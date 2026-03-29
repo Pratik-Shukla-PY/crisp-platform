@@ -1,0 +1,46 @@
+# Environment & secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Logs & runtime
+*.log
+*.pid
+logs/
+
+# macOS
+.DS_Store
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Uploads (runtime user data)
+backend/uploads/
+
+# ML model weights
+*.pth
+*.pt
+*.bin
+
+# IDE
+.vscode/
+.idea/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Docker
+*.tar

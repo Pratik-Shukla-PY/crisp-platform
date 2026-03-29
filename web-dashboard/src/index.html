@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRISP | UN Crisis Control Panel</title>
+    <meta name="description" content="United Nations Crisis Response Intelligence System — hierarchical incident monitoring and strategic command center.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="dashboard-container">
+    <div id="crisis-map"></div>
+
+    <!-- Top Command Bar -->
+    <header class="command-bar glass-panel">
+        <div class="brand">
+            <div class="brand-icon"><i class="fa-solid fa-satellite-dish"></i></div>
+            <div class="brand-text">
+                <span class="brand-name">CRISP</span>
+                <span class="brand-sub">UN Crisis Command Center</span>
+            </div>
+            <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+        </div>
+
+        <div class="command-stats">
+            <div class="stat-pill critical" id="stat-critical"><span id="count-critical">0</span><label>CRITICAL</label></div>
+            <div class="stat-pill responding" id="stat-responding"><span id="count-responding">0</span><label>DISPATCHED</label></div>
+            <div class="stat-pill resolved" id="stat-resolved"><span id="count-resolved">0</span><label>RESOLVED</label></div>
+            <div class="stat-pill total"><span id="count-total">0</span><label>TOTAL</label></div>
+        </div>
+
+        <div class="command-actions">
+            <div class="time-filter-bar">
+                <button class="time-btn" onclick="setTimeFilter(1)">1h</button>
+                <button class="time-btn active" onclick="setTimeFilter(24)">24h</button>
+                <button class="time-btn" onclick="setTimeFilter(0)">All</button>
+            </div>
+            <button class="icon-btn" onclick="exportData()"><i class="fa-solid fa-file-export"></i> Export</button>
+        </div>
+    </header>
+
+    <!-- Hierarchical Control Panel Sidebar -->
+    <aside class="feed-panel glass-panel">
+        <div class="feed-header">
+            <div class="feed-title">
+                <i class="fa-solid fa-tower-broadcast text-accent"></i>
+                <h2>Crisis Control Panel</h2>
+                <span class="feed-count" id="feed-count-badge">0 Active</span>
+            </div>
+            <div class="header-tools">
+                <select id="sort-select" class="sort-select" onchange="sortMode=this.value; renderFeed()">
+                    <option value="impact">Sort by: Impact</option>
+                    <option value="recent">Sort by: Recent</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="status-tabs">
+            <button class="stab active" id="stab-active" onclick="setStatusFilter('active')">Active</button>
+            <button class="stab" id="stab-responding" onclick="setStatusFilter('responding')">Dispatched</button>
+            <button class="stab" id="stab-resolved" onclick="setStatusFilter('resolved')">Resolved</button>
+        </div>
+
+        <div id="report-feed-list" class="incident-list"></div>
+    </aside>
+
+    <!-- Detail View -->
+    <aside class="detail-panel glass-panel" id="detail-panel" style="display:none;">
+        <div class="detail-header">
+            <button class="close-btn" onclick="closeDetail()"><i class="fa-solid fa-xmark"></i></button>
+            <h3 id="detail-title">Incident Detail</h3>
+        </div>
+        <div class="detail-body" id="detail-body"></div>
+    </aside>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+<script src="app.js?v=206"></script>
+</body>
+</html>

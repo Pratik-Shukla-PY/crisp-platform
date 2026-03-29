@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CRISP | Report Incident</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="mobile-screen" id="app-root">
+
+    <!-- ── LANGUAGE SWITCHER ── -->
+    <div class="lang-switcher" id="lang-switcher">
+        <button id="btn-lang-local" data-lang="en" style="display:none;">...</button>
+        <button id="btn-lang-en" class="active" data-lang="en">EN</button>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         STAGE 0 — WELCOME / HOME
+    ══════════════════════════════════════ -->
+    <div class="stage active" id="stage-home">
+        <div class="stage-center">
+            <div class="undp-badge">
+                <i class="fa-solid fa-satellite-dish"></i>
+                <span>CRISP × UNDP</span>
+            </div>
+            <h1 class="hero-title" data-i18n="home_title">Report an Incident</h1>
+            <p class="hero-sub" data-i18n="home_sub">Help rescue teams find you faster.<br>It only takes 4 easy steps.</p>
+
+            <!-- Step roadmap pills -->
+            <div class="roadmap">
+                <div class="roadmap-step">
+                    <div class="rs-icon">📸</div>
+                    <div class="rs-label" data-i18n="rs1">Take Photo</div>
+                </div>
+                <div class="roadmap-arrow">→</div>
+                <div class="roadmap-step">
+                    <div class="rs-icon">🎙️</div>
+                    <div class="rs-label" data-i18n="rs2">Speak</div>
+                </div>
+                <div class="roadmap-arrow">→</div>
+                <div class="roadmap-step">
+                    <div class="rs-icon">✏️</div>
+                    <div class="rs-label" data-i18n="rs3">Check Text</div>
+                </div>
+                <div class="roadmap-arrow">→</div>
+                <div class="roadmap-step">
+                    <div class="rs-icon">🚀</div>
+                    <div class="rs-label" data-i18n="rs4">Send</div>
+                </div>
+            </div>
+
+            <button class="big-cta" id="btn-start">
+                <i class="fa-solid fa-play"></i>
+                <span data-i18n="start_btn">Start Report</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         STAGE 1 — CAPTURE IMAGE
+    ══════════════════════════════════════ -->
+    <div class="stage" id="stage-photo">
+        <div class="stage-header">
+            <div class="step-badge">Step 1 of 4</div>
+            <h2 data-i18n="s1_title">Take a Photo</h2>
+            <p data-i18n="s1_sub">Show us what happened</p>
+        </div>
+
+        <!-- Image preview area -->
+        <div class="photo-preview-box" id="photo-preview-box">
+            <div class="photo-placeholder" id="photo-placeholder">
+                <i class="fa-regular fa-image"></i>
+                <span data-i18n="no_photo">No photo yet</span>
+            </div>
+            <img id="photo-preview" src="" alt="" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:20px;">
+        </div>
+
+        <!-- Camera / Browse buttons -->
+        <div class="dual-btns">
+            <button class="choice-btn camera-btn" id="btn-open-camera">
+                <i class="fa-solid fa-camera"></i>
+                <span data-i18n="use_camera">Camera</span>
+            </button>
+            <button class="choice-btn browse-btn" id="btn-browse-photo">
+                <i class="fa-solid fa-folder-open"></i>
+                <span data-i18n="browse">Browse</span>
+            </button>
+        </div>
+
+        <p class="skip-text" id="photo-skip-link" data-i18n="skip_photo">Skip — no photo available</p>
+
+        <button class="nav-btn next-btn" id="btn-photo-next" style="display:none;">
+            <span data-i18n="next">Next</span> <i class="fa-solid fa-arrow-right"></i>
+        </button>
+
+        <!-- Hidden inputs -->
+        <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none">
+        <input type="file" id="file-browse" accept="image/*" style="display:none">
+    </div>
+
+    <!-- Camera modal overlay -->
+    <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:200; flex-direction:column; align-items:center; justify-content:center;">
+        <video id="camera-stream" autoplay playsinline style="width:100%; height:85%; object-fit:cover;"></video>
+        <canvas id="camera-canvas" style="display:none;"></canvas>
+        <div style="display:flex; gap:32px; padding:16px; background:#111;">
+            <button id="btn-cam-close" style="background:rgba(255,255,255,0.1); color:#fff; border:none; border-radius:50%; width:56px; height:56px; font-size:1.4rem; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+            <button id="btn-cam-snap" style="background:#fff; border:none; border-radius:50%; width:72px; height:72px; font-size:1.8rem; cursor:pointer; box-shadow:0 0 0 4px rgba(255,255,255,0.3);">📸</button>
+            <div style="width:56px;"></div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         STAGE 2 — RECORD AUDIO + LIVE TRANSCRIPT
+    ══════════════════════════════════════ -->
+    <div class="stage" id="stage-audio">
+        <div class="stage-header">
+            <div class="step-badge">Step 2 of 4</div>
+            <h2 data-i18n="s2_title">Describe the Problem</h2>
+            <p data-i18n="s2_sub">Speak in your language — we will convert it to text</p>
+        </div>
+
+        <!-- Big mic button -->
+        <div class="mic-wrapper" id="mic-wrapper">
+            <button class="mic-btn" id="btn-mic">
+                <i class="fa-solid fa-microphone" id="mic-icon"></i>
+            </button>
+            <p class="mic-label" id="mic-label" data-i18n="tap_mic">Tap to Start Speaking</p>
+        </div>
+
+        <!-- Live transcript box -->
+        <div class="transcript-box" id="transcript-box">
+            <div class="transcript-placeholder" id="transcript-placeholder">
+                <i class="fa-solid fa-wave-square" style="color:#4b5563; font-size:2rem; margin-bottom:8px;"></i>
+                <p data-i18n="transcript_hint">Your words will appear here as you speak...</p>
+            </div>
+            <textarea id="live-transcript" class="edit-textarea" style="display:none; width: 100%; height: 120px;" placeholder="Or type your message here manually..."></textarea>
+        </div>
+
+        <!-- Timer -->
+        <div class="rec-timer" id="rec-timer" style="display:none;">
+            <span class="rec-dot"></span>
+            <span id="timer-text">00:00</span>
+        </div>
+
+        <!-- Skip audio link -->
+        <p class="skip-text" id="audio-skip-link" data-i18n="skip_audio">Skip — I will type instead</p>
+
+        <button class="nav-btn next-btn" id="btn-audio-next">
+            <span data-i18n="next">Next</span> <i class="fa-solid fa-arrow-right"></i>
+        </button>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         STAGE 3 — REVIEW / EDIT TEXT
+    ══════════════════════════════════════ -->
+    <div class="stage" id="stage-review">
+        <div class="stage-header">
+            <div class="step-badge">Step 3 of 4</div>
+            <h2 data-i18n="s3_title">Check Your Message</h2>
+            <p data-i18n="s3_sub">Edit if something is wrong — or just continue</p>
+        </div>
+
+        <!-- Photo summary -->
+        <div class="review-photo-row" id="review-photo-row" style="display:none;">
+            <img id="review-photo-thumb" src="" alt="" style="width:64px; height:64px; border-radius:12px; object-fit:cover;">
+            <span style="font-size:0.9rem; color:#9ca3af;" data-i18n="photo_attached">✅ Photo attached</span>
+        </div>
+
+        <!-- Editable text area -->
+        <div class="edit-section">
+            <label class="edit-label" data-i18n="your_message">Your Message:</label>
+            <textarea id="edit-text" class="edit-textarea" data-i18n-placeholder="type_your_msg" placeholder="Describe what happened..."></textarea>
+        </div>
+
+        <!-- Quick classification chips -->
+        <div class="chip-section">
+            <p class="chip-label" data-i18n="what_damaged">What is damaged?</p>
+            <div class="chips-row">
+                <button class="chip-btn selected" data-type="ROAD"><i class="fa-solid fa-bridge"></i> <span data-i18n="road">Road</span></button>
+                <button class="chip-btn" data-type="HOSPITAL"><i class="fa-solid fa-hospital"></i> <span data-i18n="hospital">Hospital</span></button>
+                <button class="chip-btn" data-type="HOUSE"><i class="fa-solid fa-house"></i> <span data-i18n="house">Home</span></button>
+                <button class="chip-btn" data-type="POWER"><i class="fa-solid fa-bolt"></i> <span data-i18n="power">Power</span></button>
+                <button class="chip-btn" data-type="WATER"><i class="fa-solid fa-faucet"></i> <span data-i18n="water">Water</span></button>
+                <button class="chip-btn" data-type="OTHER"><i class="fa-solid fa-circle-question"></i> <span data-i18n="other">Other</span></button>
+            </div>
+        </div>
+
+        <!-- Severity row -->
+        <div class="sev-section">
+            <p class="chip-label" data-i18n="severity_label">How serious?</p>
+            <div class="chips-row sev-row">
+                <button class="sev-chip" data-sev="MINOR">🟢 <span data-i18n="minor">Minor</span></button>
+                <button class="sev-chip selected" data-sev="MODERATE">🟡 <span data-i18n="moderate">Moderate</span></button>
+                <button class="sev-chip" data-sev="SEVERE">🔴 <span data-i18n="severe">Severe</span></button>
+            </div>
+        </div>
+
+        <!-- Location Verification -->
+        <div class="location-verify-box">
+            <div class="loc-row">
+                <i class="fa-solid fa-location-crosshairs"></i>
+                <div class="loc-info">
+                    <span id="loc-status" data-i18n="loc_status">Detecting...</span>
+                    <small id="loc-coords">0.0000, 0.0000</small>
+                </div>
+                <button id="btn-refresh-loc" class="refresh-btn">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+            </div>
+            <div class="loc-search-row">
+                <input type="text" id="input-loc-search" data-i18n-placeholder="search_place" placeholder="Or type place name...">
+                <button id="btn-search-loc" class="search-btn">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+            </div>
+        </div>
+
+        <button class="nav-btn next-btn" id="btn-review-next">
+            <span data-i18n="ready_send">Ready to Send</span> <i class="fa-solid fa-arrow-right"></i>
+        </button>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         STAGE 4 — SEND CONFIRMATION
+    ══════════════════════════════════════ -->
+    <div class="stage" id="stage-send">
+        <div class="stage-header">
+            <div class="step-badge">Step 4 of 4</div>
+            <h2 data-i18n="s4_title">Send to UNDP</h2>
+            <p data-i18n="s4_sub">Your report is ready. Tap the button below to send it.</p>
+        </div>
+
+        <!-- Summary card -->
+        <div class="summary-card" id="summary-card">
+            <div id="summary-photo-row" style="display:none; margin-bottom:12px;">
+                <img id="summary-photo" src="" style="width:100%; border-radius:12px; max-height:160px; object-fit:cover;">
+            </div>
+            <div class="summary-row">
+                <i class="fa-solid fa-tag" style="color:#ffae00;"></i>
+                <span id="summary-type" style="font-weight:600;">ROAD</span>
+            </div>
+            <div class="summary-row">
+                <i class="fa-solid fa-triangle-exclamation" style="color:#ef4444;"></i>
+                <span id="summary-severity">MODERATE</span>
+            </div>
+            <div class="summary-row" id="summary-loc-row">
+                <i class="fa-solid fa-location-dot" style="color:#10b981;"></i>
+                <span id="summary-loc">Getting location...</span>
+            </div>
+            <div class="summary-row" id="summary-text-row" style="display:none;">
+                <i class="fa-solid fa-align-left" style="color:#0ea5e9;"></i>
+                <span id="summary-text" style="font-size:0.9rem; color:#d1d5db;"></span>
+            </div>
+        </div>
+
+        <!-- Big send button -->
+        <button class="send-btn" id="btn-send">
+            <i class="fa-solid fa-paper-plane"></i>
+            <span data-i18n="send_undp">Send to UNDP</span>
+        </button>
+
+        <button class="nav-btn back-link" id="btn-send-back" style="background:transparent; color:#9ca3af; border:none; margin-top:8px;">
+            <i class="fa-solid fa-arrow-left"></i> <span data-i18n="go_back">Edit Report</span>
+        </button>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         STAGE SUCCESS
+    ══════════════════════════════════════ -->
+    <div class="stage" id="stage-success">
+        <div class="stage-center success-center">
+            <div class="success-icon">✅</div>
+            <h2 data-i18n="sent_title">Report Sent!</h2>
+            <p data-i18n="sent_sub">UNDP rescue teams have been notified.<br>Thank you for helping your community.</p>
+            <div class="success-id-box" id="success-id-box">
+                <span data-i18n="report_id">Report ID:</span>
+                <strong id="report-id-text">—</strong>
+            </div>
+            <button class="big-cta" id="btn-new-report">
+                <i class="fa-solid fa-plus"></i>
+                <span data-i18n="new_report">New Report</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Bottom progress bar -->
+    <div class="progress-bar-container" id="progress-bar-container">
+        <div class="progress-bar-fill" id="progress-bar-fill"></div>
+    </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
