@@ -1,3 +1,261 @@
+// ── Service Worker Registration ───────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        // Register SW relative to current path so it works regardless of serving root
+        const swUrl = new URL('sw.js', window.location.href).href;
+        navigator.serviceWorker.register(swUrl, { scope: './' })
+            .then((reg) => {
+                console.log('SW registered, scope:', reg.scope);
+                setInterval(() => reg.update(), 60 * 60 * 1000);
+            })
+            .catch((err) => {
+                console.warn('SW registration failed:', err);
+            });
+    });
+}
+
+// ── IndexedDB Offline Queue ──────────────────────────────────────────────────
+const IDB_NAME = 'crisp-offline';
+const IDB_VERSION = 1;
+const IDB_STORE = 'pending-reports';
+
+function openIDB() {
+    return new Promise((resolve, reject) => {
+        if (typeof indexedDB === 'undefined') {
+            return reject(new Error('IndexedDB not available'));
+        }
+        const timeout = setTimeout(() => reject(new Error('IndexedDB open timeout')), 5000);
+        const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+        req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(IDB_STORE)) {
+                db.createObjectStore(IDB_STORE, { keyPath: 'client_report_id' });
+            }
+        };
+        req.onsuccess = () => { clearTimeout(timeout); resolve(req.result); };
+        req.onerror = () => { clearTimeout(timeout); reject(req.error); };
+        req.onblocked = () => { clearTimeout(timeout); reject(new Error('IndexedDB blocked')); };
+    });
+}
+
+async function enqueueReport(payload) {
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put({
+            client_report_id: payload.client_report_id,
+            payload,
+            timestamp: Date.now(),
+            retryCount: 0,
+            status: 'queued'
+        });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+async function dequeueReport(clientReportId) {
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).delete(clientReportId);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+async function getAllQueued() {
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function updateQueueItemStatus(clientReportId, status, retryCount) {
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        const getReq = store.get(clientReportId);
+        getReq.onsuccess = () => {
+            const item = getReq.result;
+            if (item) {
+                item.status = status;
+                if (retryCount !== undefined) item.retryCount = retryCount;
+                store.put(item);
+            }
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+// ── Upload Progress Helpers ──────────────────────────────────────────────────
+function sendWithProgress(url, payload) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                updateUploadProgress(pct, pct < 100 ? 'Uploading...' : 'Processing...');
+            }
+        });
+
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                resolve(JSON.parse(xhr.responseText));
+            } else {
+                reject(new Error(`HTTP ${xhr.status}`));
+            }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error'));
+        xhr.ontimeout = () => reject(new Error('Timeout'));
+        xhr.timeout = 120000; // 2min timeout for large payloads with audio
+
+        xhr.send(JSON.stringify(payload));
+    });
+}
+
+function showUploadOverlay(statusText) {
+    const overlay = document.getElementById('upload-overlay');
+    overlay.style.display = 'flex';
+    document.getElementById('upload-status-text').textContent = statusText || 'Sending report...';
+    document.getElementById('upload-progress-fill').style.width = '0%';
+    document.getElementById('upload-progress-pct').textContent = '0%';
+    const icon = document.getElementById('upload-status-icon');
+    icon.className = 'upload-status-icon';
+    icon.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i>';
+}
+
+function updateUploadProgress(pct, statusText) {
+    document.getElementById('upload-progress-fill').style.width = pct + '%';
+    document.getElementById('upload-progress-pct').textContent = pct + '%';
+    if (statusText) {
+        document.getElementById('upload-status-text').textContent = statusText;
+    }
+}
+
+function hideUploadOverlay() {
+    document.getElementById('upload-overlay').style.display = 'none';
+}
+
+function showUploadSuccess() {
+    const icon = document.getElementById('upload-status-icon');
+    icon.className = 'upload-status-icon success';
+    icon.innerHTML = '<i class="fa-solid fa-check"></i>';
+    document.getElementById('upload-status-text').textContent = 'Report sent!';
+    updateUploadProgress(100);
+    setTimeout(hideUploadOverlay, 1200);
+}
+
+function showUploadQueued() {
+    // Same success animation as online — user shouldn't feel different
+    showUploadSuccess();
+}
+
+// ── Sync Badge ───────────────────────────────────────────────────────────────
+async function updateSyncBadge() {
+    try {
+        const badge = document.getElementById('sync-badge');
+        const text = document.getElementById('sync-badge-text');
+        const items = await getAllQueued();
+
+        if (items.length === 0) {
+            badge.style.display = 'none';
+            return;
+        }
+
+        badge.style.display = 'flex';
+        const syncing = items.filter(i => i.status === 'syncing').length;
+        const failed = items.filter(i => i.status === 'failed').length;
+
+        if (syncing > 0) {
+            badge.className = 'sync-badge syncing';
+            text.textContent = `Syncing ${syncing}/${items.length}...`;
+        } else if (failed > 0) {
+            badge.className = 'sync-badge error';
+            text.textContent = `${items.length} queued (${failed} failed)`;
+        } else {
+            badge.className = 'sync-badge';
+            text.textContent = `${items.length} queued`;
+        }
+    } catch (e) {
+        console.warn('Sync badge update failed:', e);
+    }
+}
+
+// ── Manual Sync Fallback (for browsers without Background Sync) ──────────────
+async function syncQueueManual() {
+    let items;
+    try { items = await getAllQueued(); } catch (_) { return; }
+    if (items.length === 0) return;
+
+    console.log(`Manual sync: ${items.length} queued reports`);
+    for (const item of items) {
+        try {
+            const stages = item.stages || {};
+            let reportId = item.serverId || null;
+
+            // Stage 1: metadata
+            if (!stages.meta && item.meta) {
+                const res = await fetch(`${API_BASE}/reports/meta`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(item.meta)
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    reportId = data.id;
+                    item.serverId = reportId;
+                    item.stages.meta = true;
+                    try { await enqueueReport(item); } catch (_) {}
+                } else { continue; }
+            }
+
+            if (!reportId) continue;
+
+            // Stage 2: photo
+            if (!stages.photo && item.photo) {
+                try {
+                    const res = await fetch(`${API_BASE}/reports/${reportId}/media/attach`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: 'IMAGE', resolution_tier: 'MEDIUM', url: item.photo, file_size_bytes: item.photoSize || 0 })
+                    });
+                    if (res.ok) { item.stages.photo = true; item.photo = null; try { await enqueueReport(item); } catch (_) {} }
+                } catch (_) {}
+            }
+
+            // Stage 3: audio
+            if (!stages.audio && item.audioBlob) {
+                try {
+                    const res = await fetch(`${API_BASE}/reports/${reportId}/media/attach`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: 'AUDIO', resolution_tier: 'LOW', url: item.audioBlob, file_size_bytes: item.audioSize || 0 })
+                    });
+                    if (res.ok) { item.stages.audio = true; item.audioBlob = null; try { await enqueueReport(item); } catch (_) {} }
+                } catch (_) {}
+            }
+
+            // All done?
+            if (item.stages.meta && item.stages.photo && item.stages.audio) {
+                await dequeueReport(item.client_report_id);
+            }
+        } catch (e) {
+            console.warn('Manual sync error for', item.client_report_id, e);
+        }
+    }
+    updateSyncBadge();
+}
+
 // ── i18n strings ──────────────────────────────────────────────────────────────
 const I18N = {
     en: {
@@ -94,6 +352,8 @@ const state = {
     severity: 'MODERATE',
     location: null,
     deviceLocation: null, // Keep original GPS separately
+    userLocationName: null, // Place name typed by user (for offline geocoding)
+    locationName: null, // Resolved human-readable place name from reverse geocoding
     isRecording: false,
     recognition: null,
     timerInterval: null,
@@ -101,8 +361,117 @@ const state = {
     cameraStream: null,
     speechCode: 'en-US',
     mediaRecorder: null,
-    audioChunks: []
+    audioChunks: [],
+    isAutoSubmit: false,  // Flag to track if this submission is auto-submitted
+    inactivityTimeoutMs: 120 * 1000 // 2 minutes in milliseconds
 };
+
+// ── Inactivity Manager (Auto-Submit) ───────────────────────────────────────────
+class InactivityManager {
+    constructor(timeoutMs = 120000, onTimeout = null) {
+        this.timeoutMs = timeoutMs;
+        this.onTimeout = onTimeout;
+        this.timeRemaining = timeoutMs;
+        this.timerInterval = null;
+        this.isActive = false;
+        this.activities = ['input', 'change', 'click', 'touchstart', 'touchend', 'keydown'];
+    }
+
+    start() {
+        if (this.isActive) return;
+        this.isActive = true;
+        this.timeRemaining = this.timeoutMs;
+        this.updateDisplay();
+
+        // Start countdown timer
+        this.timerInterval = setInterval(() => {
+            this.timeRemaining -= 100;
+            this.updateDisplay();
+            if (this.timeRemaining <= 0) {
+                this.stop();
+                if (this.onTimeout) this.onTimeout();
+            }
+        }, 100);
+
+        // Add activity listeners
+        this.activities.forEach(event => {
+            document.addEventListener(event, () => this.reset(), true);
+        });
+        document.addEventListener('mousemove', () => this.reset());
+    }
+
+    reset() {
+        if (!this.isActive) return;
+        this.timeRemaining = this.timeoutMs;
+        this.updateDisplay();
+    }
+
+    updateDisplay() {
+        const timerEl = document.getElementById('auto-submit-timer');
+        const displayEl = document.getElementById('timer-display');
+        if (!timerEl || !displayEl) return;
+
+        const seconds = Math.ceil(this.timeRemaining / 1000);
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        displayEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    stop() {
+        this.isActive = false;
+        if (this.timerInterval) clearInterval(this.timerInterval);
+        const timerEl = document.getElementById('auto-submit-timer');
+        if (timerEl) timerEl.style.display = 'none';
+        this.activities.forEach(event => {
+            document.removeEventListener(event, () => this.reset(), true);
+        });
+        document.removeEventListener('mousemove', () => this.reset());
+    }
+
+    show() {
+        const timerEl = document.getElementById('auto-submit-timer');
+        if (timerEl) timerEl.style.display = 'flex';
+    }
+
+    hide() {
+        const timerEl = document.getElementById('auto-submit-timer');
+        if (timerEl) timerEl.style.display = 'none';
+    }
+}
+
+// Auto-submit handler (called when inactivity timeout expires)
+function handleAutoSubmit() {
+    const currentStage = Array.from(document.querySelectorAll('.stage')).find(s => s.classList.contains('active'))?.id;
+
+    // Don't auto-submit on home or success stages
+    if (currentStage === 'stage-home' || currentStage === 'stage-success') return;
+
+    // Validate: at least one input must be provided
+    if (!hasMinimumInput()) {
+        showToast('⚠️ Please add a photo, audio, or text before submitting.');
+        inactivityManager.reset();
+        return;
+    }
+
+    // Mark this submission as auto-submit
+    state.isAutoSubmit = true;
+
+    // Auto-submit: capture current state and submit
+    if (currentStage === 'stage-photo') {
+        goToStage('stage-audio');
+    } else if (currentStage === 'stage-audio') {
+        if (state.isRecording) state.isRecording = false;
+        state.transcript = document.getElementById('live-transcript')?.value || '';
+        goToStage('stage-review');
+    } else if (currentStage === 'stage-review') {
+        state.description = document.getElementById('edit-text')?.value.trim() || '';
+        goToStage('stage-send');
+    } else if (currentStage === 'stage-send') {
+        submitReport();
+    }
+}
+
+const inactivityManager = new InactivityManager(state.inactivityTimeoutMs, handleAutoSubmit);
 
 // Dynamically resolve backend host so the app works from both localhost (desktop)
 // and from the LAN IP (real mobile device on the same Wi-Fi network).
@@ -148,6 +517,53 @@ async function tryIPGeolocation() {
     return null;
 }
 
+// ── Reverse Geocoding (coordinates → place name) ─────────────────────────────
+async function reverseGeocode(lat, lng) {
+    try {
+        const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=16&addressdetails=1`,
+            { signal: AbortSignal.timeout(8000) }
+        );
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!data || !data.address) return null;
+
+        const a = data.address;
+        // Build a short, readable name: neighbourhood/suburb, city, country
+        const parts = [];
+        const local = a.neighbourhood || a.suburb || a.hamlet || a.village || a.town || '';
+        const city = a.city || a.county || a.state_district || a.state || '';
+        if (local) parts.push(local);
+        if (city && city !== local) parts.push(city);
+        if (a.country) parts.push(a.country);
+        return parts.length > 0 ? parts.join(', ') : (data.display_name || null);
+    } catch (e) {
+        console.log('Reverse geocoding failed (offline?):', e.message);
+        return null;
+    }
+}
+
+// Resolve and cache location name, update UI elements showing it
+async function resolveLocationName() {
+    if (!state.location || (state.location.lat === 0 && state.location.lng === 0)) return;
+    // Don't re-resolve if we already have a name for these coords
+    if (state.locationName) return;
+
+    const name = await reverseGeocode(state.location.lat, state.location.lng);
+    if (name) {
+        state.locationName = name;
+        // Update any visible location displays
+        const locCoords = document.getElementById('loc-coords');
+        if (locCoords && !state.userLocationName) {
+            locCoords.textContent = name;
+        }
+        const summaryLoc = document.getElementById('summary-loc');
+        if (summaryLoc) {
+            summaryLoc.textContent = name;
+        }
+    }
+}
+
 // ── i18n helpers ───────────────────────────────────────────────────────────────
 function t(key) { return (I18N[state.lang] || I18N.en)[key] || key; }
 
@@ -177,6 +593,21 @@ function goToStage(id) {
     const pct = idx === 0 ? 0 : Math.round((idx / (STAGES.length - 2)) * 100);
     document.getElementById('progress-bar-fill').style.width = pct + '%';
     document.getElementById('progress-bar-container').style.display = (id === 'stage-home' || id === 'stage-success') ? 'none' : 'block';
+
+    // Manage inactivity timer: show on photo/audio/review, hide on home/success
+    if (id === 'stage-home' || id === 'stage-success') {
+        inactivityManager.stop();
+        inactivityManager.hide();
+    } else {
+        inactivityManager.show();
+        inactivityManager.reset();
+        inactivityManager.start();
+    }
+}
+
+// ── Validation: Check if at least one input (photo, audio, or text) is provided
+function hasMinimumInput() {
+    return !!(state.photoDataUrl || state.audioBlob || (state.description && state.description.trim()));
 }
 
 // ── Language switching ─────────────────────────────────────────────────────────
@@ -309,10 +740,13 @@ function detectAndSetupLanguage() {
             I18N[code] = Object.assign({}, I18N.en, EXTRA_LANG[code]);
         }
         applyI18n();
-        // Update speech recognition language
+        // Resolve speech code and store on state so setupAudioStage can use it
+        const entry = REGION_LANG_MAP.find(r => r.code === code);
+        const countryEntry = Object.values(COUNTRY_LANG_DATA).find(e => e.code === code);
+        state.speechCode = entry ? entry.speech : (countryEntry ? countryEntry.speech : 'en-IN');
+        // Update live recognition instance if already created
         if (state.recognition) {
-            const entry = REGION_LANG_MAP.find(r => r.code === code);
-            state.recognition.lang = entry ? entry.speech : 'en-IN';
+            state.recognition.lang = state.speechCode;
         }
     }
 
@@ -393,11 +827,21 @@ function detectAndSetupLanguage() {
         console.log('GPS Fixed:', state.location);
         try {
             const res = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`,
+                `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&addressdetails=1`,
                 { headers: { 'Accept-Language': 'en' } }
             );
             const data = await res.json();
             const addr = data.address || {};
+
+            // Cache the human-readable place name from reverse geocode
+            const nameParts = [];
+            const local = addr.neighbourhood || addr.suburb || addr.hamlet || addr.village || addr.town || '';
+            const city = addr.city || addr.county || addr.state_district || addr.state || '';
+            if (local) nameParts.push(local);
+            if (city && city !== local) nameParts.push(city);
+            if (addr.country) nameParts.push(addr.country);
+            state.locationName = nameParts.length > 0 ? nameParts.join(', ') : (data.display_name || null);
+            console.log('Location name:', state.locationName);
             const countryCode = (addr.country_code || '').toUpperCase();
             const regionStr = [
                 addr.state, addr.state_district, addr.county,
@@ -428,6 +872,8 @@ function detectAndSetupLanguage() {
             state.location = ipLoc;
             state.deviceLocation = { lat: ipLoc.lat, lng: ipLoc.lng };
             console.log('IP geolocation fallback applied:', ipLoc);
+            // Resolve place name in background
+            resolveLocationName();
             // Use IP region for language
             const regionStr = (ipLoc.region || '').toLowerCase();
             for (const entry of REGION_LANG_MAP) {
@@ -545,7 +991,8 @@ function setupAudioStage() {
     const micLabel = document.getElementById('mic-label');
     const micIcon = document.getElementById('mic-icon');
     const liveTranscript = document.getElementById('live-transcript');
-    const placeholder = document.getElementById('transcript-placeholder');
+    const labelText = document.getElementById('transcript-label-text');
+    const hintBar = document.getElementById('transcript-hint-bar');
     const recTimer = document.getElementById('rec-timer');
     const timerText = document.getElementById('timer-text');
     const nextBtn = document.getElementById('btn-audio-next');
@@ -569,29 +1016,62 @@ function setupAudioStage() {
                 else interim = event.results[i][0].transcript;
             }
             liveTranscript.value = finalTranscript + interim;
-            liveTranscript.style.display = 'block';
-            placeholder.style.display = 'none';
             state.transcript = liveTranscript.value;
+            // Visual feedback: pulse the textarea border while getting speech
+            liveTranscript.classList.add('has-text');
+            labelText.textContent = '🎤 Listening — text appears live below';
         };
 
         recognition.onerror = (event) => {
+            console.warn('SpeechRecognition error:', event.error, event.message);
             const FATAL = ['not-allowed', 'service-not-allowed'];
             if (FATAL.includes(event.error)) {
                 stopRecording();
                 micLabel.textContent = 'Microphone access denied.';
+            } else if (event.error === 'network') {
+                labelText.textContent = '⚠ Live text needs internet — audio still recording';
+                console.warn('Speech API needs network. Audio recording continues.');
+            } else if (event.error === 'no-speech') {
+                // Normal — just means silence detected, recognition will restart
+            } else if (event.error === 'aborted') {
+                // Can happen on page transitions, ignore
+            } else {
+                labelText.textContent = '⚠ Live text unavailable — audio still recording';
             }
         };
 
+        recognition.onstart = () => {
+            console.log('SpeechRecognition started, lang:', recognition.lang);
+        };
+
+        recognition.onaudiostart = () => {
+            console.log('SpeechRecognition: audio capture started');
+        };
+
         recognition.onend = () => {
+            console.log('SpeechRecognition ended, isRecording:', state.isRecording);
             if (state.isRecording) {
-                setTimeout(() => { try { recognition.start(); } catch(_) {} }, 120);
+                setTimeout(() => { try { recognition.start(); } catch(_) {} }, 200);
             }
         };
         state.recognition = recognition;
     } else {
         console.warn("SpeechRecognition not supported in this browser.");
-        micLabel.textContent = "Raw audio recording only (No Live-Text)";
+        // Check if it's a secure context issue
+        if (!window.isSecureContext) {
+            console.warn("Not a secure context (HTTPS required for Speech API). URL:", window.location.href);
+            micLabel.textContent = "Audio only — live text needs HTTPS";
+            labelText.textContent = '⚠ Live text needs HTTPS — type below or backend will transcribe after submit';
+        } else {
+            micLabel.textContent = "Audio only (type your message below)";
+            labelText.textContent = 'Type your message below';
+        }
     }
+
+    // Keep state.transcript synced with manual edits
+    liveTranscript.addEventListener('input', () => {
+        state.transcript = liveTranscript.value;
+    });
 
     // ── Universal Recording Logic (MediaRecorder) ──
     async function startRecording() {
@@ -611,7 +1091,10 @@ function setupAudioStage() {
             micBtn.classList.add('recording');
             micIcon.className = 'fa-solid fa-stop';
             micLabel.textContent = 'Recording... Tap to Stop';
-            
+            labelText.textContent = '🎤 Listening — text appears live below';
+            liveTranscript.classList.add('recording-active');
+            hintBar.style.display = 'none';
+
             recTimer.style.display = 'flex';
             state.timerSeconds = 0;
             timerText.textContent = '00:00';
@@ -623,7 +1106,20 @@ function setupAudioStage() {
             }, 1000);
 
             if (recognition) {
-                try { recognition.start(); } catch(e) { console.warn("STT Start failed:", e); }
+                try {
+                    recognition.start();
+                    console.log('SpeechRecognition.start() called successfully');
+                } catch(e) {
+                    console.warn("STT Start failed:", e.name, e.message);
+                    // Show fallback message — audio still records, live text won't work
+                    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                        labelText.textContent = '⚠ Live text requires HTTPS — audio still recording, backend will transcribe';
+                    } else {
+                        labelText.textContent = '⚠ Live text unavailable — audio still recording';
+                    }
+                }
+            } else {
+                labelText.textContent = '⚠ Live text not supported — audio still recording, backend will transcribe';
             }
         } catch (err) {
             console.error("Mic error:", err);
@@ -638,15 +1134,21 @@ function setupAudioStage() {
         micLabel.textContent = t('tap_mic');
         recTimer.style.display = 'none';
         clearInterval(state.timerInterval);
+        liveTranscript.classList.remove('recording-active');
+        labelText.textContent = '✅ Recording done — edit your text below';
+        hintBar.style.display = 'flex';
 
         if (recognition) {
             try { recognition.stop(); } catch(e) {}
         }
-        
+
         if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
             state.mediaRecorder.stop();
         }
-        
+
+        // Focus the textarea so user can edit immediately
+        liveTranscript.focus();
+
         if (state.transcript && state.transcript.trim()) {
             nextBtn.classList.add('highlight');
         }
@@ -657,23 +1159,18 @@ function setupAudioStage() {
         else stopRecording();
     });
 
-    skipLink.addEventListener('click', () => {
-        if (state.isRecording && state.recognition) state.recognition.stop();
-        clearInterval(state.timerInterval);
-        state.isRecording = false;
-        state.transcript = liveTranscript.value; // Capture edits
-        goToStage('stage-review');
-        populateReview();
-    });
+    function proceedToReview() {
+        if (state.isRecording) stopRecording();
+        // Small delay to let final speech results arrive
+        setTimeout(() => {
+            state.transcript = liveTranscript.value;
+            goToStage('stage-review');
+            populateReview();
+        }, 300);
+    }
 
-    nextBtn.addEventListener('click', () => {
-        if (state.isRecording && state.recognition) state.recognition.stop();
-        clearInterval(state.timerInterval);
-        state.isRecording = false;
-        state.transcript = liveTranscript.value; // Capture edits
-        goToStage('stage-review');
-        populateReview();
-    });
+    skipLink.addEventListener('click', proceedToReview);
+    nextBtn.addEventListener('click', proceedToReview);
 }
 
 // ── STAGE 3: Review & Edit ─────────────────────────────────────────────────────
@@ -690,23 +1187,37 @@ function populateReview() {
     const editText = document.getElementById('edit-text');
     editText.value = state.transcript || '';
 
-    // Update location UI
+    // Update location UI — show place names, not coordinates
     const locStatus = document.getElementById('loc-status');
     const locCoords = document.getElementById('loc-coords');
-    if (state.location) {
+    const locUserName = document.getElementById('loc-user-name');
+    if (state.location && (state.location.lat !== 0 || state.location.lng !== 0)) {
         if (state.location.is_ip_based) {
-            locStatus.textContent = '📍 Approximate (IP-based)';
+            locStatus.textContent = '📍 Approximate location';
             locStatus.style.color = 'var(--accent, #f59e0b)';
-            locCoords.textContent = `~${state.location.lat.toFixed(3)}, ${state.location.lng.toFixed(3)} · Tap 🔄 to refine`;
         } else {
-            locStatus.textContent = '✅ GPS Verified';
+            locStatus.textContent = '✅ Location detected';
             locStatus.style.color = 'var(--green)';
-            locCoords.textContent = `${state.location.lat.toFixed(5)}, ${state.location.lng.toFixed(5)} (±${Math.round(state.location.acc)}m)`;
+        }
+        // Show resolved place name, or "Resolving..." while we fetch it
+        if (state.locationName) {
+            locCoords.textContent = state.locationName;
+        } else {
+            locCoords.textContent = 'Resolving location...';
+            resolveLocationName(); // async — will update UI when done
         }
     } else {
-        locStatus.textContent = '⚠️ No location — search a place below';
-        locStatus.style.color = 'var(--red)';
-        locCoords.textContent = 'Type a place name and tap 🔍 to set location';
+        locStatus.textContent = '📍 Type your location below';
+        locStatus.style.color = 'var(--muted)';
+        locCoords.textContent = 'We\'ll find it on the map for you';
+    }
+
+    // Show user-typed location name if set
+    if (state.userLocationName) {
+        locUserName.textContent = `📌 Your location: ${state.userLocationName}`;
+        locUserName.style.display = 'block';
+    } else {
+        locUserName.style.display = 'none';
     }
 }
 
@@ -772,30 +1283,37 @@ async function searchAddress() {
     if (!query) return;
 
     const btn = document.getElementById('btn-search-loc');
-    const locStatus = document.getElementById('loc-status');
-    
+
     btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
-    
+
+    // Always store the user-typed name (for backend geocoding if offline)
+    state.userLocationName = query;
+
     try {
         const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`);
         const data = await res.json();
         if (data && data.length > 0) {
             const first = data[0];
-            state.location = { 
-                lat: parseFloat(first.lat), 
-                lng: parseFloat(first.lon), 
-                acc: 0, 
-                is_user_corrected: true 
+            state.location = {
+                lat: parseFloat(first.lat),
+                lng: parseFloat(first.lon),
+                acc: 0,
+                is_user_corrected: true
             };
-            populateReview();
-            input.value = ''; // clear
-        } else {
-            alert("Location not found. Please try another name.");
+            // Use the search query as the display name (user typed it, it resolved)
+            state.locationName = query;
         }
+        // If no results, we still have the name stored — backend will geocode it
     } catch (e) {
-        alert("Search failed. Check your connection.");
+        // Offline — that's fine, the name is stored and backend will resolve it
+        console.log('Geocoding offline, will resolve server-side:', query);
+        if (!state.location || (state.location.lat === 0 && state.location.lng === 0)) {
+            state.location = { lat: 0, lng: 0, acc: 0, is_user_corrected: true };
+        }
     } finally {
         btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i>';
+        populateReview();
+        input.value = '';
     }
 }
 
@@ -818,8 +1336,6 @@ function setupReviewStage() {
         });
     });
 
-    // Refresh location button
-    document.getElementById('btn-refresh-loc').addEventListener('click', refreshLocation);
     // Search location button
     document.getElementById('btn-search-loc').addEventListener('click', searchAddress);
     document.getElementById('input-loc-search').addEventListener('keypress', (e) => {
@@ -857,107 +1373,259 @@ function populateSendStage() {
     }
 
     const locSpan = document.getElementById('summary-loc');
-    if (state.location) {
-        locSpan.textContent = `${state.location.lat.toFixed(4)}, ${state.location.lng.toFixed(4)}`;
+    if (state.userLocationName) {
+        locSpan.textContent = state.userLocationName;
+    } else if (state.locationName) {
+        locSpan.textContent = state.locationName;
+    } else if (state.location && (state.location.lat !== 0 || state.location.lng !== 0)) {
+        locSpan.textContent = 'Resolving...';
+        resolveLocationName(); // will update summary-loc when done
     } else {
-        locSpan.textContent = 'Fetching GPS...';
-        navigator.geolocation?.getCurrentPosition(pos => {
-            state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
-            locSpan.textContent = `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
-        });
+        locSpan.textContent = 'Location not set';
+    }
+}
+
+// ── Progressive Upload Helper ────────────────────────────────────────────────
+// XHR-based sender with hard timeout. fetch() hangs on slow networks — XHR doesn't.
+function sendJSON(url, payload, timeoutMs = 30000) {
+    const method = /\/meta$/.test(url) ? 'POST' : 'PATCH';
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(method, url, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.timeout = timeoutMs;
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try { resolve(JSON.parse(xhr.responseText)); }
+                catch (e) { reject(new Error('Invalid JSON response')); }
+            } else {
+                reject(new Error(`HTTP ${xhr.status}`));
+            }
+        };
+        xhr.onerror = () => reject(new Error('Network error'));
+        xhr.ontimeout = () => reject(new Error('Timeout'));
+        xhr.send(JSON.stringify(payload));
+    });
+}
+
+// Retry wrapper: tries up to `retries` times with exponential backoff
+async function sendWithRetry(url, payload, retries = 5, timeoutMs = 30000) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            return await sendJSON(url, payload, timeoutMs);
+        } catch (err) {
+            console.warn(`Attempt ${attempt}/${retries} failed for ${url}: ${err.message}`);
+            if (attempt === retries) throw err;
+            // Backoff: 2s, 4s, 8s, 16s, 32s
+            await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt - 1)));
+        }
     }
 }
 
 async function submitReport() {
     const sendBtn = document.getElementById('btn-send');
     sendBtn.disabled = true;
-    sendBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
-
-    // Build payload
-    const deviceHash = localStorage.getItem('crisp_device_id') || (() => {
-        const id = 'DEV-' + Math.random().toString(36).substring(2, 10).toUpperCase();
-        localStorage.setItem('crisp_device_id', id);
-        return id;
-    })();
-
-    const mediaList = [];
-
-    if (state.photoDataUrl) {
-        mediaList.push({ type: 'IMAGE', resolution_tier: 'MEDIUM', url: state.photoDataUrl, file_size_bytes: state.photoBlob?.size || 0 });
-    }
-
-    if (state.audioBlob) {
-        const audioBase64 = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.readAsDataURL(state.audioBlob);
-        });
-        mediaList.push({ type: 'AUDIO', resolution_tier: 'LOW', url: audioBase64, file_size_bytes: state.audioBlob.size });
-    }
-
-    const payload = {
-        device_hash: deviceHash,
-        source: 'APP',
-        severity: state.severity,
-        infrastructure_type: state.infraType,
-        description: state.description || state.transcript || '',
-        client_created_at: new Date().toISOString(),
-        location: state.location
-            ? { 
-                latitude: state.location.lat, 
-                longitude: state.location.lng, 
-                accuracy_meters: state.location.acc,
-                is_user_corrected: !!state.location.is_user_corrected,
-                device_latitude: state.deviceLocation ? state.deviceLocation.lat : null,
-                device_longitude: state.deviceLocation ? state.deviceLocation.lng : null
-            }
-            : { latitude: 0, longitude: 0 },
-        media: mediaList
-    };
 
     try {
-        const res = await fetch(`${API_BASE}/reports/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+        // Generate idempotency key
+        const clientReportId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        document.getElementById('report-id-text').textContent = data.id.slice(0, 8).toUpperCase();
-        goToStage('stage-success');
-    } catch (err) {
-        // Offline fallback — queue it
-        const queued = JSON.parse(localStorage.getItem('crisp_queue') || '[]');
-        queued.push({ payload, timestamp: Date.now() });
-        localStorage.setItem('crisp_queue', JSON.stringify(queued));
-        document.getElementById('report-id-text').textContent = 'OFFLINE-' + Date.now().toString(36).slice(-5).toUpperCase();
-        goToStage('stage-success');
-    }
-}
 
-async function syncQueue() {
-    const queued = JSON.parse(localStorage.getItem('crisp_queue') || '[]');
-    if (queued.length === 0) return;
+        const deviceHash = localStorage.getItem('crisp_device_id') || (() => {
+            const id = 'DEV-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+            localStorage.setItem('crisp_device_id', id);
+            return id;
+        })();
 
-    console.log(`Syncing ${queued.length} queued reports...`);
-    const remaining = [];
-    
-    for (const item of queued) {
-        try {
-            const res = await fetch(`${API_BASE}/reports/`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(item.payload)
-            });
-            if (!res.ok) throw new Error();
-        } catch (e) {
-            remaining.push(item);
+        const hasPhoto = !!state.photoDataUrl;
+        const hasAudio = !!state.audioBlob;
+        const expectedMedia = (hasPhoto ? 1 : 0) + (hasAudio ? 1 : 0);
+
+        // Build queue item with all data
+        const queueItem = {
+            client_report_id: clientReportId,
+            meta: {
+                client_report_id: clientReportId,
+                device_hash: deviceHash,
+                source: 'APP',
+                severity: state.severity,
+                infrastructure_type: state.infraType,
+                description: state.description || state.transcript || '',
+                is_auto_submitted: state.isAutoSubmit,
+                client_created_at: new Date().toISOString(),
+                expected_media: expectedMedia,
+                location: state.location
+                    ? {
+                        latitude: state.location.lat,
+                        longitude: state.location.lng,
+                        accuracy_meters: state.location.acc || 0,
+                        is_user_corrected: !!state.location.is_user_corrected,
+                        device_latitude: state.deviceLocation ? state.deviceLocation.lat : null,
+                        device_longitude: state.deviceLocation ? state.deviceLocation.lng : null,
+                        user_location_name: state.userLocationName || null
+                    }
+                    : { latitude: 0, longitude: 0, user_location_name: state.userLocationName || null }
+            },
+            photo: hasPhoto ? state.photoDataUrl : null,
+            photoSize: hasPhoto ? (state.photoBlob?.size || 0) : 0,
+            audioBlob: null,
+            audioSize: 0,
+            stages: { meta: false, photo: !hasPhoto, audio: !hasAudio },
+            serverId: null
+        };
+
+        // Encode audio to base64
+        if (hasAudio) {
+            try {
+                const audioBase64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = () => reject(reader.error);
+                    reader.readAsDataURL(state.audioBlob);
+                });
+                queueItem.audioBlob = audioBase64;
+                queueItem.audioSize = state.audioBlob.size;
+            } catch (e) {
+                console.warn('Audio encode failed:', e);
+                queueItem.stages.audio = true; // skip audio
+            }
         }
+
+        // ── SAVE TO QUEUE FIRST — this is the safety net ─────────────────────
+        try { await enqueueReport(queueItem); } catch (_) {}
+        console.log('Report queued:', clientReportId, 'media expected:', expectedMedia);
+
+        // ── Show success to user IMMEDIATELY — don't wait for network ────────
+        showUploadOverlay('Sending report...');
+        updateUploadProgress(50, 'Report saved!');
+        document.getElementById('report-id-text').textContent = clientReportId.slice(0, 8).toUpperCase();
+
+        // Brief pause so user sees the overlay
+        await new Promise(r => setTimeout(r, 800));
+        showUploadSuccess();
+        setTimeout(() => goToStage('stage-success'), 1200);
+
+        // ── Now try to send in background (non-blocking) ─────────────────────
+        trySendQueuedReport(queueItem);
+
+    } catch (fatalErr) {
+        console.error('submitReport fatal error:', fatalErr);
+        hideUploadOverlay();
+        document.getElementById('report-id-text').textContent = 'SAVED';
+        goToStage('stage-success');
+        sendBtn.disabled = false;
     }
-    
-    localStorage.setItem('crisp_queue', JSON.stringify(remaining));
-    if (remaining.length === 0) console.log('✅ Offline queue synced successfully.');
 }
+
+// ── Background sender: processes one queued report through all stages ─────────
+async function trySendQueuedReport(item) {
+    try {
+        const stages = item.stages;
+        let reportId = item.serverId;
+
+        // Stage 1: Metadata (< 1KB — 15s timeout, 5 retries)
+        if (!stages.meta) {
+            try {
+                const data = await sendWithRetry(`${API_BASE}/reports/meta`, item.meta, 5, 15000);
+                reportId = data.id;
+                item.serverId = reportId;
+                item.stages.meta = true;
+                try { await enqueueReport(item); } catch (_) {}
+                console.log('Stage 1 (meta) sent:', reportId);
+            } catch (e) {
+                console.warn('Stage 1 failed, will retry later:', e.message);
+                return; // Can't proceed without server ID
+            }
+        }
+
+        // Stage 2: Photo (60s timeout, 3 retries)
+        if (!stages.photo && item.photo && reportId) {
+            try {
+                await sendWithRetry(`${API_BASE}/reports/${reportId}/media/attach`, {
+                    type: 'IMAGE', resolution_tier: 'MEDIUM',
+                    url: item.photo, file_size_bytes: item.photoSize || 0
+                }, 3, 60000);
+                item.stages.photo = true;
+                item.photo = null; // free memory
+                try { await enqueueReport(item); } catch (_) {}
+                console.log('Stage 2 (photo) sent');
+            } catch (e) {
+                console.warn('Stage 2 (photo) failed, will retry later:', e.message);
+            }
+        }
+
+        // Stage 3: Audio (90s timeout, 3 retries)
+        if (!stages.audio && item.audioBlob && reportId) {
+            try {
+                await sendWithRetry(`${API_BASE}/reports/${reportId}/media/attach`, {
+                    type: 'AUDIO', resolution_tier: 'LOW',
+                    url: item.audioBlob, file_size_bytes: item.audioSize || 0
+                }, 3, 90000);
+                item.stages.audio = true;
+                item.audioBlob = null;
+                try { await enqueueReport(item); } catch (_) {}
+                console.log('Stage 3 (audio) sent');
+            } catch (e) {
+                console.warn('Stage 3 (audio) failed, will retry later:', e.message);
+            }
+        }
+
+        // All done?
+        if (item.stages.meta && item.stages.photo && item.stages.audio) {
+            try { await dequeueReport(item.client_report_id); } catch (_) {}
+            console.log('Report fully synced:', reportId);
+        }
+    } catch (e) {
+        console.warn('trySendQueuedReport error:', e);
+    }
+    updateSyncBadge();
+}
+
+// ── Persistent Retry Loop — runs every 15 seconds ───────────────────────────
+// This is the real workhorse. It keeps trying until everything is sent.
+let _retryLoopRunning = false;
+async function startRetryLoop() {
+    if (_retryLoopRunning) return;
+    _retryLoopRunning = true;
+    console.log('Retry loop started');
+
+    while (true) {
+        try {
+            const items = await getAllQueued();
+            if (items.length === 0) {
+                _retryLoopRunning = false;
+                console.log('Retry loop: queue empty, stopping');
+                return;
+            }
+
+            for (const item of items) {
+                if (item.stages && item.meta) {
+                    await trySendQueuedReport(item);
+                }
+            }
+        } catch (e) {
+            console.warn('Retry loop error:', e);
+        }
+
+        // Wait 15 seconds before next attempt
+        await new Promise(r => setTimeout(r, 15000));
+    }
+}
+
+function triggerBackgroundSync() {
+    // Start persistent retry loop
+    startRetryLoop();
+    // Also try browser Background Sync API
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+        navigator.serviceWorker.ready.then(reg => {
+            reg.sync.register('sync-reports').catch(() => {});
+        });
+    }
+}
+
+// Legacy syncQueue replaced by IndexedDB-based syncQueueManual (defined above)
 
 function setupSendStage() {
     document.getElementById('btn-send').addEventListener('click', submitReport);
@@ -965,17 +1633,43 @@ function setupSendStage() {
     document.getElementById('btn-new-report').addEventListener('click', resetApp);
 }
 
+// ── Toast Notification ────────────────────────────────────────────────────────
+function showToast(message, duration = 3000) {
+    const existingToast = document.getElementById('toast-notification');
+    if (existingToast) existingToast.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'toast-notification';
+    toast.style.cssText = `
+        position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.9); color: #fff;
+        padding: 12px 20px; border-radius: 20px;
+        font-size: 0.95rem; z-index: 300;
+        animation: slideUp 0.3s ease-out;
+    `;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'slideDown 0.3s ease-in';
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
 function resetApp() {
+    inactivityManager.stop();
     state.photoDataUrl = null; state.photoBlob = null;
     state.audioBlob = null; state.transcript = ''; state.description = '';
-    state.infraType = 'ROAD'; state.severity = 'MODERATE';
+    state.infraType = 'ROAD'; state.severity = 'MODERATE'; state.isAutoSubmit = false;
+    state.userLocationName = null; state.locationName = null;
     document.getElementById('photo-preview').style.display = 'none';
     document.getElementById('photo-placeholder').style.display = 'flex';
     document.getElementById('btn-photo-next').style.display = 'none';
     document.getElementById('photo-skip-link').style.display = 'block';
-    document.getElementById('live-transcript').style.display = 'none';
-    document.getElementById('transcript-placeholder').style.display = 'flex';
     document.getElementById('live-transcript').value = '';
+    document.getElementById('live-transcript').classList.remove('has-text', 'recording-active');
+    document.getElementById('transcript-label-text').textContent = 'Live Text — speak or type below';
+    document.getElementById('transcript-hint-bar').style.display = 'none';
     document.getElementById('edit-text').value = '';
     document.getElementById('btn-send').disabled = false;
     document.getElementById('btn-send').innerHTML = `<i class="fa-solid fa-paper-plane"></i> <span>${t('send_undp')}</span>`;
@@ -983,7 +1677,7 @@ function resetApp() {
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     // 1. Setup stage modules first
     setupPhotoStage();
     setupCameraModal();
@@ -994,12 +1688,55 @@ document.addEventListener('DOMContentLoaded', () => {
     // 2. Start language detection (it will call applyI18n when ready or fallback)
     detectAndSetupLanguage();
 
-    // 3. Try to sync offline reports
-    syncQueue();
+    // 3. Migrate old localStorage queue to IndexedDB (backward compatibility)
+    try {
+        const oldQueue = JSON.parse(localStorage.getItem('crisp_queue') || '[]');
+        if (oldQueue.length > 0) {
+            for (const item of oldQueue) {
+                const payload = item.payload || item;
+                if (!payload.client_report_id) {
+                    payload.client_report_id = crypto.randomUUID();
+                }
+                await enqueueReport(payload);
+            }
+            localStorage.removeItem('crisp_queue');
+            console.log(`Migrated ${oldQueue.length} reports from localStorage to IndexedDB`);
+        }
+    } catch (e) {
+        console.warn('localStorage migration failed:', e);
+    }
 
-    // 4. Setup start button
+    // 4. Start persistent retry loop for any queued reports
+    startRetryLoop();
+
+    // 5. Update sync badge
+    updateSyncBadge();
+
+    // 6. Connectivity listeners
+    window.addEventListener('online', async () => {
+        console.log('Back online — triggering sync');
+        startRetryLoop(); // restart retry loop immediately
+        updateSyncBadge();
+    });
+
+    window.addEventListener('offline', () => {
+        // Silently handle offline — user doesn't need to worry
+        console.log('Device went offline — reports will queue silently');
+    });
+
+    // 7. Listen for sync success messages from service worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data.type === 'SYNC_SUCCESS') {
+                showToast('Queued report synced successfully!');
+                updateSyncBadge();
+            }
+        });
+    }
+
+    // 8. Setup start button
     document.getElementById('btn-start').addEventListener('click', () => goToStage('stage-photo'));
-    
-    // 4. Show home
+
+    // 9. Show home
     goToStage('stage-home');
 });

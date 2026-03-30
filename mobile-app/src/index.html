@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>CRISP | Report Incident</title>
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ffae00">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="CRISP">
+    <link rel="apple-touch-icon" href="assets/icon-192.png">
+    <!-- Fonts & Styles -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
@@ -12,9 +20,9 @@
 <div class="mobile-screen" id="app-root">
 
     <!-- ── LANGUAGE SWITCHER ── -->
-    <div class="lang-switcher" id="lang-switcher">
-        <button id="btn-lang-local" data-lang="en" style="display:none;">...</button>
-        <button id="btn-lang-en" class="active" data-lang="en">EN</button>
+    <div class="lang-switcher" id="lang-switcher" title="Tap to change language">
+        <button id="btn-lang-local" data-lang="en" style="display:none;" title="Tap to switch to local language">🌐 ...</button>
+        <button id="btn-lang-en" class="active" data-lang="en" title="Tap to switch to English">🌐 EN</button>
     </div>
 
     <!-- ══════════════════════════════════════
@@ -128,21 +136,23 @@
                 <i class="fa-solid fa-microphone" id="mic-icon"></i>
             </button>
             <p class="mic-label" id="mic-label" data-i18n="tap_mic">Tap to Start Speaking</p>
-        </div>
-
-        <!-- Live transcript box -->
-        <div class="transcript-box" id="transcript-box">
-            <div class="transcript-placeholder" id="transcript-placeholder">
-                <i class="fa-solid fa-wave-square" style="color:#4b5563; font-size:2rem; margin-bottom:8px;"></i>
-                <p data-i18n="transcript_hint">Your words will appear here as you speak...</p>
+            <!-- Timer -->
+            <div class="rec-timer" id="rec-timer" style="display:none;">
+                <span class="rec-dot"></span>
+                <span id="timer-text">00:00</span>
             </div>
-            <textarea id="live-transcript" class="edit-textarea" style="display:none; width: 100%; height: 120px;" placeholder="Or type your message here manually..."></textarea>
         </div>
 
-        <!-- Timer -->
-        <div class="rec-timer" id="rec-timer" style="display:none;">
-            <span class="rec-dot"></span>
-            <span id="timer-text">00:00</span>
+        <!-- Live transcript box — always visible -->
+        <div class="transcript-box" id="transcript-box">
+            <div class="transcript-label-row">
+                <i class="fa-solid fa-language" style="color:var(--accent);"></i>
+                <span class="transcript-label-text" id="transcript-label-text">Live Text — speak or type below</span>
+            </div>
+            <textarea id="live-transcript" class="edit-textarea live-transcript-area" placeholder="Your speech appears here in real-time. You can also type or edit directly..."></textarea>
+            <div class="transcript-hint-bar" id="transcript-hint-bar">
+                <i class="fa-solid fa-pen"></i> You can edit this text before sending
+            </div>
         </div>
 
         <!-- Skip audio link -->
@@ -198,7 +208,7 @@
             </div>
         </div>
 
-        <!-- Location Verification -->
+        <!-- Location -->
         <div class="location-verify-box">
             <div class="loc-row">
                 <i class="fa-solid fa-location-crosshairs"></i>
@@ -206,16 +216,14 @@
                     <span id="loc-status" data-i18n="loc_status">Detecting...</span>
                     <small id="loc-coords">0.0000, 0.0000</small>
                 </div>
-                <button id="btn-refresh-loc" class="refresh-btn">
-                    <i class="fa-solid fa-arrows-rotate"></i>
-                </button>
             </div>
             <div class="loc-search-row">
-                <input type="text" id="input-loc-search" data-i18n-placeholder="search_place" placeholder="Or type place name...">
+                <input type="text" id="input-loc-search" data-i18n-placeholder="search_place" placeholder="Correct location? Type place name...">
                 <button id="btn-search-loc" class="search-btn">
                     <i class="fa-solid fa-magnifying-glass"></i>
                 </button>
             </div>
+            <small id="loc-user-name" class="loc-user-name" style="display:none;"></small>
         </div>
 
         <button class="nav-btn next-btn" id="btn-review-next">
@@ -286,12 +294,37 @@
         </div>
     </div>
 
-    <!-- Bottom progress bar -->
+    <!-- Bottom progress bar + auto-submit timer -->
     <div class="progress-bar-container" id="progress-bar-container">
         <div class="progress-bar-fill" id="progress-bar-fill"></div>
     </div>
+    <div class="auto-submit-timer" id="auto-submit-timer" style="display:none;">
+        <i class="fa-solid fa-hourglass-end"></i>
+        <span id="timer-display">2:00</span>
+        <span class="auto-send-text">Auto-send</span>
+    </div>
+
+    <!-- Sync Status Badge (shows queued report count) -->
+    <div class="sync-badge" id="sync-badge" style="display:none;">
+        <i class="fa-solid fa-cloud-arrow-up"></i>
+        <span id="sync-badge-text">0 queued</span>
+    </div>
+
+    <!-- Upload Progress Overlay -->
+    <div class="upload-overlay" id="upload-overlay" style="display:none;">
+        <div class="upload-progress-card">
+            <div class="upload-status-icon" id="upload-status-icon">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+            </div>
+            <p class="upload-status-text" id="upload-status-text">Sending report...</p>
+            <div class="upload-progress-track">
+                <div class="upload-progress-fill" id="upload-progress-fill" style="width:0%"></div>
+            </div>
+            <p class="upload-progress-pct" id="upload-progress-pct">0%</p>
+        </div>
+    </div>
 
 </div>
-<script src="app.js"></script>
+<script src="app.js?v=507"></script>
 </body>
 </html>

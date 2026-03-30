@@ -70,6 +70,7 @@ class Device(Base):
 class Report(Base):
     __tablename__ = "reports"
     id = Column(String(36), primary_key=True, default=gen_uuid)
+    client_report_id = Column(String(36), unique=True, nullable=True, index=True)
     device_id = Column(String(36), ForeignKey("devices.id", ondelete="SET NULL"))
     source = Column(Enum(SourceEnum), default=SourceEnum.APP, nullable=False)
     status = Column(Enum(ReportStatusEnum), default=ReportStatusEnum.PENDING, nullable=False)
@@ -77,6 +78,9 @@ class Report(Base):
     severity = Column(Enum(SeverityEnum), default=SeverityEnum.UNKNOWN, nullable=False)
     infrastructure_type = Column(Enum(InfraTypeEnum), default=InfraTypeEnum.OTHER, nullable=False)
     description = Column(String)
+    is_auto_submitted = Column(Boolean, default=False, nullable=False)
+    expected_media = Column(Integer, default=0, nullable=False)   # How many media files expected
+    received_media = Column(Integer, default=0, nullable=False)   # How many received so far
     client_created_at = Column(DateTime(timezone=True))
     server_created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -96,6 +100,7 @@ class Location(Base):
     device_longitude = Column(Float)
     accuracy_meters = Column(Float)
     is_user_corrected = Column(Boolean, default=False)
+    user_location_name = Column(String, nullable=True)  # Place name typed by user when offline
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     report = relationship("Report", back_populates="location")

@@ -7,6 +7,8 @@
     <meta name="description" content="United Nations Crisis Response Intelligence System — hierarchical incident monitoring and strategic command center.">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -38,7 +40,8 @@
                 <button class="time-btn active" onclick="setTimeFilter(24)">24h</button>
                 <button class="time-btn" onclick="setTimeFilter(0)">All</button>
             </div>
-            <button class="icon-btn" onclick="exportData()"><i class="fa-solid fa-file-export"></i> Export</button>
+            <button class="icon-btn" onclick="exportData('csv')"><i class="fa-solid fa-file-csv"></i> CSV</button>
+            <button class="icon-btn" onclick="exportData('geojson')"><i class="fa-solid fa-globe"></i> GeoJSON</button>
         </div>
     </header>
 
@@ -52,8 +55,10 @@
             </div>
             <div class="header-tools">
                 <select id="sort-select" class="sort-select" onchange="sortMode=this.value; renderFeed()">
-                    <option value="impact">Sort by: Impact</option>
-                    <option value="recent">Sort by: Recent</option>
+                    <option value="impact">Impact Score</option>
+                    <option value="recent">Most Recent</option>
+                    <option value="infra">Critical Infra</option>
+                    <option value="density">Highest Density</option>
                 </select>
             </div>
         </div>
@@ -62,6 +67,7 @@
             <button class="stab active" id="stab-active" onclick="setStatusFilter('active')">Active</button>
             <button class="stab" id="stab-responding" onclick="setStatusFilter('responding')">Dispatched</button>
             <button class="stab" id="stab-resolved" onclick="setStatusFilter('resolved')">Resolved</button>
+            <button class="stab" id="stab-all" onclick="setStatusFilter('all')">All</button>
         </div>
 
         <div id="report-feed-list" class="incident-list"></div>
@@ -78,7 +84,9 @@
 </main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-<script src="app.js?v=206"></script>
+<script src="app.js?v=301"></script>
 </body>
 </html>
