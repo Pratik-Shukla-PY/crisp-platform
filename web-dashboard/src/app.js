@@ -6,7 +6,9 @@
 // ── Config ───────────────────────────────────────────────────────────────────
 const BACKEND_HOST = `http://${window.location.hostname || 'localhost'}:8000`;
 const API = `${BACKEND_HOST}/api/v1/reports`;
-const POLL_INTERVAL = 4000;
+const POLL_INTERVAL        = 4000;  // normal polling
+const POLL_INTERVAL_ACTIVE = 1200;  // fast polling while any image is uploading
+let _pollTimer = null;
 
 // ── State ────────────────────────────────────────────────────────────────────
 let allReports = [];
@@ -28,6 +30,18 @@ const SEV_SCORE = { CRITICAL: 10, SEVERE: 7, MODERATE: 4, MINOR: 2, UNKNOWN: 1 }
 const INFRA_WEIGHTS = { HOSPITAL: 10, POWER_PLANT: 8, POWER: 8, WATER_TREATMENT: 7, WATER: 7, ROAD: 3, BRIDGE: 5, SCHOOL: 4, HOUSE: 2, OTHER: 1 };
 const INFRA_ICONS = { HOSPITAL: 'fa-hospital', POWER: 'fa-bolt', WATER: 'fa-droplet', ROAD: 'fa-road', HOUSE: 'fa-house-crack', OTHER: 'fa-triangle-exclamation' };
 const SEV_COLORS = { CRITICAL: '#ef4444', SEVERE: '#f97316', MODERATE: '#eab308', MINOR: '#22c55e', UNKNOWN: '#64748b' };
+
+// ── QRT Queue State ───────────────────────────────────────────────────────────
+let viewMode = 'queue'; // 'queue' = triage cards | 'tree' = strategic hierarchy
+let sectionState = { needs: true, dispatched: false, resolved: false };
+// Priority sort: severity first, then infrastructure criticality, then recency
+const SEV_PRIORITY = { CRITICAL: 4, SEVERE: 3, MODERATE: 2, MINOR: 1, UNKNOWN: 0 };
+const INFRA_CARD_ICONS = {
+    HOSPITAL: 'fa-hospital', POWER_PLANT: 'fa-bolt', POWER: 'fa-bolt',
+    WATER_TREATMENT: 'fa-droplet', WATER: 'fa-droplet', ROAD: 'fa-road',
+    BRIDGE: 'fa-archway', SCHOOL: 'fa-school', HOUSE: 'fa-house-crack',
+    OTHER: 'fa-triangle-exclamation'
+};
 const CLUSTER_RADIUS_KM = 15; // Merge regions within 15km
 
 // ── Country / Continent Mappings ─────────────────────────────────────────────
@@ -55,14 +69,44 @@ const getMediaUrl = (url) => {
     return `${BACKEND_HOST}/${url.replace(/^\//, '')}`;
 };
 
+/** Ensure ISO string is treated as UTC if no timezone indicator present */
+function ensureUTC(iso) {
+    if (!iso) return iso;
+    const s = String(iso).trim();
+    if (/Z$/i.test(s) || /[+-]\d{2}:\d{2}$/.test(s) || /[+-]\d{4}$/.test(s)) return s;
+    return s + 'Z';
+}
+
 function timeAgo(iso) {
-    const d = new Date(iso);
+    const d = new Date(ensureUTC(iso));
     if (isNaN(d.getTime())) return 'Just now';
     const diff = (Date.now() - d) / 1000;
+    if (diff < 0) return 'Just now';
     if (diff < 60) return `${Math.round(diff)}s ago`;
     if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
-    return `${Math.round(diff / 86400)}d ago`;
+    if (diff < 86400) {
+        const h = Math.floor(diff / 3600);
+        const m = Math.round((diff % 3600) / 60);
+        return m > 0 ? `${h}h ${m}m ago` : `${h}h ago`;
+    }
+    const days = Math.round(diff / 86400);
+    return days === 1 ? '1 day ago' : `${days}d ago`;
+}
+
+/** Rich time display for detail panel: "3:45 PM · 2h 15m ago" */
+function timeDisplay(iso) {
+    const d = new Date(ensureUTC(iso));
+    if (isNaN(d.getTime())) return 'Unknown';
+    const localTime = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return `${localTime} · ${timeAgo(iso)}`;
+}
+
+/** Short date format: "Apr 2, 3:45 PM" */
+function formatShortDate(iso) {
+    const d = new Date(ensureUTC(iso));
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' +
+           d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 function showToast(msg, type = 'info') {
@@ -354,7 +398,12 @@ function createIncidentRow(r) {
     const hasImg = r.media?.some(m => m.type === 'IMAGE');
     const hasAudio = r.media?.some(m => m.type === 'AUDIO');
     const isPartial = r.sync_status === 'PARTIAL';
-    const pctDone = r.expected_media > 0 ? Math.round((r.received_media / r.expected_media) * 100) : 100;
+    // W-6 fix: use chunk-level completion_pct from media if available,
+    // otherwise fall back to assembled-file ratio (which only shows 0% or 100%)
+    const imgMedia = r.media?.find(m => m.type === 'IMAGE');
+    const pctDone = imgMedia?.completion_pct != null
+        ? Math.round(imgMedia.completion_pct)
+        : (r.expected_media > 0 ? Math.round((r.received_media / r.expected_media) * 100) : 100);
 
     inc.innerHTML = `
         <span class="inc-sev-dot sev-dot-${r.severity}" title="Severity: ${r.severity}"></span>
@@ -431,7 +480,204 @@ function renderHotspots(parentEl, reports) {
 function renderFeed() {
     const el = document.getElementById('report-feed-list');
     if (!el) return;
+    if (viewMode === 'queue') {
+        renderTriageQueue(el);
+    } else {
+        renderTreeFeed(el);
+    }
+    updateCommandStats();
+}
 
+// ── Queue Mode: three-bucket triage cards ─────────────────────────────────────
+function renderTriageQueue(el) {
+    // Apply time filter
+    let reports = allReports;
+    if (timeFilterHours > 0) {
+        const cutoff = Date.now() - timeFilterHours * 3600000;
+        reports = reports.filter(r => new Date(r.server_created_at).getTime() > cutoff);
+    }
+
+    // Three buckets by action status
+    const needs      = reports.filter(r => r.status === 'PENDING' || r.status === 'VERIFIED');
+    const dispatched = reports.filter(r => r.status === 'RESPONDING');
+    const resolved   = reports.filter(r => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM');
+
+    // Sort each bucket: severity → infra weight → recency
+    [needs, dispatched, resolved].forEach(bucket => bucket.sort(sortByPriorityDesc));
+
+    el.innerHTML = '';
+    const frag = document.createDocumentFragment();
+
+    // Flashing alert if critical incidents are still waiting for response
+    const criticals = needs.filter(r => r.severity === 'CRITICAL');
+    if (criticals.length > 0) frag.appendChild(createAlertBanner(criticals.length));
+
+    // Three collapsible sections
+    frag.appendChild(createQueueSection('needs',      '⚡ NEEDS RESPONSE', needs,      'qrt-section-needs'));
+    frag.appendChild(createQueueSection('dispatched', '🚑 DISPATCHED',     dispatched, 'qrt-section-dispatched'));
+    frag.appendChild(createQueueSection('resolved',   '✓  RESOLVED',       resolved,   'qrt-section-resolved'));
+
+    el.appendChild(frag);
+    document.getElementById('feed-count-badge').textContent =
+        needs.length > 0 ? `${needs.length} Need Response` : 'All Clear';
+}
+
+function sortByPriorityDesc(a, b) {
+    // 1. Severity (CRITICAL first)
+    const ds = (SEV_PRIORITY[b.severity] || 0) - (SEV_PRIORITY[a.severity] || 0);
+    if (ds !== 0) return ds;
+    // 2. Infrastructure criticality (hospitals, power before roads, houses)
+    const dw = (INFRA_WEIGHTS[b.infrastructure_type] || 1) - (INFRA_WEIGHTS[a.infrastructure_type] || 1);
+    if (dw !== 0) return dw;
+    // 3. Recency (newest first)
+    return new Date(b.server_created_at) - new Date(a.server_created_at);
+}
+
+function createAlertBanner(count) {
+    const el = document.createElement('div');
+    el.className = 'qrt-alert-banner';
+    el.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${count} CRITICAL incident${count > 1 ? 's' : ''} — immediate response required`;
+    return el;
+}
+
+function createQueueSection(key, label, incidents, cssClass) {
+    const isOpen = sectionState[key] !== false;
+    const sec = document.createElement('div');
+    sec.className = `qrt-section ${cssClass}${isOpen ? '' : ' collapsed'}`;
+
+    const header = document.createElement('div');
+    header.className = 'qrt-section-header';
+    header.innerHTML = `
+        <span class="qrt-section-label">${label}</span>
+        <span class="qrt-section-count">${incidents.length}</span>
+        <i class="fa-solid fa-chevron-down qrt-section-chevron"></i>
+    `;
+    header.onclick = () => {
+        sectionState[key] = !sectionState[key];
+        sec.classList.toggle('collapsed');
+    };
+    sec.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'qrt-section-body';
+    if (incidents.length === 0) {
+        body.innerHTML = `<div class="qrt-empty"><i class="fa-solid fa-circle-check" style="opacity:0.35;"></i> None</div>`;
+    } else {
+        incidents.forEach(r => body.appendChild(createIncidentCard(r)));
+    }
+    sec.appendChild(body);
+    return sec;
+}
+
+function createIncidentCard(r) {
+    const card = document.createElement('div');
+    card.className = `qrt-card ${selectedId === r.id ? 'selected' : ''}`;
+    card.onclick    = () => selectReport(r.id);
+    card.onmouseenter = (e) => showIncidentPreview(r, e);
+    card.onmouseleave = hideIncidentPreview;
+
+    const sev   = r.severity || 'UNKNOWN';
+    const infra = r.infrastructure_type || 'OTHER';
+    const icon  = INFRA_CARD_ICONS[infra] || 'fa-triangle-exclamation';
+
+    // WHERE — prefer user-named location, fall back to device name, then coords
+    const loc     = r.location;
+    const locText = loc?.user_location_name
+                 || loc?.device_location_name
+                 || (loc ? `${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}` : 'Location unknown');
+
+    const imgMedia   = r.media?.find(m => m.type === 'IMAGE');
+    const audioMedia = r.media?.find(m => m.type === 'AUDIO');
+    const hasImg     = !!imgMedia;
+    const hasAudio   = !!audioMedia;
+    const imgPct     = imgMedia?.completion_pct ?? (hasImg ? 100 : 0);
+    const imgDone    = imgMedia?.assembly_status === 'complete';
+    const audioPct   = audioMedia?.completion_pct ?? (hasAudio ? 100 : 0);
+    const audioDone  = audioMedia?.assembly_status === 'complete';
+    const locDone    = !!(loc?.latitude || loc?.device_latitude);
+    const allDone    = (!r.expected_media || r.received_media >= r.expected_media) && locDone;
+
+    // ACTION button — differs by current status
+    let actionEl;
+    if (r.status === 'PENDING' || r.status === 'VERIFIED') {
+        actionEl = `<button class="qrt-dispatch-btn"
+            onclick="event.stopPropagation(); patchReport('${r.id}', 'dispatch')">
+            <i class="fa-solid fa-truck-medical"></i> DISPATCH
+        </button>`;
+    } else if (r.status === 'RESPONDING') {
+        actionEl = `<span class="qrt-dispatched-label"><i class="fa-solid fa-siren-on"></i> En Route</span>`;
+    } else {
+        actionEl = `<span class="qrt-resolved-label"><i class="fa-solid fa-circle-check"></i> Done</span>`;
+    }
+
+    // Truth score badge — shown if verification has been run
+    const v = r.verification;
+    let truthBadge = '';
+    if (v && v.total_score !== undefined) {
+        const score   = v.total_score;
+        const verdict = v.verdict || 'UNVERIFIED';
+        const badgeClass = score >= 80 ? 'truth-strong'
+                         : score >= 60 ? 'truth-likely'
+                         : score >= 40 ? 'truth-partial'
+                         : score >= 20 ? 'truth-low'
+                         :               'truth-unverified';
+        const icon = score >= 60 ? 'fa-satellite' : 'fa-triangle-exclamation';
+        truthBadge = `<span class="qrt-truth-badge ${badgeClass}" title="${verdict.replace(/_/g,' ')}">
+            <i class="fa-solid ${icon}"></i> ${score}
+        </span>`;
+    }
+
+    card.innerHTML = `
+        <div class="qrt-sev-strip strip-${sev}"></div>
+        <div class="qrt-card-body">
+            <div class="qrt-what">
+                <div class="qrt-infra-icon"><i class="fa-solid ${icon}"></i></div>
+                <span class="qrt-infra-name">${infra.replace(/_/g, ' ')}</span>
+                <span class="qrt-sev-badge qrt-sev-${sev}">${sev}</span>
+            </div>
+            <div class="qrt-where">
+                <i class="fa-solid fa-location-dot"></i>
+                <span class="qrt-where-text" title="${locText}">${locText}</span>
+            </div>
+            <div class="qrt-when">
+                <i class="fa-regular fa-clock"></i>
+                ${timeAgo(r.server_created_at)}
+            </div>
+            <div class="qrt-data-progress">
+                <span class="qrt-dp-item ${locDone ? 'done' : ''}" title="Location">
+                    <i class="fa-solid ${locDone ? 'fa-check' : 'fa-location-dot'}"></i> Loc
+                </span>
+                <span class="qrt-dp-item ${imgDone ? 'done' : hasImg ? 'active' : 'waiting'}" title="Image: ${Math.round(imgPct)}%">
+                    <i class="fa-solid ${imgDone ? 'fa-check' : hasImg ? 'fa-cloud-arrow-up' : 'fa-image'}"></i>
+                    ${imgDone ? 'Img' : hasImg && !imgDone ? Math.round(imgPct) + '%' : 'Img'}
+                </span>
+                <span class="qrt-dp-item ${audioDone ? 'done' : hasAudio ? 'active' : 'waiting'}" title="Audio: ${Math.round(audioPct)}%">
+                    <i class="fa-solid ${audioDone ? 'fa-check' : hasAudio ? 'fa-cloud-arrow-up' : 'fa-microphone'}"></i>
+                    ${audioDone ? 'Aud' : hasAudio && !audioDone ? Math.round(audioPct) + '%' : 'Aud'}
+                </span>
+                ${allDone ? '<span class="qrt-dp-all-done"><i class="fa-solid fa-circle-check"></i> 100%</span>' : ''}
+            </div>
+            <div class="qrt-card-footer">
+                ${truthBadge}
+                ${actionEl}
+            </div>
+        </div>
+    `;
+    return card;
+}
+
+window.setViewMode = function(mode) {
+    viewMode = mode;
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.view-btn[data-mode="${mode}"]`)?.classList.add('active');
+    // Show/hide tree-specific controls (sort + status tabs)
+    const tc = document.getElementById('tree-controls');
+    if (tc) tc.style.display = mode === 'tree' ? '' : 'none';
+    renderFeed();
+};
+
+// ── Tree Mode: original hierarchical feed ─────────────────────────────────────
+function renderTreeFeed(el) {
     // Filter by status
     let filtered = allReports.filter(r => {
         if (statusFilter === 'all') return true;
@@ -439,31 +685,18 @@ function renderFeed() {
         if (statusFilter === 'active') return s === 'PENDING' || s === 'VERIFIED';
         return s.toLowerCase() === statusFilter.toLowerCase();
     });
-
     // Filter by time
     if (timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
         filtered = filtered.filter(r => new Date(r.server_created_at).getTime() > cutoff);
     }
-
     el.innerHTML = '';
     const frag = document.createDocumentFragment();
-
-    // Hotspots section (always shows top from active filter)
     renderHotspots(frag, filtered);
-
-    // Main hierarchy tree
     const tree = buildControlPanelTree(filtered);
     renderTreeLevel(frag, tree, 0, '');
-
     el.appendChild(frag);
-
-    // Update badge
     document.getElementById('feed-count-badge').textContent = `${filtered.length} Active`;
-
-    // Update command bar stats
-    updateCommandStats();
-
     // Update status tab highlights
     document.querySelectorAll('.stab').forEach(btn => btn.classList.remove('active'));
     const activeTab = document.getElementById(`stab-${statusFilter}`);
@@ -498,13 +731,21 @@ function showIncidentPreview(r, event) {
     const loc = r.location;
     const ai = r.ai_analysis;
 
+    // W-4 fix: img.url is '' before assembly completes — fall back to thumbnail_url
+    const thumbUrl = img?.thumbnail_url ? getMediaUrl(img.thumbnail_url) : '';
+    const fullUrl  = img?.url && img.assembly_status === 'complete' ? getMediaUrl(img.url) : '';
     p.innerHTML = `
-        ${img ? `<img src="${getMediaUrl(img.url)}" class="fp-img" alt="Incident photo">` : ''}
+        ${thumbUrl || fullUrl ? `
+        <div class="fp-img-wrap">
+            ${thumbUrl ? `<img src="${thumbUrl}" class="fp-img fp-img-blur" alt="">` : ''}
+            ${fullUrl  ? `<img src="${fullUrl}"  class="fp-img fp-img-full" alt="Incident photo"
+                              onload="this.classList.add('img-ready')" onerror="this.style.display='none'">` : ''}
+        </div>` : ''}
         <div class="fp-main">
             <div class="fp-title">${r.infrastructure_type} <span class="fp-sev sev-dot-${r.severity}">${r.severity}</span></div>
             <div class="fp-desc">${r.description || 'No description'}</div>
             ${ai?.transcription ? `<div class="fp-transcript"><i class="fa-solid fa-quote-left"></i> ${ai.transcription.substring(0, 80)}...</div>` : ''}
-            ${loc ? `<div class="fp-loc"><i class="fa-solid fa-location-dot"></i> ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}</div>` : ''}
+            ${loc ? `<div class="fp-loc"><i class="fa-solid fa-location-dot"></i> ${loc.user_location_name || loc.device_location_name || `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`}</div>` : ''}
             ${audio ? `<button class="fp-audio-btn" onclick="event.stopPropagation(); playPreviewAudio('${getMediaUrl(audio.url)}', this)"><i class="fa-solid fa-play"></i> Play Audio</button>` : ''}
             <div class="fp-meta">${timeAgo(r.server_created_at)} · ${r.status}</div>
         </div>
@@ -539,112 +780,437 @@ window.playPreviewAudio = function (url, btn) {
 };
 
 // ── Detail Panel ─────────────────────────────────────────────────────────────
-window.selectReport = (id) => {
+// skipFly=true when called from poll loop — avoids jarring map movement on auto-refresh
+window.selectReport = (id, skipFly = false) => {
     selectedId = id;
     const r = allReports.find(x => x.id === id);
     if (!r) return;
 
-    document.getElementById('detail-panel').style.display = 'flex';
-    document.getElementById('detail-title').textContent = `${r.infrastructure_type} — ${r.severity}`;
+    const panel = document.getElementById('detail-panel');
+    panel.style.display = 'flex';
 
-    const img = r.media?.find(m => m.type === 'IMAGE');
+    const img   = r.media?.find(m => m.type === 'IMAGE');
     const audio = r.media?.find(m => m.type === 'AUDIO');
-    const loc = r.location;
-    const ai = r.ai_analysis;
+    const loc   = r.location;
+    const ai    = r.ai_analysis;
+    const v     = r.verification;
+    const sevColor = SEV_COLORS[r.severity] || '#64748b';
+    const infraIcon = INFRA_ICONS[r.infrastructure_type] || 'fa-triangle-exclamation';
+    const locName = loc?.user_location_name || loc?.device_location_name || null;
+    const locLat  = loc?.latitude;
+    const locLng  = loc?.longitude;
+
+    // ── Image HTML (compact 160px) ──
+    const imgPct = (img?.completion_pct ?? 0);
+    const imgComplete = img?.assembly_status === 'complete' && img?.url;
+    const imgSrc = imgComplete ? getMediaUrl(img.url) : (img?.thumbnail_url ? getMediaUrl(img.thumbnail_url) + '?_cb=' + (Math.round(imgPct/5)*5) : '');
+    const imgHtml = img ? (
+        imgComplete
+            ? `<div class="dp-img" onclick="openLightbox('${getMediaUrl(img.url)}','${r.infrastructure_type}')">
+                   ${img.thumbnail_url ? `<img src="${getMediaUrl(img.thumbnail_url)}" class="img-thumb-bg">` : ''}
+                   <img src="${getMediaUrl(img.url)}" class="img-full-layer" onload="this.classList.add('img-ready')" onerror="this.style.display='none'">
+               </div>`
+            : imgSrc
+                ? `<div class="dp-img dp-img-uploading">
+                       <img src="${imgSrc}" class="img-thumb-bg">
+                       <div class="img-progress-overlay">
+                           <div class="chunk-progress-track"><div class="chunk-progress-fill" style="width:${imgPct}%"></div></div>
+                           <span class="partial-img-label"><i class="fa-solid fa-cloud-arrow-up fa-pulse"></i> ${imgPct.toFixed(0)}%</span>
+                       </div>
+                   </div>`
+                : imgPct > 0
+                    ? `<div class="dp-img dp-img-placeholder"><div class="chunk-progress-track" style="width:80%"><div class="chunk-progress-fill" style="width:${imgPct}%"></div></div><span style="font-size:9px;color:#6b7280;">${imgPct.toFixed(0)}%</span></div>`
+                    : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-camera" style="font-size:18px;color:#334155;"></i></div>`
+    ) : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-camera-slash" style="font-size:16px;color:#334155;"></i></div>`;
+
+    // ── Satellite image HTML (with alt source toggle) ──
+    const satSrc    = v?.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
+    const satAltSrc = v?.satellite_image_url_alt ? `${BACKEND_HOST}${v.satellite_image_url_alt}` : '';
+    const satPrimaryLabel = (v?.satellite_source || 'Satellite').split('(')[0].trim();
+    const satAltLabel     = (v?.satellite_source_alt || 'Alt').split('(')[0].trim();
+    const satHtml = satSrc
+        ? `<div class="dp-sat-wrap">
+               ${satAltSrc ? `<div class="dp-sat-tabs">
+                   <button class="dp-sat-tab active" onclick="switchSatSource('${r.id}','primary',this,'${satSrc}')">${satPrimaryLabel}</button>
+                   <button class="dp-sat-tab" onclick="switchSatSource('${r.id}','alt',this,'${satAltSrc}')">${satAltLabel}</button>
+               </div>` : ''}
+               <div class="dp-img" onclick="openLightbox(document.getElementById('dp-sat-img-${r.id}').src,'Satellite')">
+                   <img id="dp-sat-img-${r.id}" src="${satSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">
+               </div>
+           </div>`
+        : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-satellite" style="font-size:16px;color:#334155;"></i><span style="font-size:8px;color:#475569;">Not verified</span></div>`;
+
+    // ── Audio HTML (compact inline strip) ──
+    const aPct = (audio?.completion_pct ?? 0);
+    const aComplete = audio?.assembly_status === 'complete' && audio?.url;
+    const aPartialUrl = audio?.thumbnail_url ? getMediaUrl(audio.thumbnail_url) + '?_cb=' + (Math.round(aPct/5)*5) : '';
+    const audioPlayUrl = aComplete ? getMediaUrl(audio.url) : aPartialUrl;
+
+    // ── Verification inline + full report ──
+    const vGaugeHtml = (() => {
+        if (!v) return '';
+        const total = v.total_score || 0;
+        const C = 125.66;
+        const offset = C - (total / 100) * C;
+        const gc = total >= 80 ? '#22c55e' : total >= 60 ? '#86efac' : total >= 40 ? '#eab308' : total >= 20 ? '#f97316' : '#ef4444';
+        const verdictLabels = { STRONGLY_CORROBORATED:'Corroborated', LIKELY_AUTHENTIC:'Likely Authentic', PARTIALLY_VERIFIED:'Partial', LOW_CONFIDENCE:'Low Confidence', UNVERIFIED:'Unverified' };
+        const vLabel = verdictLabels[v.verdict] || v.verdict || '';
+        const scores = v.scores || {};
+        const barPct = (val) => Math.round(((val || 0) / 25) * 100);
+        const barCol = (val) => val >= 20 ? '#22c55e' : val >= 13 ? '#eab308' : '#ef4444';
+        const findings = (v.key_findings || []).map(f => `<div style="font-size:9px;color:var(--text-sub);margin-bottom:3px;"><i class="fa-solid fa-circle-dot" style="color:var(--info);font-size:6px;margin-right:4px;"></i>${f}</div>`).join('');
+        const caveats = (v.caveats || []).map(c => `<div style="font-size:9px;color:#fbbf24;margin-bottom:3px;"><i class="fa-solid fa-triangle-exclamation" style="font-size:6px;margin-right:4px;"></i>${c}</div>`).join('');
+        return `
+        <div class="dp-verify-strip" onclick="document.getElementById('dp-full-report').style.display=document.getElementById('dp-full-report').style.display==='none'?'block':'none'" style="cursor:pointer;">
+            <div class="dp-gauge">
+                <svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
+                <circle cx="22" cy="22" r="18" fill="none" stroke="${gc}" stroke-width="5" stroke-linecap="round"
+                    stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}" transform="rotate(-90 22 22)"/></svg>
+                <span class="dp-gauge-num" style="color:${gc};">${total}</span>
+            </div>
+            <div class="dp-verify-info">
+                <div class="dp-verdict" style="color:${gc};">${vLabel}</div>
+                <div class="dp-verify-desc">${v.satellite_scene_description ? v.satellite_scene_description.substring(0, 100) + '...' : 'Click for full report'}</div>
+            </div>
+            <i class="fa-solid fa-chevron-down" style="color:var(--text-dim);font-size:9px;"></i>
+        </div>
+        <div id="dp-full-report" style="display:none;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;margin-bottom:8px;margin-top:-4px;">
+            ${v.error ? `<div style="padding:6px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font-size:10px;color:#fca5a5;margin-bottom:8px;"><i class="fa-solid fa-triangle-exclamation"></i> ${v.error}</div>` : ''}
+            <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;">
+                <div style="display:flex;align-items:center;gap:6px;font-size:9px;"><span style="width:90px;color:var(--text-dim);flex-shrink:0;">Location</span><div style="flex:1;height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${barPct(scores.location_authenticity)}%;background:${barCol(scores.location_authenticity)};border-radius:2px;"></div></div><span style="color:var(--text-sub);">${scores.location_authenticity ?? '—'}/25</span></div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:9px;"><span style="width:90px;color:var(--text-dim);flex-shrink:0;">Damage</span><div style="flex:1;height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${barPct(scores.damage_corroboration)}%;background:${barCol(scores.damage_corroboration)};border-radius:2px;"></div></div><span style="color:var(--text-sub);">${scores.damage_corroboration ?? '—'}/25</span></div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:9px;"><span style="width:90px;color:var(--text-dim);flex-shrink:0;">Description</span><div style="flex:1;height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${barPct(scores.description_coherence)}%;background:${barCol(scores.description_coherence)};border-radius:2px;"></div></div><span style="color:var(--text-sub);">${scores.description_coherence ?? '—'}/25</span></div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:9px;"><span style="width:90px;color:var(--text-dim);flex-shrink:0;">Data Quality</span><div style="flex:1;height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${barPct(scores.data_quality)}%;background:${barCol(scores.data_quality)};border-radius:2px;"></div></div><span style="color:var(--text-sub);">${scores.data_quality ?? '—'}/25</span></div>
+            </div>
+            ${findings ? `<div style="margin-bottom:6px;">${findings}</div>` : ''}
+            ${caveats ? `<div style="margin-bottom:6px;">${caveats}</div>` : ''}
+            ${v.reasoning ? `<div style="font-size:9px;color:var(--text-sub);line-height:1.4;padding:6px 8px;background:rgba(255,255,255,0.02);border-left:2px solid var(--border);border-radius:0 4px 4px 0;">${v.reasoning}</div>` : ''}
+        </div>`;
+    })();
+
+    // ── Build the compact detail body ──
+    document.getElementById('detail-title').innerHTML = `
+        <i class="fa-solid ${infraIcon}" style="color:${sevColor};margin-right:6px;"></i>
+        ${r.infrastructure_type}
+        <span class="detail-sev-badge detail-sev-${r.severity}" style="margin-left:8px;font-size:10px;padding:2px 10px;">${r.severity}</span>
+        <span class="status-badge status-${r.status}" style="margin-left:4px;">${r.status}</span>
+    `;
 
     document.getElementById('detail-body').innerHTML = `
-        <div class="detail-section">
-            <div class="detail-section-title">Classification</div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-                <span class="detail-sev-badge detail-sev-${r.severity}">${r.severity}</span>
-                <span class="status-badge status-${r.status}">${r.status}</span>
-                ${r.sync_status === 'PARTIAL' ? `<span class="sync-status-badge partial"><i class="fa-solid fa-cloud-arrow-up"></i> Partial (${r.received_media}/${r.expected_media} files)</span>` : r.sync_status === 'SYNCED' ? `<span class="sync-status-badge synced"><i class="fa-solid fa-circle-check"></i> Complete</span>` : ''}
-                ${r.is_auto_submitted ? '<span class="auto-submit-badge"><i class="fa-solid fa-hourglass-end"></i> Auto-submitted</span>' : ''}
+        <!-- Subtitle: time + sync + auto-submit -->
+        <div class="dp-subtitle">
+            <span>${timeDisplay(r.server_created_at)}</span>
+            ${r.sync_status === 'PARTIAL' ? `<span class="dp-chip dp-chip-warn"><i class="fa-solid fa-cloud-arrow-up"></i> ${r.received_media}/${r.expected_media}</span>` : ''}
+            ${r.is_auto_submitted ? '<span class="dp-chip dp-chip-dim"><i class="fa-solid fa-hourglass-end"></i> Auto</span>' : ''}
+        </div>
+
+        <!-- Photo + Satellite side-by-side -->
+        <div class="dp-images ${v ? '' : 'dp-images-single'}">
+            <div class="dp-img-col">
+                ${imgHtml}
+                <div class="dp-img-ts">Captured: ${formatShortDate(r.server_created_at)}</div>
             </div>
-            <div class="detail-field"><label>Type</label><div class="val">${r.infrastructure_type}</div></div>
-            <div class="detail-field"><label>Source</label><div class="val">${r.source}</div></div>
+            ${v ? `<div class="dp-img-col">
+                ${satHtml}
+                <div class="dp-img-ts">${(v.satellite_source || 'Satellite').split(' ')[0]}: ${v.satellite_acquisition_date ? formatShortDate(v.satellite_acquisition_date) : 'N/A'}${v.satellite_days_gap != null ? ` · ${v.satellite_days_gap === 0 ? 'Same day' : v.satellite_days_gap > 0 ? v.satellite_days_gap + 'd before' : Math.abs(v.satellite_days_gap) + 'd after'}` : ''}</div>
+            </div>` : ''}
         </div>
 
-        <div class="detail-section">
-            <div class="detail-section-title">Description</div>
-            <div class="detail-description-block">${r.description || 'No description provided.'}</div>
+        <!-- Evidence strip: audio + transcription -->
+        <div class="dp-evidence-strip">
+            ${audio ? (
+                audioPlayUrl
+                    ? `<button class="dp-audio-btn ${aComplete ? '' : 'uploading'}" onclick="playDetailAudio(this, '${audioPlayUrl}')">
+                           <i class="fa-solid ${aComplete ? 'fa-play' : 'fa-cloud-arrow-up fa-pulse'}"></i>
+                           ${aComplete ? '' : aPct.toFixed(0) + '%'}
+                       </button>`
+                    : `<span class="dp-audio-pending"><i class="fa-solid fa-microphone" style="color:#475569;"></i> ${aPct > 0 ? aPct.toFixed(0) + '%' : 'Waiting...'}</span>`
+            ) : ''}
+            <div class="dp-audio-bar-wrap" style="${audioPlayUrl ? '' : 'display:none'}">
+                <div class="audio-progress-bar" style="height:3px;"><div class="audio-progress-fill" id="detail-audio-fill"></div></div>
+                <div class="audio-time" style="font-size:8px;"><span id="detail-audio-cur">0:00</span><span id="detail-audio-dur">${aComplete ? '0:00' : '--:--'}</span></div>
+            </div>
+            <div class="dp-transcript-snippet">
+                ${ai?.transcription ? `<i class="fa-solid fa-quote-left" style="font-size:7px;color:#475569;margin-right:3px;"></i>${ai.transcription.substring(0, 100)}${ai.transcription.length > 100 ? '...' : ''}` :
+                  (r.description ? r.description.substring(0, 100) + (r.description.length > 100 ? '...' : '') : '<span style="color:#475569;">No description</span>')}
+            </div>
         </div>
 
-        ${img ? `
-        <div class="detail-section">
-            <div class="detail-section-title"><i class="fa-solid fa-camera"></i> Photo Evidence</div>
-            <img src="${getMediaUrl(img.url)}" class="detail-image" onclick="openLightbox('${getMediaUrl(img.url)}', '${r.infrastructure_type}')">
-        </div>` : ''}
-
-        ${audio ? `
-        <div class="detail-section">
-            <div class="detail-section-title"><i class="fa-solid fa-microphone"></i> Voice Report</div>
-            <div class="detail-audio-player">
-                <button class="audio-play-btn" onclick="playDetailAudio(this, '${getMediaUrl(audio.url)}')"><i class="fa-solid fa-play"></i></button>
-                <div class="audio-progress-wrap">
-                    <div class="audio-progress-bar"><div class="audio-progress-fill" id="detail-audio-fill"></div></div>
-                    <div class="audio-time"><span id="detail-audio-cur">0:00</span><span id="detail-audio-dur">0:00</span></div>
+        <!-- Location -->
+        ${loc ? (() => {
+            const mismatch = loc.is_user_corrected && loc.device_latitude && loc.device_longitude;
+            const distKm = mismatch ? Math.round(haversineKm(loc.latitude, loc.longitude, loc.device_latitude, loc.device_longitude)) : 0;
+            const userName = loc.user_location_name || `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
+            const devName  = loc.device_location_name || `${loc.device_latitude?.toFixed(4)}, ${loc.device_longitude?.toFixed(4)}`;
+            return mismatch ? `
+            <div class="dp-loc-mismatch">
+                <div class="dp-loc-row">
+                    <i class="fa-solid fa-location-dot" style="color:${sevColor};"></i>
+                    <span class="dp-loc-label">User:</span>
+                    <span class="dp-loc-name">${userName}</span>
+                    <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${loc.latitude}, ${loc.longitude}'); showToast('User coords copied','success')"><i class="fa-solid fa-copy"></i></button>
                 </div>
-            </div>
-        </div>` : ''}
-
-        ${ai?.transcription ? `
-        <div class="detail-section">
-            <div class="detail-section-title"><i class="fa-solid fa-brain"></i> AI Transcription</div>
-            <div class="card-transcript">${ai.transcription}</div>
-        </div>` : ''}
-
-        ${loc ? `
-        <div class="detail-section">
-            <div class="detail-section-title"><i class="fa-solid fa-location-dot"></i> Location</div>
-            <div class="loc-tags-grid">
-                ${loc.device_latitude && loc.device_longitude ? `
-                <div class="loc-tag device-tag">
-                    <div class="loc-tag-label"><i class="fa-solid fa-satellite-dish"></i> Device GeoTag</div>
-                    <button class="copy-coords-btn" onclick="navigator.clipboard.writeText('${loc.device_latitude}, ${loc.device_longitude}'); showToast('Device coords copied', 'success')">
-                        <i class="fa-solid fa-copy"></i> ${loc.device_latitude.toFixed(6)}, ${loc.device_longitude.toFixed(6)}
-                    </button>
-                </div>` : ''}
-                ${loc.user_location_name ? `
-                <div class="loc-tag user-tag">
-                    <div class="loc-tag-label"><i class="fa-solid fa-user-pen"></i> User Suggested</div>
-                    <div class="loc-tag-value">${loc.user_location_name}</div>
-                </div>` : ''}
-                <div class="loc-tag ${loc.is_user_corrected ? 'corrected-tag' : 'final-tag'}">
-                    <div class="loc-tag-label"><i class="fa-solid fa-map-pin"></i> ${loc.is_user_corrected ? 'User-Corrected' : 'Final'} Coordinates</div>
-                    <button class="copy-coords-btn" onclick="navigator.clipboard.writeText('${loc.latitude}, ${loc.longitude}'); showToast('Coordinates copied', 'success')">
-                        <i class="fa-solid fa-copy"></i> ${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)}
-                    </button>
+                <div class="dp-loc-row">
+                    <i class="fa-solid fa-mobile-screen" style="color:#94a3b8;"></i>
+                    <span class="dp-loc-label">Device:</span>
+                    <span class="dp-loc-name">${devName}</span>
+                    <span class="dp-loc-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${distKm}km apart</span>
                 </div>
-            </div>
-            ${loc.is_user_corrected && loc.device_latitude ? '<div class="loc-mismatch-warning"><i class="fa-solid fa-triangle-exclamation"></i> Device and user locations differ</div>' : ''}
-        </div>` : ''}
+            </div>` : `
+            <div class="dp-loc-line">
+                <i class="fa-solid fa-location-dot" style="color:${sevColor};"></i>
+                <span class="dp-loc-name">${locName || userName}</span>
+                <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${locLat}, ${locLng}'); showToast('Coords copied','success')"><i class="fa-solid fa-copy"></i></button>
+            </div>`;
+        })() : ''}
 
-        <div class="detail-section">
-            <div class="detail-section-title">Actions</div>
-            <div class="detail-actions">
-                ${r.status !== 'RESPONDING' ? `<button class="action-btn btn-dispatch" onclick="patchReport('${r.id}', 'dispatch')"><i class="fa-solid fa-truck-medical"></i> Dispatch Team</button>` : ''}
-                ${r.status !== 'RESOLVED' ? `<button class="action-btn btn-resolve" onclick="patchReport('${r.id}', 'resolve')"><i class="fa-solid fa-check-circle"></i> Mark Resolved</button>` : ''}
-                ${r.status !== 'FALSE_ALARM' ? `<button class="action-btn btn-false-alarm" onclick="patchReport('${r.id}', 'false-alarm')"><i class="fa-solid fa-ban"></i> False Alarm</button>` : ''}
-                <button class="action-btn btn-delete" onclick="if(confirm('Delete this report permanently?')) deleteReport('${r.id}')"><i class="fa-solid fa-trash"></i> Delete</button>
-            </div>
+        <!-- Verification score (compact) -->
+        ${vGaugeHtml}
+
+        <!-- Primary actions -->
+        <div class="dp-actions-primary">
+            ${r.status !== 'RESPONDING' ? `<button class="dp-act dp-act-dispatch" onclick="patchReport('${r.id}','dispatch')"><i class="fa-solid fa-truck-medical"></i> Dispatch</button>` : ''}
+            ${r.status !== 'RESOLVED' ? `<button class="dp-act dp-act-resolve" onclick="patchReport('${r.id}','resolve')"><i class="fa-solid fa-check-circle"></i> Resolve</button>` : ''}
+            ${r.status !== 'FALSE_ALARM' ? `<button class="dp-act dp-act-false" onclick="patchReport('${r.id}','false-alarm')"><i class="fa-solid fa-ban"></i> False</button>` : ''}
         </div>
 
-        <div class="detail-section">
-            <div class="detail-section-title">Metadata</div>
-            <div class="detail-field"><label>Report ID</label><div class="val" style="font-family:var(--font-mono);font-size:10px;">${r.id}</div></div>
-            <div class="detail-field"><label>Reported</label><div class="val">${timeAgo(r.server_created_at)}</div></div>
+        <!-- Secondary actions -->
+        <div class="dp-actions-secondary">
+            <button class="dp-act-sm dp-act-verify" id="btn-verify-${r.id}" onclick="runVerification('${r.id}')">
+                <i class="fa-solid fa-satellite"></i> ${v ? 'Re-verify & Report' : 'Verify & Report'}
+            </button>
+            <button class="dp-act-sm dp-act-delete" onclick="if(confirm('Delete this report permanently?')) deleteReport('${r.id}')">
+                <i class="fa-solid fa-trash"></i>
+            </button>
         </div>
     `;
 
-    if (loc) map.flyTo([loc.latitude, loc.longitude], 15);
+    if (loc && !skipFly) map.flyTo([loc.latitude, loc.longitude], 15);
     renderFeed();
+};
+
+window.switchSatSource = (reportId, which, btn, src) => {
+    const img = document.getElementById(`dp-sat-img-${reportId}`);
+    if (img) img.src = src;
+    btn.parentElement.querySelectorAll('.dp-sat-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
 };
 
 window.closeDetail = () => {
     selectedId = null;
     document.getElementById('detail-panel').style.display = 'none';
     renderFeed();
+};
+
+// ── Satellite Truth Verification ─────────────────────────────────────────────
+
+/**
+ * Render the verification result section inside the detail panel.
+ * Called during detail-panel render if r.verification exists.
+ */
+function renderVerificationSection(r) {
+    const v = r.verification;
+    if (!v) return ''; // Not yet verified — section absent until user triggers it
+
+    const scores   = v.scores || {};
+    const total    = v.total_score || 0;
+    const verdict  = v.verdict   || 'UNVERIFIED';
+    const verdictLabels = {
+        STRONGLY_CORROBORATED: 'Strongly Corroborated',
+        LIKELY_AUTHENTIC:      'Likely Authentic',
+        PARTIALLY_VERIFIED:    'Partially Verified',
+        LOW_CONFIDENCE:        'Low Confidence',
+        UNVERIFIED:            'Unverified',
+    };
+
+    // SVG gauge — circle r=30, circumference = 188.5
+    const C      = 188.5;
+    const offset = C - (total / 100) * C;
+    const gaugeColor = total >= 80 ? '#22c55e'
+                     : total >= 60 ? '#86efac'
+                     : total >= 40 ? '#eab308'
+                     : total >= 20 ? '#f97316'
+                     :               '#ef4444';
+
+    // Component bar colours (each out of 25)
+    const barPct = (val) => Math.round(((val || 0) / 25) * 100);
+    const barCol = (val) => val >= 20 ? '#22c55e' : val >= 13 ? '#eab308' : '#ef4444';
+
+    // Temporal gap chip
+    const gap       = v.satellite_days_gap;
+    let gapChip = '';
+    if (gap !== null && gap !== undefined) {
+        if (gap < 0) {
+            gapChip = `<span class="sat-meta-chip chip-good"><i class="fa-solid fa-calendar-check"></i> Post-incident (${Math.abs(gap)}d after)</span>`;
+        } else if (gap === 0) {
+            gapChip = `<span class="sat-meta-chip chip-good"><i class="fa-solid fa-calendar-day"></i> Same day</span>`;
+        } else if (gap <= 7) {
+            gapChip = `<span class="sat-meta-chip chip-warn"><i class="fa-solid fa-calendar"></i> ${gap}d before report</span>`;
+        } else {
+            gapChip = `<span class="sat-meta-chip chip-alert"><i class="fa-solid fa-calendar-xmark"></i> ${gap}d before report</span>`;
+        }
+    }
+
+    // Cloud cover chip
+    const cloud = v.satellite_cloud_cover_pct;
+    let cloudChip = '';
+    if (cloud !== null && cloud !== undefined) {
+        const cls = cloud < 20 ? 'chip-good' : cloud < 50 ? 'chip-warn' : 'chip-alert';
+        cloudChip = `<span class="sat-meta-chip ${cls}"><i class="fa-solid fa-cloud"></i> ${cloud}% cloud</span>`;
+    } else {
+        cloudChip = `<span class="sat-meta-chip chip-info"><i class="fa-solid fa-cloud"></i> Cloud: N/A</span>`;
+    }
+
+    // User photo src (first IMAGE media)
+    const img = r.media?.find(m => m.type === 'IMAGE');
+    const userImgSrc = img?.url ? getMediaUrl(img.url) : (img?.thumbnail_url ? getMediaUrl(img.thumbnail_url) : '');
+
+    const satImgSrc = v.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
+
+    // Key findings
+    const findings = (v.key_findings || []).map(f =>
+        `<div class="sat-finding-item"><i class="fa-solid fa-circle-dot" style="color:var(--info);"></i>${f}</div>`
+    ).join('');
+
+    // Caveats
+    const caveats = (v.caveats || []).map(c =>
+        `<div class="sat-caveat-item"><i class="fa-solid fa-triangle-exclamation"></i>${c}</div>`
+    ).join('');
+
+    // Scored-at time
+    const scoredAt = v.scored_at ? timeAgo(v.scored_at) : '';
+
+    return `
+    <div class="detail-section" id="sat-verify-section">
+        <div class="detail-section-title">
+            <i class="fa-solid fa-satellite" style="color:var(--info);"></i>
+            Satellite Verification
+            <span style="font-size:8px; color:var(--text-dim); font-weight:400; margin-left:4px;">${scoredAt}</span>
+        </div>
+
+        ${v.error && total === 0 ? `
+        <div style="padding:10px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; font-size:11px; color:#fca5a5; margin-bottom:10px;">
+            <i class="fa-solid fa-triangle-exclamation"></i> ${v.error}
+        </div>` : ''}
+
+        <!-- Image comparison -->
+        <div class="sat-compare-strip">
+            <div class="sat-compare-frame">
+                <div class="sat-compare-label"><i class="fa-solid fa-user"></i> Reporter Photo</div>
+                ${userImgSrc
+                    ? `<img src="${userImgSrc}" class="sat-compare-img" onclick="openLightbox('${userImgSrc}','User Photo')" title="Click to enlarge">`
+                    : `<div class="sat-compare-img" style="display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-dim);">No photo</div>`
+                }
+            </div>
+            <div class="sat-compare-frame">
+                <div class="sat-compare-label"><i class="fa-solid fa-satellite"></i> Satellite View</div>
+                ${satImgSrc
+                    ? `<img src="${satImgSrc}" class="sat-compare-img" onclick="openLightbox('${satImgSrc}','Satellite')" title="Click to enlarge — ${v.satellite_source || ''}">`
+                    : `<div class="sat-compare-img" style="display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-dim);">Unavailable</div>`
+                }
+            </div>
+        </div>
+
+        <!-- Satellite metadata chips -->
+        <div class="sat-meta-row">
+            <span class="sat-meta-chip chip-info"><i class="fa-solid fa-satellite-dish"></i> ${v.satellite_source || 'Unknown source'}</span>
+            ${gapChip}
+            ${cloudChip}
+            ${v.satellite_resolution_m ? `<span class="sat-meta-chip"><i class="fa-solid fa-ruler"></i> ${v.satellite_resolution_m}m/px</span>` : ''}
+        </div>
+
+        <!-- Score gauge + verdict -->
+        <div class="sat-score-block">
+            <div class="sat-gauge">
+                <svg width="68" height="68" viewBox="0 0 68 68">
+                    <circle class="sat-gauge-track" cx="34" cy="34" r="28"/>
+                    <circle class="sat-gauge-fill"
+                        cx="34" cy="34" r="28"
+                        stroke="${gaugeColor}"
+                        stroke-dasharray="${C}"
+                        stroke-dashoffset="${offset.toFixed(1)}"/>
+                </svg>
+                <div class="sat-gauge-label">
+                    <span class="sat-gauge-num" style="color:${gaugeColor};">${total}</span>
+                    <span class="sat-gauge-denom">/100</span>
+                </div>
+            </div>
+            <div class="sat-score-info">
+                <div class="sat-verdict verdict-${verdict}">${verdictLabels[verdict] || verdict}</div>
+                ${v.satellite_scene_description
+                    ? `<div style="font-size:9px;color:var(--text-sub);line-height:1.4;">${v.satellite_scene_description}</div>`
+                    : ''}
+            </div>
+        </div>
+
+        <!-- Component breakdown bars -->
+        <div class="sat-components">
+            <div class="sat-comp-row">
+                <span class="sat-comp-label">Location Match</span>
+                <div class="sat-comp-bar"><div class="sat-comp-fill" style="width:${barPct(scores.location_authenticity)}%; background:${barCol(scores.location_authenticity)};"></div></div>
+                <span class="sat-comp-val">${scores.location_authenticity ?? '—'}/25</span>
+            </div>
+            <div class="sat-comp-row">
+                <span class="sat-comp-label">Damage Evidence</span>
+                <div class="sat-comp-bar"><div class="sat-comp-fill" style="width:${barPct(scores.damage_corroboration)}%; background:${barCol(scores.damage_corroboration)};"></div></div>
+                <span class="sat-comp-val">${scores.damage_corroboration ?? '—'}/25</span>
+            </div>
+            <div class="sat-comp-row">
+                <span class="sat-comp-label">Description Match</span>
+                <div class="sat-comp-bar"><div class="sat-comp-fill" style="width:${barPct(scores.description_coherence)}%; background:${barCol(scores.description_coherence)};"></div></div>
+                <span class="sat-comp-val">${scores.description_coherence ?? '—'}/25</span>
+            </div>
+            <div class="sat-comp-row">
+                <span class="sat-comp-label">Data Quality</span>
+                <div class="sat-comp-bar"><div class="sat-comp-fill" style="width:${barPct(scores.data_quality)}%; background:${barCol(scores.data_quality)};"></div></div>
+                <span class="sat-comp-val">${scores.data_quality ?? '—'}/25</span>
+            </div>
+        </div>
+
+        ${findings ? `<div class="sat-findings">${findings}</div>` : ''}
+        ${caveats  ? `<div class="sat-findings">${caveats}</div>` : ''}
+
+        ${v.reasoning ? `<div class="sat-reasoning">${v.reasoning}</div>` : ''}
+    </div>`;
+}
+
+/**
+ * Trigger verification for a report — calls POST /api/v1/reports/{id}/verify.
+ * Shows loading state on the button, then refreshes the detail panel on completion.
+ */
+window.runVerification = async (id) => {
+    const btn = document.getElementById(`btn-verify-${id}`);
+    if (btn) {
+        btn.classList.add('verifying');
+        btn.innerHTML = '<i class="fa-solid fa-satellite fa-spin"></i> Fetching satellite...';
+        btn.disabled = true;
+    }
+    try {
+        const res = await fetch(`${API}/${id}/verify`, { method: 'POST' });
+        if (res.ok) {
+            const verif = await res.json();
+            // Merge verification result into allReports so re-render shows it
+            const idx = allReports.findIndex(r => r.id === id);
+            if (idx >= 0) allReports[idx] = { ...allReports[idx], verification: verif };
+            showToast(`Truth score: ${verif.total_score}/100 — ${verif.verdict?.replace(/_/g,' ')}`, 'success');
+            selectReport(id, true); // re-render detail panel, skip map fly
+        } else {
+            const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+            showToast(`Verification failed: ${err.detail || res.status}`, 'error');
+            if (btn) {
+                btn.classList.remove('verifying');
+                btn.innerHTML = '<i class="fa-solid fa-satellite"></i> Verify with Satellite';
+                btn.disabled = false;
+            }
+        }
+    } catch (e) {
+        showToast('Verification request failed', 'error');
+        if (btn) {
+            btn.classList.remove('verifying');
+            btn.innerHTML = '<i class="fa-solid fa-satellite"></i> Verify with Satellite';
+            btn.disabled = false;
+        }
+    }
 };
 
 // ── Report Actions ───────────────────────────────────────────────────────────
@@ -684,7 +1250,9 @@ window.playDetailAudio = function (btn, url) {
         btn.classList.remove('playing');
         if (currentAudio._url === url) { currentAudio = null; return; }
     }
-    currentAudio = new Audio(url);
+    // Cache-bust so re-clicks fetch the latest partial file from disk
+    const fetchUrl = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+    currentAudio = new Audio(fetchUrl);
     currentAudio._url = url;
     btn.innerHTML = '<i class="fa-solid fa-pause"></i>';
     btn.classList.add('playing');
@@ -805,12 +1373,14 @@ function updateMapMarkers() {
         heatPoints.push([lat, lng, intensity]);
     });
 
-    // Heat layer
+    // Heat layer — guard against zero-size canvas (can throw getImageData error)
     if (heatPoints.length > 0) {
-        heatLayer = L.heatLayer(heatPoints, {
-            radius: 30, blur: 20, maxZoom: 10,
-            gradient: { 0.2: '#22c55e', 0.4: '#eab308', 0.6: '#f97316', 0.8: '#ef4444', 1.0: '#dc2626' }
-        }).addTo(map);
+        try {
+            heatLayer = L.heatLayer(heatPoints, {
+                radius: 30, blur: 20, maxZoom: 10,
+                gradient: { 0.2: '#22c55e', 0.4: '#eab308', 0.6: '#f97316', 0.8: '#ef4444', 1.0: '#dc2626' }
+            }).addTo(map);
+        } catch (_) { /* map not fully sized yet — heat layer will be added on next update */ }
     }
 
     // Auto-zoom on first load
@@ -857,6 +1427,71 @@ function focusMapOnNode(path) {
 
     map.flyToBounds(bounds.pad(0.3), { maxZoom: 14 });
 }
+
+// ── Pending Deletions Admin View ─────────────────────────────────────────────
+let _pendingDeletions = [];
+
+async function _checkPendingDeletions() {
+    try {
+        const res = await fetch(`${API}?include_deleted=true`);
+        if (!res.ok) return;
+        const all = await res.json();
+        _pendingDeletions = all.filter(r => r.deletion_requested_at);
+        const btn = document.getElementById('btn-pending-deletions');
+        const badge = document.getElementById('deletion-count-badge');
+        if (btn && badge) {
+            btn.style.display = _pendingDeletions.length > 0 ? 'inline-flex' : 'none';
+            badge.textContent = _pendingDeletions.length;
+        }
+    } catch (_) {}
+}
+
+window.showPendingDeletions = function () {
+    const panel = document.getElementById('deletions-panel');
+    const body = document.getElementById('del-panel-body');
+    if (!panel || !body) return;
+    panel.style.display = 'flex';
+
+    if (_pendingDeletions.length === 0) {
+        body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-dim);"><i class="fa-solid fa-circle-check" style="font-size:24px;color:#22c55e;"></i><br>No pending deletions</div>';
+        return;
+    }
+
+    body.innerHTML = _pendingDeletions.map(r => {
+        const delAt = new Date(ensureUTC(r.deletion_requested_at));
+        const expiresAt = new Date(delAt.getTime() + 24 * 60 * 60 * 1000);
+        const remaining = Math.max(0, expiresAt - Date.now());
+        const hrs = Math.floor(remaining / 3600000);
+        const mins = Math.floor((remaining % 3600000) / 60000);
+        const countdown = remaining > 0 ? `${hrs}h ${mins}m remaining` : 'Expired — awaiting purge';
+        const expired = remaining <= 0;
+        const loc = r.location?.user_location_name || r.location?.device_location_name || 'Unknown';
+        const sevColor = SEV_COLORS[r.severity] || '#64748b';
+
+        return `<div class="del-item ${expired ? 'del-expired' : ''}">
+            <div class="del-item-info">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="color:${sevColor};font-weight:700;">${r.infrastructure_type}</span>
+                    <span class="detail-sev-badge detail-sev-${r.severity}" style="font-size:9px;padding:1px 8px;">${r.severity}</span>
+                </div>
+                <div style="font-size:11px;color:var(--text-sub);margin-top:2px;">${loc} · ${timeAgo(r.server_created_at)}</div>
+                <div style="font-size:10px;color:${expired ? '#ef4444' : '#f59e0b'};margin-top:4px;display:flex;align-items:center;gap:4px;">
+                    <i class="fa-solid ${expired ? 'fa-clock' : 'fa-hourglass-half'}"></i>
+                    Deletion requested ${timeAgo(r.deletion_requested_at)} · ${countdown}
+                </div>
+                <div style="font-size:9px;color:var(--text-dim);margin-top:2px;">Device: ${r.device_id?.substring(0, 8)}... · ID: ${r.id.substring(0, 8)}...</div>
+            </div>
+        </div>`;
+    }).join('');
+};
+
+window.closeDeletionsPanel = function () {
+    const panel = document.getElementById('deletions-panel');
+    if (panel) panel.style.display = 'none';
+};
+
+// Check on every poll cycle
+const _origFetchReports = fetchReports;
 
 // ── Export Functions ──────────────────────────────────────────────────────────
 window.exportData = function (format) {
@@ -1116,33 +1751,124 @@ function applyGeoResult(r, address, cacheKey) {
 }
 
 // ── Data Fetching ────────────────────────────────────────────────────────────
-async function fetchReports() {
-    try {
-        const res = await fetch(API);
-        const data = await res.json();
-        data.forEach(r => {
-            if (!knownIds.has(r.id)) {
-                knownIds.add(r.id);
-                allReports.push(r);
-            } else {
-                // Update existing report (status changes, etc.)
-                const idx = allReports.findIndex(x => x.id === r.id);
-                if (idx >= 0) {
-                    const geo = { _region: allReports[idx]._region, _country: allReports[idx]._country, _continent_code: allReports[idx]._continent_code };
-                    allReports[idx] = { ...r, ...geo };
+const REPORTS_CACHE_KEY = 'crisp_reports_v1';
+
+function _applyReportData(data) {
+    let detailPanelNeedsRefresh = false;
+    data.forEach(r => {
+        if (!knownIds.has(r.id)) {
+            knownIds.add(r.id);
+            allReports.push(r);
+        } else {
+            const idx = allReports.findIndex(x => x.id === r.id);
+            if (idx >= 0) {
+                const geo = { _region: allReports[idx]._region, _country: allReports[idx]._country, _continent_code: allReports[idx]._continent_code };
+                const prev = allReports[idx];
+                allReports[idx] = { ...r, ...geo };
+                if (r.id === selectedId) {
+                    const prevImg = prev.media?.find(m => m.type === 'IMAGE');
+                    const newImg  = r.media?.find(m => m.type === 'IMAGE');
+                    if (newImg && (
+                        !prevImg ||
+                        prevImg.thumbnail_url    !== newImg.thumbnail_url   ||
+                        prevImg.completion_pct   !== newImg.completion_pct  ||
+                        prevImg.assembly_status  !== newImg.assembly_status
+                    )) detailPanelNeedsRefresh = true;
+                    // Audio progressive refresh
+                    const prevAud = prev.media?.find(m => m.type === 'AUDIO');
+                    const newAud  = r.media?.find(m => m.type === 'AUDIO');
+                    if (newAud && (
+                        !prevAud ||
+                        prevAud.thumbnail_url    !== newAud.thumbnail_url   ||
+                        prevAud.completion_pct   !== newAud.completion_pct  ||
+                        prevAud.assembly_status  !== newAud.assembly_status
+                    )) detailPanelNeedsRefresh = true;
+                    if (prev.sync_status !== r.sync_status) detailPanelNeedsRefresh = true;
                 }
             }
-        });
-        updateGeodata(allReports);
-        updateMapMarkers();
-        renderFeed();
-    } catch (e) { console.error('Fetch failed:', e); }
+        }
+    });
+    updateGeodata(allReports);
+    updateMapMarkers();
+    renderFeed();
+    if (detailPanelNeedsRefresh && selectedId) selectReport(selectedId, true);
+}
+
+async function fetchReports() {
+    try {
+        const res  = await fetch(API);
+        const data = await res.json();
+        try {
+            localStorage.setItem(REPORTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+        } catch (_) {}
+        _updateCacheBadge(false);
+        // Apply rendering separately so UI errors don't look like network failures
+        try { _applyReportData(data); } catch (e) { console.warn('[CRISP] Render error:', e); }
+        // Check for pending deletions (admin indicator)
+        _checkPendingDeletions();
+    } catch (e) {
+        console.warn('[CRISP] Fetch failed (offline?) — using cached data:', e);
+        _updateCacheBadge(true);
+    }
+    _reschedulePoller();
+}
+
+function _hasActiveUploads() {
+    return allReports.some(r => {
+        return r.media?.some(m =>
+            (m.type === 'IMAGE' || m.type === 'AUDIO') &&
+            m.assembly_status !== 'complete' &&
+            (m.completion_pct ?? 0) > 0
+        );
+    });
+}
+
+function _reschedulePoller() {
+    if (_pollTimer) clearTimeout(_pollTimer);
+    const interval = _hasActiveUploads() ? POLL_INTERVAL_ACTIVE : POLL_INTERVAL;
+    _pollTimer = setTimeout(fetchReports, interval);
+}
+
+function _updateCacheBadge(stale) {
+    let badge = document.getElementById('cache-freshness-badge');
+    if (!badge) return;
+    if (stale) {
+        badge.textContent = '⚠ Cached';
+        badge.title = 'Showing last cached data — reconnect to refresh';
+        badge.style.color = '#f59e0b';
+    } else {
+        badge.textContent = '● Live';
+        badge.title = 'Data is live from server';
+        badge.style.color = 'var(--accent, #7c3aed)';
+    }
+}
+
+function _loadCachedReports() {
+    try {
+        const raw = localStorage.getItem(REPORTS_CACHE_KEY);
+        if (!raw) return false;
+        const { ts, data } = JSON.parse(raw);
+        if (!Array.isArray(data) || !data.length) return false;
+        _applyReportData(data);
+        // Show age of cache
+        const ageMin = Math.round((Date.now() - ts) / 60000);
+        const badge = document.getElementById('cache-freshness-badge');
+        if (badge) {
+            badge.textContent = `⚠ Cached ${ageMin}m ago`;
+            badge.style.color = '#f59e0b';
+        }
+        return true;
+    } catch (_) { return false; }
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     initMap();
     await loadWorldData();
+
+    // Show cached data instantly (zero network needed)
+    _loadCachedReports();
+
+    // Fetch fresh data, then adaptive polling takes over
     fetchReports();
-    setInterval(fetchReports, POLL_INTERVAL);
 });

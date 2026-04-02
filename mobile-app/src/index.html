@@ -17,6 +17,33 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+<!-- ── Privacy Consent (first launch only, auto-translates to local language) ── -->
+<div id="consent-overlay" class="consent-overlay" style="display:none;">
+    <div class="consent-card">
+        <div class="consent-icon"><i class="fa-solid fa-shield-halved"></i></div>
+        <h2 data-i18n="consent_title">Your Privacy Matters</h2>
+        <p data-i18n="consent_desc">CRISP collects only the data needed to help rescue teams respond faster:</p>
+        <ul>
+            <li><i class="fa-solid fa-location-dot"></i> <span data-i18n="consent_loc">Location — GPS coordinates to pinpoint the incident</span></li>
+            <li><i class="fa-solid fa-camera"></i> <span data-i18n="consent_photo">Photos — damage evidence for response teams</span></li>
+            <li><i class="fa-solid fa-microphone"></i> <span data-i18n="consent_audio">Audio — voice descriptions transcribed by AI</span></li>
+        </ul>
+        <div class="consent-assurance">
+            <div><i class="fa-solid fa-user-slash"></i> <span data-i18n="consent_no_pii">No personal identity collected</span></div>
+            <div><i class="fa-solid fa-lock"></i> <span data-i18n="consent_shared">Data shared only with crisis responders</span></div>
+            <div><i class="fa-solid fa-trash-can"></i> <span data-i18n="consent_delete">You can request deletion anytime</span></div>
+        </div>
+        <label class="consent-check">
+            <input type="checkbox" id="consent-checkbox">
+            <span data-i18n="consent_check">I understand and consent to sharing this data for crisis response</span>
+        </label>
+        <button class="consent-accept-btn" id="consent-accept-btn" disabled>
+            <i class="fa-solid fa-check"></i> <span data-i18n="consent_accept">Accept & Continue</span>
+        </button>
+    </div>
+</div>
+
 <div class="mobile-screen" id="app-root">
 
     <!-- ── LANGUAGE SWITCHER ── -->
@@ -37,24 +64,25 @@
             <h1 class="hero-title" data-i18n="home_title">Report an Incident</h1>
             <p class="hero-sub" data-i18n="home_sub">Help rescue teams find you faster.<br>It only takes 4 easy steps.</p>
 
-            <!-- Step roadmap pills -->
+            <!-- Step roadmap — 2×2 grid with big icons -->
             <div class="roadmap">
                 <div class="roadmap-step">
+                    <span class="rs-step-num">1</span>
                     <div class="rs-icon">📸</div>
-                    <div class="rs-label" data-i18n="rs1">Take Photo</div>
+                    <div class="rs-label" data-i18n="rs1">Photo</div>
                 </div>
-                <div class="roadmap-arrow">→</div>
                 <div class="roadmap-step">
+                    <span class="rs-step-num">2</span>
                     <div class="rs-icon">🎙️</div>
                     <div class="rs-label" data-i18n="rs2">Speak</div>
                 </div>
-                <div class="roadmap-arrow">→</div>
                 <div class="roadmap-step">
-                    <div class="rs-icon">✏️</div>
-                    <div class="rs-label" data-i18n="rs3">Check Text</div>
+                    <span class="rs-step-num">3</span>
+                    <div class="rs-icon">✅</div>
+                    <div class="rs-label" data-i18n="rs3">Check</div>
                 </div>
-                <div class="roadmap-arrow">→</div>
                 <div class="roadmap-step">
+                    <span class="rs-step-num">4</span>
                     <div class="rs-icon">🚀</div>
                     <div class="rs-label" data-i18n="rs4">Send</div>
                 </div>
@@ -64,6 +92,25 @@
                 <i class="fa-solid fa-play"></i>
                 <span data-i18n="start_btn">Start Report</span>
             </button>
+
+            <button class="delete-my-data-link" id="btn-delete-my-data" style="display:none;">
+                <i class="fa-solid fa-trash-can"></i> <span data-i18n="delete_my_data">Delete My Data</span>
+            </button>
+
+            <!-- Delete data panel (hidden by default) -->
+            <div id="delete-data-panel" class="delete-data-panel" style="display:none;">
+                <div class="ddp-header">
+                    <h3><i class="fa-solid fa-shield-halved"></i> <span data-i18n="your_reports">Your Submitted Reports</span></h3>
+                    <div class="ddp-lang-switch" id="ddp-lang-switch"></div>
+                    <button class="ddp-close" id="ddp-close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="ddp-list" class="ddp-list"></div>
+                <div class="ddp-footer">
+                    <button class="ddp-delete-all" id="ddp-delete-all">
+                        <i class="fa-solid fa-trash-can"></i> <span data-i18n="delete_all">Delete All Reports</span>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -72,7 +119,12 @@
     ══════════════════════════════════════ -->
     <div class="stage" id="stage-photo">
         <div class="stage-header">
-            <div class="step-badge">Step 1 of 4</div>
+            <div class="step-dots">
+                <div class="step-dot active"></div>
+                <div class="step-dot"></div>
+                <div class="step-dot"></div>
+                <div class="step-dot"></div>
+            </div>
             <h2 data-i18n="s1_title">Take a Photo</h2>
             <p data-i18n="s1_sub">Show us what happened</p>
         </div>
@@ -125,9 +177,14 @@
     ══════════════════════════════════════ -->
     <div class="stage" id="stage-audio">
         <div class="stage-header">
-            <div class="step-badge">Step 2 of 4</div>
+            <div class="step-dots">
+                <div class="step-dot done"></div>
+                <div class="step-dot active"></div>
+                <div class="step-dot"></div>
+                <div class="step-dot"></div>
+            </div>
             <h2 data-i18n="s2_title">Describe the Problem</h2>
-            <p data-i18n="s2_sub">Speak in your language — we will convert it to text</p>
+            <p data-i18n="s2_sub">Speak in your language</p>
         </div>
 
         <!-- Big mic button -->
@@ -168,47 +225,82 @@
     ══════════════════════════════════════ -->
     <div class="stage" id="stage-review">
         <div class="stage-header">
-            <div class="step-badge">Step 3 of 4</div>
-            <h2 data-i18n="s3_title">Check Your Message</h2>
-            <p data-i18n="s3_sub">Edit if something is wrong — or just continue</p>
+            <div class="step-dots">
+                <div class="step-dot done"></div>
+                <div class="step-dot done"></div>
+                <div class="step-dot active"></div>
+                <div class="step-dot"></div>
+            </div>
+            <h2 data-i18n="s3_title">Check Details</h2>
         </div>
 
-        <!-- Photo summary -->
+        <!-- Photo row (shown by JS when photo exists) — compact -->
         <div class="review-photo-row" id="review-photo-row" style="display:none;">
-            <img id="review-photo-thumb" src="" alt="" style="width:64px; height:64px; border-radius:12px; object-fit:cover;">
-            <span style="font-size:0.9rem; color:#9ca3af;" data-i18n="photo_attached">✅ Photo attached</span>
+            <img id="review-photo-thumb" src="" alt="" style="width:40px; height:40px; border-radius:8px; object-fit:cover;">
+            <span style="font-size:0.82rem; color:#9ca3af;" data-i18n="photo_attached">✅ Photo attached</span>
         </div>
 
-        <!-- Editable text area -->
-        <div class="edit-section">
-            <label class="edit-label" data-i18n="your_message">Your Message:</label>
-            <textarea id="edit-text" class="edit-textarea" data-i18n-placeholder="type_your_msg" placeholder="Describe what happened..."></textarea>
-        </div>
+        <!-- Hidden textarea (JS reads state.text from here) -->
+        <textarea id="edit-text" class="edit-textarea" style="display:none;"
+                  data-i18n-placeholder="type_your_msg" placeholder="Describe what happened..."></textarea>
 
-        <!-- Quick classification chips -->
-        <div class="chip-section">
-            <p class="chip-label" data-i18n="what_damaged">What is damaged?</p>
-            <div class="chips-row">
-                <button class="chip-btn selected" data-type="ROAD"><i class="fa-solid fa-bridge"></i> <span data-i18n="road">Road</span></button>
-                <button class="chip-btn" data-type="HOSPITAL"><i class="fa-solid fa-hospital"></i> <span data-i18n="hospital">Hospital</span></button>
-                <button class="chip-btn" data-type="HOUSE"><i class="fa-solid fa-house"></i> <span data-i18n="house">Home</span></button>
-                <button class="chip-btn" data-type="POWER"><i class="fa-solid fa-bolt"></i> <span data-i18n="power">Power</span></button>
-                <button class="chip-btn" data-type="WATER"><i class="fa-solid fa-faucet"></i> <span data-i18n="water">Water</span></button>
-                <button class="chip-btn" data-type="OTHER"><i class="fa-solid fa-circle-question"></i> <span data-i18n="other">Other</span></button>
+        <!-- WHAT is damaged? — Big icon grid -->
+        <div class="review-block">
+            <p class="block-label" data-i18n="what_damaged">
+                <i class="fa-solid fa-circle-question" style="color:var(--accent);"></i>
+                What is damaged?
+            </p>
+            <div class="category-grid">
+                <button class="chip-btn selected" data-type="ROAD">
+                    <i class="fa-solid fa-bridge"></i>
+                    <span data-i18n="road">Road</span>
+                </button>
+                <button class="chip-btn" data-type="HOSPITAL">
+                    <i class="fa-solid fa-hospital"></i>
+                    <span data-i18n="hospital">Hospital</span>
+                </button>
+                <button class="chip-btn" data-type="HOUSE">
+                    <i class="fa-solid fa-house"></i>
+                    <span data-i18n="house">Home</span>
+                </button>
+                <button class="chip-btn" data-type="POWER">
+                    <i class="fa-solid fa-bolt"></i>
+                    <span data-i18n="power">Power</span>
+                </button>
+                <button class="chip-btn" data-type="WATER">
+                    <i class="fa-solid fa-faucet"></i>
+                    <span data-i18n="water">Water</span>
+                </button>
+                <button class="chip-btn" data-type="OTHER">
+                    <i class="fa-solid fa-circle-question"></i>
+                    <span data-i18n="other">Other</span>
+                </button>
             </div>
         </div>
 
-        <!-- Severity row -->
-        <div class="sev-section">
-            <p class="chip-label" data-i18n="severity_label">How serious?</p>
-            <div class="chips-row sev-row">
-                <button class="sev-chip" data-sev="MINOR">🟢 <span data-i18n="minor">Minor</span></button>
-                <button class="sev-chip selected" data-sev="MODERATE">🟡 <span data-i18n="moderate">Moderate</span></button>
-                <button class="sev-chip" data-sev="SEVERE">🔴 <span data-i18n="severe">Severe</span></button>
+        <!-- HOW BAD? — Big colored severity buttons -->
+        <div class="review-block">
+            <p class="block-label" data-i18n="severity_label">
+                <i class="fa-solid fa-triangle-exclamation" style="color:var(--accent);"></i>
+                How serious?
+            </p>
+            <div class="sev-big-row">
+                <button class="sev-chip" data-sev="MINOR">
+                    <div class="sev-dot"></div>
+                    <span data-i18n="minor">Minor</span>
+                </button>
+                <button class="sev-chip selected" data-sev="MODERATE">
+                    <div class="sev-dot"></div>
+                    <span data-i18n="moderate">Moderate</span>
+                </button>
+                <button class="sev-chip" data-sev="SEVERE">
+                    <div class="sev-dot"></div>
+                    <span data-i18n="severe">Severe</span>
+                </button>
             </div>
         </div>
 
-        <!-- Location -->
+        <!-- Location — compact -->
         <div class="location-verify-box">
             <div class="loc-row">
                 <i class="fa-solid fa-location-crosshairs"></i>
@@ -217,17 +309,27 @@
                     <small id="loc-coords">0.0000, 0.0000</small>
                 </div>
             </div>
-            <div class="loc-search-row">
-                <input type="text" id="input-loc-search" data-i18n-placeholder="search_place" placeholder="Correct location? Type place name...">
-                <button id="btn-search-loc" class="search-btn">
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                </button>
+            <div class="loc-autocomplete-wrap">
+                <div class="loc-search-wrap">
+                    <i class="fa-solid fa-magnifying-glass loc-search-icon"></i>
+                    <input type="text" id="input-loc-search" autocomplete="off" spellcheck="false"
+                           data-i18n-placeholder="search_place"
+                           placeholder="Search city or place…">
+                    <button id="btn-clear-loc" class="loc-clear-btn" type="button" style="display:none;" aria-label="Clear">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div id="place-suggestions" class="place-suggestions" style="display:none;"></div>
             </div>
-            <small id="loc-user-name" class="loc-user-name" style="display:none;"></small>
+            <div id="loc-selected-pill" class="loc-selected-pill" style="display:none;">
+                <i class="fa-solid fa-circle-check"></i>
+                <span id="loc-selected-text"></span>
+                <button id="btn-loc-change" type="button"><i class="fa-solid fa-pencil"></i></button>
+            </div>
         </div>
 
-        <button class="nav-btn next-btn" id="btn-review-next">
-            <span data-i18n="ready_send">Ready to Send</span> <i class="fa-solid fa-arrow-right"></i>
+        <button class="nav-btn next-btn highlight" id="btn-review-next">
+            <span data-i18n="ready_send">READY</span> <i class="fa-solid fa-arrow-right"></i>
         </button>
     </div>
 
@@ -236,9 +338,14 @@
     ══════════════════════════════════════ -->
     <div class="stage" id="stage-send">
         <div class="stage-header">
-            <div class="step-badge">Step 4 of 4</div>
+            <div class="step-dots">
+                <div class="step-dot done"></div>
+                <div class="step-dot done"></div>
+                <div class="step-dot done"></div>
+                <div class="step-dot active"></div>
+            </div>
             <h2 data-i18n="s4_title">Send to UNDP</h2>
-            <p data-i18n="s4_sub">Your report is ready. Tap the button below to send it.</p>
+            <p data-i18n="s4_sub">Tap the button to send your report</p>
         </div>
 
         <!-- Summary card -->
@@ -325,6 +432,7 @@
     </div>
 
 </div>
-<script src="app.js?v=507"></script>
+<script src="places.js?v=3"></script>
+<script src="app.js?v=607"></script>
 </body>
 </html>

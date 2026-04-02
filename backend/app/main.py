@@ -1,9 +1,15 @@
+import os
+import logging
+from dotenv import load_dotenv
+
+# Load .env into os.environ BEFORE any service singletons are imported
+_env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+load_dotenv(dotenv_path=_env_path, override=True)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.api.router import api_router
-import os
-import logging
 
 # Configure logging to show debug messages
 logging.basicConfig(
@@ -45,3 +51,28 @@ app.mount("/static", StaticFiles(directory="uploads"), name="static")
 @app.get("/health", tags=["system"])
 def health_check():
     return {"status": "CRISP Core Backend Online", "version": settings.VERSION}
+
+
+# ── Background purge: permanently delete reports past 24-hour grace period ────
+import asyncio
+import threading
+
+def _purge_loop():
+    """Run every 15 minutes, delete expired soft-deleted reports."""
+    from app.db.session import SessionLocal
+    from app.api.endpoints.reports import _purge_expired_deletions
+    while True:
+        try:
+            db = SessionLocal()
+            count = _purge_expired_deletions(db)
+            db.close()
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Purge loop error: {e}")
+        import time as _t
+        _t.sleep(900)  # 15 minutes
+
+@app.on_event("startup")
+def start_purge_worker():
+    t = threading.Thread(target=_purge_loop, daemon=True)
+    t.start()
+    logging.getLogger(__name__).info("Deletion purge worker started (runs every 15 min)")

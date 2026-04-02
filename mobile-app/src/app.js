@@ -1,3 +1,27 @@
+// ── Privacy Consent Gate (shown after language detection so it appears in local language) ──
+function _initConsentGate() {
+    const CONSENT_KEY = 'crisp_privacy_consent';
+    if (localStorage.getItem(CONSENT_KEY)) return;
+
+    const overlay = document.getElementById('consent-overlay');
+    if (!overlay) return;
+    overlay.style.display = 'flex';
+
+    const checkbox = document.getElementById('consent-checkbox');
+    const acceptBtn = document.getElementById('consent-accept-btn');
+
+    checkbox.addEventListener('change', () => {
+        acceptBtn.disabled = !checkbox.checked;
+    });
+
+    acceptBtn.addEventListener('click', () => {
+        if (!checkbox.checked) return;
+        localStorage.setItem(CONSENT_KEY, JSON.stringify({ accepted: true, ts: Date.now() }));
+        overlay.style.display = 'none';
+    });
+}
+// _initConsentGate() is called from DOMContentLoaded AFTER detectAndSetupLanguage() applies i18n
+
 // ── Service Worker Registration ───────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -42,11 +66,12 @@ async function enqueueReport(payload) {
     const db = await openIDB();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(IDB_STORE, 'readwrite');
+        // Store ALL fields flat at top level — keyPath is client_report_id.
+        // Previously nested under `payload` key which broke retry loop reads.
         tx.objectStore(IDB_STORE).put({
-            client_report_id: payload.client_report_id,
-            payload,
+            ...payload,                            // all stage/media/meta fields at top level
             timestamp: Date.now(),
-            retryCount: 0,
+            retryCount: payload.retryCount || 0,  // preserve existing retry count
             status: 'queued'
         });
         tx.oncomplete = () => resolve();
@@ -221,8 +246,20 @@ async function syncQueueManual() {
 
             if (!reportId) continue;
 
-            // Stage 2: photo
-            if (!stages.photo && item.photo) {
+            // Stage 2: text
+            if (!stages.text && reportId) {
+                try {
+                    const res = await fetch(`${API_BASE}/reports/${reportId}/description`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ description: item.text || '' })
+                    });
+                    if (res.ok) { item.stages.text = true; try { await enqueueReport(item); } catch (_) {} }
+                } catch (_) {}
+            }
+
+            // Stage 3: photo
+            if (!stages.photo && item.photo && reportId) {
                 try {
                     const res = await fetch(`${API_BASE}/reports/${reportId}/media/attach`, {
                         method: 'PATCH',
@@ -233,8 +270,8 @@ async function syncQueueManual() {
                 } catch (_) {}
             }
 
-            // Stage 3: audio
-            if (!stages.audio && item.audioBlob) {
+            // Stage 4: audio
+            if (!stages.audio && item.audioBlob && reportId) {
                 try {
                     const res = await fetch(`${API_BASE}/reports/${reportId}/media/attach`, {
                         method: 'PATCH',
@@ -246,7 +283,7 @@ async function syncQueueManual() {
             }
 
             // All done?
-            if (item.stages.meta && item.stages.photo && item.stages.audio) {
+            if (item.stages.meta && item.stages.text && item.stages.photo && item.stages.audio) {
                 await dequeueReport(item.client_report_id);
             }
         } catch (e) {
@@ -259,6 +296,18 @@ async function syncQueueManual() {
 // ── i18n strings ──────────────────────────────────────────────────────────────
 const I18N = {
     en: {
+        consent_title: "Your Privacy Matters",
+        consent_desc: "CRISP collects only the data needed to help rescue teams respond faster:",
+        consent_loc: "Location — GPS coordinates to pinpoint the incident",
+        consent_photo: "Photos — damage evidence for response teams",
+        consent_audio: "Audio — voice descriptions transcribed by AI",
+        consent_no_pii: "No personal identity collected",
+        consent_shared: "Data shared only with crisis responders",
+        consent_delete: "You can request deletion anytime",
+        consent_check: "I understand and consent to sharing this data for crisis response",
+        consent_accept: "Accept & Continue",
+        delete_my_data: "Delete My Data", your_reports: "Your Submitted Reports", delete_all: "Delete All Reports",
+        delete_confirm: "Delete this report? Your data will be permanently deleted within 24 hours. You can undo this within that time.",
         home_title: "Report", home_sub: "Quick & Easy\n4 steps.",
         rs1: "PHOTO", rs2: "VOICE", rs3: "CHECK", rs4: "SEND",
         start_btn: "START",
@@ -281,6 +330,8 @@ const I18N = {
         retry_gps: "Tap 🔄 to retry"
     },
     kn: {
+        consent_title: "ನಿಮ್ಮ ಗೌಪ್ಯತೆ ಮುಖ್ಯ", consent_desc: "ರಕ್ಷಣಾ ತಂಡಗಳಿಗೆ ಸಹಾಯ ಮಾಡಲು ಅಗತ್ಯ ಮಾಹಿತಿ ಮಾತ್ರ:", consent_loc: "ಸ್ಥಳ — GPS ನಿರ್ದೇಶಾಂಕಗಳು", consent_photo: "ಫೋಟೋಗಳು — ಹಾನಿ ಸಾಕ್ಷ್ಯ", consent_audio: "ಆಡಿಯೋ — ಧ್ವನಿ ವಿವರಣೆ", consent_no_pii: "ವೈಯಕ್ತಿಕ ಗುರುತು ಸಂಗ್ರಹಿಸಲಾಗುವುದಿಲ್ಲ", consent_shared: "ಬಿಕ್ಕಟ್ಟು ಪ್ರತಿಕ್ರಿಯಾಕಾರರಿಗೆ ಮಾತ್ರ", consent_delete: "ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು", consent_check: "ಈ ಡೇಟಾ ಹಂಚಿಕೊಳ್ಳಲು ಒಪ್ಪುತ್ತೇನೆ", consent_accept: "ಒಪ್ಪಿ ಮುಂದುವರಿಸಿ",
+        delete_my_data: "ನನ್ನ ಡೇಟಾ ಅಳಿಸಿ", your_reports: "ನಿಮ್ಮ ವರದಿಗಳು", delete_all: "ಎಲ್ಲಾ ಅಳಿಸಿ",
         home_title: "ವರದಿ", home_sub: "ಸರಳ ಮತ್ತು ವೇಗ.\n4 ಹೆಜ್ಜೆಗಳು.",
         rs1: "ಫೋಟೋ", rs2: "ಧ್ವನಿ", rs3: "ಪರಿಶೀಲಿಸಿ", rs4: "ಕಳುಹಿಸಿ",
         start_btn: "ಪ್ರಾರಂಭಿಸಿ",
@@ -303,6 +354,8 @@ const I18N = {
         retry_gps: "Tap 🔄 ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲು"
     },
     hi: {
+        consent_title: "आपकी गोपनीयता महत्वपूर्ण है", consent_desc: "बचाव दलों की मदद के लिए केवल आवश्यक डेटा:", consent_loc: "स्थान — GPS निर्देशांक", consent_photo: "फोटो — क्षति का प्रमाण", consent_audio: "ऑडियो — आवाज विवरण", consent_no_pii: "कोई व्यक्तिगत पहचान नहीं", consent_shared: "केवल आपदा प्रतिक्रियाकर्ताओं के लिए", consent_delete: "कभी भी हटा सकते हैं", consent_check: "मैं इस डेटा को साझा करने के लिए सहमत हूँ", consent_accept: "स्वीकार करें",
+        delete_my_data: "मेरा डेटा हटाएं", your_reports: "आपकी रिपोर्टें", delete_all: "सभी हटाएं",
         home_title: "रिपोर्ट", home_sub: "सरल और तेज़।\n4 कदम।",
         rs1: "फोटो", rs2: "आवाज़", rs3: "जांचें", rs4: "भेजें",
         start_btn: "शुरू करें",
@@ -325,6 +378,8 @@ const I18N = {
         retry_gps: "Tap 🔄 फिर से"
     },
     ta: {
+        consent_title: "உங்கள் தனியுரிமை முக்கியம்", consent_desc: "மீட்புக் குழுக்களுக்கு உதவ தேவையான தகவல் மட்டும்:", consent_loc: "இடம் — GPS ஆயங்கள்", consent_photo: "புகைப்படங்கள் — சேத ஆதாரம்", consent_audio: "ஆடியோ — குரல் விளக்கம்", consent_no_pii: "தனிப்பட்ட அடையாளம் சேகரிக்கப்படாது", consent_shared: "நெருக்கடி மீட்பாளர்களுக்கு மட்டும்", consent_delete: "எப்போது வேண்டுமானாலும் நீக்கலாம்", consent_check: "இந்தத் தகவலைப் பகிர ஒப்புக்கொள்கிறேன்", consent_accept: "ஏற்கவும்",
+        delete_my_data: "என் தரவை நீக்கு", your_reports: "உங்கள் அறிக்கைகள்", delete_all: "அனைத்தும் நீக்கு",
         skip_audio: "தவிர்க்கவும் — நான் தட்டச்சு செய்வேன்",
         s3_title: "உங்கள் செய்தியை சரிபார்க்கவும்", s3_sub: "தவறு இருந்தால் திருத்தவும் — அல்லது தொடரவும்",
         photo_attached: "✅ புகைப்படம் இணைக்கப்பட்டது", your_message: "உங்கள் செய்தி:", type_your_msg: "என்ன நடந்தது...",
@@ -543,6 +598,25 @@ async function reverseGeocode(lat, lng) {
     }
 }
 
+// ── Location context cache helpers (module-scope so resolveLocationName can use them) ──
+const _LOC_CTX_KEY = 'crisp_loc_ctx';
+
+function _saveLocCtx(lat, lng, acc, name, lang, langLabel, speechCode) {
+    try {
+        localStorage.setItem(_LOC_CTX_KEY, JSON.stringify({
+            lat, lng, acc, name, lang, langLabel, speechCode, ts: Date.now()
+        }));
+    } catch (_) {}
+}
+
+/** Merge-update specific fields in the persisted location context without overwriting others. */
+function _patchLocCtx(fields) {
+    try {
+        const existing = JSON.parse(localStorage.getItem(_LOC_CTX_KEY) || 'null') || {};
+        localStorage.setItem(_LOC_CTX_KEY, JSON.stringify({ ...existing, ...fields, ts: Date.now() }));
+    } catch (_) {}
+}
+
 // Resolve and cache location name, update UI elements showing it
 async function resolveLocationName() {
     if (!state.location || (state.location.lat === 0 && state.location.lng === 0)) return;
@@ -552,6 +626,8 @@ async function resolveLocationName() {
     const name = await reverseGeocode(state.location.lat, state.location.lng);
     if (name) {
         state.locationName = name;
+        // Persist the resolved name so next reload shows it instantly (no "Resolving...")
+        _patchLocCtx({ name });
         // Update any visible location displays
         const locCoords = document.getElementById('loc-coords');
         if (locCoords && !state.userLocationName) {
@@ -617,90 +693,208 @@ function setupLangSwitcher() {
             const langCode = btn.dataset.lang;
             // Map the simple en/kn/hi buttons to their BCP-47 speech codes
             const speechMap = { 'en': 'en-IN', 'kn': 'kn-IN', 'hi': 'hi-IN', 'ta': 'ta-IN' };
-            activateLang(langCode, speechMap[langCode] || 'en-US');
+            const speechCode = speechMap[langCode] || 'en-US';
+            activateLang(langCode, speechCode);
 
             document.querySelectorAll('#lang-switcher button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+
+            // Persist manual language choice — survives offline reload
+            const langLabel = langCode !== 'en' ? btn.textContent.trim() : null;
+            _patchLocCtx({ lang: langCode, langLabel, speechCode });
         });
     });
 }
 
 // ── Dynamic language detection ────────────────────────────────────────────────
-// Comprehensive region → { code, label, speechCode } map
-// Covers Indian states, ASEAN countries, African states, South American regions, etc.
-// Global mapping: ISO 3166-1 alpha-2 -> { code, label, speechCode }
+// Complete global mapping: ISO 3166-1 alpha-2 → { code, label (native script), speechCode }
+// Covers 190+ countries. Every country maps to its primary official language in native script.
 const COUNTRY_LANG_DATA = {
-    // Asia
-    'IN': { code: 'hi', label: 'हिंदी', speech: 'hi-IN' }, // Default India (states handled separately)
-    'MY': { code: 'my', label: 'မြန်မာ', speech: 'my-MM' },
+    // ── Asia & Pacific ──
+    'IN': { code: 'hi', label: 'हिंदी', speech: 'hi-IN' },
     'BD': { code: 'bn', label: 'বাংলা', speech: 'bn-BD' },
     'PK': { code: 'ur', label: 'اردو', speech: 'ur-PK' },
     'LK': { code: 'si', label: 'සිංහල', speech: 'si-LK' },
     'NP': { code: 'ne', label: 'नेपाली', speech: 'ne-NP' },
+    'MM': { code: 'my', label: 'မြန်မာ', speech: 'my-MM' },
+    'MY': { code: 'ms', label: 'Bahasa Melayu', speech: 'ms-MY' },
     'TH': { code: 'th', label: 'ไทย', speech: 'th-TH' },
     'VN': { code: 'vi', label: 'Tiếng Việt', speech: 'vi-VN' },
-    'ID': { code: 'id', label: 'Bahasa', speech: 'id-ID' },
+    'ID': { code: 'id', label: 'Bahasa Indonesia', speech: 'id-ID' },
     'PH': { code: 'tl', label: 'Filipino', speech: 'fil-PH' },
     'KH': { code: 'km', label: 'ខ្មែរ', speech: 'km-KH' },
+    'LA': { code: 'lo', label: 'ລາວ', speech: 'lo-LA' },
     'CN': { code: 'zh', label: '中文', speech: 'zh-CN' },
+    'TW': { code: 'zh', label: '中文', speech: 'zh-TW' },
+    'HK': { code: 'zh', label: '中文', speech: 'zh-HK' },
     'JP': { code: 'ja', label: '日本語', speech: 'ja-JP' },
     'KR': { code: 'ko', label: '한국어', speech: 'ko-KR' },
-    // Africa
-    'GH': { code: 'ak', label: 'Akan', speech: 'en-GH' },
-    'NG': { code: 'yo', label: 'Yorùbá', speech: 'en-NG' },
+    'MN': { code: 'mn', label: 'Монгол', speech: 'mn-MN' },
+    'KZ': { code: 'kk', label: 'Қазақша', speech: 'kk-KZ' },
+    'UZ': { code: 'uz', label: 'Oʻzbekcha', speech: 'uz-UZ' },
+    'KG': { code: 'ky', label: 'Кыргызча', speech: 'ky-KG' },
+    'TJ': { code: 'tg', label: 'Тоҷикӣ', speech: 'tg-TJ' },
+    'TM': { code: 'tk', label: 'Türkmençe', speech: 'tk-TM' },
+    'AZ': { code: 'az', label: 'Azərbaycan', speech: 'az-AZ' },
+    'GE': { code: 'ka', label: 'ქართული', speech: 'ka-GE' },
+    'AM': { code: 'hy', label: 'Հայերեն', speech: 'hy-AM' },
+    'MV': { code: 'dv', label: 'ދިވެހި', speech: 'dv-MV' },
+    'BT': { code: 'dz', label: 'རྫོང་ཁ', speech: 'dz-BT' },
+    'SG': { code: 'en', label: 'English', speech: 'en-SG' },
+    'BN': { code: 'ms', label: 'Bahasa Melayu', speech: 'ms-BN' },
+    'TL': { code: 'pt', label: 'Português', speech: 'pt-TL' },
+    'PG': { code: 'en', label: 'English', speech: 'en-PG' },
+    'FJ': { code: 'en', label: 'English', speech: 'en-FJ' },
+    'WS': { code: 'sm', label: 'Gagana Samoa', speech: 'en-WS' },
+    'TO': { code: 'to', label: 'lea fakatonga', speech: 'en-TO' },
+    'VU': { code: 'bi', label: 'Bislama', speech: 'en-VU' },
+    'SB': { code: 'en', label: 'English', speech: 'en-SB' },
+    'NZ': { code: 'en', label: 'English', speech: 'en-NZ' },
+    'AU': { code: 'en', label: 'English', speech: 'en-AU' },
+    // ── Middle East ──
+    'SA': { code: 'ar', label: 'العربية', speech: 'ar-SA' },
+    'AE': { code: 'ar', label: 'العربية', speech: 'ar-AE' },
+    'IQ': { code: 'ar', label: 'العربية', speech: 'ar-IQ' },
+    'SY': { code: 'ar', label: 'العربية', speech: 'ar-SY' },
+    'JO': { code: 'ar', label: 'العربية', speech: 'ar-JO' },
+    'LB': { code: 'ar', label: 'العربية', speech: 'ar-LB' },
+    'KW': { code: 'ar', label: 'العربية', speech: 'ar-KW' },
+    'QA': { code: 'ar', label: 'العربية', speech: 'ar-QA' },
+    'BH': { code: 'ar', label: 'العربية', speech: 'ar-BH' },
+    'OM': { code: 'ar', label: 'العربية', speech: 'ar-OM' },
+    'YE': { code: 'ar', label: 'العربية', speech: 'ar-YE' },
+    'PS': { code: 'ar', label: 'العربية', speech: 'ar-PS' },
+    'TR': { code: 'tr', label: 'Türkçe', speech: 'tr-TR' },
+    'IR': { code: 'fa', label: 'فارسی', speech: 'fa-IR' },
+    'IL': { code: 'he', label: 'עברית', speech: 'he-IL' },
+    'AF': { code: 'ps', label: 'پښتو', speech: 'ps-AF' },
+    'CY': { code: 'el', label: 'Ελληνικά', speech: 'el-CY' },
+    // ── Africa ──
+    'EG': { code: 'ar', label: 'العربية', speech: 'ar-EG' },
+    'MA': { code: 'ar', label: 'العربية', speech: 'ar-MA' },
+    'DZ': { code: 'ar', label: 'العربية', speech: 'ar-DZ' },
+    'TN': { code: 'ar', label: 'العربية', speech: 'ar-TN' },
+    'LY': { code: 'ar', label: 'العربية', speech: 'ar-LY' },
+    'SD': { code: 'ar', label: 'العربية', speech: 'ar-SD' },
+    'MR': { code: 'ar', label: 'العربية', speech: 'ar-MR' },
+    'SO': { code: 'so', label: 'Soomaali', speech: 'so-SO' },
+    'DJ': { code: 'fr', label: 'Français', speech: 'fr-DJ' },
     'ET': { code: 'am', label: 'አማርኛ', speech: 'am-ET' },
+    'ER': { code: 'ti', label: 'ትግርኛ', speech: 'ti-ER' },
     'KE': { code: 'sw', label: 'Kiswahili', speech: 'sw-KE' },
     'TZ': { code: 'sw', label: 'Kiswahili', speech: 'sw-TZ' },
     'UG': { code: 'sw', label: 'Kiswahili', speech: 'sw-UG' },
-    'EG': { code: 'ar', label: 'عربي', speech: 'ar-EG' },
-    'MA': { code: 'ar', label: 'عربي', speech: 'ar-MA' },
+    'RW': { code: 'rw', label: 'Kinyarwanda', speech: 'rw-RW' },
+    'BI': { code: 'rn', label: 'Ikirundi', speech: 'fr-BI' },
+    'CD': { code: 'fr', label: 'Français', speech: 'fr-CD' },
+    'CG': { code: 'fr', label: 'Français', speech: 'fr-CG' },
+    'CF': { code: 'fr', label: 'Français', speech: 'fr-CF' },
+    'CM': { code: 'fr', label: 'Français', speech: 'fr-CM' },
+    'TD': { code: 'fr', label: 'Français', speech: 'fr-TD' },
+    'NE': { code: 'fr', label: 'Français', speech: 'fr-NE' },
+    'ML': { code: 'fr', label: 'Français', speech: 'fr-ML' },
+    'BF': { code: 'fr', label: 'Français', speech: 'fr-BF' },
+    'SN': { code: 'fr', label: 'Français', speech: 'fr-SN' },
+    'GN': { code: 'fr', label: 'Français', speech: 'fr-GN' },
+    'CI': { code: 'fr', label: 'Français', speech: 'fr-CI' },
+    'TG': { code: 'fr', label: 'Français', speech: 'fr-TG' },
+    'BJ': { code: 'fr', label: 'Français', speech: 'fr-BJ' },
+    'GA': { code: 'fr', label: 'Français', speech: 'fr-GA' },
+    'GQ': { code: 'es', label: 'Español', speech: 'es-GQ' },
+    'NG': { code: 'en', label: 'English', speech: 'en-NG' },
+    'GH': { code: 'en', label: 'English', speech: 'en-GH' },
     'ZA': { code: 'zu', label: 'isiZulu', speech: 'en-ZA' },
-    // South America
-    'BR': { code: 'pt', label: 'Português', speech: 'pt-BR' },
-    'CO': { code: 'es', label: 'Español', speech: 'es-CO' },
-    'AR': { code: 'es', label: 'Español', speech: 'es-AR' },
-    'PE': { code: 'es', label: 'Español', speech: 'es-PE' },
-    'VE': { code: 'es', label: 'Español', speech: 'es-VE' },
-    'CL': { code: 'es', label: 'Español', speech: 'es-CL' },
-    'MX': { code: 'es', label: 'Español', speech: 'es-MX' },
-    // Middle East
-    'SA': { code: 'ar', label: 'عربي', speech: 'ar-SA' },
-    'AE': { code: 'ar', label: 'عربي', speech: 'ar-AE' },
-    'TR': { code: 'tr', label: 'Türkçe', speech: 'tr-TR' },
-    'IR': { code: 'fa', label: 'فارسی', speech: 'fa-IR' },
-    // Europe
+    'ZW': { code: 'en', label: 'English', speech: 'en-ZW' },
+    'ZM': { code: 'en', label: 'English', speech: 'en-ZM' },
+    'MW': { code: 'en', label: 'English', speech: 'en-MW' },
+    'MZ': { code: 'pt', label: 'Português', speech: 'pt-MZ' },
+    'AO': { code: 'pt', label: 'Português', speech: 'pt-AO' },
+    'CV': { code: 'pt', label: 'Português', speech: 'pt-CV' },
+    'GW': { code: 'pt', label: 'Português', speech: 'pt-GW' },
+    'ST': { code: 'pt', label: 'Português', speech: 'pt-ST' },
+    'MG': { code: 'mg', label: 'Malagasy', speech: 'fr-MG' },
+    'MU': { code: 'fr', label: 'Français', speech: 'fr-MU' },
+    'SC': { code: 'fr', label: 'Français', speech: 'fr-SC' },
+    'KM': { code: 'ar', label: 'العربية', speech: 'ar-KM' },
+    'NA': { code: 'en', label: 'English', speech: 'en-NA' },
+    'BW': { code: 'en', label: 'English', speech: 'en-BW' },
+    'LS': { code: 'st', label: 'Sesotho', speech: 'en-LS' },
+    'SZ': { code: 'en', label: 'English', speech: 'en-SZ' },
+    'SL': { code: 'en', label: 'English', speech: 'en-SL' },
+    'LR': { code: 'en', label: 'English', speech: 'en-LR' },
+    'GM': { code: 'en', label: 'English', speech: 'en-GM' },
+    'SS': { code: 'en', label: 'English', speech: 'en-SS' },
+    // ── Europe ──
     'FR': { code: 'fr', label: 'Français', speech: 'fr-FR' },
     'DE': { code: 'de', label: 'Deutsch', speech: 'de-DE' },
+    'AT': { code: 'de', label: 'Deutsch', speech: 'de-AT' },
+    'CH': { code: 'de', label: 'Deutsch', speech: 'de-CH' },
+    'LI': { code: 'de', label: 'Deutsch', speech: 'de-LI' },
+    'LU': { code: 'fr', label: 'Français', speech: 'fr-LU' },
+    'BE': { code: 'nl', label: 'Nederlands', speech: 'nl-BE' },
+    'NL': { code: 'nl', label: 'Nederlands', speech: 'nl-NL' },
     'ES': { code: 'es', label: 'Español', speech: 'es-ES' },
+    'PT': { code: 'pt', label: 'Português', speech: 'pt-PT' },
     'IT': { code: 'it', label: 'Italiano', speech: 'it-IT' },
-    'RU': { code: 'ru', label: 'Русский', speech: 'ru-RU' },
-    'UA': { code: 'uk', label: 'Українська', speech: 'uk-UA' },
-    // Europe (More)
     'GB': { code: 'en', label: 'English', speech: 'en-GB' },
+    'IE': { code: 'en', label: 'English', speech: 'en-IE' },
     'US': { code: 'en', label: 'English', speech: 'en-US' },
     'CA': { code: 'en', label: 'English', speech: 'en-CA' },
-    'AU': { code: 'en', label: 'English', speech: 'en-AU' },
-    'NL': { code: 'nl', label: 'Nederlands', speech: 'nl-NL' },
+    'RU': { code: 'ru', label: 'Русский', speech: 'ru-RU' },
+    'UA': { code: 'uk', label: 'Українська', speech: 'uk-UA' },
+    'BY': { code: 'be', label: 'Беларуская', speech: 'be-BY' },
     'PL': { code: 'pl', label: 'Polski', speech: 'pl-PL' },
+    'CZ': { code: 'cs', label: 'Čeština', speech: 'cs-CZ' },
+    'SK': { code: 'sk', label: 'Slovenčina', speech: 'sk-SK' },
+    'HU': { code: 'hu', label: 'Magyar', speech: 'hu-HU' },
+    'RO': { code: 'ro', label: 'Română', speech: 'ro-RO' },
+    'MD': { code: 'ro', label: 'Română', speech: 'ro-MD' },
+    'BG': { code: 'bg', label: 'Български', speech: 'bg-BG' },
+    'RS': { code: 'sr', label: 'Српски', speech: 'sr-RS' },
+    'HR': { code: 'hr', label: 'Hrvatski', speech: 'hr-HR' },
+    'BA': { code: 'bs', label: 'Bosanski', speech: 'bs-BA' },
+    'ME': { code: 'sr', label: 'Srpski', speech: 'sr-ME' },
+    'SI': { code: 'sl', label: 'Slovenščina', speech: 'sl-SI' },
+    'MK': { code: 'mk', label: 'Македонски', speech: 'mk-MK' },
+    'AL': { code: 'sq', label: 'Shqip', speech: 'sq-AL' },
+    'XK': { code: 'sq', label: 'Shqip', speech: 'sq-XK' },
+    'GR': { code: 'el', label: 'Ελληνικά', speech: 'el-GR' },
     'SE': { code: 'sv', label: 'Svenska', speech: 'sv-SE' },
     'NO': { code: 'no', label: 'Norsk', speech: 'no-NO' },
     'DK': { code: 'da', label: 'Dansk', speech: 'da-DK' },
     'FI': { code: 'fi', label: 'Suomi', speech: 'fi-FI' },
-    'CH': { code: 'de', label: 'Deutsch', speech: 'de-CH' },
-    'AT': { code: 'de', label: 'Deutsch', speech: 'de-AT' },
-    'PT': { code: 'pt', label: 'Português', speech: 'pt-PT' },
-    // Middle East (More)
-    'IQ': { code: 'ar', label: 'عربي', speech: 'ar-IQ' },
-    'JO': { code: 'ar', label: 'عربي', speech: 'ar-JO' },
-    'KW': { code: 'ar', label: 'عربي', speech: 'ar-KW' },
-    'QA': { code: 'ar', label: 'عربي', speech: 'ar-QA' },
-    'IL': { code: 'he', label: 'עברית', speech: 'he-IL' },
-    // North Africa / Other
-    'DZ': { code: 'ar', label: 'عربي', speech: 'ar-DZ' },
-    'TN': { code: 'ar', label: 'عربي', speech: 'ar-TN' },
-    'LY': { code: 'ar', label: 'عربي', speech: 'ar-LY' },
-    'SD': { code: 'ar', label: 'عربي', speech: 'ar-SD' },
-    'AF': { code: 'ps', label: 'پښتو', speech: 'ps-AF' },
+    'IS': { code: 'is', label: 'Íslenska', speech: 'is-IS' },
+    'EE': { code: 'et', label: 'Eesti', speech: 'et-EE' },
+    'LV': { code: 'lv', label: 'Latviešu', speech: 'lv-LV' },
+    'LT': { code: 'lt', label: 'Lietuvių', speech: 'lt-LT' },
+    'MT': { code: 'mt', label: 'Malti', speech: 'mt-MT' },
+    // ── Americas ──
+    'MX': { code: 'es', label: 'Español', speech: 'es-MX' },
+    'GT': { code: 'es', label: 'Español', speech: 'es-GT' },
+    'HN': { code: 'es', label: 'Español', speech: 'es-HN' },
+    'SV': { code: 'es', label: 'Español', speech: 'es-SV' },
+    'NI': { code: 'es', label: 'Español', speech: 'es-NI' },
+    'CR': { code: 'es', label: 'Español', speech: 'es-CR' },
+    'PA': { code: 'es', label: 'Español', speech: 'es-PA' },
+    'CU': { code: 'es', label: 'Español', speech: 'es-CU' },
+    'DO': { code: 'es', label: 'Español', speech: 'es-DO' },
+    'PR': { code: 'es', label: 'Español', speech: 'es-PR' },
+    'CO': { code: 'es', label: 'Español', speech: 'es-CO' },
+    'VE': { code: 'es', label: 'Español', speech: 'es-VE' },
+    'EC': { code: 'es', label: 'Español', speech: 'es-EC' },
+    'PE': { code: 'es', label: 'Español', speech: 'es-PE' },
+    'BO': { code: 'es', label: 'Español', speech: 'es-BO' },
+    'PY': { code: 'es', label: 'Español', speech: 'es-PY' },
+    'UY': { code: 'es', label: 'Español', speech: 'es-UY' },
+    'AR': { code: 'es', label: 'Español', speech: 'es-AR' },
+    'CL': { code: 'es', label: 'Español', speech: 'es-CL' },
+    'BR': { code: 'pt', label: 'Português', speech: 'pt-BR' },
+    'HT': { code: 'fr', label: 'Français', speech: 'fr-HT' },
+    'JM': { code: 'en', label: 'English', speech: 'en-JM' },
+    'TT': { code: 'en', label: 'English', speech: 'en-TT' },
+    'GY': { code: 'en', label: 'English', speech: 'en-GY' },
+    'SR': { code: 'nl', label: 'Nederlands', speech: 'nl-SR' },
+    'BZ': { code: 'en', label: 'English', speech: 'en-BZ' },
 };
 
 // Sub-national regions where mapping by country alone is not enough (e.g. India)
@@ -725,7 +919,38 @@ const EXTRA_LANG = {
     te: { home_title: 'సంఘటన నివేదించండి', start_btn: 'నివేదిక ప్రారంభించండి', use_camera: 'కెమెరా', browse: 'బ్రౌజ్', skip_photo: 'దాటవేయి', next: 'తదుపరి', tap_mic: 'మాట్లాడటానికి నొక్కండి', send_undp: 'UNDP కు పంపండి', sent_title: 'నివేదిక పంపబడింది!' },
     mr: { home_title: 'घटना नोंदवा', start_btn: 'अहवाल सुरू करा', use_camera: 'कॅमेरा', browse: 'ब्राउज', skip_photo: 'वगळा', next: 'पुढे', tap_mic: 'बोलण्यासाठी दाबा', send_undp: 'UNDP ला पाठवा', sent_title: 'अहवाल पाठवला!' },
     gu: { home_title: 'ઘટનાની જાણ કરો', start_btn: 'રિપોર્ટ શરૂ કરો', use_camera: 'કૅમેરા', browse: 'શોધો', skip_photo: 'છોડો', next: 'આગળ', tap_mic: 'બોલવા દબાવો', send_undp: 'UNDP ને મોકલો', sent_title: 'રિપોર્ट મોकвायो!' },
-    sw: { home_title: 'Ripoti Tukio', start_btn: 'Anza Ripoti', use_camera: 'Kamera', browse: 'Tafuta', skip_photo: 'Ruka', next: 'Endelea', tap_mic: 'Gonga ili Kurekodi', send_undp: 'Tuma kwa UNDP', sent_title: 'Ripoti Imetumwa!' },
+    sw: { home_title: 'Ripoti', start_btn: 'Anza', use_camera: 'Kamera', browse: 'Tafuta', skip_photo: 'Ruka', next: 'Endelea', tap_mic: 'Rekodi', send_undp: 'Tuma', sent_title: 'Imetumwa!', consent_title: 'Faragha yako ni muhimu', consent_check: 'Nakubali kushiriki data', consent_accept: 'Kubali' },
+    // ── UN official + major global languages ──
+    fr: { home_title: 'Signaler', start_btn: 'Commencer', use_camera: 'Photo', browse: 'Parcourir', skip_photo: 'Passer', next: 'Suivant', tap_mic: 'Parler', send_undp: 'Envoyer', sent_title: 'Envoyé!', consent_title: 'Votre vie privée compte', consent_desc: 'CRISP collecte uniquement les données nécessaires:', consent_loc: 'Localisation — coordonnées GPS', consent_photo: 'Photos — preuves de dégâts', consent_audio: 'Audio — descriptions vocales', consent_no_pii: 'Aucune identité personnelle collectée', consent_shared: 'Données partagées uniquement avec les secours', consent_delete: 'Suppression possible à tout moment', consent_check: 'Je consens au partage de ces données', consent_accept: 'Accepter', delete_my_data: 'Supprimer mes données', your_reports: 'Vos rapports soumis', delete_all: 'Tout supprimer' },
+    es: { home_title: 'Reportar', start_btn: 'Iniciar', use_camera: 'Cámara', browse: 'Buscar', skip_photo: 'Omitir', next: 'Siguiente', tap_mic: 'Hablar', send_undp: 'Enviar', sent_title: 'Enviado!', consent_title: 'Su privacidad importa', consent_desc: 'CRISP recopila solo los datos necesarios:', consent_loc: 'Ubicación — coordenadas GPS', consent_photo: 'Fotos — evidencia de daños', consent_audio: 'Audio — descripción por voz', consent_no_pii: 'No se recopila identidad personal', consent_shared: 'Datos solo para equipos de rescate', consent_delete: 'Puede solicitar eliminación', consent_check: 'Consiento compartir estos datos', consent_accept: 'Aceptar', delete_my_data: 'Eliminar mis datos', your_reports: 'Sus informes', delete_all: 'Eliminar todo' },
+    ar: { home_title: 'إبلاغ', start_btn: 'ابدأ', use_camera: 'كاميرا', browse: 'تصفح', skip_photo: 'تخطي', next: 'التالي', tap_mic: 'تحدث', send_undp: 'إرسال', sent_title: 'تم!', consent_title: 'خصوصيتك مهمة', consent_desc: 'يجمع CRISP فقط البيانات اللازمة:', consent_loc: 'الموقع — إحداثيات GPS', consent_photo: 'صور — أدلة الأضرار', consent_audio: 'صوت — وصف صوتي', consent_no_pii: 'لا يتم جمع هوية شخصية', consent_shared: 'البيانات للمستجيبين فقط', consent_delete: 'يمكنك طلب الحذف', consent_check: 'أوافق على مشاركة هذه البيانات', consent_accept: 'قبول', delete_my_data: 'حذف بياناتي', your_reports: 'تقاريرك', delete_all: 'حذف الكل' },
+    ru: { home_title: 'Сообщить', start_btn: 'Начать', use_camera: 'Камера', browse: 'Обзор', skip_photo: 'Пропустить', next: 'Далее', tap_mic: 'Говорить', send_undp: 'Отправить', sent_title: 'Отправлено!', consent_title: 'Ваша конфиденциальность важна', consent_check: 'Я согласен на передачу данных', consent_accept: 'Принять' },
+    zh: { home_title: '报告', start_btn: '开始', use_camera: '相机', browse: '浏览', skip_photo: '跳过', next: '下一步', tap_mic: '说话', send_undp: '发送', sent_title: '已发送!', consent_title: '您的隐私很重要', consent_check: '我同意分享此数据', consent_accept: '接受' },
+    pt: { home_title: 'Reportar', start_btn: 'Iniciar', use_camera: 'Câmera', browse: 'Procurar', skip_photo: 'Pular', next: 'Próximo', tap_mic: 'Falar', send_undp: 'Enviar', sent_title: 'Enviado!', consent_title: 'Sua privacidade importa', consent_check: 'Concordo em compartilhar dados', consent_accept: 'Aceitar' },
+    de: { home_title: 'Melden', start_btn: 'Starten', use_camera: 'Kamera', browse: 'Suchen', skip_photo: 'Überspringen', next: 'Weiter', tap_mic: 'Sprechen', send_undp: 'Senden', sent_title: 'Gesendet!', consent_title: 'Ihre Privatsphäre ist wichtig', consent_check: 'Ich stimme der Datenweitergabe zu', consent_accept: 'Akzeptieren' },
+    it: { home_title: 'Segnala', start_btn: 'Inizia', use_camera: 'Foto', browse: 'Sfoglia', skip_photo: 'Salta', next: 'Avanti', tap_mic: 'Parla', send_undp: 'Invia', sent_title: 'Inviato!', consent_title: 'La tua privacy è importante', consent_check: 'Acconsento alla condivisione dei dati', consent_accept: 'Accetta' },
+    tr: { home_title: 'Bildir', start_btn: 'Başla', use_camera: 'Kamera', browse: 'Ara', skip_photo: 'Atla', next: 'İleri', tap_mic: 'Konuş', send_undp: 'Gönder', sent_title: 'Gönderildi!', consent_title: 'Gizliliğiniz önemli', consent_check: 'Veri paylaşmayı kabul ediyorum', consent_accept: 'Kabul et' },
+    uk: { home_title: 'Повідомити', start_btn: 'Почати', use_camera: 'Камера', browse: 'Огляд', skip_photo: 'Пропустити', next: 'Далі', tap_mic: 'Записати', send_undp: 'Надіслати', sent_title: 'Надіслано!', consent_title: 'Ваша конфіденційність важлива', consent_check: 'Я погоджуюсь на передачу даних', consent_accept: 'Прийняти' },
+    ja: { home_title: '報告', start_btn: '開始', use_camera: 'カメラ', browse: '参照', skip_photo: 'スキップ', next: '次へ', tap_mic: '話す', send_undp: '送信', sent_title: '送信済み!', consent_title: 'プライバシーについて', consent_check: 'データ共有に同意します', consent_accept: '同意' },
+    ko: { home_title: '신고', start_btn: '시작', use_camera: '카메라', browse: '찾기', skip_photo: '건너뛰기', next: '다음', tap_mic: '말하기', send_undp: '보내기', sent_title: '전송됨!', consent_title: '개인정보 보호', consent_check: '데이터 공유에 동의합니다', consent_accept: '동의' },
+    am: { home_title: 'ሪፖርት', start_btn: 'ጀምር', use_camera: 'ካሜራ', browse: 'ፈልግ', skip_photo: 'ዝለል', next: 'ቀጣይ', tap_mic: 'ንካ', send_undp: 'ላክ', sent_title: 'ተልኳል!', consent_title: 'ግላዊነትዎ ጠቃሚ', consent_check: 'ዳታ ማጋራት እስማማለሁ', consent_accept: 'ተቀበል' },
+    ur: { home_title: 'رپورٹ', start_btn: 'شروع', use_camera: 'کیمرا', browse: 'تلاش', skip_photo: 'چھوڑیں', next: 'اگلا', tap_mic: 'بولیں', send_undp: 'بھیجیں', sent_title: 'بھیج دیا!', consent_title: 'آپ کی رازداری اہم ہے', consent_check: 'ڈیٹا شیئر کرنے پر متفق', consent_accept: 'قبول' },
+    ne: { home_title: 'रिपोर्ट', start_btn: 'सुरु', use_camera: 'क्यामेरा', browse: 'खोज', skip_photo: 'छोड्नुहोस्', next: 'अर्को', tap_mic: 'बोल्नुहोस्', send_undp: 'पठाउ', sent_title: 'पठाइयो!', consent_title: 'तपाईंको गोपनीयता महत्त्वपूर्ण', consent_check: 'डाटा साझा गर्न सहमत', consent_accept: 'स्वीकार' },
+    th: { home_title: 'รายงาน', start_btn: 'เริ่ม', use_camera: 'กล้อง', browse: 'ค้นหา', skip_photo: 'ข้าม', next: 'ถัดไป', tap_mic: 'พูด', send_undp: 'ส่ง', sent_title: 'ส่งแล้ว!', consent_title: 'ความเป็นส่วนตัวสำคัญ', consent_check: 'ยินยอมแบ่งปันข้อมูล', consent_accept: 'ยอมรับ' },
+    vi: { home_title: 'Báo cáo', start_btn: 'Bắt đầu', use_camera: 'Máy ảnh', browse: 'Duyệt', skip_photo: 'Bỏ qua', next: 'Tiếp', tap_mic: 'Nói', send_undp: 'Gửi', sent_title: 'Đã gửi!', consent_title: 'Quyền riêng tư quan trọng', consent_check: 'Tôi đồng ý chia sẻ dữ liệu', consent_accept: 'Chấp nhận' },
+    id: { home_title: 'Laporan', start_btn: 'Mulai', use_camera: 'Kamera', browse: 'Cari', skip_photo: 'Lewati', next: 'Lanjut', tap_mic: 'Bicara', send_undp: 'Kirim', sent_title: 'Terkirim!', consent_title: 'Privasi Anda penting', consent_check: 'Saya setuju membagikan data', consent_accept: 'Terima' },
+    ms: { home_title: 'Laporan', start_btn: 'Mula', use_camera: 'Kamera', browse: 'Cari', skip_photo: 'Langkau', next: 'Seterusnya', tap_mic: 'Bercakap', send_undp: 'Hantar', sent_title: 'Dihantar!', consent_title: 'Privasi anda penting', consent_check: 'Saya bersetuju berkongsi data', consent_accept: 'Terima' },
+    km: { home_title: 'រាយការណ៍', start_btn: 'ចាប់ផ្តើម', use_camera: 'កាមេរ៉ា', browse: 'រុករក', skip_photo: 'រំលង', next: 'បន្ទាប់', tap_mic: 'និយាយ', send_undp: 'ផ្ញើ', sent_title: 'បានផ្ញើ!', consent_title: 'ភាពឯកជនសំខាន់', consent_check: 'ខ្ញុំយល់ព្រមចែករំលែកទិន្នន័យ', consent_accept: 'ទទួលយក' },
+    fa: { home_title: 'گزارش', start_btn: 'شروع', use_camera: 'دوربین', browse: 'مرور', skip_photo: 'رد شو', next: 'بعدی', tap_mic: 'صحبت', send_undp: 'ارسال', sent_title: 'ارسال شد!', consent_title: 'حریم خصوصی شما مهم است', consent_check: 'موافقم داده‌ها را به اشتراک بگذارم', consent_accept: 'قبول' },
+    my: { home_title: 'အစီရင်ခံ', start_btn: 'စတင်', use_camera: 'ကင်မရာ', browse: 'ရှာ', skip_photo: 'ကျော်', next: 'ရှေ့', tap_mic: 'ပြော', send_undp: 'ပို့', sent_title: 'ပို့ပြီး!', consent_title: 'ကိုယ်ရေးအချက်အလက် အရေးကြီးသည်', consent_check: 'ဒေတာမျှဝေရန် သဘောတူသည်', consent_accept: 'လက်ခံ' },
+    pl: { home_title: 'Zgłoś', start_btn: 'Rozpocznij', use_camera: 'Aparat', browse: 'Szukaj', skip_photo: 'Pomiń', next: 'Dalej', tap_mic: 'Mów', send_undp: 'Wyślij', sent_title: 'Wysłano!', consent_title: 'Twoja prywatność jest ważna', consent_check: 'Wyrażam zgodę na udostępnienie danych', consent_accept: 'Akceptuj' },
+    ro: { home_title: 'Raportează', start_btn: 'Începe', use_camera: 'Cameră', browse: 'Caută', skip_photo: 'Omite', next: 'Următor', tap_mic: 'Vorbește', send_undp: 'Trimite', sent_title: 'Trimis!', consent_title: 'Confidențialitatea contează', consent_check: 'Sunt de acord să partajez date', consent_accept: 'Accept' },
+    so: { home_title: 'Warbixin', start_btn: 'Bilow', use_camera: 'Kamarad', browse: 'Raadi', skip_photo: 'Ka bood', next: 'Xiga', tap_mic: 'Hadal', send_undp: 'Dir', sent_title: 'La diray!', consent_title: 'Asturnaantaadu muhiim', consent_check: 'Waan ogolahay in xogta la wadaago', consent_accept: 'Aqbal' },
+    si: { home_title: 'වාර්තාව', start_btn: 'ආරම්භ', use_camera: 'කැමරාව', browse: 'සොයන්න', skip_photo: 'මඟ හරින්න', next: 'ඊළඟ', tap_mic: 'කතා කරන්න', send_undp: 'යවන්න', sent_title: 'යැවීය!', consent_title: 'ඔබේ පෞද්ගලිකත්වය වැදගත්', consent_check: 'දත්ත බෙදා ගැනීමට එකඟ', consent_accept: 'පිළිගන්න' },
+    he: { home_title: 'דווח', start_btn: 'התחל', use_camera: 'מצלמה', browse: 'חפש', skip_photo: 'דלג', next: 'הבא', tap_mic: 'דבר', send_undp: 'שלח', sent_title: 'נשלח!', consent_title: 'הפרטיות שלך חשובה', consent_check: 'אני מסכים לשתף נתונים', consent_accept: 'אישור' },
+    el: { home_title: 'Αναφορά', start_btn: 'Έναρξη', use_camera: 'Κάμερα', browse: 'Αναζήτηση', skip_photo: 'Παράλειψη', next: 'Επόμενο', tap_mic: 'Μιλήστε', send_undp: 'Αποστολή', sent_title: 'Εστάλη!', consent_title: 'Το απόρρητό σας μετράει', consent_check: 'Συμφωνώ να μοιραστώ δεδομένα', consent_accept: 'Αποδοχή' },
+    bn: { home_title: 'রিপোর্ট', start_btn: 'শুরু', use_camera: 'ক্যামেরা', browse: 'খুঁজুন', skip_photo: 'বাদ', next: 'পরবর্তী', tap_mic: 'চাপুন', send_undp: 'পাঠান', sent_title: 'পাঠানো হয়েছে!', consent_title: 'আপনার গোপনীয়তা গুরুত্বপূর্ণ', consent_check: 'ডেটা শেয়ার করতে সম্মত', consent_accept: 'গ্রহণ' },
+    pa: { home_title: 'ਰਿਪੋਰਟ', start_btn: 'ਸ਼ੁਰੂ', use_camera: 'ਕੈਮਰਾ', browse: 'ਖੋਜੋ', skip_photo: 'ਛੱਡੋ', next: 'ਅੱਗੇ', tap_mic: 'ਦਬਾਓ', send_undp: 'ਭੇਜੋ', sent_title: 'ਭੇਜਿਆ!', consent_title: 'ਤੁਹਾਡੀ ਗੋਪਨੀਯਤਾ ਮਹੱਤਵਪੂਰਨ', consent_check: 'ਡੇਟਾ ਸਾਂਝਾ ਕਰਨ ਲਈ ਸਹਿਮਤ', consent_accept: 'ਸਵੀਕਾਰ' },
 };
 
 function detectAndSetupLanguage() {
@@ -773,10 +998,39 @@ function detectAndSetupLanguage() {
         activateLang('en');
     });
 
-    // STARTING STATE: Default to English but don't finalize yet
-    // Show a small hint that we are checking location
-    const homeTitle = document.querySelector('[data-i18n="home_title"]');
-    if (homeTitle) homeTitle.textContent = "Locating...";
+    // ── Restore cached location + language instantly (before any network call) ──
+    // (_LOC_CTX_KEY, _saveLocCtx, _patchLocCtx are module-scope — defined near resolveLocationName)
+
+    function _applyLocCtx(ctx) {
+        // Restore location state
+        state.location     = { lat: ctx.lat, lng: ctx.lng, acc: ctx.acc };
+        state.deviceLocation = { lat: ctx.lat, lng: ctx.lng };
+        state.locationName = ctx.name || null;
+        // Restore language
+        if (ctx.lang && ctx.lang !== 'en' && ctx.langLabel) {
+            showLocalLangBtn(ctx.lang, ctx.langLabel, ctx.speechCode || 'en-IN');
+        } else {
+            activateLang(ctx.lang || 'en');
+        }
+        // Update location display immediately — no "Locating..." shown
+        const locCoords = document.getElementById('loc-coords');
+        if (locCoords && ctx.name) locCoords.textContent = ctx.name;
+        const summaryLoc = document.getElementById('summary-loc');
+        if (summaryLoc && ctx.name) summaryLoc.textContent = ctx.name;
+    }
+
+    const _cachedCtx = (() => {
+        try { return JSON.parse(localStorage.getItem(_LOC_CTX_KEY) || 'null'); } catch (_) { return null; }
+    })();
+
+    if (_cachedCtx && _cachedCtx.lat) {
+        // Apply instantly — user sees their previous location, no "Locating..."
+        _applyLocCtx(_cachedCtx);
+    } else {
+        // First ever launch — show "Locating..." only when no cache exists
+        const homeTitle = document.querySelector('[data-i18n="home_title"]');
+        if (homeTitle) homeTitle.textContent = "Locating...";
+    }
 
     // Try to get GPS and reverse geocode
     if (!navigator.geolocation) {
@@ -797,16 +1051,21 @@ function detectAndSetupLanguage() {
             if (ipLoc) {
                 state.location = ipLoc;
                 state.deviceLocation = { lat: ipLoc.lat, lng: ipLoc.lng };
-                // Use IP country/region to set language
                 const regionStr = (ipLoc.region || '').toLowerCase();
                 for (const entry of REGION_LANG_MAP) {
                     if (entry.match.some(k => regionStr.includes(k))) {
+                        _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName, entry.code, entry.label, entry.speech);
                         showLocalLangBtn(entry.code, entry.label, entry.speech);
                         return;
                     }
                 }
                 const cc = (ipLoc.country || '').toUpperCase();
-                if (COUNTRY_LANG_DATA[cc]) { showLocalLangBtn(COUNTRY_LANG_DATA[cc].code, COUNTRY_LANG_DATA[cc].label, COUNTRY_LANG_DATA[cc].speech); return; }
+                if (COUNTRY_LANG_DATA[cc]) {
+                    const e = COUNTRY_LANG_DATA[cc];
+                    _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName, e.code, e.label, e.speech);
+                    showLocalLangBtn(e.code, e.label, e.speech);
+                    return;
+                }
             }
             activateLang('en');
         });
@@ -824,7 +1083,18 @@ function detectAndSetupLanguage() {
         clearTimeout(gpsTimeout);
         state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
         state.deviceLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        // Cache raw device GPS — restored on new report (not user-corrected location)
+        try {
+            localStorage.setItem('crisp_device_gps', JSON.stringify({
+                lat: pos.coords.latitude, lng: pos.coords.longitude,
+                acc: pos.coords.accuracy, ts: Date.now()
+            }));
+        } catch (_) {}
         console.log('GPS Fixed:', state.location);
+        // Pre-fetch nearby places for offline autocomplete (non-blocking background task)
+        if (typeof placeSearch !== 'undefined') {
+            placeSearch.prefetchNearby(pos.coords.latitude, pos.coords.longitude);
+        }
         try {
             const res = await fetch(
                 `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&addressdetails=1`,
@@ -849,16 +1119,23 @@ function detectAndSetupLanguage() {
             ].filter(Boolean).join(' ').toLowerCase();
             for (const entry of REGION_LANG_MAP) {
                 if (entry.match.some(keyword => regionStr.includes(keyword))) {
+                    _saveLocCtx(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy,
+                        state.locationName, entry.code, entry.label, entry.speech);
                     showLocalLangBtn(entry.code, entry.label, entry.speech);
                     return;
                 }
             }
             if (COUNTRY_LANG_DATA[countryCode]) {
                 const entry = COUNTRY_LANG_DATA[countryCode];
+                _saveLocCtx(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy,
+                    state.locationName, entry.code, entry.label, entry.speech);
                 showLocalLangBtn(entry.code, entry.label, entry.speech);
                 return;
             }
             const browserLang = navigator.language.split('-')[0];
+            const resolvedLang = browserLang !== 'en' ? browserLang : 'en';
+            _saveLocCtx(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy,
+                state.locationName, resolvedLang, null, null);
             if (browserLang !== 'en') { activateLang(browserLang); } else { activateLang('en'); }
         } catch {
             activateLang('en');
@@ -871,19 +1148,27 @@ function detectAndSetupLanguage() {
         if (ipLoc) {
             state.location = ipLoc;
             state.deviceLocation = { lat: ipLoc.lat, lng: ipLoc.lng };
-            console.log('IP geolocation fallback applied:', ipLoc);
-            // Resolve place name in background
+            try {
+                localStorage.setItem('crisp_device_gps', JSON.stringify({
+                    lat: ipLoc.lat, lng: ipLoc.lng, acc: 5000, ts: Date.now(), is_ip_based: true
+                }));
+            } catch (_) {}
             resolveLocationName();
-            // Use IP region for language
             const regionStr = (ipLoc.region || '').toLowerCase();
             for (const entry of REGION_LANG_MAP) {
                 if (entry.match.some(k => regionStr.includes(k))) {
+                    _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName, entry.code, entry.label, entry.speech);
                     showLocalLangBtn(entry.code, entry.label, entry.speech);
                     return;
                 }
             }
             const cc = (ipLoc.country || '').toUpperCase();
-            if (COUNTRY_LANG_DATA[cc]) { showLocalLangBtn(COUNTRY_LANG_DATA[cc].code, COUNTRY_LANG_DATA[cc].label, COUNTRY_LANG_DATA[cc].speech); return; }
+            if (COUNTRY_LANG_DATA[cc]) {
+                const e = COUNTRY_LANG_DATA[cc];
+                _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName, e.code, e.label, e.speech);
+                showLocalLangBtn(e.code, e.label, e.speech);
+                return;
+            }
         }
         activateLang('en');
     }, {
@@ -922,16 +1207,38 @@ function setupPhotoStage() {
         document.getElementById('file-browse').click();
     });
 
-    // File input handlers
+    // File input handlers (camera fallback and file browse)
     ['file-camera', 'file-browse'].forEach(id => {
         document.getElementById(id).addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            state.photoBlob = file;
+
             const reader = new FileReader();
             reader.onload = (ev) => {
-                state.photoDataUrl = ev.target.result;
-                showPreview(state.photoDataUrl);
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    // Downscale if very large (> 2000px) to save memory/bandwidth
+                    let w = img.width, h = img.height;
+                    const max = 1600;
+                    if (w > max || h > max) {
+                        if (w > h) { h = Math.round(h * max / w); w = max; }
+                        else { w = Math.round(w * max / h); h = max; }
+                    }
+                    canvas.width = w; canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.60);
+                    state.photoDataUrl = dataUrl;
+                    showPreview(dataUrl);
+
+                    canvas.toBlob(blob => {
+                        state.photoBlob = blob;
+                        console.log(`Image compressed: ${Math.round(file.size / 1024)}KB -> ${Math.round(blob.size / 1024)}KB`);
+                    }, 'image/jpeg', 0.60);
+                };
+                img.src = ev.target.result;
             };
             reader.readAsDataURL(file);
             e.target.value = '';
@@ -972,7 +1279,7 @@ function setupCameraModal() {
         const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         state.photoDataUrl = dataUrl;
 
-        canvas.toBlob(blob => { state.photoBlob = blob; }, 'image/jpeg', 0.85);
+        canvas.toBlob(blob => { state.photoBlob = blob; }, 'image/jpeg', 0.60);
 
         document.getElementById('photo-preview').src = dataUrl;
         document.getElementById('photo-preview').style.display = 'block';
@@ -1190,7 +1497,6 @@ function populateReview() {
     // Update location UI — show place names, not coordinates
     const locStatus = document.getElementById('loc-status');
     const locCoords = document.getElementById('loc-coords');
-    const locUserName = document.getElementById('loc-user-name');
     if (state.location && (state.location.lat !== 0 || state.location.lng !== 0)) {
         if (state.location.is_ip_based) {
             locStatus.textContent = '📍 Approximate location';
@@ -1212,12 +1518,14 @@ function populateReview() {
         locCoords.textContent = 'We\'ll find it on the map for you';
     }
 
-    // Show user-typed location name if set
+    // Sync the selected-place pill with state (replaces old loc-user-name)
+    const selPill = document.getElementById('loc-selected-pill');
+    const selText = document.getElementById('loc-selected-text');
     if (state.userLocationName) {
-        locUserName.textContent = `📌 Your location: ${state.userLocationName}`;
-        locUserName.style.display = 'block';
+        if (selPill && selText) { selText.textContent = state.userLocationName; selPill.style.display = 'flex'; }
+        locCoords.textContent = state.userLocationName;
     } else {
-        locUserName.style.display = 'none';
+        if (selPill) selPill.style.display = 'none';
     }
 }
 
@@ -1277,44 +1585,207 @@ async function refreshLocation() {
     }
 }
 
-async function searchAddress() {
+function setupLocationAutocomplete() {
     const input = document.getElementById('input-loc-search');
-    const query = input.value.trim();
-    if (!query) return;
+    const suggestionsBox = document.getElementById('place-suggestions');
+    const clearBtn = document.getElementById('btn-clear-loc');
+    const selectedPill = document.getElementById('loc-selected-pill');
+    const selectedText = document.getElementById('loc-selected-text');
+    const changeBtn = document.getElementById('btn-loc-change');
+    if (!input || !suggestionsBox) return;
 
-    const btn = document.getElementById('btn-search-loc');
+    // ── Critical: move suggestions box to <body> so it escapes the
+    // .stage transform (transform creates a containing block that traps
+    // position:fixed children AND clips them with overflow-y:auto) ────────────
+    document.body.appendChild(suggestionsBox);
 
-    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+    let activeSuggestions = [];
+    let activeIdx = -1;
+    let remoteDebounce = null;
 
-    // Always store the user-typed name (for backend geocoding if offline)
-    state.userLocationName = query;
+    // ── Smart positioning: flip above when not enough space below ─────────────
+    function positionDropdown() {
+        const rect = input.getBoundingClientRect();
+        const vH = window.innerHeight;
+        const GAP = 6;
+        const spaceBelow = vH - rect.bottom - GAP;
+        const spaceAbove = rect.top - GAP;
 
-    try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`);
-        const data = await res.json();
-        if (data && data.length > 0) {
-            const first = data[0];
-            state.location = {
-                lat: parseFloat(first.lat),
-                lng: parseFloat(first.lon),
-                acc: 0,
-                is_user_corrected: true
-            };
-            // Use the search query as the display name (user typed it, it resolved)
-            state.locationName = query;
+        // Max height = available space, capped at 5 items × ~60px + small buffer
+        const maxVisible = 5;
+        const idealH = Math.min(maxVisible * 62, activeSuggestions.length * 62 + (activeSuggestions.length ? 0 : 56));
+
+        suggestionsBox.style.left = rect.left + 'px';
+        suggestionsBox.style.width = rect.width + 'px';
+
+        const openBelow = spaceBelow >= 160 || spaceBelow >= spaceAbove;
+        if (openBelow) {
+            suggestionsBox.style.top = (rect.bottom + GAP) + 'px';
+            suggestionsBox.style.bottom = 'auto';
+            suggestionsBox.style.maxHeight = Math.max(spaceBelow, 120) + 'px';
+            suggestionsBox.classList.remove('opens-up');
+            suggestionsBox.classList.add('opens-down');
+        } else {
+            // Flip above input
+            suggestionsBox.style.bottom = (vH - rect.top + GAP) + 'px';
+            suggestionsBox.style.top = 'auto';
+            suggestionsBox.style.maxHeight = Math.max(spaceAbove, 120) + 'px';
+            suggestionsBox.classList.remove('opens-down');
+            suggestionsBox.classList.add('opens-up');
         }
-        // If no results, we still have the name stored — backend will geocode it
-    } catch (e) {
-        // Offline — that's fine, the name is stored and backend will resolve it
-        console.log('Geocoding offline, will resolve server-side:', query);
-        if (!state.location || (state.location.lat === 0 && state.location.lng === 0)) {
+    }
+
+    function showSuggestions(places, queryActive) {
+        activeSuggestions = places;
+        activeIdx = -1;
+        positionDropdown();
+
+        if (!places.length) {
+            if (queryActive) {
+                suggestionsBox.innerHTML = `<div class="place-no-results"><i class="fa-solid fa-magnifying-glass"></i> No matches — try a shorter or different name</div>`;
+                suggestionsBox.style.display = 'block';
+            } else {
+                suggestionsBox.style.display = 'none';
+            }
+            return;
+        }
+
+        suggestionsBox.innerHTML = places.slice(0, 5).map((p, i) => {
+            const sub = [p.region, p.country].filter(Boolean).join(', ');
+            return `<div class="place-item" data-idx="${i}">
+                <div class="place-item-icon"><i class="fa-solid fa-location-dot"></i></div>
+                <div class="place-item-info">
+                    <div class="place-name">${p.name}</div>
+                    ${sub ? `<div class="place-sub">${sub}</div>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+        suggestionsBox.style.display = 'block';
+
+        suggestionsBox.querySelectorAll('.place-item').forEach(item => {
+            item.addEventListener('mousedown', (e) => e.preventDefault());
+            item.addEventListener('click', () => selectPlace(activeSuggestions[parseInt(item.dataset.idx)]));
+            item.addEventListener('touchstart', () => item.classList.add('active'), { passive: true });
+            item.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                item.classList.remove('active');
+                selectPlace(activeSuggestions[parseInt(item.dataset.idx)]);
+            });
+            item.addEventListener('touchcancel', () => item.classList.remove('active'));
+        });
+    }
+
+    function closeSuggestions() {
+        suggestionsBox.style.display = 'none';
+        activeSuggestions = [];
+        activeIdx = -1;
+    }
+
+    function showSelectedPill(name) {
+        if (selectedPill && selectedText) {
+            selectedText.textContent = name;
+            selectedPill.style.display = 'flex';
+        }
+    }
+
+    function hideSelectedPill() {
+        if (selectedPill) selectedPill.style.display = 'none';
+    }
+
+    function selectPlace(place) {
+        if (!place) return;
+        closeSuggestions();
+        input.value = '';
+        clearBtn && (clearBtn.style.display = 'none');
+        const fullName = [place.name, place.region, place.country].filter(Boolean).join(', ');
+        state.userLocationName = fullName;
+        state.locationName = fullName;
+        if (place.lat && place.lng) {
+            state.location = { lat: place.lat, lng: place.lng, acc: 0, is_user_corrected: true };
+        } else if (!state.location) {
             state.location = { lat: 0, lng: 0, acc: 0, is_user_corrected: true };
         }
-    } finally {
-        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i>';
+        showSelectedPill(fullName);
         populateReview();
-        input.value = '';
     }
+
+    function highlightSuggestion(idx) {
+        suggestionsBox.querySelectorAll('.place-item').forEach((item, i) => {
+            item.classList.toggle('active', i === idx);
+        });
+    }
+
+    // ── Input events ──────────────────────────────────────────────────────────
+    input.addEventListener('input', () => {
+        const q = input.value.trim();
+
+        // Show/hide clear button
+        if (clearBtn) clearBtn.style.display = q.length ? 'flex' : 'none';
+
+        if (q.length < 3) { closeSuggestions(); return; }
+
+        // Instant offline results — bundled DB + localStorage cache
+        const ps = (typeof placeSearch !== 'undefined') ? placeSearch : null;
+        const instant = ps ? ps.search(q) : [];
+        showSuggestions(instant, true);
+
+        // Background Nominatim enrichment — debounced 700ms, non-blocking
+        clearTimeout(remoteDebounce);
+        remoteDebounce = setTimeout(() => {
+            if (ps) {
+                ps.searchRemote(q, () => {
+                    if (input.value.trim() === q) showSuggestions(ps.search(q), true);
+                });
+            }
+        }, 700);
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIdx = Math.min(activeIdx + 1, Math.min(activeSuggestions.length, 5) - 1);
+            highlightSuggestion(activeIdx);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIdx = Math.max(activeIdx - 1, 0);
+            highlightSuggestion(activeIdx);
+        } else if (e.key === 'Enter' && activeSuggestions.length) {
+            e.preventDefault();
+            selectPlace(activeSuggestions[activeIdx >= 0 ? activeIdx : 0]);
+        } else if (e.key === 'Escape') {
+            closeSuggestions();
+            input.blur();
+        }
+    });
+
+    input.addEventListener('blur', () => setTimeout(closeSuggestions, 200));
+
+    // Clear button
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            input.value = '';
+            clearBtn.style.display = 'none';
+            closeSuggestions();
+            input.focus();
+        });
+    }
+
+    // Change button on selected pill — let user re-search
+    if (changeBtn) {
+        changeBtn.addEventListener('click', () => {
+            hideSelectedPill();
+            // Reset the user correction, restore device GPS
+            state.userLocationName = null;
+            state.locationName = state.deviceLocationName || null;
+            populateReview();
+            input.focus();
+        });
+    }
+
+    // Reposition on stage scroll (stage is the scroll container, not window)
+    const stageEl = document.getElementById('stage-review');
+    if (stageEl) stageEl.addEventListener('scroll', positionDropdown, { passive: true });
+    window.addEventListener('resize', () => { if (suggestionsBox.style.display !== 'none') positionDropdown(); }, { passive: true });
 }
 
 function setupReviewStage() {
@@ -1336,11 +1807,8 @@ function setupReviewStage() {
         });
     });
 
-    // Search location button
-    document.getElementById('btn-search-loc').addEventListener('click', searchAddress);
-    document.getElementById('input-loc-search').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') searchAddress();
-    });
+    // Location autocomplete (instant offline suggestions after 3 chars)
+    setupLocationAutocomplete();
 
     document.getElementById('btn-review-next').addEventListener('click', () => {
         state.description = document.getElementById('edit-text').value.trim();
@@ -1385,10 +1853,59 @@ function populateSendStage() {
     }
 }
 
+// ── Media Chunking Utilities (PRD §3.3 / §3.4 / §3.7) ───────────────────────
+
+// Generate a micro-thumbnail from a data URL (sent before full chunks for fast preview)
+// Kept tiny (80×80, quality 0.25) so it transfers in ~10-15s even at 1kbps
+async function generateThumbnail(dataUrl, maxDim = 80, quality = 0.25) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+            const w = Math.round(img.width * scale);
+            const h = Math.round(img.height * scale);
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(null);
+        img.src = dataUrl;
+    });
+}
+
+// Split a base64 string into ~1KB chunks (1024 chars each ≈ 768 bytes binary)
+function chunkBase64(b64str, chunkChars = 1024) {
+    const chunks = [];
+    for (let i = 0; i < b64str.length; i += chunkChars) {
+        chunks.push(b64str.slice(i, i + chunkChars));
+    }
+    return chunks;
+}
+
+// djb2 checksum — must match Python djb2_checksum() on the backend (PRD §3.7)
+function simpleChecksum(str) {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) {
+        h = (((h << 5) + h) ^ str.charCodeAt(i)) >>> 0;
+    }
+    return h.toString(16).padStart(8, '0');
+}
+
+// UUID generator (works on HTTP, unlike crypto.randomUUID)
+function genUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+}
+
 // ── Progressive Upload Helper ────────────────────────────────────────────────
 // XHR-based sender with hard timeout. fetch() hangs on slow networks — XHR doesn't.
 function sendJSON(url, payload, timeoutMs = 30000) {
-    const method = /\/meta$/.test(url) ? 'POST' : 'PATCH';
+    // POST for meta, chunk, thumbnail — PATCH for everything else
+    const method = /\/(meta|chunk|thumbnail)$/.test(url) ? 'POST' : 'PATCH';
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open(method, url, true);
@@ -1427,11 +1944,8 @@ async function submitReport() {
     sendBtn.disabled = true;
 
     try {
-        // Generate idempotency key
-        const clientReportId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-            const r = Math.random() * 16 | 0;
-            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-        });
+        // Generate idempotency key (use shared genUUID() — single source of truth)
+        const clientReportId = genUUID();
 
         const deviceHash = localStorage.getItem('crisp_device_id') || (() => {
             const id = 'DEV-' + Math.random().toString(36).substring(2, 10).toUpperCase();
@@ -1452,7 +1966,7 @@ async function submitReport() {
                 source: 'APP',
                 severity: state.severity,
                 infrastructure_type: state.infraType,
-                description: state.description || state.transcript || '',
+                description: '', // Split to Stage 2 for 1KBPS safety
                 is_auto_submitted: state.isAutoSubmit,
                 client_created_at: new Date().toISOString(),
                 expected_media: expectedMedia,
@@ -1464,16 +1978,23 @@ async function submitReport() {
                         is_user_corrected: !!state.location.is_user_corrected,
                         device_latitude: state.deviceLocation ? state.deviceLocation.lat : null,
                         device_longitude: state.deviceLocation ? state.deviceLocation.lng : null,
-                        user_location_name: state.userLocationName || null
+                        user_location_name: state.userLocationName || null,
+                        device_location_name: (!state.userLocationName && state.locationName) ? state.locationName : null
                     }
-                    : { latitude: 0, longitude: 0, user_location_name: state.userLocationName || null }
+                    : { latitude: 0, longitude: 0, user_location_name: state.userLocationName || null, device_location_name: null }
             },
             photo: hasPhoto ? state.photoDataUrl : null,
             photoSize: hasPhoto ? (state.photoBlob?.size || 0) : 0,
             audioBlob: null,
             audioSize: 0,
-            stages: { meta: false, photo: !hasPhoto, audio: !hasAudio },
-            serverId: null
+            text: state.description || state.transcript || '',
+            stages: { meta: false, text: false, photo: !hasPhoto, audio: !hasAudio },
+            serverId: null,
+            // Stable media IDs for idempotent chunked uploads (PRD §3.3)
+            photoMediaId: hasPhoto ? genUUID() : null,
+            audioMediaId: hasAudio ? genUUID() : null,
+            photoChunkProgress: 0,  // last successfully sent chunk index (for resume)
+            audioChunkProgress: 0,
         };
 
         // Encode audio to base64
@@ -1540,40 +2061,128 @@ async function trySendQueuedReport(item) {
             }
         }
 
-        // Stage 2: Photo (60s timeout, 3 retries)
-        if (!stages.photo && item.photo && reportId) {
+        // Stage 2: Text/Description (Tiny, but separate for 1KBPS bursts)
+        if (!stages.text && reportId) {
             try {
-                await sendWithRetry(`${API_BASE}/reports/${reportId}/media/attach`, {
-                    type: 'IMAGE', resolution_tier: 'MEDIUM',
-                    url: item.photo, file_size_bytes: item.photoSize || 0
-                }, 3, 60000);
-                item.stages.photo = true;
-                item.photo = null; // free memory
+                await sendWithRetry(`${API_BASE}/reports/${reportId}/description`, {
+                    description: item.text || ''
+                }, 5, 20000);
+                item.stages.text = true;
                 try { await enqueueReport(item); } catch (_) {}
-                console.log('Stage 2 (photo) sent');
+                console.log('Stage 2 (text) sent');
             } catch (e) {
-                console.warn('Stage 2 (photo) failed, will retry later:', e.message);
+                console.warn('Stage 2 failed, will retry later:', e.message);
+                // We DON'T return; we can still try to send media if we have a reportId
             }
         }
 
-        // Stage 3: Audio (90s timeout, 3 retries)
+        // Stage 2: Photo — thumbnail first (fast preview), then 1KB chunks (PRD §3.3/3.4)
+        if (!stages.photo && item.photo && reportId) {
+            try {
+                const mediaId = item.photoMediaId || genUUID();
+                item.photoMediaId = mediaId;
+
+                // Extract pure base64 (strip "data:image/jpeg;base64," prefix)
+                const b64 = item.photo.includes(',') ? item.photo.split(',')[1] : item.photo;
+                const chunks = chunkBase64(b64, 1024);
+                const total = chunks.length;
+                const startSeq = item.photoChunkProgress || 0;
+
+                // Send thumbnail once at the start (gives dashboard an instant preview)
+                if (startSeq === 0) {
+                    try {
+                        const thumb = await generateThumbnail(item.photo);
+                        if (thumb) {
+                            await sendWithRetry(
+                                `${API_BASE}/reports/${reportId}/media/thumbnail`,
+                                { media_id: mediaId, thumbnail_data: thumb },
+                                3, 15000
+                            );
+                            console.log('Thumbnail sent for', mediaId);
+                        }
+                    } catch (e) {
+                        console.warn('Thumbnail failed (non-fatal):', e.message);
+                    }
+                }
+
+                // Send chunks from last known position (resume capability — PRD §6)
+                for (let seq = startSeq; seq < total; seq++) {
+                    const chunkData = chunks[seq];
+                    await sendWithRetry(
+                        `${API_BASE}/reports/${reportId}/media/chunk`,
+                        {
+                            media_id: mediaId,
+                            type: 'IMAGE',
+                            seq_num: seq,
+                            total_chunks: total,
+                            data: chunkData,
+                            checksum: simpleChecksum(chunkData)  // integrity (PRD §3.7)
+                        },
+                        5, 20000  // 20s per 1KB chunk is generous even at 1kbps
+                    );
+                    item.photoChunkProgress = seq + 1;
+                    // Persist progress every 5 chunks so retries can resume mid-file
+                    if ((seq + 1) % 5 === 0) {
+                        try { await enqueueReport(item); } catch (_) {}
+                    }
+                }
+
+                item.stages.photo = true;
+                item.photo = null; // free memory — all chunks sent
+                try { await enqueueReport(item); } catch (_) {}
+                console.log(`Photo sent: ${total} chunks (${item.photoSize || '?'} bytes)`);
+            } catch (e) {
+                // Note: item.photo may already be null if error was in post-loop cleanup;
+                // use saved progress counter rather than re-computing chunk total
+                console.warn(`Photo chunk failed at seq ${item.photoChunkProgress}:`, e.message);
+                try { await enqueueReport(item); } catch (_) {} // save progress for resume
+                // Don't return — attempt audio independently
+            }
+        }
+
+        // Stage 3: Audio — 1KB chunks (PRD §3.3)
         if (!stages.audio && item.audioBlob && reportId) {
             try {
-                await sendWithRetry(`${API_BASE}/reports/${reportId}/media/attach`, {
-                    type: 'AUDIO', resolution_tier: 'LOW',
-                    url: item.audioBlob, file_size_bytes: item.audioSize || 0
-                }, 3, 90000);
+                const mediaId = item.audioMediaId || genUUID();
+                item.audioMediaId = mediaId;
+
+                const b64 = item.audioBlob.includes(',') ? item.audioBlob.split(',')[1] : item.audioBlob;
+                const chunks = chunkBase64(b64, 1024);
+                const total = chunks.length;
+                const startSeq = item.audioChunkProgress || 0;
+
+                for (let seq = startSeq; seq < total; seq++) {
+                    const chunkData = chunks[seq];
+                    await sendWithRetry(
+                        `${API_BASE}/reports/${reportId}/media/chunk`,
+                        {
+                            media_id: mediaId,
+                            type: 'AUDIO',
+                            seq_num: seq,
+                            total_chunks: total,
+                            data: chunkData,
+                            checksum: simpleChecksum(chunkData)
+                        },
+                        5, 20000
+                    );
+                    item.audioChunkProgress = seq + 1;
+                    if ((seq + 1) % 5 === 0) {
+                        try { await enqueueReport(item); } catch (_) {}
+                    }
+                }
+
                 item.stages.audio = true;
                 item.audioBlob = null;
                 try { await enqueueReport(item); } catch (_) {}
-                console.log('Stage 3 (audio) sent');
+                console.log(`Audio sent: ${total} chunks`);
             } catch (e) {
-                console.warn('Stage 3 (audio) failed, will retry later:', e.message);
+                console.warn(`Audio chunk failed at seq ${item.audioChunkProgress}:`, e.message);
+                try { await enqueueReport(item); } catch (_) {}
             }
         }
 
         // All done?
-        if (item.stages.meta && item.stages.photo && item.stages.audio) {
+        if (item.stages.meta && item.stages.text && item.stages.photo && item.stages.audio) {
             try { await dequeueReport(item.client_report_id); } catch (_) {}
             console.log('Report fully synced:', reportId);
         }
@@ -1600,7 +2209,9 @@ async function startRetryLoop() {
                 return;
             }
 
-            for (const item of items) {
+            for (const rawItem of items) {
+                // Backward-compat: unwrap old nested format (payload key) if present
+                const item = rawItem.payload && !rawItem.stages ? rawItem.payload : rawItem;
                 if (item.stages && item.meta) {
                     await trySendQueuedReport(item);
                 }
@@ -1661,7 +2272,17 @@ function resetApp() {
     state.photoDataUrl = null; state.photoBlob = null;
     state.audioBlob = null; state.transcript = ''; state.description = '';
     state.infraType = 'ROAD'; state.severity = 'MODERATE'; state.isAutoSubmit = false;
+
+    // Always reset to device GPS — never carry over user-corrected location to next report
     state.userLocationName = null; state.locationName = null;
+    const cachedGps = (() => { try { return JSON.parse(localStorage.getItem('crisp_device_gps')); } catch (_) { return null; } })();
+    if (cachedGps && cachedGps.lat) {
+        state.location = { lat: cachedGps.lat, lng: cachedGps.lng, acc: cachedGps.acc || 0, is_user_corrected: false };
+        state.deviceLocation = { lat: cachedGps.lat, lng: cachedGps.lng };
+    } else {
+        state.location = null;
+        state.deviceLocation = null;
+    }
     document.getElementById('photo-preview').style.display = 'none';
     document.getElementById('photo-placeholder').style.display = 'flex';
     document.getElementById('btn-photo-next').style.display = 'none';
@@ -1687,6 +2308,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 2. Start language detection (it will call applyI18n when ready or fallback)
     detectAndSetupLanguage();
+
+    // 2b. Show consent gate AFTER language detection so it displays in local language
+    // Language detection calls applyI18n() which updates all data-i18n elements including consent
+    // Use a short delay to let async GPS/IP detection complete before showing consent
+    setTimeout(_initConsentGate, 800);
 
     // 3. Migrate old localStorage queue to IndexedDB (backward compatibility)
     try {
@@ -1736,6 +2362,188 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 8. Setup start button
     document.getElementById('btn-start').addEventListener('click', () => goToStage('stage-photo'));
+
+    // 9. Delete My Data — check if device has reports, show/hide button
+    const delBtn = document.getElementById('btn-delete-my-data');
+    const ddpPanel = document.getElementById('delete-data-panel');
+    const ddpList = document.getElementById('ddp-list');
+    const ddpClose = document.getElementById('ddp-close');
+    const ddpDeleteAll = document.getElementById('ddp-delete-all');
+
+    async function _checkDeviceReports() {
+        const deviceId = localStorage.getItem('crisp_device_id');
+        if (!deviceId || !delBtn) return;
+        try {
+            // include_deleted=true so we can show pending-deletion reports with undo option
+            const res = await fetch(`${API_BASE}/reports/device/${deviceId}`);
+            if (res.ok) {
+                const reports = await res.json();
+                delBtn.style.display = reports.length > 0 ? 'inline-flex' : 'none';
+                delBtn._reports = reports;
+            }
+        } catch (_) { /* offline — hide button */ }
+    }
+    _checkDeviceReports();
+
+    function _renderDeleteList(reports) {
+        if (!ddpList) return;
+        if (!reports.length) {
+            ddpList.innerHTML = '<div class="ddp-empty"><i class="fa-solid fa-circle-check" style="color:#22c55e;font-size:20px;"></i><br>No data on server</div>';
+            ddpDeleteAll.style.display = 'none';
+            return;
+        }
+        // Split into active vs pending-deletion
+        const active = reports.filter(r => !r.deletion_requested_at);
+        const pending = reports.filter(r => r.deletion_requested_at);
+        ddpDeleteAll.style.display = active.length > 0 ? 'block' : 'none';
+
+        function _renderItem(r) {
+            const loc = r.location?.user_location_name || r.location?.device_location_name || 'Unknown location';
+            const time = new Date(r.server_created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            const hasImg = r.media?.some(m => m.type === 'IMAGE' && m.assembly_status === 'complete');
+            const hasAudio = r.media?.some(m => m.type === 'AUDIO' && m.assembly_status === 'complete');
+            const isPending = !!r.deletion_requested_at;
+
+            let countdown = '';
+            if (isPending) {
+                const delAt = new Date(r.deletion_requested_at);
+                const expiresAt = new Date(delAt.getTime() + 24 * 60 * 60 * 1000);
+                const remaining = Math.max(0, expiresAt - Date.now());
+                const hrs = Math.floor(remaining / 3600000);
+                const mins = Math.floor((remaining % 3600000) / 60000);
+                countdown = `${hrs}h ${mins}m remaining`;
+            }
+
+            return `<div class="ddp-item ${isPending ? 'ddp-item-pending' : ''}" data-id="${r.id}">
+                <div class="ddp-item-info">
+                    <div class="ddp-item-type"><i class="fa-solid fa-triangle-exclamation" style="color:${r.severity === 'SEVERE' ? '#ef4444' : r.severity === 'MODERATE' ? '#f59e0b' : '#22c55e'};"></i> ${r.infrastructure_type} — ${r.severity}</div>
+                    <div class="ddp-item-meta">${loc} · ${time}</div>
+                    ${isPending ? `<div class="ddp-pending-label"><i class="fa-solid fa-clock"></i> Deletion scheduled — ${countdown}</div>` : `
+                    <div class="ddp-item-media">
+                        ${hasImg ? '<span><i class="fa-solid fa-image"></i> Photo</span>' : ''}
+                        ${hasAudio ? '<span><i class="fa-solid fa-microphone"></i> Audio</span>' : ''}
+                    </div>`}
+                </div>
+                ${isPending
+                    ? `<button class="ddp-item-undo" onclick="undoDeleteReport('${r.id}', this)"><i class="fa-solid fa-rotate-left"></i> Undo</button>`
+                    : `<button class="ddp-item-del" onclick="deleteOneReport('${r.id}', this)"><i class="fa-solid fa-trash"></i></button>`
+                }
+            </div>`;
+        }
+
+        let html = active.map(_renderItem).join('');
+        if (pending.length > 0) {
+            html += `<div class="ddp-pending-section"><div class="ddp-pending-header"><i class="fa-solid fa-hourglass-half"></i> Pending Deletion</div>${pending.map(_renderItem).join('')}</div>`;
+        }
+        ddpList.innerHTML = html;
+    }
+
+    window.deleteOneReport = async (reportId, btn) => {
+        if (!confirm(t('delete_confirm') || 'Delete this report? Your data will be permanently deleted within 24 hours. You can undo this within that time.')) return;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        try {
+            const res = await fetch(`${API_BASE}/reports/${reportId}`, { method: 'DELETE' });
+            if (res.ok) {
+                const result = await res.json();
+                alert(result.message || 'Your data will be permanently deleted within 24 hours.');
+                // Refresh list to show undo option
+                setTimeout(async () => {
+                    await _checkDeviceReports();
+                    _renderDeleteList(delBtn._reports || []);
+                }, 400);
+            }
+        } catch (_) { alert('Could not reach server.'); }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+    };
+
+    window.undoDeleteReport = async (reportId, btn) => {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        try {
+            const res = await fetch(`${API_BASE}/reports/${reportId}/undo-delete`, { method: 'POST' });
+            if (res.ok) {
+                setTimeout(async () => {
+                    await _checkDeviceReports();
+                    _renderDeleteList(delBtn._reports || []);
+                }, 300);
+            } else {
+                const err = await res.json().catch(() => ({}));
+                alert(err.detail || 'Could not undo deletion.');
+            }
+        } catch (_) { alert('Could not reach server.'); }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-rotate-left"></i> Undo';
+    };
+
+    const langSwitcherEl = document.getElementById('lang-switcher');
+    const ddpLangSwitch = document.getElementById('ddp-lang-switch');
+
+    // Build a mini lang switcher for the delete panel
+    function _buildDdpLangSwitch() {
+        if (!ddpLangSwitch) return;
+        const localBtn = document.getElementById('btn-lang-local');
+        const localLang = localBtn?.dataset?.lang;
+        const localLabel = localBtn?.textContent?.trim();
+        if (localLang && localLang !== 'en' && localLabel) {
+            ddpLangSwitch.innerHTML = `
+                <button class="ddp-lang-btn ${state.lang !== 'en' ? 'active' : ''}" data-dlang="${localLang}">${localLabel}</button>
+                <button class="ddp-lang-btn ${state.lang === 'en' ? 'active' : ''}" data-dlang="en">EN</button>`;
+        } else {
+            ddpLangSwitch.innerHTML = '';
+            return;
+        }
+        ddpLangSwitch.querySelectorAll('.ddp-lang-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const code = btn.dataset.dlang;
+                // Reuse the main activateLang via the main lang buttons
+                const mainBtn = code === 'en' ? document.getElementById('btn-lang-en') : document.getElementById('btn-lang-local');
+                if (mainBtn) mainBtn.click();
+                ddpLangSwitch.querySelectorAll('.ddp-lang-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                // Re-render the delete list in new language
+                if (delBtn._reports) _renderDeleteList(delBtn._reports);
+            });
+        });
+    }
+
+    if (delBtn) {
+        delBtn.addEventListener('click', () => {
+            ddpPanel.style.display = 'block';
+            if (langSwitcherEl) langSwitcherEl.style.display = 'none';
+            _buildDdpLangSwitch();
+            _renderDeleteList(delBtn._reports || []);
+        });
+    }
+    if (ddpClose) {
+        ddpClose.addEventListener('click', () => {
+            ddpPanel.style.display = 'none';
+            if (langSwitcherEl) langSwitcherEl.style.display = '';
+        });
+    }
+    if (ddpDeleteAll) {
+        ddpDeleteAll.addEventListener('click', async () => {
+            if (!confirm('This will permanently delete ALL your submitted reports and media from the server. This cannot be undone.\n\nContinue?')) return;
+            const deviceId = localStorage.getItem('crisp_device_id');
+            if (!deviceId) return;
+            ddpDeleteAll.disabled = true;
+            ddpDeleteAll.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Deleting all...';
+            try {
+                const res = await fetch(`${API_BASE}/reports/device/${deviceId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    const result = await res.json();
+                    localStorage.removeItem('crisp_device_id');
+                    localStorage.removeItem('crisp_privacy_consent');
+                    try { const db = await openIDB(); const tx = db.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).clear(); } catch(_){}
+                    alert(`${result.deleted} report(s) deleted.\nAll local data cleared.`);
+                    location.reload();
+                }
+            } catch (_) { alert('Could not reach server.'); }
+            ddpDeleteAll.disabled = false;
+            ddpDeleteAll.innerHTML = '<i class="fa-solid fa-trash-can"></i> Delete All Reports';
+        });
+    }
 
     // 9. Show home
     goToStage('stage-home');

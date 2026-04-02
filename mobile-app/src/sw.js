@@ -1,7 +1,7 @@
 // ── CRISP Service Worker ──────────────────────────────────────────────────────
 // Handles: offline caching, background sync, push notifications (future)
 
-const CACHE_NAME = 'crisp-v2';
+const CACHE_NAME = 'crisp-v3';
 
 // Derive base path from SW's own URL (works regardless of where the app is served)
 const SW_BASE = self.location.href.replace(/sw\.js$/, '');
@@ -10,6 +10,7 @@ const STATIC_ASSETS = [
     SW_BASE,
     SW_BASE + 'index.html',
     SW_BASE + 'app.js',
+    SW_BASE + 'places.js',
     SW_BASE + 'styles.css',
     SW_BASE + 'manifest.json',
     SW_BASE + 'assets/icon-192.png',
