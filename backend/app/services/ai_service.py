@@ -67,6 +67,33 @@ class AIService:
             logger.error(traceback.format_exc())
             return ""
 
+    def transcribe_audio_partial(self, path: str, translate_to_english: bool = True) -> str:
+        """
+        Fast transcription of a partial audio file (e.g. _partial.webm).
+        Uses beam_size=1 for speed. When translate_to_english=True, outputs
+        English text regardless of source language (uses Whisper's translate task).
+        """
+        if not os.path.exists(path):
+            return ""
+        if self.whisper_model is None:
+            return ""
+        try:
+            task = "translate" if translate_to_english else "transcribe"
+            segments, info = self.whisper_model.transcribe(
+                path,
+                language=None,
+                beam_size=1,
+                vad_filter=True,
+                task=task,
+            )
+            text = " ".join([s.text.strip() for s in segments if s.text]).strip()
+            if text:
+                logger.info(f"Partial transcription ({task}): {len(text)} chars, lang={info.language}")
+            return text
+        except Exception as e:
+            logger.warning(f"Partial transcription failed: {e}")
+            return ""
+
     def analyze_image(self, path: str) -> dict:
         """
         Analyze image for damage/labels.

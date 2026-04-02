@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Float, Boolean, Integer, DateTime, ForeignKey, Enum, JSON
+from sqlalchemy import Column, String, Float, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -84,11 +84,13 @@ class Report(Base):
     client_created_at = Column(DateTime(timezone=True))
     server_created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deletion_requested_at = Column(DateTime(timezone=True), nullable=True)  # 24h grace period
 
-    device = relationship("Device", back_populates="reports")
-    location = relationship("Location", back_populates="report", uselist=False, cascade="all, delete-orphan")
-    media = relationship("Media", back_populates="report", cascade="all, delete-orphan")
-    ai_analysis = relationship("AIAnalysis", back_populates="report", uselist=False, cascade="all, delete-orphan")
+    device      = relationship("Device", back_populates="reports")
+    location    = relationship("Location",    back_populates="report", uselist=False, cascade="all, delete-orphan")
+    media       = relationship("Media",       back_populates="report", cascade="all, delete-orphan")
+    ai_analysis = relationship("AIAnalysis",  back_populates="report", uselist=False, cascade="all, delete-orphan")
+    verification = relationship("SatelliteVerification", back_populates="report", uselist=False, cascade="all, delete-orphan")
 
 class Location(Base):
     __tablename__ = "locations"
@@ -100,7 +102,8 @@ class Location(Base):
     device_longitude = Column(Float)
     accuracy_meters = Column(Float)
     is_user_corrected = Column(Boolean, default=False)
-    user_location_name = Column(String, nullable=True)  # Place name typed by user when offline
+    user_location_name = Column(String, nullable=True)   # Place name selected by user (autocomplete / offline)
+    device_location_name = Column(String, nullable=True) # Human-readable name of raw device GPS position
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     report = relationship("Report", back_populates="location")
@@ -111,12 +114,35 @@ class Media(Base):
     report_id = Column(String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False)
     type = Column(Enum(MediaTypeEnum), nullable=False)
     resolution_tier = Column(Enum(ResolutionEnum), default=ResolutionEnum.LOW, nullable=False)
-    url = Column(String, nullable=False)
+    url = Column(String, nullable=False, default='')
     file_size_bytes = Column(Integer)
     is_synced = Column(Boolean, default=False)
+    # Chunked upload tracking (PRD §3.3/3.4/3.6)
+    thumbnail_url = Column(String, nullable=True)           # tiny preview sent before chunks
+    chunk_count = Column(Integer, default=0, nullable=False) # total chunks expected
+    received_chunks = Column(Integer, default=0, nullable=False)
+    completion_pct = Column(Float, default=0.0, nullable=False)
+    assembly_status = Column(String(20), default='pending', nullable=False)  # pending|partial|complete
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     report = relationship("Report", back_populates="media")
+    chunks = relationship("MediaChunk", back_populates="media", cascade="all, delete-orphan")
+
+
+class MediaChunk(Base):
+    """Individual ~1KB packet of a media file (PRD §3.3). Assembled into full file when complete."""
+    __tablename__ = "media_chunks"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    media_id = Column(String(36), ForeignKey("media.id", ondelete="CASCADE"), nullable=False, index=True)
+    seq_num = Column(Integer, nullable=False)
+    total_chunks = Column(Integer, nullable=False)
+    data_b64 = Column(Text, nullable=False)
+    checksum = Column(String(16), nullable=True)
+    received_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    media = relationship("Media", back_populates="chunks")
+
+    __table_args__ = (UniqueConstraint('media_id', 'seq_num', name='uq_media_chunk_seq'),)
 
 class AIAnalysis(Base):
     __tablename__ = "ai_analysis"
@@ -130,6 +156,56 @@ class AIAnalysis(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     report = relationship("Report", back_populates="ai_analysis")
+
+
+class SatelliteVerification(Base):
+    """
+    Stores the result of an AI-powered satellite truth-verification run.
+    One row per report (unique on report_id). Re-running verification
+    overwrites the previous result.
+    """
+    __tablename__ = "satellite_verifications"
+
+    id                           = Column(String(36), primary_key=True, default=gen_uuid)
+    report_id                    = Column(String(36), ForeignKey("reports.id", ondelete="CASCADE"),
+                                          nullable=False, unique=True, index=True)
+
+    # Composite truth score (0-100)
+    total_score                  = Column(Integer, default=0)
+    verdict                      = Column(String(50))   # e.g. LIKELY_AUTHENTIC
+
+    # Component breakdown (stored as JSON: {location_authenticity, damage_corroboration, …})
+    scores                       = Column(JSON)
+
+    # AI narrative
+    reasoning                    = Column(Text)
+    key_findings                 = Column(JSON)         # list[str]
+    caveats                      = Column(JSON)         # list[str]
+    satellite_scene_description  = Column(Text)
+    photo_analysis               = Column(Text)
+
+    # Satellite metadata
+    satellite_source             = Column(String(120))
+    satellite_acquisition_date   = Column(String(50))   # ISO-8601 string
+    satellite_cloud_cover_pct    = Column(Float)
+    satellite_resolution_m       = Column(Float)
+    satellite_days_gap           = Column(Integer)      # negative = post-incident
+
+    # Saved satellite image path (served via /static/)
+    satellite_image_url          = Column(String)
+
+    # Alternate satellite source (e.g. Mapbox when Sentinel is primary)
+    satellite_image_url_alt      = Column(String)
+    satellite_source_alt         = Column(String(120))
+    satellite_acquisition_date_alt = Column(String(50))
+    satellite_resolution_m_alt   = Column(Float)
+
+    # Error info (if scoring failed)
+    error                        = Column(String)
+
+    scored_at                    = Column(DateTime(timezone=True), server_default=func.now())
+
+    report = relationship("Report", back_populates="verification")
 
 class IncidentCluster(Base):
     __tablename__ = "incident_clusters"

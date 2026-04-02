@@ -15,12 +15,27 @@ class LocationBase(BaseModel):
     accuracy_meters: Optional[float] = None
     is_user_corrected: Optional[bool] = False
     user_location_name: Optional[str] = None
+    device_location_name: Optional[str] = None
 
 class MediaBase(BaseModel):
     type: MediaTypeEnum
     resolution_tier: ResolutionEnum = ResolutionEnum.LOW
     url: str
     file_size_bytes: Optional[int] = None
+
+# Chunked upload: tiny thumbnail sent before chunks (PRD §3.4)
+class ThumbnailPayload(BaseModel):
+    media_id: str
+    thumbnail_data: str  # full data:image/jpeg;base64,... URL (≤20KB)
+
+# Chunked upload: one ~1KB packet (PRD §3.3)
+class MediaChunkPayload(BaseModel):
+    media_id: str
+    type: MediaTypeEnum
+    seq_num: int
+    total_chunks: int
+    data: str            # raw base64 chars (no data: prefix)
+    checksum: Optional[str] = None  # djb2 hex for integrity (PRD §3.7)
 
 # API Request Payloads
 class ReportCreate(BaseModel):
@@ -60,6 +75,10 @@ class MediaUpload(BaseModel):
     report_id: str
     media_data: MediaBase  # For progressive upload sync
 
+# Single text update (Stage 2 — description/transcript)
+class ReportDescriptionUpdate(BaseModel):
+    description: str
+
 # API Response Payloads
 class LocationResponse(LocationBase):
     id: str
@@ -68,6 +87,9 @@ class LocationResponse(LocationBase):
 class MediaResponse(MediaBase):
     id: str
     is_synced: bool
+    thumbnail_url: Optional[str] = None
+    completion_pct: float = 0.0
+    assembly_status: str = 'pending'
     model_config = ConfigDict(from_attributes=True)
 
 class AIAnalysisResponse(BaseModel):
@@ -85,6 +107,33 @@ class AIAnalysisResponse(BaseModel):
             obj.detected_labels = []
         return super().model_validate(obj, *args, **kwargs)
 
+
+class VerificationResponse(BaseModel):
+    """Response schema for a satellite truth-verification result."""
+    id: str
+    report_id: str
+    total_score: int = 0
+    verdict: Optional[str] = None
+    scores: Optional[Any] = None                      # {location_authenticity, …}
+    reasoning: Optional[str] = None
+    key_findings: Optional[List[str]] = []
+    caveats: Optional[List[str]] = []
+    satellite_scene_description: Optional[str] = None
+    photo_analysis: Optional[str] = None
+    satellite_source: Optional[str] = None
+    satellite_acquisition_date: Optional[str] = None
+    satellite_cloud_cover_pct: Optional[float] = None
+    satellite_resolution_m: Optional[float] = None
+    satellite_days_gap: Optional[int] = None
+    satellite_image_url: Optional[str] = None
+    satellite_image_url_alt: Optional[str] = None
+    satellite_source_alt: Optional[str] = None
+    satellite_acquisition_date_alt: Optional[str] = None
+    satellite_resolution_m_alt: Optional[float] = None
+    error: Optional[str] = None
+    scored_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
 class ReportResponse(BaseModel):
     id: str
     client_report_id: Optional[str] = None
@@ -99,9 +148,11 @@ class ReportResponse(BaseModel):
     expected_media: int = 0
     received_media: int = 0
     server_created_at: datetime
+    deletion_requested_at: Optional[datetime] = None
     location: Optional[LocationResponse] = None
     media: List[MediaResponse] = []
     ai_analysis: Optional[AIAnalysisResponse] = None
+    verification: Optional[VerificationResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
 

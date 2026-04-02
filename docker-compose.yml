@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  # ── Backend API ─────────────────────────────────────────────
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://crisp:crisp@db:5432/crisp
+    volumes:
+      - uploads:/app/backend/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Frontend (Nginx serves mobile + dashboard) ─────────────
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./mobile-app:/usr/share/nginx/html/mobile-app:ro
+      - ./web-dashboard:/usr/share/nginx/html/web-dashboard:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - uploads:/usr/share/nginx/html/static:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ── PostgreSQL Database ────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: crisp
+      POSTGRES_USER: crisp
+      POSTGRES_PASSWORD: crisp
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crisp"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:

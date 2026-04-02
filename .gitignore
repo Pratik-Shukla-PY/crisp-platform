@@ -44,3 +44,8 @@ backend/uploads/
 
 # Docker
 *.tar
+
+# CRISP runtime
+.crisp.pids
+nohup.out
+!.env.example

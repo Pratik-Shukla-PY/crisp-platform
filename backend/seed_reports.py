@@ -24,8 +24,8 @@ def add_report(infra_type, severity, description):
     rid = str(uuid.uuid4())
     now = datetime.now().isoformat()
     cur.execute("""
-        INSERT INTO reports (id, device_id, source, status, sync_status, severity, infrastructure_type, description, server_created_at)
-        VALUES (?, ?, 'APP', 'PENDING', 'SYNCED', ?, ?, ?, ?);
+        INSERT INTO reports (id, device_id, source, status, sync_status, severity, infrastructure_type, description, is_auto_submitted, expected_media, received_media, server_created_at)
+        VALUES (?, ?, 'APP', 'PENDING', 'SYNCED', ?, ?, ?, 0, 1, 1, ?);
     """, (rid, device_id, severity, infra_type, description, now))
     
     # Add location
@@ -36,8 +36,8 @@ def add_report(infra_type, severity, description):
     
     # Add media (optional dummy)
     cur.execute("""
-        INSERT INTO media (id, report_id, type, resolution_tier, url, is_synced, created_at)
-        VALUES (?, ?, 'IMAGE', 'LOW', '/static/seed_img.jpg', 1, ?);
+        INSERT INTO media (id, report_id, type, resolution_tier, url, is_synced, chunk_count, received_chunks, completion_pct, assembly_status, created_at)
+        VALUES (?, ?, 'IMAGE', 'LOW', '/static/seed_img.jpg', 1, 0, 0, 100.0, 'complete', ?);
     """, (str(uuid.uuid4()), rid, now))
 
     # Add AI analysis
