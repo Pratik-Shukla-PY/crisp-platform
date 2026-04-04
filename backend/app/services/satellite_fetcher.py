@@ -94,17 +94,15 @@ class SatelliteFetcher:
         bbox  = [lon - delta, lat - delta, lon + delta, lat + delta]
         try:
             async with httpx.AsyncClient(timeout=20) as c:
+                # Note: CQL2 filter param causes 400 on some Sentinel Hub plans.
+                # Fetch multiple scenes and filter by cloud cover in code.
                 r = await c.post(
                     _SH_CATALOG_URL,
                     json={
                         "collections": ["sentinel-2-l2a"],
                         "bbox":         bbox,
                         "datetime":     f"{from_str}/{to_str}",
-                        "filter": {
-                            "op":   "lte",
-                            "args": [{"property": "eo:cloud_cover"}, 80],
-                        },
-                        "limit":   1,
+                        "limit":        10,
                     },
                     headers={
                         "Authorization": f"Bearer {token}",
@@ -112,14 +110,33 @@ class SatelliteFetcher:
                     },
                 )
                 r.raise_for_status()
-                features = r.json().get("features", [])
+                data = r.json()
+                features = data.get("features", [])
+                # Pick the most recent scene with acceptable cloud cover
+                for feat in features:
+                    props = feat.get("properties", {})
+                    cloud = props.get("eo:cloud_cover", 100)
+                    acq = props.get("datetime", "")
+                    if cloud <= 80:
+                        logger.info(f"Catalog hit: acq={acq}, cloud={cloud}%, id={feat.get('id', '?')[:40]}")
+                        return {
+                            "acquisition_date": acq,
+                            "cloud_cover":      cloud,
+                            "scene_id":         feat.get("id", ""),
+                        }
+                # No low-cloud scene found — return the most recent anyway with its cloud cover
                 if features:
                     props = features[0].get("properties", {})
+                    acq = props.get("datetime", "")
+                    cloud = props.get("eo:cloud_cover", 100)
+                    logger.warning(f"All scenes cloudy; using most recent: acq={acq}, cloud={cloud}%")
                     return {
-                        "acquisition_date": props.get("datetime", ""),
-                        "cloud_cover":      props.get("eo:cloud_cover", 0),
+                        "acquisition_date": acq,
+                        "cloud_cover":      cloud,
                         "scene_id":         features[0].get("id", ""),
                     }
+                else:
+                    logger.warning(f"Sentinel catalog returned 0 features for bbox={bbox}, range={from_str}/{to_str}")
         except Exception as exc:
             logger.warning(f"Sentinel catalog query error: {exc}")
         return {}

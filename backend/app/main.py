@@ -46,6 +46,23 @@ app.add_middleware(
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+# WhatsApp Bot webhook (runs on the same server)
+try:
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+    from messaging_bot.whatsapp.webhook import whatsapp_router
+    app.include_router(whatsapp_router, prefix=f"{settings.API_V1_STR}/whatsapp", tags=["whatsapp"])
+    logging.getLogger(__name__).info("WhatsApp webhook mounted at /api/v1/whatsapp/webhook")
+except ImportError as e:
+    logging.getLogger(__name__).warning(f"WhatsApp bot not loaded: {e}")
+
+try:
+    from messaging_bot.telegram.webhook import telegram_router
+    app.include_router(telegram_router, prefix=f"{settings.API_V1_STR}/telegram", tags=["telegram"])
+    logging.getLogger(__name__).info("Telegram webhook mounted at /api/v1/telegram/")
+except ImportError as e:
+    logging.getLogger(__name__).warning(f"Telegram bot not loaded: {e}")
+
 app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
 @app.get("/health", tags=["system"])
