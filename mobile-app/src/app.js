@@ -1258,8 +1258,14 @@ function openCameraModal() {
             state.cameraStream = stream;
             document.getElementById('camera-stream').srcObject = stream;
         })
-        .catch(() => {
+        .catch((err) => {
             modal.style.display = 'none';
+            // Show friendly message then fall back to file picker
+            const msg = err.name === 'NotAllowedError'
+                ? 'Camera access blocked — using file picker instead. Allow camera in browser settings for live capture.'
+                : 'Camera unavailable — using file picker instead.';
+            if (typeof showToast === 'function') showToast(msg);
+            else alert(msg);
             document.getElementById('file-camera').click();
         });
 }
@@ -1334,7 +1340,7 @@ function setupAudioStage() {
             const FATAL = ['not-allowed', 'service-not-allowed'];
             if (FATAL.includes(event.error)) {
                 stopRecording();
-                micLabel.textContent = 'Microphone access denied.';
+                micLabel.textContent = 'Microphone blocked — check browser settings and allow access.';
             } else if (event.error === 'network') {
                 labelText.textContent = '⚠ Live text needs internet — audio still recording';
                 console.warn('Speech API needs network. Audio recording continues.');

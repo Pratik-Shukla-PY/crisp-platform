@@ -465,11 +465,37 @@ def update_report_description(report_id: str, desc_in: ReportDescriptionUpdate, 
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
-    
+
     report.description = desc_in.description
     db.commit()
     db.refresh(report)
     logger.info(f"Report {report.id} description updated ({len(desc_in.description)} chars)")
+    return report
+
+
+@router.patch("/{report_id}/classify", response_model=ReportResponse)
+def update_report_classification(report_id: str, request: dict, db: Session = Depends(get_db)):
+    """Update severity and/or infrastructure_type on an existing report.
+    Used by Telegram/WhatsApp bots to update classification after initial creation."""
+    from app.models.report import SeverityEnum, InfraTypeEnum
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if "severity" in request:
+        try:
+            report.severity = SeverityEnum(request["severity"])
+        except ValueError:
+            pass
+    if "infrastructure_type" in request:
+        try:
+            report.infrastructure_type = InfraTypeEnum(request["infrastructure_type"])
+        except ValueError:
+            pass
+    if "description" in request and request["description"]:
+        report.description = request["description"]
+    db.commit()
+    db.refresh(report)
+    logger.info(f"Report {report.id} classified: sev={report.severity.value} type={report.infrastructure_type.value}")
     return report
 
 

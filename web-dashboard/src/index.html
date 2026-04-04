@@ -24,17 +24,21 @@
             <div class="brand-icon"><i class="fa-solid fa-satellite-dish"></i></div>
             <div class="brand-text">
                 <span class="brand-name">CRISP</span>
-                <span class="brand-sub">UN Crisis Command Center</span>
+                <span class="brand-sub">UN Crisis Command</span>
             </div>
-            <div class="live-badge"><span class="live-dot"></span>LIVE</div>
-            <span id="cache-freshness-badge" title="Data freshness" style="font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:6px;background:rgba(124,58,237,0.12);color:var(--accent,#7c3aed);cursor:default;">● Live</span>
+            <div class="live-badge" id="cache-freshness-badge"><span class="live-dot"></span>LIVE</div>
         </div>
 
         <div class="command-stats">
-            <div class="stat-pill critical" id="stat-critical"><span id="count-critical">0</span><label>CRITICAL</label></div>
-            <div class="stat-pill responding" id="stat-responding"><span id="count-responding">0</span><label>DISPATCHED</label></div>
-            <div class="stat-pill resolved" id="stat-resolved"><span id="count-resolved">0</span><label>RESOLVED</label></div>
-            <div class="stat-pill total"><span id="count-total">0</span><label>TOTAL</label></div>
+            <div class="stat-pill critical clickable-pill" id="stat-critical" onclick="filterByPill('critical')" title="Click to filter critical/severe incidents"><span id="count-critical">0</span><label>CRITICAL</label></div>
+            <div class="stat-pill pending clickable-pill" id="stat-pending" onclick="filterByPill('pending')" title="Click to filter pending incidents"><span id="count-pending">0</span><label>PENDING</label></div>
+            <div class="stat-pill responding clickable-pill" id="stat-responding" onclick="filterByPill('responding')" title="Click to filter dispatched incidents"><span id="count-responding">0</span><label>DISPATCHED</label></div>
+            <div class="stat-pill resolved clickable-pill" id="stat-resolved" onclick="filterByPill('resolved')" title="Click to filter resolved incidents"><span id="count-resolved">0</span><label>RESOLVED</label></div>
+            <div class="stat-pill total clickable-pill" id="stat-total" onclick="filterByPill('all')" title="Show all incidents"><span id="count-total">0</span><label>TOTAL</label></div>
+            <div class="stat-pill avg-response" id="stat-avg-response" title="Average wait time of pending incidents"><span id="count-avg-response">—</span><label>AVG WAIT</label></div>
+            <button class="stat-pill analytics-toggle" onclick="toggleAnalytics()" title="Analytics Dashboard">
+                <i class="fa-solid fa-chart-bar"></i><label>ANALYTICS</label>
+            </button>
         </div>
 
         <div class="command-actions">
@@ -51,6 +55,87 @@
         </div>
     </header>
 
+    <!-- Analytics Full-Page Panel (Plecto-style command center dashboard) -->
+    <div id="analytics-panel" class="analytics-panel" style="display:none;">
+        <div class="analytics-scroll">
+            <!-- Row 1: Big KPI Cards (Plecto-style hero metrics) -->
+            <div class="ac-kpi-row">
+                <div class="ac-kpi-card">
+                    <div class="ac-kpi-header"><span>Pending Incidents</span><span class="ac-kpi-date" id="ac-kpi-date"></span></div>
+                    <div class="ac-kpi-value" id="kpi-pending" style="color:#eab308;">0</div>
+                    <div class="ac-kpi-sub" id="kpi-pending-sub"></div>
+                </div>
+                <div class="ac-kpi-card ac-kpi-large">
+                    <div class="ac-kpi-header"><span>Avg Wait Time</span></div>
+                    <div class="ac-kpi-value ac-kpi-time" id="kpi-avg-wait" style="color:#38bdf8;">--:--</div>
+                    <div class="ac-kpi-sub" id="kpi-wait-sub"></div>
+                </div>
+                <div class="ac-kpi-card">
+                    <div class="ac-kpi-header"><span>Resolved Today</span></div>
+                    <div class="ac-kpi-value" id="kpi-resolved" style="color:#22c55e;">0</div>
+                    <div class="ac-kpi-sub" id="kpi-resolved-sub"></div>
+                </div>
+                <div class="ac-kpi-card">
+                    <div class="ac-kpi-header"><span>Response Rate</span></div>
+                    <div class="ac-kpi-value" id="kpi-response-rate" style="color:#a78bfa;">0%</div>
+                    <div class="ac-kpi-sub" id="kpi-rate-sub"></div>
+                </div>
+                <div class="ac-kpi-card">
+                    <div class="ac-kpi-header"><span>False Alarm Rate</span></div>
+                    <div class="ac-kpi-value" id="kpi-false-rate" style="color:#f97316;">0%</div>
+                    <div class="ac-kpi-sub" id="kpi-false-sub"></div>
+                </div>
+            </div>
+
+            <!-- Row 2: Team Score Ring + Incident Timeline -->
+            <div class="ac-row-2">
+                <div class="analytics-card ac-score-card">
+                    <div class="ac-title">Team Score</div>
+                    <div class="ac-hero">
+                        <div class="ac-score-ring" id="team-score-ring"></div>
+                        <div class="ac-score-details" id="team-score-details"></div>
+                    </div>
+                </div>
+                <div class="analytics-card ac-timeline-card">
+                    <div class="ac-title">Incident Timeline (24h)</div>
+                    <div id="timeline-chart" class="ac-timeline"></div>
+                </div>
+            </div>
+
+            <!-- Row 3: Distribution charts + metrics -->
+            <div class="analytics-grid">
+                <div class="analytics-card">
+                    <div class="ac-title">Severity Distribution</div>
+                    <div id="sev-dist-bars" class="ac-bars"></div>
+                </div>
+                <div class="analytics-card">
+                    <div class="ac-title">Infrastructure Affected</div>
+                    <div id="infra-dist-bars" class="ac-bars"></div>
+                </div>
+                <div class="analytics-card">
+                    <div class="ac-title">Verification Status</div>
+                    <div id="verify-summary" class="ac-metrics"></div>
+                </div>
+            </div>
+
+            <!-- Row 4: Regions + Data Quality + Score Trend -->
+            <div class="analytics-grid">
+                <div class="analytics-card">
+                    <div class="ac-title">Top Affected Regions</div>
+                    <div id="top-regions" class="ac-list"></div>
+                </div>
+                <div class="analytics-card">
+                    <div class="ac-title">Data Quality</div>
+                    <div id="data-quality-metrics" class="ac-metrics"></div>
+                </div>
+                <div class="analytics-card">
+                    <div class="ac-title">Score Trend (Daily)</div>
+                    <div id="score-trend-chart" class="ac-timeline"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Pending Deletions Admin Panel (overlay) -->
     <div id="deletions-panel" class="deletions-panel" style="display:none;">
         <div class="del-panel-header">
@@ -58,6 +143,7 @@
             <button class="close-btn" onclick="closeDeletionsPanel()"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="del-panel-body" id="del-panel-body"></div>
+        <div class="del-panel-footer" id="del-panel-footer"></div>
     </div>
 
     <!-- QRT Response Queue Sidebar -->
@@ -97,13 +183,14 @@
         <div id="report-feed-list" class="incident-list"></div>
     </aside>
 
-    <!-- Detail View -->
+    <!-- Detail View (Rapid Decision Interface) -->
     <aside class="detail-panel glass-panel" id="detail-panel" style="display:none;">
         <div class="detail-header">
             <button class="close-btn" onclick="closeDetail()"><i class="fa-solid fa-xmark"></i></button>
             <h3 id="detail-title">Incident Detail</h3>
         </div>
         <div class="detail-body" id="detail-body"></div>
+        <div class="dp-action-dock" id="dp-action-dock"></div>
     </aside>
 </main>
 
@@ -111,7 +198,7 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-<script src="app.js?v=430"></script>
+<script src="app.js?v=490"></script>
 
 <!-- Offline status banner -->
 <div id="offline-banner" style="

@@ -211,7 +211,7 @@ function calculateNodeMetrics(data) {
         if (r.severity === 'CRITICAL' || r.severity === 'SEVERE') s.p1++;
         else if (r.severity === 'MODERATE') s.p2++;
         else s.p3++;
-        const t = new Date(r.server_created_at).getTime();
+        const t = new Date(ensureUTC(r.server_created_at)).getTime();
         if (t > s.latest) s.latest = t;
         const sevScore = SEV_SCORE[r.severity] || 1;
         const infraWeight = INFRA_WEIGHTS[r.infrastructure_type] || 1;
@@ -494,8 +494,20 @@ function renderTriageQueue(el) {
     let reports = allReports;
     if (timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        reports = reports.filter(r => new Date(r.server_created_at).getTime() > cutoff);
+        reports = reports.filter(r => new Date(ensureUTC(r.server_created_at)).getTime() > cutoff);
     }
+
+    // Apply pill filter (if user clicked a stat pill)
+    if (_activePillFilter === 'critical') {
+        reports = reports.filter(r => r.severity === 'CRITICAL' || r.severity === 'SEVERE');
+    } else if (_activePillFilter === 'pending') {
+        reports = reports.filter(r => r.status === 'PENDING' || r.status === 'VERIFIED');
+    } else if (_activePillFilter === 'responding') {
+        reports = reports.filter(r => r.status === 'RESPONDING');
+    } else if (_activePillFilter === 'resolved') {
+        reports = reports.filter(r => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM');
+    }
+    // 'all' or null = no additional filter
 
     // Three buckets by action status
     const needs      = reports.filter(r => r.status === 'PENDING' || r.status === 'VERIFIED');
@@ -506,7 +518,28 @@ function renderTriageQueue(el) {
     [needs, dispatched, resolved].forEach(bucket => bucket.sort(sortByPriorityDesc));
 
     el.innerHTML = '';
+
+    // Empty state
+    if (!reports.length) {
+        el.innerHTML = `<div class="feed-empty-state">
+            <i class="fa-solid fa-satellite-dish"></i>
+            <div class="feed-empty-title">${allReports.length === 0 ? 'Awaiting Incidents' : 'No incidents in this time window'}</div>
+            <div class="feed-empty-sub">${allReports.length === 0 ? 'Reports from the field will appear here in real-time as they arrive.' : 'Try expanding the time filter above.'}</div>
+        </div>`;
+        const badge = document.getElementById('feed-count-badge');
+        if (badge) badge.textContent = 'All Clear';
+        return;
+    }
+
     const frag = document.createDocumentFragment();
+
+    // Show active filter indicator with clear button
+    if (_activePillFilter && _activePillFilter !== 'all') {
+        const filterBar = document.createElement('div');
+        filterBar.className = 'feed-filter-bar';
+        filterBar.innerHTML = `<i class="fa-solid fa-filter"></i> Showing: <strong>${_activePillFilter.toUpperCase()}</strong> <button onclick="filterByPill('${_activePillFilter}')" class="filter-clear-btn"><i class="fa-solid fa-xmark"></i> Clear</button>`;
+        frag.appendChild(filterBar);
+    }
 
     // Flashing alert if critical incidents are still waiting for response
     const criticals = needs.filter(r => r.severity === 'CRITICAL');
@@ -518,7 +551,8 @@ function renderTriageQueue(el) {
     frag.appendChild(createQueueSection('resolved',   '✓  RESOLVED',       resolved,   'qrt-section-resolved'));
 
     el.appendChild(frag);
-    document.getElementById('feed-count-badge').textContent =
+    const _fcb = document.getElementById('feed-count-badge');
+    if (_fcb) _fcb.textContent =
         needs.length > 0 ? `${needs.length} Need Response` : 'All Clear';
 }
 
@@ -621,9 +655,9 @@ function createIncidentCard(r) {
                          : score >= 40 ? 'truth-partial'
                          : score >= 20 ? 'truth-low'
                          :               'truth-unverified';
-        const icon = score >= 60 ? 'fa-satellite' : 'fa-triangle-exclamation';
+        const truthIcon = score >= 60 ? 'fa-satellite' : 'fa-triangle-exclamation';
         truthBadge = `<span class="qrt-truth-badge ${badgeClass}" title="${verdict.replace(/_/g,' ')}">
-            <i class="fa-solid ${icon}"></i> ${score}
+            <i class="fa-solid ${truthIcon}"></i> ${score}
         </span>`;
     }
 
@@ -634,6 +668,7 @@ function createIncidentCard(r) {
                 <div class="qrt-infra-icon"><i class="fa-solid ${icon}"></i></div>
                 <span class="qrt-infra-name">${infra.replace(/_/g, ' ')}</span>
                 <span class="qrt-sev-badge qrt-sev-${sev}">${sev}</span>
+                <span class="qrt-source-badge qrt-src-${(r.source || 'APP').toLowerCase()}" title="Source: ${{APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i>',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i>',TELEGRAM:'<i class="fa-brands fa-telegram"></i>'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i>'}</span>
             </div>
             <div class="qrt-where">
                 <i class="fa-solid fa-location-dot"></i>
@@ -688,7 +723,7 @@ function renderTreeFeed(el) {
     // Filter by time
     if (timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        filtered = filtered.filter(r => new Date(r.server_created_at).getTime() > cutoff);
+        filtered = filtered.filter(r => new Date(ensureUTC(r.server_created_at)).getTime() > cutoff);
     }
     el.innerHTML = '';
     const frag = document.createDocumentFragment();
@@ -696,24 +731,336 @@ function renderTreeFeed(el) {
     const tree = buildControlPanelTree(filtered);
     renderTreeLevel(frag, tree, 0, '');
     el.appendChild(frag);
-    document.getElementById('feed-count-badge').textContent = `${filtered.length} Active`;
+    const _fcb = document.getElementById('feed-count-badge');
+    if (_fcb) _fcb.textContent = `${filtered.length} Active`;
     // Update status tab highlights
     document.querySelectorAll('.stab').forEach(btn => btn.classList.remove('active'));
     const activeTab = document.getElementById(`stab-${statusFilter}`);
     if (activeTab) activeTab.classList.add('active');
 }
 
+/** Get the time-filtered report set (shared by stats, analytics, and map) */
+function _getFilteredReports() {
+    let reports = allReports;
+    if (timeFilterHours > 0) {
+        const cutoff = Date.now() - timeFilterHours * 3600000;
+        reports = reports.filter(r => new Date(ensureUTC(r.server_created_at)).getTime() > cutoff);
+    }
+    return reports;
+}
+
 function updateCommandStats() {
-    let critical = 0, responding = 0, resolved = 0;
-    allReports.forEach(r => {
+    const reports = _getFilteredReports();
+    let critical = 0, responding = 0, resolved = 0, pending = 0;
+
+    reports.forEach(r => {
         if (r.severity === 'CRITICAL' || r.severity === 'SEVERE') critical++;
         if (r.status === 'RESPONDING') responding++;
-        if (r.status === 'RESOLVED') resolved++;
+        if (r.status === 'RESOLVED' || r.status === 'FALSE_ALARM') resolved++;
+        if (r.status === 'PENDING' || r.status === 'VERIFIED') pending++;
     });
-    document.getElementById('count-critical').textContent = critical;
-    document.getElementById('count-responding').textContent = responding;
-    document.getElementById('count-resolved').textContent = resolved;
-    document.getElementById('count-total').textContent = allReports.length;
+
+    const _set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    _set('count-critical', critical);
+    _set('count-pending', pending);
+    _set('count-responding', responding);
+    _set('count-resolved', resolved);
+    _set('count-total', reports.length);
+
+    // Average wait time of pending reports
+    const pendingReports = reports.filter(r => r.status === 'PENDING' || r.status === 'VERIFIED');
+    if (pendingReports.length > 0) {
+        const avgWaitMs = pendingReports.reduce((s, r) => s + (Date.now() - new Date(ensureUTC(r.server_created_at)).getTime()), 0) / pendingReports.length;
+        const avgMin = Math.round(avgWaitMs / 60000);
+        _set('count-avg-response', avgMin < 60 ? `${avgMin}m` : `${Math.floor(avgMin/60)}h${avgMin%60 > 0 ? ' ' + avgMin%60 + 'm' : ''}`);
+    } else {
+        _set('count-avg-response', '✓');
+    }
+
+    // Pulse critical pill when there are critical incidents pending
+    const critEl = document.getElementById('stat-critical');
+    if (critEl) critEl.classList.toggle('pulse-attention', critical > 0 && pending > 0);
+
+    // Update analytics if panel is open
+    if (document.getElementById('analytics-panel')?.style.display !== 'none') _renderAnalytics();
+}
+
+// ── Clickable pill filter: click a stat pill to filter the feed ──
+let _activePillFilter = null;
+
+window.filterByPill = function (type) {
+    // Toggle: click same pill again to clear filter
+    if (_activePillFilter === type) {
+        _activePillFilter = null;
+    } else {
+        _activePillFilter = type;
+    }
+    // Highlight active pill
+    document.querySelectorAll('.clickable-pill').forEach(p => p.classList.remove('pill-active'));
+    if (_activePillFilter) {
+        const activeEl = document.querySelector(`.stat-pill.${_activePillFilter === 'all' ? 'total' : _activePillFilter}`);
+        if (activeEl) activeEl.classList.add('pill-active');
+    }
+    renderFeed();
+};
+
+window.toggleAnalytics = function () {
+    const panel = document.getElementById('analytics-panel');
+    if (!panel) return;
+    const show = panel.style.display === 'none';
+    panel.style.display = show ? 'block' : 'none';
+    if (show) _renderAnalytics();
+};
+
+function _calcTeamScore(reports) {
+    if (!reports.length) return { score: 0, breakdown: {} };
+    const total = reports.length;
+    // 1. Response rate (0-30 pts): % of reports that have been dispatched or resolved
+    const acted = reports.filter(r => r.status === 'RESPONDING' || r.status === 'RESOLVED' || r.status === 'FALSE_ALARM').length;
+    const responseScore = Math.round((acted / total) * 30);
+    // 2. Critical resolution (0-25 pts): % of critical/severe incidents resolved
+    const criticals = reports.filter(r => r.severity === 'CRITICAL' || r.severity === 'SEVERE');
+    const critResolved = criticals.filter(r => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM').length;
+    const critScore = criticals.length > 0 ? Math.round((critResolved / criticals.length) * 25) : 25;
+    // 3. Verification coverage (0-20 pts): % of reports verified with satellite
+    const verified = reports.filter(r => r.verification).length;
+    const verifyScore = Math.round((verified / total) * 20);
+    // 4. Data completeness (0-15 pts): avg media received / expected
+    let completeness = 0;
+    reports.forEach(r => { if (r.expected_media > 0) completeness += (r.received_media || 0) / r.expected_media; else completeness += 1; });
+    const dataScore = Math.round((completeness / total) * 15);
+    // 5. False alarm detection (0-10 pts): identifying false alarms shows good triage
+    const falseAlarms = reports.filter(r => r.status === 'FALSE_ALARM').length;
+    const faScore = Math.min(10, falseAlarms * 2);
+    const score = Math.min(100, responseScore + critScore + verifyScore + dataScore + faScore);
+    return { score, breakdown: { response: responseScore, critical: critScore, verification: verifyScore, data: dataScore, triage: faScore } };
+}
+
+function _renderAnalytics() {
+  try {
+    const reports = _getFilteredReports();
+    if (!reports.length) return;
+
+    // ── KPI Cards (Plecto-style hero metrics) ──
+    const dateEl = document.getElementById('ac-kpi-date');
+    if (dateEl) dateEl.textContent = new Date().toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+
+    const pendingR = reports.filter(r => r.status === 'PENDING' || r.status === 'VERIFIED');
+    const critPending = pendingR.filter(r => r.severity === 'CRITICAL' || r.severity === 'SEVERE').length;
+    const el1 = document.getElementById('kpi-pending');
+    if (el1) el1.textContent = pendingR.length;
+    const sub1 = document.getElementById('kpi-pending-sub');
+    if (sub1) sub1.innerHTML = critPending > 0 ? `<span class="down"><i class="fa-solid fa-arrow-up"></i> ${critPending} critical/severe</span>` : '<span class="up">No critical pending</span>';
+
+    // Avg wait time of pending reports
+    if (pendingR.length > 0) {
+        const avgMs = pendingR.reduce((s, r) => s + (Date.now() - new Date(ensureUTC(r.server_created_at)).getTime()), 0) / pendingR.length;
+        const hrs = Math.floor(avgMs / 3600000);
+        const mins = Math.floor((avgMs % 3600000) / 60000);
+        const el2 = document.getElementById('kpi-avg-wait');
+        if (el2) el2.textContent = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+        const sub2 = document.getElementById('kpi-wait-sub');
+        if (sub2) sub2.innerHTML = avgMs > 3600000 ? '<span class="down"><i class="fa-solid fa-arrow-up"></i> Over 1 hour</span>' : '<span class="up"><i class="fa-solid fa-arrow-down"></i> Under 1 hour</span>';
+    } else {
+        const el2 = document.getElementById('kpi-avg-wait');
+        if (el2) el2.textContent = '00:00';
+        const sub2 = document.getElementById('kpi-wait-sub');
+        if (sub2) sub2.innerHTML = '<span class="up">All responded</span>';
+    }
+
+    const resolvedR = reports.filter(r => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM');
+    const el3 = document.getElementById('kpi-resolved');
+    if (el3) el3.textContent = resolvedR.length;
+    const sub3 = document.getElementById('kpi-resolved-sub');
+    if (sub3) sub3.innerHTML = `of ${reports.length} total`;
+
+    const acted = reports.filter(r => r.status === 'RESPONDING' || r.status === 'RESOLVED' || r.status === 'FALSE_ALARM').length;
+    const rate = reports.length > 0 ? Math.round((acted / reports.length) * 100) : 0;
+    const el4 = document.getElementById('kpi-response-rate');
+    if (el4) el4.textContent = rate + '%';
+    const sub4 = document.getElementById('kpi-rate-sub');
+    if (sub4) sub4.innerHTML = rate >= 80 ? '<span class="up"><i class="fa-solid fa-arrow-up"></i> Strong</span>' : rate >= 50 ? 'Moderate' : '<span class="down"><i class="fa-solid fa-arrow-down"></i> Needs attention</span>';
+
+    const falseAlarms = reports.filter(r => r.status === 'FALSE_ALARM').length;
+    const faRate = reports.length > 0 ? Math.round((falseAlarms / reports.length) * 100) : 0;
+    const el5 = document.getElementById('kpi-false-rate');
+    if (el5) el5.textContent = faRate + '%';
+    const sub5 = document.getElementById('kpi-false-sub');
+    if (sub5) sub5.innerHTML = `${falseAlarms} of ${reports.length} reports`;
+
+    // 0. Team Performance Score (hero)
+    const ts = _calcTeamScore(reports);
+    const sc = ts.score;
+    const scColor = sc >= 80 ? '#22c55e' : sc >= 60 ? '#86efac' : sc >= 40 ? '#eab308' : sc >= 20 ? '#f97316' : '#ef4444';
+    const scLabel = sc >= 80 ? 'Excellent' : sc >= 60 ? 'Good' : sc >= 40 ? 'Fair' : sc >= 20 ? 'Needs Improvement' : 'Critical';
+    const C = 251.33; // r=40, circumference
+    const scOffset = C - (sc / 100) * C;
+    const _tsr = document.getElementById('team-score-ring');
+    if (_tsr) _tsr.innerHTML = `
+        <svg width="96" height="96" viewBox="0 0 96 96">
+            <circle cx="48" cy="48" r="40" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="8"/>
+            <circle cx="48" cy="48" r="40" fill="none" stroke="${scColor}" stroke-width="8" stroke-linecap="round"
+                stroke-dasharray="${C}" stroke-dashoffset="${scOffset}" transform="rotate(-90 48 48)" style="transition:stroke-dashoffset 0.8s ease;"/>
+        </svg>
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <span style="font-size:28px;font-weight:800;color:${scColor};font-family:var(--font-head);line-height:1;">${sc}</span>
+            <span style="font-size:10px;color:var(--text-dim);">/100</span>
+        </div>`;
+    if (_tsr) _tsr.style.position = 'relative';
+
+    const bd = ts.breakdown;
+    const _tsd = document.getElementById('team-score-details');
+    if (_tsd) _tsd.innerHTML = `
+        <div style="font-size:18px;font-weight:800;color:${scColor};font-family:var(--font-head);margin-bottom:4px;">${scLabel}</div>
+        <div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">Team Performance Score — based on response speed, critical resolution, verification coverage, and data quality</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="ac-score-chip">Response ${bd.response}/30</span>
+            <span class="ac-score-chip">Critical ${bd.critical}/25</span>
+            <span class="ac-score-chip">Verified ${bd.verification}/20</span>
+            <span class="ac-score-chip">Data ${bd.data}/15</span>
+            <span class="ac-score-chip">Triage ${bd.triage}/10</span>
+        </div>`;
+
+    // 0b. Score Trend (daily — store in localStorage)
+    const TREND_KEY = 'crisp_score_trend';
+    const today = new Date().toISOString().slice(0, 10);
+    let trend = {};
+    try { trend = JSON.parse(localStorage.getItem(TREND_KEY) || '{}'); } catch (_) {}
+    trend[today] = sc;
+    // Keep last 14 days
+    const trendDays = Object.keys(trend).sort().slice(-14);
+    const cleanTrend = {};
+    trendDays.forEach(d => { cleanTrend[d] = trend[d]; });
+    try { localStorage.setItem(TREND_KEY, JSON.stringify(cleanTrend)); } catch (_) {}
+
+    const trendMax = Math.max(...Object.values(cleanTrend), 100);
+    const trendEntries = Object.entries(cleanTrend);
+    const _stc = document.getElementById('score-trend-chart');
+    if (_stc) _stc.innerHTML = `
+        <div class="ac-timeline-bars" style="height:50px;">
+            ${trendEntries.map(([day, val]) => {
+                const dayLabel = day.slice(5); // MM-DD
+                const col = val >= 80 ? '#22c55e' : val >= 60 ? '#86efac' : val >= 40 ? '#eab308' : val >= 20 ? '#f97316' : '#ef4444';
+                return `<div class="ac-tbar" style="height:${Math.max(4, (val/trendMax)*100)}%;background:linear-gradient(to top,${col}66,${col});" title="${day}: ${val}/100">
+                    <span class="ac-tbar-val">${val}</span>
+                </div>`;
+            }).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);margin-top:4px;">
+            ${trendEntries.length > 1 ? `<span>${trendEntries[0][0].slice(5)}</span><span>${trendEntries[trendEntries.length-1][0].slice(5)}</span>` : '<span>Today</span>'}
+        </div>`;
+
+    // 1. Severity Distribution
+    const sevCounts = { CRITICAL: 0, SEVERE: 0, MODERATE: 0, MINOR: 0 };
+    reports.forEach(r => { if (sevCounts[r.severity] !== undefined) sevCounts[r.severity]++; });
+    const maxSev = Math.max(...Object.values(sevCounts), 1);
+    const sevColors = { CRITICAL: '#ef4444', SEVERE: '#f97316', MODERATE: '#eab308', MINOR: '#22c55e' };
+    const _sdEl = document.getElementById('sev-dist-bars');
+    if (_sdEl) _sdEl.innerHTML = Object.entries(sevCounts).map(([k, v]) =>
+        `<div class="ac-bar-row">
+            <span class="ac-bar-label">${k}</span>
+            <div class="ac-bar-track"><div class="ac-bar-fill" style="width:${(v/maxSev)*100}%;background:${sevColors[k]};"></div></div>
+            <span class="ac-bar-val">${v}</span>
+        </div>`
+    ).join('');
+
+    // 2. Infrastructure Breakdown
+    const infraCounts = {};
+    reports.forEach(r => { infraCounts[r.infrastructure_type] = (infraCounts[r.infrastructure_type] || 0) + 1; });
+    const infraSorted = Object.entries(infraCounts).sort((a, b) => b[1] - a[1]);
+    const maxInfra = Math.max(...infraSorted.map(e => e[1]), 1);
+    const _idEl = document.getElementById('infra-dist-bars');
+    if (_idEl) _idEl.innerHTML = infraSorted.map(([k, v]) =>
+        `<div class="ac-bar-row">
+            <span class="ac-bar-label">${k}</span>
+            <div class="ac-bar-track"><div class="ac-bar-fill" style="width:${(v/maxInfra)*100}%;background:var(--info);"></div></div>
+            <span class="ac-bar-val">${v}</span>
+        </div>`
+    ).join('');
+
+    // 3. Response Metrics (use rm_ prefix to avoid variable shadowing with KPI section)
+    const rm_pending = reports.filter(r => r.status === 'PENDING' || r.status === 'VERIFIED').length;
+    const rm_dispatched = reports.filter(r => r.status === 'RESPONDING').length;
+    const rm_done = reports.filter(r => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM').length;
+    const rm_fa = reports.filter(r => r.status === 'FALSE_ALARM').length;
+    const rm_rate = reports.length > 0 ? Math.round(((rm_dispatched + rm_done) / reports.length) * 100) : 0;
+    const avgMedia = reports.length > 0 ? (reports.reduce((s, r) => s + (r.received_media || 0), 0) / reports.length).toFixed(1) : 0;
+    const _rmEl = document.getElementById('response-metrics');
+    if (_rmEl) _rmEl.innerHTML = `
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#ef4444;">${rm_pending}</span><span class="ac-metric-label">Awaiting</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#a78bfa;">${rm_dispatched}</span><span class="ac-metric-label">Dispatched</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#10b981;">${rm_done}</span><span class="ac-metric-label">Resolved</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#38bdf8;">${rm_rate}%</span><span class="ac-metric-label">Response Rate</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#f59e0b;">${rm_fa}</span><span class="ac-metric-label">False Alarms</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#94a3b8;">${avgMedia}</span><span class="ac-metric-label">Avg Media/Report</span></div>
+    `;
+
+    // 4. Timeline (last 24h, binned by hour)
+    const now = Date.now();
+    const hours = Array(24).fill(0);
+    reports.forEach(r => {
+        const h = Math.floor((now - new Date(ensureUTC(r.server_created_at)).getTime()) / 3600000);
+        if (h >= 0 && h < 24) hours[23 - h]++;
+    });
+    const maxH = Math.max(...hours, 1);
+    const _tcEl = document.getElementById('timeline-chart');
+    if (_tcEl) _tcEl.innerHTML = `
+        <div class="ac-timeline-bars">
+            ${hours.map((v, i) => `<div class="ac-tbar" style="height:${Math.max(2, (v/maxH)*100)}%;" title="${24 - i}h ago: ${v} incidents"><span class="ac-tbar-val">${v || ''}</span></div>`).join('')}
+        </div>
+        <div class="ac-timeline-labels"><span>24h ago</span><span>Now</span></div>
+    `;
+
+    // 5. Top Affected Regions
+    const regionCounts = {};
+    reports.forEach(r => {
+        const name = r.location?.user_location_name || r.location?.device_location_name || r._region || 'Unknown';
+        const short = name.split(',')[0].trim();
+        regionCounts[short] = (regionCounts[short] || 0) + 1;
+    });
+    const topRegions = Object.entries(regionCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const _trEl = document.getElementById('top-regions');
+    if (_trEl) _trEl.innerHTML = topRegions.map(([name, count], i) =>
+        `<div class="ac-list-row">
+            <span class="ac-list-rank">${i + 1}</span>
+            <span class="ac-list-name">${name}</span>
+            <span class="ac-list-count">${count}</span>
+        </div>`
+    ).join('') || '<div style="color:var(--text-dim);font-size:12px;">No location data</div>';
+
+    // 6. Verification Summary
+    const verified = reports.filter(r => r.verification).length;
+    const unverified = reports.length - verified;
+    const avgScore = verified > 0 ? Math.round(reports.filter(r => r.verification).reduce((s, r) => s + (r.verification.total_score || 0), 0) / verified) : 0;
+    const highConf = reports.filter(r => r.verification && r.verification.total_score >= 60).length;
+    const lowConf = reports.filter(r => r.verification && r.verification.total_score < 40).length;
+    const _vsEl = document.getElementById('verify-summary');
+    if (_vsEl) _vsEl.innerHTML = `
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#22c55e;">${verified}</span><span class="ac-metric-label">Verified</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#64748b;">${unverified}</span><span class="ac-metric-label">Unverified</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#38bdf8;">${avgScore}</span><span class="ac-metric-label">Avg Score</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#22c55e;">${highConf}</span><span class="ac-metric-label">High Conf</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#ef4444;">${lowConf}</span><span class="ac-metric-label">Low Conf</span></div>
+    `;
+
+    // 7. Data Quality Metrics
+    const withPhoto = reports.filter(r => r.media?.some(m => m.type === 'IMAGE' && m.assembly_status === 'complete')).length;
+    const withAudio = reports.filter(r => r.media?.some(m => m.type === 'AUDIO' && m.assembly_status === 'complete')).length;
+    const withLocation = reports.filter(r => r.location && (r.location.latitude || r.location.device_latitude)).length;
+    const withTranscript = reports.filter(r => r.ai_analysis?.transcription).length;
+    const withDescription = reports.filter(r => r.description && r.description.trim().length > 0).length;
+    const photoPct = reports.length > 0 ? Math.round((withPhoto / reports.length) * 100) : 0;
+    const audioPct = reports.length > 0 ? Math.round((withAudio / reports.length) * 100) : 0;
+    const locPct = reports.length > 0 ? Math.round((withLocation / reports.length) * 100) : 0;
+    const dqEl = document.getElementById('data-quality-metrics');
+    if (dqEl) dqEl.innerHTML = `
+        <div class="ac-metric"><span class="ac-metric-val" style="color:${photoPct >= 80 ? '#22c55e' : photoPct >= 50 ? '#eab308' : '#ef4444'};">${photoPct}%</span><span class="ac-metric-label">Have Photos</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:${audioPct >= 80 ? '#22c55e' : audioPct >= 50 ? '#eab308' : '#ef4444'};">${audioPct}%</span><span class="ac-metric-label">Have Audio</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:${locPct >= 90 ? '#22c55e' : '#eab308'};">${locPct}%</span><span class="ac-metric-label">Have GPS</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#38bdf8;">${withTranscript}</span><span class="ac-metric-label">Transcribed</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#94a3b8;">${withDescription}</span><span class="ac-metric-label">Have Text</span></div>
+    `;
+  } catch (e) { console.warn('[CRISP] Analytics render error:', e); }
 }
 
 // ── Incident Preview (Hover Tooltip) ─────────────────────────────────────────
@@ -800,6 +1147,13 @@ window.selectReport = (id, skipFly = false) => {
     const locLat  = loc?.latitude;
     const locLng  = loc?.longitude;
 
+    // ── Urgency signals ──
+    const nearbyCount = allReports.filter(rr => rr.id !== r.id && rr.location && loc &&
+        haversineKm(loc.latitude, loc.longitude, rr.location.latitude, rr.location.longitude) < 5).length;
+    const isCriticalInfra = ['HOSPITAL','POWER','POWER_PLANT','WATER','WATER_TREATMENT'].includes(r.infrastructure_type);
+    const waitMs = Date.now() - new Date(ensureUTC(r.server_created_at)).getTime();
+    const waitMin = Math.round(waitMs / 60000);
+
     // ── Image HTML (compact 160px) ──
     const imgPct = (img?.completion_pct ?? 0);
     const imgComplete = img?.assembly_status === 'complete' && img?.url;
@@ -819,7 +1173,7 @@ window.selectReport = (id, skipFly = false) => {
                        </div>
                    </div>`
                 : imgPct > 0
-                    ? `<div class="dp-img dp-img-placeholder"><div class="chunk-progress-track" style="width:80%"><div class="chunk-progress-fill" style="width:${imgPct}%"></div></div><span style="font-size:9px;color:#6b7280;">${imgPct.toFixed(0)}%</span></div>`
+                    ? `<div class="dp-img dp-img-placeholder"><div class="chunk-progress-track" style="width:80%"><div class="chunk-progress-fill" style="width:${imgPct}%"></div></div><span style="font-size:12px;color:#6b7280;">${imgPct.toFixed(0)}%</span></div>`
                     : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-camera" style="font-size:18px;color:#334155;"></i></div>`
     ) : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-camera-slash" style="font-size:16px;color:#334155;"></i></div>`;
 
@@ -838,7 +1192,7 @@ window.selectReport = (id, skipFly = false) => {
                    <img id="dp-sat-img-${r.id}" src="${satSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">
                </div>
            </div>`
-        : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-satellite" style="font-size:16px;color:#334155;"></i><span style="font-size:8px;color:#475569;">Not verified</span></div>`;
+        : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-satellite" style="font-size:16px;color:#334155;"></i><span style="font-size:12px;color:#475569;">Not verified</span></div>`;
 
     // ── Audio HTML (compact inline strip) ──
     const aPct = (audio?.completion_pct ?? 0);
@@ -846,7 +1200,16 @@ window.selectReport = (id, skipFly = false) => {
     const aPartialUrl = audio?.thumbnail_url ? getMediaUrl(audio.thumbnail_url) + '?_cb=' + (Math.round(aPct/5)*5) : '';
     const audioPlayUrl = aComplete ? getMediaUrl(audio.url) : aPartialUrl;
 
-    // ── Verification inline + full report ──
+    // ── Image match score (shown below image section) ──
+    const imgMatchHtml = v ? (() => {
+        const total = v.total_score || 0;
+        const gc = total >= 80 ? '#22c55e' : total >= 60 ? '#86efac' : total >= 40 ? '#eab308' : total >= 20 ? '#f97316' : '#ef4444';
+        const damageScore = v.scores?.damage_corroboration || 0;
+        const matchPct = Math.round((damageScore / 25) * 100);
+        return `<div class="dp-img-match"><i class="fa-solid fa-brain" style="color:${gc};"></i> Image Match Score: <strong style="color:${gc};">${matchPct}%</strong> <span style="color:var(--text-dim);">· Overall: ${total}/100</span></div>`;
+    })() : '';
+
+    // ── Verification: compact summary (default) + expandable detail ──
     const vGaugeHtml = (() => {
         if (!v) return '';
         const total = v.total_score || 0;
@@ -858,123 +1221,147 @@ window.selectReport = (id, skipFly = false) => {
         const scores = v.scores || {};
         const barPct = (val) => Math.round(((val || 0) / 25) * 100);
         const barCol = (val) => val >= 20 ? '#22c55e' : val >= 13 ? '#eab308' : '#ef4444';
-        const findings = (v.key_findings || []).map(f => `<div style="font-size:9px;color:var(--text-sub);margin-bottom:3px;"><i class="fa-solid fa-circle-dot" style="color:var(--info);font-size:6px;margin-right:4px;"></i>${f}</div>`).join('');
-        const caveats = (v.caveats || []).map(c => `<div style="font-size:9px;color:#fbbf24;margin-bottom:3px;"><i class="fa-solid fa-triangle-exclamation" style="font-size:6px;margin-right:4px;"></i>${c}</div>`).join('');
-        return `
-        <div class="dp-verify-strip" onclick="document.getElementById('dp-full-report').style.display=document.getElementById('dp-full-report').style.display==='none'?'block':'none'" style="cursor:pointer;">
-            <div class="dp-gauge">
-                <svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
-                <circle cx="22" cy="22" r="18" fill="none" stroke="${gc}" stroke-width="5" stroke-linecap="round"
-                    stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}" transform="rotate(-90 22 22)"/></svg>
-                <span class="dp-gauge-num" style="color:${gc};">${total}</span>
+        const dotCol = (val) => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${barCol(val)};"></span>`;
+
+        // Tier 1: Compact summary (always visible)
+        const tier1 = `
+        <div class="dp-ai-summary">
+            <div class="dp-ai-header">
+                <div class="dp-gauge">
+                    <svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="${gc}" stroke-width="5" stroke-linecap="round"
+                        stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}" transform="rotate(-90 22 22)"/></svg>
+                    <span class="dp-gauge-num" style="color:${gc};">${total}</span>
+                </div>
+                <div class="dp-ai-verdict">
+                    <div style="font-size:14px;font-weight:800;color:${gc};text-transform:uppercase;">${vLabel}</div>
+                    <div style="font-size:11px;color:var(--text-dim);">AI Verification Score</div>
+                </div>
             </div>
-            <div class="dp-verify-info">
-                <div class="dp-verdict" style="color:${gc};">${vLabel}</div>
-                <div class="dp-verify-desc">${v.satellite_scene_description ? v.satellite_scene_description.substring(0, 100) + '...' : 'Click for full report'}</div>
+            <div class="dp-ai-scores">
+                <div class="dp-ai-score-item">${dotCol(scores.location_authenticity)} <span>Location</span> <strong>${scores.location_authenticity ?? '—'}</strong>/25</div>
+                <div class="dp-ai-score-item">${dotCol(scores.damage_corroboration)} <span>Damage</span> <strong>${scores.damage_corroboration ?? '—'}</strong>/25</div>
+                <div class="dp-ai-score-item">${dotCol(scores.description_coherence)} <span>Coherence</span> <strong>${scores.description_coherence ?? '—'}</strong>/25</div>
+                <div class="dp-ai-score-item">${dotCol(scores.data_quality)} <span>Quality</span> <strong>${scores.data_quality ?? '—'}</strong>/25</div>
             </div>
-            <i class="fa-solid fa-chevron-down" style="color:var(--text-dim);font-size:9px;"></i>
-        </div>
-        <div id="dp-full-report" style="display:none;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;margin-bottom:8px;margin-top:-4px;">
-            ${v.error ? `<div style="padding:6px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font-size:10px;color:#fca5a5;margin-bottom:8px;"><i class="fa-solid fa-triangle-exclamation"></i> ${v.error}</div>` : ''}
-            <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;">
-                <div style="display:flex;align-items:center;gap:6px;font-size:9px;"><span style="width:90px;color:var(--text-dim);flex-shrink:0;">Location</span><div style="flex:1;height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${barPct(scores.location_authenticity)}%;background:${barCol(scores.location_authenticity)};border-radius:2px;"></div></div><span style="color:var(--text-sub);">${scores.location_authenticity ?? '—'}/25</span></div>
-                <div style="display:flex;align-items:center;gap:6px;font-size:9px;"><span style="width:90px;color:var(--text-dim);flex-shrink:0;">Damage</span><div style="flex:1;height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${barPct(scores.damage_corroboration)}%;background:${barCol(scores.damage_corroboration)};border-radius:2px;"></div></div><span style="color:var(--text-sub);">${scores.damage_corroboration ?? '—'}/25</span></div>
-                <div style="display:flex;align-items:center;gap:6px;font-size:9px;"><span style="width:90px;color:var(--text-dim);flex-shrink:0;">Description</span><div style="flex:1;height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${barPct(scores.description_coherence)}%;background:${barCol(scores.description_coherence)};border-radius:2px;"></div></div><span style="color:var(--text-sub);">${scores.description_coherence ?? '—'}/25</span></div>
-                <div style="display:flex;align-items:center;gap:6px;font-size:9px;"><span style="width:90px;color:var(--text-dim);flex-shrink:0;">Data Quality</span><div style="flex:1;height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${barPct(scores.data_quality)}%;background:${barCol(scores.data_quality)};border-radius:2px;"></div></div><span style="color:var(--text-sub);">${scores.data_quality ?? '—'}/25</span></div>
-            </div>
-            ${findings ? `<div style="margin-bottom:6px;">${findings}</div>` : ''}
-            ${caveats ? `<div style="margin-bottom:6px;">${caveats}</div>` : ''}
-            ${v.reasoning ? `<div style="font-size:9px;color:var(--text-sub);line-height:1.4;padding:6px 8px;background:rgba(255,255,255,0.02);border-left:2px solid var(--border);border-radius:0 4px 4px 0;">${v.reasoning}</div>` : ''}
         </div>`;
+
+        // Tier 2: Expandable detailed report (hidden by default)
+        const findings = (v.key_findings || []).map(f => `<div class="dp-finding"><i class="fa-solid fa-circle-check" style="color:var(--info);"></i>${f}</div>`).join('');
+        const caveats = (v.caveats || []).map(c => `<div class="dp-finding dp-caveat"><i class="fa-solid fa-triangle-exclamation" style="color:#fbbf24;"></i>${c}</div>`).join('');
+
+        const tier2 = (findings || caveats || v.reasoning) ? `
+        <button class="dp-expand-btn" onclick="const el=document.getElementById('dp-detail-report');const ic=this.querySelector('i');if(el.style.display==='none'){el.style.display='block';ic.classList.replace('fa-chevron-down','fa-chevron-up');this.querySelector('span').textContent='Hide Details';}else{el.style.display='none';ic.classList.replace('fa-chevron-up','fa-chevron-down');this.querySelector('span').textContent='View Detailed Report';}">
+            <i class="fa-solid fa-chevron-down"></i> <span>View Detailed Report</span>
+        </button>
+        <div id="dp-detail-report" style="display:none;" class="dp-detail-report">
+            ${v.error ? `<div class="dp-report-error"><i class="fa-solid fa-triangle-exclamation"></i> ${v.error}</div>` : ''}
+            ${v.photo_analysis ? `<div class="dp-report-section"><div class="dp-report-label">Photo Analysis</div><div class="dp-report-text">${v.photo_analysis}</div></div>` : ''}
+            ${v.satellite_scene_description ? `<div class="dp-report-section"><div class="dp-report-label">Satellite Scene</div><div class="dp-report-text">${v.satellite_scene_description}</div></div>` : ''}
+            ${findings ? `<div class="dp-report-section"><div class="dp-report-label">Key Findings</div>${findings}</div>` : ''}
+            ${caveats ? `<div class="dp-report-section"><div class="dp-report-label">Caveats</div>${caveats}</div>` : ''}
+            ${v.reasoning ? `<div class="dp-report-section"><div class="dp-report-label">AI Reasoning</div><div class="dp-report-text">${v.reasoning}</div></div>` : ''}
+        </div>` : '';
+
+        return tier1 + tier2;
     })();
 
-    // ── Build the compact detail body ──
+    // ── Build decision-first detail panel ──
+    // Header: type + severity + status + confidence + time
     document.getElementById('detail-title').innerHTML = `
-        <i class="fa-solid ${infraIcon}" style="color:${sevColor};margin-right:6px;"></i>
-        ${r.infrastructure_type}
-        <span class="detail-sev-badge detail-sev-${r.severity}" style="margin-left:8px;font-size:10px;padding:2px 10px;">${r.severity}</span>
-        <span class="status-badge status-${r.status}" style="margin-left:4px;">${r.status}</span>
+        <i class="fa-solid ${infraIcon}" style="color:${sevColor};"></i>
+        ${r.infrastructure_type.replace(/_/g,' ')}
+        <span class="detail-sev-badge detail-sev-${r.severity}">${r.severity}</span>
+        <span class="status-badge status-${r.status}">${r.status}</span>
+        ${v ? `<span class="dp-confidence-badge" style="color:${v.total_score >= 60 ? '#22c55e' : v.total_score >= 40 ? '#eab308' : '#ef4444'};">${v.total_score}/100</span>` : ''}
+        <span class="dp-source-badge dp-src-${(r.source || 'APP').toLowerCase()}" title="Reported via ${{APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i> App',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i> WhatsApp',TELEGRAM:'<i class="fa-brands fa-telegram"></i> Telegram'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i> App'}</span>
+        <span class="dp-time-badge">${timeAgo(r.server_created_at)}</span>
     `;
 
-    document.getElementById('detail-body').innerHTML = `
-        <!-- Subtitle: time + sync + auto-submit -->
-        <div class="dp-subtitle">
-            <span>${timeDisplay(r.server_created_at)}</span>
-            ${r.sync_status === 'PARTIAL' ? `<span class="dp-chip dp-chip-warn"><i class="fa-solid fa-cloud-arrow-up"></i> ${r.received_media}/${r.expected_media}</span>` : ''}
-            ${r.is_auto_submitted ? '<span class="dp-chip dp-chip-dim"><i class="fa-solid fa-hourglass-end"></i> Auto</span>' : ''}
-        </div>
+    // Urgency alerts
+    const urgencyHtml = (() => {
+        const alerts = [];
+        if (r.severity === 'CRITICAL') alerts.push('<span class="dp-urgency dp-urgency-red"><i class="fa-solid fa-circle-exclamation"></i> CRITICAL SEVERITY</span>');
+        if (isCriticalInfra) alerts.push(`<span class="dp-urgency dp-urgency-red"><i class="fa-solid fa-building-shield"></i> Critical Infrastructure</span>`);
+        if (nearbyCount > 0) alerts.push(`<span class="dp-urgency dp-urgency-amber"><i class="fa-solid fa-layer-group"></i> ${nearbyCount} more report${nearbyCount > 1 ? 's' : ''} nearby</span>`);
+        if (waitMin > 30 && (r.status === 'PENDING' || r.status === 'VERIFIED')) alerts.push(`<span class="dp-urgency dp-urgency-red"><i class="fa-solid fa-clock"></i> Waiting ${waitMin > 60 ? Math.floor(waitMin/60) + 'h ' + (waitMin%60) + 'm' : waitMin + 'm'}</span>`);
+        return alerts.length ? `<div class="dp-urgency-bar">${alerts.join('')}</div>` : '';
+    })();
 
-        <!-- Photo + Satellite side-by-side -->
-        <div class="dp-images ${v ? '' : 'dp-images-single'}">
-            <div class="dp-img-col">
+    // Transcript with keyword highlighting
+    const highlightKeywords = (text) => {
+        if (!text) return '';
+        const keywords = ['help','stuck','trapped','injury','injured','flood','fire','collapse','damage','emergency','rescue','save','water','destroy'];
+        let html = text.substring(0, 150);
+        keywords.forEach(k => {
+            const re = new RegExp(`(${k})`, 'gi');
+            html = html.replace(re, '<mark class="dp-keyword">$1</mark>');
+        });
+        return html + (text.length > 150 ? '...' : '');
+    };
+
+    const transcriptText = ai?.transcription || r.description || '';
+
+    document.getElementById('detail-body').innerHTML = `
+        <!-- Urgency alerts -->
+        ${urgencyHtml}
+
+        <!-- Evidence: full-width image with view toggle -->
+        <div class="dp-evidence-card">
+            <div class="dp-img-view" id="dp-img-view-${r.id}">
                 ${imgHtml}
-                <div class="dp-img-ts">Captured: ${formatShortDate(r.server_created_at)}</div>
             </div>
-            ${v ? `<div class="dp-img-col">
-                ${satHtml}
-                <div class="dp-img-ts">${(v.satellite_source || 'Satellite').split(' ')[0]}: ${v.satellite_acquisition_date ? formatShortDate(v.satellite_acquisition_date) : 'N/A'}${v.satellite_days_gap != null ? ` · ${v.satellite_days_gap === 0 ? 'Same day' : v.satellite_days_gap > 0 ? v.satellite_days_gap + 'd before' : Math.abs(v.satellite_days_gap) + 'd after'}` : ''}</div>
+            ${v && satSrc ? `<div class="dp-view-toggle">
+                <button class="dp-vt-btn active" onclick="dpSwitchView('${r.id}','photo',this)"><i class="fa-solid fa-camera"></i> Photo</button>
+                <button class="dp-vt-btn" onclick="dpSwitchView('${r.id}','sat',this)"><i class="fa-solid fa-satellite"></i> Satellite</button>
+                ${satAltSrc ? `<button class="dp-vt-btn" onclick="dpSwitchView('${r.id}','alt',this)"><i class="fa-solid fa-globe"></i> ${satAltLabel}</button>` : ''}
+                <button class="dp-vt-btn dp-vt-compare" onclick="dpSwitchView('${r.id}','compare',this)"><i class="fa-solid fa-columns"></i> Compare</button>
             </div>` : ''}
         </div>
 
-        <!-- Evidence strip: audio + transcription -->
-        <div class="dp-evidence-strip">
-            ${audio ? (
-                audioPlayUrl
-                    ? `<button class="dp-audio-btn ${aComplete ? '' : 'uploading'}" onclick="playDetailAudio(this, '${audioPlayUrl}')">
-                           <i class="fa-solid ${aComplete ? 'fa-play' : 'fa-cloud-arrow-up fa-pulse'}"></i>
-                           ${aComplete ? '' : aPct.toFixed(0) + '%'}
-                       </button>`
-                    : `<span class="dp-audio-pending"><i class="fa-solid fa-microphone" style="color:#475569;"></i> ${aPct > 0 ? aPct.toFixed(0) + '%' : 'Waiting...'}</span>`
-            ) : ''}
-            <div class="dp-audio-bar-wrap" style="${audioPlayUrl ? '' : 'display:none'}">
-                <div class="audio-progress-bar" style="height:3px;"><div class="audio-progress-fill" id="detail-audio-fill"></div></div>
-                <div class="audio-time" style="font-size:8px;"><span id="detail-audio-cur">0:00</span><span id="detail-audio-dur">${aComplete ? '0:00' : '--:--'}</span></div>
-            </div>
-            <div class="dp-transcript-snippet">
-                ${ai?.transcription ? `<i class="fa-solid fa-quote-left" style="font-size:7px;color:#475569;margin-right:3px;"></i>${ai.transcription.substring(0, 100)}${ai.transcription.length > 100 ? '...' : ''}` :
-                  (r.description ? r.description.substring(0, 100) + (r.description.length > 100 ? '...' : '') : '<span style="color:#475569;">No description</span>')}
-            </div>
-        </div>
+        <!-- Image match score -->
+        ${imgMatchHtml}
 
-        <!-- Location -->
+        <!-- Audio + Transcript (merged, prominent text) -->
+        ${transcriptText || audio ? `
+        <div class="dp-transcript-card">
+            ${audio ? `<div class="dp-audio-row">
+                <button class="dp-audio-btn ${aComplete ? '' : 'uploading'}" onclick="playDetailAudio(this, '${audioPlayUrl || ''}')">
+                    <i class="fa-solid ${aComplete ? 'fa-play' : audioPlayUrl ? 'fa-cloud-arrow-up fa-pulse' : 'fa-microphone'}"></i>
+                </button>
+                <div class="dp-audio-bar-wrap">
+                    <div class="audio-progress-bar" style="height:3px;"><div class="audio-progress-fill" id="detail-audio-fill"></div></div>
+                    <div class="audio-time" style="font-size:11px;"><span id="detail-audio-cur">0:00</span><span id="detail-audio-dur">${aComplete ? '0:00' : '--:--'}</span></div>
+                </div>
+                ${!aComplete && aPct > 0 ? `<span class="dp-upload-pct">${aPct.toFixed(0)}%</span>` : ''}
+            </div>` : ''}
+            ${transcriptText ? `<div class="dp-transcript-text">${highlightKeywords(transcriptText)}</div>` : ''}
+        </div>` : ''}
+
+        <!-- Location intelligence -->
         ${loc ? (() => {
             const mismatch = loc.is_user_corrected && loc.device_latitude && loc.device_longitude;
             const distKm = mismatch ? Math.round(haversineKm(loc.latitude, loc.longitude, loc.device_latitude, loc.device_longitude)) : 0;
             const userName = loc.user_location_name || `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
             const devName  = loc.device_location_name || `${loc.device_latitude?.toFixed(4)}, ${loc.device_longitude?.toFixed(4)}`;
-            return mismatch ? `
-            <div class="dp-loc-mismatch">
+            return `<div class="dp-loc-card ${mismatch ? 'dp-loc-mismatch' : ''}">
                 <div class="dp-loc-row">
                     <i class="fa-solid fa-location-dot" style="color:${sevColor};"></i>
-                    <span class="dp-loc-label">User:</span>
                     <span class="dp-loc-name">${userName}</span>
-                    <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${loc.latitude}, ${loc.longitude}'); showToast('User coords copied','success')"><i class="fa-solid fa-copy"></i></button>
+                    <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${loc.latitude}, ${loc.longitude}'); showToast('Coords copied','success')"><i class="fa-solid fa-copy"></i></button>
                 </div>
-                <div class="dp-loc-row">
+                ${mismatch ? `<div class="dp-loc-row dp-loc-device">
                     <i class="fa-solid fa-mobile-screen" style="color:#94a3b8;"></i>
-                    <span class="dp-loc-label">Device:</span>
-                    <span class="dp-loc-name">${devName}</span>
-                    <span class="dp-loc-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${distKm}km apart</span>
-                </div>
-            </div>` : `
-            <div class="dp-loc-line">
-                <i class="fa-solid fa-location-dot" style="color:${sevColor};"></i>
-                <span class="dp-loc-name">${locName || userName}</span>
-                <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${locLat}, ${locLng}'); showToast('Coords copied','success')"><i class="fa-solid fa-copy"></i></button>
+                    <span class="dp-loc-name" style="color:var(--text-sub);">${devName}</span>
+                    <span class="dp-loc-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${distKm}km mismatch</span>
+                </div>` : ''}
             </div>`;
         })() : ''}
 
-        <!-- Verification score (compact) -->
+        <!-- Verification summary (visual indicators, not text) -->
         ${vGaugeHtml}
 
-        <!-- Primary actions -->
-        <div class="dp-actions-primary">
-            ${r.status !== 'RESPONDING' ? `<button class="dp-act dp-act-dispatch" onclick="patchReport('${r.id}','dispatch')"><i class="fa-solid fa-truck-medical"></i> Dispatch</button>` : ''}
-            ${r.status !== 'RESOLVED' ? `<button class="dp-act dp-act-resolve" onclick="patchReport('${r.id}','resolve')"><i class="fa-solid fa-check-circle"></i> Resolve</button>` : ''}
-            ${r.status !== 'FALSE_ALARM' ? `<button class="dp-act dp-act-false" onclick="patchReport('${r.id}','false-alarm')"><i class="fa-solid fa-ban"></i> False</button>` : ''}
-        </div>
-
-        <!-- Secondary actions -->
+        <!-- Verify button -->
         <div class="dp-actions-secondary">
             <button class="dp-act-sm dp-act-verify" id="btn-verify-${r.id}" onclick="runVerification('${r.id}')">
                 <i class="fa-solid fa-satellite"></i> ${v ? 'Re-verify & Report' : 'Verify & Report'}
@@ -985,9 +1372,113 @@ window.selectReport = (id, skipFly = false) => {
         </div>
     `;
 
+    // ── Fixed action dock (always visible, no scrolling needed) ──
+    document.getElementById('dp-action-dock').innerHTML = `
+        ${r.status !== 'RESPONDING' ? `<button class="dp-dock-btn dp-dock-dispatch" onclick="patchReport('${r.id}','dispatch')"><i class="fa-solid fa-truck-medical"></i> DISPATCH</button>` : `<div class="dp-dock-status"><i class="fa-solid fa-truck-medical"></i> EN ROUTE</div>`}
+        ${r.status !== 'RESOLVED' ? `<button class="dp-dock-btn dp-dock-resolve" onclick="patchReport('${r.id}','resolve')"><i class="fa-solid fa-check-circle"></i> RESOLVE</button>` : ''}
+        ${r.status !== 'FALSE_ALARM' ? `<button class="dp-dock-btn dp-dock-false" onclick="patchReport('${r.id}','false-alarm')"><i class="fa-solid fa-ban"></i> FALSE</button>` : ''}
+    `;
+
     if (loc && !skipFly) map.flyTo([loc.latitude, loc.longitude], 15);
     renderFeed();
 };
+
+// Image/Satellite view toggle in detail panel
+window.dpSwitchView = (reportId, view, btn) => {
+    const r = allReports.find(x => x.id === reportId);
+    if (!r) return;
+    const container = document.getElementById(`dp-img-view-${reportId}`);
+    if (!container) return;
+    const img = r.media?.find(m => m.type === 'IMAGE');
+    const v = r.verification;
+    btn.parentElement.querySelectorAll('.dp-vt-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    if (view === 'compare') {
+        // Open full-screen compare overlay
+        dpOpenCompare(r);
+        return;
+    }
+    // Reset to single view aspect ratio
+    container.closest('.dp-evidence-card').querySelector('.dp-img-view .dp-img')?.style?.removeProperty?.('aspect-ratio');
+    if (view === 'photo' && img?.url) {
+        container.innerHTML = `<div class="dp-img" onclick="openLightbox('${getMediaUrl(img.url)}','Photo')"><img src="${getMediaUrl(img.url)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
+    } else if (view === 'sat' && v?.satellite_image_url) {
+        container.innerHTML = `<div class="dp-img" onclick="openLightbox('${BACKEND_HOST}${v.satellite_image_url}','Satellite')"><img src="${BACKEND_HOST}${v.satellite_image_url}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
+    } else if (view === 'alt' && v?.satellite_image_url_alt) {
+        container.innerHTML = `<div class="dp-img" onclick="openLightbox('${BACKEND_HOST}${v.satellite_image_url_alt}','Alt Satellite')"><img src="${BACKEND_HOST}${v.satellite_image_url_alt}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
+    }
+};
+
+// Full-screen multi-image compare overlay
+window.dpOpenCompare = (r) => {
+    const img = r.media?.find(m => m.type === 'IMAGE');
+    const v = r.verification;
+    const photoSrc = img?.url ? getMediaUrl(img.url) : '';
+    const satSrc = v?.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
+    const altSrc = v?.satellite_image_url_alt ? `${BACKEND_HOST}${v.satellite_image_url_alt}` : '';
+    const scores = v?.scores || {};
+    const total = v?.total_score || 0;
+    const damageMatch = scores.damage_corroboration ? Math.round((scores.damage_corroboration / 25) * 100) : 0;
+    const locMatch = scores.location_authenticity ? Math.round((scores.location_authenticity / 25) * 100) : 0;
+    const gc = (pct) => pct >= 70 ? '#22c55e' : pct >= 40 ? '#eab308' : '#ef4444';
+
+    // Timestamps — satellite_acquisition_date is when the satellite CAPTURED the image (from provider API)
+    const photoTime = r.server_created_at ? formatShortDate(r.server_created_at) : 'Unknown';
+    const satAcqDate = v?.satellite_acquisition_date;
+    const satTime = satAcqDate ? formatShortDate(satAcqDate) : 'Acq. date unavailable';
+    const altAcqDate = v?.satellite_acquisition_date_alt;
+    const altTime = altAcqDate ? formatShortDate(altAcqDate) : 'Acq. date unavailable';
+
+    // Time gap between photo capture and satellite image capture
+    const gapText = (acqDate) => {
+        if (!acqDate || !r.server_created_at) return 'Date unknown — verify manually';
+        const photoMs = new Date(ensureUTC(r.server_created_at)).getTime();
+        const satMs = new Date(ensureUTC(acqDate)).getTime();
+        const diffDays = Math.round((photoMs - satMs) / 86400000);
+        if (diffDays === 0) return 'Same day as photo';
+        if (diffDays > 0) return `Captured ${diffDays}d before incident`;
+        return `Captured ${Math.abs(diffDays)}d after incident`;
+    };
+
+    // Build image panels with timestamps
+    const panels = [];
+    if (photoSrc) panels.push({ src: photoSrc, label: 'Reporter Photo', score: null, scoreLabel: 'Source', time: `Captured: ${photoTime}`, gap: '' });
+    if (satSrc) panels.push({ src: satSrc, label: v?.satellite_source?.split('(')[0]?.trim() || 'Sentinel-2', score: damageMatch, scoreLabel: 'Damage Match', time: `Acquired: ${satTime}`, gap: gapText(satAcqDate) });
+    if (altSrc) panels.push({ src: altSrc, label: v?.satellite_source_alt?.split('(')[0]?.trim() || 'Maxar', score: locMatch, scoreLabel: 'Location Match', time: `Acquired: ${altTime}`, gap: gapText(altAcqDate) });
+
+    if (panels.length < 2) return;
+
+    let overlay = document.getElementById('dp-compare-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'dp-compare-overlay';
+        overlay.className = 'dp-compare-overlay';
+        document.body.appendChild(overlay);
+    }
+    overlay.style.display = 'flex';
+
+    overlay.innerHTML = `
+        <div class="dp-compare-header">
+            <div class="dp-compare-title"><i class="fa-solid fa-columns"></i> Image Comparison — ${r.infrastructure_type.replace(/_/g,' ')} · ${r.severity}</div>
+            <div class="dp-compare-overall">Overall: <strong style="color:${gc(total)};">${total}/100</strong></div>
+            <button class="dp-compare-close" onclick="document.getElementById('dp-compare-overlay').style.display='none'"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="dp-compare-grid" style="grid-template-columns:repeat(${panels.length},1fr);">
+            ${panels.map(p => `
+                <div class="dp-compare-panel">
+                    <div class="dp-compare-label">${p.label}</div>
+                    <div class="dp-compare-img-wrap">
+                        <img src="${p.src}" class="dp-compare-img" onclick="this.classList.toggle('dp-zoomed')" title="Click to zoom">
+                        ${p.score !== null ? `<div class="dp-compare-score" style="color:${gc(p.score)};">${p.scoreLabel}: ${p.score}%</div>` : ''}
+                        <div class="dp-compare-time"><i class="fa-regular fa-clock"></i> ${p.time}${p.gap ? ` · ${p.gap}` : ''}</div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+};
+
 
 window.switchSatSource = (reportId, which, btn, src) => {
     const img = document.getElementById(`dp-sat-img-${reportId}`);
@@ -1085,11 +1576,11 @@ function renderVerificationSection(r) {
         <div class="detail-section-title">
             <i class="fa-solid fa-satellite" style="color:var(--info);"></i>
             Satellite Verification
-            <span style="font-size:8px; color:var(--text-dim); font-weight:400; margin-left:4px;">${scoredAt}</span>
+            <span style="font-size:12px; color:var(--text-dim); font-weight:400; margin-left:4px;">${scoredAt}</span>
         </div>
 
         ${v.error && total === 0 ? `
-        <div style="padding:10px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; font-size:11px; color:#fca5a5; margin-bottom:10px;">
+        <div style="padding:10px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; font-size:14px; color:#fca5a5; margin-bottom:10px;">
             <i class="fa-solid fa-triangle-exclamation"></i> ${v.error}
         </div>` : ''}
 
@@ -1099,14 +1590,14 @@ function renderVerificationSection(r) {
                 <div class="sat-compare-label"><i class="fa-solid fa-user"></i> Reporter Photo</div>
                 ${userImgSrc
                     ? `<img src="${userImgSrc}" class="sat-compare-img" onclick="openLightbox('${userImgSrc}','User Photo')" title="Click to enlarge">`
-                    : `<div class="sat-compare-img" style="display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-dim);">No photo</div>`
+                    : `<div class="sat-compare-img" style="display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-dim);">No photo</div>`
                 }
             </div>
             <div class="sat-compare-frame">
                 <div class="sat-compare-label"><i class="fa-solid fa-satellite"></i> Satellite View</div>
                 ${satImgSrc
                     ? `<img src="${satImgSrc}" class="sat-compare-img" onclick="openLightbox('${satImgSrc}','Satellite')" title="Click to enlarge — ${v.satellite_source || ''}">`
-                    : `<div class="sat-compare-img" style="display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-dim);">Unavailable</div>`
+                    : `<div class="sat-compare-img" style="display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-dim);">Unavailable</div>`
                 }
             </div>
         </div>
@@ -1138,7 +1629,7 @@ function renderVerificationSection(r) {
             <div class="sat-score-info">
                 <div class="sat-verdict verdict-${verdict}">${verdictLabels[verdict] || verdict}</div>
                 ${v.satellite_scene_description
-                    ? `<div style="font-size:9px;color:var(--text-sub);line-height:1.4;">${v.satellite_scene_description}</div>`
+                    ? `<div style="font-size:12px;color:var(--text-sub);line-height:1.4;">${v.satellite_scene_description}</div>`
                     : ''}
             </div>
         </div>
@@ -1195,8 +1686,9 @@ window.runVerification = async (id) => {
             showToast(`Truth score: ${verif.total_score}/100 — ${verif.verdict?.replace(/_/g,' ')}`, 'success');
             selectReport(id, true); // re-render detail panel, skip map fly
         } else {
-            const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
-            showToast(`Verification failed: ${err.detail || res.status}`, 'error');
+            const err = await res.json().catch(() => ({}));
+            const errMsg = err.detail || (res.status === 503 ? 'Satellite service unavailable — check API keys' : `Server error (${res.status})`);
+            showToast(`Verification failed: ${errMsg}`, 'error');
             if (btn) {
                 btn.classList.remove('verifying');
                 btn.innerHTML = '<i class="fa-solid fa-satellite"></i> Verify with Satellite';
@@ -1204,7 +1696,7 @@ window.runVerification = async (id) => {
             }
         }
     } catch (e) {
-        showToast('Verification request failed', 'error');
+        showToast('Verification request failed — check internet connection', 'error');
         if (btn) {
             btn.classList.remove('verifying');
             btn.innerHTML = '<i class="fa-solid fa-satellite"></i> Verify with Satellite';
@@ -1225,7 +1717,7 @@ window.patchReport = async (id, action) => {
             if (selectedId === id) selectReport(id);
             renderFeed();
         }
-    } catch (e) { showToast('Action failed', 'error'); }
+    } catch (e) { showToast('Action failed — check internet connection', 'error'); }
 };
 
 window.deleteReport = async (id) => {
@@ -1261,14 +1753,14 @@ window.playDetailAudio = function (btn, url) {
     currentAudio.ontimeupdate = () => {
         const fill = document.getElementById('detail-audio-fill');
         const cur = document.getElementById('detail-audio-cur');
-        if (fill && currentAudio.duration) {
+        if (fill && currentAudio.duration && isFinite(currentAudio.duration)) {
             fill.style.width = `${(currentAudio.currentTime / currentAudio.duration) * 100}%`;
-            cur.textContent = formatTime(currentAudio.currentTime);
         }
+        if (cur) cur.textContent = formatTime(currentAudio.currentTime);
     };
     currentAudio.onloadedmetadata = () => {
         const dur = document.getElementById('detail-audio-dur');
-        if (dur) dur.textContent = formatTime(currentAudio.duration);
+        if (dur) dur.textContent = isFinite(currentAudio.duration) ? formatTime(currentAudio.duration) : '—:——';
     };
     currentAudio.onended = () => {
         btn.innerHTML = '<i class="fa-solid fa-play"></i>';
@@ -1277,6 +1769,7 @@ window.playDetailAudio = function (btn, url) {
 };
 
 function formatTime(s) {
+    if (!s || !isFinite(s) || isNaN(s)) return '—:——';
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
     return `${m}:${sec.toString().padStart(2, '0')}`;
@@ -1299,18 +1792,27 @@ window.openLightbox = function (url, caption) {
 let map;
 
 function initMap() {
-    map = L.map('crisis-map', { zoomControl: false }).setView([20, 0], 2);
+    map = L.map('crisis-map', {
+        zoomControl: false,
+        minZoom: 2,
+        maxBounds: [[-85, -180], [85, 180]],
+        maxBoundsViscosity: 1.0,
+    }).setView([20, 0], 2);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap &copy; CARTO',
-        maxZoom: 19
+        maxZoom: 19,
+        noWrap: true,
     }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Initialize cluster group
+    // Initialize cluster group — optimized for easy clicking on hotspots
     clusterGroup = L.markerClusterGroup({
-        maxClusterRadius: 50,
+        maxClusterRadius: 35,
         spiderfyOnMaxZoom: true,
+        spiderfyDistanceMultiplier: 2.5,
         showCoverageOnHover: false,
+        zoomToBoundsOnClick: false,     // we handle click ourselves — spiderfy on click
+        disableClusteringAtZoom: 16,
         iconCreateFunction: function (cluster) {
             const children = cluster.getAllChildMarkers();
             let maxSev = 'UNKNOWN';
@@ -1322,36 +1824,127 @@ function initMap() {
             });
             const color = SEV_COLORS[maxSev] || '#64748b';
             const count = children.length;
-            const size = count > 50 ? 48 : count > 20 ? 40 : count > 5 ? 34 : 28;
+            const size = count > 50 ? 52 : count > 20 ? 44 : count > 5 ? 38 : 32;
+            const hasCritical = children.some(m => m._crispReport?.severity === 'CRITICAL');
+            const pulseClass = hasCritical ? 'crisp-cluster-pulse' : '';
             return L.divIcon({
-                className: 'crisp-cluster',
-                html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid rgba(255,255,255,0.8);display:flex;align-items:center;justify-content:center;font-size:${size > 40 ? 14 : 11}px;font-weight:800;color:#fff;box-shadow:0 2px 12px ${color}80;">${count}</div>`,
+                className: `crisp-cluster ${pulseClass}`,
+                html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid rgba(255,255,255,0.9);display:flex;align-items:center;justify-content:center;font-size:${size > 40 ? 15 : 13}px;font-weight:800;color:#fff;box-shadow:0 2px 16px ${color}aa;cursor:pointer;">${count}</div>`,
                 iconSize: [size, size]
             });
         }
     });
     map.addLayer(clusterGroup);
+
+    // Cluster hover: show popup with incidents grouped by infrastructure type
+    clusterGroup.on('clustermouseover', function (e) {
+        const cluster = e.layer;
+        const children = cluster.getAllChildMarkers();
+
+        // Group by infrastructure type
+        const groups = {};
+        children.forEach(m => {
+            const r = m._crispReport;
+            if (!r) return;
+            const type = r.infrastructure_type || 'OTHER';
+            if (!groups[type]) groups[type] = { count: 0, maxSev: 'UNKNOWN', sevCounts: {} };
+            groups[type].count++;
+            groups[type].sevCounts[r.severity] = (groups[type].sevCounts[r.severity] || 0) + 1;
+            const sevOrder = ['UNKNOWN', 'MINOR', 'MODERATE', 'SEVERE', 'CRITICAL'];
+            if (sevOrder.indexOf(r.severity) > sevOrder.indexOf(groups[type].maxSev)) groups[type].maxSev = r.severity;
+        });
+
+        const rows = Object.entries(groups)
+            .sort((a, b) => b[1].count - a[1].count)
+            .map(([type, g]) => {
+                const ic = INFRA_ICONS[type] || 'fa-circle';
+                const col = SEV_COLORS[g.maxSev] || '#64748b';
+                const sevDots = Object.entries(g.sevCounts).map(([s, c]) =>
+                    `<span style="color:${SEV_COLORS[s] || '#64748b'};font-size:10px;" title="${s}: ${c}">${'●'.repeat(Math.min(c, 5))}</span>`
+                ).join(' ');
+                return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+                    <i class="fa-solid ${ic}" style="color:${col};font-size:13px;width:16px;text-align:center;"></i>
+                    <span style="font-size:12px;color:#f1f5f9;font-weight:600;flex:1;">${type.replace(/_/g,' ')}</span>
+                    <span style="font-size:13px;font-weight:800;color:${col};min-width:18px;text-align:right;">${g.count}</span>
+                </div>`;
+            }).join('');
+
+        const locName = children[0]?._crispReport?.location?.user_location_name || children[0]?._crispReport?.location?.device_location_name || '';
+        cluster.bindPopup(`<div style="min-width:190px;max-width:260px;">
+            <div style="font-size:13px;font-weight:800;color:#ffae00;margin-bottom:6px;">${children.length} Incidents${locName ? ' — ' + locName : ''}</div>
+            ${rows}
+            <div style="font-size:10px;color:#64748b;text-align:center;margin-top:6px;"><i class="fa-solid fa-hand-pointer"></i> Click to expand</div>
+        </div>`, { className: 'cluster-popup', closeButton: false, autoPan: false }).openPopup();
+    });
+
+    clusterGroup.on('clustermouseout', function (e) {
+        e.layer.closePopup();
+    });
+
+    // Track spiderfy state — exposed on window so updateMapMarkers can skip rebuild
+    window._spiderfiedCluster = null;
+    let _spiderfyLock = false;
+
+    clusterGroup.on('clusterclick', function (e) {
+        e.layer.closePopup();
+        // If clicking the same cluster that's already spiderfied, close it
+        if (window._spiderfiedCluster === e.layer) {
+            e.layer.unspiderfy();
+            window._spiderfiedCluster = null;
+            return;
+        }
+        // Close any previously spiderfied cluster
+        if (window._spiderfiedCluster) {
+            try { window._spiderfiedCluster.unspiderfy(); } catch (_) {}
+        }
+        _spiderfyLock = true;
+        window._spiderfiedCluster = e.layer;
+        e.layer.spiderfy();
+        setTimeout(() => { _spiderfyLock = false; }, 500);
+    });
+
+    // Click on map background: close spider
+    map.on('click', function () {
+        if (_spiderfyLock) return;
+        if (window._spiderfiedCluster) {
+            try { window._spiderfiedCluster.unspiderfy(); } catch (_) {}
+            window._spiderfiedCluster = null;
+        }
+    });
+
+    // When cluster unspiderfies (by any means), clear our reference
+    clusterGroup.on('unspiderfied', function () {
+        window._spiderfiedCluster = null;
+    });
 }
 
 function updateMapMarkers() {
+    // Skip full map rebuild while a spider is open — user is interacting with it
+    if (window._spiderfiedCluster) return;
+
     clusterGroup.clearLayers();
     if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
 
     const heatPoints = [];
+    const filteredReports = _getFilteredReports();
 
-    allReports.forEach(r => {
+    filteredReports.forEach(r => {
         if (!r.location) return;
         const lat = r.location.latitude;
         const lng = r.location.longitude;
         const color = SEV_COLORS[r.severity] || '#64748b';
 
-        // Marker for cluster group
-        const icon = L.divIcon({
+        // Marker with infrastructure category icon
+        const infraIc = INFRA_ICONS[r.infrastructure_type] || 'fa-circle';
+        const markerIcon = L.divIcon({
             className: 'crisp-marker',
-            html: `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,0.9);box-shadow:0 1px 6px ${color}80;"></div>`,
-            iconSize: [12, 12]
+            html: `<div class="crisp-marker-pin" style="background:${color};box-shadow:0 2px 12px ${color}aa;">
+                <i class="fa-solid ${infraIc}"></i>
+            </div>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
         });
-        const marker = L.marker([lat, lng], { icon });
+        const marker = L.marker([lat, lng], { icon: markerIcon });
         marker._crispReport = r;
         marker.on('click', () => selectReport(r.id));
 
@@ -1360,9 +1953,9 @@ function updateMapMarkers() {
             const img = r.media?.find(m => m.type === 'IMAGE');
             return `<div style="padding:8px;min-width:180px;">
                 ${img ? `<img src="${getMediaUrl(img.url)}" style="width:100%;height:70px;object-fit:cover;border-radius:6px;margin-bottom:6px;">` : ''}
-                <div style="font-weight:700;font-size:11px;color:${color};">${r.severity} — ${r.infrastructure_type}</div>
-                <div style="font-size:10px;color:#94a3b8;margin-top:2px;">${(r.description || '').substring(0, 60)}</div>
-                <div style="font-size:9px;color:#475569;margin-top:4px;">${timeAgo(r.server_created_at)}</div>
+                <div style="font-weight:700;font-size:14px;color:${color};">${r.severity} — ${r.infrastructure_type}</div>
+                <div style="font-size:13px;color:#94a3b8;margin-top:2px;">${(r.description || '').substring(0, 60)}</div>
+                <div style="font-size:12px;color:#475569;margin-top:4px;">${timeAgo(r.server_created_at)}</div>
             </div>`;
         }, { className: 'rich-tooltip', direction: 'top', offset: [0, -8] });
 
@@ -1384,8 +1977,8 @@ function updateMapMarkers() {
     }
 
     // Auto-zoom on first load
-    if (!firstZoomDone && allReports.some(r => r.location)) {
-        const pts = allReports.filter(r => r.location).map(r => [r.location.latitude, r.location.longitude]);
+    if (!firstZoomDone && filteredReports.some(r => r.location)) {
+        const pts = filteredReports.filter(r => r.location).map(r => [r.location.latitude, r.location.longitude]);
         map.flyToBounds(L.latLngBounds(pts), { padding: [80, 80], maxZoom: 10 });
         firstZoomDone = true;
     }
@@ -1457,6 +2050,11 @@ window.showPendingDeletions = function () {
         return;
     }
 
+    const expiredCount = _pendingDeletions.filter(r => {
+        const delAt = new Date(ensureUTC(r.deletion_requested_at));
+        return (Date.now() - delAt.getTime()) > 86400000;
+    }).length;
+
     body.innerHTML = _pendingDeletions.map(r => {
         const delAt = new Date(ensureUTC(r.deletion_requested_at));
         const expiresAt = new Date(delAt.getTime() + 24 * 60 * 60 * 1000);
@@ -1472,22 +2070,83 @@ window.showPendingDeletions = function () {
             <div class="del-item-info">
                 <div style="display:flex;align-items:center;gap:6px;">
                     <span style="color:${sevColor};font-weight:700;">${r.infrastructure_type}</span>
-                    <span class="detail-sev-badge detail-sev-${r.severity}" style="font-size:9px;padding:1px 8px;">${r.severity}</span>
+                    <span class="detail-sev-badge detail-sev-${r.severity}" style="font-size:12px;padding:1px 8px;">${r.severity}</span>
                 </div>
-                <div style="font-size:11px;color:var(--text-sub);margin-top:2px;">${loc} · ${timeAgo(r.server_created_at)}</div>
-                <div style="font-size:10px;color:${expired ? '#ef4444' : '#f59e0b'};margin-top:4px;display:flex;align-items:center;gap:4px;">
+                <div style="font-size:14px;color:var(--text-sub);margin-top:2px;">${loc} · ${timeAgo(r.server_created_at)}</div>
+                <div style="font-size:13px;color:${expired ? '#ef4444' : '#f59e0b'};margin-top:4px;display:flex;align-items:center;gap:4px;">
                     <i class="fa-solid ${expired ? 'fa-clock' : 'fa-hourglass-half'}"></i>
                     Deletion requested ${timeAgo(r.deletion_requested_at)} · ${countdown}
                 </div>
-                <div style="font-size:9px;color:var(--text-dim);margin-top:2px;">Device: ${r.device_id?.substring(0, 8)}... · ID: ${r.id.substring(0, 8)}...</div>
+                <div style="font-size:12px;color:var(--text-dim);margin-top:2px;">Device: ${r.device_id?.substring(0, 8)}... · ID: ${r.id.substring(0, 8)}...</div>
             </div>
         </div>`;
     }).join('');
+
+    // Footer with purge button
+    const footer = document.getElementById('del-panel-footer');
+    if (footer) {
+        footer.innerHTML = `
+            <div style="display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--border);">
+                <button class="dp-dock-btn" style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);flex:1;" onclick="purgeAllDeletions()">
+                    <i class="fa-solid fa-trash"></i> Purge All (${_pendingDeletions.length})
+                </button>
+                ${expiredCount > 0 ? `<button class="dp-dock-btn" style="background:rgba(249,115,22,0.12);color:#f97316;border:1px solid rgba(249,115,22,0.25);flex:1;" onclick="purgeExpiredOnly()">
+                    <i class="fa-solid fa-clock"></i> Purge Expired (${expiredCount})
+                </button>` : ''}
+            </div>
+        `;
+    }
 };
 
 window.closeDeletionsPanel = function () {
     const panel = document.getElementById('deletions-panel');
     if (panel) panel.style.display = 'none';
+};
+
+window.purgeAllDeletions = async function () {
+    if (!confirm(`Permanently delete all ${_pendingDeletions.length} pending deletion(s)? This cannot be undone.`)) return;
+    try {
+        // Delete each report permanently by calling the purge endpoint
+        const res = await fetch(`${API}/purge-expired`, { method: 'POST' });
+        if (res.ok) {
+            const result = await res.json();
+            showToast(`Purged ${result.purged} expired report(s)`, 'success');
+        }
+        // Also force-delete any that haven't expired yet
+        for (const r of _pendingDeletions) {
+            const delAt = new Date(ensureUTC(r.deletion_requested_at));
+            if ((Date.now() - delAt.getTime()) <= 86400000) {
+                // Not yet expired — force delete by setting deletion_requested_at to 25h ago
+                // We'll use a direct delete approach instead
+                try {
+                    await fetch(`${API}/${r.id}/undo-delete`, { method: 'POST' });
+                    await fetch(`${API}/${r.id}`, { method: 'DELETE' });
+                } catch (_) {}
+            }
+        }
+        showToast(`All ${_pendingDeletions.length} deletion(s) processed`, 'success');
+        _pendingDeletions = [];
+        showPendingDeletions();
+        fetchReports();
+    } catch (e) {
+        showToast('Purge failed — check connection', 'error');
+    }
+};
+
+window.purgeExpiredOnly = async function () {
+    if (!confirm('Permanently delete all expired deletion requests?')) return;
+    try {
+        const res = await fetch(`${API}/purge-expired`, { method: 'POST' });
+        if (res.ok) {
+            const result = await res.json();
+            showToast(`Purged ${result.purged} expired report(s)`, 'success');
+            _checkPendingDeletions();
+            setTimeout(() => showPendingDeletions(), 1000);
+            fetchReports();
+        }
+    } catch (e) {
+        showToast('Purge failed — check connection', 'error');
+    }
 };
 
 // Check on every poll cycle
@@ -1522,7 +2181,7 @@ function getFilteredReports() {
     });
     if (timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        filtered = filtered.filter(r => new Date(r.server_created_at).getTime() > cutoff);
+        filtered = filtered.filter(r => new Date(ensureUTC(r.server_created_at)).getTime() > cutoff);
     }
     return filtered;
 }
@@ -1830,16 +2489,16 @@ function _reschedulePoller() {
 }
 
 function _updateCacheBadge(stale) {
-    let badge = document.getElementById('cache-freshness-badge');
+    const badge = document.getElementById('cache-freshness-badge');
     if (!badge) return;
     if (stale) {
-        badge.textContent = '⚠ Cached';
-        badge.title = 'Showing last cached data — reconnect to refresh';
-        badge.style.color = '#f59e0b';
+        badge.innerHTML = '<span class="live-dot" style="background:#f59e0b;box-shadow:0 0 6px #f59e0b;"></span>CACHED';
+        badge.title = 'Showing cached data — reconnect to refresh';
+        badge.style.borderColor = 'rgba(245,158,11,0.4)';
     } else {
-        badge.textContent = '● Live';
+        badge.innerHTML = '<span class="live-dot"></span>LIVE';
         badge.title = 'Data is live from server';
-        badge.style.color = 'var(--accent, #7c3aed)';
+        badge.style.borderColor = '';
     }
 }
 
@@ -1865,6 +2524,16 @@ function _loadCachedReports() {
 document.addEventListener('DOMContentLoaded', async () => {
     initMap();
     await loadWorldData();
+
+    // Show loading state in feed while data loads
+    const feedList = document.getElementById('report-feed-list');
+    if (feedList && !allReports.length) {
+        feedList.innerHTML = `<div class="feed-empty-state">
+            <i class="fa-solid fa-spinner fa-spin" style="color:var(--info);"></i>
+            <div class="feed-empty-title">Connecting to server...</div>
+            <div class="feed-empty-sub">Loading incident reports</div>
+        </div>`;
+    }
 
     // Show cached data instantly (zero network needed)
     _loadCachedReports();
