@@ -1,3 +1,14 @@
+"""
+CRISP AI Service — Local Whisper-based audio transcription.
+
+Uses faster-whisper (CTranslate2) for on-device transcription.
+Model: 'base' (good speed/accuracy balance on CPU).
+
+Key feature: task="translate" ensures ALL audio (Hindi, Spanish, Arabic, etc.)
+is output as English text — critical for control center operators.
+
+Used by: backend chunk assembly, IVR webhook, partial transcription during upload.
+"""
 import os
 import logging
 from faster_whisper import WhisperModel
@@ -16,16 +27,18 @@ class AIService:
             logger.error(f"Failed to load Whisper model: {e}")
             self.whisper_model = None
 
-    def transcribe_audio(self, path: str) -> str:
+    def transcribe_audio(self, path: str, translate_to_english: bool = True) -> str:
         """
         Transcribe audio file using faster-whisper (local, no API calls).
-        Supports: WAV, MP3, WebM, FLAC, OGG, and other formats.
+        Always translates to English so control-panel admins see English text,
+        regardless of the source language (Hindi, Spanish, Arabic, etc.).
 
         Args:
             path (str): File path to audio file
+            translate_to_english (bool): If True, always output English (default True)
 
         Returns:
-            str: Transcribed text (empty string if transcription fails)
+            str: Transcribed text in English (empty string if transcription fails)
         """
         if not os.path.exists(path):
             logger.error(f"Audio file not found: {path}")
@@ -38,24 +51,23 @@ class AIService:
         try:
             logger.info(f"Starting transcription for {path}")
 
-            # Transcribe audio
-            # language=None means auto-detect language
+            # Use "translate" task to always output English regardless of source language
+            task = "translate" if translate_to_english else "transcribe"
             segments, info = self.whisper_model.transcribe(
                 path,
-                language=None,  # Auto-detect
-                beam_size=5,    # Lower beam size = faster but less accurate
-                vad_filter=True # Use voice activity detection to skip silence
+                language=None,  # Auto-detect source language
+                beam_size=5,
+                vad_filter=True,
+                task=task,      # "translate" → always English output
             )
 
-            # Collect all text from segments
-            # Convert generator to list to ensure all segments are processed
             segments_list = list(segments)
-            logger.info(f"Transcription generated {len(segments_list)} segments")
+            logger.info(f"Transcription generated {len(segments_list)} segments (task={task})")
 
             full_text = " ".join([segment.text.strip() for segment in segments_list if segment.text]).strip()
 
             if full_text:
-                logger.info(f"✓ Transcribed {path}: {len(full_text)} chars, language={info.language}")
+                logger.info(f"✓ Transcribed {path}: {len(full_text)} chars, source_lang={info.language}, task={task}")
                 return full_text
             else:
                 logger.warning(f"⚠ No speech detected in {path}")

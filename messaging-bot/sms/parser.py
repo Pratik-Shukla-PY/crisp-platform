@@ -1,0 +1,89 @@
+"""
+SMS Text Parser — Extracts incident type, severity, and location from raw SMS text.
+Uses keyword matching (MVP) with NLP-ready structure for future upgrade.
+"""
+import re
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Incident type keywords → CRISP infrastructure_type
+_TYPE_KEYWORDS = {
+    "WATER": ["flood", "water", "rain", "overflow", "dam", "river", "pipeline", "burst", "leak", "drain", "sewage", "tsunami", "cyclone"],
+    "ROAD": ["road", "bridge", "highway", "collapse", "crack", "pothole", "traffic", "landslide", "blocked", "debris"],
+    "HOSPITAL": ["hospital", "clinic", "medical", "injury", "injured", "ambulance", "doctor", "patient", "health"],
+    "HOUSE": ["house", "home", "building", "shelter", "roof", "wall", "stuck", "trapped", "rescue", "evacuate"],
+    "POWER": ["power", "electric", "electricity", "blackout", "wire", "pole", "transformer", "outage", "generator"],
+    "OTHER": ["fire", "smoke", "explosion", "gas", "chemical", "earthquake", "quake"],
+}
+
+# Severity keywords
+_SEVERITY_HIGH = ["urgent", "emergency", "critical", "dying", "dead", "death", "severe", "major", "rescue", "sos", "help me", "save", "trapped", "stuck", "dangerous"]
+_SEVERITY_MED = ["need help", "damage", "broken", "problem", "affected", "bad"]
+_SEVERITY_LOW = ["minor", "small", "little", "slight"]
+
+
+def parse_sms(text: str) -> dict:
+    """
+    Parse raw SMS text into structured incident data.
+
+    Returns:
+        {
+            "infrastructure_type": "WATER" | "ROAD" | ... | "OTHER",
+            "severity": "SEVERE" | "MODERATE" | "MINOR",
+            "description": str (cleaned text),
+            "location_text": str (extracted location phrase or full text),
+            "keywords_found": list[str],
+        }
+    """
+    if not text or not text.strip():
+        return {"infrastructure_type": "OTHER", "severity": "MODERATE", "description": "", "location_text": "", "keywords_found": []}
+
+    lower = text.lower().strip()
+    keywords_found = []
+
+    # 1. Detect infrastructure type
+    infra_type = "OTHER"
+    best_count = 0
+    for itype, keywords in _TYPE_KEYWORDS.items():
+        count = sum(1 for k in keywords if k in lower)
+        if count > best_count:
+            best_count = count
+            infra_type = itype
+            keywords_found.extend([k for k in keywords if k in lower])
+
+    # 2. Detect severity
+    severity = "MODERATE"  # default
+    if any(k in lower for k in _SEVERITY_HIGH):
+        severity = "SEVERE"
+        keywords_found.extend([k for k in _SEVERITY_HIGH if k in lower])
+    elif any(k in lower for k in _SEVERITY_LOW):
+        severity = "MINOR"
+    elif any(k in lower for k in _SEVERITY_MED):
+        severity = "MODERATE"
+
+    # 3. Extract location — look for "in/at/near" + place name patterns
+    location_text = ""
+    loc_patterns = [
+        r'(?:in|at|near|from|around)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',  # "near Sector 7"
+        r'(?:village|town|city|area|district|block|sector|colony|nagar|puram|pur|ganj|wadi|palli)\s*[\-:]?\s*(\S+(?:\s+\S+){0,3})',
+    ]
+    for pattern in loc_patterns:
+        m = re.search(pattern, text)
+        if m:
+            location_text = m.group(1).strip()
+            break
+
+    # If no location pattern found, use the full text for geocoding
+    if not location_text:
+        location_text = text.strip()
+
+    logger.info(f"SMS parsed: type={infra_type} sev={severity} loc='{location_text[:30]}' keywords={keywords_found[:5]}")
+
+    return {
+        "infrastructure_type": infra_type,
+        "severity": severity,
+        "description": text.strip(),
+        "location_text": location_text,
+        "keywords_found": list(set(keywords_found)),
+    }

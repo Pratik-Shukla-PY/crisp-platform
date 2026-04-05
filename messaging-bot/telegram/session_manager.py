@@ -40,6 +40,7 @@ class TelegramSession:
     text: str = ""
     image_data_url: str = ""
     audio_data_url: str = ""
+    video_data_url: str = ""     # deferred: uploaded after everything else
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     location_name: str = ""           # reverse-geocoded place name
@@ -116,9 +117,64 @@ def is_duplicate_message(session: TelegramSession, message_id: int) -> bool:
     return False
 
 
+# ── Language detection — EXACT SAME logic as mobile app (COUNTRY_LANG_DATA + REGION_LANG_MAP) ──
+# 190+ countries → language code (mirrors mobile-app/src/app.js COUNTRY_LANG_DATA)
+_COUNTRY_LANG = {
+    # Asia & Pacific
+    'IN': 'hi', 'BD': 'bn', 'PK': 'ur', 'LK': 'si', 'NP': 'ne',
+    'MM': 'my', 'MY': 'ms', 'TH': 'th', 'VN': 'vi', 'ID': 'id',
+    'PH': 'tl', 'KH': 'km', 'LA': 'lo', 'CN': 'zh', 'TW': 'zh', 'HK': 'zh',
+    'JP': 'ja', 'KR': 'ko', 'MN': 'mn', 'KZ': 'kk', 'UZ': 'uz', 'KG': 'ky',
+    'TJ': 'tg', 'TM': 'tk', 'AZ': 'az', 'GE': 'ka', 'AM': 'hy',
+    'SG': 'en', 'BN': 'ms', 'TL': 'pt', 'NZ': 'en', 'AU': 'en',
+    # Middle East
+    'SA': 'ar', 'AE': 'ar', 'IQ': 'ar', 'SY': 'ar', 'JO': 'ar', 'LB': 'ar',
+    'KW': 'ar', 'QA': 'ar', 'BH': 'ar', 'OM': 'ar', 'YE': 'ar', 'PS': 'ar',
+    'TR': 'tr', 'IR': 'fa', 'IL': 'he', 'AF': 'ps', 'CY': 'el',
+    # Africa
+    'EG': 'ar', 'MA': 'ar', 'DZ': 'ar', 'TN': 'ar', 'LY': 'ar', 'SD': 'ar', 'MR': 'ar',
+    'SO': 'so', 'DJ': 'fr', 'ET': 'am', 'ER': 'ti',
+    'KE': 'sw', 'TZ': 'sw', 'UG': 'sw', 'RW': 'rw', 'BI': 'fr',
+    'CD': 'fr', 'CG': 'fr', 'CF': 'fr', 'CM': 'fr', 'TD': 'fr', 'NE': 'fr',
+    'ML': 'fr', 'BF': 'fr', 'SN': 'fr', 'GN': 'fr', 'CI': 'fr', 'TG': 'fr',
+    'BJ': 'fr', 'GA': 'fr', 'GQ': 'es',
+    'NG': 'en', 'GH': 'en', 'ZA': 'zu', 'ZW': 'en', 'ZM': 'en', 'MW': 'en',
+    'MZ': 'pt', 'AO': 'pt', 'CV': 'pt', 'GW': 'pt', 'ST': 'pt', 'MG': 'fr',
+    'NA': 'en', 'BW': 'en', 'SS': 'en',
+    # Europe
+    'FR': 'fr', 'DE': 'de', 'AT': 'de', 'CH': 'de', 'LU': 'fr', 'BE': 'nl', 'NL': 'nl',
+    'ES': 'es', 'PT': 'pt', 'IT': 'it', 'GB': 'en', 'IE': 'en', 'US': 'en', 'CA': 'en',
+    'RU': 'ru', 'UA': 'uk', 'BY': 'be', 'PL': 'pl', 'CZ': 'cs', 'SK': 'sk',
+    'HU': 'hu', 'RO': 'ro', 'MD': 'ro', 'BG': 'bg', 'RS': 'sr', 'HR': 'hr',
+    'BA': 'bs', 'SI': 'sl', 'MK': 'mk', 'AL': 'sq', 'GR': 'el',
+    'SE': 'sv', 'NO': 'no', 'DK': 'da', 'FI': 'fi', 'IS': 'is',
+    'EE': 'et', 'LV': 'lv', 'LT': 'lt', 'MT': 'mt',
+    # Americas
+    'MX': 'es', 'GT': 'es', 'HN': 'es', 'SV': 'es', 'NI': 'es', 'CR': 'es', 'PA': 'es',
+    'CU': 'es', 'DO': 'es', 'PR': 'es', 'CO': 'es', 'VE': 'es', 'EC': 'es',
+    'PE': 'es', 'BO': 'es', 'PY': 'es', 'UY': 'es', 'AR': 'es', 'CL': 'es',
+    'BR': 'pt', 'HT': 'fr', 'JM': 'en', 'TT': 'en', 'GY': 'en', 'SR': 'nl', 'BZ': 'en',
+}
+
+# Sub-national regions (India) — mirrors mobile-app/src/app.js REGION_LANG_MAP
+_REGION_LANG_MAP = [
+    {'match': ['karnataka', 'bangalore', 'bengaluru', 'mysore', 'hubli'], 'code': 'kn'},
+    {'match': ['tamil nadu', 'tamilnadu'], 'code': 'ta'},
+    {'match': ['kerala'], 'code': 'ml'},
+    {'match': ['telangana', 'andhra'], 'code': 'te'},
+    {'match': ['maharashtra'], 'code': 'mr'},
+    {'match': ['gujarat'], 'code': 'gu'},
+    {'match': ['punjab', 'chandigarh', 'haryana'], 'code': 'pa'},
+    {'match': ['west bengal', 'kolkata'], 'code': 'bn'},
+    {'match': ['odisha'], 'code': 'or'},
+    {'match': ['assam', 'meghalaya', 'manipur', 'nagaland', 'mizoram', 'tripura', 'arunachal', 'sikkim'], 'code': 'as'},
+    {'match': ['rajasthan', 'uttar pradesh', 'madhya pradesh', 'bihar', 'jharkhand', 'chhattisgarh', 'uttarakhand', 'himachal', 'delhi', 'india'], 'code': 'hi'},
+]
+
+
 async def resolve_location_name(session: TelegramSession):
     """Reverse-geocode coordinates to get a detailed place name.
-    Returns format: 'Neighbourhood/Locality, City, State, Country'"""
+    Also detects the local language from the country code and overrides session.lang."""
     if not session.has_location:
         return
     try:
@@ -139,6 +195,7 @@ async def resolve_location_name(session: TelegramSession):
                 city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("county") or ""
                 state = addr.get("state") or addr.get("state_district") or ""
                 country = addr.get("country") or ""
+                country_code = (addr.get("country_code") or "").upper()
 
                 parts = []
                 if neighbourhood:
@@ -153,6 +210,28 @@ async def resolve_location_name(session: TelegramSession):
                 session.location_name = ", ".join(parts) if parts else ""
                 if session.location_name:
                     logger.info(f"Location resolved: {session.location_name}")
+
+                # Override language based on location — same logic as mobile app
+                # Step 1: Check sub-national regions first (e.g. Indian states)
+                region_str = " ".join([
+                    state, addr.get("state_district", ""),
+                    city, neighbourhood, country
+                ]).lower()
+
+                detected_lang = ""
+                for entry in _REGION_LANG_MAP:
+                    if any(k in region_str for k in entry['match']):
+                        detected_lang = entry['code']
+                        break
+
+                # Step 2: Fall back to country-level mapping
+                if not detected_lang:
+                    detected_lang = _COUNTRY_LANG.get(country_code, "")
+
+                if detected_lang:
+                    old_lang = session.lang
+                    session.lang = detected_lang
+                    logger.info(f"Language overridden by location: {old_lang} → {detected_lang} (country={country_code}, region={state})")
     except Exception as e:
         logger.warning(f"Reverse geocode failed: {e}")
 
@@ -213,6 +292,20 @@ async def upload_image(session: TelegramSession) -> bool:
         return await upload_media_chunked(session.report_id, b64, "IMAGE", mime)
     except Exception as e:
         logger.error(f"Image upload error: {e}")
+        return False
+
+
+async def upload_video_deferred(session: TelegramSession) -> bool:
+    """Upload video as a secondary media item — runs after audio+image are done."""
+    if not session.report_id or not session.video_data_url:
+        return False
+    try:
+        from messaging_bot.chunked_uploader import upload_media_chunked, extract_b64_from_data_url
+        b64, mime = extract_b64_from_data_url(session.video_data_url)
+        logger.info(f"Deferred video upload: {len(b64):,} base64 chars")
+        return await upload_media_chunked(session.report_id, b64, "IMAGE", mime)
+    except Exception as e:
+        logger.warning(f"Deferred video upload error: {e}")
         return False
 
 

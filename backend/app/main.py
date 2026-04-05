@@ -1,3 +1,16 @@
+"""
+CRISP Backend — FastAPI application entry point.
+
+Mounts all API routes, webhook endpoints (Telegram, WhatsApp, SMS, IVR),
+static file serving, CORS middleware, and background workers.
+
+Startup sequence:
+  1. Load .env
+  2. Mount API router (/api/v1/reports/)
+  3. Mount messaging webhooks (/api/v1/telegram/, whatsapp/, sms/, ivr/)
+  4. Start Telegram long-polling
+  5. Start deletion purge worker (every 15 min)
+"""
 import os
 import logging
 from dotenv import load_dotenv
@@ -63,6 +76,20 @@ try:
 except ImportError as e:
     logging.getLogger(__name__).warning(f"Telegram bot not loaded: {e}")
 
+try:
+    from messaging_bot.sms.webhook import sms_router
+    app.include_router(sms_router, prefix=f"{settings.API_V1_STR}/sms", tags=["sms"])
+    logging.getLogger(__name__).info("SMS webhook mounted at /api/v1/sms/")
+except ImportError as e:
+    logging.getLogger(__name__).warning(f"SMS bot not loaded: {e}")
+
+try:
+    from messaging_bot.ivr.webhook import ivr_router
+    app.include_router(ivr_router, prefix=f"{settings.API_V1_STR}/ivr", tags=["ivr"])
+    logging.getLogger(__name__).info("IVR webhook mounted at /api/v1/ivr/")
+except ImportError as e:
+    logging.getLogger(__name__).warning(f"IVR bot not loaded: {e}")
+
 app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
 @app.get("/health", tags=["system"])
@@ -89,7 +116,25 @@ def _purge_loop():
         _t.sleep(900)  # 15 minutes
 
 @app.on_event("startup")
-def start_purge_worker():
+async def start_background_workers():
+    # Purge worker
     t = threading.Thread(target=_purge_loop, daemon=True)
     t.start()
     logging.getLogger(__name__).info("Deletion purge worker started (runs every 15 min)")
+
+    # Auto-start Telegram polling if token is configured
+    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if telegram_token:
+        try:
+            from messaging_bot.telegram.webhook import telegram_router
+            import httpx
+            # Delete any stale webhook and start polling
+            async with httpx.AsyncClient(timeout=10) as c:
+                await c.get(f"https://api.telegram.org/bot{telegram_token}/deleteWebhook", params={"drop_pending_updates": "false"})
+            from messaging_bot.telegram.webhook import _poll_loop, _polling_active
+            import messaging_bot.telegram.webhook as tg_wh
+            tg_wh._polling_active = True
+            tg_wh._polling_task = asyncio.create_task(tg_wh._poll_loop())
+            logging.getLogger(__name__).info("Telegram polling auto-started on boot")
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Telegram auto-start failed: {e}")

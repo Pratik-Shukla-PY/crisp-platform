@@ -24,6 +24,7 @@ let clusterGroup = null;
 let boundaryLayers = [];
 let currentAudio = null;
 let treeState = {};
+let treeSearchTerm = '';
 let priorityZones = new Set(JSON.parse(localStorage.getItem('crisp_priority_zones') || '[]'));
 
 const SEV_SCORE = { CRITICAL: 10, SEVERE: 7, MODERATE: 4, MINOR: 2, UNKNOWN: 1 };
@@ -231,22 +232,17 @@ function calculateNodeMetrics(data) {
 }
 
 function buildControlPanelTree(reports) {
+    // Flat 2-level tree: Region → Type → Incidents[]
     const tree = {};
     reports.forEach(r => {
-        const cont = CONTINENT_NAMES[r._continent_code] || 'Global';
-        const coun = r._country || 'Unknown Country';
-        const reg = r._region || 'Unknown Region';
+        const region = r._region || r._country || r.location?.user_location_name || r.location?.device_location_name || 'Unknown';
+        const country = r._country || '';
+        const label = country && country !== region ? `${region}, ${country}` : region;
         const type = r.infrastructure_type || 'OTHER';
-        const sev = r.severity || 'UNKNOWN';
-        const st = r.status || 'PENDING';
 
-        if (!tree[cont]) tree[cont] = {};
-        if (!tree[cont][coun]) tree[cont][coun] = {};
-        if (!tree[cont][coun][reg]) tree[cont][coun][reg] = {};
-        if (!tree[cont][coun][reg][type]) tree[cont][coun][reg][type] = {};
-        if (!tree[cont][coun][reg][type][sev]) tree[cont][coun][reg][type][sev] = {};
-        if (!tree[cont][coun][reg][type][sev][st]) tree[cont][coun][reg][type][sev][st] = [];
-        tree[cont][coun][reg][type][sev][st].push(r);
+        if (!tree[label]) tree[label] = {};
+        if (!tree[label][type]) tree[label][type] = [];
+        tree[label][type].push(r);
     });
     return tree;
 }
@@ -333,41 +329,49 @@ function createTreeHeader(label, stats, levelName, path, isExpanded) {
 
     const useCompact = ['type', 'severity', 'status'].includes(levelName);
 
+    const sevDots = stats.p1 > 0
+        ? `<span class="tv-sev-dots">${'🔴'.repeat(Math.min(stats.p1, 3))}${stats.p1 > 3 ? '+' + (stats.p1-3) : ''}</span>`
+        : '';
+
     div.innerHTML = `
         <span class="chevron" title="Expand/Collapse"><i class="fa-solid fa-chevron-right"></i></span>
         ${getLevelIcon(levelName, label)}
         <span class="tree-label">${label}</span>
-        ${isPriority ? '<span class="priority-flag" title="Priority Zone"><i class="fa-solid fa-flag"></i></span>' : ''}
-        ${metricsHTML(stats, useCompact)}
-        ${quickActionsHTML(path, levelName)}
+        <span class="tv-count">${stats.total}</span>
+        ${sevDots}
     `;
 
     div.onclick = (e) => {
         e.stopPropagation();
         toggleTreeNode(path);
-        focusMapOnNode(path);
     };
     return div;
 }
 
 function renderTreeLevel(parentEl, data, levelIndex, currentPath) {
-    const levels = ['continent', 'country', 'region', 'type', 'severity', 'status'];
+    // Flat 2-level: region (0) → type (1) → incidents
+    const levels = ['region', 'type'];
     const levelName = levels[levelIndex];
     if (!levelName) return;
 
-    const keys = sortNodes(Object.keys(data), data);
+    const keys = Object.keys(data).sort((a, b) => {
+        const sa = collectIncidents(data[a]);
+        const sb = collectIncidents(data[b]);
+        // Sort by critical count desc, then total desc
+        const pa = sa.filter(r => r.severity === 'CRITICAL' || r.severity === 'SEVERE').length;
+        const pb = sb.filter(r => r.severity === 'CRITICAL' || r.severity === 'SEVERE').length;
+        if (pb !== pa) return pb - pa;
+        return sb.length - sa.length;
+    });
 
     keys.forEach(key => {
         const path = currentPath ? `${currentPath}|${key}` : key;
-        // Default: expand continent & country, collapse deeper levels
-        if (treeState[path] === undefined) {
-            treeState[path] = levelIndex <= 1;
-        }
+        if (treeState[path] === undefined) treeState[path] = levelIndex === 0; // regions expanded by default
         const expanded = !!treeState[path];
         const stats = calculateNodeMetrics(data[key]);
 
         const node = document.createElement('div');
-        node.className = `tree-node level-${levelName} ${priorityZones.has(path) ? 'priority-zone' : ''}`;
+        node.className = `tree-node level-${levelName}`;
         node.appendChild(createTreeHeader(key, stats, levelName, path, expanded));
 
         if (expanded) {
@@ -377,11 +381,14 @@ function renderTreeLevel(parentEl, data, levelIndex, currentPath) {
             if (levelIndex < levels.length - 1) {
                 renderTreeLevel(content, data[key], levelIndex + 1, path);
             } else {
-                // Leaf level: render incidents
-                const incidents = data[key];
-                incidents.forEach(r => {
-                    content.appendChild(createIncidentRow(r));
+                // Leaf: render incident rows with inline actions
+                const incidents = Array.isArray(data[key]) ? data[key] : collectIncidents(data[key]);
+                incidents.sort((a, b) => {
+                    const sa = SEV_PRIORITY[b.severity] || 0;
+                    const sb = SEV_PRIORITY[a.severity] || 0;
+                    return sa !== sb ? sa - sb : new Date(b.server_created_at) - new Date(a.server_created_at);
                 });
+                incidents.forEach(r => content.appendChild(createIncidentRow(r)));
             }
             node.appendChild(content);
         }
@@ -392,30 +399,27 @@ function renderTreeLevel(parentEl, data, levelIndex, currentPath) {
 function createIncidentRow(r) {
     const inc = document.createElement('div');
     inc.className = `tree-incident ${selectedId === r.id ? 'selected' : ''}`;
-    inc.onclick = (e) => { e.stopPropagation(); selectReport(r.id); };
+    inc.onclick = (e) => { if (e.target.closest('.tv-act')) return; selectReport(r.id); };
 
-    const desc = (r.description || 'No description').substring(0, 40);
-    const hasImg = r.media?.some(m => m.type === 'IMAGE');
-    const hasAudio = r.media?.some(m => m.type === 'AUDIO');
-    const isPartial = r.sync_status === 'PARTIAL';
-    // W-6 fix: use chunk-level completion_pct from media if available,
-    // otherwise fall back to assembled-file ratio (which only shows 0% or 100%)
-    const imgMedia = r.media?.find(m => m.type === 'IMAGE');
-    const pctDone = imgMedia?.completion_pct != null
-        ? Math.round(imgMedia.completion_pct)
-        : (r.expected_media > 0 ? Math.round((r.received_media / r.expected_media) * 100) : 100);
+    const desc = (r.ai_analysis?.ai_summary || r.description || r.ai_analysis?.transcription || '').substring(0, 35);
+    const sevColor = SEV_COLORS[r.severity] || '#64748b';
+    const srcIcon = {APP:'fa-mobile-screen-button',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'}[r.source] || 'fa-mobile-screen-button';
+    const srcClass = {APP:'qrt-src-app',WHATSAPP:'qrt-src-whatsapp',TELEGRAM:'qrt-src-telegram',SMS:'qrt-src-sms',IVR:'qrt-src-ivr'}[r.source] || 'qrt-src-app';
+    const srcBrand = ['WHATSAPP','TELEGRAM'].includes(r.source) ? 'fa-brands' : 'fa-solid';
 
     inc.innerHTML = `
-        <span class="inc-sev-dot sev-dot-${r.severity}" title="Severity: ${r.severity}"></span>
-        <span class="inc-type" title="Infrastructure type">${r.infrastructure_type}</span>
-        <span class="inc-desc" title="${(r.description || 'No description').replace(/"/g, '&quot;')}">${desc}</span>
-        <span class="inc-media-icons">
-            ${hasImg ? '<i class="fa-solid fa-image" title="Has photo"></i>' : (r.expected_media > 0 && !hasImg ? '<i class="fa-solid fa-image" title="Photo pending" style="opacity:0.3;"></i>' : '')}
-            ${hasAudio ? '<i class="fa-solid fa-microphone" title="Has audio"></i>' : (r.expected_media > 0 && !hasAudio ? '<i class="fa-solid fa-microphone" title="Audio pending" style="opacity:0.3;"></i>' : '')}
-            ${isPartial ? `<span class="sync-partial-badge" title="Data: ${pctDone}% received (${r.received_media}/${r.expected_media} files)">${pctDone}%</span>` : ''}
-            ${r.is_auto_submitted ? '<i class="fa-solid fa-hourglass-end" title="Auto-submitted" style="color: #ff9800; font-size: 0.75rem;"></i>' : ''}
+        <span class="inc-sev-dot sev-dot-${r.severity}"></span>
+        <span class="tv-status tv-st-${r.status}">${r.status === 'RESPONDING' || r.status === 'RESOLVED' ? 'HELPED' : r.status === 'FALSE_ALARM' ? 'FALSE' : r.status}</span>
+        <span class="tv-desc" title="${(r.description || '').replace(/"/g, '&quot;')}">${desc || 'No description'}</span>
+        <span class="tv-meta">
+            <span class="tv-time">${timeAgo(r.server_created_at)}</span>
+            <span class="qrt-source-badge ${srcClass}" title="${r.source}"><i class="${srcBrand} ${srcIcon}"></i></span>
         </span>
-        <span class="inc-time">${timeAgo(r.server_created_at)}</span>
+        <span class="tv-actions">
+            ${r.status === 'PENDING' || r.status === 'VERIFIED' ? `<button class="tv-act tv-act-dispatch" onclick="event.stopPropagation();patchReport('${r.id}','dispatch')" title="Send Help"><i class="fa-solid fa-hands-helping"></i></button>` : ''}
+            ${r.status !== 'FALSE_ALARM' ? `<button class="tv-act tv-act-false" onclick="event.stopPropagation();patchReport('${r.id}','false-alarm')" title="False Alarm"><i class="fa-solid fa-ban"></i></button>` : ''}
+            <button class="tv-act tv-act-delete" onclick="event.stopPropagation();if(confirm('Delete?'))deleteReport('${r.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </span>
     `;
 
     inc.onmouseenter = (e) => showIncidentPreview(r, e);
@@ -546,9 +550,9 @@ function renderTriageQueue(el) {
     if (criticals.length > 0) frag.appendChild(createAlertBanner(criticals.length));
 
     // Three collapsible sections
-    frag.appendChild(createQueueSection('needs',      '⚡ NEEDS RESPONSE', needs,      'qrt-section-needs'));
-    frag.appendChild(createQueueSection('dispatched', '🚑 DISPATCHED',     dispatched, 'qrt-section-dispatched'));
-    frag.appendChild(createQueueSection('resolved',   '✓  RESOLVED',       resolved,   'qrt-section-resolved'));
+    frag.appendChild(createQueueSection('needs',      '<i class="fa-solid fa-circle-exclamation"></i> NEEDS HELP', needs,      'qrt-section-needs'));
+    frag.appendChild(createQueueSection('dispatched', '<i class="fa-solid fa-hands-helping"></i> HELP SENT', dispatched, 'qrt-section-dispatched'));
+    frag.appendChild(createQueueSection('resolved',   '<i class="fa-solid fa-circle-check"></i> CLOSED',     resolved,   'qrt-section-resolved'));
 
     el.appendChild(frag);
     const _fcb = document.getElementById('feed-count-badge');
@@ -636,12 +640,12 @@ function createIncidentCard(r) {
     if (r.status === 'PENDING' || r.status === 'VERIFIED') {
         actionEl = `<button class="qrt-dispatch-btn"
             onclick="event.stopPropagation(); patchReport('${r.id}', 'dispatch')">
-            <i class="fa-solid fa-truck-medical"></i> DISPATCH
+            <i class="fa-solid fa-hands-helping"></i> SEND HELP
         </button>`;
-    } else if (r.status === 'RESPONDING') {
-        actionEl = `<span class="qrt-dispatched-label"><i class="fa-solid fa-siren-on"></i> En Route</span>`;
+    } else if (r.status === 'RESPONDING' || r.status === 'RESOLVED') {
+        actionEl = `<span class="qrt-dispatched-label"><i class="fa-solid fa-circle-check"></i> Help Sent</span>`;
     } else {
-        actionEl = `<span class="qrt-resolved-label"><i class="fa-solid fa-circle-check"></i> Done</span>`;
+        actionEl = `<span class="qrt-resolved-label"><i class="fa-solid fa-ban"></i> False</span>`;
     }
 
     // Truth score badge — shown if verification has been run
@@ -668,7 +672,7 @@ function createIncidentCard(r) {
                 <div class="qrt-infra-icon"><i class="fa-solid ${icon}"></i></div>
                 <span class="qrt-infra-name">${infra.replace(/_/g, ' ')}</span>
                 <span class="qrt-sev-badge qrt-sev-${sev}">${sev}</span>
-                <span class="qrt-source-badge qrt-src-${(r.source || 'APP').toLowerCase()}" title="Source: ${{APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i>',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i>',TELEGRAM:'<i class="fa-brands fa-telegram"></i>'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i>'}</span>
+                <span class="qrt-source-badge qrt-src-${(r.source || 'APP').toLowerCase()}" title="Source: ${{APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i>',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i>',TELEGRAM:'<i class="fa-brands fa-telegram"></i>',SMS:'<i class="fa-solid fa-comment-sms"></i>',IVR:'<i class="fa-solid fa-phone"></i>'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i>'}</span>
             </div>
             <div class="qrt-where">
                 <i class="fa-solid fa-location-dot"></i>
@@ -679,18 +683,20 @@ function createIncidentCard(r) {
                 ${timeAgo(r.server_created_at)}
             </div>
             <div class="qrt-data-progress">
-                <span class="qrt-dp-item ${locDone ? 'done' : ''}" title="Location">
-                    <i class="fa-solid ${locDone ? 'fa-check' : 'fa-location-dot'}"></i> Loc
+                <span class="qrt-di ${locDone ? 'di-done' : 'di-off'}" title="Location: ${locDone ? 'Received' : 'Missing'}">
+                    <i class="fa-solid fa-location-dot"></i>
                 </span>
-                <span class="qrt-dp-item ${imgDone ? 'done' : hasImg ? 'active' : 'waiting'}" title="Image: ${Math.round(imgPct)}%">
-                    <i class="fa-solid ${imgDone ? 'fa-check' : hasImg ? 'fa-cloud-arrow-up' : 'fa-image'}"></i>
-                    ${imgDone ? 'Img' : hasImg && !imgDone ? Math.round(imgPct) + '%' : 'Img'}
+                <span class="qrt-di ${imgDone ? 'di-done' : hasImg ? 'di-partial' : 'di-off'}" title="Image: ${imgDone ? 'Complete' : hasImg ? Math.round(imgPct) + '%' : 'Not received'}">
+                    <i class="fa-solid fa-camera"></i>
+                    ${hasImg && !imgDone ? `<span class="di-pct">${Math.round(imgPct)}%</span>` : ''}
                 </span>
-                <span class="qrt-dp-item ${audioDone ? 'done' : hasAudio ? 'active' : 'waiting'}" title="Audio: ${Math.round(audioPct)}%">
-                    <i class="fa-solid ${audioDone ? 'fa-check' : hasAudio ? 'fa-cloud-arrow-up' : 'fa-microphone'}"></i>
-                    ${audioDone ? 'Aud' : hasAudio && !audioDone ? Math.round(audioPct) + '%' : 'Aud'}
+                <span class="qrt-di ${audioDone ? 'di-done' : hasAudio ? 'di-partial' : 'di-off'}" title="Audio: ${audioDone ? 'Complete' : hasAudio ? Math.round(audioPct) + '%' : 'Not received'}">
+                    <i class="fa-solid fa-microphone"></i>
+                    ${hasAudio && !audioDone ? `<span class="di-pct">${Math.round(audioPct)}%</span>` : ''}
                 </span>
-                ${allDone ? '<span class="qrt-dp-all-done"><i class="fa-solid fa-circle-check"></i> 100%</span>' : ''}
+                ${v ? `<span class="qrt-ai-badge" title="AI Verified: ${v.total_score}/100 — ${(v.verdict || '').replace(/_/g,' ')}" style="color:${v.total_score >= 60 ? '#22c55e' : v.total_score >= 40 ? '#eab308' : '#ef4444'};">
+                    <i class="fa-solid fa-brain"></i> ${v.total_score}
+                </span>` : ''}
             </div>
             <div class="qrt-card-footer">
                 ${truthBadge}
@@ -725,9 +731,19 @@ function renderTreeFeed(el) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
         filtered = filtered.filter(r => new Date(ensureUTC(r.server_created_at)).getTime() > cutoff);
     }
+    // Filter by search
+    if (treeSearchTerm) {
+        filtered = filtered.filter(r => {
+            const haystack = [
+                r.description, r.infrastructure_type, r.severity, r.status, r.source,
+                r.location?.user_location_name, r.location?.device_location_name,
+                r._region, r._country, r.ai_analysis?.transcription, r.ai_analysis?.ai_summary,
+            ].filter(Boolean).join(' ').toLowerCase();
+            return haystack.includes(treeSearchTerm);
+        });
+    }
     el.innerHTML = '';
     const frag = document.createDocumentFragment();
-    renderHotspots(frag, filtered);
     const tree = buildControlPanelTree(filtered);
     renderTreeLevel(frag, tree, 0, '');
     el.appendChild(frag);
@@ -988,8 +1004,8 @@ function _renderAnalytics() {
     const _rmEl = document.getElementById('response-metrics');
     if (_rmEl) _rmEl.innerHTML = `
         <div class="ac-metric"><span class="ac-metric-val" style="color:#ef4444;">${rm_pending}</span><span class="ac-metric-label">Awaiting</span></div>
-        <div class="ac-metric"><span class="ac-metric-val" style="color:#a78bfa;">${rm_dispatched}</span><span class="ac-metric-label">Dispatched</span></div>
-        <div class="ac-metric"><span class="ac-metric-val" style="color:#10b981;">${rm_done}</span><span class="ac-metric-label">Resolved</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#a78bfa;">${rm_dispatched}</span><span class="ac-metric-label">Help Sent</span></div>
+        <div class="ac-metric"><span class="ac-metric-val" style="color:#10b981;">${rm_done}</span><span class="ac-metric-label">Closed</span></div>
         <div class="ac-metric"><span class="ac-metric-val" style="color:#38bdf8;">${rm_rate}%</span><span class="ac-metric-label">Response Rate</span></div>
         <div class="ac-metric"><span class="ac-metric-val" style="color:#f59e0b;">${rm_fa}</span><span class="ac-metric-label">False Alarms</span></div>
         <div class="ac-metric"><span class="ac-metric-val" style="color:#94a3b8;">${avgMedia}</span><span class="ac-metric-label">Avg Media/Report</span></div>
@@ -1077,39 +1093,94 @@ function showIncidentPreview(r, event) {
     const audio = r.media?.find(m => m.type === 'AUDIO');
     const loc = r.location;
     const ai = r.ai_analysis;
+    const v = r.verification;
+    const sevColor = SEV_COLORS[r.severity] || '#64748b';
+    const locName = loc?.user_location_name || loc?.device_location_name || (loc ? `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : 'Unknown');
+    const srcIcon = {APP:'fa-mobile-screen-button',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'}[r.source] || 'fa-mobile-screen-button';
+    const srcBrand = ['WHATSAPP','TELEGRAM'].includes(r.source) ? 'fa-brands' : 'fa-solid';
+    const hoverAiSummary = ai?.ai_summary || '';
+    const hoverUserText = r.description || ai?.transcription || '';
+    const hoverDisplayText = hoverAiSummary || hoverUserText;
 
-    // W-4 fix: img.url is '' before assembly completes — fall back to thumbnail_url
     const thumbUrl = img?.thumbnail_url ? getMediaUrl(img.thumbnail_url) : '';
     const fullUrl  = img?.url && img.assembly_status === 'complete' ? getMediaUrl(img.url) : '';
+    const audioUrl = audio?.url ? getMediaUrl(audio.url) : (audio?.thumbnail_url ? getMediaUrl(audio.thumbnail_url) : '');
+    const photoSrc = fullUrl || thumbUrl;
+    const satSrc = v?.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
+
+    // Verification score dots
+    const scores = v?.scores || {};
+    const dotCol = (val) => (val || 0) >= 20 ? '#22c55e' : (val || 0) >= 13 ? '#eab308' : '#ef4444';
+    const gc = v ? (v.total_score >= 60 ? '#22c55e' : v.total_score >= 40 ? '#eab308' : '#ef4444') : '';
+
     p.innerHTML = `
-        ${thumbUrl || fullUrl ? `
-        <div class="fp-img-wrap">
-            ${thumbUrl ? `<img src="${thumbUrl}" class="fp-img fp-img-blur" alt="">` : ''}
-            ${fullUrl  ? `<img src="${fullUrl}"  class="fp-img fp-img-full" alt="Incident photo"
-                              onload="this.classList.add('img-ready')" onerror="this.style.display='none'">` : ''}
+        <div class="fp-header">
+            <span class="fp-sev-strip" style="background:${sevColor};"></span>
+            <div class="fp-header-info">
+                <div class="fp-title-row">
+                    <i class="fa-solid ${INFRA_ICONS[r.infrastructure_type] || 'fa-triangle-exclamation'}" style="color:${sevColor};"></i>
+                    <span class="fp-type">${r.infrastructure_type.replace(/_/g,' ')}</span>
+                    <span class="fp-sev-badge" style="background:${sevColor}20;color:${sevColor};">${r.severity}</span>
+                    <span class="fp-status-badge fp-st-${r.status}">${r.status === 'RESPONDING' || r.status === 'RESOLVED' ? 'HELPED' : r.status === 'FALSE_ALARM' ? 'FALSE' : r.status}</span>
+                </div>
+                <div class="fp-meta-row">
+                    <span>${timeAgo(r.server_created_at)}</span>
+                    <span><i class="${srcBrand} ${srcIcon}"></i> ${r.source}</span>
+                    ${v ? `<span style="color:${gc};font-weight:700;">${v.total_score}/100</span>` : '<span style="color:var(--text-dim);">Not verified</span>'}
+                </div>
+            </div>
+        </div>
+        ${photoSrc ? `<div class="fp-img-section">
+            <img id="fp-preview-img" src="${photoSrc}" class="fp-photo" onerror="this.style.display='none'">
+            ${satSrc ? `<div class="fp-img-toggle">
+                <button class="fp-itg active" onclick="event.stopPropagation();document.getElementById('fp-preview-img').src='${photoSrc}';this.classList.add('active');this.nextElementSibling.classList.remove('active')"><i class="fa-solid fa-camera"></i></button>
+                <button class="fp-itg" onclick="event.stopPropagation();document.getElementById('fp-preview-img').src='${satSrc}';this.classList.add('active');this.previousElementSibling.classList.remove('active')"><i class="fa-solid fa-satellite"></i></button>
+            </div>` : ''}
         </div>` : ''}
-        <div class="fp-main">
-            <div class="fp-title">${r.infrastructure_type} <span class="fp-sev sev-dot-${r.severity}">${r.severity}</span></div>
-            <div class="fp-desc">${r.description || 'No description'}</div>
-            ${ai?.transcription ? `<div class="fp-transcript"><i class="fa-solid fa-quote-left"></i> ${ai.transcription.substring(0, 80)}...</div>` : ''}
-            ${loc ? `<div class="fp-loc"><i class="fa-solid fa-location-dot"></i> ${loc.user_location_name || loc.device_location_name || `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`}</div>` : ''}
-            ${audio ? `<button class="fp-audio-btn" onclick="event.stopPropagation(); playPreviewAudio('${getMediaUrl(audio.url)}', this)"><i class="fa-solid fa-play"></i> Play Audio</button>` : ''}
-            <div class="fp-meta">${timeAgo(r.server_created_at)} · ${r.status}</div>
+        <div class="fp-body">
+            ${hoverAiSummary ? `<div class="fp-text" style="border-left:2px solid #3b82f6;padding-left:6px;"><i class="fa-solid fa-robot" style="font-size:10px;color:#3b82f6;margin-right:3px;"></i>${hoverAiSummary.substring(0, 140)}${hoverAiSummary.length > 140 ? '...' : ''}</div>` : ''}
+            ${hoverUserText && (!hoverAiSummary || hoverUserText !== hoverAiSummary) ? `<div class="fp-text" style="font-size:11px;color:#94a3b8;margin-top:3px;"><i class="fa-solid fa-user" style="font-size:9px;margin-right:3px;"></i>${hoverUserText.substring(0, 100)}${hoverUserText.length > 100 ? '...' : ''}</div>` : ''}
+            ${!hoverAiSummary && !hoverUserText ? '' : ''}
+            <div class="fp-loc-row"><i class="fa-solid fa-location-dot" style="color:${sevColor};"></i> ${locName}</div>
+            ${audioUrl ? `<button class="fp-play-btn" onclick="event.stopPropagation();playPreviewAudio('${audioUrl}',this)"><i class="fa-solid fa-play"></i> Play Audio</button>` : ''}
+            ${v ? `<div class="fp-verify-row">
+                <span class="fp-verify-score" style="color:${gc};">${v.total_score}</span>
+                <div class="fp-verify-dots">
+                    <span style="color:${dotCol(scores.location_authenticity)};">● Loc ${scores.location_authenticity ?? '—'}</span>
+                    <span style="color:${dotCol(scores.damage_corroboration)};">● Dmg ${scores.damage_corroboration ?? '—'}</span>
+                    <span style="color:${dotCol(scores.description_coherence)};">● Desc ${scores.description_coherence ?? '—'}</span>
+                    <span style="color:${dotCol(scores.data_quality)};">● Data ${scores.data_quality ?? '—'}</span>
+                </div>
+            </div>` : ''}
+        </div>
+        <div class="fp-actions">
+            ${r.status === 'PENDING' || r.status === 'VERIFIED' ? `<button class="fp-act fp-act-dispatch" onclick="event.stopPropagation();patchReport('${r.id}','dispatch');hideIncidentPreview()"><i class="fa-solid fa-hands-helping"></i> Send Help</button>` : ''}
+            ${r.status !== 'FALSE_ALARM' ? `<button class="fp-act fp-act-false" onclick="event.stopPropagation();patchReport('${r.id}','false-alarm');hideIncidentPreview()"><i class="fa-solid fa-ban"></i> False</button>` : ''}
+            <button class="fp-act fp-act-detail" onclick="event.stopPropagation();selectReport('${r.id}');hideIncidentPreview()"><i class="fa-solid fa-expand"></i></button>
         </div>
     `;
 
     // Position near cursor but within viewport
     const rect = event.target.getBoundingClientRect();
     const panelLeft = rect.right + 12;
-    const maxLeft = window.innerWidth - 320;
+    const maxLeft = window.innerWidth - 380;
+    const maxTop = window.innerHeight - p.offsetHeight - 20;
     p.style.left = `${Math.min(panelLeft, maxLeft)}px`;
-    p.style.top = `${Math.max(rect.top - 20, 10)}px`;
+    p.style.top = `${Math.max(Math.min(rect.top - 20, maxTop), 10)}px`;
     p.style.display = 'flex';
+
+    // Keep tooltip visible when hovering over it (for action buttons)
+    p.onmouseenter = () => { p._hovered = true; };
+    p.onmouseleave = () => { p._hovered = false; hideIncidentPreview(); };
 }
 
+let _hidePreviewTimer = null;
 function hideIncidentPreview() {
-    const p = document.getElementById('fast-preview');
-    if (p) p.style.display = 'none';
+    clearTimeout(_hidePreviewTimer);
+    _hidePreviewTimer = setTimeout(() => {
+        const p = document.getElementById('fast-preview');
+        if (p && !p._hovered) p.style.display = 'none';
+    }, 150);
 }
 
 window.playPreviewAudio = function (url, btn) {
@@ -1209,61 +1280,31 @@ window.selectReport = (id, skipFly = false) => {
         return `<div class="dp-img-match"><i class="fa-solid fa-brain" style="color:${gc};"></i> Image Match Score: <strong style="color:${gc};">${matchPct}%</strong> <span style="color:var(--text-dim);">· Overall: ${total}/100</span></div>`;
     })() : '';
 
-    // ── Verification: compact summary (default) + expandable detail ──
+    // ── Satellite verification: score + 1-paragraph summary ──
     const vGaugeHtml = (() => {
         if (!v) return '';
         const total = v.total_score || 0;
-        const C = 125.66;
-        const offset = C - (total / 100) * C;
         const gc = total >= 80 ? '#22c55e' : total >= 60 ? '#86efac' : total >= 40 ? '#eab308' : total >= 20 ? '#f97316' : '#ef4444';
         const verdictLabels = { STRONGLY_CORROBORATED:'Corroborated', LIKELY_AUTHENTIC:'Likely Authentic', PARTIALLY_VERIFIED:'Partial', LOW_CONFIDENCE:'Low Confidence', UNVERIFIED:'Unverified' };
         const vLabel = verdictLabels[v.verdict] || v.verdict || '';
-        const scores = v.scores || {};
-        const barPct = (val) => Math.round(((val || 0) / 25) * 100);
-        const barCol = (val) => val >= 20 ? '#22c55e' : val >= 13 ? '#eab308' : '#ef4444';
-        const dotCol = (val) => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${barCol(val)};"></span>`;
+        // Build 1-paragraph summary from available data
+        const parts = [];
+        if (v.photo_analysis) parts.push(v.photo_analysis);
+        else if (v.satellite_scene_description) parts.push(v.satellite_scene_description);
+        if (v.key_findings?.length) parts.push(v.key_findings[0]);
+        if (v.caveats?.length) parts.push('Caveat: ' + v.caveats[0]);
+        const paragraph = parts.join(' ').substring(0, 250) || 'Satellite comparison completed.';
 
-        // Tier 1: Compact summary (always visible)
-        const tier1 = `
-        <div class="dp-ai-summary">
-            <div class="dp-ai-header">
-                <div class="dp-gauge">
-                    <svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
-                    <circle cx="22" cy="22" r="18" fill="none" stroke="${gc}" stroke-width="5" stroke-linecap="round"
-                        stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}" transform="rotate(-90 22 22)"/></svg>
-                    <span class="dp-gauge-num" style="color:${gc};">${total}</span>
-                </div>
-                <div class="dp-ai-verdict">
-                    <div style="font-size:14px;font-weight:800;color:${gc};text-transform:uppercase;">${vLabel}</div>
-                    <div style="font-size:11px;color:var(--text-dim);">AI Verification Score</div>
-                </div>
+        return `
+        <div class="dp-sat-result">
+            <div class="dp-sat-header-row">
+                <i class="fa-solid fa-satellite" style="color:${gc};font-size:12px;"></i>
+                <span style="font-size:13px;font-weight:800;color:${gc};">${total}/100</span>
+                <span style="font-size:11px;font-weight:700;color:${gc};text-transform:uppercase;">${vLabel}</span>
+                <div class="dp-sat-bar"><div class="dp-sat-bar-fill" style="width:${total}%;background:${gc};"></div></div>
             </div>
-            <div class="dp-ai-scores">
-                <div class="dp-ai-score-item">${dotCol(scores.location_authenticity)} <span>Location</span> <strong>${scores.location_authenticity ?? '—'}</strong>/25</div>
-                <div class="dp-ai-score-item">${dotCol(scores.damage_corroboration)} <span>Damage</span> <strong>${scores.damage_corroboration ?? '—'}</strong>/25</div>
-                <div class="dp-ai-score-item">${dotCol(scores.description_coherence)} <span>Coherence</span> <strong>${scores.description_coherence ?? '—'}</strong>/25</div>
-                <div class="dp-ai-score-item">${dotCol(scores.data_quality)} <span>Quality</span> <strong>${scores.data_quality ?? '—'}</strong>/25</div>
-            </div>
+            <p class="dp-sat-para">${paragraph}${parts.join(' ').length > 250 ? '…' : ''}</p>
         </div>`;
-
-        // Tier 2: Expandable detailed report (hidden by default)
-        const findings = (v.key_findings || []).map(f => `<div class="dp-finding"><i class="fa-solid fa-circle-check" style="color:var(--info);"></i>${f}</div>`).join('');
-        const caveats = (v.caveats || []).map(c => `<div class="dp-finding dp-caveat"><i class="fa-solid fa-triangle-exclamation" style="color:#fbbf24;"></i>${c}</div>`).join('');
-
-        const tier2 = (findings || caveats || v.reasoning) ? `
-        <button class="dp-expand-btn" onclick="const el=document.getElementById('dp-detail-report');const ic=this.querySelector('i');if(el.style.display==='none'){el.style.display='block';ic.classList.replace('fa-chevron-down','fa-chevron-up');this.querySelector('span').textContent='Hide Details';}else{el.style.display='none';ic.classList.replace('fa-chevron-up','fa-chevron-down');this.querySelector('span').textContent='View Detailed Report';}">
-            <i class="fa-solid fa-chevron-down"></i> <span>View Detailed Report</span>
-        </button>
-        <div id="dp-detail-report" style="display:none;" class="dp-detail-report">
-            ${v.error ? `<div class="dp-report-error"><i class="fa-solid fa-triangle-exclamation"></i> ${v.error}</div>` : ''}
-            ${v.photo_analysis ? `<div class="dp-report-section"><div class="dp-report-label">Photo Analysis</div><div class="dp-report-text">${v.photo_analysis}</div></div>` : ''}
-            ${v.satellite_scene_description ? `<div class="dp-report-section"><div class="dp-report-label">Satellite Scene</div><div class="dp-report-text">${v.satellite_scene_description}</div></div>` : ''}
-            ${findings ? `<div class="dp-report-section"><div class="dp-report-label">Key Findings</div>${findings}</div>` : ''}
-            ${caveats ? `<div class="dp-report-section"><div class="dp-report-label">Caveats</div>${caveats}</div>` : ''}
-            ${v.reasoning ? `<div class="dp-report-section"><div class="dp-report-label">AI Reasoning</div><div class="dp-report-text">${v.reasoning}</div></div>` : ''}
-        </div>` : '';
-
-        return tier1 + tier2;
     })();
 
     // ── Build decision-first detail panel ──
@@ -1273,8 +1314,7 @@ window.selectReport = (id, skipFly = false) => {
         ${r.infrastructure_type.replace(/_/g,' ')}
         <span class="detail-sev-badge detail-sev-${r.severity}">${r.severity}</span>
         <span class="status-badge status-${r.status}">${r.status}</span>
-        ${v ? `<span class="dp-confidence-badge" style="color:${v.total_score >= 60 ? '#22c55e' : v.total_score >= 40 ? '#eab308' : '#ef4444'};">${v.total_score}/100</span>` : ''}
-        <span class="dp-source-badge dp-src-${(r.source || 'APP').toLowerCase()}" title="Reported via ${{APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i> App',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i> WhatsApp',TELEGRAM:'<i class="fa-brands fa-telegram"></i> Telegram'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i> App'}</span>
+        <span class="dp-source-badge dp-src-${(r.source || 'APP').toLowerCase()}" title="Reported via ${{APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i> App',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i> WhatsApp',TELEGRAM:'<i class="fa-brands fa-telegram"></i> Telegram',SMS:'<i class="fa-solid fa-comment-sms"></i> SMS',IVR:'<i class="fa-solid fa-phone"></i> Call'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i> App'}</span>
         <span class="dp-time-badge">${timeAgo(r.server_created_at)}</span>
     `;
 
@@ -1289,10 +1329,10 @@ window.selectReport = (id, skipFly = false) => {
     })();
 
     // Transcript with keyword highlighting
-    const highlightKeywords = (text) => {
+    const highlightKeywords = (text, truncate = true) => {
         if (!text) return '';
         const keywords = ['help','stuck','trapped','injury','injured','flood','fire','collapse','damage','emergency','rescue','save','water','destroy'];
-        let html = text.substring(0, 150);
+        let html = truncate && text.length > 150 ? text.substring(0, 150) : text;
         keywords.forEach(k => {
             const re = new RegExp(`(${k})`, 'gi');
             html = html.replace(re, '<mark class="dp-keyword">$1</mark>');
@@ -1300,84 +1340,167 @@ window.selectReport = (id, skipFly = false) => {
         return html + (text.length > 150 ? '...' : '');
     };
 
-    const transcriptText = ai?.transcription || r.description || '';
+    const rawTranscript = ai?.transcription || '';
+    const aiSummary = ai?.ai_summary || '';
+    const userDescription = r.description || '';
+    // For display: AI summary takes priority, fallback to description, then raw transcript
+    const primaryText = aiSummary || userDescription || rawTranscript;
+    // Show raw transcript if it differs from AI summary (so admin sees both)
+    const showRawTranscript = rawTranscript && rawTranscript !== aiSummary && rawTranscript !== userDescription;
+
+    // Build audio players for ALL audio media (location + description recordings)
+    const allAudioMedia = r.media?.filter(m => m.type === 'AUDIO') || [];
+
+    // ── Conditional evidence visibility ──
+    const hasVisualEvidence = img || (v && satSrc);
+    const isVoiceOrText = ['IVR','SMS'].includes(r.source);
+
+    // Quick summary text for top bar (for data-rich sources only)
+    const displayText = userDescription || rawTranscript || aiSummary || '';
+    // Use DB-persisted ai_assessment (survives refresh) or client-cached _aiAssessment
+    const cachedAA = r.ai_assessment || r._aiAssessment || null;
+    const aaScore = cachedAA?.confidence_score ?? cachedAA?.score ?? null;
+    const aaAction = cachedAA?.suggested_action ?? cachedAA?.action ?? '';
+    const aaSummary = cachedAA?.summary ?? '';
+    const aaDetails = cachedAA?.details ?? '';
 
     document.getElementById('detail-body').innerHTML = `
-        <!-- Urgency alerts -->
+        <!-- ① TOP: AI Assessment result OR "Run AI Assessment" button -->
+        <div class="dp-action-bar">
+            <div class="dp-top-row">
+                <div class="dp-quick-summary">
+                    ${cachedAA ? (() => {
+                        const ac = aaAction.includes('Dispatch') ? '#22c55e' : aaAction.includes('False') ? '#ef4444' : aaAction.includes('Suspicious') ? '#f97316' : '#eab308';
+                        const cc = aaScore >= 70 ? '#22c55e' : aaScore >= 50 ? '#eab308' : aaScore >= 30 ? '#f97316' : '#ef4444';
+                        return `<div class="dp-top-ai">
+                            <div class="dp-top-ai-row">
+                                <span class="dp-top-ai-score" style="color:${cc};">${aaScore}<small>/100</small></span>
+                                <span class="dp-top-ai-action" style="color:${ac};">${aaAction}</span>
+                            </div>
+                            <p class="dp-summary-text">${aaSummary}</p>
+                        </div>`;
+                    })() : `<button class="dp-run-ai-btn" onclick="runAIAssessment('${r.id}')"><i class="fa-solid fa-brain"></i> Run AI Assessment</button>`}
+                </div>
+                <button class="dp-pdf-btn" onclick="exportPDF('${r.id}')" title="Export PDF"><i class="fa-solid fa-file-pdf"></i></button>
+            </div>
+            <div class="dp-action-buttons">
+                ${r.status === 'PENDING' || r.status === 'VERIFIED'
+                    ? `<button class="dp-act-main dp-act-dispatch" onclick="patchReport('${r.id}','dispatch')"><i class="fa-solid fa-hands-helping"></i> Send Help</button>`
+                    : `<span class="dp-act-status"><i class="fa-solid fa-circle-check"></i> Help Sent</span>`}
+                ${r.status !== 'FALSE_ALARM'
+                    ? `<button class="dp-act-main dp-act-false" onclick="patchReport('${r.id}','false-alarm')"><i class="fa-solid fa-ban"></i> False</button>` : ''}
+                <button class="dp-act-main dp-act-del" onclick="if(confirm('Delete this report?'))deleteReport('${r.id}')"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
+        </div>
+
+        <!-- ② Urgency alerts -->
         ${urgencyHtml}
 
-        <!-- Evidence: full-width image with view toggle -->
+        <!-- ③ Evidence: Image + Satellite Verify below image -->
+        ${hasVisualEvidence ? `
         <div class="dp-evidence-card">
-            <div class="dp-img-view" id="dp-img-view-${r.id}">
-                ${imgHtml}
-            </div>
+            <div class="dp-img-view" id="dp-img-view-${r.id}">${imgHtml}</div>
             ${v && satSrc ? `<div class="dp-view-toggle">
                 <button class="dp-vt-btn active" onclick="dpSwitchView('${r.id}','photo',this)"><i class="fa-solid fa-camera"></i> Photo</button>
                 <button class="dp-vt-btn" onclick="dpSwitchView('${r.id}','sat',this)"><i class="fa-solid fa-satellite"></i> Satellite</button>
                 ${satAltSrc ? `<button class="dp-vt-btn" onclick="dpSwitchView('${r.id}','alt',this)"><i class="fa-solid fa-globe"></i> ${satAltLabel}</button>` : ''}
                 <button class="dp-vt-btn dp-vt-compare" onclick="dpSwitchView('${r.id}','compare',this)"><i class="fa-solid fa-columns"></i> Compare</button>
             </div>` : ''}
-        </div>
+            <!-- Satellite verify button + result right below image -->
+            ${v ? vGaugeHtml : `<button class="dp-sat-verify-btn" id="btn-verify-${r.id}" onclick="runVerification('${r.id}')">
+                <i class="fa-solid fa-satellite"></i> Verify via Satellite
+            </button>`}
+        </div>` : `
+        <div class="dp-no-image-verify">
+            <button class="dp-sat-verify-btn" id="btn-verify-${r.id}" onclick="runVerification('${r.id}')">
+                <i class="fa-solid fa-satellite"></i> ${v ? 'Re-verify Satellite' : 'Verify via Satellite'}
+            </button>
+            ${v ? vGaugeHtml : ''}
+        </div>`}
 
-        <!-- Image match score -->
-        ${imgMatchHtml}
-
-        <!-- Audio + Transcript (merged, prominent text) -->
-        ${transcriptText || audio ? `
+        <!-- ④ Audio + User Transcription -->
+        ${displayText || allAudioMedia.length ? `
         <div class="dp-transcript-card">
-            ${audio ? `<div class="dp-audio-row">
-                <button class="dp-audio-btn ${aComplete ? '' : 'uploading'}" onclick="playDetailAudio(this, '${audioPlayUrl || ''}')">
-                    <i class="fa-solid ${aComplete ? 'fa-play' : audioPlayUrl ? 'fa-cloud-arrow-up fa-pulse' : 'fa-microphone'}"></i>
-                </button>
-                <div class="dp-audio-bar-wrap">
-                    <div class="audio-progress-bar" style="height:3px;"><div class="audio-progress-fill" id="detail-audio-fill"></div></div>
-                    <div class="audio-time" style="font-size:11px;"><span id="detail-audio-cur">0:00</span><span id="detail-audio-dur">${aComplete ? '0:00' : '--:--'}</span></div>
+            ${allAudioMedia.length > 0 ? allAudioMedia.map((am, idx) => {
+                const amComplete = am.assembly_status === 'complete' && am.url;
+                const amPct = am.completion_pct ?? (amComplete ? 100 : 0);
+                const amPartialUrl = am.thumbnail_url ? getMediaUrl(am.thumbnail_url) + '?_cb=' + (Math.round(amPct/5)*5) : '';
+                const amPlayUrl = amComplete ? getMediaUrl(am.url) : amPartialUrl;
+                const label = allAudioMedia.length > 1 ? (idx === 0 ? 'Location' : 'Description') : 'Audio';
+                return `<div class="dp-audio-row">
+                    <button class="dp-audio-btn ${amComplete ? '' : 'uploading'}" onclick="playDetailAudio(this, '${amPlayUrl || ''}')">
+                        <i class="fa-solid ${amComplete ? 'fa-play' : amPartialUrl ? 'fa-cloud-arrow-up fa-pulse' : 'fa-microphone'}"></i>
+                    </button>
+                    <span class="dp-audio-label">${label}</span>
+                    <div class="dp-audio-bar-wrap">
+                        <div class="audio-progress-bar" style="height:3px;"><div class="audio-progress-fill" id="detail-audio-fill-${idx}"></div></div>
+                        <div class="audio-time" style="font-size:11px;"><span id="detail-audio-cur-${idx}">0:00</span><span id="detail-audio-dur-${idx}">${amComplete ? '0:00' : '--:--'}</span></div>
+                    </div>
+                    ${!amComplete && amPct > 0 ? `<span class="dp-upload-pct">${amPct.toFixed(0)}%</span>` : ''}
+                </div>`;
+            }).join('') : ''}
+
+            ${displayText ? `
+                <div class="dp-text-section">
+                    <div class="dp-text-label"><i class="fa-solid fa-align-left"></i> ${isVoiceOrText ? 'User Report' : 'Description'}</div>
+                    <div class="dp-transcript-text" id="dp-transcript-short">${highlightKeywords(displayText, true)}${displayText.length > 150 ? `<span class="dp-text-expand" onclick="document.getElementById('dp-transcript-short').style.display='none';document.getElementById('dp-transcript-full').style.display='block';">… read more</span>` : ''}</div>
+                    ${displayText.length > 150 ? `<div class="dp-transcript-text dp-transcript-full" id="dp-transcript-full" style="display:none;">${highlightKeywords(displayText, false)}<span class="dp-text-expand" onclick="document.getElementById('dp-transcript-full').style.display='none';document.getElementById('dp-transcript-short').style.display='block';"> show less</span></div>` : ''}
                 </div>
-                ${!aComplete && aPct > 0 ? `<span class="dp-upload-pct">${aPct.toFixed(0)}%</span>` : ''}
-            </div>` : ''}
-            ${transcriptText ? `<div class="dp-transcript-text">${highlightKeywords(transcriptText)}</div>` : ''}
+            ` : ''}
         </div>` : ''}
 
-        <!-- Location intelligence -->
-        ${loc ? (() => {
-            const mismatch = loc.is_user_corrected && loc.device_latitude && loc.device_longitude;
+        <!-- ⑤ Location + Caller Info -->
+        ${loc || r.caller_info ? (() => {
+            const mismatch = loc?.is_user_corrected && loc?.device_latitude && loc?.device_longitude;
             const distKm = mismatch ? Math.round(haversineKm(loc.latitude, loc.longitude, loc.device_latitude, loc.device_longitude)) : 0;
-            const userName = loc.user_location_name || `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
-            const devName  = loc.device_location_name || `${loc.device_latitude?.toFixed(4)}, ${loc.device_longitude?.toFixed(4)}`;
+            const userName = loc ? (loc.user_location_name || `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`) : '';
+            const devName  = mismatch ? (loc.device_location_name || `${loc.device_latitude?.toFixed(4)}, ${loc.device_longitude?.toFixed(4)}`) : '';
+            const ci = r.caller_info || {};
+            const phone = ci.phone || '';
+            const netLoc = ci.network_location || [ci.network_city, ci.network_state, ci.network_country].filter(Boolean).join(', ');
+            const hasCallerInfo = phone || netLoc;
             return `<div class="dp-loc-card ${mismatch ? 'dp-loc-mismatch' : ''}">
-                <div class="dp-loc-row">
-                    <i class="fa-solid fa-location-dot" style="color:${sevColor};"></i>
+                <div class="dp-section-label"><i class="fa-solid fa-location-dot"></i> Location${hasCallerInfo ? ' & Contact' : ''}</div>
+                ${loc ? `<div class="dp-loc-row">
+                    <i class="fa-solid fa-map-pin" style="color:${sevColor};"></i>
                     <span class="dp-loc-name">${userName}</span>
                     <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${loc.latitude}, ${loc.longitude}'); showToast('Coords copied','success')"><i class="fa-solid fa-copy"></i></button>
-                </div>
+                </div>` : ''}
                 ${mismatch ? `<div class="dp-loc-row dp-loc-device">
                     <i class="fa-solid fa-mobile-screen" style="color:#94a3b8;"></i>
                     <span class="dp-loc-name" style="color:var(--text-sub);">${devName}</span>
                     <span class="dp-loc-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${distKm}km mismatch</span>
                 </div>` : ''}
+                ${hasCallerInfo ? `<div class="dp-loc-divider"></div>` : ''}
+                ${phone ? `<div class="dp-loc-row">
+                    <i class="fa-solid fa-phone" style="color:#a855f7;"></i>
+                    <a href="tel:${phone}" class="dp-caller-phone">${phone}</a>
+                    <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${phone}'); showToast('Phone copied','success')"><i class="fa-solid fa-copy"></i></button>
+                </div>` : ''}
+                ${netLoc ? `<div class="dp-loc-row">
+                    <i class="fa-solid fa-tower-cell" style="color:#94a3b8;"></i>
+                    <span class="dp-caller-net">Telecom: ${netLoc}</span>
+                </div>` : ''}
             </div>`;
         })() : ''}
 
-        <!-- Verification summary (visual indicators, not text) -->
-        ${vGaugeHtml}
-
-        <!-- Verify button -->
-        <div class="dp-actions-secondary">
-            <button class="dp-act-sm dp-act-verify" id="btn-verify-${r.id}" onclick="runVerification('${r.id}')">
-                <i class="fa-solid fa-satellite"></i> ${v ? 'Re-verify & Report' : 'Verify & Report'}
+        <!-- ⑥ Source Details (collapsible) -->
+        <div class="dp-source-details">
+            <button class="dp-expand-btn" onclick="const el=document.getElementById('dp-source-body');const ic=this.querySelector('i');if(el.style.display==='none'){el.style.display='block';ic.classList.replace('fa-chevron-down','fa-chevron-up');}else{el.style.display='none';ic.classList.replace('fa-chevron-up','fa-chevron-down');}">
+                <i class="fa-solid fa-chevron-down"></i> <span style="color:${{APP:'#7c3aed',WHATSAPP:'#25d366',TELEGRAM:'#26a5e4',SMS:'#f59e0b',IVR:'#ec4899'}[r.source] || '#94a3b8'};">Source Details — ${{APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || r.source}</span>
             </button>
-            <button class="dp-act-sm dp-act-delete" onclick="if(confirm('Delete this report permanently?')) deleteReport('${r.id}')">
-                <i class="fa-solid fa-trash"></i>
-            </button>
+            <div id="dp-source-body" style="display:none;" class="dp-source-detail-body">
+                <div class="dp-meta-row"><span class="dp-meta-key">Channel</span><span>${{APP:'Progressive Web App',WHATSAPP:'WhatsApp Bot',TELEGRAM:'Telegram Bot',SMS:'SMS Gateway',IVR:'IVR Voice Call'}[r.source] || r.source}</span></div>
+                <div class="dp-meta-row"><span class="dp-meta-key">Report ID</span><span style="font-family:monospace;font-size:11px;">${r.id.substring(0,12)}…</span></div>
+                <div class="dp-meta-row"><span class="dp-meta-key">Media</span><span>${r.received_media}/${r.expected_media} received</span></div>
+                <div class="dp-meta-row"><span class="dp-meta-key">Submitted</span><span>${new Date(ensureUTC(r.server_created_at)).toLocaleString()}</span></div>
+                ${r.is_auto_submitted ? `<div class="dp-meta-row"><span class="dp-meta-key">Auto</span><span style="color:#f59e0b;">Auto-submitted</span></div>` : ''}
+            </div>
         </div>
     `;
 
-    // ── Fixed action dock (always visible, no scrolling needed) ──
-    document.getElementById('dp-action-dock').innerHTML = `
-        ${r.status !== 'RESPONDING' ? `<button class="dp-dock-btn dp-dock-dispatch" onclick="patchReport('${r.id}','dispatch')"><i class="fa-solid fa-truck-medical"></i> DISPATCH</button>` : `<div class="dp-dock-status"><i class="fa-solid fa-truck-medical"></i> EN ROUTE</div>`}
-        ${r.status !== 'RESOLVED' ? `<button class="dp-dock-btn dp-dock-resolve" onclick="patchReport('${r.id}','resolve')"><i class="fa-solid fa-check-circle"></i> RESOLVE</button>` : ''}
-        ${r.status !== 'FALSE_ALARM' ? `<button class="dp-dock-btn dp-dock-false" onclick="patchReport('${r.id}','false-alarm')"><i class="fa-solid fa-ban"></i> FALSE</button>` : ''}
-    `;
+    // ── Action dock hidden — actions now in top bar ──
+    document.getElementById('dp-action-dock').innerHTML = '';
 
     if (loc && !skipFly) map.flyTo([loc.latitude, loc.longitude], 15);
     renderFeed();
@@ -1703,6 +1826,191 @@ window.runVerification = async (id) => {
             btn.disabled = false;
         }
     }
+};
+
+// ── AI Assessment (on-demand, full incident analysis) ────────────────────────
+window.runAIAssessment = async (id) => {
+    const r = allReports.find(x => x.id === id);
+    if (!r) return;
+
+    // Block if already assessed — prevent duplicate API calls
+    if (r.ai_assessment) {
+        showToast('AI assessment already completed for this incident', 'info');
+        return;
+    }
+
+    const topBtn = document.querySelector('.dp-run-ai-btn');
+    if (topBtn) {
+        topBtn.disabled = true;
+        topBtn.innerHTML = '<i class="fa-solid fa-brain fa-spin"></i> Analyzing…';
+    }
+
+    // Count nearby corroborating reports
+    const loc = r.location;
+    const nearbyReports = loc ? allReports.filter(rr => rr.id !== r.id && rr.location &&
+        haversineKm(loc.latitude, loc.longitude, rr.location.latitude, rr.location.longitude) < 5).length : 0;
+
+    // Build full multi-signal payload for AI
+    const payload = {
+        id: r.id, source: r.source, severity: r.severity,
+        infrastructure_type: r.infrastructure_type, status: r.status,
+        description: r.description || '',
+        transcription: r.ai_analysis?.transcription || '',
+        ai_summary: r.ai_analysis?.ai_summary || '',
+        location: loc ? { lat: loc.latitude, lng: loc.longitude, name: loc.user_location_name || loc.device_location_name || '' } : null,
+        media_count: r.media?.length || 0,
+        has_image: !!r.media?.find(m => m.type === 'IMAGE'),
+        has_audio: !!r.media?.find(m => m.type === 'AUDIO'),
+        verification: r.verification ? {
+            score: r.verification.total_score, verdict: r.verification.verdict,
+            scores: r.verification.scores || {},
+            photo_analysis: r.verification.photo_analysis || '',
+            satellite_scene: r.verification.satellite_scene_description || '',
+            key_findings: r.verification.key_findings || [],
+            caveats: r.verification.caveats || [],
+        } : null,
+        caller_info: r.caller_info || null,
+        nearby_reports: nearbyReports,
+    };
+
+    try {
+        const res = await fetch(`${BACKEND_HOST}/api/v1/reports/${id}/ai-assess`, {
+            method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const summary = data.summary || 'No summary available.';
+            const details = data.details || '';
+            const action = data.suggested_action || '';
+            const confScore = data.confidence_score ?? null;
+            const actionColor = action.includes('Dispatch') ? '#22c55e' : action.includes('False') ? '#ef4444' : action.includes('Suspicious') ? '#f97316' : action.includes('Monitor') ? '#eab308' : '#94a3b8';
+            // Store in report object and update classification from AI inference
+            const idx = allReports.findIndex(x => x.id === id);
+            if (idx >= 0) {
+                allReports[idx].ai_assessment = data;
+                // Update type/severity from AI (replaces old AI Extractor)
+                if (data.inferred_type) allReports[idx].infrastructure_type = data.inferred_type;
+                if (data.inferred_severity) allReports[idx].severity = data.inferred_severity;
+            }
+            // Re-render — top bar shows AI score, tree view updates type/severity
+            selectReport(id, true);
+            renderFeed();
+            showToast(`AI assessment: ${confScore}/100 — ${action}`, 'success');
+        } else {
+            showToast('AI assessment failed', 'error');
+            if (topBtn) { topBtn.disabled = false; topBtn.innerHTML = '<i class="fa-solid fa-brain"></i> Run AI Assessment'; }
+        }
+    } catch (e) {
+        showToast('AI assessment request failed', 'error');
+        if (topBtn) { topBtn.disabled = false; topBtn.innerHTML = '<i class="fa-solid fa-brain"></i> Run AI Assessment'; }
+    }
+};
+
+// ── PDF Export ────────────────────────────────────────────────────────────────
+window.exportPDF = (id) => {
+    const r = allReports.find(x => x.id === id);
+    if (!r) return;
+    const loc = r.location;
+    const ai = r.ai_analysis;
+    const v = r.verification;
+    const ci = r.caller_info;
+    const locName = loc?.user_location_name || loc?.device_location_name || (loc ? `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : 'Unknown');
+    const srcLabel = {APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || r.source;
+    const ts = new Date(ensureUTC(r.server_created_at)).toLocaleString();
+
+    // Gather all image URLs: user photo + primary satellite + alt satellite
+    const imgMedia = r.media?.find(m => m.type === 'IMAGE' && m.assembly_status === 'complete' && m.url);
+    const userImgUrl = imgMedia ? `${BACKEND_HOST}${imgMedia.url.startsWith('/') ? '' : '/static/'}${imgMedia.url.replace('/static/','')}` : '';
+    const satImgUrl = v?.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
+    const satAltImgUrl = v?.satellite_image_url_alt ? `${BACKEND_HOST}${v.satellite_image_url_alt}` : '';
+    const satSource1 = (v?.satellite_source || 'Satellite').split('(')[0].trim();
+    const satSource2 = (v?.satellite_source_alt || 'Alt Satellite').split('(')[0].trim();
+    const satDate1 = v?.satellite_acquisition_date ? new Date(v.satellite_acquisition_date).toLocaleDateString() : '';
+    const satDate2 = v?.satellite_acquisition_date_alt ? new Date(v.satellite_acquisition_date_alt).toLocaleDateString() : '';
+    const satRes1 = v?.satellite_resolution_m ? `${v.satellite_resolution_m}m` : '';
+    const satRes2 = v?.satellite_resolution_m_alt ? `${v.satellite_resolution_m_alt}m` : '';
+    const hasAnyImage = userImgUrl || satImgUrl || satAltImgUrl;
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>CRISP Incident Report — ${r.id.substring(0,8)}</title>
+    <style>
+      *{margin:0;padding:0;box-sizing:border-box;}
+      body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:28px 32px;max-width:800px;margin:0 auto;color:#1e293b;font-size:13px;}
+      .hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #7c3aed;padding-bottom:12px;margin-bottom:18px;}
+      .hdr h1{font-size:20px;color:#7c3aed;letter-spacing:-0.3px;}.hdr .rid{font-size:11px;color:#64748b;font-family:monospace;display:block;margin-top:2px;}
+      .badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;margin-right:4px;}
+      .sev-CRITICAL,.sev-SEVERE{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;}
+      .sev-MODERATE{background:#fffbeb;color:#d97706;border:1px solid #fde68a;}.sev-MINOR{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;}
+      .section{margin-bottom:14px;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;}
+      .section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#475569;margin-bottom:8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;}
+      .row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px;}.row .k{color:#64748b;font-weight:600;}.row .v{color:#1e293b;}
+      .desc{font-size:13px;line-height:1.6;color:#334155;white-space:pre-wrap;}
+      .img-grid{display:flex;gap:10px;margin-top:8px;}
+      .img-card{flex:1;text-align:center;min-width:0;}
+      .img-card img{width:100%;height:180px;border-radius:6px;border:1px solid #e2e8f0;object-fit:cover;}
+      .img-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#475569;margin-top:5px;}
+      .img-ts{font-size:9px;color:#94a3b8;margin-top:1px;}
+      .print-bar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:16px;}
+      .print-bar button{padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;}
+      .btn-print{background:#7c3aed;color:#fff;}.btn-save{background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;}
+      .footer{margin-top:24px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;text-align:center;}
+      @media print{.print-bar{display:none !important;}body{padding:12px;}}
+    </style></head><body>
+
+    <div class="print-bar">
+      <button class="btn-save" onclick="document.title='CRISP-Report-${r.id.substring(0,8)}';window.print();">Save as PDF</button>
+      <button class="btn-print" onclick="window.print();">Print</button>
+    </div>
+
+    <div class="hdr"><div><h1>CRISP Incident Report</h1><span class="rid">ID: ${r.id}</span></div><div style="text-align:right;"><div style="font-size:13px;font-weight:700;">${r.infrastructure_type.replace(/_/g,' ')}</div><span class="badge sev-${r.severity}">${r.severity}</span><span class="badge" style="background:#f1f5f9;border:1px solid #cbd5e1;">${r.status}</span></div></div>
+
+    <div class="section"><div class="section-title">Incident Overview</div>
+      <div class="row"><span class="k">Type</span><span class="v">${r.infrastructure_type.replace(/_/g,' ')}</span></div>
+      <div class="row"><span class="k">Severity</span><span class="v">${r.severity}</span></div>
+      <div class="row"><span class="k">Status</span><span class="v">${r.status}</span></div>
+      <div class="row"><span class="k">Source</span><span class="v">${srcLabel}</span></div>
+      <div class="row"><span class="k">Reported</span><span class="v">${ts}</span></div>
+      ${ci?.phone ? `<div class="row"><span class="k">Caller</span><span class="v">${ci.phone}</span></div>` : ''}
+    </div>
+
+    <div class="section"><div class="section-title">Location</div>
+      <div class="row"><span class="k">Name</span><span class="v">${locName}</span></div>
+      ${loc ? `<div class="row"><span class="k">Coordinates</span><span class="v">${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}</span></div>` : ''}
+      ${ci?.network_location ? `<div class="row"><span class="k">Telecom Circle</span><span class="v">${ci.network_location}</span></div>` : ''}
+    </div>
+
+    <div class="section"><div class="section-title">Description</div>
+      <div class="desc">${r.description || ai?.transcription || 'No description available.'}</div>
+    </div>
+
+    ${hasAnyImage ? `
+    <div class="section"><div class="section-title">Visual Evidence</div>
+      <div class="img-grid">
+        ${userImgUrl ? `<div class="img-card"><img src="${userImgUrl}" onerror="this.parentElement.style.display='none'"><div class="img-label">Reported Photo</div><div class="img-ts">${ts}</div></div>` : ''}
+        ${satImgUrl ? `<div class="img-card"><img src="${satImgUrl}" onerror="this.parentElement.style.display='none'"><div class="img-label">${satSource1}</div><div class="img-ts">${satDate1}${satRes1 ? ' · ' + satRes1 + ' res' : ''}</div></div>` : ''}
+        ${satAltImgUrl ? `<div class="img-card"><img src="${satAltImgUrl}" onerror="this.parentElement.style.display='none'"><div class="img-label">${satSource2}</div><div class="img-ts">${satDate2}${satRes2 ? ' · ' + satRes2 + ' res' : ''}</div></div>` : ''}
+      </div>
+    </div>` : ''}
+
+    ${ai?.ai_summary ? `<div class="section"><div class="section-title">AI Analysis</div><div class="desc">${ai.ai_summary}</div></div>` : ''}
+
+    ${v ? `<div class="section"><div class="section-title">Satellite Verification</div>
+      <div class="row"><span class="k">Score</span><span class="v" style="font-weight:700;">${v.total_score}/100</span></div>
+      <div class="row"><span class="k">Verdict</span><span class="v">${(v.verdict || '').replace(/_/g,' ')}</span></div>
+      ${v.key_findings?.length ? `<div style="margin-top:6px;font-size:12px;"><strong>Findings:</strong><ul style="margin:4px 0 0 16px;">${v.key_findings.map(f=>'<li>'+f+'</li>').join('')}</ul></div>` : ''}
+    </div>` : ''}
+
+    <div class="section"><div class="section-title">Media Summary</div>
+      <div class="row"><span class="k">Attachments</span><span class="v">${r.received_media} of ${r.expected_media} received</span></div>
+      <div class="row"><span class="k">Images</span><span class="v">${r.media?.filter(m=>m.type==='IMAGE').length || 0}</span></div>
+      <div class="row"><span class="k">Audio Recordings</span><span class="v">${r.media?.filter(m=>m.type==='AUDIO').length || 0}</span></div>
+    </div>
+
+    <div class="footer">Generated by CRISP — Crisis Response Intelligence & Situation Platform · ${new Date().toLocaleString()}</div>
+    </body></html>`;
+
+    const w = window.open('', '_blank', 'width=850,height=1100');
+    w.document.write(html);
+    w.document.close();
 };
 
 // ── Report Actions ───────────────────────────────────────────────────────────
@@ -2106,28 +2414,16 @@ window.closeDeletionsPanel = function () {
 window.purgeAllDeletions = async function () {
     if (!confirm(`Permanently delete all ${_pendingDeletions.length} pending deletion(s)? This cannot be undone.`)) return;
     try {
-        // Delete each report permanently by calling the purge endpoint
-        const res = await fetch(`${API}/purge-expired`, { method: 'POST' });
+        const res = await fetch(`${API}/purge-all-pending`, { method: 'POST' });
         if (res.ok) {
             const result = await res.json();
-            showToast(`Purged ${result.purged} expired report(s)`, 'success');
+            showToast(`${result.purged} report(s) permanently deleted`, 'success');
+            _pendingDeletions = [];
+            showPendingDeletions();
+            fetchReports();
+        } else {
+            showToast('Purge failed', 'error');
         }
-        // Also force-delete any that haven't expired yet
-        for (const r of _pendingDeletions) {
-            const delAt = new Date(ensureUTC(r.deletion_requested_at));
-            if ((Date.now() - delAt.getTime()) <= 86400000) {
-                // Not yet expired — force delete by setting deletion_requested_at to 25h ago
-                // We'll use a direct delete approach instead
-                try {
-                    await fetch(`${API}/${r.id}/undo-delete`, { method: 'POST' });
-                    await fetch(`${API}/${r.id}`, { method: 'DELETE' });
-                } catch (_) {}
-            }
-        }
-        showToast(`All ${_pendingDeletions.length} deletion(s) processed`, 'success');
-        _pendingDeletions = [];
-        showPendingDeletions();
-        fetchReports();
     } catch (e) {
         showToast('Purge failed — check connection', 'error');
     }

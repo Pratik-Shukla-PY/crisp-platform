@@ -59,6 +59,7 @@ class ReportMetaCreate(BaseModel):
     severity: SeverityEnum = SeverityEnum.UNKNOWN
     infrastructure_type: InfraTypeEnum = InfraTypeEnum.OTHER
     description: Optional[str] = None
+    caller_info: Optional[Any] = None  # Phone, network city/state for IVR/SMS
     is_auto_submitted: bool = False
     client_created_at: Optional[datetime] = None
     location: Optional[LocationBase] = None
@@ -97,6 +98,7 @@ class AIAnalysisResponse(BaseModel):
     damage_score: Optional[float] = None
     ai_severity: Optional[SeverityEnum] = None
     transcription: Optional[str] = None
+    ai_summary: Optional[str] = None
     detected_labels: Optional[List[Any]] = []
     model_config = ConfigDict(from_attributes=True)
 
@@ -144,6 +146,8 @@ class ReportResponse(BaseModel):
     severity: SeverityEnum
     infrastructure_type: InfraTypeEnum
     description: Optional[str] = None
+    caller_info: Optional[Any] = None
+    ai_assessment: Optional[Any] = None
     is_auto_submitted: bool = False
     expected_media: int = 0
     received_media: int = 0
