@@ -35,9 +35,9 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: crisp
-      POSTGRES_USER: crisp
-      POSTGRES_PASSWORD: crisp
+      POSTGRES_DB: ${POSTGRES_DB:-crisp}
+      POSTGRES_USER: ${POSTGRES_USER:-crisp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

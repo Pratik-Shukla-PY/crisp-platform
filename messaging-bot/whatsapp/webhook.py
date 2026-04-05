@@ -64,7 +64,8 @@ def _mask_phone(phone: str) -> str:
 def _validate_signature(payload: bytes, signature: str) -> bool:
     """Validate X-Hub-Signature-256 header using HMAC-SHA256."""
     if not APP_SECRET:
-        return True  # Skip in dev mode (no secret configured)
+        logger.warning("WHATSAPP_APP_SECRET not configured — rejecting webhook for security")
+        return False  # Reject when secret not configured (secure by default)
     expected = "sha256=" + hmac.new(
         APP_SECRET.encode(), payload, hashlib.sha256
     ).hexdigest()

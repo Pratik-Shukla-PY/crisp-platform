@@ -12,23 +12,62 @@ Startup sequence:
   5. Start deletion purge worker (every 15 min)
 """
 import os
+import re
 import logging
+import time
+from collections import defaultdict
 from dotenv import load_dotenv
 
 # Load .env into os.environ BEFORE any service singletons are imported
 _env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
 load_dotenv(dotenv_path=_env_path, override=True)
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from app.api.router import api_router
 
-# Configure logging to show debug messages
+# Environment-aware logging (default INFO, set LOG_LEVEL=DEBUG for dev)
+_log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=getattr(logging, _log_level, logging.INFO),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+logger = logging.getLogger(__name__)
+
+
+# ── Security: Admin API Key ──────────────────────────────────────────────────
+ADMIN_KEY = os.getenv("CRISP_ADMIN_KEY", "")
+
+def verify_admin_key(request: Request):
+    """Dependency: require X-Admin-Key header for admin-only endpoints."""
+    if not ADMIN_KEY:
+        return  # No key configured = dev mode (all allowed)
+    key = request.headers.get("X-Admin-Key", "")
+    if key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing admin key")
+
+
+# ── Security: Rate Limiter ───────────────────────────────────────────────────
+_rate_limits = defaultdict(list)
+
+def check_rate_limit(key: str, max_requests: int = 30, window: int = 60) -> bool:
+    """In-memory rate limiter. Returns False if limit exceeded."""
+    now = time.time()
+    _rate_limits[key] = [t for t in _rate_limits[key] if now - t < window]
+    if len(_rate_limits[key]) >= max_requests:
+        return False
+    _rate_limits[key].append(now)
+    return True
+
+
+# ── Security: Path sanitization ──────────────────────────────────────────────
+def safe_filename(name: str) -> str:
+    """Remove path traversal characters, ensure filename is safe."""
+    name = os.path.basename(name)
+    name = re.sub(r'[^\w\-.]', '_', name)
+    return name
 
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
@@ -48,14 +87,22 @@ app = FastAPI(
     description="Community-driven Rapid Infrastructure Sensing Platform Backend API"
 )
 
-# CORS Configuration for the Web Dashboard integration
+# CORS — restricted to configured origins (default: localhost dev)
+_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:8080,http://localhost:8000,http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in _cors_origins],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Admin-Key"],
 )
+
+
+# Global exception handler — never leak stack traces to clients
+@app.exception_handler(Exception)
+async def _global_error_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled error: {type(exc).__name__}: {exc}", exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
