@@ -32,8 +32,8 @@
         <div class="command-stats">
             <div class="stat-pill critical clickable-pill" id="stat-critical" onclick="filterByPill('critical')" title="Click to filter critical/severe incidents"><span id="count-critical">0</span><label>CRITICAL</label></div>
             <div class="stat-pill pending clickable-pill" id="stat-pending" onclick="filterByPill('pending')" title="Click to filter pending incidents"><span id="count-pending">0</span><label>PENDING</label></div>
-            <div class="stat-pill responding clickable-pill" id="stat-responding" onclick="filterByPill('responding')" title="Click to filter dispatched incidents"><span id="count-responding">0</span><label>DISPATCHED</label></div>
-            <div class="stat-pill resolved clickable-pill" id="stat-resolved" onclick="filterByPill('resolved')" title="Click to filter resolved incidents"><span id="count-resolved">0</span><label>RESOLVED</label></div>
+            <div class="stat-pill responding clickable-pill" id="stat-responding" onclick="filterByPill('responding')" title="Click to filter helped incidents"><span id="count-responding">0</span><label>HELPED</label></div>
+            <div class="stat-pill resolved clickable-pill" id="stat-resolved" onclick="filterByPill('resolved')" title="Click to filter closed incidents"><span id="count-resolved">0</span><label>CLOSED</label></div>
             <div class="stat-pill total clickable-pill" id="stat-total" onclick="filterByPill('all')" title="Show all incidents"><span id="count-total">0</span><label>TOTAL</label></div>
             <div class="stat-pill avg-response" id="stat-avg-response" title="Average wait time of pending incidents"><span id="count-avg-response">—</span><label>AVG WAIT</label></div>
             <button class="stat-pill analytics-toggle" onclick="toggleAnalytics()" title="Analytics Dashboard">
@@ -71,7 +71,7 @@
                     <div class="ac-kpi-sub" id="kpi-wait-sub"></div>
                 </div>
                 <div class="ac-kpi-card">
-                    <div class="ac-kpi-header"><span>Resolved Today</span></div>
+                    <div class="ac-kpi-header"><span>Closed Today</span></div>
                     <div class="ac-kpi-value" id="kpi-resolved" style="color:#22c55e;">0</div>
                     <div class="ac-kpi-sub" id="kpi-resolved-sub"></div>
                 </div>
@@ -150,32 +150,24 @@
     <aside class="feed-panel glass-panel">
         <div class="feed-header">
             <div class="feed-title">
-                <i class="fa-solid fa-tower-broadcast text-accent"></i>
-                <h2>Response Queue</h2>
-                <span class="feed-count" id="feed-count-badge">0 Active</span>
+                <h2><i class="fa-solid fa-satellite-dish" style="color:var(--accent);margin-right:6px;font-size:14px;"></i>Incident Feed</h2>
+                <span class="feed-count" id="feed-count-badge">0</span>
             </div>
-            <div class="header-tools" style="display:flex;align-items:center;gap:6px;">
-                <div class="view-toggle">
-                    <button class="view-btn active" data-mode="queue" onclick="setViewMode('queue')"><i class="fa-solid fa-bolt"></i> Queue</button>
-                    <button class="view-btn" data-mode="tree" onclick="setViewMode('tree')"><i class="fa-solid fa-sitemap"></i> Tree</button>
-                </div>
+            <div class="view-toggle">
+                <button class="view-btn active" data-mode="queue" onclick="setViewMode('queue')"><i class="fa-solid fa-layer-group"></i></button>
+                <button class="view-btn" data-mode="tree" onclick="setViewMode('tree')"><i class="fa-solid fa-sitemap"></i></button>
             </div>
         </div>
 
         <!-- Tree-mode controls (hidden in queue mode) -->
         <div id="tree-controls" style="display:none;">
-            <div class="header-tools" style="padding:0 8px 6px;">
-                <select id="sort-select" class="sort-select" onchange="sortMode=this.value; renderFeed()">
-                    <option value="impact">Impact Score</option>
-                    <option value="recent">Most Recent</option>
-                    <option value="infra">Critical Infra</option>
-                    <option value="density">Highest Density</option>
-                </select>
+            <div style="padding:0 8px 6px;">
+                <input type="text" id="tree-search" class="tree-search" placeholder="Search by location, type, description..." oninput="treeSearchTerm=this.value.toLowerCase();renderFeed()">
             </div>
             <div class="status-tabs">
-                <button class="stab active" id="stab-active" onclick="setStatusFilter('active')">Active</button>
-                <button class="stab" id="stab-responding" onclick="setStatusFilter('responding')">Dispatched</button>
-                <button class="stab" id="stab-resolved" onclick="setStatusFilter('resolved')">Resolved</button>
+                <button class="stab active" id="stab-active" onclick="setStatusFilter('active')">Needs Help</button>
+                <button class="stab" id="stab-responding" onclick="setStatusFilter('responding')">Helped</button>
+                <button class="stab" id="stab-resolved" onclick="setStatusFilter('resolved')">Closed</button>
                 <button class="stab" id="stab-all" onclick="setStatusFilter('all')">All</button>
             </div>
         </div>
@@ -198,7 +190,7 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-<script src="app.js?v=490"></script>
+<script src="app.js?v=516"></script>
 
 <!-- Offline status banner -->
 <div id="offline-banner" style="

@@ -12,6 +12,8 @@ class SourceEnum(str, enum.Enum):
     APP = "APP"
     WHATSAPP = "WHATSAPP"
     TELEGRAM = "TELEGRAM"
+    SMS = "SMS"
+    IVR = "IVR"
 
 class SeverityEnum(str, enum.Enum):
     MINOR = "MINOR"
@@ -78,6 +80,8 @@ class Report(Base):
     severity = Column(Enum(SeverityEnum), default=SeverityEnum.UNKNOWN, nullable=False)
     infrastructure_type = Column(Enum(InfraTypeEnum), default=InfraTypeEnum.OTHER, nullable=False)
     description = Column(String)
+    caller_info = Column(JSON, nullable=True)  # Phone number, network city/state for IVR/SMS/Telegram
+    ai_assessment = Column(JSON, nullable=True)  # Cached AI assessment {score, action, summary, details}
     is_auto_submitted = Column(Boolean, default=False, nullable=False)
     expected_media = Column(Integer, default=0, nullable=False)   # How many media files expected
     received_media = Column(Integer, default=0, nullable=False)   # How many received so far
@@ -150,7 +154,8 @@ class AIAnalysis(Base):
     report_id = Column(String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False)
     damage_score = Column(Float)
     ai_severity = Column(Enum(SeverityEnum))
-    transcription = Column(String)
+    transcription = Column(String)        # Raw Whisper transcription (may be rough)
+    ai_summary = Column(String)           # Claude AI-cleaned English interpretation
     detected_labels = Column(JSON, default=list)
     processing_time_ms = Column(Integer)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

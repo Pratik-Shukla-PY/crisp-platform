@@ -1,11 +1,17 @@
 """
-CRISP Satellite Truth Scorer — powered by Claude claude-3-5-haiku-20241022
+CRISP Satellite Truth Scorer — powered by Claude Haiku (vision-capable)
 ──────────────────────────────────────────────────────────────
 Sends two images + full report context to Claude (multi-modal):
   Image 1 — satellite top-down view of the reported GPS coordinates
   Image 2 — ground-level photo submitted by the citizen reporter
   Text    — description, audio transcription, claimed infra type / severity,
              temporal gap between satellite acquisition and report timestamp,
+
+Uses prompt caching: the scoring rubric (~800 tokens) is sent as a cached
+system prompt, saving ~90% on repeated verification calls.
+
+Triggered by admin clicking "Verify via Satellite" on the dashboard.
+Result stored in satellite_verifications table.
              satellite cloud cover, source metadata
 
 Returns a structured JSON dict with:
@@ -206,7 +212,6 @@ class TruthScorer:
 
         # ── Part 4: full context text ─────────────────────────────────────────
         content.append({"type": "text", "text": (
-            f"{_PROMPT}\n\n"
             f"REPORT CONTEXT:\n"
             f"  Report ID:              {report_id}\n"
             f"  Claimed infrastructure: {infrastructure_type}\n"
@@ -234,6 +239,7 @@ class TruthScorer:
                 model=ANTHROPIC_MODEL,
                 max_tokens=1200,
                 temperature=0.1,
+                system=[{"type": "text", "text": _PROMPT, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": content}],
             )
 

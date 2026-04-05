@@ -24,13 +24,16 @@ _STRINGS = {
         "step_loc": "📍 *Step 1:* Share your location\n\nTap the button below 👇",
         "step_loc_btn": "📍 Share My Location",
         "step_loc_done": "✅ Location received!",
-        "step_photo": "📸 *Step 2:* Take a photo of the damage\n\nSend a photo now 👇",
-        "step_voice": "🎙 *Step 3:* Describe what happened\n\nSend a *voice note* 🎤\nor *type* a message ⌨️",
-        "step_sev": "⚠️ *Step 4:* How bad is it?",
-        "step_type": "🏗 *Step 5:* What is damaged?",
+        "step_photo": "📸 *Step 4:* Take a photo of the damage\n\nSend a photo now 👇",
+        "step_voice": "🎙 *Step 5:* Describe what happened\n\nSend a *voice note* 🎤\nor *type* a message ⌨️",
+        "step_text": "📝 *Step 6:* Anything else to add?\n\nType a message or tap Submit 👇",
+        "step_text_skip": "✅ Submit Report",
+        "step_type": "🏗 *Step 2:* What is damaged?",
+        "step_sev": "⚠️ *Step 3:* How bad is it?",
         "submitting": "⏳ Sending your report...",
         "done_1": "✅ *Report Sent!*",
         "done_2": "Rescue teams will see this. Thank you. 🙏",
+        "done_another_prompt": "👇 *Need to report another incident?*",
         "done_another": "🚨 Report Another Incident",
         "done_stop": "✅ Done for now",
         "error": "⚠️ Something went wrong. Please try again.",
@@ -45,13 +48,16 @@ _STRINGS = {
         "step_loc": "📍 *चरण 1:* अपना स्थान भेजें\n\nनीचे बटन दबाएं 👇",
         "step_loc_btn": "📍 मेरा स्थान भेजें",
         "step_loc_done": "✅ स्थान मिल गया!",
-        "step_photo": "📸 *चरण 2:* नुकसान की फोटो भेजें\n\nअभी फोटो भेजें 👇",
-        "step_voice": "🎙 *चरण 3:* क्या हुआ बताएं\n\n🎤 *आवाज़ संदेश* भेजें\nया ⌨️ *लिखें*",
-        "step_sev": "⚠️ *चरण 4:* कितना बुरा है?",
-        "step_type": "🏗 *चरण 5:* क्या टूटा है?",
+        "step_type": "🏗 *चरण 2:* क्या टूटा है?",
+        "step_sev": "⚠️ *चरण 3:* कितना बुरा है?",
+        "step_photo": "📸 *चरण 4:* नुकसान की फोटो भेजें\n\nअभी फोटो भेजें 👇",
+        "step_voice": "🎙 *चरण 5:* क्या हुआ बताएं\n\n🎤 *आवाज़ संदेश* भेजें\nया ⌨️ *लिखें*",
+        "step_text": "📝 *चरण 6:* कुछ और बताना है?\n\nलिखें या भेजें दबाएं 👇",
+        "step_text_skip": "✅ रिपोर्ट भेजें",
         "submitting": "⏳ रिपोर्ट भेज रहे हैं...",
         "done_1": "✅ *रिपोर्ट भेज दी!*",
         "done_2": "बचाव दल इसे देखेंगे। धन्यवाद। 🙏",
+        "done_another_prompt": "👇 *एक और घटना रिपोर्ट करनी है?*",
         "done_another": "🚨 एक और रिपोर्ट करें",
         "done_stop": "✅ बस हो गया",
         "error": "⚠️ कुछ गलत हुआ। फिर से कोशिश करें।",
@@ -66,13 +72,16 @@ _STRINGS = {
         "step_loc": "📍 *Paso 1:* Comparte tu ubicación\n\nToca el botón abajo 👇",
         "step_loc_btn": "📍 Compartir Ubicación",
         "step_loc_done": "✅ ¡Ubicación recibida!",
-        "step_photo": "📸 *Paso 2:* Envía foto del daño 👇",
-        "step_voice": "🎙 *Paso 3:* Describe qué pasó\n\n🎤 *Audio* o ⌨️ *escribe*",
-        "step_sev": "⚠️ *Paso 4:* ¿Qué tan grave es?",
-        "step_type": "🏗 *Paso 5:* ¿Qué se dañó?",
+        "step_type": "🏗 *Paso 2:* ¿Qué se dañó?",
+        "step_sev": "⚠️ *Paso 3:* ¿Qué tan grave es?",
+        "step_photo": "📸 *Paso 4:* Envía foto del daño 👇",
+        "step_voice": "🎙 *Paso 5:* Describe qué pasó\n\n🎤 *Audio* o ⌨️ *escribe*",
+        "step_text": "📝 *Paso 6:* ¿Algo más?\n\nEscribe o envía 👇",
+        "step_text_skip": "✅ Enviar Reporte",
         "submitting": "⏳ Enviando reporte...",
         "done_1": "✅ *¡Reporte Enviado!*",
         "done_2": "Los equipos de rescate lo verán. Gracias. 🙏",
+        "done_another_prompt": "👇 *¿Necesita reportar otro incidente?*",
         "done_another": "🚨 Reportar Otro Incidente",
         "done_stop": "✅ Listo",
         "error": "⚠️ Algo salió mal. Intenta de nuevo.",
@@ -87,13 +96,16 @@ _STRINGS = {
         "step_loc": "📍 *Étape 1:* Partagez votre position\n\nAppuyez ci-dessous 👇",
         "step_loc_btn": "📍 Partager Ma Position",
         "step_loc_done": "✅ Position reçue !",
-        "step_photo": "📸 *Étape 2:* Photo du dégât 👇",
-        "step_voice": "🎙 *Étape 3:* Décrivez\n\n🎤 *Vocal* ou ⌨️ *écrivez*",
-        "step_sev": "⚠️ *Étape 4:* C'est grave comment ?",
-        "step_type": "🏗 *Étape 5:* Qu'est-ce qui est endommagé ?",
+        "step_type": "🏗 *Étape 2:* Qu'est-ce qui est endommagé ?",
+        "step_sev": "⚠️ *Étape 3:* C'est grave comment ?",
+        "step_photo": "📸 *Étape 4:* Photo du dégât 👇",
+        "step_voice": "🎙 *Étape 5:* Décrivez\n\n🎤 *Vocal* ou ⌨️ *écrivez*",
+        "step_text": "📝 *Étape 6:* Autre chose ?\n\nÉcrivez ou envoyez 👇",
+        "step_text_skip": "✅ Envoyer",
         "submitting": "⏳ Envoi du rapport...",
         "done_1": "✅ *Rapport Envoyé !*",
         "done_2": "Les secours le verront. Merci. 🙏",
+        "done_another_prompt": "👇 *Signaler un autre incident ?*",
         "done_another": "🚨 Signaler un Autre Incident",
         "done_stop": "✅ C'est tout",
         "error": "⚠️ Erreur. Réessayez.",
@@ -108,13 +120,16 @@ _STRINGS = {
         "step_loc": "📍 *الخطوة 1:* شارك موقعك\n\nاضغط الزر أدناه 👇",
         "step_loc_btn": "📍 مشاركة موقعي",
         "step_loc_done": "✅ تم استلام الموقع!",
-        "step_photo": "📸 *الخطوة 2:* صورة الضرر 👇",
-        "step_voice": "🎙 *الخطوة 3:* صف ما حدث\n\n🎤 *صوت* أو ⌨️ *اكتب*",
-        "step_sev": "⚠️ *الخطوة 4:* ما مدى الخطورة؟",
-        "step_type": "🏗 *الخطوة 5:* ماذا تضرر؟",
+        "step_type": "🏗 *الخطوة 2:* ماذا تضرر؟",
+        "step_sev": "⚠️ *الخطوة 3:* ما مدى الخطورة؟",
+        "step_photo": "📸 *الخطوة 4:* صورة الضرر 👇",
+        "step_voice": "🎙 *الخطوة 5:* صف ما حدث\n\n🎤 *صوت* أو ⌨️ *اكتب*",
+        "step_text": "📝 *الخطوة 6:* شيء آخر؟\n\nاكتب أو أرسل 👇",
+        "step_text_skip": "✅ إرسال",
         "submitting": "⏳ جارٍ الإرسال...",
         "done_1": "✅ *تم إرسال التقرير!*",
         "done_2": "فرق الإنقاذ ستراه. شكراً. 🙏",
+        "done_another_prompt": "👇 *هل تريد الإبلاغ عن حادث آخر؟*",
         "done_another": "🚨 الإبلاغ عن حادث آخر",
         "done_stop": "✅ انتهيت",
         "error": "⚠️ حدث خطأ. حاول مرة أخرى.",
@@ -129,13 +144,16 @@ _STRINGS = {
         "step_loc": "📍 *Passo 1:* Compartilhe sua localização\n\nToque abaixo 👇",
         "step_loc_btn": "📍 Compartilhar Localização",
         "step_loc_done": "✅ Localização recebida!",
-        "step_photo": "📸 *Passo 2:* Foto do dano 👇",
-        "step_voice": "🎙 *Passo 3:* Descreva\n\n🎤 *Áudio* ou ⌨️ *escreva*",
-        "step_sev": "⚠️ *Passo 4:* Qual a gravidade?",
-        "step_type": "🏗 *Passo 5:* O que foi danificado?",
+        "step_type": "🏗 *Passo 2:* O que foi danificado?",
+        "step_sev": "⚠️ *Passo 3:* Qual a gravidade?",
+        "step_photo": "📸 *Passo 4:* Foto do dano 👇",
+        "step_voice": "🎙 *Passo 5:* Descreva\n\n🎤 *Áudio* ou ⌨️ *escreva*",
+        "step_text": "📝 *Passo 6:* Mais alguma coisa?\n\nDigite ou envie 👇",
+        "step_text_skip": "✅ Enviar",
         "submitting": "⏳ Enviando relatório...",
         "done_1": "✅ *Relatório Enviado!*",
         "done_2": "Equipes de resgate verão isso. Obrigado. 🙏",
+        "done_another_prompt": "👇 *Precisa relatar outro incidente?*",
         "done_another": "🚨 Relatar Outro",
         "done_stop": "✅ Pronto",
         "error": "⚠️ Erro. Tente novamente.",
@@ -150,13 +168,16 @@ _STRINGS = {
         "step_loc": "📍 *Hatua 1:* Tuma eneo lako\n\nBonyeza kitufe hapo chini 👇",
         "step_loc_btn": "📍 Tuma Eneo Langu",
         "step_loc_done": "✅ Eneo limepokelewa!",
-        "step_photo": "📸 *Hatua 2:* Picha ya uharibifu 👇",
-        "step_voice": "🎙 *Hatua 3:* Eleza\n\n🎤 *Sauti* au ⌨️ *andika*",
-        "step_sev": "⚠️ *Hatua 4:* Ni mbaya kiasi gani?",
-        "step_type": "🏗 *Hatua 5:* Nini kimeharibiwa?",
+        "step_type": "🏗 *Hatua 2:* Nini kimeharibiwa?",
+        "step_sev": "⚠️ *Hatua 3:* Ni mbaya kiasi gani?",
+        "step_photo": "📸 *Hatua 4:* Picha ya uharibifu 👇",
+        "step_voice": "🎙 *Hatua 5:* Eleza\n\n🎤 *Sauti* au ⌨️ *andika*",
+        "step_text": "📝 *Hatua 6:* Kitu kingine?\n\nAndika au tuma 👇",
+        "step_text_skip": "✅ Tuma",
         "submitting": "⏳ Inatuma ripoti...",
         "done_1": "✅ *Ripoti Imetumwa!*",
         "done_2": "Timu za uokoaji wataona. Asante. 🙏",
+        "done_another_prompt": "👇 *Unahitaji kuripoti tukio lingine?*",
         "done_another": "🚨 Ripoti Nyingine",
         "done_stop": "✅ Nimemaliza",
         "error": "⚠️ Kuna tatizo. Jaribu tena.",
@@ -166,25 +187,37 @@ _STRINGS = {
     },
 }
 
-# Fallback to English for unsupported languages
+# Map unsupported language codes to the closest supported language
+# Same fallback logic as mobile app (Indian langs → hi, African → sw/fr, etc.)
+_LANG_FALLBACK = {
+    "kn": "hi", "ta": "hi", "te": "hi", "ml": "hi", "mr": "hi",
+    "gu": "hi", "pa": "hi", "bn": "hi", "or": "hi", "as": "hi",
+    "ur": "hi", "ne": "hi", "si": "hi",
+    "am": "sw", "rw": "sw", "so": "sw",
+    "de": "en", "it": "en", "nl": "en", "pl": "en", "ro": "en",
+    "ru": "en", "uk": "en", "cs": "en", "sk": "en", "hu": "en",
+    "bg": "en", "sr": "en", "hr": "en", "sl": "en",
+    "sv": "en", "no": "en", "da": "en", "fi": "en",
+    "zh": "en", "ja": "en", "ko": "en", "th": "en", "vi": "en",
+    "id": "en", "ms": "en", "tl": "en", "km": "en", "lo": "en", "my": "en",
+    "tr": "en", "fa": "en", "he": "en", "el": "en",
+    "az": "en", "ka": "en", "hy": "en",
+}
+
+
 def t(lang: str, key: str) -> str:
-    """Get translated string, fallback to English."""
-    strings = _STRINGS.get(lang, _STRINGS["en"])
+    """Get translated string. Falls back through chain: lang → fallback → English."""
+    resolved = lang if lang in _STRINGS else _LANG_FALLBACK.get(lang, "en")
+    strings = _STRINGS.get(resolved, _STRINGS["en"])
     return strings.get(key, _STRINGS["en"].get(key, key))
 
 
 def detect_lang(user: dict) -> str:
-    """Detect language from Telegram user's language_code."""
+    """Detect language from Telegram user's language_code (initial guess before location override)."""
     code = (user.get("language_code") or "en").split("-")[0].lower()
     if code in _STRINGS:
         return code
-    # Map common codes to closest match
-    MAP = {"bn": "hi", "ur": "hi", "ne": "hi", "ta": "hi", "kn": "hi",
-           "te": "hi", "mr": "hi", "gu": "hi", "pa": "hi",
-           "ru": "en", "uk": "en", "de": "en", "it": "en",
-           "id": "en", "ms": "en", "th": "en", "vi": "en",
-           "zh": "en", "ja": "en", "ko": "en", "tr": "en",
-           "am": "sw", "rw": "sw"}
+    return _LANG_FALLBACK.get(code, "en")
     return MAP.get(code, "en")
 
 
@@ -241,14 +274,14 @@ async def send_step_location(chat_id: int, lang: str):
 
 
 async def send_step_photo(chat_id: int, lang: str):
-    """Ask for photo — mandatory, no skip."""
+    """Ask for photo — mandatory."""
     await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_photo"),
         "parse_mode": "Markdown",
         "reply_markup": {
             "inline_keyboard": [
-                [{"text": "🗑 Cancel", "callback_data": "cancel_report"}],
+                [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
             ],
         },
     })
@@ -265,11 +298,14 @@ async def send_step_severity(chat_id: int, lang: str):
         "text": t(lang, "step_sev"),
         "parse_mode": "Markdown",
         "reply_markup": {
-            "inline_keyboard": [[
-                {"text": t(lang, "sev_1"), "callback_data": "sev_severe"},
-                {"text": t(lang, "sev_2"), "callback_data": "sev_moderate"},
-                {"text": t(lang, "sev_3"), "callback_data": "sev_minor"},
-            ]],
+            "inline_keyboard": [
+                [
+                    {"text": t(lang, "sev_1"), "callback_data": "sev_severe"},
+                    {"text": t(lang, "sev_2"), "callback_data": "sev_moderate"},
+                    {"text": t(lang, "sev_3"), "callback_data": "sev_minor"},
+                ],
+                [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
+            ],
         },
     })
 
@@ -287,6 +323,7 @@ async def send_step_type(chat_id: int, lang: str):
                  {"text": t(lang, "type_power"), "callback_data": "type_power"}],
                 [{"text": t(lang, "type_water"), "callback_data": "type_water"},
                  {"text": t(lang, "type_other"), "callback_data": "type_other"}],
+                [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
             ],
         },
     })
@@ -300,7 +337,22 @@ async def send_step_voice(chat_id: int, lang: str):
         "parse_mode": "Markdown",
         "reply_markup": {
             "inline_keyboard": [
-                [{"text": "🗑 Cancel", "callback_data": "cancel_report"}],
+                [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
+            ],
+        },
+    })
+
+
+async def send_step_text(chat_id: int, lang: str):
+    """Ask for optional text description after audio — or skip to submit."""
+    await _send("sendMessage", {
+        "chat_id": chat_id,
+        "text": t(lang, "step_text"),
+        "parse_mode": "Markdown",
+        "reply_markup": {
+            "inline_keyboard": [
+                [{"text": t(lang, "step_text_skip"), "callback_data": "skip_text"}],
+                [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
             ],
         },
     })
@@ -312,22 +364,35 @@ async def send_confirmation(chat_id: int, lang: str, report_id: str,
                             location_name: str = None,
                             has_photo: bool = False, has_audio: bool = False):
     loc_str = location_name or (f"{lat:.4f}, {lng:.4f}" if lat and lng else "—")
+
+    # Message 1: Confirmation summary
     msg = (
-        f"{t(lang, 'done_1')}\n\n"
-        f"📋 {infra_type}  ·  ⚠️ {severity}\n"
-        f"📍 {loc_str}\n"
-        f"📸 {'✅' if has_photo else '—'}  🎙 {'✅' if has_audio else '—'}\n"
-        f"🆔 `{report_id[:12]}...`\n\n"
+        f"{t(lang, 'done_1')}\n"
+        f"━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📋 *Type:* {infra_type.replace('_', ' ')}\n"
+        f"⚠️ *Severity:* {severity}\n"
+        f"📍 *Location:* {loc_str}\n"
+        f"📸 *Photo:* {'✅' if has_photo else '❌'}  🎙 *Audio:* {'✅' if has_audio else '❌'}\n"
+        f"🆔 *ID:* `{report_id[:12]}...`\n\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
         f"{t(lang, 'done_2')}"
     )
     await _send("sendMessage", {
         "chat_id": chat_id,
         "text": msg,
         "parse_mode": "Markdown",
+        "reply_markup": {"remove_keyboard": True},
+    })
+
+    # Message 2: Separate prompt to report another (clear visual break)
+    await _send("sendMessage", {
+        "chat_id": chat_id,
+        "text": t(lang, "done_another_prompt"),
+        "parse_mode": "Markdown",
         "reply_markup": {
-            "inline_keyboard": [[
-                {"text": t(lang, "done_another"), "callback_data": "start_report"},
-                {"text": t(lang, "done_stop"), "callback_data": "stop"},
-            ]],
+            "inline_keyboard": [
+                [{"text": t(lang, "done_another"), "callback_data": "start_report"}],
+                [{"text": t(lang, "done_stop"), "callback_data": "stop"}],
+            ],
         },
     })

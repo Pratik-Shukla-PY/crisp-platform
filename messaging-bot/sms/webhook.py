@@ -1,0 +1,229 @@
+"""
+SMS Webhook — FastAPI router for SMS gateway integration.
+Supports Exotel and Twilio incoming SMS webhooks.
+Each SMS = one report submitted to the CRISP backend.
+"""
+import os
+import hashlib
+import logging
+import secrets
+import time
+from collections import defaultdict
+from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
+
+from .parser import parse_sms
+from .geocoder import geocode_text
+
+logger = logging.getLogger(__name__)
+
+sms_router = APIRouter()
+
+BACKEND_URL = os.getenv("CRISP_BACKEND_URL", "http://localhost:8000")
+SMS_WEBHOOK_SECRET = os.getenv("SMS_WEBHOOK_PATH_SECRET", secrets.token_urlsafe(16))
+EXOTEL_API_KEY = os.getenv("EXOTEL_API_KEY", "")
+EXOTEL_API_TOKEN = os.getenv("EXOTEL_API_TOKEN", "")
+EXOTEL_SID = os.getenv("EXOTEL_SID", "")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+
+# Rate limiting
+_rate_store: dict = defaultdict(list)
+RATE_LIMIT = 10
+RATE_WINDOW = 60
+
+# Deduplication
+_recent_messages: dict = {}  # hash → timestamp
+
+
+def _hash_phone(phone: str) -> str:
+    return "SMS-" + hashlib.sha256(phone.encode()).hexdigest()[:16]
+
+
+def _deduplicate(phone: str, text: str) -> bool:
+    """Returns True if this is a duplicate message."""
+    key = hashlib.md5(f"{phone}:{text}".encode()).hexdigest()
+    now = time.time()
+    # Clean old entries
+    for k in list(_recent_messages.keys()):
+        if now - _recent_messages[k] > 300:
+            del _recent_messages[k]
+    if key in _recent_messages:
+        return True
+    _recent_messages[key] = now
+    return False
+
+
+def _rate_check(ip: str) -> bool:
+    now = time.time()
+    _rate_store[ip] = [t for t in _rate_store[ip] if now - t < RATE_WINDOW]
+    if len(_rate_store[ip]) >= RATE_LIMIT:
+        return False
+    _rate_store[ip].append(now)
+    return True
+
+
+# ── Exotel-format webhook ──────────────────────────────────────────────────────
+
+@sms_router.post(f"/webhook/{SMS_WEBHOOK_SECRET}")
+async def receive_sms(request: Request, background_tasks: BackgroundTasks):
+    """
+    Receive incoming SMS from Exotel or Twilio.
+
+    Exotel sends form-encoded: From, To, Body
+    Twilio sends form-encoded: From, To, Body
+    Generic: accepts JSON or form-encoded with 'from'/'phone' and 'body'/'text' fields
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    if not _rate_check(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limited")
+
+    # Parse incoming data (support both form-encoded and JSON)
+    content_type = request.headers.get("content-type", "")
+    if "json" in content_type:
+        data = await request.json()
+    else:
+        form = await request.form()
+        data = dict(form)
+
+    # Extract phone and text (handle multiple gateway formats)
+    phone = data.get("From") or data.get("from") or data.get("phone") or data.get("CallFrom") or ""
+    text = data.get("Body") or data.get("body") or data.get("text") or data.get("TextMessage") or ""
+
+    phone = str(phone).strip()
+    text = str(text).strip()
+
+    if not phone or not text:
+        logger.warning(f"SMS webhook: empty phone or text from {client_ip}")
+        return {"status": "ignored", "reason": "empty"}
+
+    # Deduplication
+    if _deduplicate(phone, text):
+        logger.info(f"SMS duplicate: {_hash_phone(phone)}")
+        return {"status": "duplicate"}
+
+    logger.info(f"SMS received: from={_hash_phone(phone)} len={len(text)}")
+
+    # Process in background
+    background_tasks.add_task(_process_sms, phone, text)
+    return {"status": "accepted"}
+
+
+async def _process_sms(phone: str, text: str):
+    """Process an incoming SMS: parse → geocode → create report → reply."""
+    import httpx
+    from uuid import uuid4
+
+    device_hash = _hash_phone(phone)
+
+    # 1. Parse SMS
+    parsed = parse_sms(text)
+
+    # 2. Geocode location
+    geo = await geocode_text(parsed["location_text"])
+
+    # 3. Create report on CRISP backend
+    meta = {
+        "device_hash": device_hash,
+        "client_report_id": str(uuid4()),
+        "source": "SMS",
+        "severity": parsed["severity"],
+        "infrastructure_type": parsed["infrastructure_type"],
+        "description": parsed["description"],
+        "expected_media": 0,
+        "caller_info": {"phone": phone, "source": "SMS"},
+    }
+
+    if geo["latitude"] is not None:
+        meta["location"] = {
+            "latitude": geo["latitude"],
+            "longitude": geo["longitude"],
+            "device_latitude": geo["latitude"],
+            "device_longitude": geo["longitude"],
+            "accuracy_meters": 5000.0 if geo["confidence"] == "low" else 1000.0,
+            "device_location_name": geo["location_name"],
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as c:
+            r = await c.post(f"{BACKEND_URL}/api/v1/reports/meta", json=meta)
+            if r.status_code in (200, 201):
+                report = r.json()
+                report_id = report["id"]
+                logger.info(f"SMS report created: {report_id} type={parsed['infrastructure_type']} sev={parsed['severity']}")
+
+                # Send confirmation SMS
+                await _send_reply(phone, f"CRISP: Your report has been received. ID: {report_id[:8]}. Rescue teams will be notified. Thank you.")
+
+                # AI extraction removed — admin triggers AI Assessment on dashboard instead
+                # This saves 1 Claude API call per SMS report
+
+                # If location was unclear, ask for clarification
+                if geo["latitude"] is None:
+                    await _send_reply(phone, "CRISP: We could not determine your exact location. Please reply with the nearest landmark or village name.")
+            else:
+                logger.error(f"SMS report creation failed ({r.status_code}): {r.text[:200]}")
+    except Exception as e:
+        logger.error(f"SMS processing error: {e}")
+
+
+async def _send_reply(phone: str, message: str):
+    """Send SMS reply via Exotel or Twilio."""
+    import httpx
+
+    # Exotel
+    if EXOTEL_SID and EXOTEL_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                r = await c.post(
+                    f"https://{EXOTEL_API_KEY}:{EXOTEL_API_TOKEN}@api.exotel.com/v1/Accounts/{EXOTEL_SID}/Sms/send",
+                    data={"From": EXOTEL_SID, "To": phone, "Body": message},
+                )
+                if r.status_code == 200:
+                    logger.info(f"SMS reply sent via Exotel to {_hash_phone(phone)}")
+                    return
+        except Exception as e:
+            logger.warning(f"Exotel send failed: {e}")
+
+    # Twilio
+    twilio_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
+    twilio_token = os.getenv("TWILIO_AUTH_TOKEN", "")
+    twilio_from = os.getenv("TWILIO_PHONE_NUMBER", "")
+    if twilio_sid and twilio_token and twilio_from:
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                r = await c.post(
+                    f"https://api.twilio.com/2010-04-01/Accounts/{twilio_sid}/Messages.json",
+                    auth=(twilio_sid, twilio_token),
+                    data={"From": twilio_from, "To": phone, "Body": message},
+                )
+                if r.status_code in (200, 201):
+                    logger.info(f"SMS reply sent via Twilio to {_hash_phone(phone)}")
+                    return
+        except Exception as e:
+            logger.warning(f"Twilio send failed: {e}")
+
+    logger.warning(f"No SMS gateway configured — reply not sent to {_hash_phone(phone)}")
+
+
+# ── Status ─────────────────────────────────────────────────────────────────────
+
+@sms_router.get("/status")
+async def sms_status():
+    return {
+        "status": "SMS Bot Online",
+        "webhook_path_configured": bool(SMS_WEBHOOK_SECRET),
+        "exotel_configured": bool(EXOTEL_SID and EXOTEL_API_KEY),
+        "twilio_configured": bool(os.getenv("TWILIO_ACCOUNT_SID")),
+        "recent_messages": len(_recent_messages),
+    }
+
+
+@sms_router.get("/webhook-url")
+async def get_sms_webhook_url(request: Request):
+    client_ip = request.client.host if request.client else ""
+    if client_ip not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="Local access only")
+    base = str(request.base_url).rstrip("/")
+    return {
+        "webhook_url": f"{base}/api/v1/sms/webhook/{SMS_WEBHOOK_SECRET}",
+        "note": "Configure this URL in your SMS gateway (Exotel/Twilio) as the incoming SMS webhook.",
+    }

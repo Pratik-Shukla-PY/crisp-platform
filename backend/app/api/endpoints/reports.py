@@ -397,6 +397,40 @@ def purge_expired_deletions(db: Session = Depends(get_db)):
     return {"purged": count}
 
 
+@router.post("/purge-all-pending", status_code=status.HTTP_200_OK)
+def purge_all_pending_deletions(db: Session = Depends(get_db)):
+    """Admin endpoint: permanently delete ALL reports with deletion_requested_at set,
+    regardless of whether the 24-hour grace period has passed."""
+    pending = db.query(Report).filter(Report.deletion_requested_at != None).all()
+    if not pending:
+        return {"purged": 0}
+    count = 0
+    for report in pending:
+        for m in report.media:
+            for suffix in ['', '_partial', '_assembled']:
+                for ext in ['jpg', 'webm', 'png']:
+                    fpath = os.path.join(UPLOAD_DIR, f"{m.id}{suffix}.{ext}")
+                    if os.path.exists(fpath):
+                        try: os.remove(fpath)
+                        except: pass
+            if m.url and m.url.startswith("/static/"):
+                disk_path = os.path.join(UPLOAD_DIR, m.url.replace("/static/", ""))
+                if os.path.exists(disk_path):
+                    try: os.remove(disk_path)
+                    except: pass
+        for prefix in ['sat_', 'sat_alt_']:
+            for ext in ['png', 'jpg']:
+                sat_path = os.path.join(UPLOAD_DIR, f"{prefix}{report.id}.{ext}")
+                if os.path.exists(sat_path):
+                    try: os.remove(sat_path)
+                    except: pass
+        db.delete(report)
+        count += 1
+    db.commit()
+    logger.info(f"Force purge: {count} pending deletion(s) permanently removed")
+    return {"purged": count}
+
+
 # ── Progressive Upload: Stage 1 — metadata only (tiny, instant) ───────────────
 @router.post("/meta", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
 def create_report_meta(meta_in: ReportMetaCreate, db: Session = Depends(get_db)):
@@ -497,6 +531,205 @@ def update_report_classification(report_id: str, request: dict, db: Session = De
     db.refresh(report)
     logger.info(f"Report {report.id} classified: sev={report.severity.value} type={report.infrastructure_type.value}")
     return report
+
+
+@router.patch("/{report_id}/location", response_model=ReportResponse)
+def update_report_location(report_id: str, loc_data: dict, db: Session = Depends(get_db)):
+    """Add or update location on an existing report. Used by AI extractor for IVR/SMS."""
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if report.location:
+        # Update existing
+        report.location.latitude = loc_data.get("latitude", report.location.latitude)
+        report.location.longitude = loc_data.get("longitude", report.location.longitude)
+        report.location.device_latitude = loc_data.get("device_latitude", report.location.device_latitude)
+        report.location.device_longitude = loc_data.get("device_longitude", report.location.device_longitude)
+        report.location.accuracy_meters = loc_data.get("accuracy_meters", report.location.accuracy_meters)
+        report.location.device_location_name = loc_data.get("device_location_name", report.location.device_location_name)
+    else:
+        # Create new
+        db.add(Location(
+            report_id=report_id,
+            latitude=loc_data.get("latitude", 0),
+            longitude=loc_data.get("longitude", 0),
+            device_latitude=loc_data.get("device_latitude"),
+            device_longitude=loc_data.get("device_longitude"),
+            accuracy_meters=loc_data.get("accuracy_meters", 5000),
+            device_location_name=loc_data.get("device_location_name"),
+        ))
+    db.commit()
+    db.refresh(report)
+    logger.info(f"Report {report_id} location updated: {loc_data.get('device_location_name', 'coords only')}")
+    return report
+
+
+@router.post("/{report_id}/ai-assess")
+async def ai_assess_report(report_id: str, payload: dict, db: Session = Depends(get_db)):
+    """On-demand AI assessment: sends full incident data to Claude for analysis."""
+    import httpx
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not anthropic_key:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not configured")
+
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    # Build context for Claude
+    desc = payload.get("description", "") or ""
+    trans = payload.get("transcription", "") or ""
+    ai_sum = payload.get("ai_summary", "") or ""
+    loc_info = payload.get("location", {}) or {}
+    loc_name = loc_info.get("name", "Unknown")
+    verif = payload.get("verification", {}) or {}
+    caller = payload.get("caller_info", {}) or {}
+
+    nearby = payload.get('nearby_reports', 0)
+    v_scores = verif.get('scores', {}) if verif else {}
+    photo_analysis = verif.get('photo_analysis', '') if verif else ''
+    sat_scene = verif.get('satellite_scene', '') if verif else ''
+    v_findings = verif.get('key_findings', []) if verif else []
+    v_caveats = verif.get('caveats', []) if verif else []
+
+    source = payload.get('source', 'UNKNOWN')
+    is_voice_sms = source in ('IVR', 'SMS')
+
+    # Static system prompt — cached across all AI assessments (90% token savings on repeated calls)
+    system_prompt = """You are a senior crisis assessment analyst for CRISP (Crisis Response Intelligence & Situation Platform). Your assessment directly determines whether rescue teams are dispatched. THE STAKES ARE LIFE AND DEATH.
+
+GENERAL RULES:
+- FALSE NEGATIVE (dismissing a real incident) = LIVES LOST. Err on the side of caution for voice/SMS reports.
+- FALSE POSITIVE (dispatching for fake) = wasted resources. Be stricter with anonymous app reports with no evidence.
+- Nearby corroborating reports from DIFFERENT users = STRONGEST signal for ANY source.
+- A person calling from a traceable phone number is putting their identity on the line — this IS evidence of sincerity.
+- IVR/SMS callers often have NO smartphone — they CANNOT send photos. Do NOT penalize for missing photos from these sources.
+- App/Telegram/WhatsApp users CAN send photos — if they claim severe damage but sent NO photo, that is suspicious.
+
+SCORING WEIGHTS FOR IVR/SMS (no photo possible):
+- Voice/Text content & specificity: 40%
+- Satellite verification: 25%
+- Corroboration (nearby reports): 25%
+- Caller identity & traceability: 10%
+
+SCORING WEIGHTS FOR App/Telegram/WhatsApp (photo possible):
+- Photo evidence: 25%
+- Voice/Text content: 25%
+- Satellite verification: 25%
+- Corroboration (nearby reports): 25%
+
+Return ONLY valid JSON with: summary (2 lines, max 50 words), suggested_action (Dispatch Rescue Team | Monitor Situation | Flag as Suspicious | Likely False Report), confidence_score (0-100), inferred_type (WATER/ROAD/HOSPITAL/HOUSE/POWER/OTHER), inferred_severity (CRITICAL/SEVERE/MODERATE/MINOR), details (6-8 line cross-verification analysis)."""
+
+    # Dynamic user message — changes per incident (NOT cached)
+    prompt = f"""
+
+SOURCE: {source} {"(VOICE/SMS — no photo capability, do NOT penalize)" if is_voice_sms else "(smartphone — CAN send photos)"}
+
+═══════════════════════════════════════════
+INCIDENT DATA
+═══════════════════════════════════════════
+Type: {payload.get('infrastructure_type', 'UNKNOWN')}
+Reported Severity: {payload.get('severity', 'UNKNOWN')}
+Source Channel: {source}
+Location: {loc_name} ({loc_info.get('lat','?')}, {loc_info.get('lng','?')})
+
+═══════════════════════════════════════════
+SIGNAL 1: TEXT & VOICE CONTENT
+═══════════════════════════════════════════
+User Description: {desc[:600] if desc else '[NONE]'}
+Audio Transcription: {trans[:600] if trans else '[NONE — no audio]'}
+AI-Cleaned Summary: {ai_sum[:400] if ai_sum else '[NONE]'}
+
+Key questions: Does the text contain SPECIFIC details (exact village/landmark, number of people affected, type of damage)? Does the voice show genuine distress? Are local details mentioned that only someone on-ground would know?
+
+═══════════════════════════════════════════
+SIGNAL 2: VISUAL EVIDENCE
+═══════════════════════════════════════════
+Has User Photo: {payload.get('has_image', False)}
+{f'Photo Analysis: {photo_analysis[:400]}' if photo_analysis else f'Photo: Not available {"(EXPECTED — IVR/SMS users cannot send photos)" if is_voice_sms else "(User has smartphone but did not send photo)"}'}
+
+═══════════════════════════════════════════
+SIGNAL 3: SATELLITE VERIFICATION
+═══════════════════════════════════════════
+{f'Score: {verif["score"]}/100 — {verif["verdict"]}' if verif.get("score") else 'Not yet verified'}
+{f'Scene: {sat_scene[:250]}' if sat_scene else ''}
+{f'Findings: {"; ".join(v_findings[:2])}' if v_findings else ''}
+
+═══════════════════════════════════════════
+SIGNAL 4: CORROBORATION & IDENTITY
+═══════════════════════════════════════════
+Nearby Reports (within 5km): {nearby} {'— STRONG corroboration from independent sources' if nearby >= 2 else '— some corroboration' if nearby == 1 else '— no corroboration yet'}
+Audio Evidence: {payload.get('has_audio', False)}
+Media Count: {payload.get('media_count', 0)}
+{f'Caller Phone: {caller.get("phone","")} (TRACEABLE — caller is identifiable)' if caller.get("phone") else 'Caller: Anonymous'}
+
+Respond with the JSON format specified in the system prompt."""
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as c:
+            r = await c.post("https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": anthropic_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "max_tokens": 800,
+                    "system": [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
+                    "messages": [{"role": "user", "content": prompt}],
+                })
+            if r.status_code == 200:
+                import json as jsonlib
+                text = r.json().get("content", [{}])[0].get("text", "{}")
+                # Extract JSON from response
+                try:
+                    start = text.index('{')
+                    end = text.rindex('}') + 1
+                    data = jsonlib.loads(text[start:end])
+                except:
+                    data = {"summary": text[:200], "suggested_action": "Review Needed", "details": text}
+                # Persist AI assessment to DB
+                report.ai_assessment = data
+
+                # Also update report classification from AI inference (replaces old AI Extractor)
+                inferred_type = data.get("inferred_type", "")
+                inferred_sev = data.get("inferred_severity", "")
+                valid_types = ["WATER", "ROAD", "HOSPITAL", "HOUSE", "POWER", "OTHER"]
+                valid_sevs = ["CRITICAL", "SEVERE", "MODERATE", "MINOR"]
+                if inferred_type in valid_types and report.infrastructure_type.value == "OTHER":
+                    report.infrastructure_type = InfraTypeEnum(inferred_type)
+                if inferred_sev in valid_sevs:
+                    report.severity = SeverityEnum(inferred_sev)
+
+                db.commit()
+                logger.info(f"AI assessment saved for {report_id}: score={data.get('confidence_score','?')} type={inferred_type} sev={inferred_sev}")
+                return data
+            else:
+                raise HTTPException(status_code=502, detail="AI service error")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="AI service timeout")
+
+
+@router.patch("/{report_id}/ai-summary")
+def update_ai_summary(report_id: str, data: dict, db: Session = Depends(get_db)):
+    """Store AI-inferred summary and raw transcription. Used by AI extractor."""
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    ai = db.query(AIAnalysis).filter(AIAnalysis.report_id == report_id).first()
+    if ai:
+        if data.get("ai_summary"):
+            ai.ai_summary = data["ai_summary"]
+        if data.get("transcription"):
+            ai.transcription = data["transcription"]
+    else:
+        ai = AIAnalysis(
+            report_id=report_id,
+            transcription=data.get("transcription", ""),
+            ai_summary=data.get("ai_summary", ""),
+        )
+        db.add(ai)
+    db.commit()
+    logger.info(f"Report {report_id} AI summary updated")
+    return {"status": "ok", "report_id": report_id}
 
 
 # ── Progressive Upload: Stage 2/3 — attach one media file ────────────────────

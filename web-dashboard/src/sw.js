@@ -2,40 +2,29 @@
  * CRISP Web Dashboard — Service Worker
  * ─────────────────────────────────────
  * Strategy:
- *   Static local assets  → Cache-First  (instant on repeat visit)
- *   CDN assets           → Cache-First  (cache once, serve forever)
- *   API /api/v1/reports  → Stale-While-Revalidate (show cached data,
- *                          silently fetch fresh in background)
- *   Everything else      → Network with cache fallback
+ *   App files (HTML/JS/CSS) → Network-First (always get latest, cache as fallback)
+ *   CDN assets              → Cache-First   (fonts, icons — rarely change)
+ *   Static data (world.json)→ Cache-First   (large, never changes)
+ *   API /api/v1/reports     → Stale-While-Revalidate (instant + background refresh)
+ *   Everything else         → Network with cache fallback
  */
 
-const STATIC_CACHE  = 'crisp-static-v5';
-const CDN_CACHE     = 'crisp-cdn-v2';
-const API_CACHE     = 'crisp-api-v2';
+const APP_CACHE    = 'crisp-app-v1';
+const CDN_CACHE    = 'crisp-cdn-v3';
+const API_CACHE    = 'crisp-api-v3';
+const STATIC_CACHE = 'crisp-static-v6';
 
-// Local files to pre-cache on install (served instantly forever after)
-const PRECACHE_ASSETS = [
-  '/web-dashboard/src/index.html',
-  '/web-dashboard/src/styles.css',
-  '/web-dashboard/src/app.js',
-  '/web-dashboard/src/world.json',
-  '/web-dashboard/src/app_patch.js',
-  '/web-dashboard/src/app_tooltip_patch.js',
-];
+// App files that should always be fresh (network-first)
+const APP_FILES = ['index.html', 'app.js', 'styles.css', 'manifest.json'];
 
-// ── Install: pre-cache local assets ──────────────────────────────────────────
+// ── Install: skip waiting immediately (don't wait for old tabs to close) ─────
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(STATIC_CACHE)
-      .then(cache => cache.addAll(PRECACHE_ASSETS))
-      .then(() => self.skipWaiting())
-      .catch(() => self.skipWaiting()) // don't block install if a file 404s
-  );
+  self.skipWaiting();
 });
 
-// ── Activate: wipe old caches ─────────────────────────────────────────────────
+// ── Activate: claim all clients + wipe old caches ────────────────────────────
 self.addEventListener('activate', event => {
-  const valid = [STATIC_CACHE, CDN_CACHE, API_CACHE];
+  const valid = [APP_CACHE, CDN_CACHE, API_CACHE, STATIC_CACHE];
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(
@@ -45,21 +34,20 @@ self.addEventListener('activate', event => {
   );
 });
 
-// ── Fetch: route by request type ──────────────────────────────────────────────
+// ── Fetch: route by request type ─────────────────────────────────────────────
 self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Only handle GET
   if (request.method !== 'GET') return;
 
-  // ── API data: stale-while-revalidate ─────────────────────────────────────
+  // ── API data: stale-while-revalidate ────────────────────────────────────
   if (url.port === '8000' || url.pathname.startsWith('/api/')) {
     event.respondWith(staleWhileRevalidate(API_CACHE, request));
     return;
   }
 
-  // ── CDN assets: cache-first ───────────────────────────────────────────────
+  // ── CDN assets: cache-first (fonts, icons — stable) ─────────────────────
   const CDN_HOSTS = [
     'unpkg.com', 'cdnjs.cloudflare.com',
     'fonts.googleapis.com', 'fonts.gstatic.com',
@@ -70,19 +58,49 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // ── Local static assets: cache-first ─────────────────────────────────────
+  // ── Local files on same host ────────────────────────────────────────────
   if (url.hostname === self.location.hostname) {
-    event.respondWith(cacheFirst(STATIC_CACHE, request));
+    const filename = url.pathname.split('/').pop() || '';
+
+    // App files (HTML/JS/CSS): NETWORK-FIRST — always get latest on normal refresh
+    if (APP_FILES.some(f => filename === f || url.pathname.endsWith(f))) {
+      event.respondWith(networkFirst(APP_CACHE, request));
+      return;
+    }
+
+    // Large static data (world.json): cache-first (280KB, never changes)
+    if (filename === 'world.json') {
+      event.respondWith(cacheFirst(STATIC_CACHE, request));
+      return;
+    }
+
+    // Other local assets (images, patches): network-first
+    event.respondWith(networkFirst(APP_CACHE, request));
     return;
   }
 
-  // ── Anything else: network with fallback ─────────────────────────────────
+  // ── Everything else: network with fallback ──────────────────────────────
   event.respondWith(
     fetch(request).catch(() => caches.match(request))
   );
 });
 
-// ── Strategies ────────────────────────────────────────────────────────────────
+// ── Strategies ───────────────────────────────────────────────────────────────
+
+async function networkFirst(cacheName, request) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(cacheName);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    // Network failed — fall back to cache (offline mode)
+    const cached = await caches.match(request);
+    return cached || new Response('Offline', { status: 503 });
+  }
+}
 
 async function cacheFirst(cacheName, request) {
   const cached = await caches.match(request);
@@ -103,7 +121,6 @@ async function staleWhileRevalidate(cacheName, request) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
 
-  // Kick off network fetch in background regardless
   const networkFetch = fetch(request)
     .then(response => {
       if (response.ok) cache.put(request, response.clone());
@@ -111,11 +128,10 @@ async function staleWhileRevalidate(cacheName, request) {
     })
     .catch(() => null);
 
-  // Return cached immediately if available, otherwise wait for network
   return cached || networkFetch;
 }
 
-// ── Background sync: notify clients when fresh data arrives ──────────────────
+// ── Messages ─────────────────────────────────────────────────────────────────
 self.addEventListener('message', event => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
