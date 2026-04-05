@@ -3,6 +3,14 @@
 // Hierarchical, decision-focused, scalable dashboard for UN crisis response
 // ══════════════════════════════════════════════════════════════════════════════
 
+// ── Security: HTML escaping to prevent XSS ──────────────────────────────────
+function escapeHtml(str) {
+    if (!str) return '';
+    const d = document.createElement('div');
+    d.textContent = String(str);
+    return d.innerHTML;
+}
+
 // ── Config ───────────────────────────────────────────────────────────────────
 const BACKEND_HOST = `http://${window.location.hostname || 'localhost'}:8000`;
 const API = `${BACKEND_HOST}/api/v1/reports`;
@@ -1331,13 +1339,14 @@ window.selectReport = (id, skipFly = false) => {
     // Transcript with keyword highlighting
     const highlightKeywords = (text, truncate = true) => {
         if (!text) return '';
+        // Escape HTML first to prevent XSS, then apply keyword highlighting
+        let safe = escapeHtml(truncate && text.length > 150 ? text.substring(0, 150) : text);
         const keywords = ['help','stuck','trapped','injury','injured','flood','fire','collapse','damage','emergency','rescue','save','water','destroy'];
-        let html = truncate && text.length > 150 ? text.substring(0, 150) : text;
         keywords.forEach(k => {
             const re = new RegExp(`(${k})`, 'gi');
-            html = html.replace(re, '<mark class="dp-keyword">$1</mark>');
+            safe = safe.replace(re, '<mark class="dp-keyword">$1</mark>');
         });
-        return html + (text.length > 150 ? '...' : '');
+        return safe + (text.length > 150 ? '...' : '');
     };
 
     const rawTranscript = ai?.transcription || '';

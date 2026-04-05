@@ -5,7 +5,7 @@ import logging
 import httpx
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -13,6 +13,7 @@ from app.models.report import (
     Device, Report, Location, Media, MediaChunk, AIAnalysis,
     SatelliteVerification,
     MediaTypeEnum, ResolutionEnum, ReportStatusEnum, SyncStatusEnum,
+    SeverityEnum, InfraTypeEnum,
 )
 from app.schemas.report import (
     ReportCreate, ReportResponse, ReportMetaCreate, MediaAttach,
@@ -391,16 +392,20 @@ def _purge_expired_deletions(db: Session):
 
 
 @router.post("/purge-expired", status_code=status.HTTP_200_OK)
-def purge_expired_deletions(db: Session = Depends(get_db)):
+def purge_expired_deletions(request: Request, db: Session = Depends(get_db)):
     """Admin endpoint: permanently delete all reports past the 24-hour grace period."""
+    from app.main import verify_admin_key
+    verify_admin_key(request)
     count = _purge_expired_deletions(db)
     return {"purged": count}
 
 
 @router.post("/purge-all-pending", status_code=status.HTTP_200_OK)
-def purge_all_pending_deletions(db: Session = Depends(get_db)):
+def purge_all_pending_deletions(request: Request, db: Session = Depends(get_db)):
     """Admin endpoint: permanently delete ALL reports with deletion_requested_at set,
     regardless of whether the 24-hour grace period has passed."""
+    from app.main import verify_admin_key
+    verify_admin_key(request)
     pending = db.query(Report).filter(Report.deletion_requested_at != None).all()
     if not pending:
         return {"purged": 0}
@@ -433,11 +438,16 @@ def purge_all_pending_deletions(db: Session = Depends(get_db)):
 
 # ── Progressive Upload: Stage 1 — metadata only (tiny, instant) ───────────────
 @router.post("/meta", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
-def create_report_meta(meta_in: ReportMetaCreate, db: Session = Depends(get_db)):
+def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session = Depends(get_db)):
     """
     Stage 1 of progressive upload: Accept metadata only (< 1KB).
     Creates a PARTIAL report immediately. Media follows via PATCH.
     """
+    # Rate limit: 30 reports/min per device
+    from app.main import check_rate_limit
+    if not check_rate_limit(f"meta:{meta_in.device_hash}", 30, 60):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded — try again later")
+
     # Idempotency check
     if meta_in.client_report_id:
         existing = db.query(Report).filter(
@@ -1013,12 +1023,16 @@ def attach_media_chunk(
 
 
 @router.post("/", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
-def create_report(report_in: ReportCreate, db: Session = Depends(get_db)):
+def create_report(report_in: ReportCreate, request: Request, db: Session = Depends(get_db)):
     """
     Ingest a new multi-modal incident report locally.
-    This endpoint supports rich JSON graphs combining GPS telemetry, 
+    This endpoint supports rich JSON graphs combining GPS telemetry,
     offline user classification, and associated base64 media blocks.
     """
+    # Rate limit: 30 reports/min per device
+    from app.main import check_rate_limit
+    if not check_rate_limit(f"report:{report_in.device_hash}", 30, 60):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded — try again later")
     
     # 0. Idempotency Check — prevent duplicate submissions on retry
     if report_in.client_report_id:

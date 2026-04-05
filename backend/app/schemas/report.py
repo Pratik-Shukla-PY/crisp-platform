@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional, Any
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from app.models.report import (
     SourceEnum, SeverityEnum, InfraTypeEnum, MediaTypeEnum, 
     ResolutionEnum, SyncStatusEnum, ReportStatusEnum, ClusterStatusEnum
@@ -39,12 +39,12 @@ class MediaChunkPayload(BaseModel):
 
 # API Request Payloads
 class ReportCreate(BaseModel):
-    device_hash: str
-    client_report_id: Optional[str] = None
+    device_hash: str = Field(..., max_length=255)
+    client_report_id: Optional[str] = Field(None, max_length=64)
     source: SourceEnum = SourceEnum.APP
     severity: SeverityEnum = SeverityEnum.UNKNOWN
     infrastructure_type: InfraTypeEnum = InfraTypeEnum.OTHER
-    description: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=5000)
     is_auto_submitted: bool = False
     client_created_at: Optional[datetime] = None
     location: LocationBase
@@ -53,12 +53,12 @@ class ReportCreate(BaseModel):
 
 # Lightweight metadata-only payload (Stage 1 — tiny, instant)
 class ReportMetaCreate(BaseModel):
-    device_hash: str
-    client_report_id: str
+    device_hash: str = Field(..., max_length=255)
+    client_report_id: str = Field(..., max_length=64)
     source: SourceEnum = SourceEnum.APP
     severity: SeverityEnum = SeverityEnum.UNKNOWN
     infrastructure_type: InfraTypeEnum = InfraTypeEnum.OTHER
-    description: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=5000)
     caller_info: Optional[Any] = None  # Phone, network city/state for IVR/SMS
     is_auto_submitted: bool = False
     client_created_at: Optional[datetime] = None
