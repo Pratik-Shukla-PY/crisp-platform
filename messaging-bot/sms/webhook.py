@@ -18,6 +18,31 @@ logger = logging.getLogger(__name__)
 
 sms_router = APIRouter()
 
+# ── SMS Multilingual replies (short, SMS-optimized) ──────────────────────────
+_SMS_REPLIES = {
+    "en": "CRISP: Report received (ID:{id}). Rescue teams notified. Data anonymized. Reply DELETE to remove.",
+    "zh": "CRISP: 报告已收到(ID:{id})。救援队已通知。数据匿名。回复DELETE删除。",
+    "ru": "CRISP: Отчет получен (ID:{id}). Спасатели уведомлены. Данные анонимны. Ответьте DELETE для удаления.",
+    "es": "CRISP: Reporte recibido (ID:{id}). Rescate notificado. Datos anonimos. Responde DELETE para eliminar.",
+    "fr": "CRISP: Rapport recu (ID:{id}). Secours alertes. Donnees anonymes. Repondez DELETE pour supprimer.",
+    "ar": "CRISP: تم استلام التقرير (ID:{id}). تم إبلاغ الإنقاذ. البيانات مجهولة. أرسل DELETE للحذف.",
+    "hi": "CRISP: रिपोर्ट मिली (ID:{id})। बचाव दल को सूचित किया गया। डेटा गुमनाम। DELETE भेजें हटाने के लिए।",
+}
+
+# Phone prefix → language
+_PHONE_LANG_SMS = {
+    "86": "zh", "7": "ru", "34": "es", "52": "es", "54": "es",
+    "33": "fr", "212": "ar", "966": "ar", "971": "ar", "20": "ar",
+    "91": "hi", "1": "en", "44": "en", "61": "en",
+}
+
+def _detect_sms_lang(phone: str) -> str:
+    clean = phone.lstrip('+').replace(' ', '').replace('-', '')
+    for prefix in sorted(_PHONE_LANG_SMS.keys(), key=len, reverse=True):
+        if clean.startswith(prefix):
+            return _PHONE_LANG_SMS[prefix]
+    return "en"
+
 BACKEND_URL = os.getenv("CRISP_BACKEND_URL", "http://localhost:8000")
 SMS_WEBHOOK_SECRET = os.getenv("SMS_WEBHOOK_PATH_SECRET", secrets.token_urlsafe(16))
 EXOTEL_API_KEY = os.getenv("EXOTEL_API_KEY", "")
@@ -151,7 +176,9 @@ async def _process_sms(phone: str, text: str):
                 logger.info(f"SMS report created: {report_id} type={parsed['infrastructure_type']} sev={parsed['severity']}")
 
                 # Send confirmation SMS
-                await _send_reply(phone, f"CRISP: Your report has been received. ID: {report_id[:8]}. Rescue teams will be notified. Thank you.")
+                sms_lang = _detect_sms_lang(phone)
+                reply_template = _SMS_REPLIES.get(sms_lang, _SMS_REPLIES["en"])
+                await _send_reply(phone, reply_template.format(id=report_id[:8]))
 
                 # AI extraction removed — admin triggers AI Assessment on dashboard instead
                 # This saves 1 Claude API call per SMS report

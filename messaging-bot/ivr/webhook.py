@@ -119,15 +119,91 @@ async def handle_incoming_call(request: Request):
     }
 
     base = _get_base_url(request)
-    next_url = f"{base}/api/v1/ivr/describe/{IVR_WEBHOOK_SECRET}?sid={call_sid}"
+    loc_url = f"{base}/api/v1/ivr/location-step/{IVR_WEBHOOK_SECRET}?sid={call_sid}"
 
     logger.info(f"IVR call from {_hash_phone(phone)}, sid={call_sid[:12]}")
 
-    # Step 1: Ask for location — auto-stop after 3s silence, or * key, max 30s
+    # Step 0: Language selection + privacy notice + ask location
+    # Uses Gather with timeout=5 — if user presses a key, route to language handler
+    # If no key pressed (timeout), default to English and proceed to location
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Aditi" language="hi-IN">Welcome to CRISP Crisis Reporting.
-Please tell us your location. Say your village, city, or nearest landmark.</Say>
+    <Gather action="{loc_url}" method="POST" numDigits="1" timeout="5">
+        <Say voice="Polly.Joanna" language="en-US">Welcome to CRISP Crisis Reporting.
+This call is recorded to help rescue teams. Your data is anonymized.
+Press 1 for English.
+Press 2 for Hindi.
+Press 3 for Spanish.
+Press 4 for French.
+Press 5 for Arabic.
+Or just start speaking after the beep.</Say>
+    </Gather>
+    <Redirect method="POST">{loc_url}?lang=en</Redirect>
+</Response>"""
+
+    return Response(content=xml, media_type="application/xml")
+
+
+# IVR language → Polly voice + language code
+_IVR_VOICES = {
+    "en": ("Polly.Joanna", "en-US"),
+    "hi": ("Polly.Aditi", "hi-IN"),
+    "es": ("Polly.Lupe", "es-US"),
+    "fr": ("Polly.Lea", "fr-FR"),
+    "ar": ("Polly.Zeina", "ar-XA"),
+    "ru": ("Polly.Tatyana", "ru-RU"),
+    "zh": ("Polly.Zhiyu", "cmn-CN"),
+}
+
+_IVR_PROMPTS = {
+    "en": {"loc": "Please say your location. Your village, city, or nearest landmark.",
+           "desc": "Now describe your problem. What happened and how serious is it.",
+           "done": "Thank you. Your report has been received. Rescue teams will be notified. Stay safe. Goodbye."},
+    "hi": {"loc": "कृपया अपना स्थान बताएं। गांव, शहर, या नजदीकी स्थान।",
+           "desc": "अब अपनी समस्या बताएं। क्या हुआ और कितना गंभीर है।",
+           "done": "धन्यवाद। आपकी रिपोर्ट मिल गई। बचाव दल को सूचित किया जाएगा। सुरक्षित रहें।"},
+    "es": {"loc": "Diga su ubicacion. Pueblo, ciudad o punto de referencia.",
+           "desc": "Describa su problema. Que paso y que tan grave es.",
+           "done": "Gracias. Su reporte ha sido recibido. Los equipos de rescate seran notificados."},
+    "fr": {"loc": "Dites votre emplacement. Village, ville ou repere.",
+           "desc": "Decrivez votre probleme. Que s'est-il passe.",
+           "done": "Merci. Votre rapport a ete recu. Les secours seront alertes."},
+    "ar": {"loc": "قل موقعك. القرية أو المدينة أو أقرب معلم.",
+           "desc": "صف مشكلتك. ماذا حدث وما مدى خطورته.",
+           "done": "شكراً. تم استلام تقريرك. سيتم إبلاغ فرق الإنقاذ."},
+}
+
+_DIGIT_LANG = {"1": "en", "2": "hi", "3": "es", "4": "fr", "5": "ar"}
+
+
+@ivr_router.api_route(f"/location-step/{IVR_WEBHOOK_SECRET}", methods=["GET", "POST"])
+async def handle_location_step(request: Request):
+    """Receives language selection (if any), then asks for location."""
+    params = dict(request.query_params)
+    if request.method == "POST":
+        try:
+            form = await request.form()
+            params.update(dict(form))
+        except:
+            pass
+
+    call_sid = params.get("sid", "") or params.get("CallSid", "")
+    digits = params.get("Digits", "")
+    lang = _DIGIT_LANG.get(digits, params.get("lang", "en"))
+
+    session = _ivr_sessions.get(call_sid, {})
+    session["lang"] = lang
+    _ivr_sessions[call_sid] = session
+
+    voice, voice_lang = _IVR_VOICES.get(lang, _IVR_VOICES["en"])
+    prompts = _IVR_PROMPTS.get(lang, _IVR_PROMPTS["en"])
+
+    base = _get_base_url(request)
+    next_url = f"{base}/api/v1/ivr/describe/{IVR_WEBHOOK_SECRET}?sid={call_sid}"
+
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="{voice}" language="{voice_lang}">{prompts['loc']}</Say>
     <Record action="{next_url}" method="POST"
             maxLength="30" timeout="10" finishOnKey="*"
             playBeep="true" transcribe="false"/>
@@ -172,10 +248,14 @@ async def handle_describe(request: Request, background_tasks: BackgroundTasks):
     base = _get_base_url(request)
     done_url = f"{base}/api/v1/ivr/done/{IVR_WEBHOOK_SECRET}?sid={call_sid}"
 
-    # Step 2: Ask to describe problem — auto-stop after 3s silence, max 60s
+    # Step 2: Ask to describe problem in user's selected language
+    lang = session.get("lang", "en")
+    voice, voice_lang = _IVR_VOICES.get(lang, _IVR_VOICES["en"])
+    prompts = _IVR_PROMPTS.get(lang, _IVR_PROMPTS["en"])
+
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Aditi" language="hi-IN">Now please describe your problem. Tell us what happened and how serious the situation is.</Say>
+    <Say voice="{voice}" language="{voice_lang}">{prompts['desc']}</Say>
     <Record action="{done_url}" method="POST"
             maxLength="120" timeout="20" finishOnKey="*"
             playBeep="true" transcribe="false"/>
@@ -219,9 +299,13 @@ async def handle_done(request: Request, background_tasks: BackgroundTasks):
     # Always process — even if we only got location or only description
     background_tasks.add_task(_process_ivr_report, call_sid)
 
-    xml = """<?xml version="1.0" encoding="UTF-8"?>
+    lang = session.get("lang", "en")
+    voice, voice_lang = _IVR_VOICES.get(lang, _IVR_VOICES["en"])
+    prompts = _IVR_PROMPTS.get(lang, _IVR_PROMPTS["en"])
+
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Aditi" language="hi-IN">Thank you. Your report has been received. Rescue teams will be notified. Stay safe. Goodbye.</Say>
+    <Say voice="{voice}" language="{voice_lang}">{prompts['done']}</Say>
     <Hangup/>
 </Response>"""
 

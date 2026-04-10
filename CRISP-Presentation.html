@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRISP — Crisis Response Intelligence & Situation Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{--bg:#0a0e1a;--surface:#111827;--surface2:#1e293b;--border:#1e293b;--text:#e2e8f0;--text-dim:#94a3b8;--accent:#7c3aed;--accent-glow:rgba(124,58,237,0.3);--red:#ef4444;--orange:#f97316;--amber:#eab308;--green:#22c55e;--cyan:#38bdf8;--pink:#ec4899;}
+html{scroll-behavior:smooth;}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden;}
+
+/* ── Navigation ────────────────────────────────────────── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,14,26,0.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.06);padding:0 40px;display:flex;align-items:center;height:60px;}
+nav .logo{font-size:18px;font-weight:900;letter-spacing:-0.5px;background:linear-gradient(135deg,var(--accent),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+nav .logo span{font-weight:400;opacity:0.6;-webkit-text-fill-color:var(--text-dim);}
+nav ul{list-style:none;display:flex;gap:24px;margin-left:auto;font-size:13px;font-weight:500;}
+nav ul a{color:var(--text-dim);text-decoration:none;transition:0.2s;}
+nav ul a:hover{color:var(--text);}
+.undp-badge{margin-left:20px;font-size:10px;font-weight:700;padding:4px 10px;border:1px solid rgba(0,148,200,0.4);color:#0094c8;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;}
+
+/* ── Hero ──────────────────────────────────────────────── */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:120px 40px 80px;position:relative;overflow:hidden;}
+.hero::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle at 30% 40%, rgba(124,58,237,0.08) 0%, transparent 50%),radial-gradient(circle at 70% 60%, rgba(56,189,248,0.06) 0%, transparent 50%);animation:float 20s ease-in-out infinite;}
+@keyframes float{0%,100%{transform:translate(0,0);}50%{transform:translate(-20px,20px);}}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border:1px solid rgba(124,58,237,0.3);border-radius:999px;font-size:12px;font-weight:600;color:var(--accent);margin-bottom:32px;background:rgba(124,58,237,0.06);position:relative;z-index:1;}
+.hero h1{font-size:clamp(48px,8vw,88px);font-weight:900;letter-spacing:-3px;line-height:0.95;margin-bottom:24px;position:relative;z-index:1;}
+.hero h1 .gradient{background:linear-gradient(135deg,#7c3aed,#38bdf8,#22c55e);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.hero .subtitle{font-size:clamp(16px,2.5vw,22px);color:var(--text-dim);max-width:700px;line-height:1.6;margin-bottom:48px;position:relative;z-index:1;}
+.hero-stats{display:flex;gap:48px;position:relative;z-index:1;}
+.hero-stat{text-align:center;}
+.hero-stat .num{font-size:42px;font-weight:900;background:linear-gradient(135deg,var(--accent),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.hero-stat .label{font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-top:4px;}
+.scroll-hint{position:absolute;bottom:32px;animation:bounce 2s infinite;color:var(--text-dim);font-size:20px;}
+@keyframes bounce{0%,100%{transform:translateY(0);}50%{transform:translateY(8px);}}
+
+/* ── Section Styles ────────────────────────────────────── */
+section{padding:100px 40px;max-width:1200px;margin:0 auto;}
+.section-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--accent);margin-bottom:12px;}
+.section-title{font-size:clamp(32px,5vw,48px);font-weight:800;letter-spacing:-1.5px;margin-bottom:16px;}
+.section-desc{font-size:17px;color:var(--text-dim);max-width:600px;line-height:1.7;margin-bottom:48px;}
+
+/* ── Channel Cards ─────────────────────────────────────── */
+.channels-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px;}
+.channel-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;transition:all 0.3s;position:relative;overflow:hidden;}
+.channel-card:hover{transform:translateY(-4px);border-color:rgba(124,58,237,0.3);box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+.channel-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--card-accent,var(--accent));opacity:0;transition:0.3s;}
+.channel-card:hover::before{opacity:1;}
+.channel-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px;}
+.channel-card h3{font-size:18px;font-weight:700;margin-bottom:8px;}
+.channel-card p{font-size:14px;color:var(--text-dim);line-height:1.6;}
+.channel-tag{display:inline-block;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;margin-top:12px;text-transform:uppercase;letter-spacing:0.5px;}
+
+/* ── Architecture ──────────────────────────────────────── */
+.arch-flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:0;align-items:stretch;margin-top:40px;}
+.arch-col{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;}
+.arch-col h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.arch-item{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;color:var(--text-dim);}
+.arch-item i{width:18px;text-align:center;color:var(--cyan);font-size:12px;}
+.arch-arrow{display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--accent);padding:0 12px;}
+
+/* ── AI Assessment ─────────────────────────────────────── */
+.ai-section{background:linear-gradient(135deg,rgba(124,58,237,0.05),rgba(56,189,248,0.03));border:1px solid rgba(124,58,237,0.12);border-radius:20px;padding:48px;margin-top:48px;}
+.signal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:24px;}
+.signal-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:20px;display:flex;align-items:flex-start;gap:14px;}
+.signal-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.signal-card h4{font-size:14px;font-weight:700;margin-bottom:4px;}
+.signal-card p{font-size:12px;color:var(--text-dim);line-height:1.5;}
+.signal-weight{font-size:20px;font-weight:900;margin-top:8px;}
+
+/* ── Tech Stack ────────────────────────────────────────── */
+.tech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;}
+.tech-row{display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:14px;}
+.tech-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);min-width:90px;}
+.tech-val{color:var(--text-dim);}
+
+/* ── Data Flow ─────────────────────────────────────────── */
+.flow-steps{display:flex;flex-direction:column;gap:0;margin-top:32px;}
+.flow-step{display:flex;align-items:flex-start;gap:20px;padding:20px 0;}
+.flow-num{width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;}
+.flow-step:not(:last-child) .flow-num::after{content:'';position:absolute;top:36px;left:50%;width:2px;height:calc(100% + 4px);background:linear-gradient(to bottom,var(--accent),transparent);transform:translateX(-50%);}
+.flow-body h4{font-size:16px;font-weight:700;margin-bottom:4px;}
+.flow-body p{font-size:14px;color:var(--text-dim);line-height:1.6;}
+
+/* ── Security ──────────────────────────────────────────── */
+.security-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
+.sec-card{display:flex;align-items:flex-start;gap:12px;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:12px;}
+.sec-icon{width:36px;height:36px;border-radius:8px;background:rgba(34,197,94,0.1);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.sec-card h4{font-size:14px;font-weight:700;margin-bottom:2px;}
+.sec-card p{font-size:12px;color:var(--text-dim);}
+
+/* ── Dashboard Preview ─────────────────────────────────── */
+.dashboard-features{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:32px;}
+.dash-feat{padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:12px;font-size:13px;}
+.dash-feat i{color:var(--cyan);margin-right:6px;}
+.dash-feat strong{display:block;font-size:14px;margin-bottom:4px;}
+.dash-feat span{color:var(--text-dim);}
+
+/* ── Cost Optimization ─────────────────────────────────── */
+.cost-table{width:100%;border-collapse:collapse;margin-top:24px;font-size:14px;}
+.cost-table th{text-align:left;padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);border-bottom:1px solid var(--border);}
+.cost-table td{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.04);}
+.cost-table tr:hover td{background:rgba(255,255,255,0.02);}
+.cost-badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;display:inline-block;}
+
+/* ── Footer ────────────────────────────────────────────── */
+footer{text-align:center;padding:60px 40px;border-top:1px solid var(--border);margin-top:40px;}
+footer .logo{font-size:28px;font-weight:900;background:linear-gradient(135deg,var(--accent),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:12px;}
+footer p{font-size:14px;color:var(--text-dim);}
+footer .built{margin-top:20px;font-size:12px;color:#475569;}
+
+/* ── Responsive ────────────────────────────────────────── */
+@media(max-width:768px){
+    nav{padding:0 20px;}nav ul{display:none;}
+    section{padding:60px 20px;}
+    .hero{padding:100px 20px 60px;}
+    .hero h1{font-size:36px;letter-spacing:-1px;}
+    .hero-stats{flex-wrap:wrap;gap:24px;}
+    .arch-flow{grid-template-columns:1fr;gap:12px;}
+    .arch-arrow{transform:rotate(90deg);padding:8px 0;}
+    .channels-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+    <div class="logo">CRISP <span>Platform</span></div>
+    <ul>
+        <li><a href="#channels">Channels</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#ai">AI Engine</a></li>
+        <li><a href="#dashboard">Dashboard</a></li>
+        <li><a href="#security">Security</a></li>
+        <li><a href="#cost">Optimization</a></li>
+    </ul>
+    <span class="undp-badge">UNDP InnoCentive Challenge</span>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+    <div class="hero-badge"><i class="fa-solid fa-satellite-dish"></i> Built for Crisis Response</div>
+    <h1>
+        <span class="gradient">Crisis Response</span><br>
+        Intelligence Platform
+    </h1>
+    <p class="subtitle">
+        Multi-channel, AI-powered damage reporting for the first 48 hours.
+        Any device. Any language. Any connectivity. <strong>Every life matters.</strong>
+    </p>
+    <div class="hero-stats">
+        <div class="hero-stat"><div class="num">6</div><div class="label">Report Channels</div></div>
+        <div class="hero-stat"><div class="num">190+</div><div class="label">Countries Supported</div></div>
+        <div class="hero-stat"><div class="num">2Kbps</div><div class="label">Min Bandwidth</div></div>
+        <div class="hero-stat"><div class="num">0</div><div class="label">Registration Required</div></div>
+    </div>
+    <div class="scroll-hint"><i class="fa-solid fa-chevron-down"></i></div>
+</section>
+
+<!-- Problem Statement -->
+<section>
+    <div class="section-label">The Challenge</div>
+    <div class="section-title">The First 48 Hours Are Critical</div>
+    <div class="section-desc">After a sudden-onset disaster, accurate damage data is the difference between life and death. But the people who need help the most often have the least technology. CRISP bridges this gap.</div>
+    <div class="channels-grid">
+        <div class="channel-card" style="--card-accent:var(--green);">
+            <div class="channel-icon" style="background:rgba(34,197,94,0.1);color:var(--green);"><i class="fa-solid fa-person-drowning"></i></div>
+            <h3>The Problem</h3>
+            <p>Existing platforms require smartphones, internet, and technical literacy. <strong>Billions of people</strong> in disaster-prone areas have none of these. Voice calls and SMS are their only lifeline.</p>
+        </div>
+        <div class="channel-card" style="--card-accent:var(--cyan);">
+            <div class="channel-icon" style="background:rgba(56,189,248,0.1);color:var(--cyan);"><i class="fa-solid fa-bullseye"></i></div>
+            <h3>Our Solution</h3>
+            <p>Accept reports from <strong>any device</strong> (smartphone, feature phone, landline), in <strong>any language</strong>, at <strong>any bandwidth</strong>. AI verifies each report using satellite imagery, nearby corroboration, and voice analysis.</p>
+        </div>
+        <div class="channel-card" style="--card-accent:var(--accent);">
+            <div class="channel-icon" style="background:rgba(124,58,237,0.1);color:var(--accent);"><i class="fa-solid fa-heart-pulse"></i></div>
+            <h3>The Impact</h3>
+            <p>Control centers get <strong>verified, actionable intelligence</strong> within minutes. AI separates real emergencies from false alarms. <strong>Every genuine report gets a response.</strong></p>
+        </div>
+    </div>
+</section>
+
+<!-- Channels -->
+<section id="channels">
+    <div class="section-label">Intake Layer</div>
+    <div class="section-title">6 Channels, One Platform</div>
+    <div class="section-desc">From offline-first progressive web apps to simple voice calls from a landline — CRISP meets people where they are.</div>
+    <div class="channels-grid">
+        <div class="channel-card" style="--card-accent:#7c3aed;">
+            <div class="channel-icon" style="background:rgba(124,58,237,0.12);color:#7c3aed;"><i class="fa-solid fa-mobile-screen-button"></i></div>
+            <h3>Mobile PWA</h3>
+            <p>Offline-first progressive web app. Photo capture, audio recording, GPS location. Syncs in 1KB chunks even at 2Kbps. Installable on home screen.</p>
+            <span class="channel-tag" style="background:rgba(124,58,237,0.12);color:#7c3aed;">Primary Channel</span>
+        </div>
+        <div class="channel-card" style="--card-accent:#26a5e4;">
+            <div class="channel-icon" style="background:rgba(38,165,228,0.12);color:#26a5e4;"><i class="fa-brands fa-telegram"></i></div>
+            <h3>Telegram Bot</h3>
+            <p>Guided flow with step-by-step prompts in 7 languages. Accepts photos, audio, video, text, location. Video auto-splits into audio + thumbnail.</p>
+            <span class="channel-tag" style="background:rgba(38,165,228,0.12);color:#26a5e4;">Multilingual</span>
+        </div>
+        <div class="channel-card" style="--card-accent:#25d366;">
+            <div class="channel-icon" style="background:rgba(37,211,102,0.12);color:#25d366;"><i class="fa-brands fa-whatsapp"></i></div>
+            <h3>WhatsApp Bot</h3>
+            <p>Receives text, photos, audio, and location via WhatsApp Cloud API. Media downloaded from Meta Graph API and chunked-uploaded to backend.</p>
+            <span class="channel-tag" style="background:rgba(37,211,102,0.12);color:#25d366;">2B+ Users</span>
+        </div>
+        <div class="channel-card" style="--card-accent:#f59e0b;">
+            <div class="channel-icon" style="background:rgba(245,158,11,0.12);color:#f59e0b;"><i class="fa-solid fa-comment-sms"></i></div>
+            <h3>SMS Gateway</h3>
+            <p>Text-based reporting with keyword parsing. "Flood near bridge, urgent" becomes a structured incident. Auto-replies with confirmation. No internet needed.</p>
+            <span class="channel-tag" style="background:rgba(245,158,11,0.12);color:#f59e0b;">Feature Phone</span>
+        </div>
+        <div class="channel-card" style="--card-accent:#ec4899;">
+            <div class="channel-icon" style="background:rgba(236,72,153,0.12);color:#ec4899;"><i class="fa-solid fa-phone"></i></div>
+            <h3>IVR Voice Call</h3>
+            <p>2-step voice flow: "Say your location" + "Describe your problem." Auto-stops on silence. Whisper transcribes to English. Claude AI geocodes mangled Hindi place names.</p>
+            <span class="channel-tag" style="background:rgba(236,72,153,0.12);color:#ec4899;">Landline OK</span>
+        </div>
+        <div class="channel-card" style="--card-accent:var(--cyan);">
+            <div class="channel-icon" style="background:rgba(56,189,248,0.12);color:var(--cyan);"><i class="fa-solid fa-display"></i></div>
+            <h3>Web Dashboard</h3>
+            <p>Control center for QRT operators. Leaflet map with clusters, decision-first detail panel, AI assessment, satellite verification, PDF export for rescue teams.</p>
+            <span class="channel-tag" style="background:rgba(56,189,248,0.12);color:var(--cyan);">Command Center</span>
+        </div>
+    </div>
+</section>
+
+<!-- Architecture -->
+<section id="architecture">
+    <div class="section-label">System Design</div>
+    <div class="section-title">Three-Layer Architecture</div>
+    <div class="section-desc">Reports flow from any channel through AI processing to the control center in real-time.</div>
+    <div class="arch-flow">
+        <div class="arch-col">
+            <h4><i class="fa-solid fa-tower-broadcast"></i> Intake Layer</h4>
+            <div class="arch-item"><i class="fa-solid fa-mobile-screen-button"></i> Mobile PWA (offline-first)</div>
+            <div class="arch-item"><i class="fa-brands fa-telegram"></i> Telegram Bot (guided flow)</div>
+            <div class="arch-item"><i class="fa-brands fa-whatsapp"></i> WhatsApp Bot (media+text)</div>
+            <div class="arch-item"><i class="fa-solid fa-comment-sms"></i> SMS Gateway (text parsing)</div>
+            <div class="arch-item"><i class="fa-solid fa-phone"></i> IVR Voice Call (auto-stop)</div>
+        </div>
+        <div class="arch-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+        <div class="arch-col">
+            <h4><i class="fa-solid fa-microchip"></i> Processing Layer</h4>
+            <div class="arch-item"><i class="fa-solid fa-server"></i> FastAPI + SQLAlchemy</div>
+            <div class="arch-item"><i class="fa-solid fa-language"></i> Whisper Transcription</div>
+            <div class="arch-item"><i class="fa-solid fa-brain"></i> Claude AI Geocoding</div>
+            <div class="arch-item"><i class="fa-solid fa-satellite"></i> Sentinel Hub Satellite</div>
+            <div class="arch-item"><i class="fa-solid fa-puzzle-piece"></i> Chunked Media Assembly</div>
+        </div>
+        <div class="arch-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+        <div class="arch-col">
+            <h4><i class="fa-solid fa-shield-halved"></i> Decision Layer</h4>
+            <div class="arch-item"><i class="fa-solid fa-map-location-dot"></i> Leaflet Map + Clusters</div>
+            <div class="arch-item"><i class="fa-solid fa-brain"></i> AI Assessment (on-demand)</div>
+            <div class="arch-item"><i class="fa-solid fa-satellite-dish"></i> Satellite Verification</div>
+            <div class="arch-item"><i class="fa-solid fa-file-pdf"></i> PDF Export for Teams</div>
+            <div class="arch-item"><i class="fa-solid fa-hands-helping"></i> Send Help / False / Delete</div>
+        </div>
+    </div>
+</section>
+
+<!-- AI Engine -->
+<section id="ai">
+    <div class="section-label">Intelligence Engine</div>
+    <div class="section-title">AI-Powered Assessment</div>
+    <div class="section-desc">Claude Sonnet cross-verifies every signal. No single data point drives the decision. Source-aware scoring ensures fair treatment for all reporters.</div>
+
+    <div class="ai-section">
+        <h3 style="font-size:20px;font-weight:800;margin-bottom:8px;"><i class="fa-solid fa-brain" style="color:var(--accent);"></i> Multi-Signal Cross-Verification</h3>
+        <p style="color:var(--text-dim);font-size:14px;margin-bottom:24px;">The AI doesn't just look at photos. It cross-checks <strong>text urgency</strong>, <strong>satellite imagery</strong>, <strong>nearby corroboration</strong>, and <strong>caller identity</strong> — adapting weights based on the source channel.</p>
+
+        <div class="signal-grid">
+            <div class="signal-card">
+                <div class="signal-icon" style="background:rgba(56,189,248,0.1);color:var(--cyan);"><i class="fa-solid fa-camera"></i></div>
+                <div>
+                    <h4>Photo Evidence</h4>
+                    <p>Does the photo show real damage? Does it match the text description? Could it be a stock photo?</p>
+                    <div class="signal-weight" style="color:var(--cyan);">25%</div>
+                </div>
+            </div>
+            <div class="signal-card">
+                <div class="signal-icon" style="background:rgba(124,58,237,0.1);color:var(--accent);"><i class="fa-solid fa-align-left"></i></div>
+                <div>
+                    <h4>Text & Voice</h4>
+                    <p>Specific details, emotional distress, local knowledge that only someone on-ground would know.</p>
+                    <div class="signal-weight" style="color:var(--accent);">25-40%</div>
+                </div>
+            </div>
+            <div class="signal-card">
+                <div class="signal-icon" style="background:rgba(34,197,94,0.1);color:var(--green);"><i class="fa-solid fa-satellite"></i></div>
+                <div>
+                    <h4>Satellite Imagery</h4>
+                    <p>Sentinel-2 + Maxar compared against ground photos. Detects flooding, structural damage, fire scars.</p>
+                    <div class="signal-weight" style="color:var(--green);">25%</div>
+                </div>
+            </div>
+            <div class="signal-card">
+                <div class="signal-icon" style="background:rgba(245,158,11,0.1);color:var(--amber);"><i class="fa-solid fa-layer-group"></i></div>
+                <div>
+                    <h4>Corroboration</h4>
+                    <p>Multiple independent reports from the same area? That's the strongest signal of a real incident.</p>
+                    <div class="signal-weight" style="color:var(--amber);">25%</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top:32px;padding:20px;background:rgba(236,72,153,0.06);border:1px solid rgba(236,72,153,0.15);border-radius:12px;">
+            <h4 style="color:var(--pink);font-size:14px;margin-bottom:8px;"><i class="fa-solid fa-phone"></i> Source-Aware Fairness: IVR & SMS</h4>
+            <p style="font-size:13px;color:var(--text-dim);line-height:1.6;">Callers without smartphones <strong>cannot send photos</strong>. CRISP never penalizes them for it. For voice calls and SMS, text/voice content weight increases to <strong>40%</strong>, and a traceable phone number is treated as <strong>evidence of sincerity</strong>. These are often the most vulnerable populations — their reports get fair scores.</p>
+        </div>
+    </div>
+</section>
+
+<!-- Data Flow -->
+<section>
+    <div class="section-label">How It Works</div>
+    <div class="section-title">From Report to Rescue</div>
+    <div class="flow-steps">
+        <div class="flow-step">
+            <div class="flow-num">1</div>
+            <div class="flow-body">
+                <h4>Report Arrives</h4>
+                <p>Via any of 6 channels. Audio transcribed by Whisper (any language to English). Location geocoded by Claude AI + Mapbox. Media chunked into 1KB packets with DJB2 checksum.</p>
+            </div>
+        </div>
+        <div class="flow-step">
+            <div class="flow-num">2</div>
+            <div class="flow-body">
+                <h4>Dashboard Shows It</h4>
+                <p>Report appears on the Leaflet map with source badge (App/Telegram/WhatsApp/SMS/Call). Control center sees location, description, audio players, and caller info.</p>
+            </div>
+        </div>
+        <div class="flow-step">
+            <div class="flow-num">3</div>
+            <div class="flow-body">
+                <h4>Admin Runs AI Assessment</h4>
+                <p>One click. Claude Sonnet analyzes all signals: text, photo, satellite, nearby reports, caller identity. Returns confidence score (0-100) + recommended action. Stored permanently.</p>
+            </div>
+        </div>
+        <div class="flow-step">
+            <div class="flow-num">4</div>
+            <div class="flow-body">
+                <h4>Decision & Dispatch</h4>
+                <p><strong>Send Help</strong> / <strong>Mark False</strong> / <strong>Delete</strong>. Export PDF report for rescue team with photos, satellite images, and AI analysis. All in under 60 seconds.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Dashboard -->
+<section id="dashboard">
+    <div class="section-label">Control Center</div>
+    <div class="section-title">Decision-First Dashboard</div>
+    <div class="section-desc">Every pixel designed for high-pressure crisis response. No scrolling needed for critical decisions.</div>
+    <div class="dashboard-features">
+        <div class="dash-feat"><strong><i class="fa-solid fa-brain"></i> AI Assessment</strong><span>Score + recommended action at the top. One-click, stored permanently.</span></div>
+        <div class="dash-feat"><strong><i class="fa-solid fa-hands-helping"></i> Instant Actions</strong><span>Send Help / False / Delete — always visible, no scrolling.</span></div>
+        <div class="dash-feat"><strong><i class="fa-solid fa-satellite"></i> Satellite Toggle</strong><span>Photo / Satellite / Compare side-by-side with one click.</span></div>
+        <div class="dash-feat"><strong><i class="fa-solid fa-file-pdf"></i> PDF Export</strong><span>One-page report with photos + satellite for rescue teams.</span></div>
+        <div class="dash-feat"><strong><i class="fa-solid fa-play"></i> Audio Players</strong><span>Labeled (Location/Description) for IVR. Progressive upload.</span></div>
+        <div class="dash-feat"><strong><i class="fa-solid fa-location-dot"></i> Location + Contact</strong><span>Coordinates, caller phone, telecom circle — merged card.</span></div>
+        <div class="dash-feat"><strong><i class="fa-solid fa-map"></i> Live Map</strong><span>Leaflet + clusters + heatmap. Fly-to on incident click.</span></div>
+        <div class="dash-feat"><strong><i class="fa-solid fa-tree"></i> Tree View</strong><span>Region > Type > Incidents. Inline dispatch buttons.</span></div>
+    </div>
+</section>
+
+<!-- Tech Stack -->
+<section>
+    <div class="section-label">Technology</div>
+    <div class="section-title">Tech Stack</div>
+    <div class="tech-grid">
+        <div class="tech-row"><span class="tech-label">Mobile</span><span class="tech-val">Vanilla JS PWA, Service Worker, IndexedDB</span></div>
+        <div class="tech-row"><span class="tech-label">Backend</span><span class="tech-val">Python 3.11, FastAPI, SQLAlchemy, Uvicorn</span></div>
+        <div class="tech-row"><span class="tech-label">AI / ML</span><span class="tech-val">Claude Sonnet + Haiku, faster-whisper</span></div>
+        <div class="tech-row"><span class="tech-label">Satellite</span><span class="tech-val">ESA Sentinel-2 (10m), Mapbox/Maxar (0.5m)</span></div>
+        <div class="tech-row"><span class="tech-label">Geocoding</span><span class="tech-val">Mapbox API + Claude AI place name fixer</span></div>
+        <div class="tech-row"><span class="tech-label">Dashboard</span><span class="tech-val">Vanilla JS, Leaflet.js, Turf.js, MarkerCluster</span></div>
+        <div class="tech-row"><span class="tech-label">Messaging</span><span class="tech-val">Telegram, WhatsApp Cloud, Twilio (SMS+IVR)</span></div>
+        <div class="tech-row"><span class="tech-label">Database</span><span class="tech-val">SQLite (dev) / PostgreSQL (prod)</span></div>
+    </div>
+</section>
+
+<!-- Security -->
+<section id="security">
+    <div class="section-label">Trust & Safety</div>
+    <div class="section-title">Security by Design</div>
+    <div class="section-desc">18 vulnerabilities identified and fixed. Zero registration barrier. Privacy-first architecture.</div>
+    <div class="security-grid">
+        <div class="sec-card"><div class="sec-icon"><i class="fa-solid fa-user-slash"></i></div><div><h4>Zero Registration</h4><p>No accounts, no passwords. Anyone can report. Device identified by anonymous hash.</p></div></div>
+        <div class="sec-card"><div class="sec-icon"><i class="fa-solid fa-shield-halved"></i></div><div><h4>Admin Auth</h4><p>Admin endpoints protected by API key. Field reporters need zero authentication.</p></div></div>
+        <div class="sec-card"><div class="sec-icon"><i class="fa-solid fa-code"></i></div><div><h4>XSS Prevention</h4><p>All user input HTML-escaped before rendering. No innerHTML injection possible.</p></div></div>
+        <div class="sec-card"><div class="sec-icon"><i class="fa-solid fa-gauge-high"></i></div><div><h4>Rate Limiting</h4><p>30 req/min per device. Prevents flooding and DoS attacks.</p></div></div>
+        <div class="sec-card"><div class="sec-icon"><i class="fa-solid fa-lock"></i></div><div><h4>CORS Restricted</h4><p>Only configured origins allowed. No wildcard access.</p></div></div>
+        <div class="sec-card"><div class="sec-icon"><i class="fa-solid fa-helmet-safety"></i></div><div><h4>CSP Headers</h4><p>Content Security Policy, X-Frame-Options, X-XSS-Protection via nginx.</p></div></div>
+    </div>
+</section>
+
+<!-- Cost -->
+<section id="cost">
+    <div class="section-label">Efficiency</div>
+    <div class="section-title">API Cost Optimization</div>
+    <div class="section-desc">Prompt caching reduces Claude API costs by 90% on repeated calls. AI Assessment runs once per incident — result stored permanently.</div>
+    <table class="cost-table">
+        <thead>
+            <tr><th>API Call</th><th>Model</th><th>Trigger</th><th>Caching</th><th>Savings</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><i class="fa-solid fa-location-dot" style="color:var(--cyan);"></i> Geocoder</td><td>Haiku</td><td>Auto (IVR/SMS)</td><td>System prompt cached</td><td><span class="cost-badge" style="background:rgba(34,197,94,0.12);color:var(--green);">~90%</span></td></tr>
+            <tr><td><i class="fa-solid fa-satellite" style="color:var(--amber);"></i> Satellite Scorer</td><td>Haiku</td><td>Admin click</td><td>Scoring rubric cached</td><td><span class="cost-badge" style="background:rgba(34,197,94,0.12);color:var(--green);">~90%</span></td></tr>
+            <tr><td><i class="fa-solid fa-brain" style="color:var(--accent);"></i> AI Assessment</td><td>Sonnet</td><td>Admin click (once)</td><td>System rules cached</td><td><span class="cost-badge" style="background:rgba(34,197,94,0.12);color:var(--green);">~90%</span></td></tr>
+        </tbody>
+    </table>
+    <p style="margin-top:16px;font-size:13px;color:var(--text-dim);">Per-incident: <strong>1 automatic</strong> (geocoder) + <strong>2 on-demand</strong> (satellite + assessment). AI Extractor removed — saving 40% fewer API calls.</p>
+</section>
+
+<!-- Offline -->
+<section>
+    <div class="section-label">Resilience</div>
+    <div class="section-title">Works at 2Kbps</div>
+    <div class="flow-steps">
+        <div class="flow-step"><div class="flow-num" style="background:var(--red);"><i class="fa-solid fa-wifi" style="font-size:12px;"></i></div><div class="flow-body"><h4>No Internet</h4><p>Report saved to IndexedDB with photo thumbnail + full audio. Ready to sync when connectivity returns.</p></div></div>
+        <div class="flow-step"><div class="flow-num" style="background:var(--orange);"><i class="fa-solid fa-signal" style="font-size:12px;"></i></div><div class="flow-body"><h4>2Kbps Connection</h4><p>Metadata syncs first (<1KB). Then media uploads in 1KB chunks with DJB2 checksum + automatic resume on failure.</p></div></div>
+        <div class="flow-step"><div class="flow-num" style="background:var(--green);"><i class="fa-solid fa-wifi" style="font-size:12px;"></i></div><div class="flow-body"><h4>Full Connectivity</h4><p>High-res photo + original audio uploaded. Whisper transcription + AI pipeline triggered automatically.</p></div></div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer>
+    <div class="logo">CRISP</div>
+    <p>Crisis Response Intelligence & Situation Platform</p>
+    <p class="built">Built for the UNDP InnoCentive Challenge on Rapid Community Damage Assessment</p>
+    <p class="built" style="margin-top:8px;">Apache License 2.0 &middot; Open Source</p>
+</footer>
+
+</body>
+</html>

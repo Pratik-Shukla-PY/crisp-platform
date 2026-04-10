@@ -80,6 +80,7 @@ class Report(Base):
     severity = Column(Enum(SeverityEnum), default=SeverityEnum.UNKNOWN, nullable=False)
     infrastructure_type = Column(Enum(InfraTypeEnum), default=InfraTypeEnum.OTHER, nullable=False)
     description = Column(String)
+    detected_language = Column(String(10), nullable=True)  # ISO language code (en, hi, zh, etc.)
     caller_info = Column(JSON, nullable=True)  # Phone number, network city/state for IVR/SMS/Telegram
     ai_assessment = Column(JSON, nullable=True)  # Cached AI assessment {score, action, summary, details}
     is_auto_submitted = Column(Boolean, default=False, nullable=False)

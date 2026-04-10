@@ -68,6 +68,16 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
     with open(filepath, 'wb') as f:
         f.write(file_bytes)
 
+    # PII Protection: Auto-blur faces + PII text (GDPR/CCPA compliance)
+    if media_type == 'IMAGE':
+        try:
+            from app.services.pii_blur import blur_pii
+            pii_result = blur_pii(filepath)
+            if pii_result.get("blurred"):
+                logger.info(f"PII blurred in {filename}: faces={pii_result['faces']} pii_text={pii_result['pii_texts']}")
+        except Exception as e:
+            logger.warning(f"PII blur failed for {filename}: {e}")
+
     logger.info(f"Assembled {media_id}: {len(file_bytes):,} bytes → {filename}")
     return f"/static/{filename}"
 
@@ -112,6 +122,13 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
     filepath = os.path.join(UPLOAD_DIR, filename)
     with open(filepath, 'wb') as f:
         f.write(file_bytes)
+
+    # PII Protection: blur faces even in partial images (shown on dashboard during upload)
+    try:
+        from app.services.pii_blur import blur_pii
+        blur_pii(filepath)
+    except Exception:
+        pass  # Non-critical for partial images
 
     logger.info(f"Partial image updated: {media_id} ({len(parts)} chunks, {len(file_bytes):,} bytes)")
     return f"/static/{filename}"
@@ -853,8 +870,15 @@ def attach_thumbnail(report_id: str, payload: ThumbnailPayload, db: Session = De
             padding = (4 - len(b64) % 4) % 4
             thumb_bytes = base64.b64decode(b64 + '=' * padding)
             filename = f"{payload.media_id}_thumb.jpg"
-            with open(os.path.join(UPLOAD_DIR, filename), "wb") as f:
+            thumb_path = os.path.join(UPLOAD_DIR, filename)
+            with open(thumb_path, "wb") as f:
                 f.write(thumb_bytes)
+            # PII blur on thumbnail too
+            try:
+                from app.services.pii_blur import blur_pii
+                blur_pii(thumb_path)
+            except Exception:
+                pass
             thumbnail_url = f"/static/{filename}"
         except Exception as e:
             logger.warning(f"Thumbnail save failed (non-fatal): {e}")

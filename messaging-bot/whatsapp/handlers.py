@@ -11,6 +11,7 @@ from .media_handler import download_media
 from .bot_replies import (
     send_welcome, send_received_ack, send_severity_prompt,
     send_type_prompt, send_location_request, send_confirmation, send_text,
+    send_lang_menu, detect_lang_from_phone, parse_lang_selection, t,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,12 +26,28 @@ async def handle_incoming_message(phone: str, message: dict):
     msg_type = message.get("type", "")
     session = get_or_create_session(phone)
 
+    # Auto-detect language from phone number on first message
+    if not hasattr(session, 'lang') or not session.lang:
+        session.lang = detect_lang_from_phone(phone)
+
     # Deduplication
     if msg_id and is_duplicate_message(session, msg_id):
         logger.debug(f"Duplicate message {msg_id} — skipping")
         return
 
     session.touch()
+
+    # Check for language switch command
+    if msg_type == "text":
+        text_body = message.get("text", {}).get("body", "").strip()
+        lang_result = parse_lang_selection(text_body)
+        if lang_result == "__SHOW_MENU__":
+            await send_lang_menu(phone, session.lang)
+            return
+        elif lang_result:
+            session.lang = lang_result
+            await send_welcome(phone, session.lang)
+            return
 
     # Route by message type
     if msg_type == "text":
@@ -106,6 +123,7 @@ async def _handle_image(session, message: dict):
         session.text = caption
     logger.info(f"{session.phone_hash}: image received ({media['size_bytes']:,} bytes)")
     await send_received_ack(session.phone_raw, "image")
+    await send_text(session.phone_raw, "🔒 Privacy: Faces in your photo will be automatically blurred.")
 
 
 async def _handle_audio(session, message: dict):
