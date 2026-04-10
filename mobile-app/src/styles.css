@@ -805,3 +805,53 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     transition: transform 0.3s ease;
 }
 .offline-banner.visible { transform: translateY(0); }
+
+/* PII Warning Banner (above photo preview) */
+.pii-warning-banner {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.25);
+    color: #d97706; font-size: 12px; font-weight: 500;
+    padding: 8px 12px; border-radius: 10px; margin-bottom: 10px;
+    line-height: 1.4;
+}
+.pii-warning-banner i { color: #22c55e; font-size: 14px; flex-shrink: 0; }
+
+/* PII Privacy Notice (on photo preview after capture) */
+.photo-privacy-note {
+    position: absolute; bottom: 8px; left: 8px; right: 8px;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+    color: #94a3b8; font-size: 11px; font-weight: 500;
+    padding: 6px 10px; border-radius: 8px;
+    display: flex; align-items: center; gap: 6px;
+}
+.photo-privacy-note i { color: #22c55e; font-size: 12px; }
+
+/* Extra Photos Strip (multiple photos) */
+.extra-photos-strip {
+    display: flex; align-items: center; gap: 6px;
+    margin: 8px 0; overflow-x: auto; padding: 4px 0;
+}
+.extra-photos-scroll {
+    display: flex; gap: 6px; flex: 1; overflow-x: auto;
+}
+.extra-photos-scroll::-webkit-scrollbar { height: 3px; }
+.extra-photos-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+.extra-photo-thumb {
+    width: 56px; height: 56px; border-radius: 8px; overflow: hidden;
+    flex-shrink: 0; border: 2px solid rgba(255,255,255,0.15);
+    position: relative; cursor: pointer;
+}
+.extra-photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.extra-photo-thumb.active { border-color: var(--accent); box-shadow: 0 0 8px rgba(124,58,237,0.3); }
+.extra-photo-remove {
+    position: absolute; top: -4px; right: -4px; width: 18px; height: 18px;
+    background: #ef4444; color: white; border: none; border-radius: 50%;
+    font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.add-photo-btn {
+    width: 56px; height: 56px; border-radius: 8px; border: 2px dashed rgba(255,255,255,0.2);
+    background: transparent; color: rgba(255,255,255,0.4); font-size: 18px;
+    cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+}
+.add-photo-btn:hover { border-color: var(--accent); color: var(--accent); }

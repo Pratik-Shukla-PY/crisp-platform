@@ -146,6 +146,7 @@ class ReportResponse(BaseModel):
     severity: SeverityEnum
     infrastructure_type: InfraTypeEnum
     description: Optional[str] = None
+    detected_language: Optional[str] = None
     caller_info: Optional[Any] = None
     ai_assessment: Optional[Any] = None
     is_auto_submitted: bool = False

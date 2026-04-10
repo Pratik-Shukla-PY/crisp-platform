@@ -129,13 +129,27 @@
             <p data-i18n="s1_sub">Show us what happened</p>
         </div>
 
+        <!-- PII Warning Banner -->
+        <div class="pii-warning-banner">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span data-i18n="pii_warning">Avoid capturing faces or personal documents. Faces will be auto-blurred for privacy.</span>
+        </div>
+
         <!-- Image preview area -->
-        <div class="photo-preview-box" id="photo-preview-box">
+        <div class="photo-preview-box" id="photo-preview-box" style="position:relative;">
             <div class="photo-placeholder" id="photo-placeholder">
                 <i class="fa-regular fa-image"></i>
                 <span data-i18n="no_photo">No photo yet</span>
             </div>
             <img id="photo-preview" src="" alt="" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:20px;">
+        </div>
+
+        <!-- Extra photos strip (for multiple photos) -->
+        <div class="extra-photos-strip" id="extra-photos-strip" style="display:none;">
+            <div class="extra-photos-scroll" id="extra-photos-scroll"></div>
+            <button class="add-photo-btn" id="btn-add-more-photo" title="Add another photo">
+                <i class="fa-solid fa-plus"></i>
+            </button>
         </div>
 
         <!-- Camera / Browse buttons -->
@@ -159,6 +173,7 @@
         <!-- Hidden inputs -->
         <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none">
         <input type="file" id="file-browse" accept="image/*" style="display:none">
+        <input type="file" id="file-extra" accept="image/*" style="display:none">
     </div>
 
     <!-- Camera modal overlay -->

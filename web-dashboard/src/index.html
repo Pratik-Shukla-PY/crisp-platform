@@ -52,6 +52,23 @@
             <button class="icon-btn deletion-btn" id="btn-pending-deletions" onclick="showPendingDeletions()" style="display:none;" title="View pending deletion requests">
                 <i class="fa-solid fa-trash-clock"></i> <span id="deletion-count-badge">0</span>
             </button>
+
+            <!-- Live Incident Notifications -->
+            <div class="notif-area" id="notif-area">
+                <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()" title="New incident alerts">
+                    <i class="fa-solid fa-bell"></i>
+                    <span class="notif-count" id="notif-count" style="display:none;">0</span>
+                </button>
+                <div class="notif-panel" id="notif-panel" style="display:none;">
+                    <div class="notif-header">
+                        <span><i class="fa-solid fa-bolt"></i> New Incidents</span>
+                        <button class="notif-clear" onclick="clearAllNotifs()" title="Clear all">Clear</button>
+                    </div>
+                    <div class="notif-list" id="notif-list">
+                        <div class="notif-empty">No new incidents</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -189,8 +206,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-<script src="app.js?v=516"></script>
+<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+<script src="app.js?v=521"></script>
 
 <!-- Offline status banner -->
 <div id="offline-banner" style="

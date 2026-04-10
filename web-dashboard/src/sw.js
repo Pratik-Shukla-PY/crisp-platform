@@ -9,10 +9,10 @@
  *   Everything else         → Network with cache fallback
  */
 
-const APP_CACHE    = 'crisp-app-v1';
-const CDN_CACHE    = 'crisp-cdn-v3';
-const API_CACHE    = 'crisp-api-v3';
-const STATIC_CACHE = 'crisp-static-v6';
+const APP_CACHE    = 'crisp-app-v3';
+const CDN_CACHE    = 'crisp-cdn-v5';
+const API_CACHE    = 'crisp-api-v5';
+const STATIC_CACHE = 'crisp-static-v8';
 
 // App files that should always be fresh (network-first)
 const APP_FILES = ['index.html', 'app.js', 'styles.css', 'manifest.json'];
@@ -41,10 +41,9 @@ self.addEventListener('fetch', event => {
 
   if (request.method !== 'GET') return;
 
-  // ── API data: stale-while-revalidate ────────────────────────────────────
+  // ── API data: network-only (always fresh, never serve stale) ────────────
   if (url.port === '8000' || url.pathname.startsWith('/api/')) {
-    event.respondWith(staleWhileRevalidate(API_CACHE, request));
-    return;
+    return; // Let browser handle it directly — no SW interception
   }
 
   // ── CDN assets: cache-first (fonts, icons — stable) ─────────────────────

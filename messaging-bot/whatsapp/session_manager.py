@@ -41,6 +41,7 @@ class SessionBuffer:
     """Per-user session that accumulates WhatsApp inputs."""
     phone_hash: str          # WA-{sha256[:16]} — anonymized
     phone_raw: str           # raw number (for sending replies only, never stored in DB)
+    lang: str = "en"         # Detected/selected language
     state: str = "COLLECTING"  # COLLECTING → AWAITING_SEVERITY → AWAITING_TYPE → AWAITING_LOCATION → SUBMITTING → DONE
     text: str = ""
     image_data_url: str = ""      # data:image/jpeg;base64,...

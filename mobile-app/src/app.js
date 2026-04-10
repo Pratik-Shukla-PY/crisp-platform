@@ -270,6 +270,19 @@ async function syncQueueManual() {
                 } catch (_) {}
             }
 
+            // Stage 3b: extra photos (multiple images)
+            if (stages.photo && item.extraPhotos && item.extraPhotos.length > 0 && reportId) {
+                for (let ei = 0; ei < item.extraPhotos.length; ei++) {
+                    try {
+                        const res = await fetch(`${API_BASE}/reports/${reportId}/media/attach`, {
+                            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ type: 'IMAGE', resolution_tier: 'MEDIUM', url: item.extraPhotos[ei], file_size_bytes: 0 })
+                        });
+                        if (res.ok) { item.extraPhotos.splice(ei, 1); ei--; try { await enqueueReport(item); } catch(_){} }
+                    } catch (_) {}
+                }
+            }
+
             // Stage 4: audio
             if (!stages.audio && item.audioBlob && reportId) {
                 try {
@@ -313,6 +326,7 @@ const I18N = {
         start_btn: "START",
         s1_title: "PHOTO", s1_sub: "Take picture",
         no_photo: "No photo", use_camera: "Camera", browse: "Files", skip_photo: "Skip", next: "NEXT",
+        pii_warning: "Avoid faces or personal documents. Faces will be auto-blurred for privacy.",
         s2_title: "VOICE", s2_sub: "Speak now",
         tap_mic: "TAP to SPEAK", transcript_hint: "Listening...",
         skip_audio: "I will type",
@@ -361,6 +375,7 @@ const I18N = {
         start_btn: "शुरू करें",
         s1_title: "फोटो", s1_sub: "चित्र लें",
         no_photo: "नहीं है", use_camera: "कैमरा", browse: "फाइल", skip_photo: "छोड़ें", next: "आगे",
+        pii_warning: "चेहरे या व्यक्तिगत दस्तावेज न दिखाएं। चेहरे गोपनीयता के लिए स्वचालित रूप से धुंधले होंगे।",
         s2_title: "आवाज़", s2_sub: "बोलें",
         tap_mic: "बोलने के लिए दबाएं", transcript_hint: "सुन रहे हैं...",
         skip_audio: "टाइप करें",
@@ -400,6 +415,7 @@ const state = {
     lang: 'en',
     photoDataUrl: null,
     photoBlob: null,
+    extraPhotos: [],  // Array of { dataUrl, blob } for additional photos
     audioBlob: null,
     transcript: '',
     description: '',
@@ -538,23 +554,23 @@ const API_BASE = `${_backendHost}/api/v1`;
 // All endpoints use HTTPS so this works on both HTTP and HTTPS pages.
 // Returns { lat, lng, acc, is_ip_based, country, region } or null on failure.
 async function tryIPGeolocation() {
-    const TO = 6000;
-    // Tier 1: ipapi.co — richest data, may rate-limit on shared server IPs but works from browsers
-    try {
-        const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(TO) });
-        if (res.ok) {
-            const d = await res.json();
-            if (d && d.latitude && d.longitude && !d.error) {
-                return { lat: d.latitude, lng: d.longitude, acc: 5000, is_ip_based: true, country: d.country_code, region: d.region };
-            }
-        }
-    } catch (_) {}
-    // Tier 2: ipwho.is — free HTTPS, no key required
+    const TO = 4000;
+    // Tier 1: ipwho.is — most reliable free HTTPS, no key required
     try {
         const res = await fetch('https://ipwho.is/', { signal: AbortSignal.timeout(TO) });
         if (res.ok) {
             const d = await res.json();
             if (d && d.latitude && d.longitude && d.success !== false) {
+                return { lat: d.latitude, lng: d.longitude, acc: 5000, is_ip_based: true, country: d.country_code, region: d.region };
+            }
+        }
+    } catch (_) {}
+    // Tier 2: ipapi.co — rich data but often rate-limited
+    try {
+        const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(TO) });
+        if (res.ok) {
+            const d = await res.json();
+            if (d && d.latitude && d.longitude && !d.error) {
                 return { lat: d.latitude, lng: d.longitude, acc: 5000, is_ip_based: true, country: d.country_code, region: d.region };
             }
         }
@@ -1072,13 +1088,22 @@ function detectAndSetupLanguage() {
         return;
     }
 
-    // Set a timeout for GPS so the user isn't stuck forever
+    // Set a timeout for GPS — 8s is enough for most devices.
+    // Don't give up too early (was 4s, GPS needs 5-10s on cold start)
     const gpsTimeout = setTimeout(() => {
-        if (!state.location && state.lang === 'en') {
-            activateLang('en');
+        if (!state.location) {
+            console.warn('GPS timeout (8s) — trying IP fallback');
+            tryIPGeolocation().then(ipLoc => {
+                if (ipLoc && !state.location) {
+                    state.location = ipLoc;
+                    state.deviceLocation = { lat: ipLoc.lat, lng: ipLoc.lng };
+                }
+                if (!state.lang || state.lang === 'en') activateLang('en');
+            });
         }
-    }, 4000);
+    }, 8000);
 
+    // Try coarse location first (WiFi/cell, instant), then upgrade to GPS
     navigator.geolocation.getCurrentPosition(async (pos) => {
         clearTimeout(gpsTimeout);
         state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
@@ -1172,10 +1197,22 @@ function detectAndSetupLanguage() {
         }
         activateLang('en');
     }, {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
+        enableHighAccuracy: false,  // Use WiFi/cell first (instant), not GPS hardware (slow)
+        timeout: 8000,
+        maximumAge: 60000  // Accept cached position up to 1 minute old (fast startup)
     });
+
+    // After coarse fix, upgrade to high-accuracy GPS in background (non-blocking)
+    setTimeout(() => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition((pos) => {
+                state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
+                state.deviceLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                try { localStorage.setItem('crisp_device_gps', JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy, ts: Date.now() })); } catch(_){}
+                console.log('GPS upgraded to high accuracy:', pos.coords.accuracy, 'm');
+            }, () => {}, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+        }
+    }, 2000);
 }
 function setupPhotoStage() {
     const previewImg = document.getElementById('photo-preview');
@@ -1189,6 +1226,75 @@ function setupPhotoStage() {
         placeholder.style.display = 'none';
         nextBtn.style.display = 'flex';
         skipLink.style.display = 'none';
+        // PII privacy notice overlay on the photo
+        let privNote = previewImg.parentElement.querySelector('.photo-privacy-note');
+        if (!privNote) {
+            privNote = document.createElement('div');
+            privNote.className = 'photo-privacy-note';
+            privNote.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Faces will be auto-blurred for privacy';
+            previewImg.parentElement.appendChild(privNote);
+        }
+        // Show "Add more photos" strip after first photo
+        const strip = document.getElementById('extra-photos-strip');
+        if (strip) strip.style.display = 'flex';
+        _updateExtraPhotoStrip();
+    }
+
+    function _updateExtraPhotoStrip() {
+        const scroll = document.getElementById('extra-photos-scroll');
+        if (!scroll) return;
+        scroll.innerHTML = '';
+        // Show primary photo as first thumb
+        if (state.photoDataUrl) {
+            const thumb = document.createElement('div');
+            thumb.className = 'extra-photo-thumb active';
+            thumb.innerHTML = `<img src="${state.photoDataUrl}">`;
+            thumb.onclick = () => { previewImg.src = state.photoDataUrl; document.querySelectorAll('.extra-photo-thumb').forEach(t=>t.classList.remove('active')); thumb.classList.add('active'); };
+            scroll.appendChild(thumb);
+        }
+        // Show extra photos
+        state.extraPhotos.forEach((ep, idx) => {
+            const thumb = document.createElement('div');
+            thumb.className = 'extra-photo-thumb';
+            thumb.innerHTML = `<img src="${ep.dataUrl}"><button class="extra-photo-remove" onclick="event.stopPropagation();removeExtraPhoto(${idx})"><i class="fa-solid fa-xmark"></i></button>`;
+            thumb.onclick = () => { previewImg.src = ep.dataUrl; document.querySelectorAll('.extra-photo-thumb').forEach(t=>t.classList.remove('active')); thumb.classList.add('active'); };
+            scroll.appendChild(thumb);
+        });
+    }
+
+    window.removeExtraPhoto = (idx) => {
+        state.extraPhotos.splice(idx, 1);
+        _updateExtraPhotoStrip();
+    };
+
+    // "Add more photos" button
+    const addMoreBtn = document.getElementById('btn-add-more-photo');
+    const fileExtra = document.getElementById('file-extra');
+    if (addMoreBtn && fileExtra) {
+        addMoreBtn.addEventListener('click', () => fileExtra.click());
+        fileExtra.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let cw = img.width, ch = img.height;
+                    if (Math.max(cw, ch) > 1600) { const s = 1600 / Math.max(cw, ch); cw = Math.round(cw * s); ch = Math.round(ch * s); }
+                    canvas.width = cw; canvas.height = ch;
+                    canvas.getContext('2d').drawImage(img, 0, 0, cw, ch);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.60);
+                    canvas.toBlob(blob => {
+                        state.extraPhotos.push({ dataUrl, blob });
+                        _updateExtraPhotoStrip();
+                    }, 'image/jpeg', 0.60);
+                };
+                img.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
+            fileExtra.value = '';
+        });
     }
 
     // Camera button
@@ -1559,7 +1665,7 @@ async function refreshLocation() {
             navigator.geolocation.getCurrentPosition(
                 (pos) => { clearTimeout(timer); resolve(pos); },
                 (err) => { clearTimeout(timer); console.warn('GPS refresh error:', err.code, err.message); resolve(null); },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
             );
         });
 
@@ -1961,7 +2067,8 @@ async function submitReport() {
 
         const hasPhoto = !!state.photoDataUrl;
         const hasAudio = !!state.audioBlob;
-        const expectedMedia = (hasPhoto ? 1 : 0) + (hasAudio ? 1 : 0);
+        const extraPhotoCount = state.extraPhotos.length;
+        const expectedMedia = (hasPhoto ? 1 : 0) + extraPhotoCount + (hasAudio ? 1 : 0);
 
         // Build queue item with all data
         const queueItem = {
@@ -1991,6 +2098,7 @@ async function submitReport() {
             },
             photo: hasPhoto ? state.photoDataUrl : null,
             photoSize: hasPhoto ? (state.photoBlob?.size || 0) : 0,
+            extraPhotos: state.extraPhotos.map(ep => ep.dataUrl),
             audioBlob: null,
             audioSize: 0,
             text: state.description || state.transcript || '',
@@ -2275,7 +2383,7 @@ function showToast(message, duration = 3000) {
 
 function resetApp() {
     inactivityManager.stop();
-    state.photoDataUrl = null; state.photoBlob = null;
+    state.photoDataUrl = null; state.photoBlob = null; state.extraPhotos = [];
     state.audioBlob = null; state.transcript = ''; state.description = '';
     state.infraType = 'ROAD'; state.severity = 'MODERATE'; state.isAutoSubmit = false;
 

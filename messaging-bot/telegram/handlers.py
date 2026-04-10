@@ -1,12 +1,16 @@
 """
-Telegram Handlers — Resilient crisis reporting.
+Telegram Handlers — Resilient crisis reporting for low-connectivity scenarios.
+
+RESILIENCE STRATEGY:
+  1. ONE-MESSAGE REPORTING: Photo with caption = instant complete report.
+     No multi-step flow needed. Caption parsed for location + description.
+  2. AGGRESSIVE EARLY SUBMIT: Report created on FIRST data received
+     (even just text), not waiting for location. Partial data > no data.
+  3. REDUCED ROUND-TRIPS: Steps combined. Type+severity skippable.
+     AI Assessment on dashboard infers type/severity later.
 
 Accepts ANY input at ANY step. People in crisis send data randomly.
 Photo, video, voice, text, location — all captured regardless of sequence.
-The bot still guides step-by-step, but never rejects valid data.
-
-Sequence guide: Location → Type → Severity → Photo → Voice → Text → Done
-But if user sends photo during Type step — it's stored. Video treated as photo.
 """
 import logging
 from .session_manager import (
@@ -20,7 +24,8 @@ from .media_handler import download_media, download_and_split_video
 from .bot_replies import (
     send_welcome, send_step_location, send_step_photo,
     send_step_voice, send_step_severity, send_step_type,
-    send_step_text, send_confirmation, send_text, answer_callback,
+    send_step_text, send_confirmation, send_add_more_prompt,
+    send_text, answer_callback,
     detect_lang, t,
 )
 
@@ -143,17 +148,16 @@ async def _capture_any_media(session, message: dict):
 
 
 def _next_missing_step(session) -> str:
-    """Determine what the user still needs to provide."""
+    """Determine what the user still needs to provide.
+    Reduced steps for connectivity resilience:
+      - Location (critical for rescue teams)
+      - Photo OR voice/text (at least one evidence)
+      - Type/Severity SKIPPED — AI Assessment infers these on dashboard
+    """
     if not session.has_location:
         return "STEP_LOCATION"
-    if session.infra_type == "OTHER":
-        return "STEP_TYPE"
-    if session.severity == "UNKNOWN":
-        return "STEP_SEVERITY"
-    if not session.image_data_url:
-        return "STEP_PHOTO"
-    if not session.audio_data_url and not session.text:
-        return "STEP_VOICE"
+    if not session.image_data_url and not session.audio_data_url and not session.text:
+        return "STEP_PHOTO"  # Ask for any evidence — photo, voice, or text
     return "READY"
 
 
@@ -223,18 +227,41 @@ async def handle_update(update: dict):
         await send_welcome(chat_id, session.lang)
         return
 
+    # ADD_MORE state — user is adding details to an already-submitted report
+    if session.state == "ADD_MORE" and session.report_id:
+        await _capture_any_media(session, message)
+        await send_text(chat_id, "✅ " + t(session.lang, "add_more_done") + "\n\n📎 Send more, or tap Done 👇")
+        return
+
     # ── CAPTURE everything first, regardless of step ──
     had_location_before = session.has_location
+    had_report_before = session.report_id
     await _capture_any_media(session, message)
 
-    # If location was just received for first time, resolve name + create report
+    # Resolve location name if just received
     if session.has_location and not had_location_before:
         await resolve_location_name(session)
-        if not session.report_id:
+
+    # AGGRESSIVE EARLY SUBMIT: Create report on ANY first data
+    # Even text-only or photo-only gets saved immediately.
+    # Partial data on the dashboard > complete data lost to connectivity.
+    if not session.report_id:
+        has_any_data = session.has_location or session.text or session.image_data_url or session.audio_data_url
+        if has_any_data:
             await create_report_early(session)
+            logger.info(f"[TG] Early report created with partial data: loc={session.has_location} text={bool(session.text)} img={bool(session.image_data_url)}")
 
     # ── Now advance to the next missing step ──
     next_step = _next_missing_step(session)
+
+    # ── ONE-MESSAGE REPORTING: If photo+caption has location info, auto-submit ──
+    if not had_report_before and session.report_id and session.image_data_url and session.text and len(session.text) > 10:
+        # User sent a rich single message (photo + detailed caption)
+        # This is likely a one-shot report — auto-submit to minimize round-trips
+        if session.has_location or any(w in session.text.lower() for w in ['near', 'at', 'in', 'village', 'road', 'bridge', 'city']):
+            logger.info(f"[TG] One-message report detected — auto-submitting")
+            await _finalize(session)
+            return
 
     if next_step == "READY":
         # Everything we need is collected — ask for final text or submit
@@ -265,11 +292,20 @@ async def _handle_callback(callback_query: dict):
         session.lang = detected
     lang = session.lang
 
+    # Language selection
+    if data.startswith("lang_"):
+        new_lang = data.replace("lang_", "")
+        session.lang = new_lang
+        await answer_callback(cq_id, f"Language: {new_lang.upper()}")
+        # Re-send welcome in the new language
+        await send_welcome(chat_id, new_lang)
+        return
+
     # Start / Report Another
     if data == "start_report":
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
-        s.lang = detected
+        s.lang = session.lang or detected  # Preserve language choice
         s.state = "STEP_LOCATION"
         await answer_callback(cq_id)
         await send_step_location(chat_id, s.lang)
@@ -277,7 +313,23 @@ async def _handle_callback(callback_query: dict):
 
     if data == "stop":
         await answer_callback(cq_id)
+        await send_text(chat_id, "🙏 " + t(lang, "done_stop"))
         clear_session(user_id)
+        return
+
+    # Add more details to the last submitted report
+    if data.startswith("add_more:"):
+        report_id = data.split(":", 1)[1]
+        session.report_id = report_id
+        session.state = "ADD_MORE"
+        await answer_callback(cq_id)
+        await send_add_more_prompt(chat_id, lang)
+        return
+
+    if data == "add_more_done":
+        await answer_callback(cq_id)
+        await send_text(chat_id, "✅ " + t(lang, "add_more_done"))
+        session.state = "DONE"
         return
 
     if data == "cancel_report":

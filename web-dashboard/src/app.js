@@ -27,6 +27,12 @@ let selectedId = null;
 const knownIds = new Set();
 const liveMarkers = {};
 let firstZoomDone = false;
+
+// ── Live Incident Notifications ─────────────────────────────────────────────
+let _unseenReports = [];
+const _MAX_NOTIFS = 10;
+const _seenIds = new Set(JSON.parse(localStorage.getItem('crisp_seen_ids') || '[]'));
+let _notifPanelOpen = false;
 let heatLayer = null;
 let clusterGroup = null;
 let boundaryLayers = [];
@@ -131,6 +137,138 @@ function showToast(msg, type = 'info') {
     container.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
 }
+
+// ── Live Incident Notification System ────────────────────────────────────────
+
+function _addNotification(r) {
+    const locName = r.location?.user_location_name || r.location?.device_location_name || 'Unknown location';
+    const srcIcons = {APP:'fa-mobile-screen-button',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'};
+    const srcBrand = ['WHATSAPP','TELEGRAM'].includes(r.source) ? 'fa-brands' : 'fa-solid';
+    const sevColor = SEV_COLORS[r.severity] || '#64748b';
+
+    const notif = {
+        id: r.id,
+        type: (r.infrastructure_type || 'OTHER').replace(/_/g, ' '),
+        severity: r.severity || 'UNKNOWN',
+        location: locName,
+        source: r.source || 'APP',
+        srcIcon: srcIcons[r.source] || 'fa-mobile-screen-button',
+        srcBrand,
+        timestamp: r.server_created_at,
+    };
+
+    _unseenReports.unshift(notif);
+    if (_unseenReports.length > _MAX_NOTIFS) _unseenReports.pop();
+
+    _renderNotifications();
+
+    // Show flash notification below bell — visible for 5 seconds then flies into bell
+    _showFlashNotification(notif, sevColor);
+}
+
+function _showFlashNotification(n, sevColor) {
+    // Remove any existing flash
+    document.querySelectorAll('.notif-flash').forEach(el => el.remove());
+
+    const flash = document.createElement('div');
+    flash.className = 'notif-flash';
+    flash.onclick = () => { flash.remove(); dismissNotif(n.id); };
+    flash.innerHTML = `
+        <div class="notif-flash-top">
+            <span class="notif-flash-new">NEW</span>
+            <span class="notif-sev" style="background:${sevColor}20;color:${sevColor};">${n.severity}</span>
+            <span class="notif-flash-type">${n.type}</span>
+            <i class="${n.srcBrand} ${n.srcIcon}" style="color:#64748b;font-size:12px;"></i>
+        </div>
+        <div class="notif-flash-loc"><i class="fa-solid fa-location-dot" style="color:${sevColor};"></i> ${escapeHtml(n.location)}</div>
+    `;
+    document.body.appendChild(flash);
+
+    // After 5 seconds: fly into bell icon
+    setTimeout(() => {
+        flash.classList.add('fly-away');
+        // After fly animation completes, remove
+        setTimeout(() => flash.remove(), 700);
+    }, 5000);
+}
+
+function _renderNotifications() {
+    const bell = document.getElementById('notif-bell');
+    const countEl = document.getElementById('notif-count');
+    const list = document.getElementById('notif-list');
+    if (!bell || !countEl || !list) return;
+
+    const count = _unseenReports.length;
+
+    // Update bell badge
+    if (count > 0) {
+        countEl.textContent = count;
+        countEl.style.display = 'flex';
+        bell.classList.add('has-new');
+    } else {
+        countEl.style.display = 'none';
+        bell.classList.remove('has-new');
+    }
+
+    // Render cards
+    if (count === 0) {
+        list.innerHTML = '<div class="notif-empty"><i class="fa-solid fa-check-circle"></i> No new incidents</div>';
+        return;
+    }
+
+    list.innerHTML = _unseenReports.map(n => {
+        const sevColor = SEV_COLORS[n.severity] || '#64748b';
+        return `<div class="notif-card" onclick="dismissNotif('${n.id}')" style="border-left:3px solid ${sevColor};">
+            <div class="notif-card-top">
+                <span class="notif-sev" style="background:${sevColor}20;color:${sevColor};">${n.severity}</span>
+                <span class="notif-type">${n.type}</span>
+                <i class="${n.srcBrand} ${n.srcIcon}" style="color:#64748b;font-size:11px;" title="${n.source}"></i>
+            </div>
+            <div class="notif-loc"><i class="fa-solid fa-location-dot" style="color:${sevColor};"></i> ${escapeHtml(n.location)}</div>
+            <div class="notif-time">${timeAgo(n.timestamp)}</div>
+        </div>`;
+    }).join('');
+}
+
+window.toggleNotifPanel = () => {
+    const panel = document.getElementById('notif-panel');
+    if (!panel) return;
+    _notifPanelOpen = !_notifPanelOpen;
+    panel.style.display = _notifPanelOpen ? 'block' : 'none';
+};
+
+window.dismissNotif = (id) => {
+    _unseenReports = _unseenReports.filter(n => n.id !== id);
+    _seenIds.add(id);
+    try { localStorage.setItem('crisp_seen_ids', JSON.stringify([..._seenIds])); } catch(_){}
+    _renderNotifications();
+    selectReport(id);
+    // Close panel if empty
+    if (_unseenReports.length === 0) {
+        const panel = document.getElementById('notif-panel');
+        if (panel) panel.style.display = 'none';
+        _notifPanelOpen = false;
+    }
+};
+
+window.clearAllNotifs = () => {
+    _unseenReports.forEach(n => _seenIds.add(n.id));
+    _unseenReports = [];
+    try { localStorage.setItem('crisp_seen_ids', JSON.stringify([..._seenIds])); } catch(_){}
+    _renderNotifications();
+    const panel = document.getElementById('notif-panel');
+    if (panel) panel.style.display = 'none';
+    _notifPanelOpen = false;
+};
+
+// Close panel when clicking outside
+document.addEventListener('click', (e) => {
+    if (_notifPanelOpen && !e.target.closest('.notif-area')) {
+        const panel = document.getElementById('notif-panel');
+        if (panel) panel.style.display = 'none';
+        _notifPanelOpen = false;
+    }
+});
 
 // ── Spatial Clustering (15km radius) ─────────────────────────────────────────
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -1215,7 +1353,8 @@ window.selectReport = (id, skipFly = false) => {
     const panel = document.getElementById('detail-panel');
     panel.style.display = 'flex';
 
-    const img   = r.media?.find(m => m.type === 'IMAGE');
+    const allImages = r.media?.filter(m => m.type === 'IMAGE') || [];
+    const img   = allImages[0] || null;  // Primary image (backward compat)
     const audio = r.media?.find(m => m.type === 'AUDIO');
     const loc   = r.location;
     const ai    = r.ai_analysis;
@@ -1405,17 +1544,32 @@ window.selectReport = (id, skipFly = false) => {
         <!-- ② Urgency alerts -->
         ${urgencyHtml}
 
-        <!-- ③ Evidence: Image + Satellite Verify below image -->
+        <!-- ③ Evidence: Images gallery + Satellite Verify -->
         ${hasVisualEvidence ? `
         <div class="dp-evidence-card">
-            <div class="dp-img-view" id="dp-img-view-${r.id}">${imgHtml}</div>
+            <div class="dp-img-view" id="dp-img-view-${r.id}" style="position:relative;">
+                ${imgHtml}
+                <div class="dp-pii-badge"><i class="fa-solid fa-shield-halved"></i> PII Protected</div>
+            </div>
+            ${allImages.length > 1 ? `
+            <div class="dp-gallery">
+                <div class="dp-gallery-label"><i class="fa-solid fa-images"></i> ${allImages.length} Photos</div>
+                <div class="dp-gallery-strip">
+                    ${allImages.map((im, idx) => {
+                        const imSrc = im.assembly_status === 'complete' && im.url ? getMediaUrl(im.url) : (im.thumbnail_url ? getMediaUrl(im.thumbnail_url) : '');
+                        return imSrc ? `<div class="dp-gallery-thumb ${idx === 0 ? 'active' : ''}" onclick="dpShowGalleryImage('${r.id}',${idx},this)">
+                            <img src="${imSrc}" alt="Photo ${idx+1}">
+                            ${im.assembly_status !== 'complete' ? `<span class="dp-gallery-pct">${(im.completion_pct||0).toFixed(0)}%</span>` : ''}
+                        </div>` : '';
+                    }).join('')}
+                </div>
+            </div>` : ''}
             ${v && satSrc ? `<div class="dp-view-toggle">
                 <button class="dp-vt-btn active" onclick="dpSwitchView('${r.id}','photo',this)"><i class="fa-solid fa-camera"></i> Photo</button>
                 <button class="dp-vt-btn" onclick="dpSwitchView('${r.id}','sat',this)"><i class="fa-solid fa-satellite"></i> Satellite</button>
                 ${satAltSrc ? `<button class="dp-vt-btn" onclick="dpSwitchView('${r.id}','alt',this)"><i class="fa-solid fa-globe"></i> ${satAltLabel}</button>` : ''}
                 <button class="dp-vt-btn dp-vt-compare" onclick="dpSwitchView('${r.id}','compare',this)"><i class="fa-solid fa-columns"></i> Compare</button>
             </div>` : ''}
-            <!-- Satellite verify button + result right below image -->
             ${v ? vGaugeHtml : `<button class="dp-sat-verify-btn" id="btn-verify-${r.id}" onclick="runVerification('${r.id}')">
                 <i class="fa-solid fa-satellite"></i> Verify via Satellite
             </button>`}
@@ -1540,6 +1694,25 @@ window.dpSwitchView = (reportId, view, btn) => {
     } else if (view === 'alt' && v?.satellite_image_url_alt) {
         container.innerHTML = `<div class="dp-img" onclick="openLightbox('${BACKEND_HOST}${v.satellite_image_url_alt}','Alt Satellite')"><img src="${BACKEND_HOST}${v.satellite_image_url_alt}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
     }
+};
+
+// Gallery image switcher — click thumbnail to show in main view
+window.dpShowGalleryImage = (reportId, imgIdx, thumbEl) => {
+    const r = allReports.find(x => x.id === reportId);
+    if (!r) return;
+    const images = r.media?.filter(m => m.type === 'IMAGE') || [];
+    const im = images[imgIdx];
+    if (!im) return;
+    const container = document.getElementById(`dp-img-view-${reportId}`);
+    if (!container) return;
+    const src = im.assembly_status === 'complete' && im.url ? getMediaUrl(im.url) : (im.thumbnail_url ? getMediaUrl(im.thumbnail_url) : '');
+    if (!src) return;
+    container.innerHTML = `<div class="dp-img" onclick="openLightbox('${src}','Photo ${imgIdx+1}')">
+        <img src="${src}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">
+    </div>`;
+    // Update active thumb
+    thumbEl.parentElement.querySelectorAll('.dp-gallery-thumb').forEach(t => t.classList.remove('active'));
+    thumbEl.classList.add('active');
 };
 
 // Full-screen multi-image compare overlay
@@ -2343,7 +2516,7 @@ let _pendingDeletions = [];
 
 async function _checkPendingDeletions() {
     try {
-        const res = await fetch(`${API}?include_deleted=true`);
+        const res = await fetch(`${API}/?include_deleted=true`);
         if (!res.ok) return;
         const all = await res.json();
         _pendingDeletions = all.filter(r => r.deletion_requested_at);
@@ -2723,6 +2896,10 @@ function _applyReportData(data) {
         if (!knownIds.has(r.id)) {
             knownIds.add(r.id);
             allReports.push(r);
+            // Live notification for new unseen incidents
+            if (!_seenIds.has(r.id)) {
+                _addNotification(r);
+            }
         } else {
             const idx = allReports.findIndex(x => x.id === r.id);
             if (idx >= 0) {
@@ -2760,19 +2937,32 @@ function _applyReportData(data) {
 
 async function fetchReports() {
     try {
-        const res  = await fetch(API);
+        const listUrl = API.endsWith('/') ? API : API + '/';
+        console.log('[CRISP] Fetching from:', listUrl);
+        const res  = await fetch(listUrl);
+        console.log('[CRISP] Response:', res.status, res.url);
         const data = await res.json();
+        console.log('[CRISP] Loaded', data.length, 'reports');
         try {
             localStorage.setItem(REPORTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
         } catch (_) {}
         _updateCacheBadge(false);
         // Apply rendering separately so UI errors don't look like network failures
-        try { _applyReportData(data); } catch (e) { console.warn('[CRISP] Render error:', e); }
-        // Check for pending deletions (admin indicator)
+        try {
+            _applyReportData(data);
+            console.log('[CRISP] Rendered', allReports.length, 'reports on map');
+        } catch (e) {
+            console.error('[CRISP] RENDER ERROR:', e);
+            // Show error visually so user can report it
+            const feed = document.getElementById('report-feed-list');
+            if (feed) feed.innerHTML = `<div style="padding:20px;color:#ef4444;font-size:13px;"><b>Render Error:</b> ${e.message}<br><br>Data loaded (${data.length} reports) but UI failed. Check console (Cmd+Option+J).</div>`;
+        }
         _checkPendingDeletions();
     } catch (e) {
-        console.warn('[CRISP] Fetch failed (offline?) — using cached data:', e);
+        console.error('[CRISP] FETCH ERROR:', e);
         _updateCacheBadge(true);
+        const feed = document.getElementById('report-feed-list');
+        if (feed && !allReports.length) feed.innerHTML = `<div style="padding:20px;color:#f59e0b;font-size:13px;"><b>Connection Error:</b> ${e.message}<br><br>API: ${API}<br>Check if backend is running on port 8000.</div>`;
     }
     _reschedulePoller();
 }
