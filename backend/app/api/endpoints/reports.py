@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.report import (
     Device, Report, Location, Media, MediaChunk, AIAnalysis,
-    SatelliteVerification,
+    SatelliteVerification, DeletionAuditLog,
     MediaTypeEnum, ResolutionEnum, ReportStatusEnum, SyncStatusEnum,
     SeverityEnum, InfraTypeEnum,
 )
@@ -337,18 +337,67 @@ def delete_device_data(device_hash: str, db: Session = Depends(get_db)):
     return {"deleted": count}
 
 
-@router.delete("/{report_id}", status_code=status.HTTP_200_OK)
-def delete_report(report_id: str, db: Session = Depends(get_db)):
-    """Soft-delete: mark report for deletion with 24-hour grace period.
-    The record is hidden from active views immediately. After 24 hours,
-    a background purge job permanently deletes it and all associated files."""
+@router.get("/device/{device_hash}/status-since")
+def get_device_status_since(device_hash: str, since: str = None, db: Session = Depends(get_db)):
+    """Lightweight status polling for mobile apps. Returns only status fields."""
+    device_id = _resolve_device_id(device_hash, db)
+    if not device_id:
+        return []
+    q = db.query(Report).filter(Report.device_id == device_id)
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
+            q = q.filter(Report.updated_at > since_dt)
+        except Exception:
+            pass
+    reports = q.all()
+    return [{"id": r.id, "client_report_id": r.client_report_id, "status": r.status.value,
+             "severity": r.severity.value, "infrastructure_type": r.infrastructure_type.value,
+             "lives_impacted": r.lives_impacted, "updated_at": r.updated_at.isoformat() if r.updated_at else None}
+            for r in reports]
+
+
+@router.patch("/{report_id}/impact")
+def set_lives_impacted(report_id: str, payload: dict, db: Session = Depends(get_db)):
+    """Set the number of lives impacted by this incident."""
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
-    report.deletion_requested_at = datetime.now(timezone.utc)
+    report.lives_impacted = payload.get("lives_impacted", 0)
     db.commit()
-    logger.info(f"Soft-delete requested for report {report_id} — permanent deletion in 24h")
-    return {"id": report_id, "deletion_requested_at": report.deletion_requested_at.isoformat(), "message": "Your data will be permanently deleted within 24 hours."}
+    return {"id": report_id, "lives_impacted": report.lives_impacted}
+
+
+@router.delete("/{report_id}", status_code=status.HTTP_200_OK)
+def delete_report(report_id: str, grace_minutes: int = 1440,
+                  deletion_source: str = "DASHBOARD", db: Session = Depends(get_db)):
+    """Soft-delete with audit logging. grace_minutes: 1440 (24h) for dashboard, 30 for mobile."""
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    # Audit log: preserve anonymized metadata before deletion
+    loc_snapshot = None
+    if report.location:
+        loc_snapshot = {"lat": report.location.latitude, "lng": report.location.longitude,
+                        "name": report.location.device_location_name or report.location.user_location_name}
+    audit = DeletionAuditLog(
+        report_id=report_id,
+        device_hash=report.device.device_hash if report.device else None,
+        location_snapshot=loc_snapshot,
+        damage_type=report.infrastructure_type.value if report.infrastructure_type else None,
+        severity=report.severity.value if report.severity else None,
+        deletion_source=deletion_source,
+    )
+    db.add(audit)
+
+    report.deletion_requested_at = datetime.now(timezone.utc)
+    report.deletion_grace_minutes = grace_minutes
+    db.commit()
+    grace_label = f"{grace_minutes} minutes" if grace_minutes < 120 else f"{grace_minutes // 60} hours"
+    logger.info(f"Soft-delete: report {report_id} ({deletion_source}) — permanent in {grace_label}")
+    return {"id": report_id, "deletion_requested_at": report.deletion_requested_at.isoformat(),
+            "message": f"Your data will be permanently deleted within {grace_label}."}
 
 
 @router.post("/{report_id}/undo-delete", response_model=ReportResponse)
@@ -371,13 +420,17 @@ def undo_delete(report_id: str, db: Session = Depends(get_db)):
 
 
 def _purge_expired_deletions(db: Session):
-    """Permanently delete all reports whose 24-hour grace period has expired.
-    Called by background cron job."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    expired = db.query(Report).filter(
-        Report.deletion_requested_at != None,
-        Report.deletion_requested_at <= cutoff
-    ).all()
+    """Permanently delete reports whose grace period has expired.
+    Uses per-report grace_minutes (default 24h, mobile=30min)."""
+    now = datetime.now(timezone.utc)
+    # Get all reports with deletion requested
+    pending = db.query(Report).filter(Report.deletion_requested_at != None).all()
+    expired = []
+    for r in pending:
+        grace = r.deletion_grace_minutes or 1440
+        cutoff = r.deletion_requested_at.replace(tzinfo=timezone.utc) + timedelta(minutes=grace)
+        if now >= cutoff:
+            expired.append(r)
     if not expired:
         return 0
     count = 0
@@ -785,24 +838,56 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             with open(filepath, "wb") as f:
                 f.write(file_data)
             logger.info(f"Attached {ext}: {filename} ({len(file_data)} bytes)")
+            # PII Protection: blur faces + PII text on single-file uploads
+            if ext in ('jpg', 'jpeg', 'png'):
+                try:
+                    from app.services.pii_blur import blur_pii
+                    pii_result = blur_pii(filepath)
+                    if pii_result.get("blurred"):
+                        logger.info(f"PII blurred in attached {filename}: faces={pii_result['faces']} text={pii_result['pii_texts']}")
+                except Exception as e:
+                    logger.warning(f"PII blur failed for {filename}: {e}")
             file_url = f"/static/{filename}"
         except Exception as e:
             logger.error(f"Media attach decode error: {e}")
             raise HTTPException(status_code=400, detail=f"Failed to decode media: {str(e)}")
 
-    # Save media record
-    db_media = Media(
-        report_id=report.id,
-        type=media_in.type,
-        resolution_tier=media_in.resolution_tier,
-        url=file_url,
-        file_size_bytes=media_in.file_size_bytes,
-        is_synced=True
-    )
-    db.add(db_media)
+    # Save or update media record (avoid duplicates on retry)
+    existing_media = db.query(Media).filter(
+        Media.report_id == report.id,
+        Media.type == media_in.type,
+        Media.assembly_status == 'complete'
+    ).first()
 
-    # Update received count
-    report.received_media = (report.received_media or 0) + 1
+    if existing_media:
+        # Update existing — don't create duplicate
+        existing_media.url = file_url
+        existing_media.file_size_bytes = media_in.file_size_bytes or (len(file_data) if file_data else 0)
+        logger.info(f"Media updated (existing): {existing_media.id[:12]}")
+    else:
+        # Clean up any failed/orphaned media of same type first
+        orphans = db.query(Media).filter(
+            Media.report_id == report.id,
+            Media.type == media_in.type,
+            Media.assembly_status != 'complete'
+        ).all()
+        for o in orphans:
+            db.delete(o)
+
+        db_media = Media(
+            report_id=report.id,
+            type=media_in.type,
+            resolution_tier=media_in.resolution_tier,
+            url=file_url,
+            file_size_bytes=media_in.file_size_bytes or (len(file_data) if file_data else 0),
+            is_synced=True,
+            assembly_status='complete',
+            completion_pct=100.0,
+        )
+        db.add(db_media)
+
+        # Update received count only for new media
+        report.received_media = (report.received_media or 0) + 1
 
     # Check if all expected media received → mark SYNCED
     if report.received_media >= report.expected_media:

@@ -36,11 +36,16 @@ class TelegramSession:
     user_hash: str           # TG-{sha256[:16]}
     chat_id: int             # for sending replies
     lang: str = ""           # detected from Telegram user locale
-    state: str = "START"     # START → STEP_LOCATION → STEP_PHOTO → STEP_SEVERITY → STEP_TYPE → STEP_VOICE → DONE
+    state: str = "START"     # START → LANG_SELECT → STEP_PHOTO → STEP_DESCRIPTION → STEP_TYPE → STEP_SEVERITY → STEP_LOCATION → DONE
     text: str = ""
     image_data_url: str = ""
     audio_data_url: str = ""
     video_data_url: str = ""     # deferred: uploaded after everything else
+    image_uploaded: bool = False  # track if image was already sent to backend
+    audio_uploaded: bool = False  # track if audio was already sent to backend
+    type_answered: bool = False   # track if user answered type (even if they picked OTHER)
+    severity_answered: bool = False  # track if user answered severity
+    pending_uploads: list = field(default_factory=list)  # asyncio.Task fire-and-forget uploads
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     location_name: str = ""           # reverse-geocoded place name
@@ -284,12 +289,15 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
 
 async def upload_image(session: TelegramSession) -> bool:
     """Upload image in progressive chunks to an already-created report."""
-    if not session.report_id or not session.image_data_url:
+    if not session.report_id or not session.image_data_url or session.image_uploaded:
         return False
     try:
         from messaging_bot.chunked_uploader import upload_media_chunked, extract_b64_from_data_url
         b64, mime = extract_b64_from_data_url(session.image_data_url)
-        return await upload_media_chunked(session.report_id, b64, "IMAGE", mime)
+        ok = await upload_media_chunked(session.report_id, b64, "IMAGE", mime)
+        if ok:
+            session.image_uploaded = True
+        return ok
     except Exception as e:
         logger.error(f"Image upload error: {e}")
         return False
@@ -311,12 +319,15 @@ async def upload_video_deferred(session: TelegramSession) -> bool:
 
 async def upload_audio(session: TelegramSession) -> bool:
     """Upload audio in progressive chunks to an already-created report."""
-    if not session.report_id or not session.audio_data_url:
+    if not session.report_id or not session.audio_data_url or session.audio_uploaded:
         return False
     try:
         from messaging_bot.chunked_uploader import upload_media_chunked, extract_b64_from_data_url
         b64, mime = extract_b64_from_data_url(session.audio_data_url)
-        return await upload_media_chunked(session.report_id, b64, "AUDIO", mime)
+        ok = await upload_media_chunked(session.report_id, b64, "AUDIO", mime)
+        if ok:
+            session.audio_uploaded = True
+        return ok
     except Exception as e:
         logger.error(f"Audio upload error: {e}")
         return False
@@ -365,12 +376,52 @@ async def delete_report(session: TelegramSession) -> bool:
     return False
 
 
-# Legacy compat
+async def update_report_location(session: TelegramSession) -> bool:
+    """PATCH location onto an already-created report (location is last in flow)."""
+    if not session.report_id or not session.has_location:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            loc_data = {
+                "latitude": session.latitude,
+                "longitude": session.longitude,
+                "device_latitude": session.latitude,
+                "device_longitude": session.longitude,
+                "accuracy_meters": 50.0,
+                "device_location_name": session.location_name or None,
+            }
+            r = await c.patch(
+                f"{BACKEND_URL}/api/v1/reports/{session.report_id}/location",
+                json=loc_data,
+            )
+            if r.status_code == 200:
+                logger.info(f"Report {session.report_id} location updated")
+                return True
+            else:
+                logger.warning(f"Location update failed ({r.status_code})")
+    except Exception as e:
+        logger.warning(f"Location update error: {e}")
+    return False
+
+
 async def submit_report(session: TelegramSession) -> Optional[str]:
-    """Final submission — update metadata and return report_id."""
+    """Final submission — await pending uploads, update metadata, return report_id."""
     if not session.report_id:
         await create_report_early(session)
     if session.report_id:
+        # Await any fire-and-forget uploads (max 15s)
+        import asyncio
+        if session.pending_uploads:
+            done, _ = await asyncio.wait(session.pending_uploads, timeout=15)
+            session.pending_uploads.clear()
+        # Safety net: upload any media not yet uploaded
+        if session.image_data_url:
+            await upload_image(session)
+        if session.audio_data_url:
+            await upload_audio(session)
+        # Update location if not yet sent
+        if session.has_location:
+            await update_report_location(session)
         await update_report_metadata(session)
         session.submitted_report_id = session.report_id
         session.state = "DONE"

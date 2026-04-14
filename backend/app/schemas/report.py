@@ -28,13 +28,13 @@ class ThumbnailPayload(BaseModel):
     media_id: str
     thumbnail_data: str  # full data:image/jpeg;base64,... URL (≤20KB)
 
-# Chunked upload: one ~1KB packet (PRD §3.3)
+# Chunked upload: adaptive packets 1KB-512KB (network-aware)
 class MediaChunkPayload(BaseModel):
     media_id: str
     type: MediaTypeEnum
-    seq_num: int
-    total_chunks: int
-    data: str            # raw base64 chars (no data: prefix)
+    seq_num: int = Field(..., ge=0)
+    total_chunks: int = Field(..., ge=1)
+    data: str = Field(..., max_length=1048576)  # max 1MB chars (512KB base64 + overhead)
     checksum: Optional[str] = None  # djb2 hex for integrity (PRD §3.7)
 
 # API Request Payloads
@@ -154,6 +154,7 @@ class ReportResponse(BaseModel):
     received_media: int = 0
     server_created_at: datetime
     deletion_requested_at: Optional[datetime] = None
+    lives_impacted: Optional[int] = None
     location: Optional[LocationResponse] = None
     media: List[MediaResponse] = []
     ai_analysis: Optional[AIAnalysisResponse] = None
