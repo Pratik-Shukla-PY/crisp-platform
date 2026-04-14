@@ -29,7 +29,32 @@ class InfraTypeEnum(str, enum.Enum):
     HOUSE = "HOUSE"
     POWER = "POWER"
     WATER = "WATER"
+    SCHOOL = "SCHOOL"
+    TELECOM = "TELECOM"
+    GOVERNMENT = "GOVERNMENT"
     OTHER = "OTHER"
+
+class DamageClassEnum(str, enum.Enum):
+    NO_DAMAGE = "NO_DAMAGE"
+    PARTIAL = "PARTIAL"
+    COMPLETE = "COMPLETE"
+
+class CrisisTypeEnum(str, enum.Enum):
+    EARTHQUAKE = "EARTHQUAKE"
+    FLOOD = "FLOOD"
+    CONFLICT = "CONFLICT"
+    HURRICANE = "HURRICANE"
+    CYCLONE = "CYCLONE"
+    WILDFIRE = "WILDFIRE"
+    LANDSLIDE = "LANDSLIDE"
+    PANDEMIC = "PANDEMIC"
+    OTHER = "OTHER"
+
+class ServiceStatusEnum(str, enum.Enum):
+    OPERATIONAL = "OPERATIONAL"
+    DISRUPTED = "DISRUPTED"
+    DESTROYED = "DESTROYED"
+    UNKNOWN = "UNKNOWN"
 
 class MediaTypeEnum(str, enum.Enum):
     IMAGE = "IMAGE"
@@ -93,6 +118,13 @@ class Report(Base):
     deletion_requested_at = Column(DateTime(timezone=True), nullable=True)
     deletion_grace_minutes = Column(Integer, nullable=True, default=1440)  # 24h default, 30min for mobile
     lives_impacted = Column(Integer, nullable=True)  # How many lives saved/impacted by this report
+    # UNDP required fields
+    damage_classification = Column(String(20), nullable=True)   # NO_DAMAGE / PARTIAL / COMPLETE
+    crisis_type = Column(String(30), nullable=True)             # EARTHQUAKE / FLOOD / CONFLICT / etc.
+    infrastructure_name = Column(String(255), nullable=True)    # Specific building/road name
+    debris_clearing_needed = Column(Boolean, nullable=True)     # Does this location need debris clearing?
+    service_status = Column(JSON, nullable=True)                # {"electricity":"DISRUPTED","water":"OPERATIONAL",...}
+    building_id = Column(String(36), nullable=True, index=True) # Links multiple reports about same structure
 
     device      = relationship("Device", back_populates="reports")
     location    = relationship("Location",    back_populates="report", uselist=False, cascade="all, delete-orphan")
@@ -257,3 +289,16 @@ class SyncLog(Base):
     status = Column(Enum(SyncStatusEnum), nullable=False)
 
     device = relationship("Device", back_populates="sync_logs")
+
+
+class ReporterProfile(Base):
+    """Gamification: tracks reporter engagement for UNDP incentive requirement."""
+    __tablename__ = "reporter_profiles"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    device_hash = Column(String(255), unique=True, nullable=False, index=True)
+    report_count = Column(Integer, default=0)
+    verified_count = Column(Integer, default=0)       # reports that got verified/dispatched
+    badge_level = Column(String(20), default="NEWCOMER")  # NEWCOMER / HELPER / GUARDIAN / HERO
+    impact_score = Column(Integer, default=0)          # cumulative lives_impacted
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

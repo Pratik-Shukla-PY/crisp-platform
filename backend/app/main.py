@@ -76,9 +76,31 @@ from app.core.config import settings
 from app.db.session import engine
 from app.models.report import Base
 
-# For development MVP: auto-create tables if they don't exist. 
+# For development MVP: auto-create tables if they don't exist.
 # Production generally requires Alembic migrations.
 Base.metadata.create_all(bind=engine)
+
+# Migrate existing DBs: add new columns that don't exist yet (idempotent)
+def _migrate_schema():
+    from sqlalchemy import text, inspect as sa_inspect
+    insp = sa_inspect(engine)
+    if "reports" in insp.get_table_names():
+        existing = {c["name"] for c in insp.get_columns("reports")}
+        new_cols = {
+            "damage_classification": "VARCHAR(20)",
+            "crisis_type": "VARCHAR(30)",
+            "infrastructure_name": "VARCHAR(255)",
+            "debris_clearing_needed": "BOOLEAN",
+            "service_status": "JSON",
+            "building_id": "VARCHAR(36)",
+        }
+        with engine.begin() as conn:
+            for col, typ in new_cols.items():
+                if col not in existing:
+                    conn.execute(text(f"ALTER TABLE reports ADD COLUMN {col} {typ}"))
+                    logging.getLogger(__name__).info(f"Migrated: added reports.{col}")
+
+_migrate_schema()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

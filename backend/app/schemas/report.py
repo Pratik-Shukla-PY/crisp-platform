@@ -2,8 +2,9 @@ from datetime import datetime
 from typing import List, Optional, Any
 from pydantic import BaseModel, ConfigDict, Field
 from app.models.report import (
-    SourceEnum, SeverityEnum, InfraTypeEnum, MediaTypeEnum, 
-    ResolutionEnum, SyncStatusEnum, ReportStatusEnum, ClusterStatusEnum
+    SourceEnum, SeverityEnum, InfraTypeEnum, MediaTypeEnum,
+    ResolutionEnum, SyncStatusEnum, ReportStatusEnum, ClusterStatusEnum,
+    DamageClassEnum, CrisisTypeEnum, ServiceStatusEnum
 )
 
 # Shared Properties
@@ -49,7 +50,13 @@ class ReportCreate(BaseModel):
     client_created_at: Optional[datetime] = None
     location: LocationBase
     media: Optional[List[MediaBase]] = []
-    expected_media: Optional[int] = 0  # How many media files client intends to send
+    expected_media: Optional[int] = 0
+    # UNDP required fields
+    damage_classification: Optional[str] = None
+    crisis_type: Optional[str] = None
+    infrastructure_name: Optional[str] = Field(None, max_length=255)
+    debris_clearing_needed: Optional[bool] = None
+    service_status: Optional[Any] = None
 
 # Lightweight metadata-only payload (Stage 1 — tiny, instant)
 class ReportMetaCreate(BaseModel):
@@ -59,11 +66,17 @@ class ReportMetaCreate(BaseModel):
     severity: SeverityEnum = SeverityEnum.UNKNOWN
     infrastructure_type: InfraTypeEnum = InfraTypeEnum.OTHER
     description: Optional[str] = Field(None, max_length=5000)
-    caller_info: Optional[Any] = None  # Phone, network city/state for IVR/SMS
+    caller_info: Optional[Any] = None
     is_auto_submitted: bool = False
     client_created_at: Optional[datetime] = None
     location: Optional[LocationBase] = None
-    expected_media: int = 0  # photo + audio = 2, photo only = 1, etc.
+    expected_media: int = 0
+    # UNDP required fields
+    damage_classification: Optional[str] = None
+    crisis_type: Optional[str] = None
+    infrastructure_name: Optional[str] = Field(None, max_length=255)
+    debris_clearing_needed: Optional[bool] = None
+    service_status: Optional[Any] = None
 
 # Single media attachment (Stage 2/3 — one file at a time)
 class MediaAttach(BaseModel):
@@ -155,6 +168,13 @@ class ReportResponse(BaseModel):
     server_created_at: datetime
     deletion_requested_at: Optional[datetime] = None
     lives_impacted: Optional[int] = None
+    # UNDP required fields
+    damage_classification: Optional[str] = None
+    crisis_type: Optional[str] = None
+    infrastructure_name: Optional[str] = None
+    debris_clearing_needed: Optional[bool] = None
+    service_status: Optional[Any] = None
+    building_id: Optional[str] = None
     location: Optional[LocationResponse] = None
     media: List[MediaResponse] = []
     ai_analysis: Optional[AIAnalysisResponse] = None

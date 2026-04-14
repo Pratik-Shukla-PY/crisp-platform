@@ -44,7 +44,7 @@ let priorityZones = new Set(JSON.parse(localStorage.getItem('crisp_priority_zone
 
 const SEV_SCORE = { CRITICAL: 10, SEVERE: 7, MODERATE: 4, MINOR: 2, UNKNOWN: 1 };
 const INFRA_WEIGHTS = { HOSPITAL: 10, POWER_PLANT: 8, POWER: 8, WATER_TREATMENT: 7, WATER: 7, ROAD: 3, BRIDGE: 5, SCHOOL: 4, HOUSE: 2, OTHER: 1 };
-const INFRA_ICONS = { HOSPITAL: 'fa-hospital', POWER: 'fa-bolt', WATER: 'fa-droplet', ROAD: 'fa-road', HOUSE: 'fa-house-crack', OTHER: 'fa-triangle-exclamation' };
+const INFRA_ICONS = { HOSPITAL: 'fa-hospital', POWER: 'fa-bolt', WATER: 'fa-droplet', ROAD: 'fa-road', HOUSE: 'fa-house-crack', SCHOOL: 'fa-school', TELECOM: 'fa-tower-cell', GOVERNMENT: 'fa-landmark', OTHER: 'fa-triangle-exclamation' };
 const SEV_COLORS = { CRITICAL: '#ef4444', SEVERE: '#f97316', MODERATE: '#eab308', MINOR: '#22c55e', UNKNOWN: '#64748b' };
 
 // ── QRT Queue State ───────────────────────────────────────────────────────────
@@ -56,6 +56,7 @@ const INFRA_CARD_ICONS = {
     HOSPITAL: 'fa-hospital', POWER_PLANT: 'fa-bolt', POWER: 'fa-bolt',
     WATER_TREATMENT: 'fa-droplet', WATER: 'fa-droplet', ROAD: 'fa-road',
     BRIDGE: 'fa-archway', SCHOOL: 'fa-school', HOUSE: 'fa-house-crack',
+    TELECOM: 'fa-tower-cell', GOVERNMENT: 'fa-landmark',
     OTHER: 'fa-triangle-exclamation'
 };
 const CLUSTER_RADIUS_KM = 15; // Merge regions within 15km
@@ -824,6 +825,10 @@ function createIncidentCard(r) {
                 <span class="qrt-sev-badge qrt-sev-${sev}">${sev}</span>
                 <span class="qrt-source-badge qrt-src-${(r.source || 'APP').toLowerCase()}" title="Source: ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i>',ANDROID:'<i class="fa-solid fa-robot"></i>',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i>',TELEGRAM:'<i class="fa-brands fa-telegram"></i>',SMS:'<i class="fa-solid fa-comment-sms"></i>',IVR:'<i class="fa-solid fa-phone"></i>'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i>'}</span>
             </div>
+            ${r.crisis_type || r.damage_classification ? `<div class="qrt-undp-tags">
+                ${r.crisis_type ? `<span class="qrt-tag qrt-tag-crisis">${r.crisis_type.replace(/_/g,' ')}</span>` : ''}
+                ${r.damage_classification ? `<span class="qrt-tag qrt-tag-dmg-${r.damage_classification}">${r.damage_classification.replace(/_/g,' ')}</span>` : ''}
+            </div>` : ''}
             <div class="qrt-where">
                 <i class="fa-solid fa-location-dot"></i>
                 <span class="qrt-where-text" title="${locText}">${locText}</span>
@@ -1548,6 +1553,29 @@ window.selectReport = (id, skipFly = false) => {
         <!-- ② Urgency alerts -->
         ${urgencyHtml}
 
+        <!-- ②b UNDP fields -->
+        ${r.crisis_type || r.damage_classification || r.infrastructure_name || r.building_id || r.service_status ? `
+        <div class="dp-undp-fields" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;">
+            ${r.crisis_type ? `<span class="dp-field-badge" style="background:rgba(124,58,237,0.15);color:#a78bfa;"><i class="fa-solid fa-cloud-bolt"></i> ${r.crisis_type.replace(/_/g,' ')}</span>` : ''}
+            ${r.damage_classification ? `<span class="dp-field-badge" style="background:${r.damage_classification==='COMPLETE'?'rgba(239,68,68,0.15);color:#f87171':r.damage_classification==='PARTIAL'?'rgba(249,115,22,0.15);color:#fb923c':'rgba(34,197,94,0.15);color:#4ade80'};"><i class="fa-solid fa-building-circle-xmark"></i> ${r.damage_classification.replace(/_/g,' ')}</span>` : ''}
+            ${r.infrastructure_name ? `<span class="dp-field-badge" style="background:rgba(59,130,246,0.15);color:#93c5fd;"><i class="fa-solid fa-building"></i> ${escapeHtml(r.infrastructure_name)}</span>` : ''}
+            ${r.debris_clearing_needed ? `<span class="dp-field-badge" style="background:rgba(245,158,11,0.15);color:#fbbf24;"><i class="fa-solid fa-truck-pickup"></i> Debris clearing</span>` : ''}
+            ${r.building_id ? `<span class="dp-field-badge dp-building-link" style="background:rgba(99,102,241,0.15);color:#a5b4fc;cursor:pointer;" onclick="filterByBuilding('${r.building_id}')"><i class="fa-solid fa-timeline"></i> Building history</span>` : ''}
+        </div>
+        ${r.service_status ? (() => {
+            const ss = r.service_status;
+            const svcColor = v => v === 'OPERATIONAL' ? '#4ade80' : v === 'DISRUPTED' ? '#fbbf24' : v === 'DESTROYED' ? '#f87171' : '#64748b';
+            const svcIcon = v => v === 'OPERATIONAL' ? 'fa-circle-check' : v === 'DISRUPTED' ? 'fa-triangle-exclamation' : v === 'DESTROYED' ? 'fa-circle-xmark' : 'fa-circle-question';
+            let html = '<div class="dp-svc-status" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px;">';
+            if (ss.electricity && ss.electricity !== 'UNKNOWN') html += `<span class="dp-field-badge" style="background:rgba(255,255,255,0.04);color:${svcColor(ss.electricity)};"><i class="fa-solid ${svcIcon(ss.electricity)}"></i> ⚡ ${ss.electricity}</span>`;
+            if (ss.water && ss.water !== 'UNKNOWN') html += `<span class="dp-field-badge" style="background:rgba(255,255,255,0.04);color:${svcColor(ss.water)};"><i class="fa-solid ${svcIcon(ss.water)}"></i> 💧 ${ss.water}</span>`;
+            if (ss.health && ss.health !== 'UNKNOWN') html += `<span class="dp-field-badge" style="background:rgba(255,255,255,0.04);color:${svcColor(ss.health)};"><i class="fa-solid ${svcIcon(ss.health)}"></i> 🏥 ${ss.health}</span>`;
+            if (ss.pressing_needs?.length) html += `<span class="dp-field-badge" style="background:rgba(239,68,68,0.1);color:#fca5a5;"><i class="fa-solid fa-exclamation-circle"></i> Needs: ${ss.pressing_needs.join(', ')}</span>`;
+            html += '</div>';
+            return html;
+        })() : ''}
+        ` : ''}
+
         <!-- ③ Evidence: Images gallery + Satellite Verify -->
         ${hasVisualEvidence ? `
         <div class="dp-evidence-card">
@@ -2228,6 +2256,20 @@ window.deleteReport = async (id) => {
     } catch (e) { showToast('Delete failed', 'error'); }
 };
 
+// ── Building History ─────────────────────────────────────────────────────────
+window.filterByBuilding = async (buildingId) => {
+    try {
+        const res = await fetch(`${API}/building/${buildingId}`);
+        if (!res.ok) { showToast('Could not load building history', 'error'); return; }
+        const reports = await res.json();
+        if (reports.length <= 1) { showToast('Only 1 report for this building', 'info'); return; }
+        const names = reports.map(r => `${r.damage_classification || r.severity} — ${new Date(r.server_created_at).toLocaleDateString()}`).join('\n');
+        showToast(`Building has ${reports.length} reports`, 'success');
+        // Highlight all building reports on map
+        reports.forEach(rep => { const marker = clusterGroup.getLayers().find(m => m._crispReport?.id === rep.id); if (marker) marker.openPopup(); });
+    } catch (e) { showToast('Building history error', 'error'); }
+};
+
 // ── Audio Player ─────────────────────────────────────────────────────────────
 window.playDetailAudio = function (btn, url) {
     if (currentAudio && !currentAudio.paused) {
@@ -2292,12 +2334,48 @@ function initMap() {
         maxBounds: [[-85, -180], [85, 180]],
         maxBoundsViscosity: 1.0,
     }).setView([20, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
-        maxZoom: 19,
-        noWrap: true,
-    }).addTo(map);
+    const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19, noWrap: true,
+    });
+    const satelliteTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri World Imagery', maxZoom: 19, noWrap: true,
+    });
+    const streetTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap', maxZoom: 19, noWrap: true,
+    });
+    darkTiles.addTo(map);
+    L.control.layers({ "Dark": darkTiles, "Satellite": satelliteTiles, "Street": streetTiles }, null, { position: 'topright' }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // Building footprints layer — loads from Overpass API at zoom >= 15
+    let _buildingLayer = null;
+    let _buildingCache = {};
+    let _buildingDebounce = null;
+    function loadBuildingFootprints() {
+        if (map.getZoom() < 15) { if (_buildingLayer) { map.removeLayer(_buildingLayer); _buildingLayer = null; } return; }
+        const b = map.getBounds();
+        const key = `${b.getSouth().toFixed(3)},${b.getWest().toFixed(3)},${b.getNorth().toFixed(3)},${b.getEast().toFixed(3)}`;
+        if (_buildingCache[key]) return;
+        const bbox = `${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`;
+        const query = `[out:json][timeout:10];way["building"](${bbox});out geom;`;
+        fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`)
+            .then(r => r.json())
+            .then(data => {
+                _buildingCache[key] = true;
+                const features = (data.elements || []).filter(e => e.geometry).map(e => ({
+                    type: 'Feature',
+                    geometry: { type: 'Polygon', coordinates: [e.geometry.map(p => [p.lon, p.lat])] },
+                    properties: { name: e.tags?.name || '', type: e.tags?.building || 'yes' },
+                }));
+                if (_buildingLayer) map.removeLayer(_buildingLayer);
+                _buildingLayer = L.geoJSON({ type: 'FeatureCollection', features }, {
+                    style: { color: '#7c3aed', weight: 1, fillColor: '#7c3aed', fillOpacity: 0.15 },
+                    onEachFeature: (f, layer) => { if (f.properties.name) layer.bindTooltip(f.properties.name, { sticky: true }); },
+                }).addTo(map);
+            })
+            .catch(() => {});
+    }
+    map.on('moveend', () => { clearTimeout(_buildingDebounce); _buildingDebounce = setTimeout(loadBuildingFootprints, 600); });
 
     // Initialize cluster group — optimized for easy clicking on hotspots
     clusterGroup = L.markerClusterGroup({
@@ -2636,6 +2714,13 @@ const _origFetchReports = fetchReports;
 
 // ── Export Functions ──────────────────────────────────────────────────────────
 window.exportData = function (format) {
+    // Shapefile and KML use backend API endpoints (binary generation)
+    if (format === 'shapefile' || format === 'kml') {
+        const base = API.replace('/api/v1/reports', '/api/v1/exports');
+        window.open(`${base}/${format === 'shapefile' ? 'shapefile' : 'kml'}`, '_blank');
+        showToast(`Downloading ${format.toUpperCase()} export...`, 'success');
+        return;
+    }
     const filtered = getFilteredReports();
     if (format === 'geojson') exportGeoJSON(filtered);
     else exportCSV(filtered);
@@ -2669,12 +2754,13 @@ function getFilteredReports() {
 }
 
 function exportCSV(reports, filename = 'crisp_export') {
-    const headers = ['ID', 'Severity', 'Infrastructure', 'Status', 'Description', 'Latitude', 'Longitude', 'Time', 'Source', 'Country', 'Region'];
+    const headers = ['ID', 'Severity', 'Infrastructure', 'Infrastructure_Name', 'Status', 'Crisis_Type', 'Damage_Classification', 'Debris_Clearing', 'Description', 'Latitude', 'Longitude', 'Time', 'Source', 'Building_ID', 'Country', 'Region'];
     const rows = reports.map(r => [
-        r.id, r.severity, r.infrastructure_type, r.status,
+        r.id, r.severity, r.infrastructure_type, `"${(r.infrastructure_name || '').replace(/"/g, '""')}"`, r.status,
+        r.crisis_type || '', r.damage_classification || '', r.debris_clearing_needed ?? '',
         `"${(r.description || '').replace(/"/g, '""')}"`,
         r.location?.latitude || '', r.location?.longitude || '',
-        r.server_created_at, r.source, r._country || '', r._region || ''
+        r.server_created_at, r.source, r.building_id || '', r._country || '', r._region || ''
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     downloadFile(csv, `${filename}.csv`, 'text/csv');
@@ -2687,8 +2773,11 @@ function exportGeoJSON(reports, filename = 'crisp_export') {
         geometry: { type: 'Point', coordinates: [r.location.longitude, r.location.latitude] },
         properties: {
             id: r.id, severity: r.severity, infrastructure: r.infrastructure_type,
+            infrastructure_name: r.infrastructure_name || '', crisis_type: r.crisis_type || '',
+            damage_classification: r.damage_classification || '', debris_clearing: r.debris_clearing_needed ?? '',
+            building_id: r.building_id || '',
             status: r.status, description: r.description, time: r.server_created_at,
-            country: r._country, region: r._region
+            source: r.source, country: r._country, region: r._region
         }
     }));
     const geojson = JSON.stringify({ type: 'FeatureCollection', features }, null, 2);

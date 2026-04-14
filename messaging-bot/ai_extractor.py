@@ -52,8 +52,10 @@ Text: "{text}"
 Return JSON with these fields:
 {{
   "location_name": "specific place name mentioned (city, area, landmark) or empty string",
-  "infrastructure_type": "one of: WATER, ROAD, HOSPITAL, HOUSE, POWER, OTHER",
+  "infrastructure_type": "one of: WATER, ROAD, HOSPITAL, HOUSE, POWER, SCHOOL, TELECOM, GOVERNMENT, OTHER",
   "severity": "one of: SEVERE, MODERATE, MINOR",
+  "crisis_type": "one of: EARTHQUAKE, FLOOD, CONFLICT, HURRICANE, CYCLONE, WILDFIRE, LANDSLIDE, PANDEMIC, OTHER",
+  "damage_classification": "one of: NO_DAMAGE, PARTIAL, COMPLETE",
   "summary": "A clear, professional 1-2 sentence English summary of the crisis situation for a control center operator to take action on. Fix any transcription errors, grammar issues, and translate any non-English fragments to English. Max 80 words.",
   "user_said": "A clean English version of what the caller actually said, fixing transcription artifacts but preserving their meaning faithfully. Max 60 words."
 }}"""}],
@@ -97,7 +99,7 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
     user_said = extracted.get("user_said", "")
 
     # Validate infrastructure type
-    valid_types = ["WATER", "ROAD", "HOSPITAL", "HOUSE", "POWER", "OTHER"]
+    valid_types = ["WATER", "ROAD", "HOSPITAL", "HOUSE", "POWER", "SCHOOL", "TELECOM", "GOVERNMENT", "OTHER"]
     if infra_type not in valid_types:
         infra_type = "OTHER"
 
@@ -105,10 +107,22 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
     if severity not in valid_sev:
         severity = "MODERATE"
 
+    crisis_type = extracted.get("crisis_type", "OTHER")
+    valid_crisis = ["EARTHQUAKE", "FLOOD", "CONFLICT", "HURRICANE", "CYCLONE", "WILDFIRE", "LANDSLIDE", "PANDEMIC", "OTHER"]
+    if crisis_type not in valid_crisis:
+        crisis_type = "OTHER"
+
+    damage_class = extracted.get("damage_classification", "")
+    valid_damage = ["NO_DAMAGE", "PARTIAL", "COMPLETE"]
+    if damage_class not in valid_damage:
+        damage_class = ""
+
     # Update classification — keep raw transcription in description for audit trail
     update_payload = {
         "infrastructure_type": infra_type,
         "severity": severity,
+        "crisis_type": crisis_type,
+        "damage_classification": damage_class if damage_class else None,
     }
     # Use the clean user_said as description (what user actually meant)
     if user_said:

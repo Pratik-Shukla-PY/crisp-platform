@@ -155,6 +155,8 @@ async def _process_sms(phone: str, text: str):
         "description": parsed["description"],
         "expected_media": 0,
         "caller_info": {"phone": phone, "source": "SMS"},
+        "crisis_type": parsed.get("crisis_type"),
+        "damage_classification": parsed.get("damage_classification"),
     }
 
     if geo["latitude"] is not None:

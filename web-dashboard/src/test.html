@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html><head><title>CRISP API Test</title></head>
+<body style="background:#111;color:#eee;font-family:monospace;padding:20px;">
+<h2>CRISP API Test</h2>
+<div id="result">Loading...</div>
+<script>
+const host = `http://${window.location.hostname}:8000`;
+document.getElementById('result').textContent = `Fetching from: ${host}/api/v1/reports/`;
+fetch(`${host}/api/v1/reports/`)
+  .then(r => { 
+    document.getElementById('result').textContent += `\nHTTP ${r.status}`;
+    return r.json(); 
+  })
+  .then(d => {
+    document.getElementById('result').textContent += `\nLoaded ${d.length} reports!`;
+    d.slice(0,5).forEach(r => {
+      document.getElementById('result').textContent += `\n  ${r.id.substring(0,8)} [${r.source}] ${(r.description||'').substring(0,50)}`;
+    });
+  })
+  .catch(e => {
+    document.getElementById('result').textContent += `\nERROR: ${e.message}`;
+  });
+</script>
+</body></html>

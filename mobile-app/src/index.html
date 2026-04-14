@@ -286,12 +286,131 @@
                     <i class="fa-solid fa-faucet"></i>
                     <span data-i18n="water">Water</span>
                 </button>
+                <button class="chip-btn" data-type="SCHOOL">
+                    <i class="fa-solid fa-school"></i>
+                    <span data-i18n="school">School</span>
+                </button>
+                <button class="chip-btn" data-type="TELECOM">
+                    <i class="fa-solid fa-tower-cell"></i>
+                    <span data-i18n="telecom">Telecom</span>
+                </button>
+                <button class="chip-btn" data-type="GOVERNMENT">
+                    <i class="fa-solid fa-landmark"></i>
+                    <span data-i18n="government">Gov. Building</span>
+                </button>
                 <button class="chip-btn" data-type="OTHER">
                     <i class="fa-solid fa-circle-question"></i>
                     <span data-i18n="other">Other</span>
                 </button>
             </div>
         </div>
+
+        <!-- CRISIS TYPE — What kind of crisis? -->
+        <div class="review-block">
+            <p class="block-label" data-i18n="crisis_label">
+                <i class="fa-solid fa-cloud-bolt" style="color:var(--accent);"></i>
+                Type of Crisis
+            </p>
+            <div class="category-grid">
+                <button class="chip-btn" data-crisis="EARTHQUAKE"><i class="fa-solid fa-house-crack"></i><span data-i18n="earthquake">Earthquake</span></button>
+                <button class="chip-btn selected" data-crisis="FLOOD"><i class="fa-solid fa-water"></i><span data-i18n="flood">Flood</span></button>
+                <button class="chip-btn" data-crisis="CONFLICT"><i class="fa-solid fa-shield-halved"></i><span data-i18n="conflict">Conflict</span></button>
+                <button class="chip-btn" data-crisis="HURRICANE"><i class="fa-solid fa-wind"></i><span data-i18n="hurricane">Hurricane</span></button>
+                <button class="chip-btn" data-crisis="CYCLONE"><i class="fa-solid fa-tornado"></i><span data-i18n="cyclone">Cyclone</span></button>
+                <button class="chip-btn" data-crisis="WILDFIRE"><i class="fa-solid fa-fire"></i><span data-i18n="wildfire">Wildfire</span></button>
+                <button class="chip-btn" data-crisis="LANDSLIDE"><i class="fa-solid fa-mountain"></i><span data-i18n="landslide">Landslide</span></button>
+                <button class="chip-btn" data-crisis="PANDEMIC"><i class="fa-solid fa-virus"></i><span data-i18n="pandemic">Pandemic</span></button>
+                <button class="chip-btn" data-crisis="OTHER"><i class="fa-solid fa-circle-question"></i><span data-i18n="other_crisis">Other</span></button>
+            </div>
+        </div>
+
+        <!-- DAMAGE CLASSIFICATION — UNDP mandatory 3-tier -->
+        <div class="review-block">
+            <p class="block-label" data-i18n="damage_label">
+                <i class="fa-solid fa-building-circle-xmark" style="color:var(--accent);"></i>
+                Damage Level
+            </p>
+            <div class="sev-big-row">
+                <button class="damage-chip" data-damage="NO_DAMAGE">
+                    <div class="damage-dot" style="background:#22c55e;"></div>
+                    <span data-i18n="no_damage">No Damage</span>
+                </button>
+                <button class="damage-chip selected" data-damage="PARTIAL">
+                    <div class="damage-dot" style="background:#f97316;"></div>
+                    <span data-i18n="partial_damage">Partial</span>
+                </button>
+                <button class="damage-chip" data-damage="COMPLETE">
+                    <div class="damage-dot" style="background:#ef4444;"></div>
+                    <span data-i18n="complete_damage">Destroyed</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- INFRASTRUCTURE NAME — optional -->
+        <div class="review-block">
+            <p class="block-label" data-i18n="infra_name_label">
+                <i class="fa-solid fa-building" style="color:var(--accent);"></i>
+                Building / Road Name <small style="color:#64748b;">(optional)</small>
+            </p>
+            <input type="text" id="input-infra-name" class="text-input-sm" maxlength="255"
+                   data-i18n-placeholder="infra_name_hint" placeholder="e.g. City Hospital, Main Street...">
+        </div>
+
+        <!-- DEBRIS CLEARING — toggle -->
+        <div class="review-block" style="display:flex; align-items:center; gap:12px;">
+            <label class="toggle-switch">
+                <input type="checkbox" id="toggle-debris">
+                <span class="toggle-slider"></span>
+            </label>
+            <span class="block-label" style="margin:0;" data-i18n="debris_label">Needs debris clearing?</span>
+        </div>
+
+        <!-- SERVICE STATUS — collapsible -->
+        <details class="review-block service-details">
+            <summary class="block-label" data-i18n="service_label">
+                <i class="fa-solid fa-gauge" style="color:var(--accent);"></i>
+                Service Status <small style="color:#64748b;">(optional)</small>
+            </summary>
+            <div class="service-grid">
+                <div class="svc-row">
+                    <span data-i18n="electricity">⚡ Electricity</span>
+                    <select id="svc-electricity" class="svc-select">
+                        <option value="UNKNOWN" data-i18n="unknown">Unknown</option>
+                        <option value="OPERATIONAL" data-i18n="working">Working</option>
+                        <option value="DISRUPTED" data-i18n="disrupted">Disrupted</option>
+                        <option value="DESTROYED" data-i18n="destroyed">Destroyed</option>
+                    </select>
+                </div>
+                <div class="svc-row">
+                    <span data-i18n="water_svc">💧 Water</span>
+                    <select id="svc-water" class="svc-select">
+                        <option value="UNKNOWN">Unknown</option>
+                        <option value="OPERATIONAL">Working</option>
+                        <option value="DISRUPTED">Disrupted</option>
+                        <option value="DESTROYED">Destroyed</option>
+                    </select>
+                </div>
+                <div class="svc-row">
+                    <span data-i18n="health_svc">🏥 Health</span>
+                    <select id="svc-health" class="svc-select">
+                        <option value="UNKNOWN">Unknown</option>
+                        <option value="OPERATIONAL">Working</option>
+                        <option value="DISRUPTED">Disrupted</option>
+                        <option value="DESTROYED">Destroyed</option>
+                    </select>
+                </div>
+                <div class="svc-row">
+                    <span data-i18n="needs_label">🆘 Pressing Needs</span>
+                    <div class="needs-chips">
+                        <label class="need-chip"><input type="checkbox" value="food"> <span data-i18n="food">Food</span></label>
+                        <label class="need-chip"><input type="checkbox" value="water"> <span data-i18n="need_water">Water</span></label>
+                        <label class="need-chip"><input type="checkbox" value="shelter"> <span data-i18n="shelter">Shelter</span></label>
+                        <label class="need-chip"><input type="checkbox" value="medical"> <span data-i18n="medical">Medical</span></label>
+                        <label class="need-chip"><input type="checkbox" value="security"> <span data-i18n="security">Security</span></label>
+                    </div>
+                </div>
+            </div>
+        </details>
 
         <!-- HOW BAD? — Big colored severity buttons -->
         <div class="review-block">
@@ -376,6 +495,22 @@
                 <i class="fa-solid fa-triangle-exclamation" style="color:#ef4444;"></i>
                 <span id="summary-severity">MODERATE</span>
             </div>
+            <div class="summary-row">
+                <i class="fa-solid fa-cloud-bolt" style="color:#a78bfa;"></i>
+                <span id="summary-crisis" style="font-weight:600;">FLOOD</span>
+            </div>
+            <div class="summary-row">
+                <i class="fa-solid fa-building-circle-xmark" style="color:#f97316;"></i>
+                <span id="summary-damage">PARTIAL</span>
+            </div>
+            <div class="summary-row" id="summary-infra-name-row" style="display:none;">
+                <i class="fa-solid fa-building" style="color:#60a5fa;"></i>
+                <span id="summary-infra-name"></span>
+            </div>
+            <div class="summary-row" id="summary-debris-row" style="display:none;">
+                <i class="fa-solid fa-truck-pickup" style="color:#fbbf24;"></i>
+                <span>Needs debris clearing</span>
+            </div>
             <div class="summary-row" id="summary-loc-row">
                 <i class="fa-solid fa-location-dot" style="color:#10b981;"></i>
                 <span id="summary-loc">Getting location...</span>
@@ -408,6 +543,18 @@
             <div class="success-id-box" id="success-id-box">
                 <span data-i18n="report_id">Report ID:</span>
                 <strong id="report-id-text">—</strong>
+            </div>
+            <!-- Gamification badge -->
+            <div class="badge-card" id="badge-card" style="display:none;">
+                <div class="badge-icon" id="badge-icon">🌱</div>
+                <div class="badge-info">
+                    <strong id="badge-level">Newcomer</strong>
+                    <span id="badge-count">1 report submitted</span>
+                </div>
+                <div class="badge-bar-wrap">
+                    <div class="badge-bar"><div class="badge-bar-fill" id="badge-bar-fill" style="width:33%"></div></div>
+                    <small id="badge-next">Next: Helper (3 reports)</small>
+                </div>
             </div>
             <button class="big-cta" id="btn-new-report">
                 <i class="fa-solid fa-plus"></i>

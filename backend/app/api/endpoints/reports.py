@@ -565,6 +565,12 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
         db.add(db_loc)
         db.commit()
 
+    # Auto-assign building_id for deduplication/versioning
+    _auto_assign_building_id(db_report, db)
+    # Update reporter gamification profile
+    _update_reporter_profile(meta_in.device_hash, db)
+
+    db.commit()
     logger.info(f"Report meta created: {db_report.id} (expecting {meta_in.expected_media} media)")
     db.refresh(db_report)
     return db_report
@@ -607,6 +613,17 @@ def update_report_classification(report_id: str, request: dict, db: Session = De
             pass
     if "description" in request and request["description"]:
         report.description = request["description"]
+    # UNDP extended fields
+    if "damage_classification" in request and request["damage_classification"]:
+        report.damage_classification = request["damage_classification"]
+    if "crisis_type" in request and request["crisis_type"]:
+        report.crisis_type = request["crisis_type"]
+    if "infrastructure_name" in request and request["infrastructure_name"]:
+        report.infrastructure_name = request["infrastructure_name"]
+    if "debris_clearing_needed" in request and request["debris_clearing_needed"] is not None:
+        report.debris_clearing_needed = request["debris_clearing_needed"]
+    if "service_status" in request and request["service_status"]:
+        report.service_status = request["service_status"]
     db.commit()
     db.refresh(report)
     logger.info(f"Report {report.id} classified: sev={report.severity.value} type={report.infrastructure_type.value}")
@@ -1455,3 +1472,93 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(v)
     return v
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GAMIFICATION: Reporter profiles with badge progression
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/profile/{device_hash}")
+def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
+    """Get reporter's gamification profile (badge level, report count, impact)."""
+    from app.models.report import ReporterProfile
+    profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
+    if not profile:
+        profile = ReporterProfile(device_hash=device_hash, report_count=0, badge_level="NEWCOMER", impact_score=0)
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
+    return {
+        "device_hash": profile.device_hash,
+        "report_count": profile.report_count,
+        "verified_count": profile.verified_count,
+        "badge_level": profile.badge_level,
+        "impact_score": profile.impact_score,
+    }
+
+
+def _update_reporter_profile(device_hash: str, db: Session):
+    """Increment reporter's profile on report submission. Badge tiers: 1=NEWCOMER, 3=HELPER, 10=GUARDIAN, 25=HERO."""
+    from app.models.report import ReporterProfile
+    profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
+    if not profile:
+        profile = ReporterProfile(device_hash=device_hash)
+        db.add(profile)
+    profile.report_count = (profile.report_count or 0) + 1
+    count = profile.report_count
+    if count >= 25:
+        profile.badge_level = "HERO"
+    elif count >= 10:
+        profile.badge_level = "GUARDIAN"
+    elif count >= 3:
+        profile.badge_level = "HELPER"
+    else:
+        profile.badge_level = "NEWCOMER"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUILDING VERSIONING: Group multiple reports about the same structure
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/building/{building_id}")
+def get_building_history(building_id: str, db: Session = Depends(get_db)):
+    """Get all reports linked to a building, ordered by time (damage progression)."""
+    reports = db.query(Report).filter(
+        Report.building_id == building_id,
+        Report.deletion_requested_at.is_(None)
+    ).order_by(Report.server_created_at.asc()).all()
+    return [ReportResponse.model_validate(r) for r in reports]
+
+
+def _auto_assign_building_id(report: Report, db: Session):
+    """Auto-link reports within 30m of each other to the same building_id."""
+    if not report.location or report.building_id:
+        return
+    lat, lng = report.location.latitude, report.location.longitude
+    if lat == 0 and lng == 0:
+        return
+    from math import radians, cos, sin, sqrt, atan2
+    def haversine(lat1, lon1, lat2, lon2):
+        R = 6371000
+        dlat = radians(lat2 - lat1)
+        dlon = radians(lon2 - lon1)
+        a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+        return R * 2 * atan2(sqrt(a), sqrt(1-a))
+
+    nearby = db.query(Report).join(Location).filter(
+        Report.id != report.id,
+        Report.deletion_requested_at.is_(None),
+        Location.latitude.between(lat - 0.0003, lat + 0.0003),
+        Location.longitude.between(lng - 0.0003, lng + 0.0003),
+    ).all()
+
+    for n in nearby:
+        if n.location and haversine(lat, lng, n.location.latitude, n.location.longitude) <= 30:
+            if n.building_id:
+                report.building_id = n.building_id
+                return
+            else:
+                bid = gen_uuid()
+                report.building_id = bid
+                n.building_id = bid
+                return

@@ -421,6 +421,11 @@ const state = {
     description: '',
     infraType: 'ROAD',
     severity: 'MODERATE',
+    crisisType: 'FLOOD',
+    damageClass: 'PARTIAL',
+    infraName: '',
+    debrisClearing: false,
+    serviceStatus: { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] },
     location: null,
     deviceLocation: null, // Keep original GPS separately
     userLocationName: null, // Place name typed by user (for offline geocoding)
@@ -1910,12 +1915,21 @@ function setupLocationAutocomplete() {
 }
 
 function setupReviewStage() {
-    // Category chips
-    document.querySelectorAll('.chip-btn').forEach(btn => {
+    // Infrastructure type chips (scoped by data-type)
+    document.querySelectorAll('.chip-btn[data-type]').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('selected'));
+            document.querySelectorAll('.chip-btn[data-type]').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             state.infraType = btn.dataset.type;
+        });
+    });
+
+    // Crisis type chips (scoped by data-crisis)
+    document.querySelectorAll('.chip-btn[data-crisis]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.chip-btn[data-crisis]').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            state.crisisType = btn.dataset.crisis;
         });
     });
 
@@ -1928,11 +1942,39 @@ function setupReviewStage() {
         });
     });
 
+    // Damage classification chips
+    document.querySelectorAll('.damage-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.damage-chip').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            state.damageClass = btn.dataset.damage;
+        });
+    });
+
+    // Debris clearing toggle
+    const debrisToggle = document.getElementById('toggle-debris');
+    if (debrisToggle) debrisToggle.addEventListener('change', () => { state.debrisClearing = debrisToggle.checked; });
+
+    // Infrastructure name
+    const infraNameInput = document.getElementById('input-infra-name');
+    if (infraNameInput) infraNameInput.addEventListener('input', () => { state.infraName = infraNameInput.value.trim(); });
+
     // Location autocomplete (instant offline suggestions after 3 chars)
     setupLocationAutocomplete();
 
     document.getElementById('btn-review-next').addEventListener('click', () => {
         state.description = document.getElementById('edit-text').value.trim();
+        // Collect service status from dropdowns
+        const elec = document.getElementById('svc-electricity');
+        const water = document.getElementById('svc-water');
+        const health = document.getElementById('svc-health');
+        if (elec) state.serviceStatus.electricity = elec.value;
+        if (water) state.serviceStatus.water = water.value;
+        if (health) state.serviceStatus.health = health.value;
+        const needs = [];
+        document.querySelectorAll('.need-chip input:checked').forEach(cb => needs.push(cb.value));
+        state.serviceStatus.pressing_needs = needs;
+
         populateSendStage();
         goToStage('stage-send');
     });
@@ -1942,6 +1984,18 @@ function setupReviewStage() {
 function populateSendStage() {
     document.getElementById('summary-type').textContent = state.infraType;
     document.getElementById('summary-severity').textContent = state.severity;
+    document.getElementById('summary-crisis').textContent = state.crisisType.replace(/_/g, ' ');
+    document.getElementById('summary-damage').textContent = state.damageClass.replace(/_/g, ' ');
+
+    // Infrastructure name
+    const infraNameRow = document.getElementById('summary-infra-name-row');
+    if (state.infraName) {
+        document.getElementById('summary-infra-name').textContent = state.infraName;
+        infraNameRow.style.display = 'flex';
+    } else { infraNameRow.style.display = 'none'; }
+
+    // Debris clearing
+    document.getElementById('summary-debris-row').style.display = state.debrisClearing ? 'flex' : 'none';
 
     const photoRow = document.getElementById('summary-photo-row');
     const summaryPhoto = document.getElementById('summary-photo');
@@ -2137,6 +2191,12 @@ async function submitReport() {
                 is_auto_submitted: state.isAutoSubmit,
                 client_created_at: new Date().toISOString(),
                 expected_media: expectedMedia,
+                // UNDP required fields
+                crisis_type: state.crisisType,
+                damage_classification: state.damageClass,
+                infrastructure_name: state.infraName || null,
+                debris_clearing_needed: state.debrisClearing,
+                service_status: state.serviceStatus,
                 location: state.location
                     ? {
                         latitude: state.location.lat,
@@ -2195,6 +2255,9 @@ async function submitReport() {
         await new Promise(r => setTimeout(r, 800));
         showUploadSuccess();
         setTimeout(() => goToStage('stage-success'), 1200);
+
+        // Fetch gamification badge (non-blocking)
+        fetchBadge(deviceHash);
 
         // ── Now try to send in background (non-blocking) ─────────────────────
         trySendQueuedReport(queueItem);
@@ -2433,6 +2496,34 @@ function setupSendStage() {
     document.getElementById('btn-new-report').addEventListener('click', resetApp);
 }
 
+// ── Gamification Badge Fetch ─────────────────────────────────────────────────
+async function fetchBadge(deviceHash) {
+    try {
+        const res = await fetch(`${API_BASE}/reports/profile/${deviceHash}`);
+        if (!res.ok) return;
+        const p = await res.json();
+        const badges = { NEWCOMER: '🌱', HELPER: '🤝', GUARDIAN: '🛡', HERO: '🦸' };
+        const tiers = [
+            { level: 'NEWCOMER', need: 1, next: 'Helper', nextNeed: 3 },
+            { level: 'HELPER', need: 3, next: 'Guardian', nextNeed: 10 },
+            { level: 'GUARDIAN', need: 10, next: 'Hero', nextNeed: 25 },
+            { level: 'HERO', need: 25, next: null, nextNeed: 25 },
+        ];
+        const tier = tiers.find(t => t.level === p.badge_level) || tiers[0];
+        const pct = tier.next ? Math.min(100, Math.round((p.report_count / tier.nextNeed) * 100)) : 100;
+
+        const card = document.getElementById('badge-card');
+        if (card) {
+            document.getElementById('badge-icon').textContent = badges[p.badge_level] || '🌱';
+            document.getElementById('badge-level').textContent = p.badge_level.charAt(0) + p.badge_level.slice(1).toLowerCase();
+            document.getElementById('badge-count').textContent = `${p.report_count} report${p.report_count !== 1 ? 's' : ''} submitted`;
+            document.getElementById('badge-bar-fill').style.width = pct + '%';
+            document.getElementById('badge-next').textContent = tier.next ? `Next: ${tier.next} (${tier.nextNeed} reports)` : 'Max level reached!';
+            card.style.display = 'flex';
+        }
+    } catch (_) {}
+}
+
 // ── Toast Notification ────────────────────────────────────────────────────────
 function showToast(message, duration = 3000) {
     const existingToast = document.getElementById('toast-notification');
@@ -2461,6 +2552,8 @@ function resetApp() {
     state.photoDataUrl = null; state.photoBlob = null; state.extraPhotos = [];
     state.audioBlob = null; state.transcript = ''; state.description = '';
     state.infraType = 'ROAD'; state.severity = 'MODERATE'; state.isAutoSubmit = false;
+    state.crisisType = 'FLOOD'; state.damageClass = 'PARTIAL'; state.infraName = '';
+    state.debrisClearing = false; state.serviceStatus = { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] };
 
     // Always reset to device GPS — never carry over user-corrected location to next report
     state.userLocationName = null; state.locationName = null;
