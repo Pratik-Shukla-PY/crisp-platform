@@ -24,9 +24,27 @@ import { useAudioRecorder, AudioModule } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { detectNetworkTier, getAdaptiveConfig, getCurrentTier } from './services/networkAdaptive';
 import { getHistory, getImpactStats, markHistoryDeletionRequested, updateHistoryStatus, HistoryReport } from './services/database';
-import { getDeviceStatusSince, deleteReportFromServer } from './services/api';
+import { getDeviceStatusSince, deleteReportFromServer, getApiBase } from './services/api';
 
 type Screen = 'home' | 'photo' | 'audio' | 'review' | 'send' | 'success' | 'history';
+
+const BADGE_ICONS: Record<string,string> = { NEWCOMER: '🌱', HELPER: '🤝', GUARDIAN: '🛡', HERO: '🦸' };
+function BadgeCard({ deviceHash }: { deviceHash: string }) {
+  const [badge, setBadge] = React.useState<{badge_level:string;report_count:number} | null>(null);
+  React.useEffect(() => {
+    if (!deviceHash) return;
+    fetch(`${getApiBase()}/reports/profile/${deviceHash}`)
+      .then(r => r.ok ? r.json() : null).then(d => { if (d) setBadge(d); }).catch(() => {});
+  }, [deviceHash]);
+  if (!badge) return null;
+  return (
+    <View style={{ backgroundColor: 'rgba(124,58,237,0.1)', borderWidth: 1, borderColor: 'rgba(124,58,237,0.3)', borderRadius: 14, padding: 14, marginBottom: 12, alignItems: 'center', width: '100%' }}>
+      <Text style={{ fontSize: 32 }}>{BADGE_ICONS[badge.badge_level] || '🌱'}</Text>
+      <Text style={{ color: '#a78bfa', fontSize: 16, fontWeight: '700', marginTop: 4 }}>{badge.badge_level}</Text>
+      <Text style={{ color: '#9ca3af', fontSize: 12 }}>{badge.report_count} report{badge.report_count !== 1 ? 's' : ''} submitted</Text>
+    </View>
+  );
+}
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -38,6 +56,10 @@ export default function App() {
   const [description, setDescription] = useState('');
   const [infraType, setInfraType] = useState('ROAD');
   const [severity, setSeverity] = useState('MODERATE');
+  const [crisisType, setCrisisType] = useState('FLOOD');
+  const [damageClass, setDamageClass] = useState('PARTIAL');
+  const [infraName, setInfraName] = useState('');
+  const [debrisClearing, setDebrisClearing] = useState(false);
   const [location, setLocation] = useState<{ lat: number; lng: number; acc: number } | null>(null);
   const [locationName, setLocationName] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -218,6 +240,7 @@ export default function App() {
   const resetReport = () => {
     setPhotoUri(null); setPhotoBase64(null); setAudioUri(null); setDescription('');
     setInfraType('ROAD'); setSeverity('MODERATE');
+    setCrisisType('FLOOD'); setDamageClass('PARTIAL'); setInfraName(''); setDebrisClearing(false);
     setLocation(null); setLocationName(''); setIsSending(false); setReportId('');
   };
 
@@ -246,6 +269,8 @@ export default function App() {
         client_report_id: clientId, source: 'ANDROID', severity, infrastructure_type: infraType,
         description: description || '', detected_language: lang,
         expected_media: (photoData ? 1 : 0) + (audioData ? 1 : 0),
+        crisis_type: crisisType, damage_classification: damageClass,
+        infrastructure_name: infraName || null, debris_clearing_needed: debrisClearing,
         ...(location ? { location: { latitude: location.lat, longitude: location.lng, device_latitude: location.lat, device_longitude: location.lng, accuracy_meters: location.acc || 0, device_location_name: locationName || null } } : {}),
       };
 
@@ -271,12 +296,25 @@ export default function App() {
   const types = [
     { key: 'ROAD', icon: '🛣', label: t('type_road') }, { key: 'HOSPITAL', icon: '🏥', label: t('type_hospital') },
     { key: 'HOUSE', icon: '🏠', label: t('type_house') }, { key: 'POWER', icon: '⚡', label: t('type_power') },
-    { key: 'WATER', icon: '💧', label: t('type_water') }, { key: 'OTHER', icon: '❓', label: t('type_other') },
+    { key: 'WATER', icon: '💧', label: t('type_water') }, { key: 'SCHOOL', icon: '🏫', label: 'School' },
+    { key: 'TELECOM', icon: '📡', label: 'Telecom' }, { key: 'GOVERNMENT', icon: '🏛', label: 'Gov.' },
+    { key: 'OTHER', icon: '❓', label: t('type_other') },
   ];
   const sevs = [
     { key: 'MINOR', icon: '🟢', label: t('sev_minor') },
     { key: 'MODERATE', icon: '🟠', label: t('sev_moderate') },
     { key: 'SEVERE', icon: '🔴', label: t('sev_severe') },
+  ];
+  const crisisTypes = [
+    { key: 'EARTHQUAKE', icon: '🏚', label: 'Earthquake' }, { key: 'FLOOD', icon: '🌊', label: 'Flood' },
+    { key: 'CONFLICT', icon: '⚔️', label: 'Conflict' }, { key: 'HURRICANE', icon: '🌀', label: 'Hurricane' },
+    { key: 'WILDFIRE', icon: '🔥', label: 'Wildfire' }, { key: 'LANDSLIDE', icon: '🏔', label: 'Landslide' },
+    { key: 'PANDEMIC', icon: '🦠', label: 'Pandemic' }, { key: 'OTHER', icon: '❓', label: 'Other' },
+  ];
+  const damageOptions = [
+    { key: 'NO_DAMAGE', icon: '✅', label: 'No Damage', color: '#22c55e' },
+    { key: 'PARTIAL', icon: '⚠️', label: 'Partial', color: '#f97316' },
+    { key: 'COMPLETE', icon: '❌', label: 'Destroyed', color: '#ef4444' },
   ];
 
   return (
@@ -356,6 +394,14 @@ export default function App() {
           <View style={s.chipRow}>{types.map(tp => <TouchableOpacity key={tp.key} style={[s.chip, infraType === tp.key && s.chipActive]} onPress={() => setInfraType(tp.key)}><Text style={s.chipText}>{tp.icon} {tp.label}</Text></TouchableOpacity>)}</View>
           <Text style={s.label}>{t('severity_label')}</Text>
           <View style={s.chipRow}>{sevs.map(sv => <TouchableOpacity key={sv.key} style={[s.chip, severity === sv.key && s.chipActive]} onPress={() => setSeverity(sv.key)}><Text style={s.chipText}>{sv.icon} {sv.label}</Text></TouchableOpacity>)}</View>
+          <Text style={s.label}>Type of Crisis</Text>
+          <View style={s.chipRow}>{crisisTypes.map(ct => <TouchableOpacity key={ct.key} style={[s.chip, crisisType === ct.key && s.chipActive]} onPress={() => setCrisisType(ct.key)}><Text style={s.chipText}>{ct.icon} {ct.label}</Text></TouchableOpacity>)}</View>
+          <Text style={s.label}>Damage Level</Text>
+          <View style={s.chipRow}>{damageOptions.map(d => <TouchableOpacity key={d.key} style={[s.chip, damageClass === d.key && { ...s.chipActive, borderColor: d.color }]} onPress={() => setDamageClass(d.key)}><Text style={s.chipText}>{d.icon} {d.label}</Text></TouchableOpacity>)}</View>
+          <TextInput style={[s.textInput, { marginBottom: 8, height: 42 }]} placeholder="Building/road name (optional)" placeholderTextColor={Colors.textDim} value={infraName} onChangeText={setInfraName} returnKeyType="done" blurOnSubmit={true} onSubmitEditing={Keyboard.dismiss} />
+          <TouchableOpacity style={[s.chip, debrisClearing && s.chipActive, { alignSelf: 'flex-start', marginBottom: 8 }]} onPress={() => setDebrisClearing(!debrisClearing)}>
+            <Text style={s.chipText}>{debrisClearing ? '✅' : '⬜'} Needs debris clearing</Text>
+          </TouchableOpacity>
           <Text style={s.label}>{t('description_label')}</Text>
           <TextInput style={s.textInput} value={description} onChangeText={setDescription} multiline numberOfLines={3} placeholderTextColor={Colors.textDim} placeholder={t('type_text')} />
           <View style={s.navRow}>
@@ -370,6 +416,9 @@ export default function App() {
           <Text style={s.stepLabel}>4/4</Text>
           <View style={s.summaryCard}>
             <Text style={s.summaryRow}>📋 {infraType} | ⚠️ {severity}</Text>
+            <Text style={s.summaryRow}>🌪 {crisisType.replace(/_/g, ' ')} | 🏗 {damageClass.replace(/_/g, ' ')}</Text>
+            {infraName ? <Text style={s.summaryRow}>🏛 {infraName}</Text> : null}
+            {debrisClearing ? <Text style={s.summaryRow}>🚛 Debris clearing needed</Text> : null}
             <Text style={s.summaryRow}>📸 {photoUri ? '✅' : '❌'}  🎤 {audioUri ? '✅' : '❌'}</Text>
             {description ? <Text style={s.summaryDesc} numberOfLines={2}>{description}</Text> : null}
           </View>
@@ -385,7 +434,8 @@ export default function App() {
           <Text style={s.emoji}>✅</Text>
           <Text style={s.title}>{t('success_title')}</Text>
           <Text style={s.subtitle}>{t('success_sub')}</Text>
-          <Text style={{ color: Colors.accent, fontSize: 14, fontFamily: 'monospace', marginBottom: 16 }}>🆔 {reportId}...</Text>
+          <Text style={{ color: Colors.accent, fontSize: 14, fontFamily: 'monospace', marginBottom: 12 }}>🆔 {reportId}...</Text>
+          <BadgeCard deviceHash={deviceHash} />
           {!isOnline && <View style={s.queueBadge}><Text style={s.queueText}>📴 {t('offline')}</Text></View>}
           <TouchableOpacity style={s.bigBtn} onPress={() => { resetReport(); setScreen('home'); }}>
             <Text style={s.bigBtnText}>{t('new_report')}</Text>
@@ -496,7 +546,7 @@ const s = StyleSheet.create({
   micBtn: { width: 160, height: 160, borderRadius: 80, backgroundColor: Colors.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 24, elevation: 10 },
   textInput: { width: '100%', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, padding: 14, color: Colors.text, fontSize: 15, textAlignVertical: 'top', marginBottom: 16 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  chip: { paddingVertical: 16, paddingHorizontal: 18, borderRadius: 14, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, minWidth: '30%', alignItems: 'center' },
+  chip: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, backgroundColor: Colors.surface, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center' },
   chipActive: { borderColor: Colors.accent, backgroundColor: 'rgba(124,58,237,0.12)' },
   chipText: { color: Colors.text, fontSize: 14, fontWeight: '600' },
   summaryCard: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: 14, padding: 18, width: '100%', marginBottom: 16 },

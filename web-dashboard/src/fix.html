@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html><head><title>CRISP - Cache Fix</title></head>
+<body style="background:#0a0e1a;color:#e2e8f0;font-family:monospace;padding:40px;font-size:14px;">
+<h2 style="color:#7c3aed;">CRISP Cache Fix</h2>
+<pre id="log">Starting cleanup...</pre>
+<script>
+const log = (msg) => { document.getElementById('log').textContent += '\n' + msg; console.log(msg); };
+
+(async () => {
+    // 1. Unregister all service workers
+    log('1. Unregistering service workers...');
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) { await r.unregister(); log('   Unregistered: ' + r.scope); }
+    if (!regs.length) log('   None found');
+
+    // 2. Clear all caches
+    log('2. Clearing caches...');
+    const names = await caches.keys();
+    for (const n of names) { await caches.delete(n); log('   Deleted: ' + n); }
+    if (!names.length) log('   None found');
+
+    // 3. Clear localStorage
+    log('3. Clearing localStorage...');
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('crisp'));
+    keys.forEach(k => { localStorage.removeItem(k); log('   Removed: ' + k); });
+    if (!keys.length) log('   None found');
+
+    // 4. Test API
+    log('4. Testing API...');
+    const host = `http://${window.location.hostname}:8000`;
+    try {
+        const res = await fetch(`${host}/api/v1/reports/`);
+        const data = await res.json();
+        log(`   SUCCESS: ${data.length} reports from ${host}`);
+    } catch(e) {
+        log(`   FAILED: ${e.message}`);
+    }
+
+    log('\n=== DONE ===');
+    log('Redirecting to dashboard in 3 seconds...');
+    setTimeout(() => { window.location.href = 'index.html?nocache=' + Date.now(); }, 3000);
+})();
+</script>
+</body></html>
+</content>
+</invoke>

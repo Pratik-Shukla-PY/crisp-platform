@@ -23,6 +23,7 @@ from app.schemas.report import (
 from app.services.ai_service import ai_service
 from app.services.satellite_fetcher import satellite_fetcher
 from app.services.truth_scorer import truth_scorer
+from app.core.deps import get_optional_user, require_viewer, require_analyst, require_admin, require_super_admin
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +245,7 @@ def _run_ai_pipeline(report_id: str, media_type: str, file_url: str, db: Session
 
 
 @router.patch("/{report_id}/false-alarm", response_model=ReportResponse)
-def mark_false_alarm(report_id: str, db: Session = Depends(get_db)):
+def mark_false_alarm(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
     """Mark a report as a FALSE_ALARM without deleting it."""
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
@@ -256,7 +257,7 @@ def mark_false_alarm(report_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/{report_id}/dispatch", response_model=ReportResponse)
-def dispatch_team(report_id: str, db: Session = Depends(get_db)):
+def dispatch_team(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
     """Mark a report as RESPONDING — rescue team has been dispatched."""
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
@@ -268,7 +269,7 @@ def dispatch_team(report_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/{report_id}/resolve", response_model=ReportResponse)
-def resolve_report(report_id: str, db: Session = Depends(get_db)):
+def resolve_report(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
     """Mark a report as RESOLVED — situation handled."""
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
@@ -358,7 +359,7 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
 
 
 @router.patch("/{report_id}/impact")
-def set_lives_impacted(report_id: str, payload: dict, db: Session = Depends(get_db)):
+def set_lives_impacted(report_id: str, payload: dict, user=Depends(require_analyst), db: Session = Depends(get_db)):
     """Set the number of lives impacted by this incident."""
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
@@ -369,7 +370,7 @@ def set_lives_impacted(report_id: str, payload: dict, db: Session = Depends(get_
 
 
 @router.delete("/{report_id}", status_code=status.HTTP_200_OK)
-def delete_report(report_id: str, grace_minutes: int = 1440,
+def delete_report(report_id: str, user=Depends(require_admin), grace_minutes: int = 1440,
                   deletion_source: str = "DASHBOARD", db: Session = Depends(get_db)):
     """Soft-delete with audit logging. grace_minutes: 1440 (24h) for dashboard, 30 for mobile."""
     report = db.query(Report).filter(Report.id == report_id).first()
@@ -565,6 +566,12 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
         db.add(db_loc)
         db.commit()
 
+    # Auto-assign building_id for deduplication/versioning
+    _auto_assign_building_id(db_report, db)
+    # Update reporter gamification profile
+    _update_reporter_profile(meta_in.device_hash, db)
+
+    db.commit()
     logger.info(f"Report meta created: {db_report.id} (expecting {meta_in.expected_media} media)")
     db.refresh(db_report)
     return db_report
@@ -607,6 +614,17 @@ def update_report_classification(report_id: str, request: dict, db: Session = De
             pass
     if "description" in request and request["description"]:
         report.description = request["description"]
+    # UNDP extended fields
+    if "damage_classification" in request and request["damage_classification"]:
+        report.damage_classification = request["damage_classification"]
+    if "crisis_type" in request and request["crisis_type"]:
+        report.crisis_type = request["crisis_type"]
+    if "infrastructure_name" in request and request["infrastructure_name"]:
+        report.infrastructure_name = request["infrastructure_name"]
+    if "debris_clearing_needed" in request and request["debris_clearing_needed"] is not None:
+        report.debris_clearing_needed = request["debris_clearing_needed"]
+    if "service_status" in request and request["service_status"]:
+        report.service_status = request["service_status"]
     db.commit()
     db.refresh(report)
     logger.info(f"Report {report.id} classified: sev={report.severity.value} type={report.infrastructure_type.value}")
@@ -644,9 +662,118 @@ def update_report_location(report_id: str, loc_data: dict, db: Session = Depends
     return report
 
 
+# ── Intelligence Data Enrichment Functions ──────────────────────────────────
+
+def _get_reporter_credibility(device_hash: str, db: Session) -> dict:
+    """Build reporter credibility profile from ReporterProfile + report history."""
+    from app.models.report import ReporterProfile, ReportStatusEnum
+    profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
+    if not profile:
+        return {"badge_level": "NEWCOMER", "total_reports": 0, "verified_reports": 0,
+                "false_alarm_rate": 0, "credibility_score": 50}
+    total = profile.report_count or 1
+    device = db.query(Device).filter(Device.device_hash == device_hash).first()
+    false_count = 0
+    verified_count = 0
+    if device:
+        all_reps = db.query(Report).filter(Report.device_id == device.id, Report.deletion_requested_at.is_(None)).all()
+        false_count = sum(1 for r in all_reps if r.status == ReportStatusEnum.FALSE_ALARM)
+        verified_count = sum(1 for r in all_reps if r.status in (ReportStatusEnum.VERIFIED, ReportStatusEnum.RESPONDING, ReportStatusEnum.RESOLVED))
+    false_rate = round((false_count / max(total, 1)) * 100, 1)
+    base = {"HERO": 95, "GUARDIAN": 85, "HELPER": 70, "NEWCOMER": 50}.get(profile.badge_level, 50)
+    cred = max(10, base - int(false_rate * 0.5))
+    return {"badge_level": profile.badge_level, "total_reports": total,
+            "verified_reports": verified_count, "false_alarm_rate": false_rate, "credibility_score": cred}
+
+
+def _get_corroboration(report: Report, db: Session) -> dict:
+    """Quality-weighted corroboration from nearby reports."""
+    if not report.location:
+        return {"nearby_total": 0, "nearby_verified": 0, "nearby_same_type": 0,
+                "source_diversity": 0, "strongest_score": 0, "temporal_cluster": False, "details": []}
+    lat, lng = report.location.latitude, report.location.longitude
+    from math import radians, cos, sin, sqrt, atan2
+    from datetime import timedelta
+    def hav(la1, lo1, la2, lo2):
+        R = 6371000
+        d1, d2 = radians(la2 - la1), radians(lo2 - lo1)
+        a = sin(d1/2)**2 + cos(radians(la1)) * cos(radians(la2)) * sin(d2/2)**2
+        return R * 2 * atan2(sqrt(a), sqrt(1-a))
+
+    nearby = db.query(Report).join(Location).filter(
+        Report.id != report.id, Report.deletion_requested_at.is_(None),
+        Location.latitude.between(lat - 0.05, lat + 0.05),
+        Location.longitude.between(lng - 0.05, lng + 0.05),
+    ).all()
+    result = []
+    sources = set()
+    two_hr_count = 0
+    for n in nearby:
+        if not n.location:
+            continue
+        dist = hav(lat, lng, n.location.latitude, n.location.longitude)
+        if dist > 5000:
+            continue
+        v_score = n.verification.total_score if n.verification else 0
+        gap = abs((report.server_created_at - n.server_created_at).total_seconds() / 3600) if report.server_created_at and n.server_created_at else 999
+        if gap <= 2:
+            two_hr_count += 1
+        sources.add(n.source.value if n.source else "APP")
+        result.append({
+            "dist_m": int(dist), "type": n.infrastructure_type.value if n.infrastructure_type else "OTHER",
+            "same_type": n.infrastructure_type == report.infrastructure_type,
+            "crisis": n.crisis_type or "", "severity": n.severity.value if n.severity else "UNKNOWN",
+            "source": n.source.value if n.source else "APP",
+            "v_score": v_score, "hours_ago": round(gap, 1),
+            "has_photo": any(m.type.value == "IMAGE" and m.assembly_status == "complete" for m in n.media) if n.media else False,
+        })
+    result.sort(key=lambda x: x["dist_m"])
+    return {
+        "nearby_total": len(result), "nearby_verified": sum(1 for r in result if r["v_score"] > 60),
+        "nearby_same_type": sum(1 for r in result if r["same_type"]),
+        "source_diversity": len(sources), "strongest_score": max((r["v_score"] for r in result), default=0),
+        "temporal_cluster": two_hr_count >= 2, "details": result[:5],
+    }
+
+
+def _get_historical(report: Report, db: Session) -> dict:
+    """Historical context from the same area over the past 90 days."""
+    if not report.location:
+        return {"past_30d": 0, "past_90d": 0, "false_alarm_rate": 0,
+                "recurring": False, "past_crisis_types": [], "past_avg_severity": "UNKNOWN"}
+    from datetime import datetime, timedelta, timezone
+    lat, lng = report.location.latitude, report.location.longitude
+    now = report.server_created_at or datetime.now(timezone.utc)
+    if hasattr(now, 'tzinfo') and now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    cutoff_90 = now - timedelta(days=90)
+    past_90 = db.query(Report).join(Location).filter(
+        Report.id != report.id, Report.deletion_requested_at.is_(None),
+        Location.latitude.between(lat - 0.05, lat + 0.05),
+        Location.longitude.between(lng - 0.05, lng + 0.05),
+        Report.server_created_at >= cutoff_90,
+    ).all()
+    past_30 = [r for r in past_90 if r.server_created_at and abs((now - (r.server_created_at.replace(tzinfo=timezone.utc) if r.server_created_at.tzinfo is None else r.server_created_at)).days) <= 30]
+    false_count = sum(1 for r in past_90 if r.status == ReportStatusEnum.FALSE_ALARM)
+    crisis_set = set(r.crisis_type for r in past_90 if r.crisis_type)
+    sev_map = {"CRITICAL": 4, "SEVERE": 3, "MODERATE": 2, "MINOR": 1, "UNKNOWN": 0}
+    avg_sev = sum(sev_map.get(r.severity.value, 0) for r in past_90) / max(len(past_90), 1)
+    avg_label = "CRITICAL" if avg_sev >= 3.5 else "SEVERE" if avg_sev >= 2.5 else "MODERATE" if avg_sev >= 1.5 else "MINOR"
+    return {
+        "past_30d": len(past_30), "past_90d": len(past_90),
+        "false_alarm_rate": round((false_count / max(len(past_90), 1)) * 100, 1),
+        "recurring": len(past_90) >= 3, "past_crisis_types": list(crisis_set),
+        "past_avg_severity": avg_label,
+    }
+
+
+CRITICALITY = {"HOSPITAL": "CRITICAL", "WATER": "CRITICAL", "POWER": "HIGH", "GOVERNMENT": "HIGH",
+               "TELECOM": "HIGH", "ROAD": "MEDIUM", "SCHOOL": "MEDIUM", "HOUSE": "STANDARD", "OTHER": "STANDARD"}
+
+
 @router.post("/{report_id}/ai-assess")
-async def ai_assess_report(report_id: str, payload: dict, db: Session = Depends(get_db)):
-    """On-demand AI assessment: sends full incident data to Claude for analysis."""
+async def ai_assess_report(report_id: str, payload: dict, user=Depends(require_analyst), db: Session = Depends(get_db)):
+    """Multi-signal intelligence assessment: builds 360° dossier and sends to Claude for analysis."""
     import httpx
     anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not anthropic_key:
@@ -656,132 +783,220 @@ async def ai_assess_report(report_id: str, payload: dict, db: Session = Depends(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # Build context for Claude
-    desc = payload.get("description", "") or ""
-    trans = payload.get("transcription", "") or ""
-    ai_sum = payload.get("ai_summary", "") or ""
-    loc_info = payload.get("location", {}) or {}
-    loc_name = loc_info.get("name", "Unknown")
-    verif = payload.get("verification", {}) or {}
-    caller = payload.get("caller_info", {}) or {}
+    # ── Gather intelligence from all sources ──
+    desc = (report.description or payload.get("description", "") or "")[:600]
+    ai = report.ai_analysis
+    trans = ((ai.transcription if ai and ai.transcription else None) or payload.get("transcription", "") or "")[:600]
+    ai_sum = ((ai.ai_summary if ai and ai.ai_summary else None) or payload.get("ai_summary", "") or "")[:400]
+    loc = report.location
+    loc_name = (loc.user_location_name or loc.device_location_name or "Unknown") if loc else "Unknown"
+    lat = loc.latitude if loc else 0
+    lng = loc.longitude if loc else 0
+    acc = loc.accuracy_meters if loc else 0
+    v = report.verification
+    caller = report.caller_info or payload.get("caller_info", {}) or {}
+    source = report.source.value if report.source else "APP"
+    is_voice_sms = source in ("IVR", "SMS")
+    infra = report.infrastructure_type.value if report.infrastructure_type else "OTHER"
+    criticality = CRITICALITY.get(infra, "STANDARD")
 
-    nearby = payload.get('nearby_reports', 0)
-    v_scores = verif.get('scores', {}) if verif else {}
-    photo_analysis = verif.get('photo_analysis', '') if verif else ''
-    sat_scene = verif.get('satellite_scene', '') if verif else ''
-    v_findings = verif.get('key_findings', []) if verif else []
-    v_caveats = verif.get('caveats', []) if verif else []
+    # Reporter credibility
+    device = report.device
+    device_hash = device.device_hash if device else ""
+    cred = _get_reporter_credibility(device_hash, db)
 
-    source = payload.get('source', 'UNKNOWN')
-    is_voice_sms = source in ('IVR', 'SMS')
+    # Corroboration
+    corr = _get_corroboration(report, db)
 
-    # Static system prompt — cached across all AI assessments (90% token savings on repeated calls)
-    system_prompt = """You are a senior crisis assessment analyst for CRISP (Crisis Response Intelligence & Situation Platform). Your assessment directly determines whether rescue teams are dispatched. THE STAKES ARE LIFE AND DEATH.
+    # Historical context
+    hist = _get_historical(report, db)
 
-GENERAL RULES:
-- FALSE NEGATIVE (dismissing a real incident) = LIVES LOST. Err on the side of caution for voice/SMS reports.
-- FALSE POSITIVE (dispatching for fake) = wasted resources. Be stricter with anonymous app reports with no evidence.
-- Nearby corroborating reports from DIFFERENT users = STRONGEST signal for ANY source.
-- A person calling from a traceable phone number is putting their identity on the line — this IS evidence of sincerity.
-- IVR/SMS callers often have NO smartphone — they CANNOT send photos. Do NOT penalize for missing photos from these sources.
-- App/Telegram/WhatsApp users CAN send photos — if they claim severe damage but sent NO photo, that is suspicious.
+    # Media analysis
+    img_media = [m for m in (report.media or []) if m.type.value == "IMAGE" and m.assembly_status == "complete"]
+    aud_media = [m for m in (report.media or []) if m.type.value == "AUDIO"]
+    has_photo = len(img_media) > 0
+    has_audio = len(aud_media) > 0
 
-SCORING WEIGHTS FOR IVR/SMS (no photo possible):
-- Voice/Text content & specificity: 40%
-- Satellite verification: 25%
-- Corroboration (nearby reports): 25%
-- Caller identity & traceability: 10%
+    # Temporal signals
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    created = report.server_created_at.replace(tzinfo=timezone.utc) if report.server_created_at and report.server_created_at.tzinfo is None else (report.server_created_at or now)
+    wait_hours = round((now - created).total_seconds() / 3600, 1)
+    is_night = created.hour >= 22 or created.hour < 6
+    batch = db.query(Report).filter(
+        Report.device_id == report.device_id, Report.id != report.id,
+        Report.server_created_at.between(created - timedelta(minutes=5), created + timedelta(minutes=5))
+    ).count() if report.device_id else 0
 
-SCORING WEIGHTS FOR App/Telegram/WhatsApp (photo possible):
-- Photo evidence: 25%
-- Voice/Text content: 25%
-- Satellite verification: 25%
-- Corroboration (nearby reports): 25%
+    # Data completeness
+    fields_filled = sum([has_photo, has_audio, bool(desc), bool(lat), bool(loc_name != "Unknown"),
+                         bool(report.crisis_type), bool(report.damage_classification),
+                         bool(report.infrastructure_name)])
+    completeness = round((fields_filled / 8) * 100)
 
-Return ONLY valid JSON with: summary (2 lines, max 50 words), suggested_action (Dispatch Rescue Team | Monitor Situation | Flag as Suspicious | Likely False Report), confidence_score (0-100), inferred_type (WATER/ROAD/HOSPITAL/HOUSE/POWER/OTHER), inferred_severity (CRITICAL/SEVERE/MODERATE/MINOR), details (6-8 line cross-verification analysis)."""
+    # Service status
+    ss = report.service_status or {}
 
-    # Dynamic user message — changes per incident (NOT cached)
-    prompt = f"""
+    # ── System prompt (CACHED — 90% token savings) ──
+    system_prompt = """You are the Chief Intelligence Analyst for CRISP, a UN crisis response platform deployed in active disaster zones. Your assessment determines whether rescue teams are dispatched to save lives. You receive a full intelligence dossier per incident.
 
-SOURCE: {source} {"(VOICE/SMS — no photo capability, do NOT penalize)" if is_voice_sms else "(smartphone — CAN send photos)"}
+DECISION FRAMEWORK:
+1. LIVES AT STAKE — a false negative (dismissing real crisis) kills people. A false positive wastes resources. ALWAYS err toward saving lives.
+2. MULTI-SIGNAL FUSION — weight evidence by quality, not just presence. A HERO reporter with photo + verified satellite > 5 anonymous text-only reports.
+3. CORROBORATION IS KING — multiple independent sources reporting the same event from different channels (IVR + Telegram + App) is the strongest possible signal.
+4. TEMPORAL URGENCY — reports waiting >2 hours need expedited review. Night reports deserve benefit of doubt.
+5. INFRASTRUCTURE CRITICALITY — hospital/water/power damage has cascading community-wide effects. Weight higher.
+6. HISTORICAL PATTERNS — recurring reports from the same area may indicate chronic vulnerability OR persistent real damage.
 
-═══════════════════════════════════════════
-INCIDENT DATA
-═══════════════════════════════════════════
-Type: {payload.get('infrastructure_type', 'UNKNOWN')}
-Reported Severity: {payload.get('severity', 'UNKNOWN')}
-Source Channel: {source}
-Location: {loc_name} ({loc_info.get('lat','?')}, {loc_info.get('lng','?')})
+REPORTER CREDIBILITY WEIGHTS:
+- HERO (25+ verified reports, <5% false alarm): weight testimony at 95%
+- GUARDIAN (10+ reports): 85%
+- HELPER (3+ reports): 70%
+- NEWCOMER (<3 reports): 50% — rely more on other signals
+- IVR/SMS (traceable phone): +10% trust bonus regardless of badge
 
-═══════════════════════════════════════════
-SIGNAL 1: TEXT & VOICE CONTENT
-═══════════════════════════════════════════
-User Description: {desc[:600] if desc else '[NONE]'}
-Audio Transcription: {trans[:600] if trans else '[NONE — no audio]'}
-AI-Cleaned Summary: {ai_sum[:400] if ai_sum else '[NONE]'}
+SOURCE RULES:
+- IVR/SMS: CANNOT send photos. NEVER penalize for missing visual evidence.
+- App/Telegram/WhatsApp: CAN send photos. Missing photo on SEVERE claim = mild flag (not automatic rejection).
 
-Key questions: Does the text contain SPECIFIC details (exact village/landmark, number of people affected, type of damage)? Does the voice show genuine distress? Are local details mentioned that only someone on-ground would know?
+SCORE COMPUTATION — You MUST compute and return a breakdown:
+1. text_voice_score (0-100): Specificity, local knowledge, genuine detail, distress indicators
+2. visual_evidence_score (0-100): Photo quality/relevance, or 50 baseline for IVR/SMS (cannot penalize)
+3. satellite_score (0-100): Truth verification score, or 50 baseline if not yet verified
+4. corroboration_score (0-100): Nearby reports quality, source diversity, temporal clustering
+5. credibility_bonus (-10 to +10): Reporter badge adjustment
+6. criticality_bonus (0-5): Infrastructure criticality adjustment
+7. penalties (-20 to 0): Batch submission, high false-alarm rate, contradictions
+8. final_score: weighted average + bonuses + penalties, clamped 0-100
 
-═══════════════════════════════════════════
-SIGNAL 2: VISUAL EVIDENCE
-═══════════════════════════════════════════
-Has User Photo: {payload.get('has_image', False)}
-{f'Photo Analysis: {photo_analysis[:400]}' if photo_analysis else f'Photo: Not available {"(EXPECTED — IVR/SMS users cannot send photos)" if is_voice_sms else "(User has smartphone but did not send photo)"}'}
+RESPONSE FORMAT — Return ONLY valid JSON:
+{
+  "priority_level": "P1_IMMEDIATE | P2_URGENT | P3_STANDARD | P4_MONITOR | P5_LIKELY_FALSE",
+  "confidence_score": 0-100,
+  "suggested_action": "Dispatch Rescue Team | Dispatch + Alert Neighbors | Monitor & Verify | Request More Info | Flag as Suspicious | Likely False Report",
+  "lives_at_risk_estimate": "number or range string",
+  "inferred_severity": "CRITICAL | SEVERE | MODERATE | MINOR",
+  "inferred_crisis_type": "EARTHQUAKE | FLOOD | CONFLICT | HURRICANE | CYCLONE | WILDFIRE | LANDSLIDE | PANDEMIC | OTHER",
+  "inferred_damage_class": "NO_DAMAGE | PARTIAL | COMPLETE",
+  "score_breakdown": {
+    "text_voice_score": 0-100,
+    "visual_evidence_score": 0-100,
+    "satellite_score": 0-100,
+    "corroboration_score": 0-100,
+    "credibility_bonus": -10 to +10,
+    "criticality_bonus": 0-5,
+    "penalties": -20 to 0,
+    "raw_total": float,
+    "final_score": 0-100
+  },
+  "key_factors": ["factor1", "factor2", "factor3"],
+  "risk_flags": ["flag1 if any"],
+  "summary": "2-3 sentence executive briefing for dispatch commander. Max 80 words.",
+  "reasoning": "6-10 line cross-verification analysis explaining how each signal was weighed."
+}"""
 
-═══════════════════════════════════════════
-SIGNAL 3: SATELLITE VERIFICATION
-═══════════════════════════════════════════
-{f'Score: {verif["score"]}/100 — {verif["verdict"]}' if verif.get("score") else 'Not yet verified'}
-{f'Scene: {sat_scene[:250]}' if sat_scene else ''}
-{f'Findings: {"; ".join(v_findings[:2])}' if v_findings else ''}
+    # ── Dynamic intelligence dossier (NOT cached — unique per report) ──
+    corr_details = ""
+    for c in corr["details"][:3]:
+        corr_details += f"\n    • {c['dist_m']}m away: {c['type']} ({c['severity']}) via {c['source']}, {'verified '+str(c['v_score'])+'/100' if c['v_score'] else 'unverified'}, {c['hours_ago']}h ago"
 
-═══════════════════════════════════════════
-SIGNAL 4: CORROBORATION & IDENTITY
-═══════════════════════════════════════════
-Nearby Reports (within 5km): {nearby} {'— STRONG corroboration from independent sources' if nearby >= 2 else '— some corroboration' if nearby == 1 else '— no corroboration yet'}
-Audio Evidence: {payload.get('has_audio', False)}
-Media Count: {payload.get('media_count', 0)}
-{f'Caller Phone: {caller.get("phone","")} (TRACEABLE — caller is identifiable)' if caller.get("phone") else 'Caller: Anonymous'}
+    dossier = f"""═══ INCIDENT INTELLIGENCE DOSSIER ═══
+Report ID: {report_id[:8]} | Source: {source} {"(NO photo capability)" if is_voice_sms else "(HAS photo capability)"} | Waiting: {wait_hours}h
 
-Respond with the JSON format specified in the system prompt."""
+── SECTION 1: REPORT DATA ──
+Infrastructure: {infra} (Criticality: {criticality})
+Name: {report.infrastructure_name or 'Not specified'}
+Severity: {report.severity.value if report.severity else 'UNKNOWN'}
+Crisis Type: {report.crisis_type or 'Not specified'}
+Damage: {report.damage_classification or 'Not specified'}
+Debris Clearing: {'Needed' if report.debris_clearing_needed else 'Not specified'}
+Location: {loc_name} ({lat}, {lng}) ±{acc}m
+
+── SECTION 2: EVIDENCE ──
+Photo: {'Yes ('+str(len(img_media))+')' if has_photo else 'No'} | Audio: {'Yes' if has_audio else 'No'} | Text: {'Yes ('+str(len(desc))+' chars)' if desc else 'No'}
+Completeness: {completeness}%
+Description: "{desc or '[NONE]'}"
+Transcription: "{trans or '[NONE]'}"
+AI Summary: "{ai_sum or '[NONE]'}"
+
+── SECTION 3: REPORTER PROFILE ──
+Badge: {cred['badge_level']} | Reports: {cred['total_reports']} | Verified: {cred['verified_reports']} | False Alarm Rate: {cred['false_alarm_rate']}%
+Credibility Score: {cred['credibility_score']}/100
+Identity: {caller.get('phone', 'Anonymous app user') if caller else 'Anonymous'}
+
+── SECTION 4: SATELLITE VERIFICATION ──
+{f"Score: {v.total_score}/100 — {v.verdict}" if v and v.total_score else "Not yet verified (baseline 50)"}
+{f"Scene: {(v.satellite_scene_description or '')[:250]}" if v else ""}
+{f"Findings: {'; '.join((v.key_findings or [])[:3])}" if v and v.key_findings else ""}
+{f"Photo vs Satellite: {(v.photo_analysis or '')[:200]}" if v and v.photo_analysis else ""}
+
+── SECTION 5: CORROBORATION ──
+Nearby (5km): {corr['nearby_total']} reports ({corr['nearby_verified']} verified, {corr['nearby_same_type']} same type)
+Source Diversity: {corr['source_diversity']} channels
+Temporal Cluster (2h): {'YES — likely real event' if corr['temporal_cluster'] else 'No'}
+Strongest Score: {corr['strongest_score']}/100{corr_details}
+
+── SECTION 6: HISTORICAL CONTEXT ──
+Past 30 days (5km): {hist['past_30d']} reports | Past 90 days: {hist['past_90d']} reports
+Historical False Alarm Rate: {hist['false_alarm_rate']}%
+Recurring Location: {'YES' if hist['recurring'] else 'No'}
+Past Crisis Types: {', '.join(hist['past_crisis_types']) if hist['past_crisis_types'] else 'None recorded'}
+
+── SECTION 7: SERVICE STATUS ──
+Electricity: {ss.get('electricity', 'Unknown')} | Water: {ss.get('water', 'Unknown')} | Health: {ss.get('health', 'Unknown')}
+Pressing Needs: {', '.join(ss.get('pressing_needs', [])) or 'Not specified'}
+
+── SECTION 8: URGENCY SIGNALS ──
+Night Report: {'YES' if is_night else 'No'} | Batch Submission: {'YES — SUSPICIOUS' if batch >= 3 else 'No'}
+Response Wait: {wait_hours}h | Data Completeness: {completeness}%
+
+Compute the score breakdown and return JSON as specified."""
 
     try:
-        async with httpx.AsyncClient(timeout=30) as c:
+        async with httpx.AsyncClient(timeout=45) as c:
             r = await c.post("https://api.anthropic.com/v1/messages",
                 headers={"x-api-key": anthropic_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
                 json={
                     "model": "claude-sonnet-4-20250514",
-                    "max_tokens": 800,
+                    "max_tokens": 1200,
                     "system": [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [{"role": "user", "content": dossier}],
                 })
             if r.status_code == 200:
                 import json as jsonlib
                 text = r.json().get("content", [{}])[0].get("text", "{}")
-                # Extract JSON from response
                 try:
                     start = text.index('{')
                     end = text.rindex('}') + 1
                     data = jsonlib.loads(text[start:end])
                 except:
-                    data = {"summary": text[:200], "suggested_action": "Review Needed", "details": text}
-                # Persist AI assessment to DB
+                    data = {"summary": text[:200], "suggested_action": "Review Needed", "reasoning": text, "confidence_score": 0}
+
+                # Persist full assessment to DB
                 report.ai_assessment = data
 
-                # Also update report classification from AI inference (replaces old AI Extractor)
-                inferred_type = data.get("inferred_type", "")
-                inferred_sev = data.get("inferred_severity", "")
-                valid_types = ["WATER", "ROAD", "HOSPITAL", "HOUSE", "POWER", "OTHER"]
-                valid_sevs = ["CRITICAL", "SEVERE", "MODERATE", "MINOR"]
+                # Update classification from AI inference
+                valid_types = [e.value for e in InfraTypeEnum]
+                valid_sevs = [e.value for e in SeverityEnum]
+                inferred_type = data.get("inferred_type", "") or ""
+                inferred_sev = data.get("inferred_severity", "") or ""
+                inferred_crisis = data.get("inferred_crisis_type", "") or ""
+                inferred_damage = data.get("inferred_damage_class", "") or ""
+
                 if inferred_type in valid_types and report.infrastructure_type.value == "OTHER":
                     report.infrastructure_type = InfraTypeEnum(inferred_type)
                 if inferred_sev in valid_sevs:
                     report.severity = SeverityEnum(inferred_sev)
+                if inferred_crisis:
+                    report.crisis_type = inferred_crisis
+                if inferred_damage:
+                    report.damage_classification = inferred_damage
 
                 db.commit()
-                logger.info(f"AI assessment saved for {report_id}: score={data.get('confidence_score','?')} type={inferred_type} sev={inferred_sev}")
+                logger.info(f"AI assessment saved: {report_id} score={data.get('confidence_score','?')} priority={data.get('priority_level','?')}")
                 return data
             else:
+                logger.error(f"Claude API error ({r.status_code}): {r.text[:200]}")
                 raise HTTPException(status_code=502, detail="AI service error")
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="AI service timeout")
@@ -1302,7 +1517,8 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
     return db_report
 
 @router.get("/", response_model=List[ReportResponse])
-def get_reports(skip: int = 0, limit: int = 100, include_deleted: bool = False, db: Session = Depends(get_db)):
+def get_reports(skip: int = 0, limit: int = 100, include_deleted: bool = False,
+                user=Depends(require_viewer), db: Session = Depends(get_db)):
     """
     Retrieve aggregated tactical reports for the dashboard sync client.
     By default, excludes reports pending deletion (24h grace period).
@@ -1455,3 +1671,93 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(v)
     return v
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GAMIFICATION: Reporter profiles with badge progression
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/profile/{device_hash}")
+def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
+    """Get reporter's gamification profile (badge level, report count, impact)."""
+    from app.models.report import ReporterProfile
+    profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
+    if not profile:
+        profile = ReporterProfile(device_hash=device_hash, report_count=0, badge_level="NEWCOMER", impact_score=0)
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
+    return {
+        "device_hash": profile.device_hash,
+        "report_count": profile.report_count,
+        "verified_count": profile.verified_count,
+        "badge_level": profile.badge_level,
+        "impact_score": profile.impact_score,
+    }
+
+
+def _update_reporter_profile(device_hash: str, db: Session):
+    """Increment reporter's profile on report submission. Badge tiers: 1=NEWCOMER, 3=HELPER, 10=GUARDIAN, 25=HERO."""
+    from app.models.report import ReporterProfile
+    profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
+    if not profile:
+        profile = ReporterProfile(device_hash=device_hash)
+        db.add(profile)
+    profile.report_count = (profile.report_count or 0) + 1
+    count = profile.report_count
+    if count >= 25:
+        profile.badge_level = "HERO"
+    elif count >= 10:
+        profile.badge_level = "GUARDIAN"
+    elif count >= 3:
+        profile.badge_level = "HELPER"
+    else:
+        profile.badge_level = "NEWCOMER"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUILDING VERSIONING: Group multiple reports about the same structure
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/building/{building_id}")
+def get_building_history(building_id: str, db: Session = Depends(get_db)):
+    """Get all reports linked to a building, ordered by time (damage progression)."""
+    reports = db.query(Report).filter(
+        Report.building_id == building_id,
+        Report.deletion_requested_at.is_(None)
+    ).order_by(Report.server_created_at.asc()).all()
+    return [ReportResponse.model_validate(r) for r in reports]
+
+
+def _auto_assign_building_id(report: Report, db: Session):
+    """Auto-link reports within 30m of each other to the same building_id."""
+    if not report.location or report.building_id:
+        return
+    lat, lng = report.location.latitude, report.location.longitude
+    if lat == 0 and lng == 0:
+        return
+    from math import radians, cos, sin, sqrt, atan2
+    def haversine(lat1, lon1, lat2, lon2):
+        R = 6371000
+        dlat = radians(lat2 - lat1)
+        dlon = radians(lon2 - lon1)
+        a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+        return R * 2 * atan2(sqrt(a), sqrt(1-a))
+
+    nearby = db.query(Report).join(Location).filter(
+        Report.id != report.id,
+        Report.deletion_requested_at.is_(None),
+        Location.latitude.between(lat - 0.0003, lat + 0.0003),
+        Location.longitude.between(lng - 0.0003, lng + 0.0003),
+    ).all()
+
+    for n in nearby:
+        if n.location and haversine(lat, lng, n.location.latitude, n.location.longitude) <= 30:
+            if n.building_id:
+                report.building_id = n.building_id
+                return
+            else:
+                bid = gen_uuid()
+                report.building_id = bid
+                n.building_id = bid
+                return

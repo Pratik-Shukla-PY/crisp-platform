@@ -16,13 +16,14 @@ from .session_manager import (
     get_or_create_session, is_duplicate_message,
     create_report_early, upload_image, upload_audio, upload_video_deferred,
     update_report_metadata, update_report_location, delete_report, submit_report,
-    clear_session, SEVERITY_MAP, TYPE_MAP, hash_user,
+    clear_session, SEVERITY_MAP, TYPE_MAP, CRISIS_MAP, DAMAGE_MAP, hash_user,
     resolve_location_name,
 )
 from .media_handler import download_media, download_and_split_video
 from .bot_replies import (
     send_welcome, send_step_location, send_step_photo, send_step_photo_first,
     send_step_voice, send_step_severity, send_step_type,
+    send_step_crisis_type, send_step_damage_class,
     send_step_text, send_step_description, send_confirmation, send_add_more_prompt,
     send_text, answer_callback,
     detect_lang, t,
@@ -149,27 +150,21 @@ async def _capture_any_media(session, message: dict):
 
 
 def _next_missing_step(session) -> str:
-    """New flow: Photo → Description → Type → Severity → Location → READY"""
-    # Step 1: Evidence (photo, voice, or text)
+    """Flow: Photo → Description → Type → Crisis → Damage → Severity → Location → READY"""
     if not session.image_data_url and not session.audio_data_url and not session.text:
         return "STEP_PHOTO"
-
-    # Step 2: Description (if we have photo/audio but no text description)
     if not session.text and (session.image_data_url or session.audio_data_url):
         return "STEP_DESCRIPTION"
-
-    # Step 3: Damage type
     if not session.type_answered:
         return "STEP_TYPE"
-
-    # Step 4: Severity
+    if not session.crisis_type:
+        return "STEP_CRISIS_TYPE"
+    if not session.damage_class:
+        return "STEP_DAMAGE_CLASS"
     if not session.severity_answered:
         return "STEP_SEVERITY"
-
-    # Step 5: Location
     if not session.has_location:
         return "STEP_LOCATION"
-
     return "READY"
 
 
@@ -182,6 +177,10 @@ async def _prompt_for_step(session, chat_id: int, step: str):
         await send_step_description(chat_id, lang)
     elif step == "STEP_TYPE":
         await send_step_type(chat_id, lang)
+    elif step == "STEP_CRISIS_TYPE":
+        await send_step_crisis_type(chat_id, lang)
+    elif step == "STEP_DAMAGE_CLASS":
+        await send_step_damage_class(chat_id, lang)
     elif step == "STEP_SEVERITY":
         await send_step_severity(chat_id, lang)
     elif step == "STEP_LOCATION":
@@ -402,6 +401,36 @@ async def _handle_callback(callback_query: dict):
         if sev:
             session.severity = sev
             session.severity_answered = True
+            await update_report_metadata(session)
+            await answer_callback(cq_id)
+            next_step = _next_missing_step(session)
+            session.state = next_step
+            if next_step == "READY":
+                await _finalize(session)
+            else:
+                await _prompt_for_step(session, chat_id, next_step)
+        return
+
+    # ── Crisis type buttons ──
+    if data.startswith("crisis_"):
+        ct = CRISIS_MAP.get(data)
+        if ct:
+            session.crisis_type = ct
+            await update_report_metadata(session)
+            await answer_callback(cq_id)
+            next_step = _next_missing_step(session)
+            session.state = next_step
+            if next_step == "READY":
+                await _finalize(session)
+            else:
+                await _prompt_for_step(session, chat_id, next_step)
+        return
+
+    # ── Damage classification buttons ──
+    if data.startswith("dmg_"):
+        dc = DAMAGE_MAP.get(data)
+        if dc:
+            session.damage_class = dc
             await update_report_metadata(session)
             await answer_callback(cq_id)
             next_step = _next_missing_step(session)

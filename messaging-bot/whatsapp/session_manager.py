@@ -30,9 +30,19 @@ SEVERITY_MAP = {
 }
 TYPE_MAP = {
     "type_road": "ROAD", "type_hospital": "HOSPITAL", "type_house": "HOUSE",
-    "type_power": "POWER", "type_water": "WATER", "type_other": "OTHER",
+    "type_power": "POWER", "type_water": "WATER", "type_school": "SCHOOL",
+    "type_telecom": "TELECOM", "type_govt": "GOVERNMENT", "type_other": "OTHER",
     "road": "ROAD", "hospital": "HOSPITAL", "house": "HOUSE",
-    "power": "POWER", "water": "WATER", "other": "OTHER",
+    "power": "POWER", "water": "WATER", "school": "SCHOOL",
+    "telecom": "TELECOM", "government": "GOVERNMENT", "other": "OTHER",
+}
+CRISIS_MAP = {
+    "crisis_earthquake": "EARTHQUAKE", "crisis_flood": "FLOOD", "crisis_conflict": "CONFLICT",
+    "crisis_hurricane": "HURRICANE", "crisis_wildfire": "WILDFIRE", "crisis_landslide": "LANDSLIDE",
+    "crisis_pandemic": "PANDEMIC", "crisis_other": "OTHER",
+}
+DAMAGE_MAP = {
+    "dmg_none": "NO_DAMAGE", "dmg_partial": "PARTIAL", "dmg_complete": "COMPLETE",
 }
 
 
@@ -50,6 +60,8 @@ class SessionBuffer:
     longitude: Optional[float] = None
     severity: str = "UNKNOWN"
     infra_type: str = "OTHER"
+    crisis_type: str = ""
+    damage_class: str = ""
     client_report_id: str = field(default_factory=lambda: str(uuid4()))
     created_at: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     last_activity: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
@@ -143,6 +155,8 @@ async def submit_report(session: SessionBuffer) -> Optional[str]:
         "infrastructure_type": session.infra_type,
         "description": session.text or None,
         "expected_media": session.media_count,
+        "crisis_type": session.crisis_type or None,
+        "damage_classification": session.damage_class or None,
     }
 
     if session.has_location:

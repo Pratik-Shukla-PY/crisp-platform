@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRISP — Login</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #080c14; --surface: #111827; --border: rgba(255,255,255,0.08); --accent: #7c3aed; --text: #f1f5f9; --dim: #64748b; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--bg); color: var(--text); font-family: 'Outfit', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 40px 32px; width: 100%; max-width: 420px; }
+        .logo { text-align: center; margin-bottom: 28px; }
+        .logo h1 { font-size: 32px; font-weight: 900; background: linear-gradient(135deg, #7c3aed, #06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .logo p { color: var(--dim); font-size: 13px; margin-top: 4px; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 24px; background: rgba(255,255,255,0.03); border-radius: 12px; padding: 4px; }
+        .tab { flex: 1; padding: 10px; border: none; border-radius: 10px; background: transparent; color: var(--dim); font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+        .tab.active { background: var(--accent); color: #fff; }
+        .tab-panel { display: none; } .tab-panel.active { display: block; }
+        .form-group { margin-bottom: 16px; }
+        .form-label { font-size: 12px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
+        .form-input { width: 100%; padding: 12px 16px; border: 1.5px solid var(--border); border-radius: 12px; background: rgba(255,255,255,0.03); color: var(--text); font-size: 15px; font-family: inherit; outline: none; transition: border 0.2s; }
+        .form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,0.15); }
+        .otp-row { display: flex; gap: 8px; justify-content: center; }
+        .otp-digit { width: 48px; height: 56px; text-align: center; font-size: 24px; font-weight: 800; font-family: 'JetBrains Mono', monospace; border: 2px solid var(--border); border-radius: 12px; background: rgba(255,255,255,0.03); color: var(--text); outline: none; }
+        .otp-digit:focus { border-color: var(--accent); }
+        .btn-primary { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(124,58,237,0.4); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-secondary { width: 100%; padding: 12px; border: 1.5px solid var(--border); border-radius: 12px; background: transparent; color: var(--dim); font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: all 0.15s; }
+        .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+        .msg { text-align: center; font-size: 13px; padding: 10px; border-radius: 10px; margin-bottom: 12px; display: none; }
+        .msg-success { display: block; background: rgba(34,197,94,0.1); color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
+        .msg-error { display: block; background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+        .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; color: var(--dim); font-size: 12px; }
+        .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+        .sso-btn { width: 100%; padding: 12px; border: 1.5px solid var(--border); border-radius: 12px; background: rgba(255,255,255,0.02); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 8px; transition: all 0.15s; }
+        .sso-btn:hover { border-color: var(--accent); background: rgba(124,58,237,0.05); }
+        .gdpr-check { display: flex; align-items: flex-start; gap: 10px; font-size: 12px; color: var(--dim); margin: 12px 0; }
+        .gdpr-check input { accent-color: var(--accent); margin-top: 2px; }
+        .gdpr-check a { color: var(--accent); text-decoration: none; }
+        .link-row { text-align: center; margin-top: 16px; font-size: 13px; color: var(--dim); }
+        .link-row a { color: var(--accent); text-decoration: none; font-weight: 600; cursor: pointer; }
+        #step-otp { display: none; }
+        .pw-toggle { position: relative; }
+        .pw-toggle i { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--dim); cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="logo">
+            <h1><i class="fa-solid fa-shield-halved"></i> CRISP</h1>
+            <p>Crisis Response Intelligence Platform</p>
+        </div>
+
+        <div id="msg" class="msg"></div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('login')">Login</button>
+            <button class="tab" onclick="switchTab('register')">Register</button>
+            <button class="tab" onclick="switchTab('sso')">Enterprise SSO</button>
+        </div>
+
+        <!-- LOGIN TAB -->
+        <div id="panel-login" class="tab-panel active">
+            <div id="step-email">
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" id="login-email" class="form-input" placeholder="you@organization.org" autocomplete="email">
+                </div>
+                <button class="btn-primary" id="btn-send-otp" onclick="sendLoginOTP()">
+                    <i class="fa-solid fa-paper-plane"></i> Send Login Code
+                </button>
+                <div class="divider">or</div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <div class="pw-toggle">
+                        <input type="password" id="login-password" class="form-input" placeholder="Enter password" autocomplete="current-password">
+                        <i class="fa-solid fa-eye" onclick="togglePw()"></i>
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="loginWithPassword()" style="background:linear-gradient(135deg,#1e293b,#334155);">
+                    <i class="fa-solid fa-right-to-bracket"></i> Login with Password
+                </button>
+            </div>
+            <div id="step-otp">
+                <p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:16px;">Enter the 6-digit code sent to <strong id="otp-email-display"></strong></p>
+                <div class="otp-row" id="otp-inputs">
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" autofocus>
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+                </div>
+                <br>
+                <button class="btn-primary" onclick="verifyOTP()">
+                    <i class="fa-solid fa-check-circle"></i> Verify & Login
+                </button>
+                <button class="btn-secondary" onclick="sendLoginOTP()">Resend Code</button>
+            </div>
+        </div>
+
+        <!-- REGISTER TAB -->
+        <div id="panel-register" class="tab-panel">
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" id="reg-email" class="form-input" placeholder="you@organization.org">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Full Name (optional)</label>
+                <input type="text" id="reg-name" class="form-input" placeholder="Your name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Password (optional — can use OTP only)</label>
+                <input type="password" id="reg-password" class="form-input" placeholder="Min 8 chars, upper+lower+digit+special">
+            </div>
+            <div class="gdpr-check">
+                <input type="checkbox" id="gdpr-consent">
+                <span>I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>. My data will be processed in accordance with GDPR.</span>
+            </div>
+            <button class="btn-primary" onclick="registerUser()">
+                <i class="fa-solid fa-user-plus"></i> Create Account
+            </button>
+        </div>
+
+        <!-- SSO TAB -->
+        <div id="panel-sso" class="tab-panel">
+            <p style="color:var(--dim);font-size:13px;margin-bottom:16px;">Login with your organization's identity provider.</p>
+            <div class="form-group">
+                <label class="form-label">Organization Domain</label>
+                <input type="text" id="sso-domain" class="form-input" placeholder="e.g. undp.org">
+            </div>
+            <button class="btn-primary" onclick="initiateSSO()">
+                <i class="fa-solid fa-building"></i> Continue with SSO
+            </button>
+            <div style="margin-top:16px;">
+                <button class="sso-btn" onclick="initiateSSO('okta')"><i class="fa-solid fa-shield-halved" style="color:#007dc1;"></i> Okta</button>
+                <button class="sso-btn" onclick="initiateSSO('auth0')"><i class="fa-solid fa-lock" style="color:#eb5424;"></i> Auth0</button>
+                <button class="sso-btn" onclick="initiateSSO('azure')"><i class="fa-brands fa-microsoft" style="color:#00a4ef;"></i> Azure AD</button>
+                <button class="sso-btn" onclick="initiateSSO('keycloak')"><i class="fa-solid fa-key" style="color:#4d4d4d;"></i> Keycloak</button>
+            </div>
+        </div>
+
+        <div class="link-row" id="link-row">
+            Don't have an account? <a onclick="switchTab('register')">Register</a>
+        </div>
+    </div>
+
+    <script>
+    const API = `http://${window.location.hostname || 'localhost'}:8000/api/v1/auth`;
+    let currentEmail = '';
+    let otpPurpose = 'LOGIN';
+
+    function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach((t, i) => {
+            t.classList.toggle('active', ['login','register','sso'][i] === tab);
+        });
+        document.querySelectorAll('.tab-panel').forEach((p, i) => {
+            p.classList.toggle('active', ['login','register','sso'][i] === tab);
+        });
+        clearMsg();
+    }
+
+    function showMsg(text, type) {
+        const el = document.getElementById('msg');
+        el.textContent = text;
+        el.className = `msg msg-${type}`;
+    }
+    function clearMsg() { document.getElementById('msg').className = 'msg'; }
+
+    function togglePw() {
+        const inp = document.getElementById('login-password');
+        inp.type = inp.type === 'password' ? 'text' : 'password';
+    }
+
+    // OTP digit auto-advance
+    document.querySelectorAll('.otp-digit').forEach((inp, i, all) => {
+        inp.addEventListener('input', () => {
+            if (inp.value && i < all.length - 1) all[i + 1].focus();
+        });
+        inp.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && !inp.value && i > 0) all[i - 1].focus();
+        });
+    });
+
+    function getOTPCode() {
+        return Array.from(document.querySelectorAll('.otp-digit')).map(i => i.value).join('');
+    }
+
+    async function sendLoginOTP() {
+        const email = document.getElementById('login-email').value.trim();
+        if (!email) { showMsg('Enter your email', 'error'); return; }
+        try {
+            const res = await fetch(`${API}/otp/request`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email, purpose: 'LOGIN' }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                currentEmail = email;
+                otpPurpose = 'LOGIN';
+                document.getElementById('step-email').style.display = 'none';
+                document.getElementById('step-otp').style.display = 'block';
+                document.getElementById('otp-email-display').textContent = email;
+                document.querySelectorAll('.otp-digit').forEach(i => i.value = '');
+                document.querySelector('.otp-digit').focus();
+                showMsg('Code sent! Check your email.', 'success');
+            } else {
+                showMsg(data.detail || 'Failed to send code', 'error');
+            }
+        } catch (e) { showMsg('Network error', 'error'); }
+    }
+
+    async function verifyOTP() {
+        const code = getOTPCode();
+        if (code.length !== 6) { showMsg('Enter all 6 digits', 'error'); return; }
+        try {
+            const res = await fetch(`${API}/otp/verify`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email: currentEmail, code, purpose: otpPurpose }),
+            });
+            const data = await res.json();
+            if (res.ok && data.access_token) {
+                localStorage.setItem('crisp_token', data.access_token);
+                localStorage.setItem('crisp_refresh', data.refresh_token);
+                localStorage.setItem('crisp_user', JSON.stringify(data.user));
+                showMsg('Login successful! Redirecting...', 'success');
+                setTimeout(() => window.location.href = 'index.html', 800);
+            } else {
+                showMsg(data.detail || 'Verification failed', 'error');
+            }
+        } catch (e) { showMsg('Network error', 'error'); }
+    }
+
+    async function loginWithPassword() {
+        const email = document.getElementById('login-email').value.trim();
+        const password = document.getElementById('login-password').value;
+        if (!email || !password) { showMsg('Enter email and password', 'error'); return; }
+        try {
+            const res = await fetch(`${API}/login`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email, password }),
+            });
+            const data = await res.json();
+            if (data.requires_mfa) {
+                currentEmail = email;
+                otpPurpose = 'MFA';
+                document.getElementById('step-email').style.display = 'none';
+                document.getElementById('step-otp').style.display = 'block';
+                document.getElementById('otp-email-display').textContent = email;
+                showMsg('MFA code sent to your email', 'success');
+            } else if (data.access_token) {
+                localStorage.setItem('crisp_token', data.access_token);
+                localStorage.setItem('crisp_refresh', data.refresh_token);
+                localStorage.setItem('crisp_user', JSON.stringify(data.user));
+                showMsg('Login successful!', 'success');
+                setTimeout(() => window.location.href = 'index.html', 800);
+            } else {
+                showMsg(data.detail || 'Login failed', 'error');
+            }
+        } catch (e) { showMsg('Network error', 'error'); }
+    }
+
+    async function registerUser() {
+        const email = document.getElementById('reg-email').value.trim();
+        const name = document.getElementById('reg-name').value.trim();
+        const password = document.getElementById('reg-password').value;
+        const consent = document.getElementById('gdpr-consent').checked;
+        if (!email) { showMsg('Email is required', 'error'); return; }
+        if (!consent) { showMsg('You must accept the Terms and Privacy Policy', 'error'); return; }
+        try {
+            const body = { email };
+            if (name) body.full_name = name;
+            if (password) body.password = password;
+            const res = await fetch(`${API}/register`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                currentEmail = email;
+                otpPurpose = 'SIGNUP';
+                switchTab('login');
+                document.getElementById('step-email').style.display = 'none';
+                document.getElementById('step-otp').style.display = 'block';
+                document.getElementById('otp-email-display').textContent = email;
+                showMsg('Account created! Enter the verification code sent to your email.', 'success');
+            } else {
+                showMsg(data.detail || 'Registration failed', 'error');
+            }
+        } catch (e) { showMsg('Network error', 'error'); }
+    }
+
+    async function initiateSSO(provider) {
+        const domain = document.getElementById('sso-domain').value.trim() || (provider || '');
+        if (!domain) { showMsg('Enter your organization domain', 'error'); return; }
+        try {
+            const res = await fetch(`${API}/sso/login?domain=${encodeURIComponent(domain)}`);
+            const data = await res.json();
+            showMsg(data.message || 'SSO provider found', res.ok ? 'success' : 'error');
+        } catch (e) { showMsg('Network error', 'error'); }
+    }
+
+    // Auto-redirect if already logged in
+    if (localStorage.getItem('crisp_token')) {
+        window.location.href = 'index.html';
+    }
+    </script>
+</body>
+</html>

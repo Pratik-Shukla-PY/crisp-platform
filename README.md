@@ -12,7 +12,8 @@ CRISP is an open-source, offline-first platform that enables communities to repo
 |------|------|---------|
 | **Field Reporter** | Mobile PWA, Telegram, WhatsApp, SMS, IVR Call | Report damage from any device — smartphone, feature phone, or landline |
 | **Control Center** | Web Dashboard | Triage incidents, AI assessment, satellite verification, dispatch rescue teams |
-| **Data Analyst** | Export API / PDF | Download CSV/GeoJSON or generate single-page PDF reports for rescue teams |
+| **Data Analyst** | Export API / PDF | Download CSV/GeoJSON/Shapefile/KML or generate PDF reports for rescue teams |
+| **Prediction Analyst** | Predictive Intelligence | Multi-signal risk forecasting with weather, seismic, and historical data |
 
 ### Key Capabilities
 
@@ -27,6 +28,13 @@ CRISP is an open-source, offline-first platform that enables communities to repo
 - **PDF Export**: Single-page incident reports with photos + satellite images for rescue teams
 - **Prompt Caching**: Claude API calls use ephemeral caching for 90% token cost reduction
 - **Source-aware scoring**: IVR/SMS reports scored fairly (no photo penalty for callers without smartphones)
+- **Enterprise Auth**: Email + OTP signup, JWT sessions, RBAC (Super Admin/Admin/Analyst/Viewer), SSO ready (Okta/Auth0/Azure AD/Keycloak)
+- **GDPR Compliance**: Data export, account deletion, consent management, audit logging
+- **Predictive Intelligence**: Multi-signal risk forecasting (weather + seismic + historical + geospatial + conflict) with Claude AI
+- **Gamification**: Reporter badges (Newcomer→Helper→Guardian→Hero) based on verified report count
+- **UNDP Damage Classification**: 3-tier (No Damage/Partial/Complete), 9 crisis types, 9 infrastructure types, debris clearing, service status
+- **Data Export**: CSV, GeoJSON, Shapefile (.shp), KML for GIS tools
+- **Building Versioning**: Auto-links multiple reports about the same structure (30m proximity)
 
 ---
 
@@ -43,19 +51,24 @@ CRISP is an open-source, offline-first platform that enables communities to repo
                                        Mapbox Geocoding             Satellite Verification
                                        Prompt Caching               PDF Export
                                        Progressive Chunked Upload   Send Help / False / Delete
+                                       Enterprise Auth (JWT+OTP)    Predictive Intelligence
+                                       Building Versioning          Data Export (CSV/GeoJSON/SHP/KML)
 ```
 
 ### Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Mobile App | Vanilla JS PWA, Service Worker, IndexedDB, Web Speech API |
+| Mobile App (PWA) | Vanilla JS PWA, Service Worker, IndexedDB, Web Speech API |
+| Mobile App (Native) | React Native (Expo), TypeScript, expo-audio, expo-camera |
 | Backend API | Python 3.11, FastAPI, SQLAlchemy, Uvicorn |
 | AI/ML | faster-whisper (local), Anthropic Claude Sonnet + Haiku (cloud) |
 | Satellite | ESA Sentinel-2 L2A (10m), Mapbox/Maxar (0.5m fallback) |
 | Geocoding | Mapbox Geocoding API + Claude AI place name correction |
 | Dashboard | Vanilla JS, Leaflet.js, Turf.js, leaflet.heat, MarkerCluster |
 | Messaging | Telegram Bot API (long-polling), WhatsApp Cloud API, Twilio (SMS+IVR) |
+| Auth | JWT (python-jose), bcrypt (passlib), OTP email, RBAC, SSO stubs |
+| Prediction | Claude Sonnet + OpenWeatherMap + USGS Earthquake + geospatial heuristics |
 | Database | SQLite (dev) / PostgreSQL (prod) |
 
 ---
@@ -83,10 +96,10 @@ Audio transcribed by Whisper, translated to English, geocoded by Claude AI + Map
 
 ---
 
-## AI Assessment System
+## Credibility Check System (AI-Powered)
 
-### On-Demand Assessment (Admin-Triggered)
-When the control center admin clicks **"Run AI Assessment"**, Claude Sonnet analyzes the complete incident using 4 weighted signals:
+### On-Demand Assessment (Analyst-Triggered)
+When an analyst clicks **"Credibility Check"**, Claude Sonnet builds a 360° intelligence dossier from 8 data sections and produces a scored assessment:
 
 **For App/Telegram/WhatsApp (photo possible):**
 | Signal | Weight | What It Checks |
@@ -111,10 +124,59 @@ When the control center admin clicks **"Run AI Assessment"**, Claude Sonnet anal
 - False negatives (dismissing real incidents) cost lives
 - Assessment stored in DB permanently (one-time cost per incident)
 
+### Intelligence Dossier (8 Sections Fed to Claude):
+1. **Report Data** — infrastructure type, crisis type, damage classification, location
+2. **Evidence** — photo, audio, description, data completeness %
+3. **Reporter Profile** — badge level, report count, verified count, false alarm rate
+4. **Satellite Verification** — truth score, scene description, key findings
+5. **Corroboration** — nearby reports (quality-weighted), source diversity, temporal clustering
+6. **Historical Context** — 30d/90d report count, false alarm rate, recurring location
+7. **Service Status** — electricity, water, health services, pressing needs
+8. **Urgency Signals** — response wait time, night report, batch submission detection
+
+### Output:
+- **Priority Level**: P1 (Immediate) → P5 (Likely False)
+- **Confidence Score**: 0-100 with itemized breakdown (text + visual + satellite + corroboration + bonuses - penalties)
+- **Lives at Risk Estimate**: Based on infrastructure type and damage level
+- **Key Factors + Risk Flags**: Explainable reasoning
+- **ℹ️ Logic Transparency**: Click to see full score breakdown math
+
 ### AI also infers:
-- `infrastructure_type` (WATER/ROAD/HOSPITAL/HOUSE/POWER/OTHER)
+- `infrastructure_type` (9 categories including SCHOOL/TELECOM/GOVERNMENT)
 - `severity` (CRITICAL/SEVERE/MODERATE/MINOR)
+- `crisis_type` (EARTHQUAKE/FLOOD/CONFLICT/HURRICANE/etc.)
+- `damage_classification` (NO_DAMAGE/PARTIAL/COMPLETE)
 - These update the report classification automatically
+
+---
+
+## Predictive Intelligence Dashboard
+
+Claude-powered multi-signal risk forecasting that predicts future crises before they happen.
+
+### Data Sources (5 Signals):
+| Signal | Source | What It Provides |
+|--------|--------|-----------------|
+| Historical | CRISP database | Past reports (90d), crisis types, severity trends, false alarm rates |
+| Weather | OpenWeatherMap API | 5-day rainfall, wind, temperature, alerts, anomalies |
+| Seismic | USGS Earthquake API | Recent quakes (7d/30d), magnitude, depth within 200km |
+| Geospatial | Computed heuristics | Flood zone detection, coastal proximity, elevation, landslide risk |
+| Conflict | CRISP conflict reports | Conflict intensity and trends from CRISP data |
+
+### Output per Zone:
+- **Risk Score**: 0-100 with level (LOW/MEDIUM/HIGH/CRITICAL)
+- **Predicted Crisis Type**: FLOOD, EARTHQUAKE, CONFLICT, etc.
+- **Time Window**: 24h / 72h / 7 days
+- **Contributing Factors**: Top 5 with specific data points
+- **Signal Breakdown**: Weighted scores per signal source
+- **Recommended Action**: "Pre-position flood rescue boats" etc.
+- **Full Reasoning**: Claude's multi-paragraph analysis
+
+### Dashboard Features:
+- Prediction heatmap overlay on map (blue→cyan→yellow→orange→purple)
+- Zone cards with score rings, signal bars, factor lists
+- Detail modal with full breakdown + prediction history
+- Time window selector (24h / 3d / 7d)
 
 ### Prompt Caching
 All Claude API calls use `cache_control: {"type": "ephemeral"}` on static system prompts:
@@ -168,6 +230,8 @@ docker compose up --build
 | **Telegram** | Telegram Bot token | [@BotFather](https://t.me/BotFather) |
 | **WhatsApp** | WhatsApp Cloud API | [Meta for Developers](https://developers.facebook.com/) |
 | **Twilio** | SMS + IVR Voice Calls | [twilio.com](https://www.twilio.com/) |
+| **OpenWeatherMap** | Weather forecasts for predictions | [openweathermap.org](https://openweathermap.org/api) |
+| **USGS** | Seismic data (free, no key) | [earthquake.usgs.gov](https://earthquake.usgs.gov/) |
 
 ---
 
@@ -176,12 +240,22 @@ docker compose up --build
 ```
 Report
   +-- Location (GPS coords, device vs. geocoded, place names)
-  +-- Media[] (IMAGE, AUDIO — chunked upload with DJB2 checksum)
-  |     +-- MediaChunk[] (1KB base64 packets)
+  +-- Media[] (IMAGE, AUDIO — adaptive chunked upload 1KB-512KB)
+  |     +-- MediaChunk[] (base64 packets with DJB2 checksum)
   +-- AIAnalysis (Whisper transcription, AI summary, damage labels)
   +-- SatelliteVerification (truth score, component breakdown, satellite metadata)
-  +-- ai_assessment (JSON — AI confidence score, action, detailed analysis)
+  +-- ai_assessment (JSON — priority, confidence, score breakdown, key factors, reasoning)
   +-- caller_info (JSON — phone number, network city/state for IVR/SMS)
+  +-- UNDP fields: crisis_type, damage_classification, infrastructure_name, debris_clearing, service_status, building_id
+  +-- ReporterProfile (gamification: badge_level, report_count, verified_count)
+
+User (Enterprise Auth)
+  +-- Organization (multi-tenant, SSO config)
+  +-- UserSession[] (device tracking, refresh tokens)
+  +-- AuthAuditLog[] (all actions logged)
+
+PredictionZone
+  +-- PredictionResult[] (risk score, signal breakdown, contributing factors, reasoning)
 ```
 
 ---
@@ -220,9 +294,15 @@ Single-page structured report with:
 
 ## Security & Privacy
 
-- **No PII collected**: Device identified by anonymous hash only
-- **No user accounts**: Zero registration barrier for crisis reporters
-- **Caller phone stored**: Only for IVR/SMS (needed for rescue callback)
+- **No PII collected from reporters**: Device identified by anonymous hash only
+- **Zero registration for reporting**: Anyone can report via any channel — no login required
+- **Enterprise auth for dashboard**: Email + OTP login, JWT sessions, RBAC (Super Admin/Admin/Analyst/Viewer)
+- **SSO ready**: Architecture supports Okta, Auth0, Azure AD, Keycloak (SAML/OIDC)
+- **GDPR compliant**: Data export, account deletion, consent management, 30-day deletion grace
+- **Brute force protection**: Account lockout after 5 failed attempts (15 min cooldown)
+- **OTP security**: 6-digit, 10 min expiry, max 5 attempts, 3 requests/10 min rate limit
+- **Audit trail**: Every login, logout, role change, dispatch, and deletion logged with IP + user agent
+- **PII blur**: MediaPipe BlazeFace (faces) + easyocr (text) — 100% local, zero API cost
 - **API keys**: Stored in `.env`, excluded from git via `.gitignore`
 
 ---
@@ -233,24 +313,41 @@ Single-page structured report with:
 crisp-platform/
   backend/
     app/
-      api/endpoints/         # FastAPI route handlers (reports, verify, ai-assess)
-      models/                # SQLAlchemy ORM (Report, Location, Media, AIAnalysis)
-      schemas/               # Pydantic request/response schemas
-      services/              # AI service, satellite fetcher, truth scorer
-      db/                    # Database session, engine
+      api/endpoints/
+        reports.py           # Report CRUD, credibility check, building versioning
+        auth.py              # Registration, login, OTP, JWT, GDPR, admin, SSO
+        exports.py           # CSV, GeoJSON, Shapefile, KML export
+        predictions.py       # Predictive intelligence zones + forecasting
+      models/
+        report.py            # Report, Location, Media, AIAnalysis, ReporterProfile
+        auth.py              # User, Organization, OTP, Session, AuditLog
+        prediction.py        # PredictionZone, PredictionResult
+      core/
+        security.py          # JWT, bcrypt, OTP generation, SMTP email
+        deps.py              # Auth dependencies (require_viewer, require_analyst, etc.)
+      services/
+        prediction_engine.py # Multi-signal prediction (weather, seismic, historical, geospatial)
+        truth_scorer.py      # Claude Haiku satellite truth verification
+        satellite_fetcher.py # Sentinel-2 + Mapbox imagery
+        pii_blur.py          # Face + text blur (MediaPipe + easyocr)
+      schemas/               # Pydantic request/response validation
+      db/                    # SQLAlchemy session + engine
     requirements.txt
+  crisp-mobile/              # React Native (Expo) iOS/Android app
   mobile-app/src/            # Offline-first PWA (Vanilla JS)
-  web-dashboard/src/         # Control center dashboard (Vanilla JS + Leaflet)
+  web-dashboard/src/
+    index.html               # Dashboard layout
+    login.html               # Auth login/register page
+    app.js                   # Main dashboard logic
+    predictions.js           # Predictive intelligence UI
+    styles.css               # All styles
   messaging-bot/
-    telegram/                # Telegram bot (long-polling, guided flow)
+    telegram/                # Telegram bot (9 languages, guided flow)
     whatsapp/                # WhatsApp Cloud API webhook
     sms/                     # SMS gateway + AI geocoder
     ivr/                     # IVR voice call webhook (TwiML)
-    ai_extractor.py          # Claude AI text extraction (deprecated — replaced by AI Assessment)
-    chunked_uploader.py      # Shared chunked media upload
-  ai-services/               # NLP, speech, vision pipelines
-  infra/                     # Docker, Nginx, Terraform configs
-  start.sh / stop.sh         # Local development scripts
+    ai_extractor.py          # Claude AI text extraction
+    chunked_uploader.py      # Adaptive chunked media upload (1KB-512KB)
   docker-compose.yml         # Production deployment
   .env.example               # API key template
 ```

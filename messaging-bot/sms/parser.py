@@ -22,6 +22,24 @@ _SEVERITY_HIGH = ["urgent", "emergency", "critical", "dying", "dead", "death", "
 _SEVERITY_MED = ["need help", "damage", "broken", "problem", "affected", "bad"]
 _SEVERITY_LOW = ["minor", "small", "little", "slight"]
 
+# Crisis type keywords → UNDP required
+_CRISIS_KEYWORDS = {
+    "EARTHQUAKE": ["earthquake", "quake", "tremor", "seismic", "aftershock"],
+    "FLOOD": ["flood", "flooding", "inundation", "overflow", "tsunami", "tidal"],
+    "CONFLICT": ["conflict", "war", "attack", "bomb", "explosion", "shelling", "gunfire", "airstrike"],
+    "HURRICANE": ["hurricane", "typhoon", "storm", "cyclone"],
+    "WILDFIRE": ["wildfire", "fire", "bushfire", "forest fire", "blaze"],
+    "LANDSLIDE": ["landslide", "mudslide", "rockfall", "avalanche"],
+    "PANDEMIC": ["pandemic", "epidemic", "outbreak", "virus", "covid", "cholera"],
+}
+
+# Damage classification keywords
+_DAMAGE_KEYWORDS = {
+    "COMPLETE": ["destroyed", "collapsed", "demolished", "flattened", "total", "rubble", "gone"],
+    "PARTIAL": ["damaged", "broken", "cracked", "leaking", "partial", "bent", "tilted"],
+    "NO_DAMAGE": ["safe", "intact", "undamaged", "fine", "ok", "standing"],
+}
+
 
 def parse_sms(text: str) -> dict:
     """
@@ -78,11 +96,29 @@ def parse_sms(text: str) -> dict:
     if not location_text:
         location_text = text.strip()
 
-    logger.info(f"SMS parsed: type={infra_type} sev={severity} loc='{location_text[:30]}' keywords={keywords_found[:5]}")
+    # 4. Detect crisis type
+    crisis_type = "OTHER"
+    best_crisis = 0
+    for ctype, keywords in _CRISIS_KEYWORDS.items():
+        count = sum(1 for k in keywords if k in lower)
+        if count > best_crisis:
+            best_crisis = count
+            crisis_type = ctype
+
+    # 5. Detect damage classification
+    damage_class = ""
+    for dclass, keywords in _DAMAGE_KEYWORDS.items():
+        if any(k in lower for k in keywords):
+            damage_class = dclass
+            break
+
+    logger.info(f"SMS parsed: type={infra_type} sev={severity} crisis={crisis_type} damage={damage_class} loc='{location_text[:30]}'")
 
     return {
         "infrastructure_type": infra_type,
         "severity": severity,
+        "crisis_type": crisis_type,
+        "damage_classification": damage_class,
         "description": text.strip(),
         "location_text": location_text,
         "keywords_found": list(set(keywords_found)),
