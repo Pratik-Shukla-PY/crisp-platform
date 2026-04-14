@@ -1279,16 +1279,18 @@ function setupPhotoStage() {
             reader.onload = (ev) => {
                 const img = new Image();
                 img.onload = () => {
+                    detectPWANetworkTier();
+                    const nc = getPWAAdaptiveConfig();
                     const canvas = document.createElement('canvas');
                     let cw = img.width, ch = img.height;
-                    if (Math.max(cw, ch) > 1600) { const s = 1600 / Math.max(cw, ch); cw = Math.round(cw * s); ch = Math.round(ch * s); }
+                    if (Math.max(cw, ch) > nc.imageMaxWidth) { const s = nc.imageMaxWidth / Math.max(cw, ch); cw = Math.round(cw * s); ch = Math.round(ch * s); }
                     canvas.width = cw; canvas.height = ch;
                     canvas.getContext('2d').drawImage(img, 0, 0, cw, ch);
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.60);
+                    const dataUrl = canvas.toDataURL('image/jpeg', nc.imageQuality);
                     canvas.toBlob(blob => {
                         state.extraPhotos.push({ dataUrl, blob });
                         _updateExtraPhotoStrip();
-                    }, 'image/jpeg', 0.60);
+                    }, 'image/jpeg', nc.imageQuality);
                 };
                 img.src = ev.target.result;
             };
@@ -1323,26 +1325,31 @@ function setupPhotoStage() {
             reader.onload = (ev) => {
                 const img = new Image();
                 img.onload = () => {
+                    // Adaptive compression based on network speed
+                    detectPWANetworkTier();
+                    const netCfg = getPWAAdaptiveConfig();
+                    const maxDim = netCfg.imageMaxWidth;
+                    const quality = netCfg.imageQuality;
+                    console.log(`[PWA Photo] Compress: tier=${_pwaTier}, quality=${quality}, maxWidth=${maxDim}`);
+
                     const canvas = document.createElement('canvas');
-                    // Downscale if very large (> 2000px) to save memory/bandwidth
                     let w = img.width, h = img.height;
-                    const max = 1600;
-                    if (w > max || h > max) {
-                        if (w > h) { h = Math.round(h * max / w); w = max; }
-                        else { w = Math.round(w * max / h); h = max; }
+                    if (w > maxDim || h > maxDim) {
+                        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                        else { w = Math.round(w * maxDim / h); h = maxDim; }
                     }
                     canvas.width = w; canvas.height = h;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, w, h);
 
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.60);
+                    const dataUrl = canvas.toDataURL('image/jpeg', quality);
                     state.photoDataUrl = dataUrl;
                     showPreview(dataUrl);
 
                     canvas.toBlob(blob => {
                         state.photoBlob = blob;
-                        console.log(`Image compressed: ${Math.round(file.size / 1024)}KB -> ${Math.round(blob.size / 1024)}KB`);
-                    }, 'image/jpeg', 0.60);
+                        console.log(`Image compressed: ${Math.round(file.size / 1024)}KB -> ${Math.round(blob.size / 1024)}KB (${_pwaTier})`);
+                    }, 'image/jpeg', quality);
                 };
                 img.src = ev.target.result;
             };
@@ -1388,10 +1395,12 @@ function setupCameraModal() {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        detectPWANetworkTier();
+        const camCfg = getPWAAdaptiveConfig();
+        const dataUrl = canvas.toDataURL('image/jpeg', camCfg.imageQuality);
         state.photoDataUrl = dataUrl;
 
-        canvas.toBlob(blob => { state.photoBlob = blob; }, 'image/jpeg', 0.60);
+        canvas.toBlob(blob => { state.photoBlob = blob; }, 'image/jpeg', camCfg.imageQuality);
 
         document.getElementById('photo-preview').src = dataUrl;
         document.getElementById('photo-preview').style.display = 'block';
@@ -1987,7 +1996,52 @@ async function generateThumbnail(dataUrl, maxDim = 80, quality = 0.25) {
     });
 }
 
-// Split a base64 string into ~1KB chunks (1024 chars each ≈ 768 bytes binary)
+// ── PWA Adaptive Network Engine ─────────────────────────────────────────────
+// Mirrors crisp-mobile/services/networkAdaptive.ts for browser context
+const PWA_NETWORK_TIERS = {
+    FAST:      { chunkSize: 524288, retries: 4, timeout: 30000, imageQuality: 0.85, imageMaxWidth: 1280 },  // 512KB (req: 512KB-1MB)
+    MEDIUM:    { chunkSize: 131072, retries: 5, timeout: 30000, imageQuality: 0.65, imageMaxWidth: 1024 },  // 128KB (req: 128-512KB)
+    SLOW:      { chunkSize: 32768,  retries: 8, timeout: 45000, imageQuality: 0.50, imageMaxWidth: 720  },  // 32KB  (req: 32-128KB)
+    VERY_SLOW: { chunkSize: 1024,   retries: 15, timeout: 60000, imageQuality: 0.35, imageMaxWidth: 480  },  // 1KB   (req: 1KB min)
+};
+let _pwaTier = 'MEDIUM';
+let _pwaSuccessStreak = 0;
+
+function detectPWANetworkTier() {
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (!navigator.onLine) { _pwaTier = 'VERY_SLOW'; return _pwaTier; }
+    if (conn) {
+        const ect = conn.effectiveType; // '4g', '3g', '2g', 'slow-2g'
+        const dl = conn.downlink; // Mbps estimate
+        if (ect === '4g' && dl > 5)  { _pwaTier = 'FAST'; }
+        else if (ect === '4g')       { _pwaTier = 'MEDIUM'; }
+        else if (ect === '3g')       { _pwaTier = 'SLOW'; }
+        else                         { _pwaTier = 'VERY_SLOW'; }
+    }
+    console.log(`[PWA Network] Tier: ${_pwaTier}`);
+    return _pwaTier;
+}
+
+function getPWAAdaptiveConfig() { return PWA_NETWORK_TIERS[_pwaTier]; }
+
+function pwaNetworkDowngrade() {
+    const order = ['FAST', 'MEDIUM', 'SLOW', 'VERY_SLOW'];
+    const idx = order.indexOf(_pwaTier);
+    if (idx < order.length - 1) { _pwaTier = order[idx + 1]; console.log(`[PWA Network] Downgraded → ${_pwaTier}`); }
+    _pwaSuccessStreak = 0;
+}
+
+function pwaNetworkUpgrade() {
+    _pwaSuccessStreak++;
+    if (_pwaSuccessStreak >= 10) {
+        const order = ['FAST', 'MEDIUM', 'SLOW', 'VERY_SLOW'];
+        const idx = order.indexOf(_pwaTier);
+        if (idx > 0) { _pwaTier = order[idx - 1]; console.log(`[PWA Network] Upgraded → ${_pwaTier}`); }
+        _pwaSuccessStreak = 0;
+    }
+}
+
+// Split a base64 string into chunks (adaptive size, default 1024 for backward compat)
 function chunkBase64(b64str, chunkChars = 1024) {
     const chunks = [];
     for (let i = 0; i < b64str.length; i += chunkChars) {
@@ -2190,15 +2244,20 @@ async function trySendQueuedReport(item) {
             }
         }
 
-        // Stage 2: Photo — thumbnail first (fast preview), then 1KB chunks (PRD §3.3/3.4)
+        // Stage 2: Photo — thumbnail first, then adaptive chunks
         if (!stages.photo && item.photo && reportId) {
             try {
                 const mediaId = item.photoMediaId || genUUID();
                 item.photoMediaId = mediaId;
 
+                // Detect network tier for adaptive chunk sizing
+                detectPWANetworkTier();
+                const netConfig = getPWAAdaptiveConfig();
+                console.log(`[PWA Upload] Photo: tier=${_pwaTier}, chunkSize=${netConfig.chunkSize}`);
+
                 // Extract pure base64 (strip "data:image/jpeg;base64," prefix)
                 const b64 = item.photo.includes(',') ? item.photo.split(',')[1] : item.photo;
-                const chunks = chunkBase64(b64, 1024);
+                const chunks = chunkBase64(b64, netConfig.chunkSize);
                 const total = chunks.length;
                 const startSeq = item.photoChunkProgress || 0;
 
@@ -2219,21 +2278,27 @@ async function trySendQueuedReport(item) {
                     }
                 }
 
-                // Send chunks from last known position (resume capability — PRD §6)
+                // Send chunks from last known position (resume capability)
                 for (let seq = startSeq; seq < total; seq++) {
                     const chunkData = chunks[seq];
-                    await sendWithRetry(
-                        `${API_BASE}/reports/${reportId}/media/chunk`,
-                        {
-                            media_id: mediaId,
-                            type: 'IMAGE',
-                            seq_num: seq,
-                            total_chunks: total,
-                            data: chunkData,
-                            checksum: simpleChecksum(chunkData)  // integrity (PRD §3.7)
-                        },
-                        5, 20000  // 20s per 1KB chunk is generous even at 1kbps
-                    );
+                    try {
+                        await sendWithRetry(
+                            `${API_BASE}/reports/${reportId}/media/chunk`,
+                            {
+                                media_id: mediaId,
+                                type: 'IMAGE',
+                                seq_num: seq,
+                                total_chunks: total,
+                                data: chunkData,
+                                checksum: simpleChecksum(chunkData)
+                            },
+                            netConfig.retries, netConfig.timeout
+                        );
+                        pwaNetworkUpgrade();
+                    } catch (retryErr) {
+                        pwaNetworkDowngrade();
+                        throw retryErr; // will be caught by outer catch
+                    }
                     item.photoChunkProgress = seq + 1;
                     // Persist progress every 5 chunks so retries can resume mid-file
                     if ((seq + 1) % 5 === 0) {
@@ -2244,7 +2309,7 @@ async function trySendQueuedReport(item) {
                 item.stages.photo = true;
                 item.photo = null; // free memory — all chunks sent
                 try { await enqueueReport(item); } catch (_) {}
-                console.log(`Photo sent: ${total} chunks (${item.photoSize || '?'} bytes)`);
+                console.log(`Photo sent: ${total} chunks (${item.photoSize || '?'} bytes, tier=${_pwaTier})`);
             } catch (e) {
                 // Note: item.photo may already be null if error was in post-loop cleanup;
                 // use saved progress counter rather than re-computing chunk total
@@ -2254,31 +2319,41 @@ async function trySendQueuedReport(item) {
             }
         }
 
-        // Stage 3: Audio — 1KB chunks (PRD §3.3)
+        // Stage 3: Audio — adaptive chunks
         if (!stages.audio && item.audioBlob && reportId) {
             try {
                 const mediaId = item.audioMediaId || genUUID();
                 item.audioMediaId = mediaId;
 
+                detectPWANetworkTier();
+                const netConfig = getPWAAdaptiveConfig();
+                console.log(`[PWA Upload] Audio: tier=${_pwaTier}, chunkSize=${netConfig.chunkSize}`);
+
                 const b64 = item.audioBlob.includes(',') ? item.audioBlob.split(',')[1] : item.audioBlob;
-                const chunks = chunkBase64(b64, 1024);
+                const chunks = chunkBase64(b64, netConfig.chunkSize);
                 const total = chunks.length;
                 const startSeq = item.audioChunkProgress || 0;
 
                 for (let seq = startSeq; seq < total; seq++) {
                     const chunkData = chunks[seq];
-                    await sendWithRetry(
-                        `${API_BASE}/reports/${reportId}/media/chunk`,
-                        {
-                            media_id: mediaId,
-                            type: 'AUDIO',
-                            seq_num: seq,
-                            total_chunks: total,
-                            data: chunkData,
-                            checksum: simpleChecksum(chunkData)
-                        },
-                        5, 20000
-                    );
+                    try {
+                        await sendWithRetry(
+                            `${API_BASE}/reports/${reportId}/media/chunk`,
+                            {
+                                media_id: mediaId,
+                                type: 'AUDIO',
+                                seq_num: seq,
+                                total_chunks: total,
+                                data: chunkData,
+                                checksum: simpleChecksum(chunkData)
+                            },
+                            netConfig.retries, netConfig.timeout
+                        );
+                        pwaNetworkUpgrade();
+                    } catch (retryErr) {
+                        pwaNetworkDowngrade();
+                        throw retryErr;
+                    }
                     item.audioChunkProgress = seq + 1;
                     if ((seq + 1) % 5 === 0) {
                         try { await enqueueReport(item); } catch (_) {}
@@ -2288,7 +2363,7 @@ async function trySendQueuedReport(item) {
                 item.stages.audio = true;
                 item.audioBlob = null;
                 try { await enqueueReport(item); } catch (_) {}
-                console.log(`Audio sent: ${total} chunks`);
+                console.log(`Audio sent: ${total} chunks (tier=${_pwaTier})`);
             } catch (e) {
                 console.warn(`Audio chunk failed at seq ${item.audioChunkProgress}:`, e.message);
                 try { await enqueueReport(item); } catch (_) {}

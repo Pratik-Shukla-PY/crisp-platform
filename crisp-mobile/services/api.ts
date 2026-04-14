@@ -12,22 +12,27 @@ export function setApiBase(host: string) {
 
 export function getApiBase() { return API_BASE; }
 
-async function sendJSON(url: string, method: string, body: any, timeoutMs = 15000): Promise<any> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
+async function sendJSON(url: string, method: string, body: any, _timeoutMs = 30000): Promise<any> {
+  // No AbortController — React Native's implementation is unreliable and causes
+  // spurious "Aborted" errors. Plain fetch waits for server response naturally.
+  const options: any = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  };
+  if (body !== null && body !== undefined) {
+    options.body = JSON.stringify(body);
+  }
+  console.log(`[API] ${method} ${url.replace(API_BASE, '')}`);
   try {
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.warn(`[API] ${res.status} ${errText.substring(0, 200)}`);
+      throw new Error(`HTTP ${res.status}`);
+    }
     return await res.json();
-  } catch (e) {
-    clearTimeout(timer);
+  } catch (e: any) {
+    console.error(`[API] FAILED ${method} ${url.replace(API_BASE, '')}: ${e.message}`);
     throw e;
   }
 }
@@ -58,7 +63,14 @@ export async function sendChunk(
   return sendJSON(`${API_BASE}/reports/${reportId}/media/chunk`, 'POST', {
     media_id: mediaId, type, seq_num: seqNum,
     total_chunks: totalChunks, data, checksum,
-  }, 20000);
+  }, 30000);
+}
+
+/** Send entire media file in one request (simpler than chunking for mobile) */
+export async function attachMedia(reportId: string, type: string, dataUrl: string): Promise<any> {
+  return sendJSON(`${API_BASE}/reports/${reportId}/media/attach`, 'PATCH', {
+    type, resolution_tier: 'MEDIUM', url: dataUrl, file_size_bytes: 0,
+  }, 60000);  // 60s timeout for large files
 }
 
 /** DJB2 checksum — MUST match Python backend */
@@ -68,4 +80,23 @@ export function djb2Checksum(str: string): string {
     hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
   }
   return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+/** Get status updates for a device since a timestamp */
+export async function getDeviceStatusSince(deviceHash: string, since?: string): Promise<any[]> {
+  const url = since
+    ? `${API_BASE}/reports/device/${deviceHash}/status-since?since=${since}`
+    : `${API_BASE}/reports/device/${deviceHash}/status-since`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+/** Delete a report (soft-delete with 30min grace for mobile) */
+export async function deleteReportFromServer(reportId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/reports/${reportId}?grace_minutes=30&deletion_source=MOBILE`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
+  return res.json();
 }

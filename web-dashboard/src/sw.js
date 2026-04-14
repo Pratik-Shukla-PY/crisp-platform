@@ -9,10 +9,10 @@
  *   Everything else         → Network with cache fallback
  */
 
-const APP_CACHE    = 'crisp-app-v3';
-const CDN_CACHE    = 'crisp-cdn-v5';
-const API_CACHE    = 'crisp-api-v5';
-const STATIC_CACHE = 'crisp-static-v8';
+const APP_CACHE    = 'crisp-app-v4';
+const CDN_CACHE    = 'crisp-cdn-v6';
+const API_CACHE    = 'crisp-api-v6';
+const STATIC_CACHE = 'crisp-static-v9';
 
 // App files that should always be fresh (network-first)
 const APP_FILES = ['index.html', 'app.js', 'styles.css', 'manifest.json'];

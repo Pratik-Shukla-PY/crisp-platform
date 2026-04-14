@@ -1,30 +1,29 @@
 """
-Telegram Handlers — Resilient crisis reporting for low-connectivity scenarios.
+Telegram Handlers — Zero-friction crisis reporting.
 
-RESILIENCE STRATEGY:
-  1. ONE-MESSAGE REPORTING: Photo with caption = instant complete report.
-     No multi-step flow needed. Caption parsed for location + description.
-  2. AGGRESSIVE EARLY SUBMIT: Report created on FIRST data received
-     (even just text), not waiting for location. Partial data > no data.
-  3. REDUCED ROUND-TRIPS: Steps combined. Type+severity skippable.
-     AI Assessment on dashboard infers type/severity later.
+FLOW: Language → Photo → Description → Type → Severity → Location → Done
 
-Accepts ANY input at ANY step. People in crisis send data randomly.
-Photo, video, voice, text, location — all captured regardless of sequence.
+DESIGN PRINCIPLES:
+  1. NO EXTRA BUTTONS: Picking a language immediately starts reporting.
+  2. ONE QUESTION AT A TIME: Never send multiple prompts together.
+  3. NON-BLOCKING UPLOADS: Photos upload in background (asyncio.create_task).
+  4. ACCEPT ANYTHING ANYTIME: Photos, voice, text captured at any step.
+  5. AGGRESSIVE EARLY SUBMIT: Report created on first data received.
 """
+import asyncio
 import logging
 from .session_manager import (
     get_or_create_session, is_duplicate_message,
     create_report_early, upload_image, upload_audio, upload_video_deferred,
-    update_report_metadata, delete_report, submit_report,
+    update_report_metadata, update_report_location, delete_report, submit_report,
     clear_session, SEVERITY_MAP, TYPE_MAP, hash_user,
     resolve_location_name,
 )
 from .media_handler import download_media, download_and_split_video
 from .bot_replies import (
-    send_welcome, send_step_location, send_step_photo,
+    send_welcome, send_step_location, send_step_photo, send_step_photo_first,
     send_step_voice, send_step_severity, send_step_type,
-    send_step_text, send_confirmation, send_add_more_prompt,
+    send_step_text, send_step_description, send_confirmation, send_add_more_prompt,
     send_text, answer_callback,
     detect_lang, t,
 )
@@ -32,9 +31,16 @@ from .bot_replies import (
 logger = logging.getLogger(__name__)
 
 
+def _fire_upload(session, coro):
+    """Fire-and-forget an upload coroutine. Tracks task for safety-net await at submit."""
+    task = asyncio.create_task(coro)
+    session.pending_uploads.append(task)
+
+
 async def _capture_any_media(session, message: dict):
     """
     Silently capture ANY media/text from the message, regardless of current step.
+    Uploads fire-and-forget (never block the next prompt).
     Returns True if something was captured.
     """
     captured = False
@@ -48,7 +54,7 @@ async def _capture_any_media(session, message: dict):
             if media:
                 session.image_data_url = media["data_url"]
                 if session.report_id:
-                    await upload_image(session)
+                    _fire_upload(session, upload_image(session))
                 captured = True
         if message.get("caption"):
             session.text = (session.text + " " + message["caption"]).strip() if session.text else message["caption"]
@@ -62,22 +68,18 @@ async def _capture_any_media(session, message: dict):
         if video_file_id:
             split = await download_and_split_video(video_file_id, thumb_file_id)
 
-            # Audio from video → upload in chunks first (priority for transcription)
             if split.get("audio") and not session.audio_data_url:
                 session.audio_data_url = split["audio"]["data_url"]
                 if session.report_id:
-                    await upload_audio(session)
+                    _fire_upload(session, upload_audio(session))
                 captured = True
-                logger.info("[TG] Audio extracted from video and uploaded")
 
-            # Thumbnail/frame as image evidence
             if split.get("image") and not session.image_data_url:
                 session.image_data_url = split["image"]["data_url"]
                 if session.report_id:
-                    await upload_image(session)
+                    _fire_upload(session, upload_image(session))
                 captured = True
 
-            # Store full video for deferred upload (after everything else)
             if split.get("video"):
                 session.video_data_url = split["video"]["data_url"]
                 captured = True
@@ -85,7 +87,7 @@ async def _capture_any_media(session, message: dict):
         if message.get("caption"):
             session.text = (session.text + "\n" + message["caption"]).strip() if session.text else message["caption"]
 
-    # Video note (round video) — same treatment
+    # Video note (round video)
     if message.get("video_note"):
         vn = message["video_note"]
         vn_file_id = vn.get("file_id")
@@ -96,12 +98,12 @@ async def _capture_any_media(session, message: dict):
             if split.get("audio") and not session.audio_data_url:
                 session.audio_data_url = split["audio"]["data_url"]
                 if session.report_id:
-                    await upload_audio(session)
+                    _fire_upload(session, upload_audio(session))
                 captured = True
             if split.get("image") and not session.image_data_url:
                 session.image_data_url = split["image"]["data_url"]
                 if session.report_id:
-                    await upload_image(session)
+                    _fire_upload(session, upload_image(session))
                 captured = True
 
     # Voice / Audio
@@ -113,7 +115,7 @@ async def _capture_any_media(session, message: dict):
             if media:
                 session.audio_data_url = media["data_url"]
                 if session.report_id:
-                    await upload_audio(session)
+                    _fire_upload(session, upload_audio(session))
                 captured = True
 
     # Location (can update even if already set — user might correct it)
@@ -125,22 +127,21 @@ async def _capture_any_media(session, message: dict):
     # Text — always accumulate (never reject text from a person in crisis)
     text = message.get("text", "").strip()
     if text and not text.startswith("/"):
-        # Check if it's a severity or type answer first
         sev = SEVERITY_MAP.get(text.lower()) or SEVERITY_MAP.get(text)
         itype = TYPE_MAP.get(text.lower()) or TYPE_MAP.get(text)
         if sev and session.severity == "UNKNOWN":
             session.severity = sev
+            session.severity_answered = True
             captured = True
         elif itype and session.infra_type == "OTHER":
             session.infra_type = itype
+            session.type_answered = True
             captured = True
         else:
-            # Accumulate as description — every word matters in a crisis
             session.text = (session.text + "\n" + text).strip() if session.text else text
             captured = True
-            logger.info(f"[TG] Text accumulated: {len(session.text)} chars total")
 
-    # Push ALL changes to backend immediately (text, severity, type)
+    # Push metadata to backend immediately
     if captured and session.report_id:
         await update_report_metadata(session)
 
@@ -148,34 +149,43 @@ async def _capture_any_media(session, message: dict):
 
 
 def _next_missing_step(session) -> str:
-    """Determine what the user still needs to provide.
-    Reduced steps for connectivity resilience:
-      - Location (critical for rescue teams)
-      - Photo OR voice/text (at least one evidence)
-      - Type/Severity SKIPPED — AI Assessment infers these on dashboard
-    """
+    """New flow: Photo → Description → Type → Severity → Location → READY"""
+    # Step 1: Evidence (photo, voice, or text)
+    if not session.image_data_url and not session.audio_data_url and not session.text:
+        return "STEP_PHOTO"
+
+    # Step 2: Description (if we have photo/audio but no text description)
+    if not session.text and (session.image_data_url or session.audio_data_url):
+        return "STEP_DESCRIPTION"
+
+    # Step 3: Damage type
+    if not session.type_answered:
+        return "STEP_TYPE"
+
+    # Step 4: Severity
+    if not session.severity_answered:
+        return "STEP_SEVERITY"
+
+    # Step 5: Location
     if not session.has_location:
         return "STEP_LOCATION"
-    if not session.image_data_url and not session.audio_data_url and not session.text:
-        return "STEP_PHOTO"  # Ask for any evidence — photo, voice, or text
+
     return "READY"
 
 
 async def _prompt_for_step(session, chat_id: int, step: str):
     """Send the appropriate prompt for the given step."""
     lang = session.lang
-    if step == "STEP_LOCATION":
-        await send_step_location(chat_id, lang)
+    if step == "STEP_PHOTO":
+        await send_step_photo_first(chat_id, lang)
+    elif step == "STEP_DESCRIPTION":
+        await send_step_description(chat_id, lang)
     elif step == "STEP_TYPE":
         await send_step_type(chat_id, lang)
     elif step == "STEP_SEVERITY":
         await send_step_severity(chat_id, lang)
-    elif step == "STEP_PHOTO":
-        await send_step_photo(chat_id, lang)
-    elif step == "STEP_VOICE":
-        await send_step_voice(chat_id, lang)
-    elif step == "READY":
-        await send_step_text(chat_id, lang)
+    elif step == "STEP_LOCATION":
+        await send_step_location(chat_id, lang)
 
 
 async def handle_update(update: dict):
@@ -204,11 +214,12 @@ async def handle_update(update: dict):
         session.lang = detected
     text = message.get("text", "").strip()
 
-    # /start always resets
+    # /start always resets — show language picker
     if text.startswith("/start"):
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
         s.lang = detected
+        s.state = "LANG_SELECT"
         await send_welcome(chat_id, s.lang)
         return
 
@@ -219,11 +230,13 @@ async def handle_update(update: dict):
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
         s.lang = detected
+        s.state = "LANG_SELECT"
         await send_welcome(chat_id, s.lang)
         return
 
-    # If in START or DONE state, show welcome
-    if session.state in ("START", "DONE"):
+    # If in START, DONE, or LANG_SELECT — show language picker
+    if session.state in ("START", "DONE", "LANG_SELECT"):
+        session.state = "LANG_SELECT"
         await send_welcome(chat_id, session.lang)
         return
 
@@ -235,45 +248,45 @@ async def handle_update(update: dict):
 
     # ── CAPTURE everything first, regardless of step ──
     had_location_before = session.has_location
-    had_report_before = session.report_id
+    had_evidence_before = session.has_evidence
     await _capture_any_media(session, message)
 
     # Resolve location name if just received
     if session.has_location and not had_location_before:
         await resolve_location_name(session)
+        if session.report_id:
+            await update_report_location(session)
 
     # AGGRESSIVE EARLY SUBMIT: Create report on ANY first data
-    # Even text-only or photo-only gets saved immediately.
-    # Partial data on the dashboard > complete data lost to connectivity.
     if not session.report_id:
         has_any_data = session.has_location or session.text or session.image_data_url or session.audio_data_url
         if has_any_data:
             await create_report_early(session)
-            logger.info(f"[TG] Early report created with partial data: loc={session.has_location} text={bool(session.text)} img={bool(session.image_data_url)}")
+            logger.info(f"[TG] Early report created: loc={session.has_location} text={bool(session.text)} img={bool(session.image_data_url)}")
+            # Fire-and-forget upload for media captured before report existed
+            if session.report_id:
+                if session.image_data_url:
+                    _fire_upload(session, upload_image(session))
+                if session.audio_data_url:
+                    _fire_upload(session, upload_audio(session))
 
-    # ── Now advance to the next missing step ──
+    # ── Instant acknowledgment if new evidence just captured ──
+    if not had_evidence_before and session.has_evidence:
+        if session.image_data_url:
+            await send_text(chat_id, t(session.lang, "photo_ack"))
+        elif session.audio_data_url:
+            await send_text(chat_id, t(session.lang, "desc_ack"))
+
+    # ── Advance to next step ──
     next_step = _next_missing_step(session)
 
-    # ── ONE-MESSAGE REPORTING: If photo+caption has location info, auto-submit ──
-    if not had_report_before and session.report_id and session.image_data_url and session.text and len(session.text) > 10:
-        # User sent a rich single message (photo + detailed caption)
-        # This is likely a one-shot report — auto-submit to minimize round-trips
-        if session.has_location or any(w in session.text.lower() for w in ['near', 'at', 'in', 'village', 'road', 'bridge', 'city']):
-            logger.info(f"[TG] One-message report detected — auto-submitting")
-            await _finalize(session)
-            return
-
     if next_step == "READY":
-        # Everything we need is collected — ask for final text or submit
-        if session.state != "STEP_TEXT":
-            session.state = "STEP_TEXT"
-            await send_step_text(chat_id, session.lang)
-        else:
-            # They already sent text at the text step — finalize
-            await _finalize(session)
-    else:
+        await _finalize(session)
+    elif session.state != next_step:
+        # Step changed — send the new prompt
         session.state = next_step
         await _prompt_for_step(session, chat_id, next_step)
+    # else: same step, user sent bonus data (e.g. extra photo) — no re-prompt
 
 
 async def _handle_callback(callback_query: dict):
@@ -292,23 +305,23 @@ async def _handle_callback(callback_query: dict):
         session.lang = detected
     lang = session.lang
 
-    # Language selection
+    # ── Language selection → immediately start photo step ──
     if data.startswith("lang_"):
         new_lang = data.replace("lang_", "")
         session.lang = new_lang
+        session.state = "STEP_PHOTO"
         await answer_callback(cq_id, f"Language: {new_lang.upper()}")
-        # Re-send welcome in the new language
-        await send_welcome(chat_id, new_lang)
+        await send_step_photo_first(chat_id, new_lang)
         return
 
-    # Start / Report Another
+    # Start / Report Another → go straight to photo
     if data == "start_report":
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
-        s.lang = session.lang or detected  # Preserve language choice
-        s.state = "STEP_LOCATION"
+        s.lang = session.lang or detected
+        s.state = "STEP_PHOTO"
         await answer_callback(cq_id)
-        await send_step_location(chat_id, s.lang)
+        await send_step_photo_first(chat_id, s.lang)
         return
 
     if data == "stop":
@@ -339,44 +352,62 @@ async def _handle_callback(callback_query: dict):
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
         s.lang = detected
+        s.state = "LANG_SELECT"
         await send_welcome(chat_id, s.lang)
         return
 
-    # Skip text — submit now
+    # ── Skip photo → go to description ──
+    if data == "skip_photo":
+        session.state = "STEP_DESCRIPTION"
+        await answer_callback(cq_id)
+        await send_step_description(chat_id, lang)
+        return
+
+    # ── Skip description → advance to type ──
+    if data == "skip_description":
+        await answer_callback(cq_id)
+        next_step = _next_missing_step(session)
+        session.state = next_step
+        if next_step == "READY":
+            await _finalize(session)
+        else:
+            await _prompt_for_step(session, chat_id, next_step)
+        return
+
+    # Skip text / submit now
     if data == "skip_text":
         await answer_callback(cq_id)
         await _finalize(session)
         return
 
-    # Type buttons
+    # ── Type buttons ──
     if data.startswith("type_"):
         itype = TYPE_MAP.get(data)
         if itype:
             session.infra_type = itype
+            session.type_answered = True
             await update_report_metadata(session)
             await answer_callback(cq_id)
-            # Advance to next missing step
             next_step = _next_missing_step(session)
             session.state = next_step
             if next_step == "READY":
-                session.state = "STEP_TEXT"
-                await send_step_text(chat_id, lang)
+                await _finalize(session)
             else:
                 await _prompt_for_step(session, chat_id, next_step)
         return
 
-    # Severity buttons
+    # ── Severity buttons ──
     if data.startswith("sev_"):
         sev = SEVERITY_MAP.get(data)
         if sev:
             session.severity = sev
+            session.severity_answered = True
             await update_report_metadata(session)
             await answer_callback(cq_id)
             next_step = _next_missing_step(session)
             session.state = next_step
             if next_step == "READY":
-                session.state = "STEP_TEXT"
-                await send_step_text(chat_id, lang)
+                await _finalize(session)
             else:
                 await _prompt_for_step(session, chat_id, next_step)
         return
@@ -399,9 +430,8 @@ async def _finalize(session):
         )
         session.state = "DONE"
 
-        # Deferred: upload full video after confirmation (low priority, large file)
+        # Deferred: upload full video after confirmation
         if session.video_data_url:
-            logger.info(f"[TG] Starting deferred video upload for {report_id}")
-            await upload_video_deferred(session)
+            _fire_upload(session, upload_video_deferred(session))
     else:
         await send_text(chat_id, t(lang, "error"))

@@ -21,7 +21,7 @@ let _pollTimer = null;
 // ── State ────────────────────────────────────────────────────────────────────
 let allReports = [];
 let sortMode = 'impact';
-let timeFilterHours = 24;
+let timeFilterHours = 0; // 0 = show all time (no filter)
 let statusFilter = 'active';
 let selectedId = null;
 const knownIds = new Set();
@@ -33,6 +33,7 @@ let _unseenReports = [];
 const _MAX_NOTIFS = 10;
 const _seenIds = new Set(JSON.parse(localStorage.getItem('crisp_seen_ids') || '[]'));
 let _notifPanelOpen = false;
+let _initialLoadDone = false;  // Suppress notifications on first data load
 let heatLayer = null;
 let clusterGroup = null;
 let boundaryLayers = [];
@@ -142,7 +143,7 @@ function showToast(msg, type = 'info') {
 
 function _addNotification(r) {
     const locName = r.location?.user_location_name || r.location?.device_location_name || 'Unknown location';
-    const srcIcons = {APP:'fa-mobile-screen-button',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'};
+    const srcIcons = {APP:'fa-mobile-screen-button',ANDROID:'fa-robot',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'};
     const srcBrand = ['WHATSAPP','TELEGRAM'].includes(r.source) ? 'fa-brands' : 'fa-solid';
     const sevColor = SEV_COLORS[r.severity] || '#64748b';
 
@@ -170,25 +171,28 @@ function _showFlashNotification(n, sevColor) {
     // Remove any existing flash
     document.querySelectorAll('.notif-flash').forEach(el => el.remove());
 
+    const srcLabel = {APP:'Mobile App',ANDROID:'Android',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[n.source] || n.source;
+
     const flash = document.createElement('div');
     flash.className = 'notif-flash';
     flash.onclick = () => { flash.remove(); dismissNotif(n.id); };
     flash.innerHTML = `
-        <div class="notif-flash-top">
-            <span class="notif-flash-new">NEW</span>
-            <span class="notif-sev" style="background:${sevColor}20;color:${sevColor};">${n.severity}</span>
-            <span class="notif-flash-type">${n.type}</span>
-            <i class="${n.srcBrand} ${n.srcIcon}" style="color:#64748b;font-size:12px;"></i>
+        <div class="notif-flash-icon">🚨</div>
+        <div class="notif-flash-title">NEW INCIDENT REPORTED</div>
+        <div class="notif-flash-detail">
+            <span class="notif-sev" style="background:${sevColor}25;color:${sevColor};font-size:13px;padding:4px 10px;">${n.severity}</span>
+            <span style="font-size:16px;font-weight:700;color:#e2e8f0;">${n.type}</span>
         </div>
         <div class="notif-flash-loc"><i class="fa-solid fa-location-dot" style="color:${sevColor};"></i> ${escapeHtml(n.location)}</div>
+        <div class="notif-flash-source"><i class="${n.srcBrand} ${n.srcIcon}"></i> via ${srcLabel}</div>
+        <div class="notif-flash-hint">Click to view &middot; Auto-dismiss in 5s</div>
     `;
     document.body.appendChild(flash);
 
-    // After 5 seconds: fly into bell icon
+    // After 5 seconds: shrink and fly to top-right bell
     setTimeout(() => {
         flash.classList.add('fly-away');
-        // After fly animation completes, remove
-        setTimeout(() => flash.remove(), 700);
+        setTimeout(() => flash.remove(), 800);
     }, 5000);
 }
 
@@ -549,7 +553,7 @@ function createIncidentRow(r) {
 
     const desc = (r.ai_analysis?.ai_summary || r.description || r.ai_analysis?.transcription || '').substring(0, 35);
     const sevColor = SEV_COLORS[r.severity] || '#64748b';
-    const srcIcon = {APP:'fa-mobile-screen-button',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'}[r.source] || 'fa-mobile-screen-button';
+    const srcIcon = {APP:'fa-mobile-screen-button',ANDROID:'fa-robot',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'}[r.source] || 'fa-mobile-screen-button';
     const srcClass = {APP:'qrt-src-app',WHATSAPP:'qrt-src-whatsapp',TELEGRAM:'qrt-src-telegram',SMS:'qrt-src-sms',IVR:'qrt-src-ivr'}[r.source] || 'qrt-src-app';
     const srcBrand = ['WHATSAPP','TELEGRAM'].includes(r.source) ? 'fa-brands' : 'fa-solid';
 
@@ -818,7 +822,7 @@ function createIncidentCard(r) {
                 <div class="qrt-infra-icon"><i class="fa-solid ${icon}"></i></div>
                 <span class="qrt-infra-name">${infra.replace(/_/g, ' ')}</span>
                 <span class="qrt-sev-badge qrt-sev-${sev}">${sev}</span>
-                <span class="qrt-source-badge qrt-src-${(r.source || 'APP').toLowerCase()}" title="Source: ${{APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i>',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i>',TELEGRAM:'<i class="fa-brands fa-telegram"></i>',SMS:'<i class="fa-solid fa-comment-sms"></i>',IVR:'<i class="fa-solid fa-phone"></i>'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i>'}</span>
+                <span class="qrt-source-badge qrt-src-${(r.source || 'APP').toLowerCase()}" title="Source: ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i>',ANDROID:'<i class="fa-solid fa-robot"></i>',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i>',TELEGRAM:'<i class="fa-brands fa-telegram"></i>',SMS:'<i class="fa-solid fa-comment-sms"></i>',IVR:'<i class="fa-solid fa-phone"></i>'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i>'}</span>
             </div>
             <div class="qrt-where">
                 <i class="fa-solid fa-location-dot"></i>
@@ -1242,7 +1246,7 @@ function showIncidentPreview(r, event) {
     const v = r.verification;
     const sevColor = SEV_COLORS[r.severity] || '#64748b';
     const locName = loc?.user_location_name || loc?.device_location_name || (loc ? `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : 'Unknown');
-    const srcIcon = {APP:'fa-mobile-screen-button',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'}[r.source] || 'fa-mobile-screen-button';
+    const srcIcon = {APP:'fa-mobile-screen-button',ANDROID:'fa-robot',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'}[r.source] || 'fa-mobile-screen-button';
     const srcBrand = ['WHATSAPP','TELEGRAM'].includes(r.source) ? 'fa-brands' : 'fa-solid';
     const hoverAiSummary = ai?.ai_summary || '';
     const hoverUserText = r.description || ai?.transcription || '';
@@ -1461,7 +1465,7 @@ window.selectReport = (id, skipFly = false) => {
         ${r.infrastructure_type.replace(/_/g,' ')}
         <span class="detail-sev-badge detail-sev-${r.severity}">${r.severity}</span>
         <span class="status-badge status-${r.status}">${r.status}</span>
-        <span class="dp-source-badge dp-src-${(r.source || 'APP').toLowerCase()}" title="Reported via ${{APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i> App',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i> WhatsApp',TELEGRAM:'<i class="fa-brands fa-telegram"></i> Telegram',SMS:'<i class="fa-solid fa-comment-sms"></i> SMS',IVR:'<i class="fa-solid fa-phone"></i> Call'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i> App'}</span>
+        <span class="dp-source-badge dp-src-${(r.source || 'APP').toLowerCase()}" title="Reported via ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i> App',ANDROID:'<i class="fa-solid fa-robot"></i> Android',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i> WhatsApp',TELEGRAM:'<i class="fa-brands fa-telegram"></i> Telegram',SMS:'<i class="fa-solid fa-comment-sms"></i> SMS',IVR:'<i class="fa-solid fa-phone"></i> Call'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i> App'}</span>
         <span class="dp-time-badge">${timeAgo(r.server_created_at)}</span>
     `;
 
@@ -1650,7 +1654,7 @@ window.selectReport = (id, skipFly = false) => {
         <!-- ⑥ Source Details (collapsible) -->
         <div class="dp-source-details">
             <button class="dp-expand-btn" onclick="const el=document.getElementById('dp-source-body');const ic=this.querySelector('i');if(el.style.display==='none'){el.style.display='block';ic.classList.replace('fa-chevron-down','fa-chevron-up');}else{el.style.display='none';ic.classList.replace('fa-chevron-up','fa-chevron-down');}">
-                <i class="fa-solid fa-chevron-down"></i> <span style="color:${{APP:'#7c3aed',WHATSAPP:'#25d366',TELEGRAM:'#26a5e4',SMS:'#f59e0b',IVR:'#ec4899'}[r.source] || '#94a3b8'};">Source Details — ${{APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || r.source}</span>
+                <i class="fa-solid fa-chevron-down"></i> <span style="color:${{APP:'#7c3aed',WHATSAPP:'#25d366',TELEGRAM:'#26a5e4',SMS:'#f59e0b',IVR:'#ec4899'}[r.source] || '#94a3b8'};">Source Details — ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || r.source}</span>
             </button>
             <div id="dp-source-body" style="display:none;" class="dp-source-detail-body">
                 <div class="dp-meta-row"><span class="dp-meta-key">Channel</span><span>${{APP:'Progressive Web App',WHATSAPP:'WhatsApp Bot',TELEGRAM:'Telegram Bot',SMS:'SMS Gateway',IVR:'IVR Voice Call'}[r.source] || r.source}</span></div>
@@ -2097,7 +2101,7 @@ window.exportPDF = (id) => {
     const v = r.verification;
     const ci = r.caller_info;
     const locName = loc?.user_location_name || loc?.device_location_name || (loc ? `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : 'Unknown');
-    const srcLabel = {APP:'Mobile App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || r.source;
+    const srcLabel = {APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || r.source;
     const ts = new Date(ensureUTC(r.server_created_at)).toLocaleString();
 
     // Gather all image URLs: user photo + primary satellite + alt satellite
@@ -2896,9 +2900,12 @@ function _applyReportData(data) {
         if (!knownIds.has(r.id)) {
             knownIds.add(r.id);
             allReports.push(r);
-            // Live notification for new unseen incidents
-            if (!_seenIds.has(r.id)) {
+            // Live notification ONLY for genuinely new incidents (not initial page load)
+            if (_initialLoadDone && !_seenIds.has(r.id)) {
                 _addNotification(r);
+            } else {
+                // Initial load — silently mark as seen, no flash
+                _seenIds.add(r.id);
             }
         } else {
             const idx = allReports.findIndex(x => x.id === r.id);
@@ -2950,6 +2957,11 @@ async function fetchReports() {
         // Apply rendering separately so UI errors don't look like network failures
         try {
             _applyReportData(data);
+            if (!_initialLoadDone) {
+                _initialLoadDone = true;
+                try { localStorage.setItem('crisp_seen_ids', JSON.stringify([..._seenIds])); } catch(_){}
+                console.log('[CRISP] Initial load complete — future reports will trigger notifications');
+            }
             console.log('[CRISP] Rendered', allReports.length, 'reports on map');
         } catch (e) {
             console.error('[CRISP] RENDER ERROR:', e);

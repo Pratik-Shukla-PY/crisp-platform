@@ -1,33 +1,35 @@
 """
-Chunked Media Uploader — Shared by WhatsApp and Telegram bots.
-Splits media into ~1KB base64 chunks and uploads progressively via
-the same /media/chunk endpoint used by the mobile app, enabling
-real-time streaming preview on the web dashboard.
+Adaptive Chunked Media Uploader — Server-side (Telegram/WhatsApp/IVR).
 
-Flow:
-  1. POST /reports/{id}/media/thumbnail — send low-res preview first
-  2. POST /reports/{id}/media/chunk — send ~1KB packets with seq_num
-  3. Backend assembles partial files every 3 (image) / 5 (audio) chunks
-  4. Dashboard shows progressive loading in real-time
+Server-to-server uploads (localhost) use large chunks + high concurrency.
+Adapts dynamically if backend becomes slow (e.g., under load).
+
+Chunk sizes:
+  Normal (localhost):  64KB chunks, 5 concurrent
+  Slow (high latency): 8KB chunks, 2 concurrent
+  Degraded:            1KB chunks, sequential
 """
 import os
-import base64
-import hashlib
+import time
 import logging
 import asyncio
 from uuid import uuid4
-from typing import Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
 BACKEND_URL = os.getenv("CRISP_BACKEND_URL", "http://localhost:8000")
-CHUNK_SIZE = 1024  # ~1KB base64 chars per chunk (matches mobile app)
+
+# Start with fast settings (server-to-server = localhost)
+_chunk_size = 524288  # 512KB (req: 512KB–1MB for FAST)
+_concurrency = 5
+_consecutive_successes = 0
+_consecutive_failures = 0
 
 
 def _djb2_checksum(data: str) -> str:
-    """DJB2 hash for chunk integrity — must match backend djb2_checksum() exactly."""
+    """DJB2 hash — must match backend exactly."""
     h = 5381
     for ch in data:
         h = ((h << 5) + h) ^ ord(ch)
@@ -35,109 +37,123 @@ def _djb2_checksum(data: str) -> str:
     return format(h, '08x')
 
 
+def _adapt_on_success():
+    """Gradually increase chunk size after consecutive successes."""
+    global _chunk_size, _concurrency, _consecutive_successes, _consecutive_failures
+    _consecutive_successes += 1
+    _consecutive_failures = 0
+    if _consecutive_successes >= 10 and _chunk_size < 524288:
+        _chunk_size = min(_chunk_size * 2, 524288)
+        _concurrency = min(_concurrency + 1, 5)
+        _consecutive_successes = 0
+        logger.info(f"Adaptive: upgraded to {_chunk_size}B chunks, {_concurrency} concurrent")
+
+
+def _adapt_on_failure():
+    """Immediately reduce chunk size on failure."""
+    global _chunk_size, _concurrency, _consecutive_successes, _consecutive_failures
+    _consecutive_failures += 1
+    _consecutive_successes = 0
+    if _chunk_size > 1024:
+        _chunk_size = max(_chunk_size // 2, 1024)
+        _concurrency = max(_concurrency - 1, 1)
+        logger.info(f"Adaptive: downgraded to {_chunk_size}B chunks, {_concurrency} concurrent")
+
+
 async def upload_media_chunked(
     report_id: str,
     data_b64: str,
-    media_type: str,  # "IMAGE" or "AUDIO"
+    media_type: str,
     mime_type: str = "image/jpeg",
 ) -> bool:
-    """
-    Upload media in progressive chunks, exactly like the mobile app.
-
-    Args:
-        report_id: CRISP report ID
-        data_b64: Raw base64 string (no data: prefix)
-        media_type: "IMAGE" or "AUDIO"
-        mime_type: MIME type for thumbnail
-
-    Returns:
-        True if all chunks uploaded successfully
-    """
+    """Upload media with adaptive chunk sizing and concurrent batching."""
     media_id = str(uuid4())
     total_len = len(data_b64)
-    total_chunks = (total_len + CHUNK_SIZE - 1) // CHUNK_SIZE
 
-    if total_chunks == 0:
-        logger.warning(f"Empty media data for {report_id}")
+    if total_len == 0:
         return False
 
-    logger.info(
-        f"Chunked upload: {media_type} for {report_id} — "
-        f"{total_len:,} base64 chars → {total_chunks} chunks"
-    )
+    logger.info(f"Upload: {media_type} {total_len:,} chars, chunk={_chunk_size}B, concurrency={_concurrency}")
 
-    async with httpx.AsyncClient(timeout=20) as c:
-        # Step 1: Send thumbnail first (for immediate dashboard preview)
+    async with httpx.AsyncClient(timeout=30) as c:
+        # Thumbnail for instant preview
         if media_type == "IMAGE":
-            # Use first ~16KB of base64 as low-res thumbnail
             thumb_size = min(total_len, 20000)
             thumb_b64 = data_b64[:thumb_size]
-            # Pad to valid base64
             pad = (4 - len(thumb_b64) % 4) % 4
-            thumb_b64_padded = thumb_b64 + "=" * pad
-            thumb_data_url = f"data:{mime_type};base64,{thumb_b64_padded}"
-
+            thumb_url = f"data:{mime_type};base64,{thumb_b64 + '=' * pad}"
             try:
-                r = await c.post(
-                    f"{BACKEND_URL}/api/v1/reports/{report_id}/media/thumbnail",
-                    json={"media_id": media_id, "thumbnail_data": thumb_data_url},
-                )
-                if r.status_code == 200:
-                    logger.info(f"Thumbnail sent for {media_id}")
-            except Exception as e:
-                logger.warning(f"Thumbnail upload failed: {e}")
+                await c.post(f"{BACKEND_URL}/api/v1/reports/{report_id}/media/thumbnail",
+                             json={"media_id": media_id, "thumbnail_data": thumb_url})
+            except Exception:
+                pass
 
-        # Step 2: Send chunks progressively
+        # Adaptive chunked upload
+        offset = 0
+        total_chunks = (total_len + _chunk_size - 1) // _chunk_size
         success_count = 0
-        for seq in range(total_chunks):
-            start = seq * CHUNK_SIZE
-            end = min(start + CHUNK_SIZE, total_len)
-            chunk_data = data_b64[start:end]
-            checksum = _djb2_checksum(chunk_data)
+        start_time = time.time()
 
-            payload = {
-                "media_id": media_id,
-                "type": media_type,
-                "seq_num": seq,
-                "total_chunks": total_chunks,
-                "data": chunk_data,
-                "checksum": checksum,
-            }
+        while offset < total_len:
+            # Build batch of chunks
+            batch = []
+            for _ in range(_concurrency):
+                if offset >= total_len:
+                    break
+                end = min(offset + _chunk_size, total_len)
+                chunk_data = data_b64[offset:end]
+                seq = len(batch) + (success_count)
+                batch.append((seq, chunk_data, offset))
+                offset += _chunk_size
 
-            for attempt in range(3):  # retry up to 3 times
-                try:
-                    r = await c.post(
-                        f"{BACKEND_URL}/api/v1/reports/{report_id}/media/chunk",
-                        json=payload,
-                    )
-                    if r.status_code == 200:
-                        success_count += 1
-                        break
-                    else:
-                        logger.warning(f"Chunk {seq}/{total_chunks} failed ({r.status_code})")
-                except Exception as e:
-                    logger.warning(f"Chunk {seq} attempt {attempt+1} error: {e}")
-                    await asyncio.sleep(0.5)
+            # Send batch concurrently
+            tasks = [
+                _send_chunk_with_retry(c, report_id, media_id, media_type,
+                                       seq, total_chunks, chunk_data)
+                for seq, chunk_data, _ in batch
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Small delay between chunks to simulate progressive streaming
-            # and avoid overwhelming the server
-            if seq % 5 == 0 and seq > 0:
-                await asyncio.sleep(0.1)
+            for r in results:
+                if r is True:
+                    success_count += 1
+                    _adapt_on_success()
+                else:
+                    _adapt_on_failure()
 
-        logger.info(
-            f"Chunked upload complete: {media_type} {media_id} — "
-            f"{success_count}/{total_chunks} chunks succeeded"
-        )
-        return success_count == total_chunks
+        elapsed = time.time() - start_time
+        speed = total_len / 1024 / max(elapsed, 0.01)
+        logger.info(f"Upload done: {success_count} chunks, {elapsed:.1f}s, {speed:.0f} KB/s")
+        return success_count > 0
+
+
+async def _send_chunk_with_retry(client, report_id, media_id, media_type, seq, total, data):
+    """Send a single chunk with exponential backoff retry."""
+    checksum = _djb2_checksum(data)
+    payload = {
+        "media_id": media_id, "type": media_type,
+        "seq_num": seq, "total_chunks": total,
+        "data": data, "checksum": checksum,
+    }
+    delays = [2, 5, 10, 30]  # Exponential backoff (req: 2→5→10→30s)
+    for attempt in range(len(delays) + 1):
+        try:
+            r = await client.post(
+                f"{BACKEND_URL}/api/v1/reports/{report_id}/media/chunk",
+                json=payload,
+            )
+            if r.status_code == 200:
+                return True
+        except Exception:
+            pass
+        if attempt < len(delays):
+            await asyncio.sleep(delays[attempt])
+    return False
 
 
 def extract_b64_from_data_url(data_url: str) -> tuple:
-    """
-    Extract raw base64 and MIME type from a data: URL.
-    Returns (base64_string, mime_type)
-    """
+    """Extract raw base64 and MIME type from a data: URL."""
     if data_url.startswith("data:"):
-        # data:image/jpeg;base64,/9j/4AAQ...
         header, b64 = data_url.split(",", 1)
         mime = header.split(":")[1].split(";")[0]
         return b64, mime

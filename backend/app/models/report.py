@@ -10,6 +10,7 @@ def gen_uuid():
 
 class SourceEnum(str, enum.Enum):
     APP = "APP"
+    ANDROID = "ANDROID"
     WHATSAPP = "WHATSAPP"
     TELEGRAM = "TELEGRAM"
     SMS = "SMS"
@@ -89,13 +90,29 @@ class Report(Base):
     client_created_at = Column(DateTime(timezone=True))
     server_created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    deletion_requested_at = Column(DateTime(timezone=True), nullable=True)  # 24h grace period
+    deletion_requested_at = Column(DateTime(timezone=True), nullable=True)
+    deletion_grace_minutes = Column(Integer, nullable=True, default=1440)  # 24h default, 30min for mobile
+    lives_impacted = Column(Integer, nullable=True)  # How many lives saved/impacted by this report
 
     device      = relationship("Device", back_populates="reports")
     location    = relationship("Location",    back_populates="report", uselist=False, cascade="all, delete-orphan")
     media       = relationship("Media",       back_populates="report", cascade="all, delete-orphan")
     ai_analysis = relationship("AIAnalysis",  back_populates="report", uselist=False, cascade="all, delete-orphan")
     verification = relationship("SatelliteVerification", back_populates="report", uselist=False, cascade="all, delete-orphan")
+
+
+class DeletionAuditLog(Base):
+    """Audit trail for deleted reports — preserves anonymized metadata for accountability."""
+    __tablename__ = "deletion_audit_log"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    report_id = Column(String(36), nullable=False, index=True)
+    device_hash = Column(String(255), nullable=True)
+    location_snapshot = Column(JSON, nullable=True)  # {lat, lng, name}
+    damage_type = Column(String(50), nullable=True)
+    severity = Column(String(20), nullable=True)
+    deletion_source = Column(String(50), default="DASHBOARD")  # MOBILE, DASHBOARD, ADMIN
+    deleted_at = Column(DateTime(timezone=True), server_default=func.now())
+
 
 class Location(Base):
     __tablename__ = "locations"
