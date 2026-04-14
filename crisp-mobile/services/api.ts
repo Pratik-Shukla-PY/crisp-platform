@@ -4,7 +4,7 @@
  */
 
 // Default: local network. Change for production.
-let API_BASE = 'http://172.16.110.18:8000/api/v1';
+let API_BASE = 'http://192.168.1.38:8000/api/v1';
 
 export function setApiBase(host: string) {
   API_BASE = `${host}/api/v1`;

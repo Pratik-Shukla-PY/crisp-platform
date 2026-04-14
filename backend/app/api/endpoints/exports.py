@@ -12,6 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from app.core.deps import require_viewer
 
 from app.db.session import get_db
 from app.models.report import Report, Location
@@ -70,6 +71,7 @@ def _report_to_row(r):
 
 @router.get("/csv")
 def export_csv(
+    user=Depends(require_viewer),
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
@@ -102,6 +104,7 @@ def export_csv(
 
 @router.get("/geojson")
 def export_geojson(
+    user=Depends(require_viewer),
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
@@ -135,6 +138,7 @@ def export_geojson(
 
 @router.get("/shapefile")
 def export_shapefile(
+    user=Depends(require_viewer),
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
@@ -203,6 +207,7 @@ def export_shapefile(
 
 @router.get("/kml")
 def export_kml(
+    user=Depends(require_viewer),
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),

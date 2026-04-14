@@ -27,6 +27,11 @@
                 <span class="brand-sub">UN Crisis Command</span>
             </div>
             <div class="live-badge" id="cache-freshness-badge"><span class="live-dot"></span>LIVE</div>
+            <div class="user-menu" id="user-menu">
+                <span class="user-role-badge" id="user-role-badge"></span>
+                <span class="user-name" id="user-name-display"></span>
+                <button class="user-logout-btn" onclick="crispLogout()" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+            </div>
         </div>
 
         <div class="command-stats">
@@ -39,6 +44,9 @@
             <button class="stat-pill analytics-toggle" onclick="toggleAnalytics()" title="Analytics Dashboard">
                 <i class="fa-solid fa-chart-bar"></i><label>ANALYTICS</label>
             </button>
+            <button class="stat-pill predictions-toggle" onclick="togglePredictions()" title="Predictive Intelligence">
+                <i class="fa-solid fa-bolt"></i><label>PREDICT</label>
+            </button>
         </div>
 
         <div class="command-actions">
@@ -47,10 +55,15 @@
                 <button class="time-btn" onclick="setTimeFilter(24)">24h</button>
                 <button class="time-btn active" onclick="setTimeFilter(0)">All</button>
             </div>
-            <button class="icon-btn" onclick="exportData('csv')"><i class="fa-solid fa-file-csv"></i> CSV</button>
-            <button class="icon-btn" onclick="exportData('geojson')"><i class="fa-solid fa-globe"></i> GeoJSON</button>
-            <button class="icon-btn" onclick="exportData('shapefile')"><i class="fa-solid fa-map"></i> SHP</button>
-            <button class="icon-btn" onclick="exportData('kml')"><i class="fa-solid fa-earth-americas"></i> KML</button>
+            <div class="export-dropdown">
+                <button class="icon-btn" onclick="this.parentElement.classList.toggle('open')"><i class="fa-solid fa-download"></i> Export <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.5;"></i></button>
+                <div class="export-menu">
+                    <button onclick="exportData('csv');this.closest('.export-dropdown').classList.remove('open')"><i class="fa-solid fa-file-csv"></i> CSV</button>
+                    <button onclick="exportData('geojson');this.closest('.export-dropdown').classList.remove('open')"><i class="fa-solid fa-globe"></i> GeoJSON</button>
+                    <button onclick="exportData('shapefile');this.closest('.export-dropdown').classList.remove('open')"><i class="fa-solid fa-map"></i> Shapefile</button>
+                    <button onclick="exportData('kml');this.closest('.export-dropdown').classList.remove('open')"><i class="fa-solid fa-earth-americas"></i> KML</button>
+                </div>
+            </div>
             <button class="icon-btn deletion-btn" id="btn-pending-deletions" onclick="showPendingDeletions()" style="display:none;" title="View pending deletion requests">
                 <i class="fa-solid fa-trash-clock"></i> <span id="deletion-count-badge">0</span>
             </button>
@@ -165,6 +178,38 @@
         <div class="del-panel-footer" id="del-panel-footer"></div>
     </div>
 
+    <!-- Predictive Intelligence Panel -->
+    <div id="predictions-panel" class="predictions-panel" style="display:none;">
+        <div class="pred-scroll">
+            <div class="pred-header">
+                <h2><i class="fa-solid fa-bolt" style="color:#a78bfa;"></i> Predictive Intelligence</h2>
+                <div class="pred-controls">
+                    <div class="pred-time-selector">
+                        <button class="pred-time-btn active" onclick="setPredTimeWindow(24)">24h</button>
+                        <button class="pred-time-btn" onclick="setPredTimeWindow(72)">3 days</button>
+                        <button class="pred-time-btn" onclick="setPredTimeWindow(168)">7 days</button>
+                    </div>
+                    <button class="pred-run-btn" onclick="runNewForecast()"><i class="fa-solid fa-satellite-dish"></i> Run Forecast</button>
+                    <button class="pred-close-btn" onclick="togglePredictions()"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="pred-add-zone">
+                <input type="text" id="pred-zone-name" placeholder="Zone name (e.g. Dhaka Coastal)" class="pred-input">
+                <div class="pred-add-row">
+                    <input type="number" id="pred-zone-lat" placeholder="Latitude" step="0.001" class="pred-input pred-input-sm">
+                    <input type="number" id="pred-zone-lng" placeholder="Longitude" step="0.001" class="pred-input pred-input-sm">
+                    <button class="pred-add-btn" onclick="addPredictionZone()"><i class="fa-solid fa-plus"></i> Add Zone</button>
+                </div>
+            </div>
+            <div id="pred-cards" class="pred-cards"></div>
+            <div id="pred-empty" class="pred-empty">
+                <i class="fa-solid fa-satellite-dish" style="font-size:32px;color:#334155;"></i>
+                <p>No prediction zones configured yet.</p>
+                <p style="font-size:11px;color:#4b5563;">Add a zone above or click on the map to start forecasting.</p>
+            </div>
+        </div>
+    </div>
+
     <!-- QRT Response Queue Sidebar -->
     <aside class="feed-panel glass-panel">
         <div class="feed-header">
@@ -209,7 +254,8 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-<script src="app.js?v=600"></script>
+<script src="app.js?v=700"></script>
+<script src="predictions.js?v=100"></script>
 
 <!-- Offline status banner -->
 <div id="offline-banner" style="

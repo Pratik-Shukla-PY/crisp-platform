@@ -75,6 +75,8 @@ if not os.path.exists("uploads"):
 from app.core.config import settings
 from app.db.session import engine
 from app.models.report import Base
+import app.models.auth        # Ensure auth tables are registered with Base.metadata
+import app.models.prediction  # Prediction zone + result tables
 
 # For development MVP: auto-create tables if they don't exist.
 # Production generally requires Alembic migrations.

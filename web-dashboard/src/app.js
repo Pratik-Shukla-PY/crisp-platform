@@ -11,9 +11,34 @@ function escapeHtml(str) {
     return d.innerHTML;
 }
 
+// ── Auth Gate ────────────────────────────────────────────────────────────────
+const _crispToken = localStorage.getItem('crisp_token');
+const _crispUser = (() => { try { return JSON.parse(localStorage.getItem('crisp_user')); } catch { return null; } })();
+if (!_crispToken && !window.location.pathname.includes('login')) {
+    window.location.href = 'login.html';
+}
+
 // ── Config ───────────────────────────────────────────────────────────────────
 const BACKEND_HOST = `http://${window.location.hostname || 'localhost'}:8000`;
 const API = `${BACKEND_HOST}/api/v1/reports`;
+
+// Add Authorization header to all fetch calls + handle 401 → redirect to login
+const _origFetch = window.fetch;
+window.fetch = function(url, opts = {}) {
+    if (_crispToken && typeof url === 'string' && url.includes('/api/')) {
+        opts.headers = { ...(opts.headers || {}), 'Authorization': `Bearer ${_crispToken}` };
+    }
+    return _origFetch.call(this, url, opts).then(res => {
+        if (res.status === 401 && typeof url === 'string' && url.includes('/api/')) {
+            localStorage.removeItem('crisp_token');
+            localStorage.removeItem('crisp_user');
+            if (!window.location.pathname.includes('login')) {
+                window.location.href = 'login.html';
+            }
+        }
+        return res;
+    });
+};
 const POLL_INTERVAL        = 4000;  // normal polling
 const POLL_INTERVAL_ACTIVE = 1200;  // fast polling while any image is uploading
 let _pollTimer = null;
@@ -849,7 +874,7 @@ function createIncidentCard(r) {
                     <i class="fa-solid fa-microphone"></i>
                     ${hasAudio && !audioDone ? `<span class="di-pct">${Math.round(audioPct)}%</span>` : ''}
                 </span>
-                ${v ? `<span class="qrt-ai-badge" title="AI Verified: ${v.total_score}/100 — ${(v.verdict || '').replace(/_/g,' ')}" style="color:${v.total_score >= 60 ? '#22c55e' : v.total_score >= 40 ? '#eab308' : '#ef4444'};">
+                ${v ? `<span class="qrt-ai-badge" title="Verified: ${v.total_score}/100 — ${(v.verdict || '').replace(/_/g,' ')}" style="color:${v.total_score >= 60 ? '#22c55e' : v.total_score >= 40 ? '#eab308' : '#ef4444'};">
                     <i class="fa-solid fa-brain"></i> ${v.total_score}
                 </span>` : ''}
             </div>
@@ -1522,21 +1547,31 @@ window.selectReport = (id, skipFly = false) => {
     const aaDetails = cachedAA?.details ?? '';
 
     document.getElementById('detail-body').innerHTML = `
-        <!-- ① TOP: AI Assessment result OR "Run AI Assessment" button -->
+        <!-- ① TOP: Credibility Check result OR "Credibility Check" button -->
         <div class="dp-action-bar">
             <div class="dp-top-row">
                 <div class="dp-quick-summary">
                     ${cachedAA ? (() => {
                         const ac = aaAction.includes('Dispatch') ? '#22c55e' : aaAction.includes('False') ? '#ef4444' : aaAction.includes('Suspicious') ? '#f97316' : '#eab308';
                         const cc = aaScore >= 70 ? '#22c55e' : aaScore >= 50 ? '#eab308' : aaScore >= 30 ? '#f97316' : '#ef4444';
+                        const priority = cachedAA.priority_level || '';
+                        const pColor = priority.includes('P1') ? '#ef4444' : priority.includes('P2') ? '#f97316' : priority.includes('P3') ? '#eab308' : priority.includes('P4') ? '#3b82f6' : '#64748b';
+                        const lives = cachedAA.lives_at_risk_estimate || '';
+                        const keyFactors = cachedAA.key_factors || [];
+                        const riskFlags = cachedAA.risk_flags || [];
                         return `<div class="dp-top-ai">
                             <div class="dp-top-ai-row">
+                                ${priority ? `<span class="dp-priority-badge" style="background:${pColor};">${priority.replace('_',' ')}</span>` : ''}
                                 <span class="dp-top-ai-score" style="color:${cc};">${aaScore}<small>/100</small></span>
                                 <span class="dp-top-ai-action" style="color:${ac};">${aaAction}</span>
+                                <button class="dp-ai-info-btn" onclick="event.stopPropagation();showAILogic('${r.id}')" title="View credibility reasoning"><i class="fa-solid fa-circle-info"></i></button>
                             </div>
+                            ${lives ? `<div class="dp-lives-risk"><i class="fa-solid fa-people-group"></i> <strong>${lives}</strong> lives at risk</div>` : ''}
                             <p class="dp-summary-text">${aaSummary}</p>
+                            ${keyFactors.length ? `<div class="dp-key-factors">${keyFactors.slice(0,3).map(f => `<span class="dp-factor-chip"><i class="fa-solid fa-check-circle"></i> ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
+                            ${riskFlags.length ? `<div class="dp-risk-flags">${riskFlags.map(f => `<span class="dp-flag-chip"><i class="fa-solid fa-exclamation-triangle"></i> ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
                         </div>`;
-                    })() : `<button class="dp-run-ai-btn" onclick="runAIAssessment('${r.id}')"><i class="fa-solid fa-brain"></i> Run AI Assessment</button>`}
+                    })() : `<button class="dp-run-ai-btn" onclick="runAIAssessment('${r.id}')"><i class="fa-solid fa-shield-halved"></i> Credibility Check</button>`}
                 </div>
                 <button class="dp-pdf-btn" onclick="exportPDF('${r.id}')" title="Export PDF"><i class="fa-solid fa-file-pdf"></i></button>
             </div>
@@ -2042,14 +2077,14 @@ window.runVerification = async (id) => {
     }
 };
 
-// ── AI Assessment (on-demand, full incident analysis) ────────────────────────
+// ── Credibility Check (on-demand, full incident analysis) ────────────────────
 window.runAIAssessment = async (id) => {
     const r = allReports.find(x => x.id === id);
     if (!r) return;
 
     // Block if already assessed — prevent duplicate API calls
     if (r.ai_assessment) {
-        showToast('AI assessment already completed for this incident', 'info');
+        showToast('Credibility check already completed for this incident', 'info');
         return;
     }
 
@@ -2109,14 +2144,14 @@ window.runAIAssessment = async (id) => {
             // Re-render — top bar shows AI score, tree view updates type/severity
             selectReport(id, true);
             renderFeed();
-            showToast(`AI assessment: ${confScore}/100 — ${action}`, 'success');
+            showToast(`Credibility: ${confScore}/100 — ${action}`, 'success');
         } else {
-            showToast('AI assessment failed', 'error');
-            if (topBtn) { topBtn.disabled = false; topBtn.innerHTML = '<i class="fa-solid fa-brain"></i> Run AI Assessment'; }
+            showToast('Credibility check failed', 'error');
+            if (topBtn) { topBtn.disabled = false; topBtn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Credibility Check'; }
         }
     } catch (e) {
-        showToast('AI assessment request failed', 'error');
-        if (topBtn) { topBtn.disabled = false; topBtn.innerHTML = '<i class="fa-solid fa-brain"></i> Run AI Assessment'; }
+        showToast('Credibility check request failed', 'error');
+        if (topBtn) { topBtn.disabled = false; topBtn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Credibility Check'; }
     }
 };
 
@@ -2268,6 +2303,66 @@ window.filterByBuilding = async (buildingId) => {
         // Highlight all building reports on map
         reports.forEach(rep => { const marker = clusterGroup.getLayers().find(m => m._crispReport?.id === rep.id); if (marker) marker.openPopup(); });
     } catch (e) { showToast('Building history error', 'error'); }
+};
+
+// ── AI Logic Transparency Modal ──────────────────────────────────────────────
+window.showAILogic = function (reportId) {
+    const r = allReports.find(rr => rr.id === reportId);
+    if (!r || !r.ai_assessment) return;
+    const aa = r.ai_assessment;
+    const sb = aa.score_breakdown || {};
+
+    const barHtml = (label, val, max = 100) => {
+        const pct = Math.min(100, Math.max(0, (val / max) * 100));
+        const color = val >= 70 ? '#22c55e' : val >= 50 ? '#eab308' : val >= 30 ? '#f97316' : '#ef4444';
+        return `<div class="ai-logic-bar-row">
+            <span class="ai-logic-label">${label}</span>
+            <div class="ai-logic-bar"><div class="ai-logic-bar-fill" style="width:${pct}%;background:${color};"></div></div>
+            <span class="ai-logic-val" style="color:${color};">${val}</span>
+        </div>`;
+    };
+
+    const bonusHtml = (label, val) => {
+        if (!val) return '';
+        const color = val > 0 ? '#22c55e' : val < 0 ? '#ef4444' : '#64748b';
+        return `<div class="ai-logic-bonus"><span>${label}</span><span style="color:${color};font-weight:700;">${val > 0 ? '+' : ''}${val}</span></div>`;
+    };
+
+    const modal = document.createElement('div');
+    modal.className = 'ai-logic-overlay';
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    modal.innerHTML = `
+        <div class="ai-logic-card">
+            <div class="ai-logic-header">
+                <h3><i class="fa-solid fa-shield-halved"></i> Credibility Assessment Logic</h3>
+                <button onclick="this.closest('.ai-logic-overlay').remove()" class="ai-logic-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="ai-logic-body">
+                <div class="ai-logic-section">
+                    <h4>Score Breakdown</h4>
+                    ${barHtml('Text & Voice', sb.text_voice_score || 0)}
+                    ${barHtml('Visual Evidence', sb.visual_evidence_score || 0)}
+                    ${barHtml('Satellite Verification', sb.satellite_score || 0)}
+                    ${barHtml('Corroboration', sb.corroboration_score || 0)}
+                    <div class="ai-logic-divider"></div>
+                    ${bonusHtml('Reporter Credibility', sb.credibility_bonus)}
+                    ${bonusHtml('Infrastructure Criticality', sb.criticality_bonus)}
+                    ${bonusHtml('Penalties', sb.penalties)}
+                    <div class="ai-logic-divider"></div>
+                    <div class="ai-logic-total">
+                        <span>Final Score</span>
+                        <span style="font-size:24px;font-weight:800;color:${(sb.final_score || aa.confidence_score || 0) >= 70 ? '#22c55e' : '#f97316'};">
+                            ${sb.final_score || aa.confidence_score || '?'}<small>/100</small>
+                        </span>
+                    </div>
+                </div>
+                ${(aa.key_factors || []).length ? `<div class="ai-logic-section"><h4>Key Factors</h4><ul>${aa.key_factors.map(f => `<li><i class="fa-solid fa-check" style="color:#22c55e;"></i> ${escapeHtml(f)}</li>`).join('')}</ul></div>` : ''}
+                ${(aa.risk_flags || []).length ? `<div class="ai-logic-section"><h4>Risk Flags</h4><ul>${aa.risk_flags.map(f => `<li><i class="fa-solid fa-triangle-exclamation" style="color:#f97316;"></i> ${escapeHtml(f)}</li>`).join('')}</ul></div>` : ''}
+                <div class="ai-logic-section"><h4>Full Reasoning</h4><p class="ai-logic-reasoning">${escapeHtml(aa.reasoning || aa.details || 'No detailed reasoning available.')}</p></div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
 };
 
 // ── Audio Player ─────────────────────────────────────────────────────────────
@@ -3117,7 +3212,49 @@ function _loadCachedReports() {
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
+// ── Auth: Logout + User Menu ─────────────────────────────────────────────────
+window.crispLogout = async () => {
+    try { await fetch(`${BACKEND_HOST}/api/v1/auth/logout`, { method: 'POST' }); } catch (_) {}
+    localStorage.removeItem('crisp_token');
+    localStorage.removeItem('crisp_refresh');
+    localStorage.removeItem('crisp_user');
+    window.location.href = 'login.html';
+};
+
+function _initUserMenu() {
+    const u = _crispUser;
+    if (!u) return;
+    const nameEl = document.getElementById('user-name-display');
+    const roleEl = document.getElementById('user-role-badge');
+    if (nameEl) nameEl.textContent = u.full_name || u.email?.split('@')[0] || '';
+    if (roleEl) roleEl.textContent = u.role || 'VIEWER';
+}
+
+// ── Token auto-refresh (5 min before expiry) ─────────────────────────────────
+async function _autoRefreshToken() {
+    const refresh = localStorage.getItem('crisp_refresh');
+    if (!refresh) return;
+    try {
+        const res = await _origFetch(`${BACKEND_HOST}/api/v1/auth/refresh`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refresh }),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem('crisp_token', data.access_token);
+        }
+    } catch (_) {}
+}
+setInterval(_autoRefreshToken, 25 * 60 * 1000); // Refresh every 25 min
+
 document.addEventListener('DOMContentLoaded', async () => {
+    _initUserMenu();
+    // Close export dropdown on outside click
+    document.addEventListener('click', (e) => {
+        document.querySelectorAll('.export-dropdown.open').forEach(d => {
+            if (!d.contains(e.target)) d.classList.remove('open');
+        });
+    });
     initMap();
     await loadWorldData();
 
