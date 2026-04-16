@@ -61,7 +61,9 @@ export async function processQueue(): Promise<number> {
 }
 
 async function syncReport(report: QueuedReport): Promise<void> {
-  const meta = JSON.parse(report.meta || '{}');
+  let meta: any;
+  try { meta = JSON.parse(report.meta || '{}'); }
+  catch { console.error('[Sync] Corrupted meta, skipping:', report.client_report_id); return; }
 
   // Stage 1: Create report on server
   let serverId = report.server_id;

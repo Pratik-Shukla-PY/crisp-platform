@@ -33,8 +33,12 @@ function BadgeCard({ deviceHash }: { deviceHash: string }) {
   const [badge, setBadge] = React.useState<{badge_level:string;report_count:number} | null>(null);
   React.useEffect(() => {
     if (!deviceHash) return;
+    let cancelled = false;
     fetch(`${getApiBase()}/reports/profile/${deviceHash}`)
-      .then(r => r.ok ? r.json() : null).then(d => { if (d) setBadge(d); }).catch(() => {});
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && d.badge_level && !cancelled) setBadge(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [deviceHash]);
   if (!badge) return null;
   return (
@@ -344,7 +348,12 @@ export default function App() {
             {impactStats.totalLives > 0 && <Text style={{ color: Colors.green, fontSize: 12, fontWeight: '700' }}>💚 {impactStats.totalLives} lives saved</Text>}
           </TouchableOpacity>
 
-          {queueCount > 0 && <View style={s.queueBadge}><Text style={s.queueText}>{isOnline ? '🔄' : '📴'} {queueCount} {t('queued')}</Text></View>}
+          {queueCount > 0 && <TouchableOpacity style={s.queueBadge} onPress={async () => {
+            const { clearAllQueuedReports } = await import('./services/database');
+            const cleared = await clearAllQueuedReports();
+            updateQueueCount();
+            Alert.alert('Queue Cleared', `${cleared} queued report${cleared !== 1 ? 's' : ''} removed.`);
+          }}><Text style={s.queueText}>{isOnline ? '🔄' : '📴'} {queueCount} {t('queued')} — Tap to clear</Text></TouchableOpacity>}
           {!isOnline && <Text style={s.offlineText}>{t('offline')}</Text>}
         </View>
       )}
