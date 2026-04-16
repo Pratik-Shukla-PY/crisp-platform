@@ -74,6 +74,7 @@ const SEV_COLORS = { CRITICAL: '#ef4444', SEVERE: '#f97316', MODERATE: '#eab308'
 
 // ── QRT Queue State ───────────────────────────────────────────────────────────
 let viewMode = 'queue'; // 'queue' = triage cards | 'tree' = strategic hierarchy
+let cardSortMode = 'priority'; // priority | newest | oldest | severity | type | has_media | confidence | crisis | damage | source
 let sectionState = { needs: true, dispatched: false, resolved: false };
 // Priority sort: severity first, then infrastructure criticality, then recency
 const SEV_PRIORITY = { CRITICAL: 4, SEVERE: 3, MODERATE: 2, MINOR: 1, UNKNOWN: 0 };
@@ -694,8 +695,9 @@ function renderTriageQueue(el) {
     const dispatched = reports.filter(r => r.status === 'RESPONDING');
     const resolved   = reports.filter(r => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM');
 
-    // Sort each bucket: severity → infra weight → recency
-    [needs, dispatched, resolved].forEach(bucket => bucket.sort(sortByPriorityDesc));
+    // Sort each bucket based on selected sort mode
+    const sorter = getSortFunction();
+    [needs, dispatched, resolved].forEach(bucket => bucket.sort(sorter));
 
     el.innerHTML = '';
 
@@ -745,6 +747,71 @@ function sortByPriorityDesc(a, b) {
     if (dw !== 0) return dw;
     // 3. Recency (newest first)
     return new Date(b.server_created_at) - new Date(a.server_created_at);
+}
+
+// ── Sort Functions ───────────────────────────────────────────────────────────
+
+window.setCardSortMode = function (mode) {
+    cardSortMode = mode;
+    // Update active state on buttons
+    document.querySelectorAll('.sort-opt').forEach(b => b.classList.toggle('active', b.dataset.sort === mode));
+    document.querySelector('.sort-dropdown')?.classList.remove('open');
+    renderFeed();
+};
+
+function getSortFunction() {
+    const DAMAGE_ORDER = { COMPLETE: 3, PARTIAL: 2, NO_DAMAGE: 1 };
+    const SOURCE_ORDER = { IVR: 6, SMS: 5, TELEGRAM: 4, WHATSAPP: 3, ANDROID: 2, APP: 1 };
+
+    switch (cardSortMode) {
+        case 'newest':
+            return (a, b) => new Date(b.server_created_at) - new Date(a.server_created_at);
+        case 'oldest':
+            return (a, b) => new Date(a.server_created_at) - new Date(b.server_created_at);
+        case 'severity':
+            return (a, b) => {
+                const d = (SEV_PRIORITY[b.severity] || 0) - (SEV_PRIORITY[a.severity] || 0);
+                return d !== 0 ? d : new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'type':
+            return (a, b) => {
+                const ta = a.infrastructure_type || 'OTHER';
+                const tb = b.infrastructure_type || 'OTHER';
+                return ta < tb ? -1 : ta > tb ? 1 : new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'has_media':
+            return (a, b) => {
+                const ma = (a.media || []).filter(m => m.assembly_status === 'complete').length;
+                const mb = (b.media || []).filter(m => m.assembly_status === 'complete').length;
+                return mb - ma || new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'confidence':
+            return (a, b) => {
+                const sa = a.ai_assessment?.confidence_score ?? -1;
+                const sb = b.ai_assessment?.confidence_score ?? -1;
+                return sb - sa || new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'crisis':
+            return (a, b) => {
+                const ca = a.crisis_type || 'ZZZ';
+                const cb = b.crisis_type || 'ZZZ';
+                return ca < cb ? -1 : ca > cb ? 1 : new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'damage':
+            return (a, b) => {
+                const da = DAMAGE_ORDER[a.damage_classification] || 0;
+                const db2 = DAMAGE_ORDER[b.damage_classification] || 0;
+                return db2 - da || new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'source':
+            return (a, b) => {
+                const sa = SOURCE_ORDER[a.source] || 0;
+                const sb = SOURCE_ORDER[b.source] || 0;
+                return sb - sa || new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        default: // 'priority'
+            return sortByPriorityDesc;
+    }
 }
 
 function createAlertBanner(count) {
@@ -891,9 +958,12 @@ window.setViewMode = function(mode) {
     viewMode = mode;
     document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
     document.querySelector(`.view-btn[data-mode="${mode}"]`)?.classList.add('active');
-    // Show/hide tree-specific controls (sort + status tabs)
+    // Show/hide tree-specific controls
     const tc = document.getElementById('tree-controls');
     if (tc) tc.style.display = mode === 'tree' ? '' : 'none';
+    // Show/hide sort dropdown (queue mode only)
+    const sd = document.getElementById('sort-dropdown');
+    if (sd) sd.style.display = mode === 'queue' ? '' : 'none';
     renderFeed();
 };
 
@@ -3249,9 +3319,9 @@ setInterval(_autoRefreshToken, 25 * 60 * 1000); // Refresh every 25 min
 
 document.addEventListener('DOMContentLoaded', async () => {
     _initUserMenu();
-    // Close export dropdown on outside click
+    // Close dropdowns on outside click
     document.addEventListener('click', (e) => {
-        document.querySelectorAll('.export-dropdown.open').forEach(d => {
+        document.querySelectorAll('.export-dropdown.open, .sort-dropdown.open').forEach(d => {
             if (!d.contains(e.target)) d.classList.remove('open');
         });
     });

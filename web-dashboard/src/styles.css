@@ -1837,6 +1837,36 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
    Each card answers: WHAT happened / WHERE / WHEN
    ══════════════════════════════════════════════════════════════ */
 
+/* Feed actions (sort + view toggle) */
+.feed-actions { display: flex; align-items: center; gap: 6px; }
+
+/* Sort dropdown */
+.sort-dropdown { position: relative; }
+.sort-btn {
+    background: none; border: 1px solid var(--border); color: var(--text-dim);
+    padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    transition: all 0.15s; display: flex; align-items: center;
+}
+.sort-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+.sort-dropdown.open .sort-btn { color: var(--accent); border-color: var(--accent); }
+.sort-menu {
+    display: none; position: absolute; top: 100%; right: 0; margin-top: 4px;
+    background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+    padding: 6px; min-width: 180px; z-index: 100;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.sort-dropdown.open .sort-menu { display: block; }
+.sort-menu-label { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #475569; padding: 4px 8px 6px; }
+.sort-opt {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 7px 10px; border: none; border-radius: 6px; background: transparent;
+    color: #94a3b8; font-size: 11px; font-weight: 600; cursor: pointer; transition: 0.15s;
+    text-align: left;
+}
+.sort-opt:hover { background: rgba(124,58,237,0.1); color: #e2e8f0; }
+.sort-opt.active { background: rgba(124,58,237,0.15); color: #a78bfa; }
+.sort-opt i { width: 14px; text-align: center; font-size: 10px; }
+
 /* View-mode toggle (Queue ↔ Tree) */
 .view-toggle {
     display: flex; gap: 2px;

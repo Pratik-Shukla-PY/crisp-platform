@@ -217,9 +217,29 @@
                 <h2><i class="fa-solid fa-satellite-dish" style="color:var(--accent);margin-right:6px;font-size:14px;"></i>Incident Feed</h2>
                 <span class="feed-count" id="feed-count-badge">0</span>
             </div>
-            <div class="view-toggle">
-                <button class="view-btn active" data-mode="queue" onclick="setViewMode('queue')"><i class="fa-solid fa-layer-group"></i></button>
-                <button class="view-btn" data-mode="tree" onclick="setViewMode('tree')"><i class="fa-solid fa-sitemap"></i></button>
+            <div class="feed-actions">
+                <div class="sort-dropdown" id="sort-dropdown">
+                    <button class="sort-btn" onclick="this.parentElement.classList.toggle('open')" title="Sort incidents">
+                        <i class="fa-solid fa-arrow-down-short-wide"></i>
+                    </button>
+                    <div class="sort-menu">
+                        <div class="sort-menu-label">Sort by</div>
+                        <button class="sort-opt active" data-sort="priority" onclick="setCardSortMode('priority')"><i class="fa-solid fa-exclamation-circle"></i> Priority</button>
+                        <button class="sort-opt" data-sort="newest" onclick="setCardSortMode('newest')"><i class="fa-solid fa-clock"></i> Newest First</button>
+                        <button class="sort-opt" data-sort="oldest" onclick="setCardSortMode('oldest')"><i class="fa-solid fa-clock-rotate-left"></i> Oldest First</button>
+                        <button class="sort-opt" data-sort="severity" onclick="setCardSortMode('severity')"><i class="fa-solid fa-triangle-exclamation"></i> Severity</button>
+                        <button class="sort-opt" data-sort="type" onclick="setCardSortMode('type')"><i class="fa-solid fa-building"></i> Infrastructure</button>
+                        <button class="sort-opt" data-sort="has_media" onclick="setCardSortMode('has_media')"><i class="fa-solid fa-camera"></i> With Media</button>
+                        <button class="sort-opt" data-sort="confidence" onclick="setCardSortMode('confidence')"><i class="fa-solid fa-shield-halved"></i> Credibility Score</button>
+                        <button class="sort-opt" data-sort="crisis" onclick="setCardSortMode('crisis')"><i class="fa-solid fa-cloud-bolt"></i> Crisis Type</button>
+                        <button class="sort-opt" data-sort="damage" onclick="setCardSortMode('damage')"><i class="fa-solid fa-building-circle-xmark"></i> Damage Level</button>
+                        <button class="sort-opt" data-sort="source" onclick="setCardSortMode('source')"><i class="fa-solid fa-tower-cell"></i> Source Channel</button>
+                    </div>
+                </div>
+                <div class="view-toggle">
+                    <button class="view-btn active" data-mode="queue" onclick="setViewMode('queue')"><i class="fa-solid fa-layer-group"></i></button>
+                    <button class="view-btn" data-mode="tree" onclick="setViewMode('tree')"><i class="fa-solid fa-sitemap"></i></button>
+                </div>
             </div>
         </div>
 
