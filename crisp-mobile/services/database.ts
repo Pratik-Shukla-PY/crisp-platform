@@ -110,6 +110,14 @@ export async function clearSyncedReports(): Promise<void> {
   await db!.runAsync(`DELETE FROM reports WHERE status = 'synced'`);
 }
 
+export async function clearAllQueuedReports(): Promise<number> {
+  if (!db) await initDatabase();
+  const result = await db!.getFirstAsync<{ count: number }>(`SELECT COUNT(*) as count FROM reports WHERE status != 'synced'`);
+  const count = result?.count || 0;
+  await db!.runAsync(`DELETE FROM reports WHERE status != 'synced'`);
+  return count;
+}
+
 // ── Report History (synced reports with status tracking) ─────────────────────
 
 export interface HistoryReport {

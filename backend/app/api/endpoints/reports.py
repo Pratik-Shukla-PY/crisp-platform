@@ -1757,7 +1757,8 @@ def _auto_assign_building_id(report: Report, db: Session):
                 report.building_id = n.building_id
                 return
             else:
-                bid = gen_uuid()
+                import uuid
+                bid = str(uuid.uuid4())
                 report.building_id = bid
                 n.building_id = bid
                 return

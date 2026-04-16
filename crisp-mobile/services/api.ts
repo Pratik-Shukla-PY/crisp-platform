@@ -4,7 +4,7 @@
  */
 
 // Default: local network. Change for production.
-let API_BASE = 'http://192.168.1.38:8000/api/v1';
+let API_BASE = 'https://vada-penalizable-fidel.ngrok-free.dev/api/v1';
 
 export function setApiBase(host: string) {
   API_BASE = `${host}/api/v1`;
@@ -84,19 +84,28 @@ export function djb2Checksum(str: string): string {
 
 /** Get status updates for a device since a timestamp */
 export async function getDeviceStatusSince(deviceHash: string, since?: string): Promise<any[]> {
-  const url = since
-    ? `${API_BASE}/reports/device/${deviceHash}/status-since?since=${since}`
-    : `${API_BASE}/reports/device/${deviceHash}/status-since`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-  if (!res.ok) return [];
-  return res.json();
+  try {
+    const url = since
+      ? `${API_BASE}/reports/device/${deviceHash}/status-since?since=${since}`
+      : `${API_BASE}/reports/device/${deviceHash}/status-since`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
 }
 
 /** Delete a report (soft-delete with 30min grace for mobile) */
 export async function deleteReportFromServer(reportId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/reports/${reportId}?grace_minutes=30&deletion_source=MOBILE`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/reports/${reportId}?grace_minutes=30&deletion_source=MOBILE`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
+    return res.json();
+  } catch (e) {
+    console.warn('[API] Delete failed:', e);
+    return null;
+  }
 }

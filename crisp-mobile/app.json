@@ -6,29 +6,59 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "CRISP needs camera access to photograph damage for crisis reports.",
+        "NSMicrophoneUsageDescription": "CRISP needs microphone access to record voice descriptions of incidents.",
+        "NSLocationWhenInUseUsageDescription": "CRISP needs your location so rescue teams can find the incident."
+      }
     },
     "android": {
+      "package": "org.undp.crisp",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-localization",
-      "expo-sqlite"
-    ]
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "CRISP needs camera to photograph damage."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "CRISP needs your location for rescue teams."
+        }
+      ],
+      "expo-audio"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e11aeea4-0106-487a-84fc-70fc90917352"
+      }
+    },
+    "owner": "pkshukla1989"
   }
 }
