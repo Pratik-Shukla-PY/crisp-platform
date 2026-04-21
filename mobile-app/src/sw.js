@@ -14,7 +14,15 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v41';  // bump on static-asset changes
+const CACHE_NAME = 'crisp-v42';  // bump on static-asset changes
+// v42 (Apr 2026) Capture-flow responsiveness fix — the Next button + shutter
+// felt "sticky" for 300–800 ms after each photo because the BlazeFace +
+// variant pipeline ran synchronously on the main thread, starving touch
+// events. Now the 5 `_trackBlur(...)` call-sites defer via a new
+// `_runWhenIdle(...)` helper (requestIdleCallback + setTimeout fallback)
+// so the browser paints the enabled button + handles taps BEFORE the TF
+// work starts. Pipeline unchanged; only WHEN it starts moved from
+// "immediately" to "after the next idle tick".
 // v41 (Apr 2026) Locale-bootstrap hotfix — fixes two pre-existing bugs
 // that made manual Arabic/Urdu/Hebrew/French/Spanish/Russian/Chinese
 // selections silently revert to English on every reload:

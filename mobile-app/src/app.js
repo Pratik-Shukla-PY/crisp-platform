@@ -2680,7 +2680,10 @@ function setupPhotoStage() {
                         const entry = { dataUrl, blob: rawBlob, groupId: genUUID(), variants: null };
                         state.extraPhotos.push(entry);
                         _updateExtraPhotoStrip();
-                        _trackBlur((async () => {
+                        // Defer blur+variants via _runWhenIdle so the UI can
+                        // paint + handle taps before the TF.js face detector
+                        // saturates the main thread. See _runWhenIdle doc.
+                        _trackBlur(_runWhenIdle(async () => {
                             const variants = window.ImageVariants
                                 ? await window.ImageVariants.generate(rawBlob).catch(e => {
                                     _silent('imageVariants.extra', e);
@@ -2707,7 +2710,7 @@ function setupPhotoStage() {
                                     } catch (_) {}
                                 }
                             }
-                        })());
+                        }));
                     }, 'image/jpeg', nc.imageQuality);
                 };
                 img.src = ev.target.result;
@@ -2769,7 +2772,10 @@ function setupPhotoStage() {
                         const entry = { dataUrl, blob: rawBlob, groupId: genUUID(), variants: null };
                         state.extraPhotos.push(entry);
                         _updateExtraPhotoStrip();
-                        _trackBlur((async () => {
+                        // Defer blur+variants via _runWhenIdle so the UI can
+                        // paint + handle taps before TF.js saturates the main
+                        // thread. See _runWhenIdle doc.
+                        _trackBlur(_runWhenIdle(async () => {
                             const variants = window.ImageVariants
                                 ? await window.ImageVariants.generate(rawBlob).catch(e => { _silent('imageVariants.extraFile', e); return null; })
                                 : null;
@@ -2786,13 +2792,13 @@ function setupPhotoStage() {
                                     try { entry.dataUrl = await _blobToDataUrl(br.blob); _updateExtraPhotoStrip(); } catch (_) {}
                                 }
                             }
-                        })());
+                        }));
                         return;
                     }
                     // Primary-photo path.
                     state.photoBlob = rawBlob;
                     state.photoGroupId = genUUID();
-                    _trackBlur((async () => {
+                    _trackBlur(_runWhenIdle(async () => {
                         const variants = window.ImageVariants
                             ? await window.ImageVariants.generate(rawBlob).catch(e => { _silent('imageVariants.file', e); return null; })
                             : null;
@@ -2984,7 +2990,10 @@ function setupCameraModal() {
                     const total = (state.photoDataUrl ? 1 : 0) + state.extraPhotos.length;
                     count2.textContent = String(total);
                 }
-                _trackBlur((async () => {
+                // Defer via _runWhenIdle: camera-modal snaps fire rapid-fire
+                // from the shutter, and BlazeFace-per-snap kills the shutter
+                // button's responsiveness. Idle-scheduling keeps the UI hot.
+                _trackBlur(_runWhenIdle(async () => {
                     const variants = window.ImageVariants
                         ? await window.ImageVariants.generate(rawBlob).catch(e => { _silent('imageVariants.camExtra', e); return null; })
                         : null;
@@ -3001,12 +3010,14 @@ function setupCameraModal() {
                             try { entry.dataUrl = await _blobToDataUrl(br.blob); } catch (_) {}
                         }
                     }
-                })());
+                }));
                 return;
             }
             // Primary slot.
             state.photoBlob = rawBlob;
-            _trackBlur((async () => {
+            // Defer via _runWhenIdle so the user can tap Next / shutter / any
+            // UI element without waiting for BlazeFace to finish.
+            _trackBlur(_runWhenIdle(async () => {
                 const variants = window.ImageVariants
                     ? await window.ImageVariants.generate(rawBlob).catch(e => { _silent('imageVariants.live', e); return null; })
                     : null;
@@ -3083,6 +3094,39 @@ function _trackBlur(promise) {
     if (!Array.isArray(state.photoBlurPending)) state.photoBlurPending = [];
     state.photoBlurPending.push(promise);
     return promise;
+}
+
+// Apr 2026: field-reported UX bug — the Next button on stage-photo and the
+// "Done" button inside the camera modal felt "sticky" for 300–800 ms after
+// a capture. Root cause: the code enabled Next synchronously in showPreview()
+// but IMMEDIATELY afterwards kicked off the blur+variants pipeline
+// (`ImageVariants.generate` → BlazeFace inference → canvas resize × 2) on
+// the SAME main thread. The button was technically clickable, but the tap
+// event queued behind ~400 ms of TF.js work.
+//
+// Fix: schedule the heavy async work via requestIdleCallback so the browser
+// flushes paint + input handlers first. User-initiated taps pre-empt idle
+// callbacks, so "capture → tap Next" feels instant even when the pipeline
+// is still churning. On Safari (no rIC) we fall back to a short setTimeout
+// which at least lets the current paint complete. The pipeline itself is
+// unchanged — same variants, same blur, same `awaitPendingBlur()` gate at
+// submit time. Only WHEN it starts moves from "immediately" to "after the
+// next idle tick".
+function _runWhenIdle(asyncFn) {
+    return new Promise((resolve, reject) => {
+        const run = () => {
+            try { Promise.resolve(asyncFn()).then(resolve, reject); }
+            catch (e) { reject(e); }
+        };
+        if (typeof requestIdleCallback === 'function') {
+            // `timeout` guarantees the work doesn't starve forever if the
+            // user keeps the thread busy (e.g. scrolling). 200 ms matches
+            // the human-perceivable latency budget for UI feedback.
+            requestIdleCallback(run, { timeout: 200 });
+        } else {
+            setTimeout(run, 50);
+        }
+    });
 }
 async function awaitPendingBlur() {
     const pending = state.photoBlurPending;

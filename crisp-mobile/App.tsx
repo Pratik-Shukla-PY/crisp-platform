@@ -10,6 +10,7 @@ import {
   ScrollView, TextInput, Alert, Image, StatusBar, Platform,
   Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView,
   Animated, Easing, AccessibilityInfo, Modal,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from './constants/colors';
@@ -40,6 +41,30 @@ import { getEnabledRegions, findActiveRegion, Region } from './services/regionCa
 // with photo / timeline / metadata / feedback + per-report delete. Parity
 // with PWA's stage-report-detail.
 type Screen = 'home' | 'photo' | 'audio' | 'review_details' | 'review_confirm' | 'success' | 'history' | 'report_detail';
+
+/**
+ * Schedule heavy async work to run AFTER any user interaction (touch, scroll,
+ * animation) has finished. InteractionManager.runAfterInteractions is React
+ * Native's answer to the browser's requestIdleCallback — it ensures the JS
+ * thread processes gestures first before yielding to background tasks.
+ *
+ * Capture-flow bug (Apr 2026): the PII blur + variant-generation pipeline
+ * runs for 300–800 ms and — because JS is single-threaded — starves touch
+ * events until it completes. Users reported the Next / shutter / Browse
+ * buttons "doing nothing" immediately after a capture. Wrapping the
+ * pipeline in runAfterInteractions fixes the perception of unresponsiveness
+ * without changing any of the downstream upload logic.
+ *
+ * Returns a Promise so callers can `await` completion for things like
+ * submitReport()'s `blurPromiseRef` gate.
+ */
+function _runAfterInteractions<T>(asyncFn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    InteractionManager.runAfterInteractions(() => {
+      asyncFn().then(resolve, reject);
+    });
+  });
+}
 
 const BADGE_ICONS: Record<string,string> = { NEWCOMER: '🌱', HELPER: '🤝', GUARDIAN: '🛡', HERO: '🦸' };
 function BadgeCard({ deviceHash }: { deviceHash: string }) {
@@ -388,7 +413,11 @@ export default function App() {
     const groupId = crypto.randomUUID();
     const entry = { uri: rawUri, base64: rawB64, groupId, variants: null as PhotoVariants | null };
     setExtraPhotos((xs) => [...xs, entry]);
-    const p = (async () => {
+    // Defer the blur+variants pipeline via InteractionManager so the UI
+    // can finish handling the user's shutter/Done tap before TF.js / PII
+    // blur saturates the JS thread. Without this, the Next / shutter
+    // buttons feel "sticky" for 300–800ms after each capture.
+    const p = _runAfterInteractions(async () => {
       try {
         const variants = await generateVariants(rawUri, rawB64);
         setExtraPhotos((xs) => xs.map((x) => x === entry
@@ -409,7 +438,7 @@ export default function App() {
       } finally {
         blurPromiseRef.current = null;
       }
-    })();
+    });
     blurPromiseRef.current = p;
   };
 
@@ -587,7 +616,13 @@ export default function App() {
     const groupId = crypto.randomUUID();
     setPhotoGroupId(groupId);
     setIsBlurring(true);
-    const p = (async () => {
+    // Defer the heavy blur+variants pipeline via InteractionManager so the
+    // Next / shutter / Browse buttons stay responsive in the ~400ms window
+    // right after capture (PWA mirrors this with requestIdleCallback; see
+    // _runWhenIdle in mobile-app/src/app.js). submitReport() still awaits
+    // blurPromiseRef before reading variants, so a user who races through
+    // to Send ends up with everything correctly queued.
+    const p = _runAfterInteractions(async () => {
       try {
         const variants = await generateVariants(rawUri, rawB64);
         setPhotoVariants(variants);
@@ -616,7 +651,7 @@ export default function App() {
         setIsBlurring(false);
         blurPromiseRef.current = null;
       }
-    })();
+    });
     blurPromiseRef.current = p;
   };
 
