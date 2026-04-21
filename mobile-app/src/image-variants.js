@@ -172,14 +172,41 @@
             }
         }
 
+        // Step 4 — blurhash placeholder (Phase 1 progressive-upload stack).
+        // Encode a ~28-char DCT from a 32x32 working canvas. The dashboard
+        // renders this as the first visual feedback BEFORE any media chunk
+        // uploads — closes the time-to-first-visual gap from ~2 s (first
+        // SMALL chunk) to ~200 ms (meta POST RTT). Costs ~10–20 ms of
+        // main-thread time; already inside the _runWhenIdle deferral, so
+        // the perceived-latency impact is zero.
+        //
+        // Best-effort — a failure here never breaks the upload path. The
+        // variant pipeline outputs are already valid; `blurhash` is an
+        // ADDITIONAL payload, not a replacement for anything.
+        let blurhash = null;
+        try {
+            if (typeof self !== 'undefined' && self.BlurHash && typeof self.BlurHash.encodeFromCanvas === 'function') {
+                const bhCanvas = document.createElement('canvas');
+                bhCanvas.width = 32;
+                bhCanvas.height = 32;
+                const bhCtx = bhCanvas.getContext('2d');
+                bhCtx.drawImage(bitmap, 0, 0, 32, 32);
+                blurhash = self.BlurHash.encodeFromCanvas(bhCanvas, 4, 3);
+            }
+        } catch (e) {
+            console.warn('[ImageVariants] blurhash encode failed (non-fatal):', e && e.message);
+        }
+
         if (typeof bitmap.close === 'function') try { bitmap.close(); } catch (_) {}
 
         console.log(
             `[ImageVariants] sizes — small=${(out.small.bytes / 1024).toFixed(1)} KB` +
             `, medium=${(out.medium.bytes / 1024).toFixed(1)} KB` +
             `, large=${(out.large.bytes / 1024).toFixed(1)} KB` +
-            `; clientBlurApplied=${clientBlurApplied} (faces=${blurResult.facesDetected}${blurResult.skipped ? ', SKIPPED: ' + blurResult.error : ''})`
+            `; clientBlurApplied=${clientBlurApplied} (faces=${blurResult.facesDetected}${blurResult.skipped ? ', SKIPPED: ' + blurResult.error : ''})` +
+            (blurhash ? `; blurhash=${blurhash.slice(0, 8)}…(${blurhash.length} chars)` : '; blurhash=skipped')
         );
+        out.blurhash = blurhash;
         return out;
     }
 

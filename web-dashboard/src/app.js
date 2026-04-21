@@ -112,6 +112,55 @@ const getMediaUrl = (url) => {
     return `${BACKEND_HOST}/${url.replace(/^\//, '')}`;
 };
 
+// ── Phase 1.5 (Apr 2026): BlurHash placeholder rendering ────────────────────
+// The backend serves a ~28-char BlurHash string on each Report (field:
+// `blurhash`), encoded by the reporter app at capture time and delivered in
+// the meta POST (arrives in ~200 ms). Decoding it locally gives us a very
+// cheap 40x40 colour-impression bitmap we can slot into the <img src> BEFORE
+// any media chunk has uploaded — closing the time-to-first-visual gap from
+// "first SMALL variant lands" (~2 s best case) to "meta POST round-trip"
+// (~200 ms). The real photo hot-swaps in via `_maybeUpgradeDetailImage` the
+// moment a complete variant arrives, so the blurhash is a transient visual
+// only.
+//
+// Caching: decoding a 40x40 image via the 4x3 DCT costs ~1–2 ms — cheap, but
+// `selectReport()` and `showIncidentPreview()` can fire many times per poll
+// cycle, and the hash is stable for the lifetime of a report. A plain Map
+// keyed by hash is fine: the dashboard holds ~36 reports in the feed so
+// memory is negligible and no LRU eviction is needed.
+const _blurhashCache = new Map();   // hash → dataURL string (or the sentinel `null`)
+
+function blurhashToDataURL(hash, width = 40, height = 40) {
+    // Null/invalid hash → no placeholder. Callers fall through to the
+    // existing "awaiting media" icon.
+    if (!hash || typeof hash !== 'string' || hash.length < 6) return null;
+    if (!window.BlurHash || typeof window.BlurHash.decode !== 'function') return null;
+    // Memoise by hash (width/height are fixed defaults for all call sites).
+    if (_blurhashCache.has(hash)) return _blurhashCache.get(hash);
+    try {
+        const pixels = window.BlurHash.decode(hash, width, height);
+        // Offscreen canvas: no DOM insertion needed, just an ephemeral 2D
+        // context to hand the Uint8ClampedArray to. JPEG at q=0.6 because the
+        // blurhash bitmap is already lossy/blurred — PNG would be ~4× larger
+        // for zero perceptible gain.
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        const imgData = ctx.createImageData(width, height);
+        imgData.data.set(pixels);
+        ctx.putImageData(imgData, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        _blurhashCache.set(hash, dataUrl);
+        return dataUrl;
+    } catch (e) {
+        // Malformed hash — cache `null` so we don't re-attempt each render.
+        console.warn('[CRISP] blurhash decode failed:', e && e.message);
+        _blurhashCache.set(hash, null);
+        return null;
+    }
+}
+
 // ── Guaranteed-delivery: group + pick best variant ─────────────────────────
 // A photo_group_id links the three variants (SMALL/MEDIUM/LARGE) of one
 // captured photo. `groupPhotos()` folds a flat media[] into an array of
@@ -198,6 +247,34 @@ function bestVariant(group) {
     if (partials.length > 0) {
         const m = partials[0];
         return { src: getMediaUrl(m.thumbnail_url), tier: m.resolution_tier + '-partial', isFinal: false, mediaId: m.id };
+    }
+    // ── Phase 2.2 (Apr 2026): partial-file rendering ───────────────────────
+    // If no variant has emitted a thumbnail yet but the backend has written
+    // `<media_id>_partial.jpg` (updated every few chunks during upload), we
+    // can show THAT file as an intermediate visual — even ~30% of a JPEG is
+    // recognisable. `completion_pct` is the 0..100 progress indicator; any
+    // value strictly between 0 and 100 means a partial file is on disk.
+    //
+    // Cache-buster: append `?p=<floor(completion_pct)>` so a move from e.g.
+    // 33% → 66% forces a refetch (new URL), but a micro-tick 33.1% → 33.9%
+    // reuses the cached response. Keeps the CDN/etag layer happy while still
+    // advancing the visual as chunks land.
+    const partialCandidate = group.members
+        .filter(m => {
+            const pct = m.completion_pct || 0;
+            return pct > 0 && pct < 100 && m.id;
+        })
+        .sort((a, b) => (TIER_RANK[b.resolution_tier] || 0) - (TIER_RANK[a.resolution_tier] || 0))[0];
+    if (partialCandidate) {
+        const pct = partialCandidate.completion_pct || 0;
+        const partialUrl = getMediaUrl('static/' + partialCandidate.id + '_partial.jpg')
+                         + '?p=' + Math.floor(pct);
+        return {
+            src: partialUrl,
+            tier: (partialCandidate.resolution_tier || 'UNKNOWN') + '-partial',
+            isFinal: false,
+            mediaId: partialCandidate.id,
+        };
     }
     return null;
 }
@@ -1495,7 +1572,24 @@ function showIncidentPreview(r, event) {
     const thumbUrl = img?.thumbnail_url ? getMediaUrl(img.thumbnail_url) : '';
     const fullUrl  = img?.url && img.assembly_status === 'complete' ? getMediaUrl(img.url) : '';
     const audioUrl = audio?.url ? getMediaUrl(audio.url) : (audio?.thumbnail_url ? getMediaUrl(audio.thumbnail_url) : '');
-    const photoSrc = fullUrl || thumbUrl;
+    // Phase 2.2: if the best variant isn't ready yet but the backend has
+    // written a partial JPEG (0 < completion_pct < 100), surface it here so
+    // the hover-preview shows something recognisable within seconds of the
+    // first chunk landing. Cache-busted by the same `?p=<pct>` stepping
+    // that `bestVariant` uses.
+    let partialPreviewUrl = '';
+    if (img && img.type === 'IMAGE' && img.id &&
+        img.assembly_status !== 'complete' &&
+        (img.completion_pct || 0) > 0 && (img.completion_pct || 0) < 100) {
+        partialPreviewUrl = getMediaUrl('static/' + img.id + '_partial.jpg')
+                          + '?p=' + Math.floor(img.completion_pct);
+    }
+    // Phase 1.5: last-resort — blurhash placeholder. Used when no variant,
+    // no partial thumbnail, and no partial file exists yet (e.g. meta POST
+    // landed but the first chunk is still in flight). Never overrides a
+    // real photo source.
+    const blurPreviewUrl = blurhashToDataURL(r.blurhash);
+    const photoSrc = fullUrl || thumbUrl || partialPreviewUrl || blurPreviewUrl || '';
     const satSrc = v?.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
 
     // Verification score dots
@@ -1521,7 +1615,13 @@ function showIncidentPreview(r, event) {
             </div>
         </div>
         ${photoSrc ? `<div class="fp-img-section">
-            <img id="fp-preview-img" src="${photoSrc}" class="fp-photo" onerror="this.style.display='none'">
+            <img id="fp-preview-img" src="${photoSrc}" class="fp-photo" onerror="this.style.display='none'"${
+                // Phase 1.5: when the only thing we have is the blurhash,
+                // apply a soft blur + saturation bump so the image reads as
+                // a placeholder (not a low-res real photo). The filter is
+                // dropped automatically once a real variant replaces the src.
+                photoSrc === blurPreviewUrl && photoSrc ? ' style="filter:blur(6px) saturate(1.1);"' : ''
+            }>
             ${satSrc ? `<div class="fp-img-toggle">
                 <button class="fp-itg active" onclick="event.stopPropagation();document.getElementById('fp-preview-img').src='${photoSrc}';this.classList.add('active');this.nextElementSibling.classList.remove('active')"><i class="fa-solid fa-camera"></i></button>
                 <button class="fp-itg" onclick="event.stopPropagation();document.getElementById('fp-preview-img').src='${satSrc}';this.classList.add('active');this.previousElementSibling.classList.remove('active')"><i class="fa-solid fa-satellite"></i></button>
@@ -1658,6 +1758,11 @@ window.selectReport = (id, skipFly = false) => {
     // Each button is disabled when that tier hasn't finished assembly yet;
     // hovering shows the completion-pct of the pending tier.
     const tierSwitcher = primaryGroup ? _buildTierSwitcher(r.id, primaryGroup, variantPick?.tier) : '';
+    // Phase 1.5: if nothing else is renderable yet, try the report's
+    // blurhash for instant first-visual. Decoding is cached; returns null
+    // when the hash is missing (legacy report) or malformed — in which case
+    // we fall back to the original "awaiting media" icon placeholder.
+    const blurDataUrl = !imgSrc ? blurhashToDataURL(r.blurhash) : null;
     const imgHtml = primaryGroup ? (
         imgComplete
             ? `<div class="dp-img" data-group-id="${primaryGroup.group_id || ''}"
@@ -1675,10 +1780,32 @@ window.selectReport = (id, skipFly = false) => {
                        </div>
                        ${tierSwitcher}
                    </div>`
-                : imgPct > 0
-                    ? `<div class="dp-img dp-img-placeholder"><div class="chunk-progress-track" style="width:80%"><div class="chunk-progress-fill" style="width:${imgPct}%"></div></div><span style="font-size:12px;color:#6b7280;">${imgPct.toFixed(0)}%</span></div>`
-                    : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-camera" style="font-size:18px;color:#334155;"></i></div>`
-    ) : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-camera-slash" style="font-size:16px;color:#334155;"></i></div>`;
+                : blurDataUrl
+                    // Phase 1.5: blurhash placeholder — the <div> carries
+                    // `data-group-id` so `_maybeUpgradeDetailImage` finds
+                    // and hot-swaps this element once a real variant lands.
+                    ? `<div class="dp-img dp-img-uploading" data-group-id="${primaryGroup.group_id || ''}">
+                           <img src="${blurDataUrl}" class="img-thumb-bg" style="filter:blur(8px) saturate(1.1);">
+                           <div class="img-progress-overlay">
+                               <div class="chunk-progress-track"><div class="chunk-progress-fill" style="width:${imgPct}%"></div></div>
+                               <span class="partial-img-label"><i class="fa-solid fa-cloud-arrow-up fa-pulse"></i> ${imgPct.toFixed(0)}%</span>
+                           </div>
+                           ${tierSwitcher}
+                       </div>`
+                    : imgPct > 0
+                        ? `<div class="dp-img dp-img-placeholder"><div class="chunk-progress-track" style="width:80%"><div class="chunk-progress-fill" style="width:${imgPct}%"></div></div><span style="font-size:12px;color:#6b7280;">${imgPct.toFixed(0)}%</span></div>`
+                        : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-camera" style="font-size:18px;color:#334155;"></i></div>`
+    ) : (
+        // No media rows at all (meta POST landed but upload hasn't started):
+        // if the report carries a blurhash, use it as the placeholder instead
+        // of the "camera-slash" icon — gives the analyst an immediate sense
+        // of the scene while the uploader negotiates the first chunk.
+        blurDataUrl
+            ? `<div class="dp-img dp-img-placeholder" style="padding:0;overflow:hidden;">
+                   <img src="${blurDataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;filter:blur(8px) saturate(1.1);">
+               </div>`
+            : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-camera-slash" style="font-size:16px;color:#334155;"></i></div>`
+    );
 
     // ── Satellite image HTML (with alt source toggle) ──
     const satSrc    = v?.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';

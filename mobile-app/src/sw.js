@@ -14,7 +14,13 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v42';  // bump on static-asset changes
+const CACHE_NAME = 'crisp-v43';  // bump on static-asset changes
+// v43 (Apr 2026) Phase-1 progressive-upload stack. New vendored blurhash.js
+// (compact DCT encoder/decoder) is pre-cached + loaded before image-
+// variants.js. image-variants.js bumped to v3 — now returns a blurhash
+// string alongside the SMALL/MEDIUM/LARGE variants. app.js bumped to
+// v=840 — threads blurhash into the meta POST payload, mid-upload
+// re-probe with hysteresis, per-device bandwidth cache in localStorage.
 // v42 (Apr 2026) Capture-flow responsiveness fix — the Next button + shutter
 // felt "sticky" for 300–800 ms after each photo because the BlazeFace +
 // variant pipeline ran synchronously on the main thread, starving touch
@@ -335,6 +341,7 @@ const STATIC_ASSETS = [
     SW_BASE + 'places.js',
     SW_BASE + 'pii-blur.js',
     SW_BASE + 'image-variants.js',   // Phase 4 — now pre-cached
+    SW_BASE + 'blurhash.js',         // Phase-1 progressive: compact DCT
     SW_BASE + 'building-select.js',  // UNDP §3.2 — building-footprint selector
     SW_BASE + 'styles.css',
     SW_BASE + 'manifest.json',

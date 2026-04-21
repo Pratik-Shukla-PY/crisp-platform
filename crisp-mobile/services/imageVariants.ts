@@ -22,6 +22,16 @@
  */
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { blurFacesBase64 } from './piiBlur';
+import { encode as blurhashEncode } from './blurhash';
+
+// jpeg-js is CommonJS, same approach as piiBlur.ts — use require so
+// Metro resolves it correctly.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const jpeg = require('jpeg-js') as {
+  decode: (data: Uint8Array, opts: { useTArray: boolean }) => {
+    width: number; height: number; data: Uint8Array;
+  };
+};
 
 export type VariantTier = 'small' | 'medium' | 'large';
 
@@ -34,6 +44,13 @@ export interface PhotoVariants {
   small: Variant;
   medium: Variant;
   large: Variant;
+  /**
+   * Phase-1 progressive-upload placeholder. Compact DCT encoding (~28–32 chars)
+   * threaded through submitReport() into the meta POST payload. Dashboard
+   * decodes it for an instant time-to-first-visual placeholder, BEFORE any
+   * media chunk lands. `null` on any encode failure — never breaks upload.
+   */
+  blurhash: string | null;
 }
 
 // Tier → backend ResolutionEnum. Kept in one place so callers never hard-code.
@@ -135,11 +152,47 @@ export async function generateVariants(rawUri: string, rawBase64: string): Promi
     }
   }
 
-  const final = out as PhotoVariants;
+  // Step 4 — blurhash placeholder (Phase-1 progressive-upload).
+  //
+  // Decode a 32x32 downscale via expo-image-manipulator → jpeg-js → encode
+  // via the vendored TS blurhash. Best-effort: any failure falls through
+  // with `blurhash=null` and never breaks upload.
+  //
+  // We don't reuse the 320-px SMALL variant because blurhash encode at that
+  // size costs ~100 ms on low-end devices (O(w*h*numX*numY)). Downscaling
+  // to 32x32 first takes ~10 ms via native image-manipulator and makes the
+  // blurhash encode ~5 ms total — inside the already-deferred
+  // _runAfterInteractions wrapper so the UI stays responsive.
+  let blurhash: string | null = null;
+  try {
+    const bhSrc = await manipulateAsync(
+      sourceUri,
+      [{ resize: { width: 32 } }],
+      { base64: true, compress: 0.4, format: SaveFormat.JPEG },
+    );
+    if (bhSrc.base64) {
+      // Base64 → Uint8Array. We avoid Buffer here to stay portable across
+      // RN runtimes (Hermes has a partial Buffer polyfill but it's safer
+      // to go through atob).
+      const binStr =
+        typeof atob === 'function'
+          ? atob(bhSrc.base64)
+          : Buffer.from(bhSrc.base64, 'base64').toString('binary');
+      const bytes = new Uint8Array(binStr.length);
+      for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+      const decoded = jpeg.decode(bytes, { useTArray: true });
+      blurhash = blurhashEncode(decoded.data, decoded.width, decoded.height, 4, 3);
+    }
+  } catch (e) {
+    console.warn('[imageVariants] blurhash encode skipped:', (e as Error)?.message || e);
+  }
+
+  const final = { ...(out as Omit<PhotoVariants, 'blurhash'>), blurhash } as PhotoVariants;
   console.log(
     `[imageVariants] small=${Math.round(final.small.bytes / 1024)} KB, ` +
     `medium=${Math.round(final.medium.bytes / 1024)} KB, ` +
-    `large=${Math.round(final.large.bytes / 1024)} KB`
+    `large=${Math.round(final.large.bytes / 1024)} KB` +
+    (blurhash ? `; blurhash=${blurhash.slice(0, 8)}…(${blurhash.length} chars)` : '; blurhash=skipped')
   );
   return final;
 }

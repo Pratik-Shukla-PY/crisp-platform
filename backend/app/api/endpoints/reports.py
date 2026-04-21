@@ -391,6 +391,30 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
         logger.warning(f"Partial assembly decode failed for {media_id}: {e}")
         return None
 
+    # Phase-2.3 safeguards (Apr 2026) — don't write an unreadable partial.
+    #   (a) Validate JPEG Start-Of-Image marker. A truncated JPEG at least
+    #       has to start with 0xFFD8 to even attempt to render; without
+    #       this the dashboard shows a "broken image" icon which is worse
+    #       UX than no placeholder at all.
+    #   (b) Minimum byte threshold. At VERY_SLOW tier (1 KB chunks), a
+    #       3-chunk prefix is only 3 KB — too small to contain the quant
+    #       + Huffman tables for most JPEG encoders, so the file would be
+    #       unreadable. 2 KB is the empirical floor below which partial
+    #       rendering is useless; above it most decoders will render a
+    #       banded preview even with only a few scanlines.
+    if len(file_bytes) < 2048:
+        logger.debug(
+            f"Partial assembly skipped for {media_id}: only {len(file_bytes)} bytes "
+            f"(need ≥2048 for a renderable JPEG prefix)"
+        )
+        return None
+    if not (len(file_bytes) >= 2 and file_bytes[0] == 0xFF and file_bytes[1] == 0xD8):
+        logger.warning(
+            f"Partial assembly skipped for {media_id}: missing JPEG SOI marker "
+            f"(first 2 bytes: {file_bytes[:2].hex() if len(file_bytes) >= 2 else 'empty'})"
+        )
+        return None
+
     filename = f"{media_id}_partial.jpg"
     filepath = os.path.join(UPLOAD_DIR, filename)
     with open(filepath, 'wb') as f:
@@ -2138,6 +2162,20 @@ def attach_media_chunk(
             checksum=payload.checksum
         ))
         # P-6 fix: atomic SQL-level increment avoids race condition on concurrent retries
+        #
+        # Phase-2.4 invariant (Apr 2026) — `chunk_count` is updated on every
+        # chunk insert to `payload.total_chunks`. The assumption this relies
+        # on: **chunks within a single media_id are UNIFORM size**, so
+        # `total_chunks` never changes mid-upload. Clients enforce this via
+        # a `LOCKED_TOTAL_CHUNKS` (RN) / `const total = ...` (PWA) computed
+        # once at upload-start. Mid-upload tier switches in the adaptive
+        # layer (Phase 1.6 re-probe, Phase 2.1 packet-loss shrink) only
+        # affect the chunk SIZE of the NEXT media — they do NOT re-chunk
+        # in-flight data. If a future adaptive change ever re-chunks a live
+        # upload, it MUST allocate a new media_id for the post-switch bytes;
+        # overwriting `chunk_count` on a live media with a different-sized
+        # chunk schedule would corrupt the completion-percentage calculation
+        # AND the concat invariant in `_assemble_media_file`.
         db.query(Media).filter(Media.id == payload.media_id).update(
             {"received_chunks": Media.received_chunks + 1,
              "chunk_count": payload.total_chunks},

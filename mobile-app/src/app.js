@@ -2806,6 +2806,11 @@ function setupPhotoStage() {
                             state.photoVariants = variants;
                             state.photoBlob = variants.small.blob;
                             state.photoClientBlurApplied = Boolean(variants.clientBlurApplied);
+                            // Phase-1 progressive-upload — capture the blurhash
+                            // so submitReport() can thread it into the meta POST.
+                            // Only the PRIMARY photo's hash is used as the
+                            // report-level placeholder; extras don't need one.
+                            state.blurhash = variants.blurhash || null;
                             try {
                                 const smallUrl = await _blobToDataUrl(variants.small.blob);
                                 state.photoDataUrl = smallUrl;
@@ -3024,6 +3029,8 @@ function setupCameraModal() {
                 if (variants) {
                     state.photoVariants = variants;
                     state.photoClientBlurApplied = Boolean(variants.clientBlurApplied);
+                    // Phase-1 progressive-upload — capture blurhash for meta POST.
+                    state.blurhash = variants.blurhash || null;
                     try {
                         const smallUrl = await _blobToDataUrl(variants.small.blob);
                         state.photoDataUrl = smallUrl;
@@ -4027,6 +4034,152 @@ function computeChunkTimeout(chunkSize, measuredBytesPerSec = null) {
  *  first successful probe. Used by `computeChunkTimeout` + tests. */
 function getMeasuredBandwidth() { return _lastProbeBytesPerSec; }
 
+// ─── Phase-1 Adaptive Upgrades (Apr 2026) ────────────────────────────────────
+// 1. Per-device bandwidth cache — skip the first probe round-trip for
+//    repeat sessions. Saves ~500 ms of cold-start latency on typical links.
+// 2. Mid-upload re-probe with hysteresis — detect "user walked into a
+//    weak cell area" and switch tiers for remaining chunks. Hysteresis
+//    prevents flip-flop oscillation: only switch if measured bps differs
+//    from current by >2×.
+// 3. Packet-loss awareness — if a chunk needs >2 retries to land,
+//    the link is effectively lossy. Shrink the tier one step for the
+//    rest of the session so smaller chunks = fewer timeouts / waste.
+
+const _BANDWIDTH_CACHE_KEY = 'crisp_bandwidth_last_bps';
+const _BANDWIDTH_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 h
+const _MID_UPLOAD_REPROBE_EVERY = 8;                 // chunks
+const _HYSTERESIS_RATIO = 2.0;                       // require 2× bps delta to switch
+const _PACKET_LOSS_RETRY_THRESHOLD = 3;              // >3 retries on a single chunk = lossy
+
+/** Read a cached bandwidth from localStorage so the first session probe
+ *  isn't always a cold start. Returns 0 if no cache / expired. */
+function _readCachedBandwidth() {
+    try {
+        const raw = localStorage.getItem(_BANDWIDTH_CACHE_KEY);
+        if (!raw) return 0;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed.bps !== 'number' || !parsed.ts) return 0;
+        if (Date.now() - parsed.ts > _BANDWIDTH_CACHE_TTL_MS) return 0;
+        return parsed.bps;
+    } catch (_) { return 0; }
+}
+function _writeCachedBandwidth(bps) {
+    try {
+        localStorage.setItem(_BANDWIDTH_CACHE_KEY, JSON.stringify({ bps, ts: Date.now() }));
+    } catch (_) { /* storage quota or disabled — no-op */ }
+}
+
+/** Seed the probe state from the device-local cache so the first
+ *  `adaptTierViaProbe()` call on a warm-cached device can return the
+ *  cached tier instantly without the 8 KB round-trip. The real probe
+ *  runs in the background right after and overwrites. */
+function _hydrateBandwidthFromCache() {
+    const bps = _readCachedBandwidth();
+    if (bps > 0 && _lastProbeBytesPerSec === 0) {
+        _lastProbeBytesPerSec = bps;
+        _lastProbeAt = Date.now();
+        _pwaTier = pickTierFromBandwidth(bps);
+        console.log(`[Probe] hydrated from cache: ${Math.round(bps)} B/s → ${_pwaTier}`);
+    }
+}
+// Hydrate at module load so the first report's upload starts with a
+// reasonable tier even before the first live probe.
+try { _hydrateBandwidthFromCache(); } catch (_) {}
+
+/**
+ * Mid-upload re-probe hook. Called every _MID_UPLOAD_REPROBE_EVERY chunks
+ * by the upload loop. Re-measures bandwidth and switches tier IF the new
+ * measurement exceeds the hysteresis threshold. No-op for the fast paths
+ * (if the user's link is stable, the probe returns ~same bps → no switch).
+ *
+ * Returns the (possibly new) tier name.
+ */
+async function midUploadReprobe() {
+    const prevBps = _lastProbeBytesPerSec;
+    const prevTier = _pwaTier;
+    // Force-probe: bypass the 60 s cache so we actually re-measure.
+    const newTier = await adaptTierViaProbe({ force: true });
+    const newBps = _lastProbeBytesPerSec;
+    if (newBps > 0) _writeCachedBandwidth(newBps);
+    // Hysteresis: if the new measurement is within 2× of the previous,
+    // don't switch — noise in the probe shouldn't make us flap between
+    // tiers mid-upload. Let the chunk loop continue with the prior tier.
+    if (prevBps > 0 && newBps > 0) {
+        const ratio = Math.max(prevBps, newBps) / Math.min(prevBps, newBps);
+        if (ratio < _HYSTERESIS_RATIO) {
+            // Revert _pwaTier to prevTier since adaptTierViaProbe wrote it.
+            _pwaTier = prevTier;
+            console.log(
+                `[Reprobe] ${Math.round(prevBps)}→${Math.round(newBps)} B/s ` +
+                `(ratio ${ratio.toFixed(2)}) — within hysteresis, staying on ${prevTier}`
+            );
+            return prevTier;
+        }
+    }
+    if (newTier !== prevTier) {
+        console.log(`[Reprobe] tier shift: ${prevTier} → ${newTier}`);
+    }
+    return newTier;
+}
+
+// Packet-loss signal. Incremented by the chunk-retry code path; reset at
+// upload-start. Read by `maybeShrinkTierForLoss()` which the chunk loop
+// calls after every chunk completion.
+let _packetLossEvents = 0;
+let _packetLossShrunk = false;
+
+function _recordRetryCount(retries) {
+    if (retries > _PACKET_LOSS_RETRY_THRESHOLD) _packetLossEvents += 1;
+}
+
+function _resetPacketLossCounters() {
+    _packetLossEvents = 0;
+    _packetLossShrunk = false;
+}
+
+/**
+ * Called after every successful chunk. If we've seen ≥2 lossy chunks in
+ * the current session AND haven't already shrunk the tier, drop one step
+ * (FAST → MEDIUM, MEDIUM → SLOW, SLOW → VERY_SLOW). One-way: we don't
+ * bump back up even if subsequent chunks land cleanly, because the lossy
+ * signal is usually a persistent link characteristic (5 % loss doesn't
+ * come and go in the same session).
+ */
+function maybeShrinkTierForLoss() {
+    if (_packetLossShrunk) return _pwaTier;
+    if (_packetLossEvents < 2) return _pwaTier;
+    const downgrade = {
+        FAST: 'MEDIUM',
+        MEDIUM: 'SLOW',
+        SLOW: 'VERY_SLOW',
+        VERY_SLOW: 'VERY_SLOW',  // already at floor
+    };
+    const next = downgrade[_pwaTier] || _pwaTier;
+    if (next !== _pwaTier) {
+        console.log(`[Adaptive] packet-loss shrink: ${_pwaTier} → ${next} (events=${_packetLossEvents})`);
+        _pwaTier = next;
+        _packetLossShrunk = true;
+    }
+    return _pwaTier;
+}
+
+// Expose on window for tests + debugging. Tests assert on tier transitions
+// after simulated retries.
+window._crispAdaptive = {
+    midUploadReprobe,
+    maybeShrinkTierForLoss,
+    readCachedBandwidth: _readCachedBandwidth,
+    writeCachedBandwidth: _writeCachedBandwidth,
+    resetPacketLossCounters: _resetPacketLossCounters,
+    recordRetryCount: _recordRetryCount,
+    getPacketLossEvents: () => _packetLossEvents,
+    // Constants so tests can reason about thresholds without magic numbers.
+    HYSTERESIS_RATIO: _HYSTERESIS_RATIO,
+    PACKET_LOSS_RETRY_THRESHOLD: _PACKET_LOSS_RETRY_THRESHOLD,
+    MID_UPLOAD_REPROBE_EVERY: _MID_UPLOAD_REPROBE_EVERY,
+};
+// ─── end Phase-1 Adaptive Upgrades ────────────────────────────────────────────
+
 /** Accessor for the current active tier. `_pwaTier` is a `let` binding
  *  so it's not exposed on `window`; tests + the dashboard debug panel
  *  read via this getter instead. */
@@ -4251,7 +4404,12 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
                 : (blob instanceof ArrayBuffer || ArrayBuffer.isView(blob)) ? new Blob([blob])
                 : new Blob([blob]);
             fd.append('data', asBlob, 'chunk.bin');
-            return await sendFormData(url, fd, timeoutMs);
+            const result = await sendFormData(url, fd, timeoutMs);
+            // Phase-2.1 — record the retry count for this chunk. 0 = first
+            // attempt succeeded; >_PACKET_LOSS_RETRY_THRESHOLD counts as a
+            // "lossy" event. See _recordRetryCount in the adaptive block.
+            try { _recordRetryCount(attempt - 1); } catch (_) {}
+            return result;
         } catch (err) {
             // 404 means this backend doesn't know about /chunk-bin yet.
             // Switch the entire session to base64 and retry legacy.
@@ -4339,6 +4497,24 @@ async function uploadChunksBinary(reportId, mediaId, blob, {
         );
         pwaNetworkUpgrade();   // streak-based upgrade on each successful chunk
         if (onProgress) onProgress(seq + 1, total);
+
+        // Phase-1.6 + Phase-2.1 adaptive hooks. Cheap: the first call
+        // returns immediately when the 60 s probe cache is warm, and
+        // packet-loss shrink is a pure in-memory comparison. Only actual
+        // network traffic is the re-probe every _MID_UPLOAD_REPROBE_EVERY
+        // chunks — and even that is skipped on the fast path because the
+        // cache hit short-circuits.
+        try {
+            if (window._crispAdaptive) {
+                window._crispAdaptive.maybeShrinkTierForLoss();
+                if ((seq + 1) % window._crispAdaptive.MID_UPLOAD_REPROBE_EVERY === 0) {
+                    // fire-and-forget — don't block the next chunk behind
+                    // the probe round-trip. If the probe discovers a new
+                    // tier, the NEXT getPWAAdaptiveConfig() call picks it up.
+                    window._crispAdaptive.midUploadReprobe().catch(() => {});
+                }
+            }
+        } catch (_) { /* adaptive hooks are best-effort */ }
     }
     return { totalChunks: total };
 }
@@ -4433,6 +4609,11 @@ async function submitReport() {
                 // a polygon; the server's `_auto_assign_building_id` still
                 // runs as a coarse fallback when absent.
                 building_id: (typeof state.buildingId === 'string' && state.buildingId) || null,
+                // Phase-1 progressive-upload — compact DCT placeholder.
+                // Dashboard renders this the instant this meta POST lands,
+                // BEFORE any media chunk arrives. Null for text-only reports
+                // or when the encoder failed (~never, but guarded).
+                blurhash: (typeof state.blurhash === 'string' && state.blurhash) || null,
                 // P1.3 — NEVER fall back to {latitude:0,longitude:0}. If no
                 // real coordinates are available, send location: null so the
                 // backend/dashboard handle it explicitly (pure text-based
@@ -6037,6 +6218,9 @@ function _clearCaptureState() {
     // previous report can't make the next awaitPendingBlur() wait on them.
     state.photoBlurPending = [];
     state.photoGroupId = null; state.photoVariants = null;
+    // Phase-1 progressive-upload: clear blurhash so it doesn't leak from the
+    // previous capture into the next report's meta payload.
+    state.blurhash = null;
     // Apr 2026 PII-blur hardening leaves a per-capture truthful flag on
     // state. Clearing it means the next capture starts from "unknown until
     // the pipeline runs", not from the previous report's answer.

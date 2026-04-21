@@ -255,6 +255,13 @@ class Report(Base):
     debris_clearing_needed = Column(Boolean, nullable=True)     # Does this location need debris clearing?
     service_status = Column(JSON, nullable=True)                # {"electricity":"DISRUPTED","water":"OPERATIONAL",...}
     building_id = Column(String(36), nullable=True, index=True) # Links multiple reports about same structure
+    # Progressive-upload placeholder (Apr 2026, Phase 1). Compact blurhash
+    # of the main photo — decoded on the dashboard to render a fuzzy colour
+    # impression the instant the meta POST lands, BEFORE any media chunk
+    # arrives. See app/schemas/report.py::ReportMetaCreate.blurhash for the
+    # design doc. Typical length: 28–32 chars (4x3 DCT). Cap at 96 lets us
+    # go up to 9x9 DCT later without another migration.
+    blurhash = Column(String(96), nullable=True)
 
     # Phase 5 (Apr 2026) — reviewer-accountability workflow.
     #   reviewer_verdict → explicit human verdict ({NOT_REVIEWED,ACCEPTED,REJECTED})

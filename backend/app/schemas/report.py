@@ -120,6 +120,17 @@ class ReportMetaCreate(BaseModel):
     # — the auto-assign logic in `_auto_assign_building_id` runs first
     # but an explicit pick overrides the coarse match.
     building_id: Optional[str] = Field(None, max_length=64)
+    # Phase 1 progressive-upload stack (Apr 2026). Blurhash encodes a
+    # ~4x3 DCT of the main photo into a short string (~25-35 chars); the
+    # dashboard decodes it into a blurred colour impression and renders
+    # it as a placeholder the instant the meta POST lands, BEFORE any
+    # media chunk arrives. Closes the "time-to-first-visual" gap from
+    # ~2 s (first SMALL chunk) down to ~200 ms (meta RTT). The string is
+    # tiny enough to fit comfortably in the meta body even on a 2 Kbps
+    # link (25 bytes ≈ 100 ms at 2 Kbps).
+    # Length cap is generous — blurhash can go up to ~9x9 DCT (≈ 83
+    # chars) but our encoder uses 4x3, which yields ~30 chars.
+    blurhash: Optional[str] = Field(None, max_length=96)
 
 # Single media attachment (Stage 2/3 — one file at a time)
 class MediaAttach(BaseModel):
@@ -235,6 +246,11 @@ class ReportResponse(BaseModel):
     debris_clearing_needed: Optional[bool] = None
     service_status: Optional[Any] = None
     building_id: Optional[str] = None
+    # Blurhash placeholder — see ReportMetaCreate.blurhash for design. The
+    # dashboard renders this via the blurhash-decode path while waiting for
+    # the first SMALL variant to arrive. Nullable because legacy reports
+    # submitted before Phase-1 won't have one.
+    blurhash: Optional[str] = None
 
     # Phase 5 (Apr 2026) — reviewer workflow surface.
     # `response_time_seconds` is COMPUTED at read time from

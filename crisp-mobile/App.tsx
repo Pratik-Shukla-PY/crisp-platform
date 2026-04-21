@@ -1079,6 +1079,11 @@ export default function App() {
         // UNDP Appendix 1 — pin to an OSM way id when the reporter picked
         // an exact building footprint. Backend expects `osm:way:<id>` or null.
         building_id: buildingId || null,
+        // Phase-1 progressive-upload placeholder. Captured by
+        // generateVariants() → jpeg-js decode → blurhash encode. Dashboard
+        // renders this the instant the meta POST lands — BEFORE any media
+        // chunk arrives. ~28–32-char string (~100 ms at 2 Kbps).
+        blurhash: photoVariants?.blurhash || null,
         service_status: {
           electricity: electricityStatus,
           water: waterStatus,
