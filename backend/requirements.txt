@@ -19,6 +19,16 @@ simplekml>=1.3.0
 reportlab>=4.0.0
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+# Pin bcrypt <5.0: passlib 1.7.4 is incompatible with bcrypt 5.x.
+#   1) passlib reads `bcrypt.__about__.__version__`, removed in bcrypt 4.1+
+#      → backend self-test logs (trapped) warning.
+#   2) passlib's `detect_wrap_bug` self-test hashes a 73-byte secret;
+#      bcrypt 5.x raises ValueError instead of truncating, which aborts
+#      CryptContext load and every downstream hash_password/verify_password
+#      call. Observed on GitHub Actions runners (Python 3.11, pip resolves
+#      latest). Local venvs frozen on bcrypt 4.x kept working silently.
+# Revisit once passlib ships a release that declares bcrypt 5.x support.
+bcrypt>=4.0,<5.0
 email-validator>=2.0.0
 # Required by FastAPI for multipart/form-data parsing — used by the
 # binary chunk endpoint (POST /reports/{id}/media/chunk-bin) and every
