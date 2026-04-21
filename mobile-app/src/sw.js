@@ -14,7 +14,16 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v40';  // bump on static-asset changes
+const CACHE_NAME = 'crisp-v41';  // bump on static-asset changes
+// v41 (Apr 2026) Locale-bootstrap hotfix — fixes two pre-existing bugs
+// that made manual Arabic/Urdu/Hebrew/French/Spanish/Russian/Chinese
+// selections silently revert to English on every reload:
+//   (1) narrow locale gate (`I18N[code]` check rejected UN + RTL-only
+//       locales because I18N only carries en/kn/hi/ta)
+//   (2) window.I18N undefined (classic-script const doesn't attach to
+//       window in Chromium; tests + dashboard embed couldn't read it)
+// New regression spec: e2e/tests/pwa/19-locale-bootstrap.spec.ts (10
+// cases). PWA matrix: 73 → 88 passed.
 // v40 (Apr 2026) Post-submit state-clear fix — previously `resetApp()`
 // only ran from the "Add another report" button, so users who navigated
 // back to home by any other route saw the previous report's photo + text

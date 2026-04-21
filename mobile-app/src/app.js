@@ -2073,6 +2073,18 @@ const UNDP_I18N_EXTRA = {
     },
 };
 
+// Expose the locale dicts on window so tests, the dashboard embed shell,
+// and future debugging probes can read them without reaching into module
+// scope. Top-level `const` bindings in a classic (non-module) script are
+// accessible by bare identifier but NOT via `window.<name>` — see the
+// locale-JSON loader spec which relied on `window.I18N.fr.loc_resolving`.
+// `I18N[code]` is mutated in-place by `activateLang()`, so this single
+// window-assignment automatically reflects the merged dense JSON pack
+// as it arrives — no need to re-assign on every merge.
+window.I18N = I18N;
+window.EXTRA_LANG = EXTRA_LANG;
+window.UNDP_I18N_EXTRA = UNDP_I18N_EXTRA;
+
 function detectAndSetupLanguage() {
     const langSwitcher = document.getElementById('lang-switcher');
     const localBtn = document.getElementById('btn-lang-local');
@@ -2287,7 +2299,36 @@ function detectAndSetupLanguage() {
     const _manualLang = (() => {
         try { return localStorage.getItem('crisp_lang_manual') || ''; } catch (_) { return ''; }
     })();
-    activateLang(_manualLang && I18N[_manualLang] ? _manualLang : 'en');
+    // "Known locale" = present in ANY of our locale registries, OR listed
+    // as RTL. The inline I18N dict only carries en/kn/hi/ta (our original
+    // 4 languages); the UN / India dense packs live in EXTRA_LANG and
+    // UNDP_I18N_EXTRA, and Hebrew is RTL-only (no inline dict but the
+    // direction flip + async JSON load should still work). Previously
+    // this check only consulted I18N, so a user manually picking Arabic /
+    // French / Hebrew etc. would silently snap back to English on every
+    // reload — bug reproduced by 13-rtl-layout + 14-locale-json-loader.
+    const _isKnownLocale = (code) => {
+        if (!code || typeof code !== 'string') return false;
+        if (I18N[code]) return true;
+        if (typeof EXTRA_LANG !== 'undefined' && EXTRA_LANG[code]) return true;
+        if (typeof UNDP_I18N_EXTRA !== 'undefined' && UNDP_I18N_EXTRA[code]) return true;
+        if (RTL_LANGS.has(code)) return true;
+        // COUNTRY_LANG_DATA values are { code, label, speech } — accept
+        // any code declared there (e.g. Italian via IT).
+        if (typeof COUNTRY_LANG_DATA !== 'undefined') {
+            for (const k in COUNTRY_LANG_DATA) {
+                if (COUNTRY_LANG_DATA[k] && COUNTRY_LANG_DATA[k].code === code) return true;
+            }
+        }
+        // REGION_LANG_MAP entries are { code, speech, ... }.
+        if (typeof REGION_LANG_MAP !== 'undefined' && Array.isArray(REGION_LANG_MAP)) {
+            for (const r of REGION_LANG_MAP) {
+                if (r && r.code === code) return true;
+            }
+        }
+        return false;
+    };
+    activateLang(_isKnownLocale(_manualLang) ? _manualLang : 'en');
 
     const _cachedCtx = (() => {
         try { return JSON.parse(localStorage.getItem(_LOC_CTX_KEY) || 'null'); } catch (_) { return null; }

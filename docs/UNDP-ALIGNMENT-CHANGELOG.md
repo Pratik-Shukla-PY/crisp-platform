@@ -139,6 +139,41 @@ the gap-analysis section number.
   this sprint (no staging infra spun up).
 * Pitch video — not a code deliverable.
 
+## Post-sprint hotfixes (Apr 2026)
+
+### PWA locale-bootstrap (2026-04-21)
+
+Five Playwright specs were failing deterministically on a clean baseline
+(reproduced with `git stash`): `13-rtl-layout.spec.ts` × 3 + `14-locale-
+json-loader.spec.ts` × 2. Two separate bugs on the same bootstrap path:
+
+  1. **Narrow locale gate.** `app.js` bootstrapped manual-lang from
+     localStorage via `activateLang(_manualLang && I18N[_manualLang]
+     ? _manualLang : 'en')`. The inline `I18N` dict only carries EN /
+     KN / HI / TA; every other locale lives in `EXTRA_LANG` /
+     `UNDP_I18N_EXTRA` or is RTL-only (Hebrew). A user who manually
+     picked AR / UR / HE / FR / ES / RU / ZH silently snapped back
+     to English on every reload — `<html dir>` never flipped for RTL.
+     Fix: new `_isKnownLocale(code)` helper consults I18N + EXTRA_LANG
+     + UNDP_I18N_EXTRA + RTL_LANGS + COUNTRY_LANG_DATA + REGION_LANG_MAP.
+  2. **`window.I18N` undefined.** Classic scripts (non-module) do NOT
+     attach top-level `const` bindings to `window` in Chromium. Tests +
+     the dashboard embed shell that probed `window.I18N` saw undefined.
+     Fix: explicit `window.I18N = I18N` (+ EXTRA_LANG + UNDP_I18N_EXTRA)
+     right after each dict definition. Mutations via `I18N[code] = …`
+     inside `activateLang` automatically reflect on window (shared
+     reference).
+
+New regression spec: `e2e/tests/pwa/19-locale-bootstrap.spec.ts` (10
+cases) — window-exposure check + "manual locale survives reload" for
+every UN locale + Hebrew + unknown/empty fallback to English.
+
+PWA test matrix: **73 → 88 passed** (5 pre-existing failures closed +
+10 new regression tests). Zero test regressions elsewhere.
+
+Cache-bumped `sw.js v40 → v41` and `app.js?v=810 → v=820` so existing
+installs pick up the bootstrap fix together with the window exposures.
+
 ---
 
 *Sprint author: CRISP platform maintainers, April 2026. Closes
