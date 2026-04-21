@@ -935,17 +935,43 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .dp-pii-badge { position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.65); backdrop-filter:blur(4px); color:#22c55e; font-size:9px; font-weight:600; padding:3px 7px; border-radius:4px; display:flex; align-items:center; gap:3px; z-index:2; pointer-events:none; }
 .dp-pii-badge i { font-size:8px; }
 
-/* Gallery strip for multiple images */
-.dp-gallery { margin-top:6px; }
-.dp-gallery-label { font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center; gap:4px; }
-.dp-gallery-label i { font-size:10px; color:var(--cyan); }
-.dp-gallery-strip { display:flex; gap:4px; overflow-x:auto; padding-bottom:4px; }
-.dp-gallery-strip::-webkit-scrollbar { height:3px; }
-.dp-gallery-strip::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
-.dp-gallery-thumb { width:52px; height:52px; border-radius:6px; overflow:hidden; cursor:pointer; border:2px solid transparent; flex-shrink:0; position:relative; transition:all .15s; }
+/* Guaranteed-delivery tier chip — tells analysts which variant they're seeing
+   so they know whether a higher-quality one is still in-flight.
+   LOW = SMALL (amber, "still uploading" feel)
+   MEDIUM = MEDIUM (cyan, "good enough")
+   HIGH = LARGE (green, "fully resolved") */
+.dp-tier-chip { position:absolute; top:6px; left:6px; background:rgba(0,0,0,0.65); backdrop-filter:blur(4px); font-size:9px; font-weight:700; padding:3px 7px; border-radius:4px; letter-spacing:0.4px; z-index:2; pointer-events:none; text-transform:uppercase; }
+.dp-tier-chip.dp-tier-low    { color:#f59e0b; border:1px solid rgba(245,158,11,0.35); }
+.dp-tier-chip.dp-tier-medium { color:#38bdf8; border:1px solid rgba(56,189,248,0.35); }
+.dp-tier-chip.dp-tier-high   { color:#22c55e; border:1px solid rgba(34,197,94,0.35); }
+.dp-tier-chip.dp-tier-original { color:#a78bfa; border:1px solid rgba(167,139,250,0.35); }
+
+/* Phase 2 (Apr 2026): tier switcher — 3 clickable buttons inside the detail
+   image overlay. Replaces the read-only tier chip. Lets analysts pick
+   SMALL/MEDIUM/LARGE on demand; the active button keeps the colour grammar
+   of the old chip. */
+.dp-tier-switcher { position:absolute; top:6px; left:6px; display:flex; gap:3px; z-index:2; }
+.dp-tier-btn { appearance:none; background:rgba(0,0,0,0.65); backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; font-size:9px; font-weight:700; letter-spacing:0.4px; padding:3px 7px; border-radius:4px; cursor:pointer; text-transform:uppercase; transition:background .12s, border-color .12s, transform .08s; }
+.dp-tier-btn:hover:not(.disabled) { background:rgba(0,0,0,0.8); border-color:rgba(255,255,255,0.35); transform:translateY(-1px); }
+.dp-tier-btn.disabled { opacity:0.4; cursor:not-allowed; }
+.dp-tier-btn.active { font-weight:800; }
+.dp-tier-btn.dp-tier-low.active     { color:#f59e0b; border-color:rgba(245,158,11,0.65); background:rgba(245,158,11,0.12); }
+.dp-tier-btn.dp-tier-medium.active  { color:#38bdf8; border-color:rgba(56,189,248,0.65); background:rgba(56,189,248,0.12); }
+.dp-tier-btn.dp-tier-high.active    { color:#22c55e; border-color:rgba(34,197,94,0.65); background:rgba(34,197,94,0.12); }
+
+/* Gallery strip for multiple images — bumped to be more visible so users see
+   and click the 2nd/3rd photo sent from the mobile app's multi-photo flow. */
+.dp-gallery { margin-top:10px; padding:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; }
+.dp-gallery-label { font-size:11px; font-weight:700; color:#cbd5e1; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+.dp-gallery-label i { font-size:11px; color:var(--cyan); }
+.dp-gallery-strip { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
+.dp-gallery-strip::-webkit-scrollbar { height:4px; }
+.dp-gallery-strip::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:2px; }
+/* 72×72 (was 52×52) — at 52 the 2nd/3rd thumbs were easy to miss. */
+.dp-gallery-thumb { width:72px; height:72px; border-radius:8px; overflow:hidden; cursor:pointer; border:2px solid transparent; flex-shrink:0; position:relative; transition:all .15s; }
 .dp-gallery-thumb img { width:100%; height:100%; object-fit:cover; }
-.dp-gallery-thumb:hover { border-color:rgba(255,255,255,0.3); }
-.dp-gallery-thumb.active { border-color:var(--cyan); box-shadow:0 0 8px rgba(56,189,248,0.3); }
+.dp-gallery-thumb:hover { border-color:rgba(255,255,255,0.4); transform: scale(1.02); }
+.dp-gallery-thumb.active { border-color:var(--cyan); box-shadow:0 0 10px rgba(56,189,248,0.4); }
 .dp-gallery-pct { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); color:#f59e0b; font-size:9px; font-weight:700; text-align:center; padding:1px; }
 
 .dp-sat-verify-btn { width:100%; margin-top:6px; padding:7px 10px; border:1px dashed rgba(56,189,248,0.25); background:rgba(56,189,248,0.04); color:#7dd3fc; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; transition:all .15s; }
@@ -2000,6 +2026,10 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 .qrt-undp-tags { display: flex; gap: 4px; flex-wrap: wrap; padding: 0 2px; }
 .qrt-tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
 .qrt-tag-crisis { background: rgba(124,58,237,0.15); color: #a78bfa; }
+/* UNDP Appendix-1 damage labels. MINIMAL is the canonical value; NO_DAMAGE
+   kept as an alias so legacy cards rendered from pre-April-2026 rows still
+   get a coloured tag instead of falling back to default grey. */
+.qrt-tag-dmg-MINIMAL { background: rgba(34,197,94,0.15); color: #4ade80; }
 .qrt-tag-dmg-NO_DAMAGE { background: rgba(34,197,94,0.15); color: #4ade80; }
 .qrt-tag-dmg-PARTIAL { background: rgba(249,115,22,0.15); color: #fb923c; }
 .qrt-tag-dmg-COMPLETE { background: rgba(239,68,68,0.15); color: #f87171; }
@@ -2068,3 +2098,47 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     font-size: 13px; color: var(--text-dim);
     display: flex; align-items: center; justify-content: center; gap: 6px;
 }
+
+/* ── Phase 4 (Apr 2026) — Auto-Submit Regions admin panel ─────────────── */
+.region-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; border-bottom:1px solid rgba(255,255,255,0.06); }
+.region-row:last-child { border-bottom:none; }
+.region-row-main { flex:1; min-width:0; }
+.region-row-name { font-size:14px; color:#e5e7eb; display:flex; align-items:center; gap:8px; }
+.region-row-meta { font-size:12px; color:#94a3b8; margin-top:3px; }
+.region-row-actions { display:flex; gap:6px; flex-shrink:0; }
+.region-row-actions .btn { padding:6px 10px; font-size:12px; }
+.region-chip { font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; text-transform:uppercase; letter-spacing:0.4px; }
+.region-chip.region-chip-on { color:#22c55e; border:1px solid rgba(34,197,94,0.45); background:rgba(34,197,94,0.1); }
+.region-chip.region-chip-off { color:#94a3b8; border:1px solid rgba(148,163,184,0.35); background:rgba(148,163,184,0.08); }
+
+/* Region form modal — floating overlay similar to the lightbox pattern. */
+#region-form-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:10000; align-items:center; justify-content:center; }
+.region-form { width:min(460px, 90vw); background:#0f172a; border:1px solid rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.5); }
+.region-form-body { padding:16px; display:flex; flex-direction:column; gap:10px; }
+.region-form-body label { font-size:11px; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px; }
+.region-form-body input[type=text], .region-form-body input[type=number] { padding:8px 10px; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#e5e7eb; font-size:14px; width:100%; box-sizing:border-box; }
+.region-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.region-grid > div { display:flex; flex-direction:column; gap:4px; }
+.region-enabled-row { display:flex; align-items:flex-start; gap:8px; font-size:12px; color:#cbd5e1; text-transform:none; letter-spacing:0; font-weight:400; line-height:1.4; }
+.region-enabled-row input[type=checkbox] { margin-top:2px; flex-shrink:0; }
+.region-form-footer { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid rgba(255,255,255,0.06); }
+
+/* ── Phase 5 (Apr 2026) — Reviewer actions block (detail panel) ────────── */
+.dp-reviewer { margin:8px 0 6px; padding:10px 12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; }
+.dp-reviewer-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; color:#94a3b8; }
+.dp-reviewer-chip { font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; letter-spacing:0.3px; }
+.dp-reviewer-chip.dp-reviewer-accepted { color:#22c55e; background:rgba(34,197,94,0.12); border:1px solid rgba(34,197,94,0.4); }
+.dp-reviewer-chip.dp-reviewer-rejected { color:#ef4444; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.4); }
+.dp-reviewer-chip.dp-reviewer-not_reviewed { color:#f59e0b; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.35); }
+.dp-reviewer-meta { font-size:11px; color:#94a3b8; }
+.dp-reviewer-meta.dp-reviewer-response { color:#22c55e; font-weight:600; }
+.dp-reviewer-times { display:flex; gap:12px; margin-top:6px; font-size:11px; color:#cbd5e1; }
+.dp-reviewer-times i { color:#7dd3fc; margin-right:3px; }
+.dp-reviewer-note { margin-top:6px; padding:6px 8px; background:rgba(239,68,68,0.06); border-left:3px solid rgba(239,68,68,0.5); border-radius:4px; font-size:12px; color:#fca5a5; line-height:1.4; }
+.dp-reviewer-note i { margin-right:4px; opacity:0.7; }
+.dp-reviewer-btns { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.dp-reviewer-btn { flex:1; min-width:80px; padding:5px 8px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:6px; font-size:11px; font-weight:600; color:#cbd5e1; cursor:pointer; transition:all .12s; display:flex; align-items:center; justify-content:center; gap:4px; }
+.dp-reviewer-btn:hover:not(:disabled) { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.25); }
+.dp-reviewer-btn:disabled { opacity:0.45; cursor:not-allowed; }
+.dp-reviewer-btn.dp-reviewer-accept.active { color:#22c55e; border-color:rgba(34,197,94,0.65); background:rgba(34,197,94,0.12); }
+.dp-reviewer-btn.dp-reviewer-reject.active { color:#ef4444; border-color:rgba(239,68,68,0.65); background:rgba(239,68,68,0.12); }

@@ -1,11 +1,28 @@
-from datetime import datetime
+from datetime import datetime, timezone as _dt_timezone
 from typing import List, Optional, Any
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 from app.models.report import (
     SourceEnum, SeverityEnum, InfraTypeEnum, MediaTypeEnum,
     ResolutionEnum, SyncStatusEnum, ReportStatusEnum, ClusterStatusEnum,
     DamageClassEnum, CrisisTypeEnum, ServiceStatusEnum
 )
+
+
+# P2.9 — All backend datetimes are UTC (see models: DateTime(timezone=True) on
+# every column). SQLite, however, round-trips them as naive. Pydantic's
+# default ISO serialization then emits "2026-04-18T10:00:00" without a Z,
+# and browsers parse that as LOCAL time — dashboards see reports off by
+# hours. This helper stamps naive datetimes as UTC before they leave the
+# backend, guaranteeing every wire value ends in Z. tz-aware values pass
+# through unchanged (covering Postgres + future migrations).
+def _utc_iso(dt: Optional[datetime]) -> Optional[str]:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_dt_timezone.utc)
+    # isoformat always includes the offset when tz-aware; normalize to `Z`.
+    s = dt.astimezone(_dt_timezone.utc).isoformat()
+    return s.replace("+00:00", "Z")
 
 # Shared Properties
 class LocationBase(BaseModel):
@@ -33,10 +50,29 @@ class ThumbnailPayload(BaseModel):
 class MediaChunkPayload(BaseModel):
     media_id: str
     type: MediaTypeEnum
-    seq_num: int = Field(..., ge=0)
-    total_chunks: int = Field(..., ge=1)
+    seq_num: int = Field(..., ge=0, le=10_000)
+    # P1.7 — cap total_chunks at 10,000. At 512 KB max per chunk that allows
+    # a ~5 GB upload; well beyond any legitimate mobile capture. Previously
+    # an attacker could submit total_chunks=999_999_999 to force premature
+    # assembly after one chunk or exhaust DB storage with empty MediaChunk
+    # rows.
+    total_chunks: int = Field(..., ge=1, le=10_000)
     data: str = Field(..., max_length=1048576)  # max 1MB chars (512KB base64 + overhead)
     checksum: Optional[str] = None  # djb2 hex for integrity (PRD §3.7)
+    # Guaranteed-delivery pipeline. The client tags each chunk with which
+    # variant it's building (SMALL=LOW, MEDIUM=MEDIUM, LARGE=HIGH) and a
+    # shared photo_group_id linking the three variants of one captured photo.
+    # Both default such that legacy single-variant clients keep working
+    # (the chunk handler used to hard-code `MEDIUM` on new media rows — we
+    # drop that hard-coding and trust this field instead).
+    resolution_tier: ResolutionEnum = ResolutionEnum.LOW
+    photo_group_id: Optional[str] = Field(None, max_length=36)
+    # Apr 2026: when `true`, the client has already run its PII blur (face
+    # redaction via BlazeFace on PWA / similar on RN) against the original
+    # image before chunking. The server-side blur_pii() pass is then skipped
+    # on assembly — avoiding a second lossy pass over already-redacted bytes.
+    # Default false so legacy clients continue to get server-side blur.
+    client_blur_applied: bool = False
 
 # API Request Payloads
 class ReportCreate(BaseModel):
@@ -70,13 +106,20 @@ class ReportMetaCreate(BaseModel):
     is_auto_submitted: bool = False
     client_created_at: Optional[datetime] = None
     location: Optional[LocationBase] = None
-    expected_media: int = 0
-    # UNDP required fields
-    damage_classification: Optional[str] = None
-    crisis_type: Optional[str] = None
+    expected_media: int = Field(0, ge=0, le=50)
+    # UNDP required fields — P2.10 validation: accept only canonical enum
+    # values. Clients that still send stringly-typed legacy values get a clear
+    # 422 now instead of silently writing garbage to the DB.
+    damage_classification: Optional[DamageClassEnum] = None
+    crisis_type: Optional[CrisisTypeEnum] = None
     infrastructure_name: Optional[str] = Field(None, max_length=255)
     debris_clearing_needed: Optional[bool] = None
     service_status: Optional[Any] = None
+    # Building-footprint selection (UNDP Appendix). Client submits the
+    # composite OSM identifier it rendered from (e.g. ``osm:way:123456``)
+    # — the auto-assign logic in `_auto_assign_building_id` runs first
+    # but an explicit pick overrides the coarse match.
+    building_id: Optional[str] = Field(None, max_length=64)
 
 # Single media attachment (Stage 2/3 — one file at a time)
 class MediaAttach(BaseModel):
@@ -104,6 +147,15 @@ class MediaResponse(MediaBase):
     thumbnail_url: Optional[str] = None
     completion_pct: float = 0.0
     assembly_status: str = 'pending'
+    # Guaranteed-delivery: dashboard groups media by this id and picks the
+    # best-available complete variant (LARGE > MEDIUM > SMALL > partial).
+    photo_group_id: Optional[str] = None
+    # Apr 2026 — server-side PII-blur outcome. Dashboard MUST warn/flag
+    # any row where this is 'skipped' or 'failed' — the file is on disk
+    # and may contain unredacted PII. 'not_needed' = client handled it,
+    # 'complete' = server-side pass succeeded, 'pending' = blur
+    # in flight, NULL = legacy row (pre-tracking).
+    pii_blur_status: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class AIAnalysisResponse(BaseModel):
@@ -168,19 +220,66 @@ class ReportResponse(BaseModel):
     server_created_at: datetime
     deletion_requested_at: Optional[datetime] = None
     lives_impacted: Optional[int] = None
+
+    @field_serializer("server_created_at", "deletion_requested_at", when_used="json")
+    def _serialize_dt(self, v: Optional[datetime]) -> Optional[str]:
+        # P2.9 — emit UTC-with-Z so dashboard JS `new Date(...)` parses it correctly.
+        return _utc_iso(v)
+
     # UNDP required fields
-    damage_classification: Optional[str] = None
-    crisis_type: Optional[str] = None
+    damage_classification: Optional[str] = None     # MINIMAL / PARTIAL / COMPLETE (UNDP-aligned)
+    crisis_type: Optional[str] = None               # see CrisisTypeEnum for the full UNDP list
+    crisis_category: Optional[str] = None           # NATURAL / TECHNOLOGICAL / HUMAN_MADE / OTHER
+    infrastructure_sub_type: Optional[str] = None   # original UI chip (ROAD, HOSPITAL, ...) for drill-down
     infrastructure_name: Optional[str] = None
     debris_clearing_needed: Optional[bool] = None
     service_status: Optional[Any] = None
     building_id: Optional[str] = None
+
+    # Phase 5 (Apr 2026) — reviewer workflow surface.
+    # `response_time_seconds` is COMPUTED at read time from
+    # help_arrived_at (or help_dispatched_at) minus reviewed_at. Not stored
+    # to avoid two-source-of-truth drift.
+    reviewed_at: Optional[datetime] = None
+    reviewer_verdict: str = "NOT_REVIEWED"
+    action_taken: Optional[str] = None
+    help_dispatched_at: Optional[datetime] = None
+    help_arrived_at: Optional[datetime] = None
+    response_time_seconds: Optional[int] = None
+
+    @field_serializer("reviewed_at", "help_dispatched_at", "help_arrived_at", when_used="json")
+    def _serialize_reviewer_dt(self, v: Optional[datetime]) -> Optional[str]:
+        return _utc_iso(v)
+
     location: Optional[LocationResponse] = None
     media: List[MediaResponse] = []
     ai_analysis: Optional[AIAnalysisResponse] = None
     verification: Optional[VerificationResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    # Apr 2026: use model_validator(mode='after') — the previous
+    # `model_validate` classmethod override fired on direct calls but was
+    # skipped by FastAPI's list-response serialisation path (which uses a
+    # TypeAdapter under the hood). `model_validator(after)` runs on EVERY
+    # validated instance regardless of entry point. Caught by e2e test
+    # tests/dashboard/03-reviewer-workflow.spec.ts.
+    @model_validator(mode='after')
+    def _compute_response_time(self):
+        """Compute `response_time_seconds` from the reviewer + responder
+        timestamps. Derived, not stored — avoids two-source-of-truth drift."""
+        if self.reviewed_at and (self.help_arrived_at or self.help_dispatched_at):
+            end = self.help_arrived_at or self.help_dispatched_at
+            try:
+                from datetime import timezone as _tz
+                a = self.reviewed_at if self.reviewed_at.tzinfo else self.reviewed_at.replace(tzinfo=_tz.utc)
+                b = end if end.tzinfo else end.replace(tzinfo=_tz.utc)
+                delta = int((b - a).total_seconds())
+                if delta >= 0:
+                    self.response_time_seconds = delta
+            except Exception:
+                pass
+        return self
 
 class ClusterResponse(BaseModel):
     id: str

@@ -49,10 +49,18 @@ function renderPredictionCards(predictions) {
 
     const riskColor = (score) => score >= 76 ? '#ef4444' : score >= 51 ? '#f97316' : score >= 21 ? '#eab308' : '#22c55e';
     const riskGlow = (score) => score >= 76 ? 'rgba(239,68,68,0.3)' : score >= 51 ? 'rgba(249,115,22,0.3)' : score >= 21 ? 'rgba(234,179,8,0.2)' : 'rgba(34,197,94,0.2)';
+    // UNDP Appendix-1 crisis icons. TSUNAMI / EXPLOSION / CHEMICAL_INCIDENT /
+    // CIVIL_UNREST added April 2026. HURRICANE + WILDFIRE kept for legacy
+    // prediction rows that may still reference them.
     const crisisIcon = (type) => ({
-        FLOOD:'fa-water',EARTHQUAKE:'fa-house-crack',CONFLICT:'fa-shield-halved',
-        HURRICANE:'fa-wind',CYCLONE:'fa-tornado',WILDFIRE:'fa-fire',
-        LANDSLIDE:'fa-mountain',PANDEMIC:'fa-virus',NONE:'fa-check-circle'
+        FLOOD:'fa-water', EARTHQUAKE:'fa-house-crack', TSUNAMI:'fa-water',
+        CYCLONE:'fa-tornado', LANDSLIDE:'fa-mountain',
+        EXPLOSION:'fa-explosion', CHEMICAL_INCIDENT:'fa-flask-vial',
+        PANDEMIC:'fa-virus',
+        CONFLICT:'fa-shield-halved', CIVIL_UNREST:'fa-people-group',
+        // Legacy
+        HURRICANE:'fa-wind', WILDFIRE:'fa-fire',
+        NONE:'fa-check-circle'
     }[type] || 'fa-triangle-exclamation');
 
     container.innerHTML = predictions.map(p => {

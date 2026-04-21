@@ -2,11 +2,14 @@ import base64
 import os
 import time
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import httpx
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_, and_, func as sa_func
 
 from app.db.session import get_db
 from app.models.report import (
@@ -24,6 +27,12 @@ from app.services.ai_service import ai_service
 from app.services.satellite_fetcher import satellite_fetcher
 from app.services.truth_scorer import truth_scorer
 from app.core.deps import get_optional_user, require_viewer, require_analyst, require_admin, require_super_admin
+from app.core.observability import (
+    variant_uploads_total,
+    time_to_first_image_seconds,
+    time_to_full_image_seconds,
+    chunk_transport_total,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +41,49 @@ router = APIRouter()
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# P2.2 — bounded thread pool for background assembly.
+#
+# Previously every final-chunk arrival called `threading.Thread(...).start()`
+# directly. Under 100 concurrent uploads this would spawn 100 OS threads, all
+# blocking on the GIL during PII blur (MediaPipe + easyocr on CPU) and
+# Whisper transcription. Effective parallelism was ~1, memory use 100× worse.
+#
+# 4 workers is chosen to match typical cloud instance core counts and because
+# the bottleneck is Python's GIL + disk I/O + ffmpeg/Torch workloads that
+# release the GIL — so more threads past cores adds overhead without speedup.
+# Override via CRISP_ASSEMBLY_WORKERS env var for bigger boxes.
+_ASSEMBLY_WORKERS = max(1, int(os.getenv("CRISP_ASSEMBLY_WORKERS", "4")))
+_assembly_executor = ThreadPoolExecutor(
+    max_workers=_ASSEMBLY_WORKERS,
+    thread_name_prefix="assembly",
+)
+
+# P2.3 — separate pool for the slow AI tasks (PII blur with MediaPipe +
+# easyocr, and Whisper transcription). These can each take 5–30 s on CPU
+# and would otherwise back up the assembly pool. Two workers is deliberately
+# conservative: Whisper and easyocr both spawn internal thread pools that
+# already saturate a few cores, so running too many in parallel just thrashes
+# the L3 cache. Increase via CRISP_AI_WORKERS on bigger instances.
+_AI_WORKERS = max(1, int(os.getenv("CRISP_AI_WORKERS", "2")))
+_ai_executor = ThreadPoolExecutor(
+    max_workers=_AI_WORKERS,
+    thread_name_prefix="ai",
+)
+logger_for_pool = logging.getLogger(__name__)
+logger_for_pool.info(
+    f"Assembly pool: {_ASSEMBLY_WORKERS} workers; AI pool: {_AI_WORKERS} workers"
+)
+
 
 # ── Data Integrity ────────────────────────────────────────────────────────────
 def djb2_checksum(s: str) -> str:
-    """djb2 hash — matches client-side simpleChecksum() in app.js (PRD §3.7)."""
+    """djb2 hash over the char-code sequence of `s`.
+
+    Matches client-side ``simpleChecksum()`` in ``mobile-app/src/app.js``
+    (PRD §3.7). Used by the legacy base64 chunk endpoint
+    ``/reports/{id}/media/chunk`` where the payload ships as a JSON
+    string of base64 characters (ASCII codes 43–122).
+    """
     h = 5381
     for c in s:
         h = ((h << 5) + h) ^ ord(c)
@@ -43,8 +91,44 @@ def djb2_checksum(s: str) -> str:
     return format(h, '08x')
 
 
+def djb2_bytes(b: bytes) -> str:
+    """djb2 hash over the byte sequence `b`.
+
+    Used by the April-2026 binary chunk endpoint
+    ``/reports/{id}/media/chunk-bin`` where the payload ships as raw
+    bytes (multipart/form-data). The polynomial is identical to
+    ``djb2_checksum`` — the only difference is the input alphabet
+    (full byte range 0–255 vs. base64 ASCII).
+
+    Client parity: mirrored by ``djb2Bytes()`` in
+    ``mobile-app/src/app.js`` + ``crisp-mobile/services/syncEngine.ts``.
+    Pairwise unit-tested against ``test_chunk_binary.py::test_djb2_parity``.
+    """
+    h = 5381
+    for byte in b:
+        h = ((h << 5) + h) ^ byte
+        h &= 0xFFFFFFFF
+    return format(h, '08x')
+
+
 def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optional[str]:
-    """Concatenate all received base64 chunks in seq order and write to disk."""
+    """Concatenate all received chunks in seq order and write to disk.
+
+    April 2026 — dual-transport assembly. A chunk row stores its payload
+    in ONE of two columns:
+
+      * ``data_binary`` (LargeBinary) — new `/media/chunk-bin` endpoint.
+      * ``data_b64``    (Text)        — legacy `/media/chunk` endpoint.
+
+    We read each chunk row and take whichever column is populated. The
+    CHECK constraint on ``media_chunks`` guarantees exactly one is set.
+
+    Mixed-format chunks for a single ``media_id`` are not produced by
+    client logic (one upload session picks one transport), but if they
+    ever appear — e.g. retry across an app update — the assembler
+    concatenates them transparently since both columns ultimately yield
+    bytes.
+    """
     chunks = db.query(MediaChunk).filter(
         MediaChunk.media_id == media_id
     ).order_by(MediaChunk.seq_num).all()
@@ -52,35 +136,216 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
     if not chunks:
         return None
 
-    full_b64 = ''.join(c.data_b64 for c in chunks)
-    # Ensure valid base64 padding
-    padding = (4 - len(full_b64) % 4) % 4
-    full_b64 += '=' * padding
-
-    try:
-        file_bytes = base64.b64decode(full_b64)
-    except Exception as e:
-        logger.error(f"Base64 reassembly failed for {media_id}: {e}")
+    # Decode each chunk to bytes in seq order. Binary rows bypass base64
+    # entirely. Legacy base64 rows are decoded per-chunk so one corrupted
+    # row doesn't poison the entire assembly (we log + skip the bad one,
+    # matching the prior behaviour that failed the whole media).
+    parts: List[bytes] = []
+    for c in chunks:
+        if c.data_binary is not None:
+            parts.append(bytes(c.data_binary))
+            continue
+        if c.data_b64:
+            # Pad per-chunk to avoid cross-chunk padding ambiguity.
+            b64 = c.data_b64
+            padding = (4 - len(b64) % 4) % 4
+            try:
+                parts.append(base64.b64decode(b64 + ('=' * padding)))
+            except Exception as e:
+                logger.error(
+                    f"Base64 decode failed for {media_id} seq={c.seq_num}: {e}"
+                )
+                return None
+            continue
+        logger.error(
+            f"Chunk {media_id} seq={c.seq_num} has neither data_binary nor "
+            f"data_b64 — CHECK constraint violated; aborting assembly."
+        )
         return None
 
-    ext = 'jpg' if media_type == 'IMAGE' else 'webm'
+    file_bytes = b"".join(parts)
+
+    # Detect audio format from magic bytes (first few bytes)
+    if media_type == 'IMAGE':
+        ext = 'jpg'
+    else:
+        # Audio: sniff format for correct extension
+        if len(file_bytes) > 12 and file_bytes[4:8] == b'ftyp':
+            ext = 'm4a'       # MPEG-4 Audio (AAC) — iOS, Android
+        elif len(file_bytes) >= 4 and file_bytes[0:4] == b'OggS':
+            ext = 'ogg'       # Ogg container (Opus) — WhatsApp, Telegram
+        elif len(file_bytes) >= 4 and file_bytes[0:4] == b'\x1a\x45\xdf\xa3':
+            ext = 'webm'      # WebM (PWA MediaRecorder)
+        elif len(file_bytes) >= 4 and file_bytes[0:4] == b'caff':
+            # Apple Core Audio Format — older iOS recorder configs produced
+            # this silently. Not playable in HTML5 <audio>; we transcode it
+            # to .m4a via ffmpeg below so the dashboard player works.
+            ext = 'caf'
+        elif len(file_bytes) >= 3 and (file_bytes[0:3] == b'ID3' or (file_bytes[0] == 0xFF and (file_bytes[1] & 0xE0) == 0xE0)):
+            ext = 'mp3'       # MP3
+        elif len(file_bytes) >= 12 and file_bytes[0:4] == b'RIFF' and file_bytes[8:12] == b'WAVE':
+            ext = 'wav'       # WAV
+        else:
+            ext = 'm4a'       # Default to m4a (most compatible for mobile)
+
     filename = f"{media_id}_assembled.{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
-    with open(filepath, 'wb') as f:
-        f.write(file_bytes)
+    # P2.14 — disk-full handling. A silent OSError here used to leave the media
+    # marked `failed` with no observable signal. Now we catch, log loudly, and
+    # let the caller mark assembly_status='failed' so the client shows a
+    # retryable error in My Reports (P2.12) instead of a mysterious stuck upload.
+    try:
+        with open(filepath, 'wb') as f:
+            f.write(file_bytes)
+    except OSError as e:
+        logger.error(
+            f"[Assembly] OSError writing {filepath} ({len(file_bytes):,} bytes): {e}. "
+            "Likely causes: disk full, permissions, or upload dir deleted."
+        )
+        # Return None so the caller's `if file_url:` branch skips + flips to 'failed'.
+        return None
 
-    # PII Protection: Auto-blur faces + PII text (GDPR/CCPA compliance)
-    if media_type == 'IMAGE':
+    # CAFF → WAV transcode. Apple Core Audio isn't supported by HTML5 <audio>
+    # or most non-Apple players. Older iOS recorder configs produced CAFF even
+    # when the filename said .m4a. We use PyAV (which bundles FFmpeg libs, no
+    # system binary required) to re-encode as PCM-in-WAV — universally
+    # playable and lossless. AAC-in-MP4 would be smaller but PyAV's bundled
+    # FFmpeg build omits the AAC encoder, so WAV is the pragmatic choice for
+    # the rare CAFF straggler (new iOS builds produce proper .m4a).
+    if ext == 'caf':
         try:
-            from app.services.pii_blur import blur_pii
-            pii_result = blur_pii(filepath)
-            if pii_result.get("blurred"):
-                logger.info(f"PII blurred in {filename}: faces={pii_result['faces']} pii_text={pii_result['pii_texts']}")
+            import av
+            wav_path = filepath[:-4] + '.wav'
+            wav_name = f"{media_id}_assembled.wav"
+            input_c = av.open(filepath)
+            output_c = av.open(wav_path, mode='w', format='wav')
+            try:
+                in_stream = input_c.streams.audio[0]
+                out_stream = output_c.add_stream('pcm_s16le', rate=in_stream.rate)
+                out_stream.layout = in_stream.layout
+                for frame in input_c.decode(in_stream):
+                    frame.pts = None
+                    for packet in out_stream.encode(frame):
+                        output_c.mux(packet)
+                for packet in out_stream.encode():
+                    output_c.mux(packet)
+            finally:
+                output_c.close()
+                input_c.close()
+            if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
+                try: os.remove(filepath)
+                except Exception: pass
+                filepath = wav_path
+                filename = wav_name
+                ext = 'wav'
+                logger.info(f"Transcoded CAFF → WAV for {media_id} ({os.path.getsize(filepath):,} bytes)")
+            else:
+                logger.warning(f"CAFF→WAV transcode produced no output for {media_id}")
         except Exception as e:
-            logger.warning(f"PII blur failed for {filename}: {e}")
+            logger.warning(f"CAFF→WAV transcode failed for {media_id}: {e}")
+
+    # Apr 2026: the client-side blur pipeline (PWA BlazeFace / RN equivalent)
+    # now reliably runs BEFORE chunking, so the media row's
+    # `client_blur_applied` flag tells us whether a server-side pass is
+    # needed at all. When set, we skip the server blur to avoid a second
+    # lossy re-encode over already-redacted pixels. Legacy clients that
+    # don't send the flag still get the server pass as a safety net.
+    if media_type == 'IMAGE':
+        media_row = db.query(Media).filter(Media.id == media_id).first()
+        if media_row and getattr(media_row, 'client_blur_applied', False):
+            # Client PIIBlur pipeline ran successfully AND the client
+            # reported truthfully — nothing for the server to do.
+            db.query(Media).filter(Media.id == media_id).update(
+                {'pii_blur_status': 'not_needed'}, synchronize_session=False
+            )
+            db.commit()
+            logger.info(
+                f"Skipping server PII blur for {media_id}: "
+                "client_blur_applied=true (client-side pipeline handled it)"
+            )
+        else:
+            # Server will run its own pass. Stamp 'pending' NOW so the
+            # dashboard (or a polling client) can distinguish "blur
+            # in progress" from "blur finished" — the async worker flips
+            # it to 'complete' / 'failed' / 'skipped' when it resolves.
+            db.query(Media).filter(Media.id == media_id).update(
+                {'pii_blur_status': 'pending'}, synchronize_session=False
+            )
+            db.commit()
+            _ai_executor.submit(_run_server_pii_blur, filepath, filename, media_id)
 
     logger.info(f"Assembled {media_id}: {len(file_bytes):,} bytes → {filename}")
     return f"/static/{filename}"
+
+
+def _run_server_pii_blur(filepath: str, filename: str, media_id: str) -> None:
+    """Server-side PII blur (MediaPipe faces + easyocr PII text). Runs in
+    the AI thread pool so it doesn't block assembly. Never raises —
+    failure is logged and the media row's ``pii_blur_status`` is updated
+    accordingly so the dashboard can flag the file.
+
+    Apr 2026 — now observability-instrumented + DB-updating:
+      * bumps ``pii_blur_runs_total{outcome}`` Prometheus counter
+      * writes ``pii_blur_status`` on the Media row
+        (``complete`` / ``failed`` / ``skipped``).
+
+    ``pii_blur_status='skipped'`` is the important one — it means the
+    backends weren't loadable (model missing, package not installed)
+    and the file is on disk UNBLURRED. Operators need to see this
+    loudly, which is why the `/api/v1/health/pii` endpoint + the
+    `PII-BLUR CRITICAL` log lines in `pii_blur.py` exist.
+    """
+    outcome = 'failed'
+    db = None
+    try:
+        from app.services.pii_blur import blur_pii
+        from app.db.session import SessionLocal
+        pii_result = blur_pii(filepath)
+        if pii_result.get('ran'):
+            outcome = 'complete'
+            if pii_result.get('blurred'):
+                logger.info(
+                    f"PII blurred in {filename}: "
+                    f"faces={pii_result['faces']} pii_text={pii_result['pii_texts']}"
+                )
+            else:
+                logger.info(f"PII blur ran on {filename}: no PII detected")
+        else:
+            # backends unavailable — the file is on disk UNBLURRED.
+            outcome = 'skipped'
+            logger.error(
+                f"PII-BLUR SKIPPED for {filename}: {pii_result.get('error')} — "
+                "file kept as-is, dashboard will flag via pii_blur_status='skipped'."
+            )
+    except Exception as e:
+        outcome = 'failed'
+        logger.warning(f"PII blur failed for {filename}: {e}")
+    finally:
+        # Update the Media row in a fresh session — this runs on the
+        # `_ai_executor` worker thread which doesn't carry the request's
+        # DB session. Swallow DB errors so one bad commit doesn't wedge
+        # the worker.
+        try:
+            from app.db.session import SessionLocal
+            from app.models.report import Media as _Media
+            db = SessionLocal()
+            db.query(_Media).filter(_Media.id == media_id).update(
+                {'pii_blur_status': outcome}, synchronize_session=False
+            )
+            db.commit()
+        except Exception as e:
+            logger.warning(f"pii_blur_status update failed for {media_id}: {e}")
+        finally:
+            if db:
+                try: db.close()
+                except Exception: pass
+        # Prometheus counter. `import inside` + try/except so a missing
+        # observability module can't break the blur worker.
+        try:
+            from app.core.observability import pii_blur_runs_total
+            pii_blur_runs_total.labels(outcome=outcome).inc()
+        except Exception:
+            pass
 
 
 def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
@@ -96,25 +361,32 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
     if len(chunks) < 3:
         return None
 
-    # Collect only consecutive chunks (stop at first gap — no gaps in partial JPEG)
-    parts = []
+    # Collect only consecutive chunks (stop at first gap — no gaps in
+    # partial JPEG). April 2026: dual-transport — each chunk decodes to
+    # bytes separately, then we concat. Parity with the full-assembly
+    # path so partial-render works regardless of transport mix.
+    byte_parts: List[bytes] = []
     expected_seq = 0
     for c in chunks:
         if c.seq_num != expected_seq:
             break
-        parts.append(c.data_b64)
+        if c.data_binary is not None:
+            byte_parts.append(bytes(c.data_binary))
+        elif c.data_b64:
+            b64 = c.data_b64
+            padding = (4 - len(b64) % 4) % 4
+            try:
+                byte_parts.append(base64.b64decode(b64 + ('=' * padding)))
+            except Exception:
+                # Partial-render is best-effort; skip undecodable chunk.
+                break
         expected_seq += 1
 
-    if not parts:
+    if not byte_parts:
         return None
 
-    full_b64 = ''.join(parts)
-    # Add padding — partial base64 may not be aligned to 4-char boundary
-    padding = (4 - len(full_b64) % 4) % 4
-    full_b64 += '=' * padding
-
     try:
-        file_bytes = base64.b64decode(full_b64)
+        file_bytes = b"".join(byte_parts)
     except Exception as e:
         logger.warning(f"Partial assembly decode failed for {media_id}: {e}")
         return None
@@ -131,7 +403,7 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
     except Exception:
         pass  # Non-critical for partial images
 
-    logger.info(f"Partial image updated: {media_id} ({len(parts)} chunks, {len(file_bytes):,} bytes)")
+    logger.info(f"Partial image updated: {media_id} ({len(byte_parts)} chunks, {len(file_bytes):,} bytes)")
     return f"/static/{filename}"
 
 
@@ -149,34 +421,46 @@ def _assemble_partial_audio(media_id: str, db: Session) -> Optional[str]:
     if len(chunks) < 5:
         return None
 
-    # Collect only consecutive chunks (stop at first gap)
-    parts = []
+    # Collect only consecutive chunks (stop at first gap).
+    # April 2026 dual-transport: decode each chunk to bytes separately
+    # (binary rows pass through, legacy base64 rows decode per-row).
+    byte_parts: List[bytes] = []
     expected_seq = 0
     for c in chunks:
         if c.seq_num != expected_seq:
             break
-        parts.append(c.data_b64)
+        if c.data_binary is not None:
+            byte_parts.append(bytes(c.data_binary))
+        elif c.data_b64:
+            b64 = c.data_b64
+            padding = (4 - len(b64) % 4) % 4
+            try:
+                byte_parts.append(base64.b64decode(b64 + ('=' * padding)))
+            except Exception:
+                break   # skip undecodable tail; best-effort partial render
         expected_seq += 1
 
-    if not parts:
+    if not byte_parts:
         return None
 
-    full_b64 = ''.join(parts)
-    padding = (4 - len(full_b64) % 4) % 4
-    full_b64 += '=' * padding
+    file_bytes = b"".join(byte_parts)
 
-    try:
-        file_bytes = base64.b64decode(full_b64)
-    except Exception as e:
-        logger.warning(f"Partial audio decode failed for {media_id}: {e}")
-        return None
+    # Detect audio format from magic bytes
+    if len(file_bytes) > 12 and file_bytes[4:8] == b'ftyp':
+        ext = 'm4a'
+    elif len(file_bytes) >= 4 and file_bytes[0:4] == b'OggS':
+        ext = 'ogg'
+    elif len(file_bytes) >= 4 and file_bytes[0:4] == b'\x1a\x45\xdf\xa3':
+        ext = 'webm'
+    else:
+        ext = 'm4a'
 
-    filename = f"{media_id}_partial.webm"
+    filename = f"{media_id}_partial.{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
     with open(filepath, 'wb') as f:
         f.write(file_bytes)
 
-    logger.info(f"Partial audio updated: {media_id} ({len(parts)} chunks, {len(file_bytes):,} bytes)")
+    logger.info(f"Partial audio updated: {media_id} ({len(byte_parts)} chunks, {len(file_bytes):,} bytes)")
     return f"/static/{filename}"
 
 
@@ -210,6 +494,190 @@ def _run_ai_pipeline_bg(report_id: str, media_type: str, file_url: str):
     db = SessionLocal()
     try:
         _run_ai_pipeline(report_id, media_type, file_url, db)
+    finally:
+        db.close()
+
+
+def _try_partial_image_bg(media_id: str):
+    """Background partial-image assembly — runs PII blur (slow: easyocr + MediaPipe).
+    Non-blocking so the chunk handler can return in <100ms."""
+    from app.db.session import SessionLocal
+    db = SessionLocal()
+    try:
+        media = db.query(Media).filter(Media.id == media_id).first()
+        if not media or media.assembly_status == 'complete':
+            return
+        partial_url = _assemble_partial_image(media_id, db)
+        if partial_url:
+            # Re-fetch so we don't overwrite a later update
+            db.refresh(media)
+            if media.assembly_status != 'complete':
+                media.thumbnail_url = partial_url
+                db.commit()
+    except Exception as e:
+        logger.warning(f"[PartialImgBG] {media_id[:8]} failed: {e}")
+    finally:
+        db.close()
+
+
+def _try_partial_audio_bg(media_id: str, report_id: str):
+    """Background partial-audio assembly + live transcription."""
+    from app.db.session import SessionLocal
+    db = SessionLocal()
+    try:
+        media = db.query(Media).filter(Media.id == media_id).first()
+        if not media or media.assembly_status == 'complete':
+            return
+        partial_url = _assemble_partial_audio(media_id, db)
+        if partial_url:
+            db.refresh(media)
+            if media.assembly_status != 'complete':
+                media.thumbnail_url = partial_url
+                db.commit()
+            # Live transcription (translates to English) — own try/except in the fn
+            _run_partial_transcription_bg(report_id, partial_url)
+    except Exception as e:
+        logger.warning(f"[PartialAudioBG] {media_id[:8]} failed: {e}")
+    finally:
+        db.close()
+
+
+def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
+    """Background full-assembly task.
+
+    Moving assembly off the HTTP handler prevents two problems:
+      1) iOS fetch timing out on the last chunk while the server runs PII blur
+         + file I/O (5–15 s). When the client aborts mid-handler we can end up
+         with received_chunks == total but assembly_status still 'pending'
+         (the symptom we saw for media b36a0511 — image stuck at 50–100 %).
+      2) Concurrent retries racing each other inside the same handler.
+
+    The task is idempotent: it flips status 'pending' → 'assembling' in a single
+    UPDATE (optimistic locking) and only runs when that UPDATE actually changed
+    a row. A second task for the same media_id will see 'assembling' or
+    'complete' and exit immediately.
+    """
+    from app.db.session import SessionLocal
+    db = SessionLocal()
+    try:
+        media = db.query(Media).filter(Media.id == media_id).first()
+        if not media:
+            logger.warning(f"[AssemblyBG] media {media_id} not found")
+            return
+        if media.assembly_status == 'complete':
+            logger.info(f"[AssemblyBG] {media_id[:8]} already complete — skip")
+            return
+        if media.chunk_count == 0 or media.received_chunks < media.chunk_count:
+            logger.info(
+                f"[AssemblyBG] {media_id[:8]} not ready: "
+                f"{media.received_chunks}/{media.chunk_count}"
+            )
+            return
+
+        # Optimistic lock: accept either 'pending' (we got here before the
+        # handler pre-claimed — rare) OR 'assembling' (the handler pre-claimed
+        # the slot for us via its own CAS in the chunk endpoint, which is the
+        # common path). We must NOT bail on 'assembling' because the handler's
+        # CAS IS our handoff signal — before this fix, every chunk logged
+        # "acquired assembly lock" on the handler side and then "lock lost"
+        # on the worker side, leaving the media in 'assembling' forever.
+        # We still exclude 'complete' and 'failed' so re-submissions no-op.
+        locked = db.query(Media).filter(
+            Media.id == media_id,
+            Media.assembly_status.in_(['pending', 'assembling'])
+        ).update({'assembly_status': 'assembling'}, synchronize_session=False)
+        db.commit()
+        if locked == 0:
+            logger.info(f"[AssemblyBG] {media_id[:8]} already terminal (complete/failed) — skip")
+            return
+
+        logger.info(
+            f"[AssemblyBG] start {media_id[:8]} type={media_type} "
+            f"chunks={media.received_chunks}/{media.chunk_count}"
+        )
+
+        # Guaranteed-delivery: capture tier + group NOW (before assembly) so
+        # we can label metrics even on the failure branches. `tier_label` is
+        # kept as the Enum value's string form for stable Prometheus label sets.
+        _tier_label = getattr(getattr(media, 'resolution_tier', None), 'value', 'LOW') or 'LOW'
+        _group_id = getattr(media, 'photo_group_id', None)
+
+        try:
+            file_url = _assemble_media_file(media_id, media_type, db)
+        except Exception as e:
+            logger.error(f"[AssemblyBG] {media_id[:8]} assemble failed: {e}", exc_info=True)
+            db.query(Media).filter(Media.id == media_id).update(
+                {'assembly_status': 'failed'}, synchronize_session=False
+            )
+            db.commit()
+            if media_type == 'IMAGE':
+                try:
+                    variant_uploads_total.labels(tier=_tier_label, outcome='fail').inc()
+                except Exception:
+                    pass
+            return
+
+        if not file_url:
+            logger.error(f"[AssemblyBG] {media_id[:8]} assemble returned no url")
+            db.query(Media).filter(Media.id == media_id).update(
+                {'assembly_status': 'failed'}, synchronize_session=False
+            )
+            db.commit()
+            if media_type == 'IMAGE':
+                try:
+                    variant_uploads_total.labels(tier=_tier_label, outcome='fail').inc()
+                except Exception:
+                    pass
+            return
+
+        # Mark complete + bump report sync state.
+        db.refresh(media)
+        media.url = file_url
+        media.assembly_status = 'complete'
+        media.is_synced = True
+        media.completion_pct = 100.0
+
+        report = db.query(Report).filter(Report.id == report_id).first()
+        if report:
+            report.received_media = (report.received_media or 0) + 1
+            if report.expected_media and report.received_media >= report.expected_media:
+                report.sync_status = SyncStatusEnum.SYNCED
+                logger.info(f"[AssemblyBG] report {report_id[:8]} fully synced")
+        db.commit()
+        logger.info(f"[AssemblyBG] complete {media_id[:8]} → {file_url}")
+
+        # Guaranteed-delivery: record variant success + time-to-first/full image.
+        # These are the SLIs behind the 5-s first-image promise.
+        if media_type == 'IMAGE':
+            try:
+                variant_uploads_total.labels(tier=_tier_label, outcome='success').inc()
+                if report and report.server_created_at:
+                    now = datetime.now(timezone.utc)
+                    created_at = report.server_created_at
+                    if created_at.tzinfo is None:
+                        created_at = created_at.replace(tzinfo=timezone.utc)
+                    delta = (now - created_at).total_seconds()
+                    # First image of THIS photo group?
+                    first_in_group = True
+                    if _group_id:
+                        sibling_count = db.query(Media).filter(
+                            Media.photo_group_id == _group_id,
+                            Media.id != media_id,
+                            Media.assembly_status == 'complete',
+                        ).count()
+                        first_in_group = sibling_count == 0
+                    if first_in_group and delta >= 0:
+                        time_to_first_image_seconds.observe(delta)
+                    if _tier_label == 'HIGH' and delta >= 0:
+                        time_to_full_image_seconds.observe(delta)
+            except Exception as e:
+                # Metrics must never break the assembly pipeline.
+                logger.debug(f"[AssemblyBG] variant metric skipped: {e}")
+
+        # P2.3 — dispatch AI pipeline (Whisper / vision) to the AI pool instead
+        # of running it inline. Whisper alone can take 10–30 s on CPU; keeping
+        # it here would hold an assembly worker idle for that entire window.
+        _ai_executor.submit(_run_ai_pipeline_bg, report_id, media_type, file_url)
     finally:
         db.close()
 
@@ -258,11 +726,19 @@ def mark_false_alarm(report_id: str, user=Depends(require_analyst), db: Session 
 
 @router.patch("/{report_id}/dispatch", response_model=ReportResponse)
 def dispatch_team(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
-    """Mark a report as RESPONDING — rescue team has been dispatched."""
+    """Mark a report as RESPONDING — rescue team has been dispatched.
+
+    April 2026: the first time a report leaves PENDING for a verified
+    status (RESPONDING / RESOLVED) we bump the reporter's
+    ``verified_count`` so quality-based credibility (see §3.8 of
+    docs/INCENTIVES.md) reflects the accepted report."""
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+    was_pending = report.status == ReportStatusEnum.PENDING
     report.status = ReportStatusEnum.RESPONDING
+    if was_pending:
+        _mark_report_verified_for_credibility(report, db)
     db.commit()
     db.refresh(report)
     return report
@@ -274,9 +750,120 @@ def resolve_report(report_id: str, user=Depends(require_analyst), db: Session = 
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+    was_pending = report.status == ReportStatusEnum.PENDING
     report.status = ReportStatusEnum.RESOLVED
+    if was_pending:
+        _mark_report_verified_for_credibility(report, db)
     db.commit()
     db.refresh(report)
+    return report
+
+
+# ── Phase 5 (Apr 2026) — reviewer workflow ─────────────────────────────────
+
+@router.patch("/{report_id}/review", response_model=ReportResponse)
+def set_review_verdict(
+    report_id: str,
+    payload: dict,
+    user=Depends(require_analyst),
+    db: Session = Depends(get_db),
+):
+    """Record an analyst's explicit accept/reject verdict. Stamps
+    `reviewed_at=now()` so response-time metrics work. REJECTED requires a
+    non-empty `action_taken` so reviewers always capture a rationale."""
+    from app.models.report import ReviewerVerdictEnum
+    from datetime import datetime, timezone as _tz
+
+    verdict = str(payload.get("verdict", "")).upper()
+    if verdict not in {v.value for v in ReviewerVerdictEnum}:
+        raise HTTPException(status_code=400, detail=f"Invalid verdict: {verdict!r}")
+    action_taken = payload.get("action_taken")
+    if verdict == ReviewerVerdictEnum.REJECTED.value and not (action_taken and str(action_taken).strip()):
+        raise HTTPException(
+            status_code=400,
+            detail="action_taken is required when verdict is REJECTED",
+        )
+
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    report.reviewer_verdict = verdict
+    report.reviewed_at = datetime.now(_tz.utc)
+    if action_taken is not None:
+        report.action_taken = str(action_taken).strip()[:500] or None
+
+    # Phase 5 metric. Never let observability failures break the endpoint.
+    try:
+        from app.core.observability import (
+            reports_reviewed_total,  # type: ignore[attr-defined]
+        )
+        if verdict in ("ACCEPTED", "REJECTED"):
+            reports_reviewed_total.labels(verdict=verdict).inc()
+    except Exception:
+        pass
+
+    db.commit()
+    db.refresh(report)
+    logger.info(f"[Reviewer] {report_id[:8]} verdict={verdict} by {user.id[:8]}")
+    return report
+
+
+@router.patch("/{report_id}/timestamps", response_model=ReportResponse)
+def set_responder_timestamps(
+    report_id: str,
+    payload: dict,
+    user=Depends(require_analyst),
+    db: Session = Depends(get_db),
+):
+    """Stamp dispatched/arrived moments for the response team. The admin UI
+    can either pass explicit ISO timestamps OR set `stamp_dispatched_now` /
+    `stamp_arrived_now` to have the server write `datetime.now(UTC)`.
+    Computed `response_time_seconds` on the read path derives from these +
+    `reviewed_at`."""
+    from datetime import datetime, timezone as _tz
+
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    def _parse(v):
+        if not v:
+            return None
+        try:
+            return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Invalid datetime: {v!r}")
+
+    if payload.get("stamp_dispatched_now"):
+        report.help_dispatched_at = datetime.now(_tz.utc)
+    elif "help_dispatched_at" in payload:
+        report.help_dispatched_at = _parse(payload.get("help_dispatched_at"))
+    if payload.get("stamp_arrived_now"):
+        report.help_arrived_at = datetime.now(_tz.utc)
+    elif "help_arrived_at" in payload:
+        report.help_arrived_at = _parse(payload.get("help_arrived_at"))
+
+    # Cross-field sanity: arrival cannot precede dispatch. SQLite reads
+    # stored datetimes back tz-naive; freshly-stamped values (above) are
+    # tz-aware. Normalise both to UTC-aware before comparing or Python
+    # raises TypeError on the mixed comparison (caught by E2E test
+    # tests/backend/01-report-lifecycle.spec.ts → end-to-end flow).
+    if report.help_dispatched_at and report.help_arrived_at:
+        d = report.help_dispatched_at
+        a = report.help_arrived_at
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=_tz.utc)
+        if a.tzinfo is None:
+            a = a.replace(tzinfo=_tz.utc)
+        if a < d:
+            raise HTTPException(status_code=400, detail="help_arrived_at before help_dispatched_at")
+
+    db.commit()
+    db.refresh(report)
+    logger.info(
+        f"[Reviewer] {report_id[:8]} timestamps dispatched="
+        f"{report.help_dispatched_at} arrived={report.help_arrived_at}"
+    )
     return report
 
 
@@ -340,11 +927,25 @@ def delete_device_data(device_hash: str, db: Session = Depends(get_db)):
 
 @router.get("/device/{device_hash}/status-since")
 def get_device_status_since(device_hash: str, since: str = None, db: Session = Depends(get_db)):
-    """Lightweight status polling for mobile apps. Returns only status fields."""
+    """Lightweight polling endpoint used by the mobile apps' My Reports
+    screen. Returns a flat list of the caller's reports with enough
+    detail to render both the list card AND the detail view without
+    additional round-trips.
+
+    Apr 2026 expansion (spec: 'My Reports & Individual Report Management'):
+    each row now includes location, a thumbnail URL, and the description
+    so the My Reports card can show image/place/status at a glance.
+    """
     device_id = _resolve_device_id(device_hash, db)
     if not device_id:
         return []
-    q = db.query(Report).filter(Report.device_id == device_id)
+    # joinedload so we don't N+1 on location + media lookups. Each user
+    # typically has 1–50 reports; eager loading is cheaper than the round
+    # trips, especially on cold DB connections.
+    q = db.query(Report).options(
+        joinedload(Report.location),
+        joinedload(Report.media),
+    ).filter(Report.device_id == device_id)
     if since:
         try:
             since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
@@ -352,10 +953,80 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
         except Exception:
             pass
     reports = q.all()
-    return [{"id": r.id, "client_report_id": r.client_report_id, "status": r.status.value,
-             "severity": r.severity.value, "infrastructure_type": r.infrastructure_type.value,
-             "lives_impacted": r.lives_impacted, "updated_at": r.updated_at.isoformat() if r.updated_at else None}
-            for r in reports]
+
+    def _iso(dt):
+        return dt.isoformat() if dt else None
+
+    def _rt(r):
+        """Computed response_time_seconds — same formula as ReportResponse."""
+        end = r.help_arrived_at or r.help_dispatched_at
+        if not (r.reviewed_at and end):
+            return None
+        from datetime import timezone as _tz
+        a = r.reviewed_at if r.reviewed_at.tzinfo else r.reviewed_at.replace(tzinfo=_tz.utc)
+        b = end if end.tzinfo else end.replace(tzinfo=_tz.utc)
+        delta = int((b - a).total_seconds())
+        return delta if delta >= 0 else None
+
+    def _thumb_url(r):
+        """Pick the SMALL photo variant if available — cheap to download,
+        always sized for a card thumbnail. Falls back to MEDIUM → any
+        complete IMAGE → first IMAGE's thumbnail_url. Returns None when
+        the report has no photos yet."""
+        images = [m for m in (r.media or []) if m.type.value == 'IMAGE']
+        if not images:
+            return None
+        # Prefer a complete SMALL variant (cheapest, best for list thumbs).
+        for tier_preference in ('LOW', 'MEDIUM', 'HIGH'):
+            for m in images:
+                if (m.resolution_tier and m.resolution_tier.value == tier_preference and
+                        m.assembly_status == 'complete' and m.url):
+                    return m.url
+        # Fallback: any complete variant at all.
+        for m in images:
+            if m.assembly_status == 'complete' and m.url:
+                return m.url
+        # Last resort: the partial-assembly preview thumbnail.
+        return images[0].thumbnail_url
+
+    def _location(r):
+        """Return a compact location descriptor. Prefers user-entered
+        name; falls back to device-reported geocoded name; finally bare
+        lat/lng. None if no location row exists."""
+        loc = r.location
+        if not loc:
+            return None
+        return {
+            "user_location_name": loc.user_location_name,
+            "device_location_name": loc.device_location_name,
+            "latitude": loc.latitude,
+            "longitude": loc.longitude,
+        }
+
+    return [{
+        "id": r.id,
+        "client_report_id": r.client_report_id,
+        "status": r.status.value,
+        "severity": r.severity.value,
+        "infrastructure_type": r.infrastructure_type.value,
+        "crisis_type": r.crisis_type,
+        "damage_classification": r.damage_classification,
+        "description": r.description,
+        "lives_impacted": r.lives_impacted,
+        "server_created_at": _iso(r.server_created_at),
+        "updated_at": _iso(r.updated_at),
+        # Reviewer workflow (Apr 2026 Phase 5).
+        "reviewer_verdict": r.reviewer_verdict or "NOT_REVIEWED",
+        "action_taken": r.action_taken,
+        "help_dispatched_at": _iso(r.help_dispatched_at),
+        "help_arrived_at": _iso(r.help_arrived_at),
+        "reviewed_at": _iso(r.reviewed_at),
+        "response_time_seconds": _rt(r),
+        # My Reports card / detail view surfaces (Apr 2026 spec).
+        "location": _location(r),
+        "thumbnail_url": _thumb_url(r),
+        "deletion_requested_at": _iso(r.deletion_requested_at),
+    } for r in reports]
 
 
 @router.patch("/{report_id}/impact")
@@ -422,7 +1093,16 @@ def undo_delete(report_id: str, db: Session = Depends(get_db)):
 
 def _purge_expired_deletions(db: Session):
     """Permanently delete reports whose grace period has expired.
-    Uses per-report grace_minutes (default 24h, mobile=30min)."""
+    Uses per-report grace_minutes (default 24h, mobile=30min).
+
+    Apr 2026 PR 2 — ALSO decrements the corresponding `ReporterProfile`
+    counters. The counter was previously incremented on submit
+    (`_update_reporter_profile`) but never decremented anywhere, so a
+    user who deleted all their reports still saw "7 REPORTS SUBMITTED"
+    on the home screen. Decrementing here (not on soft-delete) matches
+    the 24-hour grace window: the user might undo their deletion, so
+    their counter stays until the row actually disappears.
+    """
     now = datetime.now(timezone.utc)
     # Get all reports with deletion requested
     pending = db.query(Report).filter(Report.deletion_requested_at != None).all()
@@ -434,6 +1114,20 @@ def _purge_expired_deletions(db: Session):
             expired.append(r)
     if not expired:
         return 0
+
+    # Local import so we don't shuffle the top-of-file block; matches the
+    # pattern used by _get_reporter_credibility below.
+    from app.models.report import ReporterProfile
+
+    # Collect per-device decrements so we only touch each profile once.
+    # Keyed by device_id; value is (report_count_delta, verified_count_delta).
+    profile_decrements: dict = {}
+    VERIFIED_STATUSES = {
+        ReportStatusEnum.VERIFIED.value,
+        ReportStatusEnum.RESPONDING.value,
+        ReportStatusEnum.RESOLVED.value,
+    }
+
     count = 0
     for report in expired:
         for m in report.media:
@@ -454,11 +1148,40 @@ def _purge_expired_deletions(db: Session):
                 if os.path.exists(sat_path):
                     try: os.remove(sat_path)
                     except: pass
+
+        # Accumulate counter decrements — look up the device hash before
+        # we delete the row so we still have report.device.device_hash.
+        device_hash = None
+        try:
+            if report.device_id:
+                device = db.query(Device).filter(Device.id == report.device_id).first()
+                device_hash = device.device_hash if device else None
+        except Exception:
+            device_hash = None
+        if device_hash:
+            status_val = report.status.value if hasattr(report.status, 'value') else str(report.status or '')
+            delta_verified = 1 if status_val in VERIFIED_STATUSES else 0
+            prev = profile_decrements.get(device_hash, (0, 0))
+            profile_decrements[device_hash] = (prev[0] + 1, prev[1] + delta_verified)
+
         db.delete(report)
         count += 1
+
+    # Apply the decrements. Clamp at 0 to defend against double-purges
+    # or pre-existing drift in the counter.
+    for device_hash, (r_delta, v_delta) in profile_decrements.items():
+        profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
+        if not profile:
+            continue
+        profile.report_count = max(0, (profile.report_count or 0) - r_delta)
+        profile.verified_count = max(0, (profile.verified_count or 0) - v_delta)
+
     db.commit()
     if count > 0:
-        logger.info(f"Purge: {count} expired deletion(s) permanently removed")
+        logger.info(
+            f"Purge: {count} expired deletion(s) permanently removed; "
+            f"counters decremented for {len(profile_decrements)} device(s)"
+        )
     return count
 
 
@@ -519,14 +1242,41 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     if not check_rate_limit(f"meta:{meta_in.device_hash}", 30, 60):
         raise HTTPException(status_code=429, detail="Rate limit exceeded — try again later")
 
-    # Idempotency check
+    # Idempotency + collision detection (P1.6).
+    # Same-device retry must return the existing Report (idempotent). A
+    # different-device collision — astronomically rare with UUID-v4 but
+    # possible with short device-side IDs — is a potential data-loss path:
+    # device B's submission would be silently discarded and its media
+    # chunks redirected to device A's Report. Guard with a 409 so the
+    # client regenerates its UUID and retries.
     if meta_in.client_report_id:
         existing = db.query(Report).filter(
             Report.client_report_id == meta_in.client_report_id
         ).first()
         if existing:
-            logger.info(f"Meta idempotent hit: {meta_in.client_report_id}")
-            return existing
+            # Resolve the requesting device first so we can compare.
+            req_device = db.query(Device).filter(Device.device_hash == meta_in.device_hash).first()
+            existing_owner_hash = None
+            if existing.device_id:
+                _dev = db.query(Device).filter(Device.id == existing.device_id).first()
+                existing_owner_hash = _dev.device_hash if _dev else None
+            # Same device → idempotent replay, normal retry path.
+            if existing_owner_hash and existing_owner_hash == meta_in.device_hash:
+                logger.info(f"Meta idempotent hit: {meta_in.client_report_id}")
+                return existing
+            # Different device → collision. Reject so client retries with a new id.
+            logger.warning(
+                f"client_report_id collision {meta_in.client_report_id} "
+                f"(existing owner {existing_owner_hash}, new {meta_in.device_hash})"
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "client_report_id_conflict",
+                    "message": "client_report_id already used by a different device — regenerate and retry",
+                    "existing_report_id": existing.id,
+                }
+            )
 
     # Device resolution
     device = db.query(Device).filter(Device.device_hash == meta_in.device_hash).first()
@@ -629,6 +1379,80 @@ def update_report_classification(report_id: str, request: dict, db: Session = De
     db.refresh(report)
     logger.info(f"Report {report.id} classified: sev={report.severity.value} type={report.infrastructure_type.value}")
     return report
+
+
+@router.post("/geocode/describe")
+async def geocode_from_description(payload: dict):
+    """Resolve a free-text location description to lat/lng + place name.
+
+    Called by the PWA / RN app when GPS lock fails — the user gets a
+    "describe your location" text box as the graceful fallback, and
+    this endpoint pipes the result through the same multi-layer
+    geocoder (Claude Haiku → Mapbox → Nominatim) the IVR + SMS channels
+    already use. Adds w3w if the caller supplies ``include_w3w=true``
+    and ``W3W_API_KEY`` is configured.
+
+    Body:
+        {
+            "text":          "near the big mosque in Koramangala 5th block",
+            "country_hint":  "India"  (optional, helps scope fuzzy matches),
+            "include_w3w":   true      (optional)
+        }
+
+    Response:
+        {
+            "latitude":       12.9352,
+            "longitude":      77.6245,
+            "location_name":  "Koramangala, Bengaluru, Karnataka",
+            "confidence":     "medium",
+            "source":         "mapbox",
+            "w3w":            "///example.example.example" | null
+        }
+    """
+    # Lazy import so unit tests that don't exercise this endpoint don't
+    # pay the httpx + tokeniser init cost. `messaging_bot` is a symlink
+    # inside `backend/` that points at `messaging-bot/` so the hyphenated
+    # directory name is reachable as a valid Python package.
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    from messaging_bot.sms.geocoder import geocode_text
+
+    text = str(payload.get("text", "")).strip()
+    if not text or len(text) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "text_too_short",
+                    "message": "Provide ≥ 3 characters of location description."},
+        )
+    country_hint = str(payload.get("country_hint", "India")).strip() or "India"
+
+    result = await geocode_text(text, country_hint=country_hint)
+
+    # Optional what3words enrichment. Only resolves if the caller opted in
+    # AND the operator supplied W3W_API_KEY — otherwise the field is null
+    # (no cost, no leakage of the raw text to a 3rd-party API).
+    w3w = None
+    if payload.get("include_w3w") and result.get("latitude"):
+        w3w_key = os.getenv("W3W_API_KEY", "").strip()
+        if w3w_key:
+            try:
+                async with httpx.AsyncClient(timeout=6) as c:
+                    w3w_res = await c.get(
+                        "https://api.what3words.com/v3/convert-to-3wa",
+                        params={
+                            "coordinates": f"{result['latitude']},{result['longitude']}",
+                            "key": w3w_key,
+                            "language": "en",
+                        },
+                    )
+                    if w3w_res.status_code == 200:
+                        words = (w3w_res.json() or {}).get("words")
+                        if words:
+                            w3w = f"///{words}"
+            except Exception as exc:
+                logger.warning(f"w3w lookup failed: {exc}")
+
+    return {**result, "w3w": w3w}
 
 
 @router.patch("/{report_id}/location", response_model=ReportResponse)
@@ -876,8 +1700,8 @@ RESPONSE FORMAT — Return ONLY valid JSON:
   "suggested_action": "Dispatch Rescue Team | Dispatch + Alert Neighbors | Monitor & Verify | Request More Info | Flag as Suspicious | Likely False Report",
   "lives_at_risk_estimate": "number or range string",
   "inferred_severity": "CRITICAL | SEVERE | MODERATE | MINOR",
-  "inferred_crisis_type": "EARTHQUAKE | FLOOD | CONFLICT | HURRICANE | CYCLONE | WILDFIRE | LANDSLIDE | PANDEMIC | OTHER",
-  "inferred_damage_class": "NO_DAMAGE | PARTIAL | COMPLETE",
+  "inferred_crisis_type": "EARTHQUAKE | FLOOD | TSUNAMI | CYCLONE | LANDSLIDE | EXPLOSION | CHEMICAL_INCIDENT | PANDEMIC | CONFLICT | CIVIL_UNREST | OTHER",
+  "inferred_damage_class": "MINIMAL | PARTIAL | COMPLETE",
   "score_breakdown": {
     "text_voice_score": 0-100,
     "visual_evidence_score": 0-100,
@@ -1214,6 +2038,7 @@ def attach_media_chunk(
     report_id: str,
     payload: MediaChunkPayload,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """
@@ -1223,7 +2048,21 @@ def attach_media_chunk(
     - Assembles full file when all chunks received
     - Triggers AI pipeline in background (non-blocking — P-1 fix)
     - Returns completion_pct for client progress tracking
+
+    P1.5 — rate limited to 180 chunks/minute per client IP (= 3/s). A healthy
+    1 MB upload at 512 KB chunks is ~2 chunks; even a 10 MB upload at 1 KB
+    chunks (worst-case very-slow tier) is 10,000 chunks over many minutes.
+    180/min therefore comfortably covers every real scenario while blocking
+    the DoS surface where a single client sprays thousands of fake chunks.
     """
+    from app.main import check_rate_limit
+    client_ip = request.client.host if request.client else 'unknown'
+    if not check_rate_limit(f"chunk:{client_ip}", max_requests=180, window=60):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many chunk uploads from this IP; slow down and retry."
+        )
+
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -1232,28 +2071,56 @@ def attach_media_chunk(
     if payload.checksum:
         computed = djb2_checksum(payload.data)
         if computed != payload.checksum:
+            try:
+                chunk_transport_total.labels(transport='base64', outcome='rejected').inc()
+            except Exception:
+                pass
             raise HTTPException(
                 status_code=400,
                 detail=f"Checksum mismatch seq={payload.seq_num}: expected {payload.checksum}, got {computed}"
             )
 
-    # Find or create the Media record for this upload session
+    # Transport observability — emit after integrity check so checksum-mismatch
+    # failures land in the `rejected` bucket above and only healthy uploads
+    # hit `accepted` here.
+    try:
+        chunk_transport_total.labels(transport='base64', outcome='accepted').inc()
+    except Exception:
+        pass
+
+    # Find or create the Media record for this upload session.
+    # Guaranteed-delivery: the client tags every chunk with `resolution_tier`
+    # (SMALL=LOW / MEDIUM=MEDIUM / LARGE=HIGH) and a `photo_group_id` linking
+    # the three variants of one captured photo. We used to hard-code `MEDIUM`
+    # here, which meant tier mismatches were silently lost. Use the values
+    # from the payload; legacy clients that don't send them still work
+    # because the schema defaults are `LOW` + null.
     media = db.query(Media).filter(Media.id == payload.media_id).first()
     if not media:
         media = Media(
             id=payload.media_id,
             report_id=report_id,
             type=payload.type,
-            resolution_tier=ResolutionEnum.MEDIUM,   # P-2 fix: use enum not string
+            resolution_tier=payload.resolution_tier,
+            photo_group_id=payload.photo_group_id,
             url='',
             is_synced=False,
             chunk_count=payload.total_chunks,
             received_chunks=0,
             completion_pct=0.0,
-            assembly_status='pending'
+            assembly_status='pending',
+            # Apr 2026: persist the client-blur flag from the first chunk.
+            # Subsequent chunks for the same media_id don't update it —
+            # all chunks for one upload share the same blur status.
+            client_blur_applied=bool(payload.client_blur_applied),
         )
         db.add(media)
         db.flush()
+    elif payload.client_blur_applied and not media.client_blur_applied:
+        # Client sent the flag on a later chunk (e.g. resumed upload where
+        # first chunk predated the client-blur release). Upgrade the media
+        # row so the assembler picks it up.
+        media.client_blur_applied = True
 
     # Idempotent chunk insert — check for duplicate before incrementing counter
     existing_chunk = db.query(MediaChunk).filter(
@@ -1283,58 +2150,74 @@ def attach_media_chunk(
 
     db.commit()
 
-    # Progressive partial assembly every 3 new chunks for smooth real-time preview
-    if (is_new_chunk and
+    # Progressive partial assembly — BUT skip it if this chunk completes the
+    # upload (full assembly will produce the final file anyway, so partial is
+    # redundant and just delays it). FastAPI BackgroundTasks run serially, so
+    # a partial task with slow PII blur would queue up in front of the full
+    # assembly and starve it.
+    is_final_chunk = media.received_chunks >= payload.total_chunks
+    if (is_new_chunk and not is_final_chunk and
         payload.type == MediaTypeEnum.IMAGE and
         media.received_chunks >= 3 and
         media.received_chunks % 3 == 0 and
         media.assembly_status != 'complete'):
-        try:
-            partial_url = _assemble_partial_image(payload.media_id, db)
-            if partial_url:
-                media.thumbnail_url = partial_url
-                db.commit()
-        except Exception as e:
-            logger.warning(f"Partial image assembly skipped: {e}")
+        background_tasks.add_task(_try_partial_image_bg, payload.media_id)
 
-    # Progressive partial audio assembly every 5 chunks for streaming preview
-    if (is_new_chunk and
+    if (is_new_chunk and not is_final_chunk and
         payload.type == MediaTypeEnum.AUDIO and
         media.received_chunks >= 5 and
         media.received_chunks % 5 == 0 and
         media.assembly_status != 'complete'):
-        try:
-            partial_url = _assemble_partial_audio(payload.media_id, db)
-            if partial_url:
-                media.thumbnail_url = partial_url
-                db.commit()
-                # Live transcription: translate partial audio to English in background
-                background_tasks.add_task(
-                    _run_partial_transcription_bg, report_id, partial_url
-                )
-        except Exception as e:
-            logger.warning(f"Partial audio assembly skipped: {e}")
+        background_tasks.add_task(_try_partial_audio_bg, payload.media_id, report_id)
 
-    # Full assembly when all chunks received (PRD §3.6)
+    # Full assembly when all chunks received (PRD §3.6).
+    # Run in background so the HTTP response returns immediately — otherwise
+    # PII blur + disk I/O on the final chunk can hold the handler open long
+    # enough for mobile clients to time out and leave the media stuck at
+    # 'pending' despite received_chunks == total_chunks. See _try_full_assembly_bg.
+    db.refresh(media)  # make sure we see the post-commit state, not stale in-memory
+    logger.info(
+        f"[Chunk] {payload.media_id[:8]} seq={payload.seq_num} "
+        f"received={media.received_chunks}/{payload.total_chunks} "
+        f"status={media.assembly_status} new={is_new_chunk}"
+    )
+    # P1.1 — Atomic-CAS lock before spawning. Previously two concurrent chunk
+    # handlers could both see status='pending' and each spawn a thread; the
+    # second thread would no-op inside _try_full_assembly_bg's own CAS but
+    # spawning a wasted thread per retry is still avoidable. Here we flip
+    # pending → assembling in a single UPDATE and only spawn if this row
+    # changed (i.e. we won the race). Stuck 'assembling' is also escaped:
+    # if the status has been 'assembling' for >5 min with no progress, we
+    # assume the previous worker died (crash / uvicorn --reload) and reclaim
+    # the lock. This closes the data-loss path where media was stranded
+    # forever in 'assembling' after a backend restart.
     if media.received_chunks >= payload.total_chunks and media.assembly_status != 'complete':
-        try:
-            file_url = _assemble_media_file(payload.media_id, payload.type.value, db)
-            if file_url:
-                media.url = file_url
-                media.assembly_status = 'complete'
-                media.is_synced = True
-                media.completion_pct = 100.0
-                report.received_media = (report.received_media or 0) + 1
-                if report.received_media >= report.expected_media:
-                    report.sync_status = SyncStatusEnum.SYNCED
-                    logger.info(f"Report {report_id} fully synced after chunk assembly")
-                db.commit()
-                # P-1 fix: AI pipeline runs in background — never blocks the HTTP response
-                background_tasks.add_task(
-                    _run_ai_pipeline_bg, report_id, payload.type.value, file_url
-                )
-        except Exception as e:
-            logger.error(f"Assembly error for {payload.media_id}: {e}")
+        from datetime import datetime, timedelta, timezone as _tz
+        stale_cutoff = datetime.now(_tz.utc) - timedelta(minutes=5)
+        locked = db.query(Media).filter(
+            Media.id == payload.media_id,
+            or_(
+                Media.assembly_status == 'pending',
+                and_(Media.assembly_status == 'assembling', Media.updated_at < stale_cutoff),
+                Media.assembly_status == 'failed',
+            )
+        ).update({'assembly_status': 'assembling'}, synchronize_session=False)
+        db.commit()
+        if locked:
+            logger.info(f"[Chunk] acquired assembly lock for {payload.media_id[:8]}; enqueuing to pool")
+            # P2.2 — submit to the bounded ThreadPoolExecutor instead of
+            # spawning an unbounded threading.Thread. The pool caps concurrent
+            # assemblies at CRISP_ASSEMBLY_WORKERS (default 4) which prevents
+            # thread explosion under load. Queued jobs run as workers free up.
+            _assembly_executor.submit(
+                _try_full_assembly_bg,
+                payload.media_id, payload.type.value, report_id
+            )
+        else:
+            logger.info(
+                f"[Chunk] {payload.media_id[:8]} already locked by another worker "
+                f"(status={media.assembly_status})"
+            )
 
     return {
         "media_id": payload.media_id,
@@ -1343,6 +2226,269 @@ def attach_media_chunk(
         "total": payload.total_chunks,
         "completion_pct": media.completion_pct,
         "assembly_status": media.assembly_status
+    }
+
+
+# ── Upload-bandwidth probe (Apr 2026) ──────────────────────────────────────
+#
+# Lightweight endpoint the PWA/RN client hits BEFORE the first chunk of
+# a media upload to measure actual upload throughput. Fixes a class of
+# bugs where the client's network-tier detector (`detectPWANetworkTier`)
+# trusts `navigator.connection.effectiveType`, which Chrome DevTools
+# throttling does NOT update at runtime — leading to the client picking
+# MEDIUM tier (128 KB chunks, 30 s timeout) on a 2 Kbps throttled link,
+# every chunk timing out, upload stuck forever.
+#
+# The client POSTs a ~8 KB payload, measures wall-clock round-trip time,
+# divides → bytes-per-second → picks a tier. No persistence. No auth
+# (bandwidth is a public property of the link; hiding this endpoint
+# doesn't add security). Rate-limited 60/min per client IP so it can't
+# be abused for DoS.
+@router.post("/upload-probe", status_code=status.HTTP_200_OK)
+async def upload_probe(request: Request, data: UploadFile = File(...)):
+    """Echo `len(data)` for client-side bandwidth measurement.
+
+    Client usage:
+      * generate an N-byte payload (8 KB recommended — enough signal,
+        fast enough at worst-case bandwidth)
+      * `performance.now()` before the POST
+      * `performance.now()` after the 200 response arrives
+      * throughput ≈ N / elapsed_ms * 1000 bytes/sec
+    """
+    from app.main import check_rate_limit
+    client_ip = request.client.host if request.client else 'unknown'
+    if not check_rate_limit(f"probe:{client_ip}", max_requests=60, window=60):
+        raise HTTPException(status_code=429, detail="probe rate limit exceeded")
+    # 64 KB hard cap — stops abuse where a client POSTs 100 MB "probes".
+    content = await data.read()
+    if len(content) > 65_536:
+        raise HTTPException(status_code=422, detail="probe payload too large (max 64 KB)")
+    return {
+        "received_bytes": len(content),
+        "server_time_ms": int(time.time() * 1000),
+    }
+
+
+# ── Binary-chunk endpoint (Apr 2026, Option A) ─────────────────────────────
+#
+# UNDP scale work: replaces the base64-over-JSON chunk transport with a raw
+# multipart/form-data binary upload. The request body carries:
+#
+#     media_id           — string, UUID chosen by the client
+#     seq_num            — int, 0-indexed chunk sequence
+#     total_chunks       — int, total chunks for this media
+#     type               — "IMAGE" | "AUDIO"
+#     resolution_tier    — "LOW" | "MEDIUM" | "HIGH"   (default "LOW")
+#     photo_group_id     — string, UUID grouping the 3 variants of one photo
+#     client_blur_applied — "true"/"false"/"1"/"0"
+#     checksum           — hex djb2 over the raw bytes (optional)
+#     data               — UploadFile, the raw-byte chunk payload
+#
+# Preserves 100 % of the legacy endpoint's business logic:
+#   * rate limit 180 chunks/min per client IP (same Redis-free key)
+#   * report existence check
+#   * djb2 integrity verification (`djb2_bytes`) when checksum provided
+#   * idempotent insert on (media_id, seq_num)
+#   * atomic SQL-level `received_chunks += 1`
+#   * partial assembly trigger every 3 image / 5 audio chunks
+#   * full-assembly CAS lock + 5-min stale-escape
+#   * client_blur_applied flag persistence + upgrade on late chunks
+#
+# The ONLY difference: chunks land in `MediaChunk.data_binary` (LargeBinary)
+# rather than `MediaChunk.data_b64` (Text). The assembly path consults
+# both columns and concatenates whichever is populated per row, so mixed
+# media rows (never produced in practice) still assemble correctly.
+@router.post("/{report_id}/media/chunk-bin", status_code=status.HTTP_200_OK)
+async def attach_media_chunk_bin(
+    report_id: str,
+    request: Request,
+    data: UploadFile = File(...),
+    media_id: str = Form(...),
+    seq_num: int = Form(...),
+    total_chunks: int = Form(...),
+    type: str = Form(...),
+    resolution_tier: str = Form("LOW"),
+    photo_group_id: Optional[str] = Form(None),
+    client_blur_applied: str = Form("false"),
+    checksum: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    """Binary variant of `/media/chunk`. See module-level comment above."""
+    from app.main import check_rate_limit
+
+    # ── Rate limit (identical key prefix so clients sharing an IP can't
+    #    bypass the legacy limit by switching transports).
+    client_ip = request.client.host if request.client else 'unknown'
+    if not check_rate_limit(f"chunk:{client_ip}", max_requests=180, window=60):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many chunk uploads from this IP; slow down and retry."
+        )
+
+    # ── Input validation (mirrors MediaChunkPayload pydantic guards).
+    if seq_num < 0 or seq_num > 10_000:
+        raise HTTPException(status_code=422, detail="seq_num out of range")
+    if total_chunks < 1 or total_chunks > 10_000:
+        raise HTTPException(status_code=422, detail="total_chunks out of range")
+    type_upper = str(type).upper()
+    if type_upper not in {"IMAGE", "AUDIO"}:
+        raise HTTPException(status_code=422, detail=f"invalid type: {type!r}")
+    tier_upper = str(resolution_tier).upper()
+    if tier_upper not in {"LOW", "MEDIUM", "HIGH", "ORIGINAL"}:
+        raise HTTPException(status_code=422, detail=f"invalid resolution_tier: {resolution_tier!r}")
+
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    # ── Read payload bytes. 1 MB soft cap on raw bytes = 1.33 MB base64
+    #    equivalent; matches the MediaChunkPayload max_length=1048576 guard.
+    raw_bytes = await data.read()
+    if len(raw_bytes) > 1_048_576:
+        raise HTTPException(status_code=422, detail="chunk too large (max 1 MB)")
+    if len(raw_bytes) == 0:
+        raise HTTPException(status_code=422, detail="chunk payload is empty")
+
+    # ── Integrity check (PRD §3.7). Identical polynomial to the legacy
+    #    endpoint; only the input alphabet differs (byte range vs ASCII).
+    if checksum:
+        computed = djb2_bytes(raw_bytes)
+        if computed != checksum:
+            try:
+                chunk_transport_total.labels(transport='binary', outcome='rejected').inc()
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=400,
+                detail=f"Checksum mismatch seq={seq_num}: expected {checksum}, got {computed}"
+            )
+
+    # Transport observability — post-checksum-verify so rejected uploads
+    # don't bloat the `accepted` bucket.
+    try:
+        chunk_transport_total.labels(transport='binary', outcome='accepted').inc()
+    except Exception:
+        pass
+
+    # ── Coerce form-flag bools. HTTP form fields are strings.
+    blur_flag = str(client_blur_applied).lower() in ("1", "true", "yes", "y")
+    photo_group = str(photo_group_id).strip() if photo_group_id else None
+    if photo_group == "":
+        photo_group = None
+
+    # ── Find-or-create Media row. Mirrors the legacy endpoint exactly.
+    media = db.query(Media).filter(Media.id == media_id).first()
+    if not media:
+        from app.models.report import MediaTypeEnum as _MTE, ResolutionEnum as _RE
+        media = Media(
+            id=media_id,
+            report_id=report_id,
+            type=_MTE(type_upper),
+            resolution_tier=_RE(tier_upper),
+            photo_group_id=photo_group,
+            url='',
+            is_synced=False,
+            chunk_count=total_chunks,
+            received_chunks=0,
+            completion_pct=0.0,
+            assembly_status='pending',
+            client_blur_applied=blur_flag,
+        )
+        db.add(media)
+        db.flush()
+    elif blur_flag and not media.client_blur_applied:
+        # Late-arriving blur flag (same upgrade path as the legacy endpoint).
+        media.client_blur_applied = True
+
+    # ── Idempotent insert. Mirrors the legacy endpoint byte-for-byte
+    #    except the column we write (data_binary instead of data_b64).
+    existing_chunk = db.query(MediaChunk).filter(
+        MediaChunk.media_id == media_id,
+        MediaChunk.seq_num == seq_num
+    ).first()
+
+    is_new_chunk = not existing_chunk
+    if is_new_chunk:
+        db.add(MediaChunk(
+            media_id=media_id,
+            seq_num=seq_num,
+            total_chunks=total_chunks,
+            data_b64=None,            # legacy column NULL — binary wins
+            data_binary=raw_bytes,
+            checksum=checksum,
+        ))
+        # Atomic SQL-level increment — same race-safe pattern as the legacy path.
+        db.query(Media).filter(Media.id == media_id).update(
+            {"received_chunks": Media.received_chunks + 1,
+             "chunk_count": total_chunks},
+            synchronize_session="fetch"
+        )
+        db.flush()
+        db.refresh(media)
+        media.completion_pct = round((media.received_chunks / total_chunks) * 100, 1)
+
+    db.commit()
+
+    # ── Progressive partial assembly — same trigger cadence as legacy
+    #    endpoint. FastAPI BackgroundTasks requires passing the Request
+    #    chain, but we only need the side-effect; use the module-level
+    #    executor directly for parity with the full-assembly trigger.
+    is_final_chunk = media.received_chunks >= total_chunks
+    media_type_enum_value = type_upper  # "IMAGE" | "AUDIO"
+    if (is_new_chunk and not is_final_chunk and
+        media_type_enum_value == "IMAGE" and
+        media.received_chunks >= 3 and
+        media.received_chunks % 3 == 0 and
+        media.assembly_status != 'complete'):
+        _assembly_executor.submit(_try_partial_image_bg, media_id)
+
+    if (is_new_chunk and not is_final_chunk and
+        media_type_enum_value == "AUDIO" and
+        media.received_chunks >= 5 and
+        media.received_chunks % 5 == 0 and
+        media.assembly_status != 'complete'):
+        _assembly_executor.submit(_try_partial_audio_bg, media_id, report_id)
+
+    # ── Full-assembly CAS lock with stale-escape. Identical to the
+    #    legacy endpoint at `attach_media_chunk`.
+    db.refresh(media)
+    logger.info(
+        f"[ChunkBin] {media_id[:8]} seq={seq_num} "
+        f"received={media.received_chunks}/{total_chunks} "
+        f"status={media.assembly_status} new={is_new_chunk}"
+    )
+    if media.received_chunks >= total_chunks and media.assembly_status != 'complete':
+        from datetime import datetime, timedelta, timezone as _tz
+        stale_cutoff = datetime.now(_tz.utc) - timedelta(minutes=5)
+        locked = db.query(Media).filter(
+            Media.id == media_id,
+            or_(
+                Media.assembly_status == 'pending',
+                and_(Media.assembly_status == 'assembling', Media.updated_at < stale_cutoff),
+                Media.assembly_status == 'failed',
+            )
+        ).update({'assembly_status': 'assembling'}, synchronize_session=False)
+        db.commit()
+        if locked:
+            logger.info(f"[ChunkBin] acquired assembly lock for {media_id[:8]}; enqueuing to pool")
+            _assembly_executor.submit(
+                _try_full_assembly_bg,
+                media_id, type_upper, report_id
+            )
+        else:
+            logger.info(
+                f"[ChunkBin] {media_id[:8]} already locked by another worker "
+                f"(status={media.assembly_status})"
+            )
+
+    return {
+        "media_id": media_id,
+        "seq_num": seq_num,
+        "received": media.received_chunks,
+        "total": total_chunks,
+        "completion_pct": media.completion_pct,
+        "assembly_status": media.assembly_status,
+        "transport": "binary",
     }
 
 
@@ -1358,14 +2504,31 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
     if not check_rate_limit(f"report:{report_in.device_hash}", 30, 60):
         raise HTTPException(status_code=429, detail="Rate limit exceeded — try again later")
     
-    # 0. Idempotency Check — prevent duplicate submissions on retry
+    # 0. Idempotency + collision detection (P1.6 — same guard as /meta).
     if report_in.client_report_id:
         existing = db.query(Report).filter(
             Report.client_report_id == report_in.client_report_id
         ).first()
         if existing:
-            logger.info(f"Idempotent hit: client_report_id={report_in.client_report_id}, returning existing report {existing.id}")
-            return existing
+            existing_owner_hash = None
+            if existing.device_id:
+                _dev = db.query(Device).filter(Device.id == existing.device_id).first()
+                existing_owner_hash = _dev.device_hash if _dev else None
+            if existing_owner_hash and existing_owner_hash == report_in.device_hash:
+                logger.info(f"Idempotent hit: client_report_id={report_in.client_report_id}")
+                return existing
+            logger.warning(
+                f"client_report_id collision at /reports: {report_in.client_report_id} "
+                f"(existing {existing_owner_hash}, new {report_in.device_hash})"
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "client_report_id_conflict",
+                    "message": "client_report_id already used by a different device — regenerate and retry",
+                    "existing_report_id": existing.id,
+                }
+            )
 
     # 1. Device Resolution
     # Look up or auto-register the offline device hash
@@ -1517,17 +2680,59 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
     return db_report
 
 @router.get("/", response_model=List[ReportResponse])
-def get_reports(skip: int = 0, limit: int = 100, include_deleted: bool = False,
-                user=Depends(require_viewer), db: Session = Depends(get_db)):
+def get_reports(
+    request: Request,
+    response: Response,
+    skip: int = 0,
+    limit: int = 100,
+    include_deleted: bool = False,
+    user=Depends(require_viewer),
+    db: Session = Depends(get_db),
+):
     """
     Retrieve aggregated tactical reports for the dashboard sync client.
     By default, excludes reports pending deletion (24h grace period).
     Pass ?include_deleted=true to see them (admin use).
+
+    P2.1 — the serializer walks every Report's media + ai_analysis + location
+    + verification. Without eager loading this is an N+1: a 1000-row dashboard
+    fetch fires 4001+ queries. `joinedload` pulls all relationships in one
+    wide SELECT per relationship, taking the query count to ~5 regardless of N.
+
+    P2.11 — also returns X-Total-Count header and caps `limit` at 500 so a
+    misbehaving client can't pull the whole table in one shot. The dashboard
+    reads the header to drive its pagination / infinite-scroll.
     """
+    # Safety caps: dashboard may ask for more than the DB can comfortably ship.
+    safe_limit = max(1, min(limit, 500))
+    safe_skip = max(0, skip)
+
     q = db.query(Report)
     if not include_deleted:
         q = q.filter(Report.deletion_requested_at == None)
-    reports = q.order_by(Report.server_created_at.desc()).offset(skip).limit(limit).all()
+
+    # Total count for pagination (cheap indexed count, no relationships).
+    total = q.with_entities(sa_func.count(Report.id)).scalar() or 0
+
+    q = q.options(
+        joinedload(Report.media),
+        joinedload(Report.location),
+        joinedload(Report.ai_analysis),
+        joinedload(Report.verification),
+        joinedload(Report.device),
+    )
+    reports = (
+        q.order_by(Report.server_created_at.desc())
+         .offset(safe_skip)
+         .limit(safe_limit)
+         .all()
+    )
+
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Limit"] = str(safe_limit)
+    response.headers["X-Offset"] = str(safe_skip)
+    # CORS: without this the dashboard's fetch() can't actually read the header.
+    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count, X-Limit, X-Offset"
     return reports
 
 
@@ -1679,7 +2884,16 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
 
 @router.get("/profile/{device_hash}")
 def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
-    """Get reporter's gamification profile (badge level, report count, impact)."""
+    """Get reporter's gamification profile (badge level, report count, impact).
+
+    Apr 2026 PR 2 — defense-in-depth against stored-counter drift. The
+    stored `ReporterProfile.report_count` is only decremented in
+    `_purge_expired_deletions`. If the purge job hasn't run yet (or
+    failed), the stored counter can be higher than the actual live
+    rows. We report the MIN of stored vs live so the UI never shows a
+    number that's greater than the reports the user can actually see.
+    Same for `verified_count`.
+    """
     from app.models.report import ReporterProfile
     profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
     if not profile:
@@ -1687,32 +2901,104 @@ def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
         db.add(profile)
         db.commit()
         db.refresh(profile)
+
+    # Live count of un-deleted rows for this device. If the device row
+    # doesn't exist (rare — only for fresh profiles), fall back to 0.
+    live_count = 0
+    live_verified = 0
+    device = db.query(Device).filter(Device.device_hash == device_hash).first()
+    if device:
+        live_count = db.query(Report).filter(
+            Report.device_id == device.id,
+            Report.deletion_requested_at.is_(None),
+        ).count()
+        # Verified = status transitioned out of PENDING via AI or responder.
+        live_verified = db.query(Report).filter(
+            Report.device_id == device.id,
+            Report.deletion_requested_at.is_(None),
+            Report.status.in_([
+                ReportStatusEnum.VERIFIED,
+                ReportStatusEnum.RESPONDING,
+                ReportStatusEnum.RESOLVED,
+            ]),
+        ).count()
+
     return {
         "device_hash": profile.device_hash,
-        "report_count": profile.report_count,
-        "verified_count": profile.verified_count,
+        "report_count": min(profile.report_count or 0, live_count),
+        "verified_count": min(profile.verified_count or 0, live_verified),
         "badge_level": profile.badge_level,
         "impact_score": profile.impact_score,
     }
 
 
 def _update_reporter_profile(device_hash: str, db: Session):
-    """Increment reporter's profile on report submission. Badge tiers: 1=NEWCOMER, 3=HELPER, 10=GUARDIAN, 25=HERO."""
+    """Increment reporter's profile on report submission.
+
+    UNDP April 2026 incentive realignment (see docs/INCENTIVES.md).
+    The Problem Statement (§Appendix ‘Engagement Incentives’) is
+    explicit: the rewarding system must NOT encourage users to repeat
+    reports or over-report for a reward. The previous badge ladder
+    (NEWCOMER → HELPER → GUARDIAN → HERO) was keyed off raw
+    ``report_count`` — i.e. it rewarded exactly the behaviour UNDP
+    warned against.
+
+    The new ladder is keyed off **verified** reports — the public-facing
+    metric the home screen now surfaces is "reports verified" instead
+    of "reports submitted", so more submissions without verification
+    produce zero incentive uplift. The legacy ``report_count`` field is
+    retained as an internal-only counter used by the dashboard to spot
+    abusive floods, but it no longer drives badges.
+    """
     from app.models.report import ReporterProfile
     profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
     if not profile:
         profile = ReporterProfile(device_hash=device_hash)
         db.add(profile)
+    # Increment raw count (internal signal for dashboard fraud detection).
     profile.report_count = (profile.report_count or 0) + 1
-    count = profile.report_count
-    if count >= 25:
-        profile.badge_level = "HERO"
-    elif count >= 10:
-        profile.badge_level = "GUARDIAN"
-    elif count >= 3:
-        profile.badge_level = "HELPER"
+    # Badge tier is driven by verified_count, NOT report_count.
+    _recompute_badge_from_verified(profile)
+
+
+def _recompute_badge_from_verified(profile) -> None:
+    """Quality-first badge ladder:
+      * TRUSTED    — ≥ 10 verified reports (reports that were accepted
+                     and dispatched / resolved by an analyst)
+      * CONTRIBUTOR — ≥ 3 verified reports
+      * NEWCOMER    — default
+    Volume alone never produces a badge upgrade; volume without
+    verification is treated as neutral."""
+    vc = profile.verified_count or 0
+    if vc >= 10:
+        profile.badge_level = "TRUSTED"
+    elif vc >= 3:
+        profile.badge_level = "CONTRIBUTOR"
     else:
         profile.badge_level = "NEWCOMER"
+
+
+def _mark_report_verified_for_credibility(report, db: Session) -> None:
+    """Called when a report transitions to VERIFIED / RESPONDING / RESOLVED.
+
+    Idempotent via the ``ReviewerVerdictEnum`` check downstream — we bump
+    ``verified_count`` at most once per report by gating on the
+    transition that takes it out of PENDING for the first time.
+    """
+    from app.models.report import Device, ReporterProfile
+    if not report or not report.device_id:
+        return
+    device = db.query(Device).filter(Device.id == report.device_id).first()
+    if not device or not device.device_hash:
+        return
+    profile = db.query(ReporterProfile).filter(
+        ReporterProfile.device_hash == device.device_hash
+    ).first()
+    if not profile:
+        profile = ReporterProfile(device_hash=device.device_hash)
+        db.add(profile)
+    profile.verified_count = (profile.verified_count or 0) + 1
+    _recompute_badge_from_verified(profile)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

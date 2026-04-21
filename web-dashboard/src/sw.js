@@ -9,7 +9,7 @@
  *   Everything else         → Network with cache fallback
  */
 
-const APP_CACHE    = 'crisp-app-v5';
+const APP_CACHE    = 'crisp-app-v7';
 const CDN_CACHE    = 'crisp-cdn-v6';
 const API_CACHE    = 'crisp-api-v6';
 const STATIC_CACHE = 'crisp-static-v9';

@@ -137,3 +137,44 @@ Map language selection to AWS Polly voices:
 
 **Critical path (G1-G5): ~10 hours**
 **Nice-to-have (G6-G8): ~5 hours**
+
+---
+
+## Apr 2026 — audio capture screen UX rewrite
+
+The audio capture screen (`stage-audio` in the PWA / `screen === 'audio'` in
+RN) was rewritten with low-literacy-friendly copy: bullet prompts + worked
+example + mic language hint + better placeholder. See
+`docs/PARITY.md → Audio capture screen` for the canonical copy.
+
+### New i18n keys added
+
+`s2_title` (PWA) / `audio_title` (RN), `s2_sub` / `audio_sub`,
+`audio_bullet_1`, `audio_bullet_2`, `audio_bullet_3`, `audio_example`,
+`audio_mic_lang`, `audio_placeholder`, plus updated `tap_mic`, `skip_audio`,
+and universal `next` → "Continue".
+
+### Translation coverage matrix
+
+| Locale | PWA (`mobile-app/src/app.js`) | RN (`crisp-mobile/services/i18n.ts`) |
+|--------|---|---|
+| English (en) | ✅ authoritative | ✅ authoritative |
+| Hindi (hi) | ✅ full | ✅ full |
+| Kannada (kn) | ✅ full | — (RN has no kn locale yet) |
+| Tamil (ta) | ✅ full | — |
+| Spanish (es) | ✅ full | ✅ full |
+| French (fr) | ✅ full | ✅ full |
+| Arabic (ar) | ✅ full | ✅ full |
+| Portuguese (pt) | ✅ full | — |
+| Chinese (zh) | ✅ full | ✅ full |
+| Bengali (bn) | ✅ full | — |
+| All other PWA locales (~27 languages: de, it, tr, ja, ko, ur, th, vi, id, ms, ne, my, fa, ru, pl, ro, so, sw, am, he, el, ml, te, mr, gu, pa, or, as) | ⚠️ fall back to English for new keys | — |
+| RN ru locale | ⚠️ uses old `audio_title` + `audio_sub`, no bullets/example/mic_lang | — |
+
+### Follow-up
+
+Translators filling in remaining locales should aim for tone parity with the
+English master: **short, concrete, low-literacy**. Bullet copy must fit on
+one line of a small phone screen. Example text should read like a real
+crisis message (not marketing copy). When in doubt, prefer sentence over
+phrase — the redundancy helps comprehension under stress.

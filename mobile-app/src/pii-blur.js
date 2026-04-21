@@ -1,0 +1,306 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  CRISP — Client-side PII blur (PWA)
+//
+//  Runs BlazeFace (via TF.js) directly in the browser and Gaussian-blurs every
+//  face it finds *before* the photo is uploaded. Sensitive pixels never leave
+//  the device. The backend still re-runs its full PII pipeline (MediaPipe +
+//  easyocr) as a safety net.
+//
+//  Exposed as a global `PIIBlur` object so `app.js` (non-module vanilla JS) can
+//  call it without a bundler. The same pattern TF.js uses via CDN.
+//
+//  Dependencies (loaded via <script> tags in index.html):
+//    - tf           (@tensorflow/tfjs@4)
+//    - blazeface    (@tensorflow-models/blazeface@0.1)
+// ─────────────────────────────────────────────────────────────────────────────
+(function () {
+    'use strict';
+
+    /** Cached singleton model — loaded on first call, reused thereafter. */
+    let _model = null;
+    /** In-flight load promise so concurrent callers wait on the same load. */
+    let _loading = null;
+
+    /** Last telemetry snapshot; optional to read. */
+    let _lastStats = { faces: 0, ms: 0, skipped: false };
+
+    /**
+     * Load BlazeFace on demand. Idempotent + concurrent-safe.
+     */
+    async function ensureModel() {
+        if (_model) return _model;
+        if (_loading) return _loading;
+
+        if (typeof tf === 'undefined' || typeof blazeface === 'undefined') {
+            throw new Error('TF.js / blazeface not loaded');
+        }
+
+        _loading = (async () => {
+            // Prefer WebGL for speed; fall back to CPU if unavailable.
+            try { await tf.setBackend('webgl'); } catch (_) { await tf.setBackend('cpu'); }
+            await tf.ready();
+            _model = await blazeface.load();
+            console.log('[PIIBlur] BlazeFace loaded, backend=', tf.getBackend());
+            _loading = null;
+            return _model;
+        })();
+
+        return _loading;
+    }
+
+    /**
+     * Decode a Blob into an ImageBitmap (fast, native, avoids <img> flash).
+     * Falls back through an <img> for older browsers without createImageBitmap.
+     */
+    async function _decode(blob) {
+        if (typeof createImageBitmap === 'function') {
+            return await createImageBitmap(blob);
+        }
+        return await new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+            img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+            img.src = url;
+        });
+    }
+
+    /**
+     * Detect faces using BlazeFace on a downscaled copy, then scale bboxes
+     * back to original image coordinates. Downscaling to ~256 px long side
+     * keeps inference consistently under ~150 ms without hurting recall for
+     * a typical handheld photo.
+     */
+    async function _detectFaces(bitmap) {
+        const model = await ensureModel();
+
+        const longSide = Math.max(bitmap.width, bitmap.height);
+        const scale = longSide > 256 ? 256 / longSide : 1;
+        const inW = Math.max(1, Math.round(bitmap.width * scale));
+        const inH = Math.max(1, Math.round(bitmap.height * scale));
+
+        const off = document.createElement('canvas');
+        off.width = inW; off.height = inH;
+        off.getContext('2d').drawImage(bitmap, 0, 0, inW, inH);
+
+        const preds = await model.estimateFaces(off, /*returnTensors=*/false, /*flipHorizontal=*/false);
+        const invScale = 1 / scale;
+        // Confidence filter: BlazeFace at default threshold (~0.5) detects
+        // shadows and patterns as faces, so we were blurring plenty of photos
+        // without any face present. 0.85 filters out the noise while still
+        // catching real faces.
+        const CONF_THRESHOLD = 0.85;
+        return preds
+            .filter((p) => {
+                const prob = Array.isArray(p.probability) ? p.probability[0] : p.probability;
+                return typeof prob === 'number' && prob >= CONF_THRESHOLD;
+            })
+            .map((p) => {
+                // BlazeFace returns topLeft [x,y] and bottomRight [x,y] (pixels in input canvas).
+                const [x1, y1] = p.topLeft;
+                const [x2, y2] = p.bottomRight;
+                return {
+                    x: Math.round(x1 * invScale),
+                    y: Math.round(y1 * invScale),
+                    w: Math.round((x2 - x1) * invScale),
+                    h: Math.round((y2 - y1) * invScale),
+                    probability: Array.isArray(p.probability) ? p.probability[0] : p.probability
+                };
+            });
+    }
+
+    /**
+     * Paint a blurred ellipse over each face region. Mirrors the server's
+     * treatment in backend/app/services/pii_blur.py (oval mask).
+     *
+     * Apr 2026 tuning:
+     *  - Lighter radius (bbox/10 capped 6–60 px, was bbox/6 capped 12–120 px).
+     *    Still obscures identity; no longer turns faces into giant smears.
+     *  - Blur runs on a downscaled working canvas (long side ≤ 800 px) then
+     *    upscales. `ctx.filter = 'blur(Npx)'` is O(N·r²) in the canvas area,
+     *    so blurring 4032×3024 at r=120 was easily 3–8 s on mid-range phones
+     *    and blocked the main thread (→ Next button felt frozen). Down-sampling
+     *    by 4–5× cuts work by 16–25× with no visual difference — blur is
+     *    itself a low-pass filter, so down-then-blur-then-up is indistinguishable
+     *    from the original.
+     *  - 5 % padding kept (was 20 % — stacking client + server pad bloated
+     *    redaction zones).
+     */
+    function _paintBlur(srcCanvas, faces) {
+        const ctx = srcCanvas.getContext('2d');
+        const W = srcCanvas.width, H = srcCanvas.height;
+
+        // Lighter per-face radius: divide by 10 (was 6), clamp 6–60 (was 12–120).
+        // Still enough for identity obscuration — BlazeFace bboxes are typically
+        // 100–600 px, so radius lands in 10–60 px (was 16–100 px).
+        let maxRadius = 6;
+        const perFace = faces.map((f) => {
+            const r = Math.min(60, Math.max(6, Math.round(Math.max(f.w, f.h) / 10)));
+            if (r > maxRadius) maxRadius = r;
+            return r;
+        });
+
+        // Build the blurred layer on a DOWNSCALED working canvas. Maximum
+        // long side = 800 px; for a 4032-px phone photo that's a 25-fold
+        // area reduction. The blur radius scales with the downsample factor
+        // so the visual effect matches what a full-res blur would produce.
+        const DOWNSCALE_MAX = 800;
+        const longSide = Math.max(W, H);
+        const scale = longSide > DOWNSCALE_MAX ? DOWNSCALE_MAX / longSide : 1;
+        const smallW = Math.max(1, Math.round(W * scale));
+        const smallH = Math.max(1, Math.round(H * scale));
+        const scaledRadius = Math.max(2, Math.round(maxRadius * scale));
+
+        const blurCanvas = document.createElement('canvas');
+        blurCanvas.width = smallW;
+        blurCanvas.height = smallH;
+        const bCtx = blurCanvas.getContext('2d');
+        bCtx.filter = `blur(${scaledRadius}px)`;
+        bCtx.drawImage(srcCanvas, 0, 0, smallW, smallH);
+        bCtx.filter = 'none';
+
+        faces.forEach((f, i) => {
+            // 5 % padding — tight ellipse, no bloat.
+            const padX = Math.round(f.w * 0.05);
+            const padY = Math.round(f.h * 0.05);
+            const x = Math.max(0, f.x - padX);
+            const y = Math.max(0, f.y - padY);
+            const w = Math.min(W - x, f.w + 2 * padX);
+            const h = Math.min(H - y, f.h + 2 * padY);
+            if (w <= 0 || h <= 0) return;
+
+            // Map the face's source-space rectangle into the downscaled
+            // blur canvas, then drawImage back up so the result lines up
+            // pixel-for-pixel with the source canvas ellipse clip.
+            const sx = Math.max(0, Math.round(x * scale));
+            const sy = Math.max(0, Math.round(y * scale));
+            const sw = Math.max(1, Math.round(w * scale));
+            const sh = Math.max(1, Math.round(h * scale));
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(blurCanvas, sx, sy, sw, sh, x, y, w, h);
+            ctx.restore();
+        });
+    }
+
+    /**
+     * Public API: blur every detected face in `srcBlob` and return a new Blob.
+     * Falls through with the original blob (no throw) if the model is
+     * unavailable or detection fails — the server's PII pass is the safety net.
+     *
+     * @param {Blob} srcBlob
+     * @param {{ quality?: number }} [opts]
+     * @returns {Promise<Blob>}
+     */
+    /**
+     * Detect + blur faces in `srcBlob`. Apr 2026: now returns a detailed
+     * result object — was just returning the Blob, which hid failures from
+     * callers. Shape:
+     *   {
+     *     blob:           Blob,     // blurred or original, never null
+     *     blurred:        boolean,  // true IFF the full pipeline ran (detect + paint OR detect + no-op on zero faces)
+     *     facesDetected:  number,
+     *     skipped:        boolean,  // true if model load / decode / detect crashed — upload should NOT claim `client_blur_applied=true`
+     *     error:          string,   // present when skipped=true
+     *   }
+     *
+     * Legacy behaviour preserved: `blob` is always a Blob, never null,
+     * so call-sites still have something to upload. The truthful
+     * `blurred` flag is new — before the fix every call-site hardcoded
+     * `client_blur_applied: true`, so BlazeFace failures slipped PII
+     * past both client AND server blur (server skipped thinking client
+     * did it).
+     */
+    async function blurFaces(srcBlob, opts) {
+        const t0 = performance.now();
+        const quality = (opts && typeof opts.quality === 'number') ? opts.quality : 0.85;
+
+        // Pipeline is disabled entirely if the backing libraries didn't load.
+        if (typeof tf === 'undefined' || typeof blazeface === 'undefined') {
+            const err = 'tf/blazeface not loaded';
+            console.warn('[PIIBlur] ' + err + ' — returning raw blob; server MUST run its own blur');
+            _lastStats = { faces: 0, ms: 0, skipped: true };
+            return { blob: srcBlob, blurred: false, facesDetected: 0, skipped: true, error: err };
+        }
+
+        let bitmap;
+        try {
+            bitmap = await _decode(srcBlob);
+        } catch (e) {
+            console.warn('[PIIBlur] decode failed, returning original:', e);
+            _lastStats = { faces: 0, ms: 0, skipped: true };
+            return { blob: srcBlob, blurred: false, facesDetected: 0, skipped: true, error: 'decode failed: ' + (e && e.message || e) };
+        }
+
+        let faces = [];
+        try {
+            faces = await _detectFaces(bitmap);
+        } catch (e) {
+            console.warn('[PIIBlur] detect failed, returning original:', e);
+            _lastStats = { faces: 0, ms: Math.round(performance.now() - t0), skipped: true };
+            return { blob: srcBlob, blurred: false, facesDetected: 0, skipped: true, error: 'detect failed: ' + (e && e.message || e) };
+        }
+
+        if (faces.length === 0) {
+            _lastStats = { faces: 0, ms: Math.round(performance.now() - t0), skipped: false };
+            // No faces detected — pipeline ran successfully, just had
+            // nothing to redact. Safe for server to skip its face pass.
+            return { blob: srcBlob, blurred: true, facesDetected: 0, skipped: false };
+        }
+
+        // Apr 2026: yield to the event loop before the heavy paint pass so
+        // any queued UI interactions (e.g. the user tapping Next the moment
+        // the preview appears) have a chance to dispatch. Without this the
+        // sync drawImage + filter + canvas-clip work blocked the main
+        // thread for hundreds of ms and the Next button felt frozen.
+        await new Promise((r) => setTimeout(r, 0));
+
+        // Composite a fresh canvas from the bitmap, then paint blur.
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            canvas.getContext('2d').drawImage(bitmap, 0, 0);
+            _paintBlur(canvas, faces);
+
+            const outBlob = await new Promise((resolve) => {
+                canvas.toBlob((b) => resolve(b || srcBlob), 'image/jpeg', quality);
+            });
+
+            _lastStats = {
+                faces: faces.length,
+                ms: Math.round(performance.now() - t0),
+                skipped: false
+            };
+            console.log(`[PIIBlur] blurred ${faces.length} face(s) in ${_lastStats.ms}ms`);
+            return { blob: outBlob, blurred: true, facesDetected: faces.length, skipped: false };
+        } catch (e) {
+            // Paint / canvas / toBlob crash — faces WERE detected but not
+            // redacted. Server MUST run its own blur on this one.
+            console.warn('[PIIBlur] paint failed, returning original:', e);
+            _lastStats = { faces: faces.length, ms: Math.round(performance.now() - t0), skipped: true };
+            return { blob: srcBlob, blurred: false, facesDetected: faces.length, skipped: true, error: 'paint failed: ' + (e && e.message || e) };
+        }
+    }
+
+    function getLastStats() { return Object.assign({}, _lastStats); }
+
+    // Export globals for non-module callers (app.js).
+    window.PIIBlur = { ensureModel, blurFaces, getLastStats };
+
+    // Kick off a lazy model load right after the page is idle, so the *first*
+    // photo capture doesn't pay the full model-load latency. Guarded so that
+    // offline first-loads (where the model hasn't cached yet) fail silently.
+    if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(() => {
+            ensureModel().catch((e) => console.log('[PIIBlur] prewarm skipped:', e.message));
+        }, { timeout: 5000 });
+    } else {
+        setTimeout(() => {
+            ensureModel().catch((e) => console.log('[PIIBlur] prewarm skipped:', e.message));
+        }, 3000);
+    }
+})();

@@ -35,7 +35,28 @@ _polling_task = None
 
 @telegram_router.post(f"/webhook/{WEBHOOK_SECRET_PATH}")
 async def receive_update(request: Request, background_tasks: BackgroundTasks):
-    """Receive an update from Telegram via webhook."""
+    """Receive an update from Telegram via webhook.
+
+    P2.16 — defence in depth:
+      1. The URL path itself includes a per-deploy secret (existing).
+      2. Telegram's ``X-Telegram-Bot-Api-Secret-Token`` header is verified
+         when ``TELEGRAM_WEBHOOK_SECRET_TOKEN`` is configured. Matches the
+         value registered with ``setWebhook`` on Telegram's side.
+      3. Rate limit: 60 updates/min per source IP (= 1/s) — prevents a
+         hostile actor who leaked the secret path from DoSing the endpoint.
+    """
+    import os
+    from app.main import check_rate_limit
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(f"tg_webhook:{client_ip}", max_requests=60, window=60):
+        raise HTTPException(status_code=429, detail="rate limit")
+
+    expected_token = os.getenv("TELEGRAM_WEBHOOK_SECRET_TOKEN", "").strip()
+    if expected_token:
+        got = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if got != expected_token:
+            raise HTTPException(status_code=403, detail="bad secret token")
+
     try:
         update = await request.json()
     except Exception:

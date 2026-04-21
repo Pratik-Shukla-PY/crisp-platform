@@ -19,9 +19,21 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
         meta TEXT, photo TEXT, extra_photos TEXT, audio TEXT, text_description TEXT,
         status TEXT DEFAULT 'draft', server_id TEXT,
         photo_chunk_progress INTEGER DEFAULT 0, audio_chunk_progress INTEGER DEFAULT 0,
-        retry_count INTEGER DEFAULT 0, created_at INTEGER, updated_at INTEGER
+        retry_count INTEGER DEFAULT 0, created_at INTEGER, updated_at INTEGER,
+        -- P2.13: JSON {'0': 524288, '1': 0, ...} — byte offset reached for each
+        -- extra photo so a crash-and-resume doesn't re-upload completed extras.
+        extra_photos_progress TEXT
       );
     `);
+    // Idempotent migration for existing DBs created before extra_photos_progress.
+    try { await db.execAsync(`ALTER TABLE reports ADD COLUMN extra_photos_progress TEXT`); } catch {}
+    // Guaranteed-delivery pipeline — per-variant state for main + extra photos.
+    // photo_variants: JSON blob {small:{mediaId,base64,chunkProgress,complete,bytes}, medium:{...}, large:{...}}
+    // photo_group_id: UUID linking the three variant rows on the backend.
+    // extra_photos_variants: JSON array of the same shape per extra photo (each carrying its own groupId).
+    try { await db.execAsync(`ALTER TABLE reports ADD COLUMN photo_variants TEXT`); } catch {}
+    try { await db.execAsync(`ALTER TABLE reports ADD COLUMN photo_group_id TEXT`); } catch {}
+    try { await db.execAsync(`ALTER TABLE reports ADD COLUMN extra_photos_variants TEXT`); } catch {}
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS report_history (
         client_report_id TEXT PRIMARY KEY,
@@ -30,6 +42,14 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
         synced_at INTEGER, last_status_update INTEGER, deletion_requested INTEGER DEFAULT 0
       );
     `);
+    // Phase 5 (Apr 2026): reviewer workflow fields mirrored locally so the
+    // RN My Reports screen can render verdict / response-time / action-taken
+    // without an online round-trip. Idempotent ALTERs for existing installs.
+    try { await db.execAsync(`ALTER TABLE report_history ADD COLUMN reviewer_verdict TEXT DEFAULT 'NOT_REVIEWED'`); } catch {}
+    try { await db.execAsync(`ALTER TABLE report_history ADD COLUMN action_taken TEXT`); } catch {}
+    try { await db.execAsync(`ALTER TABLE report_history ADD COLUMN help_dispatched_at INTEGER`); } catch {}
+    try { await db.execAsync(`ALTER TABLE report_history ADD COLUMN help_arrived_at INTEGER`); } catch {}
+    try { await db.execAsync(`ALTER TABLE report_history ADD COLUMN response_time_seconds INTEGER`); } catch {}
     dbReady = true;
     return db;
   } catch (e) {
@@ -56,6 +76,19 @@ export interface QueuedReport {
   retry_count: number;
   created_at: number;
   updated_at: number;
+  /** P2.13 — JSON map (e.g. `{"0":524288,"1":0}`) of byte offset reached per
+   *  extra photo index. Absent or empty on freshly-queued reports. */
+  extra_photos_progress: string | null;
+  /** Guaranteed-delivery: JSON shape
+   *    { small: { mediaId, base64, chunkProgress, complete, bytes },
+   *      medium: {...}, large: {...} }
+   *  Absent when the queued report was created before the variant pipeline. */
+  photo_variants: string | null;
+  /** UUID linking the three variant Media rows on the backend. */
+  photo_group_id: string | null;
+  /** JSON array, same shape as photo_variants, one per extra photo.
+   *  Each entry additionally carries its own `groupId`. */
+  extra_photos_variants: string | null;
 }
 
 export async function enqueueReport(report: Partial<QueuedReport>): Promise<void> {
@@ -64,8 +97,9 @@ export async function enqueueReport(report: Partial<QueuedReport>): Promise<void
   await d.runAsync(
     `INSERT OR REPLACE INTO reports
      (client_report_id, meta, photo, extra_photos, audio, text_description, status, server_id,
-      photo_chunk_progress, audio_chunk_progress, retry_count, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      photo_chunk_progress, audio_chunk_progress, retry_count, created_at, updated_at,
+      extra_photos_progress, photo_variants, photo_group_id, extra_photos_variants)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       report.client_report_id || '',
       report.meta || '{}',
@@ -80,6 +114,10 @@ export async function enqueueReport(report: Partial<QueuedReport>): Promise<void
       report.retry_count || 0,
       report.created_at || now,
       now,
+      report.extra_photos_progress || null,
+      report.photo_variants || null,
+      report.photo_group_id || null,
+      report.extra_photos_variants || null,
     ]
   );
 }
@@ -88,6 +126,16 @@ export async function getPendingReports(): Promise<QueuedReport[]> {
   const d = await getDb();
   return await d.getAllAsync<QueuedReport>(
     `SELECT * FROM reports WHERE status IN ('pending_sync', 'failed') ORDER BY created_at ASC`
+  );
+}
+
+/** Every report still in-flight or queued — used by the "My Reports" screen
+ *  to show sync progress alongside already-synced history. Includes 'syncing'
+ *  which getPendingReports() excludes (syncEngine sets it mid-upload). */
+export async function getInFlightReports(): Promise<QueuedReport[]> {
+  const d = await getDb();
+  return await d.getAllAsync<QueuedReport>(
+    `SELECT * FROM reports WHERE status IN ('pending_sync', 'syncing', 'failed') ORDER BY created_at DESC`
   );
 }
 
@@ -114,6 +162,12 @@ export async function updateReportStatus(
   if (updates?.photo_chunk_progress !== undefined) { fields.push('photo_chunk_progress = ?'); values.push(updates.photo_chunk_progress); }
   if (updates?.audio_chunk_progress !== undefined) { fields.push('audio_chunk_progress = ?'); values.push(updates.audio_chunk_progress); }
   if (updates?.retry_count !== undefined) { fields.push('retry_count = ?'); values.push(updates.retry_count); }
+  if (updates?.extra_photos_progress !== undefined) { fields.push('extra_photos_progress = ?'); values.push(updates.extra_photos_progress); }
+  // Guaranteed-delivery: variant-state columns updatable mid-sync so crash
+  // recovery can resume from the last checkpointed chunk of the last tier.
+  if (updates?.photo_variants !== undefined) { fields.push('photo_variants = ?'); values.push(updates.photo_variants); }
+  if (updates?.photo_group_id !== undefined) { fields.push('photo_group_id = ?'); values.push(updates.photo_group_id); }
+  if (updates?.extra_photos_variants !== undefined) { fields.push('extra_photos_variants = ?'); values.push(updates.extra_photos_variants); }
 
   values.push(clientId);
   await d.runAsync(`UPDATE reports SET ${fields.join(', ')} WHERE client_report_id = ?`, values);
@@ -150,6 +204,13 @@ export interface HistoryReport {
   synced_at: number;
   last_status_update: number;
   deletion_requested: number;
+  // Phase 5 (Apr 2026) — reviewer workflow fields mirrored from the backend
+  // on each pollStatus() tick so My Reports renders them offline too.
+  reviewer_verdict?: string | null;         // NOT_REVIEWED | ACCEPTED | REJECTED
+  action_taken?: string | null;
+  help_dispatched_at?: number | null;       // epoch ms
+  help_arrived_at?: number | null;          // epoch ms
+  response_time_seconds?: number | null;
 }
 
 export async function saveToHistory(report: Partial<HistoryReport>): Promise<void> {
@@ -175,15 +236,38 @@ export async function getHistory(): Promise<HistoryReport[]> {
   );
 }
 
-export async function updateHistoryStatus(serverId: string, status: string, livesImpacted?: number | null): Promise<void> {
+export async function updateHistoryStatus(
+  serverId: string,
+  status: string,
+  livesImpacted?: number | null,
+  reviewer?: {
+    verdict?: string | null;
+    actionTaken?: string | null;
+    helpDispatchedAt?: number | null;
+    helpArrivedAt?: number | null;
+    responseTimeSeconds?: number | null;
+  } | null,
+): Promise<void> {
   const d = await getDb();
+  // Build dynamic SET clause so callers can pass only the fields they have.
+  const fields = ['status = ?', 'last_status_update = ?'];
+  const values: any[] = [status, Date.now()];
   if (livesImpacted !== undefined && livesImpacted !== null) {
-    await d.runAsync(`UPDATE report_history SET status = ?, lives_impacted = ?, last_status_update = ? WHERE server_id = ?`,
-      [status, livesImpacted, Date.now(), serverId]);
-  } else {
-    await d.runAsync(`UPDATE report_history SET status = ?, last_status_update = ? WHERE server_id = ?`,
-      [status, Date.now(), serverId]);
+    fields.push('lives_impacted = ?');
+    values.push(livesImpacted);
   }
+  if (reviewer) {
+    if (reviewer.verdict !== undefined) { fields.push('reviewer_verdict = ?'); values.push(reviewer.verdict); }
+    if (reviewer.actionTaken !== undefined) { fields.push('action_taken = ?'); values.push(reviewer.actionTaken); }
+    if (reviewer.helpDispatchedAt !== undefined) { fields.push('help_dispatched_at = ?'); values.push(reviewer.helpDispatchedAt); }
+    if (reviewer.helpArrivedAt !== undefined) { fields.push('help_arrived_at = ?'); values.push(reviewer.helpArrivedAt); }
+    if (reviewer.responseTimeSeconds !== undefined) { fields.push('response_time_seconds = ?'); values.push(reviewer.responseTimeSeconds); }
+  }
+  values.push(serverId);
+  await d.runAsync(
+    `UPDATE report_history SET ${fields.join(', ')} WHERE server_id = ?`,
+    values,
+  );
 }
 
 export async function markHistoryDeletionRequested(clientId: string): Promise<void> {

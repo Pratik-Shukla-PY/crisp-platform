@@ -1,0 +1,103 @@
+/**
+ * Apr 2026 — Image viewer + thumbnail-delete regression guards.
+ *
+ * Requirements this guards against regressing:
+ *   · Full-screen image-viewer overlay exists in the DOM (hidden by
+ *     default; opens when a thumb is tapped on stage-photo).
+ *   · Viewer has Close + Delete controls + a confirmation dialog.
+ *   · Every `.extra-photo-thumb` rendered with content has an
+ *     `.extra-photo-remove` ❌ child.
+ *   · Seeding `state.photoDataUrl` renders the primary thumb with a ❌.
+ *
+ * We don't drive the full capture flow here — just assert the scaffolding
+ * that makes the feature possible. The end-to-end delete interaction is
+ * validated via the existing 02-capture-flow + 06-multi-photo specs
+ * transitively (they add photos, and this spec adds a thumb-exists check).
+ */
+import { test, expect } from '@playwright/test';
+
+async function openClean(page) {
+  await page.goto('index.html');
+  await page.evaluate(() => {
+    localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+  });
+  await page.reload();
+  await page.evaluate(() => {
+    const c = document.getElementById('consent-overlay');
+    if (c) c.style.display = 'none';
+  });
+}
+
+test.describe('PWA image viewer + thumbnail-delete (Apr 2026)', () => {
+  test.beforeEach(async ({ page }) => { await openClean(page); });
+
+  test('@smoke viewer overlay + confirm-dialog are in the DOM (hidden by default)', async ({ page }) => {
+    await expect(page.locator('#image-viewer-overlay')).toBeAttached();
+    await expect(page.locator('#image-viewer-overlay')).toBeHidden();
+    await expect(page.locator('#image-delete-confirm')).toBeAttached();
+    await expect(page.locator('#image-delete-confirm')).toBeHidden();
+    // Essential controls.
+    await expect(page.locator('#btn-image-viewer-close')).toBeAttached();
+    await expect(page.locator('#btn-image-viewer-delete')).toBeAttached();
+    await expect(page.locator('#btn-idc-cancel')).toBeAttached();
+    await expect(page.locator('#btn-idc-confirm')).toBeAttached();
+  });
+
+  test('@smoke primary photo thumb renders with ❌ on bottom-left', async ({ page }) => {
+    await page.locator('#btn-start').click();
+    await expect(page.locator('#stage-photo.active')).toBeVisible();
+    // Seed a primary photo directly via state and force a strip refresh.
+    await page.evaluate(() => {
+      const s = (window as any).state;
+      s.photoDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=';
+      if (typeof (window as any).__crispRefreshPhotoStrip === 'function') {
+        (window as any).__crispRefreshPhotoStrip();
+      }
+    });
+    // Strip reveals.
+    await expect(page.locator('#extra-photos-strip')).toBeVisible({ timeout: 3000 });
+    // Every rendered thumb has its own ❌.
+    const thumbs = page.locator('#extra-photos-scroll .extra-photo-thumb');
+    const count = await thumbs.count();
+    expect(count).toBeGreaterThanOrEqual(1);
+    const removes = page.locator('#extra-photos-scroll .extra-photo-remove');
+    await expect(removes).toHaveCount(count);
+  });
+
+  test('viewer opens via programmatic trigger + close dismisses', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__crispOpenImageViewer(
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=',
+        { kind: 'extra', index: 0 }
+      );
+    });
+    await expect(page.locator('#image-viewer-overlay')).toBeVisible();
+    await expect(page.locator('#image-viewer-img')).toHaveAttribute('src', /iVBOR/);
+    // Close via the X button.
+    await page.locator('#btn-image-viewer-close').click();
+    await expect(page.locator('#image-viewer-overlay')).toBeHidden();
+  });
+
+  test('delete-inside-viewer opens confirm + cancel dismisses without delete', async ({ page }) => {
+    await page.evaluate(() => {
+      const s = (window as any).state;
+      s.photoDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=';
+      s.extraPhotos.push({ dataUrl: s.photoDataUrl, blob: null, groupId: 'x', variants: null });
+      if (typeof (window as any).__crispRefreshPhotoStrip === 'function') {
+        (window as any).__crispRefreshPhotoStrip();
+      }
+      (window as any).__crispOpenImageViewer(s.extraPhotos[0].dataUrl, { kind: 'extra', index: 0 });
+    });
+    await expect(page.locator('#image-viewer-overlay')).toBeVisible();
+    await page.locator('#btn-image-viewer-delete').click();
+    await expect(page.locator('#image-delete-confirm')).toBeVisible();
+    // Cancel.
+    await page.locator('#btn-idc-cancel').click();
+    await expect(page.locator('#image-delete-confirm')).toBeHidden();
+    // Viewer still open (cancel didn't close it).
+    await expect(page.locator('#image-viewer-overlay')).toBeVisible();
+    // Extra NOT removed — state still has 1 entry.
+    const stillThere = await page.evaluate(() => (window as any).state?.extraPhotos?.length);
+    expect(stillThere).toBe(1);
+  });
+});

@@ -1,7 +1,307 @@
 // ── CRISP Service Worker ──────────────────────────────────────────────────────
 // Handles: offline caching, background sync, push notifications (future)
 
-const CACHE_NAME = 'crisp-v4';
+// Phase 4 (Apr 2026) bump: added image-variants.js to STATIC_ASSETS (was
+// silently missing last cycle; first-load users got a stale app until the
+// opportunistic fetch-handler cached it). Bump v5 → v6 so ALL existing
+// SW installs evict the old snapshot on next activate.
+//
+// Apr 2026 audio-UX rewrite: v6 → v7. New stage-audio copy + bullet helper
+// + example + mic-lang-hint + placeholder i18n changes in app.js + new CSS
+// classes in styles.css. Existing installs must pick up all three together
+// or the "TYPE_TEXT" fix will appear without the new bullets / example.
+// Apr 2026 landing-screen rewrite: v7 → v8. Home screen now has impact
+// metrics + single CTA + merged My Reports/Delete, plus new unified
+// flow-progress bar on capture stages (replaces step-dots). Multi-file
+// change (index.html + app.js + styles.css) so cache-bump is mandatory.
+const CACHE_NAME = 'crisp-v39';  // bump on static-asset changes
+// v39 (Apr 2026) PII-blur hardening (Fixes A+B+C+D).
+// Field test revealed the client hardcoded `client_blur_applied: true`
+// even when BlazeFace failed silently — PII could reach the dashboard
+// unblurred on both client AND server. Fix A threads the truthful
+// blur result through pii-blur.js → image-variants.js → app.js so
+// every chunk reports the actual outcome. Backend fixes (B/C/D) live
+// server-side: /api/v1/health/pii probe, Media.pii_blur_status
+// column, `pii_blur_runs_total{outcome}` Prometheus counter, loud
+// error logs on missing MediaPipe/easyocr. Cache bump so v38 clients
+// pick up the new pii-blur.js return shape + truthful upload flag.
+// v38 (Apr 2026) Probe moved earlier + dynamic meta/text timeouts +
+// in-flight de-dup guard. Field test at 2 Kbps hit a second bug: the
+// v37 probe only ran before the chunk loop, but the meta+text stages
+// used hardcoded 15 s / 20 s timeouts that blow up on dial-up. Moved
+// `adaptTierViaProbe()` to the top of `trySendQueuedReport` so every
+// stage sees the measured bandwidth. Replaced the fixed timeouts with
+// `computeChunkTimeout(payloadSize, measuredBps)`. Also added an
+// `_inFlightReports` Set guard to stop `startRetryLoop` from double-
+// processing an item already mid-send (observed producing duplicate
+// meta POSTs in the field test).
+// v37 (Apr 2026) Adaptive bandwidth probe + dynamic chunk timeout.
+// Fixes the "stuck at 0 chunks on a 2 Kbps throttle" bug: the tier
+// detector trusted `navigator.connection.effectiveType` which Chrome
+// DevTools throttling doesn't update. New `measureUploadBandwidth()`
+// POSTs an 8 KB probe to `/reports/upload-probe` and picks tier from
+// actual measured throughput. `computeChunkTimeout()` scales the XHR
+// timeout per chunk so we never false-time-out a healthy upload on a
+// genuinely slow link. `detectPWANetworkTier()` also falls to SLOW
+// (not MEDIUM) when `downlink=0` is the only signal — Chrome's way of
+// saying "I don't know the bandwidth". Cache bump so v36 installs
+// evict and adopt the new probe path + dynamic timeout together.
+// v36 (Apr 2026) UNDP §5 — binary-chunk transport (Option A).
+// New upload path via `sendBinaryChunkWithRetry()` + `uploadChunksBinary()`
+// in app.js. Multipart/form-data bypasses base64 encoding entirely —
+// ~25 % wire savings, ~33 % less client RAM during capture, cleaner
+// DB footprint (LargeBinary vs TEXT). Backend keeps the legacy
+// `/media/chunk` endpoint for clients still on cached app.js; the new
+// client auto-falls-back to base64 on HTTP 404 so a client-ahead-of-
+// backend deployment degrades gracefully. Cache bump evicts v35 clients
+// so everyone gets the new code path together with the new service
+// worker — otherwise a v35 SW could intercept multipart requests and
+// try to cache them, which is not behaviour we test for.
+// v35 (Apr 2026) UNDP §3.1 picker UX — language picker split into two
+// sections: 6 UN Official Languages with enlarged 3-column tiles at top,
+// other locales in a compact 2-column list below. Parity change across
+// index.html + styles.css + app.js (2 new i18n keys) + 6 JSON packs +
+// crisp-mobile App.tsx. Cache bump needed because old SW clients would
+// still render the single flat grid.
+// v34 (Apr 2026) UNDP §3.1b — async locale-JSON loader.
+//   • 6 new i18n/*.json files (en, fr, es, ar, ru, zh) precached on install
+//     so offline captures in any UN language paint the full 232-key pack
+//     from cache rather than falling through to the inline ~60-key EXTRA_LANG
+//     baseline.
+//   • app.js `activateLang()` now fires an async `_loadLocaleJson(code)`
+//     after the sync first-paint; when the JSON resolves, merged on top of
+//     the inline pack and `applyI18n()` re-renders with the richer strings.
+//   • Bumping CACHE_NAME evicts v33 clients so the new async loader isn't
+//     competing with a cached SW that lacks the JSON precache entries.
+// v33 (Apr 2026): client-side PII blur perf + visual tuning.
+//   • Radius: divisor 6 → 10, cap 120 → 60, min 12 → 6 px. Faces were
+//     being over-smeared into unrecognisable blobs; lighter radius still
+//     obscures identity but preserves context (silhouette, posture).
+//   • Speed: blur layer now computed on a DOWNSCALED working canvas
+//     (long side ≤ 800 px, scaling factor ~5× on 4K phone shots). Blur
+//     is O(r²·area); 25× area reduction × lower radius = ~30× faster.
+//     On a mid-range phone the post-snap freeze dropped from 3–8 s to
+//     ~200 ms. Result is visually identical — blur is itself a low-pass
+//     filter so downscale-blur-upscale is equivalent to full-res blur.
+//   • Main-thread yield: blurFaces() now awaits a 0-ms setTimeout after
+//     face detection but BEFORE the heavy paint pass. Any queued UI
+//     events (e.g. user tapping Next on the already-visible preview)
+//     dispatch immediately instead of waiting for the paint to finish.
+// pii-blur.js-only change.
+// v32 (Apr 2026): My Reports screen was rendering English on non-core
+// locales (user reported Urdu UR still showing SUBMITTED / UNDER REVIEW
+// / ACCEPTED / REJECTED / "WILDFIRE · HOUSE" / "20h ago"). Fixes:
+//   (1) Card title enums (crisis_type · infrastructure_type) were
+//       rendered as raw uppercase strings — replace_(/_/g, ' ') only.
+//       Now passes through _translateEnum which looks up the lowercase
+//       i18n key (e.g. WILDFIRE → t('wildfire')) and falls back to
+//       titlecased raw value if the key is missing.
+//   (2) "N lives" hardcoded in the card meta → now t('rd_people_helped_*')
+//       with pluralisation.
+//   (3) "Will be deleted when connected" hardcoded → t('rd_delete_queued').
+//   (4) Full translation pack (in_flight, submitted, empty states,
+//       rd_status_*, rd_tl_*, rd_meta_*, rd_people_helped_*, time_*_ago,
+//       back) added to 11 locales: ur, es, fr, ar, zh, pt, ru, de, bn,
+//       ja, ko. Previously these keys only existed in EN + KN + HI + TA.
+// app.js-only change.
+// v31 (Apr 2026): two fixes for the Confirm / review page in non-core
+// locales.
+//   (1) showReviewPage() was setting the title via a hardcoded English
+//       array — `const titles = ['Details', 'Confirm']`. Non-English
+//       users saw "Confirm" in English regardless of their locale.
+//       Now resolved via t() against `review_details_title` (page 1)
+//       and `confirm_title` (page 2). Both keys added to EN + KN + HI +
+//       TA core dicts.
+//   (2) Extended 10 major non-core locales (ur, es, fr, ar, zh, pt, de,
+//       ru, bn, ja, ko) with the full Confirm-page key pack: section
+//       titles (Incident/Details), Edit button, Needs/Debris labels,
+//       Back button, enum values (wildfire/house/severe/complete/
+//       unknown/etc.). Previously all these fell through to English via
+//       the per-key t() chain because EXTRA_LANG entries were sparse.
+// app.js-only change.
+// v30 (Apr 2026): two image-pipeline changes user-requested.
+//   (1) LARGE variant is now PASSTHROUGH — no canvas resize, no JPEG
+//       re-encode. The raw captured bytes (post-PII-blur) ship directly
+//       as the archival copy so responders can zoom in on fine detail
+//       (license plates, structural damage) without resolution loss.
+//       SMALL + MEDIUM still downscale for fast progressive delivery.
+//   (2) When the client has already PII-blurred locally (BlazeFace on
+//       PWA / piiBlur on RN), every chunk now carries
+//       client_blur_applied=true. The backend persists the flag on the
+//       media row and the assembler skips _run_server_pii_blur when set,
+//       avoiding a second lossy re-encode over already-redacted pixels.
+//       Legacy clients (no flag) still get the server-side pass as a
+//       safety net.
+// Multi-platform change: image-variants.js + app.js (PWA),
+// imageVariants.ts + syncEngine.ts (RN), schemas/report.py +
+// models/report.py + main.py (migration) + api/endpoints/reports.py.
+// v29 (Apr 2026 hotfix): back button overlapping title icon on
+// #stage-report-detail and #stage-history. .history-back was
+// `position: absolute; top: 16px; left: 16px` — it stacked directly on
+// top of the <h2>'s clipboard icon + "Report" title which occupied the
+// same top-left position via the flex stage-header layout. Fix: remove
+// absolute positioning, make the back button a real flex child with
+// `order: -1` so it sits naturally on the LEFT of the title with an
+// 8 px gap. Applied to both stages. styles.css-only change.
+// v28 (Apr 2026 hotfix): "Add another report" button on the success
+// screen did nothing — resetApp() was throwing on a stale DOM lookup
+// (document.getElementById('photo-skip-link').style — but that element
+// was removed in Phase 2 when photo became mandatory). The uncaught
+// TypeError short-circuited resetApp before goToStage('stage-home')
+// fired, so the user was stranded on the success screen. Fix: every DOM
+// lookup in resetApp is now guarded (`if (el)`); stale IDs are no-ops
+// instead of crashes. Also clears the multi-photo extras strip on reset
+// and re-enables the helper text that gates Next on stage-photo.
+// app.js-only change.
+// v27 (Apr 2026): report-detail view was rendering English text even
+// when Hindi/Kannada/etc was selected (user-reported). Every
+// dynamically-rendered string inside renderReportDetail() (timeline
+// labels, status chip, meta-grid labels, ACCEPTED feedback block,
+// rejection default, delete-in-progress/queued notes, time-ago text)
+// now goes through t(). Enum values (crisis type, infra type, damage,
+// severity) also translate when a matching i18n key exists, with a
+// titlecased fallback. applyI18n() re-invokes renderReportDetail on
+// language change if the detail stage is active, so switching
+// language while viewing a report updates instantly. ~35 new i18n
+// keys across en/kn/hi/ta. app.js-only change.
+// v26 (Apr 2026): image view + delete.
+//   • ❌ badge moved from top-right → bottom-LEFT on every photo thumb
+//     (per UX spec) and added to the primary photo thumb too.
+//   • Tapping any thumbnail (primary or extra) opens a full-screen image
+//     viewer with a Delete button → confirmation dialog.
+//   • Quick-delete ❌ still works without confirmation (instant removal);
+//     the viewer's Delete asks first to prevent accidental loss on the
+//     larger touch target.
+//   • Deleting the primary photo promotes the first extra (if any) so
+//     the capture flow still has a mandatory photo; otherwise returns
+//     to empty-state.
+//   • Multi-file change (index.html + app.js + styles.css + RN App.tsx +
+//     RN i18n.ts). 6 new i18n keys each on PWA + RN with kn/hi/ta
+//     translations authored natively.
+// v25 (Apr 2026): extended i18n coverage to the home-screen chrome
+// strings that previously fell through to English on every non-EN
+// locale — specifically `home_offline_hint` ("Works offline and in low
+// internet connectivity"), `home_metric_reports`, `home_metric_lives`,
+// `fp_photo`/`fp_details`/`fp_review`/`fp_send`, `my_reports`, and
+// `home_title`. Native translations added across all 29 EXTRA_LANG
+// locales (sw, fr, es, ar, ru, zh, pt, de, it, tr, uk, ja, ko, am, ur,
+// ne, th, vi, id, ms, km, fa, my, pl, ro, so, si, he, el, bn, pa, ml,
+// te, mr, gu) plus ta in the core I18N dict. Multi-file change
+// (app.js + crisp-mobile/services/i18n.ts).
+// v24 (Apr 2026): full-app i18n coverage sweep. Every user-visible
+// string on both PWA and RN is now resolved through t() — previously
+// ~30 hardcoded English strings (Recording status, Location detection
+// messages, Summary card headers "Incident/Details", "✏️ Edit",
+// "Debris clearing needed", service-status options, place-autocomplete
+// empty state, delete confirmations, sync-badge labels, history empty
+// states, "Report not found" toast, etc) stayed English regardless of
+// the selected locale. Added ~40 new keys each to I18N.en + kn + hi +
+// ta dicts; non-core locales fall through cleanly via per-key t() chain.
+// applyI18n() now also re-triggers the JS-rendered chrome (sync-badge,
+// history list, review-summary page) so dynamically-built HTML updates
+// on language change. Multi-file change
+// (index.html + app.js + crisp-mobile/App.tsx + i18n.ts).
+// v23 (Apr 2026): language policy reverted. Detected local (GPS/IP)
+// is once again the default active locale on first visit, unless the
+// user has an explicit manual pick in localStorage['crisp_lang_manual'].
+// Picker expanded from 14 → 29 languages. English remains first in the
+// list. Rationale: UNDP crisis users are more likely native speakers of
+// their region's language; defaulting to English added friction for
+// low-literacy / distressed users. Multi-file change
+// (index.html + app.js).
+// v22 (Apr 2026 hotfix): connectivity probe was firing every 15 s
+// unconditionally — 240 requests/hr per idle user. Reworked: probe only
+// runs while the dot is red (navigator.onLine === false). On offline,
+// a 30-s recovery loop detects reconnection and self-stops on the first
+// successful response. On the happy path (browser reports online) we
+// trust navigator fully and do ZERO idle polling. User-tap on the dot
+// and tab-visibility-change still fire one-shot probes for the "Chrome
+// lied" cases. app.js-only change.
+// v21 (Apr 2026 hotfix): two orthogonal fixes shipped together because
+// the same SW update eviction covers both.
+//   (a) Device-hash mismatch: submit wrote the device id to
+//       localStorage['crisp_device_id_v2'] but My Reports read from
+//       'crisp_device_hash' / 'crisp_device_id'. Consequence: successfully
+//       submitted reports never appeared in the user's "My Reports" list
+//       because status-since was looking up the wrong hash. Fix: the
+//       history lookup falls through to 'crisp_device_id_v2' first.
+//   (b) Language UX rewrite: app now defaults to English on every load
+//       regardless of detected region. GPS / IP detection still runs in
+//       the background but only to surface a "📍 Your region: ಕನ್ನಡ"
+//       suggestion inside the new full-language picker overlay (14
+//       locales). One visible pill shows the active locale; click opens
+//       the picker. User's manual choice is remembered in
+//       localStorage['crisp_lang_manual'] so subsequent loads skip
+//       English default if a choice was made. Multi-file change
+//       (index.html + app.js + styles.css).
+// v20 (Apr 2026 hotfix): full-app CSS overflow sweep. Language pill now
+// shows 2-letter ISO codes ("🌐 EN" / "🌐 KN") instead of native-script
+// names that wrapped to 2 lines and covered the progress bar. All flex:1
+// containers with potentially-long i18n children got explicit
+// `min-width: 0` so they can shrink without forcing their parent wider
+// than the viewport. Category chips + severity chips + choice buttons
+// + CTAs now ellipsize long labels. Flow-progress right-gutter enlarged
+// to 150 px (140 px under 360 px viewports) so the Send step is always
+// clear of the pill. Multi-file change (app.js + styles.css).
+// v19 (Apr 2026 hotfix): "In Flight" list in My Reports was showing
+// reports the server had already received. Root cause: one of four
+// client-side stage flags (meta/text/photo/audio) never flipped true
+// even though the upload succeeded — the IDB queue entry then stayed
+// forever at N%. Fix: new _reconcileQueueAgainstServer() function
+// dequeues any IDB row whose client_report_id appears in the server's
+// status-since response (with expected_media vs received-media safety
+// check to avoid dequeuing genuinely mid-upload items). Called from
+// openMyReports() and from the 15s retry loop so stuck entries clean
+// up without user intervention. app.js-only change.
+// v18 (Apr 2026 hotfix): Confirm page layout was clipping content on
+// narrow viewports / long i18n labels. Root causes: (1) .stage had no
+// overflow-x:hidden so wide children bled sideways, (2) .review-nav-row
+// children had no min-width:0 so the Submit button couldn't shrink,
+// (3) .lang-switcher had no width cap and sprawled over the 4th step
+// of the flow-progress bar. styles.css-only change.
+// v17 (Apr 2026 hotfix): camera modal controls (X / 📸 / ✓) were being
+// pushed off-screen on desktop Edge/Chrome because the flex layout gave
+// the <video> element `flex:1` and the intrinsic video aspect ratio beat
+// the flex-basis. Fix: video now fills the modal via `position:absolute;
+// inset:0; object-fit:cover`, and the gallery + shutter row are absolute
+// overlays pinned to the bottom with z-index:10. Multi-file change
+// (index.html + styles.css).
+// v16 (Apr 2026 hotfix): connectivity dot stuck red even when online.
+// `navigator.onLine` lies in a handful of scenarios (captive portal,
+// post-sleep resume, missed `online` event) so the dot now runs an
+// active probe against /regions/enabled every 15 s and flips green on
+// any successful response. Users can also tap the dot to force a
+// re-check. app.js-only change so SW bump triggers the JS reload.
+// v15 (Apr 2026 PR 7): success screen warmed — glowing heart + "Thank
+// you. Your report can help save lives." + [+ Add another report] /
+// [Track your report] buttons. Multi-file change (index.html + app.js +
+// styles.css) so the new DOM, handlers, and CSS ship atomically.
+// v14 (Apr 2026 PR 6): review-page redesign — damage level merged into
+// the infra-chip row (inline severity picker), dropped building-name +
+// debris toggle, crisis label reframed as "What caused damage?".
+// Plus: z-index stacking fix for .flow-progress vs lang-switcher +
+// new flag-picker overlay for English-region users. Multi-file change
+// (index.html + app.js + styles.css) so SW update is mandatory.
+// v13 (Apr 2026 PR 5): camera modal now multi-snap (mini-gallery + Done
+// button); browse input is multi-select; blur-pending tracked as an
+// array so parallel captures don't clobber each other. Multi-file
+// change (index.html + app.js + styles.css) — DOM, JS, and CSS must
+// ship atomically or snapshot thumbnails render unstyled.
+// v12 (Apr 2026 PR 4): removed the "Type instead" skip link from
+// stage-audio. Multi-file change (index.html + app.js) — the DOM node
+// and the click handler must go together or users see a dangling
+// `getElementById(...).addEventListener is not a function` crash.
+// v11 (Apr 2026 PR 3): Lives Saved heart-pulse + 🟢/🔴 connectivity dot +
+// "Works offline" hint on the home stage. Removed "Tap the button"
+// sub-copy. Multi-file change (index.html + app.js + styles.css) so
+// users must get the whole bundle atomically.
+// v10 (Apr 2026 PR 1): fixes PWA `t()` fallback so missing locale keys
+// fall through to English instead of rendering as raw UPPERCASE_KEY
+// names. Adds 37 English values that were missing from I18N.en.
+// v9 (Apr 2026): "My Reports" spec adds stage-report-detail + redesigned
+// cards + individual delete with offline queue. DOM + CSS + app.js all
+// change together; users need the full bundle to render the detail view
+// so we force an SW update.
 
 // Derive base path from SW's own URL (works regardless of where the app is served)
 const SW_BASE = self.location.href.replace(/sw\.js$/, '');
@@ -11,15 +311,43 @@ const STATIC_ASSETS = [
     SW_BASE + 'index.html',
     SW_BASE + 'app.js',
     SW_BASE + 'places.js',
+    SW_BASE + 'pii-blur.js',
+    SW_BASE + 'image-variants.js',   // Phase 4 — now pre-cached
+    SW_BASE + 'building-select.js',  // UNDP §3.2 — building-footprint selector
     SW_BASE + 'styles.css',
     SW_BASE + 'manifest.json',
     SW_BASE + 'assets/icon-192.png',
-    SW_BASE + 'assets/icon-512.png'
+    SW_BASE + 'assets/icon-512.png',
+    // UNDP §3.1b — dense 232-key translation packs, one per UN language.
+    // Precached so offline captures render in any UN language even on a
+    // cold install. `_loadLocaleJson()` in app.js fetches these lazily
+    // on `activateLang(code)`; the SW cache-first handler serves them
+    // from this cache without touching the network.
+    SW_BASE + 'i18n/en.json',
+    SW_BASE + 'i18n/fr.json',
+    SW_BASE + 'i18n/es.json',
+    SW_BASE + 'i18n/ar.json',
+    SW_BASE + 'i18n/ru.json',
+    SW_BASE + 'i18n/zh.json'
 ];
 
 const EXTERNAL_ASSETS = [
     'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap',
-    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
+    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+    // Client-side PII blur: TF.js core + BlazeFace library.
+    // Model weights (model.json + .bin) are fetched at runtime from tfhub via
+    // BlazeFace.load() — those get cached by the runtime fetch handler below.
+    'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js',
+    'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.umd.js'
+];
+
+// Domains the runtime fetch handler should cache opportunistically so that a
+// subsequent offline capture can still load the BlazeFace model weights.
+const RUNTIME_CACHE_HOSTS = [
+    'cdn.jsdelivr.net',
+    'tfhub.dev',
+    'storage.googleapis.com',  // where tfhub models are served from
+    'www.kaggle.com'           // kaggle is the new tfhub host
 ];
 
 // ── Install: pre-cache static shell ──────────────────────────────────────────
@@ -52,17 +380,45 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // API calls: always go to network (don't cache submissions)
+    // Phase 4 (Apr 2026) — /regions/enabled is the ONE API endpoint we
+    // deliberately cache. Clients call it on every "Start Report" tap to
+    // decide whether to arm the 2-minute auto-submit timer; caching with a
+    // stale-while-revalidate pattern keeps that interaction usable even when
+    // the device is offline at the moment of capture. The response payload
+    // is tiny + public so there's no privacy concern.
+    if (event.request.method === 'GET' && url.pathname.endsWith('/api/v1/regions/enabled')) {
+        event.respondWith(
+            caches.match(event.request).then((cached) => {
+                const net = fetch(event.request).then((response) => {
+                    if (response && response.ok) {
+                        const clone = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                    }
+                    return response;
+                }).catch(() => cached);
+                return cached || net;
+            })
+        );
+        return;
+    }
+
+    // Other API calls: always go to network (don't cache submissions)
     if (url.pathname.startsWith('/api/')) {
         return;
     }
+
+    // ML model weights from TF.js model host (tfhub / jsdelivr / etc.) —
+    // explicitly cache-first so offline capture can still run BlazeFace.
+    const isMLAsset = RUNTIME_CACHE_HOSTS.includes(url.hostname);
 
     // Static assets: cache-first with network fallback
     event.respondWith(
         caches.match(event.request).then((cached) => {
             if (cached) return cached;
             return fetch(event.request).then((response) => {
-                if (response.ok && event.request.method === 'GET') {
+                // Opaque responses (cross-origin, CORS-less) still get cached for ML
+                // because the browser will replay them to the same CDN origin.
+                if (event.request.method === 'GET' && (response.ok || (isMLAsset && response.type === 'opaque'))) {
                     const clone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
                 }
