@@ -14,7 +14,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from './constants/colors';
-import { t, setLanguage, detectLanguage, getAvailableLanguages } from './services/i18n';
+import { t, setLanguage, detectLanguage, getAvailableLanguages, bootstrapLanguage, applyTextDirection } from './services/i18n';
+import ConsentOverlay from './components/ConsentOverlay';
+import BuildingFootprintPicker from './components/BuildingFootprintPicker';
+// NOTE on custom fonts: the PWA ships Inter + Outfit via Google Fonts;
+// RN's expo-font can mirror this via @expo-google-fonts/inter + outfit
+// packages. Deferred because the download gating adds 300–500ms of
+// splash-screen time on cold start, and system fonts (Roboto / San
+// Francisco, plus Noto fallbacks for non-Latin scripts on all recent
+// devices) are already legible for the capture flow's short strings.
+// Track the upgrade via the UNDP-ALIGNMENT-CHANGELOG typography entry.
 import { initDatabase, enqueueReport, getQueueCount } from './services/database';
 import { processQueue } from './services/syncEngine';
 import NetInfo from '@react-native-community/netinfo';
@@ -191,37 +200,54 @@ function FlowProgress({ step, have }: {
     upcoming: { bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.18)', fg: 'rgba(255,255,255,0.45)', glyph: '' },
   };
   const LABELS = ['Photo', 'Details', 'Review', 'Send'];
+  // PWA parity — 4px gradient bar showing overall completion, below the
+  // badge row. Fills 25/50/75/100% for steps 1..4. Mirrors PWA .progress-bar-container.
+  const fillPct = step <= 1 ? 25 : step === 2 ? 50 : step === 3 ? 75 : 100;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 }}>
-      {[1, 2, 3, 4].map((n, i) => {
-        const st = stateFor(n);
-        const c = COLORS[st];
-        return (
-          <React.Fragment key={n}>
-            <View style={{ alignItems: 'center', minWidth: 48, flex: 0 }}>
-              <View style={{
-                width: 24, height: 24, borderRadius: 12,
-                borderWidth: 2, borderColor: c.border, backgroundColor: c.bg,
-                alignItems: 'center', justifyContent: 'center',
-                ...(st === 'active' ? { shadowColor: '#f97316', shadowOpacity: 0.4, shadowRadius: 6, shadowOffset: { width: 0, height: 0 } } : {}),
-              }}>
-                <Text style={{ color: c.fg, fontSize: 12, fontWeight: '700' }}>{c.glyph}</Text>
+    <View accessibilityRole="progressbar" accessibilityLabel={`Step ${step} of 4 — ${LABELS[step - 1]}`}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 }}>
+        {[1, 2, 3, 4].map((n, i) => {
+          const st = stateFor(n);
+          const c = COLORS[st];
+          return (
+            <React.Fragment key={n}>
+              <View style={{ alignItems: 'center', minWidth: 48, flex: 0 }}>
+                <View style={{
+                  width: 24, height: 24, borderRadius: 12,
+                  borderWidth: 2, borderColor: c.border, backgroundColor: c.bg,
+                  alignItems: 'center', justifyContent: 'center',
+                  ...(st === 'active' ? { shadowColor: '#f97316', shadowOpacity: 0.4, shadowRadius: 6, shadowOffset: { width: 0, height: 0 } } : {}),
+                }}>
+                  <Text style={{ color: c.fg, fontSize: 12, fontWeight: '700' }}>{c.glyph}</Text>
+                </View>
+                <Text style={{
+                  color: st === 'active' ? '#fb923c'
+                       : st === 'done' ? '#4ade80'
+                       : st === 'missing' ? '#f87171'
+                       : 'rgba(255,255,255,0.5)',
+                  fontSize: 10, fontWeight: st === 'active' ? '700' : '600',
+                  marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.3,
+                }}>{LABELS[n - 1]}</Text>
               </View>
-              <Text style={{
-                color: st === 'active' ? '#fb923c'
-                     : st === 'done' ? '#4ade80'
-                     : st === 'missing' ? '#f87171'
-                     : 'rgba(255,255,255,0.5)',
-                fontSize: 10, fontWeight: st === 'active' ? '700' : '600',
-                marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.3,
-              }}>{LABELS[n - 1]}</Text>
-            </View>
-            {i < 3 && (
-              <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: 2, marginTop: -10 }} />
-            )}
-          </React.Fragment>
-        );
-      })}
+              {i < 3 && (
+                <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: 2, marginTop: -10 }} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </View>
+      {/* 4px gradient progress bar — PWA parity (.progress-bar-container).
+          Uses a solid accent fill + a thin track. In RN the gradient
+          effect is approximated with the accent color + reduced opacity
+          on the remaining track, which reads the same on small screens. */}
+      <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 2, marginHorizontal: 14, marginBottom: 8 }}>
+        <View style={{
+          height: '100%',
+          width: `${fillPct}%`,
+          backgroundColor: Colors.accent,
+          borderRadius: 2,
+        }} />
+      </View>
     </View>
   );
 }
@@ -313,6 +339,11 @@ export default function App() {
   // Phase 4: parity with PWA. User-correction flag + manual location name.
   const [isLocationUserCorrected, setIsLocationUserCorrected] = useState(false);
   const [userLocationName, setUserLocationName] = useState<string>('');
+  // UNDP Appendix 1 — optional OSM-way id for a specific building footprint
+  // selected by the reporter via the map picker. `null` means "location as
+  // GPS only". Submitted as `building_id` on the meta payload.
+  const [buildingId, setBuildingId] = useState<string | null>(null);
+  const [footprintPickerOpen, setFootprintPickerOpen] = useState(false);
   // Phase 4: service_status + pressing_needs (matches PWA meta).
   // Phase 3 (Apr 2026): parity fix — backend `ServiceStatusEnum` is
   // OPERATIONAL/DISRUPTED/DESTROYED/UNKNOWN (backend/app/models/report.py:57–61).
@@ -344,6 +375,10 @@ export default function App() {
   const [isSending, setIsSending] = useState(false);
   const [reportId, setReportId] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  // Apr 2026 — PWA parity: show elapsed MM:SS during audio capture so
+  // reporters know when their clip is getting long. PWA uses #rec-timer.
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [deviceHash, setDeviceHash] = useState('');
   // Phase 4 (Apr 2026) — region-gated auto-submit timer state.
   // `activeRegion` ≠ null ⇒ AutoSubmitTimer banner is visible. Set when the
@@ -674,6 +709,14 @@ export default function App() {
 
       audioRecorder.record();
       setIsRecording(true);
+      // Start the MM:SS elapsed-time ticker. We tick every 1 s — good
+      // enough resolution for a crisis report and won't re-render too
+      // aggressively. Ref is cleared on stop or unmount.
+      setRecordingSeconds(0);
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((n) => n + 1);
+      }, 1000);
     } catch (e: any) {
       console.error('[Audio] Start failed:', e);
       Alert.alert('Error', `Could not start recording: ${e.message || 'unknown'}`);
@@ -684,6 +727,13 @@ export default function App() {
     try {
       await audioRecorder.stop();
       setIsRecording(false);
+      // Drop the ticker reference; we keep the final elapsed value on
+      // screen for the brief moment before the user taps Next so the
+      // UX cue "you recorded X seconds" persists.
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
       const uri = audioRecorder.uri;
       if (uri) {
         setAudioUri(uri);
@@ -714,10 +764,45 @@ export default function App() {
     } catch (e) { telemetrySwallow('getLocation', e); }
   };
 
+  // Consent-gate state — mirrors the PWA's _initConsentGate. The render
+  // tree below is covered by <ConsentOverlay> until `consentGiven` flips
+  // true, either because the user just accepted OR because a prior
+  // launch already persisted acceptance in AsyncStorage.
+  const [consentGiven, setConsentGiven] = useState<boolean | null>(null);
+
+  // Recording-timer cleanup: if the component unmounts mid-record, kill
+  // the interval to avoid setState-on-unmounted warnings + rogue ticks.
   useEffect(() => {
-    const detected = detectLanguage();
-    setLanguage(detected);
-    setLang(detected);
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // Language: honour stored manual choice, else auto-detect device locale.
+    // This is async because AsyncStorage is async. applyTextDirection() fires
+    // I18nManager.forceRTL internally for Arabic/Urdu/Hebrew/... and reloads
+    // the bundle in dev mode so the flip takes effect without a manual
+    // Ctrl-R. See services/i18n.ts for the full policy.
+    bootstrapLanguage().then((resolved) => {
+      setLang(resolved);
+    }).catch(() => {
+      // Any failure = fall back to auto-detected device lang.
+      const detected = detectLanguage();
+      setLanguage(detected);
+      setLang(detected);
+    });
+    // Consent: read persisted acceptance; show the overlay if missing.
+    AsyncStorage.getItem('crisp_privacy_consent').then((raw) => {
+      if (!raw) { setConsentGiven(false); return; }
+      try {
+        const parsed = JSON.parse(raw);
+        setConsentGiven(parsed?.accepted === true);
+      } catch { setConsentGiven(false); }
+    }).catch(() => setConsentGiven(false));
     initDatabase();
     updateQueueCount();
     getLocation();
@@ -991,6 +1076,9 @@ export default function App() {
         is_auto_submitted: isAutoSubmit,
         crisis_type: crisisType, damage_classification: damageClass,
         infrastructure_name: infraName || null, debris_clearing_needed: debrisClearing,
+        // UNDP Appendix 1 — pin to an OSM way id when the reporter picked
+        // an exact building footprint. Backend expects `osm:way:<id>` or null.
+        building_id: buildingId || null,
         service_status: {
           electricity: electricityStatus,
           water: waterStatus,
@@ -1384,13 +1472,31 @@ export default function App() {
             <Text style={{ color: '#86efac', fontSize: 12, fontStyle: 'italic', lineHeight: 18 }}>{t('audio_example')}</Text>
           </View>
 
-          <TouchableOpacity style={[s.micBtn, isRecording && { backgroundColor: Colors.red }]}
-            onPress={isRecording ? stopRecording : startRecording}>
+          <TouchableOpacity
+            style={[s.micBtn, isRecording && { backgroundColor: Colors.red }]}
+            onPress={isRecording ? stopRecording : startRecording}
+            accessibilityRole="button"
+            accessibilityLabel={isRecording ? t('stop') : t('tap_mic')}
+            accessibilityHint={isRecording ? 'Stops audio recording' : 'Starts audio recording'}
+          >
             <Text style={{ fontSize: 40 }}>{isRecording ? '⏹' : '🎤'}</Text>
             <Text style={{ color: Colors.white, fontSize: 12, fontWeight: '600', marginTop: 4 }}>
               {isRecording ? t('stop') : t('tap_mic')}
             </Text>
           </TouchableOpacity>
+          {/* Elapsed-time display during recording. Hidden when idle so the
+              layout matches the pre-recording state. Red dot + MM:SS in
+              monospace — mirrors the PWA's .rec-timer. */}
+          {isRecording && (
+            <View style={s.recTimer} accessibilityLiveRegion="polite">
+              <View style={s.recTimerDot} />
+              <Text style={s.recTimerText}>
+                {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}
+                :
+                {String(recordingSeconds % 60).padStart(2, '0')}
+              </Text>
+            </View>
+          )}
           <Text style={{ color: '#9ca3af', fontSize: 12, textAlign: 'center', marginTop: 4, marginBottom: 8 }}>
             {t('audio_mic_lang')}
           </Text>
@@ -1532,8 +1638,64 @@ export default function App() {
           <Text style={s.label}>{t('severity_label')}</Text>
           <View style={s.chipRow}>{sevs.map(sv => <TouchableOpacity key={sv.key} style={[s.chip, severity === sv.key && s.chipActive]} onPress={() => setSeverity(sv.key)}><Text style={s.chipText}>{sv.icon} {sv.label}</Text></TouchableOpacity>)}</View>
 
-          {/* 12. Location (from GPS; user-editable on a separate location flow) */}
-          {locationName ? <Text style={{ color: Colors.textDim, marginTop: 8, fontSize: 12 }}>📍 {locationName}</Text> : null}
+          {/* 12. Location — parity with PWA .location-verify-box.
+               GPS status + searchable text override + optional building-
+               footprint picker. Until the user edits or picks, we show the
+               auto-detected name.
+               UNDP Appendix 1: `building_id` is optional — the primary
+               fallback is GPS coords + place name. */}
+          <View style={s.locVerifyBox}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+              <Text style={{ fontSize: 16 }}>📍</Text>
+              <Text style={{ color: Colors.text, fontSize: 13, flex: 1 }} numberOfLines={2}>
+                {locationName
+                  ? locationName
+                  : (location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : t('loc_resolving'))}
+              </Text>
+              {location?.acc ? (
+                <Text style={{ color: Colors.textDim, fontSize: 11 }}>
+                  ±{Math.round(location.acc)}m
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Manual location override — user types the place name. When
+                non-empty we flag `is_user_corrected` on submit. */}
+            <TextInput
+              value={userLocationName}
+              onChangeText={(txt) => {
+                setUserLocationName(txt);
+                setIsLocationUserCorrected(txt.trim().length > 0);
+              }}
+              placeholder={t('loc_search_placeholder')}
+              placeholderTextColor={Colors.textDim}
+              style={s.locSearchInput}
+              accessibilityLabel={t('loc_search_placeholder')}
+            />
+
+            {/* Building footprint selector — optional per UNDP Appendix 1.
+                Disabled until we have a GPS fix (Overpass needs a centre). */}
+            {buildingId ? (
+              <View style={s.locSelectedPill}>
+                <Text style={s.locSelectedPillIcon}>✓</Text>
+                <Text style={s.locSelectedPillText} numberOfLines={1}>
+                  {t('building_selected')}: {buildingId.replace('osm:way:', '#')}
+                </Text>
+                <TouchableOpacity onPress={() => setBuildingId(null)}>
+                  <Text style={{ color: Colors.accent, fontWeight: '600', fontSize: 12 }}>{t('edit')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[s.locFootprintBtn, !location && { opacity: 0.4 }]}
+                disabled={!location}
+                onPress={() => setFootprintPickerOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t('building_select_title')}>
+                <Text style={s.locFootprintBtnText}>🏢  {t('building_select_title')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           <View style={s.navRow}>
             <TouchableOpacity onPress={() => setScreen('audio')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
@@ -2200,6 +2362,34 @@ export default function App() {
         )}
       </View>
     </Modal>
+    {/* Building-footprint picker — WebView + Leaflet + Overpass. Opens
+        from the review_details location box when the user taps "Select
+        exact building". Only rendered when visible; the WebView boots
+        lazily so we don't burn cycles when the user never opens it. */}
+    {location ? (
+      <BuildingFootprintPicker
+        visible={footprintPickerOpen}
+        onClose={() => setFootprintPickerOpen(false)}
+        onSelect={(osmId) => setBuildingId(osmId)}
+        lat={location.lat}
+        lng={location.lng}
+      />
+    ) : null}
+
+    {/* Privacy consent gate — blocks first render until accepted. We
+        show ONLY when consentGiven === false (explicit no); while it's
+        still `null` we're still reading AsyncStorage and avoid a flash
+        of the overlay. See PWA parity: mobile-app/src/index.html:29. */}
+    <ConsentOverlay
+      visible={consentGiven === false}
+      onAccept={() => {
+        AsyncStorage.setItem(
+          'crisp_privacy_consent',
+          JSON.stringify({ accepted: true, ts: Date.now() }),
+        ).catch(() => { /* best-effort — user still gets to use the app */ });
+        setConsentGiven(true);
+      }}
+    />
     </SafeAreaView>
     </TouchableWithoutFeedback>
   );
@@ -2207,6 +2397,76 @@ export default function App() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
+  // Location verify box — parity with PWA .location-verify-box (styles.css:760).
+  // Hosts GPS status + search input + optional building-footprint selector.
+  locVerifyBox: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: Colors.surface2,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 10,
+  },
+  locSearchInput: {
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    color: Colors.text,
+    fontSize: 13,
+  },
+  locSelectedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(34,197,94,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.35)',
+  },
+  locSelectedPillIcon: { color: Colors.green, fontSize: 14, fontWeight: '700' },
+  locSelectedPillText: { color: Colors.text, fontSize: 13, flex: 1 },
+  locFootprintBtn: {
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(124,58,237,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locFootprintBtnText: { color: Colors.accent, fontSize: 13, fontWeight: '700' },
+  // Audio recording timer — shown during active capture only. Red dot
+  // + monospace MM:SS, mirrors the PWA's .rec-timer in styles.css.
+  recTimer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    alignSelf: 'center',
+  },
+  recTimerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.red,
+  },
+  recTimerText: {
+    color: Colors.red,
+    fontSize: 14,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
   screen: { flex: 1, padding: 24, justifyContent: 'center', alignItems: 'center' },
   emoji: { fontSize: 96, marginBottom: 20 },
   title: { fontSize: 32, fontWeight: '900', color: Colors.text, textAlign: 'center', marginBottom: 8, letterSpacing: -0.5 },
@@ -2254,7 +2514,9 @@ const s = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   chip: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, backgroundColor: Colors.surface, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center' },
   chipActive: { borderColor: Colors.accent, backgroundColor: 'rgba(124,58,237,0.12)' },
-  chipText: { color: Colors.text, fontSize: 14, fontWeight: '600' },
+  // PWA parity — category chip labels use UPPERCASE with a subtle
+  // letter-spacing for visual weight (.chip-btn in styles.css:517).
+  chipText: { color: Colors.text, fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   summaryCard: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: 14, padding: 18, width: '100%', marginBottom: 16 },
   summaryRow: { color: Colors.text, fontSize: 14, marginBottom: 6 },
   summaryDesc: { color: Colors.textDim, fontSize: 13, fontStyle: 'italic', marginTop: 4 },
