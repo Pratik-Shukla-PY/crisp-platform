@@ -14,7 +14,12 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v39';  // bump on static-asset changes
+const CACHE_NAME = 'crisp-v40';  // bump on static-asset changes
+// v40 (Apr 2026) Post-submit state-clear fix — previously `resetApp()`
+// only ran from the "Add another report" button, so users who navigated
+// back to home by any other route saw the previous report's photo + text
+// bleed into the new capture. Now state is cleared at submit-success, so
+// every downstream route to a new capture starts from a clean slate.
 // v39 (Apr 2026) PII-blur hardening (Fixes A+B+C+D).
 // Field test revealed the client hardcoded `client_blur_applied: true`
 // even when BlazeFace failed silently — PII could reach the dashboard

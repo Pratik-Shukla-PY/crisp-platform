@@ -4495,6 +4495,17 @@ async function submitReport() {
         // ── Now try to send in background (non-blocking) ─────────────────────
         trySendQueuedReport(queueItem);
 
+        // ── Clear capture state ──────────────────────────────────────────────
+        // From here the report lives in IndexedDB; the UI state variables and
+        // preview <img>.src values are no longer needed and actively harmful
+        // (prior-report bleed-through on the next capture). Clearing here —
+        // instead of only on the "Add another report" button — means every
+        // downstream path to a new capture (btn-start, my-reports → home,
+        // service-worker reload, browser back) starts from a clean slate.
+        // Pure state clear, no navigation — navigation is driven by the
+        // setTimeout above.
+        _clearCaptureState();
+
     } catch (fatalErr) {
         console.error('submitReport fatal error:', fatalErr);
         hideUploadOverlay();
@@ -5902,17 +5913,67 @@ function showToast(message, duration = 3000) {
     }, duration);
 }
 
-function resetApp() {
+// ─── Capture-state reset ────────────────────────────────────────────────────
+// Field-report bug (Apr 2026): after a successful submit, the user reported
+// the next capture flow showed the PREVIOUS report's photo and text until
+// they hard-refreshed. Root cause: `resetApp()` was only wired to the
+// "Add another report" button on the success screen. Users who navigated
+// away by any other route (My Reports → Home, browser back, service-worker
+// refresh, IndexedDB sync-on-boot then btn-start) would land on stage-photo
+// with stale `state.*` and — crucially — with `<img>.src` still pointing at
+// the previous photo's data URL.
+//
+// Fix has two halves:
+//   1. Split reset into `_clearCaptureState()` (pure, no navigation) +
+//      `resetApp()` (calls _clearCaptureState + goToStage('stage-home')).
+//   2. Call `_clearCaptureState()` immediately after a successful enqueue
+//      (see submitReport below). After that point the report is safely
+//      persisted to IndexedDB and the UI state is no longer needed, so
+//      every downstream route to a new capture begins from a clean slate
+//      regardless of which button the user tapped.
+//
+// Additions over the previous resetApp() surface:
+//   - `<img>.src = ''` on every preview surface (photo-preview,
+//     review-photo-thumb, summary-photo, image-viewer-img) — before this
+//     they still held the prior data-URL even when state was null.
+//   - `extra-photos-scroll` innerHTML cleared (was only cleared lazily when
+//     stage-photo re-rendered, which didn't happen if the user took no
+//     action on the next capture's photo stage).
+//   - state.photoClientBlurApplied, state.mediaRecorder, state.audioChunks,
+//     state.cameraStream nulled out so no stale refs leak into the next
+//     capture's recorder / camera wiring.
+//   - state.buildingId cleared so OSM footprint selection doesn't carry.
+function _clearCaptureState() {
     inactivityManager.stop();
+
+    // ── State fields ────────────────────────────────────────────────────────
     state.photoDataUrl = null; state.photoBlob = null; state.extraPhotos = [];
     // PR 5: blur-pending is an array now; zero it so stale promises from the
     // previous report can't make the next awaitPendingBlur() wait on them.
     state.photoBlurPending = [];
     state.photoGroupId = null; state.photoVariants = null;
+    // Apr 2026 PII-blur hardening leaves a per-capture truthful flag on
+    // state. Clearing it means the next capture starts from "unknown until
+    // the pipeline runs", not from the previous report's answer.
+    state.photoClientBlurApplied = undefined;
     state.audioBlob = null; state.transcript = ''; state.description = '';
     state.infraType = 'ROAD'; state.severity = 'MODERATE'; state.isAutoSubmit = false;
     state.crisisType = 'FLOOD'; state.damageClass = 'PARTIAL'; state.infraName = '';
     state.debrisClearing = false; state.serviceStatus = { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] };
+    // Building-footprint selection (OSM way id) — don't carry between reports.
+    state.buildingId = null;
+    // Media-recorder scaffolding — these accumulate across recordings and
+    // must zero between reports so the next audio capture starts from a
+    // clean chunk array. The recorder instance itself is closed by its
+    // own stop handler; we just drop our reference.
+    state.mediaRecorder = null;
+    state.audioChunks = [];
+    // Camera stream — if the previous capture left the live-camera modal
+    // open and the user navigated back without closing it, the stream
+    // could linger. Clearing the reference lets GC reclaim the track once
+    // the viewfinder DOM is torn down. A proactive .getTracks().stop()
+    // runs inside the camera-modal close handler; this is belt-and-braces.
+    state.cameraStream = null;
 
     // Always reset to device GPS — never carry over user-corrected location to next report
     state.userLocationName = null; state.locationName = null;
@@ -5924,15 +5985,27 @@ function resetApp() {
         state.location = null;
         state.deviceLocation = null;
     }
-    // DOM reset — every lookup is guarded because elements in this list have
-    // been added/removed over successive sprints. A single missing ID
-    // (#photo-skip-link was the historical offender after Phase 2 made photos
-    // mandatory) used to throw and abort resetApp before goToStage — which
-    // left the user stranded on the success screen when they tapped
-    // "Add another report". Guarded lookups make resetApp crash-free
-    // regardless of which DOM elements the active build still has.
+
+    // ── DOM reset ───────────────────────────────────────────────────────────
+    // Every lookup is guarded because elements in this list have been added/
+    // removed over successive sprints. A single missing ID (#photo-skip-link
+    // was the historical offender after Phase 2 made photos mandatory) used
+    // to throw and abort resetApp before goToStage — which left the user
+    // stranded on the success screen when they tapped "Add another report".
+    // Guarded lookups make reset crash-free regardless of which DOM elements
+    // the active build still has.
     const _photoPreview = document.getElementById('photo-preview');
-    if (_photoPreview) _photoPreview.style.display = 'none';
+    if (_photoPreview) {
+        _photoPreview.style.display = 'none';
+        // Clear .src — previously left pointing at the prior data URL even
+        // after display:none, which meant any code path that unhid the
+        // element (stage-photo re-entry, accessibility announcement) showed
+        // the previous report's image. This is the core bleed-through fix.
+        _photoPreview.src = '';
+        // Drop the privacy-note overlay too — it's re-added by showPreview().
+        const _privNote = _photoPreview.parentElement && _photoPreview.parentElement.querySelector('.photo-privacy-note');
+        if (_privNote) _privNote.remove();
+    }
     const _photoPlaceholder = document.getElementById('photo-placeholder');
     if (_photoPlaceholder) _photoPlaceholder.style.display = 'flex';
     const _btnPhotoNext = document.getElementById('btn-photo-next');
@@ -5952,6 +6025,30 @@ function resetApp() {
     // once the primary photo exists.
     const _extrasStrip = document.getElementById('extra-photos-strip');
     if (_extrasStrip) _extrasStrip.style.display = 'none';
+    // Clear every thumb inside the extras strip immediately. _updateExtra
+    // PhotoStrip() re-renders from state on next stage-photo entry, but if
+    // the user doesn't visit stage-photo before somehow peeking at the
+    // DOM (e.g. browser devtools or screenshot mode), they'd see old
+    // thumbs. Belt-and-braces privacy: clear the container now.
+    const _extrasScroll = document.getElementById('extra-photos-scroll');
+    if (_extrasScroll) _extrasScroll.innerHTML = '';
+    // Review-page thumb — populated by populateReview() on stage-review
+    // entry. Not re-cleared if state.photoDataUrl is null (populateReview
+    // only hides the row). Clear .src explicitly so the old bytes leave DOM.
+    const _reviewThumb = document.getElementById('review-photo-thumb');
+    if (_reviewThumb) _reviewThumb.src = '';
+    // Summary-page photo — same story as review-photo-thumb.
+    const _summaryPhoto = document.getElementById('summary-photo');
+    if (_summaryPhoto) _summaryPhoto.src = '';
+    // Full-screen image viewer. _closeImageViewer() clears this on close,
+    // but if the user never opened/closed the viewer explicitly between
+    // capture → submit → next report, the <img>.src carries over. Clear
+    // it unconditionally here.
+    const _viewerImg = document.getElementById('image-viewer-img');
+    if (_viewerImg) _viewerImg.src = '';
+    const _viewerOverlay = document.getElementById('image-viewer-overlay');
+    if (_viewerOverlay) _viewerOverlay.style.display = 'none';
+
     const _liveTranscript = document.getElementById('live-transcript');
     if (_liveTranscript) {
         _liveTranscript.value = '';
@@ -5968,6 +6065,15 @@ function resetApp() {
     if (_bs) { _bs.disabled = false; _bs.innerHTML = `<i class="fa-solid fa-paper-plane"></i> <span>${t('send_undp')}</span>`; }
     const _brs = document.getElementById('btn-review-submit');
     if (_brs) _brs.disabled = false;
+}
+
+// Expose for the post-submit hook and tests. The pure form (no navigation)
+// is the safer default; tests and submitReport can assert on the result
+// without racing the stage transition.
+window._clearCaptureState = _clearCaptureState;
+
+function resetApp() {
+    _clearCaptureState();
     goToStage('stage-home');
 }
 
