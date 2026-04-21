@@ -20,6 +20,11 @@ reportlab>=4.0.0
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 email-validator>=2.0.0
+# Required by FastAPI for multipart/form-data parsing — used by the
+# binary chunk endpoint (POST /reports/{id}/media/chunk-bin) and every
+# file-upload route. Import-time check happens when FastAPI builds
+# routes, so missing it fails the app at startup (and pytest collection).
+python-multipart>=0.0.6
 
 # Observability (P3.7 + P3.8)
 structlog>=24.0.0
