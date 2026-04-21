@@ -549,6 +549,38 @@ async def send_step_photo_first(chat_id: int, lang: str):
     })
 
 
+# P3.5 — Consent prompt shown right after language selection. Blocks all data
+# capture until the user explicitly taps "I agree". Mirrors the PWA and RN
+# consent card so Telegram users get the same privacy disclosures (location,
+# photo, audio, retention) before any data is collected.
+async def send_consent_prompt(chat_id: int, lang: str):
+    # Keep keys i18n-friendly but fall back to an English summary if the
+    # translation table doesn't have them yet. Short enough to fit one screen.
+    title = t(lang, "consent_title") or "🛡 Your privacy matters"
+    body = t(lang, "consent_body") or (
+        "To route help fast, CRISP collects:\n"
+        "• 📍 Location (GPS / map pin)\n"
+        "• 📸 Photos of damage (faces auto-blurred)\n"
+        "• 🎤 Audio / text description\n\n"
+        "Shared only with verified crisis responders. You can delete "
+        "anytime with /delete.\n\n"
+        "Continue?"
+    )
+    yes_label = t(lang, "consent_yes") or "✅ I agree"
+    no_label = t(lang, "consent_no") or "❌ No, cancel"
+    await _send("sendMessage", {
+        "chat_id": chat_id,
+        "text": f"*{title}*\n\n{body}",
+        "parse_mode": "Markdown",
+        "reply_markup": {
+            "inline_keyboard": [
+                [{"text": yes_label, "callback_data": "consent_accept"}],
+                [{"text": no_label, "callback_data": "consent_decline"}],
+            ],
+        },
+    })
+
+
 async def send_step_description(chat_id: int, lang: str):
     """Ask for text description of the incident."""
     await _send("sendMessage", {

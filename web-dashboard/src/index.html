@@ -67,6 +67,10 @@
             <button class="icon-btn deletion-btn" id="btn-pending-deletions" onclick="showPendingDeletions()" style="display:none;" title="View pending deletion requests">
                 <i class="fa-solid fa-trash-clock"></i> <span id="deletion-count-badge">0</span>
             </button>
+            <!-- Phase 4 (Apr 2026) — Auto-submit regions (admin only). -->
+            <button class="icon-btn" id="btn-auto-regions" onclick="showRegionsPanel()" style="display:none;" title="Configure auto-submit regions">
+                <i class="fa-solid fa-location-crosshairs"></i> Regions
+            </button>
 
             <!-- Live Incident Notifications -->
             <div class="notif-area" id="notif-area">
@@ -178,6 +182,45 @@
         <div class="del-panel-footer" id="del-panel-footer"></div>
     </div>
 
+    <!-- Phase 4 (Apr 2026) — Auto-Submit Regions Admin Panel (overlay).
+         Admin toggles enable per-region 2-minute auto-submit timers on
+         clients. Uses the same overlay/header pattern as the deletions
+         panel for visual consistency. -->
+    <div id="regions-panel" class="deletions-panel" style="display:none;">
+        <div class="del-panel-header">
+            <h3><i class="fa-solid fa-location-crosshairs"></i> Auto-Submit Regions</h3>
+            <button class="close-btn" onclick="closeRegionsPanel()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="del-panel-body" id="regions-panel-body"></div>
+        <div class="del-panel-footer" id="regions-panel-footer">
+            <button class="btn btn-primary" onclick="openRegionForm()"><i class="fa-solid fa-plus"></i> Add region</button>
+        </div>
+    </div>
+
+    <!-- Region create/edit modal. Small inline form; radius in kilometres. -->
+    <div id="region-form-overlay" style="display:none;">
+        <div class="region-form">
+            <div class="del-panel-header">
+                <h3 id="region-form-title"><i class="fa-solid fa-pen"></i> Region</h3>
+                <button class="close-btn" onclick="closeRegionForm()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="region-form-body">
+                <label>Name</label>
+                <input type="text" id="region-name" maxlength="120" placeholder="e.g. Bangalore">
+                <div class="region-grid">
+                    <div><label>Latitude</label><input type="number" step="0.0001" id="region-lat" placeholder="12.9716"></div>
+                    <div><label>Longitude</label><input type="number" step="0.0001" id="region-lng" placeholder="77.5946"></div>
+                    <div><label>Radius (km)</label><input type="number" step="0.1" min="0.1" max="200" id="region-radius-km" placeholder="12"></div>
+                </div>
+                <label class="region-enabled-row"><input type="checkbox" id="region-enabled"> Enabled (clients in this zone will see the 2-min auto-submit timer)</label>
+            </div>
+            <div class="del-panel-footer region-form-footer">
+                <button class="btn btn-secondary" onclick="closeRegionForm()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveRegionForm()"><i class="fa-solid fa-check"></i> Save</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Predictive Intelligence Panel -->
     <div id="predictions-panel" class="predictions-panel" style="display:none;">
         <div class="pred-scroll">
@@ -217,9 +260,29 @@
                 <h2><i class="fa-solid fa-satellite-dish" style="color:var(--accent);margin-right:6px;font-size:14px;"></i>Incident Feed</h2>
                 <span class="feed-count" id="feed-count-badge">0</span>
             </div>
-            <div class="view-toggle">
-                <button class="view-btn active" data-mode="queue" onclick="setViewMode('queue')"><i class="fa-solid fa-layer-group"></i></button>
-                <button class="view-btn" data-mode="tree" onclick="setViewMode('tree')"><i class="fa-solid fa-sitemap"></i></button>
+            <div class="feed-actions">
+                <div class="sort-dropdown" id="sort-dropdown">
+                    <button class="sort-btn" onclick="this.parentElement.classList.toggle('open')" title="Sort incidents">
+                        <i class="fa-solid fa-arrow-down-short-wide"></i>
+                    </button>
+                    <div class="sort-menu">
+                        <div class="sort-menu-label">Sort by</div>
+                        <button class="sort-opt active" data-sort="priority" onclick="setCardSortMode('priority')"><i class="fa-solid fa-exclamation-circle"></i> Priority</button>
+                        <button class="sort-opt" data-sort="newest" onclick="setCardSortMode('newest')"><i class="fa-solid fa-clock"></i> Newest First</button>
+                        <button class="sort-opt" data-sort="oldest" onclick="setCardSortMode('oldest')"><i class="fa-solid fa-clock-rotate-left"></i> Oldest First</button>
+                        <button class="sort-opt" data-sort="severity" onclick="setCardSortMode('severity')"><i class="fa-solid fa-triangle-exclamation"></i> Severity</button>
+                        <button class="sort-opt" data-sort="type" onclick="setCardSortMode('type')"><i class="fa-solid fa-building"></i> Infrastructure</button>
+                        <button class="sort-opt" data-sort="has_media" onclick="setCardSortMode('has_media')"><i class="fa-solid fa-camera"></i> With Media</button>
+                        <button class="sort-opt" data-sort="confidence" onclick="setCardSortMode('confidence')"><i class="fa-solid fa-shield-halved"></i> Credibility Score</button>
+                        <button class="sort-opt" data-sort="crisis" onclick="setCardSortMode('crisis')"><i class="fa-solid fa-cloud-bolt"></i> Crisis Type</button>
+                        <button class="sort-opt" data-sort="damage" onclick="setCardSortMode('damage')"><i class="fa-solid fa-building-circle-xmark"></i> Damage Level</button>
+                        <button class="sort-opt" data-sort="source" onclick="setCardSortMode('source')"><i class="fa-solid fa-tower-cell"></i> Source Channel</button>
+                    </div>
+                </div>
+                <div class="view-toggle">
+                    <button class="view-btn active" data-mode="queue" onclick="setViewMode('queue')"><i class="fa-solid fa-layer-group"></i></button>
+                    <button class="view-btn" data-mode="tree" onclick="setViewMode('tree')"><i class="fa-solid fa-sitemap"></i></button>
+                </div>
             </div>
         </div>
 
@@ -254,7 +317,7 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-<script src="app.js?v=700"></script>
+<script src="app.js?v=720"></script>
 <script src="predictions.js?v=100"></script>
 
 <!-- Offline status banner -->
@@ -289,17 +352,34 @@ if ('serviceWorker' in navigator) {
 }
 
 // ── Offline / online banner ───────────────────────────────────────────────────
+// Apr 2026 fix: ground this in ACTUAL fetch results, not `navigator.onLine`.
+// `navigator.onLine` is notoriously unreliable — it can get stuck at `false`
+// after a transient DHCP renewal or VPN reconnect, leaving the "Offline —
+// showing cached data" banner visible even when the dashboard is
+// successfully polling the backend. We now expose `window.setDashboardOnline`
+// which is called from `_updateCacheBadge()` in app.js on every poll; real
+// fetch failures light the banner, real successes hide it.
 const offlineBanner = document.getElementById('offline-banner');
-function updateOnlineStatus() {
-  if (!navigator.onLine) {
-    offlineBanner.style.display = 'flex';
-  } else {
-    offlineBanner.style.display = 'none';
-  }
+let _dashLastFetchOk = true;   // optimistic until a poll actually fails
+function _applyOfflineBanner() {
+  // Only show the banner when:
+  //  · the browser insists it's offline AND the last fetch failed, OR
+  //  · the last fetch failed (regardless of navigator.onLine).
+  // If either of those is a LIE (browser stuck on offline / transient 5xx),
+  // the banner flips off as soon as the next poll succeeds.
+  const online = _dashLastFetchOk;
+  offlineBanner.style.display = online ? 'none' : 'flex';
 }
-window.addEventListener('online',  updateOnlineStatus);
-window.addEventListener('offline', updateOnlineStatus);
-updateOnlineStatus();
+window.setDashboardOnline = function (ok) {
+  _dashLastFetchOk = !!ok;
+  _applyOfflineBanner();
+};
+// Browser online/offline hints still update the banner (a genuine offline
+// event flips it immediately without waiting for the next poll interval).
+window.addEventListener('online',  () => { if (_dashLastFetchOk === false) _applyOfflineBanner(); });
+window.addEventListener('offline', () => { _dashLastFetchOk = false; _applyOfflineBanner(); });
+// Start optimistic. The first fetchReports() call will confirm or correct it.
+_applyOfflineBanner();
 </script>
 </body>
 </html>

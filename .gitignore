@@ -1,6 +1,9 @@
 # Environment & secrets
 .env
 .env.*
+# Allow template files (e.g. .env.production.example) — these are
+# checked in to document required prod env vars with blank values.
+!.env.*.example
 
 # Python
 __pycache__/
@@ -11,6 +14,10 @@ venv/
 
 # Node
 node_modules/
+
+# Playwright test artefacts (regenerated on every run)
+playwright-report/
+test-results/
 
 # Logs & runtime
 *.log
@@ -24,6 +31,8 @@ logs/
 *.sqlite
 *.sqlite3
 *.db
+*.db.bak
+*.db.pre-*.bak
 
 # Uploads (runtime user data)
 backend/uploads/

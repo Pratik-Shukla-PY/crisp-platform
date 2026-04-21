@@ -1,0 +1,18 @@
+{
+  "name": "crisp-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end test suite for CRISP — covers every critical button on PWA + Dashboard via Playwright.",
+  "scripts": {
+    "test": "playwright test",
+    "test:pwa": "playwright test --project=pwa",
+    "test:dashboard": "playwright test --project=dashboard",
+    "test:smoke": "playwright test --grep=@smoke",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0"
+  }
+}

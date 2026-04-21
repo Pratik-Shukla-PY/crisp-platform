@@ -14,6 +14,13 @@
     <!-- Fonts & Styles -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet — UNDP Appendix: building-footprint overlay on the review
+         page. Loaded from CDN to match the dashboard's existing Leaflet
+         dependency; the service worker caches the JS + CSS so offline
+         captures still paint the map if the reporter's already opened
+         the app once on this device. -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -46,15 +53,162 @@
 
 <div class="mobile-screen" id="app-root">
 
-    <!-- ── LANGUAGE SWITCHER ── -->
+    <!-- ── LANGUAGE SWITCHER + CONNECTIVITY DOT ── -->
+    <!-- Apr 2026 PR 3 — 🟢/🔴 dot as the first child inside the switcher
+         pill so it sits at the fixed right-edge cluster without a
+         second absolute-positioned element fighting for 320 px worth
+         of real estate. Live-updated on navigator online/offline events
+         by _applyOnlineDot() in app.js. -->
+    <!-- Apr 2026 language-UX rewrite: app defaults to English on every load.
+         The region's local language is still auto-detected in the background
+         and surfaced INSIDE the picker overlay with a "📍 Your region" badge
+         so users discover it without being force-switched into a locale they
+         may not want. #btn-lang-current is the only visible control —
+         clicking it opens the full picker. #btn-lang-en and #btn-lang-local
+         are retained hidden in the DOM purely for Playwright back-compat
+         (existing specs click them with { force: true }). -->
     <div class="lang-switcher" id="lang-switcher" title="Tap to change language">
+        <span class="connectivity-dot connectivity-online" id="connectivity-dot" aria-label="Online" title="Online"></span>
         <button id="btn-lang-local" data-lang="en" style="display:none;" title="Tap to switch to local language">🌐 ...</button>
-        <button id="btn-lang-en" class="active" data-lang="en" title="Tap to switch to English">🌐 EN</button>
+        <button id="btn-lang-en" class="active" data-lang="en" style="display:none;" title="Tap to switch to English">🌐 EN</button>
+        <button id="btn-lang-change" style="display:none;" title="Change language">🌐</button>
+        <!-- Primary visible pill. Text is updated by activateLang() to reflect
+             the active locale code. Tapping opens #lang-picker-overlay with
+             every supported language. -->
+        <button id="btn-lang-current" class="active" title="Tap to change language">🌐 EN</button>
+    </div>
+
+    <!-- Full-screen image viewer overlay (Apr 2026). Opens when the user
+         taps any photo thumbnail on stage-photo. Shows the image at full
+         bleed + a Delete button with confirmation. -->
+    <div id="image-viewer-overlay" class="image-viewer-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Image viewer">
+        <button id="btn-image-viewer-close" class="image-viewer-close" aria-label="Close">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <img id="image-viewer-img" class="image-viewer-img" src="" alt="">
+        <button id="btn-image-viewer-delete" class="image-viewer-delete">
+            <i class="fa-solid fa-trash-can"></i>
+            <span data-i18n="image_delete_btn">Delete image</span>
+        </button>
+    </div>
+
+    <!-- Delete-confirmation dialog for in-viewer delete. Simpler than using
+         window.confirm so the copy can be fully i18n'd. -->
+    <div id="image-delete-confirm" class="image-delete-confirm" style="display:none;" role="dialog" aria-modal="true">
+        <div class="idc-sheet">
+            <h3 class="idc-title" data-i18n="image_delete_confirm_title">Delete this image?</h3>
+            <p class="idc-body" data-i18n="image_delete_confirm_body">This image will be removed from your report.</p>
+            <div class="idc-buttons">
+                <button id="btn-idc-cancel" class="idc-cancel" data-i18n="image_delete_cancel">Cancel</button>
+                <button id="btn-idc-confirm" class="idc-confirm" data-i18n="image_delete_yes">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Language picker overlay — full list. Opened by #btn-lang-current. -->
+    <div id="lang-picker-overlay" class="lang-picker-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Choose language">
+        <div class="lang-picker-sheet">
+            <h3 class="lang-picker-title" data-i18n="lang_picker_title">Choose language</h3>
+            <!-- Populated by detectAndSetupLanguage() — shown as a top row
+                 above the main grid when a detected local differs from the
+                 active locale. "📍 Your region: ಕನ್ನಡ" style hint. -->
+            <div id="lang-picker-suggested" class="lang-picker-suggested" style="display:none;"></div>
+            <!-- April 2026 §3.1 UX rewrite: language picker is now split into
+                 TWO sections so the UNDP six-official-languages requirement is
+                 surfaced prominently. The UN section renders bigger (3-column
+                 tile layout, 2rem flag) to reinforce its primacy; other locales
+                 stay in a compact 2-column list below for easy access. -->
+            <!-- ── UN Official Languages (6 tiles, larger icons) ── -->
+            <div class="lang-picker-section">
+                <h4 class="lang-picker-section-title" data-i18n="lang_picker_un_section">
+                    UN Official Languages
+                </h4>
+                <div class="lang-picker-grid lang-picker-grid-un">
+                    <button class="lang-picker-flag lpf-un" data-lang="en" aria-label="English"><span class="lpf-glyph">🇬🇧</span><span class="lpf-label">English</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="fr" aria-label="French"><span class="lpf-glyph">🇫🇷</span><span class="lpf-label">Français</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="es" aria-label="Spanish"><span class="lpf-glyph">🇪🇸</span><span class="lpf-label">Español</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="ar" aria-label="Arabic"><span class="lpf-glyph">🇸🇦</span><span class="lpf-label">العربية</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="ru" aria-label="Russian"><span class="lpf-glyph">🇷🇺</span><span class="lpf-label">Русский</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="zh" aria-label="Chinese"><span class="lpf-glyph">🇨🇳</span><span class="lpf-label">中文</span></button>
+                </div>
+            </div>
+            <!-- ── Other Languages (2-column compact list) ── -->
+            <div class="lang-picker-section">
+                <h4 class="lang-picker-section-title" data-i18n="lang_picker_other_section">
+                    Other Languages
+                </h4>
+                <div class="lang-picker-grid lang-picker-grid-other">
+                    <!-- South Asia — high UNDP footprint -->
+                    <button class="lang-picker-flag" data-lang="hi" aria-label="Hindi"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">हिन्दी</span></button>
+                    <button class="lang-picker-flag" data-lang="kn" aria-label="Kannada"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">ಕನ್ನಡ</span></button>
+                    <button class="lang-picker-flag" data-lang="ta" aria-label="Tamil"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">தமிழ்</span></button>
+                    <button class="lang-picker-flag" data-lang="bn" aria-label="Bengali"><span class="lpf-glyph">🇧🇩</span><span class="lpf-label">বাংলা</span></button>
+                    <button class="lang-picker-flag" data-lang="ur" aria-label="Urdu"><span class="lpf-glyph">🇵🇰</span><span class="lpf-label">اردو</span></button>
+                    <!-- Europe -->
+                    <button class="lang-picker-flag" data-lang="pt" aria-label="Portuguese"><span class="lpf-glyph">🇵🇹</span><span class="lpf-label">Português</span></button>
+                    <button class="lang-picker-flag" data-lang="de" aria-label="German"><span class="lpf-glyph">🇩🇪</span><span class="lpf-label">Deutsch</span></button>
+                    <button class="lang-picker-flag" data-lang="it" aria-label="Italian"><span class="lpf-glyph">🇮🇹</span><span class="lpf-label">Italiano</span></button>
+                    <button class="lang-picker-flag" data-lang="pl" aria-label="Polish"><span class="lpf-glyph">🇵🇱</span><span class="lpf-label">Polski</span></button>
+                    <button class="lang-picker-flag" data-lang="ro" aria-label="Romanian"><span class="lpf-glyph">🇷🇴</span><span class="lpf-label">Română</span></button>
+                    <button class="lang-picker-flag" data-lang="el" aria-label="Greek"><span class="lpf-glyph">🇬🇷</span><span class="lpf-label">Ελληνικά</span></button>
+                    <button class="lang-picker-flag" data-lang="uk" aria-label="Ukrainian"><span class="lpf-glyph">🇺🇦</span><span class="lpf-label">Українська</span></button>
+                    <button class="lang-picker-flag" data-lang="tr" aria-label="Turkish"><span class="lpf-glyph">🇹🇷</span><span class="lpf-label">Türkçe</span></button>
+                    <button class="lang-picker-flag" data-lang="fa" aria-label="Persian"><span class="lpf-glyph">🇮🇷</span><span class="lpf-label">فارسی</span></button>
+                    <button class="lang-picker-flag" data-lang="he" aria-label="Hebrew"><span class="lpf-glyph">🇮🇱</span><span class="lpf-label">עברית</span></button>
+                    <!-- East / Southeast Asia -->
+                    <button class="lang-picker-flag" data-lang="ja" aria-label="Japanese"><span class="lpf-glyph">🇯🇵</span><span class="lpf-label">日本語</span></button>
+                    <button class="lang-picker-flag" data-lang="ko" aria-label="Korean"><span class="lpf-glyph">🇰🇷</span><span class="lpf-label">한국어</span></button>
+                    <button class="lang-picker-flag" data-lang="vi" aria-label="Vietnamese"><span class="lpf-glyph">🇻🇳</span><span class="lpf-label">Tiếng Việt</span></button>
+                    <button class="lang-picker-flag" data-lang="th" aria-label="Thai"><span class="lpf-glyph">🇹🇭</span><span class="lpf-label">ไทย</span></button>
+                    <button class="lang-picker-flag" data-lang="id" aria-label="Indonesian"><span class="lpf-glyph">🇮🇩</span><span class="lpf-label">Bahasa Indonesia</span></button>
+                    <button class="lang-picker-flag" data-lang="ms" aria-label="Malay"><span class="lpf-glyph">🇲🇾</span><span class="lpf-label">Bahasa Melayu</span></button>
+                    <!-- Africa -->
+                    <button class="lang-picker-flag" data-lang="sw" aria-label="Swahili"><span class="lpf-glyph">🌍</span><span class="lpf-label">Kiswahili</span></button>
+                    <button class="lang-picker-flag" data-lang="am" aria-label="Amharic"><span class="lpf-glyph">🇪🇹</span><span class="lpf-label">አማርኛ</span></button>
+                </div>
+            </div>
+            <button class="lang-picker-close" id="lang-picker-close" data-i18n="lang_picker_close">Close</button>
+        </div>
+    </div>
+
+    <!-- Apr 2026 UX rewrite — unified color-coded flow-progress bar.
+         Visible only on capture stages (photo → details → review → send).
+         updateFlowProgress() in app.js flips each step through the states:
+         done (green ✓) · active (accent) · missing (red !) · upcoming (grey).
+         Replaces the per-stage .step-dots so users see the whole journey
+         at all times, not just a vague dot count. -->
+    <div class="flow-progress" id="flow-progress" style="display:none;" aria-label="Progress" role="progressbar">
+        <div class="fp-step" data-step="1">
+            <div class="fp-dot"><i class="fp-icon"></i></div>
+            <div class="fp-label" data-i18n="fp_photo">Photo</div>
+        </div>
+        <div class="fp-line"></div>
+        <div class="fp-step" data-step="2">
+            <div class="fp-dot"><i class="fp-icon"></i></div>
+            <div class="fp-label" data-i18n="fp_details">Details</div>
+        </div>
+        <div class="fp-line"></div>
+        <div class="fp-step" data-step="3">
+            <div class="fp-dot"><i class="fp-icon"></i></div>
+            <div class="fp-label" data-i18n="fp_review">Review</div>
+        </div>
+        <div class="fp-line"></div>
+        <div class="fp-step" data-step="4">
+            <div class="fp-dot"><i class="fp-icon"></i></div>
+            <div class="fp-label" data-i18n="fp_send">Send</div>
+        </div>
     </div>
 
     <!-- ══════════════════════════════════════
          STAGE 0 — WELCOME / HOME
     ══════════════════════════════════════ -->
+    <!-- Apr 2026 UX rewrite — landing screen minimised for low-literacy
+         crisis users: 1 primary CTA, 1 secondary link, live impact metrics.
+         The old 4-card roadmap (Photo/Voice/Check/Send) was removed because
+         it looked clickable but wasn't — see plan at
+         ~/.claude/plans/swirling-forging-raccoon.md.
+         "Delete My Data" moved INTO My Reports (per-report + delete-all).
+    -->
     <div class="stage active" id="stage-home">
         <div class="stage-center">
             <div class="undp-badge">
@@ -62,54 +216,64 @@
                 <span>CRISP × UNDP</span>
             </div>
             <h1 class="hero-title" data-i18n="home_title">Report an Incident</h1>
-            <p class="hero-sub" data-i18n="home_sub">Help rescue teams find you faster.<br>It only takes 4 easy steps.</p>
 
-            <!-- Step roadmap — 2×2 grid with big icons -->
-            <div class="roadmap">
-                <div class="roadmap-step">
-                    <span class="rs-step-num">1</span>
-                    <div class="rs-icon">📸</div>
-                    <div class="rs-label" data-i18n="rs1">Photo</div>
+            <!-- Apr 2026 PR 3 — Lives Saved scorecard at top. Heart-pulse
+                 animation (CSS keyframes, honours prefers-reduced-motion)
+                 draws the eye to the positive social-proof signal before
+                 the user even considers their own action. Reports
+                 Submitted stays as the secondary stat. Card is hidden
+                 until a non-zero value exists — fresh installs don't see
+                 demotivating zeros. -->
+            <!-- UNDP Appendix engagement-incentives alignment (April 2026):
+                 The primary stat on the home screen used to be "Reports
+                 Submitted" — a raw count that gamifies volume, which UNDP
+                 explicitly asks submissions NOT to do. Replaced with
+                 "Reports Verified" (reports an analyst has accepted and
+                 dispatched/resolved). The volume counter is retained as
+                 internal telemetry only; nothing on the home screen
+                 rewards sheer quantity. -->
+            <div class="home-impact" id="home-impact" style="display:none;">
+                <div class="hi-cell hi-cell-lives">
+                    <div class="hi-heart" aria-hidden="true">❤</div>
+                    <div class="hi-num hi-num-lives" id="home-lives-count">—</div>
+                    <div class="hi-label" data-i18n="home_metric_lives">Lives Saved</div>
                 </div>
-                <div class="roadmap-step">
-                    <span class="rs-step-num">2</span>
-                    <div class="rs-icon">🎙️</div>
-                    <div class="rs-label" data-i18n="rs2">Speak</div>
-                </div>
-                <div class="roadmap-step">
-                    <span class="rs-step-num">3</span>
-                    <div class="rs-icon">✅</div>
-                    <div class="rs-label" data-i18n="rs3">Check</div>
-                </div>
-                <div class="roadmap-step">
-                    <span class="rs-step-num">4</span>
-                    <div class="rs-icon">🚀</div>
-                    <div class="rs-label" data-i18n="rs4">Send</div>
+                <div class="hi-divider"></div>
+                <div class="hi-cell">
+                    <div class="hi-num" id="home-verified-count">—</div>
+                    <div class="hi-label" data-i18n="home_metric_verified">Reports Verified</div>
                 </div>
             </div>
 
             <button class="big-cta" id="btn-start">
                 <i class="fa-solid fa-play"></i>
-                <span data-i18n="start_btn">Start Report</span>
+                <span data-i18n="start_btn">Start Reporting</span>
             </button>
 
-            <button class="delete-my-data-link" id="btn-delete-my-data" style="display:none;">
-                <i class="fa-solid fa-trash-can"></i> <span data-i18n="delete_my_data">Delete My Data</span>
+            <!-- Merged My Reports + Delete My Data entry. The history screen
+                 now hosts "Delete All Reports" at the bottom so users have
+                 exactly one place to manage what they've sent. -->
+            <button class="secondary-cta" id="btn-my-reports" type="button">
+                <i class="fa-solid fa-clipboard-list"></i>
+                <span data-i18n="my_reports">My Reports</span>
+                <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
             </button>
 
-            <!-- Delete data panel (hidden by default) -->
-            <div id="delete-data-panel" class="delete-data-panel" style="display:none;">
-                <div class="ddp-header">
-                    <h3><i class="fa-solid fa-shield-halved"></i> <span data-i18n="your_reports">Your Submitted Reports</span></h3>
-                    <div class="ddp-lang-switch" id="ddp-lang-switch"></div>
-                    <button class="ddp-close" id="ddp-close"><i class="fa-solid fa-xmark"></i></button>
-                </div>
+            <!-- Apr 2026 PR 3 — "Works offline" reassurance at the bottom of
+                 the home stage ONLY (hidden on capture flow to minimise
+                 cognitive load). Subtle; doesn't compete with the CTA. -->
+            <p class="home-offline-hint" data-i18n="home_offline_hint">
+                📡 Works offline and in low internet connectivity.
+            </p>
+
+            <!-- Hidden retained DOM — old delete-data-panel refs are kept
+                 invisible so legacy Telegram-bot / deep-link flows still
+                 find their targets, but the panel is never rendered. -->
+            <button class="delete-my-data-link" id="btn-delete-my-data" style="display:none;" aria-hidden="true" tabindex="-1"></button>
+            <div id="delete-data-panel" class="delete-data-panel" style="display:none;" aria-hidden="true">
+                <div class="ddp-header"><h3></h3><div class="ddp-lang-switch" id="ddp-lang-switch"></div><button class="ddp-close" id="ddp-close"><i class="fa-solid fa-xmark"></i></button></div>
                 <div id="ddp-list" class="ddp-list"></div>
-                <div class="ddp-footer">
-                    <button class="ddp-delete-all" id="ddp-delete-all">
-                        <i class="fa-solid fa-trash-can"></i> <span data-i18n="delete_all">Delete All Reports</span>
-                    </button>
-                </div>
+                <div class="ddp-footer"><button class="ddp-delete-all" id="ddp-delete-all"></button></div>
             </div>
         </div>
     </div>
@@ -119,12 +283,7 @@
     ══════════════════════════════════════ -->
     <div class="stage" id="stage-photo">
         <div class="stage-header">
-            <div class="step-dots">
-                <div class="step-dot active"></div>
-                <div class="step-dot"></div>
-                <div class="step-dot"></div>
-                <div class="step-dot"></div>
-            </div>
+            <!-- step-dots replaced by the global #flow-progress bar above. -->
             <h2 data-i18n="s1_title">Take a Photo</h2>
             <p data-i18n="s1_sub">Show us what happened</p>
         </div>
@@ -164,26 +323,52 @@
             </button>
         </div>
 
-        <p class="skip-text" id="photo-skip-link" data-i18n="skip_photo">Skip — no photo available</p>
+        <!-- Phase 2: photo is now MANDATORY. Skip link removed; helper text
+             shows until a photo is captured/uploaded; Next stays disabled. -->
+        <p class="helper-text" id="photo-helper" data-i18n="photo_required">Please capture or upload an image to continue</p>
 
-        <button class="nav-btn next-btn" id="btn-photo-next" style="display:none;">
+        <button class="nav-btn next-btn" id="btn-photo-next" disabled>
             <span data-i18n="next">Next</span> <i class="fa-solid fa-arrow-right"></i>
         </button>
 
         <!-- Hidden inputs -->
         <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none">
-        <input type="file" id="file-browse" accept="image/*" style="display:none">
+        <!-- PR 5 (Apr 2026): multi-select on browse. File picker returns an
+             array; iterate it and push each through the same compress+blur
+             pipeline used for single photos. First file lands in the primary
+             slot (if empty); rest go to extraPhotos. -->
+        <input type="file" id="file-browse" accept="image/*" multiple style="display:none">
         <input type="file" id="file-extra" accept="image/*" style="display:none">
     </div>
 
-    <!-- Camera modal overlay -->
-    <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:200; flex-direction:column; align-items:center; justify-content:center;">
-        <video id="camera-stream" autoplay playsinline style="width:100%; height:85%; object-fit:cover;"></video>
+    <!-- Camera modal overlay.
+         PR 5 (Apr 2026) — multi-snap: the stream stays alive across snaps.
+         After each snap, a thumbnail lands in #cam-gallery; the user keeps
+         shooting and taps "Done" when finished. First snap becomes the
+         primary photo; the rest go into state.extraPhotos.
+         Close (X) tears everything down without saving anything mid-session —
+         Done is the confirm path. -->
+    <!-- Hotfix (Apr 2026): on desktop Edge/Chrome the previous flex-column
+         layout with `flex:1` on the <video> could push the controls row off
+         the bottom of the viewport — the video's intrinsic aspect ratio beat
+         the flex-basis and there was no z-index to keep the shutter on top.
+         Fix: video fills the modal with `position:absolute; inset:0;
+         object-fit:cover`, and the gallery + controls are absolute overlays
+         pinned to the bottom with z-index:10 so they can't be hidden. -->
+    <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:200;">
+        <video id="camera-stream" autoplay playsinline muted
+               style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover;"></video>
         <canvas id="camera-canvas" style="display:none;"></canvas>
-        <div style="display:flex; gap:32px; padding:16px; background:#111;">
-            <button id="btn-cam-close" style="background:rgba(255,255,255,0.1); color:#fff; border:none; border-radius:50%; width:56px; height:56px; font-size:1.4rem; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
-            <button id="btn-cam-snap" style="background:#fff; border:none; border-radius:50%; width:72px; height:72px; font-size:1.8rem; cursor:pointer; box-shadow:0 0 0 4px rgba(255,255,255,0.3);">📸</button>
-            <div style="width:56px;"></div>
+        <!-- Mini-gallery: horizontally scrolling strip of already-captured
+             thumbnails. Pinned above the controls; hidden until the first snap. -->
+        <div id="cam-gallery" class="cam-gallery" style="display:none;">
+            <div class="cam-gallery-count" id="cam-gallery-count">0</div>
+            <div class="cam-gallery-scroll" id="cam-gallery-scroll"></div>
+        </div>
+        <div class="cam-controls">
+            <button id="btn-cam-close" aria-label="Close camera"><i class="fa-solid fa-xmark"></i></button>
+            <button id="btn-cam-snap" aria-label="Take photo">📸</button>
+            <button id="btn-cam-done" aria-label="Finish" disabled><i class="fa-solid fa-check"></i></button>
         </div>
     </div>
 
@@ -192,14 +377,18 @@
     ══════════════════════════════════════ -->
     <div class="stage" id="stage-audio">
         <div class="stage-header">
-            <div class="step-dots">
-                <div class="step-dot done"></div>
-                <div class="step-dot active"></div>
-                <div class="step-dot"></div>
-                <div class="step-dot"></div>
-            </div>
-            <h2 data-i18n="s2_title">Describe the Problem</h2>
-            <p data-i18n="s2_sub">Speak in your language</p>
+            <!-- step-dots replaced by the global #flow-progress bar. -->
+            <!-- Apr 2026 UX rewrite: title + bullet helper + worked example,
+                 designed for low-literacy / crisis users. See the plan at
+                 /Users/pks/.claude/plans/swirling-forging-raccoon.md. -->
+            <h2 data-i18n="s2_title">Tell us what happened</h2>
+            <p class="audio-prompt" data-i18n="s2_sub">Speak or type:</p>
+            <ul class="audio-helper">
+                <li data-i18n="audio_bullet_1">What is damaged? (house, road, people…)</li>
+                <li data-i18n="audio_bullet_2">How bad is it? (small / big / destroyed)</li>
+                <li data-i18n="audio_bullet_3">Is anyone hurt or in danger?</li>
+            </ul>
+            <p class="audio-example" data-i18n="audio_example">Example: Road is broken and water is flooding houses. 2 people are injured.</p>
         </div>
 
         <!-- Big mic button -->
@@ -207,7 +396,8 @@
             <button class="mic-btn" id="btn-mic">
                 <i class="fa-solid fa-microphone" id="mic-icon"></i>
             </button>
-            <p class="mic-label" id="mic-label" data-i18n="tap_mic">Tap to Start Speaking</p>
+            <p class="mic-label" id="mic-label" data-i18n="tap_mic">Tap and speak clearly</p>
+            <p class="mic-lang-hint" data-i18n="audio_mic_lang">You can speak in your language</p>
             <!-- Timer -->
             <div class="rec-timer" id="rec-timer" style="display:none;">
                 <span class="rec-dot"></span>
@@ -215,51 +405,66 @@
             </div>
         </div>
 
-        <!-- Live transcript box — always visible -->
+        <!-- Apr 2026 UX rewrite: dropped the `.transcript-label-row` chip —
+             it was rendering the literal key "TYPE_TEXT" because that key
+             was missing from every locale (t() falls back to the key when
+             no translation exists). Textarea with a worked-example
+             placeholder is self-explanatory without the label. -->
         <div class="transcript-box" id="transcript-box">
-            <div class="transcript-label-row">
-                <i class="fa-solid fa-language" style="color:var(--accent);"></i>
-                <span class="transcript-label-text" id="transcript-label-text">Live Text — speak or type below</span>
-            </div>
-            <textarea id="live-transcript" class="edit-textarea live-transcript-area" placeholder="Your speech appears here in real-time. You can also type or edit directly..."></textarea>
-            <div class="transcript-hint-bar" id="transcript-hint-bar">
-                <i class="fa-solid fa-pen"></i> You can edit this text before sending
-            </div>
+            <textarea id="live-transcript" class="edit-transcript-area edit-textarea live-transcript-area"
+                      data-i18n-placeholder="audio_placeholder"
+                      placeholder="Example: House collapsed, one person trapped"></textarea>
         </div>
 
-        <!-- Skip audio link -->
-        <p class="skip-text" id="audio-skip-link" data-i18n="skip_audio">Skip — I will type instead</p>
+        <!-- Apr 2026 PR 4: "Type instead" skip link removed. Mic + textarea
+             coexist today, so the toggle only added cognitive load without
+             hiding anything. Typed descriptions still work — user just taps
+             the textarea and goes straight to Continue. -->
 
         <button class="nav-btn next-btn" id="btn-audio-next">
-            <span data-i18n="next">Next</span> <i class="fa-solid fa-arrow-right"></i>
+            <span data-i18n="next">Continue</span> <i class="fa-solid fa-arrow-right"></i>
         </button>
     </div>
 
     <!-- ══════════════════════════════════════
          STAGE 3 — REVIEW / EDIT TEXT
     ══════════════════════════════════════ -->
-    <div class="stage" id="stage-review">
-        <div class="stage-header">
-            <div class="step-dots">
-                <div class="step-dot done"></div>
-                <div class="step-dot done"></div>
-                <div class="step-dot active"></div>
-                <div class="step-dot"></div>
+    <div class="stage" id="stage-review" data-review-page="1">
+        <div class="stage-header" id="review-page-header">
+            <!-- step-dots replaced by the global #flow-progress bar.
+                 The step label is now also redundant with the bar's active
+                 state, so it's hidden via CSS (kept for a11y). -->
+            <h2 id="review-page-title" data-i18n="review_details_title">Details</h2>
+            <small id="review-page-counter" class="sr-only" style="color:#9ca3af;">Step 3 of 4</small>
+        </div>
+
+        <!-- ── Page 1 — Incident ─────────────────────────────────────────── -->
+        <div class="review-page" data-review-page="1">
+            <!-- Photo row (shown by JS when photo exists) — compact -->
+            <div class="review-photo-row" id="review-photo-row" style="display:none;">
+                <img id="review-photo-thumb" src="" alt="" style="width:40px; height:40px; border-radius:8px; object-fit:cover;">
+                <span style="font-size:0.82rem; color:#9ca3af;" data-i18n="photo_attached">✅ Photo attached</span>
             </div>
-            <h2 data-i18n="s3_title">Check Details</h2>
-        </div>
 
-        <!-- Photo row (shown by JS when photo exists) — compact -->
-        <div class="review-photo-row" id="review-photo-row" style="display:none;">
-            <img id="review-photo-thumb" src="" alt="" style="width:40px; height:40px; border-radius:8px; object-fit:cover;">
-            <span style="font-size:0.82rem; color:#9ca3af;" data-i18n="photo_attached">✅ Photo attached</span>
-        </div>
+            <!-- Description textarea (visible; Phase 6 moved here from hidden) -->
+            <div class="review-block">
+                <p class="block-label"><i class="fa-solid fa-pen" style="color:var(--accent);"></i> <span data-i18n="description_label">Description</span></p>
+                <textarea id="edit-text" class="edit-textarea"
+                          data-i18n-placeholder="type_your_msg" placeholder="Describe what happened..."></textarea>
+            </div>
 
-        <!-- Hidden textarea (JS reads state.text from here) -->
-        <textarea id="edit-text" class="edit-textarea" style="display:none;"
-                  data-i18n-placeholder="type_your_msg" placeholder="Describe what happened..."></textarea>
+        </div><!-- /page-1 -->
 
-        <!-- WHAT is damaged? — Big icon grid -->
+        <!-- Phase 3 (Apr 2026): merged into Page 1. Second `data-review-page="1"`
+             div makes showReviewPage(1) display BOTH the description block and
+             the details grid together on one scrollable screen. -->
+        <div class="review-page" data-review-page="1">
+
+        <!-- WHAT is damaged? — Big icon grid + inline severity (PR 6 merge).
+             Tapping a chip selects it AND reveals the 3-dot severity selector
+             below the grid. Re-tapping the same chip collapses the severity
+             row. Default severity is PARTIAL (silent) so submitters who skip
+             this still produce a valid backend payload. -->
         <div class="review-block">
             <p class="block-label" data-i18n="what_damaged">
                 <i class="fa-solid fa-circle-question" style="color:var(--accent);"></i>
@@ -303,73 +508,78 @@
                     <span data-i18n="other">Other</span>
                 </button>
             </div>
+
+            <!-- Inline severity (PR 6). Revealed when a chip is tapped; collapsed
+                 when the same chip is tapped again. Selection drives
+                 state.damageClass. UNDP Appendix-1 labels are MINIMAL /
+                 PARTIAL / COMPLETE — the legacy data-damage="NO_DAMAGE"
+                 value is still accepted by the backend (normalised to
+                 MINIMAL) but every new PWA build emits the UNDP label. -->
+            <div class="infra-severity" id="infra-severity" style="display:none;">
+                <p class="infra-severity-label">
+                    <span data-i18n="damage_label">How bad?</span>
+                    <span class="infra-severity-chip" id="infra-severity-chip-name">Road</span>
+                </p>
+                <div class="sev-big-row">
+                    <button class="damage-chip" data-damage="MINIMAL">
+                        <div class="damage-dot" style="background:#22c55e;"></div>
+                        <span data-i18n="minimal_damage">Minimal</span>
+                    </button>
+                    <button class="damage-chip selected" data-damage="PARTIAL">
+                        <div class="damage-dot" style="background:#f97316;"></div>
+                        <span data-i18n="partial_damage">Partial</span>
+                    </button>
+                    <button class="damage-chip" data-damage="COMPLETE">
+                        <div class="damage-dot" style="background:#ef4444;"></div>
+                        <span data-i18n="complete_damage">Destroyed</span>
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <!-- CRISIS TYPE — What kind of crisis? -->
+        <!-- WHAT CAUSED IT? — UNDP Appendix-1 crisis taxonomy.
+             Natural:       Earthquake, Flood, Tsunami, Cyclone, Landslide
+             Technological: Explosion, Chemical incident, Pandemic
+             Human-made:    Conflict, Civil unrest
+             Plus Other. HURRICANE is omitted from the chip list — UNDP
+             bundles it under CYCLONE globally, and the backend remains
+             able to accept the legacy value for back-compat. -->
         <div class="review-block">
             <p class="block-label" data-i18n="crisis_label">
                 <i class="fa-solid fa-cloud-bolt" style="color:var(--accent);"></i>
-                Type of Crisis
+                What caused damage?
             </p>
             <div class="category-grid">
+                <!-- Natural -->
                 <button class="chip-btn" data-crisis="EARTHQUAKE"><i class="fa-solid fa-house-crack"></i><span data-i18n="earthquake">Earthquake</span></button>
                 <button class="chip-btn selected" data-crisis="FLOOD"><i class="fa-solid fa-water"></i><span data-i18n="flood">Flood</span></button>
-                <button class="chip-btn" data-crisis="CONFLICT"><i class="fa-solid fa-shield-halved"></i><span data-i18n="conflict">Conflict</span></button>
-                <button class="chip-btn" data-crisis="HURRICANE"><i class="fa-solid fa-wind"></i><span data-i18n="hurricane">Hurricane</span></button>
+                <button class="chip-btn" data-crisis="TSUNAMI"><i class="fa-solid fa-water"></i><span data-i18n="tsunami">Tsunami</span></button>
                 <button class="chip-btn" data-crisis="CYCLONE"><i class="fa-solid fa-tornado"></i><span data-i18n="cyclone">Cyclone</span></button>
-                <button class="chip-btn" data-crisis="WILDFIRE"><i class="fa-solid fa-fire"></i><span data-i18n="wildfire">Wildfire</span></button>
                 <button class="chip-btn" data-crisis="LANDSLIDE"><i class="fa-solid fa-mountain"></i><span data-i18n="landslide">Landslide</span></button>
+                <!-- Technological -->
+                <button class="chip-btn" data-crisis="EXPLOSION"><i class="fa-solid fa-bomb"></i><span data-i18n="explosion">Explosion</span></button>
+                <button class="chip-btn" data-crisis="CHEMICAL_INCIDENT"><i class="fa-solid fa-flask-vial"></i><span data-i18n="chemical_incident">Chemical</span></button>
                 <button class="chip-btn" data-crisis="PANDEMIC"><i class="fa-solid fa-virus"></i><span data-i18n="pandemic">Pandemic</span></button>
+                <!-- Human-made -->
+                <button class="chip-btn" data-crisis="CONFLICT"><i class="fa-solid fa-shield-halved"></i><span data-i18n="conflict">Conflict</span></button>
+                <button class="chip-btn" data-crisis="CIVIL_UNREST"><i class="fa-solid fa-people-group"></i><span data-i18n="civil_unrest">Civil Unrest</span></button>
+                <!-- Other -->
                 <button class="chip-btn" data-crisis="OTHER"><i class="fa-solid fa-circle-question"></i><span data-i18n="other_crisis">Other</span></button>
             </div>
         </div>
 
-        <!-- DAMAGE CLASSIFICATION — UNDP mandatory 3-tier -->
-        <div class="review-block">
-            <p class="block-label" data-i18n="damage_label">
-                <i class="fa-solid fa-building-circle-xmark" style="color:var(--accent);"></i>
-                Damage Level
-            </p>
-            <div class="sev-big-row">
-                <button class="damage-chip" data-damage="NO_DAMAGE">
-                    <div class="damage-dot" style="background:#22c55e;"></div>
-                    <span data-i18n="no_damage">No Damage</span>
-                </button>
-                <button class="damage-chip selected" data-damage="PARTIAL">
-                    <div class="damage-dot" style="background:#f97316;"></div>
-                    <span data-i18n="partial_damage">Partial</span>
-                </button>
-                <button class="damage-chip" data-damage="COMPLETE">
-                    <div class="damage-dot" style="background:#ef4444;"></div>
-                    <span data-i18n="complete_damage">Destroyed</span>
-                </button>
-            </div>
-        </div>
+        <!-- PR 6 (Apr 2026): standalone "Damage Level", "Building/Road Name"
+             input, and "Needs debris clearing" toggle all removed. Damage is
+             merged with the infra chip above; the name/debris fields were
+             near-universally skipped by submitters so the form cost wasn't
+             earning its keep. state.infraName / state.debrisClearing stay
+             in the state shape ('' / false defaults) for backend compat. -->
 
-        <!-- INFRASTRUCTURE NAME — optional -->
-        <div class="review-block">
-            <p class="block-label" data-i18n="infra_name_label">
-                <i class="fa-solid fa-building" style="color:var(--accent);"></i>
-                Building / Road Name <small style="color:#64748b;">(optional)</small>
-            </p>
-            <input type="text" id="input-infra-name" class="text-input-sm" maxlength="255"
-                   data-i18n-placeholder="infra_name_hint" placeholder="e.g. City Hospital, Main Street...">
-        </div>
-
-        <!-- DEBRIS CLEARING — toggle -->
-        <div class="review-block" style="display:flex; align-items:center; gap:12px;">
-            <label class="toggle-switch">
-                <input type="checkbox" id="toggle-debris">
-                <span class="toggle-slider"></span>
-            </label>
-            <span class="block-label" style="margin:0;" data-i18n="debris_label">Needs debris clearing?</span>
-        </div>
-
-        <!-- SERVICE STATUS — collapsible -->
+        <!-- SERVICE STATUS — collapsible; labelled "Optional: Service status". -->
         <details class="review-block service-details">
             <summary class="block-label" data-i18n="service_label">
                 <i class="fa-solid fa-gauge" style="color:var(--accent);"></i>
-                Service Status <small style="color:#64748b;">(optional)</small>
+                Optional: Service status
             </summary>
             <div class="service-grid">
                 <div class="svc-row">
@@ -384,19 +594,19 @@
                 <div class="svc-row">
                     <span data-i18n="water_svc">💧 Water</span>
                     <select id="svc-water" class="svc-select">
-                        <option value="UNKNOWN">Unknown</option>
-                        <option value="OPERATIONAL">Working</option>
-                        <option value="DISRUPTED">Disrupted</option>
-                        <option value="DESTROYED">Destroyed</option>
+                        <option value="UNKNOWN" data-i18n="unknown">Unknown</option>
+                        <option value="OPERATIONAL" data-i18n="working">Working</option>
+                        <option value="DISRUPTED" data-i18n="disrupted">Disrupted</option>
+                        <option value="DESTROYED" data-i18n="destroyed">Destroyed</option>
                     </select>
                 </div>
                 <div class="svc-row">
                     <span data-i18n="health_svc">🏥 Health</span>
                     <select id="svc-health" class="svc-select">
-                        <option value="UNKNOWN">Unknown</option>
-                        <option value="OPERATIONAL">Working</option>
-                        <option value="DISRUPTED">Disrupted</option>
-                        <option value="DESTROYED">Destroyed</option>
+                        <option value="UNKNOWN" data-i18n="unknown">Unknown</option>
+                        <option value="OPERATIONAL" data-i18n="working">Working</option>
+                        <option value="DISRUPTED" data-i18n="disrupted">Disrupted</option>
+                        <option value="DESTROYED" data-i18n="destroyed">Destroyed</option>
                     </select>
                 </div>
                 <div class="svc-row">
@@ -462,9 +672,53 @@
             </div>
         </div>
 
-        <button class="nav-btn next-btn highlight" id="btn-review-next">
-            <span data-i18n="ready_send">READY</span> <i class="fa-solid fa-arrow-right"></i>
-        </button>
+        <!-- UNDP Appendix building-footprint selector (April 2026).
+             Problem Statement: "Buildings of interest shall be selected by
+             users via ... buildings shall be made available for users to pick
+             from a (satellite) map underlayer in the field app."
+             Collapsed by default so low-literacy / low-bandwidth users
+             aren't forced to interact with a map. Opening the <details>
+             triggers the one-shot Leaflet + Overpass fetch in app.js. -->
+        <details class="review-block building-select-details" id="building-select-box">
+            <summary class="block-label">
+                <i class="fa-solid fa-building" style="color:var(--accent);"></i>
+                <span data-i18n="building_select_title">Optional: pick the exact building</span>
+            </summary>
+            <div id="building-map" class="building-map"
+                 role="application"
+                 aria-label="Pick a building from the map"></div>
+            <div class="building-select-hint">
+                <i class="fa-solid fa-hand-pointer"></i>
+                <span data-i18n="building_select_hint">Tap a building outline to mark it as damaged.</span>
+            </div>
+            <div id="building-selected-pill" class="building-selected-pill" style="display:none;">
+                <i class="fa-solid fa-circle-check"></i>
+                <span data-i18n="building_selected">Building selected</span>
+                <button id="btn-building-clear" type="button" aria-label="Clear building selection">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </details>
+
+        </div><!-- /page-2 -->
+
+        <!-- Phase 3 (Apr 2026): renamed 3 → 2 (old Page 2 merged into Page 1). -->
+        <div class="review-page" data-review-page="2" style="display:none;">
+            <div id="review-summary"></div>
+        </div>
+
+        <!-- Phase 6 page navigation — Next/Back/Submit depending on page -->
+        <div class="review-nav-row" style="display:flex; gap:8px; margin-top:12px;">
+            <button class="nav-btn back-btn" id="btn-review-back" style="flex:0 0 auto; display:none;">
+                <i class="fa-solid fa-arrow-left"></i> <span data-i18n="back">Back</span>
+            </button>
+            <button class="nav-btn next-btn highlight" id="btn-review-next" style="flex:1;">
+                <span data-i18n="next">Next</span> <i class="fa-solid fa-arrow-right"></i>
+            </button>
+            <button class="nav-btn next-btn highlight" id="btn-review-submit" style="flex:1; display:none;">
+                <i class="fa-solid fa-paper-plane"></i> <span data-i18n="send_undp">Submit</span>
+            </button>
+        </div>
     </div>
 
     <!-- ══════════════════════════════════════
@@ -472,12 +726,7 @@
     ══════════════════════════════════════ -->
     <div class="stage" id="stage-send">
         <div class="stage-header">
-            <div class="step-dots">
-                <div class="step-dot done"></div>
-                <div class="step-dot done"></div>
-                <div class="step-dot done"></div>
-                <div class="step-dot active"></div>
-            </div>
+            <!-- step-dots replaced by the global #flow-progress bar. -->
             <h2 data-i18n="s4_title">Send to UNDP</h2>
             <p data-i18n="s4_sub">Tap the button to send your report</p>
         </div>
@@ -509,7 +758,7 @@
             </div>
             <div class="summary-row" id="summary-debris-row" style="display:none;">
                 <i class="fa-solid fa-truck-pickup" style="color:#fbbf24;"></i>
-                <span>Needs debris clearing</span>
+                <span data-i18n="debris_label">Needs debris clearing</span>
             </div>
             <div class="summary-row" id="summary-loc-row">
                 <i class="fa-solid fa-location-dot" style="color:#10b981;"></i>
@@ -537,9 +786,16 @@
     ══════════════════════════════════════ -->
     <div class="stage" id="stage-success">
         <div class="stage-center success-center">
-            <div class="success-icon">✅</div>
-            <h2 data-i18n="sent_title">Report Sent!</h2>
-            <p data-i18n="sent_sub">UNDP rescue teams have been notified.<br>Thank you for helping your community.</p>
+            <!-- PR 7 (Apr 2026): glowing heart replaces the green ✅. The
+                 message re-frames submission as "your report can help save
+                 lives" — a warmer close-out than the prior bureaucratic
+                 "UNDP rescue teams have been notified" copy. Report ID pill
+                 is kept (support ops reference). Two actions replace the
+                 single "New Report" CTA: primary add-another loop + Track
+                 deep-link to the just-submitted report's detail view. -->
+            <div class="success-heart" aria-hidden="true">❤️</div>
+            <h2 data-i18n="sent_title">Thank you.</h2>
+            <p data-i18n="sent_sub">Your report can help save lives. We will keep you posted.</p>
             <div class="success-id-box" id="success-id-box">
                 <span data-i18n="report_id">Report ID:</span>
                 <strong id="report-id-text">—</strong>
@@ -556,21 +812,146 @@
                     <small id="badge-next">Next: Helper (3 reports)</small>
                 </div>
             </div>
+            <!-- Primary CTA — start a new report (resets state, returns to photo). -->
             <button class="big-cta" id="btn-new-report">
                 <i class="fa-solid fa-plus"></i>
-                <span data-i18n="new_report">New Report</span>
+                <span data-i18n="add_another_report">Add another report</span>
+            </button>
+            <!-- Secondary CTA — opens the just-submitted report's detail view. -->
+            <button class="secondary-cta" id="btn-track-report">
+                <i class="fa-solid fa-map-pin"></i>
+                <span data-i18n="track_report">Track your report</span>
             </button>
         </div>
     </div>
 
-    <!-- Bottom progress bar + auto-submit timer -->
+    <!-- ══════════════════════════════════════
+         STAGE HISTORY — Phase 5 (Apr 2026) — parity with RN "My Reports"
+    ══════════════════════════════════════ -->
+    <div class="stage" id="stage-history">
+        <div class="stage-header">
+            <h2><i class="fa-solid fa-clipboard-list"></i> <span data-i18n="my_reports">My Reports</span></h2>
+            <button class="history-back" id="btn-history-back" type="button" title="Back">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+        </div>
+
+        <!-- Impact summary card — green, celebratory -->
+        <div class="history-impact" id="history-impact-card" style="display:none;">
+            <div class="hi-stat"><div class="hi-num" id="hi-resolved">0</div><div class="hi-label">Resolved</div></div>
+            <div class="hi-stat"><div class="hi-num" id="hi-lives">0</div><div class="hi-label">Lives impacted</div></div>
+            <div class="hi-stat"><div class="hi-num" id="hi-pending">0</div><div class="hi-label">In flight</div></div>
+        </div>
+
+        <div class="history-section">
+            <h3 class="history-section-title"><i class="fa-solid fa-spinner"></i> <span data-i18n="in_flight">In flight</span></h3>
+            <div id="history-partial-list"></div>
+        </div>
+
+        <div class="history-section">
+            <h3 class="history-section-title"><i class="fa-solid fa-paper-plane"></i> <span data-i18n="submitted">Submitted</span></h3>
+            <div id="history-synced-list"></div>
+        </div>
+
+        <!-- Apr 2026 "My Reports & Individual Report Management" spec:
+             bulk "Delete all my reports" is hidden by default and only
+             revealed via an Advanced accordion. Individual per-report
+             deletion happens from each card's detail view (see
+             stage-report-detail below). -->
+        <details class="history-advanced" id="history-advanced">
+            <summary class="history-advanced-summary">
+                <i class="fa-solid fa-sliders"></i>
+                <span data-i18n="advanced">Advanced</span>
+                <i class="fa-solid fa-chevron-down history-advanced-chevron"></i>
+            </summary>
+            <div class="history-advanced-body">
+                <button class="history-delete-all" id="btn-history-delete-all" type="button">
+                    <i class="fa-solid fa-trash-can"></i>
+                    <span data-i18n="delete_all_my_reports">Delete all my reports</span>
+                </button>
+                <p class="history-delete-note" data-i18n="delete_all_note">This removes every report you've sent from this device. Your data will be permanently deleted within 24 hours.</p>
+            </div>
+        </details>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         STAGE REPORT-DETAIL — Apr 2026 "My Reports" spec
+         Individual report view with status timeline, metadata, feedback,
+         and per-report delete. Rendered content is populated by
+         renderReportDetail(id) in app.js when the user taps a card.
+    ══════════════════════════════════════ -->
+    <div class="stage" id="stage-report-detail">
+        <div class="stage-header">
+            <h2 id="rd-title"><i class="fa-solid fa-file-lines"></i> <span data-i18n="report_detail">Report</span></h2>
+            <button class="history-back" id="btn-rd-back" type="button" title="Back">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+        </div>
+
+        <!-- Status chip at the top — single source of truth, same colors
+             as the list card. Text filled by renderReportDetail(). -->
+        <div class="rd-status-row">
+            <span class="rd-status-chip" id="rd-status-chip">—</span>
+            <span class="rd-meta" id="rd-meta-date">—</span>
+        </div>
+
+        <!-- Status timeline — Submitted → Under Review → Accepted/Rejected
+             → Help Sent. Each step lights up green when the corresponding
+             timestamp is set. Layout mirrors the capture flow's
+             .flow-progress bar so users recognise the pattern. -->
+        <div class="rd-timeline" id="rd-timeline" aria-label="Report lifecycle">
+            <!-- Injected by JS to keep i18n + state in one place. -->
+        </div>
+
+        <!-- Primary photo — SMALL variant for bandwidth; user can tap
+             to see the LARGE via the lightbox (existing openLightbox). -->
+        <div class="rd-photo-wrap" id="rd-photo-wrap" style="display:none;">
+            <img id="rd-photo" src="" alt="Report photo" loading="lazy">
+        </div>
+
+        <!-- Description — either typed text or server-side Whisper transcript. -->
+        <div class="rd-section" id="rd-desc-section" style="display:none;">
+            <div class="rd-section-title" data-i18n="description_label">Description</div>
+            <p class="rd-desc" id="rd-desc">—</p>
+        </div>
+
+        <!-- Metadata: location + damage + severity + crisis type. -->
+        <div class="rd-section">
+            <div class="rd-section-title" data-i18n="details_label">Details</div>
+            <div class="rd-meta-grid" id="rd-meta-grid"></div>
+        </div>
+
+        <!-- Action taken / feedback loop (if accepted). -->
+        <div class="rd-feedback" id="rd-feedback" style="display:none;">
+            <div class="rd-feedback-icon">🟢</div>
+            <div class="rd-feedback-body">
+                <div class="rd-feedback-title" id="rd-feedback-title"></div>
+                <div class="rd-feedback-sub" id="rd-feedback-sub"></div>
+            </div>
+        </div>
+
+        <!-- Rejection reason (if rejected). -->
+        <div class="rd-rejection" id="rd-rejection" style="display:none;">
+            <div class="rd-feedback-icon">🔴</div>
+            <div class="rd-feedback-body">
+                <div class="rd-feedback-title" data-i18n="rejected_reason">Not valid</div>
+                <div class="rd-feedback-sub" id="rd-rejection-text"></div>
+            </div>
+        </div>
+
+        <!-- Per-report delete — confirmation handled by JS. -->
+        <div class="rd-delete-row" id="rd-delete-row">
+            <button class="rd-delete-btn" id="btn-rd-delete" type="button">
+                <i class="fa-solid fa-trash-can"></i>
+                <span data-i18n="delete_this_report">Delete this report</span>
+            </button>
+            <p class="rd-delete-note" id="rd-delete-note" style="display:none;"></p>
+        </div>
+    </div>
+
+    <!-- Bottom progress bar (auto-submit timer removed in Phase 5 parity pass) -->
     <div class="progress-bar-container" id="progress-bar-container">
         <div class="progress-bar-fill" id="progress-bar-fill"></div>
-    </div>
-    <div class="auto-submit-timer" id="auto-submit-timer" style="display:none;">
-        <i class="fa-solid fa-hourglass-end"></i>
-        <span id="timer-display">2:00</span>
-        <span class="auto-send-text">Auto-send</span>
     </div>
 
     <!-- Sync Status Badge (shows queued report count) -->
@@ -594,7 +975,24 @@
     </div>
 
 </div>
+<!-- Leaflet for the building-footprint selector on stage-review.
+     UMD build; attaches L to window. Must load before app.js. -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+<script src="building-select.js?v=1"></script>
 <script src="places.js?v=3"></script>
-<script src="app.js?v=607"></script>
+<!-- Client-side PII blur: BlazeFace face detection + canvas Gaussian blur.
+     Scripts load in order; pii-blur.js exposes window.PIIBlur which app.js calls
+     after each photo-capture. Order matters: tfjs -> blazeface -> pii-blur. -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js" crossorigin="anonymous"></script>
+<!-- BlazeFace 0.1.0's package.json still lists blazeface.min.js but the
+     tarball only ships blazeface.min.umd.js — use that. -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.umd.js" crossorigin="anonymous"></script>
+<script src="pii-blur.js?v=1"></script>
+<!-- Guaranteed-delivery image variants: depends on pii-blur.js for per-tier
+     blur, so must load AFTER it and BEFORE app.js. Exposes window.ImageVariants. -->
+<script src="image-variants.js?v=2"></script>
+<script src="app.js?v=800"></script>
 </body>
 </html>

@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+permissions:
+  contents: read
+
+# Cancel in-progress runs for the same PR or branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (pytest + import check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ENV: dev       # ← bypass P1.2/P1.8 fail-fast boot checks
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      # Heavy CV/ML deps (mediapipe, easyocr, opencv) take a while to install.
+      # We install test deps first so the lighter suite can run even if the
+      # heavy optional deps fail on CI runners.
+      - name: Install backend deps
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || pip install $(grep -v -E "mediapipe|easyocr|faster-whisper|opencv" requirements.txt)
+          if [ -f requirements-test.txt ]; then pip install -r requirements-test.txt; fi
+          # Always ensure pytest is present even if the project doesn't track it.
+          pip install pytest pytest-asyncio httpx
+      - name: Compile-check all Python modules
+        working-directory: backend
+        run: |
+          python -m compileall -q app
+      - name: Run pytest
+        working-directory: backend
+        run: |
+          pytest -q --tb=short || (echo "Pytest failed — see logs above." && exit 1)
+
+  mobile:
+    name: React Native typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: crisp-mobile/package-lock.json
+      - name: Install mobile deps
+        working-directory: crisp-mobile
+        run: npm ci --prefer-offline --no-audit --no-fund
+      - name: TypeScript typecheck
+        working-directory: crisp-mobile
+        run: npx tsc --noEmit
+
+  pwa-and-dashboard:
+    name: PWA + Dashboard JS syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: node --check on every .js
+        run: |
+          set -e
+          failures=0
+          for f in \
+            mobile-app/src/app.js \
+            mobile-app/src/pii-blur.js \
+            mobile-app/src/sw.js \
+            web-dashboard/src/app.js; do
+            echo "checking $f"
+            node --check "$f" || failures=$((failures + 1))
+          done
+          if [ $failures -gt 0 ]; then
+            echo "$failures file(s) failed syntax check"
+            exit 1
+          fi
+
+  shell-scripts:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n every .sh
+        run: |
+          set -e
+          find scripts -type f -name "*.sh" -print0 | xargs -0 -n1 bash -n
+
+  secrets-hygiene:
+    name: No secrets in tracked files
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: .env must be ignored
+        run: |
+          if git ls-files | grep -E '^\.env$|^backend/\.env$'; then
+            echo "ERROR: .env is tracked in git — it must be gitignored."
+            exit 1
+          fi
+          echo "OK — .env is not tracked."

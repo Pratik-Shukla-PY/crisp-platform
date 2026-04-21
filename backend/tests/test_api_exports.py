@@ -45,3 +45,28 @@ class TestExports:
         res = client.get("/api/v1/exports/kml", headers=auth_header(viewer_token))
         assert res.status_code == 200
         assert "kml" in res.text[:200].lower()
+
+    def test_pdf_export(self, client, viewer_token, sample_report):
+        res = client.get("/api/v1/exports/pdf", headers=auth_header(viewer_token))
+        assert res.status_code == 200
+        # Content-type is application/pdf
+        assert "pdf" in res.headers.get("content-type", "").lower()
+        # PDF files start with the magic %PDF- marker
+        assert res.content[:5] == b"%PDF-", \
+            f"response body is not a PDF: starts with {res.content[:10]!r}"
+        # Dossier should be non-trivially sized — at least a few KB for a
+        # single report with the UNDP header.
+        assert len(res.content) > 1000
+
+    def test_pdf_export_requires_auth(self, client):
+        res = client.get("/api/v1/exports/pdf")
+        assert res.status_code == 401
+
+    def test_pdf_export_empty_result(self, client, viewer_token):
+        """No matching reports should still return a valid PDF, not a 500."""
+        res = client.get(
+            "/api/v1/exports/pdf?crisis_type=TSUNAMI",
+            headers=auth_header(viewer_token),
+        )
+        assert res.status_code == 200
+        assert res.content[:5] == b"%PDF-"

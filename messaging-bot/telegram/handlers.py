@@ -21,7 +21,7 @@ from .session_manager import (
 )
 from .media_handler import download_media, download_and_split_video
 from .bot_replies import (
-    send_welcome, send_step_location, send_step_photo, send_step_photo_first,
+    send_welcome, send_step_location, send_step_photo, send_step_photo_first, send_consent_prompt,
     send_step_voice, send_step_severity, send_step_type,
     send_step_crisis_type, send_step_damage_class,
     send_step_text, send_step_description, send_confirmation, send_add_more_prompt,
@@ -150,7 +150,13 @@ async def _capture_any_media(session, message: dict):
 
 
 def _next_missing_step(session) -> str:
-    """Flow: Photo → Description → Type → Crisis → Damage → Severity → Location → READY"""
+    """Flow: Photo → Description → Type → Crisis → Damage → Severity → Location → READY
+
+    Photo is INTENTIONALLY soft on Telegram (unlike the PWA + RN apps which
+    hard-require a photo). Text/voice-first users — e.g. reporters on feature
+    phones via SMS/IVR-class channels — must still be able to file a report
+    even if they can't attach a photo.
+    """
     if not session.image_data_url and not session.audio_data_url and not session.text:
         return "STEP_PHOTO"
     if not session.text and (session.image_data_url or session.audio_data_url):
@@ -239,6 +245,13 @@ async def handle_update(update: dict):
         await send_welcome(chat_id, session.lang)
         return
 
+    # P3.5 — Consent-gate: if waiting on consent (or never consented), any
+    # inbound text/media is ignored and the consent card is re-shown. No
+    # side-effect captures, no DB writes.
+    if session.state == "AWAIT_CONSENT" or not session.consented:
+        await send_consent_prompt(chat_id, session.lang)
+        return
+
     # ADD_MORE state — user is adding details to an already-submitted report
     if session.state == "ADD_MORE" and session.report_id:
         await _capture_any_media(session, message)
@@ -256,13 +269,22 @@ async def handle_update(update: dict):
         if session.report_id:
             await update_report_location(session)
 
-    # AGGRESSIVE EARLY SUBMIT: Create report on ANY first data
+    # P2.8 — Defer server-side report creation until the session has a minimal
+    # viable set of fields (photo OR audio, plus location or explicit text).
+    # The previous "aggressive early submit on any data" created partial rows
+    # that stranded in the DB with severity='UNKNOWN' when users dropped off
+    # mid-conversation. Keep the session in local memory until we're sure.
+    # Once created, media upload is fire-and-forget as before.
     if not session.report_id:
-        has_any_data = session.has_location or session.text or session.image_data_url or session.audio_data_url
-        if has_any_data:
+        has_media_or_text = bool(session.image_data_url or session.audio_data_url or session.text)
+        has_location = session.has_location
+        if has_media_or_text and has_location:
             await create_report_early(session)
-            logger.info(f"[TG] Early report created: loc={session.has_location} text={bool(session.text)} img={bool(session.image_data_url)}")
-            # Fire-and-forget upload for media captured before report existed
+            logger.info(
+                f"[TG] Report created once ready: loc={has_location} "
+                f"text={bool(session.text)} img={bool(session.image_data_url)} "
+                f"aud={bool(session.audio_data_url)}"
+            )
             if session.report_id:
                 if session.image_data_url:
                     _fire_upload(session, upload_image(session))
@@ -304,23 +326,55 @@ async def _handle_callback(callback_query: dict):
         session.lang = detected
     lang = session.lang
 
-    # ── Language selection → immediately start photo step ──
+    # P3.5 — Language selection now routes through explicit consent before
+    # any data is captured. If the user returns after already consenting in
+    # the same session, skip straight to the photo step.
     if data.startswith("lang_"):
         new_lang = data.replace("lang_", "")
         session.lang = new_lang
-        session.state = "STEP_PHOTO"
         await answer_callback(cq_id, f"Language: {new_lang.upper()}")
-        await send_step_photo_first(chat_id, new_lang)
+        if session.consented:
+            session.state = "STEP_PHOTO"
+            await send_step_photo_first(chat_id, new_lang)
+        else:
+            session.state = "AWAIT_CONSENT"
+            await send_consent_prompt(chat_id, new_lang)
         return
 
-    # Start / Report Another → go straight to photo
+    # User accepted the consent card — proceed to reporting flow.
+    if data == "consent_accept":
+        session.consented = True
+        session.state = "STEP_PHOTO"
+        await answer_callback(cq_id, "Thanks!")
+        await send_step_photo_first(chat_id, session.lang or detected)
+        return
+
+    # User declined — wipe session and bid farewell. Nothing captured so
+    # nothing to delete.
+    if data == "consent_decline":
+        await answer_callback(cq_id)
+        await send_text(
+            chat_id,
+            "🙏 " + (t(session.lang, "consent_declined")
+                    or "Understood — no data collected. Send /start anytime to try again.")
+        )
+        clear_session(user_id)
+        return
+
+    # Start / Report Another → go straight to photo (consent carries over).
     if data == "start_report":
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
         s.lang = session.lang or detected
-        s.state = "STEP_PHOTO"
-        await answer_callback(cq_id)
-        await send_step_photo_first(chat_id, s.lang)
+        s.consented = session.consented  # carry forward; no re-prompt
+        if s.consented:
+            s.state = "STEP_PHOTO"
+            await answer_callback(cq_id)
+            await send_step_photo_first(chat_id, s.lang)
+        else:
+            s.state = "AWAIT_CONSENT"
+            await answer_callback(cq_id)
+            await send_consent_prompt(chat_id, s.lang)
         return
 
     if data == "stop":

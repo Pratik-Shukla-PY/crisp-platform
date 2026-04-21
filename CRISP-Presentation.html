@@ -270,7 +270,7 @@ footer .built{margin-top:20px;font-size:12px;color:#475569;}
 <section id="ai">
     <div class="section-label">Intelligence Engine</div>
     <div class="section-title">AI-Powered Assessment</div>
-    <div class="section-desc">Claude Sonnet cross-verifies every signal. No single data point drives the decision. Source-aware scoring ensures fair treatment for all reporters.</div>
+    <div class="section-desc">Claude (Haiku by default; Sonnet available for enterprise tiers) cross-verifies every signal on analyst request. No single data point drives the decision. Source-aware scoring ensures fair treatment for all reporters.</div>
 
     <div class="ai-section">
         <h3 style="font-size:20px;font-weight:800;margin-bottom:8px;"><i class="fa-solid fa-brain" style="color:var(--accent);"></i> Multi-Signal Cross-Verification</h3>
@@ -341,7 +341,7 @@ footer .built{margin-top:20px;font-size:12px;color:#475569;}
             <div class="flow-num">3</div>
             <div class="flow-body">
                 <h4>Admin Runs AI Assessment</h4>
-                <p>One click. Claude Sonnet analyzes all signals: text, photo, satellite, nearby reports, caller identity. Returns confidence score (0-100) + recommended action. Stored permanently.</p>
+                <p>One analyst click. Claude (Haiku) analyzes all signals: text, photo, satellite, nearby reports, caller identity. Returns confidence score (0-100) + recommended action. Cached per-report so subsequent views cost nothing.</p>
             </div>
         </div>
         <div class="flow-step">
@@ -378,7 +378,7 @@ footer .built{margin-top:20px;font-size:12px;color:#475569;}
     <div class="tech-grid">
         <div class="tech-row"><span class="tech-label">Mobile</span><span class="tech-val">Vanilla JS PWA, Service Worker, IndexedDB</span></div>
         <div class="tech-row"><span class="tech-label">Backend</span><span class="tech-val">Python 3.11, FastAPI, SQLAlchemy, Uvicorn</span></div>
-        <div class="tech-row"><span class="tech-label">AI / ML</span><span class="tech-val">Claude Sonnet + Haiku, faster-whisper</span></div>
+        <div class="tech-row"><span class="tech-label">AI / ML</span><span class="tech-val">Claude Haiku (default) / Sonnet (enterprise), faster-whisper, BlazeFace</span></div>
         <div class="tech-row"><span class="tech-label">Satellite</span><span class="tech-val">ESA Sentinel-2 (10m), Mapbox/Maxar (0.5m)</span></div>
         <div class="tech-row"><span class="tech-label">Geocoding</span><span class="tech-val">Mapbox API + Claude AI place name fixer</span></div>
         <div class="tech-row"><span class="tech-label">Dashboard</span><span class="tech-val">Vanilla JS, Leaflet.js, Turf.js, MarkerCluster</span></div>
@@ -414,7 +414,7 @@ footer .built{margin-top:20px;font-size:12px;color:#475569;}
         <tbody>
             <tr><td><i class="fa-solid fa-location-dot" style="color:var(--cyan);"></i> Geocoder</td><td>Haiku</td><td>Auto (IVR/SMS)</td><td>System prompt cached</td><td><span class="cost-badge" style="background:rgba(34,197,94,0.12);color:var(--green);">~90%</span></td></tr>
             <tr><td><i class="fa-solid fa-satellite" style="color:var(--amber);"></i> Satellite Scorer</td><td>Haiku</td><td>Admin click</td><td>Scoring rubric cached</td><td><span class="cost-badge" style="background:rgba(34,197,94,0.12);color:var(--green);">~90%</span></td></tr>
-            <tr><td><i class="fa-solid fa-brain" style="color:var(--accent);"></i> AI Assessment</td><td>Sonnet</td><td>Admin click (once)</td><td>System rules cached</td><td><span class="cost-badge" style="background:rgba(34,197,94,0.12);color:var(--green);">~90%</span></td></tr>
+            <tr><td><i class="fa-solid fa-brain" style="color:var(--accent);"></i> AI Assessment</td><td>Haiku</td><td>Admin click (once)</td><td>System rules cached</td><td><span class="cost-badge" style="background:rgba(34,197,94,0.12);color:var(--green);">~90%</span></td></tr>
         </tbody>
     </table>
     <p style="margin-top:16px;font-size:13px;color:var(--text-dim);">Per-incident: <strong>1 automatic</strong> (geocoder) + <strong>2 on-demand</strong> (satellite + assessment). AI Extractor removed — saving 40% fewer API calls.</p>

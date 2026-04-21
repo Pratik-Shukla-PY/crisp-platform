@@ -43,8 +43,17 @@ def _query_reports(db: Session, status: Optional[str], crisis_type: Optional[str
 
 
 def _report_to_row(r):
-    """Extract flat dict from a Report for export."""
+    """Extract flat dict from a Report for export.
+
+    UNDP-aligned values:
+      * damage_classification → normalised to MINIMAL / PARTIAL / COMPLETE
+        (legacy 'NO_DAMAGE' persisted pre-migration is mapped on read)
+      * crisis_category → derived from crisis_type at write time; falls
+        back to an on-read lookup for historical rows."""
+    from app.core.taxonomy import normalise_damage, categorise_crisis
     loc = r.location
+    damage = normalise_damage(r.damage_classification) or (r.damage_classification or "")
+    crisis_cat = getattr(r, "crisis_category", None) or categorise_crisis(r.crisis_type) or ""
     return {
         "id": r.id,
         "client_report_id": r.client_report_id or "",
@@ -52,9 +61,11 @@ def _report_to_row(r):
         "status": r.status.value if r.status else "",
         "severity": r.severity.value if r.severity else "",
         "infrastructure_type": r.infrastructure_type.value if r.infrastructure_type else "",
+        "infrastructure_sub_type": getattr(r, "infrastructure_sub_type", "") or "",
         "infrastructure_name": r.infrastructure_name or "",
-        "damage_classification": r.damage_classification or "",
+        "damage_classification": damage,
         "crisis_type": r.crisis_type or "",
+        "crisis_category": crisis_cat,
         "description": (r.description or "").replace("\n", " ").replace(",", ";"),
         "debris_clearing_needed": str(r.debris_clearing_needed) if r.debris_clearing_needed is not None else "",
         "service_status": json.dumps(r.service_status) if r.service_status else "",
@@ -82,9 +93,11 @@ def export_csv(
     reports = _query_reports(db, status, crisis_type, since, until)
     headers = [
         "id", "client_report_id", "source", "status", "severity",
-        "infrastructure_type", "infrastructure_name", "damage_classification",
-        "crisis_type", "description", "debris_clearing_needed", "service_status",
-        "building_id", "latitude", "longitude", "location_name", "lives_impacted", "timestamp"
+        "infrastructure_type", "infrastructure_sub_type", "infrastructure_name",
+        "damage_classification", "crisis_type", "crisis_category",
+        "description", "debris_clearing_needed", "service_status",
+        "building_id", "latitude", "longitude", "location_name",
+        "lives_impacted", "timestamp"
     ]
 
     def generate():
@@ -203,6 +216,146 @@ def export_shapefile(
     )
 
 
+# ── PDF Export ────────────────────────────────────────────────────────────────
+#
+# April 2026: judges + humanitarian-response teams consistently ask for a
+# human-readable one-page summary alongside the GIS formats. ReportLab is
+# Python-native, no headless-browser dependency, and outputs accessible
+# tagged PDFs (PDF/UA-adjacent). The CSV + GeoJSON + Shapefile + KML + PDF
+# stack is what the pitch deck claims — this endpoint makes that true.
+
+@router.get("/pdf")
+def export_pdf(
+    user=Depends(require_viewer),
+    db: Session = Depends(get_db),
+    status: Optional[str] = Query(None),
+    crisis_type: Optional[str] = Query(None),
+    since: Optional[str] = Query(None),
+    until: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    """Export up to `limit` reports as a single PDF dossier.
+
+    One page per report. Header carries the filter criteria + generated-at
+    timestamp + UNDP Appendix-1 taxonomy attribution so the document is
+    self-describing for humanitarian audit trails."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle,
+    )
+    from reportlab.lib import colors
+
+    reports = _query_reports(db, status, crisis_type, since, until)[:limit]
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        leftMargin=2 * cm, rightMargin=2 * cm,
+        topMargin=2 * cm, bottomMargin=2 * cm,
+        title="CRISP Report Dossier",
+        author="CRISP Platform",
+    )
+    styles = getSampleStyleSheet()
+    h1 = styles["Heading1"]
+    h2 = styles["Heading2"]
+    body = styles["BodyText"]
+    small = ParagraphStyle(
+        "small", parent=body, fontSize=8, textColor=colors.grey
+    )
+    label = ParagraphStyle(
+        "label", parent=body, fontName="Helvetica-Bold", fontSize=9,
+    )
+
+    story = []
+    # Cover block
+    story.append(Paragraph("CRISP Crisis-Report Dossier", h1))
+    story.append(Paragraph(
+        "UNDP RAPIDA Appendix-1 aligned export — damage classification uses "
+        "MINIMAL / PARTIAL / COMPLETE; infrastructure uses the seven UNDP "
+        "super-types + OTHER.",
+        small,
+    ))
+    story.append(Paragraph(
+        f"Generated at {datetime.utcnow().isoformat()}Z — {len(reports)} report(s) included.",
+        small,
+    ))
+    filt_bits = []
+    if status: filt_bits.append(f"status={status}")
+    if crisis_type: filt_bits.append(f"crisis_type={crisis_type}")
+    if since: filt_bits.append(f"since={since}")
+    if until: filt_bits.append(f"until={until}")
+    if filt_bits:
+        story.append(Paragraph("Filters: " + ", ".join(filt_bits), small))
+    story.append(Spacer(1, 0.4 * cm))
+
+    for i, r in enumerate(reports):
+        if i > 0:
+            story.append(PageBreak())
+        row = _report_to_row(r)
+        story.append(Paragraph(
+            f"Report {row['id'][:8]} — {row['infrastructure_type'] or 'UNKNOWN'} / {row['damage_classification'] or 'UNKNOWN'}",
+            h2,
+        ))
+        story.append(Spacer(1, 0.2 * cm))
+
+        data = [
+            ["Client Ref",             row["client_report_id"]],
+            ["Source",                 row["source"]],
+            ["Status",                 row["status"]],
+            ["Severity",               row["severity"]],
+            ["Crisis Type",            row["crisis_type"]],
+            ["Crisis Category (UNDP)", row["crisis_category"]],
+            ["Infrastructure (UNDP)",  row["infrastructure_type"]],
+            ["Sub-type",               row.get("infrastructure_sub_type", "")],
+            ["Building / Structure",   row["infrastructure_name"]],
+            ["Damage Classification",  row["damage_classification"]],
+            ["Debris Clearing",        row["debris_clearing_needed"]],
+            ["Location (lat, lng)",    f"{row['latitude']}, {row['longitude']}"],
+            ["Location Name",          row["location_name"]],
+            ["Lives Impacted",         row["lives_impacted"]],
+            ["Submitted at",           row["timestamp"]],
+        ]
+        table = Table(data, colWidths=[5 * cm, None], hAlign="LEFT")
+        table.setStyle(TableStyle([
+            ("FONTNAME",   (0, 0), (0, -1), "Helvetica-Bold"),
+            ("FONTSIZE",   (0, 0), (-1, -1), 9),
+            ("TEXTCOLOR",  (0, 0), (0, -1), colors.HexColor("#475569")),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING",    (0, 0), (-1, -1), 4),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.25, colors.HexColor("#e2e8f0")),
+        ]))
+        story.append(table)
+
+        if r.description:
+            story.append(Spacer(1, 0.3 * cm))
+            story.append(Paragraph("Description", label))
+            story.append(Paragraph(r.description, body))
+
+        if r.service_status:
+            story.append(Spacer(1, 0.3 * cm))
+            story.append(Paragraph("Service status", label))
+            for k, v in (r.service_status or {}).items():
+                story.append(Paragraph(f"{k}: {v}", body))
+
+    # Handle empty result gracefully — don't ship an empty PDF.
+    if not reports:
+        story.append(Paragraph("No reports matched the supplied filters.", body))
+
+    doc.build(story)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition":
+                f"attachment; filename=crisp_reports_{datetime.now().strftime('%Y%m%d')}.pdf"
+        },
+    )
+
+
 # ── KML Export ────────────────────────────────────────────────────────────────
 
 @router.get("/kml")
@@ -220,9 +373,12 @@ def export_kml(
     reports = _query_reports(db, status, crisis_type, since, until)
     kml = simplekml.Kml(name="CRISP Crisis Reports")
 
+    # Colour by UNDP damage label. "NO_DAMAGE" kept as an alias for legacy
+    # rows until the next purge pass rewrites them to MINIMAL.
     damage_colors = {
         "COMPLETE": simplekml.Color.red,
         "PARTIAL": simplekml.Color.orange,
+        "MINIMAL": simplekml.Color.green,
         "NO_DAMAGE": simplekml.Color.green,
     }
 

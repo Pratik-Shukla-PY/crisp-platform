@@ -79,7 +79,17 @@ def _extract_params(request: Request, form_data: dict = None) -> dict:
 
 @ivr_router.api_route(f"/webhook/{IVR_WEBHOOK_SECRET}", methods=["GET", "POST"])
 async def handle_incoming_call(request: Request):
-    """Entry point: play welcome, ask for location. Auto-stops after 3s silence."""
+    """Entry point: play welcome, ask for location. Auto-stops after 3s silence.
+
+    P2.16 — rate limited per IP (Twilio/Exotel all call from a small pool of
+    IPs, so this is only protective against a leaked URL path being spammed
+    by a hostile actor; legitimate traffic is comfortably under the limit).
+    """
+    from app.main import check_rate_limit
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(f"ivr_webhook:{client_ip}", max_requests=120, window=60):
+        raise HTTPException(status_code=429, detail="rate limit")
+
     params = dict(request.query_params)
     if request.method == "POST":
         try:

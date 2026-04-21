@@ -74,6 +74,7 @@ const SEV_COLORS = { CRITICAL: '#ef4444', SEVERE: '#f97316', MODERATE: '#eab308'
 
 // ── QRT Queue State ───────────────────────────────────────────────────────────
 let viewMode = 'queue'; // 'queue' = triage cards | 'tree' = strategic hierarchy
+let cardSortMode = 'priority'; // priority | newest | oldest | severity | type | has_media | confidence | crisis | damage | source
 let sectionState = { needs: true, dispatched: false, resolved: false };
 // Priority sort: severity first, then infrastructure criticality, then recency
 const SEV_PRIORITY = { CRITICAL: 4, SEVERE: 3, MODERATE: 2, MINOR: 1, UNKNOWN: 0 };
@@ -110,6 +111,96 @@ const getMediaUrl = (url) => {
     if (url.startsWith('data:') || url.startsWith('http')) return url;
     return `${BACKEND_HOST}/${url.replace(/^\//, '')}`;
 };
+
+// ── Guaranteed-delivery: group + pick best variant ─────────────────────────
+// A photo_group_id links the three variants (SMALL/MEDIUM/LARGE) of one
+// captured photo. `groupPhotos()` folds a flat media[] into an array of
+// groups so the gallery strip shows one thumbnail per photo instead of 3.
+// `bestVariant(g)` returns the highest-quality complete variant, falling
+// back to partial previews if no variant has finished yet. Legacy media
+// without a photo_group_id becomes its own one-member group so reports
+// queued before this feature shipped still render.
+const TIER_RANK = { HIGH: 3, MEDIUM: 2, LOW: 1, ORIGINAL: 4 };
+
+// ── Phase 2 (Apr 2026): tier override map ──────────────────────────────────
+// Analysts can click SMALL / MEDIUM / LARGE to manually pick which variant
+// to view. Once a user has overridden, `_maybeUpgradeDetailImage` must NOT
+// auto-upgrade them back to the best tier on the next poll — their
+// deliberate pick wins. Keyed by reportId (not group) because the choice
+// is a panel-level preference; cleared on panel close / delete.
+const _tierOverride = new Map();   // reportId → 'LOW' | 'MEDIUM' | 'HIGH'
+
+function groupPhotos(mediaList) {
+    const groups = new Map();
+    const loose = [];
+    for (const m of (mediaList || [])) {
+        if (m.type !== 'IMAGE') continue;
+        const gid = m.photo_group_id;
+        if (!gid) {
+            loose.push({ group_id: null, members: [m] });
+            continue;
+        }
+        if (!groups.has(gid)) groups.set(gid, { group_id: gid, members: [] });
+        groups.get(gid).members.push(m);
+    }
+    return [...groups.values(), ...loose];
+}
+
+// Phase 2: Build the 3-button tier switcher for a photo group. Each button
+// shows SMALL / MEDIUM / LARGE; complete variants are clickable, pending
+// ones show a subtle upload-% tooltip. The button matching `activeTier`
+// gets the `.active` class so analysts can see which tier is showing.
+// Escapes group_id / report_id for safe inline handlers.
+function _buildTierSwitcher(reportId, group, activeTier) {
+    const tiers = [
+        { tier: 'LOW',    label: 'SMALL'  },
+        { tier: 'MEDIUM', label: 'MEDIUM' },
+        { tier: 'HIGH',   label: 'LARGE'  },
+    ];
+    const byTier = Object.fromEntries(group.members.map(m => [m.resolution_tier, m]));
+    const gid = (group.group_id || '').replace(/'/g, '');
+    const rid = (reportId || '').replace(/'/g, '');
+    const btns = tiers.map(({ tier, label }) => {
+        const m = byTier[tier];
+        const complete = m && m.assembly_status === 'complete' && m.url;
+        const pct = m ? Math.round(m.completion_pct || 0) : 0;
+        const active = tier === activeTier ? ' active' : '';
+        const disabled = complete ? '' : ' disabled';
+        const title = complete
+            ? `Show ${label} variant`
+            : (m ? `${label} — uploading ${pct}%` : `${label} — not available`);
+        const onclick = complete
+            ? `event.stopPropagation();setDetailImageTier('${rid}','${gid}','${tier}',this)`
+            : '';
+        return `<button class="dp-tier-btn dp-tier-${tier.toLowerCase()}${active}${disabled}"
+                        type="button"
+                        ${complete ? '' : 'aria-disabled="true"'}
+                        title="${title}"
+                        onclick="${onclick}">${label}</button>`;
+    }).join('');
+    return `<div class="dp-tier-switcher" role="group" aria-label="Image quality">${btns}</div>`;
+}
+
+function bestVariant(group) {
+    if (!group || !group.members || group.members.length === 0) return null;
+    // Prefer the highest-rank COMPLETED variant.
+    const complete = group.members
+        .filter(m => m.assembly_status === 'complete' && m.url)
+        .sort((a, b) => (TIER_RANK[b.resolution_tier] || 0) - (TIER_RANK[a.resolution_tier] || 0));
+    if (complete.length > 0) {
+        const m = complete[0];
+        return { src: getMediaUrl(m.url), tier: m.resolution_tier, isFinal: true, mediaId: m.id };
+    }
+    // No full variant yet — pick the highest partial/thumbnail preview.
+    const partials = group.members
+        .filter(m => m.thumbnail_url)
+        .sort((a, b) => (TIER_RANK[b.resolution_tier] || 0) - (TIER_RANK[a.resolution_tier] || 0));
+    if (partials.length > 0) {
+        const m = partials[0];
+        return { src: getMediaUrl(m.thumbnail_url), tier: m.resolution_tier + '-partial', isFinal: false, mediaId: m.id };
+    }
+    return null;
+}
 
 /** Ensure ISO string is treated as UTC if no timezone indicator present */
 function ensureUTC(iso) {
@@ -666,6 +757,54 @@ function renderFeed() {
         renderTreeFeed(el);
     }
     updateCommandStats();
+    // P3.3 — Progressive disclosure: once the feed is painted, hide any card
+    // past the first 50 and wire up a sentinel + IntersectionObserver that
+    // reveals the next 50 when the user scrolls near the bottom. Keeps the
+    // initial paint under 100 ms even with 1000+ reports in `allReports`.
+    _applyProgressiveReveal(el);
+}
+
+let _progressiveIO = null;
+const _PROGRESSIVE_PAGE_SIZE = 50;
+function _applyProgressiveReveal(container) {
+    // Disconnect any previous observer so we don't keep stacks from the
+    // previous render cycle.
+    if (_progressiveIO) { try { _progressiveIO.disconnect(); } catch (_) {} }
+    // Flat-scan every visible card within the feed. Cards in different view
+    // modes (.qrt-card for queue, .tree-leaf-card for tree) share the
+    // *position* of being inside `#report-feed-list`, so select all cards.
+    const cards = container.querySelectorAll('.qrt-card, .tree-leaf-card');
+    if (cards.length <= _PROGRESSIVE_PAGE_SIZE) return;
+
+    // Hide everything beyond the initial page.
+    let visibleCount = _PROGRESSIVE_PAGE_SIZE;
+    cards.forEach((c, i) => { if (i >= visibleCount) c.style.display = 'none'; });
+
+    // Add a sentinel div right after the last visible card.
+    const sentinel = document.createElement('div');
+    sentinel.className = '_feed-sentinel';
+    sentinel.style.cssText = 'height:1px;width:100%;';
+    cards[visibleCount - 1].parentElement.insertBefore(sentinel, cards[visibleCount].nextSibling);
+
+    _progressiveIO = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            const next = Math.min(visibleCount + _PROGRESSIVE_PAGE_SIZE, cards.length);
+            for (let i = visibleCount; i < next; i++) cards[i].style.display = '';
+            visibleCount = next;
+            if (visibleCount >= cards.length) {
+                try { _progressiveIO.disconnect(); } catch (_) {}
+                sentinel.remove();
+                return;
+            }
+            // Reposition sentinel after the new last-visible card.
+            const lastVisible = cards[visibleCount - 1];
+            if (lastVisible && lastVisible.parentElement) {
+                lastVisible.parentElement.insertBefore(sentinel, lastVisible.nextSibling);
+            }
+        }
+    }, { root: container, rootMargin: '400px 0px', threshold: 0 });
+    _progressiveIO.observe(sentinel);
 }
 
 // ── Queue Mode: three-bucket triage cards ─────────────────────────────────────
@@ -694,8 +833,9 @@ function renderTriageQueue(el) {
     const dispatched = reports.filter(r => r.status === 'RESPONDING');
     const resolved   = reports.filter(r => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM');
 
-    // Sort each bucket: severity → infra weight → recency
-    [needs, dispatched, resolved].forEach(bucket => bucket.sort(sortByPriorityDesc));
+    // Sort each bucket based on selected sort mode
+    const sorter = getSortFunction();
+    [needs, dispatched, resolved].forEach(bucket => bucket.sort(sorter));
 
     el.innerHTML = '';
 
@@ -745,6 +885,73 @@ function sortByPriorityDesc(a, b) {
     if (dw !== 0) return dw;
     // 3. Recency (newest first)
     return new Date(b.server_created_at) - new Date(a.server_created_at);
+}
+
+// ── Sort Functions ───────────────────────────────────────────────────────────
+
+window.setCardSortMode = function (mode) {
+    cardSortMode = mode;
+    // Update active state on buttons
+    document.querySelectorAll('.sort-opt').forEach(b => b.classList.toggle('active', b.dataset.sort === mode));
+    document.querySelector('.sort-dropdown')?.classList.remove('open');
+    renderFeed();
+};
+
+function getSortFunction() {
+    // UNDP Appendix-1 labels (April 2026 rename). NO_DAMAGE kept for legacy
+    // rows written before the normalisation hook landed.
+    const DAMAGE_ORDER = { COMPLETE: 3, PARTIAL: 2, MINIMAL: 1, NO_DAMAGE: 1 };
+    const SOURCE_ORDER = { IVR: 6, SMS: 5, TELEGRAM: 4, WHATSAPP: 3, ANDROID: 2, APP: 1 };
+
+    switch (cardSortMode) {
+        case 'newest':
+            return (a, b) => new Date(b.server_created_at) - new Date(a.server_created_at);
+        case 'oldest':
+            return (a, b) => new Date(a.server_created_at) - new Date(b.server_created_at);
+        case 'severity':
+            return (a, b) => {
+                const d = (SEV_PRIORITY[b.severity] || 0) - (SEV_PRIORITY[a.severity] || 0);
+                return d !== 0 ? d : new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'type':
+            return (a, b) => {
+                const ta = a.infrastructure_type || 'OTHER';
+                const tb = b.infrastructure_type || 'OTHER';
+                return ta < tb ? -1 : ta > tb ? 1 : new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'has_media':
+            return (a, b) => {
+                const ma = (a.media || []).filter(m => m.assembly_status === 'complete').length;
+                const mb = (b.media || []).filter(m => m.assembly_status === 'complete').length;
+                return mb - ma || new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'confidence':
+            return (a, b) => {
+                const sa = a.ai_assessment?.confidence_score ?? -1;
+                const sb = b.ai_assessment?.confidence_score ?? -1;
+                return sb - sa || new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'crisis':
+            return (a, b) => {
+                const ca = a.crisis_type || 'ZZZ';
+                const cb = b.crisis_type || 'ZZZ';
+                return ca < cb ? -1 : ca > cb ? 1 : new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'damage':
+            return (a, b) => {
+                const da = DAMAGE_ORDER[a.damage_classification] || 0;
+                const db2 = DAMAGE_ORDER[b.damage_classification] || 0;
+                return db2 - da || new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        case 'source':
+            return (a, b) => {
+                const sa = SOURCE_ORDER[a.source] || 0;
+                const sb = SOURCE_ORDER[b.source] || 0;
+                return sb - sa || new Date(b.server_created_at) - new Date(a.server_created_at);
+            };
+        default: // 'priority'
+            return sortByPriorityDesc;
+    }
 }
 
 function createAlertBanner(count) {
@@ -891,9 +1098,12 @@ window.setViewMode = function(mode) {
     viewMode = mode;
     document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
     document.querySelector(`.view-btn[data-mode="${mode}"]`)?.classList.add('active');
-    // Show/hide tree-specific controls (sort + status tabs)
+    // Show/hide tree-specific controls
     const tc = document.getElementById('tree-controls');
     if (tc) tc.style.display = mode === 'tree' ? '' : 'none';
+    // Show/hide sort dropdown (queue mode only)
+    const sd = document.getElementById('sort-dropdown');
+    if (sd) sd.style.display = mode === 'queue' ? '' : 'none';
     renderFeed();
 };
 
@@ -1388,7 +1598,12 @@ window.selectReport = (id, skipFly = false) => {
     panel.style.display = 'flex';
 
     const allImages = r.media?.filter(m => m.type === 'IMAGE') || [];
-    const img   = allImages[0] || null;  // Primary image (backward compat)
+    // Guaranteed-delivery: each captured photo may have up to 3 Media rows
+    // (SMALL/MEDIUM/LARGE) linked by photo_group_id. Fold them into groups
+    // so the gallery shows one thumb per photo, and pick the best-available
+    // variant for each group.
+    const photoGroups = groupPhotos(allImages);
+    const img = allImages[0] || null;  // kept for existing downstream refs
     const audio = r.media?.find(m => m.type === 'AUDIO');
     const loc   = r.location;
     const ai    = r.ai_analysis;
@@ -1407,22 +1622,58 @@ window.selectReport = (id, skipFly = false) => {
     const waitMin = Math.round(waitMs / 60000);
 
     // ── Image HTML (compact 160px) ──
-    const imgPct = (img?.completion_pct ?? 0);
-    const imgComplete = img?.assembly_status === 'complete' && img?.url;
-    const imgSrc = imgComplete ? getMediaUrl(img.url) : (img?.thumbnail_url ? getMediaUrl(img.thumbnail_url) + '?_cb=' + (Math.round(imgPct/5)*5) : '');
-    const imgHtml = img ? (
+    // Guaranteed-delivery: pick the best complete variant of the FIRST
+    // photo group (main photo). Falls back to partial thumbnail if nothing
+    // complete yet. Progressive-upgrade on subsequent polls is handled by
+    // `_maybeUpgradeDetailImage` below, which swaps the <img src> without
+    // rebuilding the DOM.
+    const primaryGroup = photoGroups[0] || null;
+    // Phase 2: honour the user's manual tier pick (if any). Falls back to
+    // `bestVariant()` which returns the highest-tier complete variant.
+    let variantPick = primaryGroup ? bestVariant(primaryGroup) : null;
+    const overrideTier = _tierOverride.get(r.id);
+    if (primaryGroup && overrideTier) {
+        const manual = primaryGroup.members.find(
+            m => m.resolution_tier === overrideTier &&
+                 m.assembly_status === 'complete' && m.url
+        );
+        if (manual) {
+            variantPick = {
+                src: getMediaUrl(manual.url),
+                tier: manual.resolution_tier,
+                isFinal: true,
+                mediaId: manual.id,
+            };
+        }
+        // If the chosen tier isn't complete yet, fall through to bestVariant.
+    }
+    // Show the overall progress of the group (max across any variant) so
+    // users see upload motion even before the SMALL variant completes.
+    const imgPct = primaryGroup
+        ? Math.max(0, ...primaryGroup.members.map(m => m.completion_pct || 0))
+        : 0;
+    const imgComplete = variantPick?.isFinal === true;
+    const imgSrc = variantPick?.src || '';
+    // Phase 2: 3-button tier switcher. Replaces the old read-only chip.
+    // Each button is disabled when that tier hasn't finished assembly yet;
+    // hovering shows the completion-pct of the pending tier.
+    const tierSwitcher = primaryGroup ? _buildTierSwitcher(r.id, primaryGroup, variantPick?.tier) : '';
+    const imgHtml = primaryGroup ? (
         imgComplete
-            ? `<div class="dp-img" onclick="openLightbox('${getMediaUrl(img.url)}','${r.infrastructure_type}')">
-                   ${img.thumbnail_url ? `<img src="${getMediaUrl(img.thumbnail_url)}" class="img-thumb-bg">` : ''}
-                   <img src="${getMediaUrl(img.url)}" class="img-full-layer" onload="this.classList.add('img-ready')" onerror="this.style.display='none'">
+            ? `<div class="dp-img" data-group-id="${primaryGroup.group_id || ''}"
+                   data-current-tier="${variantPick.tier}"
+                   onclick="openLightbox('${imgSrc}','${r.infrastructure_type}')">
+                   <img src="${imgSrc}" class="img-full-layer img-ready">
+                   ${tierSwitcher}
                </div>`
             : imgSrc
-                ? `<div class="dp-img dp-img-uploading">
+                ? `<div class="dp-img dp-img-uploading" data-group-id="${primaryGroup.group_id || ''}">
                        <img src="${imgSrc}" class="img-thumb-bg">
                        <div class="img-progress-overlay">
                            <div class="chunk-progress-track"><div class="chunk-progress-fill" style="width:${imgPct}%"></div></div>
                            <span class="partial-img-label"><i class="fa-solid fa-cloud-arrow-up fa-pulse"></i> ${imgPct.toFixed(0)}%</span>
                        </div>
+                       ${tierSwitcher}
                    </div>`
                 : imgPct > 0
                     ? `<div class="dp-img dp-img-placeholder"><div class="chunk-progress-track" style="width:80%"><div class="chunk-progress-fill" style="width:${imgPct}%"></div></div><span style="font-size:12px;color:#6b7280;">${imgPct.toFixed(0)}%</span></div>`
@@ -1575,6 +1826,11 @@ window.selectReport = (id, skipFly = false) => {
                 </div>
                 <button class="dp-pdf-btn" onclick="exportPDF('${r.id}')" title="Export PDF"><i class="fa-solid fa-file-pdf"></i></button>
             </div>
+            <!-- Phase 5 (Apr 2026) — Reviewer actions + response-time strip.
+                 Lives above the existing dispatch/resolve/false-alarm row so
+                 analysts see the verdict + response-time context before
+                 deciding to send help. -->
+            ${_renderReviewerActions(r)}
             <div class="dp-action-buttons">
                 ${r.status === 'PENDING' || r.status === 'VERIFIED'
                     ? `<button class="dp-act-main dp-act-dispatch" onclick="patchReport('${r.id}','dispatch')"><i class="fa-solid fa-hands-helping"></i> Send Help</button>`
@@ -1618,16 +1874,27 @@ window.selectReport = (id, skipFly = false) => {
                 ${imgHtml}
                 <div class="dp-pii-badge"><i class="fa-solid fa-shield-halved"></i> PII Protected</div>
             </div>
-            ${allImages.length > 1 ? `
+            ${photoGroups.length > 1 ? `
             <div class="dp-gallery">
-                <div class="dp-gallery-label"><i class="fa-solid fa-images"></i> ${allImages.length} Photos</div>
+                <div class="dp-gallery-label"><i class="fa-solid fa-images"></i> ${photoGroups.length} Photos</div>
                 <div class="dp-gallery-strip">
-                    ${allImages.map((im, idx) => {
-                        const imSrc = im.assembly_status === 'complete' && im.url ? getMediaUrl(im.url) : (im.thumbnail_url ? getMediaUrl(im.thumbnail_url) : '');
-                        return imSrc ? `<div class="dp-gallery-thumb ${idx === 0 ? 'active' : ''}" onclick="dpShowGalleryImage('${r.id}',${idx},this)">
-                            <img src="${imSrc}" alt="Photo ${idx+1}">
-                            ${im.assembly_status !== 'complete' ? `<span class="dp-gallery-pct">${(im.completion_pct||0).toFixed(0)}%</span>` : ''}
-                        </div>` : '';
+                    ${photoGroups.map((g, idx) => {
+                        // Guaranteed-delivery: pick the best complete variant
+                        // per group so the thumb shows the highest-quality
+                        // version available right now.
+                        const pick = bestVariant(g);
+                        if (!pick) return '';
+                        // Progress bar shows the best completion_pct across
+                        // the group so users see "60% uploading" for a
+                        // partial upload.
+                        const maxPct = Math.max(0, ...g.members.map(m => m.completion_pct || 0));
+                        return `<div class="dp-gallery-thumb ${idx === 0 ? 'active' : ''}"
+                                     data-group-id="${g.group_id || ''}"
+                                     data-current-tier="${pick.tier}"
+                                     onclick="dpShowGalleryImage('${r.id}',${idx},this)">
+                            <img src="${pick.src}" alt="Photo ${idx+1}">
+                            ${!pick.isFinal ? `<span class="dp-gallery-pct">${maxPct.toFixed(0)}%</span>` : ''}
+                        </div>`;
                     }).join('')}
                 </div>
             </div>` : ''}
@@ -1763,20 +2030,34 @@ window.dpSwitchView = (reportId, view, btn) => {
     }
 };
 
-// Gallery image switcher — click thumbnail to show in main view
-window.dpShowGalleryImage = (reportId, imgIdx, thumbEl) => {
+// Gallery image switcher — click thumbnail to show in main view.
+// groupIdx is the index into the photo-group list (one group per captured
+// photo, regardless of how many Media variant rows it has on the server).
+window.dpShowGalleryImage = (reportId, groupIdx, thumbEl) => {
     const r = allReports.find(x => x.id === reportId);
     if (!r) return;
     const images = r.media?.filter(m => m.type === 'IMAGE') || [];
-    const im = images[imgIdx];
-    if (!im) return;
+    const groups = groupPhotos(images);
+    const grp = groups[groupIdx];
+    if (!grp) return;
+    const pick = bestVariant(grp);
+    if (!pick || !pick.src) return;
     const container = document.getElementById(`dp-img-view-${reportId}`);
     if (!container) return;
-    const src = im.assembly_status === 'complete' && im.url ? getMediaUrl(im.url) : (im.thumbnail_url ? getMediaUrl(im.thumbnail_url) : '');
-    if (!src) return;
-    container.innerHTML = `<div class="dp-img" onclick="openLightbox('${src}','Photo ${imgIdx+1}')">
-        <img src="${src}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">
+    const tierLabel = pick.tier === 'LOW' ? 'SMALL' : pick.tier === 'MEDIUM' ? 'MEDIUM' : pick.tier === 'HIGH' ? 'LARGE' : pick.tier;
+    // Preserve the PII badge (and any other overlay children) — only swap the
+    // <div class="dp-img"> block. The old innerHTML= wipe lost the shield chip
+    // on every thumbnail click.
+    const imgWrap = container.querySelector('.dp-img');
+    const newImgHtml = `<div class="dp-img" data-group-id="${grp.groupId}" data-current-tier="${pick.tier}" onclick="openLightbox('${pick.src}','Photo ${groupIdx+1} of ${groups.length}')">
+        <img src="${pick.src}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">
+        <span class="dp-tier-chip dp-tier-${pick.tier.toLowerCase()}">${tierLabel}</span>
     </div>`;
+    if (imgWrap) {
+        imgWrap.outerHTML = newImgHtml;
+    } else {
+        container.insertAdjacentHTML('afterbegin', newImgHtml);
+    }
     // Update active thumb
     thumbEl.parentElement.querySelectorAll('.dp-gallery-thumb').forEach(t => t.classList.remove('active'));
     thumbEl.classList.add('active');
@@ -1860,10 +2141,218 @@ window.switchSatSource = (reportId, which, btn, src) => {
 };
 
 window.closeDetail = () => {
+    // Phase 2: clear tier override so the next time this report is opened
+    // it defaults back to the best-complete variant.
+    if (selectedId) _tierOverride.delete(selectedId);
     selectedId = null;
     document.getElementById('detail-panel').style.display = 'none';
     renderFeed();
 };
+
+// ── Phase 5 (Apr 2026) — Reviewer actions block ─────────────────────────────
+// Renders a compact row showing the current verdict + two action buttons
+// (Accept / Reject) + two timestamp buttons (Dispatched / Arrived).
+// Response time displayed when both `reviewed_at` and a responder timestamp
+// are set — value comes precomputed from the backend as `response_time_seconds`.
+
+function _fmtDuration(secs) {
+    if (!Number.isFinite(secs) || secs < 0) return '';
+    if (secs < 60) return `${secs}s`;
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    if (m < 60) return s ? `${m}m ${s}s` : `${m}m`;
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return mm ? `${h}h ${mm}m` : `${h}h`;
+}
+
+function _fmtReviewAgo(iso) {
+    if (!iso) return '';
+    const t = new Date(ensureUTC(iso)).getTime();
+    if (!Number.isFinite(t)) return '';
+    const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
+    return _fmtDuration(secs) + ' ago';
+}
+
+function _renderReviewerActions(r) {
+    const verdict = (r.reviewer_verdict || 'NOT_REVIEWED');
+    const verdictClass = verdict.toLowerCase();
+    const verdictLabel = verdict === 'ACCEPTED' ? '✓ Accepted'
+        : verdict === 'REJECTED' ? '✕ Rejected'
+        : 'Not reviewed';
+    const reviewedAgo = r.reviewed_at ? `Reviewed ${_fmtReviewAgo(r.reviewed_at)}` : '';
+    const responseStr = Number.isFinite(r.response_time_seconds)
+        ? `Response: ${_fmtDuration(r.response_time_seconds)}` : '';
+    const dispatched = r.help_dispatched_at
+        ? `Dispatched ${_fmtReviewAgo(r.help_dispatched_at)}` : '';
+    const arrived = r.help_arrived_at
+        ? `Arrived ${_fmtReviewAgo(r.help_arrived_at)}` : '';
+    const actionTxt = (verdict === 'REJECTED' && r.action_taken)
+        ? `<div class="dp-reviewer-note"><i class="fa-solid fa-comment-dots"></i> ${escapeHtml(r.action_taken)}</div>` : '';
+
+    return `<div class="dp-reviewer">
+        <div class="dp-reviewer-top">
+            <span class="dp-reviewer-chip dp-reviewer-${verdictClass}">${verdictLabel}</span>
+            ${reviewedAgo ? `<span class="dp-reviewer-meta">${reviewedAgo}</span>` : ''}
+            ${responseStr ? `<span class="dp-reviewer-meta dp-reviewer-response">${responseStr}</span>` : ''}
+        </div>
+        ${dispatched || arrived ? `<div class="dp-reviewer-times">
+            ${dispatched ? `<span><i class="fa-solid fa-truck-medical"></i> ${dispatched}</span>` : ''}
+            ${arrived ? `<span><i class="fa-solid fa-map-pin"></i> ${arrived}</span>` : ''}
+        </div>` : ''}
+        ${actionTxt}
+        <div class="dp-reviewer-btns">
+            <button class="dp-reviewer-btn dp-reviewer-accept ${verdict === 'ACCEPTED' ? 'active' : ''}"
+                    onclick="setReviewVerdict('${r.id}','ACCEPTED')" title="Mark accepted"><i class="fa-solid fa-check"></i> Accept</button>
+            <button class="dp-reviewer-btn dp-reviewer-reject ${verdict === 'REJECTED' ? 'active' : ''}"
+                    onclick="openRejectModal('${r.id}')" title="Mark rejected"><i class="fa-solid fa-xmark"></i> Reject</button>
+            <button class="dp-reviewer-btn"
+                    onclick="stampResponderTime('${r.id}','dispatched')"
+                    ${r.help_dispatched_at ? 'disabled' : ''}><i class="fa-solid fa-truck-medical"></i> Dispatched</button>
+            <button class="dp-reviewer-btn"
+                    onclick="stampResponderTime('${r.id}','arrived')"
+                    ${r.help_arrived_at ? 'disabled' : ''}><i class="fa-solid fa-map-pin"></i> Arrived</button>
+        </div>
+    </div>`;
+}
+
+window.setReviewVerdict = async (reportId, verdict, actionTaken = null) => {
+    try {
+        const body = { verdict };
+        if (actionTaken) body.action_taken = actionTaken;
+        const res = await fetch(`${API}/${reportId}/review`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+            let detail = `HTTP ${res.status}`;
+            try { detail = (await res.json()).detail || detail; } catch (_) {}
+            return showToast(`Review failed: ${detail}`, 'error');
+        }
+        const updated = await res.json();
+        const idx = allReports.findIndex(x => x.id === reportId);
+        if (idx >= 0) allReports[idx] = { ...allReports[idx], ...updated };
+        showToast(verdict === 'ACCEPTED' ? 'Marked accepted' : 'Marked rejected', 'success');
+        if (selectedId === reportId) selectReport(reportId, true);
+        renderFeed();
+    } catch (e) {
+        showToast(`Review error: ${e.message}`, 'error');
+    }
+};
+
+window.openRejectModal = (reportId) => {
+    const note = prompt(
+        'Reject this report — please describe why (required).\n\n' +
+        'This note is logged against the report so future responders see the rationale.',
+        ''
+    );
+    if (note === null) return;   // user cancelled
+    const trimmed = note.trim();
+    if (!trimmed) {
+        showToast('Rejection reason required', 'error');
+        return;
+    }
+    window.setReviewVerdict(reportId, 'REJECTED', trimmed);
+};
+
+window.stampResponderTime = async (reportId, which) => {
+    const body = which === 'arrived'
+        ? { stamp_arrived_now: true }
+        : { stamp_dispatched_now: true };
+    try {
+        const res = await fetch(`${API}/${reportId}/timestamps`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+            let detail = `HTTP ${res.status}`;
+            try { detail = (await res.json()).detail || detail; } catch (_) {}
+            return showToast(`Timestamp failed: ${detail}`, 'error');
+        }
+        const updated = await res.json();
+        const idx = allReports.findIndex(x => x.id === reportId);
+        if (idx >= 0) allReports[idx] = { ...allReports[idx], ...updated };
+        showToast(which === 'arrived' ? 'Marked arrived' : 'Marked dispatched', 'success');
+        if (selectedId === reportId) selectReport(reportId, true);
+        renderFeed();
+    } catch (e) {
+        showToast(`Timestamp error: ${e.message}`, 'error');
+    }
+};
+
+// Phase 2: manual tier selection — swap the displayed variant in-place.
+// Stamps `_tierOverride[reportId]` so subsequent polls / upgrades don't
+// override the user's choice. Also updates the gallery thumb's active
+// class + the tier switcher's active button state, and rewires the
+// lightbox click handler to open the selected tier.
+window.setDetailImageTier = (reportId, groupId, tier, btnEl) => {
+    const r = allReports.find(x => x.id === reportId);
+    if (!r) return;
+    const images = r.media?.filter(m => m.type === 'IMAGE') || [];
+    const group = groupPhotos(images).find(g => g.group_id === groupId) || groupPhotos(images)[0];
+    if (!group) return;
+    const m = group.members.find(x => x.resolution_tier === tier && x.assembly_status === 'complete' && x.url);
+    if (!m) return;
+    const src = getMediaUrl(m.url);
+    _tierOverride.set(reportId, tier);
+
+    // Swap <img src> on the main detail image.
+    const wrap = document.querySelector(`#dp-img-view-${reportId} .dp-img[data-group-id]`);
+    if (wrap) {
+        const img = wrap.querySelector('img');
+        if (img && img.src !== src) {
+            img.src = src;
+            img.classList.remove('img-thumb-bg');
+            img.classList.add('img-full-layer', 'img-ready');
+        }
+        wrap.setAttribute('data-current-tier', tier);
+        wrap.classList.remove('dp-img-uploading');
+        wrap.setAttribute('onclick',
+            `openLightbox('${src.replace(/'/g, "%27")}','${(r.infrastructure_type || 'Photo')}')`);
+    }
+
+    // Update active button state inside the switcher.
+    if (btnEl && btnEl.parentElement) {
+        btnEl.parentElement.querySelectorAll('.dp-tier-btn').forEach(b => b.classList.remove('active'));
+        btnEl.classList.add('active');
+    }
+};
+
+// Phase 2: keyboard shortcuts (← / →) to cycle tiers when the detail panel
+// is open and focused. Non-intrusive: falls through if focus is on an input.
+document.addEventListener('keydown', (e) => {
+    if (!selectedId) return;
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    const panel = document.getElementById('detail-panel');
+    if (!panel || panel.style.display === 'none') return;
+    const r = allReports.find(x => x.id === selectedId);
+    if (!r) return;
+    const images = r.media?.filter(m => m.type === 'IMAGE') || [];
+    const group = groupPhotos(images)[0];
+    if (!group) return;
+    const tiersInOrder = ['LOW', 'MEDIUM', 'HIGH'];
+    const current = _tierOverride.get(selectedId) ||
+        (bestVariant(group)?.tier) || 'HIGH';
+    const idx = tiersInOrder.indexOf(current);
+    if (idx < 0) return;
+    const nextIdx = e.key === 'ArrowRight'
+        ? Math.min(tiersInOrder.length - 1, idx + 1)
+        : Math.max(0, idx - 1);
+    if (nextIdx === idx) return;
+    const nextTier = tiersInOrder[nextIdx];
+    // Only move if the target tier is complete.
+    const m = group.members.find(x => x.resolution_tier === nextTier &&
+                                       x.assembly_status === 'complete' && x.url);
+    if (!m) return;
+    const btn = document.querySelector(
+        `#dp-img-view-${selectedId} .dp-tier-switcher .dp-tier-btn.dp-tier-${nextTier.toLowerCase()}`);
+    window.setDetailImageTier(selectedId, group.group_id || '', nextTier, btn);
+    e.preventDefault();
+});
 
 // ── Satellite Truth Verification ─────────────────────────────────────────────
 
@@ -2283,6 +2772,9 @@ window.deleteReport = async (id) => {
         if (res.ok || res.status === 204) {
             allReports = allReports.filter(r => r.id !== id);
             knownIds.delete(id);
+            // Phase 2: clear any tier override for the deleted report so
+            // a later report with the same id (re-imported) starts fresh.
+            _tierOverride.delete(id);
             if (selectedId === id) closeDetail();
             showToast('Report deleted', 'success');
             updateMapMarkers();
@@ -2298,7 +2790,7 @@ window.filterByBuilding = async (buildingId) => {
         if (!res.ok) { showToast('Could not load building history', 'error'); return; }
         const reports = await res.json();
         if (reports.length <= 1) { showToast('Only 1 report for this building', 'info'); return; }
-        const names = reports.map(r => `${r.damage_classification || r.severity} — ${new Date(r.server_created_at).toLocaleDateString()}`).join('\n');
+        const names = reports.map(r => `${r.damage_classification || r.severity} — ${new Date(ensureUTC(r.server_created_at)).toLocaleDateString()}`).join('\n');
         showToast(`Building has ${reports.length} reports`, 'success');
         // Highlight all building reports on map
         reports.forEach(rep => { const marker = clusterGroup.getLayers().find(m => m._crispReport?.id === rep.id); if (marker) marker.openPopup(); });
@@ -2712,6 +3204,11 @@ window.showPendingDeletions = function () {
     if (!panel || !body) return;
     panel.style.display = 'flex';
 
+    // Bug-fix: always clear the footer first so an empty list can't leave a
+    // stale "Purge All (1)" button on screen from the previous render.
+    const footerEl = document.getElementById('del-panel-footer');
+    if (footerEl) footerEl.innerHTML = '';
+
     if (_pendingDeletions.length === 0) {
         body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-dim);"><i class="fa-solid fa-circle-check" style="font-size:24px;color:#22c55e;"></i><br>No pending deletions</div>';
         return;
@@ -2770,18 +3267,260 @@ window.closeDeletionsPanel = function () {
     if (panel) panel.style.display = 'none';
 };
 
+// ── Phase 4 (Apr 2026) — Auto-Submit Regions Admin Panel ─────────────────────
+// Admin toggles enable per-region 2-minute auto-submit countdowns on clients.
+// Uses JWT (not X-Admin-Key) — the global fetch wrapper at line 27 handles
+// the Authorization header automatically for any /api/ request.
+
+let _regionsCache = [];
+let _regionEditingId = null;   // null when creating, uuid when editing
+
+/** Show the Regions button to ADMIN / SUPER_ADMIN only. */
+function _maybeShowRegionsButton() {
+    const u = _crispUser;
+    const role = (u && u.role) || '';
+    const btn = document.getElementById('btn-auto-regions');
+    if (btn && (role === 'ADMIN' || role === 'SUPER_ADMIN')) {
+        btn.style.display = 'inline-flex';
+    }
+}
+// Expose so _initUserMenu (called on DOMContentLoaded) can invoke it.
+window._maybeShowRegionsButton = _maybeShowRegionsButton;
+
+window.showRegionsPanel = async function () {
+    const panel = document.getElementById('regions-panel');
+    const body = document.getElementById('regions-panel-body');
+    if (!panel || !body) return;
+    panel.style.display = 'block';
+    body.innerHTML = '<div style="padding:20px;color:#9ca3af;">Loading…</div>';
+    try {
+        const res = await fetch(`${BACKEND_HOST}/api/v1/admin/regions`);
+        if (!res.ok) {
+            body.innerHTML = `<div style="padding:20px;color:#ef4444;">Failed to load regions (${res.status})</div>`;
+            return;
+        }
+        _regionsCache = await res.json();
+        _renderRegionsList();
+    } catch (e) {
+        body.innerHTML = `<div style="padding:20px;color:#ef4444;">Error: ${e.message}</div>`;
+    }
+};
+
+window.closeRegionsPanel = function () {
+    const panel = document.getElementById('regions-panel');
+    if (panel) panel.style.display = 'none';
+};
+
+function _renderRegionsList() {
+    const body = document.getElementById('regions-panel-body');
+    if (!body) return;
+    if (!_regionsCache.length) {
+        body.innerHTML = `<div style="padding:20px;color:#94a3b8;">
+            No auto-submit regions configured yet.<br><br>
+            Click <b>Add region</b> to create one. Enabled regions show a
+            2-minute auto-submit timer on every client whose GPS falls inside
+            their radius.
+        </div>`;
+        return;
+    }
+    body.innerHTML = _regionsCache.map(r => {
+        const radiusKm = (r.radius_meters / 1000).toFixed(1);
+        const lat = r.center_lat.toFixed(4);
+        const lng = r.center_lng.toFixed(4);
+        const chipClass = r.enabled ? 'region-chip-on' : 'region-chip-off';
+        const chipLabel = r.enabled ? 'ENABLED' : 'disabled';
+        return `<div class="region-row" data-id="${r.id}">
+            <div class="region-row-main">
+                <div class="region-row-name"><b>${_esc(r.name)}</b>
+                    <span class="region-chip ${chipClass}">${chipLabel}</span></div>
+                <div class="region-row-meta">
+                    ${lat}°, ${lng}° · ${radiusKm} km radius
+                </div>
+            </div>
+            <div class="region-row-actions">
+                <button class="btn btn-secondary" onclick="toggleRegion('${r.id}')" title="${r.enabled ? 'Disable' : 'Enable'}">
+                    <i class="fa-solid ${r.enabled ? 'fa-pause' : 'fa-play'}"></i>
+                </button>
+                <button class="btn btn-secondary" onclick="openRegionForm('${r.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
+                <button class="btn btn-danger" onclick="deleteRegion('${r.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function _esc(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+window.openRegionForm = function (regionId) {
+    const overlay = document.getElementById('region-form-overlay');
+    if (!overlay) return;
+    _regionEditingId = regionId || null;
+    const title = document.getElementById('region-form-title');
+    const name = document.getElementById('region-name');
+    const lat = document.getElementById('region-lat');
+    const lng = document.getElementById('region-lng');
+    const rad = document.getElementById('region-radius-km');
+    const en = document.getElementById('region-enabled');
+    if (regionId) {
+        const r = _regionsCache.find(x => x.id === regionId);
+        if (r) {
+            title.innerHTML = '<i class="fa-solid fa-pen"></i> Edit region';
+            name.value = r.name;
+            lat.value = r.center_lat;
+            lng.value = r.center_lng;
+            rad.value = (r.radius_meters / 1000);
+            en.checked = !!r.enabled;
+        }
+    } else {
+        title.innerHTML = '<i class="fa-solid fa-plus"></i> Add region';
+        name.value = '';
+        lat.value = '';
+        lng.value = '';
+        rad.value = '10';
+        en.checked = false;
+    }
+    overlay.style.display = 'flex';
+};
+
+window.closeRegionForm = function () {
+    const overlay = document.getElementById('region-form-overlay');
+    if (overlay) overlay.style.display = 'none';
+    _regionEditingId = null;
+};
+
+window.saveRegionForm = async function () {
+    const name = (document.getElementById('region-name').value || '').trim();
+    const lat = parseFloat(document.getElementById('region-lat').value);
+    const lng = parseFloat(document.getElementById('region-lng').value);
+    const radKm = parseFloat(document.getElementById('region-radius-km').value);
+    const enabled = document.getElementById('region-enabled').checked;
+    if (!name) return showToast('Name required', 'error');
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) return showToast('Latitude must be -90..90', 'error');
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) return showToast('Longitude must be -180..180', 'error');
+    if (!Number.isFinite(radKm) || radKm < 0.1 || radKm > 200) return showToast('Radius must be 0.1..200 km', 'error');
+
+    const body = {
+        name,
+        center_lat: lat,
+        center_lng: lng,
+        radius_meters: Math.round(radKm * 1000),
+        enabled,
+    };
+    const isEdit = !!_regionEditingId;
+    const url = isEdit
+        ? `${BACKEND_HOST}/api/v1/admin/regions/${_regionEditingId}`
+        : `${BACKEND_HOST}/api/v1/admin/regions`;
+    const method = isEdit ? 'PATCH' : 'POST';
+    try {
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+            let detail = `HTTP ${res.status}`;
+            try { detail = (await res.json()).detail || detail; } catch (_) {}
+            return showToast(`Save failed: ${detail}`, 'error');
+        }
+        showToast(isEdit ? 'Region updated' : 'Region created', 'success');
+        closeRegionForm();
+        showRegionsPanel();   // reload list
+    } catch (e) {
+        showToast(`Save error: ${e.message}`, 'error');
+    }
+};
+
+window.toggleRegion = async function (regionId) {
+    const r = _regionsCache.find(x => x.id === regionId);
+    if (!r) return;
+    try {
+        const res = await fetch(`${BACKEND_HOST}/api/v1/admin/regions/${regionId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: !r.enabled }),
+        });
+        if (!res.ok) return showToast(`Toggle failed (${res.status})`, 'error');
+        showToast(r.enabled ? `Disabled "${r.name}"` : `Enabled "${r.name}"`, 'success');
+        showRegionsPanel();
+    } catch (e) {
+        showToast(`Toggle error: ${e.message}`, 'error');
+    }
+};
+
+window.deleteRegion = async function (regionId) {
+    const r = _regionsCache.find(x => x.id === regionId);
+    if (!r) return;
+    if (!confirm(`Delete region "${r.name}"? Clients in this zone will no longer auto-submit.`)) return;
+    try {
+        const res = await fetch(`${BACKEND_HOST}/api/v1/admin/regions/${regionId}`, {
+            method: 'DELETE',
+        });
+        if (res.ok || res.status === 204) {
+            showToast(`Deleted "${r.name}"`, 'success');
+            showRegionsPanel();
+        } else {
+            showToast(`Delete failed (${res.status})`, 'error');
+        }
+    } catch (e) {
+        showToast(`Delete error: ${e.message}`, 'error');
+    }
+};
+
+// P1.8 — admin endpoints now require X-Admin-Key. Cache the key in localStorage
+// so the operator only pastes it once. If absent, prompt. If the server later
+// returns 403 (key rotated), wipe the cached copy and prompt again.
+function _getAdminKey(forcePrompt = false) {
+    let key = !forcePrompt ? (localStorage.getItem('crisp_admin_key') || '') : '';
+    if (!key) {
+        key = prompt(
+            'Admin key required for this action.\n\n' +
+            '(Set CRISP_ADMIN_KEY on the backend and paste the same value here. ' +
+            'It stays in your browser\'s localStorage.)'
+        ) || '';
+        if (key) localStorage.setItem('crisp_admin_key', key.trim());
+    }
+    return key.trim();
+}
+
+async function _adminFetch(url, init = {}) {
+    const key = _getAdminKey();
+    if (!key) return null;
+    const headers = Object.assign({}, init.headers || {}, { 'X-Admin-Key': key });
+    const res = await fetch(url, Object.assign({}, init, { headers }));
+    if (res.status === 403) {
+        // Cached key is stale/wrong. Clear and try once more.
+        localStorage.removeItem('crisp_admin_key');
+        const newKey = _getAdminKey(true);
+        if (!newKey) return res;
+        const retryHeaders = Object.assign({}, init.headers || {}, { 'X-Admin-Key': newKey });
+        return fetch(url, Object.assign({}, init, { headers: retryHeaders }));
+    }
+    return res;
+}
+
 window.purgeAllDeletions = async function () {
     if (!confirm(`Permanently delete all ${_pendingDeletions.length} pending deletion(s)? This cannot be undone.`)) return;
     try {
-        const res = await fetch(`${API}/purge-all-pending`, { method: 'POST' });
+        const res = await _adminFetch(`${API}/purge-all-pending`, { method: 'POST' });
+        if (!res) { showToast('Purge cancelled — admin key required', 'error'); return; }
         if (res.ok) {
             const result = await res.json();
             showToast(`${result.purged} report(s) permanently deleted`, 'success');
+            // Re-fetch from the server instead of trusting client state — the
+            // previous "_pendingDeletions = []" was correct in theory but the
+            // counter badge (driven by a separate poll) could have stayed
+            // stale if the toggle button rendered from the old cache.
             _pendingDeletions = [];
+            await _checkPendingDeletions();
             showPendingDeletions();
             fetchReports();
+        } else if (res.status === 503) {
+            showToast('Purge disabled: backend is missing CRISP_ADMIN_KEY env var', 'error');
+        } else if (res.status === 403) {
+            showToast('Purge refused: invalid admin key', 'error');
         } else {
-            showToast('Purge failed', 'error');
+            showToast(`Purge failed (HTTP ${res.status})`, 'error');
         }
     } catch (e) {
         showToast('Purge failed — check connection', 'error');
@@ -2791,13 +3530,20 @@ window.purgeAllDeletions = async function () {
 window.purgeExpiredOnly = async function () {
     if (!confirm('Permanently delete all expired deletion requests?')) return;
     try {
-        const res = await fetch(`${API}/purge-expired`, { method: 'POST' });
+        const res = await _adminFetch(`${API}/purge-expired`, { method: 'POST' });
+        if (!res) { showToast('Purge cancelled — admin key required', 'error'); return; }
         if (res.ok) {
             const result = await res.json();
             showToast(`Purged ${result.purged} expired report(s)`, 'success');
             _checkPendingDeletions();
             setTimeout(() => showPendingDeletions(), 1000);
             fetchReports();
+        } else if (res.status === 503) {
+            showToast('Purge disabled: backend is missing CRISP_ADMIN_KEY env var', 'error');
+        } else if (res.status === 403) {
+            showToast('Purge refused: invalid admin key', 'error');
+        } else {
+            showToast(`Purge failed (HTTP ${res.status})`, 'error');
         }
     } catch (e) {
         showToast('Purge failed — check connection', 'error');
@@ -3124,7 +3870,104 @@ function _applyReportData(data) {
     updateMapMarkers();
     renderFeed();
     if (detailPanelNeedsRefresh && selectedId) selectReport(selectedId, true);
+    // Guaranteed-delivery: after the feed/map update, check whether any
+    // currently-rendered photo group now has a BETTER variant available than
+    // the one shown (SMALL → MEDIUM → LARGE). If so, hot-swap the <img src>
+    // in-place so analysts see the upgrade without a full panel rebuild.
+    _maybeUpgradeDetailImage();
 }
+
+// ── Progressive image upgrade on poll ─────────────────────────────────────
+// Looks at every .dp-img[data-group-id] and .dp-gallery-thumb[data-group-id]
+// in the open detail panel and swaps their <img src> if bestVariant(group)
+// now resolves to a higher-tier complete variant than the one rendered.
+// Zero-cost when no upgrade is available.
+function _maybeUpgradeDetailImage() {
+    if (!selectedId) return;
+    // Phase 2: respect manual tier override — don't auto-upgrade when the
+    // user has deliberately picked a tier. `setDetailImageTier` stamps the
+    // override; `closeDetail` and report-delete clear it.
+    if (_tierOverride.has(selectedId)) return;
+    const r = allReports.find(x => x.id === selectedId);
+    if (!r) return;
+    const images = r.media?.filter(m => m.type === 'IMAGE') || [];
+    if (!images.length) return;
+    const groups = groupPhotos(images);
+    // Build a groupId → pick lookup. Null-group entries are skipped — the
+    // legacy single-media path never upgrades.
+    const groupMap = new Map();
+    for (const g of groups) {
+        if (!g.group_id) continue;
+        const pick = bestVariant(g);
+        if (pick) groupMap.set(g.group_id, pick);
+    }
+    if (groupMap.size === 0) return;
+
+    // Main image (primary photo)
+    document.querySelectorAll(`#dp-img-view-${selectedId} .dp-img[data-group-id]`).forEach(el => {
+        const gid = el.getAttribute('data-group-id');
+        const pick = groupMap.get(gid);
+        if (!pick || !pick.isFinal) return;
+        const currentTier = el.getAttribute('data-current-tier');
+        if (currentTier === pick.tier) return;   // already showing this variant
+        const img = el.querySelector('img');
+        if (img && img.src !== pick.src) {
+            img.src = pick.src;
+            img.classList.remove('img-thumb-bg');
+            img.classList.add('img-full-layer', 'img-ready');
+        }
+        el.setAttribute('data-current-tier', pick.tier);
+        el.classList.remove('dp-img-uploading');
+        // Phase 2: sync tier-switcher active button + enable any tier that
+        // has now finished assembly since the last render.
+        const switcher = el.querySelector('.dp-tier-switcher');
+        if (switcher) {
+            switcher.querySelectorAll('.dp-tier-btn').forEach(b => {
+                b.classList.remove('active');
+                // Re-enable buttons whose tier is now complete.
+                const tierClass = [...b.classList].find(c => c.startsWith('dp-tier-') && c !== 'dp-tier-btn');
+                const tier = tierClass ? tierClass.replace('dp-tier-', '').toUpperCase() : null;
+                if (tier) {
+                    const g = groups.find(gg => gg.group_id === gid);
+                    const m = g && g.members.find(mm => mm.resolution_tier === tier && mm.assembly_status === 'complete' && mm.url);
+                    if (m) b.classList.remove('disabled');
+                }
+            });
+            const activeBtn = switcher.querySelector(`.dp-tier-btn.dp-tier-${pick.tier.toLowerCase()}`);
+            if (activeBtn) activeBtn.classList.add('active');
+        }
+        // Refresh the onclick handler so the lightbox opens the upgraded image
+        el.setAttribute('onclick', `openLightbox('${pick.src}','${(r.infrastructure_type || 'Photo')}')`);
+    });
+
+    // Gallery strip thumbs (for reports with multiple photos)
+    document.querySelectorAll(`#dp-img-view-${selectedId} ~ .dp-gallery .dp-gallery-thumb[data-group-id]`).forEach(el => {
+        const gid = el.getAttribute('data-group-id');
+        const pick = groupMap.get(gid);
+        if (!pick) return;
+        const currentTier = el.getAttribute('data-current-tier');
+        if (currentTier === pick.tier) return;
+        const img = el.querySelector('img');
+        if (img && img.src !== pick.src) img.src = pick.src;
+        el.setAttribute('data-current-tier', pick.tier);
+        // Remove the % badge once the variant is final
+        if (pick.isFinal) {
+            const pctEl = el.querySelector('.dp-gallery-pct');
+            if (pctEl) pctEl.remove();
+        }
+    });
+}
+
+// ── Testability + debug hooks ─────────────────────────────────────────────
+// Apr 2026: expose read-only pointers to the module-scope state + the
+// poll function so the Playwright E2E suite and ad-hoc DevTools debugging
+// can inspect and kick the report list without a 4-second wait.
+// NOT used by production code paths — safe to keep always-on.
+Object.defineProperty(window, 'allReports', {
+    get: () => allReports,
+    configurable: true,
+});
+window.__crispFetchReports = () => fetchReports();
 
 async function fetchReports() {
     try {
@@ -3181,6 +4024,16 @@ function _reschedulePoller() {
 
 function _updateCacheBadge(stale) {
     const badge = document.getElementById('cache-freshness-badge');
+    // Apr 2026 fix: the bottom "Offline — showing cached data" banner used
+    // to be driven by navigator.onLine (unreliable: gets stuck false after
+    // transient network hiccups). Now it tracks ACTUAL fetch results via
+    // the bridge `window.setDashboardOnline(ok)` defined in index.html.
+    try {
+        if (typeof window.setDashboardOnline === 'function') {
+            window.setDashboardOnline(!stale);
+        }
+    } catch (_) { /* never let banner logic break data rendering */ }
+
     if (!badge) return;
     if (stale) {
         badge.innerHTML = '<span class="live-dot" style="background:#f59e0b;box-shadow:0 0 6px #f59e0b;"></span>CACHED';
@@ -3228,6 +4081,8 @@ function _initUserMenu() {
     const roleEl = document.getElementById('user-role-badge');
     if (nameEl) nameEl.textContent = u.full_name || u.email?.split('@')[0] || '';
     if (roleEl) roleEl.textContent = u.role || 'VIEWER';
+    // Phase 4: reveal Regions button only to admins.
+    if (typeof _maybeShowRegionsButton === 'function') _maybeShowRegionsButton();
 }
 
 // ── Token auto-refresh (5 min before expiry) ─────────────────────────────────
@@ -3249,9 +4104,9 @@ setInterval(_autoRefreshToken, 25 * 60 * 1000); // Refresh every 25 min
 
 document.addEventListener('DOMContentLoaded', async () => {
     _initUserMenu();
-    // Close export dropdown on outside click
+    // Close dropdowns on outside click
     document.addEventListener('click', (e) => {
-        document.querySelectorAll('.export-dropdown.open').forEach(d => {
+        document.querySelectorAll('.export-dropdown.open, .sort-dropdown.open').forEach(d => {
             if (!d.contains(e.target)) d.classList.remove('open');
         });
     });

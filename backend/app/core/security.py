@@ -20,7 +20,38 @@ logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-JWT_SECRET = os.getenv("JWT_SECRET", "crisp-dev-secret-change-in-production-" + secrets.token_hex(16))
+# P1.2 — JWT secret. In production we REQUIRE the env var. A previous fallback
+# built the secret as "crisp-dev-secret-change-in-production-" + random hex,
+# which rotated on every worker restart — that invalidated everyone's tokens
+# AND meant a misconfigured prod ran with dev-grade secret generation. Now:
+#   - APP_ENV=production + missing var → raise at import (service won't boot)
+#   - APP_ENV=dev        + missing var → auto-generate a dev secret and log a
+#                                        loud warning (convenient for local work)
+# Rotate the production value via scripts/rotate_secrets.sh (written alongside).
+_APP_ENV = os.getenv("APP_ENV", "production").lower()
+_JWT_SECRET_ENV = os.getenv("JWT_SECRET", "").strip()
+if not _JWT_SECRET_ENV:
+    if _APP_ENV == "production":
+        raise RuntimeError(
+            "JWT_SECRET env var is required when APP_ENV=production. "
+            "Generate one with scripts/rotate_secrets.sh and set it in your "
+            "deploy environment. Aborting boot to avoid shipping with a "
+            "dev-grade key."
+        )
+    # Dev mode — generate an ephemeral secret + shout about it.
+    _JWT_SECRET_ENV = "dev-insecure-" + secrets.token_hex(16)
+    logger.warning(
+        "⚠  JWT_SECRET not set and APP_ENV=%s — using an ephemeral dev secret. "
+        "All tokens will be invalidated on next restart.", _APP_ENV
+    )
+JWT_SECRET = _JWT_SECRET_ENV
+# Guard against too-short production secrets that bypass the check above with
+# e.g. `JWT_SECRET=x`. 32 bytes (64 hex chars) is the minimum for HS256 safety.
+if _APP_ENV == "production" and len(JWT_SECRET) < 64:
+    raise RuntimeError(
+        f"JWT_SECRET must be at least 64 characters (got {len(JWT_SECRET)}). "
+        "Use scripts/rotate_secrets.sh to generate a cryptographically strong value."
+    )
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))

@@ -4,8 +4,8 @@
     {
       "name": "pwa",
       "runtimeExecutable": "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
-      "runtimeArgs": ["-m", "http.server", "8082", "--directory", "/Users/pks/Desktop/CRISP- UNDP Challenge/crisp-platform/mobile-app/src"],
-      "port": 8082
+      "runtimeArgs": ["-m", "http.server", "8091", "--directory", "/Users/pks/Desktop/CRISP- UNDP Challenge/crisp-platform/mobile-app/src"],
+      "port": 8091
     }
   ]
 }

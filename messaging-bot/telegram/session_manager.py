@@ -69,6 +69,11 @@ class TelegramSession:
     last_activity: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     message_ids: set = field(default_factory=set)
     submitted_report_id: Optional[str] = None
+    # P3.5 — tracks whether the user has consented to data capture. Flipped
+    # true only by the explicit "I consent" callback; all data handlers
+    # bail early if false. Persisted across the session lifetime so returning
+    # users don't re-consent until /start wipes the session.
+    consented: bool = False
 
     @property
     def has_evidence(self) -> bool:
@@ -104,10 +109,41 @@ def hash_user(user_id: int) -> str:
 
 def get_or_create_session(user_id: int, chat_id: int) -> TelegramSession:
     uh = hash_user(user_id)
+    # P2.8 — opportunistic stale-session cleanup. A full cleanup runs on the
+    # bot's purge worker (see cleanup_stale_sessions) but doing a cheap sweep
+    # on each fetch keeps the in-memory dict bounded even if the worker is
+    # disabled. Sessions older than 2 hours with no report_id are abandoned
+    # drafts; sessions older than 24 h in any state are stale.
+    now_ts = datetime.now(timezone.utc).timestamp()
+    stale_keys = [
+        k for k, s in _sessions.items()
+        if (s.state == "DONE" and (now_ts - s.created_at) > 24 * 3600) or
+           (not s.report_id and (now_ts - s.created_at) > 2 * 3600)
+    ]
+    for k in stale_keys:
+        _sessions.pop(k, None)
+    if stale_keys:
+        logger.info(f"[TG] Cleared {len(stale_keys)} stale session(s)")
+
     if uh not in _sessions or _sessions[uh].state == "DONE":
         _sessions[uh] = TelegramSession(user_hash=uh, chat_id=chat_id)
         logger.info(f"New Telegram session: {uh}")
     return _sessions[uh]
+
+
+def cleanup_stale_sessions() -> int:
+    """Called by a background loop (or tests). Drops sessions that exceeded
+    the inactivity cutoffs used above. Returns the count removed."""
+    now_ts = datetime.now(timezone.utc).timestamp()
+    before = len(_sessions)
+    keys_to_drop = [
+        k for k, s in _sessions.items()
+        if (s.state == "DONE" and (now_ts - s.created_at) > 24 * 3600) or
+           (not s.report_id and (now_ts - s.created_at) > 2 * 3600)
+    ]
+    for k in keys_to_drop:
+        _sessions.pop(k, None)
+    return before - len(_sessions)
 
 
 def get_session(user_id: int) -> Optional[TelegramSession]:

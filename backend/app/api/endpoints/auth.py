@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import func as sa_func
 
 from app.db.session import get_db
 from app.models.auth import User, Organization, OTPRecord, UserSession, AuthAuditLog, RoleEnum
@@ -164,15 +165,38 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
 
 @router.post("/otp/request")
 def request_otp(req: OTPRequest, request: Request, db: Session = Depends(get_db)):
-    """Send a new OTP code to the user's email."""
-    # Rate limit: max 3 per 10 minutes per email
+    """Send a new OTP code to the user's email.
+
+    P2.6 — rate limiting applied in layers:
+      1. Per-email: max 3 requests per 10 min (blocks retry spam).
+      2. Per-IP: max 20 requests per hour (blocks enumeration across
+         thousands of different emails from one attacker IP).
+      3. Global-per-email attempt cap: see verify_otp — prevents new
+         OTP requests from resetting the 5-attempt budget.
+    """
     ten_min_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
+    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    client_ip = _get_ip(request)
+
+    # Layer 1 — per-email.
     recent = db.query(OTPRecord).filter(
         OTPRecord.email == req.email,
         OTPRecord.created_at >= ten_min_ago,
     ).count()
     if recent >= OTP_RATE_LIMIT:
         raise HTTPException(status_code=429, detail="Too many OTP requests. Try again in a few minutes.")
+
+    # Layer 2 — per-IP across all emails.
+    if client_ip and client_ip not in ("127.0.0.1", "::1", "unknown"):
+        from_ip = db.query(OTPRecord).filter(
+            OTPRecord.ip_address == client_ip,
+            OTPRecord.created_at >= one_hour_ago,
+        ).count()
+        if from_ip >= 20:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many OTP requests from this network. Try again later."
+            )
 
     # For LOGIN purpose, user must exist
     if req.purpose == "LOGIN":
@@ -213,10 +237,26 @@ def verify_otp(req: OTPVerify, request: Request, db: Session = Depends(get_db)):
     if now > exp:
         raise HTTPException(status_code=400, detail="Code expired. Request a new one.")
 
-    # Check attempts
+    # Check attempts — local (this OTP record)
     otp.attempts = (otp.attempts or 0) + 1
     if otp.attempts > OTP_MAX_ATTEMPTS:
         raise HTTPException(status_code=400, detail="Too many attempts. Request a new code.")
+
+    # P2.6 — global attempt cap across all OTP records for this email in the
+    # last 30 minutes. Without this, an attacker can request a fresh OTP (new
+    # record, zeroed `attempts`) and get 5 more guesses, effectively bypassing
+    # the per-record cap. 15 = 3 valid retries × 5 attempts ≈ legitimate
+    # user's worst case.
+    thirty_min_ago = datetime.now(timezone.utc) - timedelta(minutes=30)
+    global_attempts = db.query(OTPRecord).filter(
+        OTPRecord.email == req.email,
+        OTPRecord.created_at >= thirty_min_ago,
+    ).with_entities(sa_func.sum(OTPRecord.attempts)).scalar() or 0
+    if (global_attempts + otp.attempts) > 15:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed attempts on this email. Wait 30 minutes before trying again."
+        )
 
     # Verify code
     if otp.code != req.code:
