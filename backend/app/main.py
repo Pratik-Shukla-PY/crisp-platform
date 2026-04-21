@@ -220,13 +220,20 @@ app = FastAPI(
 
 # CORS — P2.7: tighter rules in production.
 #
-# In dev we happily accept localhost + LAN IPs. In production we require
-# CORS_ORIGINS to be explicitly set to the real dashboard domain — a missing
-# env var would previously have silently allowed the dev defaults, giving
-# a same-LAN attacker on the host a free authenticated-request channel
-# thanks to `allow_credentials=True`.
+# In dev we accept localhost + every RFC 1918 private LAN address so a
+# tester on the same Wi-Fi (e.g. http://192.168.1.49:8080) can hit the
+# backend from the dashboard without the preflight failing. Previously
+# only literal "localhost:*" was whitelisted — a tester opening the
+# dashboard at the LAN IP got a silent CORS preflight 400 and the
+# login button just "didn't do anything" in the browser. Fixed 2026-04-21.
+#
+# In production we require CORS_ORIGINS to be explicitly set to the real
+# dashboard domain — a missing env var would previously have silently
+# allowed the dev defaults, giving a same-LAN attacker on the host a free
+# authenticated-request channel thanks to `allow_credentials=True`.
 _default_dev_origins = "http://localhost:8080,http://localhost:8000,http://localhost:3000"
 _cors_env = os.getenv("CORS_ORIGINS", "").strip()
+_cors_regex = None  # set below in dev mode
 if not _cors_env:
     if APP_ENV == "production":
         raise RuntimeError(
@@ -236,8 +243,28 @@ if not _cors_env:
         )
     _cors_env = _default_dev_origins
     logging.getLogger(__name__).warning(
-        "CORS_ORIGINS not set and APP_ENV=%s — defaulting to localhost.",
+        "CORS_ORIGINS not set and APP_ENV=%s — defaulting to localhost "
+        "+ RFC 1918 LAN regex. Production MUST set CORS_ORIGINS.",
         APP_ENV,
+    )
+# In dev mode, ALSO whitelist any RFC 1918 private LAN IP with a regex
+# alongside whatever explicit origins were set. DHCP leases change on a
+# whim (Mac wakes up and gets a new IP), which would otherwise require
+# manually rotating .env every morning — observed 2026-04-21 when a
+# tester hit CORS 400 at http://192.168.1.49:8080 because .env was
+# frozen on http://192.168.1.38:8080. Regex is intentionally strict:
+# only http://, only RFC 1918 ranges (10.x / 172.16-31.x / 192.168.x)
+# plus localhost / 127.0.0.1. Production MUST set APP_ENV=production;
+# in that case this branch never runs and only the explicit
+# CORS_ORIGINS list applies — same-LAN attackers can't sneak in.
+if APP_ENV != "production":
+    _cors_regex = (
+        r"^http://("
+        r"localhost|127\.0\.0\.1|"
+        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+        r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|"
+        r"192\.168\.\d{1,3}\.\d{1,3}"
+        r")(:\d{1,5})?$"
     )
 _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
 # Defensive check: disallow "*" paired with credentials (MDN-specified invalid
@@ -250,6 +277,7 @@ if "*" in _cors_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
+    allow_origin_regex=_cors_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Admin-Key"],
