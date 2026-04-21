@@ -71,12 +71,44 @@ def upgrade() -> None:
 
     # 2. Backfill: copy legacy chip into sub_type, promote infrastructure_type
     # to the UNDP super-type.
+    #
+    # Portability note (Apr 2026 full-Postgres switch): two dialect-
+    # specific adjustments here.
+    #
+    #   (a) The original query used `UPPER(infrastructure_type) = :chip`.
+    #       On SQLite that works because enum columns are stored as plain
+    #       text. On Postgres `infrastructure_type` is a real ENUM type
+    #       and the planner refuses `UPPER(enum_col)` — there's no
+    #       implicit cast. Explicit `::text` cast makes it portable.
+    #
+    #   (b) On Postgres we also need `ALTER TYPE infratypeenum ADD VALUE`
+    #       for every UNDP super-type we're about to write into the
+    #       column. SQLite is untyped and accepts any string; Postgres
+    #       rejects "invalid input value for enum" until the label has
+    #       been added. The ADD VALUE statements must be OUTSIDE any
+    #       transaction in Postgres 12+, so we use `op.execute` with a
+    #       commit boundary (alembic runs each op.execute in its own
+    #       statement by default when autocommit_block is active).
+    bind = op.get_bind()
+    dialect = bind.dialect.name
+
+    if dialect == "postgresql":
+        # Widen the enum type BEFORE the UPDATE. IF NOT EXISTS needs
+        # Postgres 9.6+, which is comfortably below our 14+ target.
+        # Each ADD VALUE is its own statement per Postgres syntax rules.
+        with op.get_context().autocommit_block():
+            for new_val in sorted(set(CHIP_TO_UNDP.values())):
+                op.execute(sa.text(
+                    f"ALTER TYPE infratypeenum ADD VALUE IF NOT EXISTS '{new_val}'"
+                ))
+
+    enum_cast = "infrastructure_type::text" if dialect == "postgresql" else "infrastructure_type"
     for chip, undp in CHIP_TO_UNDP.items():
         op.execute(sa.text(
             "UPDATE reports "
             "SET infrastructure_sub_type = COALESCE(infrastructure_sub_type, :chip), "
             "    infrastructure_type = :undp "
-            "WHERE UPPER(infrastructure_type) = :chip"
+            f"WHERE UPPER({enum_cast}) = :chip"
         ).bindparams(chip=chip, undp=undp))
 
 

@@ -16,12 +16,40 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend (pytest + import check)
+    name: Backend (pytest + import check, DB=${{ matrix.database }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       APP_ENV: dev       # ← bypass P1.2/P1.8 fail-fast boot checks
       PYTHONUNBUFFERED: "1"
+    # Apr 2026 (full Postgres switch): run the backend pytest matrix
+    # against BOTH SQLite (historical default, cheap) and PostgreSQL 15
+    # (production target). SQLite keeps local-dev ergonomics; Postgres
+    # closes the deployment-risk gap that was "PostgreSQL prod" in the
+    # UNDP pitch but had never actually been exercised by CI.
+    strategy:
+      fail-fast: false
+      matrix:
+        database:
+          - sqlite
+          - postgres
+    services:
+      # Service container is started for every matrix cell; SQLite runs
+      # don't use it but paying the container spin-up is cheaper than
+      # conditionally declaring services per-matrix (not supported).
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: crisp
+          POSTGRES_PASSWORD: crisp
+          POSTGRES_DB: crisp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,25 +57,31 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: backend/requirements.txt
-      # Heavy CV/ML deps (mediapipe, easyocr, opencv) take a while to install.
-      # We install test deps first so the lighter suite can run even if the
-      # heavy optional deps fail on CI runners.
       - name: Install backend deps
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt || pip install $(grep -v -E "mediapipe|easyocr|faster-whisper|opencv" requirements.txt)
           if [ -f requirements-test.txt ]; then pip install -r requirements-test.txt; fi
-          # Always ensure pytest is present even if the project doesn't track it.
           pip install pytest pytest-asyncio httpx
       - name: Compile-check all Python modules
         working-directory: backend
         run: |
           python -m compileall -q app
-      - name: Run pytest
+      - name: Run pytest (SQLite)
+        if: matrix.database == 'sqlite'
         working-directory: backend
         run: |
-          pytest -q --tb=short || (echo "Pytest failed — see logs above." && exit 1)
+          pytest -q --tb=short || (echo "Pytest (SQLite) failed — see logs above." && exit 1)
+      - name: Run pytest (PostgreSQL 15)
+        if: matrix.database == 'postgres'
+        working-directory: backend
+        env:
+          # conftest reads PYTEST_DATABASE_URL with highest precedence so the
+          # test suite targets the service-container Postgres.
+          PYTEST_DATABASE_URL: postgresql+psycopg2://crisp:crisp@localhost:5432/crisp
+        run: |
+          pytest -q --tb=short || (echo "Pytest (Postgres) failed — see logs above." && exit 1)
 
   mobile:
     name: React Native typecheck

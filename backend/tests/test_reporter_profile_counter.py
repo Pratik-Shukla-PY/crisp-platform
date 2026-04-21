@@ -84,7 +84,14 @@ class TestReporterProfileCounter:
         for rid in (r1, r2):
             res = client.delete(f"/api/v1/reports/{rid}", headers=auth_header(admin_token))
             assert res.status_code == 200
-        # Rewind both rows so the purge picks them up.
+        # Rewind both rows so the purge picks them up. `expire_all()`
+        # forces the test session to re-read from DB — on Postgres the
+        # API's soft-delete commits live in a separate transaction and
+        # aren't visible from the test session's existing snapshot
+        # without an explicit refresh. SQLite's file-based transactions
+        # don't have this isolation, which is why this wasn't needed
+        # before the full-Postgres switch (Apr 2026).
+        db.expire_all()
         for r in db.query(Report).filter(Report.id.in_([r1, r2])).all():
             r.deletion_requested_at = datetime.now(timezone.utc) - timedelta(hours=25)
         db.commit()

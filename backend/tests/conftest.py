@@ -8,8 +8,30 @@ from datetime import datetime, timezone
 
 # Ensure backend app is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-os.environ["DATABASE_URL"] = "sqlite:///./test_crisp.db"
-os.environ["JWT_SECRET"] = "test-secret-key-do-not-use-in-production"
+
+# Apr 2026 — full Postgres switch. The DATABASE_URL the test suite uses
+# is decided by the following precedence:
+#
+#   1. A pytest-level `PYTEST_DATABASE_URL` env var — lets CI inject the
+#      service-container Postgres URL without stomping on the default.
+#   2. The already-exported `DATABASE_URL` — if someone ran
+#      `export DATABASE_URL=postgresql://...` in their shell, honour it.
+#      This is the "dev box with Postgres running" path.
+#   3. SQLite file `./test_crisp.db` — the zero-install fallback. Tests
+#      still run against SQLite so contributors cloning fresh don't need
+#      a Postgres daemon to run `pytest`.
+#
+# If the chosen DB is Postgres, we connect without `check_same_thread`
+# (that arg is SQLite-specific). The engine + session factory below
+# branch on the driver name so one codepath serves both dialects.
+TEST_DB_URL = (
+    os.environ.get("PYTEST_DATABASE_URL")
+    or os.environ.get("DATABASE_URL")
+    or "sqlite:///./test_crisp.db"
+)
+os.environ["DATABASE_URL"] = TEST_DB_URL
+os.environ.setdefault("JWT_SECRET", "test-secret-key-do-not-use-in-production")
+os.environ.setdefault("APP_ENV", "dev")
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -22,8 +44,16 @@ from app.core.security import create_access_token, hash_password
 
 # ── Database Fixture ──────────────────────────────────────────────────────────
 
-TEST_DB_URL = "sqlite:///./test_crisp.db"
-test_engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+# Dialect-specific engine args. check_same_thread is SQLite-only; Postgres
+# would reject it. pool_pre_ping survives stale connections on Postgres
+# which is the more realistic deployment shape.
+_engine_kwargs = {}
+if TEST_DB_URL.startswith("sqlite"):
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    _engine_kwargs["pool_pre_ping"] = True
+
+test_engine = create_engine(TEST_DB_URL, **_engine_kwargs)
 TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
@@ -37,19 +67,44 @@ def override_get_db():
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_db():
-    """Create all tables once for the test session."""
+    """Create all tables once for the test session.
+
+    Works on SQLite (file-backed) and PostgreSQL. On Postgres, drop_all
+    also has to clear the ENUM types that the tables reference — SQLAlchemy's
+    drop_all leaves lingering `CREATE TYPE` artefacts behind, which then
+    fail with "type already exists" on the next test run against a
+    warm DB. We reset by dropping the public schema wholesale in that case;
+    it's a test DB, nothing else relies on it.
+    """
     import app.models.report
     import app.models.auth
     import app.models.prediction
-    Base.metadata.drop_all(bind=test_engine)
-    Base.metadata.create_all(bind=test_engine)
+
+    if test_engine.url.drivername.startswith("postgresql"):
+        # Nuke everything (tables + enum types) so a re-run starts clean.
+        from sqlalchemy import text
+        with test_engine.begin() as conn:
+            conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+        Base.metadata.create_all(bind=test_engine)
+    else:
+        Base.metadata.drop_all(bind=test_engine)
+        Base.metadata.create_all(bind=test_engine)
+
     yield
-    Base.metadata.drop_all(bind=test_engine)
-    # Clean up test DB file
-    try:
-        os.remove("./test_crisp.db")
-    except:
-        pass
+
+    if test_engine.url.drivername.startswith("postgresql"):
+        from sqlalchemy import text
+        with test_engine.begin() as conn:
+            conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+    else:
+        Base.metadata.drop_all(bind=test_engine)
+        # Clean up SQLite DB file
+        try:
+            os.remove("./test_crisp.db")
+        except Exception:
+            pass
 
 
 @pytest.fixture

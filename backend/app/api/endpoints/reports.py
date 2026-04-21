@@ -1133,7 +1133,18 @@ def _purge_expired_deletions(db: Session):
     expired = []
     for r in pending:
         grace = r.deletion_grace_minutes or 1440
-        cutoff = r.deletion_requested_at.replace(tzinfo=timezone.utc) + timedelta(minutes=grace)
+        # Coerce to UTC safely regardless of whether the column returned
+        # a naive datetime (SQLite behaviour — DateTime(timezone=True) is
+        # advisory there, values come back without tzinfo) or a real
+        # tz-aware datetime (Postgres). `.replace(tzinfo=utc)` on an
+        # already-aware datetime OVERWRITES the offset without shifting
+        # the wall-clock — which silently shifted the cutoff 5.5h into
+        # the future on IST-defaulted Postgres servers. `.astimezone`
+        # correctly converts; the naive-branch replacement assumes the
+        # stored value is already UTC (matches how the column is written).
+        raw = r.deletion_requested_at
+        aware = raw.replace(tzinfo=timezone.utc) if raw.tzinfo is None else raw.astimezone(timezone.utc)
+        cutoff = aware + timedelta(minutes=grace)
         if now >= cutoff:
             expired.append(r)
     if not expired:

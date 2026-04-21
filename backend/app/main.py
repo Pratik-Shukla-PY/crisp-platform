@@ -113,7 +113,28 @@ import app.models.prediction  # Prediction zone + result tables
 
 # For development MVP: auto-create tables if they don't exist.
 # Production generally requires Alembic migrations.
-Base.metadata.create_all(bind=engine)
+#
+# Apr 2026 (full Postgres switch): `create_all` is GATED on non-production.
+# On SQLite dev it's a convenience — first `uvicorn` on a fresh checkout
+# creates every table without needing `alembic upgrade head` first.
+#
+# On Postgres, the same call races with Alembic:
+#   1. uvicorn boots → create_all materialises every table
+#   2. operator later runs `alembic upgrade head` → baseline migration
+#      tries CREATE TABLE → "relation already exists" → crash
+#   3. OR: alembic_version row is never inserted → all subsequent
+#      revisions try to run from scratch → crash
+#
+# Production MUST rely on `alembic upgrade head` as the sole schema
+# authority. APP_ENV=production skips create_all and trusts the migration
+# runner ran first. APP_ENV=dev keeps the zero-install-friction behaviour.
+if APP_ENV != "production":
+    Base.metadata.create_all(bind=engine)
+else:
+    logging.getLogger(__name__).info(
+        "APP_ENV=production — skipping Base.metadata.create_all. "
+        "Run `alembic upgrade head` BEFORE starting uvicorn in prod."
+    )
 
 # Migrate existing DBs: add new columns that don't exist yet (idempotent)
 def _migrate_schema():
@@ -209,7 +230,13 @@ def _migrate_schema():
                     f"Migrated: added reports.{', reports.'.join(added)}"
                 )
 
-_migrate_schema()
+# `_migrate_schema()` is a dev-convenience shim that hot-patches missing
+# columns on an existing SQLite DB so contributors cloning the repo for
+# the first time can just `uvicorn` without pre-running alembic. It uses
+# SQLite-isms (`DEFAULT 0` on BOOLEAN, `DATETIME` type name) that Postgres
+# rejects. In production Alembic is the source of truth anyway — skip.
+if APP_ENV != "production":
+    _migrate_schema()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

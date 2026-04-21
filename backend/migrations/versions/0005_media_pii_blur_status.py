@@ -56,10 +56,16 @@ def upgrade() -> None:
     # Keep this migration conservative: do NOT backfill 'complete' on old
     # rows. Leave them NULL and let the dashboard treat NULL as "legacy,
     # pre-tracking". Only new writes populate the column.
+    # Apr 2026: switched from SQLite-only `= 1` literal to SQLAlchemy's
+    # boolean binding so this migration is portable to PostgreSQL. On
+    # SQLite the column stored 0/1 as integers; on Postgres it's a real
+    # BOOLEAN type and `= 1` raises "operator does not exist: boolean =
+    # integer". `sa.true()` emits the right literal for whichever dialect
+    # is connected (TRUE on Postgres, 1 on SQLite).
     op.execute(sa.text(
         "UPDATE media SET pii_blur_status = 'not_needed' "
-        "WHERE pii_blur_status IS NULL AND client_blur_applied = 1"
-    ))
+        "WHERE pii_blur_status IS NULL AND client_blur_applied = :truthy"
+    ).bindparams(truthy=True))
 
 
 def downgrade() -> None:

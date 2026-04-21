@@ -88,7 +88,9 @@ class TestBlurhashRoundTrip:
         hash = "L6PZfSi_.AyE_3t7t7R**0o#DgR4"
         payload = {
             "device_hash": "TEST-BH-PERSIST-01",
-            "client_report_id": "bhtest-persist-0000-0000-000000000010",
+            # client_report_id is a VARCHAR(36) on Postgres — must fit.
+            # UUID-v4 is 36 chars including hyphens; use one here.
+            "client_report_id": "9b9c0a7e-5d31-4a8e-a0b1-1d11f0ba0010",
             "expected_media": 0,
             "blurhash": hash,
         }
@@ -137,10 +139,29 @@ class TestPartialAssemblySafeguards:
     """Phase-2.3 — refuse to write unreadable partial JPEGs."""
 
     def _make_media(self, db, media_id: str, total_chunks: int = 10):
-        # Minimal Media row — just the columns the partial path touches.
+        # Postgres enforces the `media.report_id` FK that SQLite lets
+        # through silently — ensure a matching report row exists before
+        # we insert media. Use a stable id derived from the media id so
+        # each test gets its own parent + no cross-test FK collisions.
+        from app.models.report import Report
+        parent_id = f"parent-{media_id}"[:36]
+        if db.query(Report).filter(Report.id == parent_id).first() is None:
+            db.add(Report(
+                id=parent_id,
+                source="APP",
+                status="PENDING",
+                sync_status="SYNCED",
+                severity="UNKNOWN",
+                infrastructure_type="OTHER",
+                is_auto_submitted=False,
+                expected_media=1,
+                received_media=0,
+                reviewer_verdict="NOT_REVIEWED",
+            ))
+            db.flush()
         media = Media(
             id=media_id,
-            report_id="partial-test-parent-report",
+            report_id=parent_id,
             type="IMAGE",
             resolution_tier="LOW",
             url="",
