@@ -111,132 +111,76 @@ from app.models.report import Base
 import app.models.auth        # Ensure auth tables are registered with Base.metadata
 import app.models.prediction  # Prediction zone + result tables
 
-# For development MVP: auto-create tables if they don't exist.
-# Production generally requires Alembic migrations.
+# Apr 2026 — SQLite fully retired. Alembic is the sole schema authority.
+# Before starting uvicorn, run `alembic upgrade head` (dev + prod).
+# The previous `Base.metadata.create_all(bind=engine)` call was a
+# SQLite-era zero-install shortcut that raced with Alembic on Postgres
+# (create_all → CREATE TABLE; alembic upgrade then hits "relation already
+# exists"). The `_migrate_schema()` column-adder hot-patcher is also
+# gone — its `ALTER TABLE ADD COLUMN … DEFAULT 0` syntax was SQLite-only
+# (Postgres needs `DEFAULT FALSE` on BOOLEAN, `TIMESTAMP` not `DATETIME`,
+# etc.), and Alembic covers every column it used to hot-patch. See
+# ``docs/MIGRATIONS.md`` + ``scripts/dev-setup.sh``.
 #
-# Apr 2026 (full Postgres switch): `create_all` is GATED on non-production.
-# On SQLite dev it's a convenience — first `uvicorn` on a fresh checkout
-# creates every table without needing `alembic upgrade head` first.
-#
-# On Postgres, the same call races with Alembic:
-#   1. uvicorn boots → create_all materialises every table
-#   2. operator later runs `alembic upgrade head` → baseline migration
-#      tries CREATE TABLE → "relation already exists" → crash
-#   3. OR: alembic_version row is never inserted → all subsequent
-#      revisions try to run from scratch → crash
-#
-# Production MUST rely on `alembic upgrade head` as the sole schema
-# authority. APP_ENV=production skips create_all and trusts the migration
-# runner ran first. APP_ENV=dev keeps the zero-install-friction behaviour.
-if APP_ENV != "production":
-    Base.metadata.create_all(bind=engine)
-else:
-    logging.getLogger(__name__).info(
-        "APP_ENV=production — skipping Base.metadata.create_all. "
-        "Run `alembic upgrade head` BEFORE starting uvicorn in prod."
+# Belt-and-braces: verify the DB is actually at alembic head on boot so
+# a forgotten `alembic upgrade head` fails loudly with a clear message
+# instead of surfacing later as cryptic "column does not exist" errors.
+def _assert_alembic_head() -> None:
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        try:
+            row = conn.execute(text(
+                "SELECT version_num FROM alembic_version"
+            )).first()
+        except Exception:
+            raise RuntimeError(
+                "Database has no `alembic_version` table — run "
+                "`alembic upgrade head` before starting uvicorn. "
+                "CRISP is Postgres-only as of Apr 2026."
+            )
+    current = row[0] if row else None
+    if not current:
+        raise RuntimeError(
+            "Database has no alembic revision stamped. Run "
+            "`alembic upgrade head` before starting uvicorn."
+        )
+    # Cheap head lookup: read migrations/versions/ and find the one whose
+    # `revision` appears but nobody has as `down_revision`. Avoids hard-
+    # coding a version string that would drift with every new migration.
+    import os, re
+    versions_dir = os.path.join(os.path.dirname(__file__), "..", "migrations", "versions")
+    revisions: dict[str, str] = {}   # revision → down_revision ("" for baseline)
+    for fn in os.listdir(versions_dir):
+        if not fn.endswith(".py") or fn.startswith("__"):
+            continue
+        with open(os.path.join(versions_dir, fn), encoding="utf-8") as f:
+            src = f.read()
+        m = re.search(r'^revision(?:\s*:\s*str)?\s*=\s*["\']([^"\']+)', src, re.M)
+        d = re.search(r'^down_revision(?:\s*:[^=]+)?\s*=\s*(?:["\']([^"\']+)["\']|None)', src, re.M)
+        if m:
+            revisions[m.group(1)] = (d.group(1) if d and d.group(1) else "")
+    # Head = a revision nobody references as their down_revision.
+    parents = {dv for dv in revisions.values() if dv}
+    heads = [r for r in revisions if r not in parents]
+    if len(heads) == 1 and current != heads[0]:
+        raise RuntimeError(
+            f"Database is stamped at revision {current!r} but head is "
+            f"{heads[0]!r}. Run `alembic upgrade head` before starting uvicorn."
+        )
+
+try:
+    _assert_alembic_head()
+except RuntimeError as _err:
+    # In APP_ENV=production, fail fast so Kubernetes / ECS restarts the
+    # pod and the operator sees the error loudly. In dev, log a prominent
+    # warning but boot anyway so a contributor who's mid-debugging without
+    # a recent upgrade can still iterate.
+    if APP_ENV == "production":
+        raise
+    logging.getLogger(__name__).warning(
+        "Schema check: %s (APP_ENV=%s — booting anyway; in prod this is fatal)",
+        _err, APP_ENV,
     )
-
-# Migrate existing DBs: add new columns that don't exist yet (idempotent)
-def _migrate_schema():
-    from sqlalchemy import text, inspect as sa_inspect
-    insp = sa_inspect(engine)
-    if "reports" in insp.get_table_names():
-        existing = {c["name"] for c in insp.get_columns("reports")}
-        new_cols = {
-            "damage_classification": "VARCHAR(20)",
-            "crisis_type": "VARCHAR(30)",
-            "infrastructure_name": "VARCHAR(255)",
-            "debris_clearing_needed": "BOOLEAN",
-            "service_status": "JSON",
-            "building_id": "VARCHAR(36)",
-        }
-        with engine.begin() as conn:
-            for col, typ in new_cols.items():
-                if col not in existing:
-                    conn.execute(text(f"ALTER TABLE reports ADD COLUMN {col} {typ}"))
-                    logging.getLogger(__name__).info(f"Migrated: added reports.{col}")
-
-    # P1.1 — `media.updated_at` is used by the assembly lock's stale-escape
-    # logic. Add it if missing on an existing DB. SQLite can't add a column
-    # with a non-constant default, so we add as NULL and backfill with
-    # created_at so existing rows aren't treated as infinitely-stale.
-    if "media" in insp.get_table_names():
-        existing_media = {c["name"] for c in insp.get_columns("media")}
-        if "updated_at" not in existing_media:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE media ADD COLUMN updated_at DATETIME"))
-                conn.execute(text("UPDATE media SET updated_at = COALESCE(created_at, CURRENT_TIMESTAMP)"))
-                logging.getLogger(__name__).info("Migrated: added media.updated_at and backfilled")
-
-        # Guaranteed-delivery pipeline — SMALL/MEDIUM/LARGE variants of one
-        # captured photo share a `photo_group_id`. Nullable so existing media
-        # (pre-variant-pipeline) keeps working unchanged. Index speeds up the
-        # dashboard's group-by query.
-        if "photo_group_id" not in existing_media:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE media ADD COLUMN photo_group_id VARCHAR(36)"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_media_photo_group ON media(photo_group_id)"))
-                logging.getLogger(__name__).info("Migrated: added media.photo_group_id + index")
-
-        # Apr 2026 — `client_blur_applied` flag. When the client has already
-        # face-blurred the image locally, the server skips its own blur_pii
-        # pass to avoid a second lossy re-encode. Legacy clients that don't
-        # send the flag default to FALSE so server blur still runs for them.
-        if "client_blur_applied" not in existing_media:
-            with engine.begin() as conn:
-                conn.execute(text(
-                    "ALTER TABLE media ADD COLUMN client_blur_applied "
-                    "BOOLEAN NOT NULL DEFAULT 0"
-                ))
-                logging.getLogger(__name__).info("Migrated: added media.client_blur_applied")
-
-    # Phase 4 (Apr 2026) — AutoSubmitRegion model. Idempotent CREATE TABLE
-    # so existing deployments pick it up on next boot without an external
-    # migration tool. `create_all` on Base.metadata handles this for any
-    # model declared on the same Base — that call already happens at
-    # import time in app/db/session.py, but we touch it here as a belt so
-    # the order is explicit even if that changes.
-    try:
-        from app.models.report import AutoSubmitRegion  # noqa: F401
-        AutoSubmitRegion.__table__.create(bind=engine, checkfirst=True)
-    except Exception as e:
-        logging.getLogger(__name__).warning(f"AutoSubmitRegion migration: {e}")
-
-    # Phase 5 (Apr 2026) — reviewer workflow columns on reports.
-    if "reports" in insp.get_table_names():
-        existing_r = {c["name"] for c in insp.get_columns("reports")}
-        reviewer_cols = {
-            "reviewed_at": "DATETIME",
-            "reviewer_verdict": "VARCHAR(20)",
-            "action_taken": "TEXT",
-            "help_dispatched_at": "DATETIME",
-            "help_arrived_at": "DATETIME",
-        }
-        with engine.begin() as conn:
-            added = []
-            for col, typ in reviewer_cols.items():
-                if col not in existing_r:
-                    conn.execute(text(f"ALTER TABLE reports ADD COLUMN {col} {typ}"))
-                    added.append(col)
-            if "reviewer_verdict" in added:
-                # Backfill existing rows to NOT_REVIEWED so the enum never
-                # hits a NULL on read.
-                conn.execute(text(
-                    "UPDATE reports SET reviewer_verdict = 'NOT_REVIEWED' "
-                    "WHERE reviewer_verdict IS NULL"
-                ))
-            if added:
-                logging.getLogger(__name__).info(
-                    f"Migrated: added reports.{', reports.'.join(added)}"
-                )
-
-# `_migrate_schema()` is a dev-convenience shim that hot-patches missing
-# columns on an existing SQLite DB so contributors cloning the repo for
-# the first time can just `uvicorn` without pre-running alembic. It uses
-# SQLite-isms (`DEFAULT 0` on BOOLEAN, `DATETIME` type name) that Postgres
-# rejects. In production Alembic is the source of truth anyway — skip.
-if APP_ENV != "production":
-    _migrate_schema()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

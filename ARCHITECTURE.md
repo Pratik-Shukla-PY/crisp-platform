@@ -11,7 +11,7 @@ CRISP is a multi-channel crisis reporting platform with 3 layers:
            │  Telegram Bot           │────>│  Whisper Transcription   │───>│  Map + Clusters      │
            │  WhatsApp Bot           │     │  Claude AI Geocoding     │    │  AI Assessment       │
            │  SMS Gateway            │     │  Chunked Media Assembly  │    │  Satellite Verify    │
-           │  IVR Voice Call         │     │  SQLite/PostgreSQL       │    │  PDF Export          │
+           │  IVR Voice Call         │     │  PostgreSQL 15           │    │  PDF Export          │
            └─────────────────────────┘     └──────────────────────────┘    └─────────────────────┘
 ```
 

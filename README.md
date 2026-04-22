@@ -69,7 +69,7 @@ CRISP is an open-source, offline-first platform that enables communities to repo
 | Messaging | Telegram Bot API (long-polling), WhatsApp Cloud API, Twilio (SMS+IVR) |
 | Auth | JWT (python-jose), bcrypt (passlib), OTP email, RBAC, SSO stubs |
 | Prediction | Claude Sonnet + OpenWeatherMap + USGS Earthquake + geospatial heuristics |
-| Database | SQLite (dev) / PostgreSQL (prod) |
+| Database | PostgreSQL 15 (dev + prod; SQLite retired Apr 2026) |
 
 ---
 
@@ -191,6 +191,8 @@ All Claude API calls use `cache_control: {"type": "ephemeral"}` on static system
 ### Prerequisites
 - Python 3.10+
 - A modern browser (Chrome, Safari, Firefox)
+- **PostgreSQL 15** — via Docker Compose (zero host install) or Homebrew.
+  SQLite was retired Apr 2026; see `docs/MIGRATIONS.md` for why.
 
 ### 1. Clone & Configure
 ```bash
@@ -200,7 +202,15 @@ cp .env.example .env
 # Edit .env with your API keys (see API Keys section)
 ```
 
-### 2. Run Locally
+### 2. Provision Postgres (one-time)
+```bash
+bash scripts/dev-setup.sh
+```
+This installs/starts Postgres 15 (Docker Compose preferred, Homebrew
+fallback on macOS), creates the `crisp` role + database, and runs
+`alembic upgrade head`. Sets the correct `DATABASE_URL` for you.
+
+### 3. Run Locally
 ```bash
 bash start.sh
 ```

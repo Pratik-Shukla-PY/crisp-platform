@@ -30,6 +30,26 @@ pip install -r requirements.txt -q
 pip install anthropic httpx python-dotenv -q 2>/dev/null
 mkdir -p "$DIR/logs"
 
+# Apr 2026 — CRISP is Postgres-only. If DATABASE_URL is unset, fall back
+# to the local default that scripts/dev-setup.sh provisions. The backend
+# refuses to boot on an unset/SQLite DSN (config.py), so setting it here
+# is belt-and-braces — start.sh should Just Work for anyone who has
+# already run dev-setup.sh.
+if [ -z "${DATABASE_URL:-}" ]; then
+    export DATABASE_URL="postgresql+psycopg2://crisp:crisp@localhost:5432/crisp"
+    echo "  (DATABASE_URL defaulted to localhost crisp DB — override by exporting first)"
+fi
+export APP_ENV="${APP_ENV:-dev}"
+
+# Bring the schema up to date BEFORE uvicorn starts. Running this in the
+# foreground means a failed migration fails start.sh loudly instead of
+# leaving uvicorn up against a stale schema.
+echo "  Running alembic upgrade head..."
+if ! alembic upgrade head 2>&1 | tail -20; then
+    echo "  ✗ alembic upgrade failed — aborting. See output above."
+    exit 1
+fi
+
 nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload \
     > "$DIR/logs/backend.log" 2>&1 &
 BACKEND_PID=$!
