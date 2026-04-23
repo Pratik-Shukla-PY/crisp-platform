@@ -186,10 +186,18 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
     db.flush()
 
     # Generate and send OTP
+    # Phase 1 (Apr 2026 — Optional reporter login): OTPRecord now
+    # requires `destination` + `channel`. Legacy email-only callers
+    # must populate both. `email` column retained for audit compat.
     code = generate_otp()
     otp = OTPRecord(
-        email=req.email, code=code, purpose="SIGNUP",
-        expires_at=get_otp_expiry(), ip_address=_get_ip(request),
+        destination=req.email,
+        channel="EMAIL",
+        email=req.email,
+        code=code,
+        purpose="SIGNUP",
+        expires_at=get_otp_expiry(),
+        ip_address=_get_ip(request),
     )
     db.add(otp)
     _audit(db, user.id, req.email, "REGISTER", request)
@@ -525,11 +533,14 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
 
-    # MFA check
+    # MFA check — Phase 1 (Apr 2026): OTPRecord requires destination+channel.
     if user.mfa_enabled:
         code = generate_otp()
-        db.add(OTPRecord(email=req.email, code=code, purpose="MFA",
-                         expires_at=get_otp_expiry(), ip_address=_get_ip(request)))
+        db.add(OTPRecord(
+            destination=req.email, channel="EMAIL", email=req.email,
+            code=code, purpose="MFA",
+            expires_at=get_otp_expiry(), ip_address=_get_ip(request),
+        ))
         db.commit()
         send_otp_email(req.email, code, "MFA")
         return {"requires_mfa": True, "message": "MFA code sent to your email."}
