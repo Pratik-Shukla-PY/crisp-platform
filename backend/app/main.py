@@ -389,6 +389,111 @@ def health_check():
     return body
 
 
+@app.get("/api/v1/health/db", tags=["system"])
+def db_health_check():
+    """Apr 2026 — explicit DB-connectivity probe.
+
+    The basic `/health` endpoint doesn't touch the database; an RDS
+    outage + a still-booting uvicorn would look healthy to k8s. This
+    endpoint:
+
+      * Opens a fresh connection (no pool re-use of a maybe-stale conn).
+      * Runs ``SELECT 1`` + reads `alembic_version.version_num`.
+      * Reports the configured driver + whether the schema is at head.
+
+    Return shape (always JSON):
+        200  { "status": "healthy",   "driver": "postgresql", "revision": "0006_bh", "latency_ms": 3.2 }
+        503  { "status": "unavailable","driver": "postgresql", "error": "..." }
+        200  { "status": "degraded",  "driver": "postgresql", "revision": "0004_bin",
+                "message": "DB reachable but schema behind head" }
+
+    Public — no auth gate — same policy as `/health` and `/health/pii`.
+    """
+    from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+    import time
+
+    driver = engine.url.drivername if engine else "unknown"
+    start = time.perf_counter()
+
+    # Step 1 — basic connectivity. A failure here is a real outage (DB
+    # down, credentials wrong, network partition): return 503.
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unavailable",
+                "driver": driver,
+                "error": str(e)[:200],
+            },
+        )
+
+    # Step 2 — alembic stamp. A DB with no `alembic_version` table is
+    # not "down" — it's "reachable but unstamped." Common in test
+    # fixtures that use `Base.metadata.create_all`. Return 200 with
+    # status=degraded + revision=None so orchestrators don't tear down
+    # a working pod just because Alembic hasn't been invoked.
+    rev = None
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT version_num FROM alembic_version")).first()
+        rev = row[0] if row else None
+    except Exception:
+        rev = None
+    latency_ms = round((time.perf_counter() - start) * 1000, 2)
+
+    # Compare against the head revision the same way `_assert_alembic_head`
+    # does at boot — scan migrations/versions/ for the revision nobody
+    # references as down_revision.
+    try:
+        import os as _os, re as _re
+        versions_dir = _os.path.join(_os.path.dirname(__file__), "..", "migrations", "versions")
+        revisions: dict[str, str] = {}
+        for fn in _os.listdir(versions_dir):
+            if not fn.endswith(".py") or fn.startswith("__"):
+                continue
+            with open(_os.path.join(versions_dir, fn), encoding="utf-8") as f:
+                src = f.read()
+            m = _re.search(r'^revision(?:\s*:\s*str)?\s*=\s*["\']([^"\']+)', src, _re.M)
+            d = _re.search(
+                r'^down_revision(?:\s*:[^=]+)?\s*=\s*(?:["\']([^"\']+)["\']|None)',
+                src, _re.M,
+            )
+            if m:
+                revisions[m.group(1)] = (d.group(1) if d and d.group(1) else "")
+        parents = {dv for dv in revisions.values() if dv}
+        heads = [r for r in revisions if r not in parents]
+        head = heads[0] if len(heads) == 1 else None
+    except Exception:
+        head = None
+
+    status = "healthy"
+    message = None
+    if rev is None:
+        # DB reachable but no alembic_version row. Common in test
+        # fixtures that use create_all without stamping. Not an outage
+        # — return 200 degraded + explicit message.
+        status = "degraded"
+        message = "DB reachable but alembic_version missing (schema not stamped)"
+    elif head and rev != head:
+        status = "degraded"
+        message = f"DB reachable but schema is {rev!r} vs head {head!r}"
+
+    body = {
+        "status": status,
+        "driver": driver,
+        "revision": rev,
+        "head": head,
+        "latency_ms": latency_ms,
+    }
+    if message:
+        body["message"] = message
+    return body
+
+
 @app.get("/api/v1/health/pii", tags=["system"])
 def pii_health_check():
     """Apr 2026 — expose PII-blur backend health so operators can see

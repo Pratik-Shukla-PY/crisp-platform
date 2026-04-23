@@ -10,13 +10,65 @@ import {
   ScrollView, TextInput, Alert, Image, StatusBar, Platform,
   Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView,
   Animated, Easing, AccessibilityInfo, Modal,
-  InteractionManager,
+  InteractionManager, Dimensions, BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from './constants/colors';
 import { t, setLanguage, detectLanguage, getAvailableLanguages, bootstrapLanguage, applyTextDirection } from './services/i18n';
 import ConsentOverlay from './components/ConsentOverlay';
 import BuildingFootprintPicker from './components/BuildingFootprintPicker';
+import IconTile from './components/IconTile';
+import { reviewReducer, type Page as ReviewPage } from './components/reviewReducer';
+
+/**
+ * Apr 2026 UI v2 rollout flag.
+ *
+ * Default ON — every new install boots into the 3-page review flow with
+ * SVG icons, SafeAreaView wrapping, responsive padding, and the rest of
+ * the audit fixes below. Setting `crisp_ui_v2` to literal `"off"` in
+ * AsyncStorage reverts to the pre-v2 monolithic review screen so we can
+ * roll back without an app update if field testing surfaces a regression.
+ *
+ * Reasoning for default-on: the v2 flow is required for the 23 June UNDP
+ * submission window, so we treat v1 as the escape hatch, not the baseline.
+ * The flag is read ONCE at mount (no subscription) — we don't want the UI
+ * to reshuffle mid-flow if someone flips the storage key from devtools.
+ */
+async function readUiV2Flag(): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem('crisp_ui_v2');
+    return raw === null ? true : raw === 'on';
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Phase B4 (Apr 2026) — UI v3 flag read. Same pattern as readUiV2Flag:
+ * default on, opt-out via AsyncStorage key `crisp_ui_v3` = 'off'.
+ * Drives the 8-stage capture flow (home → where → infra → crisis
+ * → extras → photo → audio → review → success). When off, the RN app
+ * keeps the v2 navigation (home → photo → audio → review → success).
+ */
+async function readUiV3Flag(): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem('crisp_ui_v3');
+    return raw === null ? true : raw === 'on';
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Responsive padding helper — replaces the fixed `padding:24` pattern
+ * across the capture flow. At 360 px and above we stay at 24 px; on
+ * smaller devices (280×480 low-end Android target) the padding scales
+ * down to 6 % of viewport width so chip rows and button columns don't
+ * overflow the safe drawable region. Audit issue R8.
+ */
+function responsivePad(): number {
+  return Math.min(24, Dimensions.get('window').width * 0.06);
+}
 // NOTE on custom fonts: the PWA ships Inter + Outfit via Google Fonts;
 // RN's expo-font can mirror this via @expo-google-fonts/inter + outfit
 // packages. Deferred because the download gating adds 300–500ms of
@@ -26,6 +78,11 @@ import BuildingFootprintPicker from './components/BuildingFootprintPicker';
 // Track the upgrade via the UNDP-ALIGNMENT-CHANGELOG typography entry.
 import { initDatabase, enqueueReport, getQueueCount } from './services/database';
 import { processQueue } from './services/syncEngine';
+import { preCacheNearest as _bldgPreCacheNearest, type NearbyBuilding } from './services/buildingCache';
+const preCacheNearest = _bldgPreCacheNearest;
+// Phase 1 (Apr 2026 — Optional reporter login). Anonymous-first auth
+// layer; imported lazily since the RN boot path mustn't block on auth.
+import * as AuthStore from './services/auth';
 import NetInfo from '@react-native-community/netinfo';
 import * as crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
@@ -49,7 +106,21 @@ import { getEnabledRegions, findActiveRegion, Region } from './services/regionCa
 // Apr 2026 "My Reports" spec — `report_detail` is a new full-screen view
 // with photo / timeline / metadata / feedback + per-report delete. Parity
 // with PWA's stage-report-detail.
-type Screen = 'home' | 'photo' | 'audio' | 'review_details' | 'review_confirm' | 'success' | 'history' | 'report_detail';
+// Phase B4 (Apr 2026 UI v3) — 4 new screen values for the 8-stage capture
+// flow reorder (parity with PWA). Default ON via UI_V3_ENABLED below; flip
+// to 'off' in AsyncStorage key `crisp_ui_v3` to revert.
+//
+//   v3 path: home → where → infra → crisis → extras → photo → audio
+//          → review_confirm → success
+//
+//   v2 path: home → photo → audio → review_details → review_confirm → success
+type Screen =
+  | 'home'
+  | 'where' | 'infra' | 'crisis' | 'extras'       // v3 additions
+  | 'photo' | 'audio' | 'review_details' | 'review_confirm'
+  | 'success' | 'history' | 'report_detail'
+  // Phase 1 (Apr 2026 — Optional reporter login) — off-flow screens.
+  | 'login' | 'settings';
 
 /**
  * Schedule heavy async work to run AFTER any user interaction (touch, scroll,
@@ -74,6 +145,19 @@ function _runAfterInteractions<T>(asyncFn: () => Promise<T>): Promise<T> {
     });
   });
 }
+
+// Apr 2026 UI v3 — per-incident photo cap (PWA/RN parity, see mobile-app/src/app.js).
+// 4 extras + 1 primary = 5 photos total. Guarded at every _ingestExtraFromUri
+// call site so a future code path can't accidentally bypass. Enforced on the
+// client AND on the server's chunked-upload ceiling — matches PWA behaviour.
+const MAX_EXTRA_PHOTOS = 4;
+const MAX_PHOTOS_TOTAL = MAX_EXTRA_PHOTOS + 1;   // main + extras
+
+// Throttle ref for the cap-reached Alert — prevents 10 popups when the user
+// selects 10 photos from the gallery while already at cap. First trigger in a
+// 1200-ms window shows the alert; subsequent triggers skip it.
+let _lastCapAlertAt = 0;
+const _CAP_ALERT_MIN_MS = 1200;
 
 const BADGE_ICONS: Record<string,string> = { NEWCOMER: '🌱', HELPER: '🤝', GUARDIAN: '🛡', HERO: '🦸' };
 function BadgeCard({ deviceHash }: { deviceHash: string }) {
@@ -225,7 +309,8 @@ function FlowProgress({ step, have }: {
                        : st === 'done' ? '#4ade80'
                        : st === 'missing' ? '#f87171'
                        : 'rgba(255,255,255,0.5)',
-                  fontSize: 10, fontWeight: st === 'active' ? '700' : '600',
+                  // Apr 2026 UI v2 (R6): 10 → 13 legibility floor.
+                  fontSize: 13, fontWeight: st === 'active' ? '700' : '600',
                   marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.3,
                 }}>{LABELS[n - 1]}</Text>
               </View>
@@ -311,12 +396,27 @@ function AutoSubmitTimer({ region, onFire, onCancel }: {
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [lang, setLang] = useState('en');
+  // Apr 2026 UI v2 flag — see readUiV2Flag() for rationale. Default true so
+  // a missing storage key lands on the new flow; flip to 'off' to revert.
+  const [uiV2, setUiV2] = useState<boolean>(true);
+  // Apr 2026 UI v3 flag — Phase B4 8-stage capture flow. See readUiV3Flag().
+  const [uiV3, setUiV3] = useState<boolean>(true);
+  // Apr 2026 UI v2: 3-page review split state. `reviewPage` drives the
+  // sub-screen inside `review_details`; the old single-page review remains
+  // as the v1 fallback path when uiV2 is false. Starts at 1 — reset to 1
+  // on stage entry so a resumed draft doesn't flash page 2 before
+  // the user re-orients.
+  const [reviewPage, setReviewPage] = useState<ReviewPage>(1);
   const [queueCount, setQueueCount] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [description, setDescription] = useState('');
-  const [infraType, setInfraType] = useState('ROAD');
+  // Phase B4 (Apr 2026 UI v3) — default to the first UNDP super-type
+  // chip (RESIDENTIAL). `ROAD` was the v2 default before the chip set
+  // switched to UNDP Appendix-1 taxonomy. Backend accepts both enum
+  // values so in-flight offline queues keep replaying cleanly.
+  const [infraType, setInfraType] = useState('RESIDENTIAL');
   const [severity, setSeverity] = useState('MODERATE');
   const [crisisType, setCrisisType] = useState('FLOOD');
   const [damageClass, setDamageClass] = useState('PARTIAL');  // UNDP: MINIMAL / PARTIAL / COMPLETE
@@ -330,6 +430,65 @@ export default function App() {
   // future feature wants to reintroduce the inputs.
   const [infraName, setInfraName] = useState('');
   const [debrisClearing, setDebrisClearing] = useState(false);
+  // Apr 2026 UI v2.1 — tracks whether `infraName` was auto-filled from
+  // an OSM tag vs typed manually. Only auto-cleared values when the
+  // user clears the building selection; a manually-typed name survives.
+  const [infraNameFromOsm, setInfraNameFromOsm] = useState(false);
+  // Phase B2 (Apr 2026 UI v3) — cached nearest-building list populated by
+  // preCacheNearest on GPS-ready. Non-authoritative; buildingId remains
+  // the truth for any actual selection.
+  const [nearbyBuildings, setNearbyBuildings] = useState<NearbyBuilding[]>([]);
+
+  // Phase 1 (Apr 2026 — Optional reporter login). State is sourced from
+  // AuthStore (services/auth.ts); these local copies exist so React
+  // re-renders the Login/account pill when they change. Never blocks
+  // the reporting flow — every call is best-effort.
+  const [authReady, setAuthReady] = useState(false);
+  const [authLoggedIn, setAuthLoggedIn] = useState(false);
+  const [authDisplay, setAuthDisplay] = useState<string | null>(null);
+  // Login screen state — simple in-place wizard (step 1 → 2 → 3).
+  const [loginChannel, setLoginChannel] = useState<'PHONE'|'EMAIL'>('PHONE');
+  const [loginCC, setLoginCC] = useState('+91');
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginCode, setLoginCode] = useState('');
+  const [loginStep, setLoginStep] = useState<1|2|3>(1);
+  const [loginError, setLoginError] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginLinkable, setLoginLinkable] = useState(0);
+  const [loginDestination, setLoginDestination] = useState('');
+  // Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — auto date/time label
+  // painted on stage-where. Ticks every 60 s via a useEffect hook below;
+  // purely local (`new Date()`), zero network, zero wait.
+  const [whereAutoTime, setWhereAutoTime] = useState<string>(() => {
+    try {
+      const now = new Date();
+      return `${now.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' })} · ${now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+    } catch {
+      return new Date().toISOString().slice(0, 16).replace('T', ' ');
+    }
+  });
+  useEffect(() => {
+    const tick = () => {
+      try {
+        const now = new Date();
+        setWhereAutoTime(`${now.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' })} · ${now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`);
+      } catch {
+        setWhereAutoTime(new Date().toISOString().slice(0, 16).replace('T', ' '));
+      }
+    };
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, []);
+  // Phase B4 (Apr 2026 UI v3) — auto-derive severity from damage class so
+  // stage-extras can drop the explicit severity chips.
+  useEffect(() => {
+    if (!uiV3) return;
+    const map: Record<string, string> = { MINIMAL: 'MINOR', NO_DAMAGE: 'MINOR', PARTIAL: 'MODERATE', COMPLETE: 'SEVERE', DESTROYED: 'SEVERE' };
+    const next = map[damageClass] || 'MODERATE';
+    if (severity !== next) setSeverity(next);
+  }, [damageClass, uiV3]);
   // PR 6 note: RN's home screen already renders the full flag row from
   // getAvailableLanguages() inline, so no overlay is needed — the existing
   // UX already satisfies the "non-redundant EN + picker" goal that PR 6
@@ -445,9 +604,35 @@ export default function App() {
    * flight would otherwise corrupt neighbour entries' variants.
    */
   const _ingestExtraFromUri = (rawUri: string, rawB64: string) => {
+    // Phase A1 (Apr 2026 UI v3) — enforce per-incident photo cap.
+    // Create the entry up-front so the downstream variant closure can match
+    // by object identity. Then atomically append inside a functional
+    // setState, which is what guarantees a rapid multi-select can't race
+    // past MAX_EXTRA_PHOTOS.
     const groupId = crypto.randomUUID();
     const entry = { uri: rawUri, base64: rawB64, groupId, variants: null as PhotoVariants | null };
-    setExtraPhotos((xs) => [...xs, entry]);
+    let pushed = false;
+    setExtraPhotos((xs) => {
+      if (xs.length >= MAX_EXTRA_PHOTOS) {
+        return xs;
+      }
+      pushed = true;
+      return [...xs, entry];
+    });
+    if (!pushed) {
+      // User has hit the 5-photo limit. One localised alert regardless of
+      // how many rejects happen in the same synchronous batch (10-photo
+      // gallery pick → one popup, not ten). Matches the PWA's `photo_cap_reached`
+      // toast added in the same April-2026 sprint.
+      const now = Date.now();
+      if (now - _lastCapAlertAt > _CAP_ALERT_MIN_MS) {
+        _lastCapAlertAt = now;
+        try {
+          Alert.alert('', (t as any)('photo_cap_reached') || `Max ${MAX_PHOTOS_TOTAL} photos per report`);
+        } catch (_) { /* best-effort */ }
+      }
+      return;
+    }
     // Defer the blur+variants pipeline via InteractionManager so the UI
     // can finish handling the user's shutter/Done tap before TF.js / PII
     // blur saturates the JS thread. Without this, the Next / shutter
@@ -516,13 +701,29 @@ export default function App() {
         _ingestExtraFromUri(asset.uri, asset.base64!);
       }
 
+      // Phase A1 (Apr 2026 UI v3) — if the cap has been reached after this
+      // snap, short-circuit the "Take another?" prompt. We peek at the
+      // current state via a functional update-noop (the only synchronous
+      // way to read extras-length inside a while loop that might batch
+      // setState callbacks).
+      let currentExtrasLen = 0;
+      setExtraPhotos((xs) => { currentExtrasLen = xs.length; return xs; });
+      if (currentExtrasLen >= MAX_EXTRA_PHOTOS) {
+        try {
+          Alert.alert('', (t as any)('photo_cap_reached') || `Max ${MAX_PHOTOS_TOTAL} photos per report`);
+        } catch (_) { /* best-effort */ }
+        break;
+      }
+
       const wantMore = await new Promise<boolean>((resolve) => {
+        // Apr 2026 i18n sweep (R7) — alert title/body/buttons now route
+        // through keys so field workers see prompts in their own locale.
         Alert.alert(
-          'Photo added ✓',
-          'Take another?',
+          t('take_another_title'),
+          t('take_another_body'),
           [
-            { text: 'Done', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Yes', onPress: () => resolve(true) },
+            { text: t('btn_done'), style: 'cancel', onPress: () => resolve(false) },
+            { text: t('take_another_yes'), onPress: () => resolve(true) },
           ],
           { cancelable: false, onDismiss: () => resolve(false) }
         );
@@ -545,12 +746,28 @@ export default function App() {
     await detectNetworkTier();
     const config = getAdaptiveConfig();
 
+    // Phase A1 (Apr 2026 UI v3) — cap the gallery picker's selectionLimit so
+    // the user can't even see the ghost of a 6th photo. Accounts for the
+    // primary slot: if it's empty, one of the picked assets fills it (no
+    // drain on the extras quota); if it's taken, every pick is an extra.
+    const primaryPresent = !!photoUri;
+    const extrasLeft = Math.max(0, MAX_EXTRA_PHOTOS - extraPhotos.length);
+    const selectionLimit = primaryPresent ? extrasLeft : extrasLeft + 1;
+    if (selectionLimit <= 0) {
+      const now = Date.now();
+      if (now - _lastCapAlertAt > _CAP_ALERT_MIN_MS) {
+        _lastCapAlertAt = now;
+        Alert.alert('', (t as any)('photo_cap_reached') || `Max ${MAX_PHOTOS_TOTAL} photos per report`);
+      }
+      return;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: config.imageQuality,
       base64: true,
       allowsMultipleSelection: true,
-      selectionLimit: 10,
+      selectionLimit,
     });
     if (result.canceled || !result.assets?.length) return;
 
@@ -576,6 +793,20 @@ export default function App() {
       Alert.alert(t('permission_needed'), t('permission_gallery'));
       return;
     }
+    // Phase A1 (Apr 2026 UI v3) — narrow the gallery picker's selection
+    // ceiling to the remaining capacity so the user never even sees the
+    // 6th / 7th / … nth photo as a picked-ghost. Falls through to the
+    // per-push guard in _ingestExtraFromUri for the primary-present race
+    // (user picks before primary capture completes).
+    const remaining = Math.max(0, MAX_EXTRA_PHOTOS - extraPhotos.length);
+    if (remaining <= 0) {
+      const now = Date.now();
+      if (now - _lastCapAlertAt > _CAP_ALERT_MIN_MS) {
+        _lastCapAlertAt = now;
+        Alert.alert('', (t as any)('photo_cap_reached') || `Max ${MAX_PHOTOS_TOTAL} photos per report`);
+      }
+      return;
+    }
     await detectNetworkTier();
     const config = getAdaptiveConfig();
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -583,7 +814,7 @@ export default function App() {
       quality: config.imageQuality,
       base64: true,
       allowsMultipleSelection: true,
-      selectionLimit: 10,
+      selectionLimit: remaining,
     });
     if (result.canceled || !result.assets?.length) return;
     result.assets.forEach((asset) => {
@@ -719,7 +950,12 @@ export default function App() {
       }, 1000);
     } catch (e: any) {
       console.error('[Audio] Start failed:', e);
-      Alert.alert('Error', `Could not start recording: ${e.message || 'unknown'}`);
+      // Apr 2026 i18n sweep — localised error copy. The underlying
+      // error string stays in English console logs above; the user-
+      // visible alert body uses their active locale via t(). Title
+      // falls back to a short English "Error" since we haven't spun
+      // up a dedicated title key (most locales use "Error" verbatim).
+      Alert.alert('Error', t('error_recording'));
     }
   };
 
@@ -761,6 +997,19 @@ export default function App() {
           setLocationName(parts.join(', '));
         }
       } catch (e) { telemetrySwallow('reverseGeocode', e); }
+      // Phase B2 (Apr 2026 UI v3) — warm the AsyncStorage building cache with
+      // the 10 nearest footprints. Non-blocking; failures are silent. The
+      // free-text fallback + future autocomplete consume this list.
+      try {
+        preCacheNearest(loc.coords.latitude, loc.coords.longitude, 10)
+          .then((list) => {
+            if (Array.isArray(list) && list.length > 0) {
+              console.log(`[BuildingPreCache] ${list.length} buildings cached`);
+              setNearbyBuildings(list);
+            }
+          })
+          .catch(() => {});
+      } catch (_) { /* best-effort */ }
     } catch (e) { telemetrySwallow('getLocation', e); }
   };
 
@@ -781,7 +1030,73 @@ export default function App() {
     };
   }, []);
 
+  /**
+   * Apr 2026 UI v2 — Android hardware-Back hook. When the review stage
+   * is showing the 3-page split, pressing the OS back button should step
+   * through the pages rather than punt the whole stage back to audio.
+   * Only mounts on Android (BackHandler is a no-op on iOS); only fires
+   * on pages 2–3 so page 1 still falls through to the audio screen.
+   *
+   * Returning `true` signals "handled" to the OS; `false` lets default
+   * behaviour run. We gate on uiV2 so the old monolithic review flow
+   * keeps its original system-back semantics when the flag is off.
+   */
   useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    if (!uiV2) return;
+    if (screen !== 'review_details') return;
+    const onBack = () => {
+      if (reviewPage > 1) {
+        setReviewPage((p) => reviewReducer(p, { type: 'BACK' }));
+        return true;
+      }
+      return false;  // let the OS pop to audio
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => sub.remove();
+  }, [uiV2, screen, reviewPage]);
+
+  /**
+   * Reset reviewPage back to 1 whenever the user (re)enters the review
+   * stage. Without this a user who Back-navs to audio and then returns
+   * would briefly see their previous page-2 state before the render
+   * settled — disorienting for low-literacy field workers.
+   */
+  useEffect(() => {
+    if (screen === 'review_details') {
+      setReviewPage((p) => reviewReducer(p, { type: 'RESET' }));
+    }
+  }, [screen]);
+
+  useEffect(() => {
+    // Apr 2026 UI v2 flag read — fire-and-forget. See readUiV2Flag() for
+    // rollback semantics. Runs in the same mount effect so no extra
+    // render is triggered after the rest of the boot sequence settles.
+    readUiV2Flag().then((on) => { setUiV2(on); }).catch(() => { /* keep default */ });
+    readUiV3Flag().then((on) => { setUiV3(on); }).catch(() => { /* keep default */ });
+    // Phase 1 (Apr 2026 — Optional reporter login). Initialise AuthStore
+    // once — it hydrates from expo-secure-store + AsyncStorage. Failures
+    // are swallowed; the UI just shows "Login / Sign up" as a fallback.
+    try {
+      AuthStore.setApiBase(getApiBase());
+      AuthStore.init().then(() => {
+        setAuthReady(true);
+        setAuthLoggedIn(AuthStore.isLoggedIn());
+        setAuthDisplay(AuthStore.getProfile().displayName);
+      }).catch(() => { setAuthReady(true); });
+    } catch { setAuthReady(true); }
+    // Device-locale country-code default (user spec answer 4).
+    try {
+      const locale = (typeof navigator !== 'undefined' && (navigator as any).language) || 'en-IN';
+      const region = ((locale as string).split('-')[1] || 'IN').toUpperCase();
+      const map: Record<string, string> = {
+        IN: '+91', US: '+1', CA: '+1', GB: '+44', KE: '+254', NG: '+234',
+        BD: '+880', PK: '+92', LK: '+94', NP: '+977', ID: '+62', PH: '+63',
+        EG: '+20', MA: '+212', AE: '+971', SA: '+966', RU: '+7', CN: '+86',
+        JP: '+81', FR: '+33', DE: '+49', ES: '+34', BR: '+55', MX: '+52',
+      };
+      if (map[region]) setLoginCC(map[region]);
+    } catch { /* leave default */ }
     // Language: honour stored manual choice, else auto-detect device locale.
     // This is async because AsyncStorage is async. applyTextDirection() fires
     // I18nManager.forceRTL internally for Arabic/Urdu/Hebrew/... and reloads
@@ -1006,8 +1321,8 @@ export default function App() {
   const changeLang = (code: string) => { setLanguage(code); setLang(code); };
   const resetReport = () => {
     setPhotoUri(null); setPhotoBase64(null); setAudioUri(null); setDescription('');
-    setInfraType('ROAD'); setSeverity('MODERATE');
-    setCrisisType('FLOOD'); setDamageClass('PARTIAL'); setInfraName(''); setDebrisClearing(false);
+    setInfraType('RESIDENTIAL'); setSeverity('MODERATE');
+    setCrisisType('FLOOD'); setDamageClass('PARTIAL'); setInfraName(''); setInfraNameFromOsm(false); setDebrisClearing(false);
     setLocation(null); setLocationName(''); setIsSending(false); setReportId('');
     // Phase 4 — reset the new service/needs/extra-photos state too.
     setElectricityStatus('UNKNOWN'); setWaterStatus('UNKNOWN'); setHealthStatus('UNKNOWN');
@@ -1076,6 +1391,13 @@ export default function App() {
         is_auto_submitted: isAutoSubmit,
         crisis_type: crisisType, damage_classification: damageClass,
         infrastructure_name: infraName || null, debris_clearing_needed: debrisClearing,
+        // Phase B2 (Apr 2026 UI v3) — distinguisher between OSM-auto-filled and
+        // user-typed building names. See backend/app/schemas/report.py
+        // ReportMetaCreate.infrastructure_name_from_osm for the full rationale.
+        // Dashboard flags `building_id IS NULL AND infrastructure_name_from_osm
+        // = false` as "needs mapping" so operators can resolve the free-text
+        // entry to a real OSM footprint later.
+        infrastructure_name_from_osm: Boolean(infraNameFromOsm),
         // UNDP Appendix 1 — pin to an OSM way id when the reporter picked
         // an exact building footprint. Backend expects `osm:way:<id>` or null.
         building_id: buildingId || null,
@@ -1145,18 +1467,39 @@ export default function App() {
 
     } catch (e: any) {
       console.error('[Submit] Local save error:', e);
-      Alert.alert('Error', 'Could not save report locally. Please try again.');
+      // Apr 2026 i18n sweep — localised error copy.
+      Alert.alert('Error', t('error_save_local'));
     }
     setIsSending(false);
   };
 
-  // Phase 3: chip lists match docs/PARITY.md order + labels exactly.
+  // Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — 8 UNDP Appendix-1
+  // super-types replacing the 9 legacy chips. Enum values match
+  // InfraTypeEnum on the backend so no client → server remap needed.
+  // v2 fallback: when `uiV3` is false, the legacy `typesLegacy` array is
+  // rendered instead.
   const types = [
-    { key: 'ROAD', icon: '🛣', label: t('type_road') }, { key: 'HOSPITAL', icon: '🏥', label: t('type_hospital') },
-    { key: 'HOUSE', icon: '🏠', label: t('type_house') }, { key: 'POWER', icon: '⚡', label: t('type_power') },
-    { key: 'WATER', icon: '💧', label: t('type_water') }, { key: 'SCHOOL', icon: '🏫', label: 'School' },
-    { key: 'TELECOM', icon: '📡', label: 'Telecom' }, { key: 'GOVERNMENT', icon: '🏛', label: 'Gov. Building' },
-    { key: 'OTHER', icon: '❓', label: t('type_other') },
+    { key: 'RESIDENTIAL',           icon: '🏠',  label: (t as any)('residential') || 'Residential' },
+    { key: 'COMMERCIAL',            icon: '🏢',  label: (t as any)('commercial') || 'Commercial' },
+    { key: 'GOVERNMENT',            icon: '🏛',  label: (t as any)('government') || 'Government' },
+    { key: 'UTILITY',               icon: '⚡',  label: (t as any)('utility') || 'Utility' },
+    { key: 'TRANSPORT_COMMUNICATION', icon: '🛣', label: (t as any)('transport_communication') || 'Transport' },
+    { key: 'COMMUNITY',             icon: '🏥',  label: (t as any)('community_infra') || 'Community' },
+    { key: 'PUBLIC_SPACES',         icon: '🌳',  label: (t as any)('public_spaces') || 'Public Space' },
+    { key: 'OTHER',                 icon: '❓',  label: t('type_other') || 'Other' },
+  ];
+  // Legacy chip set, kept for the v2 fallback path. Same `key` strings
+  // the backend's UI_CHIP_TO_UNDP mapper normalises at write time.
+  const typesLegacy = [
+    { key: 'ROAD',       icon: '🛣', label: t('type_road') },
+    { key: 'HOSPITAL',   icon: '🏥', label: t('type_hospital') },
+    { key: 'HOUSE',      icon: '🏠', label: t('type_house') },
+    { key: 'POWER',      icon: '⚡', label: t('type_power') },
+    { key: 'WATER',      icon: '💧', label: t('type_water') },
+    { key: 'SCHOOL',     icon: '🏫', label: 'School' },
+    { key: 'TELECOM',    icon: '📡', label: 'Telecom' },
+    { key: 'GOVERNMENT', icon: '🏛', label: 'Gov. Building' },
+    { key: 'OTHER',      icon: '❓', label: t('type_other') },
   ];
   const sevs = [
     { key: 'MINOR', icon: '🟢', label: t('sev_minor') },
@@ -1180,18 +1523,25 @@ export default function App() {
     { key: 'CIVIL_UNREST',       icon: '🪧', label: 'Civil Unrest' },
     { key: 'OTHER',              icon: '❓', label: 'Other' },
   ];
-  // UNDP Appendix-1 damage labels: "Minimal/No damage", "Partially damaged",
-  // "Completely damaged". The canonical stored value is MINIMAL — the
-  // backend normalises any legacy NO_DAMAGE payload on write.
+  // UNDP Appendix-1 damage labels (Apr 2026 UI v2.1) — verbatim phrasing
+  // from the spec: "Minimal / No damage", "Partially damaged", "Completely
+  // damaged". `labelKey` routes through i18n; hardcoded `label` left as
+  // the last-resort fallback if t() can't resolve the key. The canonical
+  // stored value is MINIMAL — the backend normalises any legacy
+  // NO_DAMAGE payload on write.
   const damageOptions = [
-    { key: 'MINIMAL',  icon: '✅', label: 'Minimal',  color: '#22c55e' },
-    { key: 'PARTIAL',  icon: '⚠️', label: 'Partial',  color: '#f97316' },
-    { key: 'COMPLETE', icon: '❌', label: 'Destroyed', color: '#ef4444' },
+    { key: 'MINIMAL',  icon: '✅', labelKey: 'minimal_damage', label: 'Minimal / No damage',  color: '#22c55e' },
+    { key: 'PARTIAL',  icon: '⚠️', labelKey: 'partial_damage', label: 'Partially damaged',   color: '#f97316' },
+    { key: 'COMPLETE', icon: '❌', labelKey: 'complete_damage', label: 'Completely damaged', color: '#ef4444' },
   ];
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-    <SafeAreaView style={s.container}>
+    {/* R10: SafeAreaView edges limited to left/right/bottom so the status
+         bar can render edge-to-edge (the translucent header handles the
+         top inset itself). On devices with a gesture-area / bottom
+         notch (most Android 12+) this prevents overflow of the CTA row. */}
+    <SafeAreaView style={s.container} edges={['left','right','bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
 
       {/* Phase 4 (Apr 2026) — Auto-submit timer banner, visible only during
@@ -1199,7 +1549,11 @@ export default function App() {
            GPS is inside an enabled region. Tapping Cancel clears the
            activeRegion so the banner disappears and manual submit resumes. */}
       {activeRegion && (screen === 'photo' || screen === 'audio' ||
-        screen === 'review_details' || screen === 'review_confirm') && (
+        screen === 'review_details' || screen === 'review_confirm' ||
+        // Phase B4 (Apr 2026 UI v3) — auto-submit stays armed through
+        // the new v3 capture stages too.
+        screen === 'where' || screen === 'infra' ||
+        screen === 'crisis' || screen === 'extras') && (
         <AutoSubmitTimer
           region={activeRegion}
           onCancel={() => {
@@ -1209,7 +1563,8 @@ export default function App() {
           onFire={() => {
             // Guard: must have at least one piece of content to submit.
             if (!photoUri && !audioUri && !description?.trim()) {
-              Alert.alert('Cannot auto-submit', 'Please add a photo, audio, or description before the timer expires.');
+              // Apr 2026 i18n sweep — localised auto-submit guard copy.
+              Alert.alert('Error', t('error_cannot_autosubmit'));
               setActiveRegion(null);
               return;
             }
@@ -1231,7 +1586,16 @@ export default function App() {
               want to report never see distracting gamification first.
           Parity with PWA `stage-home` at mobile-app/src/index.html. */}
       {screen === 'home' && (
-        <ScrollView style={{ flex: 1, backgroundColor: Colors.bg }} contentContainerStyle={{ padding: 24, paddingBottom: 40, alignItems: 'center' }}>
+        <ScrollView
+          style={{ flex: 1, backgroundColor: Colors.bg }}
+          // R3: allow this outer ScrollView to delegate to nested scroll
+          // containers (history pills, language row). nestedScrollEnabled
+          // keeps the inner WebView / ScrollView gestures alive on Android.
+          nestedScrollEnabled
+          scrollEventThrottle={16}
+          // R8: responsive padding — 6 % vw capped at 24 px. Keeps 280×480
+          // screens from clipping content against the right edge.
+          contentContainerStyle={{ padding: responsivePad(), paddingBottom: 40, alignItems: 'center' }}>
           <Text style={s.emoji}>🆘</Text>
           <Text style={s.title}>{t('welcome_title')}</Text>
           {/* Apr 2026 PR 3 — removed the "Tap the button" sub-copy; render
@@ -1298,7 +1662,7 @@ export default function App() {
                 }}>
                   {impactStats.totalLives}
                 </Text>
-                <Text style={{ fontSize: 10, color: '#86efac', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, textAlign: 'center' }}>
+                <Text style={{ fontSize: 13, color: '#86efac', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, textAlign: 'center' }}>
                   {t('home_metric_lives')}
                 </Text>
               </View>
@@ -1307,7 +1671,7 @@ export default function App() {
                 <Text style={{ fontSize: 28, fontWeight: '900', color: '#a78bfa', lineHeight: 32 }}>
                   {impactStats.resolvedCount}
                 </Text>
-                <Text style={{ fontSize: 10, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, textAlign: 'center' }}>
+                <Text style={{ fontSize: 13, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, textAlign: 'center' }}>
                   {t('home_metric_reports')}
                 </Text>
               </View>
@@ -1336,7 +1700,11 @@ export default function App() {
             } catch (e) {
               console.log('[AutoSubmit] geofence check skipped:', (e as Error)?.message || e);
             }
-            setScreen('photo');
+            // Phase B4 (Apr 2026 UI v3) — v3 flow opens on the "where"
+            // stage (location + damage) before the reporter is asked
+            // for evidence. When the flag is off (`crisp_ui_v3='off'`)
+            // the legacy v2 flow opens straight to photo capture.
+            setScreen(uiV3 ? 'where' : 'photo');
           }}>
             <Text style={s.bigBtnText}>{t('welcome_start')}</Text>
           </TouchableOpacity>
@@ -1346,6 +1714,31 @@ export default function App() {
             onPress={() => { refreshHistory(); pollStatus(); setScreen('history'); }}>
             <Text style={{ color: Colors.text, fontSize: 15, fontWeight: '600' }}>📋 {t('my_reports')}</Text>
           </TouchableOpacity>
+
+          {/* Phase 1 (Apr 2026 — Optional reporter login). Tertiary CTA
+              beneath My Reports so the primary Start button stays biggest.
+              When logged in, shows an account pill with a Settings gear. */}
+          {authReady && !authLoggedIn && (
+            <TouchableOpacity
+              style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: Colors.border, paddingVertical: 11, borderRadius: 10, marginTop: 10, width: '100%', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+              onPress={() => {
+                setLoginStep(1); setLoginCode(''); setLoginError(''); setLoginLinkable(0);
+                setScreen('login');
+              }}>
+              <Text style={{ color: Colors.accent, fontSize: 14, fontWeight: '600' }}>🔑  {(t as any)('login_or_signup') || 'Login / Sign up'}</Text>
+            </TouchableOpacity>
+          )}
+          {authReady && authLoggedIn && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%', marginTop: 10, padding: 10, backgroundColor: 'rgba(34,197,94,0.08)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.25)', borderRadius: 10 }}>
+              <Text style={{ color: '#4ade80' }}>✓</Text>
+              <Text style={{ color: '#86efac', flex: 1, fontWeight: '600' }} numberOfLines={1}>
+                {authDisplay || 'Signed in'}
+              </Text>
+              <TouchableOpacity onPress={() => setScreen('settings')}>
+                <Text style={{ color: '#86efac', fontSize: 16 }}>⚙️</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {queueCount > 0 && <TouchableOpacity style={s.queueBadge} onPress={async () => {
             const { clearAllQueuedReports } = await import('./services/database');
@@ -1378,8 +1771,478 @@ export default function App() {
         </ScrollView>
       )}
 
+      {/* ══════════════════════════════════════════════════════════════════
+           Phase 1 (Apr 2026 — Optional reporter login). Single screen
+           hosts all 3 wizard steps via `loginStep` local state. Every
+           step's "back" path lands on 'home' so reporting is never a
+           tap deeper than necessary.
+      ══════════════════════════════════════════════════════════════════ */}
+      {screen === 'login' && (
+        <View style={[s.screen, { padding: responsivePad() }]}>
+          <Text style={s.title}>{(t as any)('login_title') || 'Login or Sign up'}</Text>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+            {loginStep === 1 && (
+              <>
+                <Text style={{ color: Colors.textDim, fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
+                  {(t as any)('login_sub') || 'Track your reports across devices'}
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                  <TouchableOpacity
+                    style={[s.chip, loginChannel === 'PHONE' && s.chipActive, { flex: 1, paddingVertical: 14, justifyContent: 'center' }]}
+                    onPress={() => setLoginChannel('PHONE')}>
+                    <Text style={s.chipText}>📱 {(t as any)('login_channel_phone') || 'Phone'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.chip, loginChannel === 'EMAIL' && s.chipActive, { flex: 1, paddingVertical: 14, justifyContent: 'center' }]}
+                    onPress={() => setLoginChannel('EMAIL')}>
+                    <Text style={s.chipText}>📧 {(t as any)('login_channel_email') || 'Email'}</Text>
+                  </TouchableOpacity>
+                </View>
+                {loginChannel === 'PHONE' ? (
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TextInput
+                      style={[s.buildingFreeTextInput, { flex: 0, width: 90, textAlign: 'center' }]}
+                      value={loginCC}
+                      onChangeText={setLoginCC}
+                      maxLength={5}
+                      keyboardType="phone-pad"
+                    />
+                    <TextInput
+                      style={[s.buildingFreeTextInput, { flex: 1 }]}
+                      value={loginPhone}
+                      onChangeText={(v) => setLoginPhone(v.replace(/\D/g, ''))}
+                      placeholder="98765 43210"
+                      placeholderTextColor={Colors.textDim}
+                      keyboardType="phone-pad"
+                      maxLength={15}
+                    />
+                  </View>
+                ) : (
+                  <TextInput
+                    style={s.buildingFreeTextInput}
+                    value={loginEmail}
+                    onChangeText={setLoginEmail}
+                    placeholder="you@example.com"
+                    placeholderTextColor={Colors.textDim}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                )}
+                {loginError ? (
+                  <Text style={{ color: '#fca5a5', marginTop: 10 }}>{loginError}</Text>
+                ) : null}
+                <TouchableOpacity
+                  style={[s.bigBtn, { marginTop: 16 }, loginBusy && { opacity: 0.5 }]}
+                  disabled={loginBusy}
+                  onPress={async () => {
+                    setLoginError('');
+                    const destination = loginChannel === 'PHONE'
+                      ? `${loginCC}${loginPhone}`
+                      : loginEmail.trim().toLowerCase();
+                    if (!destination || destination === loginCC) {
+                      setLoginError((t as any)('login_err_missing_destination') || 'Please enter your phone or email.');
+                      return;
+                    }
+                    setLoginBusy(true);
+                    try {
+                      await AuthStore.requestOtp(destination, loginChannel, 'LOGIN', deviceHash);
+                      setLoginDestination(destination);
+                      setLoginStep(2);
+                    } catch (e: any) {
+                      setLoginError(e?.message || 'Could not send code.');
+                    } finally { setLoginBusy(false); }
+                  }}>
+                  <Text style={s.bigBtnText}>{(t as any)('login_send_code') || 'Send code'} →</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ marginTop: 12, alignItems: 'center' }} onPress={() => setScreen('home')}>
+                  <Text style={{ color: Colors.accent, fontSize: 13 }}>{(t as any)('login_skip') || 'Skip & report anonymously'} ›</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {loginStep === 2 && (
+              <>
+                <Text style={{ color: Colors.text, fontSize: 14, textAlign: 'center' }}>
+                  {(t as any)('login_code_sent_prefix') || 'We sent a 6-digit code to'}
+                </Text>
+                <Text style={{ color: Colors.accent, fontSize: 16, fontWeight: '700', textAlign: 'center', marginTop: 4, marginBottom: 16 }}>
+                  {loginDestination}
+                </Text>
+                <TextInput
+                  style={[s.buildingFreeTextInput, { textAlign: 'center', fontSize: 22, letterSpacing: 8 }]}
+                  value={loginCode}
+                  onChangeText={(v) => setLoginCode(v.replace(/\D/g, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  placeholder="••••••"
+                  placeholderTextColor={Colors.textDim}
+                  maxLength={6}
+                  autoFocus
+                />
+                {loginError ? <Text style={{ color: '#fca5a5', marginTop: 10 }}>{loginError}</Text> : null}
+                <TouchableOpacity
+                  style={[s.bigBtn, { marginTop: 16 }, loginBusy && { opacity: 0.5 }]}
+                  disabled={loginBusy}
+                  onPress={async () => {
+                    setLoginError('');
+                    if (loginCode.length !== 6) {
+                      setLoginError((t as any)('login_err_bad_code') || 'Please enter the 6-digit code.');
+                      return;
+                    }
+                    setLoginBusy(true);
+                    try {
+                      const data = await AuthStore.verifyOtp(loginDestination, loginChannel, loginCode, 'LOGIN', deviceHash);
+                      const linkable = Number((data as any)?.linkable_report_count) || 0;
+                      setAuthLoggedIn(AuthStore.isLoggedIn());
+                      setAuthDisplay(AuthStore.getProfile().displayName);
+                      if (linkable > 0) { setLoginLinkable(linkable); setLoginStep(3); }
+                      else {
+                        Alert.alert('', (t as any)('login_welcome') || "You're in!");
+                        setScreen('home');
+                      }
+                    } catch (e: any) {
+                      setLoginError(e?.message || 'Could not verify code.');
+                    } finally { setLoginBusy(false); }
+                  }}>
+                  <Text style={s.bigBtnText}>{(t as any)('login_verify') || 'Verify'} →</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ marginTop: 12, alignItems: 'center' }} onPress={() => setLoginStep(1)}>
+                  <Text style={{ color: Colors.accent, fontSize: 13 }}>{(t as any)('login_wrong_destination') || 'Wrong number / email?'} ›</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {loginStep === 3 && (
+              <>
+                <View style={{ alignItems: 'center', marginTop: 20, marginBottom: 14 }}>
+                  <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(34,197,94,0.15)', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 28, color: '#4ade80' }}>✓</Text>
+                  </View>
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: Colors.text, marginTop: 10 }}>
+                    {(t as any)('login_welcome') || "You're in!"}
+                  </Text>
+                </View>
+                <Text style={{ color: Colors.text, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+                  {(t as any)('login_found_prefix') || 'We found'}{' '}
+                  <Text style={{ color: Colors.accent, fontWeight: '700', fontSize: 18 }}>{loginLinkable}</Text>{' '}
+                  {(t as any)('login_found_suffix') || 'anonymous reports on this device. Link them to your account?'}
+                </Text>
+                <TouchableOpacity
+                  style={[s.bigBtn, { marginTop: 16 }]}
+                  onPress={async () => {
+                    try {
+                      const r = await AuthStore.linkDevice(deviceHash);
+                      Alert.alert('', `${(r as any)?.linked || 0} reports linked`);
+                    } catch { /* swallow */ }
+                    setScreen('home');
+                  }}>
+                  <Text style={s.bigBtnText}>🔗 {(t as any)('login_link_now') || 'Link reports'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ marginTop: 12, alignItems: 'center', paddingVertical: 10 }}
+                  onPress={() => setScreen('home')}>
+                  <Text style={{ color: Colors.textDim, fontSize: 14 }}>{(t as any)('login_keep_anonymous') || 'Keep them anonymous'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Phase 1 (Apr 2026 — Optional reporter login) — Settings screen. */}
+      {screen === 'settings' && (
+        <View style={[s.screen, { padding: responsivePad() }]}>
+          <Text style={s.title}>{(t as any)('settings_title') || 'Settings'}</Text>
+          <View style={{ backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 12, marginTop: 12 }}>
+            <Text style={{ color: Colors.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.05 }}>
+              {(t as any)('settings_account') || 'Account'}
+            </Text>
+            <Text style={{ color: Colors.text, fontSize: 15, fontWeight: '600', marginTop: 4 }}>
+              {authDisplay || '—'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={{ marginTop: 16, padding: 14, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, alignItems: 'center' }}
+            onPress={async () => {
+              try {
+                const r = await AuthStore.unlinkDevice(deviceHash);
+                Alert.alert('', `${(r as any)?.unlinked || 0} reports unlinked`);
+              } catch { /* swallow */ }
+            }}>
+            <Text style={{ color: Colors.text, fontSize: 14 }}>🔗 {(t as any)('settings_unlink_device') || 'Unlink this device'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ marginTop: 10, padding: 14, borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', borderRadius: 10, alignItems: 'center' }}
+            onPress={async () => {
+              await AuthStore.logout();
+              setAuthLoggedIn(false);
+              setAuthDisplay(null);
+              setScreen('home');
+            }}>
+            <Text style={{ color: '#fca5a5', fontSize: 14 }}>🚪 {(t as any)('settings_logout') || 'Logout'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={{ marginTop: 16, alignItems: 'center' }} onPress={() => setScreen('home')}>
+            <Text style={{ color: Colors.accent, fontSize: 13 }}>← {t('back')}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+           UI v3 — 4 new capture-flow screens (Phase B4, Apr 2026).
+           Each is a small chip-grid picker + Back/Continue row. Reuses the
+           same `s.chipRow` / `s.chip` / `s.nextBtn` styles the legacy
+           review_details screen uses, so no new styles needed.
+
+           Navigation chain (v3):  home → where → infra → crisis → extras
+                                   → photo → audio → review_confirm → success
+
+           `uiV3` is read once at mount. When off, these blocks never render
+           because the Start button routes straight to 'photo'.
+      ══════════════════════════════════════════════════════════════════ */}
+      {screen === 'where' && uiV3 && (
+        <View style={[s.screen, { padding: responsivePad() }]}>
+          <Text style={s.title}>{t('stage2_title') || 'Where and how bad?'}</Text>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+            {/* Phase B4 (Apr 2026 UI v3) — auto date/time panel. Rendered
+                from `new Date()` on every mount, updated every 60 s via
+                the `whereAutoTime` useState tick. Zero network, zero wait. */}
+            <View style={{ marginBottom: 12, padding: 12, backgroundColor: 'rgba(124,58,237,0.06)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(124,58,237,0.22)' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ color: Colors.accent, fontSize: 14 }}>⏰</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 10, color: Colors.textDim, textTransform: 'uppercase', letterSpacing: 0.05 }}>{t('auto_time_label') || 'Time (auto)'}</Text>
+                  <Text style={{ fontSize: 13, color: Colors.text, fontWeight: '600' }}>{whereAutoTime}</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                <Text style={{ color: Colors.accent, fontSize: 14 }}>📍</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 10, color: Colors.textDim, textTransform: 'uppercase', letterSpacing: 0.05 }}>{t('auto_loc_label') || 'Location (auto)'}</Text>
+                  <Text style={{ fontSize: 13, color: Colors.text, fontWeight: '600' }} numberOfLines={1}>
+                    {locationName || (location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : t('loc_status') || 'Detecting...')}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => getLocation()}>
+                  <Text style={{ color: Colors.accent, fontSize: 12, fontWeight: '600' }}>🔄</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <Text style={{ color: Colors.text, fontSize: 14, marginBottom: 8 }}>
+              {t('severity_label') || 'How bad is the damage?'}
+            </Text>
+            <View style={s.chipRow}>
+              {damageOptions.map((d) => (
+                <TouchableOpacity
+                  key={d.key}
+                  style={[s.chip, damageClass === d.key && s.chipActive]}
+                  onPress={() => setDamageClass(d.key)}
+                  accessibilityRole="button">
+                  <Text style={s.chipText}>{d.icon} {t(d.labelKey) || d.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Phase B4 (Apr 2026 UI v3) — building-footprint picker moved
+                 from stage-crisis to stage-where per the user spec. Works
+                 offline against the 10-nearest AsyncStorage pre-cache
+                 warmed by getLocation(). If a building_id is already set,
+                 show the "selected" pill with a clear button. */}
+            {buildingId ? (
+              <View style={[s.locSelectedPill, { marginTop: 14 }]}>
+                <Text style={s.locSelectedPillIcon}>✓</Text>
+                <Text style={s.locSelectedPillText} numberOfLines={1}>
+                  {t('building_selected')}: {infraNameFromOsm && infraName ? infraName : buildingId.replace('osm:way:', '#')}
+                </Text>
+                <TouchableOpacity onPress={() => {
+                  setBuildingId(null);
+                  if (infraNameFromOsm) { setInfraName(''); setInfraNameFromOsm(false); }
+                }}>
+                  <Text style={{ color: Colors.accent, fontWeight: '600', fontSize: 12 }}>{t('edit')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[s.locFootprintBtn, {
+                  marginTop: 14, paddingVertical: 14,
+                  borderWidth: 1.5, borderColor: Colors.accent,
+                  backgroundColor: 'rgba(124,58,237,0.10)',
+                }]}
+                onPress={() => setFootprintPickerOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t('building_select_title')}>
+                <Text style={[s.locFootprintBtnText, { fontSize: 15, color: Colors.accent }]}>
+                  🏢  {t('building_select_title')}
+                </Text>
+                {!location && (
+                  <Text style={{ marginTop: 4, color: Colors.textDim, fontSize: 12, textAlign: 'center' }}>
+                    {t('building_waiting_gps')}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+          <View style={s.navRow}>
+            <TouchableOpacity style={s.backBtn} onPress={() => setScreen('home')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
+            <TouchableOpacity style={s.nextBtn} onPress={() => setScreen('infra')}><Text style={s.nextBtnText}>{t('next')} →</Text></TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {screen === 'infra' && uiV3 && (
+        <View style={[s.screen, { padding: responsivePad() }]}>
+          <Text style={s.title}>{t('stage3_title') || 'What was hit?'}</Text>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+            <Text style={{ color: Colors.text, fontSize: 14, marginBottom: 8 }}>
+              {t('what_damaged') || 'What is damaged?'}
+            </Text>
+            <View style={s.chipRow}>
+              {types.map((ty) => (
+                <TouchableOpacity
+                  key={ty.key}
+                  style={[s.chip, infraType === ty.key && s.chipActive]}
+                  onPress={() => setInfraType(ty.key)}
+                  accessibilityRole="button">
+                  <Text style={s.chipText}>{ty.icon} {ty.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+          <View style={s.navRow}>
+            <TouchableOpacity style={s.backBtn} onPress={() => setScreen('where')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
+            <TouchableOpacity style={s.nextBtn} onPress={() => setScreen('crisis')}><Text style={s.nextBtnText}>{t('next')} →</Text></TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {screen === 'crisis' && uiV3 && (
+        <View style={[s.screen, { padding: responsivePad() }]}>
+          <Text style={s.title}>{t('stage4_title') || 'What caused it?'}</Text>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+            {/* Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — crisis chips
+                grouped into the three UNDP categories so the field matches
+                the Appendix-1 taxonomy section-by-section. Flat grid was
+                the Apr-22 shipping state; this sub-grouping mirrors the
+                PWA `.crisis-grouped` layout. */}
+            {[
+              { labelKey: 'crisis_group_natural',       fallback: 'Natural',       keys: ['EARTHQUAKE', 'FLOOD', 'TSUNAMI', 'CYCLONE', 'LANDSLIDE'] },
+              { labelKey: 'crisis_group_technological', fallback: 'Technological', keys: ['EXPLOSION', 'CHEMICAL_INCIDENT', 'PANDEMIC'] },
+              { labelKey: 'crisis_group_human_made',    fallback: 'Human-made',    keys: ['CONFLICT', 'CIVIL_UNREST', 'OTHER'] },
+            ].map((group) => (
+              <View key={group.labelKey} style={{ marginBottom: 4 }}>
+                <Text style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.08, color: Colors.textDim, fontWeight: '700', marginTop: 8, marginBottom: 4 }}>
+                  {(t as any)(group.labelKey) || group.fallback}
+                </Text>
+                <View style={s.chipRow}>
+                  {group.keys.map((k) => {
+                    const ct = crisisTypes.find((c) => c.key === k);
+                    if (!ct) return null;
+                    return (
+                      <TouchableOpacity
+                        key={ct.key}
+                        style={[s.chip, crisisType === ct.key && s.chipActive]}
+                        onPress={() => setCrisisType(ct.key)}
+                        accessibilityRole="button">
+                        <Text style={s.chipText}>{ct.icon} {ct.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+
+            {/* Infrastructure-name free-text input — stays on stage-crisis
+                per the Apr-23 spec ("Crisis + name"). The building PICKER
+                moved to stage-where; this textbox captures the reporter's
+                native-language building name independently of an OSM tap. */}
+            <View style={{ marginTop: 16, padding: 12, backgroundColor: 'rgba(37,99,235,0.06)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(37,99,235,0.22)' }}>
+              <Text style={{ color: Colors.text, fontSize: 13, fontWeight: '600', marginBottom: 6 }}>
+                ✍️  {t('bldg_offline_prompt') || 'Type the building name in your language'}
+              </Text>
+              <TextInput
+                style={s.buildingFreeTextInput}
+                placeholder="e.g. Kiambu High School / مدرسة الأمل"
+                placeholderTextColor={Colors.textDim}
+                value={infraName}
+                onChangeText={(v) => { setInfraName(v); setInfraNameFromOsm(false); }}
+                maxLength={120}
+                returnKeyType="done"
+              />
+              <Text style={{ marginTop: 6, fontSize: 11, color: Colors.textDim }}>
+                ℹ️  {t('bldg_offline_hint') || 'The team will map this to GPS later'}
+              </Text>
+            </View>
+          </ScrollView>
+          <View style={s.navRow}>
+            <TouchableOpacity style={s.backBtn} onPress={() => setScreen('infra')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
+            <TouchableOpacity style={s.nextBtn} onPress={() => setScreen('extras')}><Text style={s.nextBtnText}>{t('next')} →</Text></TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {screen === 'extras' && uiV3 && (
+        <View style={[s.screen, { padding: responsivePad() }]}>
+          <Text style={s.title}>{t('stage5_title') || 'Service + needs'}</Text>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+            {/* Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No
+                toggle re-added per UNDP Appendix-1. Severity chips dropped;
+                severity is auto-derived from damageClass on stage-where
+                (MINIMAL→MINOR, PARTIAL→MODERATE, COMPLETE→SEVERE). */}
+            <Text style={{ color: Colors.text, fontSize: 14, marginBottom: 8 }}>
+              {(t as any)('debris_label') || 'Does this need debris clearing?'}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+              <TouchableOpacity
+                style={[s.chip, !debrisClearing && s.chipActive, { flex: 1, paddingVertical: 14, justifyContent: 'center' }]}
+                onPress={() => setDebrisClearing(false)}
+                accessibilityRole="button">
+                <Text style={s.chipText}>✕ {(t as any)('debris_no') || 'No'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.chip, debrisClearing && s.chipActive, { flex: 1, paddingVertical: 14, justifyContent: 'center' }]}
+                onPress={() => setDebrisClearing(true)}
+                accessibilityRole="button">
+                <Text style={s.chipText}>✓ {(t as any)('debris_yes') || 'Yes'}</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={{ color: Colors.text, fontSize: 14, marginTop: 4, marginBottom: 8 }}>
+              {t('needs_label') || '🆘 Pressing needs'}
+            </Text>
+            <View style={s.chipRow}>
+              {[
+                { k: 'food',           l: t('food') || 'Food' },
+                { k: 'water',          l: t('need_water') || 'Water' },
+                { k: 'cash',           l: t('need_cash') || 'Cash' },
+                { k: 'medical',        l: t('medical') || 'Medical' },
+                { k: 'shelter',        l: t('shelter') || 'Shelter' },
+                { k: 'protection',     l: t('need_protection') || 'Protection' },
+              ].map((n) => {
+                const active = (pressingNeeds || []).includes(n.k);
+                return (
+                  <TouchableOpacity
+                    key={n.k}
+                    style={[s.chip, active && s.chipActive]}
+                    onPress={() => {
+                      const cur = new Set(pressingNeeds || []);
+                      if (cur.has(n.k)) cur.delete(n.k); else cur.add(n.k);
+                      setPressingNeeds(Array.from(cur));
+                    }}
+                    accessibilityRole="button">
+                    <Text style={s.chipText}>{n.l}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+          <View style={s.navRow}>
+            <TouchableOpacity style={s.backBtn} onPress={() => setScreen('crisis')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
+            <TouchableOpacity style={s.nextBtn} onPress={() => setScreen('photo')}><Text style={s.nextBtnText}>{t('next')} →</Text></TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {screen === 'photo' && (
-        <View style={s.screen}>
+        // R8: responsive padding override — keeps 24 on ≥360 px, scales
+        // down on smaller devices so the capture buttons don't clip.
+        <View style={[s.screen, { padding: responsivePad() }]}>
           <FlowProgress step={1} have={{ photo: !!photoUri, details: !!(audioUri || description?.trim()) }} />
           <Text style={s.title}>{t('photo_title')}</Text>
           <View style={s.piiWarning}><Text style={s.piiText}>🛡 {t('pii_warning')}</Text></View>
@@ -1428,8 +2291,24 @@ export default function App() {
                     </TouchableOpacity>
                   </View>
                 ))}
+                {/* Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — single
+                    "Add more" button presenting a native action sheet
+                    (iOS: ActionSheetIOS-style via Alert; Android: AlertDialog)
+                    with Camera + Library options. Mirrors the PWA's single
+                    Add-more button that opens the OS native chooser. */}
                 <TouchableOpacity
-                  onPress={pickExtraImage}
+                  onPress={() => {
+                    Alert.alert(
+                      (t as any)('add_more') || 'Add photo',
+                      '',
+                      [
+                        { text: (t as any)('chooser_camera') || 'Camera', onPress: () => takePhoto() },
+                        { text: (t as any)('chooser_gallery') || 'Gallery', onPress: () => pickExtraImage() },
+                        { text: (t as any)('cancel') || 'Cancel', style: 'cancel' },
+                      ],
+                      { cancelable: true },
+                    );
+                  }}
                   style={{ width: 64, height: 64, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={{ color: Colors.textDim, fontSize: 24 }}>+</Text>
                 </TouchableOpacity>
@@ -1445,7 +2324,9 @@ export default function App() {
             </Text>
           )}
           <View style={s.navRow}>
-            <TouchableOpacity onPress={() => setScreen('home')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
+            {/* Phase B4 (Apr 2026 UI v3) — Back routes to 'extras' when v3,
+                home otherwise. Keeps the legacy one-tap-home behaviour on v2. */}
+            <TouchableOpacity style={s.backBtn} onPress={() => setScreen(uiV3 ? 'extras' : 'home')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
             <TouchableOpacity
               style={[s.nextBtn, !photoUri && { opacity: 0.4 }]}
               onPress={() => { if (photoUri) setScreen('audio'); }}
@@ -1462,7 +2343,11 @@ export default function App() {
           unified to "Continue →". Plan:
           /Users/pks/.claude/plans/swirling-forging-raccoon.md */}
       {screen === 'audio' && (
-        <ScrollView style={{ flex: 1, backgroundColor: Colors.bg }} contentContainerStyle={{ padding: 24, paddingBottom: 48 }}>
+        <ScrollView
+          style={{ flex: 1, backgroundColor: Colors.bg }}
+          nestedScrollEnabled
+          scrollEventThrottle={16}
+          contentContainerStyle={{ padding: responsivePad(), paddingBottom: 48 }}>
           <FlowProgress step={2} have={{ photo: !!photoUri, details: !!(audioUri || description?.trim()) }} />
           <Text style={s.title}>{t('audio_title')}</Text>
           <Text style={{ color: '#cbd5e1', fontSize: 14, fontWeight: '600', marginTop: 4, marginBottom: 6 }}>
@@ -1509,19 +2394,30 @@ export default function App() {
           {audioUri && <Text style={{ color: Colors.green, fontSize: 12, marginBottom: 8 }}>{t('audio_recorded')}</Text>}
           <TextInput style={s.textInput} placeholder={t('audio_placeholder')} placeholderTextColor={Colors.textDim} value={description} onChangeText={setDescription} multiline numberOfLines={4} returnKeyType="done" blurOnSubmit={true} onSubmitEditing={Keyboard.dismiss} />
           <View style={s.navRow}>
-            <TouchableOpacity onPress={() => setScreen('photo')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
-            <TouchableOpacity style={s.nextBtn} onPress={() => setScreen('review_details')}><Text style={s.nextBtnText}>{t('next')} →</Text></TouchableOpacity>
+            <TouchableOpacity style={s.backBtn} onPress={() => setScreen('photo')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
+            {/* Phase B4 (Apr 2026 UI v3) — v3 skips the review_details
+                multi-page chip picker (already collected on earlier stages)
+                and jumps straight to review_confirm. Legacy v2 still visits
+                review_details for the last-chance edit. */}
+            <TouchableOpacity style={s.nextBtn} onPress={() => setScreen(uiV3 ? 'review_confirm' : 'review_details')}><Text style={s.nextBtnText}>{t('next')} →</Text></TouchableOpacity>
           </View>
         </ScrollView>
       )}
 
-      {/* Phase 6 — Review page 1/3: Incident (photo + description + crisis type) */}
-      {/* Phase 3 (Apr 2026) — single consolidated Details screen.
-           Merges the old review_incident + review_details into one
-           scrollable form. Field order matches docs/PARITY.md exactly so
-           the PWA and RN show the same progression top-to-bottom. */}
-      {screen === 'review_details' && (
-        <ScrollView style={{ flex: 1, backgroundColor: Colors.bg }} contentContainerStyle={{ padding: 24 }}>
+      {/* Apr 2026 UI v2 — review-stage renderer. When the feature flag is
+           ON (default), the review flow splits into 3 pages driven by
+           `reviewPage`: (1) What happened (crisis type + damage class),
+           (2) How bad + where (severity + infrastructure + location +
+           optional service status), (3) Describe & send (description +
+           optional building footprint + summary + Submit).
+           When the flag is OFF (AsyncStorage `crisp_ui_v2` = 'off'), the
+           monolithic single-ScrollView layout renders unchanged. */}
+      {screen === 'review_details' && !uiV2 && (
+        <ScrollView
+          style={{ flex: 1, backgroundColor: Colors.bg }}
+          nestedScrollEnabled
+          scrollEventThrottle={16}
+          contentContainerStyle={{ padding: responsivePad() }}>
           <FlowProgress step={3} have={{ photo: !!photoUri, details: !!(audioUri || description?.trim()) }} />
           <Text style={s.title}>{t('details_title')}</Text>
 
@@ -1558,9 +2454,6 @@ export default function App() {
             </TouchableOpacity>
           ))}</View>
 
-          {/* 5b. Inline severity picker — visible under the damaged-infra grid.
-                 Default PARTIAL preserved so submitters who skip produce a
-                 valid payload. Same-chip tap on the infra row collapses this. */}
           {showInfraSeverity && (
             <View style={{ marginTop: 8, marginBottom: 8, padding: 10, borderRadius: 10, backgroundColor: 'rgba(99,102,241,0.08)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.2)' }}>
               <Text style={{ color: '#cbd5e1', fontSize: 13, marginBottom: 6 }}>
@@ -1583,21 +2476,9 @@ export default function App() {
             </View>
           )}
 
-          {/* 4. What caused damage? (PR 6: renamed from "Type of Crisis") */}
           <Text style={s.label}>{t('crisis_label')}</Text>
           <View style={s.chipRow}>{crisisTypes.map(ct => <TouchableOpacity key={ct.key} style={[s.chip, crisisType === ct.key && s.chipActive]} onPress={() => setCrisisType(ct.key)}><Text style={s.chipText}>{ct.icon} {ct.label}</Text></TouchableOpacity>)}</View>
 
-          {/* PR 6 (Apr 2026): "Damage Level" standalone, "Building/Road Name"
-               input, and "Needs debris clearing" toggle all removed. Damage
-               merged into the infra chip row above (5b); the name/debris
-               fields were near-universally skipped and bloated the form.
-               state.infraName / state.debrisClearing keep their defaults so
-               the backend payload (infrastructure_name, debris_clearing_needed)
-               remains unchanged. */}
-
-          {/* 9. Service status — Phase 3 parity fix: enum now
-               OPERATIONAL/DISRUPTED/DESTROYED/UNKNOWN (matches backend
-               + PWA + docs/PARITY.md). Was NORMAL/DEGRADED/DOWN before. */}
           <Text style={s.label}>{t('service_label')}</Text>
           {(['electricity', 'water', 'health'] as const).map((svc) => {
             const val = svc === 'electricity' ? electricityStatus : svc === 'water' ? waterStatus : healthStatus;
@@ -1608,12 +2489,12 @@ export default function App() {
                 <Text style={{ color: Colors.text, width: 110, fontSize: 13 }}>{icon} {svc[0].toUpperCase() + svc.slice(1)}</Text>
                 <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap' }}>
                   {(['UNKNOWN','OPERATIONAL','DISRUPTED','DESTROYED'] as const).map(lvl => {
-                    const shortLabel = lvl === 'UNKNOWN' ? 'Unknown'
-                      : lvl === 'OPERATIONAL' ? 'Working'
-                      : lvl === 'DISRUPTED' ? 'Disrupted' : 'Destroyed';
+                    const labelKey = lvl === 'UNKNOWN' ? 'service_unknown'
+                      : lvl === 'OPERATIONAL' ? 'service_working'
+                      : lvl === 'DISRUPTED' ? 'service_disrupted' : 'service_destroyed';
                     return (
                       <TouchableOpacity key={lvl} style={[s.chip, val === lvl && s.chipActive, { paddingVertical: 4, paddingHorizontal: 8, marginRight: 4, marginBottom: 4 }]} onPress={() => set(lvl)}>
-                        <Text style={[s.chipText, { fontSize: 11 }]}>{shortLabel}</Text>
+                        <Text style={[s.chipText, { fontSize: 13 }]}>{t(labelKey)}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -1622,33 +2503,24 @@ export default function App() {
             );
           })}
 
-          {/* 10. Pressing needs — Phase 3 parity fix: lowercase values
-               (PWA + backend JSON convention). Label remains capitalised. */}
           <Text style={[s.label, { marginTop: 8 }]}>{t('needs_label')}</Text>
           <View style={s.chipRow}>
             {[
-              { k: 'food',     label: 'Food',     icon: '🍱' },
-              { k: 'water',    label: 'Water',    icon: '🚰' },
-              { k: 'shelter',  label: 'Shelter',  icon: '🏠' },
-              { k: 'medical',  label: 'Medical',  icon: '⚕️' },
-              { k: 'security', label: 'Security', icon: '🛡' },
+              { k: 'food',     labelKey: 'needs_food',     icon: '🍱' },
+              { k: 'water',    labelKey: 'needs_water',    icon: '🚰' },
+              { k: 'shelter',  labelKey: 'needs_shelter',  icon: '🏠' },
+              { k: 'medical',  labelKey: 'needs_medical',  icon: '⚕️' },
+              { k: 'security', labelKey: 'needs_security', icon: '🛡' },
             ].map(n => (
               <TouchableOpacity key={n.k} style={[s.chip, pressingNeeds.includes(n.k) && s.chipActive]} onPress={() => togglePressingNeed(n.k)}>
-                <Text style={s.chipText}>{n.icon} {n.label}</Text>
+                <Text style={s.chipText}>{n.icon} {t(n.labelKey)}</Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* 11. Severity */}
           <Text style={s.label}>{t('severity_label')}</Text>
           <View style={s.chipRow}>{sevs.map(sv => <TouchableOpacity key={sv.key} style={[s.chip, severity === sv.key && s.chipActive]} onPress={() => setSeverity(sv.key)}><Text style={s.chipText}>{sv.icon} {sv.label}</Text></TouchableOpacity>)}</View>
 
-          {/* 12. Location — parity with PWA .location-verify-box.
-               GPS status + searchable text override + optional building-
-               footprint picker. Until the user edits or picks, we show the
-               auto-detected name.
-               UNDP Appendix 1: `building_id` is optional — the primary
-               fallback is GPS coords + place name. */}
           <View style={s.locVerifyBox}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
               <Text style={{ fontSize: 16 }}>📍</Text>
@@ -1658,14 +2530,11 @@ export default function App() {
                   : (location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : t('loc_resolving'))}
               </Text>
               {location?.acc ? (
-                <Text style={{ color: Colors.textDim, fontSize: 11 }}>
+                <Text style={{ color: Colors.textDim, fontSize: 13 }}>
                   ±{Math.round(location.acc)}m
                 </Text>
               ) : null}
             </View>
-
-            {/* Manual location override — user types the place name. When
-                non-empty we flag `is_user_corrected` on submit. */}
             <TextInput
               value={userLocationName}
               onChangeText={(txt) => {
@@ -1677,34 +2546,433 @@ export default function App() {
               style={s.locSearchInput}
               accessibilityLabel={t('loc_search_placeholder')}
             />
-
-            {/* Building footprint selector — optional per UNDP Appendix 1.
-                Disabled until we have a GPS fix (Overpass needs a centre). */}
             {buildingId ? (
               <View style={s.locSelectedPill}>
                 <Text style={s.locSelectedPillIcon}>✓</Text>
+                {/* Show the OSM name when we have one, else the short id.
+                    The name gives the reporter confirmation of WHAT they
+                    picked (e.g. "City Hospital") and is the same string
+                    the backend + dashboard will now display. */}
                 <Text style={s.locSelectedPillText} numberOfLines={1}>
-                  {t('building_selected')}: {buildingId.replace('osm:way:', '#')}
+                  {t('building_selected')}: {infraNameFromOsm && infraName ? infraName : buildingId.replace('osm:way:', '#')}
                 </Text>
-                <TouchableOpacity onPress={() => setBuildingId(null)}>
+                <TouchableOpacity onPress={() => {
+                  setBuildingId(null);
+                  if (infraNameFromOsm) {
+                    setInfraName('');
+                    setInfraNameFromOsm(false);
+                  }
+                }}>
                   <Text style={{ color: Colors.accent, fontWeight: '600', fontSize: 12 }}>{t('edit')}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
+              // Apr 2026 UI v2.1 — no `disabled={!location}` gate. UNDP
+              // requires the building selector to be always reachable;
+              // the picker modal handles the "no GPS yet" state inline.
               <TouchableOpacity
-                style={[s.locFootprintBtn, !location && { opacity: 0.4 }]}
-                disabled={!location}
+                style={[s.locFootprintBtn, { paddingVertical: 14 }]}
                 onPress={() => setFootprintPickerOpen(true)}
                 accessibilityRole="button"
                 accessibilityLabel={t('building_select_title')}>
                 <Text style={s.locFootprintBtnText}>🏢  {t('building_select_title')}</Text>
+                {!location && (
+                  <Text style={{ marginTop: 4, color: Colors.textDim, fontSize: 12, textAlign: 'center' }}>
+                    {t('building_waiting_gps')}
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
           </View>
 
           <View style={s.navRow}>
-            <TouchableOpacity onPress={() => setScreen('audio')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
+            <TouchableOpacity style={[s.backBtn]} onPress={() => setScreen('audio')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
             <TouchableOpacity style={s.nextBtn} onPress={() => setScreen('review_confirm')}><Text style={s.nextBtnText}>{t('next')} →</Text></TouchableOpacity>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* ─── Apr 2026 UI v2 — 3-page review split ─────────────────────── */}
+      {screen === 'review_details' && uiV2 && (
+        <ScrollView
+          // R3: outer scroll container delegates to nested WebViews (the
+          // building-footprint picker lives inside its own full-screen Modal,
+          // so the two never collide, but we set these defensively so any
+          // future inline map also inherits safe behaviour on Android).
+          style={{ flex: 1, backgroundColor: Colors.bg }}
+          nestedScrollEnabled
+          scrollEventThrottle={16}
+          contentContainerStyle={{ padding: responsivePad(), paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <FlowProgress step={3} have={{ photo: !!photoUri, details: !!(audioUri || description?.trim()) }} />
+          {/* Inline page-of-3 indicator — gives the user a "you are
+              here" cue that's cheaper to read than the FlowProgress row. */}
+          <Text style={{ color: Colors.textDim, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+            {reviewPage} / 3
+          </Text>
+          <Text style={s.title}>
+            {reviewPage === 1 ? t('review_v2_title_what')
+              : reviewPage === 2 ? t('review_v2_title_how')
+              : t('review_v2_title_confirm')}
+          </Text>
+
+          {/* ── Page 1: What happened — crisis type + damage class ── */}
+          {reviewPage === 1 && (
+            <>
+              <Text style={s.label}>{t('crisis_label')}</Text>
+              {/* 2-column grid (roughly) — `width: 48%` on each tile lets
+                  the wrap naturally land two per row at 360 px. */}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {crisisTypes.map(ct => (
+                  <TouchableOpacity
+                    key={ct.key}
+                    style={[
+                      s.v2Tile,
+                      crisisType === ct.key && s.v2TileActive,
+                    ]}
+                    onPress={() => setCrisisType(ct.key)}
+                    accessibilityRole="button"
+                    accessibilityLabel={ct.label}
+                    accessibilityState={{ selected: crisisType === ct.key }}
+                  >
+                    <IconTile
+                      name={ct.key}
+                      color={crisisType === ct.key ? Colors.accent : Colors.text}
+                      size={40}
+                    />
+                    <Text style={[s.v2TileLabel, crisisType === ct.key && { color: Colors.accent }]} numberOfLines={2}>
+                      {ct.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[s.label, { marginTop: 16 }]}>{t('damage_label')}</Text>
+              {/* 3-dot row — one tile per severity. Fills / colour driven
+                  by IconTile's `filled` prop so COMPLETE reads as the
+                  filled red disc + white X glyph. */}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {damageOptions.map(d => (
+                  <TouchableOpacity
+                    key={d.key}
+                    style={[
+                      s.v2Tile,
+                      { flex: 1 },
+                      damageClass === d.key && { ...s.v2TileActive, borderColor: d.color },
+                    ]}
+                    onPress={() => setDamageClass(d.key)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t(d.labelKey) || d.label}
+                    accessibilityState={{ selected: damageClass === d.key }}
+                  >
+                    <IconTile
+                      name={d.key}
+                      color={d.color}
+                      size={36}
+                      filled={d.key === 'COMPLETE'}
+                    />
+                    <Text style={[s.v2TileLabel, { color: d.color }]}>
+                      {t(d.labelKey) || d.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* ── Page 2: How bad + where — severity / infra / location ── */}
+          {reviewPage === 2 && (
+            <>
+              <Text style={s.label}>{t('severity_label')}</Text>
+              <View style={s.chipRow}>
+                {sevs.map(sv => (
+                  <TouchableOpacity
+                    key={sv.key}
+                    style={[s.chip, severity === sv.key && s.chipActive]}
+                    onPress={() => setSeverity(sv.key)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: severity === sv.key }}
+                  >
+                    <Text style={s.chipText}>{sv.icon} {sv.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[s.label, { marginTop: 16 }]}>{t('type_label')}</Text>
+              {/* 4 super-types + OTHER. IconTile renders each glyph in
+                  its category colour so a FLOOD tile in infra reads
+                  differently from a generic chip. */}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {[
+                  { key: 'RESIDENTIAL', label: t('type_house'),    color: '#fb923c' },
+                  { key: 'UTILITY',     label: t('type_power'),    color: '#facc15' },
+                  { key: 'TRANSPORT_COMMUNICATION', label: t('type_road'), color: '#60a5fa' },
+                  { key: 'COMMUNITY',   label: t('type_hospital'), color: '#f472b6' },
+                  { key: 'OTHER',       label: t('type_other'),    color: '#94a3b8' },
+                ].map(st => (
+                  <TouchableOpacity
+                    key={st.key}
+                    style={[s.v2Tile, infraType === st.key && s.v2TileActive]}
+                    onPress={() => setInfraType(st.key)}
+                    accessibilityRole="button"
+                    accessibilityLabel={st.label}
+                    accessibilityState={{ selected: infraType === st.key }}
+                  >
+                    <IconTile
+                      name={st.key}
+                      color={infraType === st.key ? Colors.accent : st.color}
+                      size={40}
+                    />
+                    <Text style={[s.v2TileLabel, infraType === st.key && { color: Colors.accent }]}>{st.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Location block — shrunk copy of v1 verify box. Keeps
+                  the user editable text + "±acc" + footprint trigger
+                  so page 2 can stand alone without jumping to page 3. */}
+              <Text style={[s.label, { marginTop: 16 }]}>{t('location_label') || 'Location'}</Text>
+              <View style={s.locVerifyBox}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+                  <IconTile name="LOCATION" color={Colors.accent} size={20} />
+                  <Text style={{ color: Colors.text, fontSize: 13, flex: 1 }} numberOfLines={2}>
+                    {locationName
+                      ? locationName
+                      : (location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : t('loc_resolving'))}
+                  </Text>
+                  {location?.acc ? (
+                    <Text style={{ color: Colors.textDim, fontSize: 13 }}>
+                      ±{Math.round(location.acc)}m
+                    </Text>
+                  ) : null}
+                </View>
+                <TextInput
+                  value={userLocationName}
+                  onChangeText={(txt) => {
+                    setUserLocationName(txt);
+                    setIsLocationUserCorrected(txt.trim().length > 0);
+                  }}
+                  placeholder={t('loc_search_placeholder')}
+                  placeholderTextColor={Colors.textDim}
+                  style={s.locSearchInput}
+                  accessibilityLabel={t('loc_search_placeholder')}
+                />
+              </View>
+
+              {/* Service status — always visible (Apr 2026 UI v2.1).
+                  Was collapsible behind a chevron TouchableOpacity; field
+                  testing showed uneducated users didn't tap to expand.
+                  Flattened to a plain section header + always-rendered
+                  content. Header styled identically to the PWA's flat
+                  .service-details label (uppercase dim muted). */}
+              <View
+                style={{
+                  marginTop: 14, paddingHorizontal: 12, paddingVertical: 12,
+                  borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.03)',
+                  borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+                }}
+              >
+                <Text style={{
+                  color: Colors.textDim, fontSize: 13, fontWeight: '700',
+                  textTransform: 'uppercase', letterSpacing: 0.6,
+                  marginBottom: 10,
+                }}>
+                  {t('service_label')}
+                </Text>
+                <View>{/* always-rendered; no conditional gate */}
+                  {(['electricity', 'water', 'health'] as const).map((svc) => {
+                    const val = svc === 'electricity' ? electricityStatus : svc === 'water' ? waterStatus : healthStatus;
+                    const set = svc === 'electricity' ? setElectricityStatus : svc === 'water' ? setWaterStatus : setHealthStatus;
+                    const icon = svc === 'electricity' ? '⚡' : svc === 'water' ? '💧' : '🏥';
+                    return (
+                      <View key={svc} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                        <Text style={{ color: Colors.text, width: 110, fontSize: 13 }}>{icon} {svc[0].toUpperCase() + svc.slice(1)}</Text>
+                        <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap' }}>
+                          {(['UNKNOWN','OPERATIONAL','DISRUPTED','DESTROYED'] as const).map(lvl => {
+                            const labelKey = lvl === 'UNKNOWN' ? 'service_unknown'
+                              : lvl === 'OPERATIONAL' ? 'service_working'
+                              : lvl === 'DISRUPTED' ? 'service_disrupted' : 'service_destroyed';
+                            return (
+                              <TouchableOpacity key={lvl} style={[s.chip, val === lvl && s.chipActive, { paddingVertical: 4, paddingHorizontal: 8, marginRight: 4, marginBottom: 4 }]} onPress={() => set(lvl)}>
+                                <Text style={[s.chipText, { fontSize: 13 }]}>{t(labelKey)}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    );
+                  })}
+                  <Text style={[s.label, { marginTop: 8 }]}>{t('needs_label')}</Text>
+                  <View style={s.chipRow}>
+                    {/* Apr 2026 UI v2.1 — chips expanded 5 → 10 to cover all
+                        UNDP Appendix-1 pressing-needs categories + Other.
+                        Order matches the UNDP doc. Old `security` legacy
+                        value retained as `needs_security` i18n key for any
+                        reports submitted before the expansion. */}
+                    {[
+                      { k: 'food',           labelKey: 'needs_food',           icon: '🍱' },
+                      { k: 'water',          labelKey: 'needs_water',          icon: '🚰' },
+                      { k: 'cash',           labelKey: 'need_cash',            icon: '💰' },
+                      { k: 'medical',        labelKey: 'needs_medical',        icon: '⚕️' },
+                      { k: 'shelter',        labelKey: 'needs_shelter',        icon: '🏠' },
+                      { k: 'livelihoods',    labelKey: 'need_livelihoods',     icon: '💼' },
+                      { k: 'wash',           labelKey: 'need_wash',            icon: '🚿' },
+                      { k: 'basic_services', labelKey: 'need_basic_services',  icon: '⚡' },
+                      { k: 'protection',     labelKey: 'need_protection',      icon: '🛡' },
+                      { k: 'local_support',  labelKey: 'need_local_support',   icon: '🏛' },
+                    ].map(n => (
+                      <TouchableOpacity key={n.k} style={[s.chip, pressingNeeds.includes(n.k) && s.chipActive]} onPress={() => togglePressingNeed(n.k)}>
+                        <Text style={s.chipText}>{n.icon} {t(n.labelKey)}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+                </View>
+            </>
+          )}
+
+          {/* ── Page 3: Describe & send — description + footprint + submit ── */}
+          {reviewPage === 3 && (
+            <>
+              <Text style={s.label}>{t('description_label')}</Text>
+              <TextInput
+                style={s.textInput}
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                numberOfLines={3}
+                placeholderTextColor={Colors.textDim}
+                placeholder={t('type_text')}
+              />
+
+              {/* UNDP-required building footprint selector (Apr 2026 UI v2.1).
+                  WAS: disabled at opacity 0.4 until a GPS fix landed, so
+                  the UNDP-mandated picker looked broken / missing to
+                  field users who submitted before location resolved.
+                  NOW: always interactive. If no GPS yet, the picker
+                  modal itself shows a "Waiting for GPS" state and waits
+                  for the fix to roll in — parity with the PWA's flat
+                  map + placeholder pattern. */}
+              {buildingId ? (
+                <View style={[s.locSelectedPill, { marginBottom: 10 }]}>
+                  <Text style={s.locSelectedPillIcon}>✓</Text>
+                  <Text style={s.locSelectedPillText} numberOfLines={1}>
+                    {t('building_selected')}: {infraNameFromOsm && infraName ? infraName : buildingId.replace('osm:way:', '#')}
+                  </Text>
+                  <TouchableOpacity onPress={() => {
+                    setBuildingId(null);
+                    if (infraNameFromOsm) {
+                      setInfraName('');
+                      setInfraNameFromOsm(false);
+                    }
+                  }}>
+                    <Text style={{ color: Colors.accent, fontWeight: '600', fontSize: 12 }}>{t('edit')}</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    s.locFootprintBtn,
+                    {
+                      marginBottom: 10, paddingVertical: 14,
+                      borderWidth: 1.5, borderColor: Colors.accent,
+                      backgroundColor: 'rgba(124,58,237,0.10)',
+                    },
+                  ]}
+                  onPress={() => setFootprintPickerOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('building_select_title')}>
+                  <Text style={[s.locFootprintBtnText, { fontSize: 15, color: Colors.accent }]}>
+                    🏢  {t('building_select_title')}
+                  </Text>
+                  {!location && (
+                    <Text style={{ marginTop: 4, color: Colors.textDim, fontSize: 12, textAlign: 'center' }}>
+                      {t('building_waiting_gps')}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {/* Phase B2 (Apr 2026 UI v3) — free-text building-name
+                  fallback. Used when the BuildingFootprintPicker's Leaflet /
+                  Overpass pipeline is unavailable (offline, WebView blocked,
+                  Overpass rate-limit). The reporter types the name in their
+                  native language; the backend stores it on
+                  `infrastructure_name` with `building_id=NULL` and the
+                  dashboard tags the row "needs mapping". Editing this input
+                  clears `infraNameFromOsm` — user intent overrides any
+                  prior OSM auto-fill. Always rendered (not behind a
+                  conditional) so the path is discoverable; if the user
+                  already picked a footprint, they see the typed name
+                  reflected here. */}
+              <View style={s.buildingFreeText}>
+                <Text style={s.buildingFreeTextLabel}>
+                  ✍️  {t('bldg_offline_prompt')}
+                </Text>
+                <TextInput
+                  style={s.buildingFreeTextInput}
+                  placeholder="e.g. Kiambu High School / مدرسة الأمل"
+                  placeholderTextColor={Colors.textDim}
+                  value={infraName}
+                  onChangeText={(v) => {
+                    setInfraName(v);
+                    // User typed — the text is no longer OSM-authoritative.
+                    // Match PWA's setupBuildingFreeText() behaviour.
+                    setInfraNameFromOsm(false);
+                  }}
+                  maxLength={120}
+                  returnKeyType="done"
+                  accessibilityLabel={t('bldg_offline_prompt')}
+                />
+                <Text style={s.buildingFreeTextHint}>
+                  ℹ️  {t('bldg_offline_hint')}
+                </Text>
+              </View>
+
+              {/* Inline summary — one dense card that lets the user
+                  sanity-check the most load-bearing fields before Submit. */}
+              <View style={s.summaryCard}>
+                <Text style={s.summaryRow}>🌪 {(crisisTypes.find(ct => ct.key === crisisType)?.label) || crisisType}</Text>
+                <Text style={s.summaryRow}>🏗 {damageClass.replace(/_/g, ' ')}  ·  ⚠️ {severity}</Text>
+                <Text style={s.summaryRow}>📋 {infraType.replace(/_/g, ' ')}</Text>
+                {locationName ? <Text style={s.summaryRow}>📍 {locationName}</Text> : null}
+                {pressingNeeds.length > 0 ? <Text style={s.summaryRow}>{t('needs_prefix')} {pressingNeeds.join(', ')}</Text> : null}
+              </View>
+
+              <TouchableOpacity
+                style={[s.bigBtn, isSending && { opacity: 0.5 }]}
+                onPress={submitReport}
+                disabled={isSending}
+                accessibilityRole="button">
+                <Text style={s.bigBtnText}>{isSending ? t('sending') : t('submit')}</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Nav footer — Back + Next on pages 1/2, Back-only on page 3
+              (Submit is the primary CTA inline with the summary card). */}
+          <View style={s.navRow}>
+            <TouchableOpacity
+              style={[s.backBtn]}
+              onPress={() => {
+                if (reviewPage === 1) {
+                  setScreen('audio');
+                } else {
+                  setReviewPage((p) => reviewReducer(p, { type: 'BACK' }));
+                }
+              }}
+              accessibilityRole="button">
+              <Text style={s.backText}>{t('back')}</Text>
+            </TouchableOpacity>
+            {reviewPage < 3 && (
+              <TouchableOpacity
+                style={s.nextBtn}
+                onPress={() => setReviewPage((p) => reviewReducer(p, { type: 'NEXT' }))}
+                accessibilityRole="button">
+                <Text style={s.nextBtnText}>{t('next')} →</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       )}
@@ -1713,14 +2981,21 @@ export default function App() {
            links point to review_details now since that's the single editable
            screen after the 3-page → 2-page collapse. */}
       {screen === 'review_confirm' && (
-        <ScrollView style={{ flex: 1, backgroundColor: Colors.bg }} contentContainerStyle={{ padding: 24 }}>
+        <ScrollView
+          style={{ flex: 1, backgroundColor: Colors.bg }}
+          nestedScrollEnabled
+          scrollEventThrottle={16}
+          contentContainerStyle={{ padding: responsivePad() }}>
           <FlowProgress step={4} have={{ photo: !!photoUri, details: !!(audioUri || description?.trim()) }} />
           <Text style={s.title}>{t('confirm_title')}</Text>
 
           <View style={s.summaryCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <Text style={[s.summaryRow, { fontWeight: '700' }]}>{t('incident_title')}</Text>
-              <TouchableOpacity onPress={() => setScreen('review_details')}><Text style={{ color: Colors.accent }}>{t('edit')}</Text></TouchableOpacity>
+              {/* Phase B4 (Apr 2026 UI v3) — edit pill deep-links to the
+                  v3 crisis stage (where crisis + building name live). In v2
+                  it returns to the legacy review_details screen. */}
+              <TouchableOpacity onPress={() => setScreen(uiV3 ? 'crisis' : 'review_details')}><Text style={{ color: Colors.accent }}>{t('edit')}</Text></TouchableOpacity>
             </View>
             <Text style={s.summaryRow}>🌪 {crisisType.replace(/_/g, ' ')}  📸 {photoUri ? '✅' : '❌'} + {extraPhotos.length} extra  🎤 {audioUri ? '✅' : '❌'}</Text>
             {description ? <Text style={s.summaryDesc} numberOfLines={3}>📝 {description}</Text> : null}
@@ -1730,7 +3005,9 @@ export default function App() {
           <View style={s.summaryCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <Text style={[s.summaryRow, { fontWeight: '700' }]}>{t('details_title')}</Text>
-              <TouchableOpacity onPress={() => setScreen('review_details')}><Text style={{ color: Colors.accent }}>{t('edit')}</Text></TouchableOpacity>
+              {/* Phase B4 (Apr 2026 UI v3) — details-edit pill deep-links
+                  to the v3 infra stage (what was hit + damage severity). */}
+              <TouchableOpacity onPress={() => setScreen(uiV3 ? 'infra' : 'review_details')}><Text style={{ color: Colors.accent }}>{t('edit')}</Text></TouchableOpacity>
             </View>
             <Text style={s.summaryRow}>📋 {infraType} | ⚠️ {severity} | 🏗 {damageClass.replace(/_/g, ' ')}</Text>
             {infraName ? <Text style={s.summaryRow}>🏛 {infraName}</Text> : null}
@@ -1743,12 +3020,15 @@ export default function App() {
           <TouchableOpacity style={[s.bigBtn, isSending && { opacity: 0.5 }]} onPress={submitReport} disabled={isSending}>
             <Text style={s.bigBtnText}>{isSending ? t('sending') : t('submit')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setScreen('review_details')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
+          {/* Phase B4 (Apr 2026 UI v3) — v3 skipped review_details on the
+              way forward, so Back here returns to 'audio'. Legacy v2 keeps
+              its full back-nav through review_details. */}
+          <TouchableOpacity onPress={() => setScreen(uiV3 ? 'audio' : 'review_details')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
         </ScrollView>
       )}
 
       {screen === 'success' && (
-        <View style={s.screen}>
+        <View style={[s.screen, { padding: responsivePad() }]}>
           {/* PR 7 (Apr 2026): glowing heart close — warmer framing, explicit
               two-action exit. Primary resets to a fresh report loop; secondary
               opens the just-submitted report's detail so the user can
@@ -1805,16 +3085,25 @@ export default function App() {
       )}
 
       {screen === 'history' && (
-        <ScrollView style={{ flex: 1, backgroundColor: Colors.bg }} contentContainerStyle={{ padding: 20 }}>
-          {/* Beefier Back button so it's impossible to miss / mistap. */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <ScrollView
+          style={{ flex: 1, backgroundColor: Colors.bg }}
+          nestedScrollEnabled
+          scrollEventThrottle={16}
+          // R8: responsive horizontal padding — 20 px at 360 px, scales
+          // down to ~17 px at 280 px so cards don't clip the right edge.
+          contentContainerStyle={{ padding: Math.min(20, Dimensions.get('window').width * 0.055) }}>
+          {/* R1: back/refresh row wraps on narrow screens with gap + flex:1
+              + minWidth:120. No change to visible layout at ≥360 px — both
+              buttons still sit on one line — but at 320 px the refresh
+              button drops to its own row instead of overflowing. */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
             <TouchableOpacity
               onPress={() => setScreen('home')}
-              style={{ backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 }}>
-              <Text style={{ color: Colors.text, fontSize: 14, fontWeight: '700' }}>← Back</Text>
+              style={{ flex: 1, minWidth: 120, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, alignItems: 'center' }}>
+              <Text style={{ color: Colors.text, fontSize: 14, fontWeight: '700' }}>← {t('back')}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => { pollStatus(); refreshHistory(); }}
-              style={{ backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 }}>
+              style={{ flex: 1, minWidth: 120, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, alignItems: 'center' }}>
               <Text style={{ color: Colors.cyan, fontSize: 14, fontWeight: '700' }}>{t('refresh')}</Text>
             </TouchableOpacity>
           </View>
@@ -1872,10 +3161,10 @@ export default function App() {
                       </Text>
                       <Text style={{ color: statusColor, fontSize: 11, fontWeight: '700' }}>{statusLabel}</Text>
                     </View>
-                    <Text style={{ color: Colors.textDim, fontSize: 11, marginTop: 3 }}>
+                    <Text style={{ color: Colors.textDim, fontSize: 13, marginTop: 3 }}>
                       📸 {hasPhoto ? `${photoPct}%` : '—'}  🎤 {hasAudio ? `${audioPct}%` : '—'}  {p.retry_count ? `(retry ${p.retry_count})` : ''}
                     </Text>
-                    {p.text_description ? <Text style={{ color: Colors.textDim, fontSize: 11, marginTop: 2 }} numberOfLines={1}>{p.text_description}</Text> : null}
+                    {p.text_description ? <Text style={{ color: Colors.textDim, fontSize: 13, marginTop: 2 }} numberOfLines={1}>{p.text_description}</Text> : null}
                     {isFailed && (
                       <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                         <TouchableOpacity
@@ -1895,11 +3184,14 @@ export default function App() {
                         </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => {
+                            // Apr 2026 i18n sweep — localised button text via
+                            // btn_cancel / btn_delete; title/body kept as
+                            // English fall-through for now (no key yet).
                             Alert.alert('Delete queued report?',
                               'This will permanently remove it from the device. Your photo and audio will be lost.',
                               [
-                                { text: 'Cancel', style: 'cancel' },
-                                { text: 'Delete', style: 'destructive', onPress: async () => {
+                                { text: t('btn_cancel'), style: 'cancel' },
+                                { text: t('btn_delete'), style: 'destructive', onPress: async () => {
                                   try {
                                     await deleteQueuedReport(p.client_report_id);
                                     await refreshHistory();
@@ -1979,24 +3271,24 @@ export default function App() {
                         paddingHorizontal: 8, paddingVertical: 2,
                         borderRadius: 999,
                       }}>
-                        <Text style={{ color: st.color, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                        <Text style={{ color: st.color, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                           {st.icon} {st.label}
                         </Text>
                       </View>
                     </View>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
                       {!!placeName && (
-                        <Text style={{ color: Colors.textDim, fontSize: 11 }} numberOfLines={1}>📍 {placeName}</Text>
+                        <Text style={{ color: Colors.textDim, fontSize: 13 }} numberOfLines={1}>📍 {placeName}</Text>
                       )}
                       {!!dateText && (
-                        <Text style={{ color: Colors.textDim, fontSize: 11 }}>🕒 {dateText}</Text>
+                        <Text style={{ color: Colors.textDim, fontSize: 13 }}>🕒 {dateText}</Text>
                       )}
                       {h.lives_impacted > 0 && (
-                        <Text style={{ color: Colors.green, fontSize: 11, fontWeight: '600' }}>💚 {h.lives_impacted} lives</Text>
+                        <Text style={{ color: Colors.green, fontSize: 13, fontWeight: '600' }}>💚 {h.lives_impacted} lives</Text>
                       )}
                     </View>
                     {queued && (
-                      <Text style={{ color: '#fbbf24', fontSize: 10, marginTop: 4 }}>🕒 Will be deleted when connected</Text>
+                      <Text style={{ color: '#fbbf24', fontSize: 13, marginTop: 4 }}>🕒 Will be deleted when connected</Text>
                     )}
                   </View>
                 </TouchableOpacity>
@@ -2044,8 +3336,8 @@ export default function App() {
                       'Delete all my reports?',
                       'This removes every report you\'ve sent from this device. Your data will be permanently deleted within 24 hours. This cannot be undone.',
                       [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'Delete All', style: 'destructive', onPress: async () => {
+                        { text: t('btn_cancel'), style: 'cancel' },
+                        { text: t('btn_delete'), style: 'destructive', onPress: async () => {
                           try {
                             await fetch(`${getApiBase()}/reports/device/${deviceHash}`, { method: 'DELETE' });
                             Alert.alert('Deletion requested', 'Your reports will be removed within 24 hours.');
@@ -2061,7 +3353,7 @@ export default function App() {
                   <Text style={{ color: '#f87171', fontSize: 14 }}>🗑</Text>
                   <Text style={{ color: '#f87171', fontSize: 14, fontWeight: '600' }}>{t('delete_all_my_reports') || 'Delete all my reports'}</Text>
                 </TouchableOpacity>
-                <Text style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 8, lineHeight: 16 }}>
+                <Text style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', marginTop: 8, lineHeight: 18 }}>
                   {t('delete_all_note') || "This removes every report you've sent from this device. Your data will be permanently deleted within 24 hours."}
                 </Text>
               </View>
@@ -2098,7 +3390,11 @@ export default function App() {
         const alreadyRequested = !!r.deletion_requested_at;
 
         return (
-          <ScrollView style={{ flex: 1, backgroundColor: Colors.bg }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          <ScrollView
+            style={{ flex: 1, backgroundColor: Colors.bg }}
+            nestedScrollEnabled
+            scrollEventThrottle={16}
+            contentContainerStyle={{ padding: Math.min(16, Dimensions.get('window').width * 0.045), paddingBottom: 40 }}>
             {/* Header */}
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
               <TouchableOpacity onPress={() => { setScreen('history'); setSelectedReport(null); refreshHistory().catch(() => {}); }}>
@@ -2134,7 +3430,8 @@ export default function App() {
                         : 'rgba(255,255,255,0.04)',
                     }} />
                     <Text style={{
-                      fontSize: 10, fontWeight: '600',
+                      // Apr 2026 UI v2 (R6): 10 → 13 legibility floor.
+                      fontSize: 13, fontWeight: '600',
                       marginTop: 4,
                       color: s.done
                         ? (s.rejected ? '#f87171' : '#4ade80')
@@ -2160,7 +3457,7 @@ export default function App() {
             {/* Description */}
             {!!r.description && (
               <View style={{ marginBottom: 16 }}>
-                <Text style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                <Text style={{ fontSize: 13, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
                   Description
                 </Text>
                 <Text style={{ color: Colors.text, fontSize: 14, lineHeight: 20 }}>{r.description}</Text>
@@ -2169,7 +3466,7 @@ export default function App() {
 
             {/* Metadata */}
             <View style={{ marginBottom: 16 }}>
-              <Text style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+              <Text style={{ fontSize: 13, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
                 Details
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -2185,7 +3482,7 @@ export default function App() {
                     backgroundColor: 'rgba(255,255,255,0.03)',
                     borderRadius: 8,
                   }}>
-                    <Text style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                    <Text style={{ fontSize: 13, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                       {e.icon} {e.label}
                     </Text>
                     <Text style={{ fontSize: 13, color: Colors.text, fontWeight: '600', textTransform: 'capitalize', marginTop: 2 }}>
@@ -2271,9 +3568,9 @@ export default function App() {
                       'Delete this report?',
                       'Your data will be permanently removed within 24 hours. This cannot be undone.',
                       [
-                        { text: 'Cancel', style: 'cancel' },
+                        { text: t('btn_cancel'), style: 'cancel' },
                         {
-                          text: 'Delete', style: 'destructive', onPress: async () => {
+                          text: t('btn_delete'), style: 'destructive', onPress: async () => {
                             try {
                               if (!isOnline) {
                                 await enqueueDelete(idToDelete);
@@ -2375,7 +3672,18 @@ export default function App() {
       <BuildingFootprintPicker
         visible={footprintPickerOpen}
         onClose={() => setFootprintPickerOpen(false)}
-        onSelect={(osmId) => setBuildingId(osmId)}
+        onSelect={(osmId, osmName) => {
+          setBuildingId(osmId);
+          // Auto-fill infrastructure_name from the OSM `name` tag so
+          // the web-dashboard shows "City Hospital" next to the
+          // indigo Building-history pill instead of the bare OSM id.
+          // Respects a value the user has already typed — only
+          // overwrites when the field is blank.
+          if (osmName && !infraName.trim()) {
+            setInfraName(osmName);
+            setInfraNameFromOsm(true);
+          }
+        }}
         lat={location.lat}
         lng={location.lng}
       />
@@ -2446,6 +3754,38 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   locFootprintBtnText: { color: Colors.accent, fontSize: 13, fontWeight: '700' },
+  // Phase B2 (Apr 2026 UI v3) — free-text building-name fallback styles.
+  // Mirrors the PWA's `.building-free-text*` selectors in styles.css.
+  buildingFreeText: {
+    marginTop: 2,
+    marginBottom: 10,
+    padding: 12,
+    backgroundColor: 'rgba(37,99,235,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.22)',
+    borderRadius: 10,
+  },
+  buildingFreeTextLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 6,
+  },
+  buildingFreeTextInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: Colors.text,
+    backgroundColor: Colors.surface,
+  },
+  buildingFreeTextHint: {
+    marginTop: 6,
+    fontSize: 11,
+    color: Colors.textDim,
+  },
   // Audio recording timer — shown during active capture only. Red dot
   // + monospace MM:SS, mirrors the PWA's .rec-timer in styles.css.
   recTimer: {
@@ -2510,10 +3850,49 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', gap: 12, width: '100%', marginBottom: 16 },
   choiceBtn: { flex: 1, backgroundColor: Colors.surface, padding: 24, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, minHeight: 100, justifyContent: 'center' },
   choiceBtnText: { color: Colors.text, fontSize: 18, fontWeight: '700' },
-  navRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 16 },
+  // Apr 2026 UI v2 (R1 audit): nav row wraps on narrow screens (≤320 px)
+  // so the back/next pair don't overflow past the viewport edge. `flex:1`
+  // + `minWidth:120` on each button ensures they share available width
+  // but still look like tap targets; on ≥360 px the original two-up
+  // layout holds because both fit above the wrap threshold.
+  navRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', marginTop: 16, alignItems: 'center', justifyContent: 'space-between' },
   backText: { color: Colors.textDim, fontSize: 15, fontWeight: '500', padding: 8 },
-  nextBtn: { backgroundColor: Colors.accent, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10 },
+  // R1 audit: back button keeps a minimum width so flex:1 can't squeeze
+  // it below the 120-px tap-target floor on 280-px devices. The plain
+  // `backText` stays for places where only the text label is rendered.
+  backBtn: { minWidth: 120, paddingVertical: 8, paddingHorizontal: 8 },
+  nextBtn: { backgroundColor: Colors.accent, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10, flex: 1, minWidth: 120, alignItems: 'center' },
   nextBtnText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
+  // Apr 2026 UI v2 — large icon tile used on review pages 1/2. 48 %
+  // width lets the wrap land two-per-row at 360 px; on 280 px the tile
+  // still fits with room to breathe. `minHeight` floor prevents short
+  // labels from collapsing the tile below the 64-px accessibility guide.
+  v2Tile: {
+    width: '48%',
+    minHeight: 88,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  v2TileActive: {
+    borderColor: Colors.accent,
+    backgroundColor: 'rgba(124,58,237,0.12)',
+  },
+  // R6: label sits at 13 — above the legibility floor for low-end
+  // Android displays and the low-literacy field-worker persona.
+  v2TileLabel: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+    textTransform: 'capitalize',
+  },
   micBtn: { width: 160, height: 160, borderRadius: 80, backgroundColor: Colors.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 24, elevation: 10 },
   textInput: { width: '100%', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, padding: 14, color: Colors.text, fontSize: 15, textAlignVertical: 'top', marginBottom: 16 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },

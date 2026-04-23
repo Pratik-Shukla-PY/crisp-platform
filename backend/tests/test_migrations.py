@@ -305,3 +305,137 @@ def test_legacy_db_is_upgraded_without_data_loss():
             f"legacy chip not preserved in sub_type, got {infra_sub!r}"
     finally:
         _drop_tmp_db(dbname)
+
+
+# ── Phase 3.3 — Downgrade path coverage ──────────────────────────────────────
+#
+# Every revision in the chain (0002 → 0006) has a `downgrade()` body. Nobody
+# has ever run them. If a migration was written with a one-way backfill
+# (e.g. ENUM widened without a downgrade narrowing it) the only way to find
+# out is to try. These tests walk the chain backwards one step at a time
+# and assert the schema is in a sensible state after each.
+#
+# We DON'T run all the way to the empty-DB baseline because the baseline
+# revision's downgrade drops the entire schema — that's covered implicitly
+# by `_make_tmp_db + upgrade head + drop_tmp_db`. These tests stop at
+# 0002 (the first post-baseline revision) so a failure points at a
+# specific migration, not a cascading schema drop.
+
+
+def test_downgrade_from_head_to_0005():
+    """0006 → 0005: `reports.blurhash` column must be dropped."""
+    dbname, url = _make_tmp_db()
+    try:
+        up = _run_alembic("upgrade", "head", db_url=url)
+        assert up.returncode == 0, up.stderr
+        down = _run_alembic("downgrade", "0005_pii", db_url=url)
+        assert down.returncode == 0, \
+            f"downgrade 0006 → 0005 failed:\n{down.stdout}\n{down.stderr}"
+        eng = create_engine(url)
+        report_cols = {c["name"] for c in inspect(eng).get_columns("reports")}
+        eng.dispose()
+        assert "blurhash" not in report_cols, \
+            "downgrade 0006 didn't drop reports.blurhash"
+        # Sanity: pii_blur_status (from 0005) SHOULD still be there.
+        eng = create_engine(url)
+        media_cols = {c["name"] for c in inspect(eng).get_columns("media")}
+        eng.dispose()
+        assert "pii_blur_status" in media_cols
+    finally:
+        _drop_tmp_db(dbname)
+
+
+def test_downgrade_from_0005_to_0004():
+    """0005 → 0004: `media.pii_blur_status` column + index must be dropped."""
+    dbname, url = _make_tmp_db()
+    try:
+        up = _run_alembic("upgrade", "head", db_url=url)
+        assert up.returncode == 0, up.stderr
+        down = _run_alembic("downgrade", "0004_bin", db_url=url)
+        assert down.returncode == 0, \
+            f"downgrade to 0004 failed:\n{down.stdout}\n{down.stderr}"
+        eng = create_engine(url)
+        insp = inspect(eng)
+        media_cols = {c["name"] for c in insp.get_columns("media")}
+        media_indexes = {i["name"] for i in insp.get_indexes("media")}
+        eng.dispose()
+        assert "pii_blur_status" not in media_cols
+        assert "ix_media_pii_blur_status" not in media_indexes, \
+            "downgrade left the pii_blur_status index behind"
+    finally:
+        _drop_tmp_db(dbname)
+
+
+def test_downgrade_from_0004_to_0003():
+    """0004 → 0003: `media_chunks.data_binary` + CHECK constraint removed;
+    `data_b64` must be NOT NULL again. Data-binary rows would be lost —
+    that's the irreversible direction; we just verify the schema swap."""
+    dbname, url = _make_tmp_db()
+    try:
+        up = _run_alembic("upgrade", "head", db_url=url)
+        assert up.returncode == 0, up.stderr
+        down = _run_alembic("downgrade", "0003_infra", db_url=url)
+        # 0004's downgrade MAY refuse if data_binary rows exist — but on
+        # a fresh DB there are no rows so it should succeed. If it fails
+        # we surface the full alembic output for triage.
+        assert down.returncode == 0, \
+            f"downgrade to 0003 failed (possibly a rows-present guard):\n" \
+            f"{down.stdout}\n{down.stderr}"
+        eng = create_engine(url)
+        cols = {c["name"] for c in inspect(eng).get_columns("media_chunks")}
+        eng.dispose()
+        assert "data_binary" not in cols, \
+            "downgrade 0004 left data_binary behind"
+    finally:
+        _drop_tmp_db(dbname)
+
+
+def test_downgrade_from_0003_to_0002():
+    """0003 → 0002: `reports.infrastructure_sub_type` + index dropped.
+
+    Postgres ENUM widening via `ALTER TYPE ... ADD VALUE` is irreversible
+    without a type swap; the downgrade SHOULD either (a) narrow the enum
+    by recreating it (expensive) or (b) leave the extra values as no-ops
+    on narrower rows. This test asserts whatever 0003's downgrade() does
+    without prescribing the strategy — if it errors, we surface the msg.
+    """
+    dbname, url = _make_tmp_db()
+    try:
+        up = _run_alembic("upgrade", "head", db_url=url)
+        assert up.returncode == 0, up.stderr
+        down = _run_alembic("downgrade", "0002_bf_cat", db_url=url)
+        assert down.returncode == 0, \
+            f"downgrade to 0002 failed (enum-narrow irreversibility?):\n" \
+            f"{down.stdout}\n{down.stderr}"
+        eng = create_engine(url)
+        cols = {c["name"] for c in inspect(eng).get_columns("reports")}
+        eng.dispose()
+        assert "infrastructure_sub_type" not in cols, \
+            "downgrade 0003 left infrastructure_sub_type behind"
+    finally:
+        _drop_tmp_db(dbname)
+
+
+def test_downgrade_then_re_upgrade_round_trip():
+    """End-to-end round-trip: head → 0002 → head. Verifies the
+    downgrade + re-upgrade path doesn't accumulate schema drift."""
+    dbname, url = _make_tmp_db()
+    try:
+        up1 = _run_alembic("upgrade", "head", db_url=url)
+        assert up1.returncode == 0
+        down = _run_alembic("downgrade", "0002_bf_cat", db_url=url)
+        assert down.returncode == 0, down.stderr
+        up2 = _run_alembic("upgrade", "head", db_url=url)
+        assert up2.returncode == 0, \
+            f"re-upgrade after downgrade failed:\n{up2.stdout}\n{up2.stderr}"
+        # Final state must equal the end of test_alembic_upgrade_head_on_fresh_db.
+        eng = create_engine(url)
+        insp = inspect(eng)
+        assert "blurhash" in {c["name"] for c in insp.get_columns("reports")}
+        assert "pii_blur_status" in {c["name"] for c in insp.get_columns("media")}
+        with eng.connect() as conn:
+            rev = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        eng.dispose()
+        assert rev is not None
+    finally:
+        _drop_tmp_db(dbname)

@@ -11,6 +11,10 @@ httpx>=0.27.0
 anthropic>=0.40.0
 opencv-python-headless>=4.8.0
 Pillow>=10.0.0
+# Perceptual-hash duplicate detection (Apr 2026 UI v2.1 / W3).
+# Computes a 64-bit pHash per uploaded photo; near-duplicates within the
+# same building_id + 24h window land on the dashboard as candidates.
+ImageHash>=4.3.0
 mediapipe>=0.10.0
 easyocr>=1.7.0
 pyshp>=2.3.0

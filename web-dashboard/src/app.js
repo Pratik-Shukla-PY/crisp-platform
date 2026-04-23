@@ -1979,6 +1979,28 @@ window.selectReport = (id, skipFly = false) => {
             ${r.infrastructure_name ? `<span class="dp-field-badge" style="background:rgba(59,130,246,0.15);color:#93c5fd;"><i class="fa-solid fa-building"></i> ${escapeHtml(r.infrastructure_name)}</span>` : ''}
             ${r.debris_clearing_needed ? `<span class="dp-field-badge" style="background:rgba(245,158,11,0.15);color:#fbbf24;"><i class="fa-solid fa-truck-pickup"></i> Debris clearing</span>` : ''}
             ${r.building_id ? `<span class="dp-field-badge dp-building-link" style="background:rgba(99,102,241,0.15);color:#a5b4fc;cursor:pointer;" onclick="filterByBuilding('${r.building_id}')"><i class="fa-solid fa-timeline"></i> Building history</span>` : ''}
+            <!-- Phase 1 reporter badge: masked "User abc12345" derived server-side
+                 in ReportResponse._compute_identity_badge. Anonymous rows skip
+                 this span entirely. ADMIN clicks open the profile drawer. -->
+            ${r.reporter_badge ? `<span class="dp-field-badge dp-reporter-badge" style="background:rgba(34,197,94,0.12);color:#86efac;cursor:${r.user_id ? 'pointer' : 'default'};" ${r.user_id ? `onclick="openReporterProfile('${r.user_id}')"` : ''} title="${r.user_id ? 'Click to view reporter details (admin only)' : ''}"><i class="fa-solid fa-user-check"></i> ${escapeHtml(r.reporter_badge)}</span>` : ''}
+            <!-- Phase E (Apr 2026 UI v3) — "Needs mapping" badge.
+                 Fires when the reporter typed a building name in their
+                 native language (PWA free-text fallback, RN TextInput,
+                 Telegram STEP_BUILDING_NAME) without an OSM footprint
+                 resolving the row. Operators click the row to open detail,
+                 use the existing building-footprint picker on the dashboard
+                 to resolve it to an osm:way:<id>, and the badge drops.
+                 Derived server-side (see ReportResponse._compute_needs_manual_mapping)
+                 so every response surface stays consistent. -->
+            ${r.needs_manual_mapping === true ? `<span class="dp-field-badge dp-needs-mapping" style="background:rgba(239,68,68,0.16);color:#fca5a5;" title="The reporter typed the building name in their native language; resolve it to an OSM footprint."><i class="fa-solid fa-map-location-dot"></i> Needs mapping</span>` : ''}
+            <!-- W4 versioning ribbon (Apr 2026 UI v2.1). Static placeholder that's
+                 filled by dp-version-ribbon-${id} once ensureBuildingVersionIndex
+                 resolves. UNDP Appendix asks the system to bias display to the
+                 latest complete report for a given building; this ribbon makes
+                 the version ordinal + latest/older state visible on the detail
+                 panel. Green = latest, amber = older. Only rendered for reports
+                 with a building_id. -->
+            ${r.building_id ? `<span id="dp-version-ribbon-${r.id}" class="dp-field-badge dp-version-ribbon" style="background:rgba(148,163,184,0.12);color:#cbd5e1;"><i class="fa-solid fa-code-branch"></i> V …</span>` : ''}
         </div>
         ${r.service_status ? (() => {
             const ss = r.service_status;
@@ -2125,6 +2147,44 @@ window.selectReport = (id, skipFly = false) => {
 
     // ── Action dock hidden — actions now in top bar ──
     document.getElementById('dp-action-dock').innerHTML = '';
+
+    // W4 versioning ribbon fill (Apr 2026 UI v2.1). Async because we
+    // may need to hit /reports/building/{id} the first time. Guarded
+    // against the panel having been closed or switched mid-fetch
+    // (document.getElementById returns null if the ribbon element was
+    // replaced by a subsequent selectReport). Green = latest, amber =
+    // older. If the building has only one report, the ribbon collapses
+    // to "Only report" instead of "V 1 of 1" which is confusing.
+    (async () => {
+        if (!r.building_id) return;
+        const el = document.getElementById(`dp-version-ribbon-${r.id}`);
+        if (!el) return;
+        const idx = await (window.ensureBuildingVersionIndex
+            ? window.ensureBuildingVersionIndex(r)
+            : null);
+        if (!idx) {
+            el.style.display = 'none';   // hide the placeholder on fetch failure
+            return;
+        }
+        if (idx.total <= 1) {
+            el.innerHTML = `<i class="fa-solid fa-code-branch"></i> Only report`;
+            el.style.background = 'rgba(148,163,184,0.12)';
+            el.style.color      = '#cbd5e1';
+            return;
+        }
+        if (idx.is_latest) {
+            el.innerHTML = `<i class="fa-solid fa-code-branch"></i> V ${idx.ordinal} of ${idx.total} · Latest`;
+            el.style.background = 'rgba(34,197,94,0.15)';
+            el.style.color      = '#4ade80';
+        } else {
+            el.innerHTML = `<i class="fa-solid fa-code-branch"></i> V ${idx.ordinal} of ${idx.total} · Older`;
+            el.style.background = 'rgba(245,158,11,0.15)';
+            el.style.color      = '#fbbf24';
+        }
+        el.style.cursor = 'pointer';
+        el.onclick = () => window.filterByBuilding(r.building_id);
+        el.title = `Click to highlight all ${idx.total} reports for this building on the map`;
+    })();
 
     if (loc && !skipFly) map.flyTo([loc.latitude, loc.longitude], 15);
     renderFeed();
@@ -2910,18 +2970,96 @@ window.deleteReport = async (id) => {
     } catch (e) { showToast('Delete failed', 'error'); }
 };
 
-// ── Building History ─────────────────────────────────────────────────────────
+// ── Building History (Apr 2026 UI v2.1 W4) ─────────────────────────────────
+// Endpoint response shape is now:
+//   { building_id, total, latest_id, reports: [ ...ordinal-augmented... ] }
+// Each report carries `building_version_ordinal` (1-based, 1=latest) and
+// `building_is_latest` so the detail panel can paint the "V 2 of 3 · latest"
+// ribbon. Legacy list-shaped responses are still accepted (older backends)
+// via an Array.isArray branch, so we don't break during a rolling deploy.
+// Phase 1 (Apr 2026 — Optional reporter login) — reporter-profile drawer.
+// Calls `/auth/users/{user_id}` which is gated to ADMIN role on the
+// server; ANALYST sessions get 403 and we show a short info toast.
+// Masked "User abc12345" already rendered in the row badge for everyone;
+// this drawer is the PII-unmask path for admins only.
+window.openReporterProfile = async (userId) => {
+    if (!userId) return;
+    try {
+        const res = await fetch(`${API}/auth/users/${userId}`, {
+            credentials: 'include',
+            headers: { 'Accept': 'application/json' },
+        });
+        if (res.status === 403) {
+            try { window.__toast && window.__toast('Only administrators can see reporter PII.', 'info'); } catch (_) {}
+            return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const lines = [
+            `User: ${data.id}`,
+            data.email ? `Email: ${data.email}` : '',
+            data.phone_number ? `Phone: ${data.phone_number}` : '',
+            data.role ? `Role: ${data.role}` : '',
+            data.last_login_at ? `Last login: ${data.last_login_at}` : '',
+        ].filter(Boolean).join('\n');
+        alert(lines || 'No reporter details available.');
+    } catch (e) {
+        console.warn('[Reporter] fetch failed:', e);
+    }
+};
+
 window.filterByBuilding = async (buildingId) => {
     try {
         const res = await fetch(`${API}/building/${buildingId}`);
         if (!res.ok) { showToast('Could not load building history', 'error'); return; }
-        const reports = await res.json();
+        const body = await res.json();
+        const reports = Array.isArray(body) ? body : (body.reports || []);
+        const total = Array.isArray(body) ? reports.length : (body.total || reports.length);
         if (reports.length <= 1) { showToast('Only 1 report for this building', 'info'); return; }
-        const names = reports.map(r => `${r.damage_classification || r.severity} — ${new Date(ensureUTC(r.server_created_at)).toLocaleDateString()}`).join('\n');
-        showToast(`Building has ${reports.length} reports`, 'success');
+        showToast(`Building has ${total} reports (v${total} → v1, latest first)`, 'success');
         // Highlight all building reports on map
         reports.forEach(rep => { const marker = clusterGroup.getLayers().find(m => m._crispReport?.id === rep.id); if (marker) marker.openPopup(); });
+        // Cache the version index so the detail panel renderer can look
+        // up a report's ordinal without another fetch. Keyed by report-id.
+        if (!window._buildingVersionIndex) window._buildingVersionIndex = {};
+        reports.forEach(rep => {
+            window._buildingVersionIndex[rep.id] = {
+                ordinal: rep.building_version_ordinal,
+                total: total,
+                is_latest: !!rep.building_is_latest,
+                building_id: buildingId,
+            };
+        });
+        return body;
     } catch (e) { showToast('Building history error', 'error'); }
+};
+
+/**
+ * Fetch-and-cache the building version index for a report. Used by the
+ * detail-panel render when it wants the ribbon but doesn't know the
+ * building-history yet. Idempotent; subsequent calls return the cache.
+ */
+window.ensureBuildingVersionIndex = async (report) => {
+    if (!report || !report.building_id) return null;
+    const idx = window._buildingVersionIndex || {};
+    if (idx[report.id]) return idx[report.id];
+    try {
+        const res = await fetch(`${API}/building/${report.building_id}`);
+        if (!res.ok) return null;
+        const body = await res.json();
+        const reports = Array.isArray(body) ? body : (body.reports || []);
+        const total = reports.length;
+        if (!window._buildingVersionIndex) window._buildingVersionIndex = {};
+        reports.forEach(rep => {
+            window._buildingVersionIndex[rep.id] = {
+                ordinal: rep.building_version_ordinal || (reports.indexOf(rep) + 1),
+                total: total,
+                is_latest: !!rep.building_is_latest || rep === reports[0],
+                building_id: report.building_id,
+            };
+        });
+        return window._buildingVersionIndex[report.id] || null;
+    } catch (_) { return null; }
 };
 
 // ── AI Logic Transparency Modal ──────────────────────────────────────────────
@@ -4092,6 +4230,26 @@ function _maybeUpgradeDetailImage() {
 // NOT used by production code paths — safe to keep always-on.
 Object.defineProperty(window, 'allReports', {
     get: () => allReports,
+    configurable: true,
+});
+// Leaflet instances so the map-render spec can walk clusterGroup's layers
+// without screen-scraping Leaflet's private DOM. Read-only getters —
+// production code never mutates these via `window.*`.
+Object.defineProperty(window, '__crispMap', {
+    get: () => map,
+    configurable: true,
+});
+Object.defineProperty(window, '__crispClusterGroup', {
+    get: () => clusterGroup,
+    configurable: true,
+});
+// Filter-state mirror for the filter spec.
+Object.defineProperty(window, '__crispActivePillFilter', {
+    get: () => _activePillFilter,
+    configurable: true,
+});
+Object.defineProperty(window, '__crispTimeFilterHours', {
+    get: () => timeFilterHours,
     configurable: true,
 });
 window.__crispFetchReports = () => fetchReports();

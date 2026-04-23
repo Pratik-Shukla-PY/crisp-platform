@@ -1,3 +1,41 @@
+// ── UI v2 feature flag (Apr 2026 UNDP PWA rewrite) ─────────────────────────
+// Default ON. Users can disable via `localStorage.setItem('crisp_ui_v2','off')`
+// to revert to the previous 2-page review + FontAwesome chip icons exactly.
+// Exposed on window for Playwright + devtools. `body[data-ui-v2]` is set in
+// boot so CSS can gate v2-only styles without relying on a JS class.
+const UI_V2_ENABLED = (() => {
+  try {
+    const raw = localStorage.getItem('crisp_ui_v2');
+    return raw === null ? true : raw === 'on';   // default on
+  } catch { return true; }
+})();
+window.__crispUiV2 = UI_V2_ENABLED;
+
+// ── UI v3 feature flag (Apr 2026 Phase B — UNDP 8-stage reorder prep) ───────
+// v3 delivers three user-visible improvements on top of v2:
+//   1. Building-footprint pre-cache — 10 nearest buildings are downloaded
+//      into IndexedDB on app boot / GPS-ready, so offline capture flows
+//      have the overlay ready even without live Overpass access.
+//   2. Free-text building-name fallback — when the Leaflet map / Overpass
+//      fetch is unavailable, the user can type the building name in their
+//      native language. The backend stores it on `infrastructure_name`
+//      with `building_id = NULL`; the dashboard tags such rows as
+//      "needs mapping" so an operator can resolve them later.
+//   3. Richer per-crisis "extras" module rendering (W6) drawn from the
+//      backend's YAML-driven form framework (applicable-modules endpoint).
+//
+// The full 8-stage visual reorder is gated behind this same flag so a
+// rollback is one localStorage flip away: `localStorage.setItem('crisp_ui_v3','off')`.
+// Default ON because all three improvements are additive and the UNDP
+// Appendix-1 value mapping already shipped in v2 is preserved.
+const UI_V3_ENABLED = (() => {
+  try {
+    const raw = localStorage.getItem('crisp_ui_v3');
+    return raw === null ? true : raw === 'on';   // default on
+  } catch { return true; }
+})();
+window.__crispUiV3 = UI_V3_ENABLED;
+
 // ── Privacy Consent Gate (shown after language detection so it appears in local language) ──
 function _initConsentGate() {
     const CONSENT_KEY = 'crisp_privacy_consent';
@@ -230,9 +268,16 @@ async function syncQueueManual() {
 
             // Stage 1: metadata
             if (!stages.meta && item.meta) {
+                // Phase 1 (Apr 2026 — Optional reporter login) — attach
+                // the Bearer token that was captured at enqueue time
+                // (`item.auth_token`). Server silently accepts anonymous
+                // when the token has expired beyond offline grace, so no
+                // queued report is ever lost because the user logged out.
+                const _metaHeaders = { 'Content-Type': 'application/json' };
+                if (item.auth_token) _metaHeaders['Authorization'] = `Bearer ${item.auth_token}`;
                 const res = await fetch(`${API_BASE}/reports/meta`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: _metaHeaders,
                     body: JSON.stringify(item.meta)
                 });
                 if (res.ok) {
@@ -393,9 +438,15 @@ const I18N = {
         building_select_title: "Optional: pick the exact building",
         building_select_hint: "Tap a building outline to mark it as damaged.",
         building_selected: "Building selected",
+        building_waiting_gps: "Waiting for GPS to load buildings nearby…",
         home_offline_hint: "📡 Works offline and in low internet connectivity.",
         fp_photo: "Photo", fp_details: "Details", fp_review: "Review", fp_send: "Send",
         my_reports: "My Reports",
+        // Apr 2026 UI v2.1 — impact-card labels shown at the top of
+        // stage-history. `in_flight` already exists; `mr_resolved` +
+        // `mr_lives_impacted` are new (were hardcoded English before).
+        mr_resolved: "Resolved",
+        mr_lives_impacted: "Lives impacted",
         delete_all_my_reports: "Delete all my reports",
         delete_all_note: "This removes every report you've sent from this device. Your data will be permanently deleted within 24 hours.",
         in_flight: "In flight", submitted: "Submitted",
@@ -422,6 +473,20 @@ const I18N = {
         audio_placeholder: "Example: House collapsed, one person trapped",
         transcript_hint: "Listening...",
         s3_title: "CHECK", s3_sub: "Fix text",
+        photo_cap_reached: "Max 5 photos per report",
+        chooser_camera: "Camera",
+        chooser_gallery: "Gallery",
+        auto_loc_label: "Location (auto)",
+        auto_time_label: "Time (auto)",
+        stage2_title: "Where and how bad?",
+        stage3_title: "What was hit?",
+        stage4_title: "What caused it?",
+        stage5_title: "Service + needs",
+        stage8_title: "Review and send",
+        bldg_offline_prompt: "Type the building name in your language",
+        bldg_offline_hint: "The team will map this to GPS later",
+        autosub_cancel_btn: "✕ Cancel auto-submit",
+        autosub_click_anywhere: "Tap to cancel",
         photo_attached: "✅ Added", your_message: "Message:", type_your_msg: "Type...",
         what_damaged: "Damage?", road: "Road", hospital: "Clinic", house: "Home", power: "Power", water: "Water", other: "Other",
         severity_label: "Severity?", minor: "Low", moderate: "Mid", severe: "High", ready_send: "READY",
@@ -462,15 +527,48 @@ const I18N = {
         needs_label: "🆘 Pressing Needs",
         review_details_title: "Details",
         confirm_title: "Confirm",
-        // Damage-classification enum labels (UNDP Appendix-1, 3 states).
-        // UNDP spec: "Minimal/No damage", "Partially damaged", "Completely
-        // damaged". `no_damage` kept as an alias so any stale index.html
-        // copy in a service-worker cache continues to render sensible text.
-        minimal_damage: "Minimal",
-        no_damage: "Minimal",
-        partial_damage: "Partial",
-        complete_damage: "Destroyed",
-        destroyed: "Destroyed",
+        // UI v2 (Apr 2026) — titles for the 3-page stage-review split.
+        // Page 1: What happened? (infra chips + inline damage dots + crisis chips)
+        // Page 2: How bad + where? (severity row + location + services)
+        // Page 3: Describe + confirm (textarea + building footprint + summary)
+        review_v2_title_what: "What happened?",
+        review_v2_title_how: "How bad + where?",
+        review_v2_title_confirm: "Review & send",
+        // New flow-progress labels for the 5-step v2 bar.
+        fp_audio: "Audio",
+        fp_what: "What",
+        // Native alert()/confirm() → toast + custom modal migration (UI v2).
+        // Keys below are the messages previously surfaced via window.alert()
+        // or window.confirm() at 11 call-sites in app.js. Translators now
+        // have targets; the RN parity layer picks these up through the
+        // shared JSON pack via _loadLocaleJson().
+        mic_permission_alert: "Please allow microphone access to record audio.",
+        camera_blocked_toast: "Camera access blocked — using file picker instead. Allow camera in browser settings for live capture.",
+        camera_unavailable_toast: "Camera unavailable — using file picker instead.",
+        delete_requested_alert: "Your data will be permanently deleted within 24 hours.",
+        delete_server_unreachable: "Could not reach server.",
+        delete_undo_failed: "Could not undo deletion.",
+        delete_all_server_confirm: "This will permanently delete ALL your submitted reports and media from the server. This cannot be undone.",
+        delete_all_success_count: "{n} report(s) deleted. All local data cleared.",
+        // Labels for the custom confirm modal's Yes/No buttons.
+        confirm_yes: "Yes",
+        confirm_no: "Cancel",
+        confirm_delete: "Delete",
+        // Damage-classification labels — UNDP Appendix-1 verbatim phrasing
+        // (Apr 2026 UI v2.1). Previously "Minimal / Partial / Destroyed" —
+        // shorter but diverged from UNDP. The enum values on the wire
+        // (MINIMAL / PARTIAL / COMPLETE) are unchanged; only the display
+        // string is UNDP-aligned. Tooltip copy in the HTML carries the
+        // full UNDP description for evaluator context.
+        minimal_damage: "Minimal / No damage",
+        no_damage: "Minimal / No damage",
+        partial_damage: "Partially damaged",
+        complete_damage: "Completely damaged",
+        destroyed: "Completely damaged",
+        // UNDP descriptive tooltips — longer form seen on hover / aria-label.
+        damage_tip_minimal: "Structurally sound and functional — cosmetic or no visible damage.",
+        damage_tip_partial: "Repairable, still usable with caution.",
+        damage_tip_complete: "Structurally unsafe or destroyed.",
         // Infrastructure-type chip labels — keep semantic parity with the
         // existing short set (road/hospital/house/power/water/other).
         school: "School",
@@ -482,7 +580,46 @@ const I18N = {
         utility: "Utility",
         transport_communication: "Transport & Comms",
         community: "Community",
+        community_infra: "Community",   // v3 stage-infra chip (Apr 2026 Phase B4)
         public_spaces: "Public Spaces",
+        // v3 stage-crisis group headings (Apr 2026 Phase B4).
+        crisis_group_natural: "Natural",
+        crisis_group_technological: "Technological",
+        crisis_group_human_made: "Human-made",
+        // v3 stage-extras debris Yes/No toggle (Apr 2026 Phase B4).
+        debris_yes: "Yes",
+        debris_no: "No",
+        // v3 stage-photo single Add-more button (Apr 2026 Phase B4).
+        add_more: "Add",
+        // Phase 1 (Apr 2026 — Optional reporter login) — auth UI keys.
+        // Inline here AS WELL AS in i18n/*.json so stage-login renders
+        // correctly during the brief boot window before the JSON pack
+        // finishes loading (and when the service worker serves a stale
+        // JSON cache between v52 → v53 activations).
+        login_or_signup: "Login / Sign up",
+        login_title: "Login or Sign up",
+        login_sub: "Track your reports across devices",
+        login_channel_phone: "Phone",
+        login_channel_email: "Email",
+        login_send_code: "Send code",
+        login_skip: "Skip & report anonymously",
+        login_verify: "Verify",
+        login_resend: "Resend code",
+        login_wrong_destination: "Wrong number / email?",
+        login_welcome: "You're in!",
+        login_found_prefix: "We found",
+        login_found_suffix: "anonymous reports on this device. Link them to your account?",
+        login_link_now: "Link reports",
+        login_keep_anonymous: "Keep them anonymous",
+        login_code_sent_prefix: "We sent a 6-digit code to",
+        login_err_missing_destination: "Please enter your phone or email.",
+        login_err_bad_code: "Please enter the 6-digit code.",
+        login_link_failed: "Could not link reports. You can retry from Settings.",
+        logout_done: "Logged out",
+        settings_title: "Settings",
+        settings_account: "Account",
+        settings_unlink_device: "Unlink this device",
+        settings_logout: "Logout",
         // Crisis-type chip labels (UNDP Appendix-1).
         earthquake: "Earthquake",
         flood: "Flood",
@@ -514,6 +651,15 @@ const I18N = {
         shelter: "Shelter",
         medical: "Medical",
         security: "Security",
+        // UNDP Appendix-1 pressing-needs additions (Apr 2026 UI v2.1).
+        // Expanded from 5 → 10 chips to cover all UNDP-required options.
+        need_cash: "Cash",
+        need_livelihoods: "Livelihoods",
+        need_wash: "WASH",
+        need_basic_services: "Basic services",
+        need_protection: "Protection",
+        need_local_support: "Local support",
+        need_other: "Other",
         // Apr 2026 i18n-coverage sweep — every user-visible string that
         // was previously hardcoded in index.html or app.js now has a key
         // so 100% of the UI follows the selected language. Missing keys
@@ -1040,11 +1186,30 @@ const state = {
     audioBlob: null,
     transcript: '',
     description: '',
-    infraType: 'ROAD',
+    // Phase B4 (Apr 2026 UI v3) — default infraType = the first UNDP
+    // super-type chip (RESIDENTIAL). Was 'ROAD' under v2 legacy chips.
+    // Backend InfraTypeEnum accepts both the legacy + super-type values
+    // so offline queues built by pre-v3 clients keep replaying cleanly.
+    infraType: 'RESIDENTIAL',
     severity: 'MODERATE',
     crisisType: 'FLOOD',
     damageClass: 'PARTIAL',
     infraName: '',
+    // Phase B2 (Apr 2026 UI v3) — distinguisher between user-typed names and
+    // names auto-filled from the OSM building-select tap. `false` (or
+    // absent) = user typed it; `true` = building-select.js auto-filled
+    // from the OSM tags. Dashboard uses this to flag `building_id = NULL
+    // AND infraNameFromOsm=false` rows as "needs mapping".
+    infraNameFromOsm: false,
+    // List of nearest buildings populated by BuildingSelect.preCacheNearest()
+    // when GPS resolves. Non-authoritative (purely a UX affordance for the
+    // free-text autocomplete); `buildingId` remains the truth for any actual
+    // selection.
+    nearbyBuildings: [],
+    // Phase B3 (Apr 2026 UI v3) — W6 applicable-modules cache per crisis type.
+    // Populated by fetchApplicableModules on crisis-chip tap. Consumed by the
+    // future inline renderer on stage-review.
+    applicableModules: [],
     debrisClearing: false,
     serviceStatus: { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] },
     location: null,
@@ -1074,8 +1239,14 @@ const state = {
 // enabled region matches, the timer is never armed.
 
 const _REGION_CACHE_KEY = 'crisp_regions_enabled_v1';
-const _REGION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;   // 24 h
+const _REGION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;   // 24 h persisted (offline)
+const _REGION_MEM_TTL_MS = 10 * 1000;               // 10 s in-memory throttle
 const _AUTO_SUBMIT_MS = 2 * 60 * 1000;              // 2 min
+const _PROBE_MIN_INTERVAL_MS = 1500;                // throttle tryArm probes
+
+// In-memory cache so rapid stage transitions don't hammer the endpoint.
+// Bypassed by `{ bustCache: true }` (e.g. after a dashboard change).
+let _regionMemCache = { ts: 0, data: null };
 
 /** Haversine distance in kilometres between two GPS points. */
 function _haversineKm(lat1, lng1, lat2, lng2) {
@@ -1089,32 +1260,51 @@ function _haversineKm(lat1, lng1, lat2, lng2) {
     return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/** Fetch enabled regions from the public endpoint, cached in localStorage
- *  with a 24 h TTL. Returns the cached list on network failure (offline). */
-async function _fetchEnabledRegions() {
-    let cached = null;
+/** Fetch enabled regions from the public endpoint.
+ *
+ *  Cache strategy (v2, Apr 2026):
+ *  1. Short-lived in-memory cache (10 s) prevents stage-transition hammering.
+ *  2. Persisted localStorage cache (24 h TTL) for offline fallback ONLY —
+ *     live fetch is always preferred when network is reachable.
+ *  3. `{ bustCache: true }` bypasses the mem cache and forces a live fetch,
+ *     used when we want dashboard-flip changes to take effect immediately.
+ *
+ *  Previous bug: the 24 h TTL meant a region enabled in the dashboard took
+ *  up to 24 h to propagate to clients. Mem cache + always-live-try fixes.
+ */
+async function _fetchEnabledRegions(opts = {}) {
+    const { bustCache = false } = opts;
+    if (!bustCache && _regionMemCache.data && (Date.now() - _regionMemCache.ts) < _REGION_MEM_TTL_MS) {
+        return _regionMemCache.data;
+    }
+    let persisted = null;
     try {
-        cached = JSON.parse(localStorage.getItem(_REGION_CACHE_KEY) || 'null');
+        persisted = JSON.parse(localStorage.getItem(_REGION_CACHE_KEY) || 'null');
     } catch (_) {}
-    const fresh = cached && cached.ts && (Date.now() - cached.ts < _REGION_CACHE_TTL_MS);
     try {
         const url = (typeof API_BASE !== 'undefined' ? API_BASE : `${window.location.origin.replace(/:\d+$/, ':8000')}/api/v1`) + '/regions/enabled';
-        const res = await fetch(url, { method: 'GET' });
+        const res = await fetch(url, { method: 'GET', cache: 'no-store' });
         if (res.ok) {
             const data = await res.json();
-            const payload = { ts: Date.now(), data };
-            localStorage.setItem(_REGION_CACHE_KEY, JSON.stringify(payload));
+            localStorage.setItem(_REGION_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+            _regionMemCache = { ts: Date.now(), data };
             return data;
         }
     } catch (e) {
         console.warn('[Region] fetch failed, using cache:', e?.message || e);
     }
-    return fresh ? cached.data : (cached?.data || []);
+    // Live fetch failed — fall back to persisted cache (any age; network down ≈ offline).
+    if (persisted && Array.isArray(persisted.data)) {
+        _regionMemCache = { ts: Date.now(), data: persisted.data };
+        return persisted.data;
+    }
+    return [];
 }
 
-/** Returns the region the user is currently inside, or null. Never throws. */
-async function _findActiveRegion() {
-    // GPS.
+/** Pick the active region from an already-loaded list, using current GPS.
+ *  Returns null on GPS failure, no regions, or no haversine match.  */
+async function _findActiveRegionFromList(regions) {
+    if (!Array.isArray(regions) || regions.length === 0) return null;
     if (!navigator.geolocation) {
         console.warn('[Region] no navigator.geolocation — timer disabled');
         return null;
@@ -1127,24 +1317,52 @@ async function _findActiveRegion() {
         );
     });
     if (!pos) return null;
-    const regions = await _fetchEnabledRegions();
-    if (!Array.isArray(regions) || regions.length === 0) return null;
     for (const r of regions) {
         const dKm = _haversineKm(pos.coords.latitude, pos.coords.longitude, r.center_lat, r.center_lng);
-        if (dKm * 1000 <= r.radius_meters) return r;
+        const dMeters = dKm * 1000;
+        if (dMeters <= r.radius_meters) {
+            console.log(`[Region] inside '${r.name}' — ${Math.round(dMeters)} m / ${r.radius_meters} m radius`);
+            return r;
+        }
     }
+    console.log(`[Region] outside all ${regions.length} enabled regions`);
     return null;
+}
+
+/** Returns the region the user is currently inside, or null. Never throws.
+ *  Kept as the sugar helper for callers that don't want to deal with the
+ *  two-step fetch-then-match. */
+async function _findActiveRegion(opts = {}) {
+    const regions = await _fetchEnabledRegions(opts);
+    return _findActiveRegionFromList(regions);
 }
 
 /** Global auto-submit timer — a banner at the top of every stage from
  *  Start Report onwards. User may cancel at any time; otherwise the
- *  report auto-submits at T=0. */
+ *  report auto-submits at T=0.
+ *
+ *  v3 (Apr 2026) changes:
+ *    - `tryArm({bustCache:true})` is called on every `goToStage` so
+ *      dashboard-flipped regions propagate without a 24 h cache wait.
+ *    - `hasMinimumInput()` gate — the timer refuses to arm until the
+ *      user has at least one of photo / audio / text, eliminating the
+ *      silent "fire but toast-and-skip" failure mode.
+ *    - Diagnostic chip at bottom-right shows `Regions: N · inside: X ·
+ *      armed in Y s` to make the state visible in field testing.
+ *    - `userCancelled` latch — once the user taps Cancel, the timer
+ *      stays off for the rest of this report (until stage-home resets).
+ */
 class InactivityManager {
     constructor() {
         this.intervalId = null;
         this.deadline = null;
         this.bannerEl = null;
+        this.chipEl = null;
         this.activeRegion = null;
+        this.regionsList = [];
+        this.userCancelled = false;
+        this.lastProbeAt = 0;
+        this.lastStatus = 'idle';
     }
 
     _ensureBanner() {
@@ -1153,38 +1371,167 @@ class InactivityManager {
         el.id = 'auto-submit-banner';
         el.setAttribute('role', 'status');
         el.setAttribute('aria-live', 'polite');
-        el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#ea580c,#dc2626);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.25);';
+        // v3 (Apr 2026, Phase A4) — banner rebuilt for usability:
+        //   • Whole-banner tap cancels (field testers consistently tapped the
+        //     banner thinking it would dismiss the timer, but only the 6 × 12
+        //     px "Cancel" text caught the tap).
+        //   • Big explicit ✕ CANCEL button on the right still present for
+        //     users who prefer an unambiguous target + aria-label.
+        //   • Escape key cancels (desktop / accessibility path).
+        //   • Subtext "Tap anywhere to cancel" localised via the new
+        //     `autosub_click_anywhere` key (EN + 5 UN locales).
+        el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#ea580c,#dc2626);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.25);cursor:pointer;';
+        el.setAttribute('tabindex', '0');
+        el.setAttribute('aria-label', (typeof t === 'function' && t('autosub_cancel_btn')) || '✕ Cancel auto-submit');
+        const clickHintRaw = (typeof t === 'function' && t('autosub_click_anywhere')) || 'Tap anywhere to cancel';
+        const cancelLabelRaw = (typeof t === 'function' && t('autosub_cancel_btn')) || '✕ Cancel';
         el.innerHTML =
-            `<i class="fa-solid fa-stopwatch" aria-hidden="true"></i>` +
-            `<span style="flex:1;">Auto-submitting in <span id="auto-submit-remaining">2:00</span> · ` +
-            `<span id="auto-submit-region" style="opacity:0.8;"></span></span>` +
-            `<button id="auto-submit-cancel" type="button" style="background:#fff;color:#dc2626;border:0;padding:6px 12px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;" aria-label="Cancel auto-submit">Cancel</button>`;
+            `<i class="fa-solid fa-stopwatch" aria-hidden="true" style="font-size:18px;"></i>` +
+            `<span style="flex:1;line-height:1.25;">` +
+                `<span style="display:block;">` +
+                    `Auto-submitting in <span id="auto-submit-remaining" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">2:00</span> · ` +
+                    `<span id="auto-submit-region" style="opacity:0.85;"></span>` +
+                `</span>` +
+                `<span id="auto-submit-hint" style="display:block;font-size:11px;font-weight:500;opacity:0.85;margin-top:2px;">${clickHintRaw}</span>` +
+            `</span>` +
+            `<button id="auto-submit-cancel" type="button" style="background:#fff;color:#dc2626;border:0;padding:10px 16px;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;min-height:40px;min-width:88px;letter-spacing:0.02em;" aria-label="Cancel auto-submit">${cancelLabelRaw}</button>`;
         document.body.appendChild(el);
-        el.querySelector('#auto-submit-cancel').addEventListener('click', () => this.cancel('user'));
+
+        // Whole-banner cancel. stopPropagation on the explicit button so we
+        // don't double-fire (button bubbles into the banner click handler).
+        const cancelBtn = el.querySelector('#auto-submit-cancel');
+        cancelBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            this.cancel('user');
+        });
+        el.addEventListener('click', () => this.cancel('user'));
+        el.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+                ev.preventDefault();
+                this.cancel('user');
+            }
+        });
+        // Escape-anywhere cancel — added once, guarded so multiple banner
+        // (re)creations don't stack duplicate listeners.
+        if (!window.__crispAutoSubmitEscHooked) {
+            window.__crispAutoSubmitEscHooked = true;
+            document.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Escape' && this.intervalId) {
+                    this.cancel('user');
+                }
+            });
+        }
+
         this.bannerEl = el;
         return el;
     }
 
-    /** Try to arm the timer. Called on "Start Report" tap. Returns a promise
-     *  that resolves once geofence check is done (arm success or skip). */
-    async tryArm() {
-        if (this.intervalId) return;   // already armed
-        try {
-            const region = await _findActiveRegion();
-            if (!region) {
-                // outside any enabled zone — leave timer off, no banner.
-                return;
-            }
-            this.activeRegion = region;
-            this.deadline = Date.now() + _AUTO_SUBMIT_MS;
-            this._ensureBanner().style.display = 'flex';
-            const regionEl = document.getElementById('auto-submit-region');
-            if (regionEl) regionEl.textContent = region.name;
-            this.updateDisplay();
-            this.intervalId = setInterval(() => this.updateDisplay(), 1000);
-        } catch (e) {
-            console.warn('[InactivityManager] arm failed:', e?.message || e);
+    /** Diagnostic chip — bottom-right pill that shows the timer's state.
+     *  Only paints when we have regions loaded, to avoid noise on non-gated
+     *  deployments. */
+    _ensureChip() {
+        if (this.chipEl) return this.chipEl;
+        const el = document.createElement('div');
+        el.id = 'auto-submit-diag-chip';
+        el.style.cssText = 'position:fixed;bottom:12px;right:12px;z-index:9998;background:rgba(17,24,39,0.88);color:#f9fafb;padding:5px 10px;border-radius:12px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 2px 6px rgba(0,0,0,0.2);pointer-events:none;max-width:80vw;letter-spacing:0.01em;display:none;';
+        el.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(el);
+        this.chipEl = el;
+        return el;
+    }
+
+    _updateChip() {
+        if (!this.chipEl) return;
+        const loaded = Array.isArray(this.regionsList) ? this.regionsList.length : 0;
+        const inside = this.activeRegion ? this.activeRegion.name : null;
+        const armed = !!this.intervalId;
+        const inputOk = (typeof hasMinimumInput === 'function') ? hasMinimumInput() : true;
+        let status;
+        if (armed) {
+            const s = Math.max(0, Math.round((this.deadline - Date.now()) / 1000));
+            status = `armed in ${s}s`;
+        } else if (this.userCancelled) {
+            status = 'user-cancelled';
+        } else if (inside && !inputOk) {
+            status = 'waiting for input';
+        } else if (inside) {
+            status = 'arming…';
+        } else if (loaded > 0) {
+            status = 'outside region';
+        } else {
+            status = 'no regions';
         }
+        this.chipEl.textContent = `Regions: ${loaded} · ${inside ? 'inside: ' + inside : 'outside'} · ${status}`;
+        // Only render the chip when we have region info worth surfacing.
+        this.chipEl.style.display = (loaded > 0 || armed) ? 'block' : 'none';
+        this.lastStatus = status;
+    }
+
+    /** Try to arm the timer. Idempotent — safe to call on every stage entry.
+     *
+     *  Returns one of: 'already-armed', 'user-cancelled', 'throttled',
+     *  'no-region', 'waiting-for-input', 'armed', 'error'.
+     *
+     *  Options:
+     *    bustCache — bypass the 10 s mem cache on `/regions/enabled` so
+     *                dashboard changes take effect on the next stage entry.
+     */
+    async tryArm(opts = {}) {
+        const { bustCache = false } = opts;
+        if (this.intervalId) {
+            this._updateChip();
+            return 'already-armed';
+        }
+        if (this.userCancelled) {
+            this._updateChip();
+            return 'user-cancelled';
+        }
+        const now = Date.now();
+        if (!bustCache && (now - this.lastProbeAt) < _PROBE_MIN_INTERVAL_MS) {
+            return 'throttled';
+        }
+        this.lastProbeAt = now;
+
+        try {
+            this.regionsList = await _fetchEnabledRegions({ bustCache });
+        } catch (_) {
+            this.regionsList = [];
+        }
+
+        let region = null;
+        try {
+            region = await _findActiveRegionFromList(this.regionsList);
+        } catch (e) {
+            console.warn('[InactivityManager] region-match failed:', e?.message || e);
+        }
+        this.activeRegion = region;
+        this._ensureChip();
+        this._updateChip();
+
+        if (!region) {
+            return 'no-region';
+        }
+
+        // New v3 gate: don't arm until the user has something worth submitting.
+        // Previously we armed immediately and silently skipped at T=0, which
+        // manifested as "timer visible but nothing happens" in field tests.
+        if (typeof hasMinimumInput === 'function' && !hasMinimumInput()) {
+            console.log('[InactivityManager] deferring arm — no photo/audio/text yet');
+            return 'waiting-for-input';
+        }
+
+        this.deadline = Date.now() + _AUTO_SUBMIT_MS;
+        this._ensureBanner().style.display = 'flex';
+        const regionEl = document.getElementById('auto-submit-region');
+        if (regionEl) regionEl.textContent = region.name;
+        this.updateDisplay();
+        this.intervalId = setInterval(() => {
+            this.updateDisplay();
+            this._updateChip();
+        }, 1000);
+        this._updateChip();
+        console.log(`[InactivityManager] armed: region='${region.name}' deadline=+${_AUTO_SUBMIT_MS / 1000}s`);
+        return 'armed';
     }
 
     updateDisplay() {
@@ -1203,21 +1550,36 @@ class InactivityManager {
         clearInterval(this.intervalId);
         this.intervalId = null;
         this.hide();
+        this._updateChip();
         if (typeof handleAutoSubmit === 'function') handleAutoSubmit();
     }
 
     cancel(reason) {
-        if (!this.intervalId) return;
-        clearInterval(this.intervalId);
+        if (!this.intervalId && !this.deadline) {
+            if (reason === 'user') this.userCancelled = true;
+            this._updateChip();
+            return;
+        }
+        if (this.intervalId) clearInterval(this.intervalId);
         this.intervalId = null;
         this.deadline = null;
+        if (reason === 'user') {
+            this.userCancelled = true;
+        }
         this.activeRegion = null;
         this.hide();
+        this._updateChip();
         console.log(`[InactivityManager] cancelled (${reason || 'unknown'})`);
     }
 
-    /** Called from existing stop() / hide() sites. Tears the banner down. */
-    stop() { this.cancel('stop'); }
+    /** stop() is called when returning to home / success — reset the latch
+     *  so the next report can arm normally. */
+    stop() {
+        this.cancel('stop');
+        this.userCancelled = false;
+        this.regionsList = [];
+        if (this.chipEl) this.chipEl.style.display = 'none';
+    }
     show() { if (this.bannerEl) this.bannerEl.style.display = 'flex'; }
     hide() {
         if (this.bannerEl) this.bannerEl.style.display = 'none';
@@ -1225,12 +1587,24 @@ class InactivityManager {
         if (legacy) legacy.style.display = 'none';
     }
 
-    /** No-op for backward compat with legacy call sites. Reset-on-input
-     *  doesn't apply — the timer is a fixed 2-min deadline gated on region,
-     *  not an idle-activity watchdog. */
-    reset() {}
+    /** Legacy compat shim. The v1 idle-watchdog model is gone — but old
+     *  call sites still invoke .reset(). Treated as "re-evaluate arm
+     *  conditions", not as a timer restart. */
+    reset() { /* no-op; tryArm handles re-evaluation */ }
 
-    start() { this.tryArm(); }
+    start() { this.tryArm({ bustCache: true }); }
+
+    /** Public introspection for Playwright tests + DevTools debugging. */
+    status() {
+        return {
+            armed: !!this.intervalId,
+            region: this.activeRegion ? this.activeRegion.name : null,
+            regionsLoaded: (this.regionsList || []).length,
+            userCancelled: !!this.userCancelled,
+            remainingMs: this.intervalId ? Math.max(0, (this.deadline || 0) - Date.now()) : null,
+            lastStatus: this.lastStatus,
+        };
+    }
 }
 
 // Auto-submit handler (called when inactivity timeout expires)
@@ -1518,6 +1892,13 @@ function applyI18n() {
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
     });
+    // Apr 2026 UI v2.1 — `data-i18n-title` drives the `title` HTML attribute
+    // (hover tooltip). Used by the UNDP-aligned damage chips to carry the
+    // full Appendix-1 description ("Structurally sound and functional …").
+    // Evaluators hovering a chip read the spec language verbatim.
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
+    });
     // Apr 2026 i18n-coverage sweep: dynamically-rendered chrome also needs
     // a refresh when the locale CHANGES. Only re-run when state.lang
     // actually differs from the last applied lang — this avoids
@@ -1530,8 +1911,10 @@ function applyI18n() {
     try { if (typeof _renderPartialReports === 'function') _renderPartialReports().catch(() => {}); } catch (_) {}
     try { if (typeof _renderSubmittedReports === 'function') _renderSubmittedReports().catch(() => {}); } catch (_) {}
     try {
+        // v1: summary renders on reviewPage 2; v2: on reviewPage 3 (last).
         const reviewStage = document.getElementById('stage-review');
-        if (reviewStage && reviewStage.classList.contains('active') && state.reviewPage === 2) {
+        const lastPage = window.__crispUiV2 ? 3 : 2;
+        if (reviewStage && reviewStage.classList.contains('active') && state.reviewPage === lastPage) {
             if (typeof window.__crispRenderReviewSummary === 'function') {
                 window.__crispRenderReviewSummary();
             }
@@ -1551,7 +1934,185 @@ function applyI18n() {
 let _lastRenderedReport = null;
 
 // ── Stage navigation ───────────────────────────────────────────────────────────
-const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-review', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail'];
+// Phase 1 (Apr 2026 — Optional reporter login) — `stage-login` +
+// `stage-settings` added. Both are off the capture flow; they don't
+// participate in the progress-bar counter (hidden when active).
+const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-review', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail', 'stage-login', 'stage-settings'];
+
+// ── Phase B4 (Apr 2026 UI v3) — 8-stage capture flow ───────────────────────
+// When `UI_V3_ENABLED` is on, the capture flow is re-ordered:
+//
+//   1 home → 2 where+damage → 3 infra → 4 crisis+name
+// → 5 extras → 6 photo → 7 audio+text → 8 review+submit
+//
+// STAGES_V3 is the canonical order for navigation. Legacy STAGES is retained
+// as the v2 fallback. Helpers `nextStageId` / `prevStageId` consult
+// UI_V3_ENABLED to pick the right chain.
+const STAGES_V3 = [
+    'stage-home',
+    'stage-where',     // 2 — location + damage severity chips
+    'stage-infra',     // 3 — infrastructure type chips
+    'stage-crisis',    // 4 — crisis type chips + building-footprint selector
+    'stage-extras',    // 5 — severity + service status + pressing needs + W6 modules
+    'stage-photo',     // 6 — photo capture (unchanged)
+    'stage-audio',     // 7 — audio + text description (description moves here)
+    'stage-review',    // 8 — summary + submit (v3 mode: input blocks hidden)
+    'stage-send',
+    'stage-success',
+    'stage-history',
+    'stage-report-detail',
+    // Phase 1 (Apr 2026) — off-flow auth stages. Not part of the 7-step
+    // progress bar; reachable only via the Login button on stage-home.
+    'stage-login',
+    'stage-settings',
+];
+
+/** The active stage list for navigation — STAGES_V3 when v3 is on, STAGES otherwise. */
+function _activeStageList() {
+    return UI_V3_ENABLED ? STAGES_V3 : STAGES;
+}
+
+/** Return the id of the stage AFTER `currentId` in the active chain, or null
+ *  if `currentId` is terminal (success, history, report-detail) or unknown.
+ *  Used by the new v3 Continue buttons on where/infra/crisis/extras. */
+function nextStageId(currentId) {
+    const list = _activeStageList();
+    const idx = list.indexOf(currentId);
+    if (idx < 0) return null;
+    // stage-success / history / report-detail are terminal — no auto-advance.
+    const TERMINAL = new Set(['stage-success', 'stage-history', 'stage-report-detail']);
+    if (TERMINAL.has(currentId)) return null;
+    for (let i = idx + 1; i < list.length; i++) {
+        if (!TERMINAL.has(list[i])) return list[i];
+    }
+    return null;
+}
+
+/** Return the id of the stage BEFORE `currentId` in the active chain, or null.
+ *  Clamped at stage-home (the back button on stage-where returns to home). */
+function prevStageId(currentId) {
+    const list = _activeStageList();
+    const idx = list.indexOf(currentId);
+    if (idx <= 0) return null;
+    return list[idx - 1];
+}
+
+/**
+ * DOMContentLoaded-time migration: when UI v3 is enabled, move the review
+ * blocks tagged `data-v3-slot="where|infra|crisis|extras|audio-text"` out of
+ * their current parent (stage-review) and into the matching `<div class="v3-slot">`
+ * on the new v3 stages (see index.html). Idempotent — calling again after
+ * migration is a no-op because the blocks no longer match the selector inside
+ * stage-review. Handlers bound to the moved elements stay intact (same DOM
+ * nodes, different parent).
+ *
+ * v2 rollback: flip `crisp_ui_v3='off'` + reload. The migration doesn't run,
+ * blocks stay inside stage-review, v2 pager works exactly as before.
+ */
+function migrateV3Blocks() {
+    if (!UI_V3_ENABLED) return;
+    const slots = {
+        where: document.getElementById('v3-slot-where'),
+        infra: document.getElementById('v3-slot-infra'),
+        crisis: document.getElementById('v3-slot-crisis'),
+        extras: document.getElementById('v3-slot-extras'),
+        'audio-text': document.getElementById('v3-slot-audio-text'),
+    };
+    const sourceRoot = document.getElementById('stage-review');
+    if (!sourceRoot) return;
+    // Only take blocks that are currently INSIDE stage-review — prevents
+    // re-moving a block that's already been relocated by a prior call.
+    const nodes = sourceRoot.querySelectorAll('[data-v3-slot]');
+    nodes.forEach((el) => {
+        const slotName = el.getAttribute('data-v3-slot');
+        const dest = slots[slotName];
+        if (!dest) return;
+        dest.appendChild(el);
+    });
+    // v3 damage chips: always visible. The legacy "tap infra to reveal"
+    // pattern no longer applies (damage lives on an earlier stage now),
+    // so force-display it. The infra-chip handler early-returns on v3
+    // (see setupReviewStage's chip listener) so the collapse-on-retap
+    // behaviour doesn't fight this.
+    const damageBlock = document.getElementById('infra-severity');
+    if (damageBlock) {
+        damageBlock.style.display = 'block';
+    }
+    // v3: severity chips are replaced by the damage-class auto-derivation
+    // (MINIMAL → MINOR, PARTIAL → MODERATE, COMPLETE → SEVERE). Hide the
+    // whole block so it doesn't render inside stage-review on v3.
+    const sevBlock = document.getElementById('severity-block');
+    if (sevBlock) {
+        sevBlock.style.display = 'none';
+    }
+    // Wire the debris Yes/No toggle. Both buttons mutate state.debrisClearing
+    // and flip aria-pressed + the `.selected` class for the visual state.
+    const debrisNo = document.getElementById('debris-toggle-no');
+    const debrisYes = document.getElementById('debris-toggle-yes');
+    if (debrisNo && debrisYes) {
+        // Initial visual state from the current flag.
+        _paintDebrisToggle();
+        const wire = (btn, value) => btn.addEventListener('click', () => {
+            state.debrisClearing = value;
+            _paintDebrisToggle();
+        });
+        wire(debrisNo, false);
+        wire(debrisYes, true);
+    }
+}
+
+/** Paint the debris Yes/No toggle from state.debrisClearing. */
+function _paintDebrisToggle() {
+    const no = document.getElementById('debris-toggle-no');
+    const yes = document.getElementById('debris-toggle-yes');
+    if (!no || !yes) return;
+    const on = !!state.debrisClearing;
+    yes.classList.toggle('selected', on);
+    no.classList.toggle('selected', !on);
+    yes.setAttribute('aria-pressed', on ? 'true' : 'false');
+    no.setAttribute('aria-pressed', on ? 'false' : 'true');
+}
+
+/** v3 severity auto-derive: snap state.severity to the MINOR/MODERATE/SEVERE
+ *  value that matches the damage class chosen on stage-where. Used by the
+ *  damage-chip click handler + any programmatic damage changes. */
+function _v3AutoDeriveSeverity() {
+    if (!UI_V3_ENABLED) return;
+    const map = { MINIMAL: 'MINOR', NO_DAMAGE: 'MINOR', PARTIAL: 'MODERATE', COMPLETE: 'SEVERE', DESTROYED: 'SEVERE' };
+    const next = map[state.damageClass] || 'MODERATE';
+    if (state.severity !== next) {
+        state.severity = next;
+        // Mirror the selection onto the hidden severity chip row so if the
+        // user ever re-enables v2, the chosen chip is pre-highlighted.
+        document.querySelectorAll('.sev-chip').forEach(b => {
+            b.classList.toggle('selected', b.dataset.sev === next);
+        });
+    }
+}
+
+// Apr 2026 UI v3 — per-incident photo cap. UNDP brief doesn't mandate a
+// max, but field testers showed 95 % of captures land within 4–5 photos
+// and the chunked-upload pipeline slows markedly past 5 on 2 G. We cap
+// EXTRAS at 4 so main + extras = 5 max. Guarded at every push site
+// (there are three: file-input handler, camera-modal, and the legacy
+// `takePhotoFrom` path) so a future code path can't accidentally bypass.
+const MAX_EXTRA_PHOTOS = 4;
+const MAX_PHOTOS_TOTAL = MAX_EXTRA_PHOTOS + 1;   // main + extras
+
+/** Guard every extraPhotos.push — returns true when the push is allowed.
+ *  When capped, shows the localised "5/5 max" toast + aborts. Callers
+ *  should `return` immediately if this returns false. */
+function _canAddMorePhotos() {
+    if (state.extraPhotos && state.extraPhotos.length >= MAX_EXTRA_PHOTOS) {
+        try {
+            const msg = (typeof t === 'function' && t('photo_cap_reached'))
+                || `Max ${MAX_PHOTOS_TOTAL} photos per report`;
+            (typeof showToast === 'function' ? showToast(msg, 'info') : null);
+        } catch (_) { /* best-effort */ }
+        return false;
+    }
+    return true;
+}
 
 // Apr 2026 PR 1 — testability hooks. Mirrors the dashboard pattern from the
 // previous sprint (web-dashboard/src/app.js). Exposes the module-scope
@@ -1564,15 +2125,33 @@ window.__crispGoToStage = (id) => goToStage(id);
 window.__crispEnqueueReport = (payload) => enqueueReport(payload);
 window.__crispGetAllQueued = () => getAllQueued();
 window.__crispReconcileQueue = () => _reconcileQueueAgainstServer();
+// Auto-submit diagnostic hooks — used by e2e specs to assert state
+// transitions + by DevTools (`__crispInactivityStatus()` in console) to
+// inspect the region-match / arm / waiting-for-input state machine.
+window.__crispInactivityStatus = () => inactivityManager.status();
+window.__crispInactivityTryArm = (opts) => inactivityManager.tryArm(opts || { bustCache: true });
 
 function goToStage(id) {
-    STAGES.forEach(s => document.getElementById(s).classList.remove('active'));
-    document.getElementById(id).classList.add('active');
+    // UI v3 introduces 4 new stage ids (where/infra/crisis/extras) not
+    // present in STAGES. De-activate BOTH the legacy and v3 lists so a
+    // transition between chains doesn't leave an orphan ".active" behind.
+    const ACTIVE_LIST = _activeStageList();
+    const allStages = new Set([...STAGES, ...STAGES_V3]);
+    allStages.forEach(s => {
+        const el = document.getElementById(s);
+        if (el) el.classList.remove('active');
+    });
+    const target = document.getElementById(id);
+    if (target) target.classList.add('active');
 
-    const idx = STAGES.indexOf(id);
-    const pct = idx === 0 ? 0 : Math.round((idx / (STAGES.length - 2)) * 100);
-    document.getElementById('progress-bar-fill').style.width = pct + '%';
-    document.getElementById('progress-bar-container').style.display = (id === 'stage-home' || id === 'stage-success') ? 'none' : 'block';
+    // Progress bar uses the ACTIVE list so the percentage reflects the
+    // right number of steps (7 capture steps for v3, 4 for v2/v1).
+    const idx = ACTIVE_LIST.indexOf(id);
+    const pct = idx <= 0 ? 0 : Math.round((idx / (ACTIVE_LIST.length - 2)) * 100);
+    const pbarFill = document.getElementById('progress-bar-fill');
+    if (pbarFill) pbarFill.style.width = pct + '%';
+    const pbarContainer = document.getElementById('progress-bar-container');
+    if (pbarContainer) pbarContainer.style.display = (id === 'stage-home' || id === 'stage-success') ? 'none' : 'block';
 
     // Apr 2026 UX rewrite — unified 4-step flow-progress bar. Visible on
     // capture stages (photo / audio / review / send); hidden on home,
@@ -1591,14 +2170,17 @@ function goToStage(id) {
     // pager uses this to reset to page 1 each time the user arrives.
     document.dispatchEvent(new CustomEvent('stage-entered', { detail: id }));
 
-    // Manage inactivity timer: show on photo/audio/review, hide on home/success
+    // Manage auto-submit timer: hide on home/success; on every other stage,
+    // re-evaluate arm conditions with a fresh `/regions/enabled` fetch so
+    // dashboard-flipped regions propagate immediately (was 24 h before).
+    // `tryArm` is idempotent — returns 'already-armed' if the timer is
+    // already running, so stage transitions don't reset the countdown.
     if (id === 'stage-home' || id === 'stage-success') {
         inactivityManager.stop();
         inactivityManager.hide();
     } else {
         inactivityManager.show();
-        inactivityManager.reset();
-        inactivityManager.start();
+        inactivityManager.tryArm({ bustCache: true });
     }
 }
 
@@ -1623,27 +2205,102 @@ function hasMinimumInput() {
 function updateFlowProgress(currentStage) {
     const bar = document.getElementById('flow-progress');
     if (!bar) return;
-    // Hidden on non-capture stages.
-    const CAPTURE_STAGES = ['stage-photo', 'stage-audio', 'stage-review', 'stage-send'];
-    const STEP_FOR_STAGE = { 'stage-photo': 1, 'stage-audio': 2, 'stage-review': 3, 'stage-send': 4 };
+    // Hidden on non-capture stages. v3 adds where/infra/crisis/extras to
+    // the capture bag so the progress bar stays visible throughout.
+    const CAPTURE_STAGES = UI_V3_ENABLED
+        ? ['stage-where', 'stage-infra', 'stage-crisis', 'stage-extras',
+           'stage-photo', 'stage-audio', 'stage-review', 'stage-send']
+        : ['stage-photo', 'stage-audio', 'stage-review', 'stage-send'];
     if (!CAPTURE_STAGES.includes(currentStage)) {
         bar.style.display = 'none';
         return;
     }
     bar.style.display = 'flex';
-    const activeStep = STEP_FOR_STAGE[currentStage];
+    // ── v3 branch — 7 equal-width segments across the full capture chain.
+    // (Home is step 0, not rendered as a segment.) The existing DOM only
+    // ships 5 fp-steps, so we paint a lightweight overlay bar that stays
+    // accurate regardless of whether the index.html segment nodes exist.
+    if (UI_V3_ENABLED) {
+        const V3_STEP_FOR_STAGE = {
+            'stage-where':   1,
+            'stage-infra':   2,
+            'stage-crisis':  3,
+            'stage-extras':  4,
+            'stage-photo':   5,
+            'stage-audio':   6,
+            'stage-review':  7,
+            'stage-send':    7,
+        };
+        const activeStep = V3_STEP_FOR_STAGE[currentStage] || 1;
+        const totalSteps = 7;
+        // Hide the legacy 5-step dots when v3 is on; they'd fight with the
+        // new 7-step overlay below. The overlay is idempotently ensured.
+        bar.querySelectorAll('.fp-step').forEach(el => { el.style.display = 'none'; });
+        let overlay = bar.querySelector('.fp-v3-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.className = 'fp-v3-overlay';
+            for (let i = 1; i <= totalSteps; i++) {
+                const seg = document.createElement('div');
+                seg.className = 'fp-v3-seg';
+                seg.setAttribute('data-v3-step', String(i));
+                overlay.appendChild(seg);
+            }
+            bar.appendChild(overlay);
+        }
+        overlay.querySelectorAll('.fp-v3-seg').forEach(seg => {
+            const step = parseInt(seg.getAttribute('data-v3-step') || '0', 10);
+            seg.classList.remove('active', 'done', 'upcoming');
+            if (step < activeStep) seg.classList.add('done');
+            else if (step === activeStep) seg.classList.add('active');
+            else seg.classList.add('upcoming');
+        });
+        overlay.setAttribute('data-active-step', String(activeStep));
+        overlay.setAttribute('data-total-steps', String(totalSteps));
+        return;
+    }
+
+    // UI v2 (Apr 2026): 5 steps — Photo / Audio / What / Details / Send —
+    // mapped to data-step=1..5 in index.html. Step 3 ("What") lives on
+    // review-page 1, step 4 ("Details") on review-page 2, step 5 ("Send")
+    // on review-page 3 (the confirm summary). When UI_V2 is off, step-3's
+    // dot + its preceding line are hidden and the step numbers collapse
+    // back to the legacy 4-step bar (photo/audio/review/send).
+    const v2 = !!UI_V2_ENABLED;
+
+    // Elements marked `data-v2-only="1"` render only when the flag is on.
+    bar.querySelectorAll('[data-v2-only="1"]').forEach((el) => {
+        el.style.display = v2 ? '' : 'none';
+    });
+
+    let activeStep;
+    if (currentStage === 'stage-photo') activeStep = 1;
+    else if (currentStage === 'stage-audio') activeStep = 2;
+    else if (currentStage === 'stage-review') {
+        if (v2) {
+            // Step 3/4/5 depending on which review page we're on.
+            activeStep = 2 + (state.reviewPage || 1);
+        } else {
+            activeStep = 4;  // legacy "review" slot
+        }
+    } else if (currentStage === 'stage-send') activeStep = 5;
+    else activeStep = 1;
+
     // Per-step "have we captured the required thing?" predicates.
-    // Photo is mandatory at step 1; Details (audio or text) is mandatory at
-    // step 2; Review just needs us to have reached it; Send = submit pressed.
     const stepHasData = {
         1: !!(state.photoDataUrl || state.photoBlob),
         2: !!(state.audioBlob || (state.description && state.description.trim())),
-        3: true,   // by the time we're here, the review pages have summarised it
+        3: true,
         4: true,
+        5: true,
     };
     bar.querySelectorAll('.fp-step').forEach((el) => {
         const step = parseInt(el.getAttribute('data-step') || '0', 10);
         el.classList.remove('fp-done', 'fp-active', 'fp-missing', 'fp-upcoming');
+        // Legacy (v2-off): skip the v2-only "What" step entirely — it's
+        // already hidden above, but also skip its state class work so the
+        // other steps light up as they did before.
+        if (!v2 && el.hasAttribute('data-v2-only')) return;
         if (step < activeStep) {
             el.classList.add(stepHasData[step] ? 'fp-done' : 'fp-missing');
         } else if (step === activeStep) {
@@ -1971,20 +2628,20 @@ const EXTRA_LANG = {
     // metric, §3.2 building selector, and §3.1 RTL layout notes. Keys are
     // merged into the base locale object below each main definition so the
     // dense packs already translated keep their existing keys intact.
-    fr: { home_title: 'Signaler', start_btn: 'Commencer', use_camera: 'Photo', browse: 'Parcourir', skip_photo: 'Passer', next: 'Continuer', tap_mic: 'Appuyez et parlez clairement', send_undp: 'Envoyer', sent_title: 'Envoyé!', consent_title: 'Votre vie privée compte', consent_desc: 'CRISP collecte uniquement les données nécessaires:', consent_loc: 'Localisation — coordonnées GPS', consent_photo: 'Photos — preuves de dégâts', consent_audio: 'Audio — descriptions vocales', consent_no_pii: 'Aucune identité personnelle collectée', consent_shared: 'Données partagées uniquement avec les secours', consent_delete: 'Suppression possible à tout moment', consent_check: 'Je consens au partage de ces données', consent_accept: 'Accepter', delete_my_data: 'Supprimer mes données', your_reports: 'Vos rapports soumis', delete_all: 'Tout supprimer', s2_title: 'Dites-nous ce qui s\'est passé', s2_sub: 'Parlez ou écrivez:', audio_bullet_1: 'Qu\'est-ce qui est endommagé? (maison, route, personnes…)', audio_bullet_2: 'Quelle est la gravité? (petit / grand / détruit)', audio_bullet_3: 'Quelqu\'un est-il blessé ou en danger?', audio_example: 'Exemple: La route est cassée et l\'eau inonde les maisons. 2 personnes sont blessées.', audio_mic_lang: 'Vous pouvez parler dans votre langue', audio_placeholder: 'Exemple: Maison effondrée, une personne piégée', home_offline_hint: '📡 Fonctionne hors ligne et avec une connexion limitée.', home_metric_reports: 'Rapports soumis', home_metric_lives: 'Vies sauvées', fp_photo: 'Photo', fp_details: 'Détails', fp_review: 'Vérifier', fp_send: 'Envoyer', my_reports: 'Mes rapports', in_flight: 'En cours', submitted: 'Envoyé', empty_in_flight: "Rien en cours. Appuyez sur Démarrer pour en créer un.", empty_submitted: 'Rien envoyé pour le moment.', rd_status_submitted: 'Envoyé', rd_status_under_review: 'En examen', rd_status_accepted: 'Accepté', rd_status_rejected: 'Rejeté', rd_tl_submitted: 'Envoyé', rd_tl_review: 'En examen', rd_tl_accepted: 'Accepté', rd_tl_rejected: 'Rejeté', rd_tl_help_sent: 'Aide envoyée', rd_meta_location: 'Lieu', rd_meta_crisis: 'Crise', rd_meta_what: 'Quoi', rd_meta_damage: 'Dégât', rd_meta_severity: 'Gravité', rd_delete_queued: 'Supprimé à la reconnexion.', rd_people_helped_one: '~1 personne aidée', rd_people_helped_many: '~{n} personnes aidées', time_seconds_ago: 'il y a {n}s', time_minutes_ago: 'il y a {n} min', time_hours_ago: 'il y a {n} h', time_1_day_ago: 'il y a 1 jour', time_days_ago: 'il y a {n} jours', time_1_month_ago: 'il y a 1 mois', time_months_ago: 'il y a {n} mois', back: 'Retour', review_details_title: 'Détails', confirm_title: 'Confirmer', summary_incident: 'Incident', summary_details: 'Détails', summary_edit: '✏️ Modifier', summary_needs_prefix: '🆘 Besoins :', summary_debris: '🚛 Déblaiement nécessaire', summary_none: '—', wildfire: 'Feu de forêt', earthquake: 'Tremblement', cyclone: 'Cyclone', hurricane: 'Ouragan', landslide: 'Glissement', pandemic: 'Pandémie', conflict: 'Conflit', other_crisis: 'Autre', road: 'Route', hospital: 'Hôpital', house: 'Maison', power: 'Électricité', school: 'École', telecom: 'Télécoms', government: 'Bâtiment', other: 'Autre', severe: 'Grave', minor: 'Mineur', moderate: 'Modéré', no_damage: 'Aucun dommage', partial_damage: 'Partiel', complete_damage: 'Détruit', destroyed: 'Détruit', unknown: 'Inconnu', working: 'Fonctionne', disrupted: 'Perturbé', needs_label: '🆘 Besoins urgents', food: 'Nourriture', need_water: 'Eau', shelter: 'Abri', medical: 'Médical', security: 'Sécurité' },
-    es: { home_title: 'Reportar', start_btn: 'Iniciar', use_camera: 'Cámara', browse: 'Buscar', skip_photo: 'Omitir', next: 'Continuar', tap_mic: 'Toque y hable claramente', send_undp: 'Enviar', sent_title: 'Enviado!', consent_title: 'Su privacidad importa', consent_desc: 'CRISP recopila solo los datos necesarios:', consent_loc: 'Ubicación — coordenadas GPS', consent_photo: 'Fotos — evidencia de daños', consent_audio: 'Audio — descripción por voz', consent_no_pii: 'No se recopila identidad personal', consent_shared: 'Datos solo para equipos de rescate', consent_delete: 'Puede solicitar eliminación', consent_check: 'Consiento compartir estos datos', consent_accept: 'Aceptar', delete_my_data: 'Eliminar mis datos', your_reports: 'Sus informes', delete_all: 'Eliminar todo', s2_title: 'Cuéntenos qué pasó', s2_sub: 'Hable o escriba:', audio_bullet_1: '¿Qué está dañado? (casa, carretera, personas…)', audio_bullet_2: '¿Qué tan grave? (pequeño / grande / destruido)', audio_bullet_3: '¿Hay alguien herido o en peligro?', audio_example: 'Ejemplo: La carretera está rota y el agua inunda las casas. 2 personas están heridas.', audio_mic_lang: 'Puede hablar en su idioma', audio_placeholder: 'Ejemplo: Casa derrumbada, una persona atrapada', home_offline_hint: '📡 Funciona sin conexión y con internet limitado.', home_metric_reports: 'Informes enviados', home_metric_lives: 'Vidas salvadas', fp_photo: 'Foto', fp_details: 'Detalles', fp_review: 'Revisar', fp_send: 'Enviar', my_reports: 'Mis informes', in_flight: 'En vuelo', submitted: 'Enviado', empty_in_flight: 'Nada en vuelo. Toca Iniciar para crear una.', empty_submitted: 'Aún nada enviado.', rd_status_submitted: 'Enviado', rd_status_under_review: 'En revisión', rd_status_accepted: 'Aceptado', rd_status_rejected: 'Rechazado', rd_tl_submitted: 'Enviado', rd_tl_review: 'En revisión', rd_tl_accepted: 'Aceptado', rd_tl_rejected: 'Rechazado', rd_tl_help_sent: 'Ayuda enviada', rd_meta_location: 'Ubicación', rd_meta_crisis: 'Crisis', rd_meta_what: 'Qué', rd_meta_damage: 'Daño', rd_meta_severity: 'Gravedad', rd_delete_queued: 'Se eliminará al conectar.', rd_people_helped_one: '~1 persona ayudada', rd_people_helped_many: '~{n} personas ayudadas', time_seconds_ago: 'hace {n}s', time_minutes_ago: 'hace {n} min', time_hours_ago: 'hace {n} h', time_1_day_ago: 'hace 1 día', time_days_ago: 'hace {n} días', time_1_month_ago: 'hace 1 mes', time_months_ago: 'hace {n} meses', back: 'Atrás', review_details_title: 'Detalles', confirm_title: 'Confirmar', summary_incident: 'Incidente', summary_details: 'Detalles', summary_edit: '✏️ Editar', summary_needs_prefix: '🆘 Necesidades:', summary_debris: '🚛 Remoción de escombros necesaria', summary_none: '—', wildfire: 'Incendio forestal', earthquake: 'Terremoto', cyclone: 'Ciclón', hurricane: 'Huracán', landslide: 'Deslizamiento', pandemic: 'Pandemia', conflict: 'Conflicto', other_crisis: 'Otro', road: 'Carretera', hospital: 'Hospital', house: 'Casa', power: 'Electricidad', school: 'Escuela', telecom: 'Telecom', government: 'Gubernamental', other: 'Otro', severe: 'Severo', minor: 'Leve', moderate: 'Moderado', no_damage: 'Sin daños', partial_damage: 'Parcial', complete_damage: 'Destruido', destroyed: 'Destruido', unknown: 'Desconocido', working: 'Funcionando', disrupted: 'Interrumpido', needs_label: '🆘 Necesidades urgentes', food: 'Comida', need_water: 'Agua', shelter: 'Refugio', medical: 'Médico', security: 'Seguridad' },
-    ar: { home_title: 'إبلاغ', start_btn: 'ابدأ', use_camera: 'كاميرا', browse: 'تصفح', skip_photo: 'تخطي', next: 'متابعة', tap_mic: 'اضغط وتحدث بوضوح', send_undp: 'إرسال', sent_title: 'تم!', consent_title: 'خصوصيتك مهمة', consent_desc: 'يجمع CRISP فقط البيانات اللازمة:', consent_loc: 'الموقع — إحداثيات GPS', consent_photo: 'صور — أدلة الأضرار', consent_audio: 'صوت — وصف صوتي', consent_no_pii: 'لا يتم جمع هوية شخصية', consent_shared: 'البيانات للمستجيبين فقط', consent_delete: 'يمكنك طلب الحذف', consent_check: 'أوافق على مشاركة هذه البيانات', consent_accept: 'قبول', delete_my_data: 'حذف بياناتي', your_reports: 'تقاريرك', delete_all: 'حذف الكل', s2_title: 'أخبرنا بما حدث', s2_sub: 'تحدث أو اكتب:', audio_bullet_1: 'ما المتضرر؟ (منزل، طريق، أشخاص…)', audio_bullet_2: 'ما مدى السوء؟ (صغير / كبير / مدمر)', audio_bullet_3: 'هل هناك جرحى أو في خطر؟', audio_example: 'مثال: الطريق مكسور والمياه تغمر المنازل. جريحان.', audio_mic_lang: 'يمكنك التحدث بلغتك', audio_placeholder: 'مثال: انهار المنزل، شخص محاصر', home_offline_hint: '📡 يعمل دون اتصال وفي حالات الإنترنت الضعيف.', home_metric_reports: 'التقارير المرسلة', home_metric_lives: 'الأرواح المنقذة', fp_photo: 'صورة', fp_details: 'تفاصيل', fp_review: 'مراجعة', fp_send: 'إرسال', my_reports: 'تقاريري', in_flight: 'قيد الإرسال', submitted: 'مُرسل', empty_in_flight: 'لا شيء قيد الإرسال. اضغط لبدء تقرير جديد.', empty_submitted: 'لم يُرسل شيء بعد.', rd_status_submitted: 'مُرسل', rd_status_under_review: 'قيد المراجعة', rd_status_accepted: 'مقبول', rd_status_rejected: 'مرفوض', rd_tl_submitted: 'مُرسل', rd_tl_review: 'قيد المراجعة', rd_tl_accepted: 'مقبول', rd_tl_rejected: 'مرفوض', rd_tl_help_sent: 'تم إرسال المساعدة', rd_meta_location: 'الموقع', rd_meta_crisis: 'الأزمة', rd_meta_what: 'ماذا', rd_meta_damage: 'الضرر', rd_meta_severity: 'الخطورة', rd_delete_queued: 'سيُحذف عند الاتصال.', rd_people_helped_one: '~مساعدة شخص واحد', rd_people_helped_many: '~مساعدة {n} أشخاص', time_seconds_ago: 'منذ {n} ث', time_minutes_ago: 'منذ {n} د', time_hours_ago: 'منذ {n} س', time_1_day_ago: 'منذ يوم', time_days_ago: 'منذ {n} أيام', time_1_month_ago: 'منذ شهر', time_months_ago: 'منذ {n} أشهر', back: 'رجوع', review_details_title: 'التفاصيل', confirm_title: 'تأكيد', summary_incident: 'الحادث', summary_details: 'التفاصيل', summary_edit: '✏️ تعديل', summary_needs_prefix: '🆘 الاحتياجات:', summary_debris: '🚛 إزالة الأنقاض مطلوبة', summary_none: '—', wildfire: 'حريق غابات', earthquake: 'زلزال', cyclone: 'إعصار', hurricane: 'إعصار', landslide: 'انهيار أرضي', pandemic: 'جائحة', conflict: 'نزاع', other_crisis: 'أخرى', road: 'طريق', hospital: 'مستشفى', house: 'منزل', power: 'كهرباء', school: 'مدرسة', telecom: 'اتصالات', government: 'مبنى حكومي', other: 'أخرى', severe: 'شديد', minor: 'طفيف', moderate: 'متوسط', no_damage: 'لا ضرر', partial_damage: 'جزئي', complete_damage: 'مدمر', destroyed: 'مدمر', unknown: 'غير معروف', working: 'يعمل', disrupted: 'معطل', needs_label: '🆘 احتياجات عاجلة', food: 'طعام', need_water: 'ماء', shelter: 'مأوى', medical: 'طبي', security: 'أمن' },
-    ru: { home_title: 'Сообщить о происшествии', start_btn: 'Начать', use_camera: 'Камера', browse: 'Обзор', skip_photo: 'Пропустить', next: 'Далее', tap_mic: 'Говорить', send_undp: 'Отправить', sent_title: 'Отправлено!', consent_title: 'Ваша конфиденциальность важна', consent_check: 'Я согласен на передачу данных', consent_accept: 'Принять', home_offline_hint: '📡 Работает офлайн и при слабом интернете.', home_metric_reports: 'Отправленные отчёты', home_metric_lives: 'Спасённые жизни', fp_photo: 'Фото', fp_details: 'Детали', fp_review: 'Проверка', fp_send: 'Отправить', my_reports: 'Мои отчёты', in_flight: 'Отправляется', submitted: 'Отправлено', empty_in_flight: 'Ничего не отправляется. Нажмите Начать для создания.', empty_submitted: 'Пока ничего не отправлено.', rd_status_submitted: 'Отправлено', rd_status_under_review: 'На проверке', rd_status_accepted: 'Принято', rd_status_rejected: 'Отклонено', rd_tl_submitted: 'Отправлено', rd_tl_review: 'На проверке', rd_tl_accepted: 'Принято', rd_tl_rejected: 'Отклонено', rd_tl_help_sent: 'Помощь отправлена', rd_meta_location: 'Место', rd_meta_crisis: 'Кризис', rd_meta_what: 'Что', rd_meta_damage: 'Ущерб', rd_meta_severity: 'Тяжесть', rd_delete_queued: 'Удалится при подключении.', rd_people_helped_one: '~помощь 1 человеку', rd_people_helped_many: '~помощь {n} людям', time_seconds_ago: '{n}с назад', time_minutes_ago: '{n} мин назад', time_hours_ago: '{n} ч назад', time_1_day_ago: '1 день назад', time_days_ago: '{n} дней назад', time_1_month_ago: '1 месяц назад', time_months_ago: '{n} месяцев назад', back: 'Назад', review_details_title: 'Детали', confirm_title: 'Подтвердить', summary_incident: 'Инцидент', summary_details: 'Детали', summary_edit: '✏️ Изменить', summary_needs_prefix: '🆘 Нужды:', summary_debris: '🚛 Нужна уборка обломков', summary_none: '—', wildfire: 'Лесной пожар', earthquake: 'Землетрясение', cyclone: 'Циклон', hurricane: 'Ураган', landslide: 'Оползень', pandemic: 'Пандемия', conflict: 'Конфликт', other_crisis: 'Другое', road: 'Дорога', hospital: 'Больница', house: 'Дом', power: 'Электричество', school: 'Школа', telecom: 'Связь', government: 'Здание', other: 'Другое', severe: 'Тяжёлое', minor: 'Лёгкое', moderate: 'Среднее', no_damage: 'Нет ущерба', partial_damage: 'Частично', complete_damage: 'Разрушено', destroyed: 'Разрушено', unknown: 'Неизвестно', working: 'Работает', disrupted: 'Прервано', needs_label: '🆘 Срочные нужды', food: 'Еда', need_water: 'Вода', shelter: 'Убежище', medical: 'Медицина', security: 'Безопасность' },
-    zh: { home_title: '报告', start_btn: '开始', use_camera: '相机', browse: '浏览', skip_photo: '跳过', next: '继续', tap_mic: '点击后清晰地说话', send_undp: '发送', sent_title: '已发送!', consent_title: '您的隐私很重要', consent_check: '我同意分享此数据', consent_accept: '接受', s2_title: '告诉我们发生了什么', s2_sub: '说话或输入:', audio_bullet_1: '什么受损了？（房屋、道路、人员…）', audio_bullet_2: '严重程度？（小 / 大 / 完全毁坏）', audio_bullet_3: '有人受伤或处于危险中吗？', audio_example: '示例：道路断裂，水淹房屋。2 人受伤。', audio_mic_lang: '您可以用您的语言说话', audio_placeholder: '示例：房屋倒塌，一人被困', home_offline_hint: '📡 离线和低网络环境下均可使用。', home_metric_reports: '已提交报告', home_metric_lives: '挽救的生命', fp_photo: '照片', fp_details: '详情', fp_review: '审查', fp_send: '发送', my_reports: '我的报告', in_flight: '传输中', submitted: '已提交', empty_in_flight: '没有传输中的报告。点击开始报告以创建。', empty_submitted: '尚未提交任何报告。', rd_status_submitted: '已提交', rd_status_under_review: '审核中', rd_status_accepted: '已接受', rd_status_rejected: '已拒绝', rd_tl_submitted: '已提交', rd_tl_review: '审核中', rd_tl_accepted: '已接受', rd_tl_rejected: '已拒绝', rd_tl_help_sent: '已派出援助', rd_meta_location: '位置', rd_meta_crisis: '危机', rd_meta_what: '什么', rd_meta_damage: '损坏', rd_meta_severity: '严重程度', rd_delete_queued: '连接后将删除。', rd_people_helped_one: '~帮助了1人', rd_people_helped_many: '~帮助了{n}人', time_seconds_ago: '{n}秒前', time_minutes_ago: '{n}分钟前', time_hours_ago: '{n}小时前', time_1_day_ago: '1天前', time_days_ago: '{n}天前', time_1_month_ago: '1个月前', time_months_ago: '{n}个月前', back: '返回', review_details_title: '详情', confirm_title: '确认', summary_incident: '事件', summary_details: '详情', summary_edit: '✏️ 编辑', summary_needs_prefix: '🆘 需求：', summary_debris: '🚛 需要清理碎片', summary_none: '—', wildfire: '野火', earthquake: '地震', cyclone: '气旋', hurricane: '飓风', landslide: '山体滑坡', pandemic: '大流行', conflict: '冲突', other_crisis: '其他', road: '道路', hospital: '医院', house: '房屋', power: '电力', school: '学校', telecom: '电信', government: '政府建筑', other: '其他', severe: '严重', minor: '轻微', moderate: '中等', no_damage: '无损坏', partial_damage: '部分', complete_damage: '完全毁坏', destroyed: '毁坏', unknown: '未知', working: '正常', disrupted: '中断', needs_label: '🆘 紧急需求', food: '食物', need_water: '水', shelter: '避难所', medical: '医疗', security: '安全' },
-    pt: { home_title: 'Reportar', start_btn: 'Iniciar', use_camera: 'Câmera', browse: 'Procurar', skip_photo: 'Pular', next: 'Continuar', tap_mic: 'Toque e fale claramente', send_undp: 'Enviar', sent_title: 'Enviado!', consent_title: 'Sua privacidade importa', consent_check: 'Concordo em compartilhar dados', consent_accept: 'Aceitar', s2_title: 'Conte-nos o que aconteceu', s2_sub: 'Fale ou digite:', audio_bullet_1: 'O que está danificado? (casa, estrada, pessoas…)', audio_bullet_2: 'Quão grave é? (pequeno / grande / destruído)', audio_bullet_3: 'Alguém está ferido ou em perigo?', audio_example: 'Exemplo: A estrada está quebrada e a água está inundando casas. 2 pessoas feridas.', audio_mic_lang: 'Você pode falar no seu idioma', audio_placeholder: 'Exemplo: Casa desabou, uma pessoa presa', home_offline_hint: '📡 Funciona offline e com internet limitada.', home_metric_reports: 'Relatórios enviados', home_metric_lives: 'Vidas salvas', fp_photo: 'Foto', fp_details: 'Detalhes', fp_review: 'Revisar', fp_send: 'Enviar', my_reports: 'Meus relatórios', in_flight: 'Em envio', submitted: 'Enviado', empty_in_flight: 'Nada em envio. Toque em Iniciar para criar um.', empty_submitted: 'Nada enviado ainda.', rd_status_submitted: 'Enviado', rd_status_under_review: 'Em análise', rd_status_accepted: 'Aceito', rd_status_rejected: 'Rejeitado', rd_tl_submitted: 'Enviado', rd_tl_review: 'Em análise', rd_tl_accepted: 'Aceito', rd_tl_rejected: 'Rejeitado', rd_tl_help_sent: 'Ajuda enviada', rd_meta_location: 'Local', rd_meta_crisis: 'Crise', rd_meta_what: 'O quê', rd_meta_damage: 'Dano', rd_meta_severity: 'Gravidade', rd_delete_queued: 'Será excluído ao conectar.', rd_people_helped_one: '~1 pessoa ajudada', rd_people_helped_many: '~{n} pessoas ajudadas', time_seconds_ago: 'há {n}s', time_minutes_ago: 'há {n} min', time_hours_ago: 'há {n} h', time_1_day_ago: 'há 1 dia', time_days_ago: 'há {n} dias', time_1_month_ago: 'há 1 mês', time_months_ago: 'há {n} meses', back: 'Voltar', review_details_title: 'Detalhes', confirm_title: 'Confirmar', summary_incident: 'Incidente', summary_details: 'Detalhes', summary_edit: '✏️ Editar', summary_needs_prefix: '🆘 Necessidades:', summary_debris: '🚛 Remoção de detritos necessária', summary_none: '—', wildfire: 'Incêndio florestal', earthquake: 'Terremoto', cyclone: 'Ciclone', hurricane: 'Furacão', landslide: 'Deslizamento', pandemic: 'Pandemia', conflict: 'Conflito', other_crisis: 'Outro', road: 'Estrada', hospital: 'Hospital', house: 'Casa', power: 'Energia', school: 'Escola', telecom: 'Telecom', government: 'Prédio governamental', other: 'Outro', severe: 'Grave', minor: 'Leve', moderate: 'Moderado', no_damage: 'Sem danos', partial_damage: 'Parcial', complete_damage: 'Destruído', destroyed: 'Destruído', unknown: 'Desconhecido', working: 'Funcionando', disrupted: 'Interrompido', needs_label: '🆘 Necessidades urgentes', food: 'Comida', need_water: 'Água', shelter: 'Abrigo', medical: 'Médico', security: 'Segurança' },
-    de: { home_title: 'Vorfall melden', start_btn: 'Starten', use_camera: 'Kamera', browse: 'Suchen', skip_photo: 'Überspringen', next: 'Weiter', tap_mic: 'Sprechen', send_undp: 'Senden', sent_title: 'Gesendet!', consent_title: 'Ihre Privatsphäre ist wichtig', consent_check: 'Ich stimme der Datenweitergabe zu', consent_accept: 'Akzeptieren', home_offline_hint: '📡 Funktioniert offline und bei schlechter Internetverbindung.', home_metric_reports: 'Übermittelte Berichte', home_metric_lives: 'Gerettete Leben', fp_photo: 'Foto', fp_details: 'Details', fp_review: 'Prüfen', fp_send: 'Senden', my_reports: 'Meine Berichte', in_flight: 'Im Versand', submitted: 'Gesendet', empty_in_flight: 'Nichts im Versand. Tippen Sie auf Starten, um einen Bericht zu erstellen.', empty_submitted: 'Noch nichts gesendet.', rd_status_submitted: 'Gesendet', rd_status_under_review: 'In Prüfung', rd_status_accepted: 'Angenommen', rd_status_rejected: 'Abgelehnt', rd_tl_submitted: 'Gesendet', rd_tl_review: 'In Prüfung', rd_tl_accepted: 'Angenommen', rd_tl_rejected: 'Abgelehnt', rd_tl_help_sent: 'Hilfe gesendet', rd_meta_location: 'Ort', rd_meta_crisis: 'Krise', rd_meta_what: 'Was', rd_meta_damage: 'Schaden', rd_meta_severity: 'Schweregrad', rd_delete_queued: 'Wird bei Verbindung gelöscht.', rd_people_helped_one: '~1 Person geholfen', rd_people_helped_many: '~{n} Personen geholfen', time_seconds_ago: 'vor {n}s', time_minutes_ago: 'vor {n} min', time_hours_ago: 'vor {n} h', time_1_day_ago: 'vor 1 Tag', time_days_ago: 'vor {n} Tagen', time_1_month_ago: 'vor 1 Monat', time_months_ago: 'vor {n} Monaten', back: 'Zurück', review_details_title: 'Details', confirm_title: 'Bestätigen', summary_incident: 'Vorfall', summary_details: 'Details', summary_edit: '✏️ Bearbeiten', summary_needs_prefix: '🆘 Bedarf:', summary_debris: '🚛 Trümmerbeseitigung nötig', summary_none: '—', wildfire: 'Waldbrand', earthquake: 'Erdbeben', cyclone: 'Zyklon', hurricane: 'Hurrikan', landslide: 'Erdrutsch', pandemic: 'Pandemie', conflict: 'Konflikt', other_crisis: 'Sonstiges', road: 'Straße', hospital: 'Krankenhaus', house: 'Haus', power: 'Strom', school: 'Schule', telecom: 'Telekom', government: 'Gebäude', other: 'Sonstiges', severe: 'Schwer', minor: 'Leicht', moderate: 'Mittel', no_damage: 'Kein Schaden', partial_damage: 'Teilweise', complete_damage: 'Zerstört', destroyed: 'Zerstört', unknown: 'Unbekannt', working: 'Funktioniert', disrupted: 'Gestört', needs_label: '🆘 Dringender Bedarf', food: 'Essen', need_water: 'Wasser', shelter: 'Unterkunft', medical: 'Medizin', security: 'Sicherheit' },
+    fr: { home_title: 'Signaler', start_btn: 'Commencer', use_camera: 'Photo', browse: 'Parcourir', skip_photo: 'Passer', next: 'Continuer', tap_mic: 'Appuyez et parlez clairement', send_undp: 'Envoyer', sent_title: 'Envoyé!', consent_title: 'Votre vie privée compte', consent_desc: 'CRISP collecte uniquement les données nécessaires:', consent_loc: 'Localisation — coordonnées GPS', consent_photo: 'Photos — preuves de dégâts', consent_audio: 'Audio — descriptions vocales', consent_no_pii: 'Aucune identité personnelle collectée', consent_shared: 'Données partagées uniquement avec les secours', consent_delete: 'Suppression possible à tout moment', consent_check: 'Je consens au partage de ces données', consent_accept: 'Accepter', delete_my_data: 'Supprimer mes données', your_reports: 'Vos rapports soumis', delete_all: 'Tout supprimer', s2_title: 'Dites-nous ce qui s\'est passé', s2_sub: 'Parlez ou écrivez:', audio_bullet_1: 'Qu\'est-ce qui est endommagé? (maison, route, personnes…)', audio_bullet_2: 'Quelle est la gravité? (petit / grand / détruit)', audio_bullet_3: 'Quelqu\'un est-il blessé ou en danger?', audio_example: 'Exemple: La route est cassée et l\'eau inonde les maisons. 2 personnes sont blessées.', audio_mic_lang: 'Vous pouvez parler dans votre langue', audio_placeholder: 'Exemple: Maison effondrée, une personne piégée', home_offline_hint: '📡 Fonctionne hors ligne et avec une connexion limitée.', home_metric_reports: 'Rapports soumis', home_metric_lives: 'Vies sauvées', fp_photo: 'Photo', fp_details: 'Détails', fp_review: 'Vérifier', fp_send: 'Envoyer', my_reports: 'Mes rapports', mr_resolved: 'Résolus', mr_lives_impacted: 'Vies touchées', in_flight: 'En cours', submitted: 'Envoyé', empty_in_flight: "Rien en cours. Appuyez sur Démarrer pour en créer un.", empty_submitted: 'Rien envoyé pour le moment.', rd_status_submitted: 'Envoyé', rd_status_under_review: 'En examen', rd_status_accepted: 'Accepté', rd_status_rejected: 'Rejeté', rd_tl_submitted: 'Envoyé', rd_tl_review: 'En examen', rd_tl_accepted: 'Accepté', rd_tl_rejected: 'Rejeté', rd_tl_help_sent: 'Aide envoyée', rd_meta_location: 'Lieu', rd_meta_crisis: 'Crise', rd_meta_what: 'Quoi', rd_meta_damage: 'Dégât', rd_meta_severity: 'Gravité', rd_delete_queued: 'Supprimé à la reconnexion.', rd_people_helped_one: '~1 personne aidée', rd_people_helped_many: '~{n} personnes aidées', time_seconds_ago: 'il y a {n}s', time_minutes_ago: 'il y a {n} min', time_hours_ago: 'il y a {n} h', time_1_day_ago: 'il y a 1 jour', time_days_ago: 'il y a {n} jours', time_1_month_ago: 'il y a 1 mois', time_months_ago: 'il y a {n} mois', back: 'Retour', review_details_title: 'Détails', confirm_title: 'Confirmer', summary_incident: 'Incident', summary_details: 'Détails', summary_edit: '✏️ Modifier', summary_needs_prefix: '🆘 Besoins :', summary_debris: '🚛 Déblaiement nécessaire', summary_none: '—', wildfire: 'Feu de forêt', earthquake: 'Tremblement', cyclone: 'Cyclone', hurricane: 'Ouragan', landslide: 'Glissement', pandemic: 'Pandémie', conflict: 'Conflit', other_crisis: 'Autre', road: 'Route', hospital: 'Hôpital', house: 'Maison', power: 'Électricité', school: 'École', telecom: 'Télécoms', government: 'Bâtiment', other: 'Autre', severe: 'Grave', minor: 'Mineur', moderate: 'Modéré', no_damage: 'Aucun dommage', partial_damage: 'Partiel', complete_damage: 'Détruit', destroyed: 'Détruit', unknown: 'Inconnu', working: 'Fonctionne', disrupted: 'Perturbé', needs_label: '🆘 Besoins urgents', food: 'Nourriture', need_water: 'Eau', shelter: 'Abri', medical: 'Médical', security: 'Sécurité', need_cash: 'Argent', need_livelihoods: 'Moyens de subsistance', need_wash: 'EAH', need_basic_services: 'Services de base', need_protection: 'Protection', need_local_support: 'Aide locale', need_other: 'Autre' },
+    es: { home_title: 'Reportar', start_btn: 'Iniciar', use_camera: 'Cámara', browse: 'Buscar', skip_photo: 'Omitir', next: 'Continuar', tap_mic: 'Toque y hable claramente', send_undp: 'Enviar', sent_title: 'Enviado!', consent_title: 'Su privacidad importa', consent_desc: 'CRISP recopila solo los datos necesarios:', consent_loc: 'Ubicación — coordenadas GPS', consent_photo: 'Fotos — evidencia de daños', consent_audio: 'Audio — descripción por voz', consent_no_pii: 'No se recopila identidad personal', consent_shared: 'Datos solo para equipos de rescate', consent_delete: 'Puede solicitar eliminación', consent_check: 'Consiento compartir estos datos', consent_accept: 'Aceptar', delete_my_data: 'Eliminar mis datos', your_reports: 'Sus informes', delete_all: 'Eliminar todo', s2_title: 'Cuéntenos qué pasó', s2_sub: 'Hable o escriba:', audio_bullet_1: '¿Qué está dañado? (casa, carretera, personas…)', audio_bullet_2: '¿Qué tan grave? (pequeño / grande / destruido)', audio_bullet_3: '¿Hay alguien herido o en peligro?', audio_example: 'Ejemplo: La carretera está rota y el agua inunda las casas. 2 personas están heridas.', audio_mic_lang: 'Puede hablar en su idioma', audio_placeholder: 'Ejemplo: Casa derrumbada, una persona atrapada', home_offline_hint: '📡 Funciona sin conexión y con internet limitado.', home_metric_reports: 'Informes enviados', home_metric_lives: 'Vidas salvadas', fp_photo: 'Foto', fp_details: 'Detalles', fp_review: 'Revisar', fp_send: 'Enviar', my_reports: 'Mis informes', mr_resolved: 'Resueltos', mr_lives_impacted: 'Vidas afectadas', in_flight: 'En vuelo', submitted: 'Enviado', empty_in_flight: 'Nada en vuelo. Toca Iniciar para crear una.', empty_submitted: 'Aún nada enviado.', rd_status_submitted: 'Enviado', rd_status_under_review: 'En revisión', rd_status_accepted: 'Aceptado', rd_status_rejected: 'Rechazado', rd_tl_submitted: 'Enviado', rd_tl_review: 'En revisión', rd_tl_accepted: 'Aceptado', rd_tl_rejected: 'Rechazado', rd_tl_help_sent: 'Ayuda enviada', rd_meta_location: 'Ubicación', rd_meta_crisis: 'Crisis', rd_meta_what: 'Qué', rd_meta_damage: 'Daño', rd_meta_severity: 'Gravedad', rd_delete_queued: 'Se eliminará al conectar.', rd_people_helped_one: '~1 persona ayudada', rd_people_helped_many: '~{n} personas ayudadas', time_seconds_ago: 'hace {n}s', time_minutes_ago: 'hace {n} min', time_hours_ago: 'hace {n} h', time_1_day_ago: 'hace 1 día', time_days_ago: 'hace {n} días', time_1_month_ago: 'hace 1 mes', time_months_ago: 'hace {n} meses', back: 'Atrás', review_details_title: 'Detalles', confirm_title: 'Confirmar', summary_incident: 'Incidente', summary_details: 'Detalles', summary_edit: '✏️ Editar', summary_needs_prefix: '🆘 Necesidades:', summary_debris: '🚛 Remoción de escombros necesaria', summary_none: '—', wildfire: 'Incendio forestal', earthquake: 'Terremoto', cyclone: 'Ciclón', hurricane: 'Huracán', landslide: 'Deslizamiento', pandemic: 'Pandemia', conflict: 'Conflicto', other_crisis: 'Otro', road: 'Carretera', hospital: 'Hospital', house: 'Casa', power: 'Electricidad', school: 'Escuela', telecom: 'Telecom', government: 'Gubernamental', other: 'Otro', severe: 'Severo', minor: 'Leve', moderate: 'Moderado', no_damage: 'Sin daños', partial_damage: 'Parcial', complete_damage: 'Destruido', destroyed: 'Destruido', unknown: 'Desconocido', working: 'Funcionando', disrupted: 'Interrumpido', needs_label: '🆘 Necesidades urgentes', food: 'Comida', need_water: 'Agua', shelter: 'Refugio', medical: 'Médico', security: 'Seguridad', need_cash: 'Efectivo', need_livelihoods: 'Medios de vida', need_wash: 'WASH', need_basic_services: 'Servicios básicos', need_protection: 'Protección', need_local_support: 'Apoyo local', need_other: 'Otro' },
+    ar: { home_title: 'إبلاغ', start_btn: 'ابدأ', use_camera: 'كاميرا', browse: 'تصفح', skip_photo: 'تخطي', next: 'متابعة', tap_mic: 'اضغط وتحدث بوضوح', send_undp: 'إرسال', sent_title: 'تم!', consent_title: 'خصوصيتك مهمة', consent_desc: 'يجمع CRISP فقط البيانات اللازمة:', consent_loc: 'الموقع — إحداثيات GPS', consent_photo: 'صور — أدلة الأضرار', consent_audio: 'صوت — وصف صوتي', consent_no_pii: 'لا يتم جمع هوية شخصية', consent_shared: 'البيانات للمستجيبين فقط', consent_delete: 'يمكنك طلب الحذف', consent_check: 'أوافق على مشاركة هذه البيانات', consent_accept: 'قبول', delete_my_data: 'حذف بياناتي', your_reports: 'تقاريرك', delete_all: 'حذف الكل', s2_title: 'أخبرنا بما حدث', s2_sub: 'تحدث أو اكتب:', audio_bullet_1: 'ما المتضرر؟ (منزل، طريق، أشخاص…)', audio_bullet_2: 'ما مدى السوء؟ (صغير / كبير / مدمر)', audio_bullet_3: 'هل هناك جرحى أو في خطر؟', audio_example: 'مثال: الطريق مكسور والمياه تغمر المنازل. جريحان.', audio_mic_lang: 'يمكنك التحدث بلغتك', audio_placeholder: 'مثال: انهار المنزل، شخص محاصر', home_offline_hint: '📡 يعمل دون اتصال وفي حالات الإنترنت الضعيف.', home_metric_reports: 'التقارير المرسلة', home_metric_lives: 'الأرواح المنقذة', fp_photo: 'صورة', fp_details: 'تفاصيل', fp_review: 'مراجعة', fp_send: 'إرسال', my_reports: 'تقاريري', mr_resolved: 'محلولة', mr_lives_impacted: 'الأرواح المتأثرة', in_flight: 'قيد الإرسال', submitted: 'مُرسل', empty_in_flight: 'لا شيء قيد الإرسال. اضغط لبدء تقرير جديد.', empty_submitted: 'لم يُرسل شيء بعد.', rd_status_submitted: 'مُرسل', rd_status_under_review: 'قيد المراجعة', rd_status_accepted: 'مقبول', rd_status_rejected: 'مرفوض', rd_tl_submitted: 'مُرسل', rd_tl_review: 'قيد المراجعة', rd_tl_accepted: 'مقبول', rd_tl_rejected: 'مرفوض', rd_tl_help_sent: 'تم إرسال المساعدة', rd_meta_location: 'الموقع', rd_meta_crisis: 'الأزمة', rd_meta_what: 'ماذا', rd_meta_damage: 'الضرر', rd_meta_severity: 'الخطورة', rd_delete_queued: 'سيُحذف عند الاتصال.', rd_people_helped_one: '~مساعدة شخص واحد', rd_people_helped_many: '~مساعدة {n} أشخاص', time_seconds_ago: 'منذ {n} ث', time_minutes_ago: 'منذ {n} د', time_hours_ago: 'منذ {n} س', time_1_day_ago: 'منذ يوم', time_days_ago: 'منذ {n} أيام', time_1_month_ago: 'منذ شهر', time_months_ago: 'منذ {n} أشهر', back: 'رجوع', review_details_title: 'التفاصيل', confirm_title: 'تأكيد', summary_incident: 'الحادث', summary_details: 'التفاصيل', summary_edit: '✏️ تعديل', summary_needs_prefix: '🆘 الاحتياجات:', summary_debris: '🚛 إزالة الأنقاض مطلوبة', summary_none: '—', wildfire: 'حريق غابات', earthquake: 'زلزال', cyclone: 'إعصار', hurricane: 'إعصار', landslide: 'انهيار أرضي', pandemic: 'جائحة', conflict: 'نزاع', other_crisis: 'أخرى', road: 'طريق', hospital: 'مستشفى', house: 'منزل', power: 'كهرباء', school: 'مدرسة', telecom: 'اتصالات', government: 'مبنى حكومي', other: 'أخرى', severe: 'شديد', minor: 'طفيف', moderate: 'متوسط', no_damage: 'لا ضرر', partial_damage: 'جزئي', complete_damage: 'مدمر', destroyed: 'مدمر', unknown: 'غير معروف', working: 'يعمل', disrupted: 'معطل', needs_label: '🆘 احتياجات عاجلة', food: 'طعام', need_water: 'ماء', shelter: 'مأوى', medical: 'طبي', security: 'أمن', need_cash: 'مال', need_livelihoods: 'سبل العيش', need_wash: 'المياه والصرف الصحي', need_basic_services: 'خدمات أساسية', need_protection: 'الحماية', need_local_support: 'دعم محلي', need_other: 'أخرى' },
+    ru: { home_title: 'Сообщить о происшествии', start_btn: 'Начать', use_camera: 'Камера', browse: 'Обзор', skip_photo: 'Пропустить', next: 'Далее', tap_mic: 'Говорить', send_undp: 'Отправить', sent_title: 'Отправлено!', consent_title: 'Ваша конфиденциальность важна', consent_check: 'Я согласен на передачу данных', consent_accept: 'Принять', home_offline_hint: '📡 Работает офлайн и при слабом интернете.', home_metric_reports: 'Отправленные отчёты', home_metric_lives: 'Спасённые жизни', fp_photo: 'Фото', fp_details: 'Детали', fp_review: 'Проверка', fp_send: 'Отправить', my_reports: 'Мои отчёты', mr_resolved: 'Решено', mr_lives_impacted: 'Затронутые жизни', in_flight: 'Отправляется', submitted: 'Отправлено', empty_in_flight: 'Ничего не отправляется. Нажмите Начать для создания.', empty_submitted: 'Пока ничего не отправлено.', rd_status_submitted: 'Отправлено', rd_status_under_review: 'На проверке', rd_status_accepted: 'Принято', rd_status_rejected: 'Отклонено', rd_tl_submitted: 'Отправлено', rd_tl_review: 'На проверке', rd_tl_accepted: 'Принято', rd_tl_rejected: 'Отклонено', rd_tl_help_sent: 'Помощь отправлена', rd_meta_location: 'Место', rd_meta_crisis: 'Кризис', rd_meta_what: 'Что', rd_meta_damage: 'Ущерб', rd_meta_severity: 'Тяжесть', rd_delete_queued: 'Удалится при подключении.', rd_people_helped_one: '~помощь 1 человеку', rd_people_helped_many: '~помощь {n} людям', time_seconds_ago: '{n}с назад', time_minutes_ago: '{n} мин назад', time_hours_ago: '{n} ч назад', time_1_day_ago: '1 день назад', time_days_ago: '{n} дней назад', time_1_month_ago: '1 месяц назад', time_months_ago: '{n} месяцев назад', back: 'Назад', review_details_title: 'Детали', confirm_title: 'Подтвердить', summary_incident: 'Инцидент', summary_details: 'Детали', summary_edit: '✏️ Изменить', summary_needs_prefix: '🆘 Нужды:', summary_debris: '🚛 Нужна уборка обломков', summary_none: '—', wildfire: 'Лесной пожар', earthquake: 'Землетрясение', cyclone: 'Циклон', hurricane: 'Ураган', landslide: 'Оползень', pandemic: 'Пандемия', conflict: 'Конфликт', other_crisis: 'Другое', road: 'Дорога', hospital: 'Больница', house: 'Дом', power: 'Электричество', school: 'Школа', telecom: 'Связь', government: 'Здание', other: 'Другое', severe: 'Тяжёлое', minor: 'Лёгкое', moderate: 'Среднее', no_damage: 'Нет ущерба', partial_damage: 'Частично', complete_damage: 'Разрушено', destroyed: 'Разрушено', unknown: 'Неизвестно', working: 'Работает', disrupted: 'Прервано', needs_label: '🆘 Срочные нужды', food: 'Еда', need_water: 'Вода', shelter: 'Убежище', medical: 'Медицина', security: 'Безопасность', need_cash: 'Деньги', need_livelihoods: 'Средства к существованию', need_wash: 'ВСГ', need_basic_services: 'Базовые услуги', need_protection: 'Защита', need_local_support: 'Местная помощь', need_other: 'Другое' },
+    zh: { home_title: '报告', start_btn: '开始', use_camera: '相机', browse: '浏览', skip_photo: '跳过', next: '继续', tap_mic: '点击后清晰地说话', send_undp: '发送', sent_title: '已发送!', consent_title: '您的隐私很重要', consent_check: '我同意分享此数据', consent_accept: '接受', s2_title: '告诉我们发生了什么', s2_sub: '说话或输入:', audio_bullet_1: '什么受损了？（房屋、道路、人员…）', audio_bullet_2: '严重程度？（小 / 大 / 完全毁坏）', audio_bullet_3: '有人受伤或处于危险中吗？', audio_example: '示例：道路断裂，水淹房屋。2 人受伤。', audio_mic_lang: '您可以用您的语言说话', audio_placeholder: '示例：房屋倒塌，一人被困', home_offline_hint: '📡 离线和低网络环境下均可使用。', home_metric_reports: '已提交报告', home_metric_lives: '挽救的生命', fp_photo: '照片', fp_details: '详情', fp_review: '审查', fp_send: '发送', my_reports: '我的报告', mr_resolved: '已解决', mr_lives_impacted: '受影响的生命', in_flight: '传输中', submitted: '已提交', empty_in_flight: '没有传输中的报告。点击开始报告以创建。', empty_submitted: '尚未提交任何报告。', rd_status_submitted: '已提交', rd_status_under_review: '审核中', rd_status_accepted: '已接受', rd_status_rejected: '已拒绝', rd_tl_submitted: '已提交', rd_tl_review: '审核中', rd_tl_accepted: '已接受', rd_tl_rejected: '已拒绝', rd_tl_help_sent: '已派出援助', rd_meta_location: '位置', rd_meta_crisis: '危机', rd_meta_what: '什么', rd_meta_damage: '损坏', rd_meta_severity: '严重程度', rd_delete_queued: '连接后将删除。', rd_people_helped_one: '~帮助了1人', rd_people_helped_many: '~帮助了{n}人', time_seconds_ago: '{n}秒前', time_minutes_ago: '{n}分钟前', time_hours_ago: '{n}小时前', time_1_day_ago: '1天前', time_days_ago: '{n}天前', time_1_month_ago: '1个月前', time_months_ago: '{n}个月前', back: '返回', review_details_title: '详情', confirm_title: '确认', summary_incident: '事件', summary_details: '详情', summary_edit: '✏️ 编辑', summary_needs_prefix: '🆘 需求：', summary_debris: '🚛 需要清理碎片', summary_none: '—', wildfire: '野火', earthquake: '地震', cyclone: '气旋', hurricane: '飓风', landslide: '山体滑坡', pandemic: '大流行', conflict: '冲突', other_crisis: '其他', road: '道路', hospital: '医院', house: '房屋', power: '电力', school: '学校', telecom: '电信', government: '政府建筑', other: '其他', severe: '严重', minor: '轻微', moderate: '中等', no_damage: '无损坏', partial_damage: '部分', complete_damage: '完全毁坏', destroyed: '毁坏', unknown: '未知', working: '正常', disrupted: '中断', needs_label: '🆘 紧急需求', food: '食物', need_water: '水', shelter: '避难所', medical: '医疗', security: '安全', need_cash: '现金', need_livelihoods: '生计', need_wash: '水卫设施', need_basic_services: '基本服务', need_protection: '保护', need_local_support: '本地支援', need_other: '其他' },
+    pt: { home_title: 'Reportar', start_btn: 'Iniciar', use_camera: 'Câmera', browse: 'Procurar', skip_photo: 'Pular', next: 'Continuar', tap_mic: 'Toque e fale claramente', send_undp: 'Enviar', sent_title: 'Enviado!', consent_title: 'Sua privacidade importa', consent_check: 'Concordo em compartilhar dados', consent_accept: 'Aceitar', s2_title: 'Conte-nos o que aconteceu', s2_sub: 'Fale ou digite:', audio_bullet_1: 'O que está danificado? (casa, estrada, pessoas…)', audio_bullet_2: 'Quão grave é? (pequeno / grande / destruído)', audio_bullet_3: 'Alguém está ferido ou em perigo?', audio_example: 'Exemplo: A estrada está quebrada e a água está inundando casas. 2 pessoas feridas.', audio_mic_lang: 'Você pode falar no seu idioma', audio_placeholder: 'Exemplo: Casa desabou, uma pessoa presa', home_offline_hint: '📡 Funciona offline e com internet limitada.', home_metric_reports: 'Relatórios enviados', home_metric_lives: 'Vidas salvas', fp_photo: 'Foto', fp_details: 'Detalhes', fp_review: 'Revisar', fp_send: 'Enviar', my_reports: 'Meus relatórios', mr_resolved: 'Resolvidos', mr_lives_impacted: 'Vidas afetadas', in_flight: 'Em envio', submitted: 'Enviado', empty_in_flight: 'Nada em envio. Toque em Iniciar para criar um.', empty_submitted: 'Nada enviado ainda.', rd_status_submitted: 'Enviado', rd_status_under_review: 'Em análise', rd_status_accepted: 'Aceito', rd_status_rejected: 'Rejeitado', rd_tl_submitted: 'Enviado', rd_tl_review: 'Em análise', rd_tl_accepted: 'Aceito', rd_tl_rejected: 'Rejeitado', rd_tl_help_sent: 'Ajuda enviada', rd_meta_location: 'Local', rd_meta_crisis: 'Crise', rd_meta_what: 'O quê', rd_meta_damage: 'Dano', rd_meta_severity: 'Gravidade', rd_delete_queued: 'Será excluído ao conectar.', rd_people_helped_one: '~1 pessoa ajudada', rd_people_helped_many: '~{n} pessoas ajudadas', time_seconds_ago: 'há {n}s', time_minutes_ago: 'há {n} min', time_hours_ago: 'há {n} h', time_1_day_ago: 'há 1 dia', time_days_ago: 'há {n} dias', time_1_month_ago: 'há 1 mês', time_months_ago: 'há {n} meses', back: 'Voltar', review_details_title: 'Detalhes', confirm_title: 'Confirmar', summary_incident: 'Incidente', summary_details: 'Detalhes', summary_edit: '✏️ Editar', summary_needs_prefix: '🆘 Necessidades:', summary_debris: '🚛 Remoção de detritos necessária', summary_none: '—', wildfire: 'Incêndio florestal', earthquake: 'Terremoto', cyclone: 'Ciclone', hurricane: 'Furacão', landslide: 'Deslizamento', pandemic: 'Pandemia', conflict: 'Conflito', other_crisis: 'Outro', road: 'Estrada', hospital: 'Hospital', house: 'Casa', power: 'Energia', school: 'Escola', telecom: 'Telecom', government: 'Prédio governamental', other: 'Outro', severe: 'Grave', minor: 'Leve', moderate: 'Moderado', no_damage: 'Sem danos', partial_damage: 'Parcial', complete_damage: 'Destruído', destroyed: 'Destruído', unknown: 'Desconhecido', working: 'Funcionando', disrupted: 'Interrompido', needs_label: '🆘 Necessidades urgentes', food: 'Comida', need_water: 'Água', shelter: 'Abrigo', medical: 'Médico', security: 'Segurança', need_cash: 'Dinheiro', need_livelihoods: 'Meios de vida', need_wash: 'WASH', need_basic_services: 'Serviços básicos', need_protection: 'Proteção', need_local_support: 'Apoio local', need_other: 'Outro' },
+    de: { home_title: 'Vorfall melden', start_btn: 'Starten', use_camera: 'Kamera', browse: 'Suchen', skip_photo: 'Überspringen', next: 'Weiter', tap_mic: 'Sprechen', send_undp: 'Senden', sent_title: 'Gesendet!', consent_title: 'Ihre Privatsphäre ist wichtig', consent_check: 'Ich stimme der Datenweitergabe zu', consent_accept: 'Akzeptieren', home_offline_hint: '📡 Funktioniert offline und bei schlechter Internetverbindung.', home_metric_reports: 'Übermittelte Berichte', home_metric_lives: 'Gerettete Leben', fp_photo: 'Foto', fp_details: 'Details', fp_review: 'Prüfen', fp_send: 'Senden', my_reports: 'Meine Berichte', mr_resolved: 'Gelöst', mr_lives_impacted: 'Betroffene Leben', in_flight: 'Im Versand', submitted: 'Gesendet', empty_in_flight: 'Nichts im Versand. Tippen Sie auf Starten, um einen Bericht zu erstellen.', empty_submitted: 'Noch nichts gesendet.', rd_status_submitted: 'Gesendet', rd_status_under_review: 'In Prüfung', rd_status_accepted: 'Angenommen', rd_status_rejected: 'Abgelehnt', rd_tl_submitted: 'Gesendet', rd_tl_review: 'In Prüfung', rd_tl_accepted: 'Angenommen', rd_tl_rejected: 'Abgelehnt', rd_tl_help_sent: 'Hilfe gesendet', rd_meta_location: 'Ort', rd_meta_crisis: 'Krise', rd_meta_what: 'Was', rd_meta_damage: 'Schaden', rd_meta_severity: 'Schweregrad', rd_delete_queued: 'Wird bei Verbindung gelöscht.', rd_people_helped_one: '~1 Person geholfen', rd_people_helped_many: '~{n} Personen geholfen', time_seconds_ago: 'vor {n}s', time_minutes_ago: 'vor {n} min', time_hours_ago: 'vor {n} h', time_1_day_ago: 'vor 1 Tag', time_days_ago: 'vor {n} Tagen', time_1_month_ago: 'vor 1 Monat', time_months_ago: 'vor {n} Monaten', back: 'Zurück', review_details_title: 'Details', confirm_title: 'Bestätigen', summary_incident: 'Vorfall', summary_details: 'Details', summary_edit: '✏️ Bearbeiten', summary_needs_prefix: '🆘 Bedarf:', summary_debris: '🚛 Trümmerbeseitigung nötig', summary_none: '—', wildfire: 'Waldbrand', earthquake: 'Erdbeben', cyclone: 'Zyklon', hurricane: 'Hurrikan', landslide: 'Erdrutsch', pandemic: 'Pandemie', conflict: 'Konflikt', other_crisis: 'Sonstiges', road: 'Straße', hospital: 'Krankenhaus', house: 'Haus', power: 'Strom', school: 'Schule', telecom: 'Telekom', government: 'Gebäude', other: 'Sonstiges', severe: 'Schwer', minor: 'Leicht', moderate: 'Mittel', no_damage: 'Kein Schaden', partial_damage: 'Teilweise', complete_damage: 'Zerstört', destroyed: 'Zerstört', unknown: 'Unbekannt', working: 'Funktioniert', disrupted: 'Gestört', needs_label: '🆘 Dringender Bedarf', food: 'Essen', need_water: 'Wasser', shelter: 'Unterkunft', medical: 'Medizin', security: 'Sicherheit', need_cash: 'Bargeld', need_livelihoods: 'Lebensgrundlage', need_wash: 'WASH', need_basic_services: 'Grundversorgung', need_protection: 'Schutz', need_local_support: 'Lokale Hilfe', need_other: 'Sonstiges' },
     it: { home_title: 'Segnala un evento', start_btn: 'Inizia', use_camera: 'Foto', browse: 'Sfoglia', skip_photo: 'Salta', next: 'Avanti', tap_mic: 'Parla', send_undp: 'Invia', sent_title: 'Inviato!', consent_title: 'La tua privacy è importante', consent_check: 'Acconsento alla condivisione dei dati', consent_accept: 'Accetta', home_offline_hint: '📡 Funziona offline e con internet limitato.', home_metric_reports: 'Rapporti inviati', home_metric_lives: 'Vite salvate', fp_photo: 'Foto', fp_details: 'Dettagli', fp_review: 'Controlla', fp_send: 'Invia', my_reports: 'I miei rapporti' },
     tr: { home_title: 'Olay bildir', start_btn: 'Başla', use_camera: 'Kamera', browse: 'Ara', skip_photo: 'Atla', next: 'İleri', tap_mic: 'Konuş', send_undp: 'Gönder', sent_title: 'Gönderildi!', consent_title: 'Gizliliğiniz önemli', consent_check: 'Veri paylaşmayı kabul ediyorum', consent_accept: 'Kabul et', home_offline_hint: '📡 Çevrimdışı ve zayıf internet bağlantısında çalışır.', home_metric_reports: 'Gönderilen raporlar', home_metric_lives: 'Kurtarılan hayatlar', fp_photo: 'Fotoğraf', fp_details: 'Detaylar', fp_review: 'İncele', fp_send: 'Gönder', my_reports: 'Raporlarım' },
     uk: { home_title: 'Повідомити про інцидент', start_btn: 'Почати', use_camera: 'Камера', browse: 'Огляд', skip_photo: 'Пропустити', next: 'Далі', tap_mic: 'Записати', send_undp: 'Надіслати', sent_title: 'Надіслано!', consent_title: 'Ваша конфіденційність важлива', consent_check: 'Я погоджуюсь на передачу даних', consent_accept: 'Прийняти', home_offline_hint: "📡 Працює офлайн і за поганого інтернет-з'єднання.", home_metric_reports: 'Надіслані звіти', home_metric_lives: 'Врятовані життя', fp_photo: 'Фото', fp_details: 'Деталі', fp_review: 'Перевірити', fp_send: 'Надіслати', my_reports: 'Мої звіти' },
-    ja: { home_title: '事件を報告', start_btn: '開始', use_camera: 'カメラ', browse: '参照', skip_photo: 'スキップ', next: '次へ', tap_mic: '話す', send_undp: '送信', sent_title: '送信済み!', consent_title: 'プライバシーについて', consent_check: 'データ共有に同意します', consent_accept: '同意', home_offline_hint: '📡 オフラインや低速接続でも動作します。', home_metric_reports: '送信したレポート', home_metric_lives: '救われた命', fp_photo: '写真', fp_details: '詳細', fp_review: '確認', fp_send: '送信', my_reports: 'マイレポート', in_flight: '送信中', submitted: '送信済み', empty_in_flight: '送信中はありません。新規作成するには開始をタップ。', empty_submitted: 'まだ送信されていません。', rd_status_submitted: '送信済み', rd_status_under_review: '審査中', rd_status_accepted: '承認済み', rd_status_rejected: '拒否', rd_tl_submitted: '送信済み', rd_tl_review: '審査中', rd_tl_accepted: '承認済み', rd_tl_rejected: '拒否', rd_tl_help_sent: '救援派遣済み', rd_meta_location: '場所', rd_meta_crisis: '危機', rd_meta_what: '何', rd_meta_damage: '損傷', rd_meta_severity: '重大度', rd_delete_queued: '接続時に削除されます。', rd_people_helped_one: '~1人を救助', rd_people_helped_many: '~{n}人を救助', time_seconds_ago: '{n}秒前', time_minutes_ago: '{n}分前', time_hours_ago: '{n}時間前', time_1_day_ago: '1日前', time_days_ago: '{n}日前', time_1_month_ago: '1ヶ月前', time_months_ago: '{n}ヶ月前', back: '戻る', review_details_title: '詳細', confirm_title: '確認', summary_incident: '事件', summary_details: '詳細', summary_edit: '✏️ 編集', summary_needs_prefix: '🆘 必要:', summary_debris: '🚛 がれき撤去が必要', summary_none: '—', wildfire: '山火事', earthquake: '地震', cyclone: 'サイクロン', hurricane: 'ハリケーン', landslide: '地すべり', pandemic: 'パンデミック', conflict: '紛争', other_crisis: 'その他', road: '道路', hospital: '病院', house: '家', power: '電力', school: '学校', telecom: '通信', government: '政府ビル', other: 'その他', severe: '深刻', minor: '軽微', moderate: '中程度', no_damage: '被害なし', partial_damage: '部分的', complete_damage: '全壊', destroyed: '全壊', unknown: '不明', working: '稼働中', disrupted: '中断', needs_label: '🆘 緊急ニーズ', food: '食料', need_water: '水', shelter: '避難所', medical: '医療', security: '治安' },
-    ko: { home_title: '사건 신고', start_btn: '시작', use_camera: '카메라', browse: '찾기', skip_photo: '건너뛰기', next: '다음', tap_mic: '말하기', send_undp: '보내기', sent_title: '전송됨!', consent_title: '개인정보 보호', consent_check: '데이터 공유에 동의합니다', consent_accept: '동의', home_offline_hint: '📡 오프라인 및 낮은 인터넷 환경에서도 작동합니다.', home_metric_reports: '제출한 신고', home_metric_lives: '구한 생명', fp_photo: '사진', fp_details: '세부사항', fp_review: '검토', fp_send: '보내기', my_reports: '내 신고', in_flight: '전송 중', submitted: '제출됨', empty_in_flight: '전송 중 항목 없음. 새로 만들려면 시작을 탭하세요.', empty_submitted: '아직 제출되지 않았습니다.', rd_status_submitted: '제출됨', rd_status_under_review: '검토 중', rd_status_accepted: '승인됨', rd_status_rejected: '거부됨', rd_tl_submitted: '제출됨', rd_tl_review: '검토 중', rd_tl_accepted: '승인됨', rd_tl_rejected: '거부됨', rd_tl_help_sent: '지원 파견됨', rd_meta_location: '위치', rd_meta_crisis: '위기', rd_meta_what: '무엇', rd_meta_damage: '피해', rd_meta_severity: '심각도', rd_delete_queued: '연결 시 삭제됩니다.', rd_people_helped_one: '~1명 지원', rd_people_helped_many: '~{n}명 지원', time_seconds_ago: '{n}초 전', time_minutes_ago: '{n}분 전', time_hours_ago: '{n}시간 전', time_1_day_ago: '1일 전', time_days_ago: '{n}일 전', time_1_month_ago: '1달 전', time_months_ago: '{n}달 전', back: '뒤로', review_details_title: '세부사항', confirm_title: '확인', summary_incident: '사건', summary_details: '세부사항', summary_edit: '✏️ 편집', summary_needs_prefix: '🆘 필요:', summary_debris: '🚛 잔해 제거 필요', summary_none: '—', wildfire: '산불', earthquake: '지진', cyclone: '사이클론', hurricane: '허리케인', landslide: '산사태', pandemic: '팬데믹', conflict: '분쟁', other_crisis: '기타', road: '도로', hospital: '병원', house: '집', power: '전기', school: '학교', telecom: '통신', government: '정부 건물', other: '기타', severe: '심각', minor: '경미', moderate: '중간', no_damage: '피해 없음', partial_damage: '부분', complete_damage: '파괴', destroyed: '파괴', unknown: '알 수 없음', working: '작동 중', disrupted: '중단', needs_label: '🆘 긴급 필요', food: '음식', need_water: '물', shelter: '대피소', medical: '의료', security: '보안' },
+    ja: { home_title: '事件を報告', start_btn: '開始', use_camera: 'カメラ', browse: '参照', skip_photo: 'スキップ', next: '次へ', tap_mic: '話す', send_undp: '送信', sent_title: '送信済み!', consent_title: 'プライバシーについて', consent_check: 'データ共有に同意します', consent_accept: '同意', home_offline_hint: '📡 オフラインや低速接続でも動作します。', home_metric_reports: '送信したレポート', home_metric_lives: '救われた命', fp_photo: '写真', fp_details: '詳細', fp_review: '確認', fp_send: '送信', my_reports: 'マイレポート', mr_resolved: '解決済み', mr_lives_impacted: '影響を受けた命', in_flight: '送信中', submitted: '送信済み', empty_in_flight: '送信中はありません。新規作成するには開始をタップ。', empty_submitted: 'まだ送信されていません。', rd_status_submitted: '送信済み', rd_status_under_review: '審査中', rd_status_accepted: '承認済み', rd_status_rejected: '拒否', rd_tl_submitted: '送信済み', rd_tl_review: '審査中', rd_tl_accepted: '承認済み', rd_tl_rejected: '拒否', rd_tl_help_sent: '救援派遣済み', rd_meta_location: '場所', rd_meta_crisis: '危機', rd_meta_what: '何', rd_meta_damage: '損傷', rd_meta_severity: '重大度', rd_delete_queued: '接続時に削除されます。', rd_people_helped_one: '~1人を救助', rd_people_helped_many: '~{n}人を救助', time_seconds_ago: '{n}秒前', time_minutes_ago: '{n}分前', time_hours_ago: '{n}時間前', time_1_day_ago: '1日前', time_days_ago: '{n}日前', time_1_month_ago: '1ヶ月前', time_months_ago: '{n}ヶ月前', back: '戻る', review_details_title: '詳細', confirm_title: '確認', summary_incident: '事件', summary_details: '詳細', summary_edit: '✏️ 編集', summary_needs_prefix: '🆘 必要:', summary_debris: '🚛 がれき撤去が必要', summary_none: '—', wildfire: '山火事', earthquake: '地震', cyclone: 'サイクロン', hurricane: 'ハリケーン', landslide: '地すべり', pandemic: 'パンデミック', conflict: '紛争', other_crisis: 'その他', road: '道路', hospital: '病院', house: '家', power: '電力', school: '学校', telecom: '通信', government: '政府ビル', other: 'その他', severe: '深刻', minor: '軽微', moderate: '中程度', no_damage: '被害なし', partial_damage: '部分的', complete_damage: '全壊', destroyed: '全壊', unknown: '不明', working: '稼働中', disrupted: '中断', needs_label: '🆘 緊急ニーズ', food: '食料', need_water: '水', shelter: '避難所', medical: '医療', security: '治安', need_cash: '現金', need_livelihoods: '生計', need_wash: '水と衛生', need_basic_services: '基本サービス', need_protection: '保護', need_local_support: '地域支援', need_other: 'その他' },
+    ko: { home_title: '사건 신고', start_btn: '시작', use_camera: '카메라', browse: '찾기', skip_photo: '건너뛰기', next: '다음', tap_mic: '말하기', send_undp: '보내기', sent_title: '전송됨!', consent_title: '개인정보 보호', consent_check: '데이터 공유에 동의합니다', consent_accept: '동의', home_offline_hint: '📡 오프라인 및 낮은 인터넷 환경에서도 작동합니다.', home_metric_reports: '제출한 신고', home_metric_lives: '구한 생명', fp_photo: '사진', fp_details: '세부사항', fp_review: '검토', fp_send: '보내기', my_reports: '내 신고', mr_resolved: '해결됨', mr_lives_impacted: '영향받은 생명', in_flight: '전송 중', submitted: '제출됨', empty_in_flight: '전송 중 항목 없음. 새로 만들려면 시작을 탭하세요.', empty_submitted: '아직 제출되지 않았습니다.', rd_status_submitted: '제출됨', rd_status_under_review: '검토 중', rd_status_accepted: '승인됨', rd_status_rejected: '거부됨', rd_tl_submitted: '제출됨', rd_tl_review: '검토 중', rd_tl_accepted: '승인됨', rd_tl_rejected: '거부됨', rd_tl_help_sent: '지원 파견됨', rd_meta_location: '위치', rd_meta_crisis: '위기', rd_meta_what: '무엇', rd_meta_damage: '피해', rd_meta_severity: '심각도', rd_delete_queued: '연결 시 삭제됩니다.', rd_people_helped_one: '~1명 지원', rd_people_helped_many: '~{n}명 지원', time_seconds_ago: '{n}초 전', time_minutes_ago: '{n}분 전', time_hours_ago: '{n}시간 전', time_1_day_ago: '1일 전', time_days_ago: '{n}일 전', time_1_month_ago: '1달 전', time_months_ago: '{n}달 전', back: '뒤로', review_details_title: '세부사항', confirm_title: '확인', summary_incident: '사건', summary_details: '세부사항', summary_edit: '✏️ 편집', summary_needs_prefix: '🆘 필요:', summary_debris: '🚛 잔해 제거 필요', summary_none: '—', wildfire: '산불', earthquake: '지진', cyclone: '사이클론', hurricane: '허리케인', landslide: '산사태', pandemic: '팬데믹', conflict: '분쟁', other_crisis: '기타', road: '도로', hospital: '병원', house: '집', power: '전기', school: '학교', telecom: '통신', government: '정부 건물', other: '기타', severe: '심각', minor: '경미', moderate: '중간', no_damage: '피해 없음', partial_damage: '부분', complete_damage: '파괴', destroyed: '파괴', unknown: '알 수 없음', working: '작동 중', disrupted: '중단', needs_label: '🆘 긴급 필요', food: '음식', need_water: '물', shelter: '대피소', medical: '의료', security: '보안', need_cash: '현금', need_livelihoods: '생계', need_wash: 'WASH', need_basic_services: '기본 서비스', need_protection: '보호', need_local_support: '지역 지원', need_other: '기타' },
     am: { home_title: 'ክስተት ሪፖርት ያድርጉ', start_btn: 'ጀምር', use_camera: 'ካሜራ', browse: 'ፈልግ', skip_photo: 'ዝለል', next: 'ቀጣይ', tap_mic: 'ንካ', send_undp: 'ላክ', sent_title: 'ተልኳል!', consent_title: 'ግላዊነትዎ ጠቃሚ', consent_check: 'ዳታ ማጋራት እስማማለሁ', consent_accept: 'ተቀበል', home_offline_hint: '📡 ከመስመር ውጭ እና በዝቅተኛ ኢንተርኔት ግንኙነት ይሰራል።', home_metric_reports: 'የቀረቡ ሪፖርቶች', home_metric_lives: 'የዳኑ ሕይወቶች', fp_photo: 'ፎቶ', fp_details: 'ዝርዝሮች', fp_review: 'ገምግም', fp_send: 'ላክ', my_reports: 'የእኔ ሪፖርቶች' },
-    ur: { home_title: 'واقعہ رپورٹ کریں', start_btn: 'شروع', use_camera: 'کیمرا', browse: 'تلاش', skip_photo: 'چھوڑیں', next: 'جاری رکھیں', back: 'پیچھے', tap_mic: 'بولیں', send_undp: 'بھیجیں', sent_title: 'بھیج دیا!', consent_title: 'آپ کی رازداری اہم ہے', consent_check: 'ڈیٹا شیئر کرنے پر متفق', consent_accept: 'قبول', home_offline_hint: '📡 آف لائن اور کم انٹرنیٹ کنیکٹوٹی میں کام کرتا ہے۔', home_metric_reports: 'جمع کرائی گئی رپورٹیں', home_metric_lives: 'بچائی گئی زندگیاں', fp_photo: 'تصویر', fp_details: 'تفصیلات', fp_review: 'جائزہ', fp_send: 'بھیجیں', my_reports: 'میری رپورٹیں', in_flight: 'پرواز میں', submitted: 'جمع کرائی گئی', empty_in_flight: 'پرواز میں کچھ نہیں۔ نئی رپورٹ شروع کرنے کے لیے ٹیپ کریں۔', empty_submitted: 'ابھی تک کچھ جمع نہیں کرایا گیا۔', rd_status_submitted: 'جمع کرائی گئی', rd_status_under_review: 'جائزے میں', rd_status_accepted: 'منظور', rd_status_rejected: 'مسترد', rd_tl_submitted: 'جمع کرائی گئی', rd_tl_review: 'جائزے میں', rd_tl_accepted: 'منظور', rd_tl_rejected: 'مسترد', rd_tl_help_sent: 'مدد بھیجی گئی', rd_meta_location: 'مقام', rd_meta_crisis: 'بحران', rd_meta_what: 'کیا', rd_meta_damage: 'نقصان', rd_meta_severity: 'شدت', rd_feedback_accepted_title: 'آپ کی رپورٹ نے تیز ردعمل میں مدد کی', rd_feedback_awaiting: 'منظور — بھیجنے کا انتظار', rd_action_help_arrived: 'مدد موقع پر پہنچ گئی', rd_action_help_dispatched: 'مدد بھیج دی گئی', rd_people_helped_one: '~1 فرد کی مدد', rd_people_helped_many: '~{n} افراد کی مدد', rd_rejection_default: 'جائزہ کاروں نے اس رپورٹ کو غیر معتبر قرار دیا۔', rd_delete_in_progress: 'حذف جاری ہے۔ یہ رپورٹ 24 گھنٹوں میں مستقل طور پر ہٹا دی جائے گی۔', rd_delete_queued: 'کنکشن ہونے پر حذف ہو جائے گا۔', rd_delete_confirm_prompt: 'یہ رپورٹ حذف کریں؟\n\nآپ کا ڈیٹا 24 گھنٹوں میں مستقل ہٹا دیا جائے گا۔ یہ واپس نہیں ہوگا۔', time_seconds_ago: '{n} سیکنڈ پہلے', time_minutes_ago: '{n} منٹ پہلے', time_hours_ago: '{n} گھنٹے پہلے', time_1_day_ago: '1 دن پہلے', time_days_ago: '{n} دن پہلے', time_1_month_ago: '1 مہینہ پہلے', time_months_ago: '{n} مہینے پہلے', review_details_title: 'تفصیلات', confirm_title: 'تصدیق کریں', summary_incident: 'واقعہ', summary_details: 'تفصیلات', summary_edit: '✏️ ترمیم', summary_needs_prefix: '🆘 ضروریات:', summary_debris: '🚛 ملبہ ہٹانے کی ضرورت', summary_none: '—', description_label: 'تفصیل', crisis_label: 'کیا وجہ تھی؟', damage_label: 'کتنا نقصان؟', severity_label: 'شدت؟', service_label: 'اختیاری: سروس کی حالت', needs_label: '🆘 فوری ضروریات', what_damaged: 'کیا نقصان ہوا؟', earthquake: 'زلزلہ', flood: 'سیلاب', conflict: 'تنازع', hurricane: 'سمندری طوفان', cyclone: 'سمندری طوفان', wildfire: 'جنگل کی آگ', landslide: 'زمینی تودہ', pandemic: 'وبا', other_crisis: 'دیگر', road: 'سڑک', hospital: 'ہسپتال', house: 'گھر', power: 'بجلی', water: 'پانی', school: 'اسکول', telecom: 'مواصلات', government: 'سرکاری عمارت', other: 'دیگر', severity_minor: 'معمولی', minor: 'معمولی', moderate: 'اعتدال پسند', severe: 'شدید', no_damage: 'کوئی نقصان نہیں', partial_damage: 'جزوی', complete_damage: 'مکمل تباہ', destroyed: 'تباہ', electricity: '⚡ بجلی', water_svc: '💧 پانی', health_svc: '🏥 صحت', unknown: 'نامعلوم', working: 'کام کر رہا ہے', disrupted: 'متاثر', food: 'خوراک', need_water: 'پانی', shelter: 'پناہ', medical: 'طبی', security: 'سلامتی' },
+    ur: { home_title: 'واقعہ رپورٹ کریں', start_btn: 'شروع', use_camera: 'کیمرا', browse: 'تلاش', skip_photo: 'چھوڑیں', next: 'جاری رکھیں', back: 'پیچھے', tap_mic: 'بولیں', send_undp: 'بھیجیں', sent_title: 'بھیج دیا!', consent_title: 'آپ کی رازداری اہم ہے', consent_check: 'ڈیٹا شیئر کرنے پر متفق', consent_accept: 'قبول', home_offline_hint: '📡 آف لائن اور کم انٹرنیٹ کنیکٹوٹی میں کام کرتا ہے۔', home_metric_reports: 'جمع کرائی گئی رپورٹیں', home_metric_lives: 'بچائی گئی زندگیاں', fp_photo: 'تصویر', fp_details: 'تفصیلات', fp_review: 'جائزہ', fp_send: 'بھیجیں', my_reports: 'میری رپورٹیں', mr_resolved: 'حل ہو گیا', mr_lives_impacted: 'متاثرہ زندگیاں', in_flight: 'پرواز میں', submitted: 'جمع کرائی گئی', empty_in_flight: 'پرواز میں کچھ نہیں۔ نئی رپورٹ شروع کرنے کے لیے ٹیپ کریں۔', empty_submitted: 'ابھی تک کچھ جمع نہیں کرایا گیا۔', rd_status_submitted: 'جمع کرائی گئی', rd_status_under_review: 'جائزے میں', rd_status_accepted: 'منظور', rd_status_rejected: 'مسترد', rd_tl_submitted: 'جمع کرائی گئی', rd_tl_review: 'جائزے میں', rd_tl_accepted: 'منظور', rd_tl_rejected: 'مسترد', rd_tl_help_sent: 'مدد بھیجی گئی', rd_meta_location: 'مقام', rd_meta_crisis: 'بحران', rd_meta_what: 'کیا', rd_meta_damage: 'نقصان', rd_meta_severity: 'شدت', rd_feedback_accepted_title: 'آپ کی رپورٹ نے تیز ردعمل میں مدد کی', rd_feedback_awaiting: 'منظور — بھیجنے کا انتظار', rd_action_help_arrived: 'مدد موقع پر پہنچ گئی', rd_action_help_dispatched: 'مدد بھیج دی گئی', rd_people_helped_one: '~1 فرد کی مدد', rd_people_helped_many: '~{n} افراد کی مدد', rd_rejection_default: 'جائزہ کاروں نے اس رپورٹ کو غیر معتبر قرار دیا۔', rd_delete_in_progress: 'حذف جاری ہے۔ یہ رپورٹ 24 گھنٹوں میں مستقل طور پر ہٹا دی جائے گی۔', rd_delete_queued: 'کنکشن ہونے پر حذف ہو جائے گا۔', rd_delete_confirm_prompt: 'یہ رپورٹ حذف کریں؟\n\nآپ کا ڈیٹا 24 گھنٹوں میں مستقل ہٹا دیا جائے گا۔ یہ واپس نہیں ہوگا۔', time_seconds_ago: '{n} سیکنڈ پہلے', time_minutes_ago: '{n} منٹ پہلے', time_hours_ago: '{n} گھنٹے پہلے', time_1_day_ago: '1 دن پہلے', time_days_ago: '{n} دن پہلے', time_1_month_ago: '1 مہینہ پہلے', time_months_ago: '{n} مہینے پہلے', review_details_title: 'تفصیلات', confirm_title: 'تصدیق کریں', summary_incident: 'واقعہ', summary_details: 'تفصیلات', summary_edit: '✏️ ترمیم', summary_needs_prefix: '🆘 ضروریات:', summary_debris: '🚛 ملبہ ہٹانے کی ضرورت', summary_none: '—', description_label: 'تفصیل', crisis_label: 'کیا وجہ تھی؟', damage_label: 'کتنا نقصان؟', severity_label: 'شدت؟', service_label: 'اختیاری: سروس کی حالت', needs_label: '🆘 فوری ضروریات', what_damaged: 'کیا نقصان ہوا؟', earthquake: 'زلزلہ', flood: 'سیلاب', conflict: 'تنازع', hurricane: 'سمندری طوفان', cyclone: 'سمندری طوفان', wildfire: 'جنگل کی آگ', landslide: 'زمینی تودہ', pandemic: 'وبا', other_crisis: 'دیگر', road: 'سڑک', hospital: 'ہسپتال', house: 'گھر', power: 'بجلی', water: 'پانی', school: 'اسکول', telecom: 'مواصلات', government: 'سرکاری عمارت', other: 'دیگر', severity_minor: 'معمولی', minor: 'معمولی', moderate: 'اعتدال پسند', severe: 'شدید', no_damage: 'کوئی نقصان نہیں', partial_damage: 'جزوی', complete_damage: 'مکمل تباہ', destroyed: 'تباہ', electricity: '⚡ بجلی', water_svc: '💧 پانی', health_svc: '🏥 صحت', unknown: 'نامعلوم', working: 'کام کر رہا ہے', disrupted: 'متاثر', food: 'خوراک', need_water: 'پانی', shelter: 'پناہ', medical: 'طبی', security: 'سلامتی', need_cash: 'نقد', need_livelihoods: 'معاش', need_wash: 'WASH', need_basic_services: 'بنیادی خدمات', need_protection: 'تحفظ', need_local_support: 'مقامی مدد', need_other: 'دیگر' },
     ne: { home_title: 'घटना रिपोर्ट गर्नुहोस्', start_btn: 'सुरु', use_camera: 'क्यामेरा', browse: 'खोज', skip_photo: 'छोड्नुहोस्', next: 'अर्को', tap_mic: 'बोल्नुहोस्', send_undp: 'पठाउ', sent_title: 'पठाइयो!', consent_title: 'तपाईंको गोपनीयता महत्त्वपूर्ण', consent_check: 'डाटा साझा गर्न सहमत', consent_accept: 'स्वीकार', home_offline_hint: '📡 अफलाइन र कम इन्टरनेट कनेक्टिविटीमा काम गर्छ।', home_metric_reports: 'पेश गरिएका रिपोर्टहरू', home_metric_lives: 'बचाइएका जीवनहरू', fp_photo: 'फोटो', fp_details: 'विवरण', fp_review: 'समीक्षा', fp_send: 'पठाउ', my_reports: 'मेरा रिपोर्टहरू' },
     th: { home_title: 'รายงานเหตุการณ์', start_btn: 'เริ่ม', use_camera: 'กล้อง', browse: 'ค้นหา', skip_photo: 'ข้าม', next: 'ถัดไป', tap_mic: 'พูด', send_undp: 'ส่ง', sent_title: 'ส่งแล้ว!', consent_title: 'ความเป็นส่วนตัวสำคัญ', consent_check: 'ยินยอมแบ่งปันข้อมูล', consent_accept: 'ยอมรับ', home_offline_hint: '📡 ทำงานแบบออฟไลน์และการเชื่อมต่ออินเทอร์เน็ตต่ำ', home_metric_reports: 'รายงานที่ส่ง', home_metric_lives: 'ชีวิตที่รอด', fp_photo: 'รูป', fp_details: 'รายละเอียด', fp_review: 'ตรวจสอบ', fp_send: 'ส่ง', my_reports: 'รายงานของฉัน' },
     vi: { home_title: 'Báo cáo sự cố', start_btn: 'Bắt đầu', use_camera: 'Máy ảnh', browse: 'Duyệt', skip_photo: 'Bỏ qua', next: 'Tiếp', tap_mic: 'Nói', send_undp: 'Gửi', sent_title: 'Đã gửi!', consent_title: 'Quyền riêng tư quan trọng', consent_check: 'Tôi đồng ý chia sẻ dữ liệu', consent_accept: 'Chấp nhận', home_offline_hint: '📡 Hoạt động khi không có mạng hoặc mạng yếu.', home_metric_reports: 'Báo cáo đã gửi', home_metric_lives: 'Mạng sống được cứu', fp_photo: 'Ảnh', fp_details: 'Chi tiết', fp_review: 'Xem lại', fp_send: 'Gửi', my_reports: 'Báo cáo của tôi' },
@@ -1999,7 +2656,7 @@ const EXTRA_LANG = {
     si: { home_title: 'සිද්ධියක් වාර්තා කරන්න', start_btn: 'ආරම්භ', use_camera: 'කැමරාව', browse: 'සොයන්න', skip_photo: 'මඟ හරින්න', next: 'ඊළඟ', tap_mic: 'කතා කරන්න', send_undp: 'යවන්න', sent_title: 'යැවීය!', consent_title: 'ඔබේ පෞද්ගලිකත්වය වැදගත්', consent_check: 'දත්ත බෙදා ගැනීමට එකඟ', consent_accept: 'පිළිගන්න', home_offline_hint: '📡 නොබැඳි සහ අඩු අන්තර්ජාල සම්බන්ධතාවකින් ක්‍රියාත්මක වේ.', home_metric_reports: 'ඉදිරිපත් කළ වාර්තා', home_metric_lives: 'බේරාගත් ජීවිත', fp_photo: 'ඡායාරූපය', fp_details: 'විස්තර', fp_review: 'සමාලෝචනය', fp_send: 'යවන්න', my_reports: 'මගේ වාර්තා' },
     he: { home_title: 'דווח על אירוע', start_btn: 'התחל', use_camera: 'מצלמה', browse: 'חפש', skip_photo: 'דלג', next: 'הבא', tap_mic: 'דבר', send_undp: 'שלח', sent_title: 'נשלח!', consent_title: 'הפרטיות שלך חשובה', consent_check: 'אני מסכים לשתף נתונים', consent_accept: 'אישור', home_offline_hint: '📡 פועל גם ללא אינטרנט ובחיבור איטי.', home_metric_reports: 'דיווחים שנשלחו', home_metric_lives: 'חיים שניצלו', fp_photo: 'תמונה', fp_details: 'פרטים', fp_review: 'סקירה', fp_send: 'שלח', my_reports: 'הדיווחים שלי' },
     el: { home_title: 'Αναφορά συμβάντος', start_btn: 'Έναρξη', use_camera: 'Κάμερα', browse: 'Αναζήτηση', skip_photo: 'Παράλειψη', next: 'Επόμενο', tap_mic: 'Μιλήστε', send_undp: 'Αποστολή', sent_title: 'Εστάλη!', consent_title: 'Το απόρρητό σας μετράει', consent_check: 'Συμφωνώ να μοιραστώ δεδομένα', consent_accept: 'Αποδοχή', home_offline_hint: '📡 Λειτουργεί εκτός σύνδεσης και σε αργό internet.', home_metric_reports: 'Απεσταλμένες αναφορές', home_metric_lives: 'Ζωές που σώθηκαν', fp_photo: 'Φωτογραφία', fp_details: 'Λεπτομέρειες', fp_review: 'Έλεγχος', fp_send: 'Αποστολή', my_reports: 'Οι αναφορές μου' },
-    bn: { home_title: 'রিপোর্ট', start_btn: 'শুরু', use_camera: 'ক্যামেরা', browse: 'খুঁজুন', skip_photo: 'বাদ', next: 'চালিয়ে যান', tap_mic: 'চাপুন এবং স্পষ্টভাবে বলুন', send_undp: 'পাঠান', sent_title: 'পাঠানো হয়েছে!', consent_title: 'আপনার গোপনীয়তা গুরুত্বপূর্ণ', consent_check: 'ডেটা শেয়ার করতে সম্মত', consent_accept: 'গ্রহণ', s2_title: 'কী হয়েছে আমাদের বলুন', s2_sub: 'বলুন বা টাইপ করুন:', audio_bullet_1: 'কী ক্ষতিগ্রস্ত? (বাড়ি, রাস্তা, মানুষ…)', audio_bullet_2: 'কতটা খারাপ? (ছোট / বড় / সম্পূর্ণ ধ্বংস)', audio_bullet_3: 'কেউ আহত বা বিপদে আছে?', audio_example: 'উদাহরণ: রাস্তা ভেঙে গেছে এবং জল বাড়িতে ঢুকছে। 2 জন আহত।', audio_mic_lang: 'আপনি আপনার ভাষায় কথা বলতে পারেন', audio_placeholder: 'উদাহরণ: বাড়ি ধসে গেছে, একজন আটকা পড়েছে', home_offline_hint: '📡 অফলাইন এবং কম ইন্টারনেট সংযোগে কাজ করে।', home_metric_reports: 'জমা দেওয়া রিপোর্ট', home_metric_lives: 'বাঁচানো জীবন', fp_photo: 'ছবি', fp_details: 'বিবরণ', fp_review: 'পর্যালোচনা', fp_send: 'পাঠান', my_reports: 'আমার রিপোর্ট', in_flight: 'পাঠানো হচ্ছে', submitted: 'জমা দেওয়া হয়েছে', empty_in_flight: 'কিছুই পাঠানো হচ্ছে না। নতুন তৈরি করতে শুরু করুন ট্যাপ করুন।', empty_submitted: 'এখনও কিছু জমা দেওয়া হয়নি।', rd_status_submitted: 'জমা দেওয়া', rd_status_under_review: 'পর্যালোচনাধীন', rd_status_accepted: 'গৃহীত', rd_status_rejected: 'প্রত্যাখ্যাত', rd_tl_submitted: 'জমা দেওয়া', rd_tl_review: 'পর্যালোচনাধীন', rd_tl_accepted: 'গৃহীত', rd_tl_rejected: 'প্রত্যাখ্যাত', rd_tl_help_sent: 'সাহায্য পাঠানো হয়েছে', rd_meta_location: 'অবস্থান', rd_meta_crisis: 'সংকট', rd_meta_what: 'কী', rd_meta_damage: 'ক্ষতি', rd_meta_severity: 'তীব্রতা', rd_delete_queued: 'সংযোগ হলে মুছে যাবে।', rd_people_helped_one: '~১ জনকে সাহায্য', rd_people_helped_many: '~{n} জনকে সাহায্য', time_seconds_ago: '{n} সেকেন্ড আগে', time_minutes_ago: '{n} মিনিট আগে', time_hours_ago: '{n} ঘন্টা আগে', time_1_day_ago: '১ দিন আগে', time_days_ago: '{n} দিন আগে', time_1_month_ago: '১ মাস আগে', time_months_ago: '{n} মাস আগে', back: 'পিছনে', review_details_title: 'বিবরণ', confirm_title: 'নিশ্চিত করুন', summary_incident: 'ঘটনা', summary_details: 'বিবরণ', summary_edit: '✏️ সম্পাদনা', summary_needs_prefix: '🆘 প্রয়োজন:', summary_debris: '🚛 ধ্বংসাবশেষ পরিষ্কার দরকার', summary_none: '—', wildfire: 'বনাগ্নি', earthquake: 'ভূমিকম্প', cyclone: 'ঘূর্ণিঝড়', hurricane: 'হারিকেন', landslide: 'ভূমিধ্বস', pandemic: 'মহামারী', conflict: 'সংঘাত', other_crisis: 'অন্যান্য', road: 'রাস্তা', hospital: 'হাসপাতাল', house: 'বাড়ি', power: 'বিদ্যুৎ', school: 'স্কুল', telecom: 'টেলিকম', government: 'সরকারি ভবন', other: 'অন্যান্য', severe: 'গুরুতর', minor: 'সামান্য', moderate: 'মাঝারি', no_damage: 'ক্ষতি নেই', partial_damage: 'আংশিক', complete_damage: 'ধ্বংস', destroyed: 'ধ্বংস', unknown: 'অজানা', working: 'কাজ করছে', disrupted: 'বিঘ্নিত', needs_label: '🆘 জরুরি প্রয়োজন', food: 'খাবার', need_water: 'পানি', shelter: 'আশ্রয়', medical: 'চিকিৎসা', security: 'নিরাপত্তা' },
+    bn: { home_title: 'রিপোর্ট', start_btn: 'শুরু', use_camera: 'ক্যামেরা', browse: 'খুঁজুন', skip_photo: 'বাদ', next: 'চালিয়ে যান', tap_mic: 'চাপুন এবং স্পষ্টভাবে বলুন', send_undp: 'পাঠান', sent_title: 'পাঠানো হয়েছে!', consent_title: 'আপনার গোপনীয়তা গুরুত্বপূর্ণ', consent_check: 'ডেটা শেয়ার করতে সম্মত', consent_accept: 'গ্রহণ', s2_title: 'কী হয়েছে আমাদের বলুন', s2_sub: 'বলুন বা টাইপ করুন:', audio_bullet_1: 'কী ক্ষতিগ্রস্ত? (বাড়ি, রাস্তা, মানুষ…)', audio_bullet_2: 'কতটা খারাপ? (ছোট / বড় / সম্পূর্ণ ধ্বংস)', audio_bullet_3: 'কেউ আহত বা বিপদে আছে?', audio_example: 'উদাহরণ: রাস্তা ভেঙে গেছে এবং জল বাড়িতে ঢুকছে। 2 জন আহত।', audio_mic_lang: 'আপনি আপনার ভাষায় কথা বলতে পারেন', audio_placeholder: 'উদাহরণ: বাড়ি ধসে গেছে, একজন আটকা পড়েছে', home_offline_hint: '📡 অফলাইন এবং কম ইন্টারনেট সংযোগে কাজ করে।', home_metric_reports: 'জমা দেওয়া রিপোর্ট', home_metric_lives: 'বাঁচানো জীবন', fp_photo: 'ছবি', fp_details: 'বিবরণ', fp_review: 'পর্যালোচনা', fp_send: 'পাঠান', my_reports: 'আমার রিপোর্ট', mr_resolved: 'সমাধান হয়েছে', mr_lives_impacted: 'ক্ষতিগ্রস্ত জীবন', in_flight: 'পাঠানো হচ্ছে', submitted: 'জমা দেওয়া হয়েছে', empty_in_flight: 'কিছুই পাঠানো হচ্ছে না। নতুন তৈরি করতে শুরু করুন ট্যাপ করুন।', empty_submitted: 'এখনও কিছু জমা দেওয়া হয়নি।', rd_status_submitted: 'জমা দেওয়া', rd_status_under_review: 'পর্যালোচনাধীন', rd_status_accepted: 'গৃহীত', rd_status_rejected: 'প্রত্যাখ্যাত', rd_tl_submitted: 'জমা দেওয়া', rd_tl_review: 'পর্যালোচনাধীন', rd_tl_accepted: 'গৃহীত', rd_tl_rejected: 'প্রত্যাখ্যাত', rd_tl_help_sent: 'সাহায্য পাঠানো হয়েছে', rd_meta_location: 'অবস্থান', rd_meta_crisis: 'সংকট', rd_meta_what: 'কী', rd_meta_damage: 'ক্ষতি', rd_meta_severity: 'তীব্রতা', rd_delete_queued: 'সংযোগ হলে মুছে যাবে।', rd_people_helped_one: '~১ জনকে সাহায্য', rd_people_helped_many: '~{n} জনকে সাহায্য', time_seconds_ago: '{n} সেকেন্ড আগে', time_minutes_ago: '{n} মিনিট আগে', time_hours_ago: '{n} ঘন্টা আগে', time_1_day_ago: '১ দিন আগে', time_days_ago: '{n} দিন আগে', time_1_month_ago: '১ মাস আগে', time_months_ago: '{n} মাস আগে', back: 'পিছনে', review_details_title: 'বিবরণ', confirm_title: 'নিশ্চিত করুন', summary_incident: 'ঘটনা', summary_details: 'বিবরণ', summary_edit: '✏️ সম্পাদনা', summary_needs_prefix: '🆘 প্রয়োজন:', summary_debris: '🚛 ধ্বংসাবশেষ পরিষ্কার দরকার', summary_none: '—', wildfire: 'বনাগ্নি', earthquake: 'ভূমিকম্প', cyclone: 'ঘূর্ণিঝড়', hurricane: 'হারিকেন', landslide: 'ভূমিধ্বস', pandemic: 'মহামারী', conflict: 'সংঘাত', other_crisis: 'অন্যান্য', road: 'রাস্তা', hospital: 'হাসপাতাল', house: 'বাড়ি', power: 'বিদ্যুৎ', school: 'স্কুল', telecom: 'টেলিকম', government: 'সরকারি ভবন', other: 'অন্যান্য', severe: 'গুরুতর', minor: 'সামান্য', moderate: 'মাঝারি', no_damage: 'ক্ষতি নেই', partial_damage: 'আংশিক', complete_damage: 'ধ্বংস', destroyed: 'ধ্বংস', unknown: 'অজানা', working: 'কাজ করছে', disrupted: 'বিঘ্নিত', needs_label: '🆘 জরুরি প্রয়োজন', food: 'খাবার', need_water: 'পানি', shelter: 'আশ্রয়', medical: 'চিকিৎসা', security: 'নিরাপত্তা', need_cash: 'অর্থ', need_livelihoods: 'জীবিকা', need_wash: 'WASH', need_basic_services: 'মৌলিক সেবা', need_protection: 'সুরক্ষা', need_local_support: 'স্থানীয় সহায়তা', need_other: 'অন্যান্য' },
     pa: { home_title: 'ਘਟਨਾ ਦੀ ਰਿਪੋਰਟ ਕਰੋ', start_btn: 'ਸ਼ੁਰੂ', use_camera: 'ਕੈਮਰਾ', browse: 'ਖੋਜੋ', skip_photo: 'ਛੱਡੋ', next: 'ਅੱਗੇ', tap_mic: 'ਦਬਾਓ', send_undp: 'ਭੇਜੋ', sent_title: 'ਭੇਜਿਆ!', consent_title: 'ਤੁਹਾਡੀ ਗੋਪਨੀਯਤਾ ਮਹੱਤਵਪੂਰਨ', consent_check: 'ਡੇਟਾ ਸਾਂਝਾ ਕਰਨ ਲਈ ਸਹਿਮਤ', consent_accept: 'ਸਵੀਕਾਰ', home_offline_hint: '📡 ਆਫਲਾਈਨ ਅਤੇ ਘੱਟ ਇੰਟਰਨੈੱਟ ਕਨੈਕਟੀਵਿਟੀ ਵਿੱਚ ਕੰਮ ਕਰਦਾ ਹੈ।', home_metric_reports: 'ਜਮ੍ਹਾਂ ਕੀਤੀਆਂ ਰਿਪੋਰਟਾਂ', home_metric_lives: 'ਬਚਾਈਆਂ ਜਾਨਾਂ', fp_photo: 'ਫੋਟੋ', fp_details: 'ਵੇਰਵੇ', fp_review: 'ਸਮੀਖਿਆ', fp_send: 'ਭੇਜੋ', my_reports: 'ਮੇਰੀਆਂ ਰਿਪੋਰਟਾਂ' },
 };
 
@@ -2018,6 +2675,20 @@ const UNDP_I18N_EXTRA = {
         building_select_title: 'Optionnel : choisir le bâtiment exact',
         building_select_hint: "Appuyez sur un contour pour le marquer comme endommagé.",
         building_selected: 'Bâtiment sélectionné',
+        // UI v2 (Apr 2026) review-split + alert/confirm migration keys.
+        review_v2_title_what: "Que s'est-il passé ?",
+        review_v2_title_how: "Gravité et lieu ?",
+        review_v2_title_confirm: "Vérifier et envoyer",
+        fp_audio: 'Audio', fp_what: 'Quoi',
+        mic_permission_alert: "Autorisez l'accès au microphone pour enregistrer.",
+        camera_blocked_toast: "Accès caméra bloqué — sélecteur de fichiers utilisé à la place.",
+        camera_unavailable_toast: "Caméra indisponible — sélecteur de fichiers utilisé.",
+        delete_requested_alert: "Vos données seront supprimées définitivement sous 24 heures.",
+        delete_server_unreachable: "Impossible de joindre le serveur.",
+        delete_undo_failed: "Impossible d'annuler la suppression.",
+        delete_all_server_confirm: "Ceci supprimera DÉFINITIVEMENT tous les rapports et médias envoyés depuis ce serveur. Irréversible.",
+        delete_all_success_count: "{n} rapport(s) supprimé(s). Toutes les données locales effacées.",
+        confirm_yes: 'Oui', confirm_no: 'Annuler', confirm_delete: 'Supprimer',
     },
     es: {
         minimal_damage: 'Mínimo', tsunami: 'Tsunami', explosion: 'Explosión',
@@ -2028,6 +2699,19 @@ const UNDP_I18N_EXTRA = {
         building_select_title: 'Opcional: elegir el edificio exacto',
         building_select_hint: 'Toque un contorno para marcarlo como dañado.',
         building_selected: 'Edificio seleccionado',
+        review_v2_title_what: '¿Qué pasó?',
+        review_v2_title_how: '¿Qué tan grave + dónde?',
+        review_v2_title_confirm: 'Revisar y enviar',
+        fp_audio: 'Audio', fp_what: 'Qué',
+        mic_permission_alert: 'Permita el acceso al micrófono para grabar audio.',
+        camera_blocked_toast: 'Acceso a la cámara bloqueado — usando selector de archivos.',
+        camera_unavailable_toast: 'Cámara no disponible — usando selector de archivos.',
+        delete_requested_alert: 'Sus datos se eliminarán permanentemente en 24 horas.',
+        delete_server_unreachable: 'No se pudo conectar al servidor.',
+        delete_undo_failed: 'No se pudo deshacer la eliminación.',
+        delete_all_server_confirm: 'Esto eliminará DEFINITIVAMENTE todos los informes y medios enviados del servidor. No se puede deshacer.',
+        delete_all_success_count: '{n} informe(s) eliminado(s). Todos los datos locales borrados.',
+        confirm_yes: 'Sí', confirm_no: 'Cancelar', confirm_delete: 'Eliminar',
     },
     ar: {
         minimal_damage: 'أدنى', tsunami: 'تسونامي', explosion: 'انفجار',
@@ -2038,6 +2722,19 @@ const UNDP_I18N_EXTRA = {
         building_select_title: 'اختياري: اختر المبنى بالضبط',
         building_select_hint: 'اضغط على محيط مبنى لتمييزه كمتضرر.',
         building_selected: 'تم اختيار المبنى',
+        review_v2_title_what: 'ماذا حدث؟',
+        review_v2_title_how: 'ما مدى السوء + أين؟',
+        review_v2_title_confirm: 'راجع وأرسل',
+        fp_audio: 'صوت', fp_what: 'ماذا',
+        mic_permission_alert: 'يرجى السماح بالوصول إلى الميكروفون لتسجيل الصوت.',
+        camera_blocked_toast: 'تم حظر الوصول إلى الكاميرا — سيتم استخدام منتقي الملفات.',
+        camera_unavailable_toast: 'الكاميرا غير متاحة — سيتم استخدام منتقي الملفات.',
+        delete_requested_alert: 'سيتم حذف بياناتك نهائيًا خلال 24 ساعة.',
+        delete_server_unreachable: 'تعذر الوصول إلى الخادم.',
+        delete_undo_failed: 'تعذر التراجع عن الحذف.',
+        delete_all_server_confirm: 'سيؤدي هذا إلى حذف جميع تقاريرك ووسائطك المُرسَلة نهائيًا من الخادم. لا يمكن التراجع عن ذلك.',
+        delete_all_success_count: 'تم حذف {n} تقرير (تقارير). تم مسح جميع البيانات المحلية.',
+        confirm_yes: 'نعم', confirm_no: 'إلغاء', confirm_delete: 'حذف',
     },
     ru: {
         minimal_damage: 'Минимальный', tsunami: 'Цунами', explosion: 'Взрыв',
@@ -2048,6 +2745,19 @@ const UNDP_I18N_EXTRA = {
         building_select_title: 'Необязательно: укажите точное здание',
         building_select_hint: 'Нажмите на контур здания, чтобы отметить его как повреждённое.',
         building_selected: 'Здание выбрано',
+        review_v2_title_what: 'Что случилось?',
+        review_v2_title_how: 'Насколько серьёзно + где?',
+        review_v2_title_confirm: 'Проверить и отправить',
+        fp_audio: 'Аудио', fp_what: 'Что',
+        mic_permission_alert: 'Разрешите доступ к микрофону для записи.',
+        camera_blocked_toast: 'Доступ к камере заблокирован — используется выбор файла.',
+        camera_unavailable_toast: 'Камера недоступна — используется выбор файла.',
+        delete_requested_alert: 'Ваши данные будут удалены безвозвратно в течение 24 часов.',
+        delete_server_unreachable: 'Не удалось связаться с сервером.',
+        delete_undo_failed: 'Не удалось отменить удаление.',
+        delete_all_server_confirm: 'Это безвозвратно удалит ВСЕ ваши отправленные отчёты и медиа с сервера. Отмена невозможна.',
+        delete_all_success_count: 'Удалено отчётов: {n}. Все локальные данные очищены.',
+        confirm_yes: 'Да', confirm_no: 'Отмена', confirm_delete: 'Удалить',
     },
     zh: {
         minimal_damage: '轻微', tsunami: '海啸', explosion: '爆炸',
@@ -2058,6 +2768,19 @@ const UNDP_I18N_EXTRA = {
         building_select_title: '可选：选择具体建筑',
         building_select_hint: '点击建筑轮廓将其标记为损坏。',
         building_selected: '已选择建筑',
+        review_v2_title_what: '发生了什么？',
+        review_v2_title_how: '严重程度 + 地点？',
+        review_v2_title_confirm: '核查并发送',
+        fp_audio: '音频', fp_what: '什么',
+        mic_permission_alert: '请允许访问麦克风以录制音频。',
+        camera_blocked_toast: '相机访问被阻止 — 改用文件选择器。',
+        camera_unavailable_toast: '相机不可用 — 改用文件选择器。',
+        delete_requested_alert: '您的数据将在 24 小时内被永久删除。',
+        delete_server_unreachable: '无法连接服务器。',
+        delete_undo_failed: '无法撤消删除。',
+        delete_all_server_confirm: '这将从服务器永久删除您提交的所有报告和媒体文件。此操作无法撤消。',
+        delete_all_success_count: '已删除 {n} 份报告。所有本地数据已清除。',
+        confirm_yes: '是', confirm_no: '取消', confirm_delete: '删除',
     },
     // Urdu, Farsi, Hebrew — RTL locales get the same additions so the
     // text direction flip + new keys ship together.
@@ -2406,6 +3129,30 @@ function detectAndSetupLanguage() {
             }));
         } catch (_) {}
         console.log('GPS Fixed:', state.location);
+        // Apr 2026 UI v2.1 — broadcast GPS-ready so the building-footprint
+        // map can init the first time location resolves. Other listeners
+        // (region match, offline cache) are free to subscribe the same
+        // hook rather than polling `state.location`.
+        try { document.dispatchEvent(new CustomEvent('gps-ready', { detail: state.location })); } catch (_) {}
+        // Phase B2 (Apr 2026 UI v3) — warm the IndexedDB building cache with
+        // the 10 nearest footprints. Non-blocking, best-effort; the capture
+        // flow never waits on this. Once populated, the map overlay (and
+        // the free-text autocomplete) paint instantly on later flow entries
+        // even if the connection has dropped.
+        if (UI_V3_ENABLED && window.BuildingSelect && typeof window.BuildingSelect.preCacheNearest === 'function') {
+            window.BuildingSelect.preCacheNearest(state.location.lat, state.location.lng, 10)
+                .then((list) => {
+                    state.nearbyBuildings = Array.isArray(list) ? list : [];
+                    try {
+                        document.dispatchEvent(new CustomEvent('buildings-cached', { detail: { count: state.nearbyBuildings.length } }));
+                    } catch (_) {}
+                    console.log(`[BuildingPreCache] ${state.nearbyBuildings.length} buildings cached`);
+                })
+                .catch((e) => {
+                    // Network failure, Overpass rate-limit, CORS, etc. — silent by design.
+                    console.warn('[BuildingPreCache] skip:', e?.message || e);
+                });
+        }
         // Pre-fetch nearby places for offline autocomplete (non-blocking background task)
         if (typeof placeSearch !== 'undefined' && navigator.onLine !== false) {
             placeSearch.prefetchNearby(pos.coords.latitude, pos.coords.longitude);
@@ -2583,6 +3330,39 @@ function setupPhotoStage() {
             });
             scroll.appendChild(thumb);
         });
+
+        // Apr 2026 UI v3 — disable every "add more photo" surface when the
+        // per-incident cap is reached. Three buttons can trigger an extra
+        // add: the inline + button, the camera-modal's "add another" shutter,
+        // and the v3 photo-stage "Camera / Gallery" row (Phase A issue 5).
+        // Also update the counter chip if the DOM carries one so the user
+        // sees why the buttons greyed out.
+        const mainCount = state.photoDataUrl ? 1 : 0;
+        const totalPhotos = mainCount + state.extraPhotos.length;
+        const capReached = totalPhotos >= MAX_PHOTOS_TOTAL;
+        const addMoreBtns = [
+            document.getElementById('btn-add-more-photo'),
+            document.getElementById('btn-add-camera'),       // legacy Camera chooser (hidden)
+            document.getElementById('btn-add-gallery'),      // legacy Gallery chooser (hidden)
+            document.getElementById('btn-add-more'),         // v3 single Add-more (native OS sheet)
+            document.getElementById('cam-shutter-extra'),    // camera modal
+        ].filter(Boolean);
+        addMoreBtns.forEach((btn) => {
+            btn.disabled = capReached;
+            btn.style.opacity = capReached ? '0.45' : '';
+            btn.setAttribute('aria-disabled', capReached ? 'true' : 'false');
+            if (capReached) {
+                btn.title = (typeof t === 'function' && t('photo_cap_reached'))
+                    || `Max ${MAX_PHOTOS_TOTAL} photos per report`;
+            } else {
+                btn.removeAttribute('title');
+            }
+        });
+        const capChip = document.getElementById('extra-photos-cap-chip');
+        if (capChip) {
+            capChip.textContent = `${totalPhotos}/${MAX_PHOTOS_TOTAL}`;
+            capChip.classList.toggle('at-cap', capReached);
+        }
     }
 
     window.removeExtraPhoto = (idx) => {
@@ -2654,69 +3434,87 @@ function setupPhotoStage() {
         _updateExtraPhotoStrip();
     };
 
-    // "Add more photos" button
+    // ── "Add more photos" path ─────────────────────────────────────────
+    // Phase A5 (Apr 2026 UI v3) — migrated from a single "+" button to an
+    // explicit Camera vs Gallery chooser row. The legacy `#btn-add-more-photo`
+    // is kept as a hidden sentinel element so any orphaned code paths that
+    // reference it still find a DOM node and no-op gracefully. The shared
+    // ingest pipeline (`_ingestFileAsPhoto(file, {asExtra:true})`) is used
+    // by both new buttons and the legacy single-file path.
     const addMoreBtn = document.getElementById('btn-add-more-photo');
     const fileExtra = document.getElementById('file-extra');
     if (addMoreBtn && fileExtra) {
+        // Legacy + button (hidden in v3) — keep the click handler so test
+        // harnesses that synthesise the click don't regress.
         addMoreBtn.addEventListener('click', () => fileExtra.click());
         fileExtra.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const img = new Image();
-                img.onload = () => {
-                    detectPWANetworkTier();
-                    const nc = getPWAAdaptiveConfig();
-                    const canvas = document.createElement('canvas');
-                    let cw = img.width, ch = img.height;
-                    if (Math.max(cw, ch) > nc.imageMaxWidth) { const s = nc.imageMaxWidth / Math.max(cw, ch); cw = Math.round(cw * s); ch = Math.round(ch * s); }
-                    canvas.width = cw; canvas.height = ch;
-                    canvas.getContext('2d').drawImage(img, 0, 0, cw, ch);
-                    const dataUrl = canvas.toDataURL('image/jpeg', nc.imageQuality);
-                    canvas.toBlob((rawBlob) => {
-                        // Placeholder entry up front so the UI strip updates; each extra
-                        // photo gets its own photoGroupId + 3 variants built async.
-                        const entry = { dataUrl, blob: rawBlob, groupId: genUUID(), variants: null };
-                        state.extraPhotos.push(entry);
-                        _updateExtraPhotoStrip();
-                        // Defer blur+variants via _runWhenIdle so the UI can
-                        // paint + handle taps before the TF.js face detector
-                        // saturates the main thread. See _runWhenIdle doc.
-                        _trackBlur(_runWhenIdle(async () => {
-                            const variants = window.ImageVariants
-                                ? await window.ImageVariants.generate(rawBlob).catch(e => {
-                                    _silent('imageVariants.extra', e);
-                                    return null;
-                                })
-                                : null;
-                            if (variants) {
-                                entry.variants = variants;
-                                entry.blob = variants.small.blob;
-                                entry.clientBlurApplied = Boolean(variants.clientBlurApplied);
-                                try {
-                                    entry.dataUrl = await _blobToDataUrl(variants.small.blob);
-                                    _updateExtraPhotoStrip();
-                                } catch (_) {}
-                            } else {
-                                // Variant generation failed — fall back to single-blur upload.
-                                const br = await _blurIfPossible(rawBlob);
-                                entry.blob = br.blob;
-                                entry.clientBlurApplied = br.blurred;
-                                if (br.blob !== rawBlob) {
-                                    try {
-                                        entry.dataUrl = await _blobToDataUrl(br.blob);
-                                        _updateExtraPhotoStrip();
-                                    } catch (_) {}
-                                }
-                            }
-                        }));
-                    }, 'image/jpeg', nc.imageQuality);
-                };
-                img.src = ev.target.result;
-            };
-            reader.readAsDataURL(file);
+            const file = e.target.files && e.target.files[0];
+            if (file) _ingestFileAsPhoto(file, { asExtra: true });
             fileExtra.value = '';
+        });
+    }
+
+    // v3 single Add-more button — triggers the file-extra-browse input
+    // which has `multiple` + NO `capture` attribute, so mobile browsers
+    // surface the OS native sheet with "Take Photo / Photo Library /
+    // Files" as options. One target → lower cognitive load.
+    const addMoreNative = document.getElementById('btn-add-more');
+    if (addMoreNative) {
+        addMoreNative.addEventListener('click', () => {
+            if (!_canAddMorePhotos()) return;
+            const browseInput = document.getElementById('file-extra-browse');
+            if (browseInput) browseInput.click();
+        });
+    }
+
+    // Legacy v3 Camera button (hidden in the v3.1 spec-align, but kept so
+    // e2e harnesses that click it programmatically still work). Straight
+    // to the rear camera via capture="environment".
+    const addCamBtn = document.getElementById('btn-add-camera');
+    const fileExtraCam = document.getElementById('file-extra-camera');
+    if (addCamBtn && fileExtraCam) {
+        addCamBtn.addEventListener('click', () => {
+            if (!_canAddMorePhotos()) return;
+            fileExtraCam.click();
+        });
+        fileExtraCam.addEventListener('change', (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (file) _ingestFileAsPhoto(file, { asExtra: true });
+            fileExtraCam.value = '';
+        });
+    }
+
+    // v3 Gallery button — multi-select from the device library. Each file is
+    // fed sequentially through the ingest pipeline; we stop enqueueing once
+    // the cap is reached. _canAddMorePhotos() guards each push but also
+    // shows a toast the first time, so the loop below just early-breaks.
+    const addGalBtn = document.getElementById('btn-add-gallery');
+    const fileExtraBrowse = document.getElementById('file-extra-browse');
+    if (addGalBtn && fileExtraBrowse) {
+        addGalBtn.addEventListener('click', () => {
+            if (!_canAddMorePhotos()) return;
+            fileExtraBrowse.click();
+        });
+        fileExtraBrowse.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files || []);
+            for (const f of files) {
+                // Probe the cap before kicking off the async ingest —
+                // prevents over-stuffing when the user selects 10+ photos
+                // but we can only accept up to MAX_EXTRA_PHOTOS more.
+                const currentCount = (state.extraPhotos || []).length;
+                if (currentCount >= MAX_EXTRA_PHOTOS) {
+                    if (typeof showToast === 'function') {
+                        showToast(
+                            (typeof t === 'function' && t('photo_cap_reached'))
+                                || `Max ${MAX_PHOTOS_TOTAL} photos per report`,
+                            'info'
+                        );
+                    }
+                    break;
+                }
+                _ingestFileAsPhoto(f, { asExtra: true });
+            }
+            fileExtraBrowse.value = '';
         });
     }
 
@@ -2769,6 +3567,7 @@ function setupPhotoStage() {
 
                 canvas.toBlob((rawBlob) => {
                     if (asExtra) {
+                        if (!_canAddMorePhotos()) return;
                         const entry = { dataUrl, blob: rawBlob, groupId: genUUID(), variants: null };
                         state.extraPhotos.push(entry);
                         _updateExtraPhotoStrip();
@@ -2883,10 +3682,9 @@ function openCameraModal() {
             modal.style.display = 'none';
             // Show friendly message then fall back to file picker
             const msg = err.name === 'NotAllowedError'
-                ? 'Camera access blocked — using file picker instead. Allow camera in browser settings for live capture.'
-                : 'Camera unavailable — using file picker instead.';
-            if (typeof showToast === 'function') showToast(msg);
-            else alert(msg);
+                ? t('camera_blocked_toast')
+                : t('camera_unavailable_toast');
+            showToast(msg);
             document.getElementById('file-camera').click();
         });
 }
@@ -2987,6 +3785,7 @@ function setupCameraModal() {
         canvas.toBlob((rawBlob) => {
             state.photoGroupId = state.photoGroupId || genUUID();
             if (asExtra) {
+                if (!_canAddMorePhotos()) return;
                 const entry = { dataUrl, blob: rawBlob, groupId: genUUID(), variants: null };
                 state.extraPhotos.push(entry);
                 // Bump the modal counter now that the extra has landed.
@@ -3216,10 +4015,92 @@ function setupAudioStage() {
     // Apr 2026 PR 4: `#audio-skip-link` ("Type instead") removed from DOM.
     // The textarea and mic coexist — users type without any toggle.
 
-    // Keep state.transcript synced with manual edits
+    // Keep state.transcript synced with manual edits. UI v3: the
+    // live-transcript textarea is the SINGLE source for both the voice
+    // transcription AND the free-text description, so every input also
+    // mirrors into `state.description` — no separate description box.
     liveTranscript.addEventListener('input', () => {
         state.transcript = liveTranscript.value;
+        if (UI_V3_ENABLED) state.description = liveTranscript.value;
     });
+
+    // Phase B4 (Apr 2026 UI v3) — Web Speech API live transcription.
+    // Uses `webkitSpeechRecognition` / `SpeechRecognition` when the browser
+    // ships it (Chrome, Edge, Safari iOS 14.5+, Chrome Android). Sets
+    // `recognition.lang` to `state.speechCode` so the device's engine
+    // transcribes in the reporter's language (UNDP §3.1 — local-language
+    // first-class). Interim + final results append to the textarea; the
+    // raw audio blob from MediaRecorder is ALSO submitted so the server
+    // can run a higher-accuracy Whisper pass later if it wants. Recogniser
+    // is local to the device (on-device on iOS / streams through the OS
+    // speech engine on Android), so offline users see interim transcription
+    // when the engine supports it, or a graceful plain-textarea fallback
+    // on browsers without `SpeechRecognition`. Never blocks; always a
+    // background augmentation on top of MediaRecorder.
+    let _v3Recognition = null;
+    let _v3TranscriptBase = '';
+    function _startV3Recognition() {
+        if (!UI_V3_ENABLED) return null;
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+            console.info('[v3 speech] SpeechRecognition unavailable — plain textarea fallback active');
+            return null;
+        }
+        try {
+            const r = new SR();
+            // `speechCode` is the BCP-47 tag we persisted on language pick
+            // (e.g. "en-US", "fr-FR", "hi-IN"). Fall back to the browser's
+            // navigator.language if the user never explicitly picked.
+            r.lang = (state && state.speechCode) ? state.speechCode
+                    : (typeof navigator !== 'undefined' && navigator.language) ? navigator.language
+                    : 'en-US';
+            r.continuous = true;
+            r.interimResults = true;
+            _v3TranscriptBase = liveTranscript.value || '';
+            r.onresult = (ev) => {
+                let interim = '';
+                let finalChunk = '';
+                for (let i = ev.resultIndex; i < ev.results.length; i++) {
+                    const r0 = ev.results[i];
+                    if (r0.isFinal) finalChunk += r0[0].transcript;
+                    else interim += r0[0].transcript;
+                }
+                // Append FINAL chunks to the base permanently; interim chunks
+                // preview after the base + final so re-tries overwrite only
+                // the interim segment.
+                if (finalChunk) {
+                    _v3TranscriptBase = (_v3TranscriptBase + ' ' + finalChunk).trim();
+                    liveTranscript.value = _v3TranscriptBase;
+                } else if (interim) {
+                    liveTranscript.value = (_v3TranscriptBase + ' ' + interim).trim();
+                }
+                state.transcript = liveTranscript.value;
+                state.description = liveTranscript.value;
+            };
+            r.onerror = (e) => {
+                // `no-speech` / `network` / `not-allowed` — fall through
+                // silently; MediaRecorder still captures the audio blob.
+                console.warn('[v3 speech] onerror:', e?.error || e);
+            };
+            r.onend = () => {
+                // If still recording (user didn't stop), try to restart.
+                // Some engines (Chrome) auto-close after a few seconds.
+                if (state.isRecording) {
+                    try { r.start(); } catch (_) {}
+                }
+            };
+            r.start();
+            return r;
+        } catch (e) {
+            console.warn('[v3 speech] start failed:', e?.message || e);
+            return null;
+        }
+    }
+    function _stopV3Recognition() {
+        if (!_v3Recognition) return;
+        try { _v3Recognition.stop(); } catch (_) {}
+        _v3Recognition = null;
+    }
 
     // ── Universal Recording Logic (MediaRecorder) ──
     async function startRecording() {
@@ -3233,6 +4114,10 @@ function setupAudioStage() {
                 stream.getTracks().forEach(t => t.stop());
             };
             state.mediaRecorder.start();
+            // Start SpeechRecognition in parallel (v3 only). Non-blocking —
+            // if the browser doesn't support it, returns null and the raw
+            // audio blob still goes to the server.
+            _v3Recognition = _startV3Recognition();
 
             state.isRecording = true;
             micBtn.classList.add('recording');
@@ -3251,7 +4136,7 @@ function setupAudioStage() {
             }, 1000);
         } catch (err) {
             console.error("Mic error:", err);
-            alert("Please allow microphone access to record audio.");
+            showToast(t('mic_permission_alert'));
         }
     }
 
@@ -3267,6 +4152,9 @@ function setupAudioStage() {
         if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
             state.mediaRecorder.stop();
         }
+        // Tear down the v3 SpeechRecognition instance. onend's auto-restart
+        // check sees state.isRecording=false and doesn't re-fire.
+        _stopV3Recognition();
 
         // Focus the textarea so user can edit immediately
         liveTranscript.focus();
@@ -3286,6 +4174,10 @@ function setupAudioStage() {
         // Small delay to let final speech results arrive
         setTimeout(() => {
             state.transcript = liveTranscript.value;
+            // v3: the live-transcript textarea is the single source for both
+            // the voice transcription AND the free-text description, so
+            // mirror its value onto state.description on the way out.
+            if (UI_V3_ENABLED) state.description = liveTranscript.value;
             goToStage('stage-review');
             populateReview();
         }, 300);
@@ -3622,6 +4514,15 @@ function setupReviewStage() {
             document.querySelectorAll('.chip-btn[data-crisis]').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             state.crisisType = btn.dataset.crisis;
+            // Phase B3 (Apr 2026 UI v3) — warm the W6 applicable-modules cache
+            // when crisis type changes. The modules endpoint's response is
+            // small (one JSON blob per crisis), rate-cheap (lru_cached on
+            // the server), and the result drives the optional per-crisis
+            // "extras" module list shown on review. Silent on failure;
+            // modules are additive, never blocking the submit path.
+            if (UI_V3_ENABLED && typeof fetchApplicableModules === 'function') {
+                fetchApplicableModules(state.crisisType).catch(() => {});
+            }
         });
     });
 
@@ -3641,8 +4542,20 @@ function setupReviewStage() {
     // InfraType chips: one listener each. Re-tapping the currently-selected
     // chip collapses the severity picker; a different chip switches selection
     // and keeps the picker open.
+    //
+    // UI v3 exception: the damage-severity picker lives on stage-where (an
+    // earlier stage than stage-infra), so the "tap infra to reveal damage"
+    // tango doesn't apply — damage is chosen BEFORE the reporter gets here.
+    // We short-circuit to plain selection behaviour, and migrateV3Blocks
+    // has already force-displayed `#infra-severity` on stage-where.
     document.querySelectorAll('.chip-btn[data-type]').forEach(btn => {
         btn.addEventListener('click', () => {
+            if (UI_V3_ENABLED) {
+                document.querySelectorAll('.chip-btn[data-type]').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                state.infraType = btn.dataset.type;
+                return;
+            }
             const wasSelected = btn.classList.contains('selected');
             const severityOpen = infraSeverityWrap && infraSeverityWrap.style.display === 'block';
             if (wasSelected && severityOpen) {
@@ -3674,6 +4587,10 @@ function setupReviewStage() {
             document.querySelectorAll('.damage-chip').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             state.damageClass = btn.dataset.damage;
+            // Phase B4 (Apr 2026 UI v3) — severity auto-derived from damage
+            // class so stage-extras can drop the explicit severity chips.
+            // No-op when v3 is off.
+            _v3AutoDeriveSeverity();
         });
     });
 
@@ -3685,15 +4602,23 @@ function setupReviewStage() {
     // Location autocomplete (instant offline suggestions after 3 chars)
     setupLocationAutocomplete();
 
-    // ── Phase 6: paginate the Review stage (3 pages) ──────────────────────
-    // Instead of navigating to a separate stage-send, we flip between three
-    // in-stage pages: Incident → Details → Final Review. Each page controls
-    // Next / Back / Submit visibility.
+    // ── Phase 6: paginate the Review stage ──────────────────────
+    // UI v1 (default pre-Apr-2026): 2 pages — Details (all blocks) + Confirm
+    //   (summary card). Filter by `[data-review-page]`.
+    // UI v2 (Apr 2026, feature-flagged): 3 pages — "What happened?" (infra
+    //   + damage + crisis chips) + "How bad + where?" (severity row +
+    //   location + services) + "Describe + confirm" (textarea + building
+    //   footprint + summary). Filter by `[data-v2-page]`.
+    // The flag is read exactly once here so the page count stays stable
+    // across the lifetime of a single review entry — flipping localStorage
+    // mid-flow would need a reload to rebind Next/Back anyway.
     state.reviewPage = 1;
-    // Phase 3 (Apr 2026): review collapsed to 2 pages (Details + Confirm).
-    // Was 3 (Incident + Details + Final Review). The Incident page's only
-    // real field — Description — now sits at the top of Details.
-    const TOTAL_REVIEW_PAGES = 2;
+    // UI v3 — stage-review collapses to a single "confirm + submit" page.
+    // All chip/input blocks have been reparented out of stage-review by
+    // migrateV3Blocks, so the only thing on-screen is the summary card +
+    // Submit button. No pager state machine needed: TOTAL=1 means Next/Back
+    // are never shown and Submit is visible from the moment the stage paints.
+    const TOTAL_REVIEW_PAGES = UI_V3_ENABLED ? 1 : (UI_V2_ENABLED ? 3 : 2);
     const reviewRoot = document.getElementById('stage-review');
     const btnReviewBack = document.getElementById('btn-review-back');
     const btnReviewNext = document.getElementById('btn-review-next');
@@ -3709,39 +4634,100 @@ function setupReviewStage() {
         const needs = [];
         document.querySelectorAll('.need-chip input:checked').forEach(cb => needs.push(cb.value));
         state.serviceStatus.pressing_needs = needs;
-        state.description = document.getElementById('edit-text').value.trim();
+        // v3 merges the description into the live-transcript textarea on
+        // stage-audio; `edit-text` stays in the DOM but hidden + unused.
+        // Skip reading it in v3 so we don't overwrite the voice-transcript
+        // description with an empty string.
+        if (UI_V3_ENABLED) {
+            const lt = document.getElementById('live-transcript');
+            if (lt) state.description = lt.value.trim();
+        } else {
+            const et = document.getElementById('edit-text');
+            if (et) state.description = et.value.trim();
+        }
     }
 
     function showReviewPage(n) {
         state.reviewPage = Math.min(Math.max(n, 1), TOTAL_REVIEW_PAGES);
         reviewRoot.setAttribute('data-review-page', String(state.reviewPage));
-        document.querySelectorAll('#stage-review .review-page').forEach(el => {
-            const p = parseInt(el.getAttribute('data-review-page') || '0', 10);
-            el.style.display = (p === state.reviewPage) ? '' : 'none';
-        });
+        // Apr 2026 UI v2.1 — broadcast so building-select.js (and any
+        // future page-aware listener) can react without reaching into
+        // module-scope state. Detail carries the 1-based page number.
+        try {
+            document.dispatchEvent(new CustomEvent('review-page-changed', {
+                detail: { page: state.reviewPage },
+            }));
+        } catch (_) { /* CustomEvent unsupported — safe to ignore */ }
+
+        if (UI_V3_ENABLED) {
+            // UI v3: stage-review collapses to a single "summary + submit"
+            // page. Every `.review-page` wrapper is opened so the summary
+            // (which lives in the wrapper tagged `data-review-page="2"`)
+            // is reachable; the input blocks have been reparented out by
+            // migrateV3Blocks, so only the summary + hidden description
+            // remain. We ignore `data-v2-page` entirely in this mode.
+            document.querySelectorAll('#stage-review .review-page').forEach(el => {
+                el.style.display = '';
+            });
+        } else if (UI_V2_ENABLED) {
+            // UI v2: every block carries a `data-v2-page` attribute. Blocks
+            // without the attribute (e.g. the nav-row at the bottom) stay
+            // visible regardless of the current page. The two legacy
+            // `.review-page` wrappers are opened both so their children
+            // can pick up per-block v2 filtering.
+            document.querySelectorAll('#stage-review .review-page').forEach(el => {
+                el.style.display = '';
+            });
+            document.querySelectorAll('#stage-review [data-v2-page]').forEach(el => {
+                const p = parseInt(el.getAttribute('data-v2-page') || '0', 10);
+                if (!p) return;
+                el.style.display = (p === state.reviewPage) ? '' : 'none';
+            });
+        } else {
+            // Legacy v1 — unchanged: show the single .review-page whose
+            // `data-review-page` matches the current step.
+            document.querySelectorAll('#stage-review .review-page').forEach(el => {
+                const p = parseInt(el.getAttribute('data-review-page') || '0', 10);
+                el.style.display = (p === state.reviewPage) ? '' : 'none';
+            });
+        }
+
         // Step dots: mark the current review page as active.
-        // Phase 3: now 4 absolute steps (photo, audio, details, confirm).
+        // v1: 4 absolute steps (photo, audio, details, confirm).
+        // v2: 5 absolute steps (photo, audio, what, details, confirm).
         const dots = document.querySelectorAll('#review-page-header .step-dot');
-        const absoluteStep = 2 + state.reviewPage; // 1-photo, 2-audio, 3-details, 4-confirm
+        const totalAbsolute = UI_V2_ENABLED ? 5 : 4;
+        const absoluteStep = 2 + state.reviewPage; // 1-photo, 2-audio, then review-page N
         dots.forEach((d, i) => {
             d.classList.toggle('active', i + 1 === absoluteStep);
             d.classList.toggle('done', i + 1 < absoluteStep);
         });
-        // Apr 2026: was hardcoded English array — non-English locales saw
-        // "Details"/"Confirm" in English on the title. Now resolved via t()
-        // against `review_details_title` (page 1) and `confirm_title`
-        // (page 2 — already in the RN dict, mirrored here).
-        const titleKeys = ['review_details_title', 'confirm_title'];
+
+        // Title keys:
+        //   v1: page 1 → "Details", page 2 → "Confirm"
+        //   v2: page 1 → "What happened?", page 2 → "How bad + where?",
+        //       page 3 → "Review & send"
+        //   v3: single page → "Review and send" (stage8_title — see i18n).
+        const titleKeys = UI_V3_ENABLED
+            ? ['stage8_title']
+            : (UI_V2_ENABLED
+                ? ['review_v2_title_what', 'review_v2_title_how', 'review_v2_title_confirm']
+                : ['review_details_title', 'confirm_title']);
         const titleEl = document.getElementById('review-page-title');
         if (titleEl) titleEl.textContent = t(titleKeys[state.reviewPage - 1]);
         const counter = document.getElementById('review-page-counter');
-        if (counter) counter.textContent = `Step ${absoluteStep} of 4`;
-        // Button visibility
+        if (counter) counter.textContent = `Step ${absoluteStep} of ${totalAbsolute}`;
+
+        // Button visibility — Submit shows on the LAST page only.
         btnReviewBack.style.display = state.reviewPage === 1 ? 'none' : 'flex';
         btnReviewNext.style.display = state.reviewPage === TOTAL_REVIEW_PAGES ? 'none' : 'flex';
         btnReviewSubmit.style.display = state.reviewPage === TOTAL_REVIEW_PAGES ? 'flex' : 'none';
-        // On Page 3, render the live summary.
+        // On the last page, render the live summary.
         if (state.reviewPage === TOTAL_REVIEW_PAGES) renderReviewSummary();
+
+        // Keep the flow-progress bar in sync with the in-stage page flip —
+        // v2 uses steps 3/4/5 to mirror which review page is showing.
+        try { updateFlowProgress('stage-review'); } catch (_) {}
     }
 
     function renderReviewSummary() {
@@ -3749,8 +4735,77 @@ function setupReviewStage() {
         const summaryEl = document.getElementById('review-summary');
         if (!summaryEl) return;
         const ss = state.serviceStatus || {};
-        const needsTxt = (ss.pressing_needs && ss.pressing_needs.length) ? ss.pressing_needs.join(', ') : '—';
         const photoCount = (state.photoDataUrl ? 1 : 0) + (state.extraPhotos || []).length;
+
+        // Apr 2026 UI v2.1 — translate every enum value that lands on
+        // the confirm card. Before: raw `state.crisisType` ("FLOOD"),
+        // `state.infraType` ("ROAD"), severity/damage/service-status
+        // enums, and the joined `food, security` need keys all leaked
+        // straight into the DOM as English uppercase. Field testers on
+        // ZH/AR/RU saw an otherwise-translated page with ENGLISH values
+        // in the summary — classic half-translated UI. The map below
+        // routes each enum through the existing inline `I18N` dict.
+        // Any value that doesn't map (e.g. a freshly-added enum a
+        // locale hasn't translated yet) falls back to titlecased raw.
+        const ENUM_KEY = {
+            crisis: {
+                FLOOD:'flood', EARTHQUAKE:'earthquake', TSUNAMI:'tsunami',
+                CYCLONE:'cyclone', HURRICANE:'hurricane', LANDSLIDE:'landslide',
+                PANDEMIC:'pandemic', CONFLICT:'conflict', CIVIL_UNREST:'civil_unrest',
+                EXPLOSION:'explosion', CHEMICAL_INCIDENT:'chemical_incident',
+                WILDFIRE:'wildfire', OTHER:'other_crisis',
+            },
+            infra: {
+                ROAD:'road', HOSPITAL:'hospital', HOUSE:'house', POWER:'power',
+                WATER:'water', SCHOOL:'school', TELECOM:'telecom',
+                GOVERNMENT:'government', OTHER:'other',
+                // UNDP super-type synonyms — fall back to the nearest
+                // legacy chip label so non-EN locales still get a
+                // translated word even if a `public_spaces` key is
+                // not yet in the pack.
+                RESIDENTIAL:'house', COMMUNITY:'hospital', UTILITY:'power',
+                TRANSPORT_COMMUNICATION:'road', COMMERCIAL:'government',
+                PUBLIC_SPACES:'other',
+            },
+            severity: { MINOR:'minor', MODERATE:'moderate', SEVERE:'severe', CRITICAL:'severe' },
+            damage: {
+                MINIMAL:'minimal_damage', NO_DAMAGE:'no_damage',
+                PARTIAL:'partial_damage', COMPLETE:'complete_damage', DESTROYED:'destroyed',
+            },
+            service: {
+                UNKNOWN:'unknown', OPERATIONAL:'working',
+                DISRUPTED:'disrupted', DESTROYED:'destroyed',
+            },
+            need: {
+                // UNDP Appendix-1 pressing-needs taxonomy (all 9 required
+                // options + Other). `security` retained as a legacy alias
+                // so reports submitted before Apr 2026 still translate
+                // cleanly on the confirm card.
+                food:'food', water:'need_water',
+                cash:'need_cash', medical:'medical', shelter:'shelter',
+                livelihoods:'need_livelihoods', wash:'need_wash',
+                basic_services:'need_basic_services', protection:'need_protection',
+                local_support:'need_local_support',
+                other:'need_other',
+                security:'security',   // ← legacy alias; do not remove
+            },
+        };
+        const tEnum = (raw, kind) => {
+            if (!raw) return t('summary_none') || '—';
+            const upper = String(raw).toUpperCase();
+            const lookup = ENUM_KEY[kind] || {};
+            const k = lookup[upper] || lookup[raw] || lookup[String(raw).toLowerCase()];
+            if (k) {
+                const v = t(k);
+                if (v && v !== k) return v;
+            }
+            return String(raw).replace(/_/g, ' ').toLowerCase()
+                .replace(/^\w/, (c) => c.toUpperCase());
+        };
+        const needsTxt = (ss.pressing_needs && ss.pressing_needs.length)
+            ? ss.pressing_needs.map((n) => tEnum(n, 'need')).join(', ')
+            : (t('summary_none') || '—');
+
         // Phase 3: both Edit links point to page 1 (Details) — that's now the
         // single editable page. The Incident card is kept as a visual block so
         // responders at a glance see the narrative bit separately from the
@@ -3759,17 +4814,17 @@ function setupReviewStage() {
           <div class="summary-card">
             <div class="summary-card-head"><strong>${t('summary_incident')}</strong>
               <a href="#" class="summary-edit" data-page="1">${t('summary_edit')}</a></div>
-            <p>🌪 ${state.crisisType}  |  📸 ${photoCount} ${t('browse').toLowerCase() === 'files' ? (photoCount === 1 ? 'photo' : 'photos') : ''}  |  🎤 ${state.audioBlob ? '✅' : '❌'}</p>
+            <p>🌪 ${tEnum(state.crisisType, 'crisis')}  |  📸 ${photoCount} ${t('browse').toLowerCase() === 'files' ? (photoCount === 1 ? 'photo' : 'photos') : ''}  |  🎤 ${state.audioBlob ? '✅' : '❌'}</p>
             ${state.description ? `<p>📝 ${state.description.substring(0, 200)}</p>` : ''}
             ${state.locationName ? `<p>📍 ${state.locationName}</p>` : ''}
           </div>
           <div class="summary-card">
             <div class="summary-card-head"><strong>${t('summary_details')}</strong>
               <a href="#" class="summary-edit" data-page="1">${t('summary_edit')}</a></div>
-            <p>📋 ${state.infraType}  |  ⚠ ${state.severity}  |  🏗 ${state.damageClass.replace(/_/g, ' ')}</p>
+            <p>📋 ${tEnum(state.infraType, 'infra')}  |  ⚠ ${tEnum(state.severity, 'severity')}  |  🏗 ${tEnum(state.damageClass, 'damage')}</p>
             ${state.infraName ? `<p>🏛 ${state.infraName}</p>` : ''}
             ${state.debrisClearing ? `<p>${t('summary_debris')}</p>` : ''}
-            <p>⚡ ${ss.electricity || 'UNKNOWN'} · 💧 ${ss.water || 'UNKNOWN'} · 🏥 ${ss.health || 'UNKNOWN'}</p>
+            <p>⚡ ${tEnum(ss.electricity || 'UNKNOWN', 'service')} · 💧 ${tEnum(ss.water || 'UNKNOWN', 'service')} · 🏥 ${tEnum(ss.health || 'UNKNOWN', 'service')}</p>
             <p>${t('summary_needs_prefix')} ${needsTxt}</p>
           </div>`;
         // Edit-link handlers.
@@ -3799,8 +4854,52 @@ function setupReviewStage() {
 
     // Reset to page 1 every time the stage is entered.
     document.addEventListener('stage-entered', (e) => {
-        if (e.detail === 'stage-review') showReviewPage(1);
+        if (e.detail === 'stage-review') {
+            showReviewPage(1);
+            // UI v2 — inject SVG chip icons once the stage is active. Idempotent:
+            // each chip's `<span class="chip-ic">` is only populated on first
+            // pass; subsequent entries skip the innerHTML writes so language
+            // re-renders don't thrash the DOM.
+            if (UI_V2_ENABLED) _renderReviewChipIcons();
+        }
     });
+
+    // UI v2 — scan every chip in #stage-review and prepend a `<span class="chip-ic">`
+    // containing the Lucide SVG from `window.crispIconFor(key)`. Leaves the
+    // legacy `<i class="fa-solid fa-...">` glyph in place (hidden via CSS
+    // when body[data-ui-v2]) so the v1 fallback path stays byte-identical
+    // to the pre-rewrite behaviour when the feature flag is off.
+    function _renderReviewChipIcons() {
+        if (typeof window.crispIconFor !== 'function') {
+            // Icon pack failed to load (CDN down / CSP blocked). Fall back
+            // to the FontAwesome glyphs that are already in the DOM — UI
+            // still works, it just won't show the coloured SVG icons.
+            return;
+        }
+        const chips = document.querySelectorAll('#stage-review .chip-btn[data-type], #stage-review .chip-btn[data-crisis]');
+        chips.forEach((btn) => {
+            if (btn.querySelector('.chip-ic')) return;   // already populated
+            const key = btn.dataset.type || btn.dataset.crisis;
+            if (!key) return;
+            const ic = document.createElement('span');
+            ic.className = 'chip-ic';
+            ic.innerHTML = window.crispIconFor(key);
+            // Prepend so the SVG sits above the label (.category-grid is
+            // flex-direction:column). Using before() keeps the label's
+            // DOM order intact for screen readers.
+            btn.insertBefore(ic, btn.firstChild);
+        });
+    }
+    // Expose for Playwright — the E2E spec can jump straight to a given
+    // v2 review page without driving Next/Back clicks. Returns a Promise
+    // that resolves on the next animation frame so the caller can await
+    // the DOM settle before asserting.
+    window.__crispGoToReviewV2Page = function (n) {
+        return new Promise((resolve) => {
+            try { showReviewPage(n); } catch (_) {}
+            requestAnimationFrame(() => requestAnimationFrame(resolve));
+        });
+    };
 }
 
 // ── STAGE 4: Send ──────────────────────────────────────────────────────────────
@@ -4585,9 +5684,17 @@ async function submitReport() {
             (extrasWithVariants * 3) + extrasWithoutVariants +
             (hasAudio ? 1 : 0);
 
+        // Phase 1 (Apr 2026 — Optional reporter login) — capture the
+        // bearer token at enqueue time so offline replay submits under
+        // the user who captured the data, even if they log out while the
+        // queue drains. The token goes into `/reports/meta`'s auth
+        // header at replay; server silently degrades to anonymous when
+        // expired beyond offline grace — never blocks.
+        const _authToken = (window.AuthStore && window.AuthStore.getAccessToken && window.AuthStore.getAccessToken()) || null;
         // Build queue item with all data
         const queueItem = {
             client_report_id: clientReportId,
+            auth_token: _authToken,     // Phase 1 — offline-grace: captured at enqueue
             meta: {
                 client_report_id: clientReportId,
                 device_hash: deviceHash,
@@ -4602,6 +5709,13 @@ async function submitReport() {
                 crisis_type: state.crisisType,
                 damage_classification: state.damageClass,
                 infrastructure_name: state.infraName || null,
+                // Phase B2 (Apr 2026 UI v3) — distinguisher between OSM-picked
+                // and user-typed names. Dashboard treats `building_id IS NULL
+                // AND infrastructure_name_from_osm = false` as "needs mapping"
+                // so an operator can resolve the free-text entry to a real OSM
+                // footprint later. Defaults to false when the field is missing
+                // (back-compat with pre-v3 clients).
+                infrastructure_name_from_osm: Boolean(state.infraNameFromOsm),
                 debris_clearing_needed: state.debrisClearing,
                 service_status: state.serviceStatus,
                 // User-selected building footprint from the Leaflet overlay
@@ -4731,11 +5845,9 @@ async function submitReport() {
         } catch (persistErr) {
             console.error('[submitReport] enqueueReport failed:', persistErr);
             hideUploadOverlay();
-            if (typeof showToast === 'function') {
-                showToast(t('storage_full_toast'));
-            } else {
-                alert(t('storage_full_alert'));
-            }
+            // showToast is always defined — but keep a log fallback for any
+            // unexpected environment where it's been unwired by a shim.
+            showToast(t('storage_full_toast'));
             sendBtn.disabled = false;
             return;   // do NOT flip to success; user keeps the filled form
         }
@@ -5247,6 +6359,537 @@ function triggerBackgroundSync() {
 
 // Legacy syncQueue replaced by IndexedDB-based syncQueueManual (defined above)
 
+// ── Phase B3 (Apr 2026 UI v3) — W6 applicable-modules consumer ──────────────
+// The backend exposes `GET /api/v1/modules/applicable?crisis_type=X&…` which
+// returns a list of modular form definitions relevant to the current capture.
+// PWA scope is small here: fetch + cache + expose on window so dashboards +
+// future renderers can consume without another network round-trip.
+//
+// The render side is deliberately minimal — we list each applicable module
+// title in a collapsible "More details" block on the review stage so the
+// reporter can SEE that their answers could be enriched by module questions.
+// Full inline renderers for each field type (single_select / multi_select /
+// short_text / long_text / integer / yes_no) are a follow-up sprint. The
+// infrastructure (fetch + cache + state binding) ships now.
+const _w6ModuleCache = {
+    byCrisis: new Map(),  // key: crisis_type, value: Promise<Array<module>>
+};
+
+async function fetchApplicableModules(crisisType, opts = {}) {
+    const { bustCache = false } = opts;
+    if (!crisisType) return [];
+    if (!bustCache && _w6ModuleCache.byCrisis.has(crisisType)) {
+        return _w6ModuleCache.byCrisis.get(crisisType);
+    }
+    const url = `${API_BASE}/modules/applicable?crisis_type=${encodeURIComponent(crisisType)}`;
+    const promise = fetch(url, { method: 'GET', cache: 'no-store' })
+        .then((res) => {
+            if (!res.ok) throw new Error(`modules applicable HTTP ${res.status}`);
+            return res.json();
+        })
+        .then((data) => {
+            // Normalise to an array — FastAPI returns `[]` on no match, not `{modules:[]}`.
+            const list = Array.isArray(data) ? data : (Array.isArray(data?.modules) ? data.modules : []);
+            state.applicableModules = list;
+            try {
+                document.dispatchEvent(new CustomEvent('w6-modules-loaded', {
+                    detail: { crisis_type: crisisType, count: list.length },
+                }));
+            } catch (_) {}
+            return list;
+        })
+        .catch((e) => {
+            console.warn('[W6] applicable modules fetch failed:', e?.message || e);
+            state.applicableModules = [];
+            return [];
+        });
+    _w6ModuleCache.byCrisis.set(crisisType, promise);
+    return promise;
+}
+
+// Testability hook.
+window.__crispFetchApplicableModules = fetchApplicableModules;
+window.__crispW6ModuleCache = _w6ModuleCache;
+
+
+// ── Phase B2 (Apr 2026 UI v3) — free-text building-name fallback ────────────
+// When the Leaflet map / Overpass fetch is unavailable, the reporter can type
+// the building name in any language. The submit handler already emits
+// `infrastructure_name` (see submitReport → `infrastructure_name: state.infraName`).
+// The dashboard applies a "needs mapping" badge when `building_id IS NULL AND
+// infrastructure_name IS NOT NULL`.
+//
+// Interplay with the OSM tap-select path (building-select.js):
+//   • OSM tap auto-fills `state.infraName` + sets `state.infraNameFromOsm = true`
+//     AND mirrors the value into the #input-infra-name-v3 textbox.
+//   • If the user then edits the text, we flip `infraNameFromOsm` to false —
+//     user intent supersedes the OSM auto-fill.
+//   • Clearing the text clears `state.infraName` but NOT `state.buildingId`
+//     (the user may have renamed a legitimately picked building, which is
+//     still a better submission than no building at all).
+function setupBuildingFreeText() {
+    const input = document.getElementById('input-infra-name-v3');
+    const wrap = document.getElementById('building-free-text-block');
+    if (!input) return;
+    // Seed from state on every stage-entered so an offline-queued draft
+    // shows its building name when re-opened.
+    document.addEventListener('stage-entered', (ev) => {
+        if (ev && ev.detail === 'stage-review') {
+            input.value = state.infraName || '';
+            if (wrap) wrap.classList.toggle('has-value', !!input.value.trim());
+        }
+    });
+    input.addEventListener('input', () => {
+        const v = input.value;
+        state.infraName = v;
+        // Flip the OSM-source flag — user typed over whatever building-select
+        // auto-filled. The dashboard uses this to distinguish "verified OSM
+        // pick the user kept" from "user-typed free-text that needs mapping".
+        state.infraNameFromOsm = false;
+        if (wrap) wrap.classList.toggle('has-value', !!v.trim());
+    });
+    // Keep the v3 input in sync if the legacy #input-infra-name is touched
+    // elsewhere (e.g. building-select.js mirrors OSM names into it).
+    const legacy = document.getElementById('input-infra-name');
+    if (legacy) {
+        legacy.addEventListener('input', () => {
+            input.value = legacy.value;
+            if (wrap) wrap.classList.toggle('has-value', !!input.value.trim());
+        });
+    }
+}
+
+// ── Phase B4 (Apr 2026 UI v3) — 8-stage Continue/Back wiring ───────────────
+// Hooks the Continue / Back buttons on the four new v3 stages (where,
+// infra, crisis, extras). Each button delegates to nextStageId / prevStageId
+// which walks STAGES_V3 so the chain stays in a single place.
+//
+// Lightweight validators per stage: damage chip must be chosen before
+// leaving stage-where, infra type before stage-infra, etc. These validators
+// short-circuit to a toast when unmet — matches the "Photo required" gate
+// on stage-photo in the legacy flow.
+// ── Phase 1 (Apr 2026 — Optional reporter login) — UI wiring ────────────────
+// All state lives in AuthStore (auth.js); this function is purely DOM
+// glue: bind buttons, paint the header pill, navigate between the 3
+// login steps + Settings. Offline-safe — every handler exits silently
+// when the network call fails so the reporting flow is never blocked.
+function setupAuthUI() {
+    if (!window.AuthStore) return;
+    const A = window.AuthStore;
+
+    // ── A. Header pill + login button state ──────────────────────────
+    function paintHeader() {
+        const btnLogin = document.getElementById('btn-login');
+        const pill = document.getElementById('account-pill');
+        const nameEl = document.getElementById('account-name');
+        const loggedIn = A.isLoggedIn();
+        const user = A.getUser();
+        if (btnLogin) btnLogin.style.display = loggedIn ? 'none' : '';
+        if (pill) pill.style.display = loggedIn ? '' : 'none';
+        if (nameEl && user) nameEl.textContent = user.displayName || '—';
+        const settingsName = document.getElementById('settings-account-name');
+        if (settingsName && user) settingsName.textContent = user.displayName || '—';
+    }
+    document.addEventListener('auth-ready', paintHeader);
+    document.addEventListener('auth-changed', paintHeader);
+    paintHeader();   // initial render
+
+    // ── B. Populate country-code dropdown (user spec answer 4: device-default) ──
+    populateCountryCodes();
+
+    // ── C. Landing-button bindings ───────────────────────────────────
+    const btnLogin = document.getElementById('btn-login');
+    if (btnLogin) btnLogin.addEventListener('click', () => {
+        _resetLoginForm();
+        goToStage('stage-login');
+    });
+    const btnAccountSettings = document.getElementById('btn-account-settings');
+    if (btnAccountSettings) btnAccountSettings.addEventListener('click', () => {
+        goToStage('stage-settings');
+    });
+
+    // ── D. Login step 1 — channel picker + destination input ─────────
+    const channelPhone = document.getElementById('login-channel-phone');
+    const channelEmail = document.getElementById('login-channel-email');
+    const phoneRow = document.getElementById('login-phone-row');
+    const emailInput = document.getElementById('login-email-input');
+    function switchChannel(channel) {
+        const isPhone = (channel === 'PHONE');
+        channelPhone.classList.toggle('selected', isPhone);
+        channelEmail.classList.toggle('selected', !isPhone);
+        phoneRow.style.display = isPhone ? 'flex' : 'none';
+        emailInput.style.display = isPhone ? 'none' : '';
+    }
+    if (channelPhone) channelPhone.addEventListener('click', () => switchChannel('PHONE'));
+    if (channelEmail) channelEmail.addEventListener('click', () => switchChannel('EMAIL'));
+
+    const sendCodeBtn = document.getElementById('btn-login-send-code');
+    const loginError = document.getElementById('login-error');
+    function currentChannel() {
+        return channelPhone.classList.contains('selected') ? 'PHONE' : 'EMAIL';
+    }
+    function currentDestination() {
+        if (currentChannel() === 'PHONE') {
+            const cc = (document.getElementById('login-cc-select').value || '+91').trim();
+            const num = (document.getElementById('login-phone-input').value || '').replace(/\D/g, '');
+            if (!num) return null;
+            return cc + num;
+        }
+        return (emailInput.value || '').trim().toLowerCase();
+    }
+    if (sendCodeBtn) sendCodeBtn.addEventListener('click', async () => {
+        loginError.style.display = 'none';
+        const channel = currentChannel();
+        const destination = currentDestination();
+        if (!destination) {
+            loginError.textContent = (typeof t === 'function' && t('login_err_missing_destination'))
+                || 'Please enter your phone or email.';
+            loginError.style.display = 'block';
+            return;
+        }
+        sendCodeBtn.disabled = true;
+        try {
+            await A.requestOtp(destination, channel, 'LOGIN');
+            // Advance to step 2.
+            document.querySelector('#stage-login .login-body:not(.login-step2):not(.login-step3)').style.display = 'none';
+            document.getElementById('login-step2').style.display = 'block';
+            document.getElementById('login-code-destination').textContent = destination;
+            // Reset + focus the code input.
+            const codeInput = document.getElementById('login-code-input');
+            codeInput.value = '';
+            codeInput.focus();
+            _startResendCountdown();
+        } catch (e) {
+            loginError.textContent = (e && e.message) || 'Could not send code.';
+            loginError.style.display = 'block';
+        } finally {
+            sendCodeBtn.disabled = false;
+        }
+    });
+
+    // ── E. Login step 2 — code verify ────────────────────────────────
+    const verifyBtn = document.getElementById('btn-login-verify');
+    const verifyError = document.getElementById('login-verify-error');
+    const backStep1 = document.getElementById('btn-login-back-step1');
+    const codeInput = document.getElementById('login-code-input');
+    if (codeInput) codeInput.addEventListener('input', () => {
+        codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6);
+    });
+    if (backStep1) backStep1.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        document.getElementById('login-step2').style.display = 'none';
+        document.querySelector('#stage-login .login-body:not(.login-step2):not(.login-step3)').style.display = 'block';
+    });
+    if (verifyBtn) verifyBtn.addEventListener('click', async () => {
+        verifyError.style.display = 'none';
+        const code = (codeInput.value || '').trim();
+        if (code.length !== 6) {
+            verifyError.textContent = (typeof t === 'function' && t('login_err_bad_code'))
+                || 'Please enter the 6-digit code.';
+            verifyError.style.display = 'block';
+            return;
+        }
+        const destination = document.getElementById('login-code-destination').textContent.trim();
+        const channel = destination.startsWith('+') ? 'PHONE' : 'EMAIL';
+        verifyBtn.disabled = true;
+        try {
+            const data = await A.verifyOtp(destination, channel, code, 'LOGIN');
+            const linkable = Number(data && data.linkable_report_count) || 0;
+            if (linkable > 0) {
+                document.getElementById('login-step2').style.display = 'none';
+                document.getElementById('login-step3').style.display = 'block';
+                document.getElementById('login-linkable-count').textContent = String(linkable);
+            } else {
+                // No anonymous reports to link — straight back to home.
+                _completeLogin(0);
+            }
+        } catch (e) {
+            verifyError.textContent = (e && e.message) || 'Could not verify code.';
+            verifyError.style.display = 'block';
+        } finally {
+            verifyBtn.disabled = false;
+        }
+    });
+
+    // ── F. Login step 3 — link offer ─────────────────────────────────
+    const linkBtn = document.getElementById('btn-login-link');
+    const skipLinkBtn = document.getElementById('btn-login-skip-link');
+    if (linkBtn) linkBtn.addEventListener('click', async () => {
+        const dh = localStorage.getItem('crisp_device_id_v2')
+                || localStorage.getItem('crisp_device_hash')
+                || localStorage.getItem('crisp_device_id');
+        if (!dh) return _completeLogin(0);
+        linkBtn.disabled = true;
+        try {
+            const r = await A.linkDevice(dh);
+            _completeLogin(Number(r && r.linked) || 0);
+        } catch (e) {
+            showToast(t('login_link_failed') || 'Could not link reports. You can retry from Settings.');
+            _completeLogin(0);
+        }
+    });
+    if (skipLinkBtn) skipLinkBtn.addEventListener('click', () => _completeLogin(0));
+
+    // ── G. Skip-and-report on step 1 → straight back to home ─────────
+    const skipLink = document.getElementById('btn-login-skip');
+    if (skipLink) skipLink.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        goToStage('stage-home');
+    });
+
+    // ── H. Settings ──────────────────────────────────────────────────
+    const btnLogout = document.getElementById('btn-settings-logout');
+    if (btnLogout) btnLogout.addEventListener('click', async () => {
+        try { await A.logout(); } catch (_) {}
+        showToast(t('logout_done') || 'Logged out');
+        goToStage('stage-home');
+    });
+    const btnUnlinkDevice = document.getElementById('btn-settings-unlink-device');
+    if (btnUnlinkDevice) btnUnlinkDevice.addEventListener('click', async () => {
+        const dh = localStorage.getItem('crisp_device_id_v2')
+                || localStorage.getItem('crisp_device_hash');
+        if (!dh) return;
+        btnUnlinkDevice.disabled = true;
+        try {
+            const r = await A.unlinkDevice(dh);
+            showToast(`${(r && r.unlinked) || 0} reports unlinked`);
+        } catch (_) {
+            showToast('Could not unlink right now');
+        } finally {
+            btnUnlinkDevice.disabled = false;
+        }
+    });
+    const btnSettingsBack = document.getElementById('btn-settings-back');
+    if (btnSettingsBack) btnSettingsBack.addEventListener('click', () => goToStage('stage-home'));
+}
+
+function _completeLogin(linkedCount) {
+    try {
+        if (linkedCount > 0) {
+            showToast(`${linkedCount} reports linked to your account`);
+        } else {
+            showToast(t('login_welcome') || "You're logged in");
+        }
+    } catch (_) {}
+    goToStage('stage-home');
+}
+
+function _resetLoginForm() {
+    const step1 = document.querySelector('#stage-login .login-body:not(.login-step2):not(.login-step3)');
+    if (step1) step1.style.display = 'block';
+    const step2 = document.getElementById('login-step2');
+    if (step2) step2.style.display = 'none';
+    const step3 = document.getElementById('login-step3');
+    if (step3) step3.style.display = 'none';
+    const e1 = document.getElementById('login-error');
+    const e2 = document.getElementById('login-verify-error');
+    if (e1) e1.style.display = 'none';
+    if (e2) e2.style.display = 'none';
+    const ci = document.getElementById('login-code-input');
+    if (ci) ci.value = '';
+}
+
+function _startResendCountdown() {
+    const btn = document.getElementById('btn-login-resend');
+    const span = document.getElementById('login-resend-countdown');
+    if (!btn) return;
+    btn.disabled = true;
+    let remaining = 30;
+    if (span) span.textContent = ` (${remaining}s)`;
+    const id = setInterval(() => {
+        remaining -= 1;
+        if (span) span.textContent = remaining > 0 ? ` (${remaining}s)` : '';
+        if (remaining <= 0) {
+            clearInterval(id);
+            btn.disabled = false;
+        }
+    }, 1000);
+    btn.onclick = () => {
+        if (btn.disabled) return;
+        // Re-send code path: trigger step 1 button's handler programmatically.
+        document.getElementById('btn-login-send-code').click();
+    };
+}
+
+// Populate the country-code <select> with device-default selection
+// (user spec answer 4: "default select device location based currency" —
+// interpreted as device locale-based country → E.164 country code).
+function populateCountryCodes() {
+    const sel = document.getElementById('login-cc-select');
+    if (!sel) return;
+    // Short common list — full 200 countries would be overkill for a crisis
+    // reporter app. Covers UNDP pilot geographies + common expat sources.
+    const list = [
+        { code: '+91',  cc: 'IN', label: 'India (+91)' },
+        { code: '+1',   cc: 'US', label: 'USA / Canada (+1)' },
+        { code: '+44',  cc: 'GB', label: 'United Kingdom (+44)' },
+        { code: '+254', cc: 'KE', label: 'Kenya (+254)' },
+        { code: '+234', cc: 'NG', label: 'Nigeria (+234)' },
+        { code: '+880', cc: 'BD', label: 'Bangladesh (+880)' },
+        { code: '+92',  cc: 'PK', label: 'Pakistan (+92)' },
+        { code: '+94',  cc: 'LK', label: 'Sri Lanka (+94)' },
+        { code: '+977', cc: 'NP', label: 'Nepal (+977)' },
+        { code: '+62',  cc: 'ID', label: 'Indonesia (+62)' },
+        { code: '+63',  cc: 'PH', label: 'Philippines (+63)' },
+        { code: '+20',  cc: 'EG', label: 'Egypt (+20)' },
+        { code: '+212', cc: 'MA', label: 'Morocco (+212)' },
+        { code: '+971', cc: 'AE', label: 'UAE (+971)' },
+        { code: '+966', cc: 'SA', label: 'Saudi Arabia (+966)' },
+        { code: '+7',   cc: 'RU', label: 'Russia (+7)' },
+        { code: '+86',  cc: 'CN', label: 'China (+86)' },
+        { code: '+81',  cc: 'JP', label: 'Japan (+81)' },
+        { code: '+33',  cc: 'FR', label: 'France (+33)' },
+        { code: '+49',  cc: 'DE', label: 'Germany (+49)' },
+        { code: '+34',  cc: 'ES', label: 'Spain (+34)' },
+        { code: '+55',  cc: 'BR', label: 'Brazil (+55)' },
+        { code: '+52',  cc: 'MX', label: 'Mexico (+52)' },
+    ];
+    sel.innerHTML = list.map((c) => `<option value="${c.code}" data-cc="${c.cc}">${c.label}</option>`).join('');
+    // Device-locale default. navigator.language gives e.g. "en-IN" — we
+    // take the region part for the country code match.
+    try {
+        const locale = (navigator.language || 'en-IN').replace('_', '-');
+        const region = (locale.split('-')[1] || 'IN').toUpperCase();
+        const match = list.find((c) => c.cc === region);
+        if (match) sel.value = match.code;
+    } catch (_) {
+        sel.value = '+91';
+    }
+}
+
+function setupV3StageNavigation() {
+    const pairs = [
+        { id: 'btn-where-back',   stage: 'stage-where',  dir: 'prev' },
+        { id: 'btn-where-next',   stage: 'stage-where',  dir: 'next' },
+        { id: 'btn-infra-back',   stage: 'stage-infra',  dir: 'prev' },
+        { id: 'btn-infra-next',   stage: 'stage-infra',  dir: 'next' },
+        { id: 'btn-crisis-back',  stage: 'stage-crisis', dir: 'prev' },
+        { id: 'btn-crisis-next',  stage: 'stage-crisis', dir: 'next' },
+        { id: 'btn-extras-back',  stage: 'stage-extras', dir: 'prev' },
+        { id: 'btn-extras-next',  stage: 'stage-extras', dir: 'next' },
+    ];
+    for (const { id, stage, dir } of pairs) {
+        const btn = document.getElementById(id);
+        if (!btn) continue;
+        btn.addEventListener('click', () => {
+            if (dir === 'next' && !_validateV3Stage(stage)) return;
+            const target = dir === 'next' ? nextStageId(stage) : prevStageId(stage);
+            if (target) goToStage(target);
+        });
+    }
+    // Listen for crisis selections so stage-extras can pre-fetch applicable
+    // W6 modules + render them when the user arrives. Already hooked via
+    // fetchApplicableModules on chip tap; this adds the render step.
+    document.addEventListener('stage-entered', (ev) => {
+        if (!ev) return;
+        if (ev.detail === 'stage-extras') {
+            try { renderW6Modules(); } catch (e) { console.warn('[v3] W6 render failed:', e); }
+        }
+        if (ev.detail === 'stage-where') {
+            try { _refreshV3AutoMeta(); } catch (e) { console.warn('[v3] auto-meta failed:', e); }
+        }
+    });
+    // Repaint the auto-meta panel once per minute while the user is on
+    // stage-where, so the "Time (auto)" value stays current without
+    // forcing a re-entry. setInterval is a no-op on other stages.
+    setInterval(() => {
+        const where = document.getElementById('stage-where');
+        if (where && where.classList.contains('active')) _refreshV3AutoMeta();
+    }, 60 * 1000);
+    // GPS-ready → refresh the location row immediately (no waiting).
+    document.addEventListener('gps-ready', () => _refreshV3AutoMeta());
+}
+
+/** Paint the stage-where auto-meta panel — purely client-side, zero-wait.
+ *  Date/time comes from `new Date()` using the user's device locale +
+ *  timezone; the location row shows the reverse-geocoded place name when
+ *  available, or the raw lat/lng, or the localized "Detecting..." string
+ *  while GPS is still resolving. */
+function _refreshV3AutoMeta() {
+    const timeEl = document.getElementById('v3-auto-time');
+    const locEl = document.getElementById('v3-auto-loc');
+    if (timeEl) {
+        try {
+            const now = new Date();
+            // Human-friendly: "Wed 23 Apr · 14:35". Uses device locale.
+            const dateLocale = (typeof state !== 'undefined' && state.lang) ? state.lang : undefined;
+            const datePart = now.toLocaleDateString(dateLocale, { weekday: 'short', day: '2-digit', month: 'short' });
+            const timePart = now.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' });
+            timeEl.textContent = `${datePart} · ${timePart}`;
+        } catch (_) {
+            timeEl.textContent = new Date().toISOString().replace('T', ' ').slice(0, 16);
+        }
+    }
+    if (locEl) {
+        if (state.locationName) {
+            locEl.textContent = state.locationName;
+        } else if (state.location && Number.isFinite(state.location.lat) && Number.isFinite(state.location.lng)) {
+            locEl.textContent = `${state.location.lat.toFixed(4)}, ${state.location.lng.toFixed(4)}`;
+        } else {
+            locEl.textContent = (typeof t === 'function' ? t('loc_status') : null) || 'Detecting...';
+        }
+    }
+}
+
+/** Gate the Continue button on each v3 stage. Returns true when the stage
+ *  has enough data to move forward; shows a toast and returns false otherwise.
+ *  The validators are intentionally light — we don't block on optional fields
+ *  (building name, service status) but do require the headline chip pick so
+ *  downstream stages have something meaningful to render. */
+function _validateV3Stage(stageId) {
+    if (stageId === 'stage-where') {
+        // Damage class is pre-selected PARTIAL by default so this passes
+        // unless the user deselects everything (unusual). Location is soft
+        // — users can submit without GPS on slow / no-signal devices.
+        if (!state.damageClass) {
+            try { showToast(t('photo_required') || 'Please pick a damage level', 'info'); } catch (_) {}
+            return false;
+        }
+        return true;
+    }
+    if (stageId === 'stage-infra') {
+        if (!state.infraType) {
+            try { showToast(t('photo_required') || 'Please pick what was damaged', 'info'); } catch (_) {}
+            return false;
+        }
+        return true;
+    }
+    if (stageId === 'stage-crisis') {
+        if (!state.crisisType) {
+            try { showToast(t('photo_required') || 'Please pick a crisis type', 'info'); } catch (_) {}
+            return false;
+        }
+        return true;
+    }
+    if (stageId === 'stage-extras') {
+        // Extras are all optional. Always permit advance.
+        return true;
+    }
+    return true;
+}
+
+/** W6 applicable-modules minimal renderer. Paints a simple list inside
+ *  #v3-w6-modules-slot showing which UNDP-Appendix modules apply to the
+ *  current crisis. Full inline form renderers (single_select / multi_select
+ *  / short_text / …) are a follow-up sprint; for now we surface the titles
+ *  so an evaluator sees the YAML framework is wired end-to-end. */
+function renderW6Modules() {
+    const slot = document.getElementById('v3-w6-modules-slot');
+    if (!slot) return;
+    const mods = Array.isArray(state.applicableModules) ? state.applicableModules : [];
+    if (mods.length === 0) {
+        slot.innerHTML = '';
+        return;
+    }
+    const heading = '<p class="block-label"><i class="fa-solid fa-list-check" style="color:var(--accent);"></i> UNDP extras</p>';
+    const items = mods.map((m) => {
+        const title = (m && (m.title || m.id)) || 'Module';
+        const hint = (m && m.description) ? `<br><span style="opacity:0.7;font-size:11px;">${escapeHtmlSimple(String(m.description))}</span>` : '';
+        return `<li class="v3-w6-item">${escapeHtmlSimple(String(title))}${hint}</li>`;
+    }).join('');
+    slot.innerHTML = `<div class="review-block v3-w6-block">${heading}<ul class="v3-w6-list">${items}</ul></div>`;
+}
+
 function setupSendStage() {
     // Phase 6: stage-send may or may not exist (it's left in the DOM for
     // backward compat but the new flow doesn't navigate there). Guard every
@@ -5307,7 +6950,7 @@ function setupSendStage() {
             showToast(t('delete_no_reports'), 'info');
             return;
         }
-        if (!confirm(t('delete_all_confirm'))) return;
+        if (!(await crispConfirm(t('delete_all_confirm'), 'confirm_delete', 'confirm_no'))) return;
         _daBtn.disabled = true;
         _daBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('delete_deleting')}`;
         try {
@@ -6053,7 +7696,7 @@ function renderReportDetail(r) {
 
 /** Confirm + delete flow. Falls back to the offline queue when fetch fails. */
 async function confirmDeleteReport(r) {
-    if (!confirm(t('rd_delete_confirm_prompt'))) return;
+    if (!(await crispConfirm(t('rd_delete_confirm_prompt'), 'confirm_delete', 'confirm_no'))) return;
     const id = r.id || r.client_report_id;
     try {
         if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -6178,6 +7821,81 @@ function showToast(message, duration = 3000) {
         setTimeout(() => toast.remove(), 300);
     }, duration);
 }
+
+// ── Custom confirm dialog ───────────────────────────────────────────────────
+// Drop-in promise-returning replacement for native `window.confirm()`.
+// Previously 11 call-sites in app.js used `window.confirm()` which (a)
+// cannot be translated (browser-chrome language only), (b) blocks the
+// JS event loop, (c) is styled by the OS rather than CRISP's brand.
+// This helper mirrors the existing `#image-delete-confirm` modal pattern
+// (see index.html lines 97-106): a centred sheet with Cancel + Confirm
+// buttons, backdrop click closes as Cancel, Escape closes as Cancel.
+// Returns a Promise<boolean> — `true` for confirm, `false` for cancel.
+function crispConfirm(message, yesKey, noKey) {
+    return new Promise((resolve) => {
+        const yesLabel = (yesKey && t(yesKey)) || t('confirm_yes');
+        const noLabel = (noKey && t(noKey)) || t('confirm_no');
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'crisp-confirm-backdrop';
+        backdrop.setAttribute('role', 'dialog');
+        backdrop.setAttribute('aria-modal', 'true');
+        backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
+
+        const sheet = document.createElement('div');
+        sheet.className = 'crisp-confirm-sheet';
+        sheet.style.cssText = 'background:var(--surface,#fff);color:var(--text,#1e293b);border-radius:20px;max-width:340px;width:100%;padding:24px 20px;box-shadow:0 12px 40px rgba(0,0,0,0.4);text-align:center;';
+        const body = document.createElement('p');
+        body.className = 'crisp-confirm-body';
+        body.textContent = String(message || '');
+        body.style.cssText = 'margin:0 0 20px;font-size:1rem;line-height:1.5;font-weight:500;white-space:pre-wrap;';
+
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:10px;';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'crisp-confirm-cancel';
+        cancelBtn.textContent = noLabel;
+        cancelBtn.style.cssText = 'flex:1;padding:14px;border-radius:14px;border:1px solid var(--border,rgba(0,0,0,0.08));background:var(--surface2,#f1f5f9);color:var(--text,#1e293b);font-weight:700;font-size:1rem;cursor:pointer;';
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.className = 'crisp-confirm-ok';
+        confirmBtn.textContent = yesLabel;
+        confirmBtn.style.cssText = 'flex:1;padding:14px;border-radius:14px;border:none;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-weight:800;font-size:1rem;cursor:pointer;';
+
+        row.appendChild(cancelBtn);
+        row.appendChild(confirmBtn);
+        sheet.appendChild(body);
+        sheet.appendChild(row);
+        backdrop.appendChild(sheet);
+        document.body.appendChild(backdrop);
+
+        function cleanup(result) {
+            document.removeEventListener('keydown', onKey);
+            backdrop.remove();
+            resolve(result);
+        }
+        function onKey(ev) {
+            if (ev.key === 'Escape') cleanup(false);
+            else if (ev.key === 'Enter') cleanup(true);
+        }
+
+        cancelBtn.addEventListener('click', () => cleanup(false));
+        confirmBtn.addEventListener('click', () => cleanup(true));
+        backdrop.addEventListener('click', (e) => {
+            if (e.target === backdrop) cleanup(false);
+        });
+        document.addEventListener('keydown', onKey);
+        // Autofocus the confirm button so keyboard + screen-reader users
+        // can act immediately.
+        setTimeout(() => confirmBtn.focus(), 0);
+    });
+}
+// Expose globally so Playwright + any late-bound handler can call it
+// without reaching into module scope.
+window.crispConfirm = crispConfirm;
 
 // ─── Capture-state reset ────────────────────────────────────────────────────
 // Field-report bug (Apr 2026): after a successful submit, the user reported
@@ -6389,6 +8107,21 @@ function setupImageViewer() {
 
 // ── Boot ───────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+    // UI v2 — flag the body so CSS can scope v2-only chip / header styles
+    // without a runtime media-query check. Setting before setupPhotoStage
+    // ensures the `body[data-ui-v2] .chip-btn { min-height: 96px }` rule
+    // applies before the first paint of the review chips.
+    if (UI_V2_ENABLED) {
+        document.body.dataset.uiV2 = 'on';
+    }
+    if (UI_V3_ENABLED) {
+        document.body.dataset.uiV3 = 'on';
+        // Phase B4 (Apr 2026) — relocate the chip + service + location blocks
+        // out of stage-review into the new v3 stages BEFORE setupReviewStage
+        // binds its handlers. Same DOM nodes, different parents — handlers
+        // attach to the right elements in their final resting place.
+        try { migrateV3Blocks(); } catch (e) { console.warn('[v3] block migration failed:', e); }
+    }
     // 1. Setup stage modules first
     setupPhotoStage();
     setupCameraModal();
@@ -6396,6 +8129,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupAudioStage();
     setupReviewStage();
     setupSendStage();
+    // Phase B2 (Apr 2026 UI v3) — wire the free-text building-name fallback.
+    // See the <div id="building-free-text-block"> in index.html.
+    setupBuildingFreeText();
+    // Phase B4 (Apr 2026 UI v3) — wire the 4 new stage Continue/Back buttons.
+    if (UI_V3_ENABLED) {
+        try { setupV3StageNavigation(); } catch (e) { console.warn('[v3] nav wiring failed:', e); }
+    }
+    // Phase 1 (Apr 2026 — Optional reporter login). Must run AFTER
+    // AuthStore is loaded (auth.js imported before app.js in index.html)
+    // so the init() call below picks up any persisted session.
+    try { setupAuthUI(); } catch (e) { console.warn('[auth] UI wiring failed:', e); }
+    if (window.AuthStore && typeof window.AuthStore.init === 'function') {
+        window.AuthStore.init().catch((e) => console.warn('[auth] init:', e));
+    }
 
     // 2. Start language detection (it will call applyI18n when ready or fallback)
     detectAndSetupLanguage();
@@ -6489,11 +8236,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // 8. Setup start button. Phase 4 (Apr 2026): the auto-submit timer is
-    // armed inside goToStage() via inactivityManager.start() when the stage
-    // transitions to photo/audio/review. tryArm() is a silent no-op when
-    // the user's GPS isn't inside an enabled region, so this is safe.
-    document.getElementById('btn-start').addEventListener('click', () => goToStage('stage-photo'));
+    // 8. Setup start button. Phase 4 (Apr 2026, v3 Apr 2026): the auto-submit
+    // timer is armed inside goToStage() via inactivityManager.tryArm({bustCache:true})
+    // on every stage transition away from home/success. bustCache=true forces a
+    // fresh `/regions/enabled` fetch so dashboard-flipped regions propagate
+    // immediately (was 24 h before). tryArm() also gates on hasMinimumInput()
+    // and is a silent no-op outside any enabled region, so start is safe.
+    // Phase B4 (Apr 2026 UI v3) — start button lands on stage-where when v3
+    // is on so the flow opens with location + damage. Legacy v2 goes straight
+    // to stage-photo. The choice of entry point is the ONLY difference
+    // visible to the user at this instant; subsequent navigation uses
+    // nextStageId() which reads UI_V3_ENABLED once.
+    document.getElementById('btn-start').addEventListener('click', () => {
+        goToStage(UI_V3_ENABLED ? 'stage-where' : 'stage-photo');
+    });
 
     // 9. Delete My Data — check if device has reports, show/hide button
     const delBtn = document.getElementById('btn-delete-my-data');
@@ -6571,21 +8327,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     window.deleteOneReport = async (reportId, btn) => {
-        if (!confirm(t('delete_confirm') || 'Delete this report? Your data will be permanently deleted within 24 hours. You can undo this within that time.')) return;
+        const promptMsg = t('delete_confirm') !== 'delete_confirm'
+            ? t('delete_confirm')
+            : t('rd_delete_confirm_prompt');
+        if (!(await crispConfirm(promptMsg, 'confirm_delete', 'confirm_no'))) return;
         btn.disabled = true;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
         try {
             const res = await fetch(`${API_BASE}/reports/${reportId}`, { method: 'DELETE' });
             if (res.ok) {
                 const result = await res.json();
-                alert(result.message || 'Your data will be permanently deleted within 24 hours.');
+                showToast(result.message || t('delete_requested_alert'));
                 // Refresh list to show undo option
                 setTimeout(async () => {
                     await _checkDeviceReports();
                     _renderDeleteList(delBtn._reports || []);
                 }, 400);
             }
-        } catch (_) { alert('Could not reach server.'); }
+        } catch (_) { showToast(t('delete_server_unreachable')); }
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-trash"></i>';
     };
@@ -6602,9 +8361,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }, 300);
             } else {
                 const err = await res.json().catch(() => ({}));
-                alert(err.detail || 'Could not undo deletion.');
+                showToast(err.detail || t('delete_undo_failed'));
             }
-        } catch (_) { alert('Could not reach server.'); }
+        } catch (_) { showToast(t('delete_server_unreachable')); }
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-rotate-left"></i> Undo';
     };
@@ -6656,7 +8415,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (ddpDeleteAll) {
         ddpDeleteAll.addEventListener('click', async () => {
-            if (!confirm('This will permanently delete ALL your submitted reports and media from the server. This cannot be undone.\n\nContinue?')) return;
+            if (!(await crispConfirm(t('delete_all_server_confirm'), 'confirm_delete', 'confirm_no'))) return;
             const deviceId = localStorage.getItem('crisp_device_id');
             if (!deviceId) return;
             ddpDeleteAll.disabled = true;
@@ -6668,10 +8427,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     localStorage.removeItem('crisp_device_id');
                     localStorage.removeItem('crisp_privacy_consent');
                     try { const db = await openIDB(); const tx = db.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).clear(); } catch(_){}
-                    alert(`${result.deleted} report(s) deleted.\nAll local data cleared.`);
-                    location.reload();
+                    showToast(t('delete_all_success_count').replace('{n}', String(result.deleted)));
+                    setTimeout(() => location.reload(), 600);
                 }
-            } catch (_) { alert('Could not reach server.'); }
+            } catch (_) { showToast(t('delete_server_unreachable')); }
             ddpDeleteAll.disabled = false;
             ddpDeleteAll.innerHTML = '<i class="fa-solid fa-trash-can"></i> Delete All Reports';
         });

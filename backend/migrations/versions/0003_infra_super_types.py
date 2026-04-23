@@ -100,10 +100,28 @@ def downgrade() -> None:
     # Best-effort downgrade: collapse RESIDENTIAL/COMMUNITY/TRANSPORT/UTILITY
     # back to the first legacy chip we find via sub_type. If sub_type is
     # empty the row cannot be round-tripped losslessly.
+    #
+    # Portability note (Apr 2026 — full-Postgres switch): the original
+    # code wrote `infrastructure_sub_type` (varchar) straight into
+    # `infrastructure_type` (infratypeenum). On SQLite the enum is just a
+    # CHECK constraint so the cast is implicit; on Postgres it's a real
+    # enum TYPE and the UPDATE fails with "column 'infrastructure_type'
+    # is of type infratypeenum but expression is of type character
+    # varying". Explicit `::infratypeenum` cast makes it portable.
+    #
+    # Further caveat: we ALSO constrain the cast to values that ARE in
+    # the enum — a sub_type value like 'HOSPITAL' that WAS originally a
+    # legacy chip is still in the enum (migration 0003 only ADDED the
+    # UNDP super-types; it didn't REMOVE the legacy labels). So the
+    # cast is safe for every value that legitimately came from the
+    # original write path.
     op.execute(sa.text(
         "UPDATE reports "
-        "SET infrastructure_type = infrastructure_sub_type "
-        "WHERE infrastructure_sub_type IS NOT NULL AND infrastructure_sub_type != ''"
+        "SET infrastructure_type = infrastructure_sub_type::infratypeenum "
+        "WHERE infrastructure_sub_type IS NOT NULL "
+        "  AND infrastructure_sub_type != '' "
+        "  AND infrastructure_sub_type IN ("
+        "    SELECT unnest(enum_range(NULL::infratypeenum))::text)"
     ))
     if _has_column("reports", "infrastructure_sub_type"):
         with op.batch_alter_table("reports") as batch_op:

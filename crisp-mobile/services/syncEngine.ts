@@ -235,12 +235,29 @@ async function syncReport(report: QueuedReport): Promise<void> {
 let _BINARY_CHUNKS_ENABLED = true;
 let _BINARY_FALLBACK_404 = false;   // session-scoped sticky flag on 404
 
+// Apr 2026 — capability detection: React-Native's Blob constructor does
+// NOT accept ArrayBuffer/Uint8Array parts ("Creating blobs from
+// 'ArrayBuffer' and 'ArrayBufferView' are not supported"). The PWA
+// Blob does. This happens synchronously at chunk-post time, BEFORE the
+// fetch, so the HTTP-404 sticky-fallback never fires. Probe capability
+// at module load and permanently pin the base64 path when bytes-into-
+// Blob isn't available, so RN always uses the legacy chunk endpoint.
+let _BINARY_CAPABLE = true;
+try {
+  // eslint-disable-next-line no-new
+  new Blob([new Uint8Array([1, 2, 3])] as any, { type: 'application/octet-stream' });
+} catch {
+  _BINARY_CAPABLE = false;
+  _BINARY_FALLBACK_404 = true;   // permanent for this session
+  console.log('[Sync] Blob-from-bytes unsupported on this platform — pinning base64 chunk path');
+}
+
 export function setBinaryChunksEnabled(on: boolean): void {
   _BINARY_CHUNKS_ENABLED = !!on;
-  if (on) _BINARY_FALLBACK_404 = false;
+  if (on && _BINARY_CAPABLE) _BINARY_FALLBACK_404 = false;
 }
 export function isBinaryChunksEnabled(): boolean {
-  return _BINARY_CHUNKS_ENABLED && !_BINARY_FALLBACK_404;
+  return _BINARY_CHUNKS_ENABLED && _BINARY_CAPABLE && !_BINARY_FALLBACK_404;
 }
 
 // ── Upload-bandwidth probe (Apr 2026) ──────────────────────────────────────

@@ -115,3 +115,99 @@ class TestBuildingVersioning:
         id2 = r2.json().get("building_id")
         if id1 and id2:
             assert id1 == id2
+
+
+class TestPurgeEndpoints:
+    """Admin-only purge endpoints gated by X-Admin-Key (NOT JWT).
+
+    `verify_admin_key` is a module-level dependency reading
+    `app.main.ADMIN_KEY`. In the test environment that var is "" (APP_ENV=dev
+    + no CRISP_ADMIN_KEY), which makes the dependency raise 503. We monkey-
+    patch the attribute so the endpoint treats our header as valid — same
+    effect as setting the env var before Uvicorn boot.
+    """
+
+    def test_purge_all_pending_requires_admin_and_removes_soft_deleted(
+        self, client, sample_report, admin_token, monkeypatch,
+    ):
+        import app.main as app_main
+        monkeypatch.setattr(app_main, "ADMIN_KEY", "test-purge-key")
+
+        rid = sample_report["id"]
+
+        # Soft-delete via admin dashboard endpoint.
+        del_res = client.delete(
+            f"/api/v1/reports/{rid}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert del_res.status_code == 200
+
+        # Without the header → 403.
+        forbid = client.post("/api/v1/reports/purge-all-pending")
+        assert forbid.status_code == 403
+
+        # With the header → success + row gone.
+        ok = client.post(
+            "/api/v1/reports/purge-all-pending",
+            headers={"X-Admin-Key": "test-purge-key"},
+        )
+        assert ok.status_code == 200
+        assert ok.json()["purged"] >= 1
+
+        # Row is hard-deleted — confirm at the DB level (the module has no
+        # GET-by-id endpoint, so we inspect the row directly).
+        from tests.conftest import TestSessionLocal
+        from app.models.report import Report
+        s = TestSessionLocal()
+        try:
+            assert s.query(Report).filter(Report.id == rid).first() is None
+        finally:
+            s.close()
+
+    def test_purge_expired_returns_count(self, client, monkeypatch):
+        """POST /purge-expired → {"purged": <n>}. Returns 0 on a clean DB
+        and correctly counts rows whose grace window has elapsed (we
+        back-date one Report to force that branch).
+        """
+        import app.main as app_main
+        monkeypatch.setattr(app_main, "ADMIN_KEY", "test-purge-key")
+
+        # Empty-state path.
+        res = client.post(
+            "/api/v1/reports/purge-expired",
+            headers={"X-Admin-Key": "test-purge-key"},
+        )
+        assert res.status_code == 200
+        assert res.json() == {"purged": 0}
+
+        # Seed one report, mark it deleted, back-date requested_at to put
+        # it past the 24h grace window.
+        from datetime import datetime, timezone, timedelta
+        from tests.conftest import TestSessionLocal
+        from app.models.report import Report
+
+        meta = client.post("/api/v1/reports/meta", json={
+            "device_hash": "PURGE-DEV-001",
+            "client_report_id": f"purge-{datetime.now().timestamp()}",
+            "source": "APP", "severity": "MODERATE",
+            "infrastructure_type": "ROAD", "expected_media": 0,
+            "location": {"latitude": 11.0, "longitude": 22.0},
+        })
+        assert meta.status_code == 201
+        rid = meta.json()["id"]
+
+        s = TestSessionLocal()
+        try:
+            r = s.query(Report).filter(Report.id == rid).first()
+            r.deletion_requested_at = datetime.now(timezone.utc) - timedelta(days=2)
+            r.deletion_grace_minutes = 1440  # 24h — expired 24h ago
+            s.commit()
+        finally:
+            s.close()
+
+        res = client.post(
+            "/api/v1/reports/purge-expired",
+            headers={"X-Admin-Key": "test-purge-key"},
+        )
+        assert res.status_code == 200
+        assert res.json()["purged"] >= 1

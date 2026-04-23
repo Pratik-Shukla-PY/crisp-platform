@@ -1,0 +1,90 @@
+# UNDP Appendix-1 modular form — Livelihoods impact (post-crisis follow-up).
+#
+# This is a SAMPLE module demonstrating CRISP's YAML-driven form framework.
+# Operators author modules like this one, drop the file into
+# `backend/app/modules/`, and the `/api/v1/modules` endpoint exposes it to
+# both the PWA and RN capture flows without any code change.
+#
+# Field types supported:
+#   single_select   — radio buttons / big tiles (mobile-friendly)
+#   multi_select    — checkbox chip row
+#   short_text      — single-line text input, 120-char cap
+#   long_text       — multi-line textarea, 2000-char cap
+#   integer         — numeric input, min/max supported
+#   yes_no          — two-button toggle (explicit, not a checkbox)
+#
+# All prompts + options are free-text; the client renders them verbatim
+# after passing through its local `t()` translator. A `labelKey` field
+# lets operators target a pre-translated i18n key when the module is
+# shipped with a locale pack.
+
+id: livelihoods
+version: 1
+title: Livelihoods impact (post-crisis)
+title_key: module_livelihoods_title
+description: >
+  Short follow-up module asked of reporters 4+ weeks after a crisis,
+  aimed at understanding the economic knock-on effect on households.
+applies_to:
+  crisis_types: ["FLOOD", "EARTHQUAKE", "CYCLONE", "TSUNAMI", "LANDSLIDE",
+                 "WILDFIRE", "CONFLICT", "CIVIL_UNREST"]
+  # Modules can also gate on infrastructure_type, damage_classification,
+  # or time-since-submission. Evaluator examples below — keep empty to
+  # fire for every report.
+  infrastructure_types: []
+  min_hours_since_report: 0
+
+fields:
+  - key: primary_income_status
+    type: single_select
+    label: What is your household's primary income source status?
+    label_key: mod_liv_income_status
+    required: true
+    options:
+      - value: fully_restored
+        label: Fully restored
+        label_key: mod_liv_income_fully
+      - value: partially_restored
+        label: Partially restored
+        label_key: mod_liv_income_partial
+      - value: lost_entirely
+        label: Lost entirely
+        label_key: mod_liv_income_lost
+      - value: never_had
+        label: Did not have a stable income before the crisis
+        label_key: mod_liv_income_none
+      - value: prefer_not_say
+        label: Prefer not to say
+        label_key: mod_liv_income_pns
+
+  - key: affected_sectors
+    type: multi_select
+    label: Which work sectors were affected?
+    label_key: mod_liv_sectors
+    options:
+      - { value: farming,       label: Farming / agriculture,  label_key: mod_liv_sec_farming }
+      - { value: fishing,       label: Fishing / aquaculture,  label_key: mod_liv_sec_fishing }
+      - { value: construction,  label: Construction / trade,   label_key: mod_liv_sec_construction }
+      - { value: retail,        label: Retail / small business,label_key: mod_liv_sec_retail }
+      - { value: services,      label: Services (tourism, transport, other),
+                                                                label_key: mod_liv_sec_services }
+      - { value: public_sector, label: Public sector / admin,  label_key: mod_liv_sec_public }
+      - { value: other,         label: Other,                   label_key: mod_liv_sec_other }
+
+  - key: household_size
+    type: integer
+    label: How many people depend on this income?
+    label_key: mod_liv_household_size
+    min: 1
+    max: 30
+
+  - key: needs_cash_support
+    type: yes_no
+    label: Does the household need immediate cash support?
+    label_key: mod_liv_cash_support
+
+  - key: comments
+    type: long_text
+    label: Anything else we should know? (optional)
+    label_key: mod_liv_comments
+    max_length: 2000

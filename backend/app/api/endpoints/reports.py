@@ -38,7 +38,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "uploads")
+# Apr 2026 — env-configurable upload dir. Prod defaults to `backend/uploads/`;
+# pytest's conftest overrides via CRISP_UPLOAD_DIR so test-generated media
+# lands in a separate dir (`backend/uploads_test/`) that's safe to wipe on
+# session teardown. Production uploads are therefore NEVER touched by pytest.
+_UPLOAD_DEFAULT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+    "uploads",
+)
+UPLOAD_DIR = os.environ.get("CRISP_UPLOAD_DIR", _UPLOAD_DEFAULT)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # P2.2 — bounded thread pool for background assembly.
@@ -274,8 +282,48 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
             db.commit()
             _ai_executor.submit(_run_server_pii_blur, filepath, filename, media_id)
 
+        # Apr 2026 UI v2.1 — UNDP nice-to-have #3: redundancy detection.
+        # Compute the perceptual hash of the assembled photo in the AI
+        # executor (non-blocking). Result lands on `media.photo_phash`
+        # and drives the dashboard's "possible duplicate" badge. Audio
+        # and legacy rows remain NULL. Schedules AFTER the PII-blur
+        # submit above so the hash is computed over the redacted pixels
+        # when server-side blur runs — the dashboard's dedup check
+        # therefore sees post-blur fingerprints, consistent with what
+        # the admin actually views.
+        _ai_executor.submit(_run_photo_phash, filepath, media_id)
+
     logger.info(f"Assembled {media_id}: {len(file_bytes):,} bytes → {filename}")
     return f"/static/{filename}"
+
+
+def _run_photo_phash(filepath: str, media_id: str) -> None:
+    """Compute + persist perceptual hash of an assembled photo.
+
+    Fire-and-forget helper invoked from `_assemble_media_file` after the
+    PII-blur submission. Opens a short-lived DB session so we don't piggy-
+    back on the caller's transaction. Any failure is logged + swallowed —
+    `photo_phash` stays NULL and the dashboard treats that as "not yet
+    scanned" rather than "unique".
+    """
+    from app.services.phash import compute_phash
+    from app.db.session import SessionLocal as _SL
+    try:
+        h = compute_phash(filepath)
+        if not h:
+            logger.info(f"[pHash] {media_id}: no hash computed (unavailable or non-image)")
+            return
+        _db = _SL()
+        try:
+            _db.query(Media).filter(Media.id == media_id).update(
+                {'photo_phash': h}, synchronize_session=False
+            )
+            _db.commit()
+            logger.info(f"[pHash] {media_id}: stored {h}")
+        finally:
+            _db.close()
+    except Exception as e:                          # pragma: no cover
+        logger.warning(f"[pHash] {media_id}: failed: {e}")
 
 
 def _run_server_pii_blur(filepath: str, filename: str, media_id: str) -> None:
@@ -1132,7 +1180,12 @@ def _purge_expired_deletions(db: Session):
     pending = db.query(Report).filter(Report.deletion_requested_at != None).all()
     expired = []
     for r in pending:
-        grace = r.deletion_grace_minutes or 1440
+        # `or 1440` would silently rewrite an explicit `grace=0` (which
+        # the mobile "purge immediately" path uses) into a 24-hour
+        # grace, so a user who asked to delete a report NOW would
+        # actually wait a full day. `is None` is the correct null-
+        # coalesce — 0 is a legitimate value meaning "no grace".
+        grace = r.deletion_grace_minutes if r.deletion_grace_minutes is not None else 1440
         # Coerce to UTC safely regardless of whether the column returned
         # a naive datetime (SQLite behaviour — DateTime(timezone=True) is
         # advisory there, values come back without tzinfo) or a real
@@ -1266,12 +1319,49 @@ def purge_all_pending_deletions(request: Request, db: Session = Depends(get_db))
 
 
 # ── Progressive Upload: Stage 1 — metadata only (tiny, instant) ───────────────
+def _optional_user_from_auth(request: Request, db: Session):
+    """Phase 1 (Apr 2026 — Optional reporter login) — extract the
+    authenticated user from a Bearer token IF one is present, return
+    None otherwise. Never raises: an expired / invalid token silently
+    falls back to anonymous submission (crisis-reporting posture — we
+    ALWAYS accept the report, even if we can't attribute it).
+    """
+    try:
+        auth = request.headers.get("authorization") or request.headers.get("Authorization")
+        if not auth or not auth.lower().startswith("bearer "):
+            return None
+        token = auth.split(None, 1)[1].strip()
+        if not token:
+            return None
+        from app.core.security import decode_token
+        payload = decode_token(token)
+        if not payload:
+            return None
+        user_id = payload.get("sub") or payload.get("user_id")
+        if not user_id:
+            return None
+        from app.models.auth import User as _User
+        user = db.query(_User).filter(_User.id == user_id).first()
+        if not user or not user.is_active:
+            return None
+        return user
+    except Exception:
+        # Any decoding / query failure → treat as anonymous. Never a 401.
+        return None
+
+
 @router.post("/meta", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
 def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session = Depends(get_db)):
     """
     Stage 1 of progressive upload: Accept metadata only (< 1KB).
     Creates a PARTIAL report immediately. Media follows via PATCH.
+
+    Phase 1 (Apr 2026 — Optional reporter login): if the caller sends
+    an `Authorization: Bearer <token>` header AND the token is valid,
+    the created row is decorated with `user_id`. Invalid/expired tokens
+    are silently ignored — the report still lands as anonymous.
     """
+    auth_user = _optional_user_from_auth(request, db)
     # Rate limit: 30 reports/min per device
     from app.main import check_rate_limit
     if not check_rate_limit(f"meta:{meta_in.device_hash}", 30, 60):
@@ -1326,7 +1416,18 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
 
     # Create report
     report_dict = meta_in.model_dump(exclude={"location", "device_hash"})
-    db_report = Report(**report_dict, device_id=device.id, received_media=0, sync_status=sync)
+    # Phase 1 (Apr 2026 — Optional reporter login): attach user_id if the
+    # client presented a valid Bearer token. Anonymous path leaves it NULL.
+    extra_cols = {}
+    if auth_user is not None:
+        extra_cols["user_id"] = auth_user.id
+    db_report = Report(
+        **report_dict,
+        device_id=device.id,
+        received_media=0,
+        sync_status=sync,
+        **extra_cols,
+    )
     db.add(db_report)
     db.commit()
     db.refresh(db_report)
@@ -1406,6 +1507,16 @@ def update_report_classification(report_id: str, request: dict, db: Session = De
         report.crisis_type = request["crisis_type"]
     if "infrastructure_name" in request and request["infrastructure_name"]:
         report.infrastructure_name = request["infrastructure_name"]
+    # Phase D (Apr 2026 UI v3) — channel bots (Telegram/WhatsApp/SMS) that
+    # prompted the reporter to type the building name in their native
+    # language tag the classify call with `infrastructure_name_from_osm:
+    # False`. Dashboard flags these rows for manual OSM mapping. Accept
+    # explicit False (user typed) and explicit True (future: a channel bot
+    # that has an OSM-backed picker); skip the field entirely when the
+    # client doesn't specify it so back-compat clients aren't forced to
+    # volunteer an answer.
+    if "infrastructure_name_from_osm" in request and request["infrastructure_name_from_osm"] is not None:
+        report.infrastructure_name_from_osm = bool(request["infrastructure_name_from_osm"])
     if "debris_clearing_needed" in request and request["debris_clearing_needed"] is not None:
         report.debris_clearing_needed = request["debris_clearing_needed"]
     if "service_status" in request and request["service_status"]:
@@ -1492,7 +1603,14 @@ async def geocode_from_description(payload: dict):
 
 @router.patch("/{report_id}/location", response_model=ReportResponse)
 def update_report_location(report_id: str, loc_data: dict, db: Session = Depends(get_db)):
-    """Add or update location on an existing report. Used by AI extractor for IVR/SMS."""
+    """Add or update location on an existing report.
+
+    Used by the AI extractor to backfill coords from IVR/SMS traffic (no
+    ``is_user_corrected`` flag → stays False, matching bot-authored data),
+    AND by the dashboard's "pin correction" UI to let an analyst move the
+    marker. Dashboard callers pass ``is_user_corrected: true`` so the row
+    is clearly attributable to a human vs a geocoder.
+    """
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -1504,6 +1622,8 @@ def update_report_location(report_id: str, loc_data: dict, db: Session = Depends
         report.location.device_longitude = loc_data.get("device_longitude", report.location.device_longitude)
         report.location.accuracy_meters = loc_data.get("accuracy_meters", report.location.accuracy_meters)
         report.location.device_location_name = loc_data.get("device_location_name", report.location.device_location_name)
+        if "is_user_corrected" in loc_data:
+            report.location.is_user_corrected = bool(loc_data["is_user_corrected"])
     else:
         # Create new
         db.add(Location(
@@ -1514,6 +1634,7 @@ def update_report_location(report_id: str, loc_data: dict, db: Session = Depends
             device_longitude=loc_data.get("device_longitude"),
             accuracy_meters=loc_data.get("accuracy_meters", 5000),
             device_location_name=loc_data.get("device_location_name"),
+            is_user_corrected=bool(loc_data.get("is_user_corrected", False)),
         ))
     db.commit()
     db.refresh(report)
@@ -3056,12 +3177,118 @@ def _mark_report_verified_for_credibility(report, db: Session) -> None:
 
 @router.get("/building/{building_id}")
 def get_building_history(building_id: str, db: Session = Depends(get_db)):
-    """Get all reports linked to a building, ordered by time (damage progression)."""
+    """Versioned history of all reports tied to one building.
+
+    UNDP brief (Apr 2026): "multiple damage report submissions about the
+    same building, with different levels of damage — the system should
+    support 'versioning' of damage levels, to show the latest, most up-to-
+    date information about the damage status. This most likely would be
+    achieved through biasing towards the most recent, complete damage
+    report submission for a particular location."
+
+    Response shape (Apr 2026 UI v2.1 W4):
+        {
+          "building_id": "osm:way:...",
+          "total": 3,
+          "latest_id":  "<report-id of the freshest complete report>",
+          "reports": [ ...ReportResponse, latest-first... ]
+        }
+
+    Each `ReportResponse` element is augmented in-place with two read-
+    only fields the dashboard renders as a ribbon on the detail panel:
+
+        `building_version_ordinal` — 1-based index within this building's
+            history (1 = latest). Human-rendered as "V 2 of 3".
+        `building_is_latest`       — true for ordinal 1, false otherwise.
+
+    "Latest complete" bias: if a newer report exists but is still in
+    PARTIAL sync status (chunks incomplete), we still consider it the
+    latest. Operators value freshness over "complete" flag. A future
+    tightening would check Media.assembly_status instead — noted in
+    docs/UNDP-ALIGNMENT-CHANGELOG.md for the followup sprint.
+    """
     reports = db.query(Report).filter(
         Report.building_id == building_id,
         Report.deletion_requested_at.is_(None)
-    ).order_by(Report.server_created_at.asc()).all()
-    return [ReportResponse.model_validate(r) for r in reports]
+    ).order_by(Report.server_created_at.desc()).all()
+
+    # Serialise via Pydantic first, then splice the ordinal fields
+    # onto the dicts so JSON emission doesn't require model extension.
+    serialised = [ReportResponse.model_validate(r).model_dump(mode="json") for r in reports]
+    total = len(serialised)
+    latest_id = serialised[0]["id"] if serialised else None
+    for idx, row in enumerate(serialised):
+        row["building_version_ordinal"] = idx + 1
+        row["building_is_latest"] = (idx == 0)
+    return {
+        "building_id": building_id,
+        "total": total,
+        "latest_id": latest_id,
+        "reports": serialised,
+    }
+
+
+@router.get("/media/{media_id}/duplicates")
+def get_media_duplicates(
+    media_id: str,
+    threshold: int = 10,
+    window_hours: int = 24,
+    db: Session = Depends(get_db),
+):
+    """List media rows that are perceptually similar to `media_id`.
+
+    UNDP nice-to-have #3 (redundancy detection): the dashboard hits this
+    endpoint when an operator clicks "Possible duplicate" on a photo.
+    Returns candidates whose pHash Hamming distance ≤ `threshold` (default
+    10 / 64), scoped to the last `window_hours` (default 24 h) so we don't
+    drag in unrelated historical matches. Same-report media is filtered
+    out — a photo is not its own duplicate.
+
+    Scope intentionally time-windowed + hash-filtered — NOT an O(N²) join.
+    The typical working set is a few hundred candidates per crisis cell,
+    which Python-side Hamming filtering dispatches in milliseconds.
+    """
+    from datetime import datetime, timedelta, timezone as _tz
+    from app.services.phash import hamming_distance
+
+    source = db.query(Media).filter(Media.id == media_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Media not found")
+    if not source.photo_phash:
+        # The row hasn't been scanned yet — no false "unique" claim.
+        return {
+            "media_id": media_id, "phash": None,
+            "candidates": [],
+            "message": "photo_phash not yet computed (legacy or pre-assembly)",
+        }
+
+    cutoff = datetime.now(_tz.utc) - timedelta(hours=max(1, window_hours))
+    recent = db.query(Media).filter(
+        Media.id != media_id,
+        Media.photo_phash.isnot(None),
+        Media.created_at >= cutoff,
+    ).limit(2000).all()   # hard safety cap for absurd query windows
+
+    hits = []
+    for m in recent:
+        d = hamming_distance(source.photo_phash, m.photo_phash)
+        if d <= max(0, min(64, threshold)):
+            hits.append({
+                "media_id": m.id,
+                "report_id": m.report_id,
+                "phash": m.photo_phash,
+                "hamming_distance": d,
+                "url": m.url or None,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            })
+    hits.sort(key=lambda x: x["hamming_distance"])
+    return {
+        "media_id": media_id,
+        "phash": source.photo_phash,
+        "threshold": threshold,
+        "window_hours": window_hours,
+        "candidates": hits,
+    }
 
 
 def _auto_assign_building_id(report: Report, db: Session):

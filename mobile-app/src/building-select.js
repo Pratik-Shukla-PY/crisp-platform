@@ -153,17 +153,51 @@
         // building-versioning + the dashboard can pick it up.
         const osmType = element.type || 'way';
         const composite = `osm:${osmType}:${element.id}`;
+        const tags = element.tags || {};
+        // Pick the best human-readable name for the admin dashboard. OSM
+        // conventions in order of usefulness: `name` > `name:en` > the
+        // building/amenity type itself ("hospital", "residential"). If
+        // none are present, leave null and let the indigo "Building
+        // history" pill carry the raw ID.
+        const osmName =
+            tags.name || tags['name:en'] ||
+            (tags.amenity ? `${tags.amenity}`.replace(/_/g, ' ') : null) ||
+            (tags.building && tags.building !== 'yes' ? `${tags.building}`.replace(/_/g, ' ') : null) ||
+            null;
+
         if (window.state) {
             window.state.buildingId = composite;
             window.state.buildingOsmElement = {
                 type: osmType,
                 id: element.id,
-                tags: element.tags || {},
+                tags: tags,
+                name: osmName,
             };
+            // Auto-fill `infrastructure_name` with the OSM name so the
+            // dashboard renders "City Hospital" next to the indigo
+            // Building-history pill. Only overwrite if the user hasn't
+            // manually typed something — respects user intent. Tag with
+            // a flag so `_clearSelection` below only clears what WE set.
+            if (osmName && !(window.state.infraName && window.state.infraName.trim())) {
+                window.state.infraName = osmName;
+                window.state.infraNameFromOsm = true;
+                // Mirror into the textbox if it exists on-screen so the
+                // submitter sees what auto-filled. Bare HTMLInput so no
+                // framework dance.
+                const inp = document.getElementById('input-infra-name');
+                if (inp && !inp.value.trim()) inp.value = osmName;
+            }
         }
         const pill = document.getElementById('building-selected-pill');
-        if (pill) pill.style.display = 'flex';
-        console.log('[BuildingSelect] selected', composite, element.tags || {});
+        if (pill) {
+            pill.style.display = 'flex';
+            // Apr 2026 UI v2.1 — show the OSM name inside the pill so
+            // the reporter gets immediate confirmation of WHAT they
+            // just picked, not just "Building selected" generically.
+            const nameSlot = pill.querySelector('.building-selected-name');
+            if (nameSlot) nameSlot.textContent = osmName || `#${element.id}`;
+        }
+        console.log('[BuildingSelect] selected', composite, osmName || '(no name tag)', tags);
     }
 
     function _clearSelection() {
@@ -176,6 +210,15 @@
         if (window.state) {
             window.state.buildingId = null;
             window.state.buildingOsmElement = null;
+            // Only clear infraName if WE auto-filled it. If the user
+            // typed it manually (infraNameFromOsm is absent / false),
+            // keep their value — they might reselect a nearby building.
+            if (window.state.infraNameFromOsm) {
+                window.state.infraName = '';
+                window.state.infraNameFromOsm = false;
+                const inp = document.getElementById('input-infra-name');
+                if (inp) inp.value = '';
+            }
         }
         const pill = document.getElementById('building-selected-pill');
         if (pill) pill.style.display = 'none';
@@ -195,11 +238,23 @@
         _initInFlight = true;
 
         try {
+            // P5 scroll-lock fix (Apr 2026): explicit wheel/touch/dragging
+            // flags so the outer PWA page scroll reaches past the map
+            // instead of being swallowed by Leaflet's default `passive:
+            // false` wheel handler. Mouse-wheel zoom is disabled on the
+            // field app (buttons + pinch only); keyboard panning is off
+            // because the map lives inside a scroll container where
+            // arrow keys would fight. touchZoom + dragging stay on so
+            // users can still interact; `tap` stays on for mobile hit
+            // detection on building polygons.
             _map = L.map(container, {
                 zoomControl: true,
                 attributionControl: false,
+                scrollWheelZoom: false,
+                touchZoom: true,
                 dragging: true,
                 tap: true,
+                keyboard: false,
             }).setView([lat, lng], 18);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
@@ -239,22 +294,82 @@
         };
     }
 
-    // Wire the <details> expand → map init. The element may or may not
-    // exist yet when this script loads; we poll via a DOM-ready check.
+    // Try to initialise the Leaflet map + placeholder swap. Idempotent:
+    // safe to call multiple times; `ensureMap` itself is idempotent, and
+    // we clear the placeholder only after a successful tile fetch.
+    function _tryInitMap() {
+        const box = document.getElementById('building-select-box');
+        if (!box) return;
+        const loc = window.state && window.state.location;
+        if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) {
+            console.log('[BuildingSelect] waiting for GPS');
+            return;
+        }
+        const placeholder = document.getElementById('building-map-placeholder');
+        if (placeholder) placeholder.style.display = 'none';
+        ensureMap(loc.lat, loc.lng).catch((e) => {
+            console.warn('[BuildingSelect] init failed:', e);
+            // Restore placeholder so the user sees something explain-able.
+            if (placeholder) placeholder.style.display = '';
+        });
+    }
+
+    // Apr 2026 UI v2.1 — wire up the flat <section>. The box is always
+    // present in the DOM; the map initialises the first time the user
+    // lands on v2-page-3 WITH a GPS fix. Previous design hung the
+    // toggle off the <details> `toggle` event; after the flatten we
+    // listen for custom `review-page-changed` and `stage-entered`
+    // events + re-try on GPS-ready. Legacy v1 (collapsible) path still
+    // works — `<details>` would have fired `toggle`; the flat tag does
+    // not, but the explicit page-3 hook below handles both branches.
     function _wire() {
         const box = document.getElementById('building-select-box');
         if (!box) return;
-        box.addEventListener('toggle', () => {
-            if (!box.open) return;
-            const loc = window.state && window.state.location;
-            if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) {
-                console.log('[BuildingSelect] no GPS yet — skipping map init');
+
+        // Trigger 1: the PWA's review pager fires this whenever the user
+        // navigates between pages. We react to page=3.
+        document.addEventListener('review-page-changed', (e) => {
+            if ((e && e.detail && e.detail.page) === 3) _tryInitMap();
+        });
+        // Trigger 2: stage-entered fires on every stage switch, which
+        // catches the case where the user lands directly on review via
+        // the submit-then-edit flow.
+        document.addEventListener('stage-entered', (e) => {
+            if (!e) return;
+            // Phase B4 (Apr 2026 UI v3) — the building-select box now lives
+            // inside stage-crisis (moved there by migrateV3Blocks in app.js).
+            // Init the map the moment the reporter lands there so the
+            // Leaflet overlay is ready WHILE they're picking a crisis type.
+            if (e.detail === 'stage-crisis') {
+                setTimeout(() => { _tryInitMap(); }, 0);
                 return;
             }
-            ensureMap(loc.lat, loc.lng).catch((e) =>
-                console.warn('[BuildingSelect] init failed:', e)
-            );
+            if (e.detail === 'stage-review') {
+                // Defer one tick so showReviewPage() has already applied
+                // the data-v2-page filter before we inspect the DOM.
+                setTimeout(() => {
+                    const root = document.getElementById('stage-review');
+                    const p = root && root.getAttribute('data-review-page');
+                    // On legacy v1, page 2 is the confirm card (no map);
+                    // on v2, page 3 is where we want to init. Match both.
+                    if (p === '3' || p === '2') _tryInitMap();
+                }, 0);
+            }
         });
+        // Trigger 3: GPS-ready (the capture flow dispatches this when
+        // the Geolocation API resolves). Safe to call unconditionally —
+        // `_tryInitMap` re-checks every precondition.
+        document.addEventListener('gps-ready', _tryInitMap);
+
+        // Legacy safety net — if someone flips the feature flag back
+        // to v1, `<section>` becomes `<details>` again after a reload
+        // and this listener is still the right thing.
+        if (typeof box.addEventListener === 'function' && box.tagName === 'DETAILS') {
+            box.addEventListener('toggle', () => {
+                if (box.open) _tryInitMap();
+            });
+        }
+
         const clearBtn = document.getElementById('btn-building-clear');
         if (clearBtn) clearBtn.addEventListener('click', _clearSelection);
     }
@@ -265,5 +380,69 @@
         _wire();
     }
 
-    window.BuildingSelect = { ensureMap, getSelection };
+    // ── Phase B2 (Apr 2026 UI v3) — building pre-cache ────────────────────
+    // Proactively warm the IndexedDB cache with the buildings nearest to
+    // the user's current GPS position so an offline capture immediately
+    // after opening the app (tunnel, crisis-zone cell-tower drop) still
+    // paints the footprint overlay from cache. The same `_fetchBuildings`
+    // pathway as the live map initialiser — just called without a map
+    // context. Idempotent per-cache-key: the first hit seeds IndexedDB and
+    // every subsequent call within the tile radius is a no-op.
+    //
+    // `count=10` shapes the returned slice by picking the 10 polygons with
+    // the smallest centroid distance from (lat, lng). The cache itself
+    // always stores every polygon within RADIUS_METERS — the slicing is
+    // purely for callers that want a quick "nearest buildings" list (e.g.
+    // the free-text fallback's autocomplete).
+    function _centroid(elem) {
+        const latlngs = _buildingLatLngs(elem);
+        if (!latlngs || !latlngs.length) return null;
+        let latSum = 0, lngSum = 0;
+        for (const [la, ln] of latlngs) { latSum += la; lngSum += ln; }
+        return [latSum / latlngs.length, lngSum / latlngs.length];
+    }
+
+    async function preCacheNearest(lat, lng, count = 10) {
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
+        let elems;
+        try {
+            elems = await _fetchBuildings(lat, lng);
+        } catch (_) {
+            elems = null;
+        }
+        if (!Array.isArray(elems)) return [];
+        // Compute centroid + distance, filter to those with usable geometry.
+        const scored = [];
+        for (const el of elems) {
+            const c = _centroid(el);
+            if (!c) continue;
+            // Equirectangular approximation is fine for the 200 m radius.
+            const dLat = (c[0] - lat) * 111_320;
+            const dLng = (c[1] - lng) * 111_320 * Math.cos(lat * Math.PI / 180);
+            const d = Math.hypot(dLat, dLng);
+            scored.push({ el, d, centroid: c });
+        }
+        scored.sort((a, b) => a.d - b.d);
+        const slice = scored.slice(0, count);
+        // Reduce to the shape the free-text fallback wants — id + name
+        // (see _commitSelection for the name-resolution rules).
+        return slice.map(({ el, d, centroid }) => {
+            const tags = el.tags || {};
+            const osmType = el.type || 'way';
+            const name =
+                tags.name || tags['name:en'] ||
+                (tags.amenity ? `${tags.amenity}`.replace(/_/g, ' ') : null) ||
+                (tags.building && tags.building !== 'yes' ? `${tags.building}`.replace(/_/g, ' ') : null) ||
+                null;
+            return {
+                id: `osm:${osmType}:${el.id}`,
+                name,
+                distance_m: Math.round(d),
+                centroid,
+                tags,
+            };
+        });
+    }
+
+    window.BuildingSelect = { ensureMap, getSelection, preCacheNearest };
 })();

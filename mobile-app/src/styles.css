@@ -610,32 +610,83 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
 
-/* ── Service status section ───────────────────────────────────── */
-.service-details { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; }
-.service-details summary { cursor: pointer; list-style: none; }
-.service-details summary::-webkit-details-marker { display: none; }
-.service-details[open] summary { margin-bottom: 10px; }
-.service-grid { display: flex; flex-direction: column; gap: 10px; }
-.svc-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.svc-row span { font-size: 0.82rem; }
-.svc-select {
-    padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px;
-    background: var(--surface2); color: var(--text); font-size: 0.82rem;
-    -webkit-appearance: none; appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M1.5 5.5l6.5 6 6.5-6'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px;
+/* ── Service status section (Apr 2026 UI v2.1 — always-visible flat) ───────
+   Was <details>/<summary> (collapsible). Field testing showed low-literacy
+   users didn't expand the disclosure triangle, so the whole block was
+   invisible in practice. Flattened to a plain <section> that renders
+   identically to any other `.review-block`. The summary-specific rules
+   (cursor, list-style, details-marker, [open] spacing) are gone because
+   the section no longer has a summary element. */
+.service-details {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    background: var(--surface);
 }
+.service-details > .block-label {
+    margin: 0 0 12px 0;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--muted);
+}
+.service-grid { display: flex; flex-direction: column; gap: 12px; }
+
+/* Each service row: label on the left, dropdown on the right.
+   On narrow screens (<360px) the dropdown wraps under the label so
+   neither gets truncated. */
+.svc-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; min-height: 44px;
+}
+.svc-row > span:first-child {
+    font-size: 0.95rem; font-weight: 500; color: var(--text);
+    display: inline-flex; align-items: center; gap: 6px;
+    flex: 1 1 auto; min-width: 0;
+}
+
+/* Select dropdown — larger tap target, higher contrast, clearer chevron.
+   Low-literacy users reported the old 0.82rem size + muted chevron as
+   hard to see; bumped to 0.95rem and a brighter chevron glyph. */
+.svc-select {
+    padding: 10px 34px 10px 14px;
+    border: 1.5px solid var(--border); border-radius: 10px;
+    background: var(--surface2); color: var(--text);
+    font-size: 0.95rem; font-weight: 500;
+    min-height: 44px; min-width: 128px;
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%23cbd5e1' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+    cursor: pointer; transition: border-color 0.12s;
+}
+.svc-select:focus { outline: none; border-color: var(--accent); }
 .svc-select option { background: #1e293b; color: #f8fafc; }
-.needs-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+
+/* Needs chips — same visual language as the service dropdowns
+   (checkbox + label inside a rounded pill). */
+.needs-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .need-chip {
-    display: flex; align-items: center; gap: 6px; padding: 8px 12px;
-    border: 1.5px solid var(--border); border-radius: 10px; font-size: 0.82rem;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    border: 1.5px solid var(--border); border-radius: 10px;
+    font-size: 0.95rem; font-weight: 500;
+    min-height: 44px;
     cursor: pointer; color: var(--text); transition: all 0.15s;
     -webkit-tap-highlight-color: transparent;
+    background: var(--surface2);
 }
 .need-chip:active { transform: scale(0.95); }
-.need-chip input { accent-color: var(--accent); width: 16px; height: 16px; }
-.need-chip:has(input:checked) { border-color: var(--accent); background: rgba(124,58,237,0.12); color: #a78bfa; }
+.need-chip input { accent-color: var(--accent); width: 18px; height: 18px; cursor: pointer; }
+.need-chip:has(input:checked) {
+    border-color: var(--accent);
+    background: rgba(124,58,237,0.14);
+    color: #c4b5fd;
+}
+
+/* Stack the row on narrow screens so the dropdown isn't squeezed. */
+@media (max-width: 360px) {
+    .svc-row { flex-wrap: wrap; }
+    .svc-select { width: 100%; }
+}
 
 /* ── Phase 6 additions: multi-page Review layout ─────────────── */
 .review-page { display: block; }
@@ -1070,6 +1121,455 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     transition: all 0.2s;
 }
 .add-photo-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Phase 1 (Apr 2026 — Optional reporter login) ─────────────────────────
+   Landing-page tertiary "Login / Sign up" button + account pill. Secondary
+   to the primary "Start Reporting" CTA; both must be visible at once so
+   the anonymous path is a single tap and the login path is one extra
+   scroll away. */
+.tertiary-cta {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 10px 14px; margin-top: 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text); font-size: 14px; font-weight: 500; border-radius: 10px;
+    cursor: pointer; transition: background 0.15s;
+}
+.tertiary-cta:hover { background: rgba(255,255,255,0.04); }
+.tertiary-cta i { color: var(--accent); }
+
+.account-pill {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; padding: 10px 14px; margin-top: 10px;
+    background: rgba(34,197,94,0.08);
+    border: 1px solid rgba(34,197,94,0.25);
+    border-radius: 10px; color: #86efac;
+    font-size: 14px; font-weight: 600;
+}
+.account-pill > i { color: #4ade80; }
+.account-pill .account-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-pill .account-settings-btn {
+    background: transparent; border: 0; color: #86efac; cursor: pointer;
+    padding: 4px 8px; border-radius: 6px;
+}
+.account-pill .account-settings-btn:hover { background: rgba(255,255,255,0.06); }
+
+/* Phase 1 (Apr 2026 — Optional reporter login) — stage-login layout.
+   v2 polish (Apr-23 screenshot fix): form was cramped top-left with
+   dead space below. Re-centered the card + tightened the field
+   hierarchy + shrunk the country-code dropdown + gave the whole stage
+   a max-width so it breathes on tablets. Phone input now uses box-
+   sizing so it never overflows the right edge. */
+
+/* Stage shell — override generic .stage padding so the login card owns
+   the layout instead of inheriting the top-left bias. */
+#stage-login {
+    padding: 0;
+    justify-content: flex-start;   /* top-anchored — keyboard doesn't push content off-screen */
+    align-items: center;
+}
+/* Spacer before the form so there's breathing room above the header on
+   tall viewports without pushing content off-screen on short ones. */
+#stage-login::before {
+    content: '';
+    flex: 0 0 20px;
+}
+#stage-login .stage-header {
+    width: 100%;
+    padding: 40px 24px 8px;
+    text-align: center;
+    position: static;            /* not sticky on this stage */
+    box-shadow: none;
+    background: transparent;
+}
+#stage-login .stage-header h2 {
+    font-size: 1.6rem;
+    margin-bottom: 6px;
+}
+#stage-login .stage-header p {
+    font-size: 0.95rem;
+    color: var(--muted);
+}
+
+/* Login body — the actual form card. Max-width keeps the form readable
+   on tablet / desktop; mobile gets full width minus the 20-px gutter. */
+.login-body {
+    width: 100%;
+    max-width: 440px;
+    margin: 0 auto;
+    padding: 20px 24px 32px;
+    display: flex; flex-direction: column; gap: 16px;
+    box-sizing: border-box;
+}
+
+/* Channel picker — two equal pills, big tap targets (48px+ each). */
+.login-channel-row { display: flex; gap: 10px; }
+.login-channel-btn {
+    flex: 1; padding: 14px 10px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    border: 2px solid var(--border); border-radius: 12px;
+    background: var(--surface); color: var(--text);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s;
+}
+.login-channel-btn.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255, 174, 0, 0.18);  /* --accent is #ffae00 on this app */
+    color: var(--accent);
+    background: rgba(255, 174, 0, 0.06);
+}
+.login-channel-btn i { font-size: 18px; }
+
+/* Destination row — phone path (CC + number) or email. Box-sizing
+   prevents the phone input from spilling past the parent's 24-px
+   right padding. */
+.login-destination-wrap { display: flex; flex-direction: column; gap: 10px; }
+.login-phone-row {
+    display: flex; gap: 8px; align-items: stretch;
+    width: 100%; box-sizing: border-box;
+}
+.login-cc-select {
+    flex: 0 0 100px;                 /* compact so the number field gets room */
+    min-width: 0;
+    padding: 12px 10px;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface); color: var(--text);
+    font-size: 14px;
+    box-sizing: border-box;
+}
+.login-input {
+    flex: 1 1 0;                     /* grow to fill; shrink below its intrinsic size */
+    min-width: 0;                    /* crucial: lets flex-basis take effect in RTL + long strings */
+    padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface); color: var(--text);
+    font-size: 16px;                 /* ≥ 16px prevents iOS zoom on focus */
+    font-family: inherit;
+    box-sizing: border-box;
+}
+.login-input:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255, 174, 0, 0.25);
+}
+.login-code-input {
+    text-align: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 24px; letter-spacing: 0.4em;
+    padding: 16px;
+}
+
+/* Primary CTA — the Send / Verify button. Uses the site-wide
+   `.nav-btn.next-btn.highlight` style but we nudge top-margin so it
+   sits clearly below the input instead of hugging it. */
+#stage-login .nav-btn.next-btn {
+    width: 100%;
+    margin-top: 6px;
+    padding: 14px 18px;
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.login-error {
+    margin: 0; padding: 10px 12px;
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.3);
+    border-radius: 8px;
+    color: #fca5a5; font-size: 13px; line-height: 1.4;
+}
+.login-skip-link {
+    display: block; margin-top: 4px; text-align: center;
+    color: var(--muted); font-size: 13px; text-decoration: none;
+    padding: 8px;
+}
+.login-skip-link:hover { color: var(--accent); text-decoration: underline; }
+
+.login-sent-to {
+    color: var(--text); font-size: 14px; text-align: center; margin: 0;
+}
+.login-sent-to strong {
+    display: block; margin-top: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--accent); font-size: 16px; word-break: break-all;
+}
+
+.login-resend {
+    background: transparent; border: 0; color: var(--muted);
+    font-size: 13px; cursor: pointer; padding: 6px;
+    text-align: center;
+}
+.login-resend:disabled { opacity: 0.5; cursor: default; }
+
+.login-success-ring {
+    width: 72px; height: 72px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(34,197,94,0.15); color: #4ade80;
+    font-size: 32px; margin: 8px auto 0;
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.08);
+}
+.login-success-title {
+    text-align: center; font-size: 22px; font-weight: 700; margin: 12px 0 0;
+    color: var(--text);
+}
+.login-link-prompt {
+    text-align: center; color: var(--text); font-size: 14px; line-height: 1.5;
+    margin: 4px 0 0;
+}
+.login-link-prompt strong { color: var(--accent); font-size: 18px; }
+.login-skip-btn {
+    background: transparent; border: 0; color: var(--muted);
+    font-size: 14px; padding: 12px; cursor: pointer;
+    text-align: center;
+}
+.login-skip-btn:hover { color: var(--text); }
+
+/* Settings body */
+.settings-body {
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+}
+.settings-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px;
+}
+.settings-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+.settings-value { color: var(--text); font-weight: 600; }
+.nav-btn.danger {
+    border-color: rgba(239,68,68,0.3);
+    color: #fca5a5;
+}
+.nav-btn.danger:hover { background: rgba(239,68,68,0.08); }
+
+/* ── Phase B4 (Apr 2026 UI v3) — 8-stage capture flow ──────────────────
+   Four new stages (where / infra / crisis / extras) live as `.v3-stage`
+   containers. Each has a v3-slot (filled at runtime by migrateV3Blocks)
+   + a standard .review-nav-row with Back/Continue buttons.
+
+   v3 stages inherit .stage layout (flex column, padding, scroll) so the
+   chip grids already styled by .review-block / .category-grid render
+   correctly in their new home. */
+.v3-stage { /* uses .stage rules directly — kept as a class hook for CSS overrides */ }
+.v3-stage .stage-header { padding-top: 50px; }
+.v3-stage .v3-slot { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
+.v3-stage .v3-slot .review-block:first-child { margin-top: 10px; }
+.v3-stage .review-nav-row.v3-nav-row {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px 16px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+}
+.v3-stage .review-nav-row .back-btn { flex: 0 0 auto; padding: 12px 16px; }
+.v3-stage .review-nav-row .next-btn { flex: 1; padding: 14px 18px; font-weight: 700; }
+
+/* v3 damage block: always visible on stage-where (migrateV3Blocks force-
+   displays it). Override inline style that still lurks on the element. */
+.v3-stage #infra-severity { display: block !important; }
+
+/* v3: hide the legacy standalone description textarea. The live-transcript
+   textarea on stage-audio doubles as the description source when v3 is on
+   (see setupAudioStage → _collectServiceStatusFromDom). Keeps stage-review
+   clean + free of a second competing input. */
+body[data-ui-v3] .v2-only-description { display: none !important; }
+
+/* v3 auto-meta panel on stage-where — client-side date/time + reverse-
+   geocoded location. Visually a two-row compact card so the reporter
+   sees exactly what's being auto-captured for the submission. No
+   waiting / no spinners: missing values fall back to a localized
+   "Detecting..." placeholder. */
+.v3-stage .auto-meta {
+    margin: 10px 16px 0;
+    padding: 10px 12px;
+    background: rgba(124, 58, 237, 0.06);
+    border: 1px solid rgba(124, 58, 237, 0.22);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.v3-stage .auto-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.v3-stage .auto-meta-row > i {
+    color: var(--accent);
+    font-size: 14px;
+    width: 18px;
+    text-align: center;
+}
+.v3-stage .auto-meta-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+    flex: 1;
+    min-width: 0;
+}
+.v3-stage .auto-meta-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-weight: 600;
+}
+.v3-stage .auto-meta-value {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* v3 stage-extras debris Yes/No toggle (Phase B4, Apr 2026). Two large
+   tappable pills side-by-side; `.selected` class drives the colour
+   (Yes → amber, No → grey). Mirrors the damage-chip button style so
+   it feels familiar in the capture flow. */
+.debris-clearing-block .debris-toggle-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
+}
+.debris-clearing-block .debris-toggle {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 12px;
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.debris-clearing-block .debris-toggle:active { transform: scale(0.98); }
+.debris-clearing-block .debris-toggle.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
+    color: var(--accent);
+}
+#debris-toggle-yes.selected {
+    border-color: #f59e0b;
+    color: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+}
+#debris-toggle-no.selected {
+    border-color: #22c55e;
+    color: #22c55e;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+
+/* v3 stage-crisis grouped chips (Phase B4, Apr 2026). Each of the three
+   UNDP categories (Natural / Technological / Human-made) gets its own
+   small uppercase heading above a compact category-grid. Headings are
+   slim + muted so they read as section labels, not competing buttons. */
+.crisis-grouped .crisis-group-label {
+    margin: 10px 0 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 700;
+}
+.crisis-grouped .crisis-group-label:first-child { margin-top: 2px; }
+.crisis-grouped .category-grid { margin-bottom: 2px; }
+
+/* v3 W6 module render target (stage-extras). Minimal — the endpoint may
+   return 0 modules for crisis types without applicable packs, so the
+   list stays invisible unless populated. */
+.v3-w6-block { border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 10px; }
+.v3-w6-list { margin: 6px 0 0; padding: 0 0 0 20px; color: var(--text); font-size: 13px; }
+.v3-w6-list .v3-w6-item { margin: 4px 0; }
+
+/* 7-segment flow-progress overlay for v3. The legacy 5-step dot row is
+   hidden by JS; this overlay paints equal-width coloured segments so
+   the reporter sees their progress across the full 7-step v3 chain. */
+.fp-v3-overlay {
+    display: flex;
+    gap: 4px;
+    width: 100%;
+    padding: 8px 12px 4px;
+}
+.fp-v3-seg {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.08);
+    transition: background 0.25s ease;
+}
+.fp-v3-seg.done   { background: var(--green); }
+.fp-v3-seg.active { background: var(--accent); box-shadow: 0 0 6px rgba(124, 58, 237, 0.4); }
+.fp-v3-seg.upcoming { background: rgba(255, 255, 255, 0.08); }
+
+/* Phase B4 (Apr 2026 UI v3 spec-align) — single "Add more" button that
+   opens the OS native file-picker sheet (Camera + Library + Files in one
+   surface). Same 56px square as the thumbnails, with a + icon above a
+   tiny "Add" label so the path is self-documenting on low-literacy
+   devices without multiplying targets. */
+.add-photo-btn.add-photo-native {
+    flex-direction: column;
+    font-size: 18px;
+    gap: 2px;
+}
+.add-photo-btn.add-photo-native .add-photo-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.85;
+}
+
+/* Phase A5 (Apr 2026 UI v3) — Camera vs Gallery chooser row replacing the
+   single "+" button. Two 56px tiles side-by-side with an icon above a tiny
+   label so the path is self-documenting on low-literacy devices. `gap:6px`
+   matches the extra-photo-thumb gap so the row feels continuous with the
+   thumbnail strip. */
+.add-photo-choices {
+    display: flex; gap: 6px; flex-shrink: 0;
+}
+.add-photo-choices .add-photo-btn {
+    flex-direction: column;
+    font-size: 16px;
+    gap: 2px;
+}
+.add-photo-choices .add-photo-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.85;
+}
+.add-photo-btn[aria-disabled="true"] {
+    pointer-events: none;
+    cursor: not-allowed;
+}
+/* Tiny "n/5" chip next to the chooser row so the user sees at a glance how
+   many photos are left. Turns red/pulses at cap. */
+.extra-photos-cap-chip {
+    flex-shrink: 0;
+    margin-left: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: rgba(255,255,255,0.65);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.extra-photos-cap-chip.at-cap {
+    color: #fff;
+    background: rgba(239,68,68,0.85);
+    border-color: rgba(239,68,68,0.9);
+}
 
 /* ── Phase 5 (Apr 2026) — PWA My Reports screen (parity port of RN) ──────── */
 .secondary-cta {
@@ -2172,27 +2672,52 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     word-break: break-word;
 }
 
-/* ── UNDP building-footprint selector (Apr 2026) ───────────────────────
-   Lazy-loaded Leaflet map inside a <details> on stage-review. Kept
-   collapsed by default so low-literacy users / slow connections aren't
-   forced to interact with a map tile download before submitting. */
+/* ── UNDP building-footprint selector (Apr 2026 UI v2.1, flattened) ────
+   Leaflet map lives in an always-visible <section> on v2-page-3. The
+   legacy <details> rules below (list-style, summary arrow) were removed
+   — the map + hint now render unconditionally, matching the UNDP
+   non-negotiable requirement that building selection is first-class. */
 .building-select-details {
     margin-top: 10px;
-    padding: 10px 12px;
+    padding: 14px 16px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
+    border-radius: 14px;
+    touch-action: pan-y;   /* allow vertical page scroll outside the map */
 }
-.building-select-details[open] {
-    padding-bottom: 12px;
+.building-select-details > .block-label {
+    margin: 0 0 10px 0;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--muted);
 }
 .building-map {
     width: 100%;
     height: 260px;
-    margin-top: 10px;
-    border-radius: 8px;
+    margin-top: 4px;
+    border-radius: 10px;
     overflow: hidden;
     background: #0f172a;   /* tile-load fallback colour */
+    position: relative;
+}
+/* Placeholder shown while GPS is still resolving. Collapses automatically
+   when `building-select.js::_tryInitMap` hides it post-tile-load. */
+.building-map-placeholder {
+    margin-top: 8px;
+    padding: 24px 16px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    color: var(--muted); font-size: 0.9rem; text-align: center;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+.building-map-placeholder i {
+    font-size: 28px; color: var(--accent);
+    animation: pulse-dim 1.6s ease-in-out infinite;
+}
+@keyframes pulse-dim {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 1; }
 }
 .building-select-hint {
     display: flex;
@@ -2207,12 +2732,25 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     align-items: center;
     gap: 6px;
     margin-top: 8px;
-    padding: 6px 10px;
+    padding: 8px 12px;
     background: rgba(34, 197, 94, 0.12);
     color: #4ade80;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 13px;
     font-weight: 600;
+    flex-wrap: wrap;
+}
+/* OSM name slot — weight-600 green on soft bg so it pops next to the
+   static "Building selected" label. Truncates with ellipsis when the
+   name is long and the pill is narrow (e.g. "Aishwarya Apartment Complex"). */
+.building-selected-pill .building-selected-name {
+    font-weight: 700;
+    color: #86efac;
+    max-width: 60%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.building-selected-pill .building-selected-name:empty {
+    display: none;   /* hide until populated to avoid a stray colon/bullet */
 }
 .building-selected-pill button {
     margin-left: auto;
@@ -2225,6 +2763,63 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .building-selected-pill button:hover {
     color: #86efac;
+}
+
+/* Phase B2 (Apr 2026 UI v3) — free-text building-name fallback.
+   Sits under the map so the reporter still tries the footprint tap first,
+   but has an obvious fallback path when the map doesn't render (offline,
+   Overpass rate-limit, Leaflet blocked by corporate proxy). Input accepts
+   native-language characters directly — the user's keyboard handles
+   Arabic / CJK / Cyrillic / Devanagari without any extra toggles here. */
+.building-free-text {
+    margin-top: 10px;
+    padding: 12px;
+    background: rgba(37, 99, 235, 0.06);
+    border: 1px solid rgba(37, 99, 235, 0.22);
+    border-radius: 10px;
+}
+.building-free-text-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+.building-free-text-label i { color: var(--accent); }
+.building-free-text-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    font-size: 15px;
+    line-height: 1.4;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    direction: auto;   /* lets the browser pick LTR/RTL per the first strong-char */
+}
+.building-free-text-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
+}
+.building-free-text-hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0 0;
+    font-size: 11px;
+    color: var(--muted);
+}
+.building-free-text-hint i { color: rgba(124, 58, 237, 0.75); }
+/* Highlight when the user has actively typed. Confirms to the reporter
+   that the backend will receive their input. */
+.building-free-text.has-value .building-free-text-input {
+    border-color: rgba(16, 185, 129, 0.6);
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
 }
 
 /* ── RTL layout (UNDP §3.1, Apr 2026) ──────────────────────────────────
@@ -2275,4 +2870,132 @@ html[dir="rtl"] .back-btn .fa-arrow-left {
 html[dir="rtl"] #lang-switcher {
     left: auto;
     right: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   UI v2 (Apr 2026) — PWA redesign. Gated via `body[data-ui-v2]` where
+   the rule would otherwise regress the v1 pixel-perfect layout. Things
+   that are safe for both versions (muted colour bump, sticky header,
+   leaflet scroll-lock) are NOT gated so the v1 fallback path still
+   picks them up.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* P2 — sticky stage header so the title + progress bar stay on-screen
+   while long review pages scroll under them. The glass blur softens the
+   scroll-through edge; padding-bottom cushions the header from the
+   first block underneath. Safe for v1 and v2 alike.
+
+   Phase A3 (Apr 2026 UI v3) — z-index 30 → 300. The old value sat below
+   the flow-progress (z:101), the auto-submit pill (z:200), the lang-
+   switcher (z:100), and the offline banner (z:200), which meant those
+   elements scrolled OVER the sticky header — causing the "title text
+   bleeds through on scroll" report. 300 puts it above every in-stage
+   element (still below the upload overlay at 9999 + auto-submit banner
+   at 9999 which should cover the whole viewport). Background made
+   explicitly opaque so backdrop-filter is a visual-sugar layer, not
+   the only thing between header text and the scrolling content. */
+.stage-header {
+    position: sticky;
+    top: 0;
+    z-index: 300;
+    background: var(--bg);
+    background-color: var(--bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding-bottom: 6px;
+    box-shadow: 0 1px 0 var(--border);
+}
+
+/* P5 — Leaflet + PWA scroll-lock fix. The building-footprint map used
+   to capture every wheel/touch gesture inside its bounds, stranding
+   the outer stage scroll behind it. `touch-action: none` lets the map
+   still handle pinch + drag (Leaflet re-binds them explicitly) while
+   letting the browser fall through to the surrounding scroll when the
+   user pans outside the map. Paired with an explicit scrollWheelZoom
+   disable in building-select.js so mouse-wheel users also scroll
+   past. */
+.building-map {
+    touch-action: none;
+}
+
+/* ── Language picker ISO fallback ──────────────────────────────────────
+   Edge/Windows does not ship colour flag emoji — the glyph renders as
+   a monochrome "GB" / "FR" letter pair AND the fallback is silent (no
+   tooltip). The `.lpf-iso` span below each glyph guarantees a readable
+   country code under the flag on every browser, without being visually
+   overwhelming on the browsers that DO render colour emoji (Safari,
+   Chrome, Firefox). */
+.lpf-iso {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    opacity: 0.7;
+    letter-spacing: 0.05em;
+}
+
+/* UI v2 — chip icons. The `<span class="chip-ic">` is JS-injected at
+   stage-enter time by _renderReviewChipIcons() in app.js. Each chip's
+   SVG inherits `currentColor`; the `--icon-color` per-chip variable
+   below drives each category's brand-tinted default, and the
+   `.chip-btn.selected .chip-ic svg { color: white }` override ensures
+   the icon reads against the accent-tinted selected background. */
+.chip-btn .chip-ic {
+    display: block;
+    width: 36px;
+    height: 36px;
+    margin: 0 auto 6px;
+}
+.chip-btn .chip-ic svg {
+    color: var(--icon-color, #94a3b8);
+}
+.chip-btn.selected .chip-ic svg {
+    color: white;
+}
+
+/* Per-chip brand accent colours. UNDP palette-aligned where possible
+   (blue = water/flood, amber = utility, red = conflict, etc.). These
+   apply to v1 and v2 alike since the selector matches the raw chip
+   attribute — but they only become visible once the SVG is injected
+   (v2 only). */
+.chip-btn[data-type="ROAD"],
+.chip-btn[data-crisis="FLOOD"] { --icon-color: #3b82f6; }
+.chip-btn[data-type="HOUSE"] { --icon-color: #92400e; }
+.chip-btn[data-type="HOSPITAL"],
+.chip-btn[data-type="SCHOOL"] { --icon-color: #ec4899; }
+.chip-btn[data-type="POWER"],
+.chip-btn[data-type="WATER"],
+.chip-btn[data-type="TELECOM"] { --icon-color: #f59e0b; }
+.chip-btn[data-type="GOVERNMENT"] { --icon-color: #6366f1; }
+.chip-btn[data-type="OTHER"] { --icon-color: #64748b; }
+.chip-btn[data-crisis="EARTHQUAKE"],
+.chip-btn[data-crisis="LANDSLIDE"] { --icon-color: #a16207; }
+.chip-btn[data-crisis="TSUNAMI"],
+.chip-btn[data-crisis="CYCLONE"] { --icon-color: #0891b2; }
+.chip-btn[data-crisis="EXPLOSION"],
+.chip-btn[data-crisis="CONFLICT"],
+.chip-btn[data-crisis="CIVIL_UNREST"] { --icon-color: #dc2626; }
+.chip-btn[data-crisis="CHEMICAL_INCIDENT"] { --icon-color: #65a30d; }
+.chip-btn[data-crisis="PANDEMIC"] { --icon-color: #9333ea; }
+
+/* UI v2 — bigger tap targets on review chips for low-literacy users. */
+body[data-ui-v2] .chip-btn {
+    min-height: 96px;
+}
+
+/* UI v2 — hide the legacy FontAwesome chip icons once the SVG span is
+   injected. Keeps the HTML fallback intact so v1 (flag off) still
+   renders the `<i class="fa-solid fa-...">` glyphs as before. */
+body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
+    display: none;
+}
+
+/* Muted colour bump for WCAG AA — the previous #9ca3af in dark mode
+   ranked 4.2:1 against the dark background, falling short of the 4.5:1
+   AA threshold for small text. #b0b8c4 lifts contrast past 4.5:1
+   without sliding into "active" visual weight. Applied in dark mode
+   only since light-mode muted is unchanged (#64748b). */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --muted: #b0b8c4;
+    }
 }

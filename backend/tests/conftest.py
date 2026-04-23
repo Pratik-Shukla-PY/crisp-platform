@@ -15,9 +15,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 #   1. `PYTEST_DATABASE_URL` — highest. CI injects the service-container
 #      Postgres URL here so the matrix + parallel test-runs don't clash
 #      with a developer's default.
-#   2. `DATABASE_URL` — whatever the dev shell has exported.
-#   3. Localhost Postgres default (crisp/crisp/crisp) — matches the
-#      Postgres that `scripts/dev-setup.sh` provisions.
+#   2. `DATABASE_URL` — whatever the dev shell has exported, IFF it
+#      points at a `_test` DB (see seatbelt below).
+#   3. Localhost Postgres default — now `crisp_test`, NOT `crisp`. The
+#      previous default pointed at the live dev DB; the session-scoped
+#      teardown then `DROP SCHEMA CASCADE`'d whatever the developer had
+#      submitted through the dashboard / bots. Moving the default to
+#      `crisp_test` means a naked `pytest` run can never again wipe
+#      production data.
 #
 # There is NO SQLite fallback. If Postgres isn't reachable, pytest fails
 # loudly at setup — which is the right behaviour since silent fallback
@@ -25,11 +30,45 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 TEST_DB_URL = (
     os.environ.get("PYTEST_DATABASE_URL")
     or os.environ.get("DATABASE_URL")
-    or "postgresql+psycopg2://crisp:crisp@localhost:5432/crisp"
+    or "postgresql+psycopg2://crisp:crisp@localhost:5432/crisp_test"
 )
+
+# ── SEATBELT ──────────────────────────────────────────────────────────
+# Hard-refuse to run against any database whose name does not end in
+# `_test`. This is the guard that would have saved the Apr 2026 incident
+# where a naked `pytest` blew away every report submitted via the live
+# dashboard. Even if a developer (or CI) accidentally exports
+# DATABASE_URL pointing at `crisp`, we surface a loud RuntimeError
+# instead of silently `DROP SCHEMA CASCADE`-ing it.
+from sqlalchemy.engine import make_url  # noqa: E402
+_url = make_url(TEST_DB_URL)
+if not (_url.database or "").endswith("_test"):
+    raise RuntimeError(
+        f"pytest refuses to run against database `{_url.database}` — "
+        f"target DB name must end in `_test` to prevent wiping live "
+        f"dev data. Set PYTEST_DATABASE_URL to a `…_test` DB, e.g.\n"
+        f"    export PYTEST_DATABASE_URL="
+        f"'postgresql+psycopg2://crisp:crisp@localhost:5432/crisp_test'\n"
+        f"Or run `createdb crisp_test` once and re-invoke pytest."
+    )
+
 os.environ["DATABASE_URL"] = TEST_DB_URL
 os.environ.setdefault("JWT_SECRET", "test-secret-key-do-not-use-in-production")
 os.environ.setdefault("APP_ENV", "dev")
+
+# Apr 2026 — isolate test-generated uploads from the production tree.
+# `app.api.endpoints.reports::UPLOAD_DIR` reads this env var at import
+# time, so setting it BEFORE `from app.main import app` below routes
+# every chunked-upload assembly into `backend/uploads_test/`.
+# Production uploads (`backend/uploads/`) are therefore physically
+# untouched by any pytest run. The test dir is wiped in the session-
+# scoped `setup_test_db` fixture below, colocated with the DB reset
+# so both the structural + filesystem side of state resets together.
+_test_uploads = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "uploads_test")
+)
+os.makedirs(_test_uploads, exist_ok=True)
+os.environ["CRISP_UPLOAD_DIR"] = _test_uploads
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -56,7 +95,7 @@ def override_get_db():
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_db():
-    """Reset + create all tables once for the test session.
+    """Reset the test DB + test-uploads dir once per session.
 
     Postgres specifics: SQLAlchemy's `drop_all` removes tables but leaves
     the ENUM types behind. The next run then fails with "type already
@@ -66,25 +105,59 @@ def setup_test_db():
 
     No alembic migration run here — we use `create_all` which reads the
     live `Base.metadata` and matches what alembic head produces. The
-    dedicated migration-chain test (`test_migrations_postgres.py`) is
-    what exercises alembic end-to-end; this fixture is just fast setup
-    for the application-layer tests.
+    dedicated migration-chain test (`test_migrations.py`) is what
+    exercises alembic end-to-end; this fixture is just fast setup for
+    the application-layer tests.
+
+    Apr 2026 — the seatbelt at the top of this file ensures this
+    fixture can ONLY run against a `_test`-suffixed DB. Combined with
+    `CRISP_UPLOAD_DIR` pointing at `backend/uploads_test/` (also set at
+    the top of this file), a full pytest run cannot reach into any
+    production state — DB rows or on-disk media.
     """
     import app.models.report  # noqa: F401
     import app.models.auth  # noqa: F401
     import app.models.prediction  # noqa: F401
 
     from sqlalchemy import text
+    import shutil
+
+    # --- Pre-test reset --------------------------------------------------
     with test_engine.begin() as conn:
         conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
         conn.execute(text("CREATE SCHEMA public"))
     Base.metadata.create_all(bind=test_engine)
+    # Wipe the test uploads dir at session start (never the prod one —
+    # the env var is set above to point ONLY at `backend/uploads_test/`).
+    # Defensive: only if the path exists and is the one we provisioned.
+    _uploads = os.environ.get("CRISP_UPLOAD_DIR", "")
+    if _uploads and os.path.isdir(_uploads) and _uploads.endswith("uploads_test"):
+        for _name in os.listdir(_uploads):
+            _full = os.path.join(_uploads, _name)
+            try:
+                if os.path.isdir(_full):
+                    shutil.rmtree(_full, ignore_errors=True)
+                else:
+                    os.remove(_full)
+            except Exception:
+                pass
 
     yield
 
+    # --- Post-test teardown ----------------------------------------------
     with test_engine.begin() as conn:
         conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
         conn.execute(text("CREATE SCHEMA public"))
+    if _uploads and os.path.isdir(_uploads) and _uploads.endswith("uploads_test"):
+        for _name in os.listdir(_uploads):
+            _full = os.path.join(_uploads, _name)
+            try:
+                if os.path.isdir(_full):
+                    shutil.rmtree(_full, ignore_errors=True)
+                else:
+                    os.remove(_full)
+            except Exception:
+                pass
 
 
 @pytest.fixture

@@ -146,6 +146,9 @@ async def _process_sms(phone: str, text: str):
     geo = await geocode_text(parsed["location_text"])
 
     # 3. Create report on CRISP backend
+    # damage_classification is an enum-validated field on the backend
+    # schema — pass None (not "") when the parser couldn't classify,
+    # otherwise /reports/meta returns 422 and the SMS is silently lost.
     meta = {
         "device_hash": device_hash,
         "client_report_id": str(uuid4()),
@@ -155,8 +158,8 @@ async def _process_sms(phone: str, text: str):
         "description": parsed["description"],
         "expected_media": 0,
         "caller_info": {"phone": phone, "source": "SMS"},
-        "crisis_type": parsed.get("crisis_type"),
-        "damage_classification": parsed.get("damage_classification"),
+        "crisis_type": parsed.get("crisis_type") or None,
+        "damage_classification": parsed.get("damage_classification") or None,
     }
 
     if geo["latitude"] is not None:

@@ -51,6 +51,15 @@ async function sendJSON(url: string, method: string, body: any, _timeoutMs = 300
     method,
     headers: { 'Content-Type': 'application/json' },
   };
+  // Phase 1 (Apr 2026 — Optional reporter login). Attach the current
+  // access token to every JSON call, incl. /reports/meta. Lazy import
+  // avoids a circular dep between api.ts + auth.ts (auth calls sendJSON).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const AuthStore = require('./auth');
+    const tok = AuthStore.getAccessToken && AuthStore.getAccessToken();
+    if (tok) options.headers['Authorization'] = `Bearer ${tok}`;
+  } catch { /* auth module not yet loaded; proceed anonymously */ }
   if (body !== null && body !== undefined) {
     options.body = JSON.stringify(body);
   }

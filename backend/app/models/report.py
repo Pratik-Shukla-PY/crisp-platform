@@ -1,7 +1,7 @@
 import os
 import uuid
 import logging
-from sqlalchemy import Column, String, Float, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text, LargeBinary, UniqueConstraint, CheckConstraint, event
+from sqlalchemy import Column, String, Float, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text, LargeBinary, UniqueConstraint, CheckConstraint, Index, event
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -216,6 +216,18 @@ class Report(Base):
     id = Column(String(36), primary_key=True, default=gen_uuid)
     client_report_id = Column(String(36), unique=True, nullable=True, index=True)
     device_id = Column(String(36), ForeignKey("devices.id", ondelete="SET NULL"))
+    # Phase 1 (Apr 2026 — Optional reporter login) — nullable FK to the
+    # authenticated reporter. NULL = anonymous (legacy + skip-login path).
+    # `ON DELETE SET NULL` is the key guarantee from the user spec: when
+    # a reporter hits "Delete my account", their linked reports revert to
+    # anonymous — the crisis-response value of each report is preserved
+    # while the PII linkage is severed.
+    user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     source = Column(Enum(SourceEnum), default=SourceEnum.APP, nullable=False)
     status = Column(Enum(ReportStatusEnum), default=ReportStatusEnum.PENDING, nullable=False)
     sync_status = Column(Enum(SyncStatusEnum), default=SyncStatusEnum.QUEUED, nullable=False)
@@ -252,6 +264,18 @@ class Report(Base):
     # client-side. Nullable for backward compatibility with pre-migration rows.
     crisis_category = Column(String(20), nullable=True)          # NATURAL / TECHNOLOGICAL / HUMAN_MADE / OTHER
     infrastructure_name = Column(String(255), nullable=True)    # Specific building/road name
+    # Phase B2 (Apr 2026 UI v3) — distinguisher between OSM-auto-filled and
+    # user-typed `infrastructure_name`.
+    #   True  → client auto-filled the name from an OSM building-select tap.
+    #   False → user typed it as free text (map unavailable / offline /
+    #           corporate-proxy blocked Overpass / feature-flag forced fallback).
+    # Combined with `building_id IS NULL`, False flags a row as "needs
+    # manual mapping" on the dashboard so an operator can resolve the
+    # free-text entry to a real OSM footprint later. Pre-v3 clients never
+    # set this column → NULL, which the dashboard treats as "unknown"
+    # (neither green ✓ nor the red "needs mapping" badge — see
+    # ReportResponse.needs_manual_mapping).
+    infrastructure_name_from_osm = Column(Boolean, nullable=True)
     debris_clearing_needed = Column(Boolean, nullable=True)     # Does this location need debris clearing?
     service_status = Column(JSON, nullable=True)                # {"electricity":"DISRUPTED","water":"OPERATIONAL",...}
     building_id = Column(String(36), nullable=True, index=True) # Links multiple reports about same structure
@@ -282,6 +306,24 @@ class Report(Base):
     media       = relationship("Media",       back_populates="report", cascade="all, delete-orphan")
     ai_analysis = relationship("AIAnalysis",  back_populates="report", uselist=False, cascade="all, delete-orphan")
     verification = relationship("SatelliteVerification", back_populates="report", uselist=False, cascade="all, delete-orphan")
+
+    # Apr 2026 UI v2.1 — performance indexes for 500k-scale crisis queries.
+    # Mirror migration 0008. Names match exactly so `alembic upgrade` from
+    # an empty DB and `Base.metadata.create_all` from pytest's conftest
+    # both produce the same physical index names on Postgres.
+    __table_args__ = (
+        Index("ix_reports_server_created_at",     "server_created_at"),
+        Index("ix_reports_status",                "status"),
+        Index("ix_reports_crisis_type",           "crisis_type"),
+        Index("ix_reports_severity",              "severity"),
+        Index("ix_reports_damage_classification", "damage_classification"),
+        Index("ix_reports_device_id",             "device_id"),
+        Index("ix_reports_reviewer_verdict",      "reviewer_verdict"),
+        Index("ix_reports_deletion_requested_at", "deletion_requested_at"),
+        Index("ix_reports_status_created",        "status",      "server_created_at"),
+        Index("ix_reports_building_created",      "building_id", "server_created_at"),
+        Index("ix_reports_device_created",        "device_id",   "server_created_at"),
+    )
 
 
 class DeletionAuditLog(Base):
@@ -351,6 +393,14 @@ class Media(Base):
     #                unavailable (MediaPipe + easyocr both missing); the
     #                file is on disk UNBLURRED. Dashboard should flag.
     pii_blur_status = Column(String(16), nullable=True, index=True)
+    # Apr 2026 UI v2.1 — perceptual hash (pHash) of the assembled image
+    # for redundancy detection (UNDP nice-to-have #3: "spot duplicates
+    # with same time-stamp of submission, or over-reporting"). Computed
+    # once post-assembly in `_ai_executor`, stored as a 16-char hex
+    # string (64-bit imagehash.phash output). Nullable for audio/video
+    # rows + legacy photos uploaded pre-feature. Indexed so the
+    # "find near-duplicates in same building within 24h" query is fast.
+    photo_phash = Column(String(16), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     # P1.1 — auto-updating timestamp used by the assembly-lock stale-escape:
     # if assembly_status='assembling' AND updated_at > 5 min ago, the previous
@@ -359,6 +409,12 @@ class Media(Base):
 
     report = relationship("Report", back_populates="media")
     chunks = relationship("MediaChunk", back_populates="media", cascade="all, delete-orphan")
+
+    # Apr 2026 UI v2.1 — pHash dedup endpoint windows by `created_at` for
+    # the last 24 h. Mirrors migration 0008.
+    __table_args__ = (
+        Index("ix_media_created_at", "created_at"),
+    )
 
 
 class MediaChunk(Base):
@@ -614,9 +670,15 @@ event.listen(Report, "before_update", _apply_taxonomy)
 # column cannot weaponise this into an arbitrary-file-delete primitive.
 @event.listens_for(Media, "after_delete")
 def _remove_media_files_on_delete(mapper, connection, target: "Media") -> None:  # type: ignore[name-defined]
-    upload_dir = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), "..", "..", "uploads"
-    ))
+    # Honour the same `CRISP_UPLOAD_DIR` override as the chunked-upload
+    # path in api/endpoints/reports.py. When pytest runs it sets the
+    # env var to `uploads_test/`; production leaves it unset and we
+    # default to the canonical `backend/uploads/`. This ensures the
+    # after-delete hook never reaches across into production uploads
+    # when it's firing against the test DB.
+    upload_dir = os.environ.get("CRISP_UPLOAD_DIR") or os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "uploads")
+    )
     if not os.path.isdir(upload_dir):
         return
     prefix = f"{target.id}_"  # e.g. `abc123_assembled.jpg`, `abc123_partial.jpg`

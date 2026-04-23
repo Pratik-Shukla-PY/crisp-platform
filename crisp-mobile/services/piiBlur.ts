@@ -36,11 +36,43 @@ const jpeg = require('jpeg-js') as {
 let _model: blazeface.BlazeFaceModel | null = null;
 let _loading: Promise<blazeface.BlazeFaceModel> | null = null;
 
+// Apr 2026 — TF.js in Expo Go needs `fetch` to be on `tf.env().global` so
+// `@tensorflow-models/blazeface` can download its GraphModel weights from the
+// TFHub CDN. On bare RN `global.fetch` exists but tf.env() may not proxy it,
+// which surfaces as "Cannot read property 'fetch' of undefined". Shim both
+// `global.fetch` / `globalThis.fetch` into `tf.env().global.fetch` at module
+// load so model loading works without pulling in `@tensorflow/tfjs-react-native`.
+//
+// Failure here is non-fatal: the whole `ensureModel` path is wrapped so an
+// unrecoverable shim just means "no client-side face detection, the backend
+// PII pipeline catches it".
+let _tfShimAttempted = false;
+function _shimTfGlobals(): void {
+  if (_tfShimAttempted) return;
+  _tfShimAttempted = true;
+  try {
+    const g: any = (typeof globalThis !== 'undefined' && globalThis) ||
+                   (typeof global !== 'undefined' && (global as any)) ||
+                   {};
+    const env = (tf as any).env ? (tf as any).env() : null;
+    if (!env) return;
+    if (!env.global) env.global = {};
+    if (!env.global.fetch && g.fetch) env.global.fetch = g.fetch.bind(g);
+    if (!env.global.XMLHttpRequest && g.XMLHttpRequest) env.global.XMLHttpRequest = g.XMLHttpRequest;
+    if (!env.global.Headers && g.Headers) env.global.Headers = g.Headers;
+    if (!env.global.Request && g.Request) env.global.Request = g.Request;
+    if (!env.global.Response && g.Response) env.global.Response = g.Response;
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** Load BlazeFace on demand. Idempotent + concurrent-safe. */
 export async function ensureModel(): Promise<blazeface.BlazeFaceModel> {
   if (_model) return _model;
   if (_loading) return _loading;
   _loading = (async () => {
+    _shimTfGlobals();
     // WebGL isn't available in RN — TF.js picks cpu automatically, but be explicit.
     try { await tf.setBackend('cpu'); } catch { /* backend may already be set */ }
     await tf.ready();

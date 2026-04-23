@@ -38,7 +38,19 @@ import { t } from '../services/i18n';
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSelect: (osmId: string) => void;
+  /**
+   * Fired when the reporter taps a building polygon.
+   *
+   * `osmId` — the canonical OSM reference (e.g. `osm:way:123456`), used
+   * as the backend `building_id` for dedup/versioning.
+   *
+   * `osmName` — the best human-readable label from the OSM tags
+   * (`name` > `name:en` > amenity-type > building-type fallback); null
+   * when no name tag exists. UNDP-required: the dashboard admin sees
+   * this label beside the building-history pill instead of just the
+   * bare numeric ID, so operators know WHICH building was flagged.
+   */
+  onSelect: (osmId: string, osmName: string | null) => void;
   /** Current GPS — used to centre the map + scope the Overpass query. */
   lat: number;
   lng: number;
@@ -107,7 +119,16 @@ function buildMapHtml(lat: number, lng: number): string {
       poly.on('click', function(){
         // Visual feedback before the modal closes — highlight the chosen polygon.
         poly.setStyle({ fillOpacity: 0.4, color: '#22c55e', weight: 3 });
-        post({ osmId: 'osm:way:' + el.id });
+        // Pick the best human-readable name for the dashboard, same
+        // precedence as the PWA's building-select.js: name > name:en >
+        // amenity type > building type. null when no tag is present.
+        var tags = el.tags || {};
+        var osmName =
+          tags.name || tags['name:en'] ||
+          (tags.amenity ? String(tags.amenity).replace(/_/g, ' ') : null) ||
+          (tags.building && tags.building !== 'yes' ? String(tags.building).replace(/_/g, ' ') : null) ||
+          null;
+        post({ osmId: 'osm:way:' + el.id, osmName: osmName });
       });
     });
     if (count === 0) {
@@ -133,7 +154,10 @@ export default function BuildingFootprintPicker({ visible, onClose, onSelect, la
     try {
       const data = JSON.parse(e.nativeEvent.data);
       if (typeof data?.osmId === 'string' && data.osmId.startsWith('osm:way:')) {
-        onSelect(data.osmId);
+        const name = typeof data.osmName === 'string' && data.osmName.trim()
+          ? data.osmName.trim()
+          : null;
+        onSelect(data.osmId, name);
         // Delay close slightly so the user sees the green-highlight flash.
         setTimeout(onClose, 250);
       }
