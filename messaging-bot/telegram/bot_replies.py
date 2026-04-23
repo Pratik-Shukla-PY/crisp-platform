@@ -71,6 +71,19 @@ _STRINGS = {
         "step_debris":     "🚜 *Does this need debris clearing?*",
         "debris_yes":      "✅ Yes",
         "debris_no":       "❌ No",
+        # Apr 2026 UX fix — OSM building suggestions after location drop.
+        "bldg_which":      "🏛 *Which building?* Tap one, or type the name.",
+        "bldg_type_instead": "Type name instead",
+        # Apr 2026 UX fix — simplified consent prompt (used when the
+        # locale pack hasn't shipped a translation yet; see _tf() in
+        # send_consent_prompt for the fallback resolver).
+        "consent_title":   "🛡 Your privacy matters",
+        "consent_body":    ("CRISP collects just:\n"
+                            "• 📍 Location\n• 📸 Photos (faces auto-blurred)\n• 🎤 Audio / text\n\n"
+                            "Shared only with crisis responders. Type /delete anytime to remove your data.\n\n"
+                            "Continue?"),
+        "consent_yes":     "✅ I agree",
+        "consent_no":      "❌ No, cancel",
         # v3 crisis-group headers + UNDP super-type labels + missing crisis keys.
         "crisis_group_natural":       "Natural",
         "crisis_group_technological": "Technological",
@@ -651,20 +664,35 @@ async def send_step_photo_first(chat_id: int, lang: str):
 # consent card so Telegram users get the same privacy disclosures (location,
 # photo, audio, retention) before any data is collected.
 async def send_consent_prompt(chat_id: int, lang: str):
-    # Keep keys i18n-friendly but fall back to an English summary if the
-    # translation table doesn't have them yet. Short enough to fit one screen.
-    title = t(lang, "consent_title") or "🛡 Your privacy matters"
-    body = t(lang, "consent_body") or (
-        "To route help fast, CRISP collects:\n"
-        "• 📍 Location (GPS / map pin)\n"
-        "• 📸 Photos of damage (faces auto-blurred)\n"
-        "• 🎤 Audio / text description\n\n"
-        "Shared only with verified crisis responders. You can delete "
-        "anytime with /delete.\n\n"
+    # Apr 2026 — the `t(lang, key) or "default"` pattern that used to live
+    # here silently failed, because `t()` returns the raw key as a STRING
+    # when a translation is missing — always truthy → fallback never fires.
+    # That's why the bot was showing literal `consent_title` / `consent_body`
+    # /  `consent_yes` / `consent_no` on-screen. Switched to `_tf(…)` below
+    # which uses `getattr` / dict `.get()` and returns None on miss so the
+    # short human-readable defaults below kick in.
+    def _tf(key, default):
+        # Resolve via the same table `t()` uses but bypass the
+        # key-as-fallback behaviour. If the locale pack doesn't have the
+        # key AND the English pack doesn't either, return the default.
+        table = _STRINGS.get(lang) or _STRINGS.get(_LANG_FALLBACK.get(lang, "en"), _STRINGS["en"])
+        if key in table:
+            return table[key]
+        if key in _STRINGS["en"]:
+            return _STRINGS["en"][key]
+        return default
+
+    title = _tf("consent_title", "🛡 Your privacy matters")
+    body = _tf("consent_body",
+        "CRISP collects just:\n"
+        "• 📍 Location\n"
+        "• 📸 Photos (faces auto-blurred)\n"
+        "• 🎤 Audio / text\n\n"
+        "Shared only with crisis responders. Type /delete anytime to remove your data.\n\n"
         "Continue?"
     )
-    yes_label = t(lang, "consent_yes") or "✅ I agree"
-    no_label = t(lang, "consent_no") or "❌ No, cancel"
+    yes_label = _tf("consent_yes", "✅ I agree")
+    no_label = _tf("consent_no", "❌ No, cancel")
     # Apr 2026 — drop `parse_mode=Markdown`. Telegram's legacy Markdown
     # parser rejects this body with "Can't find end of the entity
     # starting at byte offset 24" because the fallback text mixes `*`
@@ -823,6 +851,38 @@ async def send_step_text(chat_id: int, lang: str):
                 [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
             ],
         },
+    })
+
+
+async def send_building_suggestions(chat_id: int, lang: str, buildings: list) -> None:
+    """Phase B2 follow-up (Apr 2026 Telegram UX polish) — offer the top-5
+    OSM-nearby buildings as tap-to-pick inline buttons.
+
+    `buildings` is the list returned by `building_lookup.nearby_buildings`
+    — `[{id, name, distance_m}, ...]`. Renders one button per building
+    ("Name · 42 m") plus a "Type a name instead" fallback and a Skip.
+    When `buildings` is empty the caller should route to the legacy
+    free-text `send_step_building_name` directly — this function assumes
+    there's at least one suggestion to show.
+    """
+    rows: list[list[dict]] = []
+    for b in (buildings or [])[:5]:
+        label = b.get("name") or "Building"
+        dist = b.get("distance_m")
+        caption = f"{label} · {dist} m" if dist is not None else label
+        # callback_data is limited to 64 bytes; `osm:way:<id>` fits easily.
+        rows.append([{"text": "🏛 " + caption, "callback_data": "bldg:" + b["id"]}])
+    rows.append([
+        {"text": "✍️ " + (t(lang, "bldg_type_instead") or "Type name instead"),
+         "callback_data": "bldg_type"},
+        {"text": "⏭ " + (t(lang, "step_building_skip") or "Skip"),
+         "callback_data": "skip_building"},
+    ])
+    await _send("sendMessage", {
+        "chat_id": chat_id,
+        "text": t(lang, "bldg_which") or "🏛 *Which building?* Tap one, or type the name.",
+        "parse_mode": "Markdown",
+        "reply_markup": {"inline_keyboard": rows},
     })
 
 

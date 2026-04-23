@@ -115,6 +115,11 @@ class TelegramSession:
     # reporter can skip and the field stays empty.
     infra_name: str = ""
     infra_name_answered: bool = False
+    # Apr 2026 UX fix — when the reporter taps an Overpass suggestion
+    # chip, this holds the `osm:way:<id>` / `osm:relation:<id>` string.
+    # Emitted on the meta payload as `building_id` so dashboard pins the
+    # report to the exact footprint without needing operator mapping.
+    building_id: str = ""
     # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No answer.
     # `debris_answered` is the flow gate; `debris_needed` the value.
     # Submitted to the backend as `debris_clearing_needed` (already a
@@ -126,6 +131,15 @@ class TelegramSession:
     created_at: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     last_activity: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     message_ids: set = field(default_factory=set)
+    # Apr 2026 UX fix — Telegram callback_query.id dedupe. Every chip tap
+    # fires a callback that the bot answers + acts on. Network lag means
+    # the user may tap twice before the first reply paints, so the second
+    # callback_query arrives with a fresh id but identical `data`. We
+    # dedupe on BOTH: the callback's own id (re-delivery by Telegram) AND
+    # a short-lived (data, window) key so accidental double-taps are a
+    # no-op. Bounded queue → never grows unbounded.
+    callback_ids: set = field(default_factory=set)
+    callback_recent_data: list = field(default_factory=list)   # [(data, ts)]
     submitted_report_id: Optional[str] = None
     # P3.5 — tracks whether the user has consented to data capture. Flipped
     # true only by the explicit "I consent" callback; all data handlers
@@ -219,6 +233,44 @@ def clear_session(user_id):
         uh = hash_user(int(user_id))
     if uh in _sessions:
         _sessions[uh].state = "DONE"
+
+
+def is_duplicate_callback(session: TelegramSession, cq_id: str, data: str, window_seconds: float = 2.0) -> bool:
+    """Return True when a callback_query should be ignored as a duplicate.
+
+    Catches two distinct patterns:
+      1. Telegram re-delivering the same cq_id (rare but happens under
+         poor connectivity → the client retries the answer_callback).
+      2. User tapping the same button twice within `window_seconds` because
+         of network lag — different cq_id but identical `data`. Without
+         this the bot would fire the handler twice, re-submit, etc.
+
+    Keeps the per-session state bounded: callback_ids ring holds the last
+    64 ids; callback_recent_data purges entries older than the window.
+    """
+    import time
+    now = time.monotonic()
+
+    # Pattern 1 — cq_id already seen.
+    if cq_id and cq_id in session.callback_ids:
+        return True
+    if cq_id:
+        session.callback_ids.add(cq_id)
+        if len(session.callback_ids) > 64:
+            # Drop the oldest-ish half; set doesn't maintain order, but we
+            # don't need strict LRU — just a soft cap.
+            session.callback_ids = set(list(session.callback_ids)[-32:])
+
+    # Pattern 2 — same data within the window.
+    # Purge entries outside the window first.
+    session.callback_recent_data = [
+        (d, ts) for (d, ts) in session.callback_recent_data if now - ts < window_seconds
+    ]
+    for (d, ts) in session.callback_recent_data:
+        if d == data:
+            return True
+    session.callback_recent_data.append((data, now))
+    return False
 
 
 def is_duplicate_message(session: TelegramSession, message_id: int) -> bool:
@@ -372,6 +424,13 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
     if session.infra_name:
         meta["infrastructure_name"] = session.infra_name
         meta["infrastructure_name_from_osm"] = False
+    # Apr 2026 Telegram UX polish — OSM building pick goes into meta too.
+    # When present, the dashboard skips the "needs mapping" badge (the
+    # footprint IS the mapping). infrastructure_name_from_osm is TRUE
+    # so the needs_manual_mapping derivation treats it as resolved.
+    if session.building_id:
+        meta["building_id"] = session.building_id
+        meta["infrastructure_name_from_osm"] = True
     # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris-clearing answer.
     if session.debris_answered:
         meta["debris_clearing_needed"] = bool(session.debris_needed)
@@ -473,6 +532,12 @@ async def update_report_metadata(session: TelegramSession):
             if session.infra_name:
                 payload["infrastructure_name"] = session.infra_name
                 payload["infrastructure_name_from_osm"] = False
+            # Apr 2026 Telegram UX polish — OSM building pick via the
+            # suggestion chips. Overrides the free-text from-osm=False
+            # branch above because the pick IS the mapping.
+            if session.building_id:
+                payload["building_id"] = session.building_id
+                payload["infrastructure_name_from_osm"] = True
             # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris answer.
             # Only emitted once the reporter has actually answered; pre-
             # answer the column stays NULL on the backend (distinguishable

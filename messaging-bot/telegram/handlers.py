@@ -18,13 +18,19 @@ from .session_manager import (
     update_report_metadata, update_report_location, delete_report, submit_report,
     clear_session, SEVERITY_MAP, TYPE_MAP, CRISIS_MAP, DAMAGE_MAP, DEBRIS_MAP, hash_user,
     resolve_location_name,
+    is_duplicate_callback,
+)
+from .consent_store import (
+    has_consented as consent_has,
+    grant as consent_grant,
+    revoke as consent_revoke,
 )
 from .media_handler import download_media, download_and_split_video
 from .bot_replies import (
     send_welcome, send_step_location, send_step_photo, send_step_photo_first, send_consent_prompt,
     send_step_voice, send_step_severity, send_step_type,
     send_step_crisis_type, send_step_damage_class, send_step_building_name,
-    send_step_debris,
+    send_step_debris, send_building_suggestions,
     send_step_text, send_step_description, send_confirmation, send_add_more_prompt,
     send_text, answer_callback,
     detect_lang, t,
@@ -186,8 +192,22 @@ def _next_missing_step(session) -> str:
     # include a caption with their first media — by the time we reach
     # STEP_DESCRIPTION `session.text` is almost always populated, and we
     # skip to READY.
-    if not session.image_data_url and not session.audio_data_url and not session.text:
-        return "STEP_PHOTO"
+    # Apr 2026 UX fix — match the PWA/RN 8-stage capture-flow sequence
+    # exactly so evaluators comparing channels see the same order:
+    #
+    #   1 home           ← handled by /start + consent
+    #   2 where+damage   → STEP_LOCATION, STEP_DAMAGE_CLASS
+    #   3 infra          → STEP_TYPE
+    #   4 crisis + name  → STEP_CRISIS_TYPE, STEP_BUILDING_NAME
+    #   5 extras         → STEP_DEBRIS, STEP_SEVERITY  (service + needs
+    #                     skipped on Telegram for brevity — low-friction)
+    #   6+7 evidence     → STEP_PHOTO (accepts photo OR voice OR text)
+    #   8 submit         → READY
+    #
+    # Evidence (photo/voice/text) comes LAST so the reporter's working
+    # memory of the scene drives the structured metadata first, while
+    # the descriptive capture closes the flow. This is the reverse of
+    # the old Telegram ordering but mirrors the field-app sequence.
     if not session.has_location:
         return "STEP_LOCATION"
     if not session.damage_class:
@@ -198,17 +218,16 @@ def _next_missing_step(session) -> str:
         return "STEP_CRISIS_TYPE"
     if not session.infra_name_answered:
         return "STEP_BUILDING_NAME"
-    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No comes
-    # BEFORE severity so the reporter's working memory of the physical
-    # scene is used for the Appendix-1 debris answer, while severity is
-    # auto-derived from damage class on the PWA/RN side (Telegram still
-    # asks the 3-level severity explicitly for feature-phone IVR parity).
     if not session.debris_answered:
         return "STEP_DEBRIS"
     if not session.severity_answered:
         return "STEP_SEVERITY"
-    if not session.text and (session.image_data_url or session.audio_data_url):
-        return "STEP_DESCRIPTION"
+    # Evidence — accepts any of photo, voice, or text. The STEP_PHOTO
+    # prompt explicitly invites all three so users aren't forced into
+    # a media type they can't produce (feature phones can type; voice-
+    # only speakers can record).
+    if not session.image_data_url and not session.audio_data_url and not session.text:
+        return "STEP_PHOTO"
     return "READY"
 
 
@@ -228,7 +247,21 @@ async def _prompt_for_step(session, chat_id: int, step: str):
     elif step == "STEP_SEVERITY":
         await send_step_severity(chat_id, lang)
     elif step == "STEP_BUILDING_NAME":
-        await send_step_building_name(chat_id, lang)
+        # Apr 2026 UX fix — if we have GPS, try to offer nearby OSM
+        # buildings as tap-to-pick chips first. Reporter taps one → done.
+        # Timeout/empty-result falls through to the free-text prompt.
+        picked = False
+        if session.has_location:
+            try:
+                from .building_lookup import nearby_buildings
+                suggestions = await nearby_buildings(session.latitude, session.longitude, limit=5)
+                if suggestions:
+                    await send_building_suggestions(chat_id, lang, suggestions)
+                    picked = True
+            except Exception:
+                picked = False
+        if not picked:
+            await send_step_building_name(chat_id, lang)
     elif step == "STEP_DEBRIS":
         await send_step_debris(chat_id, lang)
     elif step == "STEP_LOCATION":
@@ -290,6 +323,10 @@ async def handle_update(update: dict):
     # P3.5 — Consent-gate: if waiting on consent (or never consented), any
     # inbound text/media is ignored and the consent card is re-shown. No
     # side-effect captures, no DB writes.
+    # Apr-2026: hydrate from persisted consent store first so a returning
+    # reporter is treated as already-consented even on a fresh session.
+    if not session.consented and consent_has(user_id):
+        session.consented = True
     if session.state == "AWAIT_CONSENT" or not session.consented:
         await send_consent_prompt(chat_id, session.lang)
         return
@@ -368,16 +405,33 @@ async def _handle_callback(callback_query: dict):
         session.lang = detected
     lang = session.lang
 
-    # P3.5 — Language selection now routes through explicit consent before
-    # any data is captured. If the user returns after already consenting in
-    # the same session, skip straight to the photo step.
+    # Apr 2026 UX fix — multi-tap debounce. Users tap a chip, see nothing
+    # for 500-800 ms while the backend roundtrip runs, tap again in
+    # frustration. Without this guard the second callback fires the
+    # same handler (crisis_type clicked twice → re-sends the next-step
+    # prompt twice). Ack-and-drop duplicates silently.
+    if is_duplicate_callback(session, cq_id, data):
+        try:
+            await answer_callback(cq_id)
+        except Exception:
+            pass
+        return
+
+    # P3.5 — Language selection routes through consent before any data is
+    # captured. Apr-2026 fix: consent is persisted to SQLite keyed by
+    # `user_id`, so a returning reporter skips the consent card entirely.
+    # In-memory `session.consented` is mirrored from the store on first
+    # lookup so the rest of the flow keeps working unchanged.
     if data.startswith("lang_"):
         new_lang = data.replace("lang_", "")
         session.lang = new_lang
         await answer_callback(cq_id, f"Language: {new_lang.upper()}")
+        # Hydrate from the consent store — asked once, remembered forever.
+        if not session.consented and consent_has(user_id):
+            session.consented = True
         if session.consented:
-            session.state = "STEP_PHOTO"
-            await send_step_photo_first(chat_id, new_lang)
+            session.state = _next_missing_step(session)
+            await _prompt_for_step(session, chat_id, session.state)
         else:
             session.state = "AWAIT_CONSENT"
             await send_consent_prompt(chat_id, new_lang)
@@ -386,9 +440,12 @@ async def _handle_callback(callback_query: dict):
     # User accepted the consent card — proceed to reporting flow.
     if data == "consent_accept":
         session.consented = True
-        session.state = "STEP_PHOTO"
+        consent_grant(user_id, session.lang)     # persist → never re-ask
         await answer_callback(cq_id, "Thanks!")
-        await send_step_photo_first(chat_id, session.lang or detected)
+        # Jump straight to the NEXT missing step (usually STEP_LOCATION in
+        # the Apr-2026 reorder). Previously always landed on STEP_PHOTO.
+        session.state = _next_missing_step(session)
+        await _prompt_for_step(session, chat_id, session.state)
         return
 
     # User declined — wipe session and bid farewell. Nothing captured so
@@ -403,16 +460,18 @@ async def _handle_callback(callback_query: dict):
         clear_session(user_id)
         return
 
-    # Start / Report Another → go straight to photo (consent carries over).
+    # Start / Report Another → carry consent across the session reset so
+    # the reporter isn't re-prompted between reports.
     if data == "start_report":
+        persisted_consent = session.consented or consent_has(user_id)
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
         s.lang = session.lang or detected
-        s.consented = session.consented  # carry forward; no re-prompt
+        s.consented = persisted_consent
         if s.consented:
-            s.state = "STEP_PHOTO"
+            s.state = _next_missing_step(s)
             await answer_callback(cq_id)
-            await send_step_photo_first(chat_id, s.lang)
+            await _prompt_for_step(s, chat_id, s.state)
         else:
             s.state = "AWAIT_CONSENT"
             await answer_callback(cq_id)
@@ -473,6 +532,29 @@ async def _handle_callback(callback_query: dict):
     if data == "skip_text":
         await answer_callback(cq_id)
         await _finalize(session)
+        return
+
+    # ── Apr 2026 Telegram UX — OSM building pick: `bldg:osm:way:<id>`
+    # (or `bldg:osm:relation:<id>`). Resolves directly to session.building_id
+    # + mirrors the OSM name into `infra_name` via update_report_metadata.
+    if data.startswith("bldg:osm:"):
+        osm_id = data[len("bldg:"):]
+        session.building_id = osm_id
+        session.infra_name_answered = True
+        await update_report_metadata(session)
+        await answer_callback(cq_id, "✓")
+        next_step = _next_missing_step(session)
+        session.state = next_step
+        if next_step == "READY":
+            await _finalize(session)
+        else:
+            await _prompt_for_step(session, chat_id, next_step)
+        return
+
+    # User prefers to type the name freehand. Show the free-text prompt.
+    if data == "bldg_type":
+        await answer_callback(cq_id)
+        await send_step_building_name(chat_id, session.lang or detected)
         return
 
     # ── Phase D (Apr 2026 UI v3) — skip the native-language building prompt.
@@ -560,10 +642,20 @@ async def _handle_callback(callback_query: dict):
         return
 
     # ── Damage classification buttons ──
+    # Apr 2026 UX parity with PWA — severity is auto-derived from damage:
+    # MINIMAL→MINOR, PARTIAL→MODERATE, COMPLETE→SEVERE. Saves one chip
+    # step and matches what the PWA / RN flows do. Reporters can still
+    # override on the severity prompt if we ever keep it in the future.
     if data.startswith("dmg_"):
         dc = DAMAGE_MAP.get(data)
         if dc:
             session.damage_class = dc
+            derive = {"MINIMAL": "MINOR", "PARTIAL": "MODERATE",
+                      "COMPLETE": "SEVERE", "NO_DAMAGE": "MINOR", "DESTROYED": "SEVERE"}
+            derived = derive.get(dc)
+            if derived and session.severity == "UNKNOWN":
+                session.severity = derived
+                session.severity_answered = True
             await update_report_metadata(session)
             await answer_callback(cq_id)
             next_step = _next_missing_step(session)
