@@ -34,6 +34,12 @@ logger = logging.getLogger(__name__)
 _OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 _RADIUS_M = 150                                # bounded: quick query, still covers blocks
 _TIMEOUT_S = 8.0
+# Overpass rejects the default `python-httpx/…` User-Agent with HTTP 406
+# (confirmed Apr 2026 against overpass-api.de). Any identifiable UA
+# string makes it pass. We send a descriptive one so ops can contact us
+# if our query load ever tips into abusive territory.
+_USER_AGENT = "CRISP-TelegramBot/1.0 (+github.com/Pratik-Shukla-PY/crisp-platform)"
+_ACCEPT = "application/json, */*"
 
 
 def _centroid(way: Dict[str, Any]) -> Optional[tuple[float, float]]:
@@ -93,9 +99,20 @@ async def nearby_buildings(lat: float, lng: float, limit: int = 5) -> List[Dict[
             res = await client.post(
                 _OVERPASS_URL,
                 data={"data": query},
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    # See _USER_AGENT comment — Overpass 406s the default.
+                    "User-Agent": _USER_AGENT,
+                    "Accept": _ACCEPT,
+                },
             )
             if res.status_code != 200:
+                # Log the body on failure so the next 406 / rate-limit /
+                # transient is trivially diagnosable.
+                logger.warning(
+                    "[building_lookup] Overpass returned %s: %s",
+                    res.status_code, res.text[:200],
+                )
                 return []
             data = res.json()
     except Exception as e:
