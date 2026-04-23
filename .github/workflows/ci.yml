@@ -24,15 +24,19 @@ jobs:
       PYTHONUNBUFFERED: "1"
       # Apr 2026 — CRISP is Postgres-only. The backend refuses to boot
       # without a Postgres DSN. The service container below exposes
-      # crisp/crisp/crisp on :5432.
-      PYTEST_DATABASE_URL: postgresql+psycopg2://crisp:crisp@localhost:5432/crisp
+      # crisp/crisp/crisp_test on :5432. Database name MUST end in
+      # `_test` — the `conftest.py` seatbelt (added Apr 2026 after
+      # the dev-DB wipe incident) hard-refuses any non-`_test`
+      # target so pytest can't DROP SCHEMA CASCADE a production-
+      # shaped DB.
+      PYTEST_DATABASE_URL: postgresql+psycopg2://crisp:crisp@localhost:5432/crisp_test
     services:
       postgres:
         image: postgres:15-alpine
         env:
           POSTGRES_USER: crisp
           POSTGRES_PASSWORD: crisp
-          POSTGRES_DB: crisp
+          POSTGRES_DB: crisp_test
         ports:
           - 5432:5432
         options: >-
