@@ -45,6 +45,54 @@ alembic history --verbose
 For production, set `DATABASE_URL` to the Postgres DSN before running
 `alembic upgrade head`. See `.env.production.example`.
 
+## Postgres dev setup (Apr 2026 — full-switch)
+
+The full migration chain (0002 → 0006) has been verified end-to-end on
+PostgreSQL 15 and lives in CI as a Postgres-service matrix cell. To
+bring a local Postgres up to par with the SQLite default:
+
+```bash
+# Install + start Postgres 15 (macOS + Homebrew)
+brew install postgresql@15
+export LC_ALL="en_US.UTF-8"
+pg_ctl -D /opt/homebrew/var/postgresql@15 -l /tmp/pg15.log start
+
+# Provision the crisp role + DB
+psql -U "$USER" -d postgres -c \
+  "CREATE ROLE crisp WITH LOGIN PASSWORD 'crisp' SUPERUSER;"
+createdb -U "$USER" crisp
+
+# Point the app at it + run the chain
+cd backend
+export DATABASE_URL="postgresql+psycopg2://crisp:crisp@localhost:5432/crisp"
+export APP_ENV=dev
+alembic upgrade head
+alembic current    # → 0006_bh (head)
+```
+
+After `alembic upgrade head` on a fresh Postgres instance you'll have the
+same schema SQLite carries locally, plus the Postgres-specific artefacts
+(enum types widened by 0003, full tz-aware datetimes, real BOOLEAN
+columns). The backend's `_purge_expired_deletions` path handles both
+dialects: a tz-bug there that silently shifted the deletion-grace cutoff
+5.5 hours on IST-defaulted Postgres servers was fixed in the full-switch
+sprint by using `.astimezone(utc)` instead of `.replace(tzinfo=utc)`.
+
+### Dialect-specific migrations
+
+Two of the six migrations have explicit Postgres branches:
+
+  * **0003_infra** — uses `ALTER TYPE infratypeenum ADD VALUE IF NOT
+    EXISTS` (Postgres-only, autocommit-block) to widen the enum BEFORE
+    the backfill UPDATE can write `RESIDENTIAL` / `COMMUNITY` / etc.
+    into the column. SQLite is untyped and accepts the new values
+    directly. The backfill also uses `infrastructure_type::text` when
+    `UPPER()`-ing the enum on Postgres because the planner refuses
+    `UPPER(enum_col)` without an explicit cast.
+  * **0005_pii** — the backfill `WHERE client_blur_applied = :truthy`
+    binds a Python `True` rather than the literal `1`; SQLAlchemy emits
+    the right token for each dialect (`TRUE` on Postgres, `1` on SQLite).
+
 ## Adopting an existing dev database
 
 Before Alembic landed, `crisp_local.db` was created at app boot and has

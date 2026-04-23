@@ -16,14 +16,15 @@ from .session_manager import (
     get_or_create_session, is_duplicate_message,
     create_report_early, upload_image, upload_audio, upload_video_deferred,
     update_report_metadata, update_report_location, delete_report, submit_report,
-    clear_session, SEVERITY_MAP, TYPE_MAP, CRISIS_MAP, DAMAGE_MAP, hash_user,
+    clear_session, SEVERITY_MAP, TYPE_MAP, CRISIS_MAP, DAMAGE_MAP, DEBRIS_MAP, hash_user,
     resolve_location_name,
 )
 from .media_handler import download_media, download_and_split_video
 from .bot_replies import (
     send_welcome, send_step_location, send_step_photo, send_step_photo_first, send_consent_prompt,
     send_step_voice, send_step_severity, send_step_type,
-    send_step_crisis_type, send_step_damage_class,
+    send_step_crisis_type, send_step_damage_class, send_step_building_name,
+    send_step_debris,
     send_step_text, send_step_description, send_confirmation, send_add_more_prompt,
     send_text, answer_callback,
     detect_lang, t,
@@ -138,6 +139,14 @@ async def _capture_any_media(session, message: dict):
             session.infra_type = itype
             session.type_answered = True
             captured = True
+        elif session.state == "STEP_BUILDING_NAME" and not session.infra_name_answered:
+            # Phase D (Apr 2026 UI v3) — native-language building name. Cap at
+            # 120 chars to match backend `infrastructure_name` column width.
+            # Never overwritten by subsequent messages — once answered, subsequent
+            # text falls through to the description slot below.
+            session.infra_name = text[:120].strip()
+            session.infra_name_answered = True
+            captured = True
         else:
             session.text = (session.text + "\n" + text).strip() if session.text else text
             captured = True
@@ -157,20 +166,49 @@ def _next_missing_step(session) -> str:
     phones via SMS/IVR-class channels — must still be able to file a report
     even if they can't attach a photo.
     """
+    # Phase B4 (Apr 2026 UI v3) — question sequence reordered to match the
+    # PWA's 8-stage capture flow:
+    #
+    #   1 Evidence (photo / voice / text)     → STEP_PHOTO
+    #   2 Where (location) + damage level     → STEP_LOCATION, STEP_DAMAGE_CLASS
+    #   3 Infrastructure type                 → STEP_TYPE
+    #   4 Crisis type + native-language name  → STEP_CRISIS_TYPE, STEP_BUILDING_NAME
+    #   5 Severity (pressing needs are TG-optional; skipped)
+    #                                          → STEP_SEVERITY
+    #   6 Audio + text description            → STEP_DESCRIPTION
+    #   → READY
+    #
+    # Rationale: the conversational flow already defers evidence to whenever
+    # the user sends it (see `_capture_any_media`), so PHOTO stays first as
+    # a prompt rather than a gate. Location now precedes classification so
+    # the reporter's working memory of WHERE matches the PWA's stage-where
+    # kickoff. Description is asked LAST because most Telegram users
+    # include a caption with their first media — by the time we reach
+    # STEP_DESCRIPTION `session.text` is almost always populated, and we
+    # skip to READY.
     if not session.image_data_url and not session.audio_data_url and not session.text:
         return "STEP_PHOTO"
-    if not session.text and (session.image_data_url or session.audio_data_url):
-        return "STEP_DESCRIPTION"
+    if not session.has_location:
+        return "STEP_LOCATION"
+    if not session.damage_class:
+        return "STEP_DAMAGE_CLASS"
     if not session.type_answered:
         return "STEP_TYPE"
     if not session.crisis_type:
         return "STEP_CRISIS_TYPE"
-    if not session.damage_class:
-        return "STEP_DAMAGE_CLASS"
+    if not session.infra_name_answered:
+        return "STEP_BUILDING_NAME"
+    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No comes
+    # BEFORE severity so the reporter's working memory of the physical
+    # scene is used for the Appendix-1 debris answer, while severity is
+    # auto-derived from damage class on the PWA/RN side (Telegram still
+    # asks the 3-level severity explicitly for feature-phone IVR parity).
+    if not session.debris_answered:
+        return "STEP_DEBRIS"
     if not session.severity_answered:
         return "STEP_SEVERITY"
-    if not session.has_location:
-        return "STEP_LOCATION"
+    if not session.text and (session.image_data_url or session.audio_data_url):
+        return "STEP_DESCRIPTION"
     return "READY"
 
 
@@ -189,6 +227,10 @@ async def _prompt_for_step(session, chat_id: int, step: str):
         await send_step_damage_class(chat_id, lang)
     elif step == "STEP_SEVERITY":
         await send_step_severity(chat_id, lang)
+    elif step == "STEP_BUILDING_NAME":
+        await send_step_building_name(chat_id, lang)
+    elif step == "STEP_DEBRIS":
+        await send_step_debris(chat_id, lang)
     elif step == "STEP_LOCATION":
         await send_step_location(chat_id, lang)
 
@@ -431,6 +473,43 @@ async def _handle_callback(callback_query: dict):
     if data == "skip_text":
         await answer_callback(cq_id)
         await _finalize(session)
+        return
+
+    # ── Phase D (Apr 2026 UI v3) — skip the native-language building prompt.
+    # The reporter chose not to name the building. Mark the slot answered so
+    # `_next_missing_step` advances; `infra_name` stays empty.
+    if data == "skip_building":
+        await answer_callback(cq_id)
+        session.infra_name_answered = True
+        next_step = _next_missing_step(session)
+        session.state = next_step
+        if next_step == "READY":
+            await _finalize(session)
+        else:
+            await _prompt_for_step(session, chat_id, next_step)
+        return
+
+    # ── Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No.
+    # Tapping either flips `debris_answered=True` and records the value
+    # on `debris_needed`; the flow then advances to the next missing step.
+    if data in DEBRIS_MAP:
+        session.debris_needed = DEBRIS_MAP[data]
+        session.debris_answered = True
+        await update_report_metadata(session)
+        await answer_callback(cq_id)
+        next_step = _next_missing_step(session)
+        session.state = next_step
+        if next_step == "READY":
+            await _finalize(session)
+        else:
+            await _prompt_for_step(session, chat_id, next_step)
+        return
+
+    # Phase B4 — grouped crisis keyboard renders "— GROUP —" separator
+    # buttons for visual clarity. They carry a `noop_group_*` callback
+    # that silently ACKs the tap so the user doesn't see a spinner.
+    if data.startswith("noop_"):
+        await answer_callback(cq_id)
         return
 
     # ── Type buttons ──

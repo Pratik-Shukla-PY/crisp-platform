@@ -822,6 +822,19 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .dp-field-badge { font-size:11px; font-weight:600; padding:3px 8px; border-radius:8px; display:inline-flex; align-items:center; gap:4px; border:1px solid rgba(255,255,255,0.1); }
 .dp-building-link:hover { filter:brightness(1.3); }
 
+/* Phase E (Apr 2026 UI v3) — "Needs mapping" badge.
+   Subtle pulse so the operator's eye catches the pending work item among the
+   other steady-state UNDP field badges. Matches the dp-urgency-red pulse
+   cadence (2s ease-in-out) so the rhythm feels consistent across the panel. */
+.dp-needs-mapping {
+    border-color: rgba(239, 68, 68, 0.28);
+    animation: dp-needs-mapping-pulse 2.4s ease-in-out infinite;
+}
+@keyframes dp-needs-mapping-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0); }
+    50%      { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12); }
+}
+
 /* Urgency alerts bar */
 .dp-urgency-bar { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
 .dp-urgency { font-size:10px; font-weight:700; padding:3px 7px; border-radius:6px; display:inline-flex; align-items:center; gap:3px; white-space:nowrap; }

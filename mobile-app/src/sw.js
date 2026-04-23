@@ -14,7 +14,111 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v39';  // bump on static-asset changes
+const CACHE_NAME = 'crisp-v54';  // bump on static-asset changes
+// v54 (Apr 2026 — login UI polish). Fixes raw i18n keys showing on
+// stage-login when the JSON pack hadn't re-fetched yet (all login_*
+// keys now live in the inline I18N.en dict so they render immediately
+// even during a service-worker cache transition). Also tightens the
+// form layout — centered card, compact country-code dropdown, proper
+// box-sizing so the phone field never spills past the right edge.
+// v53 (Apr 2026 — Optional reporter login, Phase 1).
+//   - New auth.js module (AuthStore singleton + IDB storage).
+//   - New stage-login (3-step OTP wizard) + stage-settings (Logout).
+//   - Landing page: Login / Sign up tertiary button + account pill
+//     when logged in + ⚙ Settings entry.
+//   - Queue tagging: every queued report now captures `auth_token` at
+//     enqueue time so offline replay submits under the logged-in user.
+//   - Strong logout revokes all server-side refresh tokens.
+//   - 30-day offline grace — UI stays "logged-in" when GPS/network drop,
+//     submit still works, server silently strips expired auth to anon.
+// v52 (Apr 2026 UI v3 / Phase B4 — Apr-23 spec align).
+//   - Stage 2: auto date/time panel + building picker MOVED here from crisis.
+//   - Stage 3: 8 UNDP super-types replace 9 legacy chips.
+//   - Stage 4: crisis chips grouped into 3 UNDP categories.
+//   - Stage 5: debris Yes/No toggle (re-added); severity chips dropped
+//     — severity auto-derived from damage class.
+//   - Stage 6: single Add-more button opens OS native sheet
+//     (Camera + Library + Files).
+//   - Stage 7: live-transcript + description textareas merged; Web Speech
+//     API wired with state.speechCode (device-language transcription;
+//     graceful plain-textarea fallback when API unavailable).
+// v51 (Apr 2026 UI v3 / Phase B4) — full 8-stage capture flow reorder.
+//   - 4 new stages: where (location+damage) / infra / crisis / extras.
+//   - migrateV3Blocks reparents input blocks out of stage-review.
+//   - stage-review collapses to a single "summary + submit" page.
+//   - 7-segment progress overlay replaces the 5-dot bar when v3 is on.
+//   - btn-start lands on stage-where; legacy flow untouched via flag.
+// v50 (Apr 2026 UI v3 / Phase A2) — auto-submit firing fix.
+//   - Region cache: 24 h → 10 s mem TTL (still 24 h persisted for offline).
+//     Dashboard-flipped regions now propagate on next stage transition.
+//   - InactivityManager.tryArm() gated on hasMinimumInput() so the T=0
+//     handler never hits the silent "no input → toast → skip" path.
+//   - Diagnostic chip (bottom-right) surfaces region/arm state for field QA.
+// v49 (Apr 2026 UI v2.1) — UNDP Appendix-1 pressing-needs expanded
+// from 5 → 10 chips. New i18n keys: need_cash, need_livelihoods,
+// need_wash, need_basic_services, need_protection, need_local_support,
+// need_other (244 keys × 6 locales). Legacy `security` value retained
+// as a client alias for backward compat with pre-v2.1 offline queues.
+// v48 (Apr 2026 UI v2.1) — i18n leak sweep on stage-review confirm
+// card + stage-history impact card. Raw enum values (FLOOD / ROAD /
+// MODERATE / DISRUPTED / etc.) were bleeding English through a
+// translated chrome; now routed via a local `tEnum(raw, kind)` helper
+// into the same inline I18N dict already keyed by `flood`, `road`,
+// `moderate`, `partial_damage`, `working`, `disrupted`, etc. Two new
+// keys `mr_resolved` + `mr_lives_impacted` added across every locale
+// (inline + JSON). My-Reports stat tiles now carry `data-i18n` so
+// applyI18n() picks them up on language change.
+// v47 (Apr 2026 UI v2.1) — Building selector now posts the OSM name
+// tag ("City Hospital", "Aishwarya Apartment") to the backend, not
+// just the numeric way ID. Auto-fills `infrastructure_name` so the
+// web-dashboard admin sees a human-readable label beside the building-
+// history pill. building-select.js commit/clear logic updated; the
+// selected-pill renders the name inline for reporter confirmation.
+// v46 (Apr 2026 UI v2.1) — UNDP building-footprint selector flattened
+// from <details>/<summary> to <section>. building-select.js rewired to
+// listen for `review-page-changed` + `gps-ready` + stage-entered
+// custom events instead of the now-absent `toggle` event. New waiting-
+// for-GPS placeholder + matching i18n key `building_waiting_gps` in
+// all 6 locale packs. Bump so clients evict the old building-select.js.
+// v45 (Apr 2026 UI v2.1) — Service-status section flattened from a
+// collapsible <details>/<summary> to an always-visible <section>. Pure
+// HTML + CSS change in index.html + styles.css; no new assets to add
+// to STATIC_ASSETS, just a bump so clients evict the stale bundle.
+// v44 (Apr 2026) UI v2 rewrite. Adds components/icon-pack.js to
+// STATIC_ASSETS (shared Lucide-derived SVG pack for the stage-review
+// chips). index.html gains an ES-module script tag that loads it
+// before app.js; app.js carries the new 3-page stage-review split +
+// feature-flag gate; styles.css adds chip icon colour vars + the
+// sticky header + language-picker ISO fallback. Multi-file change,
+// so existing v43 clients must evict-and-refetch together.
+// v43 (Apr 2026) Phase-1 progressive-upload stack. New vendored blurhash.js
+// (compact DCT encoder/decoder) is pre-cached + loaded before image-
+// variants.js. image-variants.js bumped to v3 — now returns a blurhash
+// string alongside the SMALL/MEDIUM/LARGE variants. app.js bumped to
+// v=840 — threads blurhash into the meta POST payload, mid-upload
+// re-probe with hysteresis, per-device bandwidth cache in localStorage.
+// v42 (Apr 2026) Capture-flow responsiveness fix — the Next button + shutter
+// felt "sticky" for 300–800 ms after each photo because the BlazeFace +
+// variant pipeline ran synchronously on the main thread, starving touch
+// events. Now the 5 `_trackBlur(...)` call-sites defer via a new
+// `_runWhenIdle(...)` helper (requestIdleCallback + setTimeout fallback)
+// so the browser paints the enabled button + handles taps BEFORE the TF
+// work starts. Pipeline unchanged; only WHEN it starts moved from
+// "immediately" to "after the next idle tick".
+// v41 (Apr 2026) Locale-bootstrap hotfix — fixes two pre-existing bugs
+// that made manual Arabic/Urdu/Hebrew/French/Spanish/Russian/Chinese
+// selections silently revert to English on every reload:
+//   (1) narrow locale gate (`I18N[code]` check rejected UN + RTL-only
+//       locales because I18N only carries en/kn/hi/ta)
+//   (2) window.I18N undefined (classic-script const doesn't attach to
+//       window in Chromium; tests + dashboard embed couldn't read it)
+// New regression spec: e2e/tests/pwa/19-locale-bootstrap.spec.ts (10
+// cases). PWA matrix: 73 → 88 passed.
+// v40 (Apr 2026) Post-submit state-clear fix — previously `resetApp()`
+// only ran from the "Add another report" button, so users who navigated
+// back to home by any other route saw the previous report's photo + text
+// bleed into the new capture. Now state is cleared at submit-success, so
+// every downstream route to a new capture starts from a clean slate.
 // v39 (Apr 2026) PII-blur hardening (Fixes A+B+C+D).
 // Field test revealed the client hardcoded `client_blur_applied: true`
 // even when BlazeFace failed silently — PII could reach the dashboard
@@ -313,7 +417,10 @@ const STATIC_ASSETS = [
     SW_BASE + 'places.js',
     SW_BASE + 'pii-blur.js',
     SW_BASE + 'image-variants.js',   // Phase 4 — now pre-cached
+    SW_BASE + 'blurhash.js',         // Phase-1 progressive: compact DCT
     SW_BASE + 'building-select.js',  // UNDP §3.2 — building-footprint selector
+    SW_BASE + 'auth.js',             // Phase 1 (Apr 2026) optional reporter login
+    SW_BASE + 'components/icon-pack.js',  // UI v2 — shared Lucide SVG pack
     SW_BASE + 'styles.css',
     SW_BASE + 'manifest.json',
     SW_BASE + 'assets/icon-192.png',

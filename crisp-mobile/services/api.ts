@@ -1,10 +1,42 @@
 /**
  * CRISP API Client — Same endpoints as PWA.
- * Configurable backend host for dev/prod.
+ *
+ * Backend host resolution (Apr 2026):
+ *   1. EXPO_PUBLIC_CRISP_BACKEND env var — hard override (prod builds).
+ *   2. Expo Constants.expoConfig.hostUri — auto-detect the Metro host's
+ *      LAN IP in dev, so `expo start` on a Mac with any DHCP lease
+ *      Just Works for testers on Expo Go without editing this file.
+ *      Previously we hardcoded an ngrok URL that went stale the moment
+ *      the tunnel was torn down — field testers saw "HTTP 404" on
+ *      POST /reports/meta because the domain no longer pointed anywhere.
+ *   3. Final fallback: localhost (only useful on iOS Simulator or an
+ *      Android emulator on the same host).
  */
+import Constants from 'expo-constants';
 
-// Default: local network. Change for production.
-let API_BASE = 'https://vada-penalizable-fidel.ngrok-free.dev/api/v1';
+function _resolveBackendHost(): string {
+  // Explicit override wins.
+  const override = (process.env.EXPO_PUBLIC_CRISP_BACKEND || '').trim();
+  if (override) return override.replace(/\/$/, '');
+
+  // Expo injects hostUri like "192.168.1.49:8081" when Metro is running
+  // on a LAN IP. Strip the Metro port and swap in the backend's 8000.
+  // `hostUri` can be undefined in a production build — in that case fall
+  // through to the final default.
+  const hostUri: string | undefined =
+    (Constants as any)?.expoConfig?.hostUri ||
+    (Constants as any)?.manifest2?.extra?.expoGo?.hostUri ||
+    (Constants as any)?.manifest?.hostUri;
+  if (hostUri) {
+    const host = hostUri.split(':')[0];
+    if (host && host !== 'localhost') {
+      return `http://${host}:8000`;
+    }
+  }
+  return 'http://localhost:8000';
+}
+
+let API_BASE = `${_resolveBackendHost()}/api/v1`;
 
 export function setApiBase(host: string) {
   API_BASE = `${host}/api/v1`;
@@ -19,6 +51,15 @@ async function sendJSON(url: string, method: string, body: any, _timeoutMs = 300
     method,
     headers: { 'Content-Type': 'application/json' },
   };
+  // Phase 1 (Apr 2026 — Optional reporter login). Attach the current
+  // access token to every JSON call, incl. /reports/meta. Lazy import
+  // avoids a circular dep between api.ts + auth.ts (auth calls sendJSON).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const AuthStore = require('./auth');
+    const tok = AuthStore.getAccessToken && AuthStore.getAccessToken();
+    if (tok) options.headers['Authorization'] = `Bearer ${tok}`;
+  } catch { /* auth module not yet loaded; proceed anonymously */ }
   if (body !== null && body !== undefined) {
     options.body = JSON.stringify(body);
   }

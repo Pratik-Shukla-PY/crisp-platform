@@ -71,12 +71,28 @@ def upgrade() -> None:
 
     # 2. Backfill: copy legacy chip into sub_type, promote infrastructure_type
     # to the UNDP super-type.
+    #
+    # Postgres (Apr 2026 — sole supported dialect):
+    #
+    #   (a) Widen the ENUM type BEFORE the UPDATE. `ALTER TYPE ... ADD
+    #       VALUE IF NOT EXISTS` must be OUTSIDE any transaction per
+    #       Postgres semantics; we use `autocommit_block()` for that.
+    #
+    #   (b) `UPPER(enum_col)` isn't valid in Postgres — the planner
+    #       refuses the call without an explicit text cast. Hence
+    #       `infrastructure_type::text` in the WHERE.
+    with op.get_context().autocommit_block():
+        for new_val in sorted(set(CHIP_TO_UNDP.values())):
+            op.execute(sa.text(
+                f"ALTER TYPE infratypeenum ADD VALUE IF NOT EXISTS '{new_val}'"
+            ))
+
     for chip, undp in CHIP_TO_UNDP.items():
         op.execute(sa.text(
             "UPDATE reports "
             "SET infrastructure_sub_type = COALESCE(infrastructure_sub_type, :chip), "
             "    infrastructure_type = :undp "
-            "WHERE UPPER(infrastructure_type) = :chip"
+            "WHERE UPPER(infrastructure_type::text) = :chip"
         ).bindparams(chip=chip, undp=undp))
 
 
@@ -84,10 +100,28 @@ def downgrade() -> None:
     # Best-effort downgrade: collapse RESIDENTIAL/COMMUNITY/TRANSPORT/UTILITY
     # back to the first legacy chip we find via sub_type. If sub_type is
     # empty the row cannot be round-tripped losslessly.
+    #
+    # Portability note (Apr 2026 — full-Postgres switch): the original
+    # code wrote `infrastructure_sub_type` (varchar) straight into
+    # `infrastructure_type` (infratypeenum). On SQLite the enum is just a
+    # CHECK constraint so the cast is implicit; on Postgres it's a real
+    # enum TYPE and the UPDATE fails with "column 'infrastructure_type'
+    # is of type infratypeenum but expression is of type character
+    # varying". Explicit `::infratypeenum` cast makes it portable.
+    #
+    # Further caveat: we ALSO constrain the cast to values that ARE in
+    # the enum — a sub_type value like 'HOSPITAL' that WAS originally a
+    # legacy chip is still in the enum (migration 0003 only ADDED the
+    # UNDP super-types; it didn't REMOVE the legacy labels). So the
+    # cast is safe for every value that legitimately came from the
+    # original write path.
     op.execute(sa.text(
         "UPDATE reports "
-        "SET infrastructure_type = infrastructure_sub_type "
-        "WHERE infrastructure_sub_type IS NOT NULL AND infrastructure_sub_type != ''"
+        "SET infrastructure_type = infrastructure_sub_type::infratypeenum "
+        "WHERE infrastructure_sub_type IS NOT NULL "
+        "  AND infrastructure_sub_type != '' "
+        "  AND infrastructure_sub_type IN ("
+        "    SELECT unnest(enum_range(NULL::infratypeenum))::text)"
     ))
     if _has_column("reports", "infrastructure_sub_type"):
         with op.batch_alter_table("reports") as batch_op:

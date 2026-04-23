@@ -8,12 +8,16 @@
  * time via native JSON import, so there's no runtime network fetch —
  * the packs are available on first render, including fully offline.
  *
- * Precedence (highest wins): UNDP_JSON_PACKS → inline `translations`
- * below → EN fallback → raw key. This preserves every legacy key the
- * RN code already references while upgrading any key present in the
- * JSON to the UNDP-aligned, native-speaker-quality translation.
+ * Precedence (highest wins): inline `translations` below →
+ * UNDP_JSON_PACKS (dense 232-key) → UNDP_I18N_EXTRA (PWA-shared
+ * Appendix-1 addenda) → EXTRA_LANG (PWA-shared regional baseline) →
+ * EN fallback → raw key. This preserves every legacy key the RN code
+ * already references while upgrading any key present in the JSON to
+ * the UNDP-aligned, native-speaker-quality translation.
  */
 import { getLocales } from 'expo-localization';
+import { I18nManager, NativeModules } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // UNDP Appendix-1 dense packs. `as const` would widen Strings to
 // literal-string unions unnecessarily — leave the default `any` import.
@@ -23,6 +27,13 @@ import esJson from './i18n/es.json';
 import arJson from './i18n/ar.json';
 import ruJson from './i18n/ru.json';
 import zhJson from './i18n/zh.json';
+
+// PWA-shared supplemental locale packs. See `services/i18nExtras.ts`
+// for inline docs and the canonical merge order. EXTRA_LANG carries a
+// minimal baseline for ~35 regional locales; UNDP_I18N_EXTRA carries
+// Appendix-1 addenda for the UN locales + Urdu that aren't yet baked
+// into the dense JSON packs.
+import { EXTRA_LANG, UNDP_I18N_EXTRA } from './i18nExtras';
 
 type Strings = Record<string, string>;
 
@@ -167,6 +178,22 @@ const translations: Record<string, Strings> = {
     sent: '✅ Sent',
     in_queue: '⏳ In queue',
     lives_saved_chip: '💚 Saved',
+    // Apr 2026 — review-screen location verify box (UNDP Appendix 1 footprint).
+    loc_search_placeholder: 'Type a place name or landmark (optional)',
+    loc_resolving: 'Resolving location…',
+    // Consent / privacy — additional keys used by <ConsentOverlay>.
+    consent_shared: 'Data shared only with crisis responders',
+    consent_delete: 'You can request deletion anytime',
+    consent_check: 'I understand and consent to sharing this data for crisis response',
+    consent_accept: 'Accept & Continue',
+    // UNDP building-footprint picker — EN fallback in case a locale
+    // hasn't been translated yet.
+    building_select_title: 'Optional: pick the exact building',
+    building_select_hint: 'Tap a building outline to mark it as damaged.',
+    building_selected: 'Building selected',
+    // Restart prompt when I18nManager has to flip layout in production.
+    restart_required_title: 'Restart required',
+    restart_required_body: 'Changing language direction needs an app restart to redraw the UI.',
   },
   zh: {
     app_name: 'CRISP 危机报告',
@@ -273,23 +300,46 @@ const translations: Record<string, Strings> = {
   },
 };
 
-// UNDP §3.1b — merge dense JSON packs on top of inline translations at
-// module-load time. JSON wins on any key collision, so the richer
-// 232-key pack replaces the earlier ~60-key inline values while every
-// RN-specific key (`app_name`, `type_road`, `welcome_start`, etc.) that
-// isn't in the JSON stays exactly as the inline dict defines it.
-//
-// Running this once at module load (rather than at every `setLanguage`)
-// keeps `t()` O(1) and avoids re-merging on every re-render.
-for (const code of Object.keys(UNDP_JSON_PACKS)) {
-  const dense = _withoutMeta(UNDP_JSON_PACKS[code]);
-  if (Object.keys(dense).length === 0) continue;
-  translations[code] = Object.assign(
-    {},
-    translations.en || {}, // EN baseline — catch any RN-only key not in the pack
-    translations[code] || {},
-    dense,
-  );
+/**
+ * Resolve the layered dict for a single locale code.
+ *
+ * Merge order (lowest precedence to highest):
+ *   1. EN dense pack                 — baseline so any key exists somewhere.
+ *   2. EXTRA_LANG[lang]              — PWA-shared regional minimal pack.
+ *   3. UNDP_I18N_EXTRA[lang]         — PWA-shared Appendix-1 addenda.
+ *   4. UNDP_JSON_PACKS[lang] dense   — definitive 232-key native-speaker QA pack.
+ *   5. inline translations[lang]     — hand-tuned RN-only keys (`app_name`, etc.).
+ *
+ * Highest wins, so the inline RN-only strings always take priority over
+ * the shared PWA material. Dense JSON wins over addenda because it's
+ * the definitive native-speaker QA pack.
+ */
+function getDict(lang: string): Strings {
+  const en = _withoutMeta(UNDP_JSON_PACKS.en);
+  const extraRegional = EXTRA_LANG[lang] || {};
+  const undpAddenda = UNDP_I18N_EXTRA[lang] || {};
+  const undpDense = _withoutMeta(UNDP_JSON_PACKS[lang] || {});
+  const inline = translations[lang] || {};
+  // Highest precedence: inline (hand-tuned for RN-only keys like `app_name`).
+  // Dense JSON wins over addenda (it's the definitive native-speaker QA pack).
+  return { ...en, ...extraRegional, ...undpAddenda, ...undpDense, ...inline } as Strings;
+}
+
+// UNDP §3.1b — materialise the merged dict for every known locale once
+// at module-load time. Running this once (rather than at every
+// `setLanguage`) keeps `t()` O(1) and avoids re-merging on every
+// re-render. The universe of known codes is the union of every dict
+// that contributes translations: dense JSON + EXTRA_LANG + UNDP_I18N_EXTRA
+// + inline.
+const ALL_LOCALE_CODES: string[] = Array.from(new Set([
+  ...Object.keys(UNDP_JSON_PACKS),
+  ...Object.keys(UNDP_I18N_EXTRA),
+  ...Object.keys(EXTRA_LANG),
+  ...Object.keys(translations),
+]));
+
+for (const code of ALL_LOCALE_CODES) {
+  translations[code] = getDict(code);
 }
 
 let currentLang = 'en';
@@ -304,8 +354,76 @@ export function detectLanguage(): string {
   }
 }
 
+// RTL locale set — matches the PWA's RTL_LANGS constant in mobile-app/src/app.js.
+// I18nManager controls the whole JS flexbox system; flipping `.isRTL` only
+// takes effect on the NEXT bundle load in React Native, so we persist the
+// decision + optionally reload in __DEV__ via DevSettings.reload().
+const RTL_LANGS = new Set(['ar', 'ur', 'fa', 'he', 'ps', 'ku', 'sd', 'ug', 'yi']);
+
+/**
+ * Apply the text direction for a locale. Returns `true` if I18nManager
+ * had to flip — in RN a flip requires a bundle reload to fully
+ * re-layout the tree (React Native can't live-swap `isRTL`). Callers
+ * can use the return value to surface an "Apps needs to restart"
+ * notice to the user.
+ *
+ * In development mode we call `DevSettings.reload()` automatically so
+ * the flip is invisible. In production we leave it to the parent
+ * component to show an Alert + let the user tap "Restart".
+ */
+export function applyTextDirection(code: string): boolean {
+  const shouldBeRTL = RTL_LANGS.has(code);
+  if (I18nManager.isRTL === shouldBeRTL) return false;
+  try {
+    I18nManager.allowRTL(shouldBeRTL);
+    I18nManager.forceRTL(shouldBeRTL);
+  } catch {
+    // Some test environments don't expose I18nManager — treat as a no-op.
+    return false;
+  }
+  if (__DEV__) {
+    try { NativeModules?.DevSettings?.reload?.(); } catch { /* fall through */ }
+  }
+  return true;
+}
+
+export function isRTLLocale(code: string): boolean {
+  return RTL_LANGS.has(code);
+}
+
+/**
+ * Boot-time language resolver — mirrors the PWA policy at app.js:2287.
+ *
+ *   1. If `crisp_lang_manual` is in AsyncStorage and points at a known
+ *      locale, honour that. The user has previously expressed a choice.
+ *   2. Otherwise, auto-detect from the device locale via expo-localization.
+ *   3. Otherwise, English.
+ *
+ * Returns the resolved code. Side-effect: calls setLanguage() (which
+ * persists + kicks RTL). Call this ONCE at app mount before rendering
+ * any translated strings.
+ */
+export async function bootstrapLanguage(): Promise<string> {
+  try {
+    const stored = await AsyncStorage.getItem('crisp_lang_manual');
+    if (stored && translations[stored]) {
+      setLanguage(stored);
+      return stored;
+    }
+  } catch { /* AsyncStorage might be unavailable — fall through */ }
+  const detected = detectLanguage();
+  setLanguage(detected);
+  return detected;
+}
+
 export function setLanguage(code: string) {
-  currentLang = translations[code] ? code : 'en';
+  const resolved = translations[code] ? code : 'en';
+  currentLang = resolved;
+  // Persist + kick RTL flip. Persist key matches the PWA's
+  // `crisp_lang_manual` localStorage convention so the two surfaces
+  // could theoretically share a backend-sync'd preference in future.
+  try { AsyncStorage.setItem('crisp_lang_manual', resolved); } catch { /* best-effort */ }
+  applyTextDirection(resolved);
 }
 
 export function getLanguage(): string {
@@ -326,20 +444,78 @@ export type LanguageOption = {
   un: boolean;
 };
 
+/** UN official language codes — drive the `.un` flag on each emitted
+ *  LanguageOption and the picker's two-section layout. */
+const UN_LANG_CODES = new Set(['en', 'fr', 'es', 'ar', 'ru', 'zh']);
+
+/** Per-code display metadata for the picker. Every code ever present
+ *  in UNDP_JSON_PACKS / UNDP_I18N_EXTRA / EXTRA_LANG / inline should
+ *  have an entry here; any missing code falls back to `{code, code, ''}`
+ *  so the picker still renders a minimally-usable row. */
+const LANG_META: Record<string, { label: string; flag: string }> = {
+  en: { label: 'English',      flag: '🇬🇧' },
+  fr: { label: 'Français',     flag: '🇫🇷' },
+  es: { label: 'Español',      flag: '🇪🇸' },
+  ar: { label: 'العربية',      flag: '🇸🇦' },
+  ru: { label: 'Русский',      flag: '🇷🇺' },
+  zh: { label: '中文',          flag: '🇨🇳' },
+  hi: { label: 'हिन्दी',          flag: '🇮🇳' },
+  bn: { label: 'বাংলা',         flag: '🇧🇩' },
+  pa: { label: 'ਪੰਜਾਬੀ',         flag: '🇮🇳' },
+  ml: { label: 'മലയാളം',       flag: '🇮🇳' },
+  te: { label: 'తెలుగు',        flag: '🇮🇳' },
+  mr: { label: 'मराठी',          flag: '🇮🇳' },
+  gu: { label: 'ગુજરાતી',       flag: '🇮🇳' },
+  ne: { label: 'नेपाली',         flag: '🇳🇵' },
+  ur: { label: 'اردو',          flag: '🇵🇰' },
+  pt: { label: 'Português',    flag: '🇵🇹' },
+  de: { label: 'Deutsch',      flag: '🇩🇪' },
+  it: { label: 'Italiano',     flag: '🇮🇹' },
+  tr: { label: 'Türkçe',       flag: '🇹🇷' },
+  uk: { label: 'Українська',   flag: '🇺🇦' },
+  ja: { label: '日本語',        flag: '🇯🇵' },
+  ko: { label: '한국어',        flag: '🇰🇷' },
+  am: { label: 'አማርኛ',         flag: '🇪🇹' },
+  sw: { label: 'Kiswahili',    flag: '🇰🇪' },
+  th: { label: 'ไทย',          flag: '🇹🇭' },
+  vi: { label: 'Tiếng Việt',   flag: '🇻🇳' },
+  id: { label: 'Bahasa Indonesia', flag: '🇮🇩' },
+  ms: { label: 'Bahasa Melayu',    flag: '🇲🇾' },
+  km: { label: 'ខ្មែរ',          flag: '🇰🇭' },
+  fa: { label: 'فارسی',        flag: '🇮🇷' },
+  my: { label: 'မြန်မာ',        flag: '🇲🇲' },
+  pl: { label: 'Polski',       flag: '🇵🇱' },
+  ro: { label: 'Română',       flag: '🇷🇴' },
+  so: { label: 'Soomaali',     flag: '🇸🇴' },
+  si: { label: 'සිංහල',        flag: '🇱🇰' },
+  he: { label: 'עברית',        flag: '🇮🇱' },
+  el: { label: 'Ελληνικά',     flag: '🇬🇷' },
+};
+
 /** Returns the flat list of available languages, UN-first then others.
- *  Callers wanting the two-section layout can partition on `.un`. */
+ *  Callers wanting the two-section layout can partition on `.un`.
+ *
+ *  Dynamically unions every locale present in any of: UNDP_JSON_PACKS,
+ *  UNDP_I18N_EXTRA, EXTRA_LANG, or inline `translations`. UN locales
+ *  are emitted first in the canonical UNDP order, then the remainder
+ *  alphabetically by code. */
 export function getAvailableLanguages(): LanguageOption[] {
-  return [
-    // UN official languages — rendered larger + bordered in the picker.
-    { code: 'en', label: 'English',   flag: '🇬🇧', un: true  },
-    { code: 'fr', label: 'Français',  flag: '🇫🇷', un: true  },
-    { code: 'es', label: 'Español',   flag: '🇪🇸', un: true  },
-    { code: 'ar', label: 'العربية',   flag: '🇸🇦', un: true  },
-    { code: 'ru', label: 'Русский',   flag: '🇷🇺', un: true  },
-    { code: 'zh', label: '中文',       flag: '🇨🇳', un: true  },
-    // Other supported languages (expand as translations land).
-    { code: 'hi', label: 'हिन्दी',       flag: '🇮🇳', un: false },
-  ];
+  // Canonical UN ordering per UNDP §3.1 UX spec.
+  const UN_ORDER = ['en', 'fr', 'es', 'ar', 'ru', 'zh'];
+  const allCodes = new Set<string>([
+    ...Object.keys(UNDP_JSON_PACKS),
+    ...Object.keys(UNDP_I18N_EXTRA),
+    ...Object.keys(EXTRA_LANG),
+    ...Object.keys(translations),
+  ]);
+  const otherCodes = Array.from(allCodes)
+    .filter((c) => !UN_LANG_CODES.has(c))
+    .sort();
+  const ordered = [...UN_ORDER.filter((c) => allCodes.has(c)), ...otherCodes];
+  return ordered.map((code) => {
+    const meta = LANG_META[code] || { label: code, flag: '' };
+    return { code, label: meta.label, flag: meta.flag, un: UN_LANG_CODES.has(code) };
+  });
 }
 
 /** Convenience helper for the picker UI. */

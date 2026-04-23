@@ -317,6 +317,10 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+<!-- BlurHash decoder (Phase 1.5) — must load BEFORE app.js so the global
+     `window.BlurHash` is ready when the first `renderFeed()` / `selectReport()`
+     runs. Same vendored file as the PWA; see src/blurhash.js header. -->
+<script src="blurhash.js?v=1"></script>
 <script src="app.js?v=720"></script>
 <script src="predictions.js?v=100"></script>
 

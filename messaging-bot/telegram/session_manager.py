@@ -23,20 +23,65 @@ SEVERITY_MAP = {
     "severe": "SEVERE", "moderate": "MODERATE", "minor": "MINOR",
 }
 TYPE_MAP = {
-    "type_road": "ROAD", "type_hospital": "HOSPITAL", "type_house": "HOUSE",
-    "type_power": "POWER", "type_water": "WATER", "type_school": "SCHOOL",
-    "type_telecom": "TELECOM", "type_govt": "GOVERNMENT", "type_other": "OTHER",
-    "road": "ROAD", "hospital": "HOSPITAL", "house": "HOUSE",
-    "power": "POWER", "water": "WATER", "school": "SCHOOL",
-    "telecom": "TELECOM", "government": "GOVERNMENT", "other": "OTHER",
+    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — 8 UNDP Appendix-1
+    # super-types exposed as the canonical chip set. Legacy chip callbacks
+    # (type_road / type_hospital / etc.) are still accepted so users on
+    # offline-queued pre-v3 buttons don't break — the backend's taxonomy
+    # hook normalises them on write.
+    "type_residential":            "RESIDENTIAL",
+    "type_commercial":             "COMMERCIAL",
+    "type_government":             "GOVERNMENT",
+    "type_utility":                "UTILITY",
+    "type_transport_communication": "TRANSPORT_COMMUNICATION",
+    "type_community":              "COMMUNITY",
+    "type_public_spaces":          "PUBLIC_SPACES",
+    "type_other":                  "OTHER",
+    # Legacy (pre-v3) aliases — back-compat with older clients.
+    "type_road":     "TRANSPORT_COMMUNICATION",
+    "type_hospital": "COMMUNITY",
+    "type_house":    "RESIDENTIAL",
+    "type_power":    "UTILITY",
+    "type_water":    "UTILITY",
+    "type_school":   "COMMUNITY",
+    "type_telecom":  "UTILITY",
+    "type_govt":     "GOVERNMENT",
+    # Text-body aliases (user typed the word rather than tapping a button).
+    "residential": "RESIDENTIAL", "commercial": "COMMERCIAL",
+    "government":  "GOVERNMENT",  "utility":    "UTILITY",
+    "transport":   "TRANSPORT_COMMUNICATION", "community": "COMMUNITY",
+    "public":      "PUBLIC_SPACES", "other": "OTHER",
+    "road": "TRANSPORT_COMMUNICATION", "hospital": "COMMUNITY",
+    "house": "RESIDENTIAL", "power": "UTILITY", "water": "UTILITY",
+    "school": "COMMUNITY", "telecom": "UTILITY",
 }
 CRISIS_MAP = {
-    "crisis_earthquake": "EARTHQUAKE", "crisis_flood": "FLOOD", "crisis_conflict": "CONFLICT",
-    "crisis_hurricane": "HURRICANE", "crisis_wildfire": "WILDFIRE", "crisis_landslide": "LANDSLIDE",
-    "crisis_pandemic": "PANDEMIC", "crisis_other": "OTHER",
+    # UNDP Appendix-1 taxonomy — Natural / Technological / Human-made.
+    # Natural
+    "crisis_earthquake":         "EARTHQUAKE",
+    "crisis_flood":              "FLOOD",
+    "crisis_tsunami":            "TSUNAMI",
+    "crisis_cyclone":            "CYCLONE",
+    "crisis_landslide":          "LANDSLIDE",
+    # Technological
+    "crisis_explosion":          "EXPLOSION",
+    "crisis_chemical_incident":  "CHEMICAL_INCIDENT",
+    "crisis_pandemic":           "PANDEMIC",
+    # Human-made
+    "crisis_conflict":           "CONFLICT",
+    "crisis_civil_unrest":       "CIVIL_UNREST",
+    "crisis_other":              "OTHER",
+    # Legacy callbacks retained for back-compat with older clients.
+    "crisis_hurricane":          "CYCLONE",
+    "crisis_wildfire":           "OTHER",
 }
 DAMAGE_MAP = {
-    "dmg_none": "NO_DAMAGE", "dmg_partial": "PARTIAL", "dmg_complete": "COMPLETE",
+    "dmg_none": "MINIMAL",      # UNDP Appendix-1: renamed NO_DAMAGE → MINIMAL
+    "dmg_partial": "PARTIAL",
+    "dmg_complete": "COMPLETE",
+}
+DEBRIS_MAP = {
+    "debris_yes": True,
+    "debris_no":  False,
 }
 
 
@@ -63,6 +108,19 @@ class TelegramSession:
     infra_type: str = "OTHER"
     crisis_type: str = ""          # EARTHQUAKE / FLOOD / CONFLICT / etc.
     damage_class: str = ""         # NO_DAMAGE / PARTIAL / COMPLETE
+    # Phase D (Apr 2026 UI v3) — native-language building name the reporter
+    # types in-chat when asked. Sent to the backend as `infrastructure_name`
+    # with `infrastructure_name_from_osm=False` so the dashboard knows it
+    # needs to be mapped to an OSM footprint by an operator. Optional — the
+    # reporter can skip and the field stays empty.
+    infra_name: str = ""
+    infra_name_answered: bool = False
+    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No answer.
+    # `debris_answered` is the flow gate; `debris_needed` the value.
+    # Submitted to the backend as `debris_clearing_needed` (already a
+    # column on Report + a field on ReportMetaCreate).
+    debris_answered: bool = False
+    debris_needed: bool = False
     client_report_id: str = field(default_factory=lambda: str(uuid4()))
     report_id: Optional[str] = None  # set after early creation
     created_at: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
@@ -307,6 +365,16 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
         "description": session.text or None,
         "expected_media": 2,  # assume photo + audio (will adjust)
     }
+    # Phase D (Apr 2026 UI v3) — propagate the reporter-typed building name
+    # on early-create so the dashboard can render it the instant the row
+    # lands. `infrastructure_name_from_osm=False` is the distinguisher that
+    # triggers the "needs manual mapping" badge.
+    if session.infra_name:
+        meta["infrastructure_name"] = session.infra_name
+        meta["infrastructure_name_from_osm"] = False
+    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris-clearing answer.
+    if session.debris_answered:
+        meta["debris_clearing_needed"] = bool(session.debris_needed)
 
     if session.has_location:
         meta["location"] = {
@@ -399,6 +467,18 @@ async def update_report_metadata(session: TelegramSession):
                 payload["crisis_type"] = session.crisis_type
             if session.damage_class:
                 payload["damage_classification"] = session.damage_class
+            # Phase D (Apr 2026 UI v3) — native-language building name the
+            # reporter typed in chat. Always tagged as NOT OSM-authoritative
+            # so the dashboard flags these rows for manual mapping.
+            if session.infra_name:
+                payload["infrastructure_name"] = session.infra_name
+                payload["infrastructure_name_from_osm"] = False
+            # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris answer.
+            # Only emitted once the reporter has actually answered; pre-
+            # answer the column stays NULL on the backend (distinguishable
+            # from explicit False).
+            if session.debris_answered:
+                payload["debris_clearing_needed"] = bool(session.debris_needed)
 
             if payload:
                 r = await c.patch(

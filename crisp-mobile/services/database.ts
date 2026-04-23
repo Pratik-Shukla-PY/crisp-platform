@@ -8,54 +8,76 @@ const DB_NAME = 'crisp_offline.db';
 
 let db: SQLite.SQLiteDatabase | null = null;
 let dbReady = false;
+// Apr 2026 — memoise the whole open-and-init PROMISE, not just the resolved
+// handle. The old guard (`if (db && dbReady) return db`) had a race window:
+// between `db = await openDatabaseAsync()` and `dbReady = true`, a parallel
+// caller would see `db` unset and start a SECOND open — one of which ended
+// up null-rejecting `prepareAsync` with the NullPointerException that showed
+// up in the field logs. Sharing one promise across concurrent callers kills
+// the race.
+let _dbInit: Promise<SQLite.SQLiteDatabase> | null = null;
+
+async function _openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
+  const opened = await SQLite.openDatabaseAsync(DB_NAME);
+  await opened.execAsync(`
+    CREATE TABLE IF NOT EXISTS reports (
+      client_report_id TEXT PRIMARY KEY,
+      meta TEXT, photo TEXT, extra_photos TEXT, audio TEXT, text_description TEXT,
+      status TEXT DEFAULT 'draft', server_id TEXT,
+      photo_chunk_progress INTEGER DEFAULT 0, audio_chunk_progress INTEGER DEFAULT 0,
+      retry_count INTEGER DEFAULT 0, created_at INTEGER, updated_at INTEGER,
+      -- P2.13: JSON {'0': 524288, '1': 0, ...} — byte offset reached for each
+      -- extra photo so a crash-and-resume doesn't re-upload completed extras.
+      extra_photos_progress TEXT
+    );
+  `);
+  // Idempotent migration for existing DBs created before extra_photos_progress.
+  try { await opened.execAsync(`ALTER TABLE reports ADD COLUMN extra_photos_progress TEXT`); } catch {}
+  // Guaranteed-delivery pipeline — per-variant state for main + extra photos.
+  // photo_variants: JSON blob {small:{mediaId,base64,chunkProgress,complete,bytes}, medium:{...}, large:{...}}
+  // photo_group_id: UUID linking the three variant rows on the backend.
+  // extra_photos_variants: JSON array of the same shape per extra photo (each carrying its own groupId).
+  try { await opened.execAsync(`ALTER TABLE reports ADD COLUMN photo_variants TEXT`); } catch {}
+  try { await opened.execAsync(`ALTER TABLE reports ADD COLUMN photo_group_id TEXT`); } catch {}
+  try { await opened.execAsync(`ALTER TABLE reports ADD COLUMN extra_photos_variants TEXT`); } catch {}
+  await opened.execAsync(`
+    CREATE TABLE IF NOT EXISTS report_history (
+      client_report_id TEXT PRIMARY KEY,
+      server_id TEXT, status TEXT DEFAULT 'PENDING', severity TEXT,
+      infrastructure_type TEXT, description TEXT, lives_impacted INTEGER,
+      synced_at INTEGER, last_status_update INTEGER, deletion_requested INTEGER DEFAULT 0
+    );
+  `);
+  // Phase 5 (Apr 2026): reviewer workflow fields mirrored locally so the
+  // RN My Reports screen can render verdict / response-time / action-taken
+  // without an online round-trip. Idempotent ALTERs for existing installs.
+  try { await opened.execAsync(`ALTER TABLE report_history ADD COLUMN reviewer_verdict TEXT DEFAULT 'NOT_REVIEWED'`); } catch {}
+  try { await opened.execAsync(`ALTER TABLE report_history ADD COLUMN action_taken TEXT`); } catch {}
+  try { await opened.execAsync(`ALTER TABLE report_history ADD COLUMN help_dispatched_at INTEGER`); } catch {}
+  try { await opened.execAsync(`ALTER TABLE report_history ADD COLUMN help_arrived_at INTEGER`); } catch {}
+  try { await opened.execAsync(`ALTER TABLE report_history ADD COLUMN response_time_seconds INTEGER`); } catch {}
+
+  // Only assign the module-scope fields once the handle is fully usable.
+  db = opened;
+  dbReady = true;
+  return opened;
+}
 
 async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (db && dbReady) return db;
-  try {
-    db = await SQLite.openDatabaseAsync(DB_NAME);
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS reports (
-        client_report_id TEXT PRIMARY KEY,
-        meta TEXT, photo TEXT, extra_photos TEXT, audio TEXT, text_description TEXT,
-        status TEXT DEFAULT 'draft', server_id TEXT,
-        photo_chunk_progress INTEGER DEFAULT 0, audio_chunk_progress INTEGER DEFAULT 0,
-        retry_count INTEGER DEFAULT 0, created_at INTEGER, updated_at INTEGER,
-        -- P2.13: JSON {'0': 524288, '1': 0, ...} — byte offset reached for each
-        -- extra photo so a crash-and-resume doesn't re-upload completed extras.
-        extra_photos_progress TEXT
-      );
-    `);
-    // Idempotent migration for existing DBs created before extra_photos_progress.
-    try { await db.execAsync(`ALTER TABLE reports ADD COLUMN extra_photos_progress TEXT`); } catch {}
-    // Guaranteed-delivery pipeline — per-variant state for main + extra photos.
-    // photo_variants: JSON blob {small:{mediaId,base64,chunkProgress,complete,bytes}, medium:{...}, large:{...}}
-    // photo_group_id: UUID linking the three variant rows on the backend.
-    // extra_photos_variants: JSON array of the same shape per extra photo (each carrying its own groupId).
-    try { await db.execAsync(`ALTER TABLE reports ADD COLUMN photo_variants TEXT`); } catch {}
-    try { await db.execAsync(`ALTER TABLE reports ADD COLUMN photo_group_id TEXT`); } catch {}
-    try { await db.execAsync(`ALTER TABLE reports ADD COLUMN extra_photos_variants TEXT`); } catch {}
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS report_history (
-        client_report_id TEXT PRIMARY KEY,
-        server_id TEXT, status TEXT DEFAULT 'PENDING', severity TEXT,
-        infrastructure_type TEXT, description TEXT, lives_impacted INTEGER,
-        synced_at INTEGER, last_status_update INTEGER, deletion_requested INTEGER DEFAULT 0
-      );
-    `);
-    // Phase 5 (Apr 2026): reviewer workflow fields mirrored locally so the
-    // RN My Reports screen can render verdict / response-time / action-taken
-    // without an online round-trip. Idempotent ALTERs for existing installs.
-    try { await db.execAsync(`ALTER TABLE report_history ADD COLUMN reviewer_verdict TEXT DEFAULT 'NOT_REVIEWED'`); } catch {}
-    try { await db.execAsync(`ALTER TABLE report_history ADD COLUMN action_taken TEXT`); } catch {}
-    try { await db.execAsync(`ALTER TABLE report_history ADD COLUMN help_dispatched_at INTEGER`); } catch {}
-    try { await db.execAsync(`ALTER TABLE report_history ADD COLUMN help_arrived_at INTEGER`); } catch {}
-    try { await db.execAsync(`ALTER TABLE report_history ADD COLUMN response_time_seconds INTEGER`); } catch {}
-    dbReady = true;
-    return db;
-  } catch (e) {
-    console.error('[DB] Init failed:', e);
-    throw e;
-  }
+  if (_dbInit) return _dbInit;
+  _dbInit = (async () => {
+    try {
+      return await _openAndMigrate();
+    } catch (e) {
+      _dbInit = null;   // allow retry on next call
+      db = null;
+      dbReady = false;
+      console.error('[DB] Init failed:', e);
+      throw e;
+    }
+  })();
+  return _dbInit;
 }
 
 export async function initDatabase(): Promise<void> {

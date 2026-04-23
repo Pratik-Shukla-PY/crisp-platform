@@ -111,105 +111,76 @@ from app.models.report import Base
 import app.models.auth        # Ensure auth tables are registered with Base.metadata
 import app.models.prediction  # Prediction zone + result tables
 
-# For development MVP: auto-create tables if they don't exist.
-# Production generally requires Alembic migrations.
-Base.metadata.create_all(bind=engine)
+# Apr 2026 — SQLite fully retired. Alembic is the sole schema authority.
+# Before starting uvicorn, run `alembic upgrade head` (dev + prod).
+# The previous `Base.metadata.create_all(bind=engine)` call was a
+# SQLite-era zero-install shortcut that raced with Alembic on Postgres
+# (create_all → CREATE TABLE; alembic upgrade then hits "relation already
+# exists"). The `_migrate_schema()` column-adder hot-patcher is also
+# gone — its `ALTER TABLE ADD COLUMN … DEFAULT 0` syntax was SQLite-only
+# (Postgres needs `DEFAULT FALSE` on BOOLEAN, `TIMESTAMP` not `DATETIME`,
+# etc.), and Alembic covers every column it used to hot-patch. See
+# ``docs/MIGRATIONS.md`` + ``scripts/dev-setup.sh``.
+#
+# Belt-and-braces: verify the DB is actually at alembic head on boot so
+# a forgotten `alembic upgrade head` fails loudly with a clear message
+# instead of surfacing later as cryptic "column does not exist" errors.
+def _assert_alembic_head() -> None:
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        try:
+            row = conn.execute(text(
+                "SELECT version_num FROM alembic_version"
+            )).first()
+        except Exception:
+            raise RuntimeError(
+                "Database has no `alembic_version` table — run "
+                "`alembic upgrade head` before starting uvicorn. "
+                "CRISP is Postgres-only as of Apr 2026."
+            )
+    current = row[0] if row else None
+    if not current:
+        raise RuntimeError(
+            "Database has no alembic revision stamped. Run "
+            "`alembic upgrade head` before starting uvicorn."
+        )
+    # Cheap head lookup: read migrations/versions/ and find the one whose
+    # `revision` appears but nobody has as `down_revision`. Avoids hard-
+    # coding a version string that would drift with every new migration.
+    import os, re
+    versions_dir = os.path.join(os.path.dirname(__file__), "..", "migrations", "versions")
+    revisions: dict[str, str] = {}   # revision → down_revision ("" for baseline)
+    for fn in os.listdir(versions_dir):
+        if not fn.endswith(".py") or fn.startswith("__"):
+            continue
+        with open(os.path.join(versions_dir, fn), encoding="utf-8") as f:
+            src = f.read()
+        m = re.search(r'^revision(?:\s*:\s*str)?\s*=\s*["\']([^"\']+)', src, re.M)
+        d = re.search(r'^down_revision(?:\s*:[^=]+)?\s*=\s*(?:["\']([^"\']+)["\']|None)', src, re.M)
+        if m:
+            revisions[m.group(1)] = (d.group(1) if d and d.group(1) else "")
+    # Head = a revision nobody references as their down_revision.
+    parents = {dv for dv in revisions.values() if dv}
+    heads = [r for r in revisions if r not in parents]
+    if len(heads) == 1 and current != heads[0]:
+        raise RuntimeError(
+            f"Database is stamped at revision {current!r} but head is "
+            f"{heads[0]!r}. Run `alembic upgrade head` before starting uvicorn."
+        )
 
-# Migrate existing DBs: add new columns that don't exist yet (idempotent)
-def _migrate_schema():
-    from sqlalchemy import text, inspect as sa_inspect
-    insp = sa_inspect(engine)
-    if "reports" in insp.get_table_names():
-        existing = {c["name"] for c in insp.get_columns("reports")}
-        new_cols = {
-            "damage_classification": "VARCHAR(20)",
-            "crisis_type": "VARCHAR(30)",
-            "infrastructure_name": "VARCHAR(255)",
-            "debris_clearing_needed": "BOOLEAN",
-            "service_status": "JSON",
-            "building_id": "VARCHAR(36)",
-        }
-        with engine.begin() as conn:
-            for col, typ in new_cols.items():
-                if col not in existing:
-                    conn.execute(text(f"ALTER TABLE reports ADD COLUMN {col} {typ}"))
-                    logging.getLogger(__name__).info(f"Migrated: added reports.{col}")
-
-    # P1.1 — `media.updated_at` is used by the assembly lock's stale-escape
-    # logic. Add it if missing on an existing DB. SQLite can't add a column
-    # with a non-constant default, so we add as NULL and backfill with
-    # created_at so existing rows aren't treated as infinitely-stale.
-    if "media" in insp.get_table_names():
-        existing_media = {c["name"] for c in insp.get_columns("media")}
-        if "updated_at" not in existing_media:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE media ADD COLUMN updated_at DATETIME"))
-                conn.execute(text("UPDATE media SET updated_at = COALESCE(created_at, CURRENT_TIMESTAMP)"))
-                logging.getLogger(__name__).info("Migrated: added media.updated_at and backfilled")
-
-        # Guaranteed-delivery pipeline — SMALL/MEDIUM/LARGE variants of one
-        # captured photo share a `photo_group_id`. Nullable so existing media
-        # (pre-variant-pipeline) keeps working unchanged. Index speeds up the
-        # dashboard's group-by query.
-        if "photo_group_id" not in existing_media:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE media ADD COLUMN photo_group_id VARCHAR(36)"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_media_photo_group ON media(photo_group_id)"))
-                logging.getLogger(__name__).info("Migrated: added media.photo_group_id + index")
-
-        # Apr 2026 — `client_blur_applied` flag. When the client has already
-        # face-blurred the image locally, the server skips its own blur_pii
-        # pass to avoid a second lossy re-encode. Legacy clients that don't
-        # send the flag default to FALSE so server blur still runs for them.
-        if "client_blur_applied" not in existing_media:
-            with engine.begin() as conn:
-                conn.execute(text(
-                    "ALTER TABLE media ADD COLUMN client_blur_applied "
-                    "BOOLEAN NOT NULL DEFAULT 0"
-                ))
-                logging.getLogger(__name__).info("Migrated: added media.client_blur_applied")
-
-    # Phase 4 (Apr 2026) — AutoSubmitRegion model. Idempotent CREATE TABLE
-    # so existing deployments pick it up on next boot without an external
-    # migration tool. `create_all` on Base.metadata handles this for any
-    # model declared on the same Base — that call already happens at
-    # import time in app/db/session.py, but we touch it here as a belt so
-    # the order is explicit even if that changes.
-    try:
-        from app.models.report import AutoSubmitRegion  # noqa: F401
-        AutoSubmitRegion.__table__.create(bind=engine, checkfirst=True)
-    except Exception as e:
-        logging.getLogger(__name__).warning(f"AutoSubmitRegion migration: {e}")
-
-    # Phase 5 (Apr 2026) — reviewer workflow columns on reports.
-    if "reports" in insp.get_table_names():
-        existing_r = {c["name"] for c in insp.get_columns("reports")}
-        reviewer_cols = {
-            "reviewed_at": "DATETIME",
-            "reviewer_verdict": "VARCHAR(20)",
-            "action_taken": "TEXT",
-            "help_dispatched_at": "DATETIME",
-            "help_arrived_at": "DATETIME",
-        }
-        with engine.begin() as conn:
-            added = []
-            for col, typ in reviewer_cols.items():
-                if col not in existing_r:
-                    conn.execute(text(f"ALTER TABLE reports ADD COLUMN {col} {typ}"))
-                    added.append(col)
-            if "reviewer_verdict" in added:
-                # Backfill existing rows to NOT_REVIEWED so the enum never
-                # hits a NULL on read.
-                conn.execute(text(
-                    "UPDATE reports SET reviewer_verdict = 'NOT_REVIEWED' "
-                    "WHERE reviewer_verdict IS NULL"
-                ))
-            if added:
-                logging.getLogger(__name__).info(
-                    f"Migrated: added reports.{', reports.'.join(added)}"
-                )
-
-_migrate_schema()
+try:
+    _assert_alembic_head()
+except RuntimeError as _err:
+    # In APP_ENV=production, fail fast so Kubernetes / ECS restarts the
+    # pod and the operator sees the error loudly. In dev, log a prominent
+    # warning but boot anyway so a contributor who's mid-debugging without
+    # a recent upgrade can still iterate.
+    if APP_ENV == "production":
+        raise
+    logging.getLogger(__name__).warning(
+        "Schema check: %s (APP_ENV=%s — booting anyway; in prod this is fatal)",
+        _err, APP_ENV,
+    )
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -220,13 +191,20 @@ app = FastAPI(
 
 # CORS — P2.7: tighter rules in production.
 #
-# In dev we happily accept localhost + LAN IPs. In production we require
-# CORS_ORIGINS to be explicitly set to the real dashboard domain — a missing
-# env var would previously have silently allowed the dev defaults, giving
-# a same-LAN attacker on the host a free authenticated-request channel
-# thanks to `allow_credentials=True`.
+# In dev we accept localhost + every RFC 1918 private LAN address so a
+# tester on the same Wi-Fi (e.g. http://192.168.1.49:8080) can hit the
+# backend from the dashboard without the preflight failing. Previously
+# only literal "localhost:*" was whitelisted — a tester opening the
+# dashboard at the LAN IP got a silent CORS preflight 400 and the
+# login button just "didn't do anything" in the browser. Fixed 2026-04-21.
+#
+# In production we require CORS_ORIGINS to be explicitly set to the real
+# dashboard domain — a missing env var would previously have silently
+# allowed the dev defaults, giving a same-LAN attacker on the host a free
+# authenticated-request channel thanks to `allow_credentials=True`.
 _default_dev_origins = "http://localhost:8080,http://localhost:8000,http://localhost:3000"
 _cors_env = os.getenv("CORS_ORIGINS", "").strip()
+_cors_regex = None  # set below in dev mode
 if not _cors_env:
     if APP_ENV == "production":
         raise RuntimeError(
@@ -236,8 +214,28 @@ if not _cors_env:
         )
     _cors_env = _default_dev_origins
     logging.getLogger(__name__).warning(
-        "CORS_ORIGINS not set and APP_ENV=%s — defaulting to localhost.",
+        "CORS_ORIGINS not set and APP_ENV=%s — defaulting to localhost "
+        "+ RFC 1918 LAN regex. Production MUST set CORS_ORIGINS.",
         APP_ENV,
+    )
+# In dev mode, ALSO whitelist any RFC 1918 private LAN IP with a regex
+# alongside whatever explicit origins were set. DHCP leases change on a
+# whim (Mac wakes up and gets a new IP), which would otherwise require
+# manually rotating .env every morning — observed 2026-04-21 when a
+# tester hit CORS 400 at http://192.168.1.49:8080 because .env was
+# frozen on http://192.168.1.38:8080. Regex is intentionally strict:
+# only http://, only RFC 1918 ranges (10.x / 172.16-31.x / 192.168.x)
+# plus localhost / 127.0.0.1. Production MUST set APP_ENV=production;
+# in that case this branch never runs and only the explicit
+# CORS_ORIGINS list applies — same-LAN attackers can't sneak in.
+if APP_ENV != "production":
+    _cors_regex = (
+        r"^http://("
+        r"localhost|127\.0\.0\.1|"
+        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+        r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|"
+        r"192\.168\.\d{1,3}\.\d{1,3}"
+        r")(:\d{1,5})?$"
     )
 _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
 # Defensive check: disallow "*" paired with credentials (MDN-specified invalid
@@ -250,6 +248,7 @@ if "*" in _cors_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
+    allow_origin_regex=_cors_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Admin-Key"],
@@ -387,6 +386,111 @@ def health_check():
     if http_status == 503:
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=503, content=body)
+    return body
+
+
+@app.get("/api/v1/health/db", tags=["system"])
+def db_health_check():
+    """Apr 2026 — explicit DB-connectivity probe.
+
+    The basic `/health` endpoint doesn't touch the database; an RDS
+    outage + a still-booting uvicorn would look healthy to k8s. This
+    endpoint:
+
+      * Opens a fresh connection (no pool re-use of a maybe-stale conn).
+      * Runs ``SELECT 1`` + reads `alembic_version.version_num`.
+      * Reports the configured driver + whether the schema is at head.
+
+    Return shape (always JSON):
+        200  { "status": "healthy",   "driver": "postgresql", "revision": "0006_bh", "latency_ms": 3.2 }
+        503  { "status": "unavailable","driver": "postgresql", "error": "..." }
+        200  { "status": "degraded",  "driver": "postgresql", "revision": "0004_bin",
+                "message": "DB reachable but schema behind head" }
+
+    Public — no auth gate — same policy as `/health` and `/health/pii`.
+    """
+    from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+    import time
+
+    driver = engine.url.drivername if engine else "unknown"
+    start = time.perf_counter()
+
+    # Step 1 — basic connectivity. A failure here is a real outage (DB
+    # down, credentials wrong, network partition): return 503.
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unavailable",
+                "driver": driver,
+                "error": str(e)[:200],
+            },
+        )
+
+    # Step 2 — alembic stamp. A DB with no `alembic_version` table is
+    # not "down" — it's "reachable but unstamped." Common in test
+    # fixtures that use `Base.metadata.create_all`. Return 200 with
+    # status=degraded + revision=None so orchestrators don't tear down
+    # a working pod just because Alembic hasn't been invoked.
+    rev = None
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT version_num FROM alembic_version")).first()
+        rev = row[0] if row else None
+    except Exception:
+        rev = None
+    latency_ms = round((time.perf_counter() - start) * 1000, 2)
+
+    # Compare against the head revision the same way `_assert_alembic_head`
+    # does at boot — scan migrations/versions/ for the revision nobody
+    # references as down_revision.
+    try:
+        import os as _os, re as _re
+        versions_dir = _os.path.join(_os.path.dirname(__file__), "..", "migrations", "versions")
+        revisions: dict[str, str] = {}
+        for fn in _os.listdir(versions_dir):
+            if not fn.endswith(".py") or fn.startswith("__"):
+                continue
+            with open(_os.path.join(versions_dir, fn), encoding="utf-8") as f:
+                src = f.read()
+            m = _re.search(r'^revision(?:\s*:\s*str)?\s*=\s*["\']([^"\']+)', src, _re.M)
+            d = _re.search(
+                r'^down_revision(?:\s*:[^=]+)?\s*=\s*(?:["\']([^"\']+)["\']|None)',
+                src, _re.M,
+            )
+            if m:
+                revisions[m.group(1)] = (d.group(1) if d and d.group(1) else "")
+        parents = {dv for dv in revisions.values() if dv}
+        heads = [r for r in revisions if r not in parents]
+        head = heads[0] if len(heads) == 1 else None
+    except Exception:
+        head = None
+
+    status = "healthy"
+    message = None
+    if rev is None:
+        # DB reachable but no alembic_version row. Common in test
+        # fixtures that use create_all without stamping. Not an outage
+        # — return 200 degraded + explicit message.
+        status = "degraded"
+        message = "DB reachable but alembic_version missing (schema not stamped)"
+    elif head and rev != head:
+        status = "degraded"
+        message = f"DB reachable but schema is {rev!r} vs head {head!r}"
+
+    body = {
+        "status": status,
+        "driver": driver,
+        "revision": rev,
+        "head": head,
+        "latency_ms": latency_ms,
+    }
+    if message:
+        body["message"] = message
     return body
 
 

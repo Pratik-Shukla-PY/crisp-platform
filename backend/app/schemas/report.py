@@ -113,6 +113,16 @@ class ReportMetaCreate(BaseModel):
     damage_classification: Optional[DamageClassEnum] = None
     crisis_type: Optional[CrisisTypeEnum] = None
     infrastructure_name: Optional[str] = Field(None, max_length=255)
+    # Phase B2 (Apr 2026 UI v3) — distinguisher between OSM-auto-filled and
+    # user-typed building names. True = the PWA / RN client auto-filled
+    # `infrastructure_name` from the OSM building the reporter tapped. False
+    # = the reporter typed the name as free text in their native language
+    # (because the map was unavailable). The dashboard uses this in combination
+    # with `building_id IS NULL` to flag rows that need manual mapping —
+    # see `needs_manual_mapping` in the ReportResponse. Defaults to False so
+    # pre-v3 clients (which never set the field) behave like explicit
+    # free-text — the safe "needs mapping" bucket.
+    infrastructure_name_from_osm: Optional[bool] = False
     debris_clearing_needed: Optional[bool] = None
     service_status: Optional[Any] = None
     # Building-footprint selection (UNDP Appendix). Client submits the
@@ -120,6 +130,17 @@ class ReportMetaCreate(BaseModel):
     # — the auto-assign logic in `_auto_assign_building_id` runs first
     # but an explicit pick overrides the coarse match.
     building_id: Optional[str] = Field(None, max_length=64)
+    # Phase 1 progressive-upload stack (Apr 2026). Blurhash encodes a
+    # ~4x3 DCT of the main photo into a short string (~25-35 chars); the
+    # dashboard decodes it into a blurred colour impression and renders
+    # it as a placeholder the instant the meta POST lands, BEFORE any
+    # media chunk arrives. Closes the "time-to-first-visual" gap from
+    # ~2 s (first SMALL chunk) down to ~200 ms (meta RTT). The string is
+    # tiny enough to fit comfortably in the meta body even on a 2 Kbps
+    # link (25 bytes ≈ 100 ms at 2 Kbps).
+    # Length cap is generous — blurhash can go up to ~9x9 DCT (≈ 83
+    # chars) but our encoder uses 4x3, which yields ~30 chars.
+    blurhash: Optional[str] = Field(None, max_length=96)
 
 # Single media attachment (Stage 2/3 — one file at a time)
 class MediaAttach(BaseModel):
@@ -156,6 +177,12 @@ class MediaResponse(MediaBase):
     # 'complete' = server-side pass succeeded, 'pending' = blur
     # in flight, NULL = legacy row (pre-tracking).
     pii_blur_status: Optional[str] = None
+    # Apr 2026 UI v2.1 — perceptual-hash fingerprint of the assembled
+    # photo for redundancy detection (UNDP nice-to-have #3). 16-char
+    # hex string; NULL for audio / legacy / not-yet-scanned rows. The
+    # dashboard groups media with near-identical hashes (Hamming
+    # distance ≤ 10) within the same building_id + 24h window.
+    photo_phash: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class AIAnalysisResponse(BaseModel):
@@ -231,10 +258,43 @@ class ReportResponse(BaseModel):
     crisis_type: Optional[str] = None               # see CrisisTypeEnum for the full UNDP list
     crisis_category: Optional[str] = None           # NATURAL / TECHNOLOGICAL / HUMAN_MADE / OTHER
     infrastructure_sub_type: Optional[str] = None   # original UI chip (ROAD, HOSPITAL, ...) for drill-down
+    # Phase 1 (Apr 2026 — Optional reporter login) — `user_id` stays
+    # NULL on anonymous submissions. Dashboard treats NULL == anonymous.
+    # PII fields (email/phone) are never embedded in this response; the
+    # dashboard calls `/auth/users/{user_id}` separately when an operator
+    # with ADMIN role needs to see them (user answer 5 — ANALYST sees a
+    # masked "User abc1234" badge via the derived field below; ADMIN can
+    # open the detail).
+    user_id: Optional[str] = None
+    is_anonymous: Optional[bool] = None
+    # Derived at read time (ReportResponse._compute_identity_badge) —
+    # masked for the default feed; operators with ADMIN role can call
+    # /auth/users/{user_id} to see PII.
+    reporter_badge: Optional[str] = None
     infrastructure_name: Optional[str] = None
+    # Phase B2 (Apr 2026 UI v3) — see ReportMetaCreate.infrastructure_name_from_osm.
+    # Exposed on the response so the dashboard can render a "needs mapping"
+    # badge when the reporter typed a free-text building name. Three-state
+    # column:
+    #   None  → pre-v3 row, dashboard shows no badge (we can't infer).
+    #   True  → OSM-picked, dashboard shows nothing (already mapped).
+    #   False → user-typed free text, dashboard shows the red "needs mapping"
+    #           badge IF `building_id IS None`.
+    infrastructure_name_from_osm: Optional[bool] = None
+    # Dashboard-friendly derived flag: True iff the reporter left a building
+    # name but no OSM match, so an operator needs to resolve it manually.
+    # Computed at read time; not a column — keeps the responsibility on the
+    # backend rather than asking every dashboard client to re-implement the
+    # rule. See ReportsResponseBuilder._needs_manual_mapping.
+    needs_manual_mapping: Optional[bool] = None
     debris_clearing_needed: Optional[bool] = None
     service_status: Optional[Any] = None
     building_id: Optional[str] = None
+    # Blurhash placeholder — see ReportMetaCreate.blurhash for design. The
+    # dashboard renders this via the blurhash-decode path while waiting for
+    # the first SMALL variant to arrive. Nullable because legacy reports
+    # submitted before Phase-1 won't have one.
+    blurhash: Optional[str] = None
 
     # Phase 5 (Apr 2026) — reviewer workflow surface.
     # `response_time_seconds` is COMPUTED at read time from
@@ -280,6 +340,46 @@ class ReportResponse(BaseModel):
             except Exception:
                 pass
         return self
+
+    # Phase 1 (Apr 2026 — Optional reporter login) — derive the masked
+    # reporter badge. `reporter_badge` is ALWAYS safe for the default
+    # ANALYST view: 8-char truncation of the user_id ("User abc12345").
+    # Operators with ADMIN role who need PII hit /auth/users/{user_id}
+    # separately. NULL user_id → `None` (anonymous; dashboard renders
+    # the standard "Anonymous" chip).
+    @model_validator(mode='after')
+    def _compute_identity_badge(self):
+        if self.user_id:
+            short = str(self.user_id).replace("-", "")[:8]
+            self.reporter_badge = f"User {short}"
+            self.is_anonymous = False
+        else:
+            self.reporter_badge = None
+            self.is_anonymous = True
+        return self
+
+    # Phase B2 (Apr 2026 UI v3) — derive the dashboard-friendly
+    # `needs_manual_mapping` flag from the three source columns
+    # (`infrastructure_name`, `building_id`, `infrastructure_name_from_osm`).
+    # Computed here — not stored — so the rule stays in one place and every
+    # response path (list, single, dashboard bulk) sees the same value.
+    @model_validator(mode='after')
+    def _compute_needs_manual_mapping(self):
+        has_name = bool((self.infrastructure_name or "").strip())
+        has_osm = bool((self.building_id or "").strip())
+        if not has_name or has_osm:
+            # No name, or already resolved to an OSM footprint. No mapping action.
+            self.needs_manual_mapping = False
+            return self
+        if self.infrastructure_name_from_osm is None:
+            # Pre-v3 row — we can't infer. Leave None so the dashboard shows
+            # no badge (neither green ✓ nor red "needs mapping").
+            self.needs_manual_mapping = None
+            return self
+        # Explicit False from a v3+ client → user typed it; operator should resolve.
+        self.needs_manual_mapping = not self.infrastructure_name_from_osm
+        return self
+
 
 class ClusterResponse(BaseModel):
     id: str

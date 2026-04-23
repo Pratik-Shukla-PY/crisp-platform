@@ -21,18 +21,25 @@ router = APIRouter()
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class ZoneCreate(BaseModel):
+    # Apr 2026 — added pydantic bounds so the API rejects invalid
+    # geographies at the edge instead of silently persisting a bogus
+    # row that breaks downstream map/heatmap rendering. Latitude and
+    # longitude use WGS-84 ranges; radius_km is capped at 2000
+    # because anything larger than that is effectively "half a
+    # continent" and the prediction engine's haversine filter +
+    # Claude dossier format break down past that scale.
     name: str = Field(..., max_length=255)
-    latitude: float
-    longitude: float
-    radius_km: float = 25.0
+    latitude: float = Field(..., ge=-90.0, le=90.0)
+    longitude: float = Field(..., ge=-180.0, le=180.0)
+    radius_km: float = Field(25.0, gt=0.0, le=2000.0)
     country: Optional[str] = None
     region: Optional[str] = None
 
 class ForecastRequest(BaseModel):
-    latitude: float
-    longitude: float
+    latitude: float = Field(..., ge=-90.0, le=90.0)
+    longitude: float = Field(..., ge=-180.0, le=180.0)
     name: str = "Custom Zone"
-    radius_km: float = 25.0
+    radius_km: float = Field(25.0, gt=0.0, le=2000.0)
     country: Optional[str] = None
     region: Optional[str] = None
     time_window_hours: int = 72

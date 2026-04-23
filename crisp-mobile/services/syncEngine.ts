@@ -235,12 +235,29 @@ async function syncReport(report: QueuedReport): Promise<void> {
 let _BINARY_CHUNKS_ENABLED = true;
 let _BINARY_FALLBACK_404 = false;   // session-scoped sticky flag on 404
 
+// Apr 2026 — capability detection: React-Native's Blob constructor does
+// NOT accept ArrayBuffer/Uint8Array parts ("Creating blobs from
+// 'ArrayBuffer' and 'ArrayBufferView' are not supported"). The PWA
+// Blob does. This happens synchronously at chunk-post time, BEFORE the
+// fetch, so the HTTP-404 sticky-fallback never fires. Probe capability
+// at module load and permanently pin the base64 path when bytes-into-
+// Blob isn't available, so RN always uses the legacy chunk endpoint.
+let _BINARY_CAPABLE = true;
+try {
+  // eslint-disable-next-line no-new
+  new Blob([new Uint8Array([1, 2, 3])] as any, { type: 'application/octet-stream' });
+} catch {
+  _BINARY_CAPABLE = false;
+  _BINARY_FALLBACK_404 = true;   // permanent for this session
+  console.log('[Sync] Blob-from-bytes unsupported on this platform — pinning base64 chunk path');
+}
+
 export function setBinaryChunksEnabled(on: boolean): void {
   _BINARY_CHUNKS_ENABLED = !!on;
-  if (on) _BINARY_FALLBACK_404 = false;
+  if (on && _BINARY_CAPABLE) _BINARY_FALLBACK_404 = false;
 }
 export function isBinaryChunksEnabled(): boolean {
-  return _BINARY_CHUNKS_ENABLED && !_BINARY_FALLBACK_404;
+  return _BINARY_CHUNKS_ENABLED && _BINARY_CAPABLE && !_BINARY_FALLBACK_404;
 }
 
 // ── Upload-bandwidth probe (Apr 2026) ──────────────────────────────────────
@@ -345,6 +362,141 @@ function computeChunkTimeout(chunkSize: number, measuredBytesPerSec: number | nu
 
 export function _getMeasuredBandwidth(): number { return _lastProbeBytesPerSec; }
 
+// ─── Phase-1 + 2.1 Adaptive Upgrades (Apr 2026) ──────────────────────────────
+// Mirrors mobile-app/src/app.js `_crispAdaptive` block. Keep these two
+// blocks in sync; the RN app is the secondary surface, not the reference.
+//
+//  1. Per-device bandwidth cache via AsyncStorage — skip the first
+//     probe round-trip for repeat sessions (saves ~500 ms cold-start).
+//  2. Mid-upload re-probe with hysteresis (2× ratio threshold).
+//  3. Packet-loss detection — chunk retries >3 → tier shrink for the
+//     remainder of the session.
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const AsyncStorageNS = require('@react-native-async-storage/async-storage').default as {
+  getItem: (k: string) => Promise<string | null>;
+  setItem: (k: string, v: string) => Promise<void>;
+};
+
+const _BANDWIDTH_CACHE_KEY = 'crisp_bandwidth_last_bps';
+const _BANDWIDTH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const _HYSTERESIS_RATIO = 2.0;
+const _PACKET_LOSS_RETRY_THRESHOLD = 3;
+/** Hook point count — exported so the chunk loop can `(seq+1) % X === 0`. */
+export const MID_UPLOAD_REPROBE_EVERY = 8;
+
+async function _readCachedBandwidth(): Promise<number> {
+  try {
+    const raw = await AsyncStorageNS.getItem(_BANDWIDTH_CACHE_KEY);
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw) as { bps?: number; ts?: number };
+    if (!parsed || typeof parsed.bps !== 'number' || !parsed.ts) return 0;
+    if (Date.now() - parsed.ts > _BANDWIDTH_CACHE_TTL_MS) return 0;
+    return parsed.bps;
+  } catch { return 0; }
+}
+
+async function _writeCachedBandwidth(bps: number): Promise<void> {
+  try {
+    await AsyncStorageNS.setItem(_BANDWIDTH_CACHE_KEY, JSON.stringify({ bps, ts: Date.now() }));
+  } catch { /* ignore */ }
+}
+
+/** Hydrate the probe state from AsyncStorage at module load so the first
+ *  session probe isn't a cold start. Pure side-effect; best-effort. */
+export async function hydrateBandwidthFromCache(): Promise<void> {
+  const bps = await _readCachedBandwidth();
+  if (bps > 0 && _lastProbeBytesPerSec === 0) {
+    _lastProbeBytesPerSec = bps;
+    _lastProbeAt = Date.now();
+    const tier = pickTierFromBandwidth(bps);
+    console.log(`[Probe] hydrated from cache: ${Math.round(bps)} B/s → ${tier}`);
+    // Align networkAdaptive's tier to the hydrated value.
+    const tierOrder = ['FAST', 'MEDIUM', 'SLOW', 'VERY_SLOW'] as const;
+    const target = tierOrder.indexOf(tier);
+    let guard = 8;
+    while (guard-- > 0) {
+      const cur = getCurrentTier();
+      const curIdx = tierOrder.indexOf(cur as any);
+      if (curIdx === target) break;
+      if (curIdx < target) downgradeNetwork();
+      else upgradeNetwork();
+    }
+  }
+}
+// Kick hydration at module load — module import is the Metro bundler so
+// this runs exactly once per app launch.
+hydrateBandwidthFromCache().catch(() => {});
+
+/**
+ * Mid-upload re-probe with hysteresis. Returns the (possibly new) tier.
+ * Caller should invoke every MID_UPLOAD_REPROBE_EVERY chunks.
+ * Fire-and-forget is fine — failures fall through to the prior tier.
+ */
+export async function midUploadReprobe(): Promise<void> {
+  const prevBps = _lastProbeBytesPerSec;
+  const prevTier = getCurrentTier();
+  await adaptTierViaProbe({ force: true });
+  const newBps = _lastProbeBytesPerSec;
+  if (newBps > 0) _writeCachedBandwidth(newBps).catch(() => {});
+  if (prevBps > 0 && newBps > 0) {
+    const ratio = Math.max(prevBps, newBps) / Math.min(prevBps, newBps);
+    if (ratio < _HYSTERESIS_RATIO) {
+      // Adaptive tier can only be nudged via up/downgrade helpers; if
+      // adaptTierViaProbe moved it, walk it back. One-step moves are
+      // the common case since probe noise rarely crosses multiple tiers.
+      const curTier = getCurrentTier();
+      if (curTier !== prevTier) {
+        const tierOrder = ['FAST', 'MEDIUM', 'SLOW', 'VERY_SLOW'] as const;
+        const want = tierOrder.indexOf(prevTier as any);
+        let guard = 4;
+        while (guard-- > 0) {
+          const c = getCurrentTier();
+          const curIdx = tierOrder.indexOf(c as any);
+          if (curIdx === want) break;
+          if (curIdx < want) downgradeNetwork();
+          else upgradeNetwork();
+        }
+      }
+      console.log(
+        `[Reprobe] ${Math.round(prevBps)}→${Math.round(newBps)} B/s ` +
+        `(ratio ${ratio.toFixed(2)}) — within hysteresis, staying on ${prevTier}`,
+      );
+    }
+  }
+}
+
+// Packet-loss counters (module-level; reset per report).
+let _packetLossEvents = 0;
+let _packetLossShrunk = false;
+
+export function recordRetryCount(retries: number): void {
+  if (retries > _PACKET_LOSS_RETRY_THRESHOLD) _packetLossEvents += 1;
+}
+
+export function resetPacketLossCounters(): void {
+  _packetLossEvents = 0;
+  _packetLossShrunk = false;
+}
+
+/**
+ * If the session has accumulated ≥2 lossy chunks AND we haven't shrunk
+ * yet, drop one tier. One-way: lossy links tend to stay lossy, so no
+ * upgrade path from this function.
+ */
+export function maybeShrinkTierForLoss(): void {
+  if (_packetLossShrunk) return;
+  if (_packetLossEvents < 2) return;
+  const cur = getCurrentTier();
+  if (cur === 'VERY_SLOW') { _packetLossShrunk = true; return; }
+  console.log(`[Adaptive] packet-loss shrink: ${cur} → (one step down) events=${_packetLossEvents}`);
+  downgradeNetwork();
+  _packetLossShrunk = true;
+}
+
+export function getPacketLossEvents(): number { return _packetLossEvents; }
+// ─── end Phase-1 + 2.1 Adaptive Upgrades ──────────────────────────────────────
+
 /** djb2 hash over raw bytes. Mirrors `djb2_bytes` in
  *  `backend/app/api/endpoints/reports.py`. Same polynomial as the
  *  text-alphabet `djb2Checksum` helper below. */
@@ -432,6 +584,9 @@ async function adaptiveUploadBinary(
           sent = true;
           _successStreak++;
           if (_successStreak >= 10) { upgradeNetwork(); _successStreak = 0; }
+          // Phase-2.1 — record retry count for this chunk. `attempt` is
+          // 0-based: 0 = first try succeeded, >threshold = lossy.
+          try { recordRetryCount(attempt); } catch { /* best-effort */ }
           break;
         }
         if (res.status === 404 && attempt === 0) {
@@ -471,6 +626,17 @@ async function adaptiveUploadBinary(
     offset = end;
     chunkIdx++;
     await onProgress(offset);
+
+    // Phase-1.6 + Phase-2.1 — packet-loss shrink + periodic re-probe.
+    // Both best-effort: throwing from the adaptive layer must never
+    // abort an upload that's already successfully-transmitted a chunk.
+    try {
+      maybeShrinkTierForLoss();
+      if (chunkIdx % MID_UPLOAD_REPROBE_EVERY === 0) {
+        // Fire-and-forget — don't block the next chunk.
+        midUploadReprobe().catch(() => {});
+      }
+    } catch { /* ignore */ }
 
     if (chunkIdx % 10 === 0) {
       const pct = Math.round((chunkIdx / LOCKED_TOTAL_CHUNKS) * 100);

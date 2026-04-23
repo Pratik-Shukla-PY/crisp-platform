@@ -253,7 +253,10 @@ class TestBinaryAssemblyRoundTrip:
 
         url = m.url
         assert url and url.startswith("/static/")
-        upload_dir = Path(__file__).parent.parent / "uploads"
+        # Apr 2026 — conftest.py redirects writes to `backend/uploads_test/`
+        # via the `CRISP_UPLOAD_DIR` env var (seatbelt against the dev-DB
+        # wipe incident). Read from the SAME dir the server wrote to.
+        upload_dir = Path(os.environ.get("CRISP_UPLOAD_DIR") or str(Path(__file__).parent.parent / "uploads"))
         file_path = upload_dir / url.replace("/static/", "")
         assert file_path.exists()
         with open(file_path, "rb") as f:
@@ -287,7 +290,10 @@ class TestBinaryAssemblyRoundTrip:
             time.sleep(0.1)
         assert m.assembly_status == "complete"
 
-        upload_dir = Path(__file__).parent.parent / "uploads"
+        # Apr 2026 — conftest.py redirects writes to `backend/uploads_test/`
+        # via the `CRISP_UPLOAD_DIR` env var (seatbelt against the dev-DB
+        # wipe incident). Read from the SAME dir the server wrote to.
+        upload_dir = Path(os.environ.get("CRISP_UPLOAD_DIR") or str(Path(__file__).parent.parent / "uploads"))
         file_path = upload_dir / m.url.replace("/static/", "")
         with open(file_path, "rb") as f:
             assembled = f.read()
@@ -358,9 +364,123 @@ class TestChunkInvariant:
 
         url = _assemble_media_file(m.id, "IMAGE", db)
         assert url, "assembly failed"
-        upload_dir = Path(__file__).parent.parent / "uploads"
+        # Apr 2026 — conftest.py redirects writes to `backend/uploads_test/`
+        # via the `CRISP_UPLOAD_DIR` env var (seatbelt against the dev-DB
+        # wipe incident). Read from the SAME dir the server wrote to.
+        upload_dir = Path(os.environ.get("CRISP_UPLOAD_DIR") or str(Path(__file__).parent.parent / "uploads"))
         file_path = upload_dir / url.replace("/static/", "")
         with open(file_path, "rb") as f:
             assembled = f.read()
         assert assembled == b"AAAABBBBCCCCDDDD", \
             f"mixed-format assembly produced wrong bytes: {assembled!r}"
+
+
+# ── Phase 3.2 — retry idempotency completeness ────────────────────────────────
+
+class TestChunkRetryIdempotency:
+    """A flaky link can POST the same chunk 3+ times; the backend MUST
+    treat every re-post after the first as a no-op (same media_id,
+    seq_num → duplicate). The partial coverage in earlier tests proves
+    idempotency on seq=0; these tests widen it:
+
+      * Multiple retries of the same seq → `received_chunks` still 1
+      * Interleaved retries across seqs → count matches unique seqs
+
+    Regression guard for the real-world case: a 2 Kbps link's XHR
+    timeout fires mid-flight → client retries → backend had already
+    accepted the chunk. Without idempotency, `received_chunks` bumps
+    past `chunk_count` and assembly never fires.
+    """
+
+    def _seed_report(self, client, device_hash: str = "TEST-IDEM-DEV"):
+        res = client.post("/api/v1/reports/meta", json={
+            "device_hash": device_hash,
+            "client_report_id": f"idem-{time.time_ns()}",
+            "source": "APP",
+            "severity": "MODERATE",
+            "infrastructure_type": "ROAD",
+            "location": {"latitude": 12.97, "longitude": 77.59},
+            "expected_media": 1,
+        })
+        assert res.status_code == 201, res.text
+        return res.json()["id"]
+
+    def test_duplicate_seq_num_does_not_double_count(self, client, db):
+        report_id = self._seed_report(client)
+        media_id = f"idem-same-{time.time_ns()}"
+        payload = b"retry-me"
+        checksum = djb2_bytes(payload)
+
+        form, files = _make_binary_chunk_form(
+            media_id=media_id, seq_num=0, total_chunks=4,
+            data=payload, checksum=checksum,
+        )
+        # Fire the SAME (media_id, seq_num) THREE times — simulating a
+        # flaky XHR that re-tried twice after a successful server-side
+        # commit that the client never saw the ACK for.
+        for _ in range(3):
+            # Re-build files because BytesIO positions get consumed.
+            form2, files2 = _make_binary_chunk_form(
+                media_id=media_id, seq_num=0, total_chunks=4,
+                data=payload, checksum=checksum,
+            )
+            res = client.post(
+                f"/api/v1/reports/{report_id}/media/chunk-bin",
+                data=form2, files=files2,
+            )
+            # Every retry must succeed (NOT 409) — the server
+            # acknowledges "yes I have that seq, no-op."
+            assert res.status_code == 200, \
+                f"idempotent retry failed with {res.status_code}: {res.text}"
+
+        # Verify: exactly ONE MediaChunk row + received_chunks == 1.
+        db.expire_all()
+        media = db.query(Media).filter(Media.id == media_id).first()
+        assert media is not None, "media row should exist after any successful chunk"
+        assert media.received_chunks == 1, \
+            f"received_chunks bumped {media.received_chunks} times for 3 retries — " \
+            "idempotency broken"
+        chunks = db.query(MediaChunk).filter(MediaChunk.media_id == media_id).all()
+        assert len(chunks) == 1, \
+            f"duplicate MediaChunk rows — {len(chunks)} written, expected 1"
+
+    def test_interleaved_retries_across_seqs_all_accounted_once(self, client, db):
+        """Send 0,1,2 then retry 0,1 — final state must be 3 unique seqs,
+        received_chunks=3, not double-counted."""
+        report_id = self._seed_report(client)
+        media_id = f"idem-inter-{time.time_ns()}"
+        payloads = {0: b"AAAA", 1: b"BBBB", 2: b"CCCC"}
+
+        # Fresh submit — 0, 1, 2.
+        for seq, body in payloads.items():
+            form, files = _make_binary_chunk_form(
+                media_id=media_id, seq_num=seq, total_chunks=3,
+                data=body, checksum=djb2_bytes(body),
+            )
+            res = client.post(
+                f"/api/v1/reports/{report_id}/media/chunk-bin",
+                data=form, files=files,
+            )
+            assert res.status_code == 200, res.text
+
+        # Retry 0 + 1 (pretend the client didn't see the ACK for those).
+        for seq in (0, 1):
+            form, files = _make_binary_chunk_form(
+                media_id=media_id, seq_num=seq, total_chunks=3,
+                data=payloads[seq], checksum=djb2_bytes(payloads[seq]),
+            )
+            res = client.post(
+                f"/api/v1/reports/{report_id}/media/chunk-bin",
+                data=form, files=files,
+            )
+            assert res.status_code == 200
+
+        db.expire_all()
+        media = db.query(Media).filter(Media.id == media_id).first()
+        assert media is not None
+        # After 5 posts (3 unique + 2 retries), still only 3 accounted.
+        assert media.received_chunks == 3, \
+            f"expected received_chunks=3, got {media.received_chunks}"
+        chunks = db.query(MediaChunk).filter(MediaChunk.media_id == media_id).all()
+        assert len(chunks) == 3, \
+            f"expected 3 MediaChunk rows, got {len(chunks)}"

@@ -13,13 +13,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func as sa_func
 
 from app.db.session import get_db
-from app.models.auth import User, Organization, OTPRecord, UserSession, AuthAuditLog, RoleEnum
+from app.models.auth import (
+    User, Organization, OTPRecord, UserSession, AuthAuditLog, RoleEnum,
+    UserDeviceLink,
+)
+from app.models.report import Report
 from app.core.security import (
     hash_password, verify_password, validate_password_strength,
     create_access_token, create_refresh_token, decode_token, hash_token,
     generate_otp, get_otp_expiry, send_otp_email,
 )
 from app.core.deps import get_current_user, require_admin, require_super_admin
+from app.services.sms import send_otp_sms, validate_e164, SMSSendError
 from jose import JWTError
 
 logger = logging.getLogger(__name__)
@@ -38,14 +43,49 @@ class RegisterRequest(BaseModel):
     password: Optional[str] = None
     full_name: Optional[str] = Field(None, max_length=255)
 
+
+# Phase 1 (Apr 2026 — Optional reporter login) — OTP schemas generalised
+# to accept EMAIL or PHONE. `destination` holds whichever the reporter
+# chose; `channel` disambiguates. Legacy `email`-only OTPRequest kept as
+# an alias path that the endpoint auto-promotes to EMAIL+destination
+# (back-compat with the dashboard operator login flow).
 class OTPRequest(BaseModel):
-    email: EmailStr
+    # Legacy alias — dashboard operators' existing login flow sends email.
+    email: Optional[EmailStr] = None
+    # New: generalised destination (email OR E.164 phone like "+919876543210").
+    destination: Optional[str] = Field(None, max_length=255)
+    channel: Optional[str] = Field(None, pattern="^(EMAIL|PHONE)$")
     purpose: str = "LOGIN"   # SIGNUP, LOGIN, MFA, PASSWORD_RESET
+    # Client-sent device_hash so /auth/otp/verify can return a
+    # `linkable_report_count` the app uses to paint the post-login
+    # "Link N reports?" card. Optional; dashboard operators won't send it.
+    device_hash: Optional[str] = Field(None, max_length=255)
+
 
 class OTPVerify(BaseModel):
-    email: EmailStr
+    # Legacy email-only path kept alive.
+    email: Optional[EmailStr] = None
+    # Phase 1 generalised.
+    destination: Optional[str] = Field(None, max_length=255)
+    channel: Optional[str] = Field(None, pattern="^(EMAIL|PHONE)$")
     code: str = Field(..., min_length=6, max_length=6)
     purpose: str = "SIGNUP"
+    device_hash: Optional[str] = Field(None, max_length=255)
+
+
+class LinkDeviceRequest(BaseModel):
+    """POST /auth/link-device body — claims every anonymous report from
+    the given device_hash for the currently-authenticated user."""
+    device_hash: str = Field(..., min_length=1, max_length=255)
+
+
+class UnlinkDeviceRequest(BaseModel):
+    """POST /auth/unlink-device — reverts rows attributed to the caller
+    via this device back to anonymous AND removes the user_device_link
+    row so the device stops appearing in the user's "My Reports" merged
+    feed."""
+    device_hash: str = Field(..., min_length=1, max_length=255)
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -146,10 +186,18 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
     db.flush()
 
     # Generate and send OTP
+    # Phase 1 (Apr 2026 — Optional reporter login): OTPRecord now
+    # requires `destination` + `channel`. Legacy email-only callers
+    # must populate both. `email` column retained for audit compat.
     code = generate_otp()
     otp = OTPRecord(
-        email=req.email, code=code, purpose="SIGNUP",
-        expires_at=get_otp_expiry(), ip_address=_get_ip(request),
+        destination=req.email,
+        channel="EMAIL",
+        email=req.email,
+        code=code,
+        purpose="SIGNUP",
+        expires_at=get_otp_expiry(),
+        ip_address=_get_ip(request),
     )
     db.add(otp)
     _audit(db, user.id, req.email, "REGISTER", request)
@@ -163,30 +211,75 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
 
 # ── OTP Request ───────────────────────────────────────────────────────────────
 
+def _resolve_destination(req) -> tuple[str, str]:
+    """Phase 1 back-compat shim. Accepts either the legacy `email` field
+    (dashboard operators) or the new `destination`+`channel` pair
+    (mobile reporters). Returns a normalised `(destination, channel)`
+    tuple. Phone destinations are E.164-validated; emails are lower-
+    cased so queries are case-insensitive."""
+    channel = (getattr(req, "channel", None) or "").upper() or None
+    dest = getattr(req, "destination", None)
+    if not dest and getattr(req, "email", None):
+        # Legacy path — email-only caller.
+        dest = str(req.email)
+        channel = channel or "EMAIL"
+    if not dest:
+        raise HTTPException(status_code=422, detail="destination or email required")
+    if channel == "PHONE":
+        try:
+            dest = validate_e164(dest)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+    elif channel == "EMAIL":
+        dest = dest.strip().lower()
+    else:
+        # Channel unspecified — infer from destination shape.
+        if dest.startswith("+") and not ("@" in dest):
+            try:
+                dest = validate_e164(dest)
+                channel = "PHONE"
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=str(e))
+        else:
+            channel = "EMAIL"
+            dest = dest.strip().lower()
+    return dest, channel
+
+
+def _find_user_by_destination(db: Session, destination: str, channel: str) -> Optional[User]:
+    if channel == "PHONE":
+        return db.query(User).filter(User.phone_number == destination).first()
+    return db.query(User).filter(User.email == destination).first()
+
+
 @router.post("/otp/request")
 def request_otp(req: OTPRequest, request: Request, db: Session = Depends(get_db)):
-    """Send a new OTP code to the user's email.
+    """Send a new OTP code to the reporter's email OR phone.
 
-    P2.6 — rate limiting applied in layers:
-      1. Per-email: max 3 requests per 10 min (blocks retry spam).
-      2. Per-IP: max 20 requests per hour (blocks enumeration across
-         thousands of different emails from one attacker IP).
-      3. Global-per-email attempt cap: see verify_otp — prevents new
-         OTP requests from resetting the 5-attempt budget.
+    Phase 1 (Apr 2026 — Optional reporter login) generalised:
+      - Accepts `{destination, channel}` (EMAIL or PHONE) OR the legacy
+        `{email}` shape for backward-compat with dashboard operators.
+      - Rate-limits are applied per-destination + per-IP with identical
+        thresholds to the pre-v1 email-only path.
+      - For LOGIN purpose, if the user doesn't exist we silently CREATE
+        a REPORTER-role user (OTP = proof of ownership of the channel).
+        This implements the "skip-registration" UX: tapping "Login" and
+        entering your phone is ALSO how you sign up.
     """
+    destination, channel = _resolve_destination(req)
     ten_min_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
     one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
     client_ip = _get_ip(request)
 
-    # Layer 1 — per-email.
+    # Layer 1 — per-destination.
     recent = db.query(OTPRecord).filter(
-        OTPRecord.email == req.email,
+        OTPRecord.destination == destination,
         OTPRecord.created_at >= ten_min_ago,
     ).count()
     if recent >= OTP_RATE_LIMIT:
         raise HTTPException(status_code=429, detail="Too many OTP requests. Try again in a few minutes.")
 
-    # Layer 2 — per-IP across all emails.
+    # Layer 2 — per-IP across all destinations.
     if client_ip and client_ip not in ("127.0.0.1", "::1", "unknown"):
         from_ip = db.query(OTPRecord).filter(
             OTPRecord.ip_address == client_ip,
@@ -198,32 +291,65 @@ def request_otp(req: OTPRequest, request: Request, db: Session = Depends(get_db)
                 detail="Too many OTP requests from this network. Try again later."
             )
 
-    # For LOGIN purpose, user must exist
-    if req.purpose == "LOGIN":
-        user = db.query(User).filter(User.email == req.email).first()
+    # Mobile "LOGIN" = "send a code to this channel". Users are AUTO-CREATED
+    # on first verify (see verify_otp). Dashboard operator LOGIN stays
+    # user-must-exist because dashboard accounts are admin-provisioned.
+    # We detect dashboard-style calls by the absence of `device_hash` +
+    # no phone channel (dashboard is email-only).
+    is_mobile_flow = bool(getattr(req, "device_hash", None)) or channel == "PHONE"
+    if req.purpose == "LOGIN" and not is_mobile_flow:
+        user = _find_user_by_destination(db, destination, channel)
         if not user:
-            raise HTTPException(status_code=404, detail="No account with this email")
+            raise HTTPException(status_code=404, detail="No account with this destination")
 
     code = generate_otp()
     otp = OTPRecord(
-        email=req.email, code=code, purpose=req.purpose,
-        expires_at=get_otp_expiry(), ip_address=_get_ip(request),
+        destination=destination,
+        channel=channel,
+        # Keep email populated when channel == EMAIL for audit-trail legacy.
+        email=destination if channel == "EMAIL" else None,
+        code=code,
+        purpose=req.purpose,
+        expires_at=get_otp_expiry(),
+        ip_address=_get_ip(request),
     )
     db.add(otp)
-    _audit(db, None, req.email, "OTP_REQUEST", request, details={"purpose": req.purpose})
+    _audit(db, None, destination, "OTP_REQUEST", request, details={"purpose": req.purpose, "channel": channel})
     db.commit()
 
-    send_otp_email(req.email, code, req.purpose)
-    return {"message": "Verification code sent to your email.", "email": req.email}
+    # Dispatch via the correct channel. Failures surface as 502 so the
+    # client can prompt "Try the other channel".
+    try:
+        if channel == "PHONE":
+            send_otp_sms(destination, code)
+        else:
+            send_otp_email(destination, code, req.purpose)
+    except SMSSendError as e:
+        raise HTTPException(status_code=502, detail="Could not send code. Please try again or use another channel.") from e
+
+    return {"message": "Verification code sent.", "destination": destination, "channel": channel}
 
 
 # ── OTP Verification ─────────────────────────────────────────────────────────
 
 @router.post("/otp/verify")
 def verify_otp(req: OTPVerify, request: Request, db: Session = Depends(get_db)):
-    """Verify OTP code. On success: verifies account and/or issues tokens."""
+    """Verify OTP code. On success: creates/verifies the reporter account
+    and issues tokens. Returns `linkable_report_count` so the client can
+    paint the post-login "Link N reports?" card.
+
+    Phase 1 (Apr 2026 — Optional reporter login):
+      - Lookup by `(destination, channel)` for phone-or-email OTP.
+      - Auto-CREATE a REPORTER user on first LOGIN with a new destination
+        (OTP proof-of-ownership is sufficient signup credential).
+      - Bind the user to the reporting device via `user_device_link`.
+      - Return `linkable_report_count` — number of anonymous reports on
+        this device_hash the reporter can claim via /auth/link-device.
+    """
+    destination, channel = _resolve_destination(req)
+
     otp = db.query(OTPRecord).filter(
-        OTPRecord.email == req.email,
+        OTPRecord.destination == destination,
         OTPRecord.purpose == req.purpose,
         OTPRecord.used == False,
     ).order_by(OTPRecord.created_at.desc()).first()
@@ -242,20 +368,17 @@ def verify_otp(req: OTPVerify, request: Request, db: Session = Depends(get_db)):
     if otp.attempts > OTP_MAX_ATTEMPTS:
         raise HTTPException(status_code=400, detail="Too many attempts. Request a new code.")
 
-    # P2.6 — global attempt cap across all OTP records for this email in the
-    # last 30 minutes. Without this, an attacker can request a fresh OTP (new
-    # record, zeroed `attempts`) and get 5 more guesses, effectively bypassing
-    # the per-record cap. 15 = 3 valid retries × 5 attempts ≈ legitimate
-    # user's worst case.
+    # P2.6 — global attempt cap across all OTP records for this destination
+    # in the last 30 minutes. Same rationale as the legacy email-only path.
     thirty_min_ago = datetime.now(timezone.utc) - timedelta(minutes=30)
     global_attempts = db.query(OTPRecord).filter(
-        OTPRecord.email == req.email,
+        OTPRecord.destination == destination,
         OTPRecord.created_at >= thirty_min_ago,
     ).with_entities(sa_func.sum(OTPRecord.attempts)).scalar() or 0
     if (global_attempts + otp.attempts) > 15:
         raise HTTPException(
             status_code=429,
-            detail="Too many failed attempts on this email. Wait 30 minutes before trying again."
+            detail="Too many failed attempts on this destination. Wait 30 minutes before trying again."
         )
 
     # Verify code
@@ -266,45 +389,120 @@ def verify_otp(req: OTPVerify, request: Request, db: Session = Depends(get_db)):
 
     # Success
     otp.used = True
-    _audit(db, None, req.email, "OTP_VERIFY", request, details={"purpose": req.purpose})
+    _audit(db, None, destination, "OTP_VERIFY", request, details={"purpose": req.purpose, "channel": channel})
 
-    user = db.query(User).filter(User.email == req.email).first()
+    user = _find_user_by_destination(db, destination, channel)
+    is_new_user = False
 
-    # SIGNUP verification
+    # Auto-create a reporter user on first LOGIN through mobile (email- or
+    # phone-channel). SIGNUP path stays explicit — dashboard operator
+    # creation still requires the /register endpoint.
+    if not user and req.purpose == "LOGIN":
+        is_new_user = True
+        user = User(
+            email=destination if channel == "EMAIL" else None,
+            phone_number=destination if channel == "PHONE" else None,
+            phone_verified=(channel == "PHONE"),
+            is_verified=True,
+            primary_auth_channel=channel,
+            role=RoleEnum.REPORTER.value,
+            gdpr_consent_at=datetime.now(timezone.utc),
+        )
+        db.add(user)
+        db.flush()   # give us user.id for the audit log below
+        _audit(db, user.id, destination, "REGISTER", request,
+               details={"channel": channel, "source": "otp_first_login"})
+
+    # Per-purpose success handling.
     if req.purpose == "SIGNUP":
-        if user:
-            user.is_verified = True
-            db.commit()
-            return _issue_tokens(user, db, request)
-        raise HTTPException(status_code=404, detail="User not found")
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.is_verified = True
+        if channel == "PHONE":
+            user.phone_verified = True
+        tokens = _issue_tokens(user, db, request)
+        _maybe_bind_device(db, user.id, getattr(req, "device_hash", None))
+        linkable = _linkable_report_count(db, getattr(req, "device_hash", None), user.id)
+        db.commit()
+        return {**tokens, "is_new_user": is_new_user, "linkable_report_count": linkable}
 
-    # LOGIN verification
     if req.purpose == "LOGIN":
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         if not user.is_active:
             raise HTTPException(status_code=403, detail="Account disabled")
         user.is_verified = True
-        _audit(db, user.id, req.email, "LOGIN", request, details={"method": "otp"})
-        return _issue_tokens(user, db, request)
+        if channel == "PHONE":
+            user.phone_verified = True
+        user.primary_auth_channel = channel
+        _audit(db, user.id, destination, "LOGIN", request, details={"method": "otp", "channel": channel})
+        tokens = _issue_tokens(user, db, request)
+        _maybe_bind_device(db, user.id, getattr(req, "device_hash", None))
+        linkable = _linkable_report_count(db, getattr(req, "device_hash", None), user.id)
+        db.commit()
+        return {**tokens, "is_new_user": is_new_user, "linkable_report_count": linkable}
 
-    # MFA verification
     if req.purpose == "MFA":
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        _audit(db, user.id, req.email, "LOGIN", request, details={"method": "mfa"})
+        _audit(db, user.id, destination, "LOGIN", request, details={"method": "mfa"})
         return _issue_tokens(user, db, request)
 
     db.commit()
     return {"message": "Code verified successfully."}
 
 
+def _maybe_bind_device(db: Session, user_id: str, device_hash: Optional[str]) -> None:
+    """Upsert a user_device_link row. Idempotent; safe to call on every
+    verify. Skipped when the client didn't include a device_hash (e.g.
+    the dashboard operator login path)."""
+    if not device_hash:
+        return
+    existing = db.query(UserDeviceLink).filter(
+        UserDeviceLink.user_id == user_id,
+        UserDeviceLink.device_hash == device_hash,
+    ).first()
+    if existing:
+        return
+    db.add(UserDeviceLink(user_id=user_id, device_hash=device_hash))
+
+
+def _linkable_report_count(db: Session, device_hash: Optional[str], user_id: str) -> int:
+    """Count anonymous reports on this device the user could claim.
+    Bounded by `user_id IS NULL` so reports already claimed by someone
+    else (a different user on a shared device) don't mistakenly appear."""
+    if not device_hash:
+        return 0
+    device = db.query(Report.device_id).filter(Report.device_id.isnot(None)).first()
+    # We need the devices table — Report.device_id is the PK of Device,
+    # but clients submit the `device_hash` string, not the id. Look up.
+    from app.models.report import Device  # local import avoids cycle
+    d = db.query(Device).filter(Device.device_hash == device_hash).first()
+    if not d:
+        return 0
+    return db.query(Report).filter(
+        Report.device_id == d.id,
+        Report.user_id.is_(None),
+    ).count()
+
+
 # ── Password Login ────────────────────────────────────────────────────────────
 
 @router.post("/login")
 def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
-    """Login with email + password. Issues JWT tokens."""
-    user = db.query(User).filter(User.email == req.email).first()
+    """Login with email + password. Issues JWT tokens.
+
+    Apr 2026: email lookup is case-insensitive — Postgres `varchar` is
+    case-sensitive by default, which meant a user registered as
+    `admin@crisp.org` couldn't log in with `Admin@crisp.org` (common
+    after mobile-OS autocapitalisation). `ILIKE` with escaped
+    metacharacters gives a case-blind match without pulling in CITEXT.
+    """
+    # Escape SQL LIKE metacharacters so an email like "a%b@c.org"
+    # doesn't accidentally match extra rows.
+    _email = (req.email or "").strip()
+    _email_escaped = _email.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    user = db.query(User).filter(User.email.ilike(_email_escaped, escape="\\")).first()
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
@@ -335,11 +533,14 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
 
-    # MFA check
+    # MFA check — Phase 1 (Apr 2026): OTPRecord requires destination+channel.
     if user.mfa_enabled:
         code = generate_otp()
-        db.add(OTPRecord(email=req.email, code=code, purpose="MFA",
-                         expires_at=get_otp_expiry(), ip_address=_get_ip(request)))
+        db.add(OTPRecord(
+            destination=req.email, channel="EMAIL", email=req.email,
+            code=code, purpose="MFA",
+            expires_at=get_otp_expiry(), ip_address=_get_ip(request),
+        ))
         db.commit()
         send_otp_email(req.email, code, "MFA")
         return {"requires_mfa": True, "message": "MFA code sent to your email."}
@@ -383,14 +584,145 @@ def refresh_token(req: RefreshRequest, db: Session = Depends(get_db)):
 
 @router.post("/logout")
 def logout(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Revoke current session."""
-    # Revoke all active sessions for this user (simple approach)
+    """Revoke ALL active sessions for this user (strong logout, per user
+    Phase 1 spec answer 7). Other logged-in devices lose their refresh
+    ability on the next refresh — they'll degrade to anonymous once the
+    access token's 15 min expires. A fresh OTP login re-establishes
+    presence on any device that still wants it."""
+    # Strong logout: revoke every active session, not just the current one.
     db.query(UserSession).filter(
         UserSession.user_id == user.id, UserSession.is_active == True
     ).update({"is_active": False, "revoked_at": datetime.now(timezone.utc)})
-    _audit(db, user.id, user.email, "LOGOUT", request)
+    _audit(db, user.id, user.email or user.phone_number, "LOGOUT", request)
     db.commit()
     return {"message": "Logged out successfully"}
+
+
+# ── Phase 1 (Apr 2026 — Optional reporter login): device-linking ──────────────
+
+@router.post("/link-device")
+def link_device(
+    req: LinkDeviceRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Claim every anonymous report on this device for the calling user.
+
+    Policy (user spec answer: link in Phase 1):
+      - UPDATE reports SET user_id = me
+        WHERE device_hash = req.device_hash AND user_id IS NULL
+      - UPSERT user_device_link(me, device_hash) so the My-Reports feed
+        on ANY of this user's future devices surfaces this device's reports.
+
+    Already-claimed rows (user_id IS NOT NULL) are never touched — the
+    "WHERE user_id IS NULL" guard makes this safe to call on a shared
+    device where a prior user already linked some rows.
+    """
+    from app.models.report import Device  # avoid circular import at module load
+    device = db.query(Device).filter(Device.device_hash == req.device_hash).first()
+    if not device:
+        # No rows to link, but still upsert the join so future anonymous
+        # reports from this device surface in the user's feed after they
+        # link it. Dashboard will see the tie.
+        _maybe_bind_device(db, user.id, req.device_hash)
+        db.commit()
+        return {"linked": 0, "message": "Device bound; no anonymous reports to claim."}
+
+    result = db.query(Report).filter(
+        Report.device_id == device.id,
+        Report.user_id.is_(None),
+    ).update({"user_id": user.id}, synchronize_session=False)
+    _maybe_bind_device(db, user.id, req.device_hash)
+    _audit(db, user.id, user.email or user.phone_number, "OTP_VERIFY", request,
+           details={"action": "link_device", "device_hash": req.device_hash, "linked": int(result or 0)})
+    db.commit()
+    return {"linked": int(result or 0)}
+
+
+@router.post("/unlink-device")
+def unlink_device(
+    req: UnlinkDeviceRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Revert the caller's linked reports on this device back to anonymous
+    and drop the user_device_link row. Preserves the crisis-response
+    value of the reports (they stay in the dashboard); only the PII
+    linkage is removed. Idempotent."""
+    from app.models.report import Device
+    device = db.query(Device).filter(Device.device_hash == req.device_hash).first()
+    unlinked = 0
+    if device:
+        unlinked = db.query(Report).filter(
+            Report.device_id == device.id,
+            Report.user_id == user.id,
+        ).update({"user_id": None}, synchronize_session=False)
+    db.query(UserDeviceLink).filter(
+        UserDeviceLink.user_id == user.id,
+        UserDeviceLink.device_hash == req.device_hash,
+    ).delete(synchronize_session=False)
+    _audit(db, user.id, user.email or user.phone_number, "OTP_VERIFY", request,
+           details={"action": "unlink_device", "device_hash": req.device_hash, "unlinked": int(unlinked or 0)})
+    db.commit()
+    return {"unlinked": int(unlinked or 0)}
+
+
+@router.get("/me/reports")
+def my_reports(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Merged "My Reports" feed across every device the user has linked.
+
+    Returns reports where:
+      - user_id = me  (explicitly claimed), OR
+      - device_id ∈ { devices from user_device_link(me) } AND user_id IS NULL
+        (anonymous reports submitted from one of my bound devices that I
+        haven't explicitly linked yet — so the user sees them on device B
+        after binding device A's hash to the account).
+    De-duped by id, latest-first. No pagination yet — the typical reporter
+    has < 100 rows; we'll add it when a 500-row feed surfaces.
+    """
+    from app.models.report import Device
+    hashes = [r.device_hash for r in db.query(UserDeviceLink)
+              .filter(UserDeviceLink.user_id == user.id).all()]
+    device_ids = []
+    if hashes:
+        device_ids = [
+            d.id for d in db.query(Device).filter(Device.device_hash.in_(hashes)).all()
+        ]
+    from sqlalchemy import or_
+    clauses = [Report.user_id == user.id]
+    if device_ids:
+        clauses.append(Report.device_id.in_(device_ids))
+    rows = (
+        db.query(Report)
+        .filter(or_(*clauses))
+        .order_by(Report.server_created_at.desc())
+        .limit(200)
+        .all()
+    )
+    # Dedup (user_id match + device_id match may overlap).
+    seen = set()
+    out = []
+    for r in rows:
+        if r.id in seen:
+            continue
+        seen.add(r.id)
+        out.append({
+            "id": r.id,
+            "status": r.status.value if hasattr(r.status, "value") else r.status,
+            "severity": r.severity.value if hasattr(r.severity, "value") else r.severity,
+            "infrastructure_type": r.infrastructure_type.value if hasattr(r.infrastructure_type, "value") else r.infrastructure_type,
+            "crisis_type": r.crisis_type,
+            "description": r.description,
+            "server_created_at": r.server_created_at.isoformat() if r.server_created_at else None,
+            "user_id": r.user_id,
+            "is_anonymous": r.user_id is None,
+        })
+    return {"reports": out, "device_count": len(hashes)}
 
 
 # ── Profile ───────────────────────────────────────────────────────────────────

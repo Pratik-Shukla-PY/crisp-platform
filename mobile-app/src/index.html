@@ -124,12 +124,17 @@
                     UN Official Languages
                 </h4>
                 <div class="lang-picker-grid lang-picker-grid-un">
-                    <button class="lang-picker-flag lpf-un" data-lang="en" aria-label="English"><span class="lpf-glyph">🇬🇧</span><span class="lpf-label">English</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="fr" aria-label="French"><span class="lpf-glyph">🇫🇷</span><span class="lpf-label">Français</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="es" aria-label="Spanish"><span class="lpf-glyph">🇪🇸</span><span class="lpf-label">Español</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="ar" aria-label="Arabic"><span class="lpf-glyph">🇸🇦</span><span class="lpf-label">العربية</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="ru" aria-label="Russian"><span class="lpf-glyph">🇷🇺</span><span class="lpf-label">Русский</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="zh" aria-label="Chinese"><span class="lpf-glyph">🇨🇳</span><span class="lpf-label">中文</span></button>
+                    <!-- UI v2 (Apr 2026) — ISO-2 fallback under each flag.
+                         Edge on Windows renders flag emojis as monochrome
+                         "GB" / "FR" letter pairs; the extra .lpf-iso span
+                         guarantees reporters on those browsers still see a
+                         readable country code below the (colourless) glyph. -->
+                    <button class="lang-picker-flag lpf-un" data-lang="en" aria-label="English"><span class="lpf-glyph">🇬🇧</span><span class="lpf-iso">GB</span><span class="lpf-label">English</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="fr" aria-label="French"><span class="lpf-glyph">🇫🇷</span><span class="lpf-iso">FR</span><span class="lpf-label">Français</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="es" aria-label="Spanish"><span class="lpf-glyph">🇪🇸</span><span class="lpf-iso">ES</span><span class="lpf-label">Español</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="ar" aria-label="Arabic"><span class="lpf-glyph">🇸🇦</span><span class="lpf-iso">SA</span><span class="lpf-label">العربية</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="ru" aria-label="Russian"><span class="lpf-glyph">🇷🇺</span><span class="lpf-iso">RU</span><span class="lpf-label">Русский</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="zh" aria-label="Chinese"><span class="lpf-glyph">🇨🇳</span><span class="lpf-iso">CN</span><span class="lpf-label">中文</span></button>
                 </div>
             </div>
             <!-- ── Other Languages (2-column compact list) ── -->
@@ -139,32 +144,32 @@
                 </h4>
                 <div class="lang-picker-grid lang-picker-grid-other">
                     <!-- South Asia — high UNDP footprint -->
-                    <button class="lang-picker-flag" data-lang="hi" aria-label="Hindi"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">हिन्दी</span></button>
-                    <button class="lang-picker-flag" data-lang="kn" aria-label="Kannada"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">ಕನ್ನಡ</span></button>
-                    <button class="lang-picker-flag" data-lang="ta" aria-label="Tamil"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">தமிழ்</span></button>
-                    <button class="lang-picker-flag" data-lang="bn" aria-label="Bengali"><span class="lpf-glyph">🇧🇩</span><span class="lpf-label">বাংলা</span></button>
-                    <button class="lang-picker-flag" data-lang="ur" aria-label="Urdu"><span class="lpf-glyph">🇵🇰</span><span class="lpf-label">اردو</span></button>
+                    <button class="lang-picker-flag" data-lang="hi" aria-label="Hindi"><span class="lpf-glyph">🇮🇳</span><span class="lpf-iso">IN</span><span class="lpf-label">हिन्दी</span></button>
+                    <button class="lang-picker-flag" data-lang="kn" aria-label="Kannada"><span class="lpf-glyph">🇮🇳</span><span class="lpf-iso">IN</span><span class="lpf-label">ಕನ್ನಡ</span></button>
+                    <button class="lang-picker-flag" data-lang="ta" aria-label="Tamil"><span class="lpf-glyph">🇮🇳</span><span class="lpf-iso">IN</span><span class="lpf-label">தமிழ்</span></button>
+                    <button class="lang-picker-flag" data-lang="bn" aria-label="Bengali"><span class="lpf-glyph">🇧🇩</span><span class="lpf-iso">BD</span><span class="lpf-label">বাংলা</span></button>
+                    <button class="lang-picker-flag" data-lang="ur" aria-label="Urdu"><span class="lpf-glyph">🇵🇰</span><span class="lpf-iso">PK</span><span class="lpf-label">اردو</span></button>
                     <!-- Europe -->
-                    <button class="lang-picker-flag" data-lang="pt" aria-label="Portuguese"><span class="lpf-glyph">🇵🇹</span><span class="lpf-label">Português</span></button>
-                    <button class="lang-picker-flag" data-lang="de" aria-label="German"><span class="lpf-glyph">🇩🇪</span><span class="lpf-label">Deutsch</span></button>
-                    <button class="lang-picker-flag" data-lang="it" aria-label="Italian"><span class="lpf-glyph">🇮🇹</span><span class="lpf-label">Italiano</span></button>
-                    <button class="lang-picker-flag" data-lang="pl" aria-label="Polish"><span class="lpf-glyph">🇵🇱</span><span class="lpf-label">Polski</span></button>
-                    <button class="lang-picker-flag" data-lang="ro" aria-label="Romanian"><span class="lpf-glyph">🇷🇴</span><span class="lpf-label">Română</span></button>
-                    <button class="lang-picker-flag" data-lang="el" aria-label="Greek"><span class="lpf-glyph">🇬🇷</span><span class="lpf-label">Ελληνικά</span></button>
-                    <button class="lang-picker-flag" data-lang="uk" aria-label="Ukrainian"><span class="lpf-glyph">🇺🇦</span><span class="lpf-label">Українська</span></button>
-                    <button class="lang-picker-flag" data-lang="tr" aria-label="Turkish"><span class="lpf-glyph">🇹🇷</span><span class="lpf-label">Türkçe</span></button>
-                    <button class="lang-picker-flag" data-lang="fa" aria-label="Persian"><span class="lpf-glyph">🇮🇷</span><span class="lpf-label">فارسی</span></button>
-                    <button class="lang-picker-flag" data-lang="he" aria-label="Hebrew"><span class="lpf-glyph">🇮🇱</span><span class="lpf-label">עברית</span></button>
+                    <button class="lang-picker-flag" data-lang="pt" aria-label="Portuguese"><span class="lpf-glyph">🇵🇹</span><span class="lpf-iso">PT</span><span class="lpf-label">Português</span></button>
+                    <button class="lang-picker-flag" data-lang="de" aria-label="German"><span class="lpf-glyph">🇩🇪</span><span class="lpf-iso">DE</span><span class="lpf-label">Deutsch</span></button>
+                    <button class="lang-picker-flag" data-lang="it" aria-label="Italian"><span class="lpf-glyph">🇮🇹</span><span class="lpf-iso">IT</span><span class="lpf-label">Italiano</span></button>
+                    <button class="lang-picker-flag" data-lang="pl" aria-label="Polish"><span class="lpf-glyph">🇵🇱</span><span class="lpf-iso">PL</span><span class="lpf-label">Polski</span></button>
+                    <button class="lang-picker-flag" data-lang="ro" aria-label="Romanian"><span class="lpf-glyph">🇷🇴</span><span class="lpf-iso">RO</span><span class="lpf-label">Română</span></button>
+                    <button class="lang-picker-flag" data-lang="el" aria-label="Greek"><span class="lpf-glyph">🇬🇷</span><span class="lpf-iso">GR</span><span class="lpf-label">Ελληνικά</span></button>
+                    <button class="lang-picker-flag" data-lang="uk" aria-label="Ukrainian"><span class="lpf-glyph">🇺🇦</span><span class="lpf-iso">UA</span><span class="lpf-label">Українська</span></button>
+                    <button class="lang-picker-flag" data-lang="tr" aria-label="Turkish"><span class="lpf-glyph">🇹🇷</span><span class="lpf-iso">TR</span><span class="lpf-label">Türkçe</span></button>
+                    <button class="lang-picker-flag" data-lang="fa" aria-label="Persian"><span class="lpf-glyph">🇮🇷</span><span class="lpf-iso">IR</span><span class="lpf-label">فارسی</span></button>
+                    <button class="lang-picker-flag" data-lang="he" aria-label="Hebrew"><span class="lpf-glyph">🇮🇱</span><span class="lpf-iso">IL</span><span class="lpf-label">עברית</span></button>
                     <!-- East / Southeast Asia -->
-                    <button class="lang-picker-flag" data-lang="ja" aria-label="Japanese"><span class="lpf-glyph">🇯🇵</span><span class="lpf-label">日本語</span></button>
-                    <button class="lang-picker-flag" data-lang="ko" aria-label="Korean"><span class="lpf-glyph">🇰🇷</span><span class="lpf-label">한국어</span></button>
-                    <button class="lang-picker-flag" data-lang="vi" aria-label="Vietnamese"><span class="lpf-glyph">🇻🇳</span><span class="lpf-label">Tiếng Việt</span></button>
-                    <button class="lang-picker-flag" data-lang="th" aria-label="Thai"><span class="lpf-glyph">🇹🇭</span><span class="lpf-label">ไทย</span></button>
-                    <button class="lang-picker-flag" data-lang="id" aria-label="Indonesian"><span class="lpf-glyph">🇮🇩</span><span class="lpf-label">Bahasa Indonesia</span></button>
-                    <button class="lang-picker-flag" data-lang="ms" aria-label="Malay"><span class="lpf-glyph">🇲🇾</span><span class="lpf-label">Bahasa Melayu</span></button>
+                    <button class="lang-picker-flag" data-lang="ja" aria-label="Japanese"><span class="lpf-glyph">🇯🇵</span><span class="lpf-iso">JP</span><span class="lpf-label">日本語</span></button>
+                    <button class="lang-picker-flag" data-lang="ko" aria-label="Korean"><span class="lpf-glyph">🇰🇷</span><span class="lpf-iso">KR</span><span class="lpf-label">한국어</span></button>
+                    <button class="lang-picker-flag" data-lang="vi" aria-label="Vietnamese"><span class="lpf-glyph">🇻🇳</span><span class="lpf-iso">VN</span><span class="lpf-label">Tiếng Việt</span></button>
+                    <button class="lang-picker-flag" data-lang="th" aria-label="Thai"><span class="lpf-glyph">🇹🇭</span><span class="lpf-iso">TH</span><span class="lpf-label">ไทย</span></button>
+                    <button class="lang-picker-flag" data-lang="id" aria-label="Indonesian"><span class="lpf-glyph">🇮🇩</span><span class="lpf-iso">ID</span><span class="lpf-label">Bahasa Indonesia</span></button>
+                    <button class="lang-picker-flag" data-lang="ms" aria-label="Malay"><span class="lpf-glyph">🇲🇾</span><span class="lpf-iso">MY</span><span class="lpf-label">Bahasa Melayu</span></button>
                     <!-- Africa -->
-                    <button class="lang-picker-flag" data-lang="sw" aria-label="Swahili"><span class="lpf-glyph">🌍</span><span class="lpf-label">Kiswahili</span></button>
-                    <button class="lang-picker-flag" data-lang="am" aria-label="Amharic"><span class="lpf-glyph">🇪🇹</span><span class="lpf-label">አማርኛ</span></button>
+                    <button class="lang-picker-flag" data-lang="sw" aria-label="Swahili"><span class="lpf-glyph">🌍</span><span class="lpf-iso">KE</span><span class="lpf-label">Kiswahili</span></button>
+                    <button class="lang-picker-flag" data-lang="am" aria-label="Amharic"><span class="lpf-glyph">🇪🇹</span><span class="lpf-iso">ET</span><span class="lpf-label">አማርኛ</span></button>
                 </div>
             </div>
             <button class="lang-picker-close" id="lang-picker-close" data-i18n="lang_picker_close">Close</button>
@@ -176,7 +181,13 @@
          updateFlowProgress() in app.js flips each step through the states:
          done (green ✓) · active (accent) · missing (red !) · upcoming (grey).
          Replaces the per-stage .step-dots so users see the whole journey
-         at all times, not just a vague dot count. -->
+         at all times, not just a vague dot count.
+
+         UI v2 (Apr 2026): when the feature flag is on, the bar gains a 5th
+         step between Audio and Review ("What?" — the new "What happened?"
+         page of the three-way split). `updateFlowProgress()` in app.js
+         hides step 5's marker + its preceding line when UI_V2 is off so
+         the legacy 4-step bar still renders exactly as before. -->
     <div class="flow-progress" id="flow-progress" style="display:none;" aria-label="Progress" role="progressbar">
         <div class="fp-step" data-step="1">
             <div class="fp-dot"><i class="fp-icon"></i></div>
@@ -185,15 +196,20 @@
         <div class="fp-line"></div>
         <div class="fp-step" data-step="2">
             <div class="fp-dot"><i class="fp-icon"></i></div>
-            <div class="fp-label" data-i18n="fp_details">Details</div>
+            <div class="fp-label" data-i18n="fp_audio">Audio</div>
         </div>
-        <div class="fp-line"></div>
-        <div class="fp-step" data-step="3">
+        <div class="fp-line fp-line-v2" data-v2-only="1"></div>
+        <div class="fp-step fp-step-v2" data-step="3" data-v2-only="1">
             <div class="fp-dot"><i class="fp-icon"></i></div>
-            <div class="fp-label" data-i18n="fp_review">Review</div>
+            <div class="fp-label" data-i18n="fp_what">What</div>
         </div>
         <div class="fp-line"></div>
         <div class="fp-step" data-step="4">
+            <div class="fp-dot"><i class="fp-icon"></i></div>
+            <div class="fp-label" data-i18n="fp_details">Details</div>
+        </div>
+        <div class="fp-line"></div>
+        <div class="fp-step" data-step="5">
             <div class="fp-dot"><i class="fp-icon"></i></div>
             <div class="fp-label" data-i18n="fp_send">Send</div>
         </div>
@@ -259,6 +275,25 @@
                 <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
             </button>
 
+            <!-- Phase 1 (Apr 2026 — Optional reporter login).
+                 Login / Sign-up surface. Three mutually-exclusive states:
+                   (a) Not logged in → "Login / Sign up" text link
+                   (b) Logged in     → "Hi, +91 ✓" pill + Settings
+                   (c) Loading       → neither (AuthStore.init pending)
+                 `reporting must never block on login` — this is intentionally
+                 a SECONDARY action below the primary CTA + My Reports. -->
+            <button class="tertiary-cta" id="btn-login" type="button">
+                <i class="fa-solid fa-right-to-bracket"></i>
+                <span data-i18n="login_or_signup">Login / Sign up</span>
+            </button>
+            <div class="account-pill" id="account-pill" style="display:none;" role="group">
+                <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+                <span class="account-name" id="account-name">—</span>
+                <button class="account-settings-btn" id="btn-account-settings" type="button" aria-label="Account settings">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+            </div>
+
             <!-- Apr 2026 PR 3 — "Works offline" reassurance at the bottom of
                  the home stage ONLY (hidden on capture flow to minimise
                  cognitive load). Subtle; doesn't compete with the CTA. -->
@@ -303,12 +338,30 @@
             <img id="photo-preview" src="" alt="" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:20px;">
         </div>
 
-        <!-- Extra photos strip (for multiple photos) -->
+        <!-- Extra photos strip (for multiple photos).
+             Phase B4 (Apr 2026 UI v3, Apr 23 spec-align) — the Camera/Gallery
+             two-button row collapsed back to a single "Add more" button that
+             triggers the OS native file-picker sheet. On iOS Safari + Android
+             Chrome this opens the native chooser ("Take Photo / Photo Library
+             / Files"), which the user already knows from every other app.
+             Single button → one target → lower cognitive load at a crisis
+             moment. The hidden `#file-extra-browse` input has `multiple` +
+             no `capture` attr so the OS surfaces ALL three options.
+             The legacy `#btn-add-camera` / `#btn-add-gallery` / `#btn-add-more-photo`
+             IDs are retained as hidden sentinels so pre-v3 JS paths + e2e
+             tests that synthesise a click still find a DOM node. -->
         <div class="extra-photos-strip" id="extra-photos-strip" style="display:none;">
             <div class="extra-photos-scroll" id="extra-photos-scroll"></div>
-            <button class="add-photo-btn" id="btn-add-more-photo" title="Add another photo">
+            <button class="add-photo-btn add-photo-native" id="btn-add-more" type="button" title="Add another photo" aria-label="Add another photo">
                 <i class="fa-solid fa-plus"></i>
+                <span class="add-photo-label" data-i18n="add_more">Add</span>
             </button>
+            <span class="extra-photos-cap-chip" id="extra-photos-cap-chip" aria-hidden="true"></span>
+            <!-- Hidden legacy sentinels — id-only so JS paths that still
+                 reference them don't crash. None are clickable. -->
+            <button class="add-photo-btn" id="btn-add-camera" style="display:none;" aria-hidden="true" tabindex="-1"></button>
+            <button class="add-photo-btn" id="btn-add-gallery" style="display:none;" aria-hidden="true" tabindex="-1"></button>
+            <button class="add-photo-btn" id="btn-add-more-photo" style="display:none;" aria-hidden="true" tabindex="-1"></button>
         </div>
 
         <!-- Camera / Browse buttons -->
@@ -338,7 +391,17 @@
              pipeline used for single photos. First file lands in the primary
              slot (if empty); rest go to extraPhotos. -->
         <input type="file" id="file-browse" accept="image/*" multiple style="display:none">
+        <!-- Legacy single-input (pre-Phase A5 `#btn-add-more-photo` path).
+             Retained so any offline-queued code path referencing `file-extra`
+             still finds the element. -->
         <input type="file" id="file-extra" accept="image/*" style="display:none">
+        <!-- Phase A5 (Apr 2026 UI v3) — explicit Camera vs Gallery inputs for
+             the extras strip. The camera input carries capture="environment"
+             so mobile browsers open the rear camera directly (no chooser
+             sheet). The browse input drops capture + has multiple so the
+             user can pick several from their library in one step. -->
+        <input type="file" id="file-extra-camera" accept="image/*" capture="environment" style="display:none">
+        <input type="file" id="file-extra-browse" accept="image/*" multiple style="display:none">
     </div>
 
     <!-- Camera modal overlay.
@@ -421,6 +484,11 @@
              hiding anything. Typed descriptions still work — user just taps
              the textarea and goes straight to Continue. -->
 
+        <!-- UI v3 description-textarea slot. `migrateV3Blocks` moves the
+             #edit-text block here from stage-review so stage 7 becomes the
+             full "audio + text" step. Empty when v3 off. -->
+        <div class="v3-slot" id="v3-slot-audio-text"></div>
+
         <button class="nav-btn next-btn" id="btn-audio-next">
             <span data-i18n="next">Continue</span> <i class="fa-solid fa-arrow-right"></i>
         </button>
@@ -429,6 +497,220 @@
     <!-- ══════════════════════════════════════
          STAGE 3 — REVIEW / EDIT TEXT
     ══════════════════════════════════════ -->
+    <!-- ══════════════════════════════════════════════════════════════════════
+         UI v3 — 8-stage capture flow (Phase B4, Apr 2026).
+
+         When `crisp_ui_v3=on` (default), the capture flow runs:
+
+             1 home → 2 where+damage → 3 infra → 4 crisis+name
+           → 5 extras → 6 photo → 7 audio+text → 8 review+submit
+
+         The 4 NEW stages below (where / infra / crisis / extras) are EMPTY
+         SHELLS with `<div class="v3-slot">` containers. A DOMContentLoaded
+         migration (`migrateV3Blocks()` in app.js) physically reparents the
+         existing review-blocks from stage-review into these slots, so:
+
+           * Chip handlers already bound in `setupReviewStage` keep working
+             (same DOM nodes, different parent).
+           * No duplicate markup → no i18n re-binding drift.
+           * v2 rollback is clean: just flip the flag, reload, blocks stay
+             in stage-review.
+
+         Each stage has its own Back / Continue row. Navigation is driven
+         by `nextStageId(currentId)` / `prevStageId(currentId)` which walk
+         STAGES_V3 (or STAGES legacy) based on UI_V3_ENABLED.
+    ══════════════════════════════════════════════════════════════════════ -->
+    <!-- ══════════════════════════════════════════════════════════════════════
+         Phase 1 (Apr 2026 — Optional reporter login) — 3-step OTP flow.
+         Reporting NEVER blocks on login; this stage is only reachable
+         when the user taps the "Login / Sign up" button on stage-home.
+         A "Skip & Report" link on step 1 always returns to stage-home
+         so reporters who changed their mind aren't trapped.
+    ══════════════════════════════════════════════════════════════════════ -->
+    <div class="stage" id="stage-login">
+        <div class="stage-header">
+            <h2 data-i18n="login_title">Login or Sign up</h2>
+            <p data-i18n="login_sub">Track your reports across devices</p>
+        </div>
+        <div class="login-body">
+            <!-- Channel picker. Phone is default (user spec). Radio-style
+                 buttons instead of a dropdown so both options are always
+                 visible + tappable in one gesture. -->
+            <div class="login-channel-row">
+                <button class="login-channel-btn selected" id="login-channel-phone" type="button" data-channel="PHONE">
+                    <i class="fa-solid fa-phone"></i>
+                    <span data-i18n="login_channel_phone">Phone</span>
+                </button>
+                <button class="login-channel-btn" id="login-channel-email" type="button" data-channel="EMAIL">
+                    <i class="fa-solid fa-envelope"></i>
+                    <span data-i18n="login_channel_email">Email</span>
+                </button>
+            </div>
+            <div class="login-destination-wrap">
+                <!-- Phone path: E.164 with a country-code prefix auto-picked
+                     from the device locale (user spec answer 4). -->
+                <div class="login-phone-row" id="login-phone-row">
+                    <select class="login-cc-select" id="login-cc-select" aria-label="Country code">
+                        <!-- Populated by populateCountryCodes() in app.js -->
+                    </select>
+                    <input type="tel" id="login-phone-input" class="login-input"
+                           inputmode="tel" autocomplete="tel-national"
+                           placeholder="98765 43210" maxlength="15">
+                </div>
+                <!-- Email path. -->
+                <input type="email" id="login-email-input" class="login-input"
+                       autocomplete="email" inputmode="email"
+                       placeholder="you@example.com" style="display:none;">
+            </div>
+            <button class="nav-btn next-btn highlight" id="btn-login-send-code" type="button">
+                <span data-i18n="login_send_code">Send code</span> <i class="fa-solid fa-arrow-right"></i>
+            </button>
+            <p class="login-error" id="login-error" style="display:none;" role="alert"></p>
+            <a class="login-skip-link" id="btn-login-skip" href="#">
+                <span data-i18n="login_skip">Skip & report anonymously</span> ›
+            </a>
+        </div>
+
+        <!-- Step 2 — code entry -->
+        <div class="login-body login-step2" id="login-step2" style="display:none;">
+            <p class="login-sent-to">
+                <span data-i18n="login_code_sent_prefix">We sent a 6-digit code to</span>
+                <strong id="login-code-destination">—</strong>
+            </p>
+            <input type="text" id="login-code-input" class="login-input login-code-input"
+                   inputmode="numeric" autocomplete="one-time-code"
+                   pattern="[0-9]*" maxlength="6" placeholder="••••••">
+            <button class="nav-btn next-btn highlight" id="btn-login-verify" type="button">
+                <span data-i18n="login_verify">Verify</span> <i class="fa-solid fa-arrow-right"></i>
+            </button>
+            <p class="login-error" id="login-verify-error" style="display:none;" role="alert"></p>
+            <button class="login-resend" id="btn-login-resend" type="button" disabled>
+                <span data-i18n="login_resend">Resend code</span>
+                <span id="login-resend-countdown"></span>
+            </button>
+            <a class="login-skip-link" id="btn-login-back-step1" href="#">
+                <span data-i18n="login_wrong_destination">Wrong number / email?</span> ›
+            </a>
+        </div>
+
+        <!-- Step 3 — link prompt (shown only when linkable_report_count > 0) -->
+        <div class="login-body login-step3" id="login-step3" style="display:none;">
+            <div class="login-success-ring">
+                <i class="fa-solid fa-check"></i>
+            </div>
+            <p class="login-success-title" data-i18n="login_welcome">You're in!</p>
+            <p class="login-link-prompt">
+                <span data-i18n="login_found_prefix">We found</span>
+                <strong id="login-linkable-count">0</strong>
+                <span data-i18n="login_found_suffix">anonymous reports on this device. Link them to your account?</span>
+            </p>
+            <button class="nav-btn next-btn highlight" id="btn-login-link" type="button">
+                <i class="fa-solid fa-link"></i>
+                <span data-i18n="login_link_now">Link reports</span>
+            </button>
+            <button class="login-skip-btn" id="btn-login-skip-link" type="button">
+                <span data-i18n="login_keep_anonymous">Keep them anonymous</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings surface (lightweight). Reachable from the account pill's
+         gear icon. Contains only Logout for now; extensible. -->
+    <div class="stage" id="stage-settings">
+        <div class="stage-header">
+            <h2 data-i18n="settings_title">Settings</h2>
+        </div>
+        <div class="settings-body">
+            <div class="settings-row">
+                <span class="settings-label" data-i18n="settings_account">Account</span>
+                <span class="settings-value" id="settings-account-name">—</span>
+            </div>
+            <button class="nav-btn" id="btn-settings-unlink-device" type="button">
+                <i class="fa-solid fa-link-slash"></i>
+                <span data-i18n="settings_unlink_device">Unlink this device</span>
+            </button>
+            <button class="nav-btn danger" id="btn-settings-logout" type="button">
+                <i class="fa-solid fa-right-from-bracket"></i>
+                <span data-i18n="settings_logout">Logout</span>
+            </button>
+            <button class="nav-btn back-btn" id="btn-settings-back" type="button">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span data-i18n="back">Back</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="stage v3-stage" id="stage-where">
+        <div class="stage-header">
+            <h2 data-i18n="stage2_title">Where and how bad?</h2>
+        </div>
+        <!-- Phase B4 (Apr 2026 UI v3) — auto Date + Time panel. Rendered
+             client-side from `new Date()` at stage entry; zero network
+             dependency and zero waiting period. The `auto-meta` block
+             sits ABOVE the v3-slot so the reporter sees their device's
+             timestamp + GPS status at a glance before picking damage.
+             The backend receives this via `client_created_at` in the
+             meta POST (already wired). -->
+        <div class="auto-meta" id="v3-auto-meta" aria-live="polite">
+            <div class="auto-meta-row">
+                <i class="fa-solid fa-clock"></i>
+                <div class="auto-meta-text">
+                    <span class="auto-meta-label" data-i18n="auto_time_label">Time (auto)</span>
+                    <span class="auto-meta-value" id="v3-auto-time">—</span>
+                </div>
+            </div>
+            <div class="auto-meta-row">
+                <i class="fa-solid fa-location-dot"></i>
+                <div class="auto-meta-text">
+                    <span class="auto-meta-label" data-i18n="auto_loc_label">Location (auto)</span>
+                    <span class="auto-meta-value" id="v3-auto-loc" data-i18n="loc_status">Detecting...</span>
+                </div>
+            </div>
+        </div>
+        <div class="v3-slot" id="v3-slot-where"></div>
+        <div class="review-nav-row v3-nav-row">
+            <button class="nav-btn back-btn v3-back" id="btn-where-back"><i class="fa-solid fa-arrow-left"></i> <span data-i18n="back">Back</span></button>
+            <button class="nav-btn next-btn highlight v3-next" id="btn-where-next"><span data-i18n="next">Continue</span> <i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+    </div>
+
+    <div class="stage v3-stage" id="stage-infra">
+        <div class="stage-header">
+            <h2 data-i18n="stage3_title">What was hit?</h2>
+        </div>
+        <div class="v3-slot" id="v3-slot-infra"></div>
+        <div class="review-nav-row v3-nav-row">
+            <button class="nav-btn back-btn v3-back" id="btn-infra-back"><i class="fa-solid fa-arrow-left"></i> <span data-i18n="back">Back</span></button>
+            <button class="nav-btn next-btn highlight v3-next" id="btn-infra-next"><span data-i18n="next">Continue</span> <i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+    </div>
+
+    <div class="stage v3-stage" id="stage-crisis">
+        <div class="stage-header">
+            <h2 data-i18n="stage4_title">What caused it?</h2>
+        </div>
+        <div class="v3-slot" id="v3-slot-crisis"></div>
+        <div class="review-nav-row v3-nav-row">
+            <button class="nav-btn back-btn v3-back" id="btn-crisis-back"><i class="fa-solid fa-arrow-left"></i> <span data-i18n="back">Back</span></button>
+            <button class="nav-btn next-btn highlight v3-next" id="btn-crisis-next"><span data-i18n="next">Continue</span> <i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+    </div>
+
+    <div class="stage v3-stage" id="stage-extras">
+        <div class="stage-header">
+            <h2 data-i18n="stage5_title">Service + needs</h2>
+        </div>
+        <div class="v3-slot" id="v3-slot-extras"></div>
+        <!-- W6 applicable-modules render target. fetchApplicableModules(crisis)
+             populates state.applicableModules; renderW6Modules() paints the
+             list into this slot when the stage is entered. -->
+        <div id="v3-w6-modules-slot"></div>
+        <div class="review-nav-row v3-nav-row">
+            <button class="nav-btn back-btn v3-back" id="btn-extras-back"><i class="fa-solid fa-arrow-left"></i> <span data-i18n="back">Back</span></button>
+            <button class="nav-btn next-btn highlight v3-next" id="btn-extras-next"><span data-i18n="next">Continue</span> <i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+    </div>
+
     <div class="stage" id="stage-review" data-review-page="1">
         <div class="stage-header" id="review-page-header">
             <!-- step-dots replaced by the global #flow-progress bar.
@@ -440,14 +722,24 @@
 
         <!-- ── Page 1 — Incident ─────────────────────────────────────────── -->
         <div class="review-page" data-review-page="1">
-            <!-- Photo row (shown by JS when photo exists) — compact -->
-            <div class="review-photo-row" id="review-photo-row" style="display:none;">
+            <!-- Photo row (shown by JS when photo exists) — compact.
+                 UI v2: surfaces on Page 3 ("Describe + confirm") alongside
+                 the textarea so the reporter sees what they captured
+                 while writing the description. -->
+            <div class="review-photo-row" id="review-photo-row" data-v2-page="3" style="display:none;">
                 <img id="review-photo-thumb" src="" alt="" style="width:40px; height:40px; border-radius:8px; object-fit:cover;">
                 <span style="font-size:0.82rem; color:#9ca3af;" data-i18n="photo_attached">✅ Photo attached</span>
             </div>
 
-            <!-- Description textarea (visible; Phase 6 moved here from hidden) -->
-            <div class="review-block">
+            <!-- Description textarea (visible; Phase 6 moved here from hidden).
+                 UI v3: MERGED with the live-transcript textarea on stage-audio
+                 (see the "merged textarea" logic in setupAudioStage — the
+                 live-transcript box becomes the single source of truth for
+                 `state.description` when v3 is on). This block stays in the
+                 DOM for v2 fallback; when v3 is on, it's hidden via CSS
+                 (`body[data-ui-v3] .v2-only-description { display: none; }`)
+                 so there's never a second competing textarea. -->
+            <div class="review-block v2-only-description" data-v2-page="3">
                 <p class="block-label"><i class="fa-solid fa-pen" style="color:var(--accent);"></i> <span data-i18n="description_label">Description</span></p>
                 <textarea id="edit-text" class="edit-textarea"
                           data-i18n-placeholder="type_your_msg" placeholder="Describe what happened..."></textarea>
@@ -464,44 +756,53 @@
              Tapping a chip selects it AND reveals the 3-dot severity selector
              below the grid. Re-tapping the same chip collapses the severity
              row. Default severity is PARTIAL (silent) so submitters who skip
-             this still produce a valid backend payload. -->
-        <div class="review-block">
+             this still produce a valid backend payload.
+             UI v2: renders on the first review page ("What happened?").
+             UI v3: moved into stage-infra via `migrateV3Blocks`
+             (the infra chips are the core of that stage; the inline
+             damage severity follows because the chip drives it). -->
+        <div class="review-block" data-v2-page="1" data-v3-slot="infra">
             <p class="block-label" data-i18n="what_damaged">
                 <i class="fa-solid fa-circle-question" style="color:var(--accent);"></i>
                 What is damaged?
             </p>
+            <!-- UI v3 (Apr 2026 Phase B4) — UNDP Appendix-1 super-types (8).
+                 Replaces the 9 legacy chips (ROAD/HOSPITAL/HOUSE/POWER/WATER/
+                 SCHOOL/TELECOM/GOVERNMENT/OTHER) with the 7 UNDP super-types
+                 + OTHER. Enum values match `InfraTypeEnum` on the backend
+                 directly, so no client → server taxonomy remapping is
+                 needed on submit. The old chip labels are still valid
+                 enum values (back-compat for offline queues submitted
+                 from pre-v3 clients), but every new capture emits a
+                 super-type value. -->
             <div class="category-grid">
-                <button class="chip-btn selected" data-type="ROAD">
-                    <i class="fa-solid fa-bridge"></i>
-                    <span data-i18n="road">Road</span>
-                </button>
-                <button class="chip-btn" data-type="HOSPITAL">
-                    <i class="fa-solid fa-hospital"></i>
-                    <span data-i18n="hospital">Hospital</span>
-                </button>
-                <button class="chip-btn" data-type="HOUSE">
+                <button class="chip-btn selected" data-type="RESIDENTIAL">
                     <i class="fa-solid fa-house"></i>
-                    <span data-i18n="house">Home</span>
+                    <span data-i18n="residential">Residential</span>
                 </button>
-                <button class="chip-btn" data-type="POWER">
-                    <i class="fa-solid fa-bolt"></i>
-                    <span data-i18n="power">Power</span>
-                </button>
-                <button class="chip-btn" data-type="WATER">
-                    <i class="fa-solid fa-faucet"></i>
-                    <span data-i18n="water">Water</span>
-                </button>
-                <button class="chip-btn" data-type="SCHOOL">
-                    <i class="fa-solid fa-school"></i>
-                    <span data-i18n="school">School</span>
-                </button>
-                <button class="chip-btn" data-type="TELECOM">
-                    <i class="fa-solid fa-tower-cell"></i>
-                    <span data-i18n="telecom">Telecom</span>
+                <button class="chip-btn" data-type="COMMERCIAL">
+                    <i class="fa-solid fa-building"></i>
+                    <span data-i18n="commercial">Commercial</span>
                 </button>
                 <button class="chip-btn" data-type="GOVERNMENT">
                     <i class="fa-solid fa-landmark"></i>
-                    <span data-i18n="government">Gov. Building</span>
+                    <span data-i18n="government">Government</span>
+                </button>
+                <button class="chip-btn" data-type="UTILITY">
+                    <i class="fa-solid fa-bolt"></i>
+                    <span data-i18n="utility">Utility</span>
+                </button>
+                <button class="chip-btn" data-type="TRANSPORT_COMMUNICATION">
+                    <i class="fa-solid fa-bridge"></i>
+                    <span data-i18n="transport_communication">Transport</span>
+                </button>
+                <button class="chip-btn" data-type="COMMUNITY">
+                    <i class="fa-solid fa-hospital"></i>
+                    <span data-i18n="community_infra">Community</span>
+                </button>
+                <button class="chip-btn" data-type="PUBLIC_SPACES">
+                    <i class="fa-solid fa-tree"></i>
+                    <span data-i18n="public_spaces">Public Space</span>
                 </button>
                 <button class="chip-btn" data-type="OTHER">
                     <i class="fa-solid fa-circle-question"></i>
@@ -514,24 +815,40 @@
                  state.damageClass. UNDP Appendix-1 labels are MINIMAL /
                  PARTIAL / COMPLETE — the legacy data-damage="NO_DAMAGE"
                  value is still accepted by the backend (normalised to
-                 MINIMAL) but every new PWA build emits the UNDP label. -->
-            <div class="infra-severity" id="infra-severity" style="display:none;">
+                 MINIMAL) but every new PWA build emits the UNDP label.
+                 UI v3: moved into stage-where ("where + damage") and
+                 always shown (no tap-to-reveal). See migrateV3Blocks
+                 + the v3 early-return in setupReviewStage's infra-chip
+                 handler. -->
+            <div class="infra-severity" id="infra-severity" data-v3-slot="where" style="display:none;">
                 <p class="infra-severity-label">
                     <span data-i18n="damage_label">How bad?</span>
                     <span class="infra-severity-chip" id="infra-severity-chip-name">Road</span>
                 </p>
                 <div class="sev-big-row">
-                    <button class="damage-chip" data-damage="MINIMAL">
+                    <!-- Apr 2026 UI v2.1 — UNDP-aligned damage labels.
+                         UNDP Appendix-1 exact wording: "Minimal / No damage",
+                         "Partially damaged", "Completely damaged". Tooltip
+                         text (data-i18n-title) carries the full UNDP
+                         description so an evaluator hovering the chip
+                         reads the spec language. -->
+                    <button class="damage-chip" data-damage="MINIMAL"
+                            data-i18n-title="damage_tip_minimal"
+                            aria-label="Minimal or no damage">
                         <div class="damage-dot" style="background:#22c55e;"></div>
-                        <span data-i18n="minimal_damage">Minimal</span>
+                        <span data-i18n="minimal_damage">Minimal / No damage</span>
                     </button>
-                    <button class="damage-chip selected" data-damage="PARTIAL">
+                    <button class="damage-chip selected" data-damage="PARTIAL"
+                            data-i18n-title="damage_tip_partial"
+                            aria-label="Partially damaged">
                         <div class="damage-dot" style="background:#f97316;"></div>
-                        <span data-i18n="partial_damage">Partial</span>
+                        <span data-i18n="partial_damage">Partially damaged</span>
                     </button>
-                    <button class="damage-chip" data-damage="COMPLETE">
+                    <button class="damage-chip" data-damage="COMPLETE"
+                            data-i18n-title="damage_tip_complete"
+                            aria-label="Completely damaged">
                         <div class="damage-dot" style="background:#ef4444;"></div>
-                        <span data-i18n="complete_damage">Destroyed</span>
+                        <span data-i18n="complete_damage">Completely damaged</span>
                     </button>
                 </div>
             </div>
@@ -543,28 +860,40 @@
              Human-made:    Conflict, Civil unrest
              Plus Other. HURRICANE is omitted from the chip list — UNDP
              bundles it under CYCLONE globally, and the backend remains
-             able to accept the legacy value for back-compat. -->
-        <div class="review-block">
+             able to accept the legacy value for back-compat.
+             UI v2: renders on the first review page ("What happened?").
+             UI v3: moved into stage-crisis. -->
+        <div class="review-block" data-v2-page="1" data-v3-slot="crisis">
             <p class="block-label" data-i18n="crisis_label">
                 <i class="fa-solid fa-cloud-bolt" style="color:var(--accent);"></i>
                 What caused damage?
             </p>
-            <div class="category-grid">
-                <!-- Natural -->
-                <button class="chip-btn" data-crisis="EARTHQUAKE"><i class="fa-solid fa-house-crack"></i><span data-i18n="earthquake">Earthquake</span></button>
-                <button class="chip-btn selected" data-crisis="FLOOD"><i class="fa-solid fa-water"></i><span data-i18n="flood">Flood</span></button>
-                <button class="chip-btn" data-crisis="TSUNAMI"><i class="fa-solid fa-water"></i><span data-i18n="tsunami">Tsunami</span></button>
-                <button class="chip-btn" data-crisis="CYCLONE"><i class="fa-solid fa-tornado"></i><span data-i18n="cyclone">Cyclone</span></button>
-                <button class="chip-btn" data-crisis="LANDSLIDE"><i class="fa-solid fa-mountain"></i><span data-i18n="landslide">Landslide</span></button>
-                <!-- Technological -->
-                <button class="chip-btn" data-crisis="EXPLOSION"><i class="fa-solid fa-bomb"></i><span data-i18n="explosion">Explosion</span></button>
-                <button class="chip-btn" data-crisis="CHEMICAL_INCIDENT"><i class="fa-solid fa-flask-vial"></i><span data-i18n="chemical_incident">Chemical</span></button>
-                <button class="chip-btn" data-crisis="PANDEMIC"><i class="fa-solid fa-virus"></i><span data-i18n="pandemic">Pandemic</span></button>
-                <!-- Human-made -->
-                <button class="chip-btn" data-crisis="CONFLICT"><i class="fa-solid fa-shield-halved"></i><span data-i18n="conflict">Conflict</span></button>
-                <button class="chip-btn" data-crisis="CIVIL_UNREST"><i class="fa-solid fa-people-group"></i><span data-i18n="civil_unrest">Civil Unrest</span></button>
-                <!-- Other -->
-                <button class="chip-btn" data-crisis="OTHER"><i class="fa-solid fa-circle-question"></i><span data-i18n="other_crisis">Other</span></button>
+            <!-- UI v3 (Apr 2026 Phase B4) — crisis chips grouped into the
+                 three UNDP categories so evaluators cross-reference stage 4
+                 directly against UNDP Appendix-1 nomenclature. Each subgroup
+                 has a small uppercase label. Under v2 the single flat grid
+                 renders instead (see the `.crisis-grouped` gate). -->
+            <div class="crisis-grouped">
+                <p class="crisis-group-label" data-i18n="crisis_group_natural">Natural</p>
+                <div class="category-grid">
+                    <button class="chip-btn" data-crisis="EARTHQUAKE"><i class="fa-solid fa-house-crack"></i><span data-i18n="earthquake">Earthquake</span></button>
+                    <button class="chip-btn selected" data-crisis="FLOOD"><i class="fa-solid fa-water"></i><span data-i18n="flood">Flood</span></button>
+                    <button class="chip-btn" data-crisis="TSUNAMI"><i class="fa-solid fa-water"></i><span data-i18n="tsunami">Tsunami</span></button>
+                    <button class="chip-btn" data-crisis="CYCLONE"><i class="fa-solid fa-tornado"></i><span data-i18n="cyclone">Cyclone</span></button>
+                    <button class="chip-btn" data-crisis="LANDSLIDE"><i class="fa-solid fa-mountain"></i><span data-i18n="landslide">Landslide</span></button>
+                </div>
+                <p class="crisis-group-label" data-i18n="crisis_group_technological">Technological</p>
+                <div class="category-grid">
+                    <button class="chip-btn" data-crisis="EXPLOSION"><i class="fa-solid fa-bomb"></i><span data-i18n="explosion">Explosion</span></button>
+                    <button class="chip-btn" data-crisis="CHEMICAL_INCIDENT"><i class="fa-solid fa-flask-vial"></i><span data-i18n="chemical_incident">Chemical</span></button>
+                    <button class="chip-btn" data-crisis="PANDEMIC"><i class="fa-solid fa-virus"></i><span data-i18n="pandemic">Pandemic</span></button>
+                </div>
+                <p class="crisis-group-label" data-i18n="crisis_group_human_made">Human-made</p>
+                <div class="category-grid">
+                    <button class="chip-btn" data-crisis="CONFLICT"><i class="fa-solid fa-shield-halved"></i><span data-i18n="conflict">Conflict</span></button>
+                    <button class="chip-btn" data-crisis="CIVIL_UNREST"><i class="fa-solid fa-people-group"></i><span data-i18n="civil_unrest">Civil Unrest</span></button>
+                    <button class="chip-btn" data-crisis="OTHER"><i class="fa-solid fa-circle-question"></i><span data-i18n="other_crisis">Other</span></button>
+                </div>
             </div>
         </div>
 
@@ -575,12 +904,44 @@
              earning its keep. state.infraName / state.debrisClearing stay
              in the state shape ('' / false defaults) for backend compat. -->
 
-        <!-- SERVICE STATUS — collapsible; labelled "Optional: Service status". -->
-        <details class="review-block service-details">
-            <summary class="block-label" data-i18n="service_label">
+        <!-- SERVICE STATUS — always-visible section (Apr 2026 UI v2.1).
+             Was <details>/<summary> with the content hidden behind a
+             disclosure triangle; field tests showed low-literacy users
+             don't recognise/expand the triangle, so the section was
+             invisible in practice. Flattened to a plain <section> with
+             the same block-label header as every other review block.
+             "Optional:" label kept so users know skipping is fine.
+             Renders on the second review page ("How bad + where?"). -->
+        <!-- Phase B4 (Apr 2026 UI v3) — debris-clearing Yes/No toggle
+             re-added. Tapping "Yes" sets `state.debrisClearing = true`
+             and highlights the button; tapping "No" flips it back.
+             Migrates into stage-extras along with the service-details /
+             severity blocks. Sits ABOVE service-details in the DOM so it
+             renders first on stage-extras.
+             Submit emits `debris_clearing_needed: true|false` on the
+             meta payload (already wired in submitReport). -->
+        <div class="review-block debris-clearing-block" data-v2-page="2" data-v3-slot="extras" id="debris-clearing-block">
+            <p class="block-label" data-i18n="debris_label">
+                <i class="fa-solid fa-truck-pickup" style="color:var(--accent);"></i>
+                Does this need debris clearing?
+            </p>
+            <div class="debris-toggle-row">
+                <button class="debris-toggle" id="debris-toggle-no" data-debris="false" type="button" aria-pressed="true">
+                    <i class="fa-solid fa-xmark"></i>
+                    <span data-i18n="debris_no">No</span>
+                </button>
+                <button class="debris-toggle" id="debris-toggle-yes" data-debris="true" type="button" aria-pressed="false">
+                    <i class="fa-solid fa-check"></i>
+                    <span data-i18n="debris_yes">Yes</span>
+                </button>
+            </div>
+        </div>
+
+        <section class="review-block service-details" data-v2-page="2" data-v3-slot="extras">
+            <p class="block-label" data-i18n="service_label">
                 <i class="fa-solid fa-gauge" style="color:var(--accent);"></i>
                 Optional: Service status
-            </summary>
+            </p>
             <div class="service-grid">
                 <div class="svc-row">
                     <span data-i18n="electricity">⚡ Electricity</span>
@@ -611,19 +972,39 @@
                 </div>
                 <div class="svc-row">
                     <span data-i18n="needs_label">🆘 Pressing Needs</span>
+                    <!-- Apr 2026 UI v2.1: chip list expanded from 5 → 10 to match
+                         UNDP Appendix-1 pressing-needs taxonomy (all 9 required
+                         options + Other). Old `security` key retained server-
+                         side + in the enum-translator map for legacy rows, but
+                         the UI now uses `protection` (UNDP's word). Order below
+                         is UNDP-doc order. Checkbox `value` becomes the raw
+                         string persisted on the backend `service_status.pressing_needs`
+                         array — no schema change needed (it's a list of text). -->
                     <div class="needs-chips">
                         <label class="need-chip"><input type="checkbox" value="food"> <span data-i18n="food">Food</span></label>
                         <label class="need-chip"><input type="checkbox" value="water"> <span data-i18n="need_water">Water</span></label>
-                        <label class="need-chip"><input type="checkbox" value="shelter"> <span data-i18n="shelter">Shelter</span></label>
+                        <label class="need-chip"><input type="checkbox" value="cash"> <span data-i18n="need_cash">Cash</span></label>
                         <label class="need-chip"><input type="checkbox" value="medical"> <span data-i18n="medical">Medical</span></label>
-                        <label class="need-chip"><input type="checkbox" value="security"> <span data-i18n="security">Security</span></label>
+                        <label class="need-chip"><input type="checkbox" value="shelter"> <span data-i18n="shelter">Shelter</span></label>
+                        <label class="need-chip"><input type="checkbox" value="livelihoods"> <span data-i18n="need_livelihoods">Livelihoods</span></label>
+                        <label class="need-chip"><input type="checkbox" value="wash"> <span data-i18n="need_wash">WASH</span></label>
+                        <label class="need-chip"><input type="checkbox" value="basic_services"> <span data-i18n="need_basic_services">Basic services</span></label>
+                        <label class="need-chip"><input type="checkbox" value="protection"> <span data-i18n="need_protection">Protection</span></label>
+                        <label class="need-chip"><input type="checkbox" value="local_support"> <span data-i18n="need_local_support">Local support</span></label>
                     </div>
                 </div>
             </div>
-        </details>
+        </section>
 
-        <!-- HOW BAD? — Big colored severity buttons -->
-        <div class="review-block">
+        <!-- HOW BAD? — Big colored severity buttons.
+             UI v2: renders on the second review page ("How bad + where?").
+             UI v3: severity is auto-derived from the damage-class chip the
+             reporter picked on stage-where (MINIMAL→MINOR, PARTIAL→MODERATE,
+             COMPLETE→SEVERE). The chips stay in the DOM for the v2 fallback
+             path but are hidden in v3 mode (no `data-v3-slot` → they stay
+             inside stage-review where v2 renders them; they're also hidden
+             entirely when v3 is on via a JS toggle in migrateV3Blocks). -->
+        <div class="review-block" data-v2-page="2" id="severity-block">
             <p class="block-label" data-i18n="severity_label">
                 <i class="fa-solid fa-triangle-exclamation" style="color:var(--accent);"></i>
                 How serious?
@@ -644,8 +1025,10 @@
             </div>
         </div>
 
-        <!-- Location — compact -->
-        <div class="location-verify-box">
+        <!-- Location — compact. UI v2: renders on the second review page
+             ("How bad + where?").
+             UI v3: moved into stage-where alongside the damage chips. -->
+        <div class="location-verify-box" data-v2-page="2" data-v3-slot="where">
             <div class="loc-row">
                 <i class="fa-solid fa-location-crosshairs"></i>
                 <div class="loc-info">
@@ -672,21 +1055,33 @@
             </div>
         </div>
 
-        <!-- UNDP Appendix building-footprint selector (April 2026).
+        <!-- UNDP Appendix building-footprint selector (Apr 2026 UI v2.1).
              Problem Statement: "Buildings of interest shall be selected by
              users via ... buildings shall be made available for users to pick
              from a (satellite) map underlayer in the field app."
-             Collapsed by default so low-literacy / low-bandwidth users
-             aren't forced to interact with a map. Opening the <details>
-             triggers the one-shot Leaflet + Overpass fetch in app.js. -->
-        <details class="review-block building-select-details" id="building-select-box">
-            <summary class="block-label">
+
+             WAS: <details>/<summary> — collapsed by default. Field testing
+             showed the UNDP-required building selection was being SKIPPED
+             by almost every user because the disclosure triangle hid the
+             map. Flattened to a plain <section>; map now lazy-initialises
+             whenever the user lands on v2-page-3 AND a GPS fix is
+             available. "Optional:" kept in the header so users know
+             skipping is fine — but the map itself is visible + tappable
+             the moment the page opens. -->
+        <section class="review-block building-select-details" id="building-select-box" data-v2-page="3" data-v3-slot="where">
+            <p class="block-label">
                 <i class="fa-solid fa-building" style="color:var(--accent);"></i>
                 <span data-i18n="building_select_title">Optional: pick the exact building</span>
-            </summary>
+            </p>
             <div id="building-map" class="building-map"
                  role="application"
                  aria-label="Pick a building from the map"></div>
+            <!-- Placeholder shown when GPS isn't ready yet; replaced by the
+                 Leaflet tile grid once `ensureMap()` fires. -->
+            <div id="building-map-placeholder" class="building-map-placeholder">
+                <i class="fa-solid fa-location-crosshairs"></i>
+                <span data-i18n="building_waiting_gps">Waiting for GPS to load buildings nearby…</span>
+            </div>
             <div class="building-select-hint">
                 <i class="fa-solid fa-hand-pointer"></i>
                 <span data-i18n="building_select_hint">Tap a building outline to mark it as damaged.</span>
@@ -694,16 +1089,51 @@
             <div id="building-selected-pill" class="building-selected-pill" style="display:none;">
                 <i class="fa-solid fa-circle-check"></i>
                 <span data-i18n="building_selected">Building selected</span>
+                <!-- Filled by building-select.js on tap. Shows the OSM
+                     name ("City Hospital") or the raw #id if no name
+                     tag was present. Gives the reporter a sanity-check
+                     confirmation of WHAT they picked. -->
+                <span class="building-selected-name" aria-live="polite"></span>
                 <button id="btn-building-clear" type="button" aria-label="Clear building selection">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
-        </details>
+            <!-- Phase B2 (Apr 2026 UI v3) — free-text building name fallback.
+                 When the Leaflet map / Overpass fetch is unavailable (offline,
+                 rate-limited, CDN blocked, pre-cache empty) the reporter can
+                 type the building name in their native language. Backend
+                 stores it on `infrastructure_name` with `building_id = NULL`;
+                 the dashboard tags such rows "needs mapping" so an operator
+                 can resolve them later. Always visible, positioned AFTER the
+                 map so users who can tap a footprint still do — the free-text
+                 path is the belt to the map's suspenders, not a replacement. -->
+            <div class="building-free-text" id="building-free-text-block">
+                <label class="building-free-text-label" for="input-infra-name-v3">
+                    <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
+                    <span data-i18n="bldg_offline_prompt">Type the building name in your language</span>
+                </label>
+                <input
+                    type="text"
+                    id="input-infra-name-v3"
+                    class="building-free-text-input"
+                    autocomplete="off"
+                    inputmode="text"
+                    maxlength="120"
+                    placeholder="e.g. Kiambu High School / مدرسة الأمل"
+                    aria-describedby="building-free-text-hint">
+                <p class="building-free-text-hint" id="building-free-text-hint">
+                    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                    <span data-i18n="bldg_offline_hint">The team will map this to GPS later</span>
+                </p>
+            </div>
+        </section>
 
         </div><!-- /page-2 -->
 
-        <!-- Phase 3 (Apr 2026): renamed 3 → 2 (old Page 2 merged into Page 1). -->
-        <div class="review-page" data-review-page="2" style="display:none;">
+        <!-- Phase 3 (Apr 2026): renamed 3 → 2 (old Page 2 merged into Page 1).
+             UI v2: this summary card lives on Page 3 ("Describe + confirm")
+             immediately above the Submit button. -->
+        <div class="review-page" data-review-page="2" data-v2-page="3" style="display:none;">
             <div id="review-summary"></div>
         </div>
 
@@ -838,9 +1268,15 @@
 
         <!-- Impact summary card — green, celebratory -->
         <div class="history-impact" id="history-impact-card" style="display:none;">
-            <div class="hi-stat"><div class="hi-num" id="hi-resolved">0</div><div class="hi-label">Resolved</div></div>
-            <div class="hi-stat"><div class="hi-num" id="hi-lives">0</div><div class="hi-label">Lives impacted</div></div>
-            <div class="hi-stat"><div class="hi-num" id="hi-pending">0</div><div class="hi-label">In flight</div></div>
+            <!-- Apr 2026 UI v2.1: labels now translatable. Was plain-text
+                 English; Chinese / Arabic / Russian users saw the rest of
+                 the screen in their locale but these three labels leaked
+                 as "RESOLVED / LIVES IMPACTED / IN FLIGHT". Added
+                 `data-i18n` so applyI18n() routes through the inline
+                 I18N pack (`mr_resolved`, `mr_lives_impacted`, `in_flight`). -->
+            <div class="hi-stat"><div class="hi-num" id="hi-resolved">0</div><div class="hi-label" data-i18n="mr_resolved">Resolved</div></div>
+            <div class="hi-stat"><div class="hi-num" id="hi-lives">0</div><div class="hi-label" data-i18n="mr_lives_impacted">Lives impacted</div></div>
+            <div class="hi-stat"><div class="hi-num" id="hi-pending">0</div><div class="hi-label" data-i18n="in_flight">In flight</div></div>
         </div>
 
         <div class="history-section">
@@ -980,7 +1416,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
         crossorigin=""></script>
-<script src="building-select.js?v=1"></script>
+<script src="building-select.js?v=3"></script>
 <script src="places.js?v=3"></script>
 <!-- Client-side PII blur: BlazeFace face detection + canvas Gaussian blur.
      Scripts load in order; pii-blur.js exposes window.PIIBlur which app.js calls
@@ -990,9 +1426,24 @@
      tarball only ships blazeface.min.umd.js — use that. -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.umd.js" crossorigin="anonymous"></script>
 <script src="pii-blur.js?v=1"></script>
+<!-- Progressive-upload Phase 1 (Apr 2026). Exposes window.BlurHash —
+     compact ~28-char DCT encoding consumed by image-variants.js at
+     capture time and sent in the meta POST. Loaded ahead of
+     image-variants.js so the encoder is available when the pipeline
+     runs. No external dependency; fully vendored. -->
+<script src="blurhash.js?v=1"></script>
 <!-- Guaranteed-delivery image variants: depends on pii-blur.js for per-tier
      blur, so must load AFTER it and BEFORE app.js. Exposes window.ImageVariants. -->
-<script src="image-variants.js?v=2"></script>
-<script src="app.js?v=800"></script>
+<script src="image-variants.js?v=3"></script>
+<!-- Apr 2026 UI v2 — shared SVG icon pack. Loaded as a module so app.js can
+     pick up `window.CrispIconPack` / `window.crispIconFor(key)` on first
+     paint of stage-review. Stays lightweight (~6 KB) and is precached by
+     the service worker (see STATIC_ASSETS in sw.js). -->
+<script type="module" src="components/icon-pack.js?v=1"></script>
+<!-- Phase 1 (Apr 2026 — Optional reporter login). Loads BEFORE app.js
+     so the AuthStore singleton is available when the DOMContentLoaded
+     boot hook calls AuthStore.init(). -->
+<script src="auth.js?v=1"></script>
+<script src="app.js?v=900"></script>
 </body>
 </html>

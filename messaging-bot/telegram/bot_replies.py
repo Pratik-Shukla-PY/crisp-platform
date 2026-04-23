@@ -60,6 +60,34 @@ _STRINGS = {
         "photo_ack": "✅ Got your photo!",
         "desc_ack": "✅ Got it!",
         "step_loc_text_hint": "Or type the place name",
+        # Phase D (Apr 2026 UI v3) — native-language building-name prompt.
+        # Reporter types the name (e.g. "Koramangala High School", "مدرسة الأمل")
+        # in their own language. The dashboard tags these rows as "needs
+        # manual mapping" so an operator can resolve to an OSM footprint.
+        "step_building": "🏛 *Name the building?*\n\nType the building name in your own language — or skip.",
+        "step_building_skip": "⏭ Skip",
+        "step_building_ack": "✅ Got the name!",
+        # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No step.
+        "step_debris":     "🚜 *Does this need debris clearing?*",
+        "debris_yes":      "✅ Yes",
+        "debris_no":       "❌ No",
+        # v3 crisis-group headers + UNDP super-type labels + missing crisis keys.
+        "crisis_group_natural":       "Natural",
+        "crisis_group_technological": "Technological",
+        "crisis_group_human_made":    "Human-made",
+        "crisis_tsunami":             "Tsunami",
+        "crisis_cyclone":             "Cyclone",
+        "crisis_explosion":           "Explosion",
+        "crisis_chemical_incident":   "Chemical",
+        "crisis_civil_unrest":        "Civil Unrest",
+        # UNDP super-type chip labels.
+        "type_residential":            "Residential",
+        "type_commercial":             "Commercial",
+        "type_utility":                "Utility",
+        "type_transport_communication": "Transport",
+        "type_community":              "Community",
+        "type_public_spaces":          "Public Space",
+        "type_government":             "Government",
     },
     "hi": {
         "welcome_1": "🆘 *मदद! नुकसान बताएं*",
@@ -104,6 +132,12 @@ _STRINGS = {
         "photo_ack": "✅ फोटो मिल गई!",
         "desc_ack": "✅ मिल गया!",
         "step_loc_text_hint": "या जगह का नाम लिखें",
+        "step_building": "🏛 *इमारत का नाम?*\n\nइमारत का नाम अपनी भाषा में लिखें — या छोड़ें।",
+        "step_building_skip": "⏭ छोड़ें",
+        "step_building_ack": "✅ नाम मिल गया!",
+        "step_debris": "🚜 *मलबा हटाना है?*",
+        "debris_yes":  "✅ हां",
+        "debris_no":   "❌ नहीं",
     },
     "es": {
         "welcome_1": "🆘 *¡AYUDA! Reportar Daño*",
@@ -148,6 +182,12 @@ _STRINGS = {
         "photo_ack": "✅ ¡Recibimos tu foto!",
         "desc_ack": "✅ ¡Listo!",
         "step_loc_text_hint": "O escribe el nombre del lugar",
+        "step_building": "🏛 *¿Nombre del edificio?*\n\nEscribe el nombre del edificio en tu idioma — o salta.",
+        "step_building_skip": "⏭ Saltar",
+        "step_building_ack": "✅ ¡Nombre recibido!",
+        "step_debris": "🚜 *¿Hay que retirar escombros?*",
+        "debris_yes":  "✅ Sí",
+        "debris_no":   "❌ No",
     },
     "fr": {
         "welcome_1": "🆘 *AU SECOURS ! Signaler un Dégât*",
@@ -192,6 +232,12 @@ _STRINGS = {
         "photo_ack": "✅ Photo reçue !",
         "desc_ack": "✅ Reçu !",
         "step_loc_text_hint": "Ou tapez le nom du lieu",
+        "step_building": "🏛 *Nom du bâtiment ?*\n\nTapez le nom du bâtiment dans votre langue — ou passez.",
+        "step_building_skip": "⏭ Passer",
+        "step_building_ack": "✅ Nom reçu !",
+        "step_debris": "🚜 *Faut-il déblayer les décombres ?*",
+        "debris_yes":  "✅ Oui",
+        "debris_no":   "❌ Non",
     },
     "ar": {
         "welcome_1": "🆘 *نجدة! بلّغ عن ضرر*",
@@ -236,6 +282,12 @@ _STRINGS = {
         "photo_ack": "✅ وصلت الصورة!",
         "desc_ack": "✅ وصل!",
         "step_loc_text_hint": "أو اكتب اسم المكان",
+        "step_building": "🏛 *اسم المبنى؟*\n\nاكتب اسم المبنى بلغتك — أو تخطّى.",
+        "step_building_skip": "⏭ تخطّى",
+        "step_building_ack": "✅ تم استلام الاسم!",
+        "step_debris": "🚜 *هل يلزم إزالة الأنقاض؟*",
+        "debris_yes":  "✅ نعم",
+        "debris_no":   "❌ لا",
     },
     "pt": {
         "welcome_1": "🆘 *SOCORRO! Relatar Dano*",
@@ -280,6 +332,12 @@ _STRINGS = {
         "photo_ack": "✅ Foto recebida!",
         "desc_ack": "✅ Recebido!",
         "step_loc_text_hint": "Ou escreva o nome do lugar",
+        "step_building": "🏛 *Nome do edifício?*\n\nEscreva o nome do edifício em sua língua — ou pule.",
+        "step_building_skip": "⏭ Pular",
+        "step_building_ack": "✅ Nome recebido!",
+        "step_debris": "🚜 *Precisa remover escombros?*",
+        "debris_yes":  "✅ Sim",
+        "debris_no":   "❌ Não",
     },
     "sw": {
         "welcome_1": "🆘 *MSAADA! Ripoti Uharibifu*",
@@ -324,6 +382,12 @@ _STRINGS = {
         "photo_ack": "✅ Picha imepokelewa!",
         "desc_ack": "✅ Imepokelewa!",
         "step_loc_text_hint": "Au andika jina la mahali",
+        "step_building": "🏛 *Jina la jengo?*\n\nAndika jina la jengo kwa lugha yako — au ruka.",
+        "step_building_skip": "⏭ Ruka",
+        "step_building_ack": "✅ Jina limepokelewa!",
+        "step_debris": "🚜 *Kusafisha uchafu?*",
+        "debris_yes":  "✅ Ndio",
+        "debris_no":   "❌ Hapana",
     },
     "zh": {
         "welcome_1": "🆘 *救命！报告损坏*",
@@ -368,6 +432,12 @@ _STRINGS = {
         "photo_ack": "✅ 照片收到了!",
         "desc_ack": "✅ 收到!",
         "step_loc_text_hint": "或者打字写地名",
+        "step_building": "🏛 *建筑物名称？*\n\n用您的语言输入建筑物名称 — 或跳过。",
+        "step_building_skip": "⏭ 跳过",
+        "step_building_ack": "✅ 收到名称！",
+        "step_debris": "🚜 *需要清理瓦砾吗？*",
+        "debris_yes":  "✅ 是",
+        "debris_no":   "❌ 否",
     },
     "ru": {
         "welcome_1": "🆘 *ПОМОГИТЕ! Сообщить о повреждении*",
@@ -412,6 +482,12 @@ _STRINGS = {
         "photo_ack": "✅ Фото получено!",
         "desc_ack": "✅ Получили!",
         "step_loc_text_hint": "Или напишите название места",
+        "step_building": "🏛 *Название здания?*\n\nНапишите название здания на своём языке — или пропустите.",
+        "step_building_skip": "⏭ Пропустить",
+        "step_building_ack": "✅ Название получено!",
+        "step_debris": "🚜 *Нужна ли уборка завалов?*",
+        "debris_yes":  "✅ Да",
+        "debris_no":   "❌ Нет",
     },
 }
 
@@ -451,11 +527,32 @@ def detect_lang(user: dict) -> str:
 # ── Send Functions ─────────────────────────────────────────────────────────────
 
 async def _send(method: str, data: dict):
+    """Post to the Telegram Bot API with a graceful parse-error retry.
+
+    Telegram's legacy `Markdown` parser is infamously brittle — it trips
+    on any `*`/`_`/`` ` ``/`[` character that looks like the start of an
+    entity even when the markup is well-balanced (e.g. `(foo)` next to
+    `*bold*` or a trailing `/command`). Historically this used to
+    silently drop the message on the user — they'd tap a button and
+    get nothing back, looking like "the bot hangs after language
+    select". Apr 2026: on any `400 Bad Request: can't parse entities`
+    we re-POST the same payload with `parse_mode` stripped so the user
+    at least sees the plain-text version. Logs the original parse
+    error so we can still fix the root-cause template afterwards.
+    """
     if not BOT_TOKEN:
         return
     try:
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.post(f"{API_BASE}/{method}", json=data)
+            if r.status_code == 400 and "can't parse entities" in (r.text or "").lower() and data.get("parse_mode"):
+                logger.warning(
+                    f"TG parse-entity error on {method} "
+                    f"(parse_mode={data.get('parse_mode')}) — retrying as plain text. "
+                    f"Original error: {r.text[:200]}"
+                )
+                safe = {k: v for k, v in data.items() if k != "parse_mode"}
+                r = await c.post(f"{API_BASE}/{method}", json=safe)
             if r.status_code != 200:
                 logger.warning(f"TG API error ({r.status_code}): {r.text[:200]}")
     except Exception as e:
@@ -568,10 +665,19 @@ async def send_consent_prompt(chat_id: int, lang: str):
     )
     yes_label = t(lang, "consent_yes") or "✅ I agree"
     no_label = t(lang, "consent_no") or "❌ No, cancel"
+    # Apr 2026 — drop `parse_mode=Markdown`. Telegram's legacy Markdown
+    # parser rejects this body with "Can't find end of the entity
+    # starting at byte offset 24" because the fallback text mixes `*`
+    # (bold markers), `(...)` (URL-like groups), `/delete` (command
+    # slash), and emoji — the combination triggers an entity-nesting
+    # bug in the legacy parser that's intermittent across Telegram
+    # clients. Plain text reads fine thanks to the emoji headers and
+    # eliminates the 400 that was stalling the flow right after
+    # language select. If rich formatting is needed later, switch to
+    # `parse_mode=HTML` with `<b>...</b>` — HTML's parser is saner.
     await _send("sendMessage", {
         "chat_id": chat_id,
-        "text": f"*{title}*\n\n{body}",
-        "parse_mode": "Markdown",
+        "text": f"{title}\n\n{body}",
         "reply_markup": {
             "inline_keyboard": [
                 [{"text": yes_label, "callback_data": "consent_accept"}],
@@ -614,41 +720,63 @@ async def send_step_severity(chat_id: int, lang: str):
 
 
 async def send_step_type(chat_id: int, lang: str):
+    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — 8 UNDP Appendix-1
+    # super-types in a 3×3 keyboard (last cell is OTHER). Legacy
+    # type_road / type_hospital / etc. callbacks still resolve via the
+    # TYPE_MAP in session_manager, so any pre-v3 client that still sends
+    # them keeps submitting valid reports.
     await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_type_num"),
         "parse_mode": "Markdown",
         "reply_markup": {
             "inline_keyboard": [
-                [{"text": t(lang, "type_road"), "callback_data": "type_road"},
-                 {"text": t(lang, "type_hospital"), "callback_data": "type_hospital"},
-                 {"text": t(lang, "type_house"), "callback_data": "type_house"}],
-                [{"text": t(lang, "type_power"), "callback_data": "type_power"},
-                 {"text": t(lang, "type_water"), "callback_data": "type_water"},
-                 {"text": t(lang, "type_school"), "callback_data": "type_school"}],
-                [{"text": t(lang, "type_telecom"), "callback_data": "type_telecom"},
-                 {"text": t(lang, "type_govt"), "callback_data": "type_govt"},
-                 {"text": t(lang, "type_other"), "callback_data": "type_other"}],
+                [{"text": "🏠 " + t(lang, "type_residential"),            "callback_data": "type_residential"},
+                 {"text": "🏢 " + t(lang, "type_commercial"),             "callback_data": "type_commercial"},
+                 {"text": "🏛 " + t(lang, "type_government"),             "callback_data": "type_government"}],
+                [{"text": "⚡ " + t(lang, "type_utility"),                "callback_data": "type_utility"},
+                 {"text": "🛣 " + t(lang, "type_transport_communication"), "callback_data": "type_transport_communication"},
+                 {"text": "🏥 " + t(lang, "type_community"),              "callback_data": "type_community"}],
+                [{"text": "🌳 " + t(lang, "type_public_spaces"),          "callback_data": "type_public_spaces"},
+                 {"text": "❓ " + t(lang, "type_other"),                   "callback_data": "type_other"}],
             ],
         },
     })
 
 
 async def send_step_crisis_type(chat_id: int, lang: str):
+    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — crisis chips grouped
+    # into the three UNDP Appendix-1 categories. Telegram's inline_keyboard
+    # doesn't support group headers natively, so we prepend the group name
+    # to the body text in bold and visually separate each group's row.
+    # Legacy callback_data values (crisis_hurricane / crisis_wildfire) stay
+    # in CRISIS_MAP so any pre-v3 client still gets a valid enum on submit.
+    body = (
+        t(lang, "step_crisis") + "\n\n"
+        + "*" + t(lang, "crisis_group_natural") + "*"
+    )
     await _send("sendMessage", {
         "chat_id": chat_id,
-        "text": t(lang, "step_crisis"),
+        "text": body,
         "parse_mode": "Markdown",
         "reply_markup": {
             "inline_keyboard": [
-                [{"text": t(lang, "crisis_earthquake"), "callback_data": "crisis_earthquake"},
-                 {"text": t(lang, "crisis_flood"), "callback_data": "crisis_flood"},
-                 {"text": t(lang, "crisis_conflict"), "callback_data": "crisis_conflict"}],
-                [{"text": t(lang, "crisis_hurricane"), "callback_data": "crisis_hurricane"},
-                 {"text": t(lang, "crisis_wildfire"), "callback_data": "crisis_wildfire"},
-                 {"text": t(lang, "crisis_landslide"), "callback_data": "crisis_landslide"}],
-                [{"text": t(lang, "crisis_pandemic"), "callback_data": "crisis_pandemic"},
-                 {"text": t(lang, "crisis_other"), "callback_data": "crisis_other"}],
+                # Natural
+                [{"text": "🏚 " + t(lang, "crisis_earthquake"), "callback_data": "crisis_earthquake"},
+                 {"text": "🌊 " + t(lang, "crisis_flood"),       "callback_data": "crisis_flood"},
+                 {"text": "🌊 " + t(lang, "crisis_tsunami"),     "callback_data": "crisis_tsunami"}],
+                [{"text": "🌪 " + t(lang, "crisis_cyclone"),     "callback_data": "crisis_cyclone"},
+                 {"text": "🏔 " + t(lang, "crisis_landslide"),   "callback_data": "crisis_landslide"}],
+                # Technological
+                [{"text": "— " + t(lang, "crisis_group_technological") + " —", "callback_data": "noop_group_tech"}],
+                [{"text": "💥 " + t(lang, "crisis_explosion"),           "callback_data": "crisis_explosion"},
+                 {"text": "☣️ " + t(lang, "crisis_chemical_incident"),   "callback_data": "crisis_chemical_incident"},
+                 {"text": "🦠 " + t(lang, "crisis_pandemic"),            "callback_data": "crisis_pandemic"}],
+                # Human-made
+                [{"text": "— " + t(lang, "crisis_group_human_made") + " —", "callback_data": "noop_group_human"}],
+                [{"text": "⚔️ " + t(lang, "crisis_conflict"),    "callback_data": "crisis_conflict"},
+                 {"text": "🪧 " + t(lang, "crisis_civil_unrest"), "callback_data": "crisis_civil_unrest"},
+                 {"text": "❓ " + t(lang, "crisis_other"),        "callback_data": "crisis_other"}],
             ],
         },
     })
@@ -692,6 +820,52 @@ async def send_step_text(chat_id: int, lang: str):
         "reply_markup": {
             "inline_keyboard": [
                 [{"text": t(lang, "step_text_skip"), "callback_data": "skip_text"}],
+                [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
+            ],
+        },
+    })
+
+
+async def send_step_debris(chat_id: int, lang: str):
+    """Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No step.
+
+    Added between CRISIS+BUILDING and SEVERITY/DESCRIPTION so the
+    reporter answers the Appendix-1 "needs debris clearing?" question
+    while the scene is fresh in their mind. Two inline buttons; no
+    skip — both options are answers, so the flow always advances."""
+    await _send("sendMessage", {
+        "chat_id": chat_id,
+        "text": t(lang, "step_debris"),
+        "parse_mode": "Markdown",
+        "reply_markup": {
+            "inline_keyboard": [
+                [{"text": t(lang, "debris_no"),  "callback_data": "debris_no"},
+                 {"text": t(lang, "debris_yes"), "callback_data": "debris_yes"}],
+                [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
+            ],
+        },
+    })
+
+
+async def send_step_building_name(chat_id: int, lang: str):
+    """Phase D (Apr 2026 UI v3) — native-language building name prompt.
+
+    Telegram doesn't ship a Leaflet/Overpass picker the way PWA + RN do, so
+    we ask the reporter to type the building name in their own language.
+    The backend stores it on `infrastructure_name` with
+    `infrastructure_name_from_osm=False`, and the dashboard flags these rows
+    for manual OSM mapping by an operator.
+
+    Optional — the reporter can skip. Ships with a "Skip" inline button
+    for single-tap bypass + the usual Cancel escape hatch.
+    """
+    await _send("sendMessage", {
+        "chat_id": chat_id,
+        "text": t(lang, "step_building"),
+        "parse_mode": "Markdown",
+        "reply_markup": {
+            "inline_keyboard": [
+                [{"text": t(lang, "step_building_skip"), "callback_data": "skip_building"}],
                 [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
             ],
         },
