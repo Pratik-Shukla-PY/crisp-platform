@@ -253,7 +253,10 @@ class TestBinaryAssemblyRoundTrip:
 
         url = m.url
         assert url and url.startswith("/static/")
-        upload_dir = Path(__file__).parent.parent / "uploads"
+        # Apr 2026 — conftest.py redirects writes to `backend/uploads_test/`
+        # via the `CRISP_UPLOAD_DIR` env var (seatbelt against the dev-DB
+        # wipe incident). Read from the SAME dir the server wrote to.
+        upload_dir = Path(os.environ.get("CRISP_UPLOAD_DIR") or str(Path(__file__).parent.parent / "uploads"))
         file_path = upload_dir / url.replace("/static/", "")
         assert file_path.exists()
         with open(file_path, "rb") as f:
@@ -287,7 +290,10 @@ class TestBinaryAssemblyRoundTrip:
             time.sleep(0.1)
         assert m.assembly_status == "complete"
 
-        upload_dir = Path(__file__).parent.parent / "uploads"
+        # Apr 2026 — conftest.py redirects writes to `backend/uploads_test/`
+        # via the `CRISP_UPLOAD_DIR` env var (seatbelt against the dev-DB
+        # wipe incident). Read from the SAME dir the server wrote to.
+        upload_dir = Path(os.environ.get("CRISP_UPLOAD_DIR") or str(Path(__file__).parent.parent / "uploads"))
         file_path = upload_dir / m.url.replace("/static/", "")
         with open(file_path, "rb") as f:
             assembled = f.read()
@@ -358,7 +364,10 @@ class TestChunkInvariant:
 
         url = _assemble_media_file(m.id, "IMAGE", db)
         assert url, "assembly failed"
-        upload_dir = Path(__file__).parent.parent / "uploads"
+        # Apr 2026 — conftest.py redirects writes to `backend/uploads_test/`
+        # via the `CRISP_UPLOAD_DIR` env var (seatbelt against the dev-DB
+        # wipe incident). Read from the SAME dir the server wrote to.
+        upload_dir = Path(os.environ.get("CRISP_UPLOAD_DIR") or str(Path(__file__).parent.parent / "uploads"))
         file_path = upload_dir / url.replace("/static/", "")
         with open(file_path, "rb") as f:
             assembled = f.read()
