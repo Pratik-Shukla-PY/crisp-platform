@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v54';  // bump on static-asset changes
+const CACHE_NAME = 'crisp-v55';  // bump on static-asset changes (v55: prod-deploy origin-aware API_BASE in app.js + sw.js queue replay)
 // v54 (Apr 2026 — login UI polish). Fixes raw i18n keys showing on
 // stage-login when the JSON pack hadn't re-fetched yet (all login_*
 // keys now live in the inline I18N.en dict so they render immediately
@@ -559,7 +559,15 @@ async function syncAllReports() {
     const items = await idbGetAll(db, 'pending-reports');
     if (items.length === 0) return;
 
-    const apiBase = self.location.origin.replace(/:\d+$/, ':8000');
+    // Apr 2026 — origin-aware backend host (matches app.js logic). On
+    // localhost dev the page is served on :8080 with backend on :8000, so
+    // we swap the port. In prod (https://undp.crisplabs.tech) the page
+    // and the API share an origin behind nginx, so we use it as-is.
+    const _swHost = self.location.hostname;
+    const _swIsLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(_swHost);
+    const apiBase = _swIsLocalDev
+        ? self.location.origin.replace(/:\d+$/, ':8000')
+        : self.location.origin;
     console.log(`SW: Syncing ${items.length} queued reports`);
     let synced = 0;
 
