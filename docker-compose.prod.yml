@@ -1,0 +1,45 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env.production
+    environment:
+      APP_ENV: production
+      # Apr 2026 — single-admin dashboard lockdown. /auth/register returns 410.
+      ALLOW_REGISTRATION: "false"
+      # Apr 2026 — JWT access-token TTL bumped from default 30 min to 24 h
+      # (1440 min) for the UNDP submission window. Reasoning: judges may
+      # leave the dashboard open for hours during evaluation; a 30-min
+      # token forces them to re-login (with TOTP) every half hour. 24 h
+      # balances usability with security — re-login at most once per day.
+      # The refresh-token flow on the dashboard is not yet wired (separate
+      # follow-up). Reduce back to 60 once refresh-tokens are implemented
+      # client-side.
+      ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
+    volumes:
+      - uploads:/app/backend/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3).status==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./mobile-app:/usr/share/nginx/html/mobile-app:ro
+      - ./web-dashboard:/usr/share/nginx/html/web-dashboard:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - uploads:/usr/share/nginx/html/static:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  uploads:
