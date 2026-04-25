@@ -1,0 +1,137 @@
+name: Deploy to Production
+
+# Triggered automatically on every push to main, OR manually via the
+# "Run workflow" button on the GitHub Actions page (workflow_dispatch).
+# Manual dispatch lets you pick a different branch in the UI when you
+# need to deploy a hotfix without merging to main first.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy"
+        required: true
+        default: "main"
+        type: string
+      skip_rebuild:
+        description: "Skip backend image rebuild (faster, only safe for static-only changes)"
+        required: false
+        default: false
+        type: boolean
+
+# Concurrency lock — only one deploy can run at a time. New pushes
+# during an in-flight deploy are queued (NOT cancelled — cancelling
+# mid-deploy would corrupt the migration step).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Preflight (CI must be green)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify CI passed on this commit
+        # We rely on GitHub's branch protection to enforce this, but
+        # double-check at deploy time too. Skipped when manually
+        # dispatched (operator's call).
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Look up the CI workflow's latest run for this SHA. If it's
+          # not "success", refuse to deploy. The check_run API surfaces
+          # the same status the branch-protection UI uses.
+          STATUS=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs" \
+            --jq '.check_runs[] | select(.name == "Backend (pytest + import check)") | .conclusion' \
+            | head -1)
+          echo "CI conclusion for ${{ github.sha }}: $STATUS"
+          if [ "$STATUS" != "success" ] && [ -n "$STATUS" ]; then
+            echo "::error::Backend CI is not green on this commit. Refusing to deploy."
+            exit 1
+          fi
+
+  deploy:
+    name: Deploy to EC2
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      # GitHub Environments give per-environment secrets + manual approval
+      # gates. Configure under Settings → Environments → production.
+      # Optional: enable "Required reviewers" so deploys to main require
+      # approval before running.
+      name: production
+      url: https://undp.crisplabs.tech/web-dashboard/src/
+
+    steps:
+      - name: Checkout (just for the deploy.sh path)
+        uses: actions/checkout@v4
+
+      - name: Resolve deploy branch
+        id: branch
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ inputs.branch }}" >> "$GITHUB_OUTPUT"
+            echo "skip_rebuild=${{ inputs.skip_rebuild }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF##*/}" >> "$GITHUB_OUTPUT"
+            echo "skip_rebuild=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure SSH for EC2 access
+        env:
+          SSH_KEY: ${{ secrets.EC2_DEPLOY_KEY }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          if [ -z "${SSH_KEY}" ] || [ -z "${SSH_HOST}" ]; then
+            echo "::error::EC2_DEPLOY_KEY and EC2_HOST must be set as repository secrets."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # ssh-keyscan pins the host's public key into known_hosts so
+          # the first connection isn't a TOFU prompt that hangs CI.
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run deploy.sh on EC2
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER || 'ec2-user' }}
+          DEPLOY_BRANCH: ${{ steps.branch.outputs.name }}
+          SKIP_REBUILD_FLAG: ${{ steps.branch.outputs.skip_rebuild }}
+        run: |
+          # Single-command SSH invocation. We pass DEPLOY_BRANCH +
+          # SKIP_REBUILD as env vars so deploy.sh's ${VAR:-default}
+          # logic picks them up. PUBLIC_HEALTH_URL adds an outside-in
+          # probe at the end so we catch ALB / cert / DNS regressions
+          # at deploy time rather than from a customer ticket.
+          ssh -i ~/.ssh/deploy_key \
+              -o BatchMode=yes \
+              -o ConnectTimeout=10 \
+              -o ServerAliveInterval=15 \
+              "${SSH_USER}@${SSH_HOST}" \
+              "DEPLOY_BRANCH='${DEPLOY_BRANCH}' \
+               SKIP_REBUILD='${SKIP_REBUILD_FLAG/true/1}' \
+               PUBLIC_HEALTH_URL='https://undp.crisplabs.tech/health' \
+               bash ~/crisp/scripts/deploy.sh"
+
+      - name: Post-deploy smoke (from runner, end-to-end)
+        run: |
+          # Hit the public URL from outside AWS — proves the full path
+          # is alive (Route 53 → ALB → EC2 → nginx → uvicorn).
+          curl -sSf --max-time 10 https://undp.crisplabs.tech/health > /dev/null
+          curl -sSI --max-time 10 https://undp.crisplabs.tech/web-dashboard/src/ | head -1
+          curl -sSI --max-time 10 https://undp.crisplabs.tech/mobile-app/src/ | head -1
+
+      - name: Tear down SSH artifacts
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts

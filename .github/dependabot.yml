@@ -1,0 +1,112 @@
+version: 2
+# Dependabot — weekly automated PRs for dependency updates.
+# Apr 2026 — added alongside the deploy pipeline so security advisories
+# land as PRs you can review + merge instead of requiring manual audit.
+# Each ecosystem caps open PRs at 5 to avoid review-fatigue.
+
+updates:
+  # ── Backend Python ──────────────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    target-branch: "Pratik's"
+    labels:
+      - "deps"
+      - "backend"
+    commit-message:
+      prefix: "deps(backend)"
+    # Group security-only updates separately so they can be merged
+    # quickly without bundling with feature-version bumps.
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+
+  # ── PWA: keep mobile-app deps in sync (mostly transitive via npm) ───
+  - package-ecosystem: "npm"
+    directory: "/mobile-app"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 3
+    target-branch: "Pratik's"
+    labels:
+      - "deps"
+      - "pwa"
+    commit-message:
+      prefix: "deps(pwa)"
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+
+  # ── React Native app ────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/crisp-mobile"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    target-branch: "Pratik's"
+    labels:
+      - "deps"
+      - "rn"
+    commit-message:
+      prefix: "deps(rn)"
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+
+  # ── E2E Playwright tests ────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/e2e"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 3
+    target-branch: "Pratik's"
+    labels:
+      - "deps"
+      - "e2e"
+    commit-message:
+      prefix: "deps(e2e)"
+
+  # ── GitHub Actions versions ─────────────────────────────────────────
+  # Pinning action versions to a SHA + getting Dependabot bumps is the
+  # supply-chain-safe pattern. Currently we use @v4-style tags; this
+  # ecosystem will surface advisories on those.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    target-branch: "Pratik's"
+    labels:
+      - "deps"
+      - "ci"
+    commit-message:
+      prefix: "deps(ci)"

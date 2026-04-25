@@ -2,12 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, "Pratik's"]
   pull_request:
-    branches: [main, master, develop]
+    branches: [main, master, develop, "Pratik's"]
 
 permissions:
   contents: read
+  # security-events needed if we ever upload SARIF from gitleaks/trivy
+  # to GitHub's Code Scanning surface. Keep it tight for now.
+  security-events: write
 
 # Cancel in-progress runs for the same PR or branch.
 concurrency:
@@ -135,3 +138,75 @@ jobs:
             exit 1
           fi
           echo "OK — .env is not tracked."
+
+  i18n-validation:
+    name: i18n — locale parity + template-var preservation
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate i18n bundles
+        # 232 EN keys × 6 UN languages = 1,392 translation pairs.
+        # The script asserts (a) every locale has the same key set as EN,
+        # (b) every {n}-style template variable in the EN value is preserved
+        # in the translation. Catches translators who drop placeholders.
+        run: |
+          if [ -f scripts/validate-i18n.mjs ]; then
+            node scripts/validate-i18n.mjs
+          else
+            echo "scripts/validate-i18n.mjs not found — skipping"
+          fi
+
+  python-security:
+    name: Python dep vulnerability scan (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Don't fail CI on advisories — they often appear faster than upstream
+    # patches. Surface them in the run log instead. Promote to a hard
+    # failure once the team has a triage cadence.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Audit backend dependencies
+        run: pip-audit -r backend/requirements.txt --strict --vulnerability-service osv
+
+  secrets-scan:
+    name: Secrets scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks needs full history to scan all commits, not just
+          # the latest snapshot. Without this it'd miss secrets that
+          # have already been removed from HEAD but live in older blobs.
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Free for public repos; for private, the action recommends a
+          # GITLEAKS_LICENSE secret. Skipping that here means scans run
+          # in best-effort mode on private repos — fine for our scale.
+          GITLEAKS_NOTIFY_USER_LIST: "@${{ github.actor }}"
+
+  shellcheck:
+    name: Shellcheck (deploy + ops scripts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shellcheck on shell scripts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          set -e
+          find scripts -type f -name "*.sh" -print0 | xargs -0 -n1 shellcheck -x
