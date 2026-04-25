@@ -183,7 +183,7 @@ jobs:
                test -x scripts/deploy.sh || chmod +x scripts/deploy.sh; \
                DEPLOY_BRANCH='${DEPLOY_BRANCH}' \
                SKIP_REBUILD='${SKIP_REBUILD_FLAG/true/1}' \
-               PUBLIC_HEALTH_URL='https://undp.crisplabs.tech/health' \
+               PUBLIC_HEALTH_URL='https://undp.crisplabs.tech/mobile-app/src/index.html' \
                bash scripts/deploy.sh"
 
       - name: Post-deploy smoke (from runner, end-to-end)

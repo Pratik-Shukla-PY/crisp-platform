@@ -130,10 +130,16 @@ test.describe('Production — PWA', () => {
   test('loads index without CSP violations or failed resources', async ({ page }) => {
     const diag = instrument(page);
 
-    await page.goto(`${BASE}/mobile-app/src/`, { waitUntil: 'networkidle' });
+    // `load` (not networkidle) — the PWA has a service worker that
+    // does opportunistic background fetches, which means networkidle
+    // never fires within a sane timeout. `load` waits for DOMContentLoaded
+    // + main subresources, which is enough to trigger any boot-time CSP
+    // violation or asset 404.
+    await page.goto(`${BASE}/mobile-app/src/`, { waitUntil: 'load', timeout: 20_000 });
 
-    // Wait one extra beat for any lazy-loaded scripts to settle.
-    await page.waitForTimeout(2000);
+    // Wait an extra beat for any deferred scripts (TFJS, BlazeFace lazy
+    // loaders) to settle and surface any errors.
+    await page.waitForTimeout(3000);
 
     const msg = formatDiagnostics('PWA index load', diag);
     expect(diag.cspViolations, msg).toEqual([]);
