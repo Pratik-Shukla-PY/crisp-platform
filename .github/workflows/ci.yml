@@ -164,10 +164,6 @@ jobs:
     name: Python dep vulnerability scan (pip-audit)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Don't fail CI on advisories — they often appear faster than upstream
-    # patches. Surface them in the run log instead. Promote to a hard
-    # failure once the team has a triage cadence.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -176,7 +172,22 @@ jobs:
       - name: Install pip-audit
         run: pip install pip-audit
       - name: Audit backend dependencies
-        run: pip-audit -r backend/requirements.txt --strict --vulnerability-service osv
+        # Hard-fail on any unsuppressed advisory — keeps the supply
+        # chain honest. Each `--ignore-vuln` MUST be accompanied by a
+        # comment explaining why we're safe; revisit when upstream
+        # ships a fix.
+        #
+        #   CVE-2024-23342 (ecdsa 0.19.x — Minerva timing attack)
+        #     Transitive via python-jose. We sign JWTs with HS256
+        #     (HMAC-SHA256), which doesn't go through the ecdsa code
+        #     path. No upstream fix as of Apr 2026 — the ecdsa
+        #     maintainers consider constant-time crypto out of scope
+        #     for the pure-Python lib. Re-evaluate if we ever switch
+        #     JWT_ALGORITHM to ES256 / ES384, OR if we adopt cryptography
+        #     for any signing.
+        run: |
+          pip-audit -r backend/requirements.txt --strict --vulnerability-service osv \
+            --ignore-vuln CVE-2024-23342
 
   secrets-scan:
     name: Secrets scan (gitleaks)
