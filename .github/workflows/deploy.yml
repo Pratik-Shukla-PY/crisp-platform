@@ -208,3 +208,113 @@ jobs:
         if: always()
         run: |
           rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts
+
+  prod-smoke:
+    name: Prod-smoke (browser-level CSP + asset audit)
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    # Don't run on workflow_dispatch with a non-main branch — the CSP /
+    # asset state in prod hasn't been updated yet for that branch.
+    # (The auto-deploy on push to main IS the case we want to gate.)
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.branch == 'main')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install Playwright deps + Chromium
+        working-directory: e2e
+        run: |
+          npm ci --prefer-offline --no-audit --no-fund
+          # Chromium-only; we don't need Firefox/Webkit for prod-smoke.
+          # --with-deps installs the OS-level shared libs Playwright needs.
+          npx playwright install --with-deps chromium
+
+      - name: Run prod-smoke against undp.crisplabs.tech
+        working-directory: e2e
+        env:
+          CRISP_PROD_BASE_URL: https://undp.crisplabs.tech
+        run: npm run check:prod
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-smoke-report
+          path: e2e/playwright-report-prod/
+          retention-days: 7
+
+  auto-rollback:
+    name: Auto-rollback (prod-smoke regression)
+    needs: [deploy, prod-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Fires ONLY when:
+    #   - deploy succeeded (containers cycled, new code live), AND
+    #   - prod-smoke failed (browser-level regression — CSP, asset 404,
+    #     missing CDN, JS error during boot)
+    # Doesn't run when prod-smoke just couldn't START (job-level failure
+    # like Playwright install hanging) — that's caught by the always-skip
+    # condition. Doesn't run when deploy itself failed — deploy.sh already
+    # auto-rolled-back inside the EC2 in that case.
+    if: failure() && needs.deploy.result == 'success' && needs.prod-smoke.result == 'failure'
+    environment:
+      name: CRISP-Production
+      url: https://undp.crisplabs.tech/web-dashboard/src/
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.EC2_DEPLOY_KEY }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          if printf '%s' "$SSH_KEY" | base64 -d 2>/dev/null | grep -q "BEGIN.*PRIVATE KEY"; then
+            printf '%s' "$SSH_KEY" | base64 -d > ~/.ssh/deploy_key
+          else
+            printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          fi
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Roll back to previous main commit on EC2
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER || 'ec2-user' }}
+        run: |
+          # rollback.sh --yes resets to the previous main commit, rebuilds
+          # the backend, restarts the stack, and waits for /health.
+          # `HEAD~1` is the safe default for the solo-dev cadence — one
+          # bad commit per deploy, the prior commit is the last good
+          # version. Operators can run rollback.sh with a specific SHA
+          # manually if a deeper revert is needed (e.g. multiple bad
+          # commits stacked).
+          ssh -i ~/.ssh/deploy_key \
+              -o BatchMode=yes \
+              -o ConnectTimeout=10 \
+              "${SSH_USER}@${SSH_HOST}" \
+              "set -e; cd ~/crisp; bash scripts/rollback.sh --yes HEAD~1"
+
+      - name: Re-run prod-smoke after rollback
+        # Verify the rollback actually fixed prod. If even the previous
+        # commit's smoke fails, we have a deeper issue (broken EC2,
+        # broken external CDN) that no amount of rolling back fixes.
+        working-directory: e2e
+        env:
+          CRISP_PROD_BASE_URL: https://undp.crisplabs.tech
+        run: |
+          # Need to re-install Playwright since this is a fresh job.
+          # Cached from the earlier setup-node step on the same SHA.
+          npm ci --prefer-offline --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          # Smoke against the now-rolled-back prod.
+          npm run check:prod || echo "::error::Rollback smoke also failed — manual intervention required"
+
+      - name: Tear down SSH artifacts
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts

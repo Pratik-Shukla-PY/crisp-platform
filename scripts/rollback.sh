@@ -30,14 +30,33 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8000/health}"
 HEALTH_TIMEOUT_S="${HEALTH_TIMEOUT_S:-60}"
 
-if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <target-sha>" >&2
+SKIP_CONFIRM="0"
+TARGET=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --yes|-y)
+            # Non-interactive mode — used by the auto-rollback job in
+            # .github/workflows/deploy.yml when prod-smoke catches a
+            # regression and we need to revert without a human at a
+            # terminal to type 'y'.
+            SKIP_CONFIRM="1"; shift ;;
+        --*)
+            echo "Unknown flag: $1" >&2; exit 64 ;;
+        *)
+            if [ -z "$TARGET" ]; then TARGET="$1"; shift
+            else echo "Unexpected positional arg: $1" >&2; exit 64
+            fi ;;
+    esac
+done
+
+if [ -z "$TARGET" ]; then
+    echo "Usage: $0 [--yes|-y] <target-sha>" >&2
     echo "  e.g. $0 8e53736" >&2
     echo "       $0 HEAD~1" >&2
+    echo "       $0 --yes HEAD~1   # skip y/n prompt (CI rollback)" >&2
     exit 64
 fi
 
-TARGET="$1"
 cd "$CRISP_HOME"
 
 CURRENT="$(git rev-parse HEAD)"
@@ -51,10 +70,14 @@ echo "  Diff    :"
 git log --oneline "$RESOLVED..$CURRENT" | sed 's/^/    /'
 echo
 
-read -r -p "Proceed with rollback? [y/N] " confirm
-if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-    echo "Aborted."
-    exit 1
+if [ "$SKIP_CONFIRM" != "1" ]; then
+    read -r -p "Proceed with rollback? [y/N] " confirm
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        echo "Aborted."
+        exit 1
+    fi
+else
+    echo "[--yes] Skipping confirmation prompt — non-interactive rollback."
 fi
 
 # ── 1. Reset code ──────────────────────────────────────────────────────
@@ -76,6 +99,10 @@ DEADLINE=$(( $(date +%s) + HEALTH_TIMEOUT_S ))
 while [ "$(date +%s)" -lt "$DEADLINE" ]; do
     if curl -fsS -o /dev/null --max-time 4 "$HEALTH_URL" 2>/dev/null; then
         echo "[rollback] Stack is healthy at $RESOLVED"
+        # Update deploy.sh's marker so the NEXT deploy doesn't think the
+        # bad-SHA is still the "current" deploy and skip the cycle.
+        echo "$RESOLVED" > "$CRISP_HOME/.last-deployed-sha"
+        echo "[rollback] Updated .last-deployed-sha → $RESOLVED"
         docker compose -f "$COMPOSE_FILE" ps
         exit 0
     fi
