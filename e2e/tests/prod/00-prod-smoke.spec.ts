@@ -301,12 +301,16 @@ test.describe('Production — Backend via nginx', () => {
     // Required pieces — without these, prod features break:
     const required = [
       "script-src 'self'",
-      'https://unpkg.com',         // Leaflet + Turf
-      'https://cdn.jsdelivr.net',  // TFJS, BlazeFace
-      'https://nominatim.openstreetmap.org',
-      'https://overpass-api.de',
-      'https://storage.googleapis.com',
-      'worker-src',
+      "'unsafe-eval'",                          // TFJS WebGL shader compilation
+      'https://unpkg.com',                      // Leaflet + Turf
+      'https://cdn.jsdelivr.net',               // TFJS, BlazeFace
+      'https://nominatim.openstreetmap.org',    // PWA reverse-geocode
+      'https://overpass-api.de',                // Building selector
+      'https://storage.googleapis.com',         // TFJS model weights
+      'https://www.kaggle.com',                 // BlazeFace model.json (newer)
+      'https://*.basemaps.cartocdn.com',        // Dashboard dark map tiles
+      'https://server.arcgisonline.com',        // Dashboard satellite tiles
+      'worker-src',                             // TFJS workers
     ];
     for (const piece of required) {
       expect(csp, `CSP missing: ${piece}\nactual:\n${csp}`).toContain(piece);
