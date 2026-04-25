@@ -53,6 +53,14 @@ def _print_qr_ascii(uri: str) -> None:
     qr.print_ascii(invert=True)
 
 
+def _save_qr_png(uri: str, path: str) -> None:
+    """Save the otpauth URI as a real PNG file (sharper than the ASCII
+    rendering — useful for embedding in submission docs / sharing with
+    judges so they can scan from their phone)."""
+    img = qrcode.make(uri)
+    img.save(path)
+
+
 def _validate_email(email: str) -> str:
     email = (email or "").strip().lower()
     if not email or "@" not in email or len(email) > 255:
@@ -85,6 +93,12 @@ def main() -> None:
         "--password-from-stdin",
         action="store_true",
         help="Read password from a single stdin line (useful for non-interactive invocations).",
+    )
+    ap.add_argument(
+        "--qr-png-path",
+        default=None,
+        help="If set, also save the TOTP QR as a PNG at this path (e.g. /app/backend/demo-qr.png). "
+             "Useful for submission packages — judges scan the PNG with their phone.",
     )
     args = ap.parse_args()
 
@@ -172,6 +186,10 @@ def main() -> None:
         print()
         _print_qr_ascii(otp_uri)
         print()
+        if args.qr_png_path:
+            _save_qr_png(otp_uri, args.qr_png_path)
+            print(f"  QR also saved as PNG: {args.qr_png_path}")
+            print()
         print("  Or enter the secret manually in your authenticator app:")
         print()
         print(f"    Account : CRISP Dashboard ({email})")
