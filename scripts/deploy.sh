@@ -61,35 +61,62 @@ if [ ! -f "$COMPOSE_FILE" ]; then
     exit 2
 fi
 
-# ── 1. Capture current state for potential rollback ────────────────────
-OLD_SHA="$(git rev-parse HEAD)"
-log "Current SHA on disk: $OLD_SHA"
+# ── 1. Capture state via a "last-deployed" marker file ─────────────────
+# We can't compare working-tree HEAD vs origin to detect "anything to do?"
+# because the workflow's bootstrap-pull (in .github/workflows/deploy.yml)
+# already advances HEAD to TARGET_SHA before this script runs — that
+# pull is needed so this script EXISTS on disk to be invoked. So
+# `git rev-parse HEAD` would always equal `origin/<branch>` and the
+# old "nothing to do" early-exit fired on every run, skipping the
+# docker compose down+up — which meant bind-mounted nginx.conf changes
+# silently never reached the running container.
+#
+# The marker file records the SHA that was last successfully deployed
+# (set after the health probe goes green at the end of THIS script).
+# Subsequent runs compare to the marker, not to working-tree HEAD.
+DEPLOYED_MARKER="$CRISP_HOME/.last-deployed-sha"
+LAST_DEPLOYED_SHA=""
+if [ -f "$DEPLOYED_MARKER" ]; then
+    LAST_DEPLOYED_SHA="$(cat "$DEPLOYED_MARKER" 2>/dev/null || true)"
+fi
+log "Last successfully-deployed SHA on this host: ${LAST_DEPLOYED_SHA:-<none>}"
 
-# ── 2. Fetch + fast-forward to target ──────────────────────────────────
+# ── 2. Fetch + identify target ─────────────────────────────────────────
 log "Fetching origin/$DEPLOY_BRANCH"
 git fetch --quiet origin "$DEPLOY_BRANCH"
 TARGET_SHA="$(git rev-parse "origin/$DEPLOY_BRANCH")"
 log "Target SHA on remote: $TARGET_SHA"
+WORKING_TREE_SHA="$(git rev-parse HEAD)"
+OLD_SHA="${LAST_DEPLOYED_SHA:-$WORKING_TREE_SHA}"
+log "Rollback anchor (OLD_SHA): $OLD_SHA"
 
-if [ "$OLD_SHA" = "$TARGET_SHA" ]; then
-    log "Already at target SHA. Nothing to do."
+if [ -n "$LAST_DEPLOYED_SHA" ] && [ "$LAST_DEPLOYED_SHA" = "$TARGET_SHA" ]; then
+    log "Already deployed $TARGET_SHA per marker. Nothing to do."
     exit 0
 fi
 
 # Detect changed paths so we can skip the rebuild when nothing changed
 # in backend/. Saves ~2 min on docs/PWA/dashboard-only commits.
-CHANGED_FILES="$(git diff --name-only "$OLD_SHA" "$TARGET_SHA")"
+# Diff against the LAST DEPLOYED SHA, not working-tree HEAD (because
+# the workflow's bootstrap-pull may have already advanced HEAD).
+DIFF_FROM="${LAST_DEPLOYED_SHA:-$WORKING_TREE_SHA}"
+CHANGED_FILES="$(git diff --name-only "$DIFF_FROM" "$TARGET_SHA" 2>/dev/null || echo "")"
 NEED_BACKEND_BUILD="no"
+NEED_FRONTEND_RESTART="yes"  # default: always restart nginx so bind-mount changes apply
 if [ "$SKIP_REBUILD" != "1" ]; then
     if echo "$CHANGED_FILES" | grep -qE "^(backend/|Dockerfile$|docker-compose|requirements)"; then
         NEED_BACKEND_BUILD="yes"
     fi
 fi
 log "Backend rebuild required: $NEED_BACKEND_BUILD"
+log "Frontend restart required: $NEED_FRONTEND_RESTART"
 
-log "Checking out + fast-forwarding $DEPLOY_BRANCH"
-git checkout --quiet "$DEPLOY_BRANCH"
-git pull --ff-only --quiet origin "$DEPLOY_BRANCH"
+# Make sure the working tree IS at the target. The workflow's
+# bootstrap-pull usually has done this, but be defensive — the script
+# is also run manually for recovery.
+log "Checking out + fast-forwarding $DEPLOY_BRANCH to $TARGET_SHA"
+git checkout --quiet "$DEPLOY_BRANCH" 2>/dev/null || git checkout --quiet -B "$DEPLOY_BRANCH" "origin/$DEPLOY_BRANCH"
+git reset --hard --quiet "$TARGET_SHA"
 
 # ── 3. Build backend image if backend/ changed ─────────────────────────
 if [ "$NEED_BACKEND_BUILD" = "yes" ]; then
@@ -162,6 +189,13 @@ if [ -n "$PUBLIC_HEALTH_URL" ]; then
     fi
 fi
 
-# ── 7. Done ────────────────────────────────────────────────────────────
+# ── 7. Mark this SHA as successfully deployed ──────────────────────────
+# Written ONLY after the health probe + optional public probe both pass.
+# A failed deploy that auto-rolls back leaves the marker at the previous
+# good SHA, so the next deploy attempts a real cycle (not a no-op).
+echo "$TARGET_SHA" > "$DEPLOYED_MARKER"
+log "Wrote deployed-marker: $DEPLOYED_MARKER → $TARGET_SHA"
+
+# ── 8. Done ────────────────────────────────────────────────────────────
 log "Deploy complete: $OLD_SHA → $TARGET_SHA"
 docker compose -f "$COMPOSE_FILE" ps
