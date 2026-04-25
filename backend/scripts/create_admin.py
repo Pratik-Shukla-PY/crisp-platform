@@ -34,8 +34,18 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import os
 import sys
 from datetime import datetime, timezone
+
+# When invoked as `python scripts/create_admin.py` (rather than
+# `python -m scripts.create_admin`), only the script's directory ends
+# up on sys.path — which means `from app.db.session import ...` further
+# down would fail with ModuleNotFoundError. Insert the backend root
+# (the parent of scripts/) so both invocations work the same.
+_BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
 
 import pyotp
 import qrcode
