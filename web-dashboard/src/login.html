@@ -56,23 +56,30 @@
 
         <div id="msg" class="msg"></div>
 
-        <div class="tabs">
+        <!-- Apr 2026 — single-admin lockdown. Self-service registration and
+             Enterprise SSO are intentionally disabled for the dashboard;
+             the tabs are kept in the DOM (display:none) so legacy switchTab
+             callsites don't throw, and so the original layout is one
+             feature-flag flip away. Backend also returns 410 Gone on
+             /auth/register when REGISTRATION_DISABLED=true (default in prod). -->
+        <div class="tabs" style="display:none;">
             <button class="tab active" onclick="switchTab('login')">Login</button>
             <button class="tab" onclick="switchTab('register')">Register</button>
             <button class="tab" onclick="switchTab('sso')">Enterprise SSO</button>
         </div>
 
-        <!-- LOGIN TAB -->
+        <!-- LOGIN TAB — Apr 2026 single-admin lockdown:
+             Password + TOTP authenticator code (Google Authenticator / Authy /
+             1Password). Email-OTP login path retained in the DOM under
+             #step-otp for the existing verifyOTP() machinery (kept for the
+             PWA reporter flow that POSTs into the same endpoints), but
+             hidden from this dashboard's UI. -->
         <div id="panel-login" class="tab-panel active">
             <div id="step-email">
                 <div class="form-group">
                     <label class="form-label">Email</label>
-                    <input type="email" id="login-email" class="form-input" placeholder="you@organization.org" autocomplete="email">
+                    <input type="email" id="login-email" class="form-input" placeholder="admin@crisplabs.tech" autocomplete="email" autofocus>
                 </div>
-                <button class="btn-primary" id="btn-send-otp" onclick="sendLoginOTP()">
-                    <i class="fa-solid fa-paper-plane"></i> Send Login Code
-                </button>
-                <div class="divider">or</div>
                 <div class="form-group">
                     <label class="form-label">Password</label>
                     <div class="pw-toggle">
@@ -80,14 +87,21 @@
                         <i class="fa-solid fa-eye" onclick="togglePw()"></i>
                     </div>
                 </div>
-                <button class="btn-primary" onclick="loginWithPassword()" style="background:linear-gradient(135deg,#1e293b,#334155);">
-                    <i class="fa-solid fa-right-to-bracket"></i> Login with Password
+                <div class="form-group">
+                    <label class="form-label">Authenticator code <span style="color:var(--dim);font-size:11px;font-weight:normal;">— from Google Authenticator / Authy / 1Password</span></label>
+                    <input type="text" id="login-totp" class="form-input" placeholder="123456" maxlength="6" minlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" style="letter-spacing:6px;font-family:monospace;font-size:18px;text-align:center;">
+                </div>
+                <button class="btn-primary" onclick="loginWithPassword()">
+                    <i class="fa-solid fa-right-to-bracket"></i> Login
                 </button>
             </div>
-            <div id="step-otp">
+            <!-- Email-OTP step — kept for back-compat with the PWA reporter
+                 verify flow that posts into the same /auth/otp/* endpoints.
+                 Hidden in dashboard lockdown mode. -->
+            <div id="step-otp" style="display:none;">
                 <p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:16px;">Enter the 6-digit code sent to <strong id="otp-email-display"></strong></p>
                 <div class="otp-row" id="otp-inputs">
-                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" autofocus>
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
                     <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
                     <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
                     <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
@@ -96,7 +110,7 @@
                 </div>
                 <br>
                 <button class="btn-primary" onclick="verifyOTP()">
-                    <i class="fa-solid fa-check-circle"></i> Verify & Login
+                    <i class="fa-solid fa-check-circle"></i> Verify &amp; Login
                 </button>
                 <button class="btn-secondary" onclick="sendLoginOTP()">Resend Code</button>
             </div>
@@ -143,13 +157,21 @@
             </div>
         </div>
 
-        <div class="link-row" id="link-row">
+        <!-- Apr 2026 — registration link hidden for the lockdown posture.
+             Kept in DOM (display:none) for parity with the tabs strip above. -->
+        <div class="link-row" id="link-row" style="display:none;">
             Don't have an account? <a onclick="switchTab('register')">Register</a>
         </div>
     </div>
 
     <script>
-    const API = `http://${window.location.hostname || 'localhost'}:8000/api/v1/auth`;
+    // Apr 2026 — origin-aware API base. Dev: localhost:8000, Prod: same origin
+    // as the page (nginx proxies /api/ → backend internally).
+    const _isLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+    const _BACKEND_HOST = _isLocalDev
+        ? `http://${window.location.hostname}:8000`
+        : window.location.origin;
+    const API = `${_BACKEND_HOST}/api/v1/auth`;
     let currentEmail = '';
     let otpPurpose = 'LOGIN';
 
@@ -235,23 +257,22 @@
     }
 
     async function loginWithPassword() {
+        // Apr 2026 — single-admin lockdown. Email + password + TOTP code
+        // (Google Authenticator / Authy / 1Password) sent in one request.
+        // Backend rejects with 401 if password or TOTP code is wrong; on
+        // success returns an access/refresh JWT pair.
         const email = document.getElementById('login-email').value.trim();
         const password = document.getElementById('login-password').value;
+        const totp = (document.getElementById('login-totp').value || '').trim();
         if (!email || !password) { showMsg('Enter email and password', 'error'); return; }
+        if (!/^\d{6}$/.test(totp)) { showMsg('Enter the 6-digit authenticator code', 'error'); return; }
         try {
             const res = await fetch(`${API}/login`, {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({ email, password, totp_code: totp }),
             });
             const data = await res.json();
-            if (data.requires_mfa) {
-                currentEmail = email;
-                otpPurpose = 'MFA';
-                document.getElementById('step-email').style.display = 'none';
-                document.getElementById('step-otp').style.display = 'block';
-                document.getElementById('otp-email-display').textContent = email;
-                showMsg('MFA code sent to your email', 'success');
-            } else if (data.access_token) {
+            if (data.access_token) {
                 localStorage.setItem('crisp_token', data.access_token);
                 localStorage.setItem('crisp_refresh', data.refresh_token);
                 localStorage.setItem('crisp_user', JSON.stringify(data.user));

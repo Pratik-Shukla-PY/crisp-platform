@@ -19,7 +19,14 @@ if (!_crispToken && !window.location.pathname.includes('login')) {
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
-const BACKEND_HOST = `http://${window.location.hostname || 'localhost'}:8000`;
+// Apr 2026 — origin-aware backend host detection. In dev (page served at
+// localhost:8080 with backend on :8000) we point at :8000 directly. In prod
+// (page served via nginx proxy at the same origin as the API) we use the
+// page origin so HTTPS + same-host work without mixed-content / CORS drama.
+const _isLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+const BACKEND_HOST = _isLocalDev
+    ? `http://${window.location.hostname}:8000`
+    : window.location.origin;
 const API = `${BACKEND_HOST}/api/v1/reports`;
 
 // Add Authorization header to all fetch calls + handle 401 → redirect to login
