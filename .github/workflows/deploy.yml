@@ -162,15 +162,29 @@ jobs:
           # logic picks them up. PUBLIC_HEALTH_URL adds an outside-in
           # probe at the end so we catch ALB / cert / DNS regressions
           # at deploy time rather than from a customer ticket.
+          #
+          # Bootstrap pull: the EC2's working tree may be on an older
+          # branch/SHA that predates `scripts/deploy.sh`. We can't run a
+          # script that doesn't exist, so the SSH preamble does the
+          # minimum git fetch + checkout + ff-pull to bring the script
+          # into existence. Once deploy.sh is in place, IT does its OWN
+          # full pull/rebuild/migrate/health flow (idempotent — the
+          # second pull here is a no-op).
           ssh -i ~/.ssh/deploy_key \
               -o BatchMode=yes \
               -o ConnectTimeout=10 \
               -o ServerAliveInterval=15 \
               "${SSH_USER}@${SSH_HOST}" \
-              "DEPLOY_BRANCH='${DEPLOY_BRANCH}' \
+              "set -euo pipefail; \
+               cd ~/crisp; \
+               git fetch --quiet origin '${DEPLOY_BRANCH}'; \
+               git checkout --quiet '${DEPLOY_BRANCH}' 2>/dev/null || git checkout --quiet -B '${DEPLOY_BRANCH}' 'origin/${DEPLOY_BRANCH}'; \
+               git pull --ff-only --quiet origin '${DEPLOY_BRANCH}' || true; \
+               test -x scripts/deploy.sh || chmod +x scripts/deploy.sh; \
+               DEPLOY_BRANCH='${DEPLOY_BRANCH}' \
                SKIP_REBUILD='${SKIP_REBUILD_FLAG/true/1}' \
                PUBLIC_HEALTH_URL='https://undp.crisplabs.tech/health' \
-               bash ~/crisp/scripts/deploy.sh"
+               bash scripts/deploy.sh"
 
       - name: Post-deploy smoke (from runner, end-to-end)
         run: |
