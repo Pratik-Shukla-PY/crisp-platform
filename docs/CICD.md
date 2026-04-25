@@ -160,7 +160,8 @@ repository secret. Add:
 ### 4.3 Configure the production environment
 
 GitHub → Settings → Environments → New environment → name:
-`production`.
+`CRISP-Production`. Must match the `environment.name` field in
+`.github/workflows/deploy.yml` exactly (it's case-sensitive).
 
 Recommended settings:
 

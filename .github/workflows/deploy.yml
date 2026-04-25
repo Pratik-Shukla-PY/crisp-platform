@@ -64,10 +64,10 @@ jobs:
     timeout-minutes: 15
     environment:
       # GitHub Environments give per-environment secrets + manual approval
-      # gates. Configure under Settings → Environments → production.
+      # gates. Configure under Settings → Environments → CRISP-Production.
       # Optional: enable "Required reviewers" so deploys to main require
       # approval before running.
-      name: production
+      name: CRISP-Production
       url: https://undp.crisplabs.tech/web-dashboard/src/
 
     steps:
