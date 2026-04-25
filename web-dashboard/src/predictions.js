@@ -2,7 +2,12 @@
 // CRISP Predictive Intelligence — Frontend Logic
 // ══════════════════════════════════════════════════════════════════════════════
 
-const PRED_API = `http://${window.location.hostname || 'localhost'}:8000/api/v1/predictions`;
+// Apr 2026 — origin-aware backend host (dev → :8000, prod → same origin via nginx).
+const _PRED_isLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+const _PRED_BACKEND_HOST = _PRED_isLocalDev
+    ? `http://${window.location.hostname}:8000`
+    : window.location.origin;
+const PRED_API = `${_PRED_BACKEND_HOST}/api/v1/predictions`;
 let _predTimeWindow = 72;
 let _predHeatLayer = null;
 let _predZoneMarkers = [];

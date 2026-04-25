@@ -44,3 +44,10 @@ python-multipart>=0.0.6
 structlog>=24.0.0
 prometheus-client>=0.20.0
 sentry-sdk[fastapi]>=2.0.0
+
+# TOTP authenticator-app MFA (Apr 2026 — single-admin dashboard lockdown).
+# pyotp implements RFC 6238 (the TOTP standard Google Authenticator/Authy
+# /1Password use). qrcode renders the otpauth:// URI as a QR image during
+# admin provisioning. Both are tiny pure-Python deps.
+pyotp>=2.9.0
+qrcode[pil]>=7.4.2

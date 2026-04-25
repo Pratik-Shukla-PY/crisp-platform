@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import pyotp
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
@@ -34,6 +35,13 @@ MAX_FAILED_LOGINS = 5
 LOCKOUT_MINUTES = 15
 OTP_RATE_LIMIT = 3          # Max OTP requests per email per 10 min
 OTP_MAX_ATTEMPTS = 5
+
+# Apr 2026 — single-admin dashboard lockdown.
+# When ALLOW_REGISTRATION=false (set in prod .env), the /auth/register
+# endpoint returns 410 Gone with a clear "contact admin" message. Default
+# stays "true" so dev / test environments + the PWA reporter signup flow
+# (if they go through /register) continue to work unchanged.
+ALLOW_REGISTRATION = os.getenv("ALLOW_REGISTRATION", "true").lower() == "true"
 
 
 # ── Pydantic Schemas ──────────────────────────────────────────────────────────
@@ -90,6 +98,11 @@ class UnlinkDeviceRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    # Apr 2026 — TOTP authenticator code, required when the user has
+    # `mfa_enabled = True` (set during admin provisioning). Optional in
+    # the schema so legacy non-MFA accounts still work; the login handler
+    # rejects with 400 if the user IS mfa_enabled but the field is empty.
+    totp_code: Optional[str] = Field(None, min_length=6, max_length=6, pattern=r"^\d{6}$")
 
 class RefreshRequest(BaseModel):
     refresh_token: str
@@ -159,7 +172,19 @@ def _issue_tokens(user: User, db: Session, request: Request) -> dict:
 
 @router.post("/register")
 def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db)):
-    """Register a new user. Sends OTP for email verification."""
+    """Register a new user. Sends OTP for email verification.
+
+    Apr 2026 — locked down by default in prod via ``ALLOW_REGISTRATION``
+    env var. When ``ALLOW_REGISTRATION=false`` we return 410 Gone with a
+    clear admin-contact message. The single-admin dashboard model means
+    new accounts must be provisioned via ``scripts/create_admin.py``,
+    not self-service from the UI.
+    """
+    if not ALLOW_REGISTRATION:
+        raise HTTPException(
+            status_code=410,
+            detail="Self-service registration is disabled. Contact the administrator.",
+        )
     # Check email not taken
     existing = db.query(User).filter(User.email == req.email).first()
     if existing:
@@ -533,19 +558,42 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
 
-    # MFA check — Phase 1 (Apr 2026): OTPRecord requires destination+channel.
+    # MFA check — Apr 2026 single-admin lockdown: TOTP authenticator app
+    # (Google Authenticator / Authy / 1Password) instead of the legacy
+    # email-OTP fallback. The shared secret was generated during admin
+    # provisioning (scripts/create_admin.py) and is stored in
+    # users.mfa_secret. We verify the 6-digit code via pyotp's RFC 6238
+    # implementation. valid_window=1 lets a code from the previous or
+    # next 30s slot through too, so a user who tapped Login at the
+    # wraparound boundary doesn't get falsely rejected.
     if user.mfa_enabled:
-        code = generate_otp()
-        db.add(OTPRecord(
-            destination=req.email, channel="EMAIL", email=req.email,
-            code=code, purpose="MFA",
-            expires_at=get_otp_expiry(), ip_address=_get_ip(request),
-        ))
-        db.commit()
-        send_otp_email(req.email, code, "MFA")
-        return {"requires_mfa": True, "message": "MFA code sent to your email."}
+        if not user.mfa_secret:
+            # Misconfigured user (mfa_enabled=True but no secret stamped).
+            # Refuse to log them in rather than silently degrading to no MFA.
+            logger.error("User %s has mfa_enabled=True but no mfa_secret set", user.id)
+            raise HTTPException(
+                status_code=500,
+                detail="MFA is enabled on this account but not provisioned. Contact admin.",
+            )
+        if not req.totp_code:
+            raise HTTPException(
+                status_code=400,
+                detail="Authenticator code is required for this account.",
+            )
+        totp = pyotp.TOTP(user.mfa_secret)
+        if not totp.verify(req.totp_code, valid_window=1):
+            user.failed_login_count = (user.failed_login_count or 0) + 1
+            if user.failed_login_count >= MAX_FAILED_LOGINS:
+                user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_MINUTES)
+                _audit(db, user.id, req.email, "ACCOUNT_LOCKED", request, details={"reason": "totp_fail"})
+                db.commit()
+                raise HTTPException(status_code=423, detail=f"Account locked for {LOCKOUT_MINUTES} minutes due to too many failed attempts.")
+            _audit(db, user.id, req.email, "FAILED_LOGIN", request, details={"reason": "totp_invalid"})
+            db.commit()
+            raise HTTPException(status_code=401, detail="Invalid authenticator code")
+        # Successful TOTP — fall through to issue tokens.
 
-    _audit(db, user.id, req.email, "LOGIN", request, details={"method": "password"})
+    _audit(db, user.id, req.email, "LOGIN", request, details={"method": "password+totp" if user.mfa_enabled else "password"})
     return _issue_tokens(user, db, request)
 
 

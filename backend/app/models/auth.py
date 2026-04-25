@@ -105,6 +105,12 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)         # True after OTP verification
     mfa_enabled = Column(Boolean, default=False)
+    # Apr 2026 — TOTP authenticator app (Google Authenticator / Authy / 1Password).
+    # `mfa_secret` is the base32-encoded 160-bit shared secret per RFC 4648 + 6238;
+    # generated once at enrollment, scanned via QR into the user's app, and
+    # verified via pyotp.TOTP(secret).verify(code) at login time. NULL until
+    # the user enrols. Backed by migration 0011_user_mfa_secret.
+    mfa_secret = Column(String(64), nullable=True)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     login_count = Column(Integer, default=0)
     failed_login_count = Column(Integer, default=0)
