@@ -10,7 +10,9 @@
     "test:smoke": "playwright test --grep=@smoke",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
-    "report": "playwright show-report"
+    "report": "playwright show-report",
+    "check:prod": "playwright test --config=playwright.prod.config.ts",
+    "check:prod:ui": "playwright test --config=playwright.prod.config.ts --ui"
   },
   "devDependencies": {
     "@playwright/test": "^1.47.0"
