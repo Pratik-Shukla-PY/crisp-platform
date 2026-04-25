@@ -8,9 +8,16 @@ on:
 
 permissions:
   contents: read
-  # security-events needed if we ever upload SARIF from gitleaks/trivy
+  # security-events: needed if we ever upload SARIF from gitleaks/trivy
   # to GitHub's Code Scanning surface. Keep it tight for now.
   security-events: write
+  # pull-requests: read — gitleaks-action calls
+  # `GET /repos/{owner}/{repo}/pulls/{pr}/commits` so it can scope its
+  # scan to just the PR's new commits (not re-scan the whole history
+  # on every PR run). Without this, the API returns 403 "Resource not
+  # accessible by integration", gitleaks crashes, and the PR's CI is
+  # marked failed even when there are no actual leaks.
+  pull-requests: read
 
 # Cancel in-progress runs for the same PR or branch.
 concurrency:
