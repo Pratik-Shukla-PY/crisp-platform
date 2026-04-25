@@ -189,10 +189,20 @@ jobs:
       - name: Post-deploy smoke (from runner, end-to-end)
         run: |
           # Hit the public URL from outside AWS — proves the full path
-          # is alive (Route 53 → ALB → EC2 → nginx → uvicorn).
-          curl -sSf --max-time 10 https://undp.crisplabs.tech/health > /dev/null
-          curl -sSI --max-time 10 https://undp.crisplabs.tech/web-dashboard/src/ | head -1
-          curl -sSI --max-time 10 https://undp.crisplabs.tech/mobile-app/src/ | head -1
+          # is alive (Route 53 → ALB → EC2 → nginx → static or proxied API).
+          # `/health` is only exposed on the backend's :8000 port, not via
+          # nginx. We probe public-reachable URLs instead:
+          #   - /              302 redirect to dashboard (nginx alone)
+          #   - /mobile-app/src/index.html  static (nginx serving PWA)
+          #   - /web-dashboard/src/index.html  static (nginx serving dashboard)
+          # All three succeeding proves DNS + ALB + ACM cert + nginx routing
+          # work. Backend health is already verified inside deploy.sh on the
+          # EC2 itself before this step runs.
+          echo "Probing public URLs..."
+          curl -sSf --max-time 10 -o /dev/null -w "/                          %{http_code}\n" https://undp.crisplabs.tech/
+          curl -sSf --max-time 10 -o /dev/null -w "/mobile-app/src/index.html  %{http_code}\n" https://undp.crisplabs.tech/mobile-app/src/index.html
+          curl -sSf --max-time 10 -o /dev/null -w "/web-dashboard/src/index.html  %{http_code}\n" https://undp.crisplabs.tech/web-dashboard/src/index.html
+          echo "All public smokes green."
 
       - name: Tear down SSH artifacts
         if: always()
