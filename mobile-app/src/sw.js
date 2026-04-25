@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v55';  // bump on static-asset changes (v55: prod-deploy origin-aware API_BASE in app.js + sw.js queue replay)
+const CACHE_NAME = 'crisp-v56';  // v56 (Apr 2026 prod): comprehensive CSP unblocks Leaflet + TFJS + BlazeFace from CDN; force eviction of any v54/v55 still cached on user devices
 // v54 (Apr 2026 — login UI polish). Fixes raw i18n keys showing on
 // stage-login when the JSON pack hadn't re-fetched yet (all login_*
 // keys now live in the inline I18N.en dict so they render immediately
