@@ -1282,7 +1282,15 @@ async function _fetchEnabledRegions(opts = {}) {
         persisted = JSON.parse(localStorage.getItem(_REGION_CACHE_KEY) || 'null');
     } catch (_) {}
     try {
-        const url = (typeof API_BASE !== 'undefined' ? API_BASE : `${window.location.origin.replace(/:\d+$/, ':8000')}/api/v1`) + '/regions/enabled';
+        // Apr 2026 — early-init fallback (API_BASE not yet bound). Pick a
+        // sensible default per host: localhost dev → :8000, prod → same origin
+        // (behind nginx /api/ proxy). Don't blindly suffix :8000 — that
+        // pointed at a closed port behind the ALB.
+        const _earlyIsLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+        const _earlyBase = _earlyIsLocalDev
+            ? `${window.location.protocol}//${window.location.hostname}:8000/api/v1`
+            : `${window.location.origin}/api/v1`;
+        const url = (typeof API_BASE !== 'undefined' ? API_BASE : _earlyBase) + '/regions/enabled';
         const res = await fetch(url, { method: 'GET', cache: 'no-store' });
         if (res.ok) {
             const data = await res.json();
@@ -1641,9 +1649,20 @@ function handleAutoSubmit() {
 
 const inactivityManager = new InactivityManager(state.inactivityTimeoutMs, handleAutoSubmit);
 
-// Dynamically resolve backend host so the app works from both localhost (desktop)
-// and from the LAN IP (real mobile device on the same Wi-Fi network).
-const _backendHost = `http://${window.location.hostname || "localhost"}:8000`;
+// Dynamically resolve backend host so the app works from:
+//   - localhost (desktop dev)              → http://localhost:8000
+//   - LAN IP (mobile on same Wi-Fi)        → http://192.168.x.y:8000
+//   - production (https://undp.crisplabs.tech, behind nginx /api/ proxy)
+//                                          → https://undp.crisplabs.tech
+// Apr 2026 — added prod branch. Previous unconditional ":8000" suffix
+// pointed at a closed port behind the ALB and was the root cause of
+// "submission shows successful but never reaches the backend": the
+// chunked upload's offline queue caught the failed POST and the UI
+// reported success on queue-accept, never on server-ack.
+const _isLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+const _backendHost = _isLocalDev
+    ? `http://${window.location.hostname}:8000`
+    : window.location.origin;
 const API_BASE = `${_backendHost}/api/v1`;
 
 // ── IP Geolocation fallback ────────────────────────────────────────────────────
