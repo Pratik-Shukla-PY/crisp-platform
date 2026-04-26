@@ -14,7 +14,8 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v59';  // v59 (Apr 2026): Safari blank-tiles fix — back out parent transform, add canvas renderer + 500ms re-invalidate
+const CACHE_NAME = 'crisp-v60';  // v60 (Apr 2026): Noto Sans Arabic + Noto Sans SC added to Google Fonts URL — proper CJK + Arabic glyph rendering for UNDP locales (was falling through to inconsistent device system fonts).
+// v59 (Apr 2026): Safari blank-tiles fix — back out parent transform, add canvas renderer + 500ms re-invalidate
 // v54 (Apr 2026 — login UI polish). Fixes raw i18n keys showing on
 // stage-login when the JSON pack hadn't re-fetched yet (all login_*
 // keys now live in the inline I18N.en dict so they render immediately
@@ -439,7 +440,7 @@ const STATIC_ASSETS = [
 ];
 
 const EXTERNAL_ASSETS = [
-    'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap',
+    'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap',
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
     // Client-side PII blur: TF.js core + BlazeFace library.
     // Model weights (model.json + .bin) are fetched at runtime from tfhub via

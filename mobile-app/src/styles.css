@@ -98,8 +98,14 @@
     --text: #1e293b;
     --muted: #64748b;
     --border: rgba(0,0,0,0.08);
-    --font: 'Inter', sans-serif;
-    --heading: 'Outfit', sans-serif;
+    /* Apr 2026 — Noto Sans Arabic + Noto Sans SC added after Inter/Outfit.
+       Browser font cascade is per-glyph: Inter handles Latin, then
+       falls through to Noto Sans Arabic for Arabic codepoints (locale=ar)
+       and Noto Sans SC for CJK (locale=zh). Without these in the cascade,
+       Arabic/Chinese text picked an inconsistent system font on each
+       device, breaking the typography on those UNDP-mandated locales. */
+    --font: 'Inter', 'Noto Sans Arabic', 'Noto Sans SC', sans-serif;
+    --heading: 'Outfit', 'Noto Sans Arabic', 'Noto Sans SC', sans-serif;
     --radius: 20px;
     --shadow: 0 12px 30px rgba(0,0,0,0.08);
 }

@@ -12,7 +12,16 @@
     <meta name="apple-mobile-web-app-title" content="CRISP">
     <link rel="apple-touch-icon" href="assets/icon-192.png">
     <!-- Fonts & Styles -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Apr 2026 — added Noto Sans Arabic + Noto Sans SC (Simplified Chinese)
+         alongside Inter / Outfit. Inter doesn't ship CJK or full Arabic
+         glyphs; without these, Arabic / Chinese strings rendered in
+         whatever the device's system font picked, which produced visibly
+         inconsistent typography across iOS/Android/desktop for those
+         locales. The browser uses font-family fallback per-glyph: Latin
+         text picks Inter, Arabic text picks Noto Sans Arabic, CJK picks
+         Noto Sans SC. The corresponding CSS-level fallbacks live in
+         styles.css's `--font` and `--heading` definitions. -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Leaflet — UNDP Appendix: building-footprint overlay on the review
          page. Loaded from CDN to match the dashboard's existing Leaflet

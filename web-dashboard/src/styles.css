@@ -24,9 +24,15 @@
     --text-sub:    #94a3b8;
     --text-dim:    #475569;
 
-    --font:        'Inter', sans-serif;
-    --font-head:   'Outfit', sans-serif;
-    --font-mono:   'JetBrains Mono', monospace;
+    /* Apr 2026 — Noto Sans Arabic + Noto Sans SC added after the primary
+       families. Browsers do per-glyph font cascade: Latin text picks
+       Inter / Outfit / JetBrains, Arabic codepoints fall through to
+       Noto Sans Arabic, CJK to Noto Sans SC. Without these, analysts
+       on different OSes saw wildly different glyphs for foreign-locale
+       reports. Fonts pre-loaded via the Google Fonts <link> in index.html. */
+    --font:        'Inter', 'Noto Sans Arabic', 'Noto Sans SC', sans-serif;
+    --font-head:   'Outfit', 'Noto Sans Arabic', 'Noto Sans SC', sans-serif;
+    --font-mono:   'JetBrains Mono', 'Noto Sans Arabic', 'Noto Sans SC', monospace;
 
     --radius:      14px;
     --radius-sm:   8px;

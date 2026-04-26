@@ -7,7 +7,12 @@
     <meta name="description" content="United Nations Crisis Response Intelligence System — hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
     <link rel="manifest" href="manifest.json">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <!-- Apr 2026 — Noto Sans Arabic + Noto Sans SC added so analyst view
+         renders Arabic / CJK report text in proper glyphs (was falling
+         through to whatever system font the analyst's OS picked, which
+         varied wildly across Mac/Windows/Linux). Browser font cascade
+         is per-glyph; Latin text still picks Inter / Outfit / JetBrains. -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+Arabic:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
