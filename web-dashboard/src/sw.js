@@ -9,14 +9,14 @@
  *   Everything else         → Network with cache fallback
  */
 
-// Bumped from v7/v6/v6/v9 → v8/v7/v7/v10 to evict any client whose
-// installed SW is on the buggy networkFirst-for-HTML path. New SW
-// activates → wipes old caches → page navigations skip SW entirely
-// going forward.
-const APP_CACHE    = 'crisp-app-v8';
-const CDN_CACHE    = 'crisp-cdn-v7';
-const API_CACHE    = 'crisp-api-v7';
-const STATIC_CACHE = 'crisp-static-v10';
+// v8/v7/v7/v10 → v9/v8/v8/v11 — bump for the throttled-polling fix
+// (decouple pending-deletions check from per-poll cycle, cap active-
+// poll mode to 60 s of stalled progress). Forces SW reactivation
+// + cache wipe so users pick up the new app.js immediately.
+const APP_CACHE    = 'crisp-app-v9';
+const CDN_CACHE    = 'crisp-cdn-v8';
+const API_CACHE    = 'crisp-api-v8';
+const STATIC_CACHE = 'crisp-static-v11';
 
 // App files that should always be fresh (network-first)
 const APP_FILES = ['index.html', 'login.html', 'app.js', 'styles.css', 'manifest.json'];

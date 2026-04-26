@@ -4288,7 +4288,13 @@ async function fetchReports() {
             const feed = document.getElementById('report-feed-list');
             if (feed) feed.innerHTML = `<div style="padding:20px;color:#ef4444;font-size:13px;"><b>Render Error:</b> ${e.message}<br><br>Data loaded (${data.length} reports) but UI failed. Check console (Cmd+Option+J).</div>`;
         }
-        _checkPendingDeletions();
+        // Apr 2026 — REMOVED `_checkPendingDeletions()` from per-poll cycle.
+        // It made an extra GET /api/v1/reports/?include_deleted=true on
+        // every cycle, doubling the network rate (~130k req/day per open
+        // tab in active-poll mode). Pending-deletion metadata changes
+        // infrequently (admin-only action) — checking it every 30 s via
+        // the dedicated interval at init time is plenty.
+        // Manual triggers (admin purge buttons) still call it directly.
     } catch (e) {
         console.error('[CRISP] FETCH ERROR:', e);
         _updateCacheBadge(true);
@@ -4308,9 +4314,36 @@ function _hasActiveUploads() {
     });
 }
 
+// Apr 2026 — cap active-poll mode to 60 s of wall-clock time. Without
+// this cap, a single old report whose chunked upload was abandoned
+// midway (legacy bug, now fixed at submit-time but historical rows
+// remain) keeps `_hasActiveUploads()` returning true forever, which
+// pegs the poller at the 1.2 s interval and floods /api/v1/reports/
+// at ~130k requests/day per open dashboard tab. The cap means once we
+// stop seeing the upload counter actually MOVE for 60 s, we drop back
+// to the normal 4 s interval. If a fresh upload starts, the cap
+// resets — fast polling resumes for the duration of that real upload.
+let _lastActiveUploadProgressAt = 0;
+let _lastActiveUploadFingerprint = '';
+
+function _activePollAllowed() {
+    if (!_hasActiveUploads()) return false;
+    // Fingerprint = which media + how far along — captures whether
+    // anything is actually progressing or we're just stuck.
+    const fp = allReports
+        .flatMap(r => (r.media || []).map(m => `${m.id || ''}:${m.completion_pct ?? 0}:${m.assembly_status || ''}`))
+        .join('|');
+    if (fp !== _lastActiveUploadFingerprint) {
+        _lastActiveUploadFingerprint = fp;
+        _lastActiveUploadProgressAt = Date.now();
+    }
+    // Stuck: no progress in 60 s → drop to normal poll.
+    return (Date.now() - _lastActiveUploadProgressAt) < 60_000;
+}
+
 function _reschedulePoller() {
     if (_pollTimer) clearTimeout(_pollTimer);
-    const interval = _hasActiveUploads() ? POLL_INTERVAL_ACTIVE : POLL_INTERVAL;
+    const interval = _activePollAllowed() ? POLL_INTERVAL_ACTIVE : POLL_INTERVAL;
     _pollTimer = setTimeout(fetchReports, interval);
 }
 
@@ -4420,4 +4453,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Fetch fresh data, then adaptive polling takes over
     fetchReports();
+
+    // Apr 2026 — pending-deletions check runs on its own slow timer
+    // instead of riding the per-poll cycle (which doubled network rate
+    // to ~130k req/day per tab in active-poll mode). Admin actions
+    // that delete reports continue to call _checkPendingDeletions()
+    // directly so the badge updates immediately on user action.
+    _checkPendingDeletions();                                  // initial
+    setInterval(_checkPendingDeletions, 30 * 1000);            // every 30 s
 });
