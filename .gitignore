@@ -17,6 +17,7 @@ node_modules/
 
 # Playwright test artefacts (regenerated on every run)
 playwright-report/
+playwright-report-prod/
 test-results/
 
 # Logs & runtime

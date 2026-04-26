@@ -521,4 +521,56 @@ test.describe('Production — Backend via nginx', () => {
       expect(csp, `CSP missing: ${piece}\nactual:\n${csp}`).toContain(piece);
     }
   });
+
+  test('CSP connect-src covers every SW-intercepted CDN host', async ({ request }) => {
+    // Apr 2026 — regression guard for the "normal-refresh fails / hard-refresh
+    // works" prod outage. Root cause: the dashboard service worker uses
+    // cacheFirst for CDN assets (unpkg, cdnjs.cloudflare.com, fonts.gstatic.com,
+    // fonts.googleapis.com). On cache miss, it does fetch(request) FROM
+    // INSIDE THE SW. That SW-context fetch is governed by `connect-src`,
+    // NOT by the directive that originally allowed the resource (script-src
+    // / style-src / font-src). The page CSP allowed those hosts under their
+    // load-time directives but had not extended `connect-src` — so the SW's
+    // internal refetch was hitting the connect-src wall and falling through
+    // to the catch block, which returned a synthetic 503. Hard-refresh
+    // bypassed the SW entirely so the browser-driven element fetch succeeded.
+    //
+    // This test parses the CSP and asserts every SW-intercepted host is in
+    // connect-src so the bug class never reships.
+    const res = await request.get(`${BASE}/mobile-app/src/index.html`);
+    const csp = res.headers()['content-security-policy'] || '';
+
+    // Parse "directive 'src' 'src' ..." segments (split on ';').
+    const directives: Record<string, string[]> = {};
+    for (const seg of csp.split(';').map((s) => s.trim()).filter(Boolean)) {
+      const [name, ...sources] = seg.split(/\s+/);
+      directives[name] = sources;
+    }
+
+    // Hosts the dashboard + PWA service workers cacheFirst-intercept. If you
+    // add a new CDN to either sw.js, add it here too — and also to
+    // connect-src in nginx.conf, which is what this test guards.
+    const swInterceptedHosts = [
+      'https://unpkg.com',                  // Leaflet + clustering + heat
+      'https://cdnjs.cloudflare.com',       // FontAwesome
+      'https://fonts.gstatic.com',          // Google Fonts files
+      // fonts.googleapis.com covered by *.googleapis.com wildcard.
+    ];
+
+    const connectSrc = directives['connect-src'] || [];
+    const missing = swInterceptedHosts.filter(
+      (h) => !connectSrc.includes(h) &&
+             !connectSrc.some((s) => s.startsWith('https://*.') && h.endsWith(s.slice(9))),
+    );
+
+    expect(
+      missing,
+      `connect-src missing SW-intercepted host(s): ${missing.join(', ')}\n` +
+        `WHY THIS MATTERS: SW cacheFirst does fetch(request) on cache miss; that fetch\n` +
+        `is governed by connect-src (NOT script-src / style-src / font-src). Without\n` +
+        `these in connect-src, normal-refresh returns 503 from the SW catch handler.\n` +
+        `Hard-refresh bypasses the SW so the symptom is "refresh fails, hard-refresh works."\n` +
+        `actual connect-src:\n  ${connectSrc.join(' ')}`,
+    ).toEqual([]);
+  });
 });
