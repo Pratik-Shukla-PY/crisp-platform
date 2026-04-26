@@ -9,10 +9,14 @@
  *   Everything else         → Network with cache fallback
  */
 
-const APP_CACHE    = 'crisp-app-v7';
-const CDN_CACHE    = 'crisp-cdn-v6';
-const API_CACHE    = 'crisp-api-v6';
-const STATIC_CACHE = 'crisp-static-v9';
+// Bumped from v7/v6/v6/v9 → v8/v7/v7/v10 to evict any client whose
+// installed SW is on the buggy networkFirst-for-HTML path. New SW
+// activates → wipes old caches → page navigations skip SW entirely
+// going forward.
+const APP_CACHE    = 'crisp-app-v8';
+const CDN_CACHE    = 'crisp-cdn-v7';
+const API_CACHE    = 'crisp-api-v7';
+const STATIC_CACHE = 'crisp-static-v10';
 
 // App files that should always be fresh (network-first)
 const APP_FILES = ['index.html', 'login.html', 'app.js', 'styles.css', 'manifest.json'];
@@ -44,6 +48,24 @@ self.addEventListener('fetch', event => {
   // ── API data: network-only (always fresh, never serve stale) ────────────
   if (url.port === '8000' || url.pathname.startsWith('/api/')) {
     return; // Let browser handle it directly — no SW interception
+  }
+
+  // ── Page navigations: bypass SW entirely when online; cache fallback
+  //    for offline only. Apr 2026 fix — the old networkFirst-for-HTML
+  //    path had a race-condition class of bug where a stale cached
+  //    index.html / login.html got served on regular refresh, leaving
+  //    the page in a broken state. Hard-refresh (Cmd+Shift+R) bypassed
+  //    the SW and worked, which is the smoking-gun symptom for this
+  //    bug. Standard SPA SW pattern: cache assets, but let the browser
+  //    handle navigations natively.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(() => caches.match(request) || new Response(
+        '<h1>CRISP — Offline</h1><p>You appear to be offline. Reconnect and reload.</p>',
+        { headers: { 'Content-Type': 'text/html' }, status: 503 },
+      )),
+    );
+    return;
   }
 
   // ── CDN assets: cache-first (fonts, icons — stable) ─────────────────────
