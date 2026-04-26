@@ -299,5 +299,12 @@
   "settings_title": "Settings",
   "settings_account": "Account",
   "settings_unlink_device": "Unlink this device",
-  "settings_logout": "Logout"
+  "settings_logout": "Logout",
+  "submit_needs_content": "⚠️ Please add a photo, audio, or text before submitting.",
+  "unlink_done_toast": "{n} reports unlinked",
+  "unlink_failed_toast": "Could not unlink right now",
+  "link_done_toast": "{n} reports linked to your account",
+  "delete_failed_toast": "Delete failed: {detail}",
+  "delete_error_toast": "Delete error: {error}",
+  "queue_synced_toast": "Queued report synced successfully!"
 }

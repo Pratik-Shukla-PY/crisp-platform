@@ -298,5 +298,12 @@
   "settings_title": "Settings",
   "settings_account": "Account",
   "settings_unlink_device": "Unlink this device",
-  "settings_logout": "Logout"
+  "settings_logout": "Logout",
+  "submit_needs_content": "⚠️ 请在提交前添加照片、音频或文本。",
+  "unlink_done_toast": "已解除关联 {n} 份报告",
+  "unlink_failed_toast": "目前无法解除关联",
+  "link_done_toast": "已将 {n} 份报告关联到您的账户",
+  "delete_failed_toast": "删除失败：{detail}",
+  "delete_error_toast": "删除错误：{error}",
+  "queue_synced_toast": "队列中的报告已成功同步！"
 }

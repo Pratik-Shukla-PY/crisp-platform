@@ -298,5 +298,12 @@
   "settings_title": "Settings",
   "settings_account": "Account",
   "settings_unlink_device": "Unlink this device",
-  "settings_logout": "Logout"
+  "settings_logout": "Logout",
+  "submit_needs_content": "⚠️ Veuillez ajouter une photo, un audio ou du texte avant de soumettre.",
+  "unlink_done_toast": "{n} rapport(s) délié(s)",
+  "unlink_failed_toast": "Impossible de délier pour le moment",
+  "link_done_toast": "{n} rapport(s) lié(s) à votre compte",
+  "delete_failed_toast": "Échec de la suppression : {detail}",
+  "delete_error_toast": "Erreur de suppression : {error}",
+  "queue_synced_toast": "Rapport en attente synchronisé avec succès !"
 }

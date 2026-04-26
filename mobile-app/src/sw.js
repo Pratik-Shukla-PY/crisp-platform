@@ -14,7 +14,8 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v60';  // v60 (Apr 2026): Noto Sans Arabic + Noto Sans SC added to Google Fonts URL — proper CJK + Arabic glyph rendering for UNDP locales (was falling through to inconsistent device system fonts).
+const CACHE_NAME = 'crisp-v61';  // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.
+// v60 (Apr 2026): Noto Sans Arabic + Noto Sans SC added to Google Fonts URL — proper CJK + Arabic glyph rendering for UNDP locales (was falling through to inconsistent device system fonts).
 // v59 (Apr 2026): Safari blank-tiles fix — back out parent transform, add canvas renderer + 500ms re-invalidate
 // v54 (Apr 2026 — login UI polish). Fixes raw i18n keys showing on
 // stage-login when the JSON pack hadn't re-fetched yet (all login_*

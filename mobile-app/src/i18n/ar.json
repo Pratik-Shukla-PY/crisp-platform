@@ -298,5 +298,12 @@
   "settings_title": "Settings",
   "settings_account": "Account",
   "settings_unlink_device": "Unlink this device",
-  "settings_logout": "Logout"
+  "settings_logout": "Logout",
+  "submit_needs_content": "⚠️ يرجى إضافة صورة أو صوت أو نص قبل الإرسال.",
+  "unlink_done_toast": "تم فك ربط {n} تقرير",
+  "unlink_failed_toast": "تعذّر فك الربط حالياً",
+  "link_done_toast": "تم ربط {n} تقرير بحسابك",
+  "delete_failed_toast": "فشل الحذف: {detail}",
+  "delete_error_toast": "خطأ في الحذف: {error}",
+  "queue_synced_toast": "تمت مزامنة التقرير المعلّق بنجاح!"
 }

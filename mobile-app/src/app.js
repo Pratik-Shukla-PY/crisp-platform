@@ -620,6 +620,19 @@ const I18N = {
         settings_account: "Account",
         settings_unlink_device: "Unlink this device",
         settings_logout: "Logout",
+        // Apr 2026 — UNDP §3.1e. Toast strings extracted from hardcoded
+        // English literals so AR / FR / ES / RU / ZH locales render
+        // properly. {n}, {detail}, {error} are template placeholders
+        // resolved by `.replace('{name}', String(value))` at the call-site.
+        // The dense JSON pack overrides these inline values when loaded;
+        // having them inline guards against the JSON loader race.
+        submit_needs_content: "⚠️ Please add a photo, audio, or text before submitting.",
+        unlink_done_toast: "{n} reports unlinked",
+        unlink_failed_toast: "Could not unlink right now",
+        link_done_toast: "{n} reports linked to your account",
+        delete_failed_toast: "Delete failed: {detail}",
+        delete_error_toast: "Delete error: {error}",
+        queue_synced_toast: "Queued report synced successfully!",
         // Crisis-type chip labels (UNDP Appendix-1).
         earthquake: "Earthquake",
         flood: "Flood",
@@ -1624,7 +1637,7 @@ function handleAutoSubmit() {
 
     // Validate: at least one input must be provided
     if (!hasMinimumInput()) {
-        showToast('⚠️ Please add a photo, audio, or text before submitting.');
+        showToast(t('submit_needs_content'));
         inactivityManager.reset();
         return;
     }
@@ -6704,9 +6717,9 @@ function setupAuthUI() {
         btnUnlinkDevice.disabled = true;
         try {
             const r = await A.unlinkDevice(dh);
-            showToast(`${(r && r.unlinked) || 0} reports unlinked`);
+            showToast(t('unlink_done_toast').replace('{n}', String((r && r.unlinked) || 0)));
         } catch (_) {
-            showToast('Could not unlink right now');
+            showToast(t('unlink_failed_toast'));
         } finally {
             btnUnlinkDevice.disabled = false;
         }
@@ -6718,7 +6731,7 @@ function setupAuthUI() {
 function _completeLogin(linkedCount) {
     try {
         if (linkedCount > 0) {
-            showToast(`${linkedCount} reports linked to your account`);
+            showToast(t('link_done_toast').replace('{n}', String(linkedCount)));
         } else {
             showToast(t('login_welcome') || "You're logged in");
         }
@@ -7016,10 +7029,10 @@ function setupSendStage() {
             } else {
                 let detail = `HTTP ${res.status}`;
                 try { detail = (await res.json()).detail || detail; } catch (_) {}
-                showToast(`Delete failed: ${detail}`, 'error');
+                showToast(t('delete_failed_toast').replace('{detail}', String(detail)), 'error');
             }
         } catch (e) {
-            showToast(`Delete error: ${e.message}`, 'error');
+            showToast(t('delete_error_toast').replace('{error}', String(e && e.message ? e.message : e)), 'error');
         } finally {
             _daBtn.disabled = false;
             _daBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> <span data-i18n="delete_all_my_reports">Delete all my reports</span>';
@@ -8282,7 +8295,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('message', (event) => {
             if (event.data.type === 'SYNC_SUCCESS') {
-                showToast('Queued report synced successfully!');
+                showToast(t('queue_synced_toast'));
                 updateSyncBadge();
             }
         });
