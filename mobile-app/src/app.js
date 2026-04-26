@@ -5975,6 +5975,39 @@ async function _uploadVariantTier(item, reportId, unit) {
     // from NavigatorConnection is used — both code paths update
     // `_pwaTier` as a side effect.
     await adaptTierViaProbe();
+
+    // Apr 2026 — variant cap by network tier. At very-slow links (≤ 80
+    // Kbps) the HIGH-resolution variant takes 60+ minutes to upload at
+    // 1 KB chunks, holding the queue badge open long after the report
+    // (with a SMALL thumbnail) has already shown up on the dashboard.
+    // UNDP brief explicitly mandates "operate both online and offline";
+    // at 2 Kbps the right tradeoff is "submit fast, low-res" rather than
+    // "wait an hour for full-res." We mark MEDIUM/LARGE complete locally
+    // (so the queue clears) but DON'T transmit them — the report is
+    // visible on the dashboard with SMALL the moment its first chunk
+    // lands. If the operator regains bandwidth and re-captures, that
+    // session uploads at the better tier normally.
+    //
+    // Cap matrix (variants attempted vs. tier picked by probe):
+    //
+    //   FAST       → SMALL + MEDIUM + LARGE   (all 3, ~5 s total at 8 Mbps)
+    //   MEDIUM     → SMALL + MEDIUM + LARGE   (all 3, ~30 s total at 1 Mbps)
+    //   SLOW       → SMALL + MEDIUM only      (LARGE skipped — saves ~10 min)
+    //   VERY_SLOW  → SMALL only               (M+L skipped — saves ~85 min)
+    if (tier !== 'small') {
+        if (_pwaTier === 'VERY_SLOW') {
+            console.log(`[Upload] ${label}: skipped — tier=VERY_SLOW caps at SMALL only`);
+            variant.complete = true;
+            try { await enqueueReport(item); } catch (_) {}
+            return;
+        }
+        if (_pwaTier === 'SLOW' && tier === 'large') {
+            console.log(`[Upload] ${label}: skipped — tier=SLOW caps at MEDIUM`);
+            variant.complete = true;
+            try { await enqueueReport(item); } catch (_) {}
+            return;
+        }
+    }
     const netConfig = getPWAAdaptiveConfig();
     const startSeq = variant.chunkProgress || 0;
     const mediaId = variant.mediaId;
