@@ -454,13 +454,20 @@ test.describe('Production — Backend via nginx', () => {
     // infrastructure_type, etc.
     const deviceHash = `prod-smoke-${Date.now()}`;
     const clientReportId = `cr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // infrastructure_type=COMMERCIAL is intentionally chosen here over
+    // RESIDENTIAL — COMMERCIAL was missing from the Postgres infratypeenum
+    // until migration 0012 because 0003 only added the targets of legacy
+    // chip remaps (CHIP_TO_UNDP.values()) and no legacy chips mapped to
+    // COMMERCIAL or PUBLIC_SPACES. Submitting COMMERCIAL here ensures that
+    // class of "Python enum has it, Postgres enum doesn't" drift gets
+    // caught at the gate, not by user reports.
     const submitRes = await request.post(`${BASE}/api/v1/reports/meta`, {
       data: {
         device_hash: deviceHash,
         client_report_id: clientReportId,
         crisis_type: 'EARTHQUAKE',
         damage_classification: 'PARTIAL',
-        infrastructure_type: 'RESIDENTIAL',
+        infrastructure_type: 'COMMERCIAL',
         severity: 'MODERATE',
         description: `Prod-smoke synthetic report ${new Date().toISOString()}`,
         gps_lat: 12.9716,
