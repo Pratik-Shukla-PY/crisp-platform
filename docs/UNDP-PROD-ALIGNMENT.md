@@ -105,6 +105,10 @@ by prod-smoke after being missed by initial deploy:
 | 6 | Dashboard map background blank | CSP img-src missing basemaps.cartocdn.com | Extend img-src | prod-smoke iter 5 |
 | 7 | Sync-badge tap does nothing | index.html had no onclick handler; addEventListener never added | Add onclick + role=button + tabindex | prod-smoke iter 6 |
 | 8 | Dashboard "Cached 17h ago" instead of fresh | JWT 30-min TTL; user's tab survived past expiry | Bump ACCESS_TOKEN_EXPIRE_MINUTES to 1440 (24h) | manual |
+| 9 | Dashboard 130k req/day flood | `fetchReports` called `_checkPendingDeletions` every cycle; `_hasActiveUploads` stuck true | 30 s decoupled timer for deletions + 60 s no-progress cap on active polling | manual + HAR analysis |
+| 10 | Normal refresh fails, hard-refresh works | SW `cacheFirst` does internal `fetch()` on miss; that fetch is governed by **`connect-src`**, not `script-src`/`style-src`/`font-src`; CSP omitted unpkg/cdnjs/gstatic from connect-src | Extend connect-src with SW-intercepted hosts; new prod-smoke tests (structural + behavioral) lock in invariant | prod-smoke iter 7 |
+| 11 | AR / ZH text rendered in inconsistent system fonts | Inter / Outfit don't ship CJK or full Arabic glyphs; browser fell through to whatever the device picked | Add Noto Sans Arabic + Noto Sans SC to Google Fonts URL + CSS cascade on PWA + dashboard | manual visual verify |
+| 12 | Geocoder returned Latin transliteration to AR/ZH callers | Mapbox `language=` + Nominatim `Accept-Language` hardcoded to "en"; w3w `language=` hardcoded "en" | Thread caller's locale through `geocode_text` → all 3 upstream APIs; pytest covers happy + bogus-fallback paths | backend pytest +2 |
 
 Every future iteration of the prod-smoke gate gets cheaper because the bug
 class shifts from "I have to manually click around in 3 browsers" to "the
