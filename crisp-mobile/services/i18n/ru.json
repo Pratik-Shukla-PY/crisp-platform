@@ -279,6 +279,13 @@
   "bldg_offline_hint": "Команда свяжет с GPS",
   "autosub_cancel_btn": "✕ Отменить авто-отправку",
   "autosub_click_anywhere": "Нажмите для отмены",
+  "submit_needs_content": "⚠️ Перед отправкой добавьте фото, аудио или текст.",
+  "unlink_done_toast": "Отвязано отчётов: {n}",
+  "unlink_failed_toast": "Сейчас не удаётся отвязать",
+  "link_done_toast": "К вашему аккаунту привязано отчётов: {n}",
+  "delete_failed_toast": "Ошибка удаления: {detail}",
+  "delete_error_toast": "Ошибка при удалении: {error}",
+  "queue_synced_toast": "Отчёт из очереди успешно синхронизирован!",
   "__meta__": {
     "locale": "ru",
     "name": "Русский",

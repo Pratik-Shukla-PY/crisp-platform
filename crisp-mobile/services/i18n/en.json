@@ -279,6 +279,13 @@
   "bldg_offline_hint": "The team will map this to GPS later",
   "autosub_cancel_btn": "✕ Cancel auto-submit",
   "autosub_click_anywhere": "Tap to cancel",
+  "submit_needs_content": "⚠️ Please add a photo, audio, or text before submitting.",
+  "unlink_done_toast": "{n} reports unlinked",
+  "unlink_failed_toast": "Could not unlink right now",
+  "link_done_toast": "{n} reports linked to your account",
+  "delete_failed_toast": "Delete failed: {detail}",
+  "delete_error_toast": "Delete error: {error}",
+  "queue_synced_toast": "Queued report synced successfully!",
   "__meta__": {
     "locale": "en",
     "name": "English",

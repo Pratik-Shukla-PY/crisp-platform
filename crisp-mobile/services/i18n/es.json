@@ -279,6 +279,13 @@
   "bldg_offline_hint": "El equipo lo asignará a GPS",
   "autosub_cancel_btn": "✕ Cancelar envío automático",
   "autosub_click_anywhere": "Toque para cancelar",
+  "submit_needs_content": "⚠️ Añade una foto, audio o texto antes de enviar.",
+  "unlink_done_toast": "{n} informes desvinculados",
+  "unlink_failed_toast": "No se pudo desvincular en este momento",
+  "link_done_toast": "{n} informes vinculados a tu cuenta",
+  "delete_failed_toast": "Error al eliminar: {detail}",
+  "delete_error_toast": "Error en la eliminación: {error}",
+  "queue_synced_toast": "Informe en cola sincronizado correctamente.",
   "__meta__": {
     "locale": "es",
     "name": "Español",
