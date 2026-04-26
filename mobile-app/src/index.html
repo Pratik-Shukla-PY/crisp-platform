@@ -1390,8 +1390,17 @@
         <div class="progress-bar-fill" id="progress-bar-fill"></div>
     </div>
 
-    <!-- Sync Status Badge (shows queued report count) -->
-    <div class="sync-badge" id="sync-badge" style="display:none;">
+    <!-- Sync Status Badge — Apr 2026: tap-to-retry wired.
+         Tapping triggers syncQueueManual() which (a) reconciles each queued
+         item against the server (clears items already accepted but where
+         the queue tracking lost the chunk-ack), (b) re-attempts upload of
+         genuinely-failed items. role=button + tabindex make it keyboard
+         accessible per UNDP usability requirement. -->
+    <div class="sync-badge" id="sync-badge" style="display:none;"
+         role="button" tabindex="0"
+         onclick="if (typeof syncQueueManual === 'function') syncQueueManual();"
+         onkeydown="if ((event.key === 'Enter' || event.key === ' ') && typeof syncQueueManual === 'function') { event.preventDefault(); syncQueueManual(); }"
+         title="Tap to retry sync">
         <i class="fa-solid fa-cloud-arrow-up"></i>
         <span id="sync-badge-text">0 queued</span>
     </div>

@@ -238,6 +238,13 @@ jobs:
         working-directory: e2e
         env:
           CRISP_PROD_BASE_URL: https://undp.crisplabs.tech
+          # Apr 2026 — demo-account creds for the end-to-end submission
+          # smoke. These secrets were configured in repo settings during
+          # UNDP submission week. Test skips silently if any are unset
+          # (so local dev / fork PRs don't fail on missing secrets).
+          CRISP_PROD_DEMO_EMAIL: ${{ secrets.CRISP_PROD_DEMO_EMAIL }}
+          CRISP_PROD_DEMO_PASSWORD: ${{ secrets.CRISP_PROD_DEMO_PASSWORD }}
+          CRISP_PROD_DEMO_TOTP_SECRET: ${{ secrets.CRISP_PROD_DEMO_TOTP_SECRET }}
         run: npm run check:prod
 
       - name: Upload Playwright report on failure

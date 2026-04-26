@@ -203,6 +203,90 @@ test.describe('Production — PWA', () => {
     }
   });
 
+  test('PWA wiring: critical UI elements + handlers attached', async ({ page }) => {
+    // Apr 2026 — catches the class of "code shipped but not wired up" bugs.
+    // Past offenders this test would have caught:
+    //   - sync-badge tap doing nothing because index.html had no onclick
+    //     and app.js never wired addEventListener to the badge
+    //   - building-select-box missing from the DOM after a refactor
+    //   - language switcher button hidden behind a CSS regression
+    //   - BlazeFace global named differently than callers expect
+    await page.goto(`${BASE}/mobile-app/src/`, { waitUntil: 'load' });
+    await page.waitForTimeout(2000);  // settle for SW + lazy globals
+
+    // Critical DOM elements must exist (display:none is OK — we only check
+    // they're in the DOM tree, not their visibility, since some are stage-
+    // gated and only show after navigation).
+    const requiredElements = [
+      '#sync-badge',                     // offline queue indicator
+      '#sync-badge-text',                // its text content
+      '#building-select-box',            // building footprint selector
+      '#building-map-placeholder',       // building map's "waiting for GPS" placeholder
+      '#stage-where',                    // capture flow: where (location)
+      '#stage-infra',                    // capture flow: infrastructure type
+      '#stage-crisis',                   // capture flow: crisis type
+      '#stage-extras',                   // capture flow: damage / debris / service
+      '#stage-photo',                    // capture flow: photo capture
+      '#stage-audio',                    // capture flow: voice description
+      '#stage-review',                   // capture flow: confirm + submit
+      '#lang-switcher',                  // language picker
+    ];
+    const missing = await page.evaluate((selectors) => {
+      return selectors.filter((s) => !document.querySelector(s));
+    }, requiredElements);
+    expect(missing, `Missing critical PWA elements: ${missing.join(', ')}`).toEqual([]);
+
+    // Sync-badge MUST have a tap handler — otherwise the user can't
+    // manually retry stuck queue items. Past bug: button was display-only.
+    const syncBadgeWired = await page.evaluate(() => {
+      const el = document.getElementById('sync-badge');
+      if (!el) return { reason: 'no element' };
+      // Either inline onclick or addEventListener-attached listener works.
+      // Inline is detectable; addEventListener isn't from outside, so we
+      // accept either onclick OR the role=button + tabindex pattern.
+      const inlineClick = el.getAttribute('onclick');
+      const role = el.getAttribute('role');
+      const tabindex = el.getAttribute('tabindex');
+      return {
+        inlineClick,
+        role,
+        tabindex,
+        wired: !!inlineClick || (role === 'button' && tabindex !== null),
+      };
+    });
+    expect(
+      syncBadgeWired.wired,
+      `sync-badge missing tap handler. Without this, users CAN'T manually retry stuck queue items. inline=${syncBadgeWired.inlineClick} role=${syncBadgeWired.role} tabindex=${syncBadgeWired.tabindex}`,
+    ).toBe(true);
+
+    // PIIBlur (BlazeFace wrapper) needs window-exposed API for app.js to call.
+    const piiBlurExposed = await page.evaluate(() => {
+      return typeof (window as any).PIIBlur !== 'undefined' ||
+             typeof (window as any).blurFaces !== 'undefined' ||
+             typeof (window as any).faceBlur !== 'undefined';
+    });
+    expect(piiBlurExposed, 'PII blur module not exposed on window').toBe(true);
+  });
+
+  test('PWA wiring: BuildingSelect API surface (UNDP must-have #6)', async ({ page }) => {
+    // The UNDP brief mandates "interactive map with building footprints".
+    // Past prod bugs we want to catch here:
+    //   - window.BuildingSelect undefined (whole module didn't load)
+    //   - BuildingSelect missing one of the 3 methods app.js calls
+    //   - Calling preCacheNearest crashes without GPS (regression)
+    await page.goto(`${BASE}/mobile-app/src/`, { waitUntil: 'load' });
+    await page.waitForTimeout(1000);
+
+    const api = await page.evaluate(() => {
+      const bs = (window as any).BuildingSelect;
+      if (!bs || typeof bs !== 'object') return { ok: false, why: 'window.BuildingSelect not defined' };
+      const required = ['ensureMap', 'getSelection', 'preCacheNearest'];
+      const missing = required.filter((m) => typeof bs[m] !== 'function');
+      return { ok: missing.length === 0, missing };
+    });
+    expect(api.ok, `BuildingSelect API broken: ${JSON.stringify(api)}`).toBe(true);
+  });
+
   test('upstream geo CDNs reachable from the browser (CSP allows fetch)', async ({ page }) => {
     await page.goto(`${BASE}/mobile-app/src/`, { waitUntil: 'load' });
     const results = await page.evaluate(async () => {
@@ -293,6 +377,120 @@ test.describe('Production — Backend via nginx', () => {
     expect(res.status(), 'public API endpoint should respond 200').toBe(200);
     const body = await res.json();
     expect(Array.isArray(body), 'sso/providers should return an array').toBe(true);
+  });
+
+  test('end-to-end submission: POST /reports/meta + GET /reports/ shows it', async ({ request }) => {
+    // Apr 2026 — the deepest smoke we have. Catches:
+    //   - PWA submission path broken at the BACKEND layer (auth, schema,
+    //     persistence, retrieval) regardless of whether the UI works.
+    //   - "Reports submitted but never appear on dashboard" symptom — IF
+    //     it's actually a backend bug rather than a PWA wiring issue.
+    //   - Backend deployment that boots but rejects the canonical capture
+    //     payload shape (e.g., a schema-validator regression on a required
+    //     enum value).
+    //
+    // Skip when the demo creds aren't injected (local dev — we don't want
+    // tests prompting for passwords). In CI / prod-gate these are set as
+    // workflow env vars.
+    const email = process.env.CRISP_PROD_DEMO_EMAIL;
+    const password = process.env.CRISP_PROD_DEMO_PASSWORD;
+    const totpSecret = process.env.CRISP_PROD_DEMO_TOTP_SECRET;
+    test.skip(
+      !email || !password || !totpSecret,
+      'demo creds not in env (CRISP_PROD_DEMO_{EMAIL,PASSWORD,TOTP_SECRET}) — skipping end-to-end submission smoke',
+    );
+
+    // Compute current TOTP code from the base32 secret — same algorithm
+    // pyotp uses on the backend.
+    const totp = await (async () => {
+      const crypto = await import('node:crypto');
+      const decoded = Buffer.from(
+        (totpSecret as string).toUpperCase().replace(/=+$/, '') + '='.repeat((8 - (totpSecret as string).length % 8) % 8),
+        'base64',
+      );
+      // Above is wrong base32; use a proper base32 decoder:
+      const ALPH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+      const clean = (totpSecret as string).toUpperCase().replace(/=+$/, '');
+      let bits = '', bytes: number[] = [];
+      for (const c of clean) {
+        const v = ALPH.indexOf(c);
+        if (v < 0) continue;
+        bits += v.toString(2).padStart(5, '0');
+      }
+      while (bits.length >= 8) {
+        bytes.push(parseInt(bits.slice(0, 8), 2));
+        bits = bits.slice(8);
+      }
+      const key = Buffer.from(bytes);
+      const counter = Buffer.alloc(8);
+      counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 1000 / 30)));
+      const hmac = crypto.createHmac('sha1', key).update(counter).digest();
+      const offset = hmac[hmac.length - 1] & 0x0f;
+      const code =
+        ((hmac[offset] & 0x7f) << 24 | (hmac[offset + 1] & 0xff) << 16 |
+         (hmac[offset + 2] & 0xff) << 8 | (hmac[offset + 3] & 0xff)) % 1000000;
+      return String(code).padStart(6, '0');
+    })();
+
+    // Step 1 — login
+    const loginRes = await request.post(`${BASE}/api/v1/auth/login`, {
+      data: { email, password, totp_code: totp },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(loginRes.status(), `login failed: ${loginRes.status()} ${await loginRes.text()}`).toBe(200);
+    const { access_token: token } = await loginRes.json();
+    expect(token, 'login response missing access_token').toBeTruthy();
+
+    // Step 2 — count current reports
+    const beforeRes = await request.get(`${BASE}/api/v1/reports/?limit=1`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const beforeCount = parseInt(beforeRes.headers()['x-total-count'] || '0', 10);
+
+    // Step 3 — submit a synthetic report. Schema mirrors what the PWA's
+    // app.js builds before POST /reports/meta. Required fields per the
+    // FastAPI Pydantic validator: device_hash, client_report_id,
+    // crisis_type, damage_classification (MINIMAL|NO_DAMAGE|PARTIAL|COMPLETE),
+    // infrastructure_type, etc.
+    const deviceHash = `prod-smoke-${Date.now()}`;
+    const clientReportId = `cr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const submitRes = await request.post(`${BASE}/api/v1/reports/meta`, {
+      data: {
+        device_hash: deviceHash,
+        client_report_id: clientReportId,
+        crisis_type: 'EARTHQUAKE',
+        damage_classification: 'PARTIAL',
+        infrastructure_type: 'RESIDENTIAL',
+        severity: 'MODERATE',
+        description: `Prod-smoke synthetic report ${new Date().toISOString()}`,
+        gps_lat: 12.9716,
+        gps_lng: 77.5946,
+        gps_accuracy_m: 10,
+        client_created_at: new Date().toISOString(),
+        client_blur_applied: true,
+      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    });
+    expect(
+      submitRes.status(),
+      `submission rejected: ${submitRes.status()} ${await submitRes.text()}`,
+    ).toBe(201);
+    const newReport = await submitRes.json();
+    expect(newReport.id, 'submission response missing report id').toBeTruthy();
+
+    // Step 4 — verify it shows up in the list
+    const afterRes = await request.get(`${BASE}/api/v1/reports/?limit=10`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const afterCount = parseInt(afterRes.headers()['x-total-count'] || '0', 10);
+    expect(
+      afterCount,
+      `report count didn't increment: before=${beforeCount} after=${afterCount}`,
+    ).toBe(beforeCount + 1);
+
+    const afterList = await afterRes.json();
+    const found = afterList.some((r: any) => r.id === newReport.id);
+    expect(found, `submitted report ${newReport.id} not in dashboard fetch`).toBe(true);
   });
 
   test('Content-Security-Policy header is present + complete', async ({ request }) => {
