@@ -9,14 +9,16 @@
  *   Everything else         → Network with cache fallback
  */
 
-// v8/v7/v7/v10 → v9/v8/v8/v11 — bump for the throttled-polling fix
-// (decouple pending-deletions check from per-poll cycle, cap active-
-// poll mode to 60 s of stalled progress). Forces SW reactivation
-// + cache wipe so users pick up the new app.js immediately.
-const APP_CACHE    = 'crisp-app-v9';
-const CDN_CACHE    = 'crisp-cdn-v8';
-const API_CACHE    = 'crisp-api-v8';
-const STATIC_CACHE = 'crisp-static-v11';
+// v9/v8/v8/v11 → v10/v9/v9/v12 — Apr 2026 round-2 CSP fix.
+// Bumping to evict any client that has stale HTML/CDN entries cached
+// from the brief window where connect-src was missing tile hosts +
+// the browser was heuristic-pinning the old CSP. Old SWs auto-replace
+// because skipWaiting() runs in install + nginx now sends Cache-Control:
+// no-cache on sw.js so the new code lands within seconds of deploy.
+const APP_CACHE    = 'crisp-app-v10';
+const CDN_CACHE    = 'crisp-cdn-v9';
+const API_CACHE    = 'crisp-api-v9';
+const STATIC_CACHE = 'crisp-static-v12';
 
 // App files that should always be fresh (network-first)
 const APP_FILES = ['index.html', 'login.html', 'app.js', 'styles.css', 'manifest.json'];
@@ -59,8 +61,17 @@ self.addEventListener('fetch', event => {
   //    bug. Standard SPA SW pattern: cache assets, but let the browser
   //    handle navigations natively.
   if (request.mode === 'navigate') {
+    // Apr 2026 — force-revalidate against the server (cache: 'no-cache').
+    // Without this, a navigation request can serve from the BROWSER HTTP
+    // cache when the cached entry is heuristically fresh — even though
+    // we want every navigation to pull the latest HTML so a deployed
+    // CSP / app.js update reaches users immediately. The fetch() respects
+    // the original request's mode/credentials by default, but we override
+    // the cache strategy to revalidate. Combined with nginx's
+    // Cache-Control: no-cache for HTML, this gives 304 Not Modified for
+    // unchanged content (fast) and 200 + new HTML/headers for changes.
     event.respondWith(
-      fetch(request).catch(() => caches.match(request) || new Response(
+      fetch(request, { cache: 'no-cache' }).catch(() => caches.match(request) || new Response(
         '<h1>CRISP — Offline</h1><p>You appear to be offline. Reconnect and reload.</p>',
         { headers: { 'Content-Type': 'text/html' }, status: 503 },
       )),

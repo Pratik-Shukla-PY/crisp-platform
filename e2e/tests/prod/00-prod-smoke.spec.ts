@@ -406,12 +406,20 @@ test.describe('Production — Dashboard', () => {
     });
     expect(swStatus.ok, `dashboard SW not active+controlling page: ${JSON.stringify(swStatus)}`).toBe(true);
 
-    // Now exercise the bug path. These are CDN_HOSTS the dashboard SW
-    // cacheFirst-intercepts (see web-dashboard/src/sw.js).
+    // Now exercise the bug path. Mix of:
+    //   - CDN_HOSTS the dashboard SW cacheFirst-intercepts (unpkg, cdnjs)
+    //   - Tile hosts that hit the SW catch-all (basemaps, arcgisonline)
+    // The tile hosts were the second-wave bug: they're allowed under img-src
+    // for browser-driven <img> loads on first visit, but once the SW claims
+    // the page, every fetch goes SW-mediated and connect-src governs. If
+    // *.basemaps.cartocdn.com or server.arcgisonline.com is missing from
+    // connect-src, this test catches it before users hit "normal refresh."
     const probes = await page.evaluate(async () => {
       const urls = [
         'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
         'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
+        'https://a.basemaps.cartocdn.com/dark_all/2/0/0.png',
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/2/0/0',
       ];
       return Promise.all(
         urls.map(async (url) => {
@@ -419,29 +427,40 @@ test.describe('Production — Dashboard', () => {
             // Important: don't pass cache:'no-store' — that's the BROWSER
             // cache, not the SW CacheStorage. We want the SW to handle this
             // request exactly like a real cacheFirst lookup.
-            const r = await fetch(url);
-            // Reading the body validates we got a real cross-origin response,
-            // not the synthetic 503 the SW catch handler manufactures.
-            const len = (await r.text()).length;
-            return { url, status: r.status, ok: r.ok, len };
+            // Use no-cors mode for tile hosts which don't ship CORS headers;
+            // we only care that SW didn't synth-503 it. status will be 0
+            // for opaque responses but that's fine — the catch-handler 503
+            // would manifest as a real error or status=503.
+            const r = await fetch(url, { mode: 'no-cors' });
+            return { url, status: r.status, type: r.type, ok: r.ok };
           } catch (e: any) {
-            return { url, status: 0, error: String(e?.message || e) };
+            return { url, status: 0, type: '', error: String(e?.message || e) };
           }
         }),
       );
     });
 
     for (const p of probes) {
+      // Two valid success modes:
+      //   - CORS-friendly hosts (unpkg, cdnjs): r.status=200, type=basic|cors.
+      //   - Non-CORS hosts (tile providers): r.status=0, type='opaque'.
+      //     Browsers expose opaque responses with status=0 by spec, but the
+      //     fetch DID succeed — the alternative would be the synthetic 503
+      //     from the SW catch handler, which would fail the no-cors fetch
+      //     with a network error (caught above as p.error).
+      const succeeded = p.status === 200 || (p.type === 'opaque' && !p.error);
       expect(
-        p.status,
-        `SW returned ${p.status} for ${p.url} — ` +
+        succeeded,
+        `SW-mediated fetch failed for ${p.url}\n` +
+          `  status=${p.status} type=${p.type} error=${(p as any).error || '(none)'}\n` +
           (p.status === 503
-            ? 'connect-src is missing this host, OR sw.js cacheFirst returns 503 from its catch handler. ' +
-              'See nginx.conf connect-src and web-dashboard/src/sw.js.'
-            : `unexpected status (error=${(p as any).error})`),
-      ).toBe(200);
-      expect(p.ok, `SW-routed fetch to ${p.url} did not return ok`).toBe(true);
-      expect(p.len, `SW-routed fetch to ${p.url} returned empty body`).toBeGreaterThan(0);
+            ? `  ↑ Synthetic 503 from SW catch handler. Likely connect-src is missing\n` +
+              `    this host. See nginx.conf and web-dashboard/src/sw.js:103.`
+            : (p as any).error
+              ? `  ↑ Network error from SW. Likely connect-src is missing this host\n` +
+                `    OR the upstream is unreachable from prod.`
+              : `  ↑ Unexpected status — investigate.`),
+      ).toBe(true);
     }
   });
 });
@@ -635,18 +654,35 @@ test.describe('Production — Backend via nginx', () => {
     // Hosts the dashboard + PWA service workers cacheFirst-intercept. If you
     // add a new CDN to either sw.js, add it here too — and also to
     // connect-src in nginx.conf, which is what this test guards.
+    //
+    // Apr 2026 (round 2) — extended to cover ALL cross-origin hosts the
+    // dashboard SW could intercept via its catch-all (web-dashboard/src/
+    // sw.js:103: `event.respondWith(fetch(request).catch(...))`). Any
+    // cross-origin GET that hits that branch goes through SW.fetch →
+    // governed by connect-src. So tile hosts (which are only in img-src
+    // for browser-driven loads) ALSO need connect-src once the SW is
+    // active. Previously we only covered the unpkg/cdnjs/gstatic trio
+    // and shipped a bug where map tiles failed normal-refresh.
     const swInterceptedHosts = [
       'https://unpkg.com',                  // Leaflet + clustering + heat
       'https://cdnjs.cloudflare.com',       // FontAwesome
       'https://fonts.gstatic.com',          // Google Fonts files
+      'https://*.tile.openstreetmap.org',   // OSM tiles (PWA + dashboard)
+      'https://*.basemaps.cartocdn.com',    // Dashboard dark map tiles
+      'https://server.arcgisonline.com',    // Dashboard satellite tiles
       // fonts.googleapis.com covered by *.googleapis.com wildcard.
     ];
 
     const connectSrc = directives['connect-src'] || [];
-    const missing = swInterceptedHosts.filter(
-      (h) => !connectSrc.includes(h) &&
-             !connectSrc.some((s) => s.startsWith('https://*.') && h.endsWith(s.slice(9))),
-    );
+    const missing = swInterceptedHosts.filter((h) => {
+      if (connectSrc.includes(h)) return false;
+      // Wildcard match: if the directive has https://*.foo.com, it covers
+      // any subdomain. h itself may also be a wildcard literal.
+      return !connectSrc.some((s) =>
+        s.startsWith('https://*.') &&
+        (h === s || h.endsWith(s.slice(9))),
+      );
+    });
 
     expect(
       missing,
@@ -657,5 +693,37 @@ test.describe('Production — Backend via nginx', () => {
         `Hard-refresh bypasses the SW so the symptom is "refresh fails, hard-refresh works."\n` +
         `actual connect-src:\n  ${connectSrc.join(' ')}`,
     ).toEqual([]);
+  });
+
+  test('HTML responses set Cache-Control: no-cache to prevent stale-CSP pinning', async ({ request }) => {
+    // Apr 2026 — companion regression guard. Even after a CSP fix is
+    // deployed, browsers can keep serving the OLD HTML from their HTTP
+    // cache (heuristic-cached because nginx didn't send any Cache-Control
+    // header). The page's CSP comes back from that cached response, so
+    // the browser keeps applying the OLD CSP. User symptom: "I deployed
+    // the fix, hard-refresh works, normal-refresh still fails."
+    //
+    // Fix: nginx adds `Cache-Control: no-cache, must-revalidate` for HTML
+    // (and sw.js). That forces every refresh to revalidate the body +
+    // headers with the server. Body still cached locally and reused on
+    // 304 — UX stays fast.
+    const probes = [
+      `${BASE}/mobile-app/src/index.html`,
+      `${BASE}/web-dashboard/src/index.html`,
+      `${BASE}/web-dashboard/src/login.html`,
+      `${BASE}/mobile-app/src/sw.js`,
+      `${BASE}/web-dashboard/src/sw.js`,
+    ];
+    for (const url of probes) {
+      const res = await request.get(url);
+      expect(res.status(), `${url} must return 200`).toBe(200);
+      const cc = (res.headers()['cache-control'] || '').toLowerCase();
+      expect(
+        cc,
+        `${url} must declare no-cache so a deployed CSP fix isn't pinned by browser HTTP cache.\n` +
+          `Without this, "normal refresh" can keep serving stale HTML with stale CSP for hours.\n` +
+          `actual: '${res.headers()['cache-control']}'`,
+      ).toContain('no-cache');
+    }
   });
 });
