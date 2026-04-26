@@ -2700,15 +2700,15 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     overflow: hidden;
     background: #0f172a;        /* tile-load fallback colour */
     position: relative;
-    /* Apr 2026 — Safari/iOS fix. Forces a compositor layer so the layout
-       engine sizes the container before Leaflet measures it. Without
-       this, the combo of `overflow: hidden` + flex parent + a stage that
-       just transitioned from display:none gave Safari a 0×0 reading at
-       L.map() init time → tiles never painted. Chrome's more aggressive
-       layout invalidation hid the bug there. translate3d is the canonical
-       "promote to GPU layer" idiom that forces a layout flush. */
-    transform: translate3d(0, 0, 0);
-    -webkit-transform: translate3d(0, 0, 0);
+    /* Apr 2026 — initially added `transform: translate3d(0,0,0)` here as a
+       GPU-layer trigger to force layout flush in iOS Safari. Backed it out:
+       parent transform creates a new stacking context AND a containing
+       block for absolute descendants, which interfered with Leaflet's
+       internal tile-pane positioning on iOS Safari (zoom controls
+       rendered but tiles stayed invisible — only the dark fallback
+       background painted). The double-rAF + invalidateSize() in
+       building-select.js is sufficient on its own; the transform was
+       belt-and-suspenders that caused a downstream bug. */
 }
 /* Placeholder shown while GPS is still resolving. Collapses automatically
    when `building-select.js::_tryInitMap` hides it post-tile-load. */

@@ -260,9 +260,27 @@
                 touchZoom: true,
                 dragging: true,
                 keyboard: false,
+                // Apr 2026 — `preferCanvas: true` makes Leaflet render
+                // overlays via a single <canvas> instead of one <svg>
+                // path per polygon. iOS Safari's SVG renderer occasionally
+                // failed to paint inside a transformed-then-detransformed
+                // ancestor (the symptom that caused the original blank-
+                // map bug). Canvas rendering bypasses the SVG path and
+                // is also faster at 100+ polygons.
+                preferCanvas: true,
             }).setView([lat, lng], 18);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
+                // Explicit subdomains — Leaflet's default `'abc'` works
+                // in Chrome but iOS Safari occasionally fails DNS
+                // prefetch on the rotated subdomain pattern. Listing
+                // them as an array forces the parsed form.
+                subdomains: ['a', 'b', 'c'],
+                // crossOrigin allows the canvas-rendered tiles to be
+                // exported (e.g., to a screenshot of the report).
+                // Required when `preferCanvas: true` because canvas
+                // tile-rendering taints the canvas without it.
+                crossOrigin: 'anonymous',
                 attribution: '© OpenStreetMap',
             }).addTo(_map);
 
@@ -335,9 +353,30 @@
                 // re-measuring its container. This is the canonical
                 // Safari/iOS workaround for "map shows but tiles are
                 // blank / clipped". Cheap — single ms — and idempotent.
-                if (_map) {
-                    try { _map.invalidateSize({ animate: false }); } catch (_) {}
-                }
+                if (!_map) return;
+                try { _map.invalidateSize({ animate: false }); } catch (_) {}
+
+                // Apr 2026 — second-chance invalidateSize 500 ms later.
+                // iOS Safari sometimes settles layout AFTER the rAF cycle
+                // (when fetching CSS from cache, or when the page's flex
+                // tree finishes during the same task as our init). The
+                // first invalidateSize might still see a half-painted
+                // state. The second one fires after Safari has painted at
+                // least once, which forces tile prefetch + repaint of
+                // the polygon overlay. Idempotent — Leaflet skips work
+                // when dimensions haven't changed.
+                setTimeout(() => {
+                    if (!_map) return;
+                    try {
+                        _map.invalidateSize({ animate: false });
+                        // Force a re-fetch of the current view's tiles.
+                        // setView with the same coords + zoom is a no-op
+                        // for position but does re-evaluate visible bounds
+                        // and triggers tile loads we may have missed.
+                        const c = _map.getCenter();
+                        _map.setView([c.lat, c.lng], _map.getZoom(), { animate: false });
+                    } catch (_) {}
+                }, 500);
             }).catch((e) => {
                 console.warn('[BuildingSelect] init failed:', e);
                 // Restore placeholder so the user sees something explain-able.
