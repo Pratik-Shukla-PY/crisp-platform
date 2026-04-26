@@ -784,6 +784,24 @@ def _run_ai_pipeline(report_id: str, media_type: str, file_url: str, db: Session
         db.commit()
 
 
+def _push_status_change_safely(report: Report) -> None:
+    """Fire-and-forget call into the Web Push service.
+
+    Wrapped in a try/except so a push-side failure (VAPID misconfig,
+    provider 5xx, anything else) NEVER breaks the analyst's status-
+    change request. The DB commit already happened; whatever happens
+    here is best-effort UX polish.
+    """
+    try:
+        from app.services.push import push_report_status_change
+        push_report_status_change(report)
+    except Exception:
+        logger.exception(
+            "[push] failed to enqueue notification for report %s; status change is fine",
+            getattr(report, "id", "?"),
+        )
+
+
 @router.patch("/{report_id}/false-alarm", response_model=ReportResponse)
 def mark_false_alarm(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
     """Mark a report as a FALSE_ALARM without deleting it."""
@@ -793,6 +811,7 @@ def mark_false_alarm(report_id: str, user=Depends(require_analyst), db: Session 
     report.status = ReportStatusEnum.FALSE_ALARM
     db.commit()
     db.refresh(report)
+    _push_status_change_safely(report)
     return report
 
 
@@ -813,6 +832,7 @@ def dispatch_team(report_id: str, user=Depends(require_analyst), db: Session = D
         _mark_report_verified_for_credibility(report, db)
     db.commit()
     db.refresh(report)
+    _push_status_change_safely(report)
     return report
 
 
@@ -828,6 +848,7 @@ def resolve_report(report_id: str, user=Depends(require_analyst), db: Session = 
         _mark_report_verified_for_credibility(report, db)
     db.commit()
     db.refresh(report)
+    _push_status_change_safely(report)
     return report
 
 

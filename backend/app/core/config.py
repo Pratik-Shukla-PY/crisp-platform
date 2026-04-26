@@ -50,6 +50,22 @@ class Settings(BaseSettings):
     # No default — boot refuses without an explicit DSN.
     DATABASE_URL: str
 
+    # ── Web Push (VAPID) ────────────────────────────────────────────────
+    # Apr 2026 — reporter-feedback channel. Generate via
+    # `scripts/generate_vapid.py` once per environment, then put the
+    # output in .env.production + AWS Secrets Manager. The PUBLIC key
+    # is safe to ship to clients; only the PRIVATE key is sensitive.
+    #
+    # All three fields default to empty so dev / CI without push wired
+    # up still boots — the push service short-circuits gracefully when
+    # any of them is empty (logs once at startup, returns immediately
+    # on send). To enable push end-to-end in prod, set all three.
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    # RFC 8292 §2 — push providers may use this to contact us about
+    # abuse / problematic traffic. Use a real on-call address.
+    VAPID_CONTACT_EMAIL: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

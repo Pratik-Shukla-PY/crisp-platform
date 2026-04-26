@@ -51,3 +51,10 @@ sentry-sdk[fastapi]>=2.0.0
 # admin provisioning. Both are tiny pure-Python deps.
 pyotp>=2.9.0
 qrcode[pil]>=7.4.2
+
+# Web Push for reporter feedback (Apr 2026 — UNDP scalability story:
+# closes the report→response loop without N reporters polling). pywebpush
+# implements RFC 8030 (Generic Event Delivery), RFC 8291 (Message
+# Encryption), and RFC 8292 (VAPID). Provider clouds (APNs / FCM /
+# Mozilla autopush) handle the actual fan-out — we just sign + POST.
+pywebpush>=2.0.0

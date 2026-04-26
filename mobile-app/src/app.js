@@ -73,8 +73,183 @@ if ('serviceWorker' in navigator) {
             .catch((err) => {
                 console.warn('SW registration failed:', err);
             });
+
+        // Apr 2026 — when the SW handles a notificationclick, it
+        // postMessage's `NOTIFICATION_OPEN` so we can route in-app
+        // without a hard reload.
+        if (navigator.serviceWorker.addEventListener) {
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                if (event.data && event.data.type === 'NOTIFICATION_OPEN') {
+                    const reportId = (event.data.data || {}).report_id;
+                    if (reportId) {
+                        // Best-effort routing — open the device-status section
+                        // if the user is on the home screen, otherwise leave
+                        // them where they are.
+                        try { window.scrollTo(0, 0); } catch (_) {}
+                    }
+                }
+            });
+        }
     });
 }
+
+// ── Web Push subscription flow (Apr 2026 — UNDP reporter feedback) ──────────
+//
+// Strategy:
+//   1. After a successful FIRST submit, prompt for notification permission.
+//      That's when motivation is highest ("you'll know when this gets a
+//      response") and we already have a stable device_hash.
+//   2. Permission granted → fetch /api/v1/push/vapid-public, then
+//      PushManager.subscribe(), then POST /api/v1/push/subscribe with the
+//      browser-issued endpoint + keys.
+//   3. Idempotent: every subsequent app load checks if we already have an
+//      active subscription and re-syncs the keys to the server (cheap)
+//      so a re-keyed browser doesn't drop off the notify list silently.
+//   4. iOS Safari: web push only works for PWAs added to home screen.
+//      We detect with `window.matchMedia('(display-mode: standalone)')`
+//      and skip the prompt for browser-tab Safari users (no UX value
+//      asking for a permission we can't actually use).
+const PUSH_LS_KEY_PROMPTED   = 'crisp_push_prompted_v1';
+const PUSH_LS_KEY_SUBSCRIBED = 'crisp_push_subscribed_v1';
+const PUSH_LS_KEY_DECLINED   = 'crisp_push_declined_v1';
+
+function _b64uToUint8Array(b64u) {
+    // VAPID public key arrives URL-safe-base64 without padding; the
+    // browser's PushManager expects a Uint8Array of the raw bytes.
+    const padding = '='.repeat((4 - (b64u.length % 4)) % 4);
+    const b64 = (b64u + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(b64);
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+}
+
+function _isPushSupported() {
+    return (
+        typeof window !== 'undefined' &&
+        'serviceWorker' in navigator &&
+        'PushManager' in window &&
+        'Notification' in window
+    );
+}
+
+function _isStandaloneInstalled() {
+    // True when the PWA is launched from home screen (iOS) or installed
+    // (Android Chrome). On iOS Safari in a regular tab, web push is
+    // not delivered — we skip the permission prompt to avoid burning it.
+    try {
+        if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+        if (window.navigator && window.navigator.standalone === true) return true;  // iOS legacy
+    } catch (_) {}
+    return false;
+}
+
+async function _fetchVapidPublicKey() {
+    try {
+        const res = await fetch(`${API_BASE}/push/vapid-public`, { cache: 'no-cache' });
+        if (!res.ok) return null;
+        const body = await res.json();
+        if (!body || !body.enabled || !body.key) return null;
+        return body.key;
+    } catch (_) {
+        return null;
+    }
+}
+
+async function _postSubscriptionToServer(subscription, deviceHash) {
+    const json = subscription.toJSON();
+    // The browser's toJSON() returns { endpoint, expirationTime, keys: { p256dh, auth } }.
+    // We pass through endpoint + keys; expirationTime is provider-specific
+    // (usually null for FCM) and not useful server-side.
+    const body = {
+        endpoint: json.endpoint,
+        keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+        device_hash: deviceHash || null,
+        locale: (state && state.lang) ? state.lang : null,
+    };
+    const headers = { 'Content-Type': 'application/json' };
+    // Attach JWT if the reporter is logged in — backend will tie the row to user_id.
+    try {
+        const token = localStorage.getItem('crisp_auth_token');
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+    } catch (_) {}
+    const res = await fetch(`${API_BASE}/push/subscribe`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+    });
+    return res.ok;
+}
+
+async function ensurePushSubscription({ promptIfNeeded = false } = {}) {
+    if (!_isPushSupported()) return { ok: false, reason: 'unsupported' };
+
+    // iOS Safari requires PWA installed to home screen — skip prompt
+    // (and don't even ask) when running as a regular tab.
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '');
+    if (isIOS && !_isStandaloneInstalled() && promptIfNeeded) {
+        return { ok: false, reason: 'ios_needs_install' };
+    }
+
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+
+    if (existing) {
+        // Re-sync keys to server cheaply (covers re-key + multi-device).
+        const deviceHash = localStorage.getItem('crisp_device_id_v2');
+        const ok = await _postSubscriptionToServer(existing, deviceHash);
+        if (ok) localStorage.setItem(PUSH_LS_KEY_SUBSCRIBED, '1');
+        return { ok, reason: ok ? 'resynced' : 'server_error' };
+    }
+
+    // No existing subscription — need permission + fresh subscribe.
+    if (Notification.permission === 'denied') {
+        return { ok: false, reason: 'denied' };
+    }
+    if (Notification.permission !== 'granted' && !promptIfNeeded) {
+        // Don't burn the prompt unless the caller asked for it.
+        return { ok: false, reason: 'no_permission' };
+    }
+
+    if (Notification.permission !== 'granted') {
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') {
+            try { localStorage.setItem(PUSH_LS_KEY_DECLINED, '1'); } catch (_) {}
+            return { ok: false, reason: 'declined' };
+        }
+    }
+
+    const vapidKey = await _fetchVapidPublicKey();
+    if (!vapidKey) return { ok: false, reason: 'vapid_unconfigured' };
+
+    let sub;
+    try {
+        sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: _b64uToUint8Array(vapidKey),
+        });
+    } catch (e) {
+        console.warn('PushManager.subscribe failed:', e);
+        return { ok: false, reason: 'subscribe_failed' };
+    }
+
+    const deviceHash = localStorage.getItem('crisp_device_id_v2');
+    const ok = await _postSubscriptionToServer(sub, deviceHash);
+    if (ok) {
+        try { localStorage.setItem(PUSH_LS_KEY_SUBSCRIBED, '1'); } catch (_) {}
+    }
+    return { ok, reason: ok ? 'subscribed' : 'server_error' };
+}
+
+// Best-effort sync on every load (no prompt, only re-syncs if already granted+subscribed).
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        ensurePushSubscription({ promptIfNeeded: false }).catch(() => {});
+    }, 4000);  // wait until past first paint + after the fast-load critical path
+});
+
+// Expose for testing + for the post-submit hook to call.
+window.ensurePushSubscription = ensurePushSubscription;
 
 // ── IndexedDB Offline Queue ──────────────────────────────────────────────────
 const IDB_NAME = 'crisp-offline';
@@ -5901,6 +6076,25 @@ async function submitReport() {
 
         // Fetch gamification badge (non-blocking)
         fetchBadge(deviceHash);
+
+        // Apr 2026 — UNDP reporter feedback channel. After the user has
+        // just submitted (high-motivation moment), ask once for
+        // notification permission so they get pinged when the report's
+        // status changes. Subsequent visits won't re-prompt — the helper
+        // remembers via localStorage. iOS Safari without home-screen
+        // install short-circuits inside the helper (no prompt burned).
+        try {
+            const alreadyPrompted = localStorage.getItem(PUSH_LS_KEY_PROMPTED);
+            const alreadyDeclined = localStorage.getItem(PUSH_LS_KEY_DECLINED);
+            if (!alreadyPrompted && !alreadyDeclined) {
+                localStorage.setItem(PUSH_LS_KEY_PROMPTED, '1');
+                // Defer 2s so the success animation isn't fighting the
+                // permission prompt for attention.
+                setTimeout(() => {
+                    ensurePushSubscription({ promptIfNeeded: true }).catch(() => {});
+                }, 2000);
+            }
+        } catch (_) { /* localStorage unavailable — silently skip */ }
 
         // ── Now try to send in background (non-blocking) ─────────────────────
         trySendQueuedReport(queueItem);

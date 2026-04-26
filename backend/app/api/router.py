@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules
+from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -25,3 +25,10 @@ api_router.include_router(analytics.router, prefix="/analytics", tags=["analytic
 # clients render it without a code change. Public read; ADMIN endpoint
 # for authoring can be added later.
 api_router.include_router(modules.router, prefix="/modules", tags=["modules"])
+# Apr 2026 — Web Push reporter feedback channel.
+# Public: GET /api/v1/push/vapid-public (the VAPID public key, safe to expose).
+# Public-ish: POST /api/v1/push/{subscribe,unsubscribe} — JWT optional,
+# attaches user_id when present; anonymous reporters subscribe via
+# device_hash only. The endpoint URL itself is the per-subscription
+# secret (provider-issued, hard to guess).
+api_router.include_router(push.router, prefix="/push", tags=["push"])

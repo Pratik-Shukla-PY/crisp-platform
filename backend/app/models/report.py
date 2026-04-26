@@ -697,3 +697,61 @@ def _remove_media_files_on_delete(mapper, connection, target: "Media") -> None: 
                 _media_cleanup_logger.warning(f"[MediaCleanup] failed to remove {name}: {e}")
     except OSError as e:
         _media_cleanup_logger.warning(f"[MediaCleanup] listdir failed: {e}")
+
+
+class PushSubscription(Base):
+    """Web Push subscription endpoint tied to a reporter identity.
+
+    Apr 2026 — UNDP scalability story. Each row holds the
+    browser-issued PushSubscription (endpoint URL + p256dh ECDH
+    public key + auth secret) plus the reporter identity it belongs
+    to. When a Report's status changes, the dispatch / resolve
+    handler enqueues a push to every subscription matching the
+    reporter (by `device_hash` and/or `user_id`).
+
+    Identity model:
+      • Anonymous reporters → `device_hash` set, `user_id` NULL.
+      • Logged-in reporters → `user_id` set; `device_hash` may also
+        be set so a logged-out re-install on the same device still
+        gets reached.
+      • At least one of the two MUST be set (CHECK constraint).
+
+    The `endpoint` URL is globally unique (browser → push provider
+    pair). It serves as the natural dedup key, so a re-subscribe
+    upserts onto the existing row rather than accumulating
+    duplicates. We also index it for the GC path (a 410 from the
+    provider invalidates one specific endpoint).
+
+    Failure tracking is light-touch: `failure_count` increments on
+    transient 5xx, `last_failure_at` records the timestamp. Hard
+    failures (404 / 410 from provider) trigger immediate row
+    deletion in the service module — no need to remember anything
+    about a subscription that no longer exists.
+    """
+    __tablename__ = "push_subscriptions"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    device_hash = Column(String(255), nullable=True, index=True)
+    # No FK on device_hash — Devices is keyed on its own UUID, and the
+    # client-side device_hash isn't always materialised there at sub
+    # time (some flows skip device-row creation until first report).
+    user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+    endpoint = Column(Text, unique=True, nullable=False, index=True)
+    p256dh_key = Column(String(255), nullable=False)
+    auth_key = Column(String(255), nullable=False)
+    user_agent = Column(String(500), nullable=True)
+    locale = Column(String(10), nullable=True)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    last_pushed_at = Column(DateTime, nullable=True)
+    last_failure_at = Column(DateTime, nullable=True)
+    failure_count = Column(Integer, default=0, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "device_hash IS NOT NULL OR user_id IS NOT NULL",
+            name="push_sub_has_identity",
+        ),
+    )

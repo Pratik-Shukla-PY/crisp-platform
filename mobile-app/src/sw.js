@@ -14,7 +14,8 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v61';  // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.
+const CACHE_NAME = 'crisp-v62';  // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
+// v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.
 // v60 (Apr 2026): Noto Sans Arabic + Noto Sans SC added to Google Fonts URL — proper CJK + Arabic glyph rendering for UNDP locales (was falling through to inconsistent device system fonts).
 // v59 (Apr 2026): Safari blank-tiles fix — back out parent transform, add canvas renderer + 500ms re-invalidate
 // v54 (Apr 2026 — login UI polish). Fixes raw i18n keys showing on
@@ -540,6 +541,93 @@ self.addEventListener('fetch', (event) => {
             });
         })
     );
+});
+
+// ── Web Push: reporter feedback when their report's status changes ──────────
+//
+// Apr 2026 — UNDP scalability story. The backend POSTs an encrypted
+// payload to APNs / FCM / Mozilla autopush when a Report's status flips
+// (RESPONDING / RESOLVED / FALSE_ALARM). The provider routes it to this
+// SW even when the PWA is closed; we render a native notification.
+//
+// Payload shape (set by backend/app/services/push.py::_build_payload):
+//   { title, body, tag, data: { report_id, status, url } }
+//
+// `tag` deduplicates: re-sending the same tag REPLACES the existing
+// notification rather than stacking — important if an analyst flips
+// a report's status multiple times in quick succession.
+self.addEventListener('push', (event) => {
+    let payload = {};
+    try {
+        payload = event.data ? event.data.json() : {};
+    } catch (_) {
+        // Non-JSON payload (e.g. provider keep-alive) — fall through
+        // with a generic title rather than silently dropping. Better UX
+        // than a missed notification.
+        payload = { title: 'CRISP', body: 'You have a new update.' };
+    }
+    const title = payload.title || 'CRISP';
+    const opts = {
+        body: payload.body || '',
+        icon: '/mobile-app/src/assets/icon-192.png',
+        badge: '/mobile-app/src/assets/icon-96.png',
+        tag: payload.tag || 'crisp-update',
+        // `renotify: true` makes the device buzz/sound even when a
+        // notification with the same tag is already on-screen — desired
+        // for a crisis-report status change because the user IS waiting
+        // for that signal.
+        renotify: true,
+        data: payload.data || {},
+        // Two action buttons surface on Android; iOS ignores them but
+        // still renders the notification body. "View" is the default;
+        // "Dismiss" is a no-op tap that the user might prefer over
+        // swiping the OS notification away.
+        actions: [
+            { action: 'view',    title: 'View report' },
+            { action: 'dismiss', title: 'Dismiss' },
+        ],
+    };
+    event.waitUntil(self.registration.showNotification(title, opts));
+});
+
+// ── notificationclick: focus existing tab or open a new one ─────────────────
+//
+// When the user taps the notification, we want to land them on the PWA
+// at the report's deep link. Behavior:
+//   1. If a CRISP tab is already open, focus it (and navigate if URL differs).
+//   2. Otherwise, open a new window/tab to the deep link.
+// `event.action` is "view" / "dismiss" / "" (no action button tapped, just the body).
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    if (event.action === 'dismiss') return;
+
+    const data = event.notification.data || {};
+    const targetUrl = data.url || '/mobile-app/src/';
+
+    event.waitUntil((async () => {
+        const allClients = await self.clients.matchAll({
+            type: 'window',
+            includeUncontrolled: true,
+        });
+        // Prefer same-origin CRISP tabs.
+        for (const c of allClients) {
+            try {
+                const u = new URL(c.url);
+                if (u.pathname.startsWith('/mobile-app/')) {
+                    await c.focus();
+                    // Use postMessage so app.js can route to the report
+                    // without a hard navigation. The handler is wired in
+                    // app.js (search for 'NOTIFICATION_OPEN').
+                    c.postMessage({ type: 'NOTIFICATION_OPEN', data });
+                    return;
+                }
+            } catch (_) { /* malformed URL — skip */ }
+        }
+        // No matching tab — open a new one.
+        if (self.clients.openWindow) {
+            await self.clients.openWindow(targetUrl);
+        }
+    })());
 });
 
 // ── Background Sync: retry queued reports when online ────────────────────────

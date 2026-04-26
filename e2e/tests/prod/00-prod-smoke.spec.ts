@@ -483,6 +483,45 @@ test.describe('Production — Backend via nginx', () => {
     expect(Array.isArray(body), 'sso/providers should return an array').toBe(true);
   });
 
+  test('GET /api/v1/push/vapid-public returns the expected shape', async ({ request }) => {
+    // Apr 2026 — Web Push reporter-feedback channel. The PWA fetches
+    // this key once at startup and uses it as `applicationServerKey`
+    // for PushManager.subscribe(). Two valid prod states:
+    //   - VAPID configured: { enabled: true, key: "<base64url string>" }
+    //   - VAPID unset:      { enabled: false, key: "" }
+    // Either is acceptable here — what we're guarding against is the
+    // endpoint 404'ing or returning a malformed body, which would
+    // break the PWA's permission flow silently.
+    const res = await request.get(`${BASE}/api/v1/push/vapid-public`);
+    expect(res.status(), 'push/vapid-public must respond 200').toBe(200);
+    const body = await res.json();
+    expect(typeof body.enabled, 'response.enabled must be boolean').toBe('boolean');
+    expect(typeof body.key, 'response.key must be string').toBe('string');
+    if (body.enabled) {
+      // When enabled, the key MUST be a base64url string of at least
+      // ~80 chars (raw P-256 public key is 65 bytes → ~87 chars b64u).
+      expect(body.key.length, 'configured VAPID key looks too short').toBeGreaterThan(40);
+      expect(body.key, 'VAPID key must be URL-base64 (no + / =)').not.toMatch(/[+/=]/);
+    } else {
+      expect(body.key, 'when not enabled, key must be empty string').toBe('');
+    }
+  });
+
+  test('POST /api/v1/push/subscribe rejects missing identity (400)', async ({ request }) => {
+    // Identity guard: device_hash AND user_id both empty must 400.
+    const res = await request.post(`${BASE}/api/v1/push/subscribe`, {
+      data: {
+        endpoint: 'https://fcm.googleapis.com/wp/test/prod-smoke-no-id',
+        keys: { p256dh: 'x'.repeat(80), auth: 'y'.repeat(20) },
+        device_hash: null,
+      },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    // 400 (no_identity) OR 422 (pydantic) both acceptable — both mean
+    // the endpoint refused the malformed body, which is the contract.
+    expect([400, 422]).toContain(res.status());
+  });
+
   test('end-to-end submission: POST /reports/meta + GET /reports/ shows it', async ({ request }) => {
     // Apr 2026 — the deepest smoke we have. Catches:
     //   - PWA submission path broken at the BACKEND layer (auth, schema,
