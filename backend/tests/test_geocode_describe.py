@@ -9,18 +9,23 @@ stable payload. That lets us exercise the endpoint-level behaviour
 import pytest
 
 
-async def _fake_geocode(text, country_hint="India"):
-    """Return a canned result as if Mapbox matched."""
+async def _fake_geocode(text, country_hint="India", language="en"):
+    """Return a canned result as if Mapbox matched.
+
+    Apr 2026 — `language` accepted (UNDP §3.1f.5). Echoed in the
+    location_name so tests can verify the endpoint passed it through.
+    """
+    suffix = f" [{language}]" if language and language != "en" else ""
     return {
         "latitude": 12.9352,
         "longitude": 77.6245,
-        "location_name": "Koramangala, Bengaluru, Karnataka",
+        "location_name": f"Koramangala, Bengaluru, Karnataka{suffix}",
         "confidence": "high",
         "source": "mapbox",
     }
 
 
-async def _fake_empty_geocode(text, country_hint="India"):
+async def _fake_empty_geocode(text, country_hint="India", language="en"):
     return {
         "latitude": None, "longitude": None,
         "location_name": "", "confidence": "low", "source": "text_geocoding",
@@ -78,3 +83,58 @@ class TestGeocodeDescribe:
         })
         assert res.status_code == 200
         assert res.json()["w3w"] is None
+
+    def test_language_threaded_to_geocoder(self, client, monkeypatch):
+        """UNDP §3.1f.5 — the `language` field on the request body must
+        flow into geocode_text() so Mapbox/Nominatim return place names
+        in the requester's locale (Arabic place names in Arabic, not
+        Latin transliteration)."""
+        import messaging_bot.sms.geocoder as geocoder_mod
+        captured = {}
+
+        async def _capture(text, country_hint="India", language="en"):
+            captured["text"] = text
+            captured["country_hint"] = country_hint
+            captured["language"] = language
+            return await _fake_geocode(text, country_hint, language)
+
+        monkeypatch.setattr(geocoder_mod, "geocode_text", _capture)
+
+        for lang in ("ar", "fr", "es", "ru", "zh"):
+            captured.clear()
+            res = client.post("/api/v1/reports/geocode/describe", json={
+                "text": "near the big mosque in Koramangala 5th block",
+                "language": lang,
+            })
+            assert res.status_code == 200, res.text
+            assert captured["language"] == lang, (
+                f"language={lang} expected to thread to geocoder; "
+                f"got {captured.get('language')!r}"
+            )
+            assert f"[{lang}]" in res.json()["location_name"], (
+                f"location_name should reflect locale={lang}"
+            )
+
+    def test_unknown_language_falls_back_to_en(self, client, monkeypatch):
+        """UNDP §3.1f.5 — bogus or unsupported `language` values
+        fall back to "en" rather than breaking the geocoder."""
+        import messaging_bot.sms.geocoder as geocoder_mod
+        captured = {}
+
+        async def _capture(text, country_hint="India", language="en"):
+            captured["language"] = language
+            return await _fake_geocode(text, country_hint, language)
+
+        monkeypatch.setattr(geocoder_mod, "geocode_text", _capture)
+
+        for bogus in ("xx", "zz-ZZ", "klingon", "", None, "en-US-x-icu"):
+            captured.clear()
+            res = client.post("/api/v1/reports/geocode/describe", json={
+                "text": "somewhere",
+                "language": bogus,
+            })
+            assert res.status_code == 200
+            assert captured["language"] in ("en", "fr", "es", "ar", "ru", "zh"), (
+                f"normalised language must be in supported set; "
+                f"input={bogus!r} → got {captured.get('language')!r}"
+            )

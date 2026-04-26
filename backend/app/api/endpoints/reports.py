@@ -1542,6 +1542,7 @@ async def geocode_from_description(payload: dict):
         {
             "text":          "near the big mosque in Koramangala 5th block",
             "country_hint":  "India"  (optional, helps scope fuzzy matches),
+            "language":      "ar"     (optional, ISO 639-1 — UNDP §3.1f.5),
             "include_w3w":   true      (optional)
         }
 
@@ -1561,7 +1562,7 @@ async def geocode_from_description(payload: dict):
     # directory name is reachable as a valid Python package.
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-    from messaging_bot.sms.geocoder import geocode_text
+    from messaging_bot.sms.geocoder import geocode_text, _normalise_language
 
     text = str(payload.get("text", "")).strip()
     if not text or len(text) < 3:
@@ -1571,8 +1572,12 @@ async def geocode_from_description(payload: dict):
                     "message": "Provide ≥ 3 characters of location description."},
         )
     country_hint = str(payload.get("country_hint", "India")).strip() or "India"
+    # Apr 2026 — UNDP §3.1f.5. Caller passes the active UI locale so the
+    # geocoder echoes place names in the same script (e.g. Arabic place
+    # names in Arabic instead of Latin transliteration).
+    language = _normalise_language(str(payload.get("language", "en")))
 
-    result = await geocode_text(text, country_hint=country_hint)
+    result = await geocode_text(text, country_hint=country_hint, language=language)
 
     # Optional what3words enrichment. Only resolves if the caller opted in
     # AND the operator supplied W3W_API_KEY — otherwise the field is null
@@ -1588,7 +1593,7 @@ async def geocode_from_description(payload: dict):
                         params={
                             "coordinates": f"{result['latitude']},{result['longitude']}",
                             "key": w3w_key,
-                            "language": "en",
+                            "language": language,
                         },
                     )
                     if w3w_res.status_code == 200:

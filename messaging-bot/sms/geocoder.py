@@ -96,8 +96,16 @@ Rules: Return ONLY the corrected place name (city/village, district, state). If 
     return ""
 
 
-async def _geocode_mapbox(query: str, country_hint: str = "IN") -> dict:
-    """Geocode using Mapbox — excellent fuzzy matching for Indian locations."""
+async def _geocode_mapbox(query: str, country_hint: str = "IN", language: str = "en") -> dict:
+    """Geocode using Mapbox — excellent fuzzy matching for Indian locations.
+
+    Apr 2026 — language parameter (UNDP §3.1f.5). Mapbox `language` accepts
+    a 2-letter ISO 639-1 code. Passing the requester's locale ensures
+    `place_name` and the `text` field per `context` entry come back in
+    that language. Without this, an Arabic or Chinese requester would
+    get Latinised place names, which looks broken on a UI rendered in
+    AR / ZH.
+    """
     if not MAPBOX_TOKEN:
         return {}
 
@@ -111,7 +119,7 @@ async def _geocode_mapbox(query: str, country_hint: str = "IN") -> dict:
                     "country": country_code,
                     "limit": 1,
                     "types": "place,locality,neighborhood,address,district,region",
-                    "language": "en",
+                    "language": _normalise_language(language),
                 },
             )
             if r.status_code == 200:
@@ -147,15 +155,21 @@ async def _geocode_mapbox(query: str, country_hint: str = "IN") -> dict:
     return {}
 
 
-async def _geocode_nominatim(query: str, country_hint: str = "India") -> dict:
-    """Geocode using Nominatim (free, no API key required)."""
+async def _geocode_nominatim(query: str, country_hint: str = "India", language: str = "en") -> dict:
+    """Geocode using Nominatim (free, no API key required).
+
+    Apr 2026 — language parameter (UNDP §3.1f.5). Nominatim honours the
+    Accept-Language header for `display_name` and `address.*` fields.
+    Passing the requester's locale ensures the place name returned to
+    an Arabic/Chinese/etc. user is in their script, not transliterated.
+    """
     search_query = f"{query}, {country_hint}" if country_hint else query
     try:
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.get(
                 "https://nominatim.openstreetmap.org/search",
                 params={"q": search_query, "format": "json", "limit": 1, "addressdetails": 1},
-                headers={"User-Agent": "CRISP-Platform/1.0", "Accept-Language": "en"},
+                headers={"User-Agent": "CRISP-Platform/1.0", "Accept-Language": _normalise_language(language)},
             )
             if r.status_code == 200:
                 results = r.json()
@@ -199,7 +213,21 @@ async def _geocode_nominatim(query: str, country_hint: str = "India") -> dict:
     return {}
 
 
-async def geocode_text(location_text: str, country_hint: str = "India") -> dict:
+# Apr 2026 — UNDP §3.1f.5. Maps any input locale string to a 2-letter
+# ISO 639-1 code that BOTH Mapbox and Nominatim accept. Falls back to
+# "en" for anything we don't recognise so we never break geocoding when
+# a caller passes a weird value (e.g. "en-US-x-icu").
+_SUPPORTED_LANGUAGE_CODES = {"en", "fr", "es", "ar", "ru", "zh"}
+
+
+def _normalise_language(language: str) -> str:
+    if not language:
+        return "en"
+    code = language.strip().lower().split("-")[0].split("_")[0]
+    return code if code in _SUPPORTED_LANGUAGE_CODES else "en"
+
+
+async def geocode_text(location_text: str, country_hint: str = "India", language: str = "en") -> dict:
     """
     Geocode a text location description to lat/lng using multi-layer approach:
 
@@ -207,6 +235,11 @@ async def geocode_text(location_text: str, country_hint: str = "India") -> dict:
     2. If fail → Claude AI fixes place name → try Mapbox
     3. If fail → try Nominatim with AI-fixed name
     4. If fail → try Nominatim with cleaned text
+
+    Apr 2026 — `language` (UNDP §3.1f.5). Threads down to Mapbox's
+    `language=` query param and Nominatim's `Accept-Language` header
+    so the returned place names match the requester's UI locale.
+    Default "en" matches existing behaviour.
 
     Returns:
         {
@@ -223,7 +256,7 @@ async def geocode_text(location_text: str, country_hint: str = "India") -> dict:
         return empty
 
     cleaned = _clean_query(location_text)
-    logger.info(f"Geocoding: raw='{location_text[:80]}' cleaned='{cleaned[:60]}'")
+    logger.info(f"Geocoding: raw='{location_text[:80]}' cleaned='{cleaned[:60]}' lang='{language}'")
 
     best = None  # Track best result so far
 
@@ -232,14 +265,14 @@ async def geocode_text(location_text: str, country_hint: str = "India") -> dict:
     ai_place = await _ai_extract_location(location_text)
     if ai_place:
         # Try AI-fixed name on Mapbox (best combo)
-        result = await _geocode_mapbox(ai_place)
+        result = await _geocode_mapbox(ai_place, language=language)
         if result.get("latitude"):
             if result.get("confidence") in ("high", "medium"):
                 return result  # High confidence — use it
             best = result
 
         # Try AI-fixed name on Nominatim
-        result = await _geocode_nominatim(ai_place, country_hint)
+        result = await _geocode_nominatim(ai_place, country_hint, language=language)
         if result.get("latitude"):
             if result.get("confidence") in ("high", "medium"):
                 return result
@@ -247,7 +280,7 @@ async def geocode_text(location_text: str, country_hint: str = "India") -> dict:
                 best = result
 
     # ── Layer 2: Try Mapbox with cleaned text ────────────────────────────────
-    result = await _geocode_mapbox(cleaned, country_hint)
+    result = await _geocode_mapbox(cleaned, country_hint, language=language)
     if result.get("latitude"):
         if result.get("confidence") in ("high", "medium"):
             return result
@@ -255,7 +288,7 @@ async def geocode_text(location_text: str, country_hint: str = "India") -> dict:
             best = result
 
     # ── Layer 3: Nominatim with cleaned text ─────────────────────────────────
-    result = await _geocode_nominatim(cleaned, country_hint)
+    result = await _geocode_nominatim(cleaned, country_hint, language=language)
     if result.get("latitude"):
         if result.get("confidence") in ("high", "medium"):
             return result
@@ -264,7 +297,7 @@ async def geocode_text(location_text: str, country_hint: str = "India") -> dict:
 
     # ── Layer 4: Nominatim with raw text (last resort) ───────────────────────
     if cleaned != location_text.strip():
-        result = await _geocode_nominatim(location_text.strip(), country_hint)
+        result = await _geocode_nominatim(location_text.strip(), country_hint, language=language)
         if result.get("latitude"):
             if not best:
                 best = result
