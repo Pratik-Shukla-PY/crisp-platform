@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v57';  // v57 (Apr 2026): variant cap by tier (VERY_SLOW → SMALL only, SLOW → SMALL+MEDIUM); sync-badge tap wired
+const CACHE_NAME = 'crisp-v58';  // v58 (Apr 2026): Safari fix for building selector — double-rAF defer + invalidateSize + GPU-layer CSS
 // v54 (Apr 2026 — login UI polish). Fixes raw i18n keys showing on
 // stage-login when the JSON pack hadn't re-fetched yet (all login_*
 // keys now live in the inline I18N.en dict so they render immediately

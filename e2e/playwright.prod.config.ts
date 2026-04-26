@@ -32,11 +32,24 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off',
-    // Mobile viewport matches the PWA's primary user agent.
-    ...devices['Pixel 7'],
     // Geolocation pre-granted so capture flow tests don't hang on permission
     // prompts. Fixed coords (Bengaluru) keep results deterministic.
     geolocation: { latitude: 12.9716, longitude: 77.5946 },
     permissions: ['geolocation'],
   },
+  // Apr 2026 — run the full suite against BOTH Chromium and WebKit
+  // (Safari's engine) on a mobile viewport. Caught the building-select
+  // 0×0-container regression that Chromium silently tolerated but Safari
+  // rendered as a blank map. Adds ~30s to total runtime; cheaper than a
+  // user-reported "doesn't work in Safari" bug.
+  projects: [
+    {
+      name: 'mobile-chromium',
+      use: { ...devices['Pixel 7'] },
+    },
+    {
+      name: 'mobile-safari',
+      use: { ...devices['iPhone 14'] },
+    },
+  ],
 });

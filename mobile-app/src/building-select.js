@@ -247,13 +247,18 @@
             // arrow keys would fight. touchZoom + dragging stay on so
             // users can still interact; `tap` stays on for mobile hit
             // detection on building polygons.
+            // Apr 2026 — `tap: true` removed. Deprecated in Leaflet 1.7+,
+            // accepted-but-ignored in 1.9.4 we ship; on iOS Safari the
+            // legacy tap-handler path used to fight with native click
+            // synthesis and produced double-tap-zoom regressions on
+            // building polygons. Modern Leaflet auto-detects touch and
+            // wires native click/touchstart correctly without it.
             _map = L.map(container, {
                 zoomControl: true,
                 attributionControl: false,
                 scrollWheelZoom: false,
                 touchZoom: true,
                 dragging: true,
-                tap: true,
                 keyboard: false,
             }).setView([lat, lng], 18);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -297,6 +302,20 @@
     // Try to initialise the Leaflet map + placeholder swap. Idempotent:
     // safe to call multiple times; `ensureMap` itself is idempotent, and
     // we clear the placeholder only after a successful tile fetch.
+    //
+    // Apr 2026 — Safari fix: defer the init with double-rAF instead of
+    // setTimeout(0). The stage transition from display:none → block
+    // queues a style change that hasn't flushed by the next macrotask
+    // tick, so setTimeout(0) saw container.getBoundingClientRect() ===
+    // 0×0 → Leaflet cached that as the map size → tiles never paint in
+    // Safari. Chrome was more forgiving because of its more aggressive
+    // layout invalidation. Double-rAF guarantees the browser has run
+    // a full paint between the style change and our init call.
+    //
+    // Also: ensureMap re-checks _map idempotency, so calling it on EVERY
+    // stage-entered (not just the first time) gives us a chance to
+    // invalidateSize() and recover from a half-rendered map that the
+    // user briefly switched away from.
     function _tryInitMap() {
         const box = document.getElementById('building-select-box');
         if (!box) return;
@@ -305,13 +324,26 @@
             console.log('[BuildingSelect] waiting for GPS');
             return;
         }
-        const placeholder = document.getElementById('building-map-placeholder');
-        if (placeholder) placeholder.style.display = 'none';
-        ensureMap(loc.lat, loc.lng).catch((e) => {
-            console.warn('[BuildingSelect] init failed:', e);
-            // Restore placeholder so the user sees something explain-able.
-            if (placeholder) placeholder.style.display = '';
-        });
+        // Two animation frames: first to ensure the style change has
+        // been applied, second to ensure layout has been recomputed.
+        // Without this, Safari mobile saw 0×0 container and never painted.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            const placeholder = document.getElementById('building-map-placeholder');
+            if (placeholder) placeholder.style.display = 'none';
+            ensureMap(loc.lat, loc.lng).then(() => {
+                // After init (or on a subsequent show), kick Leaflet into
+                // re-measuring its container. This is the canonical
+                // Safari/iOS workaround for "map shows but tiles are
+                // blank / clipped". Cheap — single ms — and idempotent.
+                if (_map) {
+                    try { _map.invalidateSize({ animate: false }); } catch (_) {}
+                }
+            }).catch((e) => {
+                console.warn('[BuildingSelect] init failed:', e);
+                // Restore placeholder so the user sees something explain-able.
+                if (placeholder) placeholder.style.display = '';
+            });
+        }));
     }
 
     // Apr 2026 UI v2.1 — wire up the flat <section>. The box is always

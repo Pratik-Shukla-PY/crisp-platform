@@ -232,7 +232,7 @@ jobs:
           npm ci --prefer-offline --no-audit --no-fund
           # Chromium-only; we don't need Firefox/Webkit for prod-smoke.
           # --with-deps installs the OS-level shared libs Playwright needs.
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
 
       - name: Run prod-smoke against undp.crisplabs.tech
         working-directory: e2e
@@ -317,7 +317,7 @@ jobs:
           # Need to re-install Playwright since this is a fresh job.
           # Cached from the earlier setup-node step on the same SHA.
           npm ci --prefer-offline --no-audit --no-fund
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
           # Smoke against the now-rolled-back prod.
           npm run check:prod || echo "::error::Rollback smoke also failed — manual intervention required"
 
