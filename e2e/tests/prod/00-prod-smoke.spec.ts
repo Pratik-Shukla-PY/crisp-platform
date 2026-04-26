@@ -359,6 +359,91 @@ test.describe('Production — Dashboard', () => {
     }
     expect(failures, `One or more dashboard scripts failed to load:\n  ${failures.join('\n  ')}`).toEqual([]);
   });
+
+  test('SW-controlled fetch for CDN assets returns 200, not 503 (refresh symptom)', async ({ page }) => {
+    // Apr 2026 — behavioral guard for "normal-refresh fails / hard-refresh works."
+    // The structural CSP test above asserts connect-src has the expected hosts.
+    // This test goes one layer deeper: registers the dashboard SW, waits
+    // for it to claim the page, then performs a fetch from page context
+    // to a host the SW cacheFirst-intercepts. That request flow is exactly
+    // what broke in prod: page → SW.fetch event → cacheFirst miss →
+    // fetch(req) under connect-src governance. If connect-src omits the
+    // host, the SW catch handler returns a synthetic Response('Offline',
+    // { status: 503 }).
+    //
+    // We navigate to login.html (auth-free) and register the SW manually,
+    // rather than relying on index.html's automatic registration — index.html
+    // hard-redirects to login.html on its first 401, which destroys the
+    // execution context before the SW probe can run.
+    await page.goto(`${BASE}/web-dashboard/src/login.html`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20_000,
+    });
+
+    const swStatus = await page.evaluate(async () => {
+      if (!('serviceWorker' in navigator)) return { ok: false, why: 'no SW support' };
+      try {
+        // Manually register the dashboard SW. Same registration call the
+        // page itself uses when running index.html's bottom <script> block.
+        await navigator.serviceWorker.register('/web-dashboard/src/sw.js', {
+          scope: '/web-dashboard/src/',
+        });
+        const reg = await navigator.serviceWorker.ready;
+        // Wait for clients.claim() to take effect.
+        let tries = 0;
+        while (!navigator.serviceWorker.controller && tries < 50) {
+          await new Promise((r) => setTimeout(r, 100));
+          tries += 1;
+        }
+        return {
+          ok: !!reg.active && !!navigator.serviceWorker.controller,
+          activeState: reg.active?.state ?? null,
+          controlled: !!navigator.serviceWorker.controller,
+        };
+      } catch (e: any) {
+        return { ok: false, why: String(e?.message || e) };
+      }
+    });
+    expect(swStatus.ok, `dashboard SW not active+controlling page: ${JSON.stringify(swStatus)}`).toBe(true);
+
+    // Now exercise the bug path. These are CDN_HOSTS the dashboard SW
+    // cacheFirst-intercepts (see web-dashboard/src/sw.js).
+    const probes = await page.evaluate(async () => {
+      const urls = [
+        'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+        'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
+      ];
+      return Promise.all(
+        urls.map(async (url) => {
+          try {
+            // Important: don't pass cache:'no-store' — that's the BROWSER
+            // cache, not the SW CacheStorage. We want the SW to handle this
+            // request exactly like a real cacheFirst lookup.
+            const r = await fetch(url);
+            // Reading the body validates we got a real cross-origin response,
+            // not the synthetic 503 the SW catch handler manufactures.
+            const len = (await r.text()).length;
+            return { url, status: r.status, ok: r.ok, len };
+          } catch (e: any) {
+            return { url, status: 0, error: String(e?.message || e) };
+          }
+        }),
+      );
+    });
+
+    for (const p of probes) {
+      expect(
+        p.status,
+        `SW returned ${p.status} for ${p.url} — ` +
+          (p.status === 503
+            ? 'connect-src is missing this host, OR sw.js cacheFirst returns 503 from its catch handler. ' +
+              'See nginx.conf connect-src and web-dashboard/src/sw.js.'
+            : `unexpected status (error=${(p as any).error})`),
+      ).toBe(200);
+      expect(p.ok, `SW-routed fetch to ${p.url} did not return ok`).toBe(true);
+      expect(p.len, `SW-routed fetch to ${p.url} returned empty body`).toBeGreaterThan(0);
+    }
+  });
 });
 
 test.describe('Production — Backend via nginx', () => {
