@@ -521,6 +521,16 @@ class SatelliteVerification(Base):
     satellite_acquisition_date_alt = Column(String(50))
     satellite_resolution_m_alt   = Column(Float)
 
+    # Apr 2026 — multi-provider fan-out. JSON list of every successful
+    # provider's saved-image URL + metadata. Lets the dashboard render
+    # a 2×2 grid showing all 4 sources side-by-side. Format:
+    #   [{"url": "/static/...", "source": "...",
+    #     "acquisition_date": "...", "cloud_cover_pct": float,
+    #     "resolution_m": float}, ...]
+    # Stored as JSON-encoded text rather than a JSON column type to
+    # work uniformly across Postgres + sqlite without a dialect cast.
+    satellite_images_json        = Column(Text, nullable=True)
+
     # Error info (if scoring failed)
     error                        = Column(String)
 

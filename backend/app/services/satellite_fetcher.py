@@ -394,15 +394,50 @@ _PROVIDERS: list[tuple[str, Callable[[float, float, datetime], Awaitable[Optiona
 # ── Public API ─────────────────────────────────────────────────────────────
 
 class SatelliteFetcher:
-    """Fetch the best available satellite image for a lat/lon point.
+    """Fetch satellite imagery for a lat/lon point from all available providers.
 
-    Tries each provider in priority order until one returns successfully.
-    Each provider gracefully no-ops when its config is missing or its
-    API call fails — the chain naturally falls through to the next.
+    Apr 2026 second pass — refactored from a fallback CHAIN to a parallel
+    FAN-OUT. All providers are queried simultaneously via asyncio.gather;
+    every successful result is returned as part of an `images` list so
+    the dashboard can render a side-by-side comparison view.
 
-    Public API preserved from the previous Sentinel-Hub-only implementation:
-    callers `await satellite_fetcher.fetch(lat, lon, report_dt=...)` and
-    receive the same dict shape, or None if every provider failed.
+    Why fan-out for this use case:
+      * UNDP demo benefits from visual proof of multi-source redundancy.
+      * 3 of the 4 Sentinel-2 mirrors return ~identical imagery, but
+        seeing all 3 confirms "they all agree" — a stronger truth signal
+        for the analyst than "we trust this one source."
+      * Mapbox shows different imagery (Maxar high-res) — genuinely
+        complementary to the Sentinel-2 trio, not redundant.
+      * Latency cost is bounded: gather waits for the slowest provider,
+        which in practice is ~2 s vs ~500 ms for chain. Acceptable for
+        a click-driven verify action.
+      * Cost cost is one additional API call to each provider per verify
+        — well within all four free tiers.
+
+    Return shape (superset of the chain version, backward compatible):
+
+        {
+          "image_b64":        primary's bytes (legacy callers),
+          "image_media_type": ...,
+          "acquisition_date": ...,
+          "cloud_cover_pct":  ...,
+          "source":           ...,
+          "resolution_m":     ...,
+          "lat": ..., "lon": ...,
+          "alt": {...} or None,           # legacy: first Mapbox result
+
+          # NEW: every provider's result, in priority order.
+          "images": [
+            {image_b64, image_media_type, acquisition_date,
+             cloud_cover_pct, source, resolution_m},
+            ...
+          ],
+        }
+
+    The "primary" (top-level fields) is the first non-Mapbox provider
+    that returned successfully — typically AWS Sentinel-2. AI scoring
+    in the verify endpoint uses the primary; the dashboard renders all
+    images in a 2×2 grid.
     """
 
     async def fetch(
@@ -416,36 +451,57 @@ class SatelliteFetcher:
         if report_dt.tzinfo is None:
             report_dt = report_dt.replace(tzinfo=timezone.utc)
 
-        primary: Optional[dict] = None
-        primary_name = ""
-        for name, fn in _PROVIDERS:
-            try:
-                result = await fn(lat, lon, report_dt)
-            except Exception as exc:
-                # Any provider raising should NEVER block the chain.
-                logger.warning(f"Provider {name!r} raised {type(exc).__name__}: {exc}")
-                continue
-            if result is not None:
-                primary = result
-                primary_name = name
-                break
+        # Fan out to all providers in parallel. asyncio.gather with
+        # return_exceptions=True ensures one provider raising can't
+        # cancel the others — we collect every outcome separately.
+        import asyncio
+        results = await asyncio.gather(
+            *[fn(lat, lon, report_dt) for _, fn in _PROVIDERS],
+            return_exceptions=True,
+        )
 
-        if primary is None:
+        # Pair each result back with its provider name + filter to
+        # successful (dict) results only. Exceptions are logged.
+        ordered: list[tuple[str, dict]] = []
+        for (name, _fn), outcome in zip(_PROVIDERS, results):
+            if isinstance(outcome, Exception):
+                logger.warning(
+                    f"Provider {name!r} raised {type(outcome).__name__}: {outcome}"
+                )
+                continue
+            if isinstance(outcome, dict):
+                ordered.append((name, outcome))
+
+        if not ordered:
             logger.warning(f"All satellite providers failed for {lat:.4f},{lon:.4f}")
             return None
 
-        # Best-effort: also fetch a Mapbox tile as the alt-source for the
-        # comparison view in the dashboard. Don't gate the primary on it.
-        if primary_name != "Mapbox Satellite":
-            try:
-                alt = await _mapbox_satellite(lat, lon, report_dt)
-                if alt:
-                    primary["alt"] = alt
-            except Exception:
-                pass
+        # Pick the primary: first non-Mapbox result (Sentinel-2 quality
+        # is what AI scoring needs). If only Mapbox succeeded, that's
+        # the primary too.
+        primary_pair = next(
+            ((n, r) for n, r in ordered if n != "Mapbox Satellite"),
+            ordered[0],
+        )
+        primary_name, primary = primary_pair
+        result_dict: dict = dict(primary)  # shallow copy
 
-        logger.info(f"Satellite fetch succeeded via {primary_name}")
-        return primary
+        # NEW: surface every successful provider so the dashboard can
+        # render the 2×2 grid.
+        result_dict["images"] = [r for _n, r in ordered]
+
+        # LEGACY: `alt` field — first Mapbox result if any. Kept so older
+        # frontend code that reads response.alt still works.
+        for n, r in ordered:
+            if n == "Mapbox Satellite":
+                result_dict["alt"] = r
+                break
+
+        logger.info(
+            f"Satellite fetch fan-out: {len(ordered)}/{len(_PROVIDERS)} providers "
+            f"returned (primary={primary_name})"
+        )
+        return result_dict
 
 
 # Module-level singleton (preserved name for import-compatibility).

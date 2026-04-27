@@ -2982,7 +2982,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
             detail="Could not fetch satellite imagery — check SENTINEL_HUB_CLIENT_ID/SECRET and MAPBOX_TOKEN in .env"
         )
 
-    # Save satellite image to disk so the frontend can display it
+    # Save satellite image to disk so the frontend can display it.
     sat_image_url: Optional[str] = None
     try:
         sat_bytes = base64.b64decode(sat_data["image_b64"])
@@ -2995,6 +2995,30 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
         logger.info(f"Satellite image saved: {sat_fname} ({len(sat_bytes):,} bytes)")
     except Exception as exc:
         logger.warning(f"Could not save satellite image: {exc}")
+
+    # Apr 2026 — multi-provider fan-out: save EVERY successful provider's
+    # image to disk so the dashboard can render a 2×2 grid. The primary
+    # (already saved above) is duplicated as `images[0]` for consistency
+    # — we re-save with the suffixed filename so the response can list
+    # every image with the same naming pattern.
+    sat_images_list: list[dict] = []
+    for idx, img in enumerate(sat_data.get("images", []) or []):
+        try:
+            img_bytes = base64.b64decode(img["image_b64"])
+            img_ext = "png" if "png" in img.get("image_media_type", "image/jpeg") else "jpg"
+            img_fname = f"sat_{report_id}_{idx}.{img_ext}"
+            img_path = os.path.join(UPLOAD_DIR, img_fname)
+            with open(img_path, "wb") as fh:
+                fh.write(img_bytes)
+            sat_images_list.append({
+                "url": f"/static/{img_fname}",
+                "source": img.get("source"),
+                "acquisition_date": img.get("acquisition_date"),
+                "cloud_cover_pct": img.get("cloud_cover_pct"),
+                "resolution_m": img.get("resolution_m"),
+            })
+        except Exception as exc:
+            logger.warning(f"Could not save satellite image {idx}: {exc}")
 
     # ── Find user photo on disk ───────────────────────────────────────────────
     user_image_path: Optional[str] = None
@@ -3069,8 +3093,21 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
         except Exception as exc:
             logger.warning(f"Could not save alt satellite image: {exc}")
 
+    # Apr 2026 — persist the full multi-provider list so /verification
+    # GET reads back the same set on subsequent loads (otherwise refresh
+    # would only show the primary).
+    if sat_images_list:
+        import json as _json
+        v.satellite_images_json = _json.dumps(sat_images_list)
+        logger.info(f"Persisted {len(sat_images_list)} multi-source satellite images")
+
     db.commit()
     db.refresh(v)
+
+    # Decorate the SQLAlchemy instance with the list so Pydantic's
+    # from_attributes serialiser surfaces it on this POST response
+    # without a round-trip through the DB.
+    v.satellite_images = sat_images_list  # type: ignore[attr-defined]
     return v
 
 

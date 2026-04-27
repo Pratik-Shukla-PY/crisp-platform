@@ -207,73 +207,96 @@ class TestMapboxSatellite:
 
 # ── Orchestrator (chain) ───────────────────────────────────────────────────
 
-class TestSatelliteFetcherChain:
-    @pytest.mark.asyncio
-    async def test_aws_succeeds_first_no_other_provider_called(self, monkeypatch):
-        called = []
+class TestSatelliteFetcherFanOut:
+    """The fan-out orchestrator queries all providers in parallel and
+    returns every successful result in `images: [...]`. Compared with
+    the chain version, key differences pinned by these tests:
+        - All providers are CALLED on every fetch (even after one
+          succeeds), because we want their images for the grid.
+        - The primary (top-level fields) is the first non-Mapbox
+          provider that returned successfully.
+        - The `images` list contains every successful result in
+          provider-priority order.
+    """
 
+    @pytest.mark.asyncio
+    async def test_all_4_providers_succeed_returns_4_images(self, monkeypatch):
+        async def _ok(name):
+            async def _fn(lat, lon, dt):
+                return {"image_b64": "x", "image_media_type": "image/jpeg",
+                        "acquisition_date": "2026-04-15T10:00Z",
+                        "cloud_cover_pct": 5.0,
+                        "source": f"{name} test", "resolution_m": 10,
+                        "lat": lat, "lon": lon}
+            return _fn
+
+        aws = await _ok("AWS")
+        mpc = await _ok("MPC")
+        cdse = await _ok("CDSE")
+        mapbox = await _ok("Mapbox")
+        monkeypatch.setattr(sf, "_PROVIDERS", [
+            ("AWS Sentinel-2 (Element84 STAC)", aws),
+            ("Microsoft Planetary Computer", mpc),
+            ("ESA Copernicus Data Space", cdse),
+            ("Mapbox Satellite", mapbox),
+        ])
+
+        out = await sf.SatelliteFetcher().fetch(12.97, 77.59)
+        assert out is not None
+        assert "images" in out and isinstance(out["images"], list)
+        assert len(out["images"]) == 4
+        # Primary is the first non-Mapbox.
+        assert "AWS" in out["source"]
+
+    @pytest.mark.asyncio
+    async def test_aws_only_succeeds_returns_one_image(self, monkeypatch):
         async def _aws(lat, lon, dt):
-            called.append("aws")
             return {"image_b64": "x", "image_media_type": "image/jpeg",
                     "acquisition_date": "2026-04-15T10:00Z",
                     "cloud_cover_pct": 5.0,
                     "source": "AWS test", "resolution_m": 10,
                     "lat": lat, "lon": lon}
 
-        async def _mpc(lat, lon, dt):
-            called.append("mpc")
-            return None
-
-        async def _mapbox(lat, lon, dt):
-            # Called for the "alt" view, allowed but not gating.
-            called.append("mapbox")
+        async def _none(lat, lon, dt):
             return None
 
         monkeypatch.setattr(sf, "_PROVIDERS", [
             ("AWS", _aws),
-            ("MPC", _mpc),
-            ("Mapbox", _mapbox),
+            ("MPC", _none),
+            ("CDSE", _none),
+            ("Mapbox", _none),
         ])
-        # The orchestrator also calls _mapbox_satellite directly for the alt;
-        # patch that too.
-        monkeypatch.setattr(sf, "_mapbox_satellite", _mapbox)
 
         out = await sf.SatelliteFetcher().fetch(12.97, 77.59)
         assert out is not None
-        assert out["source"] == "AWS test"
-        # MPC must NOT have been called — chain stops at first success.
-        assert "mpc" not in called
+        assert len(out["images"]) == 1
+        assert out["images"][0]["source"] == "AWS test"
 
     @pytest.mark.asyncio
-    async def test_falls_through_aws_to_mpc(self, monkeypatch):
-        called = []
-
-        async def _aws(lat, lon, dt):
-            called.append("aws")
+    async def test_only_mapbox_succeeds_promoted_to_primary(self, monkeypatch):
+        """If only Mapbox returns, it's still the primary — the chain
+        no longer 'prefers Sentinel-2 only', because some Sentinel-2
+        coverage may be cloudy or missing for a given lat/lon."""
+        async def _none(lat, lon, dt):
             return None
-
-        async def _mpc(lat, lon, dt):
-            called.append("mpc")
-            return {"image_b64": "x", "image_media_type": "image/png",
-                    "acquisition_date": "2026-04-15T10:00Z",
-                    "cloud_cover_pct": 12.0,
-                    "source": "MPC test", "resolution_m": 10,
-                    "lat": lat, "lon": lon}
 
         async def _mapbox(lat, lon, dt):
-            return None
+            return {"image_b64": "y", "image_media_type": "image/jpeg",
+                    "acquisition_date": None, "cloud_cover_pct": None,
+                    "source": "Mapbox test", "resolution_m": 0.5,
+                    "lat": lat, "lon": lon}
 
         monkeypatch.setattr(sf, "_PROVIDERS", [
-            ("AWS", _aws),
-            ("MPC", _mpc),
-            ("Mapbox", _mapbox),
+            ("AWS", _none),
+            ("MPC", _none),
+            ("CDSE", _none),
+            ("Mapbox Satellite", _mapbox),
         ])
-        monkeypatch.setattr(sf, "_mapbox_satellite", _mapbox)
 
         out = await sf.SatelliteFetcher().fetch(12.97, 77.59)
         assert out is not None
-        assert out["source"] == "MPC test"
-        assert called == ["aws", "mpc"]
+        assert out["source"] == "Mapbox test"
+        assert len(out["images"]) == 1
 
     @pytest.mark.asyncio
     async def test_returns_none_when_all_providers_fail(self, monkeypatch):
@@ -286,13 +309,12 @@ class TestSatelliteFetcherChain:
             ("CDSE", _none),
             ("Mapbox", _none),
         ])
-        monkeypatch.setattr(sf, "_mapbox_satellite", _none)
 
         out = await sf.SatelliteFetcher().fetch(12.97, 77.59)
         assert out is None
 
     @pytest.mark.asyncio
-    async def test_provider_exception_does_not_break_chain(self, monkeypatch):
+    async def test_provider_exception_does_not_break_fan_out(self, monkeypatch):
         async def _aws_explodes(lat, lon, dt):
             raise RuntimeError("simulated provider crash")
 
@@ -307,19 +329,17 @@ class TestSatelliteFetcherChain:
             ("AWS", _aws_explodes),
             ("MPC", _mpc),
         ])
-        monkeypatch.setattr(sf, "_mapbox_satellite", lambda *a, **kw: _none_async())
-
-        async def _none_async():
-            return None
 
         out = await sf.SatelliteFetcher().fetch(12.97, 77.59)
         assert out is not None
         assert out["source"] == "MPC test"
+        assert len(out["images"]) == 1
 
     @pytest.mark.asyncio
-    async def test_alt_field_set_when_mapbox_available(self, monkeypatch):
-        """When the primary isn't Mapbox, orchestrator also fetches Mapbox
-        as an alt-source for the dashboard's compare view."""
+    async def test_legacy_alt_field_populated_with_first_mapbox(self, monkeypatch):
+        """Backward compat: the `alt` field is the first Mapbox result
+        if any, so older frontend code that reads `verification.alt`
+        still works."""
         async def _aws(lat, lon, dt):
             return {"image_b64": "x", "image_media_type": "image/jpeg",
                     "acquisition_date": "2026-04-15T10:00Z",
@@ -333,10 +353,14 @@ class TestSatelliteFetcherChain:
                     "source": "Mapbox test", "resolution_m": 0.5,
                     "lat": lat, "lon": lon}
 
-        monkeypatch.setattr(sf, "_PROVIDERS", [("AWS", _aws)])
-        monkeypatch.setattr(sf, "_mapbox_satellite", _mapbox)
+        monkeypatch.setattr(sf, "_PROVIDERS", [
+            ("AWS", _aws),
+            ("Mapbox Satellite", _mapbox),
+        ])
 
         out = await sf.SatelliteFetcher().fetch(12.97, 77.59)
         assert out["source"] == "AWS test"
         assert "alt" in out
         assert out["alt"]["source"] == "Mapbox test"
+        # And both are in the new images list.
+        assert len(out["images"]) == 2

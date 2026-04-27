@@ -2217,8 +2217,96 @@ window.dpSwitchView = (reportId, view, btn) => {
     container.closest('.dp-evidence-card').querySelector('.dp-img-view .dp-img')?.style?.removeProperty?.('aspect-ratio');
     if (view === 'photo' && img?.url) {
         container.innerHTML = `<div class="dp-img" onclick="openLightbox('${getMediaUrl(img.url)}','Photo')"><img src="${getMediaUrl(img.url)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
-    } else if (view === 'sat' && v?.satellite_image_url) {
-        container.innerHTML = `<div class="dp-img" onclick="openLightbox('${BACKEND_HOST}${v.satellite_image_url}','Satellite')"><img src="${BACKEND_HOST}${v.satellite_image_url}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
+    } else if (view === 'sat') {
+        // Apr 2026 — multi-provider fan-out: render every successful
+        // satellite source side-by-side (AWS Sentinel-2 / Microsoft
+        // Planetary Computer / ESA Copernicus / Mapbox). Falls back to
+        // single-image view for verifications that ran under the older
+        // chain (single-source) path.
+        const all = Array.isArray(v?.satellite_images) ? v.satellite_images : [];
+        if (all.length >= 2) {
+            // Compact label per source — keeps grid cells tight without
+            // overflowing on small screens.
+            const sourceShort = (s) => {
+                if (!s) return 'Unknown';
+                if (/AWS/i.test(s))   return 'AWS Sentinel-2';
+                if (/Microsoft/i.test(s)) return 'Microsoft Planetary Computer';
+                if (/ESA|Copernicus/i.test(s)) return 'ESA Copernicus';
+                if (/Mapbox/i.test(s)) return 'Mapbox';
+                return s.length > 30 ? s.slice(0, 30) + '…' : s;
+            };
+            const cells = all.slice(0, 4).map((entry, i) => {
+                const src = entry.url ? `${BACKEND_HOST}${entry.url}` : '';
+                const label = sourceShort(entry.source);
+                const cloud = (entry.cloud_cover_pct == null) ? '' :
+                    `<span class="dp-sat-meta">cloud ${Number(entry.cloud_cover_pct).toFixed(0)}%</span>`;
+                const acq = entry.acquisition_date ?
+                    `<span class="dp-sat-meta">${formatShortDate(entry.acquisition_date)}</span>` : '';
+                return `<div class="dp-sat-cell" onclick="openLightbox('${src}','${label}')">
+                    <img src="${src}" alt="${label}" />
+                    <div class="dp-sat-overlay">
+                        <span class="dp-sat-source">${label}</span>
+                        ${acq}${cloud}
+                    </div>
+                </div>`;
+            }).join('');
+            container.innerHTML = `<div class="dp-sat-grid">${cells}</div>`;
+            // Inject CSS once per session (idempotent)
+            if (!document.getElementById('crisp-sat-grid-css')) {
+                const st = document.createElement('style');
+                st.id = 'crisp-sat-grid-css';
+                st.textContent = `
+                .dp-sat-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    grid-template-rows: 1fr 1fr;
+                    gap: 6px;
+                    width: 100%; height: 100%;
+                    border-radius: 8px;
+                    overflow: hidden;
+                }
+                .dp-sat-cell {
+                    position: relative;
+                    overflow: hidden;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    background: #0b0b0e;
+                }
+                .dp-sat-cell img {
+                    width: 100%; height: 100%;
+                    object-fit: cover;
+                    display: block;
+                }
+                .dp-sat-overlay {
+                    position: absolute;
+                    bottom: 0; left: 0; right: 0;
+                    padding: 6px 8px;
+                    background: linear-gradient(180deg, transparent, rgba(0,0,0,0.75));
+                    display: flex; flex-direction: column; gap: 2px;
+                    font-size: 11px;
+                    color: #fff;
+                    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+                    pointer-events: none;
+                }
+                .dp-sat-source { font-weight: 600; }
+                .dp-sat-meta   { opacity: 0.85; font-size: 10px; }
+                /* If only 3 succeeded: fill the 4th cell with a graceful
+                   "source unavailable" placeholder so the grid stays 2x2. */
+                .dp-sat-cell--empty {
+                    display: flex; align-items: center; justify-content: center;
+                    color: rgba(255,255,255,0.45);
+                    font-size: 12px;
+                    background: repeating-linear-gradient(45deg,
+                        rgba(255,255,255,0.02) 0,
+                        rgba(255,255,255,0.02) 8px,
+                        transparent 8px, transparent 16px);
+                }`;
+                document.head.appendChild(st);
+            }
+        } else if (v?.satellite_image_url) {
+            // Legacy single-image path (chain-era verifications)
+            container.innerHTML = `<div class="dp-img" onclick="openLightbox('${BACKEND_HOST}${v.satellite_image_url}','Satellite')"><img src="${BACKEND_HOST}${v.satellite_image_url}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
+        }
     } else if (view === 'alt' && v?.satellite_image_url_alt) {
         container.innerHTML = `<div class="dp-img" onclick="openLightbox('${BACKEND_HOST}${v.satellite_image_url_alt}','Alt Satellite')"><img src="${BACKEND_HOST}${v.satellite_image_url_alt}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
     }

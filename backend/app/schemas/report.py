@@ -224,9 +224,51 @@ class VerificationResponse(BaseModel):
     satellite_source_alt: Optional[str] = None
     satellite_acquisition_date_alt: Optional[str] = None
     satellite_resolution_m_alt: Optional[float] = None
+    # Apr 2026 — multi-provider fan-out. List of every satellite source
+    # that returned successfully (AWS Sentinel-2, Microsoft Planetary
+    # Computer, ESA Copernicus, Mapbox). Dashboard renders 2×2 grid.
+    # Empty list when verification ran with the legacy single-source
+    # path or when no providers responded. Each entry:
+    #   { url, source, acquisition_date, cloud_cover_pct, resolution_m }
+    satellite_images: Optional[List[Any]] = []
     error: Optional[str] = None
     scored_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _decode_satellite_images_json(cls, data: Any) -> Any:
+        """Decode the satellite_images_json text column into the
+        satellite_images list field. Runs both for ORM-attribute reads
+        (POST /verify response, where the endpoint also sets
+        satellite_images directly on the instance) and for fresh DB reads
+        (GET /verification, which only has the JSON column).
+
+        Idempotent — if `satellite_images` is already populated, leave
+        it alone. Decoder is forgiving: malformed JSON yields an empty
+        list rather than blowing up the whole response.
+        """
+        if not hasattr(data, "__dict__") and not isinstance(data, dict):
+            return data
+        # ORM instance attribute access vs dict access
+        get = (lambda k: getattr(data, k, None)) if not isinstance(data, dict) else (lambda k: data.get(k))
+        already = get("satellite_images")
+        if already:
+            return data
+        raw = get("satellite_images_json")
+        if not raw:
+            return data
+        try:
+            import json as _json
+            parsed = _json.loads(raw)
+            if isinstance(parsed, list):
+                if isinstance(data, dict):
+                    data["satellite_images"] = parsed
+                else:
+                    data.satellite_images = parsed  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        return data
 
 class ReportResponse(BaseModel):
     id: str
