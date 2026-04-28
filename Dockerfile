@@ -2,9 +2,25 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for faster-whisper
+# Install system dependencies for faster-whisper + MediaPipe.
+#
+# Apr 2026 — added libgles2-mesa, libegl1, libgl1, libglib2.0-0 because
+# MediaPipe (the server-side face-detection engine in pii_blur.py) needs
+# OpenGL ES 2 + GLib at import time. Without these, `import mediapipe`
+# raises `libGLESv2.so.2: cannot open shared object file` and the
+# server-side PII blur falls back to OCR-only — which means face blur
+# silently SKIPS for any upload where the client-side BlazeFace also
+# failed. Discovered via /api/v1/health/pii returning
+# {"face_detector":{"available":false,"error":"MediaPipe import/load
+# failed: libGLESv2.so.2: cannot open shared object file"}}.
+# python:3.11-slim doesn't include these by default; bullseye/bookworm
+# package names are stable across recent Debian releases.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    libgles2-mesa \
+    libegl1 \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
