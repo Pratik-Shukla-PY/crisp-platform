@@ -1961,16 +1961,47 @@ async function resolveLocationName() {
         state.locationName = name;
         // Persist the resolved name so next reload shows it instantly (no "Resolving...")
         _patchLocCtx({ name });
-        // Update any visible location displays
-        const locCoords = document.getElementById('loc-coords');
-        if (locCoords && !state.userLocationName) {
-            locCoords.textContent = name;
-        }
-        const summaryLoc = document.getElementById('summary-loc');
-        if (summaryLoc) {
-            summaryLoc.textContent = name;
-        }
+        // Apr 2026 — use the centralised paint helper so EVERY visible
+        // location display (#v3-auto-loc on stage-where, #loc-coords in
+        // the review block which is slotted into stage-where in v3,
+        // #summary-loc on stage-review) gets the same updated value
+        // atomically. Prior bug: only #loc-coords + #summary-loc were
+        // updated here, so #v3-auto-loc and #loc-coords could show
+        // different cached values on stage-where after an async resolve.
+        try { _paintLocationDisplays(); } catch (_) {}
     }
+}
+
+// Apr 2026 — single source of truth for painting every location display
+// in the PWA. Reads `state.userLocationName` (manual pick) → falls back
+// to `state.locationName` (auto-resolved) → falls back to lat/lng → falls
+// back to the localised "Detecting..." string. Called from every place
+// that mutates either state field, so the top auto-meta panel and the
+// lower review block can never diverge again.
+function _paintLocationDisplays() {
+    const name = state.userLocationName || state.locationName || null;
+    const hasCoords = state.location
+        && Number.isFinite(state.location.lat)
+        && Number.isFinite(state.location.lng)
+        && !(state.location.lat === 0 && state.location.lng === 0);
+    const fallback = hasCoords
+        ? `${state.location.lat.toFixed(4)}, ${state.location.lng.toFixed(4)}`
+        : ((typeof t === 'function' ? t('loc_status') : null) || 'Detecting...');
+    const display = name || fallback;
+
+    // Stage-where auto-meta panel (the "LOCATION (AUTO)" row).
+    const topEl = document.getElementById('v3-auto-loc');
+    if (topEl) topEl.textContent = display;
+
+    // Review block lower display (#loc-coords). When v3 is on this is
+    // slotted into stage-where alongside the auto-meta panel — same
+    // visual stage, must show the same value.
+    const lowerEl = document.getElementById('loc-coords');
+    if (lowerEl) lowerEl.textContent = display;
+
+    // Review summary on stage-review.
+    const summaryEl = document.getElementById('summary-loc');
+    if (summaryEl) summaryEl.textContent = display;
 }
 
 // Apr 2026 PR 3 — update the 🟢/🔴 connectivity dot in the lang-switcher
@@ -3215,11 +3246,21 @@ function detectAndSetupLanguage() {
         if (ctx.lang && ctx.langLabel) {
             noteDetectedLocal(ctx.lang, ctx.langLabel);
         }
-        // Update location display immediately — no "Locating..." shown
-        const locCoords = document.getElementById('loc-coords');
-        if (locCoords && ctx.name) locCoords.textContent = ctx.name;
-        const summaryLoc = document.getElementById('summary-loc');
-        if (summaryLoc && ctx.name) summaryLoc.textContent = ctx.name;
+        // Apr 2026 — paint every location display from the central
+        // helper so the boot-cache restore can't desync from later
+        // async resolves. Previous bug: this function painted
+        // #loc-coords + #summary-loc directly with the cached name,
+        // but #v3-auto-loc was painted later by _refreshV3AutoMeta
+        // when stage-where was entered — and if a fresh GPS resolve
+        // landed in between, the top showed the new name while the
+        // bottom kept the cached old name.
+        try { _paintLocationDisplays(); } catch (_) {
+            // Defensive fallback (helper unavailable for some reason)
+            const locCoords = document.getElementById('loc-coords');
+            if (locCoords && ctx.name) locCoords.textContent = ctx.name;
+            const summaryLoc = document.getElementById('summary-loc');
+            if (summaryLoc && ctx.name) summaryLoc.textContent = ctx.name;
+        }
     }
 
     // Apr 2026 language-UX rewrite: start with English by default, then
@@ -7079,13 +7120,19 @@ function _refreshV3AutoMeta() {
             timeEl.textContent = new Date().toISOString().replace('T', ' ').slice(0, 16);
         }
     }
+    // Apr 2026 — delegate to the central paint helper so this top panel
+    // and the lower review-block display (which is also rendered in
+    // stage-where via `data-v3-slot="where"`) can never diverge.
     if (locEl) {
-        if (state.locationName) {
-            locEl.textContent = state.locationName;
-        } else if (state.location && Number.isFinite(state.location.lat) && Number.isFinite(state.location.lng)) {
-            locEl.textContent = `${state.location.lat.toFixed(4)}, ${state.location.lng.toFixed(4)}`;
-        } else {
-            locEl.textContent = (typeof t === 'function' ? t('loc_status') : null) || 'Detecting...';
+        try { _paintLocationDisplays(); } catch (_) {
+            // Defensive fallback in case the helper isn't loaded yet
+            // (shouldn't happen — same module — but keep the panel
+            // populated regardless).
+            if (state.locationName) {
+                locEl.textContent = state.locationName;
+            } else {
+                locEl.textContent = (typeof t === 'function' ? t('loc_status') : null) || 'Detecting...';
+            }
         }
     }
 }
