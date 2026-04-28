@@ -252,35 +252,36 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
         except Exception as e:
             logger.warning(f"CAFF→WAV transcode failed for {media_id}: {e}")
 
-    # Apr 2026: the client-side blur pipeline (PWA BlazeFace / RN equivalent)
-    # now reliably runs BEFORE chunking, so the media row's
-    # `client_blur_applied` flag tells us whether a server-side pass is
-    # needed at all. When set, we skip the server blur to avoid a second
-    # lossy re-encode over already-redacted pixels. Legacy clients that
-    # don't send the flag still get the server pass as a safety net.
+    # Apr 2026 (revision) — defense-in-depth PII blur. The previous
+    # design skipped the server-side pass when client_blur_applied=true,
+    # to avoid a redundant lossy re-encode. That trusted the PWA's
+    # "blurred" claim — and the PWA's BlazeFace at confidence threshold
+    # 0.85 reports "blurred:true, facesDetected:0" even when real faces
+    # at lower confidence (side profiles, distant, partial) slipped
+    # through. Server then skipped, and the un-blurred photo landed on
+    # the dashboard.
+    #
+    # New policy: ALWAYS run the server-side blur for every IMAGE,
+    # regardless of what the client claims. Cost is ~100-300 ms async
+    # (in the AI executor, doesn't block the HTTP response). Defense-
+    # in-depth — even if the client lies or BlazeFace misses, the
+    # server's MediaPipe pass + easyocr text-PII pass redact anything
+    # that slipped through.
+    #
+    # `client_blur_applied` is now telemetry only, retained on the row
+    # so we can see which clients ran the optimistic-pre-blur path.
     if media_type == 'IMAGE':
         media_row = db.query(Media).filter(Media.id == media_id).first()
-        if media_row and getattr(media_row, 'client_blur_applied', False):
-            # Client PIIBlur pipeline ran successfully AND the client
-            # reported truthfully — nothing for the server to do.
-            db.query(Media).filter(Media.id == media_id).update(
-                {'pii_blur_status': 'not_needed'}, synchronize_session=False
-            )
-            db.commit()
-            logger.info(
-                f"Skipping server PII blur for {media_id}: "
-                "client_blur_applied=true (client-side pipeline handled it)"
-            )
-        else:
-            # Server will run its own pass. Stamp 'pending' NOW so the
-            # dashboard (or a polling client) can distinguish "blur
-            # in progress" from "blur finished" — the async worker flips
-            # it to 'complete' / 'failed' / 'skipped' when it resolves.
-            db.query(Media).filter(Media.id == media_id).update(
-                {'pii_blur_status': 'pending'}, synchronize_session=False
-            )
-            db.commit()
-            _ai_executor.submit(_run_server_pii_blur, filepath, filename, media_id)
+        client_claim = bool(getattr(media_row, 'client_blur_applied', False)) if media_row else False
+        db.query(Media).filter(Media.id == media_id).update(
+            {'pii_blur_status': 'pending'}, synchronize_session=False
+        )
+        db.commit()
+        _ai_executor.submit(_run_server_pii_blur, filepath, filename, media_id)
+        logger.info(
+            f"Server PII blur queued for {media_id} "
+            f"(client_blur_applied={client_claim} — server runs anyway for defense-in-depth)"
+        )
 
         # Apr 2026 UI v2.1 — UNDP nice-to-have #3: redundancy detection.
         # Compute the perceptual hash of the assembled photo in the AI

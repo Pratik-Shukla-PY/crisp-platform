@@ -85,11 +85,28 @@
 
         const preds = await model.estimateFaces(off, /*returnTensors=*/false, /*flipHorizontal=*/false);
         const invScale = 1 / scale;
-        // Confidence filter: BlazeFace at default threshold (~0.5) detects
-        // shadows and patterns as faces, so we were blurring plenty of photos
-        // without any face present. 0.85 filters out the noise while still
-        // catching real faces.
-        const CONF_THRESHOLD = 0.85;
+        // Apr 2026 (revised) — lowered threshold from 0.85 → 0.5.
+        //
+        // The previous 0.85 threshold filtered out real faces at side
+        // profiles, distant, partial, or low-light — BlazeFace's
+        // confidence drops below 0.85 for those cases. Combined with
+        // the optimistic "blurred:true when 0 faces detected" fallback
+        // and the server's then-skip behaviour, real faces leaked
+        // through unredacted. Reported as "PII blur stopped working
+        // in last 2-3 reports" on 2026-04-28.
+        //
+        // Trade-off: 0.5 will occasionally blur non-face textures
+        // (shadows, patterns) — false positives. For a privacy-
+        // critical pipeline this is the right side to err on. Better
+        // to over-blur a wall texture than miss a face.
+        //
+        // Defense-in-depth: even with this lower threshold, the
+        // server-side MediaPipe pass (backend/app/services/pii_blur.py)
+        // now ALWAYS runs regardless of client claim — see the
+        // matching commit on the backend. Client+server combined
+        // makes the privacy guarantee robust against either side
+        // missing a face.
+        const CONF_THRESHOLD = 0.5;
         return preds
             .filter((p) => {
                 const prob = Array.isArray(p.probability) ? p.probability[0] : p.probability;
