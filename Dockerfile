@@ -4,20 +4,28 @@ WORKDIR /app
 
 # Install system dependencies for faster-whisper + MediaPipe.
 #
-# Apr 2026 — added libgles2-mesa, libegl1, libgl1, libglib2.0-0 because
-# MediaPipe (the server-side face-detection engine in pii_blur.py) needs
-# OpenGL ES 2 + GLib at import time. Without these, `import mediapipe`
-# raises `libGLESv2.so.2: cannot open shared object file` and the
-# server-side PII blur falls back to OCR-only — which means face blur
-# silently SKIPS for any upload where the client-side BlazeFace also
-# failed. Discovered via /api/v1/health/pii returning
-# {"face_detector":{"available":false,"error":"MediaPipe import/load
-# failed: libGLESv2.so.2: cannot open shared object file"}}.
-# python:3.11-slim doesn't include these by default; bullseye/bookworm
-# package names are stable across recent Debian releases.
+# Apr 2026 — MediaPipe (the server-side face-detection engine in
+# pii_blur.py) needs OpenGL ES 2 + GLib at import time. Without these,
+# `import mediapipe` raises `libGLESv2.so.2: cannot open shared object
+# file` and the server-side PII blur falls back to OCR-only — face
+# blur silently SKIPS for any upload where the client-side BlazeFace
+# also failed. Discovered via /api/v1/health/pii returning
+# {"face_detector":{"available":false,
+#   "error":"MediaPipe import/load failed: libGLESv2.so.2: ..."}}.
+#
+# Package names: python:3.11-slim now ships on Debian trixie (13), where
+# `libgles2-mesa` was renamed to plain `libgles2` (the `-mesa` suffix
+# was dropped because the package became a transitional metapackage).
+# Earlier deploy with `libgles2-mesa` failed with "Unable to locate
+# package" — fixed by switching to the trixie name.
+#
+# libgles2     → libGLESv2.so.2 (the import-time blocker)
+# libegl1      → EGL bindings, MediaPipe also touches these
+# libgl1       → core OpenGL, defensive
+# libglib2.0-0 → GLib, MediaPipe's transitive dep
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    libgles2-mesa \
+    libgles2 \
     libegl1 \
     libgl1 \
     libglib2.0-0 \
