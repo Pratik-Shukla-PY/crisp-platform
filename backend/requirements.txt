@@ -58,3 +58,9 @@ qrcode[pil]>=7.4.2
 # Encryption), and RFC 8292 (VAPID). Provider clouds (APNs / FCM /
 # Mozilla autopush) handle the actual fan-out — we just sign + POST.
 pywebpush>=2.0.0
+
+# AWS S3 client (Apr 2026 — UNDP scaling story: media off EC2 disk).
+# The instance-profile path means we don't ship static creds; boto3
+# picks up the EC2 role automatically. botocore comes along as a
+# transitive dep. moto used in tests to mock S3 without real AWS calls.
+boto3>=1.34.0

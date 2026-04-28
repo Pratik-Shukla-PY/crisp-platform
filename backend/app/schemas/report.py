@@ -185,6 +185,22 @@ class MediaResponse(MediaBase):
     photo_phash: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
+    # Apr 2026 — UNDP scaling. The DB stores `s3://<key>` for media
+    # written through the S3 backend; the dashboard can't fetch that
+    # URL directly. Resolve it to a signed presigned URL on the way
+    # out so the response is always something a browser can GET.
+    # Pass-through for `/static/...` (legacy local-disk paths) and
+    # plain http(s) URLs.
+    @field_serializer("url", when_used="json")
+    def _resolve_url(self, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return v
+        try:
+            from app.services.storage import get_storage
+            return get_storage().public_url(v)
+        except Exception:
+            return v  # never block the response on storage glitches
+
 class AIAnalysisResponse(BaseModel):
     id: str
     damage_score: Optional[float] = None
@@ -269,6 +285,40 @@ class VerificationResponse(BaseModel):
         except Exception:
             pass
         return data
+
+    # Apr 2026 — resolve S3 keys to signed URLs on response. Same logic
+    # as MediaResponse but applied to the satellite_image_url* fields
+    # which may also point at s3:// keys after the storage refactor.
+    # The `satellite_images` list contains `url` values too — those
+    # are walked and resolved cell by cell.
+    @field_serializer("satellite_image_url", "satellite_image_url_alt", when_used="json")
+    def _resolve_sat_url(self, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return v
+        try:
+            from app.services.storage import get_storage
+            return get_storage().public_url(v)
+        except Exception:
+            return v
+
+    @field_serializer("satellite_images", when_used="json")
+    def _resolve_sat_images(self, v: Optional[List[Any]]) -> Optional[List[Any]]:
+        if not v:
+            return v
+        try:
+            from app.services.storage import get_storage
+            store = get_storage()
+            out: List[Any] = []
+            for entry in v:
+                if isinstance(entry, dict) and entry.get("url"):
+                    e2 = dict(entry)
+                    e2["url"] = store.public_url(entry["url"])
+                    out.append(e2)
+                else:
+                    out.append(entry)
+            return out
+        except Exception:
+            return v
 
 class ReportResponse(BaseModel):
     id: str

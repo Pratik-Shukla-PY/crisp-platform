@@ -242,15 +242,27 @@ class TestBlurPipelineEndToEnd:
         # or 'pending' and becomes a terminal state.
         assert final_status in {"complete", "failed", "skipped"}
 
-    def test_upload_with_client_blur_applied_true_stamps_not_needed(self, client, db):
-        """Mirror: `client_blur_applied=true` short-circuits the server
-        pass entirely and the column stamps `not_needed` immediately."""
+    def test_upload_with_client_blur_applied_true_still_runs_server_pass(self, client, db):
+        """Apr-2026 (revised): `client_blur_applied=true` no longer
+        short-circuits the server. We always run the server-side pass
+        regardless of the client claim — defense-in-depth, since
+        BlazeFace-at-confidence-threshold-0.5 can still under-detect
+        edge cases (side profiles, distant, partial), and the user
+        report on 2026-04-28 ("PII blur stopped working in last 2-3
+        reports") proved the previous skip-on-trust design was unsafe.
+
+        The new policy: pii_blur_status flips to 'pending' synchronously
+        and the worker drives it to a terminal state — exactly the
+        same lifecycle as when client_blur_applied is false. The
+        column NEVER lands at 'not_needed' anymore.
+        """
         import io
         from app.models.report import Media
         from app.api.endpoints.reports import djb2_bytes
 
         report_id = self._seed_report(client)
-        media_id = f"blur-e2e-skip-{time.time_ns()}"
+        # Keep prefix short: media_id column is varchar(36).
+        media_id = f"blur-srv-anyway-{time.time_ns()}"
         payload = self._TINY_JPEG
         res = client.post(
             f"/api/v1/reports/{report_id}/media/chunk-bin",
@@ -267,21 +279,29 @@ class TestBlurPipelineEndToEnd:
         )
         assert res.status_code == 200, res.text
 
-        # `not_needed` is set synchronously in `_assemble_media_file`,
-        # so it's live immediately after assembly. The assembly
-        # executor is in-process; wait briefly for its commit to land.
-        deadline = time.time() + 10
+        # Wait for the worker to land. Since server now always runs,
+        # the terminal state is one of complete / failed / skipped.
+        # 'not_needed' should NEVER appear — that was the old behaviour.
+        deadline = time.time() + 25
         final_status = None
         while time.time() < deadline:
             db.expire_all()
             m = db.query(Media).filter(Media.id == media_id).first()
-            if m and m.pii_blur_status == "not_needed":
+            if m and m.pii_blur_status in {"complete", "failed", "skipped"}:
                 final_status = m.pii_blur_status
                 break
             time.sleep(0.2)
 
-        assert final_status == "not_needed", \
-            f"client_blur_applied=true must stamp 'not_needed', got status={m.pii_blur_status if m else 'no media row'}"
+        m = db.query(Media).filter(Media.id == media_id).first()
+        assert final_status in {"complete", "failed", "skipped"}, (
+            f"server-side pass must run regardless of client claim; got status="
+            f"{m.pii_blur_status if m else 'no media row'} (must NOT be 'not_needed')"
+        )
+        # Belt-and-braces: explicitly confirm the deprecated state never appears.
+        assert (m.pii_blur_status if m else None) != "not_needed", (
+            "'not_needed' is the deprecated client-trusts-skip outcome; the "
+            "server now always runs its pass."
+        )
 
 
 # ── Health endpoint 503 path ────────────────────────────────────────────────

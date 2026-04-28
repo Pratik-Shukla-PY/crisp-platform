@@ -49,6 +49,28 @@ _UPLOAD_DEFAULT = os.path.join(
 UPLOAD_DIR = os.environ.get("CRISP_UPLOAD_DIR", _UPLOAD_DEFAULT)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# Apr 2026 — UNDP scaling. Media reads/writes route through the
+# pluggable storage backend (LocalStorage by default; S3Storage when
+# MEDIA_BACKEND=s3). UPLOAD_DIR remains the local-disk path so legacy
+# rows keep working — the abstraction handles the actual file IO so
+# call-sites don't have to know which backend is active.
+from app.services.storage import get_storage as _get_media_storage  # noqa: E402
+
+def _content_type_for(filename: str) -> str:
+    """Best-effort content-type from filename suffix. Used for S3 PUT
+    so the dashboard's <img> / <audio> tags get the right MIME."""
+    f = (filename or "").lower()
+    if f.endswith(".jpg") or f.endswith(".jpeg"): return "image/jpeg"
+    if f.endswith(".png"):                         return "image/png"
+    if f.endswith(".webp"):                        return "image/webp"
+    if f.endswith(".m4a"):                         return "audio/mp4"
+    if f.endswith(".mp4"):                         return "video/mp4"
+    if f.endswith(".webm"):                        return "audio/webm"
+    if f.endswith(".ogg"):                         return "audio/ogg"
+    if f.endswith(".wav"):                         return "audio/wav"
+    if f.endswith(".mp3"):                         return "audio/mpeg"
+    return "application/octet-stream"
+
 # P2.2 — bounded thread pool for background assembly.
 #
 # Previously every final-chunk arrival called `threading.Thread(...).start()`
@@ -198,6 +220,16 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
 
     filename = f"{media_id}_assembled.{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
+    # Apr 2026 — two-stage persistence. We always write to local disk
+    # FIRST because the inline processing below (CAFF→WAV transcode via
+    # PyAV, PII blur worker, perceptual-hash worker) is filesystem-based
+    # and depends on `filepath` existing. After all inline mutations
+    # are done, we re-read the (possibly transcoded) bytes from disk
+    # and call storage.save() to persist them — for the local backend
+    # that's a no-op double-write to the same path; for the S3 backend
+    # the disk file is a transient working copy and the canonical
+    # store is S3. A periodic local-disk GC sweeps stale working
+    # copies; see scripts/gc_local_uploads.py (added separately).
     # P2.14 — disk-full handling. A silent OSError here used to leave the media
     # marked `failed` with no observable signal. Now we catch, log loudly, and
     # let the caller mark assembly_status='failed' so the client shows a
@@ -295,7 +327,27 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
         _ai_executor.submit(_run_photo_phash, filepath, media_id)
 
     logger.info(f"Assembled {media_id}: {len(file_bytes):,} bytes → {filename}")
-    return f"/static/{filename}"
+
+    # Apr 2026 — persist to the configured storage backend. For local:
+    # `filepath` already has the bytes (no-op re-write). For S3: this
+    # PUTs to the bucket and returns an `s3://<key>` reference that the
+    # response serializer turns into a presigned URL for the dashboard.
+    # We re-read the on-disk bytes (rather than reusing `file_bytes`)
+    # so any inline mutations (CAFF→WAV transcode) are reflected in
+    # what S3 stores.
+    try:
+        with open(filepath, "rb") as _fh:
+            final_bytes = _fh.read()
+        return _get_media_storage().save(filename, final_bytes, _content_type_for(filename))
+    except Exception as e:
+        # If S3 PUT fails, fall back to the legacy /static/ URL — the
+        # file is on disk and serveable by nginx, which keeps the
+        # report viable even if S3 has a transient issue.
+        logger.warning(
+            f"[Assembly] storage.save failed for {filename}: {e}. "
+            "Falling back to legacy /static/ URL — file is still on disk."
+        )
+        return f"/static/{filename}"
 
 
 def _run_photo_phash(filepath: str, media_id: str) -> None:
@@ -357,6 +409,24 @@ def _run_server_pii_blur(filepath: str, filename: str, media_id: str) -> None:
                     f"PII blurred in {filename}: "
                     f"faces={pii_result['faces']} pii_text={pii_result['pii_texts']}"
                 )
+                # Apr 2026 — re-upload the blurred bytes to the storage
+                # backend. For local: rewrites UPLOAD_DIR/filename (no-op
+                # since blur_pii already did). For S3: replaces the S3
+                # object with the blurred version (the initial PUT during
+                # _assemble_media_file uploaded the unblurred bytes; this
+                # closes the window where S3 had unblurred bytes).
+                try:
+                    with open(filepath, "rb") as _fh:
+                        blurred_bytes = _fh.read()
+                    _get_media_storage().save(
+                        filename, blurred_bytes, _content_type_for(filename)
+                    )
+                except Exception as _re_e:
+                    logger.warning(
+                        f"Re-upload of blurred bytes failed for {filename}: {_re_e}. "
+                        "Local-disk file is correctly blurred; S3 object may still hold "
+                        "unblurred bytes — re-run blur worker to fix."
+                    )
             else:
                 logger.info(f"PII blur ran on {filename}: no PII detected")
         else:
@@ -466,6 +536,7 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
 
     filename = f"{media_id}_partial.jpg"
     filepath = os.path.join(UPLOAD_DIR, filename)
+    # Write to local disk first so the inline blur (filesystem-based) works.
     with open(filepath, 'wb') as f:
         f.write(file_bytes)
 
@@ -477,7 +548,16 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
         pass  # Non-critical for partial images
 
     logger.info(f"Partial image updated: {media_id} ({len(byte_parts)} chunks, {len(file_bytes):,} bytes)")
-    return f"/static/{filename}"
+
+    # Apr 2026 — persist via storage abstraction. Re-read from disk so
+    # the (possibly blurred) bytes go to the canonical store.
+    try:
+        with open(filepath, "rb") as _fh:
+            final_bytes = _fh.read()
+        return _get_media_storage().save(filename, final_bytes, "image/jpeg")
+    except Exception as e:
+        logger.warning(f"[PartialImg] storage.save fallback to /static/: {e}")
+        return f"/static/{filename}"
 
 
 def _assemble_partial_audio(media_id: str, db: Session) -> Optional[str]:
@@ -530,11 +610,20 @@ def _assemble_partial_audio(media_id: str, db: Session) -> Optional[str]:
 
     filename = f"{media_id}_partial.{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
+    # Local-disk first — the partial transcription worker (Whisper)
+    # below reads from filepath, so we always need a working copy
+    # on disk regardless of canonical backend.
     with open(filepath, 'wb') as f:
         f.write(file_bytes)
 
     logger.info(f"Partial audio updated: {media_id} ({len(byte_parts)} chunks, {len(file_bytes):,} bytes)")
-    return f"/static/{filename}"
+
+    # Apr 2026 — persist via storage abstraction.
+    try:
+        return _get_media_storage().save(filename, file_bytes, _content_type_for(filename))
+    except Exception as e:
+        logger.warning(f"[PartialAudio] storage.save fallback to /static/: {e}")
+        return f"/static/{filename}"
 
 
 def _run_partial_transcription_bg(report_id: str, partial_url: str):
@@ -2983,36 +3072,34 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
             detail="Could not fetch satellite imagery — check SENTINEL_HUB_CLIENT_ID/SECRET and MAPBOX_TOKEN in .env"
         )
 
-    # Save satellite image to disk so the frontend can display it.
+    # Save satellite image to the configured storage backend.
     sat_image_url: Optional[str] = None
     try:
         sat_bytes = base64.b64decode(sat_data["image_b64"])
         ext       = "png" if "png" in sat_data.get("image_media_type", "image/png") else "jpg"
         sat_fname = f"sat_{report_id}.{ext}"
-        sat_path  = os.path.join(UPLOAD_DIR, sat_fname)
-        with open(sat_path, "wb") as fh:
-            fh.write(sat_bytes)
-        sat_image_url = f"/static/{sat_fname}"
-        logger.info(f"Satellite image saved: {sat_fname} ({len(sat_bytes):,} bytes)")
+        sat_image_url = _get_media_storage().save(
+            sat_fname, sat_bytes, _content_type_for(sat_fname)
+        )
+        logger.info(f"Satellite image saved: {sat_fname} ({len(sat_bytes):,} bytes) → {sat_image_url}")
     except Exception as exc:
         logger.warning(f"Could not save satellite image: {exc}")
 
     # Apr 2026 — multi-provider fan-out: save EVERY successful provider's
-    # image to disk so the dashboard can render a 2×2 grid. The primary
-    # (already saved above) is duplicated as `images[0]` for consistency
-    # — we re-save with the suffixed filename so the response can list
-    # every image with the same naming pattern.
+    # image to the storage backend so the dashboard can render a 2×2
+    # grid. The primary is duplicated as `images[0]` for consistency —
+    # we save with the suffixed filename so the response can list every
+    # image with the same naming pattern.
     sat_images_list: list[dict] = []
+    storage = _get_media_storage()
     for idx, img in enumerate(sat_data.get("images", []) or []):
         try:
             img_bytes = base64.b64decode(img["image_b64"])
             img_ext = "png" if "png" in img.get("image_media_type", "image/jpeg") else "jpg"
             img_fname = f"sat_{report_id}_{idx}.{img_ext}"
-            img_path = os.path.join(UPLOAD_DIR, img_fname)
-            with open(img_path, "wb") as fh:
-                fh.write(img_bytes)
+            img_url = storage.save(img_fname, img_bytes, _content_type_for(img_fname))
             sat_images_list.append({
-                "url": f"/static/{img_fname}",
+                "url": img_url,
                 "source": img.get("source"),
                 "acquisition_date": img.get("acquisition_date"),
                 "cloud_cover_pct": img.get("cloud_cover_pct"),
@@ -3083,14 +3170,13 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
             alt_bytes = base64.b64decode(alt["image_b64"])
             alt_ext   = "png" if "png" in alt.get("image_media_type", "image/jpeg") else "jpg"
             alt_fname = f"sat_alt_{report_id}.{alt_ext}"
-            alt_path  = os.path.join(UPLOAD_DIR, alt_fname)
-            with open(alt_path, "wb") as fh:
-                fh.write(alt_bytes)
-            v.satellite_image_url_alt      = f"/static/{alt_fname}"
+            v.satellite_image_url_alt      = _get_media_storage().save(
+                alt_fname, alt_bytes, _content_type_for(alt_fname)
+            )
             v.satellite_source_alt         = alt.get("source")
             v.satellite_acquisition_date_alt = alt.get("acquisition_date")
             v.satellite_resolution_m_alt   = alt.get("resolution_m")
-            logger.info(f"Alt satellite image saved: {alt_fname}")
+            logger.info(f"Alt satellite image saved: {alt_fname} → {v.satellite_image_url_alt}")
         except Exception as exc:
             logger.warning(f"Could not save alt satellite image: {exc}")
 
