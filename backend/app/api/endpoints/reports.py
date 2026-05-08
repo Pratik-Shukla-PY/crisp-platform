@@ -2248,14 +2248,21 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
 
     db.commit()
 
-    # Trigger AI pipeline for this specific media
-    if media_in.type == MediaTypeEnum.AUDIO and file_url.startswith("/static/"):
-        disk_path = os.path.join(UPLOAD_DIR, file_url.replace("/static/", ""))
-        if os.path.exists(disk_path):
-            logger.info(f"Transcribing attached audio: {disk_path}")
-            transcription = ai_service.transcribe_audio(disk_path)
+    # Trigger AI pipeline for this specific media. May 2026 (PR 3) —
+    # was previously gated on `file_url.startswith("/static/")`, which
+    # silently skipped both transcription + image-vision once the
+    # storage backend flipped to S3 (every new file_url is `s3://...`).
+    # Switched to the storage-abstraction staging pattern: read bytes
+    # via storage.read(), drop into a /tmp/ tempfile for the
+    # filesystem-bound libs (faster-whisper / cv2), unlink on exit.
+    # Mirrors what `_run_ai_pipeline` already does for the chunked path.
+    if media_in.type == MediaTypeEnum.AUDIO and file_url:
+        try:
+            filename = file_url.rsplit("/", 1)[-1].split("://", 1)[-1].rsplit("/", 1)[-1]
+            with _stage_from_storage(file_url, filename) as tmp_path:
+                logger.info(f"Transcribing attached audio: {tmp_path} (source={file_url})")
+                transcription = ai_service.transcribe_audio(tmp_path)
             if transcription:
-                # Create or update AI analysis
                 ai = db.query(AIAnalysis).filter(AIAnalysis.report_id == report.id).first()
                 if ai:
                     ai.transcription = transcription
@@ -2263,11 +2270,17 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                     ai = AIAnalysis(report_id=report.id, transcription=transcription)
                     db.add(ai)
                 db.commit()
+        except Exception as e:
+            # Best-effort — never block the attach response on a
+            # transcription failure. The dashboard renders without
+            # transcription; an analyst can retry from the admin panel.
+            logger.warning(f"Audio transcription failed for {file_url}: {e}")
 
-    elif media_in.type == MediaTypeEnum.IMAGE and file_url.startswith("/static/"):
-        disk_path = os.path.join(UPLOAD_DIR, file_url.replace("/static/", ""))
-        if os.path.exists(disk_path):
-            vision_result = ai_service.analyze_image(disk_path)
+    elif media_in.type == MediaTypeEnum.IMAGE and file_url:
+        try:
+            filename = file_url.rsplit("/", 1)[-1].split("://", 1)[-1].rsplit("/", 1)[-1]
+            with _stage_from_storage(file_url, filename) as tmp_path:
+                vision_result = ai_service.analyze_image(tmp_path)
             ai = db.query(AIAnalysis).filter(AIAnalysis.report_id == report.id).first()
             if ai:
                 ai.detected_labels = vision_result.get("labels", [])
@@ -2280,6 +2293,8 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                 )
                 db.add(ai)
             db.commit()
+        except Exception as e:
+            logger.warning(f"Image AI pipeline failed for {file_url}: {e}")
 
     db.refresh(report)
     return report
@@ -2297,7 +2312,18 @@ def attach_thumbnail(report_id: str, payload: ThumbnailPayload, db: Session = De
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # Decode and save thumbnail
+    # Decode + persist via the storage abstraction. May 2026 (PR 3) —
+    # was previously writing directly to UPLOAD_DIR + emitting
+    # `/static/<file>`. Under MEDIA_BACKEND=s3 that violated the
+    # zero-persistent-disk mandate (every fast-preview thumbnail
+    # accumulated on the EC2 volume forever). Now uses the same
+    # storage.save() path as full media + chunked uploads, so the
+    # backend selection decides where the bytes physically land.
+    # PII blur still runs but via _stage_bytes — cv2.imread needs a
+    # real path on disk, so we stage to /tmp/ for the duration of the
+    # blur call and read the (possibly mutated) bytes back. Net effect
+    # for S3 backend: persistent disk untouched, /tmp/ tempfile auto-
+    # deletes on context exit.
     thumbnail_url = None
     if payload.thumbnail_data.startswith("data:"):
         try:
@@ -2305,16 +2331,23 @@ def attach_thumbnail(report_id: str, payload: ThumbnailPayload, db: Session = De
             padding = (4 - len(b64) % 4) % 4
             thumb_bytes = base64.b64decode(b64 + '=' * padding)
             filename = f"{payload.media_id}_thumb.jpg"
-            thumb_path = os.path.join(UPLOAD_DIR, filename)
-            with open(thumb_path, "wb") as f:
-                f.write(thumb_bytes)
-            # PII blur on thumbnail too
+
+            final_bytes = thumb_bytes
             try:
                 from app.services.pii_blur import blur_pii
-                blur_pii(thumb_path)
-            except Exception:
-                pass
-            thumbnail_url = f"/static/{filename}"
+                with _stage_bytes(filename, thumb_bytes) as tmp_path:
+                    blur_pii(tmp_path)
+                    with open(tmp_path, "rb") as _fh:
+                        final_bytes = _fh.read()
+            except Exception as e:
+                # Blur failure must not block the fast-preview write —
+                # raw thumbnail still goes up, server-side blur on the
+                # full chunked photo will catch the same content later.
+                logger.warning(f"Thumbnail PII blur failed (non-fatal): {e}")
+
+            thumbnail_url = _get_media_storage().save(
+                filename, final_bytes, _content_type_for(filename)
+            )
         except Exception as e:
             logger.warning(f"Thumbnail save failed (non-fatal): {e}")
 
