@@ -72,6 +72,76 @@ def _content_type_for(filename: str) -> str:
     return "application/octet-stream"
 
 
+# May 2026 — fix for "Uncaught NotSupportedError: Failed to load
+# because no supported source was found" on dashboard audio playback.
+#
+# Root cause: the legacy single-shot base64 attach path (attach_media
+# + create_full_report) used `ext = "jpg" if "image" in header else
+# "webm"` — every audio data: URL got renamed to `.webm` regardless of
+# what the client actually recorded. iOS Safari records as MP4/AAC
+# (the data: URL header is `data:audio/mp4;base64,...`); after
+# rewrite the file landed as `<id>.webm` with Content-Type=audio/webm,
+# and the browser fed MP4 bytes into a WebM decoder → fail.
+#
+# This helper trusts the magic bytes first (cannot lie) and falls
+# back to the data: URL MIME header if the bytes are unrecognisable.
+# Mirrors the magic-byte sniffer in _assemble_partial_audio +
+# _assemble_media_file so all three paths agree on what a file is.
+def _detect_audio_format(data_url_header: str, raw_bytes: bytes) -> tuple[str, str]:
+    """Resolve (extension, content_type) for an audio data: URL.
+
+    `data_url_header` is the prefix part of `data:audio/mp4;base64,...`
+    up to the comma. `raw_bytes` is the decoded payload — magic bytes
+    win because the data: URL header sometimes lies (e.g. when a PWA
+    uses MediaRecorder.mimeType="audio/webm" but the underlying iOS
+    decoder hands back MP4 anyway).
+
+    Returns ("m4a", "audio/mp4") for unknown/empty input — that's the
+    safest default since AAC-in-MP4 is universally supported across
+    browsers and (uniquely) plays cleanly on iOS Safari without
+    transcoding.
+    """
+    # Magic-byte detection first. Same checks as _assemble_partial_audio.
+    if len(raw_bytes) >= 12 and raw_bytes[4:8] == b'ftyp':
+        return ("m4a", "audio/mp4")
+    if len(raw_bytes) >= 4 and raw_bytes[0:4] == b'\x1a\x45\xdf\xa3':
+        return ("webm", "audio/webm")
+    if len(raw_bytes) >= 4 and raw_bytes[0:4] == b'OggS':
+        return ("ogg", "audio/ogg")
+    if len(raw_bytes) >= 4 and raw_bytes[0:4] == b'RIFF':
+        return ("wav", "audio/wav")
+    if len(raw_bytes) >= 4 and raw_bytes[0:4] == b'caff':
+        # Apple Core Audio — the assembly pipeline transcodes these
+        # to WAV, but on the single-shot attach path we leave it; PyAV
+        # would've already mucked with it if the chunked path saw it.
+        return ("caf", "audio/x-caf")
+    if len(raw_bytes) >= 3 and (raw_bytes[:3] == b'ID3' or raw_bytes[0:1] == b'\xff'):
+        return ("mp3", "audio/mpeg")
+
+    # Magic-byte sniffing failed → trust the data: URL MIME header.
+    h = (data_url_header or "").lower()
+    if "audio/mp4" in h or "audio/x-m4a" in h or "audio/aac" in h:
+        return ("m4a", "audio/mp4")
+    if "audio/webm" in h:
+        return ("webm", "audio/webm")
+    if "audio/ogg" in h or "audio/opus" in h:
+        return ("ogg", "audio/ogg")
+    if "audio/wav" in h or "audio/x-wav" in h or "audio/wave" in h:
+        return ("wav", "audio/wav")
+    if "audio/mpeg" in h or "audio/mp3" in h:
+        return ("mp3", "audio/mpeg")
+
+    # Truly unknown — fall back to m4a/aac which is the most-portable
+    # audio container. Worst case is a re-decode failure on the
+    # dashboard side, but that's strictly no worse than the prior
+    # behaviour of always-webm.
+    logger.warning(
+        f"Unknown audio format (header={data_url_header!r}, "
+        f"first_bytes={raw_bytes[:8].hex()}); defaulting to m4a"
+    )
+    return ("m4a", "audio/mp4")
+
+
 # Apr 2026 — UNDP scaling, Phase 2. The inline processing pipeline
 # (CAFF→WAV transcode, server-side PII blur, perceptual hash, Whisper
 # transcription) is filesystem-based — cv2.imread, PIL.Image.open,
@@ -2164,15 +2234,24 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # Decode and save the base64 media to disk
+    # Decode and save the base64 media via the storage abstraction.
+    # May 2026 — extension + content-type now come from
+    # _detect_audio_format/the data: URL header (was hardcoded to
+    # "webm" for everything non-image, which produced unplayable
+    # audio when iOS recorded MP4/AAC).
     file_url = media_in.url
     if media_in.url.startswith("data:"):
         try:
             header, encoded = media_in.url.split(",", 1)
-            ext = "jpg" if "image" in header else "webm"
             file_data = base64.b64decode(encoded)
             if not file_data:
                 raise ValueError("Empty base64 data")
+
+            if "image" in header:
+                ext = "png" if "png" in header else "jpg"
+                content_type = _content_type_for(f"x.{ext}")
+            else:
+                ext, content_type = _detect_audio_format(header, file_data)
             filename = f"{report.id}_{time.time()}.{ext}"
 
             # Apr 2026 (PR 2) — single-shot attach path. PII blur runs
@@ -2194,10 +2273,11 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                 except Exception as e:
                     logger.warning(f"PII blur failed for {filename}: {e}")
 
-            file_url = _get_media_storage().save(
-                filename, final_data, _content_type_for(filename)
+            file_url = _get_media_storage().save(filename, final_data, content_type)
+            logger.info(
+                f"Attached {ext} ({content_type}): {filename} "
+                f"({len(final_data)} bytes) → {file_url}"
             )
-            logger.info(f"Attached {ext}: {filename} ({len(final_data)} bytes) → {file_url}")
         except Exception as e:
             logger.error(f"Media attach decode error: {e}")
             raise HTTPException(status_code=400, detail=f"Failed to decode media: {str(e)}")
@@ -2938,27 +3018,36 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
             if m.url.startswith("data:"):
                 try:
                     header, encoded = m.url.split(",", 1)
-                    ext = "jpg" if "image" in header else "webm"
 
                     # Decode base64
                     try:
                         file_data = base64.b64decode(encoded)
                     except Exception as decode_err:
-                        logger.error(f"Base64 decode error for {ext}: {decode_err}")
+                        logger.error(f"Base64 decode error: {decode_err}")
                         file_data = b""
 
                     if not file_data:
-                        logger.warning(f"Empty file data for {ext}")
+                        logger.warning("Empty file data after base64 decode")
                         raise ValueError("Base64 decoding produced empty data")
 
+                    # May 2026 — magic-byte detection (see _detect_audio_format
+                    # comment block). Was hardcoded to .webm for all audio,
+                    # which broke iOS captures (MP4 bytes in a .webm wrapper
+                    # → browser decode failure).
+                    if "image" in header:
+                        ext = "png" if "png" in header else "jpg"
+                        content_type = _content_type_for(f"x.{ext}")
+                    else:
+                        ext, content_type = _detect_audio_format(header, file_data)
                     filename = f"{db_report.id}_{time.time()}.{ext}"
 
                     # Apr 2026 (PR 2) — write through the storage
                     # backend (S3 in prod). No persistent EC2 disk usage.
-                    file_url = _get_media_storage().save(
-                        filename, file_data, _content_type_for(filename)
+                    file_url = _get_media_storage().save(filename, file_data, content_type)
+                    logger.info(
+                        f"Saved {ext} ({content_type}) file: {filename} "
+                        f"({len(file_data)} bytes) → {file_url}"
                     )
-                    logger.info(f"Saved {ext} file: {filename} ({len(file_data)} bytes) → {file_url}")
 
                 except Exception as e:
                     logger.error(f"Error handling base64 extract for {m.type}: {type(e).__name__}: {e}")
