@@ -162,6 +162,61 @@ def main(dry_run: bool, limit: Optional[int]) -> int:
                 logger.info(f"  [{m.id[:8]}] rewrote {old} → {new}")
             rewritten_media.append((m.id, old, new))
 
+        # ── Pass 2b: rewrite media.thumbnail_url rows pointing at /static/ ──
+        # May 2026 — original migration only rewrote `media.url`. The
+        # `thumbnail_url` column (set by attach_thumbnail for image
+        # fast-previews and by _try_partial_audio_bg for streaming
+        # audio) still pointed at the old /static/ path even though
+        # Pass 1 already uploaded the file to S3. The dashboard's
+        # MediaResponse._resolve_url field_serializer (May 2026 fix)
+        # then signed an /static/-pass-through URL — works only while
+        # the local UPLOAD_DIR still has the file. Once we GC the
+        # local mirror, those rows would 404.
+        legacy_thumb_rows = (
+            db.query(Media)
+            .filter(Media.thumbnail_url.like("/static/%"))
+            .all()
+        )
+        logger.info(
+            f"Media rows still pointing thumbnail_url at /static/: "
+            f"{len(legacy_thumb_rows)}"
+        )
+        for m in legacy_thumb_rows:
+            old_t = m.thumbnail_url
+            fname_t = old_t.replace("/static/", "", 1)
+            new_t = f"s3://{fname_t}"
+            # Defensive: only rewrite when the key actually exists in S3
+            # (Pass 1 uploads everything in UPLOAD_DIR, so this should
+            # always be true — but a row might reference a name that
+            # was deleted from disk before migration ran). Without the
+            # head_object check we'd happily rewrite a row to point at
+            # a 404, breaking the partial-preview render path.
+            try:
+                s3.head_object(Bucket=bucket, Key=fname_t)
+                exists_in_s3 = True
+            except ClientError as e:
+                code = e.response["Error"]["Code"]
+                if code in ("404", "NoSuchKey", "NotFound"):
+                    exists_in_s3 = False
+                else:
+                    logger.warning(
+                        f"  [{m.id[:8]}.thumbnail_url] head_object error "
+                        f"for {fname_t}: {e} — skipping rewrite to be safe"
+                    )
+                    exists_in_s3 = False
+
+            if not exists_in_s3:
+                logger.warning(
+                    f"  [{m.id[:8]}.thumbnail_url] {old_t} not in S3 — leaving as-is"
+                )
+                continue
+
+            if dry_run:
+                logger.info(f"  [{m.id[:8]}.thumbnail_url] WOULD rewrite {old_t} → {new_t}")
+            else:
+                m.thumbnail_url = new_t
+                logger.info(f"  [{m.id[:8]}.thumbnail_url] rewrote {old_t} → {new_t}")
+
         # ── Pass 3: rewrite satellite_verifications URLs ─────────────
         legacy_sat = (
             db.query(SatelliteVerification)
