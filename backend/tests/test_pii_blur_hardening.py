@@ -119,7 +119,11 @@ class TestBlurWorkerUpdatesStatus:
         db.add(m); db.commit()
         media_id = m.id
 
-        _run_server_pii_blur("/tmp/__crisp_nonexistent__.jpg", "bogus.jpg", media_id)
+        # Apr 2026 (PR 2) — signature changed to (media_id, db_url, filename).
+        # The worker stages the bytes from storage; an invalid db_url
+        # raises in storage.read() and is caught by the outer try/except,
+        # producing outcome='failed'.
+        _run_server_pii_blur(media_id, "/static/__crisp_nonexistent__.jpg", "bogus.jpg")
 
         # Re-read in a fresh view; the worker committed via its own session.
         db.expire_all()

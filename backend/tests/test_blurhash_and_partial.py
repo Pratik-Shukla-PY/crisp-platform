@@ -218,10 +218,18 @@ class TestPartialAssemblySafeguards:
             db.close()
 
     def test_writes_partial_when_soi_and_size_ok(self, tmp_path, monkeypatch):
-        """Valid-looking JPEG prefix → partial is written."""
-        # Redirect UPLOAD_DIR to tmp so we don't pollute the real uploads/.
-        import app.api.endpoints.reports as reports_mod
-        monkeypatch.setattr(reports_mod, "UPLOAD_DIR", str(tmp_path))
+        """Valid-looking JPEG prefix → partial is persisted via storage.
+
+        Apr 2026 (PR 2) — partial assembly no longer writes to UPLOAD_DIR
+        directly; bytes go through the storage abstraction. We reset the
+        storage singleton + point CRISP_UPLOAD_DIR at tmp_path so the
+        LocalStorage backend writes there for the test.
+        """
+        # Reset storage singleton + point upload dir at tmp.
+        from app.services import storage as storage_mod
+        monkeypatch.setenv("MEDIA_BACKEND", "local")
+        monkeypatch.setenv("CRISP_UPLOAD_DIR", str(tmp_path))
+        storage_mod.reset_storage_for_tests()
         db = SessionLocal()
         try:
             mid = "partial-test-ok-01"
@@ -234,16 +242,16 @@ class TestPartialAssemblySafeguards:
             import app.services.pii_blur as pii_mod
             monkeypatch.setattr(pii_mod, "blur_pii", lambda *a, **kw: {"ran": False})
             result = _assemble_partial_image(mid, db)
-            # Result is a URL path; the file itself lives under tmp_path.
+            # Result is the storage-returned URL; for LocalStorage it's
+            # `/static/<filename>`. Verify the bytes via storage.read().
             assert result is not None, "partial should be written when prefix is valid"
-            expected = tmp_path / f"{mid}_partial.jpg"
-            assert expected.exists(), f"expected {expected} to exist"
-            # Verify SOI preserved at byte 0.
-            written = expected.read_bytes()
-            assert written[:2] == b"\xff\xd8"
+            assert result == f"/static/{mid}_partial.jpg", f"got {result!r}"
+            written = storage_mod.get_storage().read(result)
+            assert written[:2] == b"\xff\xd8", "SOI marker preserved"
         finally:
             db.rollback()
             db.close()
+            storage_mod.reset_storage_for_tests()
 
     def test_skip_when_prefix_has_gap(self, tmp_path, monkeypatch):
         """Seq 0,1,3 (missing 2) → partial assembles prefix through 1 only."""

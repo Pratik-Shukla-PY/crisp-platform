@@ -71,6 +71,64 @@ def _content_type_for(filename: str) -> str:
     if f.endswith(".mp3"):                         return "audio/mpeg"
     return "application/octet-stream"
 
+
+# Apr 2026 — UNDP scaling, Phase 2. The inline processing pipeline
+# (CAFF→WAV transcode, server-side PII blur, perceptual hash, Whisper
+# transcription) is filesystem-based — cv2.imread, PIL.Image.open,
+# faster-whisper all expect a path on disk. To keep the persistent
+# UPLOAD_DIR empty under MEDIA_BACKEND=s3, we stage the bytes in a
+# tempfile under /tmp/ for the lifetime of the worker call, then
+# delete it. /tmp is independent of UPLOAD_DIR (the persistent media
+# volume) and doesn't accumulate across uploads — even at UNDP scale
+# (500k reports/incident) we never exceed `<concurrent_uploads> ×
+# <single_image_size>` in /tmp, which is bounded by the assembly +
+# AI executor pool sizes (4+2 = 6 workers max).
+import tempfile
+from contextlib import contextmanager
+
+@contextmanager
+def _stage_from_storage(db_url: str, filename: str):
+    """Read bytes from the storage backend, write to an ephemeral
+    tempfile, yield the path, delete the tempfile on exit.
+
+    Use this whenever a worker needs a filesystem path but we don't
+    want a persistent local copy. The tempfile is cleaned up on context
+    exit even if the worker raises."""
+    suffix = os.path.splitext(filename)[1] or ".bin"
+    tf = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    path = tf.name
+    try:
+        data = _get_media_storage().read(db_url)
+        tf.write(data)
+        tf.flush()
+        tf.close()
+        yield path
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+@contextmanager
+def _stage_bytes(filename: str, data: bytes):
+    """Same as _stage_from_storage but for callers that already have
+    bytes in memory (e.g. assembled chunks pre-storage-save). Avoids
+    a redundant write-then-read round-trip through storage."""
+    suffix = os.path.splitext(filename)[1] or ".bin"
+    tf = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    path = tf.name
+    try:
+        tf.write(data)
+        tf.flush()
+        tf.close()
+        yield path
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
 # P2.2 — bounded thread pool for background assembly.
 #
 # Previously every final-chunk arrival called `threading.Thread(...).start()`
@@ -219,46 +277,28 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
             ext = 'm4a'       # Default to m4a (most compatible for mobile)
 
     filename = f"{media_id}_assembled.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    # Apr 2026 — two-stage persistence. We always write to local disk
-    # FIRST because the inline processing below (CAFF→WAV transcode via
-    # PyAV, PII blur worker, perceptual-hash worker) is filesystem-based
-    # and depends on `filepath` existing. After all inline mutations
-    # are done, we re-read the (possibly transcoded) bytes from disk
-    # and call storage.save() to persist them — for the local backend
-    # that's a no-op double-write to the same path; for the S3 backend
-    # the disk file is a transient working copy and the canonical
-    # store is S3. A periodic local-disk GC sweeps stale working
-    # copies; see scripts/gc_local_uploads.py (added separately).
-    # P2.14 — disk-full handling. A silent OSError here used to leave the media
-    # marked `failed` with no observable signal. Now we catch, log loudly, and
-    # let the caller mark assembly_status='failed' so the client shows a
-    # retryable error in My Reports (P2.12) instead of a mysterious stuck upload.
-    try:
-        with open(filepath, 'wb') as f:
-            f.write(file_bytes)
-    except OSError as e:
-        logger.error(
-            f"[Assembly] OSError writing {filepath} ({len(file_bytes):,} bytes): {e}. "
-            "Likely causes: disk full, permissions, or upload dir deleted."
-        )
-        # Return None so the caller's `if file_url:` branch skips + flips to 'failed'.
-        return None
 
-    # CAFF → WAV transcode. Apple Core Audio isn't supported by HTML5 <audio>
-    # or most non-Apple players. Older iOS recorder configs produced CAFF even
-    # when the filename said .m4a. We use PyAV (which bundles FFmpeg libs, no
-    # system binary required) to re-encode as PCM-in-WAV — universally
-    # playable and lossless. AAC-in-MP4 would be smaller but PyAV's bundled
-    # FFmpeg build omits the AAC encoder, so WAV is the pragmatic choice for
-    # the rare CAFF straggler (new iOS builds produce proper .m4a).
+    # Apr 2026 (PR 2 — UNDP scaling) — the assembly path no longer
+    # writes to UPLOAD_DIR. CAFF→WAV transcode runs on PyAV BytesIO
+    # in memory; the assembled bytes go directly to the storage
+    # backend (S3 in prod). Workers receive the storage URL +
+    # filename and stage their own ephemeral tempfile in /tmp/ when
+    # they need a real path on disk (cv2.imread, faster-whisper).
+    # Net effect: EC2's persistent disk stays untouched at scale.
+
+    # CAFF → WAV transcode. Apple Core Audio isn't supported by HTML5
+    # <audio> or most non-Apple players. Older iOS recorder configs
+    # produced CAFF even when the filename said .m4a. PyAV bundles
+    # FFmpeg libs and supports BytesIO file-likes for both input and
+    # output, so we transcode entirely in memory.
     if ext == 'caf':
         try:
+            import io
             import av
-            wav_path = filepath[:-4] + '.wav'
-            wav_name = f"{media_id}_assembled.wav"
-            input_c = av.open(filepath)
-            output_c = av.open(wav_path, mode='w', format='wav')
+            input_buf = io.BytesIO(file_bytes)
+            output_buf = io.BytesIO()
+            input_c = av.open(input_buf)
+            output_c = av.open(output_buf, mode='w', format='wav')
             try:
                 in_stream = input_c.streams.audio[0]
                 out_stream = output_c.add_stream('pcm_s16le', rate=in_stream.rate)
@@ -272,36 +312,33 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
             finally:
                 output_c.close()
                 input_c.close()
-            if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
-                try: os.remove(filepath)
-                except Exception: pass
-                filepath = wav_path
-                filename = wav_name
+            wav_bytes = output_buf.getvalue()
+            if wav_bytes:
+                file_bytes = wav_bytes
+                filename = f"{media_id}_assembled.wav"
                 ext = 'wav'
-                logger.info(f"Transcoded CAFF → WAV for {media_id} ({os.path.getsize(filepath):,} bytes)")
+                logger.info(f"Transcoded CAFF → WAV for {media_id} ({len(file_bytes):,} bytes, in-memory)")
             else:
                 logger.warning(f"CAFF→WAV transcode produced no output for {media_id}")
         except Exception as e:
             logger.warning(f"CAFF→WAV transcode failed for {media_id}: {e}")
 
-    # Apr 2026 (revision) — defense-in-depth PII blur. The previous
-    # design skipped the server-side pass when client_blur_applied=true,
-    # to avoid a redundant lossy re-encode. That trusted the PWA's
-    # "blurred" claim — and the PWA's BlazeFace at confidence threshold
-    # 0.85 reports "blurred:true, facesDetected:0" even when real faces
-    # at lower confidence (side profiles, distant, partial) slipped
-    # through. Server then skipped, and the un-blurred photo landed on
-    # the dashboard.
-    #
-    # New policy: ALWAYS run the server-side blur for every IMAGE,
-    # regardless of what the client claims. Cost is ~100-300 ms async
-    # (in the AI executor, doesn't block the HTTP response). Defense-
-    # in-depth — even if the client lies or BlazeFace misses, the
-    # server's MediaPipe pass + easyocr text-PII pass redact anything
-    # that slipped through.
-    #
-    # `client_blur_applied` is now telemetry only, retained on the row
-    # so we can see which clients ran the optimistic-pre-blur path.
+    # Persist to storage backend (LocalStorage → /static/<file>;
+    # S3Storage → s3://<file>). Returned `file_url` is what gets
+    # stored in media.url; the response serializer resolves it to a
+    # signed URL when it leaves the API.
+    try:
+        file_url = _get_media_storage().save(filename, file_bytes, _content_type_for(filename))
+    except Exception as e:
+        logger.error(
+            f"[Assembly] storage.save failed for {filename} ({len(file_bytes):,} bytes): {e}. "
+            "Local backend: likely disk full / permissions. S3: likely IAM / network."
+        )
+        return None
+
+    # Defense-in-depth PII blur (always runs, regardless of client_blur_applied).
+    # Worker gets (media_id, file_url, filename) and uses storage.read()
+    # + a /tmp/ tempfile for cv2 — no persistent local disk usage.
     if media_type == 'IMAGE':
         media_row = db.query(Media).filter(Media.id == media_id).first()
         client_claim = bool(getattr(media_row, 'client_blur_applied', False)) if media_row else False
@@ -309,48 +346,20 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
             {'pii_blur_status': 'pending'}, synchronize_session=False
         )
         db.commit()
-        _ai_executor.submit(_run_server_pii_blur, filepath, filename, media_id)
+        _ai_executor.submit(_run_server_pii_blur, media_id, file_url, filename)
         logger.info(
             f"Server PII blur queued for {media_id} "
             f"(client_blur_applied={client_claim} — server runs anyway for defense-in-depth)"
         )
-
-        # Apr 2026 UI v2.1 — UNDP nice-to-have #3: redundancy detection.
-        # Compute the perceptual hash of the assembled photo in the AI
-        # executor (non-blocking). Result lands on `media.photo_phash`
-        # and drives the dashboard's "possible duplicate" badge. Audio
-        # and legacy rows remain NULL. Schedules AFTER the PII-blur
-        # submit above so the hash is computed over the redacted pixels
-        # when server-side blur runs — the dashboard's dedup check
-        # therefore sees post-blur fingerprints, consistent with what
-        # the admin actually views.
-        _ai_executor.submit(_run_photo_phash, filepath, media_id)
+        # Perceptual-hash for redundancy detection. Same /tmp/ pattern
+        # — worker stages from storage, computes phash, deletes tempfile.
+        _ai_executor.submit(_run_photo_phash, media_id, file_url, filename)
 
     logger.info(f"Assembled {media_id}: {len(file_bytes):,} bytes → {filename}")
-
-    # Apr 2026 — persist to the configured storage backend. For local:
-    # `filepath` already has the bytes (no-op re-write). For S3: this
-    # PUTs to the bucket and returns an `s3://<key>` reference that the
-    # response serializer turns into a presigned URL for the dashboard.
-    # We re-read the on-disk bytes (rather than reusing `file_bytes`)
-    # so any inline mutations (CAFF→WAV transcode) are reflected in
-    # what S3 stores.
-    try:
-        with open(filepath, "rb") as _fh:
-            final_bytes = _fh.read()
-        return _get_media_storage().save(filename, final_bytes, _content_type_for(filename))
-    except Exception as e:
-        # If S3 PUT fails, fall back to the legacy /static/ URL — the
-        # file is on disk and serveable by nginx, which keeps the
-        # report viable even if S3 has a transient issue.
-        logger.warning(
-            f"[Assembly] storage.save failed for {filename}: {e}. "
-            "Falling back to legacy /static/ URL — file is still on disk."
-        )
-        return f"/static/{filename}"
+    return file_url
 
 
-def _run_photo_phash(filepath: str, media_id: str) -> None:
+def _run_photo_phash(media_id: str, db_url: str, filename: str) -> None:
     """Compute + persist perceptual hash of an assembled photo.
 
     Fire-and-forget helper invoked from `_assemble_media_file` after the
@@ -358,11 +367,16 @@ def _run_photo_phash(filepath: str, media_id: str) -> None:
     back on the caller's transaction. Any failure is logged + swallowed —
     `photo_phash` stays NULL and the dashboard treats that as "not yet
     scanned" rather than "unique".
+
+    Apr 2026 (PR 2) — reads bytes through the storage abstraction +
+    stages a /tmp/ tempfile for the PIL.Image.open call. No persistent
+    local-disk usage.
     """
     from app.services.phash import compute_phash
     from app.db.session import SessionLocal as _SL
     try:
-        h = compute_phash(filepath)
+        with _stage_from_storage(db_url, filename) as tmp_path:
+            h = compute_phash(tmp_path)
         if not h:
             logger.info(f"[pHash] {media_id}: no hash computed (unavailable or non-image)")
             return
@@ -379,7 +393,7 @@ def _run_photo_phash(filepath: str, media_id: str) -> None:
         logger.warning(f"[pHash] {media_id}: failed: {e}")
 
 
-def _run_server_pii_blur(filepath: str, filename: str, media_id: str) -> None:
+def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
     """Server-side PII blur (MediaPipe faces + easyocr PII text). Runs in
     the AI thread pool so it doesn't block assembly. Never raises —
     failure is logged and the media row's ``pii_blur_status`` is updated
@@ -401,41 +415,45 @@ def _run_server_pii_blur(filepath: str, filename: str, media_id: str) -> None:
     try:
         from app.services.pii_blur import blur_pii
         from app.db.session import SessionLocal
-        pii_result = blur_pii(filepath)
-        if pii_result.get('ran'):
-            outcome = 'complete'
-            if pii_result.get('blurred'):
-                logger.info(
-                    f"PII blurred in {filename}: "
-                    f"faces={pii_result['faces']} pii_text={pii_result['pii_texts']}"
-                )
-                # Apr 2026 — re-upload the blurred bytes to the storage
-                # backend. For local: rewrites UPLOAD_DIR/filename (no-op
-                # since blur_pii already did). For S3: replaces the S3
-                # object with the blurred version (the initial PUT during
-                # _assemble_media_file uploaded the unblurred bytes; this
-                # closes the window where S3 had unblurred bytes).
-                try:
-                    with open(filepath, "rb") as _fh:
-                        blurred_bytes = _fh.read()
-                    _get_media_storage().save(
-                        filename, blurred_bytes, _content_type_for(filename)
+
+        # Stage bytes from storage into a /tmp/ tempfile for the
+        # filesystem-based cv2.imread inside blur_pii. The tempfile
+        # is auto-deleted when the context exits — EC2's persistent
+        # disk stays empty regardless of upload volume.
+        with _stage_from_storage(db_url, filename) as tmp_path:
+            pii_result = blur_pii(tmp_path)
+            if pii_result.get('ran'):
+                outcome = 'complete'
+                if pii_result.get('blurred'):
+                    logger.info(
+                        f"PII blurred in {filename}: "
+                        f"faces={pii_result['faces']} pii_text={pii_result['pii_texts']}"
                     )
-                except Exception as _re_e:
-                    logger.warning(
-                        f"Re-upload of blurred bytes failed for {filename}: {_re_e}. "
-                        "Local-disk file is correctly blurred; S3 object may still hold "
-                        "unblurred bytes — re-run blur worker to fix."
-                    )
+                    # Re-upload the blurred bytes back to storage. blur_pii
+                    # rewrote tmp_path in place; we read the new bytes and
+                    # storage.save() to overwrite the original (S3 PUT or
+                    # local-disk write — backend agnostic).
+                    try:
+                        with open(tmp_path, "rb") as _fh:
+                            blurred_bytes = _fh.read()
+                        _get_media_storage().save(
+                            filename, blurred_bytes, _content_type_for(filename)
+                        )
+                    except Exception as _re_e:
+                        logger.warning(
+                            f"Re-upload of blurred bytes failed for {filename}: {_re_e}. "
+                            "Storage object may still hold unblurred bytes — re-run blur worker to fix."
+                        )
+                else:
+                    logger.info(f"PII blur ran on {filename}: no PII detected")
             else:
-                logger.info(f"PII blur ran on {filename}: no PII detected")
-        else:
-            # backends unavailable — the file is on disk UNBLURRED.
-            outcome = 'skipped'
-            logger.error(
-                f"PII-BLUR SKIPPED for {filename}: {pii_result.get('error')} — "
-                "file kept as-is, dashboard will flag via pii_blur_status='skipped'."
-            )
+                # backends unavailable — the storage object still holds
+                # the unblurred bytes. Dashboard flags via pii_blur_status.
+                outcome = 'skipped'
+                logger.error(
+                    f"PII-BLUR SKIPPED for {filename}: {pii_result.get('error')} — "
+                    "object kept as-is, dashboard will flag via pii_blur_status='skipped'."
+                )
     except Exception as e:
         outcome = 'failed'
         logger.warning(f"PII blur failed for {filename}: {e}")
@@ -535,29 +553,31 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
         return None
 
     filename = f"{media_id}_partial.jpg"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    # Write to local disk first so the inline blur (filesystem-based) works.
-    with open(filepath, 'wb') as f:
-        f.write(file_bytes)
 
-    # PII Protection: blur faces even in partial images (shown on dashboard during upload)
+    # Apr 2026 (PR 2) — partial-image PII blur via /tmp/ tempfile so
+    # we never write to UPLOAD_DIR. blur_pii is filesystem-based; we
+    # stage briefly, blur in place, read back, and storage.save().
+    # Tempfile is auto-deleted on context exit.
+    final_bytes = file_bytes
     try:
-        from app.services.pii_blur import blur_pii
-        blur_pii(filepath)
+        with _stage_bytes(filename, file_bytes) as tmp_path:
+            from app.services.pii_blur import blur_pii
+            try:
+                blur_pii(tmp_path)
+            except Exception:
+                pass  # Non-critical for partial images
+            with open(tmp_path, "rb") as _fh:
+                final_bytes = _fh.read()
     except Exception:
-        pass  # Non-critical for partial images
+        pass  # Tempfile staging failed; fall back to unblurred bytes
 
     logger.info(f"Partial image updated: {media_id} ({len(byte_parts)} chunks, {len(file_bytes):,} bytes)")
 
-    # Apr 2026 — persist via storage abstraction. Re-read from disk so
-    # the (possibly blurred) bytes go to the canonical store.
     try:
-        with open(filepath, "rb") as _fh:
-            final_bytes = _fh.read()
         return _get_media_storage().save(filename, final_bytes, "image/jpeg")
     except Exception as e:
-        logger.warning(f"[PartialImg] storage.save fallback to /static/: {e}")
-        return f"/static/{filename}"
+        logger.warning(f"[PartialImg] storage.save failed: {e}")
+        return None
 
 
 def _assemble_partial_audio(media_id: str, db: Session) -> Optional[str]:
@@ -609,32 +629,34 @@ def _assemble_partial_audio(media_id: str, db: Session) -> Optional[str]:
         ext = 'm4a'
 
     filename = f"{media_id}_partial.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    # Local-disk first — the partial transcription worker (Whisper)
-    # below reads from filepath, so we always need a working copy
-    # on disk regardless of canonical backend.
-    with open(filepath, 'wb') as f:
-        f.write(file_bytes)
 
+    # Apr 2026 (PR 2) — direct in-memory persist via storage abstraction.
+    # The partial-transcription worker (Whisper, _run_partial_transcription_bg)
+    # reads via storage.read() + a /tmp/ tempfile when it runs, so we
+    # don't need to keep a local working copy here.
     logger.info(f"Partial audio updated: {media_id} ({len(byte_parts)} chunks, {len(file_bytes):,} bytes)")
 
-    # Apr 2026 — persist via storage abstraction.
     try:
         return _get_media_storage().save(filename, file_bytes, _content_type_for(filename))
     except Exception as e:
-        logger.warning(f"[PartialAudio] storage.save fallback to /static/: {e}")
-        return f"/static/{filename}"
+        logger.warning(f"[PartialAudio] storage.save failed: {e}")
+        return None
 
 
 def _run_partial_transcription_bg(report_id: str, partial_url: str):
-    """Background task: transcribe partial audio to English as chunks arrive."""
+    """Background task: transcribe partial audio to English as chunks arrive.
+
+    Apr 2026 (PR 2) — reads bytes via the storage abstraction + stages a
+    /tmp/ tempfile for faster-whisper. No persistent local-disk usage.
+    """
     from app.db.session import SessionLocal
     db = SessionLocal()
     try:
-        disk_path = os.path.join(UPLOAD_DIR, partial_url.replace("/static/", ""))
-        if not os.path.exists(disk_path):
-            return
-        text = ai_service.transcribe_audio_partial(disk_path, translate_to_english=True)
+        # Filename inferred from the URL tail (works for /static/foo.m4a
+        # and s3://foo.m4a alike).
+        filename = partial_url.rsplit("/", 1)[-1].split("://", 1)[-1].rsplit("/", 1)[-1]
+        with _stage_from_storage(partial_url, filename) as tmp_path:
+            text = ai_service.transcribe_audio_partial(tmp_path, translate_to_english=True)
         if text:
             ai = db.query(AIAnalysis).filter(AIAnalysis.report_id == report_id).first()
             if ai:
@@ -845,13 +867,19 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
 
 
 def _run_ai_pipeline(report_id: str, media_type: str, file_url: str, db: Session):
-    """Trigger transcription or image analysis after media assembly."""
-    disk_path = os.path.join(UPLOAD_DIR, file_url.replace("/static/", ""))
-    if not os.path.exists(disk_path):
+    """Trigger transcription or image analysis after media assembly.
+
+    Apr 2026 (PR 2) — reads bytes via the storage abstraction + stages
+    a /tmp/ tempfile for the underlying filesystem APIs (faster-whisper,
+    cv2 image analyzer). No persistent local-disk usage.
+    """
+    if not file_url:
         return
+    filename = file_url.rsplit("/", 1)[-1].split("://", 1)[-1].rsplit("/", 1)[-1]
 
     if media_type == 'AUDIO':
-        transcription = ai_service.transcribe_audio(disk_path)
+        with _stage_from_storage(file_url, filename) as tmp_path:
+            transcription = ai_service.transcribe_audio(tmp_path)
         if transcription:
             ai = db.query(AIAnalysis).filter(AIAnalysis.report_id == report_id).first()
             if ai:
@@ -860,7 +888,8 @@ def _run_ai_pipeline(report_id: str, media_type: str, file_url: str, db: Session
                 db.add(AIAnalysis(report_id=report_id, transcription=transcription))
             db.commit()
     elif media_type == 'IMAGE':
-        vision = ai_service.analyze_image(disk_path)
+        with _stage_from_storage(file_url, filename) as tmp_path:
+            vision = ai_service.analyze_image(tmp_path)
         ai = db.query(AIAnalysis).filter(AIAnalysis.report_id == report_id).first()
         if ai:
             ai.detected_labels = vision.get("labels", [])
@@ -2145,20 +2174,30 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             if not file_data:
                 raise ValueError("Empty base64 data")
             filename = f"{report.id}_{time.time()}.{ext}"
-            filepath = os.path.join(UPLOAD_DIR, filename)
-            with open(filepath, "wb") as f:
-                f.write(file_data)
-            logger.info(f"Attached {ext}: {filename} ({len(file_data)} bytes)")
-            # PII Protection: blur faces + PII text on single-file uploads
+
+            # Apr 2026 (PR 2) — single-shot attach path. PII blur runs
+            # via /tmp/ tempfile (filesystem-based cv2), then we
+            # storage.save() the (possibly blurred) bytes.
+            final_data = file_data
             if ext in ('jpg', 'jpeg', 'png'):
                 try:
                     from app.services.pii_blur import blur_pii
-                    pii_result = blur_pii(filepath)
+                    with _stage_bytes(filename, file_data) as tmp_path:
+                        pii_result = blur_pii(tmp_path)
+                        with open(tmp_path, "rb") as _fh:
+                            final_data = _fh.read()
                     if pii_result.get("blurred"):
-                        logger.info(f"PII blurred in attached {filename}: faces={pii_result['faces']} text={pii_result['pii_texts']}")
+                        logger.info(
+                            f"PII blurred in attached {filename}: "
+                            f"faces={pii_result['faces']} text={pii_result['pii_texts']}"
+                        )
                 except Exception as e:
                     logger.warning(f"PII blur failed for {filename}: {e}")
-            file_url = f"/static/{filename}"
+
+            file_url = _get_media_storage().save(
+                filename, final_data, _content_type_for(filename)
+            )
+            logger.info(f"Attached {ext}: {filename} ({len(final_data)} bytes) → {file_url}")
         except Exception as e:
             logger.error(f"Media attach decode error: {e}")
             raise HTTPException(status_code=400, detail=f"Failed to decode media: {str(e)}")
@@ -2880,14 +2919,13 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
                         raise ValueError("Base64 decoding produced empty data")
 
                     filename = f"{db_report.id}_{time.time()}.{ext}"
-                    filepath = os.path.join(UPLOAD_DIR, filename)
 
-                    # Write file
-                    with open(filepath, "wb") as f:
-                        bytes_written = f.write(file_data)
-
-                    logger.info(f"Saved {ext} file: {filename} ({len(file_data)} bytes, {bytes_written} written)")
-                    file_url = f"/static/{filename}"
+                    # Apr 2026 (PR 2) — write through the storage
+                    # backend (S3 in prod). No persistent EC2 disk usage.
+                    file_url = _get_media_storage().save(
+                        filename, file_data, _content_type_for(filename)
+                    )
+                    logger.info(f"Saved {ext} file: {filename} ({len(file_data)} bytes) → {file_url}")
 
                 except Exception as e:
                     logger.error(f"Error handling base64 extract for {m.type}: {type(e).__name__}: {e}")
