@@ -15,7 +15,7 @@
 // the browser was heuristic-pinning the old CSP. Old SWs auto-replace
 // because skipWaiting() runs in install + nginx now sends Cache-Control:
 // no-cache on sw.js so the new code lands within seconds of deploy.
-const APP_CACHE    = 'crisp-app-v11';  // v11 (Apr 2026): satellite 2x2 grid in dpSwitchView('sat') + new app.js?v=750.
+const APP_CACHE    = 'crisp-app-v12';  // v12 (May 2026): favicon.svg added — evict v11 so new <link rel=icon> in index.html + login.html lands without a hard refresh.
 const CDN_CACHE    = 'crisp-cdn-v9';
 const API_CACHE    = 'crisp-api-v9';
 const STATIC_CACHE = 'crisp-static-v12';

@@ -6,6 +6,13 @@
     <title>CRISP | UN Crisis Control Panel</title>
     <meta name="description" content="United Nations Crisis Response Intelligence System — hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
+    <!-- May 2026 — favicon. SVG works in modern browsers (Chrome 80+,
+         Firefox 90+, Safari 16+); the bare /favicon.ico request from
+         older browsers is satisfied by an nginx alias that serves the
+         same SVG with image/svg+xml content-type. Apple touch icon
+         reuses the PWA's existing icon-192.png. -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="apple-touch-icon" href="../../mobile-app/src/assets/icon-192.png">
     <link rel="manifest" href="manifest.json">
     <!-- Apr 2026 — Noto Sans Arabic + Noto Sans SC added so analyst view
          renders Arabic / CJK report text in proper glyphs (was falling
