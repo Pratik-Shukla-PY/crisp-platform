@@ -155,6 +155,7 @@ class S3Storage:
         # Lazy import so dev environments without boto3 don't blow up
         # at module-import time.
         import boto3  # type: ignore
+        from botocore.config import Config  # type: ignore
 
         self.bucket = bucket
         self.region = region
@@ -163,7 +164,24 @@ class S3Storage:
         # migration script walks that dir and uploads each file; until
         # then, S3Storage.read() falls back to local disk for those.
         self.legacy_local_dir = upload_dir_for_legacy_reads
-        self.s3 = boto3.client("s3", region_name=region)
+        # May 2026 — explicit `addressing_style='virtual'` + regional
+        # endpoint URL forces boto3 to generate virtual-hosted-regional
+        # URLs (`<bucket>.s3.<region>.amazonaws.com/...`) instead of the
+        # legacy global form (`<bucket>.s3.amazonaws.com/...`). Without
+        # this, presigned URLs got a 307 redirect to the regional
+        # endpoint at request time — fine for direct fetches, but the
+        # dashboard's CSP check happens BEFORE the redirect fires, so
+        # we had to whitelist both hosts. SigV4 is required for
+        # ap-south-1 + later regions and is the future-default anyway.
+        self.s3 = boto3.client(
+            "s3",
+            region_name=region,
+            endpoint_url=f"https://s3.{region}.amazonaws.com",
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "virtual"},
+            ),
+        )
 
     def save(self, filename: str, data: bytes, content_type: str = "application/octet-stream") -> str:
         # Object key matches the filename — keeps debug + grep simple
