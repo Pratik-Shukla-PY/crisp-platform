@@ -191,7 +191,18 @@ class MediaResponse(MediaBase):
     # out so the response is always something a browser can GET.
     # Pass-through for `/static/...` (legacy local-disk paths) and
     # plain http(s) URLs.
-    @field_serializer("url", when_used="json")
+    #
+    # May 2026 — `thumbnail_url` MUST be resolved too. The dashboard's
+    # audio player falls back to `audio.thumbnail_url` while a chunked
+    # upload is still in flight (it stores the partial-assembled WebM/
+    # M4A under that field, see _try_partial_audio_bg in
+    # app/api/endpoints/reports.py). Without including the field here,
+    # the dashboard receives a raw `s3://...` string, prepends
+    # BACKEND_HOST, and ends up GETting `https://undp/.../s3://abc.m4a`
+    # → 404. Same shape applies to image fast-preview thumbnails set
+    # by /reports/{id}/media/thumbnail. Pydantic v2's field_serializer
+    # accepts a tuple of field names — one decorator covers both.
+    @field_serializer("url", "thumbnail_url", when_used="json")
     def _resolve_url(self, v: Optional[str]) -> Optional[str]:
         if not v:
             return v
