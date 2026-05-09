@@ -9,9 +9,13 @@
 //  Exposed as a global `PIIBlur` object so `app.js` (non-module vanilla JS) can
 //  call it without a bundler. The same pattern TF.js uses via CDN.
 //
-//  Dependencies (loaded via <script> tags in index.html):
-//    - tf           (@tensorflow/tfjs@4)
-//    - blazeface    (@tensorflow-models/blazeface@0.1)
+//  Dependencies — LAZY-LOADED at first ensureModel() call (May 2026):
+//    - tf           (@tensorflow/tfjs@4) — ~360 KB
+//    - blazeface    (@tensorflow-models/blazeface@0.1) — ~70 KB
+//  These were eagerly downloaded at boot before this change → cost
+//  every PWA visitor ~430 KB on Slow 4G even if they never captured a
+//  photo. Now injected dynamically the first time `_blurIfPossible`
+//  runs, which only happens on the photo-capture stage.
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
     'use strict';
@@ -20,9 +24,58 @@
     let _model = null;
     /** In-flight load promise so concurrent callers wait on the same load. */
     let _loading = null;
+    /** Lazy-load promise for tf.js + blazeface scripts. Cached after first call. */
+    let _scriptsPromise = null;
 
     /** Last telemetry snapshot; optional to read. */
     let _lastStats = { faces: 0, ms: 0, skipped: false };
+
+    /**
+     * Inject a <script> tag and wait for it to load. Idempotent — calling
+     * twice with the same URL re-uses the existing tag. Returns a promise.
+     */
+    function _loadScript(url) {
+        return new Promise((resolve, reject) => {
+            const existing = document.querySelector(`script[src="${url}"]`);
+            if (existing) {
+                if (existing.dataset.loaded === '1') return resolve();
+                existing.addEventListener('load', () => resolve());
+                existing.addEventListener('error', () =>
+                    reject(new Error('script load failed: ' + url)));
+                return;
+            }
+            const s = document.createElement('script');
+            s.src = url;
+            s.crossOrigin = 'anonymous';
+            s.async = false;   // preserve order across multiple injects
+            s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+            s.onerror = () => reject(new Error('script load failed: ' + url));
+            document.head.appendChild(s);
+        });
+    }
+
+    /**
+     * Lazy-load tf.js + blazeface. Idempotent + concurrent-safe.
+     * Only fired when we actually need to blur a photo — saves ~430 KB
+     * on the home page for users who never capture.
+     */
+    function _ensureScripts() {
+        if (_scriptsPromise) return _scriptsPromise;
+        _scriptsPromise = (async () => {
+            // Already loaded by some other script tag (back-compat).
+            if (typeof tf !== 'undefined' && typeof blazeface !== 'undefined') return;
+            // tfjs FIRST (blazeface needs window.tf). Order matters.
+            if (typeof tf === 'undefined') {
+                await _loadScript(
+                    'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
+            }
+            if (typeof blazeface === 'undefined') {
+                await _loadScript(
+                    'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.umd.js');
+            }
+        })();
+        return _scriptsPromise;
+    }
 
     /**
      * Load BlazeFace on demand. Idempotent + concurrent-safe.
@@ -31,16 +84,37 @@
         if (_model) return _model;
         if (_loading) return _loading;
 
+        // May 2026 — lazy-load the scripts before checking the globals.
+        await _ensureScripts();
+
         if (typeof tf === 'undefined' || typeof blazeface === 'undefined') {
-            throw new Error('TF.js / blazeface not loaded');
+            throw new Error('TF.js / blazeface failed to load');
         }
 
         _loading = (async () => {
             // Prefer WebGL for speed; fall back to CPU if unavailable.
             try { await tf.setBackend('webgl'); } catch (_) { await tf.setBackend('cpu'); }
             await tf.ready();
-            _model = await blazeface.load();
-            console.log('[PIIBlur] BlazeFace loaded, backend=', tf.getBackend());
+            // May 2026 — vendor the BlazeFace model locally.
+            // Default `blazeface.load()` fetches from tfhub.dev/Kaggle
+            // which return CORS-blocked 404s on production. Loading from
+            // same-origin avoids both CORS issues + the 0.5 s + extra
+            // round-trip to a third-party CDN. Files are committed to
+            // mobile-app/src/vendor/blazeface/ (~470 KB).
+            const modelUrl = new URL(
+                'vendor/blazeface/model.json',
+                document.baseURI,
+            ).toString();
+            try {
+                _model = await blazeface.load({ modelUrl });
+                console.log('[PIIBlur] BlazeFace loaded (vendored), backend=', tf.getBackend());
+            } catch (e) {
+                // Fallback: try the npm-default URL in case the vendored
+                // copy is somehow corrupt or missing on first install.
+                console.warn('[PIIBlur] vendored load failed; falling back to default URL:', e.message);
+                _model = await blazeface.load();
+                console.log('[PIIBlur] BlazeFace loaded (fallback), backend=', tf.getBackend());
+            }
             _loading = null;
             return _model;
         })();
@@ -234,6 +308,19 @@
     async function blurFaces(srcBlob, opts) {
         const t0 = performance.now();
         const quality = (opts && typeof opts.quality === 'number') ? opts.quality : 0.85;
+
+        // May 2026 — lazy-load tf.js + blazeface scripts on first call.
+        // Prior to this change the libraries were always preloaded via
+        // <script> tags in index.html (~430 KB tax on the home page).
+        // _ensureScripts() is idempotent + concurrent-safe.
+        try {
+            await _ensureScripts();
+        } catch (e) {
+            const err = 'tf/blazeface load failed: ' + (e?.message || e);
+            console.warn('[PIIBlur] ' + err + ' — returning raw blob; server MUST run its own blur');
+            _lastStats = { faces: 0, ms: 0, skipped: true };
+            return { blob: srcBlob, blurred: false, facesDetected: 0, skipped: true, error: err };
+        }
 
         // Pipeline is disabled entirely if the backing libraries didn't load.
         if (typeof tf === 'undefined' || typeof blazeface === 'undefined') {

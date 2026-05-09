@@ -124,7 +124,12 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     white-space: nowrap;
 }
 .lang-switcher button {
-    background: none; border: none; color: rgba(255,255,255,0.6);
+    background: none; border: none;
+    /* May 2026 (Lighthouse a11y) — pill itself is dark (rgba(0,0,0,0.3))
+       so light text on it is fine on light-theme. But the audit treats
+       the underlying body color as the comparison point in some cases.
+       Bump to 0.85 white from 0.6 so we clear 4.5:1 on every theme. */
+    color: rgba(255,255,255,0.85);
     padding: 3px 7px; border-radius: 12px; font-size: 0.7rem;
     font-weight: 600; cursor: pointer; transition: 0.2s;
     white-space: nowrap;
@@ -138,10 +143,10 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     line-height: 1.2;
 }
 .lang-switcher button:hover {
-    color: rgba(255,255,255,0.9);
+    color: #fff;
 }
 .lang-switcher button.active {
-    background: rgba(255,255,255,0.15); color: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.20); color: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,0.3);
 }
 
 /* ── Progress bar ───────────────────────────────────────────── */
@@ -252,8 +257,16 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .undp-badge {
     display: flex; align-items: center; gap: 8px;
     background: rgba(255,174,0,0.1); border: 1px solid rgba(255,174,0,0.3);
-    color: var(--accent); padding: 6px 16px; border-radius: 20px;
+    /* May 2026 (Lighthouse a11y) — light-theme contrast: orange
+       #ffae00 on rgba(255,174,0,0.1) is ~3:1 against white-ish bg.
+       Darker color (#a85a00) hits 4.5:1 in light theme. Dark-theme
+       override below. */
+    color: #a85a00;
+    padding: 6px 16px; border-radius: 20px;
     font-size: 0.85rem; font-weight: 700;
+}
+@media (prefers-color-scheme: dark) {
+    .undp-badge { color: var(--accent); }   /* original orange on dark bg */
 }
 .hero-title {
     font-family: var(--heading); font-size: 2.6rem; font-weight: 800;
@@ -2045,13 +2058,20 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 .home-offline-hint {
     margin: 24px 16px 8px;
     padding: 10px 14px;
-    border: 1px solid rgba(56, 189, 248, 0.25);
+    border: 1px solid rgba(56, 189, 248, 0.35);
     border-radius: 10px;
     background: rgba(56, 189, 248, 0.06);
-    color: #7dd3fc;
+    /* May 2026 (Lighthouse a11y) — darker default for >=4.5:1 contrast
+       on the light-theme background (#f8fafc). #0e7490 (cyan-700) is
+       darker than the original #7dd3fc (cyan-300) which only met
+       contrast on the dark theme. */
+    color: #0e7490;
     font-size: 12px;
     text-align: center;
     line-height: 1.45;
+}
+@media (prefers-color-scheme: dark) {
+    .home-offline-hint { color: #7dd3fc; }   /* dark-theme bg, light-blue text */
 }
 
 /* ─────────────────────────────────────────────────────────────────────────

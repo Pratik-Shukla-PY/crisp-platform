@@ -52,6 +52,9 @@ backend/uploads/
 *.pth
 *.pt
 *.bin
+# Vendored TF.js model weights (BlazeFace) — small enough to track,
+# eliminates the Kaggle CORS 404 PII-blur production bug.
+!mobile-app/src/vendor/blazeface/*.bin
 
 # IDE
 .vscode/

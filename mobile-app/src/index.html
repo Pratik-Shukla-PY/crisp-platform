@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- May 2026 — `maximum-scale=1.0, user-scalable=no` REMOVED.
+         WCAG 1.4.4 (Resize text) and the UNDP a11y brief require that
+         low-vision users be able to pinch-zoom. The v4 layout is
+         responsive and survives zoom-in without breaking. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CRISP | Report Incident</title>
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
@@ -12,25 +16,39 @@
     <meta name="apple-mobile-web-app-title" content="CRISP">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="assets/icon-192.png">
-    <!-- Fonts & Styles -->
-    <!-- Apr 2026 — added Noto Sans Arabic + Noto Sans SC (Simplified Chinese)
-         alongside Inter / Outfit. Inter doesn't ship CJK or full Arabic
-         glyphs; without these, Arabic / Chinese strings rendered in
-         whatever the device's system font picked, which produced visibly
-         inconsistent typography across iOS/Android/desktop for those
-         locales. The browser uses font-family fallback per-glyph: Latin
-         text picks Inter, Arabic text picks Noto Sans Arabic, CJK picks
-         Noto Sans SC. The corresponding CSS-level fallbacks live in
-         styles.css's `--font` and `--heading` definitions. -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- May 2026 (Lighthouse perf fix) — DNS prefetch + preconnect for
+         CDN origins so the TLS handshake happens in parallel with HTML
+         parse. Saves ~200ms on Slow 4G first paint. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="dns-prefetch" href="https://unpkg.com">
+
+    <!-- May 2026 (Lighthouse perf fix) — fonts + FontAwesome + Leaflet
+         CSS were render-blocking ~6 seconds. Switched to async loading
+         pattern (media=print → onload swap). On-screen text initially
+         uses system fallback (very fast), then upgrades to webfont when
+         loaded. font-display:swap inside the font CSS prevents FOIT.
+         Apr 2026 note: Noto Sans Arabic + Noto Sans SC stay together;
+         the browser only fetches the per-glyph subsets it actually
+         needs (Latin-only renders → only Inter+Outfit hit network). -->
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap"
+          media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap"></noscript>
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+          media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
     <!-- Leaflet — UNDP Appendix: building-footprint overlay on the review
-         page. Loaded from CDN to match the dashboard's existing Leaflet
-         dependency; the service worker caches the JS + CSS so offline
-         captures still paint the map if the reporter's already opened
-         the app once on this device. -->
+         page. Async load — only the building-select stage actually
+         needs it; saves ~800 ms render-blocking on the home page. The
+         service worker caches it for offline. -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""
+          media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"></noscript>
+    <!-- Local app stylesheet — required for first paint, kept synchronous. -->
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -85,7 +103,7 @@
          window.confirm so the copy can be fully i18n'd. -->
     <div id="image-delete-confirm" class="image-delete-confirm" style="display:none;" role="dialog" aria-modal="true">
         <div class="idc-sheet">
-            <h3 class="idc-title" data-i18n="image_delete_confirm_title">Delete this image?</h3>
+            <h2 class="idc-title" data-i18n="image_delete_confirm_title">Delete this image?</h2>
             <p class="idc-body" data-i18n="image_delete_confirm_body">This image will be removed from your report.</p>
             <div class="idc-buttons">
                 <button id="btn-idc-cancel" class="idc-cancel" data-i18n="image_delete_cancel">Cancel</button>
@@ -97,7 +115,7 @@
     <!-- Language picker overlay — full list. Opened by #btn-lang-current. -->
     <div id="lang-picker-overlay" class="lang-picker-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Choose language">
         <div class="lang-picker-sheet">
-            <h3 class="lang-picker-title" data-i18n="lang_picker_title">Choose language</h3>
+            <h2 class="lang-picker-title" data-i18n="lang_picker_title">Choose language</h2>
             <!-- Populated by detectAndSetupLanguage() — shown as a top row
                  above the main grid when a detected local differs from the
                  active locale. "📍 Your region: ಕನ್ನಡ" style hint. -->
@@ -465,18 +483,18 @@
 
             <!-- Q1: damage classification (3 chips, defaults Partial) -->
             <section class="v4-section">
-                <h3 class="v4-section-title" data-i18n="v4_q_damage">How bad is the damage?</h3>
-                <div class="v4-chip-row" id="v4-chips-damage" role="radiogroup">
-                    <button class="v4-chip" data-value="MINIMAL" type="button" role="radio">
-                        <span class="v4-chip-dot v4-chip-dot-min">●</span>
+                <h2 class="v4-section-title" data-i18n="v4_q_damage">How bad is the damage?</h2>
+                <div class="v4-chip-row" id="v4-chips-damage" role="radiogroup" aria-label="Damage severity">
+                    <button class="v4-chip" data-value="MINIMAL" type="button" role="radio" aria-checked="false">
+                        <span class="v4-chip-dot v4-chip-dot-min" aria-hidden="true">●</span>
                         <span class="v4-chip-label" data-i18n="damage_minimal">Minimal</span>
                     </button>
                     <button class="v4-chip is-selected" data-value="PARTIAL" type="button" role="radio" aria-checked="true">
-                        <span class="v4-chip-dot v4-chip-dot-partial">●</span>
+                        <span class="v4-chip-dot v4-chip-dot-partial" aria-hidden="true">●</span>
                         <span class="v4-chip-label" data-i18n="damage_partial">Partial</span>
                     </button>
-                    <button class="v4-chip" data-value="COMPLETE" type="button" role="radio">
-                        <span class="v4-chip-dot v4-chip-dot-complete">●</span>
+                    <button class="v4-chip" data-value="COMPLETE" type="button" role="radio" aria-checked="false">
+                        <span class="v4-chip-dot v4-chip-dot-complete" aria-hidden="true">●</span>
                         <span class="v4-chip-label" data-i18n="damage_complete">Complete</span>
                     </button>
                 </div>
@@ -484,7 +502,7 @@
 
             <!-- Q2: infrastructure type (8 UNDP super-types as carousel) -->
             <section class="v4-section">
-                <h3 class="v4-section-title" data-i18n="v4_q_infra">What was hit?</h3>
+                <h2 class="v4-section-title" data-i18n="v4_q_infra">What was hit?</h2>
                 <div class="v4-carousel" id="v4-carousel-infra"
                      data-options='[
                         {"v":"RESIDENTIAL","i":"fa-house","l":"Residential","k":"infra_residential"},
@@ -500,7 +518,7 @@
 
             <!-- Q3: crisis type (9 UNDP types as carousel) -->
             <section class="v4-section">
-                <h3 class="v4-section-title" data-i18n="v4_q_crisis">What caused it?</h3>
+                <h2 class="v4-section-title" data-i18n="v4_q_crisis">What caused it?</h2>
                 <div class="v4-carousel" id="v4-carousel-crisis"
                      data-options='[
                         {"v":"EARTHQUAKE","i":"fa-house-crack","l":"Earthquake","k":"crisis_earthquake"},
@@ -623,7 +641,7 @@
                     <!-- Service status (compact 3-row toggle group) -->
                     <div class="v4-undp-row">
                         <span class="v4-undp-label" data-i18n="v4_electricity">Electricity</span>
-                        <select class="v4-select" id="v4-elec">
+                        <select class="v4-select" id="v4-elec" aria-label="Electricity service status">
                             <option value="" data-i18n="v4_unknown">Unknown</option>
                             <option value="WORKING" data-i18n="v4_working">Working</option>
                             <option value="INTERMITTENT" data-i18n="v4_intermittent">Intermittent</option>
@@ -633,7 +651,7 @@
                     </div>
                     <div class="v4-undp-row">
                         <span class="v4-undp-label" data-i18n="v4_health">Health services</span>
-                        <select class="v4-select" id="v4-health">
+                        <select class="v4-select" id="v4-health" aria-label="Health services status">
                             <option value="" data-i18n="v4_unknown">Unknown</option>
                             <option value="FULLY_OPERATIONAL" data-i18n="v4_fully_op">Fully operational</option>
                             <option value="PARTIALLY_OPERATIONAL" data-i18n="v4_partly_op">Partial</option>
@@ -821,7 +839,7 @@
 
         <!-- Big mic button -->
         <div class="mic-wrapper" id="mic-wrapper">
-            <button class="mic-btn" id="btn-mic">
+            <button class="mic-btn" id="btn-mic" type="button" aria-label="Tap to record voice">
                 <i class="fa-solid fa-microphone" id="mic-icon"></i>
             </button>
             <p class="mic-label" id="mic-label" data-i18n="tap_mic">Tap and speak clearly</p>
@@ -1314,7 +1332,7 @@
             <div class="service-grid">
                 <div class="svc-row">
                     <span data-i18n="electricity">⚡ Electricity</span>
-                    <select id="svc-electricity" class="svc-select">
+                    <select id="svc-electricity" class="svc-select" aria-label="Electricity service status">
                         <option value="UNKNOWN" data-i18n="unknown">Unknown</option>
                         <option value="OPERATIONAL" data-i18n="working">Working</option>
                         <option value="DISRUPTED" data-i18n="disrupted">Disrupted</option>
@@ -1323,7 +1341,7 @@
                 </div>
                 <div class="svc-row">
                     <span data-i18n="water_svc">💧 Water</span>
-                    <select id="svc-water" class="svc-select">
+                    <select id="svc-water" class="svc-select" aria-label="Water service status">
                         <option value="UNKNOWN" data-i18n="unknown">Unknown</option>
                         <option value="OPERATIONAL" data-i18n="working">Working</option>
                         <option value="DISRUPTED" data-i18n="disrupted">Disrupted</option>
@@ -1332,7 +1350,7 @@
                 </div>
                 <div class="svc-row">
                     <span data-i18n="health_svc">🏥 Health</span>
-                    <select id="svc-health" class="svc-select">
+                    <select id="svc-health" class="svc-select" aria-label="Health services status">
                         <option value="UNKNOWN" data-i18n="unknown">Unknown</option>
                         <option value="OPERATIONAL" data-i18n="working">Working</option>
                         <option value="DISRUPTED" data-i18n="disrupted">Disrupted</option>
@@ -1649,12 +1667,12 @@
         </div>
 
         <div class="history-section">
-            <h3 class="history-section-title"><i class="fa-solid fa-spinner"></i> <span data-i18n="in_flight">In flight</span></h3>
+            <h2 class="history-section-title"><i class="fa-solid fa-spinner"></i> <span data-i18n="in_flight">In flight</span></h2>
             <div id="history-partial-list"></div>
         </div>
 
         <div class="history-section">
-            <h3 class="history-section-title"><i class="fa-solid fa-paper-plane"></i> <span data-i18n="submitted">Submitted</span></h3>
+            <h2 class="history-section-title"><i class="fa-solid fa-paper-plane"></i> <span data-i18n="submitted">Submitted</span></h2>
             <div id="history-synced-list"></div>
         </div>
 
@@ -1796,14 +1814,14 @@
         crossorigin=""></script>
 <script src="building-select.js?v=6"></script>
 <script src="places.js?v=3"></script>
-<!-- Client-side PII blur: BlazeFace face detection + canvas Gaussian blur.
-     Scripts load in order; pii-blur.js exposes window.PIIBlur which app.js calls
-     after each photo-capture. Order matters: tfjs -> blazeface -> pii-blur. -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js" crossorigin="anonymous"></script>
-<!-- BlazeFace 0.1.0's package.json still lists blazeface.min.js but the
-     tarball only ships blazeface.min.umd.js — use that. -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.umd.js" crossorigin="anonymous"></script>
-<script src="pii-blur.js?v=2"></script>
+<!-- May 2026 (Lighthouse perf fix) — TF.js + BlazeFace are LAZY-LOADED.
+     They were eagerly downloaded (~360 KB tfjs + ~70 KB blazeface) at
+     boot even though only the photo-capture flow uses them. Most users
+     who land on the home page never get to capture (they tap a channel
+     button instead) — no point paying a 4-sec download tax for them.
+     pii-blur.js's `ensureModel()` now dynamically injects the script
+     tags on first call. -->
+<script src="pii-blur.js?v=3"></script>
 <!-- Progressive-upload Phase 1 (Apr 2026). Exposes window.BlurHash —
      compact ~28-char DCT encoding consumed by image-variants.js at
      capture time and sent in the meta POST. Loaded ahead of
@@ -1830,7 +1848,7 @@
      ready; app.js's applyI18n re-walks them on locale activation. -->
 <script src="install-prompt.js?v=1"></script>
 <script src="home-screen.js?v=1"></script>
-<script src="app.js?v=1020"></script>
+<script src="app.js?v=1030"></script>
 <!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
      applyI18n etc. Internally it _whenReady-polls until those are set. -->
 <script src="v4-flow.js?v=4"></script>

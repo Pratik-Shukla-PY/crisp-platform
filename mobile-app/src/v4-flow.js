@@ -108,14 +108,18 @@
         container.classList.add('v4-chipgrid');
         container.classList.remove('v4-carousel');
 
+        // May 2026 a11y — every role="radio" must carry aria-checked
+        // (true OR false). Previously only the selected tile had the
+        // attribute → axe-core "aria-required-attr" critical failure.
         container.innerHTML = `
             <div class="v4-chipgrid-track" role="radiogroup">
                 ${options.map((o, i) => `
                     <button class="v4-chipgrid-tile ${i === 0 ? 'is-selected' : ''}"
                             type="button" role="radio"
                             data-value="${o.v}" data-index="${i}"
-                            ${i === 0 ? 'aria-checked="true"' : ''}>
-                        <i class="fa-solid ${o.i} v4-tile-icon"></i>
+                            aria-checked="${i === 0 ? 'true' : 'false'}"
+                            aria-label="${(o.l || o.v).replace(/"/g, '&quot;')}">
+                        <i class="fa-solid ${o.i} v4-tile-icon" aria-hidden="true"></i>
                         <span class="v4-tile-label" data-i18n="${o.k || ''}">${o.l}</span>
                     </button>
                 `).join('')}

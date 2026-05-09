@@ -3599,6 +3599,38 @@ function detectAndSetupLanguage() {
         _applyLocCtx(_cachedCtx);
     }
 
+    // May 2026 (Lighthouse "geolocation-on-start" fix) — never call
+    // getCurrentPosition at boot. Browsers fire a permission prompt
+    // synchronously on the first invocation, which scares users + tanks
+    // the Best-Practices score. Region-based language detection now
+    // uses IP geolocation only (already in this function); GPS is
+    // requested by v4-flow's _refreshGps() ONLY after the user taps
+    // "Start Reporting" — i.e. after explicit user intent.
+    //
+    // The original GPS-first-then-IP-fallback flow is preserved as a
+    // dead branch below for reference; flipped to IP-first by default.
+    const _gpsBootEnabled = false;   // toggle to true to restore old behavior
+    if (!_gpsBootEnabled) {
+        // Skip the GPS branch entirely — fall through to IP geo.
+        try {
+            tryIPGeolocation().then(ipLoc => {
+                if (!ipLoc) { activateLang(_isKnownLocale(_manualLang) ? _manualLang : 'en'); return; }
+                state.location = ipLoc;
+                state.deviceLocation = { lat: ipLoc.lat, lng: ipLoc.lng };
+                const regionStr = (ipLoc.region || '').toLowerCase();
+                for (const entry of REGION_LANG_MAP) {
+                    if (entry.match.some(k => regionStr.includes(k))) {
+                        _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName, entry.code, entry.label, entry.speech);
+                        showLocalLangBtn(entry.code, entry.label, entry.speech);
+                        return;
+                    }
+                }
+                if (!state.lang || state.lang === 'en') activateLang('en');
+            }).catch(() => activateLang('en'));
+        } catch (_) { activateLang('en'); }
+        return;
+    }
+
     // Try to get GPS and reverse geocode
     if (!navigator.geolocation) {
         activateLang('en');

@@ -5,7 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CRISP — Login</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- May 2026 (Lighthouse perf fix) — pinned to 6.4.0 to match
+         index.html. Was 6.5.1 here, 6.4.0 there → users visiting both
+         pages downloaded both versions (~150 KB wasted FA payload).
+         Added meta description + robots for SEO score. -->
+    <meta name="description" content="CRISP login — secure access to the QRT Operations Dashboard for crisis-response analysts. UNDP × CRISP.">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
     <style>
         :root { --bg: #080c14; --surface: #111827; --border: rgba(255,255,255,0.08); --accent: #7c3aed; --text: #f1f5f9; --dim: #64748b; }
@@ -89,7 +94,7 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Authenticator code <span style="color:var(--dim);font-size:11px;font-weight:normal;">— from Google Authenticator / Authy / 1Password</span></label>
+                    <label class="form-label">Authenticator code <span style="color:var(--dim);font-size:12px;font-weight:normal;">— from Google Authenticator / Authy / 1Password</span></label>
                     <input type="text" id="login-totp" class="form-input" placeholder="123456" maxlength="6" minlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" style="letter-spacing:6px;font-family:monospace;font-size:18px;text-align:center;">
                 </div>
                 <button class="btn-primary" onclick="loginWithPassword()">

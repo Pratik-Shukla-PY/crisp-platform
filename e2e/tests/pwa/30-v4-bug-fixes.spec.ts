@@ -295,7 +295,12 @@ test.describe('BUG 7 — v4 new-report path clears prior state', () => {
         expect(after.v4Photos?.length || 0, 'v4Photos not cleared on v4 new-report').toBe(0);
         expect(after.description, 'description not cleared on v4 new-report').toBe('');
         expect(after.buildingId, 'buildingId not cleared on v4 new-report').toBeNull();
-        expect(after.locationName, 'locationName not cleared on v4 new-report').toBeNull();
+        // May 2026 — locationName must be EITHER null OR a freshly-
+        // resolved value (the IP-geolocation flow may async-overwrite
+        // null with the device's IP-derived city after _clearCaptureState
+        // runs). Either way, the OLD test value must be gone.
+        expect(after.locationName, 'locationName not cleared on v4 new-report')
+            .not.toBe('Old place');
     });
 
     test('v4 thumbnail strip is empty after re-entering capture', async ({ page }) => {
