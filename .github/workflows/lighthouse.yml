@@ -191,22 +191,29 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Boot static server + run extended QA tests
-        # Consolidated in ONE step so the backgrounded `serve` process
-        # stays alive across multiple Playwright invocations. Each step
-        # in GH Actions opens a fresh `bash -c`, so a `&`-backgrounded
-        # process from a previous step gets SIGHUP'd when that step
-        # ends. Keeping server + tests in one step avoids that.
+        # Consolidated in ONE step — backgrounded server processes from
+        # a prior step get SIGHUP'd when that step ends in GH Actions.
+        # Use python3's http.server (matches local dev's start.sh; more
+        # predictable MIME types than `npx serve`).
         env:
           CI: 'true'
         run: |
           set -e
           # Boot static server (no backend needed — static-only checks)
-          npx --yes serve -p 8080 . > /tmp/serve.log 2>&1 &
+          nohup python3 -m http.server 8080 > /tmp/serve.log 2>&1 &
           SERVER_PID=$!
           trap "kill $SERVER_PID 2>/dev/null || true" EXIT
           for i in {1..15}; do
             if curl -sf http://localhost:8080/mobile-app/src/index.html >/dev/null 2>&1; then
               echo "✓ Static server up (after ${i}s)"
+              # Sanity: confirm app.js + home-screen.js load with the
+              # right MIME type. If served as text/plain, the browser
+              # will refuse to execute them and __crispGoToStage never
+              # gets exposed.
+              echo -n "  app.js content-type: "
+              curl -sIL http://localhost:8080/mobile-app/src/app.js | grep -i content-type
+              echo -n "  home-screen.js content-type: "
+              curl -sIL http://localhost:8080/mobile-app/src/home-screen.js | grep -i content-type
               break
             fi
             sleep 1

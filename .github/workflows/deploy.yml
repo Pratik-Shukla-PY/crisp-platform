@@ -278,6 +278,8 @@ jobs:
     needs: [deploy, prod-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    permissions:
+      contents: write    # publish reports to lighthouse-history branch
     # Only run when prod-smoke passed (no point auditing if the basic
     # smoke already failed — auto-rollback will fire on smoke). Also
     # only on real prod deploys (push to main); manual workflow_dispatch

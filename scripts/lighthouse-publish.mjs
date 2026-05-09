@@ -344,5 +344,17 @@ try {
 } catch (e) {
     console.error('[publish] FATAL:', e.message);
     if (process.env.LHCI_VERBOSE) console.error(e.stack);
-    process.exit(1);
+    // Soft-fail by default — the publish step is bookkeeping, not a
+    // gate. The audit (lhci assert) is what gates the deploy. If the
+    // history-branch push fails (lacks write permission, network
+    // hiccup, etc.) we don't want that to block the deploy.
+    // Set LHCI_PUBLISH_FAIL_ON_ERROR=1 to enforce strict failure.
+    if (process.env.LHCI_PUBLISH_FAIL_ON_ERROR === '1') {
+        process.exit(1);
+    }
+    console.error(
+        '[publish] (Soft-fail — publish failure does not block the gate. ' +
+            'Set LHCI_PUBLISH_FAIL_ON_ERROR=1 to enforce strict failure.)',
+    );
+    process.exit(0);
 }
