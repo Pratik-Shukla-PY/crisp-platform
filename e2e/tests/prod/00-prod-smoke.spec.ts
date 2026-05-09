@@ -175,20 +175,24 @@ test.describe('Production — PWA', () => {
     expect(version, `sw.js CACHE_NAME = ${m?.[1]} is older than expected`).toBeGreaterThanOrEqual(55);
   });
 
-  test('global libraries from CDN are loaded (Leaflet + TFJS + BlazeFace)', async ({ page }) => {
+  test('global libraries from CDN are loaded (Leaflet + BuildingSelect + I18N)', async ({ page }) => {
     await page.goto(`${BASE}/mobile-app/src/`, { waitUntil: 'load' });
     // These are loaded by <script> tags in index.html. If CSP blocks them,
     // the global will be undefined.
+    //
+    // May 2026 — TFJS + BlazeFace are NO LONGER eagerly loaded at boot.
+    // pii-blur.js dynamically injects the script tags on first photo
+    // capture. So we don't assert window.tf / window.blazeface here;
+    // the lazy-load contract is verified by tests under e2e/tests/pwa/
+    // (40-axe-a11y + 30-v4-bug-fixes BUG 6 image upload pipeline).
     const globals = await page.evaluate(() => ({
       L: typeof (window as any).L,
-      tf: typeof (window as any).tf,
-      blazeface: typeof (window as any).blazeface,
+      PIIBlur: typeof (window as any).PIIBlur,
       BuildingSelect: typeof (window as any).BuildingSelect,
       I18N: typeof (window as any).I18N,
     }));
     expect(globals.L, 'Leaflet (window.L) — building selector + map will not work').toBe('object');
-    expect(globals.tf, 'TFJS (window.tf) — PII blur will not work').toBe('object');
-    expect(globals.blazeface, 'BlazeFace (window.blazeface) — face detection will not work').toBe('object');
+    expect(globals.PIIBlur, 'PIIBlur (window.PIIBlur) — face detection wrapper').toBe('object');
     expect(globals.BuildingSelect, 'BuildingSelect helper — building tagging will not work').toBe('object');
     expect(globals.I18N, 'I18N inline pack — all text will be raw keys').toBe('object');
   });
