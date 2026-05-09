@@ -65,89 +65,59 @@
     }
     window.__crispUiV4 = true;
 
-    // ── Carousel component ──────────────────────────────────────────────
-    function _initCarousel(container) {
-        // Options come from the data-options attribute as JSON. Each item:
-        // { v: enum value, i: FA icon class, l: English label, k: i18n key }
+    // ── Chip-grid component (replaces v3 carousel) ─────────────────────
+    // May 2026 hot-fix #2: the original carousel showed only 1 chip at
+    // a time, wasting 50–70 % of vertical screen on Page 2 with empty
+    // space below the second carousel. Field reporters had to swipe 4–7
+    // times to reach the right infra/crisis chip. Replaced with a 4×2
+    // (infra, 8 options) and 3×3 (crisis, 9 options) icon grid where
+    // every chip is tap-target-sized and visible without any scroll.
+    // Same data-options shape as before; same v4:select event; same
+    // _setValue/_getValue API so the AI pre-fill code path is unchanged.
+    function _initChipGrid(container) {
         let options = [];
         try {
             options = JSON.parse(container.getAttribute('data-options') || '[]');
         } catch (e) {
-            console.error('[v4] carousel data-options parse failed', e);
+            console.error('[v4] chip-grid data-options parse failed', e);
             return;
         }
         if (!options.length) return;
 
-        // Build the carousel: prev arrow + slides scroll-snap container + next arrow.
-        // Pure CSS scroll-snap means the user can swipe with their thumb
-        // OR tap the arrows; either gesture lands on a clean snap point.
+        container.classList.add('v4-chipgrid');
+        container.classList.remove('v4-carousel');
+
         container.innerHTML = `
-            <button class="v4-carousel-arrow v4-carousel-prev" type="button" aria-label="Previous">
-                <i class="fa-solid fa-chevron-left"></i>
-            </button>
-            <div class="v4-carousel-track" role="radiogroup">
+            <div class="v4-chipgrid-track" role="radiogroup">
                 ${options.map((o, i) => `
-                    <button class="v4-carousel-slide ${i === 0 ? 'is-selected' : ''}"
+                    <button class="v4-chipgrid-tile ${i === 0 ? 'is-selected' : ''}"
                             type="button" role="radio"
                             data-value="${o.v}" data-index="${i}"
                             ${i === 0 ? 'aria-checked="true"' : ''}>
-                        <i class="fa-solid ${o.i} v4-slide-icon"></i>
-                        <span class="v4-slide-label" data-i18n="${o.k || ''}">${o.l}</span>
+                        <i class="fa-solid ${o.i} v4-tile-icon"></i>
+                        <span class="v4-tile-label" data-i18n="${o.k || ''}">${o.l}</span>
                     </button>
                 `).join('')}
             </div>
-            <button class="v4-carousel-arrow v4-carousel-next" type="button" aria-label="Next">
-                <i class="fa-solid fa-chevron-right"></i>
-            </button>
-            <div class="v4-carousel-dots">
-                ${options.map((_, i) => `<span class="v4-carousel-dot ${i === 0 ? 'is-active' : ''}" data-index="${i}"></span>`).join('')}
-            </div>
         `;
 
-        const track = container.querySelector('.v4-carousel-track');
-        const slides = Array.from(container.querySelectorAll('.v4-carousel-slide'));
-        const dots = Array.from(container.querySelectorAll('.v4-carousel-dot'));
-        const prevBtn = container.querySelector('.v4-carousel-prev');
-        const nextBtn = container.querySelector('.v4-carousel-next');
-
+        const tiles = Array.from(container.querySelectorAll('.v4-chipgrid-tile'));
         let currentIdx = 0;
 
         const _updateSelected = (idx) => {
             currentIdx = Math.max(0, Math.min(options.length - 1, idx));
-            slides.forEach((s, i) => {
+            tiles.forEach((t, i) => {
                 const sel = i === currentIdx;
-                s.classList.toggle('is-selected', sel);
-                s.setAttribute('aria-checked', sel ? 'true' : 'false');
+                t.classList.toggle('is-selected', sel);
+                t.setAttribute('aria-checked', sel ? 'true' : 'false');
             });
-            dots.forEach((d, i) => d.classList.toggle('is-active', i === currentIdx));
-            // Centre the selected slide.
-            const slide = slides[currentIdx];
-            if (slide) slide.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-            // Emit a custom event so the parent can update state.
             container.dispatchEvent(new CustomEvent('v4:select', {
                 detail: { value: options[currentIdx].v, index: currentIdx },
             }));
         };
 
-        prevBtn.addEventListener('click', () => _updateSelected(currentIdx - 1));
-        nextBtn.addEventListener('click', () => _updateSelected(currentIdx + 1));
-        slides.forEach((s, i) => s.addEventListener('click', () => _updateSelected(i)));
-        dots.forEach((d, i) => d.addEventListener('click', () => _updateSelected(i)));
+        tiles.forEach((t, i) => t.addEventListener('click', () => _updateSelected(i)));
 
-        // IntersectionObserver: when the user free-scrolls (no arrow tap),
-        // pick whichever slide is most visible as the new selection.
-        const io = new IntersectionObserver((entries) => {
-            entries.forEach((e) => {
-                if (e.isIntersecting && e.intersectionRatio > 0.6) {
-                    const idx = parseInt(e.target.getAttribute('data-index') || '0', 10);
-                    if (idx !== currentIdx) _updateSelected(idx);
-                }
-            });
-        }, { root: track, threshold: 0.6 });
-        slides.forEach((s) => io.observe(s));
-
-        // Public API for callers: set the selected value (used by AI
-        // pre-fill animation).
         container._setValue = (value) => {
             const idx = options.findIndex((o) => o.v === value);
             if (idx >= 0) _updateSelected(idx);
@@ -156,6 +126,10 @@
 
         return container;
     }
+    // Backward-compat alias — anything still calling _initCarousel routes
+    // through the new grid. v4-flow's own classify init uses the new name
+    // directly below.
+    const _initCarousel = _initChipGrid;
 
     // ── State helpers (write into shared window.state) ──────────────────
     function _setState(patch) {
@@ -625,12 +599,19 @@
             ? s.damage_classification.charAt(0) + s.damage_classification.slice(1).toLowerCase()
             : '—');
 
-        // Photo thumb
+        // Photo thumb. May 2026 hot-fix: add `.has-photo` class so the
+        // dashed-border placeholder styling flips to a clean image card.
         const photos = s.v4Photos || [];
-        if (photos.length) {
-            const thumbDiv = document.getElementById('v4-summary-thumb');
-            if (thumbDiv) {
+        const thumbDiv = document.getElementById('v4-summary-thumb');
+        if (thumbDiv) {
+            if (photos.length) {
                 thumbDiv.innerHTML = `<img src="${photos[0].url}" alt="">`;
+                thumbDiv.classList.add('has-photo');
+            } else {
+                thumbDiv.classList.remove('has-photo');
+                if (!thumbDiv.querySelector('i')) {
+                    thumbDiv.innerHTML = '<i class="fa-solid fa-camera"></i>';
+                }
             }
         }
     }

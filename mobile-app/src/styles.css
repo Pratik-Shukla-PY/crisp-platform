@@ -3407,7 +3407,27 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
    Each .v4-stage uses a grid layout (header / body / footer pinned at
    the viewport edges) so primary CTAs are always reachable without
    scroll. .v4-body absorbs overflow if absolutely necessary.
+
+   May 2026 polish: define theme-neutral surface variables so chip /
+   drawer / select elements are visible in BOTH light and dark mode.
+   Previously we used `rgba(255, 255, 255, 0.03-0.1)` which was
+   designed for the dark-mode background; on the default light theme
+   (Chromium-headless without prefers-color-scheme override) those
+   "white at 3-10% opacity" surfaces vanished against the cream-white
+   background, making chip pills look like plain text.
    ────────────────────────────────────────────────────────────────────── */
+:root {
+    --v4-tile-bg: rgba(0, 0, 0, 0.04);
+    --v4-tile-border: rgba(0, 0, 0, 0.10);
+    --v4-tile-bg-hover: rgba(0, 0, 0, 0.06);
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --v4-tile-bg: var(--v4-tile-bg);
+        --v4-tile-border: var(--v4-tile-border);
+        --v4-tile-bg-hover: var(--v4-tile-bg-hover);
+    }
+}
 
 .stage.v4-stage {
     display: grid;
@@ -3421,6 +3441,17 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     align-items: center;
     gap: 12px;
     padding-top: 4px;
+    /* May 2026 hot-fix: reserve right-side space so the "STEP X OF 3"
+       label never collides with the language-pill cluster (which lives
+       absolute-positioned in the top-right at ~110px wide on iPhone SE).
+       Without this, on 320 px viewports the step text sat behind
+       the lang pill — visible in screenshot 04-page2 of the v4-final
+       audit. */
+    padding-right: 110px;
+    min-height: 36px;
+}
+@media (min-width: 380px) {
+    .v4-header { padding-right: 100px; }
 }
 .v4-back {
     width: 36px; height: 36px;
@@ -3428,13 +3459,13 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     align-items: center;
     justify-content: center;
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--v4-tile-border);
+    background: var(--v4-tile-bg);
     color: var(--text);
     cursor: pointer;
     flex-shrink: 0;
 }
-.v4-back:hover { background: rgba(255, 255, 255, 0.08); }
+.v4-back:hover { background: var(--v4-tile-border); }
 .v4-progress {
     display: flex;
     align-items: center;
@@ -3454,9 +3485,19 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     font-size: 11px;
     color: var(--muted, #94a3b8);
     text-transform: uppercase;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.5px;
     font-weight: 600;
     margin-left: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+@media (max-width: 380px) {
+    .v4-step-label {
+        font-size: 10px;
+        margin-left: 6px;
+        letter-spacing: 0.3px;
+    }
 }
 
 .v4-body {
@@ -3513,8 +3554,8 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     gap: 8px;
     padding: 6px 12px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: var(--v4-tile-bg);
+    border: 1px solid var(--v4-tile-bg-hover);
     font-size: 12px;
     color: var(--muted);
     flex: 1;
@@ -3537,17 +3578,22 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 
 .v4-camera-hero {
-    flex: 1 1 auto;
-    min-height: 220px;
+    /* Apr 2026 hot-fix: was flex: 1 1 auto + min-height: 220px which
+       made the hero swell to fill the entire .v4-body — 60-74% of
+       screen on most devices. Now a fixed reasonable height with
+       clear photo affordance, leaving room for the (eventual)
+       thumbnail strip + secondary actions below. */
+    height: 220px;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding: 28px 20px;
+    gap: 8px;
+    padding: 16px 20px;
     border-radius: 18px;
-    border: 2px dashed rgba(255, 174, 0, 0.4);
-    background: linear-gradient(135deg, rgba(255, 107, 53, 0.06) 0%, rgba(247, 147, 30, 0.04) 100%);
+    border: 2px dashed rgba(255, 174, 0, 0.5);
+    background: linear-gradient(135deg, rgba(255, 107, 53, 0.08) 0%, rgba(247, 147, 30, 0.05) 100%);
     color: var(--text);
     cursor: pointer;
     transition: background 0.2s ease, border-color 0.2s ease;
@@ -3590,8 +3636,8 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     overflow: hidden;
     position: relative;
     flex-shrink: 0;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: var(--v4-tile-bg);
+    border: 1px solid var(--v4-tile-bg-hover);
 }
 .v4-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .v4-thumb-x {
@@ -3629,14 +3675,14 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     gap: 8px;
     padding: 11px 12px;
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--v4-tile-border);
+    background: var(--v4-tile-bg);
     color: var(--text);
     font-size: 12.5px;
     font-weight: 500;
     cursor: pointer;
 }
-.v4-secondary-btn:hover { background: rgba(255, 255, 255, 0.07); }
+.v4-secondary-btn:hover { background: var(--v4-tile-bg-hover); }
 
 /* ── V4 Page 2 — classify ──────────────────────────────────────────── */
 
@@ -3680,15 +3726,15 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     gap: 4px;
     padding: 14px 8px;
     border-radius: 12px;
-    border: 1.5px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1.5px solid var(--v4-tile-border);
+    background: var(--v4-tile-bg);
     color: var(--text);
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     transition: border-color 0.15s ease, background 0.15s ease;
 }
-.v4-chip:hover { background: rgba(255, 255, 255, 0.07); }
+.v4-chip:hover { background: var(--v4-tile-bg-hover); }
 .v4-chip.is-selected {
     border-color: var(--brand, #ffae00);
     background: rgba(255, 174, 0, 0.1);
@@ -3698,90 +3744,102 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .v4-chip-dot-partial { color: #f59e0b; }
 .v4-chip-dot-complete { color: #ef4444; }
 
-/* Carousel (horizontal swipeable, scroll-snap). */
-.v4-carousel {
-    position: relative;
-    display: grid;
-    grid-template-columns: 32px 1fr 32px;
-    grid-template-rows: 1fr auto;
-    gap: 4px 4px;
-    align-items: center;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-    padding: 8px 4px;
-}
-.v4-carousel-arrow {
-    grid-row: 1;
-    width: 28px; height: 60px;
+/* Chip-grid (May 2026 hot-fix #2 — was carousel, see _initChipGrid in
+   v4-flow.js). All 8 (infra) / 9 (crisis) chips visible at once. Tap-
+   target ≥ 60×60 px on small phones. Selected state has solid brand
+   border + tinted background. */
+.v4-chipgrid {
+    display: block;
     background: transparent;
     border: 0;
-    color: var(--muted);
-    cursor: pointer;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 0;
 }
-.v4-carousel-arrow:hover { color: var(--brand, #ffae00); }
-.v4-carousel-prev { grid-column: 1; }
-.v4-carousel-next { grid-column: 3; }
-.v4-carousel-track {
-    grid-column: 2;
-    grid-row: 1;
-    display: flex;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    gap: 4px;
+.v4-chipgrid-track {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);  /* 4 cols by default (infra fits 4×2) */
+    gap: 8px;
 }
-.v4-carousel-track::-webkit-scrollbar { display: none; }
-.v4-carousel-slide {
-    flex: 0 0 100%;
-    scroll-snap-align: center;
+/* Crisis carousel has 9 options — render as 3 cols × 3 rows so it
+   fits the same vertical envelope without cramping. */
+#v4-carousel-crisis .v4-chipgrid-track {
+    grid-template-columns: repeat(3, 1fr);
+}
+.v4-chipgrid-tile {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 10px 8px;
+    gap: 4px;
+    padding: 10px 4px;
+    min-height: 64px;
     border-radius: 10px;
-    border: 1.5px solid transparent;
-    background: transparent;
+    border: 1.5px solid var(--v4-tile-border);
+    background: var(--v4-tile-bg);
     color: var(--text);
     cursor: pointer;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
-    min-height: 70px;
+    line-height: 1.15;
+    text-align: center;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+.v4-chipgrid-tile:hover {
+    background: var(--v4-tile-border);
+    transform: translateY(-1px);
+}
+.v4-chipgrid-tile.is-selected {
+    border-color: var(--brand, #ffae00);
+    background: rgba(255, 174, 0, 0.12);
+}
+.v4-tile-icon {
+    font-size: 20px;
+    color: var(--brand, #ffae00);
+}
+.v4-tile-label {
+    font-size: 10.5px;
+    text-align: center;
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: auto;
+}
+
+/* Legacy carousel rules kept only as a no-op safety net — the new
+   chip-grid replaces every visible class via JS. Hide any stray
+   carousel arrows/dots that might persist if a stale cache renders. */
+.v4-carousel { display: contents; }
+.v4-carousel-arrow, .v4-carousel-dots {
+    display: none !important;
+}
+.v4-carousel-track { display: contents; }
+.v4-carousel-slide {
+    flex: 0 0 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 4px;
+    min-height: 64px;
+    border-radius: 10px;
+    border: 1.5px solid var(--v4-tile-border);
+    background: var(--v4-tile-bg);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
 }
 .v4-carousel-slide.is-selected {
     border-color: var(--brand, #ffae00);
-    background: rgba(255, 174, 0, 0.08);
+    background: rgba(255, 174, 0, 0.12);
 }
-.v4-slide-icon {
-    font-size: 22px;
-    color: var(--brand, #ffae00);
-}
-.v4-slide-label {
-    font-size: 13px;
-    text-align: center;
-}
-.v4-carousel-dots {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    display: flex;
-    justify-content: center;
-    gap: 4px;
-    padding-top: 2px;
-}
+.v4-slide-icon { font-size: 20px; color: var(--brand, #ffae00); }
+.v4-slide-label { font-size: 10.5px; text-align: center; }
 .v4-carousel-dot {
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.18);
+    background: transparent;
     cursor: pointer;
-    transition: background 0.15s ease, width 0.15s ease;
 }
 .v4-carousel-dot.is-active {
     background: var(--brand, #ffae00);
@@ -3796,22 +3854,36 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     grid-template-columns: 64px 1fr;
     gap: 12px;
     padding: 12px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: var(--v4-tile-bg);
+    border: 1px solid var(--v4-tile-bg-hover);
     border-radius: 14px;
 }
 .v4-summary-thumb {
-    width: 64px; height: 64px;
-    border-radius: 10px;
+    width: 72px; height: 72px;
+    border-radius: 12px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.05);
+    background: linear-gradient(135deg, rgba(255, 107, 53, 0.12) 0%, rgba(247, 147, 30, 0.06) 100%);
+    border: 1.5px dashed rgba(255, 174, 0, 0.35);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--muted);
-    font-size: 20px;
+    color: var(--brand, #ffae00);
+    font-size: 22px;
+    flex-shrink: 0;
 }
-.v4-summary-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.v4-summary-thumb img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    border-radius: 10px;  /* slightly inset within the dashed border */
+}
+/* When a real photo is set, the dashed border becomes confusing — flip
+   the styling to a clean rounded card. v4-flow.js's _updateReviewSummary
+   adds the .has-photo class once an <img> is injected. */
+.v4-summary-thumb.has-photo {
+    background: rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--v4-tile-border);
+    padding: 0;
+}
 .v4-summary-rows {
     display: flex;
     flex-direction: column;
@@ -3840,8 +3912,8 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .v4-summary-row:hover .v4-row-pen { opacity: 1; }
 
 .v4-drawer {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: var(--v4-tile-bg);
+    border: 1px solid var(--v4-tile-bg-hover);
     border-radius: 12px;
     overflow: hidden;
 }
@@ -3891,25 +3963,40 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     box-sizing: border-box;
     padding: 10px;
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--v4-tile-border);
+    background: var(--v4-tile-bg);
     color: var(--text);
     font-size: 13px;
     font-family: inherit;
     resize: vertical;
 }
 
-.v4-undp-body { gap: 8px; }
+.v4-undp-body { gap: 10px; }
 .v4-undp-row {
     display: grid;
-    grid-template-columns: 110px 1fr;
+    /* May 2026 hot-fix: was 110px 1fr — the right column collapsed
+       to ~210px on iPhone SE which couldn't fit the 5-option select
+       OR the 10-chip pressing-needs flow. New 90px label + 1fr
+       control gives the control column ~205px on the smallest
+       device, enough for the longest select option. */
+    grid-template-columns: 90px 1fr;
     gap: 10px;
     align-items: center;
     padding: 4px 0;
 }
 .v4-undp-row-needs {
+    /* Pressing needs is the wide row — render label as a section
+       header on its own line so the chip flow gets the full width. */
     grid-template-columns: 1fr;
     gap: 6px;
+    padding-top: 6px;
+}
+.v4-undp-row-needs .v4-undp-label {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    color: var(--brand, #ffae00);
 }
 .v4-undp-label {
     font-size: 12px;
@@ -3923,8 +4010,8 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     flex: 1;
     padding: 6px 14px;
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--v4-tile-border);
+    background: var(--v4-tile-bg);
     color: var(--text);
     font-size: 12px;
     cursor: pointer;
@@ -3939,8 +4026,8 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     width: 100%;
     padding: 6px 10px;
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--v4-tile-border);
+    background: var(--v4-tile-bg);
     color: var(--text);
     font-size: 12.5px;
     cursor: pointer;
@@ -3955,17 +4042,25 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .v4-needs {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
+    gap: 6px;
+    /* Allow the chip flow to grow as tall as it needs — caps at the
+       drawer body padding. Without `min-height: 0` browsers sometimes
+       don't shrink the container, leading to overflow into the Send
+       button area. */
+    min-height: 0;
 }
 .v4-need-chip {
-    padding: 5px 9px;
+    padding: 6px 10px;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--v4-tile-border);
+    background: var(--v4-tile-bg);
     color: var(--text);
-    font-size: 11px;
+    font-size: 11.5px;
+    line-height: 1.15;
     cursor: pointer;
     font-weight: 500;
+    flex: 0 1 auto;
+    white-space: nowrap;  /* keep "Food / water" on one line */
 }
 .v4-need-chip.is-selected {
     border-color: var(--brand, #ffae00);
@@ -3980,11 +4075,23 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 
 @media (max-width: 360px) {
     .stage.v4-stage { padding: 10px 14px 14px; gap: 10px; }
-    .v4-camera-hero { min-height: 180px; padding: 22px 16px; }
+    .v4-camera-hero { height: 180px; padding: 14px 16px; }
     .v4-camera-icon { width: 52px; height: 52px; font-size: 24px; }
     .v4-camera-label { font-size: 16px; }
     .v4-section-title { font-size: 13px; }
-    .v4-undp-row { grid-template-columns: 90px 1fr; gap: 8px; }
+    .v4-undp-row { grid-template-columns: 80px 1fr; gap: 8px; }
+    /* CRITICAL — must override the .v4-undp-row above so the
+       pressing-needs row stays single-column on small phones too.
+       Without this the chip flow gets squeezed into ~170px and only
+       4 of 10 chips render before the chip area extends below the
+       Send button, hiding 6 needs from the user. */
+    .v4-undp-row.v4-undp-row-needs { grid-template-columns: 1fr; }
+    /* Tile labels under 360px — short enough to fit one word per line. */
+    .v4-tile-label { font-size: 9.5px; }
+    .v4-chipgrid-tile { padding: 8px 2px; min-height: 60px; }
+    /* Page 2 chip grids — keep 4-col infra readable; make crisis 3-col
+       slightly tighter so all 9 fit above the fold. */
+    #v4-carousel-crisis .v4-chipgrid-tile { min-height: 56px; padding: 6px 2px; }
 }
 
 

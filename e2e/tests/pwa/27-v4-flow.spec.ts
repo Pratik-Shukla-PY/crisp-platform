@@ -97,19 +97,20 @@ test.describe('UI v4 — Capture flow scaffolding', () => {
 });
 
 test.describe('UI v4 — Page 2 classify', () => {
-    test('damage chips, infra carousel, crisis carousel all render', async ({ page }) => {
+    test('damage chips, infra grid, crisis grid all render', async ({ page }) => {
         await page.goto('');
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 6000 });
         await page.evaluate(() => (window as any).CrispV4.goToClassify());
         await expect(page.locator('#v4-chips-damage .v4-chip')).toHaveCount(3);
-        // Carousels populate at runtime from data-options. Wait for the slides.
+        // May 2026 polish: carousels replaced with chip grids — every
+        // tile is visible at once. New class: .v4-chipgrid-tile.
         await page.waitForFunction(
-            () => document.querySelectorAll('#v4-carousel-infra .v4-carousel-slide').length > 0,
+            () => document.querySelectorAll('#v4-carousel-infra .v4-chipgrid-tile').length > 0,
             null, { timeout: 3000 },
         );
-        const infraCount = await page.locator('#v4-carousel-infra .v4-carousel-slide').count();
+        const infraCount = await page.locator('#v4-carousel-infra .v4-chipgrid-tile').count();
         expect(infraCount).toBe(8);
-        const crisisCount = await page.locator('#v4-carousel-crisis .v4-carousel-slide').count();
+        const crisisCount = await page.locator('#v4-carousel-crisis .v4-chipgrid-tile').count();
         expect(crisisCount).toBe(9);
     });
 
@@ -131,19 +132,19 @@ test.describe('UI v4 — Page 2 classify', () => {
         expect(stateValue).toBe('COMPLETE');
     });
 
-    test('carousel arrow advances selection + updates state', async ({ page }) => {
+    test('chip grid tap advances selection + updates state', async ({ page }) => {
         await page.goto('');
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 6000 });
         await page.evaluate(() => (window as any).CrispV4.goToClassify());
-        await page.waitForSelector('#v4-carousel-crisis .v4-carousel-slide');
-        // Default selection is the first slide (EARTHQUAKE).
-        let selectedValue = await page.locator('#v4-carousel-crisis .v4-carousel-slide.is-selected')
+        await page.waitForSelector('#v4-carousel-crisis .v4-chipgrid-tile');
+        // Default selection is the first tile (EARTHQUAKE).
+        let selectedValue = await page.locator('#v4-carousel-crisis .v4-chipgrid-tile.is-selected')
             .getAttribute('data-value');
         expect(selectedValue).toBe('EARTHQUAKE');
-        // Click next arrow → FLOOD
-        await page.locator('#v4-carousel-crisis .v4-carousel-next').click();
-        await page.waitForTimeout(300);
-        selectedValue = await page.locator('#v4-carousel-crisis .v4-carousel-slide.is-selected')
+        // Tap FLOOD tile directly (no arrows in the grid).
+        await page.locator('#v4-carousel-crisis .v4-chipgrid-tile[data-value="FLOOD"]').click();
+        await page.waitForTimeout(200);
+        selectedValue = await page.locator('#v4-carousel-crisis .v4-chipgrid-tile.is-selected')
             .getAttribute('data-value');
         expect(selectedValue).toBe('FLOOD');
         const crisisState = await page.evaluate(() => (window as any).state.crisis_type);
