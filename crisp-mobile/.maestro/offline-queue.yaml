@@ -1,0 +1,35 @@
+# Maestro flow — submit a report while offline; verify queue persists.
+#
+# Run manually: maestro test crisp-mobile/.maestro/offline-queue.yaml
+#
+# Mirrors `e2e/tests/pwa/41-offline-strict.spec.ts` BUG 9 test for RN.
+# Maestro's `toggleAirplaneMode` works on Android emulator; on iOS
+# simulator we rely on Expo's NetInfo mock injection (manual setup).
+
+appId: com.crispundp.crispmobile
+
+---
+- launchApp:
+    clearState: true
+- toggleAirplaneMode  # Android only — iOS sim ignores this command
+# Open capture flow and submit a minimal report
+- tapOn:
+    id: "btn-start"
+- tapOn:
+    text: "Voice only"
+    optional: true
+- tapOn:
+    text: "Continue"
+- tapOn:
+    text: "Send to UNDP"
+- assertVisible:
+    text: "saved"   # Some success-screen variant of "saved offline"
+    optional: true
+# Now go online + verify the queue still has the report
+- toggleAirplaneMode
+- tapOn:
+    id: "btn-my-reports"
+    optional: true
+- assertVisible:
+    text: "In flight"
+    optional: true

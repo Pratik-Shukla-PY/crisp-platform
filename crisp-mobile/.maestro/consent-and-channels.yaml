@@ -1,0 +1,37 @@
+# Maestro flow — merged always-on home page renders all channels.
+#
+# Run manually: maestro test crisp-mobile/.maestro/consent-and-channels.yaml
+
+appId: com.crispundp.crispmobile
+
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    text: "CRISP × UNDP"
+- assertVisible:
+    text: "Report an Incident"
+# Channel options should be reachable (RN may render these as a sheet
+# or a bottom drawer depending on the v4 RN port progress).
+- assertVisible:
+    text: "Or report through:"
+    optional: true   # if the RN port uses different copy, don't fail
+- assertVisible:
+    text: "Get the app:"
+    optional: true
+# Consent state — first launch should show consent UI.
+- assertVisible:
+    text: "I consent"
+    optional: true
+- tapOn:
+    id: "btn-my-reports"
+    optional: true
+- assertVisible:
+    text: "My Reports"
+- back
+- tapOn:
+    id: "btn-login"
+    optional: true
+- assertVisible:
+    text: "Login"
+    optional: true

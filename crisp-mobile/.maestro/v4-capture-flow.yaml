@@ -1,0 +1,63 @@
+# Maestro flow — walk the v4 capture → classify → review flow on RN.
+#
+# Run manually:
+#   maestro test crisp-mobile/.maestro/v4-capture-flow.yaml
+#
+# Prerequisites:
+#   1. Expo Go installed on emulator/device, OR a built APK.
+#   2. Expo dev server running: cd crisp-mobile && npm start
+#
+# What it asserts:
+#   • Home stage renders with the badge + Start button (parity with PWA).
+#   • Start → capture stage transitions correctly.
+#   • Skip-photo / voice-only path is reachable.
+#   • Capture → classify works.
+#   • Classify → review works.
+#   • Review shows the summary + Send button.
+#
+# Failure modes this catches:
+#   • App crashes on launch.
+#   • Stage transitions broken.
+#   • Critical buttons missing or unwired.
+#
+# What it does NOT cover (that the PWA spec does):
+#   • Building footprint selection (no Leaflet on RN).
+#   • Image upload pipeline (mocked out for Maestro speed).
+#   • Service-worker / offline (no SW on RN — uses native NetInfo).
+
+appId: com.crispundp.crispmobile  # Update when EAS builds with a real bundle id
+
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    text: "CRISP × UNDP"
+    timeout: 5000
+- assertVisible:
+    text: "Report an Incident"
+- tapOn:
+    id: "btn-start"
+- assertVisible:
+    text: "Take photo"
+    timeout: 5000
+- tapOn:
+    text: "Voice only"
+- assertVisible:
+    text: "How bad is the damage?"
+    timeout: 5000
+- tapOn:
+    text: "Continue"
+- assertVisible:
+    text: "Step 3 of 3"
+    timeout: 5000
+- assertVisible:
+    text: "Send to UNDP"
+- back   # Go back to classify
+- assertVisible:
+    text: "How bad is the damage?"
+- back   # Back to capture
+- assertVisible:
+    text: "Take photo"
+- back   # Back to home
+- assertVisible:
+    text: "Report an Incident"

@@ -10,11 +10,16 @@
     "test:smoke": "playwright test --grep=@smoke",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
+    "test:axe": "playwright test 40-axe-a11y --project=pwa",
+    "test:offline": "playwright test 41-offline-strict --project=pwa",
+    "test:visual": "playwright test 42-visual-regression --project=pwa",
+    "test:visual:update": "playwright test 42-visual-regression --project=pwa --update-snapshots",
     "report": "playwright show-report",
     "check:prod": "playwright test --config=playwright.prod.config.ts",
     "check:prod:ui": "playwright test --config=playwright.prod.config.ts --ui"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@playwright/test": "^1.47.0"
   }
 }
