@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v67';  // v67 (May 2026): UI v4 commit B — 3-page capture flow (stage-v4-capture / classify / review) + native camera (Path B) + AI pre-fill via /reports/classify-suggest + horizontal carousel chip selectors. New asset: v4-flow.js.
+const CACHE_NAME = 'crisp-v68';  // v68 (May 2026): UI v4 commit C — 59 new i18n keys × 6 locales (354 new translation pairs). Bump evicts v67 so the localised v4 stage labels land cleanly on next reload.
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.
