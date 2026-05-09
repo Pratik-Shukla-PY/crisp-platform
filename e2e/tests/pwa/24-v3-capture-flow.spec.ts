@@ -26,6 +26,7 @@ async function openPwa(page) {
         // the modal intercepting clicks.
         localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
       localStorage.setItem('crisp_landing_seen', '1');
+      localStorage.setItem('crisp_ui_v4', 'off');  // Pre-v4 tests target the v3 capture flow.
         localStorage.setItem('crisp_device_hash', 'DEV-E2E-V3FLOW');
     });
     await page.reload();
@@ -164,6 +165,7 @@ test.describe('UI v3 — 8-stage capture-flow reorder', () => {
         await page.evaluate(() => {
             localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
       localStorage.setItem('crisp_landing_seen', '1');
+      localStorage.setItem('crisp_ui_v4', 'off');  // Pre-v4 tests target the v3 capture flow.
             localStorage.setItem('crisp_device_hash', 'DEV-E2E-V3OFF');
             localStorage.setItem('crisp_ui_v3', 'off');
         });

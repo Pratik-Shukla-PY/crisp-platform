@@ -68,6 +68,7 @@ test.describe('PWA My Reports — individual report management', () => {
     await page.evaluate((hash) => {
       localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
       localStorage.setItem('crisp_landing_seen', '1');
+      localStorage.setItem('crisp_ui_v4', 'off');  // Pre-v4 tests target the v3 capture flow.
       localStorage.setItem('crisp_device_hash', hash);
       localStorage.setItem('crisp_device_id', hash);
     }, deviceHash);

@@ -24,6 +24,7 @@ async function openPwa(page) {
         // machine boots without modal interrupts.
         localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
       localStorage.setItem('crisp_landing_seen', '1');
+      localStorage.setItem('crisp_ui_v4', 'off');  // Pre-v4 tests target the v3 capture flow.
         localStorage.setItem('crisp_device_hash', 'DEV-E2E-V2REVIEW');
     });
     await page.reload();
@@ -158,6 +159,7 @@ test.describe('UI v2 — 3-page stage-review split', () => {
         await page.evaluate(() => {
             localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
       localStorage.setItem('crisp_landing_seen', '1');
+      localStorage.setItem('crisp_ui_v4', 'off');  // Pre-v4 tests target the v3 capture flow.
             localStorage.setItem('crisp_device_hash', 'DEV-E2E-V2OFF');
             localStorage.setItem('crisp_ui_v2', 'off');
         });

@@ -40,6 +40,7 @@ async function openHomeInEnglish(page) {
   await page.evaluate(() => {
     localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
       localStorage.setItem('crisp_landing_seen', '1');
+      localStorage.setItem('crisp_ui_v4', 'off');  // Pre-v4 tests target the v3 capture flow.
   });
   await page.reload();
   // Click the explicit EN button to override GPS-based auto-detection.
@@ -55,6 +56,7 @@ async function openHomeInDetectedLocal(page) {
   await page.evaluate(() => {
     localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
       localStorage.setItem('crisp_landing_seen', '1');
+      localStorage.setItem('crisp_ui_v4', 'off');  // Pre-v4 tests target the v3 capture flow.
   });
   await page.reload();
   const localBtn = page.locator('#btn-lang-local');

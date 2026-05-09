@@ -21,6 +21,7 @@ async function openClean(page) {
   await page.evaluate(() => {
     localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
       localStorage.setItem('crisp_landing_seen', '1');
+      localStorage.setItem('crisp_ui_v4', 'off');  // Pre-v4 tests target the v3 capture flow.
   });
   await page.reload();
   await page.evaluate(() => {
