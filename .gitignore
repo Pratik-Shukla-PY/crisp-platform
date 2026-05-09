@@ -23,6 +23,11 @@ test-results/
 # Lighthouse CI output — regenerated on every run, archived to the
 # `lighthouse-history` orphan branch by scripts/lighthouse-publish.mjs.
 .lighthouseci/
+# If we ever `git checkout origin/lighthouse-history -- <sha>` to
+# inspect a report locally, it stages those files on main. Ignore the
+# pattern so it can't accidentally end up in a main commit.
+/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*-prod/
+/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f-]*/summary.json
 
 # Visual-regression snapshots: only commit the Linux baselines (which
 # CI generates). macOS / Windows local-dev snapshots are platform-
