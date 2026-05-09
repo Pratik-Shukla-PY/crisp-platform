@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v80';  // v80 (May 2026): Lighthouse-driven QA fix sweep. PII blur fix — BlazeFace model vendored to /vendor/blazeface/ (was Kaggle CORS 404 = silent PII bypass on prod). Accessibility fixes — viewport allows zoom, btn-mic + 5 selects get aria-label, radio buttons get aria-checked=false, h3→h2 in v4 stages. Color contrast bumped on lang pill + undp-badge + offline-hint. Geolocation on-load → user-action-triggered. All from `Lighthouse — ae1ee38-prod` audit prioritized issue list.
+const CACHE_NAME = 'crisp-v81';  // v81 (May 2026): Phase A of "home page is heavy" Lighthouse follow-up. Removed TF.js + BlazeFace UMD + vendored BlazeFace model files from pre-cache STATIC_ASSETS / EXTERNAL_ASSETS. They're now runtime-cached by the existing fetch handler the moment pii-blur.js's _ensureScripts() lazy-loads them on first photo capture. Saves ~820 KB on every fresh SW install for users who never capture.
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.
@@ -428,8 +428,11 @@ const STATIC_ASSETS = [
     SW_BASE + 'install-prompt.js',   // UI v4 (May 2026) — beforeinstallprompt + iOS sheet
     SW_BASE + 'home-screen.js',      // May 2026 — merged always-on home (replaces landing.js)
     SW_BASE + 'v4-flow.js',          // UI v4 (May 2026) — 3-page capture flow + carousels + AI pre-fill
-    SW_BASE + 'vendor/blazeface/model.json',           // May 2026 — vendored BlazeFace (was Kaggle CORS 404)
-    SW_BASE + 'vendor/blazeface/group1-shard1of1.bin', // May 2026 — vendored BlazeFace weights (~400 KB)
+    // May 2026 — vendor/blazeface/model.json + .bin REMOVED from
+    // pre-cache. They're loaded on demand by pii-blur.js::ensureModel
+    // on first photo capture and runtime-cached by the fetch handler
+    // below at that point. Pre-caching cost ~466 KB on every fresh SW
+    // install for users who never reach the capture stage.
     SW_BASE + 'components/icon-pack.js',  // UI v2 — shared Lucide SVG pack
     SW_BASE + 'styles.css',
     SW_BASE + 'manifest.json',
@@ -452,11 +455,10 @@ const STATIC_ASSETS = [
 const EXTERNAL_ASSETS = [
     'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap',
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-    // Client-side PII blur: TF.js core + BlazeFace library.
-    // Model weights (model.json + .bin) are fetched at runtime from tfhub via
-    // BlazeFace.load() — those get cached by the runtime fetch handler below.
-    'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js',
-    'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.umd.js'
+    // May 2026 — TF.js + BlazeFace UMD REMOVED from pre-cache.
+    // pii-blur.js::_ensureScripts() lazy-loads them on first photo
+    // capture; the runtime fetch handler below caches them then. Saves
+    // ~356 KB on every fresh SW install for users who never capture.
 ];
 
 // Domains the runtime fetch handler should cache opportunistically so that a
