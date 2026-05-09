@@ -15,7 +15,7 @@
 // the browser was heuristic-pinning the old CSP. Old SWs auto-replace
 // because skipWaiting() runs in install + nginx now sends Cache-Control:
 // no-cache on sw.js so the new code lands within seconds of deploy.
-const APP_CACHE    = 'crisp-app-v12';  // v12 (May 2026): favicon.svg added — evict v11 so new <link rel=icon> in index.html + login.html lands without a hard refresh.
+const APP_CACHE    = 'crisp-app-v13';  // v13 (May 2026): partial-audio cache-buster fix — _withCacheBust helper now uses `&` when URL already has `?` so presigned S3 URLs don't get mangled (was breaking <audio> playback with NotSupportedError).
 const CDN_CACHE    = 'crisp-cdn-v9';
 const API_CACHE    = 'crisp-api-v9';
 const STATIC_CACHE = 'crisp-static-v12';

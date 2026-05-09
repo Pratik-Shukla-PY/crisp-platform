@@ -119,6 +119,32 @@ const getMediaUrl = (url) => {
     return `${BACKEND_HOST}/${url.replace(/^\//, '')}`;
 };
 
+// May 2026 — append a cache-buster query param without breaking
+// presigned S3 URLs. S3 SigV4 signs the canonical query string —
+// ANY extra param (even `?_cb=` or `&_t=`) shifts the canonical
+// request and the computed signature stops matching what S3 stored.
+// Browser fetch returns 403 with SignatureDoesNotMatch. The <audio>
+// element doesn't surface 403 cleanly — it bubbles up as
+// `Uncaught NotSupportedError: Failed to load because no supported
+// source was found`, which masquerades as a codec problem. Hours
+// of red-herring debugging.
+//
+// The fix is to skip the cache-buster entirely for presigned URLs.
+// The API poll cycle (every ~10s) regenerates a fresh presigned URL
+// with a new X-Amz-Date / X-Amz-Signature — that's already a natural
+// cache-buster (the URL string differs between polls, so the browser
+// HTTP cache can't share entries). For legacy `/static/...` URLs +
+// any other non-presigned URLs, the cache-buster still applies the
+// usual `?` / `&` switch.
+const _isPresignedS3Url = (url) =>
+    typeof url === 'string' && url.includes('X-Amz-Signature=');
+
+const _withCacheBust = (url, key, value) => {
+    if (!url) return '';
+    if (_isPresignedS3Url(url)) return url;  // appending breaks the sig
+    return url + (url.includes('?') ? '&' : '?') + key + '=' + value;
+};
+
 // ── Phase 1.5 (Apr 2026): BlurHash placeholder rendering ────────────────────
 // The backend serves a ~28-char BlurHash string on each Report (field:
 // `blurhash`), encoded by the reporter app at capture time and delivered in
@@ -1834,7 +1860,7 @@ window.selectReport = (id, skipFly = false) => {
     // ── Audio HTML (compact inline strip) ──
     const aPct = (audio?.completion_pct ?? 0);
     const aComplete = audio?.assembly_status === 'complete' && audio?.url;
-    const aPartialUrl = audio?.thumbnail_url ? getMediaUrl(audio.thumbnail_url) + '?_cb=' + (Math.round(aPct/5)*5) : '';
+    const aPartialUrl = audio?.thumbnail_url ? _withCacheBust(getMediaUrl(audio.thumbnail_url), '_cb', Math.round(aPct/5)*5) : '';
     const audioPlayUrl = aComplete ? getMediaUrl(audio.url) : aPartialUrl;
 
     // ── Image match score (shown below image section) ──
@@ -2077,7 +2103,7 @@ window.selectReport = (id, skipFly = false) => {
             ${allAudioMedia.length > 0 ? allAudioMedia.map((am, idx) => {
                 const amComplete = am.assembly_status === 'complete' && am.url;
                 const amPct = am.completion_pct ?? (amComplete ? 100 : 0);
-                const amPartialUrl = am.thumbnail_url ? getMediaUrl(am.thumbnail_url) + '?_cb=' + (Math.round(amPct/5)*5) : '';
+                const amPartialUrl = am.thumbnail_url ? _withCacheBust(getMediaUrl(am.thumbnail_url), '_cb', Math.round(amPct/5)*5) : '';
                 const amPlayUrl = amComplete ? getMediaUrl(am.url) : amPartialUrl;
                 const label = allAudioMedia.length > 1 ? (idx === 0 ? 'Location' : 'Description') : 'Audio';
                 return `<div class="dp-audio-row">
@@ -3225,8 +3251,12 @@ window.playDetailAudio = function (btn, url) {
         btn.classList.remove('playing');
         if (currentAudio._url === url) { currentAudio = null; return; }
     }
-    // Cache-bust so re-clicks fetch the latest partial file from disk
-    const fetchUrl = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+    // May 2026 — cache-bust on legacy /static/ URLs only. Presigned
+    // S3 URLs already vary on every API poll (fresh X-Amz-Date +
+    // Signature), and appending `&_t=…` would invalidate the SigV4
+    // signature — S3 returns 403, browser surfaces it as
+    // NotSupportedError ("no supported source was found").
+    const fetchUrl = _withCacheBust(url, '_t', Date.now());
     currentAudio = new Audio(fetchUrl);
     currentAudio._url = url;
     btn.innerHTML = '<i class="fa-solid fa-pause"></i>';
