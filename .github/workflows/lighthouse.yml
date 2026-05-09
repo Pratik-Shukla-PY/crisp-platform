@@ -190,39 +190,50 @@ jobs:
           npm ci --prefer-offline --no-audit --no-fund
           npx playwright install --with-deps chromium
 
-      - name: Boot static server (port 8080)
-        # The Playwright tests target localhost:8080. We don't need the
-        # backend running — the new tests are static-only (a11y, SW
-        # cache, queue persistence don't hit the API).
-        run: |
-          npx --yes serve -p 8080 -L . &
-          # Wait for server up
-          for i in {1..10}; do
-            curl -sf http://localhost:8080/mobile-app/src/index.html >/dev/null && break
-            sleep 1
-          done
-
-      - name: Run axe-core a11y tests
-        working-directory: e2e
-        run: npx playwright test 40-axe-a11y --project=pwa --reporter=line
-
-      - name: Run offline-first strict tests
-        working-directory: e2e
-        run: npx playwright test 41-offline-strict --project=pwa --reporter=line
-
-      - name: Run visual regression tests (Linux baselines)
-        working-directory: e2e
-        # Visual tests are gated to Linux (the OS that produced the
-        # committed baselines). Force-run via env to make sure CI
-        # actually executes them.
+      - name: Boot static server + run extended QA tests
+        # Consolidated in ONE step so the backgrounded `serve` process
+        # stays alive across multiple Playwright invocations. Each step
+        # in GH Actions opens a fresh `bash -c`, so a `&`-backgrounded
+        # process from a previous step gets SIGHUP'd when that step
+        # ends. Keeping server + tests in one step avoids that.
         env:
           CI: 'true'
         run: |
-          # First run will fail with "no baseline" if pngs aren't
-          # committed yet. We allow that and update via PR — see
-          # docs/LIGHTHOUSE_QA.md.
+          set -e
+          # Boot static server (no backend needed — static-only checks)
+          npx --yes serve -p 8080 . > /tmp/serve.log 2>&1 &
+          SERVER_PID=$!
+          trap "kill $SERVER_PID 2>/dev/null || true" EXIT
+          for i in {1..15}; do
+            if curl -sf http://localhost:8080/mobile-app/src/index.html >/dev/null 2>&1; then
+              echo "✓ Static server up (after ${i}s)"
+              break
+            fi
+            sleep 1
+            if [ $i -eq 15 ]; then
+              echo "::error::Static server didn't come up. Logs:"
+              cat /tmp/serve.log
+              exit 1
+            fi
+          done
+
+          # Run all 3 specs sequentially. Failures in one don't block
+          # the others — we collect all results.
+          cd e2e
+          rc=0
+          echo "::group::axe-core a11y"
+          npx playwright test 40-axe-a11y --project=pwa --reporter=line || rc=1
+          echo "::endgroup::"
+          echo "::group::offline-first strict"
+          npx playwright test 41-offline-strict --project=pwa --reporter=line || rc=1
+          echo "::endgroup::"
+          echo "::group::visual regression"
+          # First-ever CI run will fail with "no baseline" — we allow
+          # that and update via a follow-up PR. Subsequent runs hard-fail.
           npx playwright test 42-visual-regression --project=pwa --reporter=line || \
             echo "::warning::Visual regression: check PR for baseline drift or missing baselines"
+          echo "::endgroup::"
+          exit $rc
 
       - name: Upload Playwright report on failure
         if: failure()

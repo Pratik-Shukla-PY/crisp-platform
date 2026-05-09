@@ -47,7 +47,10 @@ const REMOTE = process.env.LHCI_HISTORY_REMOTE || 'origin';
 const DRY_RUN = process.env.LHCI_DRY_RUN === '1';
 const GITHUB_SHA_FULL = process.env.GITHUB_SHA ||
     execSync('git rev-parse HEAD', { cwd: REPO_ROOT }).toString().trim();
-const SHORT_SHA = GITHUB_SHA_FULL.slice(0, 7);
+// Optional suffix (e.g. "-prod" on the post-deploy audit) so PROD
+// audits don't collide with PR audits on the same SHA.
+const SUFFIX = process.env.LHCI_PUBLISH_SUFFIX || '';
+const SHORT_SHA = GITHUB_SHA_FULL.slice(0, 7) + SUFFIX;
 
 // ── Page-key derivation ─────────────────────────────────────────────────────
 // Maps a URL (LHCI's `requestedUrl`) to a stable folder name in the history

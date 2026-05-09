@@ -301,19 +301,11 @@ jobs:
           npm install -g @lhci/cli@0.13.x
           which google-chrome || sudo apt-get install -y -qq google-chrome-stable
       - name: Audit PROD URLs (3 runs each, mobile throttle)
-        # Override staticDistDir + URLs in the config via env so we hit
-        # https://undp.crisplabs.tech instead of localhost. The lhci.config
-        # picks env-var overrides up via process.env (or we bypass with
-        # explicit --collect.url args).
-        run: |
-          # Use --collect.staticDistDir='' to disable LHCI's auto-server,
-          # then pass external URLs via --collect.url.
-          lhci collect \
-            --collect.staticDistDir='' \
-            --collect.url=https://undp.crisplabs.tech/mobile-app/src/ \
-            --collect.url=https://undp.crisplabs.tech/mobile-app/src/?ui=v4 \
-            --collect.url=https://undp.crisplabs.tech/web-dashboard/src/ \
-            --config=./lhci.config.cjs
+        # `lhci.config.prod.cjs` is a separate config that inherits the
+        # threshold matrix from the dev config but points the URL list
+        # at the live PROD domain. No staticDistDir — LHCI audits the
+        # external URLs directly.
+        run: lhci collect --config=./lhci.config.prod.cjs
       - name: Assert thresholds (PROD audit must clear the floor)
         # If PROD score drops below the deployed code's pre-deploy
         # baseline (which already passed assert), there's a real
@@ -321,12 +313,13 @@ jobs:
         # as the PR audit; if it passed pre-deploy, it MUST pass on
         # PROD too. Drift > 15% indicates infra-level regression
         # (bad nginx config, broken CDN, etc.).
-        run: lhci assert --config=./lhci.config.cjs
+        run: lhci assert --config=./lhci.config.prod.cjs
       - name: Publish PROD reports to lighthouse-history
         env:
-          GITHUB_SHA: ${{ github.sha }}-prod
+          GITHUB_SHA: ${{ github.sha }}
           GITHUB_REF: ${{ github.ref }}
           GITHUB_ACTOR: ${{ github.actor }}
+          LHCI_PUBLISH_SUFFIX: '-prod'
         run: node scripts/lighthouse-publish.mjs
       - name: Upload PROD Lighthouse artifacts
         if: always()
