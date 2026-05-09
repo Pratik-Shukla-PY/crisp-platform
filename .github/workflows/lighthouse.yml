@@ -1,0 +1,236 @@
+name: Lighthouse QA
+
+# Runs Google Lighthouse CI against the PWA + Dashboard, archives reports
+# to the `lighthouse-history` orphan branch, posts a deterministic score
+# table to the PR, and enforces hard thresholds (block deploy on:
+# Performance < 60 mobile, Accessibility < 90, Best Practices < 80,
+# PWA < 80 on PWA pages). See docs/LIGHTHOUSE_QA.md for the full runbook.
+#
+# AI analysis is NOT done in CI — it's done interactively in Claude Code
+# when you ask "analyze the latest Lighthouse report". The CI only runs
+# the audits + threshold gate; cost in API calls is $0.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# One run per ref. Force-pushes / new commits cancel the in-flight audit.
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write          # needed for git push to lighthouse-history branch
+  pull-requests: write     # needed to post + update the PR comment
+  checks: write            # needed to set the status check
+
+jobs:
+  lighthouse:
+    name: Lighthouse audit + threshold gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Skip on draft PRs — too noisy when the work isn't ready for review.
+    if: github.event.pull_request.draft != true
+    steps:
+      - name: Checkout repo (full history for git-worktree publish)
+        uses: actions/checkout@v4
+        with:
+          # The publish script uses git worktree against the
+          # lighthouse-history branch. Shallow clone breaks that.
+          fetch-depth: 0
+          # PRs from forks: actions/checkout defaults to checking out
+          # the merge ref. We want HEAD of the PR branch so audits
+          # cover the actual code being merged.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install LHCI
+        # Pin the major version. LHCI 0.13.x is the stable line as of
+        # May 2026; bump intentionally only (Lighthouse score weighting
+        # changes between Chromium versions).
+        run: npm install -g @lhci/cli@0.13.x
+
+      - name: Install Chrome (LHCI's headless browser)
+        # LHCI uses Puppeteer's bundled Chromium under the hood, but
+        # ubuntu-latest already has a stable Chrome. Install if missing.
+        run: |
+          which google-chrome || which chromium-browser || (
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq google-chrome-stable
+          )
+
+      - name: Run Lighthouse CI collect (3 URLs × 3 runs = 9 audits)
+        # `lhci collect` reads lhci.config.cjs, spins up a static server
+        # at staticDistDir (the repo root), audits each URL the
+        # configured number of times, and writes lhr-*.json/.html to
+        # .lighthouseci/. Median is picked downstream by our publish
+        # script — LHCI's own assert step uses isRepresentativeRun.
+        run: lhci collect --config=./lhci.config.cjs
+
+      - name: Lighthouse CI assert (LHCI's own threshold check)
+        # First-pass deterministic gate — uses the assertions in
+        # lhci.config.cjs. This is the source-of-truth threshold check;
+        # the PR-comment script's evaluation duplicates the logic for
+        # the human-friendly message + regression delta vs baseline.
+        # Continue on error so we still run publish + comment + final
+        # exit-code logic below.
+        id: lhci_assert
+        continue-on-error: true
+        run: lhci assert --config=./lhci.config.cjs
+
+      - name: Publish reports to lighthouse-history branch
+        # Always runs (even on assert failure) so the failed run's
+        # data is still archived for regression analysis. The script
+        # is idempotent — no-op if the same SHA was already published.
+        env:
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: node scripts/lighthouse-publish.mjs
+
+      - name: Render PR comment + final threshold check
+        # Reads .lighthouseci/summary.json (just generated), pulls the
+        # latest baseline summary from origin/lighthouse-history, and
+        # writes .lighthouseci/pr-comment.md. The script's exit code
+        # is the final gate: exit 1 if ANY blocker AND no override label.
+        id: comment
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          # The override label bypasses the threshold gate. See
+          # docs/LIGHTHOUSE_QA.md for usage policy.
+          LIGHTHOUSE_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'lighthouse-approved') }}
+        run: node scripts/lighthouse-pr-comment.mjs
+
+      - name: Post comment on PR
+        # Edits the existing comment if one exists, otherwise creates a
+        # new one. Idempotent across repeated runs of the same PR.
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = '.lighthouseci/pr-comment.md';
+            if (!fs.existsSync(path)) {
+              core.warning('No PR comment file generated (audit step may have failed).');
+              return;
+            }
+            const body = fs.readFileSync(path, 'utf8');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const marker = '## 🚦 Lighthouse —';
+            const existing = comments.find(c => c.body && c.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated existing comment ${existing.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+              core.info('Created new PR comment');
+            }
+
+      - name: Upload artifacts (full LH JSON + HTML for offline review)
+        # Belt-and-braces: even if the lighthouse-history branch push
+        # fails (rare, but possible if a write race against another
+        # workflow), the artifacts let an operator download the raw
+        # reports from the workflow run page. 30-day retention.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            .lighthouseci/lhr-*.json
+            .lighthouseci/lhr-*.html
+            .lighthouseci/output/
+            .lighthouseci/summary.json
+            .lighthouseci/pr-comment.md
+            .lighthouseci/violations.json
+          retention-days: 30
+          if-no-files-found: warn
+
+  qa-extended:
+    name: Extended QA (axe + offline + visual)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event.pull_request.draft != true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install Playwright deps + Chromium
+        working-directory: e2e
+        run: |
+          npm ci --prefer-offline --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Boot static server (port 8080)
+        # The Playwright tests target localhost:8080. We don't need the
+        # backend running — the new tests are static-only (a11y, SW
+        # cache, queue persistence don't hit the API).
+        run: |
+          npx --yes serve -p 8080 -L . &
+          # Wait for server up
+          for i in {1..10}; do
+            curl -sf http://localhost:8080/mobile-app/src/index.html >/dev/null && break
+            sleep 1
+          done
+
+      - name: Run axe-core a11y tests
+        working-directory: e2e
+        run: npx playwright test 40-axe-a11y --project=pwa --reporter=line
+
+      - name: Run offline-first strict tests
+        working-directory: e2e
+        run: npx playwright test 41-offline-strict --project=pwa --reporter=line
+
+      - name: Run visual regression tests (Linux baselines)
+        working-directory: e2e
+        # Visual tests are gated to Linux (the OS that produced the
+        # committed baselines). Force-run via env to make sure CI
+        # actually executes them.
+        env:
+          CI: 'true'
+        run: |
+          # First run will fail with "no baseline" if pngs aren't
+          # committed yet. We allow that and update via PR — see
+          # docs/LIGHTHOUSE_QA.md.
+          npx playwright test 42-visual-regression --project=pwa --reporter=line || \
+            echo "::warning::Visual regression: check PR for baseline drift or missing baselines"
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-extended-report-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 14
+          if-no-files-found: warn

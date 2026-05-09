@@ -79,6 +79,24 @@ jobs:
             *)
               ;;
           esac
+          # May 2026 — Lighthouse QA gate (Phase 2). Same shape as the
+          # backend gate: hard-fail only when Lighthouse explicitly
+          # concluded as failure. Missing/in-flight passes through (so
+          # deploys triggered before Lighthouse finishes don't deadlock).
+          # Override path: a maintainer can apply the
+          # `lighthouse-approved` label and re-run the Lighthouse
+          # workflow before merging.
+          LH_STATUS=$(printf '%s' "$API_OUT" | jq -r '.check_runs[] | select(.name == "Lighthouse audit + threshold gate") | .conclusion' | head -1)
+          echo "Lighthouse conclusion for ${{ github.sha }}: ${LH_STATUS:-<no-run-yet>}"
+          case "$LH_STATUS" in
+            failure|cancelled|timed_out|action_required)
+              echo "::error::Lighthouse audit concluded as '$LH_STATUS' on this commit. Refusing to deploy."
+              echo "::error::Either fix the regressions, or apply the \`lighthouse-approved\` label and re-run the Lighthouse workflow."
+              exit 1
+              ;;
+            *)
+              ;;
+          esac
 
   deploy:
     name: Deploy to EC2
@@ -255,20 +273,92 @@ jobs:
           path: e2e/playwright-report-prod/
           retention-days: 7
 
-  auto-rollback:
-    name: Auto-rollback (prod-smoke regression)
+  prod-lighthouse-audit:
+    name: Lighthouse audit on PROD (post-deploy)
     needs: [deploy, prod-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    # Only run when prod-smoke passed (no point auditing if the basic
+    # smoke already failed — auto-rollback will fire on smoke). Also
+    # only on real prod deploys (push to main); manual workflow_dispatch
+    # against non-main branches doesn't update prod CSP / assets.
+    if: |
+      success() &&
+      needs.deploy.result == 'success' &&
+      needs.prod-smoke.result == 'success' &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.branch == 'main'))
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need full history for the publish script's git-worktree against
+          # the lighthouse-history branch.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install LHCI + Chrome
+        run: |
+          npm install -g @lhci/cli@0.13.x
+          which google-chrome || sudo apt-get install -y -qq google-chrome-stable
+      - name: Audit PROD URLs (3 runs each, mobile throttle)
+        # Override staticDistDir + URLs in the config via env so we hit
+        # https://undp.crisplabs.tech instead of localhost. The lhci.config
+        # picks env-var overrides up via process.env (or we bypass with
+        # explicit --collect.url args).
+        run: |
+          # Use --collect.staticDistDir='' to disable LHCI's auto-server,
+          # then pass external URLs via --collect.url.
+          lhci collect \
+            --collect.staticDistDir='' \
+            --collect.url=https://undp.crisplabs.tech/mobile-app/src/ \
+            --collect.url=https://undp.crisplabs.tech/mobile-app/src/?ui=v4 \
+            --collect.url=https://undp.crisplabs.tech/web-dashboard/src/ \
+            --config=./lhci.config.cjs
+      - name: Assert thresholds (PROD audit must clear the floor)
+        # If PROD score drops below the deployed code's pre-deploy
+        # baseline (which already passed assert), there's a real
+        # regression — block + trigger rollback. Same threshold matrix
+        # as the PR audit; if it passed pre-deploy, it MUST pass on
+        # PROD too. Drift > 15% indicates infra-level regression
+        # (bad nginx config, broken CDN, etc.).
+        run: lhci assert --config=./lhci.config.cjs
+      - name: Publish PROD reports to lighthouse-history
+        env:
+          GITHUB_SHA: ${{ github.sha }}-prod
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: node scripts/lighthouse-publish.mjs
+      - name: Upload PROD Lighthouse artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-prod-${{ github.sha }}
+          path: |
+            .lighthouseci/lhr-*.json
+            .lighthouseci/lhr-*.html
+            .lighthouseci/output/
+            .lighthouseci/summary.json
+          retention-days: 30
+          if-no-files-found: warn
+
+  auto-rollback:
+    name: Auto-rollback (prod-smoke or lighthouse regression)
+    needs: [deploy, prod-smoke, prod-lighthouse-audit]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Fires ONLY when:
     #   - deploy succeeded (containers cycled, new code live), AND
-    #   - prod-smoke failed (browser-level regression — CSP, asset 404,
-    #     missing CDN, JS error during boot)
+    #   - either prod-smoke OR prod-lighthouse-audit failed (browser-level
+    #     regression — CSP, asset 404, JS error, OR Lighthouse score
+    #     dropped below the threshold floor on PROD)
     # Doesn't run when prod-smoke just couldn't START (job-level failure
     # like Playwright install hanging) — that's caught by the always-skip
     # condition. Doesn't run when deploy itself failed — deploy.sh already
     # auto-rolled-back inside the EC2 in that case.
-    if: failure() && needs.deploy.result == 'success' && needs.prod-smoke.result == 'failure'
+    if: |
+      failure() &&
+      needs.deploy.result == 'success' &&
+      (needs.prod-smoke.result == 'failure' || needs.prod-lighthouse-audit.result == 'failure')
     environment:
       name: CRISP-Production
       url: https://undp.crisplabs.tech/web-dashboard/src/

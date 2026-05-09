@@ -20,6 +20,16 @@ playwright-report/
 playwright-report-prod/
 test-results/
 
+# Lighthouse CI output — regenerated on every run, archived to the
+# `lighthouse-history` orphan branch by scripts/lighthouse-publish.mjs.
+.lighthouseci/
+
+# Visual-regression snapshots: only commit the Linux baselines (which
+# CI generates). macOS / Windows local-dev snapshots are platform-
+# specific and shouldn't be committed.
+e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/*-darwin.png
+e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/*-win32.png
+
 # Logs & runtime
 *.log
 *.pid
