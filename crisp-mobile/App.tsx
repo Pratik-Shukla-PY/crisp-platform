@@ -120,7 +120,20 @@ type Screen =
   | 'photo' | 'audio' | 'review_details' | 'review_confirm'
   | 'success' | 'history' | 'report_detail'
   // Phase 1 (Apr 2026 — Optional reporter login) — off-flow screens.
-  | 'login' | 'settings';
+  | 'login' | 'settings'
+  // May 2026 — UI v4 parity (DEFERRED). Screen values are reserved
+  // here so the eventual port type-checks; the corresponding screen
+  // components are tracked in crisp-mobile/V4_PARITY_DEFERRED.md.
+  // No v4 navigation calls today — the flag check below prevents
+  // routing to these stubs.
+  | 'v4_landing' | 'v4_capture' | 'v4_classify' | 'v4_review';
+
+// May 2026 v4 — flag check (default OFF on RN until V4_PARITY_DEFERRED
+// roadmap completes). PWA defaults flag ON; RN companion defaults OFF
+// so users get the existing v3 flow on the legacy 4-stage path. When
+// the v4 RN screens ship (see V4_PARITY_DEFERRED.md), flip this to
+// the same default-on pattern the PWA uses.
+const UI_V4_ENABLED = false;
 
 /**
  * Schedule heavy async work to run AFTER any user interaction (touch, scroll,
