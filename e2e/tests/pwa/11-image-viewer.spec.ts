@@ -20,6 +20,7 @@ async function openClean(page) {
   await page.goto('index.html');
   await page.evaluate(() => {
     localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+      localStorage.setItem('crisp_landing_seen', '1');
   });
   await page.reload();
   await page.evaluate(() => {

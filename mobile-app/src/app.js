@@ -41,6 +41,13 @@ function _initConsentGate() {
     const CONSENT_KEY = 'crisp_privacy_consent';
     if (localStorage.getItem(CONSENT_KEY)) return;
 
+    // May 2026 v4 — defer to the landing card if it's currently up. The
+    // landing card collects consent inline (the same checkbox), so we
+    // must NOT pop the legacy full-screen overlay on top of it. The
+    // landing card calls _markConsent() on accept; on next page load
+    // the early-return above will fire.
+    if (document.getElementById('landing-overlay')) return;
+
     const overlay = document.getElementById('consent-overlay');
     if (!overlay) return;
     overlay.style.display = 'flex';
@@ -2613,6 +2620,18 @@ async function updateHomeImpactMetrics() {
         // greet fresh installs with "0 verified"). The volume signal is
         // deliberately not displayed — UNDP-incentive policy (§3.8).
         wrap.style.display = (verifiedCount > 0 || livesImpacted > 0) ? 'flex' : 'none';
+
+        // May 2026 v4 — also paint the landing card's impact panel if
+        // it's currently mounted. Same data, mirror copy. Doing this
+        // here keeps the single-source-of-truth in updateHomeImpactMetrics().
+        const landingWrap = document.getElementById('landing-impact');
+        const landingVerifiedEl = document.getElementById('landing-verified-count');
+        const landingLivesEl = document.getElementById('landing-lives-count');
+        if (landingWrap && landingVerifiedEl && landingLivesEl) {
+            landingVerifiedEl.textContent = _fmtCompactNumber(verifiedCount);
+            landingLivesEl.textContent = _fmtCompactNumber(livesImpacted);
+            landingWrap.style.display = (verifiedCount > 0 || livesImpacted > 0) ? 'flex' : 'none';
+        }
     } catch (e) {
         console.warn('[Home] impact metrics fetch failed:', e);
         wrap.style.display = 'none';

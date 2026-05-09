@@ -39,6 +39,7 @@ async function openPwaBare(page) {
   await page.goto('index.html');
   await page.evaluate(() => {
     localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+      localStorage.setItem('crisp_landing_seen', '1');
   });
   await page.reload();
 }
@@ -137,6 +138,7 @@ test.describe('PWA locale-bootstrap invariants', () => {
     await page.goto('index.html');
     await page.evaluate(() => {
       localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+      localStorage.setItem('crisp_landing_seen', '1');
       localStorage.removeItem('crisp_lang_manual');
     });
     await page.reload();

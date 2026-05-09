@@ -25,6 +25,7 @@ async function openPwa(page) {
         // Consent-gate + device pre-seed so the stage machine boots without
         // the modal intercepting clicks.
         localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+      localStorage.setItem('crisp_landing_seen', '1');
         localStorage.setItem('crisp_device_hash', 'DEV-E2E-V3FLOW');
     });
     await page.reload();
@@ -162,6 +163,7 @@ test.describe('UI v3 — 8-stage capture-flow reorder', () => {
         await page.goto('index.html');
         await page.evaluate(() => {
             localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+      localStorage.setItem('crisp_landing_seen', '1');
             localStorage.setItem('crisp_device_hash', 'DEV-E2E-V3OFF');
             localStorage.setItem('crisp_ui_v3', 'off');
         });

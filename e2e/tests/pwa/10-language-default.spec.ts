@@ -18,6 +18,7 @@ async function openClean(page) {
   await page.goto('index.html');
   await page.evaluate(() => {
     localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+      localStorage.setItem('crisp_landing_seen', '1');
     // Wipe any leftover manual lang from prior runs so we test the default.
     localStorage.removeItem('crisp_lang_manual');
   });

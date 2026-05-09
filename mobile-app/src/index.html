@@ -35,7 +35,16 @@
 </head>
 <body>
 
-<!-- ── Privacy Consent (first launch only, auto-translates to local language) ── -->
+<!-- May 2026 v4 — landing card mount point. landing.js builds the card
+     here on first visit (gated by localStorage['crisp_landing_seen']).
+     The legacy #consent-overlay below is now suppressed by landing.js
+     when the landing card is going to handle consent inline. -->
+<div id="landing-root"></div>
+
+<!-- ── Privacy Consent (legacy — folded into landing card on first
+        visit; still rendered for users who pre-date the v4 landing
+        and haven't accepted yet). app.js's _initConsentGate() short-
+        circuits if CONSENT_KEY is set; landing.js sets it on accept. -->
 <div id="consent-overlay" class="consent-overlay" style="display:none;">
     <div class="consent-card">
         <div class="consent-icon"><i class="fa-solid fa-shield-halved"></i></div>
@@ -1463,6 +1472,13 @@
      so the AuthStore singleton is available when the DOMContentLoaded
      boot hook calls AuthStore.init(). -->
 <script src="auth.js?v=1"></script>
-<script src="app.js?v=990"></script>
+<!-- May 2026 v4 — install-prompt.js MUST load BEFORE landing.js so
+     `window.InstallPrompt.onChange()` is callable when landing wires
+     its install button. Both load BEFORE app.js so the existing
+     consent gate sees CONSENT_KEY already populated when landing
+     dismisses. -->
+<script src="install-prompt.js?v=1"></script>
+<script src="landing.js?v=1"></script>
+<script src="app.js?v=1000"></script>
 </body>
 </html>

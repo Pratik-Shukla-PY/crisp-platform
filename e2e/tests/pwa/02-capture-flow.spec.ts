@@ -46,6 +46,7 @@ test.describe('PWA capture → submit → success', () => {
     await page.evaluate(() => {
       // Matches CONSENT_KEY in mobile-app/src/app.js:_initConsentGate
       localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+      localStorage.setItem('crisp_landing_seen', '1');
     });
     await page.reload();
     // Force English regardless of GPS auto-detection.

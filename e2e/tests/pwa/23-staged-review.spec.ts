@@ -23,6 +23,7 @@ async function openPwa(page) {
         // Pre-seed consent + device + the v2 flag default so the stage
         // machine boots without modal interrupts.
         localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+      localStorage.setItem('crisp_landing_seen', '1');
         localStorage.setItem('crisp_device_hash', 'DEV-E2E-V2REVIEW');
     });
     await page.reload();
@@ -156,6 +157,7 @@ test.describe('UI v2 — 3-page stage-review split', () => {
         await page.goto('index.html');
         await page.evaluate(() => {
             localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+      localStorage.setItem('crisp_landing_seen', '1');
             localStorage.setItem('crisp_device_hash', 'DEV-E2E-V2OFF');
             localStorage.setItem('crisp_ui_v2', 'off');
         });
