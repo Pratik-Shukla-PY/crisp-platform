@@ -59,12 +59,24 @@ async function _activeStages(page: Page): Promise<string[]> {
 }
 
 test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
-    test('landing card has zero raw key leaks', async ({ page }) => {
+    test('home page has zero raw key leaks', async ({ page }) => {
         await _gotoV4(page);
-        await page.waitForSelector('#landing-overlay', { timeout: 8000 });
+        await page.waitForSelector('#stage-home.active', { timeout: 8000 });
         await page.waitForTimeout(600);  // let async i18n loaders settle
-        const leaks = await _rawKeysOnPage(page);
-        expect(leaks, `landing card raw key leaks: ${leaks.join(', ')}`).toEqual([]);
+        // Limit the leak hunt to #stage-home — other stages have their
+        // own specs.
+        const leaks = await page.evaluate(() => {
+            const home = document.getElementById('stage-home');
+            if (!home) return ['stage-home-missing'];
+            return Array.from(home.querySelectorAll('[data-i18n]'))
+                .filter((el) => {
+                    const text = el.textContent?.trim() || '';
+                    const key = el.getAttribute('data-i18n') || '';
+                    return text === key && /^[a-z][a-z0-9_]+$/i.test(key) && key.includes('_');
+                })
+                .map((el) => el.getAttribute('data-i18n') || '');
+        });
+        expect(leaks, `home page raw key leaks: ${leaks.join(', ')}`).toEqual([]);
     });
 
     test('all 3 v4 stages have zero raw key leaks', async ({ page }) => {

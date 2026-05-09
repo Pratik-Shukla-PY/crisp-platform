@@ -24,18 +24,19 @@ import { test, expect, Page } from '@playwright/test';
 // Hard requirement: every test runs with NO bypass flags.
 test.use({ storageState: { cookies: [], origins: [] } });
 
-// Helper: get the user past the landing card + consent in the way a
-// real user would (tap consent, tap Open the reporter). Returns once
-// the user is on stage-home (or stage-photo if landing routed direct).
+// Helper: satisfy the inline consent gate on the merged home page (the
+// previous full-screen #landing-overlay was deleted in May 2026 — consent
+// now lives on #stage-home as a small checkbox). Returns once Start is
+// enabled.
 async function _passLandingAsRealUser(page: Page) {
-    // The landing card may or may not be present (depends on storage
-    // state). If present, satisfy consent + tap through.
-    const landing = page.locator('#landing-overlay');
-    if (await landing.count()) {
-        await landing.locator('#landing-consent-check').check();
-        await landing.locator('#landing-start-btn').click();
-        await page.waitForFunction(() => !document.getElementById('landing-overlay'),
-                                   null, { timeout: 3000 });
+    const consent = page.locator('#home-consent-check');
+    if (await consent.count() && await consent.isVisible()) {
+        await consent.check();
+        // Wait for home-screen.js to clear btn-start.disabled.
+        await page.waitForFunction(
+            () => !(document.getElementById('btn-start') as HTMLButtonElement)?.disabled,
+            null, { timeout: 3000 },
+        );
     }
 }
 

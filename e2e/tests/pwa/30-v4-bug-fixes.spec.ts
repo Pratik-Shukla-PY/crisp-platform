@@ -480,68 +480,53 @@ test.describe('BUG 8 — v4 location pill shows place name when available', () =
 });
 
 // ════════════════════════════════════════════════════════════════════════
-// BUG 1 — Landing page no longer fluctuates between old and new
+// BUG 1 — Landing page no longer fluctuates (May 2026 follow-up)
 // ════════════════════════════════════════════════════════════════════════
 //
-// User: "Landing page is fluctuating between the older one and the new
-// one." Reproduces on first visit when both #stage-home and the landing
-// card render on the same paint — the home stage briefly flashes
-// underneath the landing overlay. Fix: synchronously hide stages while
-// landing is pending. Removed by landing.js _dismiss().
+// Original BUG 1 (April 2026): "landing page is fluctuating between the
+// older one and the new one." The fix added a `landing-pending` body
+// class that hid #stage-home while #landing-overlay was up.
+//
+// May 2026 follow-up: BOTH #landing-overlay AND the legacy
+// #consent-overlay were deleted; the merged always-on home page
+// replaces them. Fluctuation is impossible because there is only ONE
+// home now. The new tests assert no leftover DOM + no overlay flash on
+// every visit (first or returning).
 
-test.describe('BUG 1 — first-visit landing renders without home flash', () => {
-    test('on first visit, only landing-overlay is visible (stage-home hidden)', async ({ page }) => {
-        // No storageState/initScript bypass — first-visit path.
+test.describe('BUG 1 (post-merge) — single always-on home, no overlay flash', () => {
+    test('first visit: only #stage-home is active, no landing-overlay or consent-overlay', async ({ page }) => {
         await page.goto('index.html');
-        await page.waitForFunction(() => !!document.getElementById('landing-overlay'),
-                                   null, { timeout: 5000 });
-        const visibility = await page.evaluate(() => {
-            const home = document.getElementById('stage-home');
-            const landing = document.getElementById('landing-overlay');
-            return {
-                landingVisible: landing ? getComputedStyle(landing).display !== 'none' : false,
-                homeVisible: home ? getComputedStyle(home).visibility !== 'hidden'
-                                  && getComputedStyle(home).display !== 'none' : false,
-                homeOpacity: home ? getComputedStyle(home).opacity : '0',
-                bodyClass: document.body.className,
-            };
-        });
-        expect(visibility.landingVisible, 'landing-overlay not visible').toBe(true);
-        // BUG 1 fix: stage-home must be invisible (visibility:hidden or
-        // display:none) while landing-overlay is up.
-        expect(visibility.homeVisible, 'stage-home leaked through landing').toBe(false);
+        await page.waitForSelector('#stage-home.active', { timeout: 5000 });
+        const dom = await page.evaluate(() => ({
+            hasLandingOverlay: !!document.getElementById('landing-overlay'),
+            hasLegacyConsentOverlay: !!document.getElementById('consent-overlay'),
+            homeActive: !!document.querySelector('#stage-home.active'),
+            consentRowPresent: !!document.getElementById('home-consent'),
+        }));
+        expect(dom.hasLandingOverlay, '#landing-overlay should not exist anymore').toBe(false);
+        expect(dom.hasLegacyConsentOverlay, '#consent-overlay should be deleted').toBe(false);
+        expect(dom.homeActive, '#stage-home should be the active stage').toBe(true);
+        expect(dom.consentRowPresent, 'inline #home-consent should exist on first visit').toBe(true);
     });
 
-    test('returning visitor (consent + landing-seen set) skips landing card', async ({ page }) => {
+    test('returning visitor (consent set) sees home with consent row hidden', async ({ page }) => {
         await page.addInitScript(() => {
-            localStorage.setItem('crisp_landing_seen', '1');
-            localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+            localStorage.setItem('crisp_privacy_consent',
+                JSON.stringify({ accepted: true, ts: Date.now() }));
         });
         await page.goto('index.html');
-        await page.waitForTimeout(1500);
+        await page.waitForSelector('#stage-home.active', { timeout: 5000 });
         const result = await page.evaluate(() => ({
-            hasLanding: !!document.getElementById('landing-overlay'),
+            homeActive: !!document.querySelector('#stage-home.active'),
             consentVisible: (() => {
-                const c = document.getElementById('consent-overlay');
+                const c = document.getElementById('home-consent');
                 return c ? getComputedStyle(c).display !== 'none' : false;
             })(),
-            homeActive: document.getElementById('stage-home')?.classList.contains('active'),
+            startEnabled: !((document.getElementById('btn-start') as HTMLButtonElement | null)?.disabled),
         }));
-        expect(result.hasLanding, 'returning user should not see landing').toBe(false);
-        expect(result.consentVisible, 'returning user should not see consent overlay').toBe(false);
         expect(result.homeActive, 'returning user should land on stage-home').toBe(true);
-    });
-
-    test('consent-overlay never shows when landing is up', async ({ page }) => {
-        await page.goto('index.html');
-        // Wait for both landing AND the 800ms _initConsentGate timer to fire.
-        await page.waitForTimeout(1500);
-        const consentVisible = await page.evaluate(() => {
-            const c = document.getElementById('consent-overlay');
-            return c ? getComputedStyle(c).display !== 'none' : false;
-        });
-        expect(consentVisible, 'legacy consent overlay flashed alongside landing')
-            .toBe(false);
+        expect(result.consentVisible, 'returning user should not see the consent row').toBe(false);
+        expect(result.startEnabled, 'Start should be enabled for returning user').toBe(true);
     });
 });
 

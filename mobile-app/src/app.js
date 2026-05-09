@@ -36,36 +36,13 @@ const UI_V3_ENABLED = (() => {
 })();
 window.__crispUiV3 = UI_V3_ENABLED;
 
-// ── Privacy Consent Gate (shown after language detection so it appears in local language) ──
-function _initConsentGate() {
-    const CONSENT_KEY = 'crisp_privacy_consent';
-    if (localStorage.getItem(CONSENT_KEY)) return;
-
-    // May 2026 v4 — defer to the landing card if it's currently up. The
-    // landing card collects consent inline (the same checkbox), so we
-    // must NOT pop the legacy full-screen overlay on top of it. The
-    // landing card calls _markConsent() on accept; on next page load
-    // the early-return above will fire.
-    if (document.getElementById('landing-overlay')) return;
-
-    const overlay = document.getElementById('consent-overlay');
-    if (!overlay) return;
-    overlay.style.display = 'flex';
-
-    const checkbox = document.getElementById('consent-checkbox');
-    const acceptBtn = document.getElementById('consent-accept-btn');
-
-    checkbox.addEventListener('change', () => {
-        acceptBtn.disabled = !checkbox.checked;
-    });
-
-    acceptBtn.addEventListener('click', () => {
-        if (!checkbox.checked) return;
-        localStorage.setItem(CONSENT_KEY, JSON.stringify({ accepted: true, ts: Date.now() }));
-        overlay.style.display = 'none';
-    });
-}
-// _initConsentGate() is called from DOMContentLoaded AFTER detectAndSetupLanguage() applies i18n
+// ── Privacy Consent ─────────────────────────────────────────────────────
+// May 2026 — the legacy `_initConsentGate()` full-screen overlay was
+// REMOVED. Consent now lives inline on the merged always-on home page
+// (#stage-home → #home-consent), wired by mobile-app/src/home-screen.js.
+// The same `localStorage['crisp_privacy_consent']` key is shared, so
+// users who accepted via the old overlay or the v4 landing card
+// continue to be considered consented (no re-prompt).
 
 // ── Service Worker Registration ───────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
@@ -8766,10 +8743,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 2. Start language detection (it will call applyI18n when ready or fallback)
     detectAndSetupLanguage();
 
-    // 2b. Show consent gate AFTER language detection so it displays in local language
-    // Language detection calls applyI18n() which updates all data-i18n elements including consent
-    // Use a short delay to let async GPS/IP detection complete before showing consent
-    setTimeout(_initConsentGate, 800);
+    // 2b. Consent gate moved inline to home-screen.js (May 2026 — the
+    //     legacy full-screen overlay was deleted; consent is now a small
+    //     checkbox above the Start CTA on #stage-home).
 
     // 3. Migrate old localStorage queue to IndexedDB (backward compatibility)
     try {

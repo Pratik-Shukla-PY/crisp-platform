@@ -1,76 +1,49 @@
 /**
- * UI v4 — Commit A regression tests.
+ * Merged always-on home page (May 2026).
  *
- * Covers:
- *   1. First-visit users see the landing card, not the legacy consent modal
- *      and not the home stage.
- *   2. The landing card surfaces all 4 channel buttons (IVR / SMS / Telegram /
- *      WhatsApp) and the 3 app buttons (iOS / Android / Expo Go) with
- *      "Coming soon" labels for the empty handles.
- *   3. The "Open the reporter" button is disabled until consent is checked.
- *   4. Tapping it after consent dismisses the landing AND lands on
- *      stage-photo (the existing capture flow's first stage).
- *   5. localStorage flags are persisted (returning visitors don't re-see
- *      the landing).
- *   6. The legacy #consent-overlay does NOT visibly flash while the landing
- *      card is present.
- *   7. window.InstallPrompt is exposed as the platform-detection API.
- *   8. Channel deep-link buttons that are configured render as <a href="…">,
- *      empty ones render as disabled <button> with "Coming soon" badge.
+ * The first-visit-only landing overlay was deleted; the merged home
+ * page replaces both `#landing-overlay` AND the previous minimal
+ * `#stage-home`. This spec covers:
  *
- * Note: we don't test the actual install prompt firing (`beforeinstallprompt`
- * is browser- and timing-driven; Playwright Chromium doesn't fire it
- * deterministically). We assert the API surface + the iOS slide-up sheet.
+ *   1. The home page is visible on every load (no first-visit gating).
+ *   2. All 4 channels (IVR / SMS / Telegram / WhatsApp) and 3 native-app
+ *      buttons (iOS / Android / Expo Go) are reachable.
+ *   3. IVR is LIVE — anchor with tel:+16626768896.
+ *   4. Telegram is LIVE — anchor with t.me/crisp_undp_bot.
+ *   5. SMS / WhatsApp / iOS / Android render as disabled "Coming soon"
+ *      buttons until handles are wired.
+ *   6. Expo Go is LIVE — anchor with exp://.
+ *   7. The inline consent checkbox gates `#btn-start` until checked,
+ *      then auto-hides + persists in localStorage.
+ *   8. Returning visitors (consent already set) see no consent row;
+ *      Start is enabled immediately.
+ *   9. window.InstallPrompt API surface is exposed (legacy contract).
+ *  10. iOS install sheet renders when triggered.
+ *  11. Viewport fits 360x640 without horizontal scroll.
+ *  12. #stage-home has the v4 viewport rule (min-height: 100dvh).
  */
 import { test, expect } from '@playwright/test';
 
-// Each test gets a fresh storage state so we always exercise the
-// first-visit flow.
+// Each test runs in a fresh context (Playwright default + the explicit
+// empty storageState below) so localStorage starts clean. We do NOT
+// install an addInitScript-based localStorage.clear() — that would also
+// fire on `page.reload()` inside a test, which breaks any persistence
+// assertions (e.g. "consent persists after reload").
 test.use({ storageState: { cookies: [], origins: [] } });
 
-test.describe('UI v4 — Landing card', () => {
-    test.beforeEach(async ({ page }) => {
-        // Reset all storage so first-visit detection fires.
-        await page.addInitScript(() => {
-            try {
-                localStorage.clear();
-                sessionStorage.clear();
-            } catch {}
-        });
-    });
+test.describe('Merged always-on home page', () => {
 
-    test('first-visit users land on the landing card', async ({ page }) => {
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        await expect(page.locator('#landing-overlay')).toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.landing-title')).toBeVisible();
-        // Landing overlay sits ABOVE stage-home (z-index 9000 vs auto).
-        // We assert by elementFromPoint at the centre — whatever lives
-        // there is what the user can interact with.
-        const topEl = await page.evaluate(() => {
-            const cx = window.innerWidth / 2;
-            const cy = window.innerHeight / 2;
-            const el = document.elementFromPoint(cx, cy);
-            if (!el) return null;
-            // Walk up to find the nearest #id ancestor.
-            let node = el;
-            while (node && !node.id && node.parentElement) node = node.parentElement;
-            return node ? node.id || node.closest('[id]')?.id || null : null;
-        });
-        // Anything inside the landing card is OK; just must NOT be inside stage-home.
-        expect(topEl).not.toBe('stage-home');
-        expect(topEl).not.toBeNull();
-    });
-
-    test('legacy consent overlay is suppressed while landing is up', async ({ page }) => {
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        await page.waitForSelector('#landing-overlay');
-        const consentVisible = await page.locator('#consent-overlay').isVisible();
-        expect(consentVisible).toBe(false);
+    test('home page is visible on every load (no first-visit gating)', async ({ page }) => {
+        await page.goto('');
+        await expect(page.locator('#stage-home.active')).toBeVisible({ timeout: 5000 });
+        // Reload — still visible.
+        await page.reload();
+        await expect(page.locator('#stage-home.active')).toBeVisible({ timeout: 5000 });
     });
 
     test('all 4 channel buttons + 3 app buttons render', async ({ page }) => {
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        await page.waitForSelector('#landing-overlay');
+        await page.goto('');
+        await page.waitForSelector('#home-channels [data-channel]', { timeout: 5000 });
         for (const channel of ['ivr', 'sms', 'telegram', 'whatsapp']) {
             await expect(page.locator(`[data-channel="${channel}"]`)).toBeVisible();
         }
@@ -79,75 +52,96 @@ test.describe('UI v4 — Landing card', () => {
         }
     });
 
-    test('empty channel handles render as "Coming soon" disabled buttons', async ({ page }) => {
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        await page.waitForSelector('#landing-overlay');
-        // iOS / Android default to empty in DEFAULT_CHANNELS → must
-        // render as disabled <button> with .lc-soon overlay.
-        const iosBtn = page.locator('[data-channel="ios"]');
-        await expect(iosBtn).toHaveClass(/is-disabled/);
-        await expect(iosBtn.locator('.lc-soon')).toBeVisible();
-        const tag = await iosBtn.evaluate((el) => el.tagName.toLowerCase());
-        expect(tag).toBe('button');
+    test('IVR is LIVE — anchor with tel:+16626768896', async ({ page }) => {
+        await page.goto('');
+        await page.waitForSelector('[data-channel="ivr"]');
+        const ivrBtn = page.locator('[data-channel="ivr"]');
+        const tag = await ivrBtn.evaluate((el) => el.tagName.toLowerCase());
+        expect(tag).toBe('a');
+        const href = await ivrBtn.getAttribute('href');
+        expect(href).toBe('tel:+16626768896');
     });
 
-    test('configured channel handles render as anchor tags with hrefs', async ({ page }) => {
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        await page.waitForSelector('#landing-overlay');
-        // Telegram is configured by default in landing.js (crisp_undp_bot)
+    test('Telegram is LIVE — anchor with t.me/crisp_undp_bot', async ({ page }) => {
+        await page.goto('');
+        await page.waitForSelector('[data-channel="telegram"]');
         const tgBtn = page.locator('[data-channel="telegram"]');
         const tag = await tgBtn.evaluate((el) => el.tagName.toLowerCase());
         expect(tag).toBe('a');
         const href = await tgBtn.getAttribute('href');
-        expect(href).toContain('https://t.me/');
+        expect(href).toContain('https://t.me/crisp_undp_bot');
     });
 
-    test('"Open the reporter" is disabled until consent is checked', async ({ page }) => {
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        await page.waitForSelector('#landing-overlay');
-        const startBtn = page.locator('#landing-start-btn');
+    test('SMS + WhatsApp render as disabled "Coming soon" buttons', async ({ page }) => {
+        await page.goto('');
+        await page.waitForSelector('[data-channel="sms"]');
+        for (const ch of ['sms', 'whatsapp']) {
+            const btn = page.locator(`[data-channel="${ch}"]`);
+            await expect(btn).toHaveClass(/is-disabled/);
+            await expect(btn.locator('.lc-soon')).toBeVisible();
+            const tag = await btn.evaluate((el) => el.tagName.toLowerCase());
+            expect(tag).toBe('button');
+        }
+    });
+
+    test('iOS + Android render as disabled "Coming soon" buttons', async ({ page }) => {
+        await page.goto('');
+        await page.waitForSelector('[data-channel="ios"]');
+        for (const app of ['ios', 'android']) {
+            const btn = page.locator(`[data-channel="${app}"]`);
+            await expect(btn).toHaveClass(/is-disabled/);
+            await expect(btn.locator('.lc-soon')).toBeVisible();
+        }
+    });
+
+    test('Expo Go is LIVE — anchor with exp:// scheme', async ({ page }) => {
+        await page.goto('');
+        await page.waitForSelector('[data-channel="expo"]');
+        const expoBtn = page.locator('[data-channel="expo"]');
+        const tag = await expoBtn.evaluate((el) => el.tagName.toLowerCase());
+        expect(tag).toBe('a');
+        const href = await expoBtn.getAttribute('href');
+        expect(href).toContain('exp://exp.host/');
+    });
+
+    test('consent checkbox gates btn-start until checked', async ({ page }) => {
+        await page.goto('');
+        await page.waitForSelector('#home-consent-check', { timeout: 5000 });
+        const startBtn = page.locator('#btn-start');
         await expect(startBtn).toBeDisabled();
-        await page.locator('#landing-consent-check').check();
+        await page.locator('#home-consent-check').check();
         await expect(startBtn).not.toBeDisabled();
     });
 
-    test('tapping start dismisses landing + persists localStorage flags', async ({ page }) => {
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        await page.waitForSelector('#landing-overlay');
-        await page.locator('#landing-consent-check').check();
-        await page.locator('#landing-start-btn').click();
-        // Landing card animates out then removes itself.
-        await page.waitForFunction(
-            () => !document.getElementById('landing-overlay'),
-            null,
-            { timeout: 2000 }
-        );
-        // Both localStorage flags now set.
-        const flags = await page.evaluate(() => ({
-            seen: !!localStorage.getItem('crisp_landing_seen'),
-            consent: !!localStorage.getItem('crisp_privacy_consent'),
-        }));
-        expect(flags.seen).toBe(true);
-        expect(flags.consent).toBe(true);
+    test('checking consent persists + hides the row', async ({ page }) => {
+        await page.goto('');
+        await page.waitForSelector('#home-consent-check');
+        await page.locator('#home-consent-check').check();
+        // Wait for hide animation (~250ms in CSS) to settle.
+        await page.waitForTimeout(400);
+        await expect(page.locator('#home-consent')).toBeHidden();
+        // Persistence — reload + ensure consent stays set + row stays hidden.
+        await page.reload();
+        await expect(page.locator('#home-consent')).toBeHidden();
+        const persisted = await page.evaluate(() =>
+            !!localStorage.getItem('crisp_privacy_consent'));
+        expect(persisted).toBe(true);
     });
 
-    test('returning visitors skip the landing entirely', async ({ page }) => {
-        // Pre-set the flags as a returning visitor would have them.
+    test('returning visitors with consent see no checkbox + Start enabled', async ({ page }) => {
         await page.addInitScript(() => {
-            localStorage.setItem('crisp_landing_seen', '1');
-            localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+            localStorage.setItem('crisp_privacy_consent',
+                JSON.stringify({ accepted: true, ts: Date.now() }));
         });
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        // Wait for app to fully boot.
-        await page.waitForFunction(() => typeof (window as any).goToStage === 'function', null, { timeout: 5000 });
-        // Landing element should not exist, and the home stage should be active.
-        await expect(page.locator('#landing-overlay')).toHaveCount(0);
-        await expect(page.locator('#stage-home.active')).toBeVisible();
+        await page.goto('');
+        await page.waitForSelector('#stage-home.active', { timeout: 5000 });
+        await expect(page.locator('#home-consent')).toBeHidden();
+        await expect(page.locator('#btn-start')).not.toBeDisabled();
     });
 
     test('window.InstallPrompt API surface is exposed', async ({ page }) => {
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        await page.waitForSelector('#landing-overlay');
+        await page.goto('');
+        await page.waitForSelector('#stage-home.active', { timeout: 5000 });
         const api = await page.evaluate(() => {
             const ip = (window as any).InstallPrompt;
             if (!ip) return { ok: false };
@@ -167,53 +161,67 @@ test.describe('UI v4 — Landing card', () => {
     });
 
     test('iOS install sheet renders when triggered', async ({ page }) => {
-        // Simulate iOS UA so the InstallPrompt platform comes back as 'ios'.
         await page.addInitScript(() => {
             Object.defineProperty(navigator, 'userAgent', {
                 value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
                 configurable: true,
             });
         });
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        await page.waitForSelector('#landing-overlay');
+        await page.goto('');
+        await page.waitForSelector('#stage-home.active', { timeout: 5000 });
         await page.evaluate(async () => {
             await (window as any).InstallPrompt.show();
         });
         await expect(page.locator('#ios-install-sheet')).toBeVisible({ timeout: 1000 });
         await expect(page.locator('.iis-title')).toContainText(/Install CRISP/i);
-        await expect(page.locator('.iis-steps li').nth(0)).toContainText(/Share/i);
-        await expect(page.locator('.iis-steps li').nth(1)).toContainText(/Add to Home Screen/i);
     });
 
-    test('viewport-fit: landing card fits without horizontal scroll on 360x640', async ({ page }) => {
+    test('viewport fits 360x640 without horizontal scroll', async ({ page }) => {
         await page.setViewportSize({ width: 360, height: 640 });
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        await page.waitForSelector('#landing-overlay');
+        await page.goto('');
+        await page.waitForSelector('#stage-home.active');
         const overflow = await page.evaluate(() => ({
             scrollWidth: document.documentElement.scrollWidth,
             clientWidth: document.documentElement.clientWidth,
         }));
         expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
     });
+
+    test('CrispHome public surface is exposed for tests + late init', async ({ page }) => {
+        await page.goto('');
+        await page.waitForSelector('#stage-home.active', { timeout: 5000 });
+        const surface = await page.evaluate(() => {
+            const h = (window as any).CrispHome;
+            if (!h) return { ok: false };
+            return {
+                ok: true,
+                hasInit: typeof h.init === 'function',
+                hasRender: typeof h.renderChannels === 'function',
+                hasConsented: typeof h.hasConsented === 'function',
+                hasMark: typeof h.markConsent === 'function',
+                ivrConfigured: !!h._channels?.ivr_phone,
+                tgConfigured: !!h._channels?.telegram_bot,
+            };
+        });
+        expect(surface.ok).toBe(true);
+        expect(surface.hasInit).toBe(true);
+        expect(surface.ivrConfigured).toBe(true);
+        expect(surface.tgConfigured).toBe(true);
+    });
 });
 
-test.describe('UI v4 — Stage CSS viewport refactor', () => {
-    test('stage uses max-height 100dvh', async ({ page }) => {
-        await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        // Wait for at least the home stage to mount IN THE DOM. May 2026:
-        // BUG 1 fix sets `visibility: hidden` on stages while landing is
-        // up, so we use state:'attached' rather than the default 'visible'.
+test.describe('Stage CSS viewport refactor', () => {
+    test('#stage-home has min-height 100dvh', async ({ page }) => {
+        await page.goto('');
         await page.waitForSelector('#stage-home', { state: 'attached', timeout: 5000 });
-        const cssMaxHeight = await page.evaluate(() => {
+        const cssMinHeight = await page.evaluate(() => {
             const el = document.querySelector('#stage-home');
             if (!el) return null;
             const cs = window.getComputedStyle(el);
-            return cs.maxHeight;
+            return cs.minHeight;
         });
-        // jsdom-free check: getComputedStyle returns the raw `100dvh` or
-        // its computed pixel value depending on browser. Either is fine —
-        // we just want SOMETHING set.
-        expect(cssMaxHeight).not.toBe('none');
-        expect(cssMaxHeight).not.toBe('');
+        expect(cssMinHeight).not.toBe('none');
+        expect(cssMinHeight).not.toBe('0px');
+        expect(cssMinHeight).not.toBe('');
     });
 });

@@ -1,36 +1,8 @@
-/* ── Privacy Consent Overlay ────────────────────────────────── */
-.consent-overlay {
-    position: fixed; inset: 0; z-index: 99999;
-    background: rgba(0,0,0,0.85); backdrop-filter: blur(12px);
-    display: flex; align-items: center; justify-content: center;
-    padding: 20px;
-}
-.consent-card {
-    background: #111827; border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 20px; padding: 28px 24px; max-width: 380px; width: 100%;
-    color: #f8fafc; text-align: center;
-}
-.consent-icon { font-size: 36px; color: #7c3aed; margin-bottom: 12px; }
-.consent-card h2 { font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 700; margin: 0 0 8px; }
-.consent-card > p { font-size: 13px; color: #9ca3af; margin: 0 0 14px; line-height: 1.5; }
-.consent-card ul { list-style: none; padding: 0; margin: 0 0 14px; text-align: left; }
-.consent-card li { font-size: 12px; color: #d1d5db; padding: 6px 0; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-.consent-card li i { color: #7c3aed; font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
-.consent-assurance { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
-.consent-assurance div { font-size: 11px; color: #22c55e; display: flex; align-items: center; gap: 8px; }
-.consent-assurance i { width: 16px; text-align: center; }
-.consent-check { display: flex; align-items: flex-start; gap: 10px; text-align: left; font-size: 12px; color: #d1d5db; cursor: pointer; margin-bottom: 16px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; }
-.consent-check input[type="checkbox"] { margin-top: 2px; width: 18px; height: 18px; accent-color: #7c3aed; flex-shrink: 0; cursor: pointer; }
-.consent-accept-btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;
-    background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; }
-.consent-accept-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.consent-accept-btn:not(:disabled):hover { transform: scale(1.02); box-shadow: 0 4px 20px rgba(124,58,237,0.4); }
-@media (prefers-color-scheme: light) {
-    .consent-card { background: #fff; color: #1e293b; border-color: rgba(0,0,0,0.1); }
-    .consent-card > p { color: #64748b; }
-    .consent-card li { color: #374151; border-color: rgba(0,0,0,0.06); }
-    .consent-check { color: #374151; background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.08); }
-}
+/* ── Privacy Consent ──────────────────────────────────────────────────────
+   May 2026 — full-screen #consent-overlay deleted. Consent now lives
+   inline on #stage-home as a small checkbox above the Start CTA, styled
+   under .home-consent below. Legacy CSS rules removed; the inline
+   layout is significantly simpler (one checkbox, one label). */
 
 /* ── Delete My Data ────────────────────────────────────────── */
 .delete-my-data-link {
@@ -3030,61 +3002,31 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     }
 }
 
-/* ─── UI v4 — Landing card (May 2026) ─────────────────────────────────────
-   Shown on first visit only (gated by localStorage['crisp_landing_seen']).
-   Sits ABOVE the existing #stage-home so the user lands here, taps
-   "Open the reporter" or a channel, and the existing flow takes over.
+/* ─── Merged always-on home page (May 2026) ───────────────────────────────
+   Replaces the v4 first-visit landing overlay. All channel buttons,
+   install prompt, consent, impact metrics, login + my-reports live
+   inside #stage-home now. Visible on every load — no first-visit-only
+   gate. Owned by mobile-app/src/home-screen.js.
    ───────────────────────────────────────────────────────────────────────── */
 
-.landing-overlay {
-    position: fixed;
-    inset: 0;
-    background: var(--bg);
-    z-index: 9000;     /* above #stage-home (z=1) but below image-viewer (~9999) */
-    display: flex;
-    align-items: stretch;
-    justify-content: center;
-    overflow-y: auto;
-    animation: landingFadeIn 0.32s ease;
-    -webkit-overflow-scrolling: touch;
+/* Stage container — fills viewport, vertical scroll allowed when content
+   exceeds height (small phones in 6-locale RTL stretch to ~700px). */
+.home-stage {
+    min-height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom, 0);
 }
-
-/* BUG 1 fix (May 2026) — landing-pending suppresses the home flash on
-   first visit. Applied synchronously by landing.js IIFE before
-   DOMContentLoaded; cleared on _dismiss + the _shouldShow=false branch.
-   Visibility (not display) so layout calculations still happen — the
-   page is "ready" the moment landing dismisses, no reflow jitter. */
-html.landing-pending .stage,
-html.landing-pending #flow-progress,
-html.landing-pending #consent-overlay,
-body.landing-pending .stage,
-body.landing-pending #flow-progress,
-body.landing-pending #consent-overlay {
-    visibility: hidden !important;
-}
-@keyframes landingFadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-.landing-overlay.is-leaving {
-    opacity: 0;
-    transition: opacity 0.25s ease;
-}
-
-.landing-card {
+.home-center {
     width: 100%;
-    max-width: 430px;
-    padding: 28px 22px 24px;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 28px 20px 24px;
     display: flex;
     flex-direction: column;
     gap: 14px;
-    background: var(--bg);
+    box-sizing: border-box;
 }
-
-.landing-header {
-    text-align: center;
-}
-.landing-header .undp-badge {
+.home-stage .undp-badge {
+    align-self: center;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -3094,109 +3036,85 @@ body.landing-pending #consent-overlay {
     color: var(--brand, #ffae00);
     font-size: 12.5px;
     font-weight: 600;
-    margin-bottom: 14px;
+    margin-bottom: 6px;
 }
-.landing-title {
-    font-family: var(--heading, 'Outfit', sans-serif);
-    font-size: 22px;
-    font-weight: 800;
-    line-height: 1.2;
-    margin: 0 0 6px;
-}
-.landing-sub {
-    color: var(--muted, #94a3b8);
-    font-size: 13px;
-    line-height: 1.45;
+.home-title {
+    text-align: center;
     margin: 0;
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1.18;
 }
 
-/* Live impact metrics — same shape as #home-impact but compact. */
-.landing-impact {
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
-    padding: 10px 14px;
+/* Consent row — inline replacement of the old full-screen overlay.
+   Auto-hidden by home-screen.js once accepted; persists in localStorage. */
+.home-consent {
+    margin-top: 4px;
+    padding: 12px 14px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 14px;
-    margin-top: 4px;
+    border-radius: 12px;
 }
-.li-cell {
-    text-align: center;
-    flex: 1;
-}
-.li-num {
-    font-size: 22px;
-    font-weight: 800;
-    color: var(--brand, #ffae00);
-    line-height: 1;
-}
-.li-label {
-    font-size: 11px;
-    color: var(--muted, #94a3b8);
-    margin-top: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-}
-.li-divider {
-    width: 1px;
-    height: 28px;
-    background: rgba(255, 255, 255, 0.1);
-}
-
-/* Primary CTA. Disabled until consent checkbox ticked. */
-.landing-primary {
+.home-consent-row {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
     gap: 10px;
-    padding: 16px 20px;
-    border-radius: 14px;
-    border: 0;
-    font-size: 16px;
-    font-weight: 700;
-    background: linear-gradient(180deg, #ff6b35 0%, #f7931e 100%);
-    color: #fff;
-    box-shadow: 0 8px 24px rgba(255, 107, 53, 0.25);
     cursor: pointer;
-    transition: transform 0.15s ease, opacity 0.15s ease;
+    font-size: 12.5px;
+    line-height: 1.45;
 }
-.landing-primary:hover { transform: translateY(-1px); }
-.landing-primary:disabled {
-    opacity: 0.45;
+.home-consent-row input[type=checkbox] {
+    width: 18px; height: 18px;
+    margin-top: 2px;
+    cursor: pointer;
+    accent-color: var(--brand, #ffae00);
+    flex-shrink: 0;
+}
+.home-consent.shake,
+.home-consent-row.shake {
+    animation: homeShake 0.4s cubic-bezier(.36,.07,.19,.97);
+}
+@keyframes homeShake {
+    10%, 90%  { transform: translateX(-1px); }
+    20%, 80%  { transform: translateX(2px); }
+    30%, 50%, 70% { transform: translateX(-3px); }
+    40%, 60%  { transform: translateX(3px); }
+}
+/* Locked-by-consent visual on btn-start — slightly faded so the user
+   sees the gate but the button is still recognisable as the Start CTA. */
+#btn-start.is-locked {
+    opacity: 0.5;
     cursor: not-allowed;
     box-shadow: none;
 }
-.landing-primary.is-ready { animation: landingPrimaryPulse 1.6s ease infinite; }
-@keyframes landingPrimaryPulse {
-    0%, 100% { box-shadow: 0 8px 24px rgba(255, 107, 53, 0.25); }
-    50%      { box-shadow: 0 8px 32px rgba(255, 107, 53, 0.45); }
-}
 
-.landing-section { margin-top: 4px; }
-.landing-section-title {
+/* Section labels — "OR REPORT BY", "GET THE APP" dividers. */
+.home-section { margin-top: 4px; }
+.home-section-title {
     font-size: 11.5px;
     color: var(--muted, #94a3b8);
     text-transform: uppercase;
     letter-spacing: 0.8px;
     margin-bottom: 8px;
     font-weight: 600;
+    text-align: center;
 }
 
 /* 4-up grid for IVR / SMS / Telegram / WhatsApp.
    3-up grid for iOS / Android / Expo Go. */
-.landing-channels {
+.home-channels {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 8px;
 }
-.landing-apps {
+.home-apps {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
 }
 
-.landing-channel {
+.home-channel {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -3215,14 +3133,14 @@ body.landing-pending #consent-overlay {
     position: relative;
     transition: background 0.15s ease, transform 0.1s ease;
 }
-.landing-channel:hover { background: rgba(255, 255, 255, 0.08); transform: translateY(-1px); }
-.landing-channel .lc-icon { font-size: 18px; color: var(--brand, #ffae00); }
-.landing-channel.is-disabled {
+.home-channel:hover { background: rgba(255, 255, 255, 0.08); transform: translateY(-1px); }
+.home-channel .lc-icon { font-size: 18px; color: var(--brand, #ffae00); }
+.home-channel.is-disabled {
     opacity: 0.55;
     cursor: not-allowed;
     pointer-events: none;
 }
-.landing-channel .lc-soon {
+.home-channel .lc-soon {
     position: absolute;
     top: -6px; right: -6px;
     background: rgba(148, 163, 184, 0.95);
@@ -3236,13 +3154,13 @@ body.landing-pending #consent-overlay {
 }
 
 /* Install card — only visible when InstallPrompt fires. */
-.landing-install {
+.home-install {
     background: rgba(34, 197, 94, 0.08);
     border: 1px solid rgba(34, 197, 94, 0.25);
     border-radius: 12px;
     padding: 4px;
 }
-.landing-install-btn {
+.home-install-btn {
     width: 100%;
     display: flex;
     align-items: center;
@@ -3257,47 +3175,22 @@ body.landing-pending #consent-overlay {
     font-weight: 600;
     cursor: pointer;
 }
-.landing-install-btn i { color: rgb(34, 197, 94); font-size: 16px; }
+.home-install-btn i { color: rgb(34, 197, 94); font-size: 16px; }
 
-/* Consent row — replaces the legacy #consent-overlay full-screen modal. */
-.landing-consent {
-    margin-top: 4px;
-    padding: 12px 14px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-}
-.landing-consent-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    cursor: pointer;
-    font-size: 12.5px;
-    line-height: 1.45;
-}
-.landing-consent-row input[type=checkbox] {
-    width: 18px; height: 18px;
-    margin-top: 2px;
-    cursor: pointer;
-    accent-color: var(--brand, #ffae00);
-    flex-shrink: 0;
-}
-.landing-consent-row.shake {
-    animation: landingShake 0.4s cubic-bezier(.36,.07,.19,.97);
-}
-@keyframes landingShake {
-    10%, 90%  { transform: translateX(-1px); }
-    20%, 80%  { transform: translateX(2px); }
-    30%, 50%, 70% { transform: translateX(-3px); }
-    40%, 60%  { transform: translateX(3px); }
-}
-
-.landing-secondary-row {
+/* Secondary actions row (My Reports + Login). On stage-home, .secondary-cta
+   and .tertiary-cta inside .home-secondary-row sit side-by-side. The
+   inherited .secondary-cta / .tertiary-cta block-level styling is overridden
+   below so the two buttons share a 2-column grid. */
+.home-secondary-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+    margin-top: 4px;
 }
-.landing-secondary-btn {
+.home-secondary-row .secondary-cta,
+.home-secondary-row .tertiary-cta {
+    width: auto;
+    margin: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3311,16 +3204,36 @@ body.landing-pending #consent-overlay {
     font-weight: 500;
     cursor: pointer;
 }
-.landing-secondary-btn:hover { background: rgba(255, 255, 255, 0.04); }
+.home-secondary-row .secondary-cta:hover,
+.home-secondary-row .tertiary-cta:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
 
-.landing-footer {
-    text-align: center;
+/* Live impact metrics within the home page — already styled by
+   .home-impact in styles.css around line 1664; we only rebalance the
+   small-cell sub-elements so they match the new spacing. */
+.home-impact .li-cell { text-align: center; flex: 1; }
+.home-impact .li-num {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--brand, #ffae00);
+    line-height: 1;
+}
+.home-impact .li-label {
     font-size: 11px;
     color: var(--muted, #94a3b8);
-    padding-top: 4px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
     margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
 }
+.home-impact .li-divider {
+    width: 1px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* iOS install instruction sheet (slide-up modal) and channel telemetry
+   anchors continue to use the existing .ios-install-sheet rules below. */
 
 /* iOS install instruction sheet (slide-up modal). */
 .ios-install-sheet {
@@ -3407,14 +3320,15 @@ body.landing-pending #consent-overlay {
     color: var(--muted);
 }
 
-/* Tighten landing card on very small screens (<= 360px wide). */
+/* Tighten home page on very small screens (<= 360px wide). */
 @media (max-width: 360px) {
-    .landing-card { padding: 20px 16px 18px; gap: 12px; }
-    .landing-title { font-size: 19px; }
-    .landing-channels { grid-template-columns: repeat(4, 1fr); gap: 6px; }
-    .landing-apps { grid-template-columns: repeat(3, 1fr); gap: 6px; }
-    .landing-channel { padding: 10px 4px; min-height: 58px; font-size: 10.5px; }
-    .landing-channel .lc-icon { font-size: 16px; }
+    .home-center { padding: 20px 14px 16px; gap: 12px; }
+    .home-title { font-size: 21px; }
+    .home-channels { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .home-apps { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .home-channel { padding: 10px 4px; min-height: 58px; font-size: 10.5px; }
+    .home-channel .lc-icon { font-size: 16px; }
+    .home-section-title { font-size: 10.5px; }
 }
 
 /* ─── UI v4 — 3-page capture flow (May 2026) ─────────────────────────────

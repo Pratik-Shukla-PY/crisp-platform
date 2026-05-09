@@ -35,40 +35,10 @@
 </head>
 <body>
 
-<!-- May 2026 v4 — landing card mount point. landing.js builds the card
-     here on first visit (gated by localStorage['crisp_landing_seen']).
-     The legacy #consent-overlay below is now suppressed by landing.js
-     when the landing card is going to handle consent inline. -->
-<div id="landing-root"></div>
-
-<!-- ── Privacy Consent (legacy — folded into landing card on first
-        visit; still rendered for users who pre-date the v4 landing
-        and haven't accepted yet). app.js's _initConsentGate() short-
-        circuits if CONSENT_KEY is set; landing.js sets it on accept. -->
-<div id="consent-overlay" class="consent-overlay" style="display:none;">
-    <div class="consent-card">
-        <div class="consent-icon"><i class="fa-solid fa-shield-halved"></i></div>
-        <h2 data-i18n="consent_title">Your Privacy Matters</h2>
-        <p data-i18n="consent_desc">CRISP collects only the data needed to help rescue teams respond faster:</p>
-        <ul>
-            <li><i class="fa-solid fa-location-dot"></i> <span data-i18n="consent_loc">Location — GPS coordinates to pinpoint the incident</span></li>
-            <li><i class="fa-solid fa-camera"></i> <span data-i18n="consent_photo">Photos — damage evidence for response teams</span></li>
-            <li><i class="fa-solid fa-microphone"></i> <span data-i18n="consent_audio">Audio — voice descriptions transcribed by AI</span></li>
-        </ul>
-        <div class="consent-assurance">
-            <div><i class="fa-solid fa-user-slash"></i> <span data-i18n="consent_no_pii">No personal identity collected</span></div>
-            <div><i class="fa-solid fa-lock"></i> <span data-i18n="consent_shared">Data shared only with crisis responders</span></div>
-            <div><i class="fa-solid fa-trash-can"></i> <span data-i18n="consent_delete">You can request deletion anytime</span></div>
-        </div>
-        <label class="consent-check">
-            <input type="checkbox" id="consent-checkbox">
-            <span data-i18n="consent_check">I understand and consent to sharing this data for crisis response</span>
-        </label>
-        <button class="consent-accept-btn" id="consent-accept-btn" disabled>
-            <i class="fa-solid fa-check"></i> <span data-i18n="consent_accept">Accept & Continue</span>
-        </button>
-    </div>
-</div>
+<!-- May 2026 — #landing-root + legacy #consent-overlay both REMOVED.
+     The merged always-on home page (#stage-home below) now hosts the
+     channel buttons + install prompt + inline consent checkbox + impact
+     metrics + login. Owned by mobile-app/src/home-screen.js. -->
 
 <div class="mobile-screen" id="app-root">
 
@@ -237,36 +207,32 @@
     <!-- ══════════════════════════════════════
          STAGE 0 — WELCOME / HOME
     ══════════════════════════════════════ -->
-    <!-- Apr 2026 UX rewrite — landing screen minimised for low-literacy
-         crisis users: 1 primary CTA, 1 secondary link, live impact metrics.
-         The old 4-card roadmap (Photo/Voice/Check/Send) was removed because
-         it looked clickable but wasn't — see plan at
-         ~/.claude/plans/swirling-forging-raccoon.md.
-         "Delete My Data" moved INTO My Reports (per-report + delete-all).
+    <!-- May 2026 — merged always-on home page (replaces v4 first-visit
+         landing overlay + v3 minimal home). Single screen surfaces the
+         FULL multi-channel story every load:
+           • PWA "Start Reporting" big CTA (anonymous default)
+           • IVR / SMS / Telegram / WhatsApp deep-link buttons
+           • iOS / Android / Expo Go native-app row
+           • PWA install prompt (when installable)
+           • One-time consent checkbox (auto-hidden after first accept)
+           • Live impact metrics
+           • My Reports + Login / Sign-up
+         Channel handles + i18n + install reactions all owned by
+         home-screen.js (replaces the deleted landing.js).
     -->
-    <div class="stage active" id="stage-home">
-        <div class="stage-center">
+    <div class="stage active home-stage" id="stage-home">
+        <div class="stage-center home-center">
             <div class="undp-badge">
                 <i class="fa-solid fa-satellite-dish"></i>
                 <span>CRISP × UNDP</span>
             </div>
-            <h1 class="hero-title" data-i18n="home_title">Report an Incident</h1>
+            <h1 class="hero-title home-title" data-i18n="home_title">Report an Incident</h1>
 
-            <!-- Apr 2026 PR 3 — Lives Saved scorecard at top. Heart-pulse
-                 animation (CSS keyframes, honours prefers-reduced-motion)
-                 draws the eye to the positive social-proof signal before
-                 the user even considers their own action. Reports
-                 Submitted stays as the secondary stat. Card is hidden
-                 until a non-zero value exists — fresh installs don't see
-                 demotivating zeros. -->
-            <!-- UNDP Appendix engagement-incentives alignment (April 2026):
-                 The primary stat on the home screen used to be "Reports
-                 Submitted" — a raw count that gamifies volume, which UNDP
-                 explicitly asks submissions NOT to do. Replaced with
-                 "Reports Verified" (reports an analyst has accepted and
-                 dispatched/resolved). The volume counter is retained as
-                 internal telemetry only; nothing on the home screen
-                 rewards sheer quantity. -->
+            <!-- Live impact metrics. Hidden on first-ever load (no data);
+                 populated by app.js::updateHomeImpactMetrics() once the
+                 backend responds. UNDP Appendix engagement-incentives
+                 alignment: Reports Verified (analyst-accepted), not raw
+                 volume. -->
             <div class="home-impact" id="home-impact" style="display:none;">
                 <div class="hi-cell hi-cell-lives">
                     <div class="hi-heart" aria-hidden="true">❤</div>
@@ -280,31 +246,83 @@
                 </div>
             </div>
 
+            <!-- One-time consent gate. home-screen.js wires a click
+                 capture-phase preempt on btn-start until consent ticks;
+                 once accepted, the row is hidden + persisted in
+                 localStorage['crisp_privacy_consent']. -->
+            <div class="home-consent" id="home-consent">
+                <label class="home-consent-row">
+                    <input type="checkbox" id="home-consent-check">
+                    <span data-i18n="landing_consent">
+                        I consent to share my report data with crisis responders.
+                    </span>
+                </label>
+            </div>
+
+            <!-- Primary CTA. Existing handler in app.js (line 8869)
+                 routes to v4 capture (or v3 stage-where via UI_V3_ENABLED
+                 flag). Disabled by home-screen.js until consent is
+                 checked. -->
             <button class="big-cta" id="btn-start">
                 <i class="fa-solid fa-play"></i>
                 <span data-i18n="start_btn">Start Reporting</span>
             </button>
 
-            <!-- Merged My Reports + Delete My Data entry. The history screen
-                 now hosts "Delete All Reports" at the bottom so users have
-                 exactly one place to manage what they've sent. -->
-            <button class="secondary-cta" id="btn-my-reports" type="button">
-                <i class="fa-solid fa-clipboard-list"></i>
-                <span data-i18n="my_reports">My Reports</span>
-                <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
-            </button>
+            <!-- Channels row — IVR / SMS / Telegram / WhatsApp.
+                 home-screen.js builds the buttons reactively from
+                 window.CRISP_CHANNELS (with sensible defaults). Each
+                 button is either an anchor with the deep-link or a
+                 disabled "Coming soon" button. -->
+            <div class="home-section">
+                <div class="home-section-title" data-i18n="landing_other_channels">
+                    Or report through:
+                </div>
+                <div class="home-channels" id="home-channels">
+                    <!-- Populated by home-screen.js _renderChannels() -->
+                </div>
+            </div>
 
-            <!-- Phase 1 (Apr 2026 — Optional reporter login).
-                 Login / Sign-up surface. Three mutually-exclusive states:
-                   (a) Not logged in → "Login / Sign up" text link
-                   (b) Logged in     → "Hi, +91 ✓" pill + Settings
-                   (c) Loading       → neither (AuthStore.init pending)
-                 `reporting must never block on login` — this is intentionally
-                 a SECONDARY action below the primary CTA + My Reports. -->
-            <button class="tertiary-cta" id="btn-login" type="button">
-                <i class="fa-solid fa-right-to-bracket"></i>
-                <span data-i18n="login_or_signup">Login / Sign up</span>
-            </button>
+            <!-- Native-app row — iOS / Android / Expo Go. Same pattern. -->
+            <div class="home-section">
+                <div class="home-section-title" data-i18n="landing_get_app">
+                    Get the app:
+                </div>
+                <div class="home-apps" id="home-apps">
+                    <!-- Populated by home-screen.js _renderChannels() -->
+                </div>
+            </div>
+
+            <!-- PWA install prompt — shown by home-screen.js only when
+                 InstallPrompt.canInstall is true (iOS Safari without
+                 home-screen install, Android Chrome before install,
+                 desktop Chrome with installability). -->
+            <div class="home-install" id="home-install" style="display:none;">
+                <button class="home-install-btn" id="home-install-btn" type="button">
+                    <i class="fa-solid fa-mobile-screen-button"></i>
+                    <span id="home-install-label" data-i18n="landing_install_pwa">
+                        Install on home screen
+                    </span>
+                </button>
+            </div>
+
+            <!-- Secondary actions row. Existing app.js handlers stay
+                 wired on these ids: btn-my-reports → openMyReports();
+                 btn-login → goToStage('stage-login'). -->
+            <div class="home-secondary-row">
+                <button class="secondary-cta" id="btn-my-reports" type="button">
+                    <i class="fa-solid fa-clipboard-list"></i>
+                    <span data-i18n="my_reports">My Reports</span>
+                    <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
+                </button>
+                <button class="tertiary-cta" id="btn-login" type="button">
+                    <i class="fa-solid fa-right-to-bracket"></i>
+                    <span data-i18n="login_or_signup">Login / Sign up</span>
+                </button>
+            </div>
+
+            <!-- Account pill (logged-in state). app.js auth-state-change
+                 hides the Login button + shows this pill in the same
+                 secondary-row slot. -->
             <div class="account-pill" id="account-pill" style="display:none;" role="group">
                 <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
                 <span class="account-name" id="account-name">—</span>
@@ -313,9 +331,7 @@
                 </button>
             </div>
 
-            <!-- Apr 2026 PR 3 — "Works offline" reassurance at the bottom of
-                 the home stage ONLY (hidden on capture flow to minimise
-                 cognitive load). Subtle; doesn't compete with the CTA. -->
+            <!-- Footer hint. -->
             <p class="home-offline-hint" data-i18n="home_offline_hint">
                 📡 Works offline and in low internet connectivity.
             </p>
@@ -1806,14 +1822,15 @@
      so the AuthStore singleton is available when the DOMContentLoaded
      boot hook calls AuthStore.init(). -->
 <script src="auth.js?v=1"></script>
-<!-- May 2026 v4 — install-prompt.js MUST load BEFORE landing.js so
-     `window.InstallPrompt.onChange()` is callable when landing wires
-     its install button. Both load BEFORE app.js so the existing
-     consent gate sees CONSENT_KEY already populated when landing
-     dismisses. -->
+<!-- May 2026 — install-prompt.js MUST load BEFORE home-screen.js so
+     `window.InstallPrompt.onChange()` is callable when home-screen wires
+     its install button. home-screen.js owns the merged always-on home
+     surface (channels + install + consent + secondary actions). It
+     loads BEFORE app.js so the channel buttons paint on first DOM
+     ready; app.js's applyI18n re-walks them on locale activation. -->
 <script src="install-prompt.js?v=1"></script>
-<script src="landing.js?v=2"></script>
-<script src="app.js?v=1010"></script>
+<script src="home-screen.js?v=1"></script>
+<script src="app.js?v=1020"></script>
 <!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
      applyI18n etc. Internally it _whenReady-polls until those are set. -->
 <script src="v4-flow.js?v=4"></script>

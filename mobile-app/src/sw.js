@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v78';  // v78 (May 2026): v4 RE-ENABLED default ON after the 9-bug fix sweep verified green. Same fixes as v77 + flag flipped: BUG 6 image upload chain, BUG 5 building tagging, BUG 7 state reset, BUG 4 voice-only recorder, BUG 8 location pill, BUG 1 landing flash, BUG 2 desktop webcam, BUG 3 back-button, BUG 9 offline queue. Escape hatches preserved: ?ui=v3 + localStorage['crisp_ui_v4']='off'.
+const CACHE_NAME = 'crisp-v79';  // v79 (May 2026): merged always-on home page — landing.js DELETED + #consent-overlay DELETED. New home-screen.js owns channel buttons (IVR LIVE, Telegram LIVE, SMS+WA Coming Soon, iOS+Android Coming Soon, Expo Go LIVE), install prompt, inline consent checkbox, all on #stage-home that shows every load. Old `crisp_landing_seen` is no longer read. _initConsentGate function removed from app.js.
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.
@@ -426,7 +426,7 @@ const STATIC_ASSETS = [
     SW_BASE + 'building-select.js',  // UNDP §3.2 — building-footprint selector
     SW_BASE + 'auth.js',             // Phase 1 (Apr 2026) optional reporter login
     SW_BASE + 'install-prompt.js',   // UI v4 (May 2026) — beforeinstallprompt + iOS sheet
-    SW_BASE + 'landing.js',          // UI v4 (May 2026) — first-visit landing card + channels
+    SW_BASE + 'home-screen.js',      // May 2026 — merged always-on home (replaces landing.js)
     SW_BASE + 'v4-flow.js',          // UI v4 (May 2026) — 3-page capture flow + carousels + AI pre-fill
     SW_BASE + 'components/icon-pack.js',  // UI v2 — shared Lucide SVG pack
     SW_BASE + 'styles.css',
