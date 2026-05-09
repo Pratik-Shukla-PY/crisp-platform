@@ -40,13 +40,10 @@
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
           media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <!-- Leaflet — UNDP Appendix: building-footprint overlay on the review
-         page. Async load — only the building-select stage actually
-         needs it; saves ~800 ms render-blocking on the home page. The
-         service worker caches it for offline. -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""
-          media="print" onload="this.media='all'">
+    <!-- May 2026 Phase B — Leaflet CSS REMOVED from <head> entirely.
+         building-select.js::_ensureLeaflet() injects both the <link>
+         + <script> on first map init. Saves the round-trip even on
+         the deferred async path. -->
     <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"></noscript>
     <!-- Local app stylesheet — required for first paint, kept synchronous. -->
     <link rel="stylesheet" href="styles.css">
@@ -1807,12 +1804,12 @@
     </div>
 
 </div>
-<!-- Leaflet for the building-footprint selector on stage-review.
-     UMD build; attaches L to window. Must load before app.js. -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-        crossorigin=""></script>
-<script src="building-select.js?v=6"></script>
+<!-- May 2026 (Lighthouse perf, Phase B) — Leaflet is now LAZY-LOADED.
+     Was eagerly loaded here (~42 KB + ~4 KB CSS); the building-
+     footprint selector only renders on stage-v4-review (after photo
+     + classify). building-select.js::_ensureLeaflet() injects the
+     <script> + <link> tags on first map init.  -->
+<script src="building-select.js?v=7"></script>
 <script src="places.js?v=3"></script>
 <!-- May 2026 (Lighthouse perf fix) — TF.js + BlazeFace are LAZY-LOADED.
      They were eagerly downloaded (~360 KB tfjs + ~70 KB blazeface) at

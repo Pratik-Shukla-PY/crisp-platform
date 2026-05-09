@@ -224,9 +224,66 @@
         if (pill) pill.style.display = 'none';
     }
 
+    // ─── Lazy-load Leaflet (Phase B, May 2026) ─────────────────────────
+    // Was eagerly loaded via <script> + <link> in index.html (~46 KB
+    // home-page tax). Now injected on first ensureMap call. Idempotent
+    // + concurrent-safe via a cached promise.
+    const LEAFLET_JS  = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    let _leafletPromise = null;
+    function _injectScript(url, integrity) {
+        return new Promise((resolve, reject) => {
+            const existing = document.querySelector(`script[src="${url}"]`);
+            if (existing) {
+                if (existing.dataset.loaded === '1') return resolve();
+                existing.addEventListener('load', () => resolve());
+                existing.addEventListener('error', () => reject(new Error('script load failed: ' + url)));
+                return;
+            }
+            const s = document.createElement('script');
+            s.src = url;
+            s.crossOrigin = '';
+            if (integrity) s.integrity = integrity;
+            s.async = false;
+            s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+            s.onerror = () => reject(new Error('script load failed: ' + url));
+            document.head.appendChild(s);
+        });
+    }
+    function _injectStylesheet(url, integrity) {
+        if (document.querySelector(`link[href="${url}"]`)) return;
+        const l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.href = url;
+        l.crossOrigin = '';
+        if (integrity) l.integrity = integrity;
+        document.head.appendChild(l);
+    }
+    function _ensureLeaflet() {
+        if (typeof L !== 'undefined') return Promise.resolve();
+        if (_leafletPromise) return _leafletPromise;
+        _leafletPromise = (async () => {
+            // CSS first — Leaflet's JS reads computed styles for tile sizing.
+            _injectStylesheet(LEAFLET_CSS, 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=');
+            await _injectScript(LEAFLET_JS, 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=');
+            if (typeof L === 'undefined') {
+                throw new Error('Leaflet did not initialise (window.L missing after script load)');
+            }
+        })();
+        return _leafletPromise;
+    }
+
     /** Public entry point — init the map (idempotent). Callers pass the
      * current lat/lng so we don't depend on any particular state shape. */
     async function ensureMap(lat, lng) {
+        // May 2026 — lazy-load Leaflet on first ensureMap call. Was
+        // eagerly loaded via <script> in index.html.
+        try {
+            await _ensureLeaflet();
+        } catch (e) {
+            console.warn('[BuildingSelect] Leaflet lazy-load failed:', e?.message || e);
+            return;
+        }
         const container = document.getElementById('building-map');
         if (!container || typeof L === 'undefined') return;
         if (!(Number.isFinite(lat) && Number.isFinite(lng))) return;

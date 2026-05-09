@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v81';  // v81 (May 2026): Phase A of "home page is heavy" Lighthouse follow-up. Removed TF.js + BlazeFace UMD + vendored BlazeFace model files from pre-cache STATIC_ASSETS / EXTERNAL_ASSETS. They're now runtime-cached by the existing fetch handler the moment pii-blur.js's _ensureScripts() lazy-loads them on first photo capture. Saves ~820 KB on every fresh SW install for users who never capture.
+const CACHE_NAME = 'crisp-v82';  // v82 (May 2026): Phase B — lazy-load Leaflet via building-select.js::_ensureLeaflet. Removed Leaflet <script>+<link> from index.html <head>. Added unpkg.com to RUNTIME_CACHE_HOSTS so the lazy-load is cached on first map open → offline subsequent reviews still work. Phase A still in: TF.js + BlazeFace + model files runtime-cached only.
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.
@@ -462,12 +462,13 @@ const EXTERNAL_ASSETS = [
 ];
 
 // Domains the runtime fetch handler should cache opportunistically so that a
-// subsequent offline capture can still load the BlazeFace model weights.
+// subsequent offline capture / map load still works.
 const RUNTIME_CACHE_HOSTS = [
     'cdn.jsdelivr.net',
     'tfhub.dev',
     'storage.googleapis.com',  // where tfhub models are served from
-    'www.kaggle.com'           // kaggle is the new tfhub host
+    'www.kaggle.com',          // kaggle is the new tfhub host
+    'unpkg.com',               // May 2026 Phase B — lazy-loaded Leaflet JS + CSS
 ];
 
 // ── Install: pre-cache static shell ──────────────────────────────────────────
