@@ -2579,6 +2579,43 @@ function _canAddMorePhotos() {
 // debugging. Zero production-path effect; safe to keep always-on.
 Object.defineProperty(window, 'state', { get: () => state, configurable: true });
 window.__crispGoToStage = (id) => goToStage(id);
+
+// May 2026 — Android hardware back button + desktop browser back.
+// When user presses back, we get a popstate with the PREVIOUS history
+// entry's state. If it's a v3/v4 stage we navigate there. If we're
+// already on stage-home, allow the default back (which exits the PWA
+// — that's the correct UX for "I'm done"). Otherwise route to home
+// instead of exiting.
+window.addEventListener('popstate', (e) => {
+    const prevStage = e.state && e.state.crispStage;
+    const currentStage = (function () {
+        const all = [...STAGES, ...STAGES_V3];
+        for (const s of all) {
+            const el = document.getElementById(s);
+            if (el && el.classList.contains('active')) return s;
+        }
+        return null;
+    })();
+    // Don't push more history when navigating from popstate (prevents
+    // an infinite popstate loop).
+    window.__crispIsHistoryNav = true;
+    try {
+        if (prevStage) {
+            goToStage(prevStage);
+        } else if (currentStage && currentStage !== 'stage-home') {
+            // No previous stage in state but we're mid-flow → go home
+            // instead of exiting the PWA.
+            goToStage('stage-home');
+            // Re-push so subsequent backs from home will exit.
+            try { history.pushState({ crispStage: 'stage-home' }, '', '#stage-home'); } catch (_) {}
+        }
+        // If already on stage-home and user presses back, the popstate
+        // will exit the PWA (browser default for empty history). That's
+        // the "I'm leaving" UX.
+    } finally {
+        window.__crispIsHistoryNav = false;
+    }
+});
 // May 2026 v4 — `submitReport` exposed for v4-flow.js's "Send to UNDP"
 // button. Same code path the v3 #btn-send + #btn-review-submit clicks
 // land in — guarantees the v4 review page produces an identical
@@ -2640,6 +2677,21 @@ function goToStage(id) {
     // Phase 6: notify listeners that a stage was entered. The review-stage
     // pager uses this to reset to page 1 each time the user arrives.
     document.dispatchEvent(new CustomEvent('stage-entered', { detail: id }));
+
+    // May 2026 — push a history entry on every stage transition so the
+    // Android hardware back button (and browser back button) navigates
+    // BETWEEN stages instead of exiting the PWA. Without this, users
+    // who installed CRISP to their home screen and pressed Back on
+    // stage-photo got dumped out of the app entirely (no history depth
+    // because the PWA was launched as a fresh window). Now each stage
+    // pushes a unique state object; popstate calls goToStage(prevStage).
+    // The `_isHistoryNav` flag prevents recursion when the popstate
+    // handler itself calls goToStage.
+    if (!window.__crispIsHistoryNav) {
+        try {
+            history.pushState({ crispStage: id }, '', `#${id}`);
+        } catch (_) { /* private mode / file:// — silent skip */ }
+    }
 
     // Manage auto-submit timer: hide on home/success; on every other stage,
     // re-evaluate arm conditions with a fresh `/regions/enabled` fetch so
