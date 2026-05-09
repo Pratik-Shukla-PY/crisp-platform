@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v73';  // v73 (May 2026): UI v4 polish round 4 — body overflow-x: hidden so any errant child element widths can't spill past the viewport (was visible in fullPage screenshots on iPhone SE).
+const CACHE_NAME = 'crisp-v74';  // v74 (May 2026): EMERGENCY ROLLBACK — UI v4 disabled by default after manual QA found 9 critical bugs (building tagging removed, image upload chain broken, state not reset between reports, voice-only broken, back button exits PWA, etc.). v3 flow restored as the default for UNDP submission safety. v4 reachable via ?ui=v4 for continued testing. Bump forces eviction of v73 clients running the broken v4 default.
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.

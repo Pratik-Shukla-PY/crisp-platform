@@ -47,6 +47,15 @@
     }
 
     // ── Feature flag ────────────────────────────────────────────────────
+    // May 2026 EMERGENCY ROLLBACK: default OFF until v4 fully covers
+    // UNDP requirements (building tagging, image upload pipeline,
+    // offline queue, state reset between reports). Users hit the
+    // battle-tested v3 flow by default; v4 reachable via ?ui=v4 OR
+    // localStorage['crisp_ui_v4']='on' for testers.
+    //
+    // Re-enabling default-on requires every test in
+    // 29-undp-requirements.spec.ts (the comprehensive UNDP coverage
+    // suite) to pass.
     function _v4Enabled() {
         try {
             const url = new URL(window.location.href);
@@ -54,9 +63,9 @@
             if (param === 'v3') return false;
             if (param === 'v4') return true;
             const ls = localStorage.getItem('crisp_ui_v4');
-            if (ls === 'off') return false;
-            return true;  // default ON
-        } catch { return true; }
+            if (ls === 'on') return true;
+            return false;  // default OFF (was ON; flipped May 2026 after UNDP-critical bugs found)
+        } catch { return false; }
     }
 
     if (!_v4Enabled()) {
