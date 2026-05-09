@@ -584,63 +584,103 @@ test.describe('Production — Backend via nginx', () => {
     const { access_token: token } = await loginRes.json();
     expect(token, 'login response missing access_token').toBeTruthy();
 
-    // Step 2 — count current reports
-    const beforeRes = await request.get(`${BASE}/api/v1/reports/?limit=1`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const beforeCount = parseInt(beforeRes.headers()['x-total-count'] || '0', 10);
-
-    // Step 3 — submit a synthetic report. Schema mirrors what the PWA's
-    // app.js builds before POST /reports/meta. Required fields per the
-    // FastAPI Pydantic validator: device_hash, client_report_id,
-    // crisis_type, damage_classification (MINIMAL|NO_DAMAGE|PARTIAL|COMPLETE),
-    // infrastructure_type, etc.
+    // Pre-allocated outside the try block so the finally cleanup can
+    // see them even if assertions fail in the middle of the test.
     const deviceHash = `prod-smoke-${Date.now()}`;
     const clientReportId = `cr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    // infrastructure_type=COMMERCIAL is intentionally chosen here over
-    // RESIDENTIAL — COMMERCIAL was missing from the Postgres infratypeenum
-    // until migration 0012 because 0003 only added the targets of legacy
-    // chip remaps (CHIP_TO_UNDP.values()) and no legacy chips mapped to
-    // COMMERCIAL or PUBLIC_SPACES. Submitting COMMERCIAL here ensures that
-    // class of "Python enum has it, Postgres enum doesn't" drift gets
-    // caught at the gate, not by user reports.
-    const submitRes = await request.post(`${BASE}/api/v1/reports/meta`, {
-      data: {
-        device_hash: deviceHash,
-        client_report_id: clientReportId,
-        crisis_type: 'EARTHQUAKE',
-        damage_classification: 'PARTIAL',
-        infrastructure_type: 'COMMERCIAL',
-        severity: 'MODERATE',
-        description: `Prod-smoke synthetic report ${new Date().toISOString()}`,
-        gps_lat: 12.9716,
-        gps_lng: 77.5946,
-        gps_accuracy_m: 10,
-        client_created_at: new Date().toISOString(),
-        client_blur_applied: true,
-      },
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    });
-    expect(
-      submitRes.status(),
-      `submission rejected: ${submitRes.status()} ${await submitRes.text()}`,
-    ).toBe(201);
-    const newReport = await submitRes.json();
-    expect(newReport.id, 'submission response missing report id').toBeTruthy();
 
-    // Step 4 — verify it shows up in the list
-    const afterRes = await request.get(`${BASE}/api/v1/reports/?limit=10`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const afterCount = parseInt(afterRes.headers()['x-total-count'] || '0', 10);
-    expect(
-      afterCount,
-      `report count didn't increment: before=${beforeCount} after=${afterCount}`,
-    ).toBe(beforeCount + 1);
+    // May 2026 — wrap in try/finally so the synthetic row is ALWAYS
+    // cleaned up, even on assertion failure. Before this guard every
+    // deploy left a "Prod-smoke synthetic report …" row behind in
+    // production; over weeks of CI activity that accumulated into
+    // visible noise on the analyst dashboard. The DELETE endpoint is
+    // the same one the PWA's "Delete My Data" privacy feature uses
+    // (open, no auth — keyed by device_hash) so the cleanup doesn't
+    // need extra permissions.
+    try {
+      // Step 2 — count current reports
+      const beforeRes = await request.get(`${BASE}/api/v1/reports/?limit=1`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const beforeCount = parseInt(beforeRes.headers()['x-total-count'] || '0', 10);
 
-    const afterList = await afterRes.json();
-    const found = afterList.some((r: any) => r.id === newReport.id);
-    expect(found, `submitted report ${newReport.id} not in dashboard fetch`).toBe(true);
+      // Step 3 — submit a synthetic report. Schema mirrors what the PWA's
+      // app.js builds before POST /reports/meta. Required fields per the
+      // FastAPI Pydantic validator: device_hash, client_report_id,
+      // crisis_type, damage_classification (MINIMAL|NO_DAMAGE|PARTIAL|COMPLETE),
+      // infrastructure_type, etc.
+      // infrastructure_type=COMMERCIAL is intentionally chosen here over
+      // RESIDENTIAL — COMMERCIAL was missing from the Postgres infratypeenum
+      // until migration 0012 because 0003 only added the targets of legacy
+      // chip remaps (CHIP_TO_UNDP.values()) and no legacy chips mapped to
+      // COMMERCIAL or PUBLIC_SPACES. Submitting COMMERCIAL here ensures that
+      // class of "Python enum has it, Postgres enum doesn't" drift gets
+      // caught at the gate, not by user reports.
+      const submitRes = await request.post(`${BASE}/api/v1/reports/meta`, {
+        data: {
+          device_hash: deviceHash,
+          client_report_id: clientReportId,
+          crisis_type: 'EARTHQUAKE',
+          damage_classification: 'PARTIAL',
+          infrastructure_type: 'COMMERCIAL',
+          severity: 'MODERATE',
+          description: `Prod-smoke synthetic report ${new Date().toISOString()}`,
+          gps_lat: 12.9716,
+          gps_lng: 77.5946,
+          gps_accuracy_m: 10,
+          client_created_at: new Date().toISOString(),
+          client_blur_applied: true,
+        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      expect(
+        submitRes.status(),
+        `submission rejected: ${submitRes.status()} ${await submitRes.text()}`,
+      ).toBe(201);
+      const newReport = await submitRes.json();
+      expect(newReport.id, 'submission response missing report id').toBeTruthy();
+
+      // Step 4 — verify it shows up in the list
+      const afterRes = await request.get(`${BASE}/api/v1/reports/?limit=10`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const afterCount = parseInt(afterRes.headers()['x-total-count'] || '0', 10);
+      expect(
+        afterCount,
+        `report count didn't increment: before=${beforeCount} after=${afterCount}`,
+      ).toBe(beforeCount + 1);
+
+      const afterList = await afterRes.json();
+      const found = afterList.some((r: any) => r.id === newReport.id);
+      expect(found, `submitted report ${newReport.id} not in dashboard fetch`).toBe(true);
+    } finally {
+      // Step 5 — ALWAYS clean up. Best-effort: if the deletion endpoint
+      // is itself broken, surface the error in console but don't mask
+      // an upstream assertion failure. Each deploy used to leak one
+      // synthetic row to prod; over the May 2026 sprint that turned
+      // into ~30 stale rows. Now: 0 net new rows per deploy.
+      try {
+        const cleanupRes = await request.delete(
+          `${BASE}/api/v1/reports/device/${encodeURIComponent(deviceHash)}`,
+        );
+        if (cleanupRes.status() !== 200) {
+          console.error(
+            `[prod-smoke] cleanup DELETE returned ${cleanupRes.status()} for ` +
+              `device_hash=${deviceHash}; row may persist in prod`,
+          );
+        } else {
+          const body = await cleanupRes.json().catch(() => ({}));
+          console.log(
+            `[prod-smoke] cleaned up ${body.deleted ?? '?'} report(s) for ` +
+              `device_hash=${deviceHash}`,
+          );
+        }
+      } catch (e: any) {
+        console.error(
+          `[prod-smoke] cleanup threw for device_hash=${deviceHash}: ${e?.message || e}`,
+        );
+      }
+    }
   });
 
   test('Content-Security-Policy header is present + complete', async ({ request }) => {
