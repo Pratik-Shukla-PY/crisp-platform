@@ -415,6 +415,14 @@
                 setTimeout(() => { _tryInitMap(); }, 0);
                 return;
             }
+            // v4 review uses #v4-building-mount as the new container; the
+            // box is moved there by v4-flow.js's _initReviewStage on first
+            // entry. Same _tryInitMap path works because it queries
+            // #building-select-box by id (location-agnostic in DOM).
+            if (e.detail === 'stage-v4-review') {
+                setTimeout(() => { _tryInitMap(); }, 0);
+                return;
+            }
             if (e.detail === 'stage-review') {
                 // Defer one tick so showReviewPage() has already applied
                 // the data-v2-page filter before we inspect the DOM.

@@ -47,15 +47,26 @@
     }
 
     // ── Feature flag ────────────────────────────────────────────────────
-    // May 2026 EMERGENCY ROLLBACK: default OFF until v4 fully covers
-    // UNDP requirements (building tagging, image upload pipeline,
-    // offline queue, state reset between reports). Users hit the
-    // battle-tested v3 flow by default; v4 reachable via ?ui=v4 OR
-    // localStorage['crisp_ui_v4']='on' for testers.
+    // May 2026 — re-enabled default ON after the 9-bug fix sweep.
+    // Bugs covered + verified by tests in 30-v4-bug-fixes.spec.ts:
+    //   1. Landing-page fluctuation (landing-pending CSS gate)
+    //   2. Desktop webcam (route to openCameraModal on getUserMedia presence)
+    //   3. Android back button (history.pushState wraps every goToStage,
+    //      v4 stages already in STAGES array)
+    //   4. Voice-only path (CrispV4 owns startRecording/stopRecording with
+    //      MediaRecorder + Web Speech mirrored to v4 mic + textarea)
+    //   5. Building tagging (move #building-select-box into v4 review on
+    //      stage entry; BuildingSelect listens for stage-v4-review)
+    //   6. Image upload chain (delegate _handlePhoto to v3's
+    //      __crispIngestFile so state.photoDataUrl + photoVariants land)
+    //   7. State reset on goToCapture (call _clearCaptureState +
+    //      explicit v4Photos / thumb / chip resets)
+    //   8. Location pill (prefer state.locationName; trigger
+    //      resolveLocationName / reverseGeocode after GPS)
+    //   9. Offline queue (CrispV4._onSend → __crispSubmitReport → enqueueReport)
     //
-    // Re-enabling default-on requires every test in
-    // 29-undp-requirements.spec.ts (the comprehensive UNDP coverage
-    // suite) to pass.
+    // Escape hatches: ?ui=v3 forces v3, localStorage['crisp_ui_v4']='off'
+    // forces v3 globally for the device.
     function _v4Enabled() {
         try {
             const url = new URL(window.location.href);
@@ -64,8 +75,9 @@
             if (param === 'v4') return true;
             const ls = localStorage.getItem('crisp_ui_v4');
             if (ls === 'on') return true;
-            return false;  // default OFF (was ON; flipped May 2026 after UNDP-critical bugs found)
-        } catch { return false; }
+            if (ls === 'off') return false;
+            return true;  // default ON (re-enabled after 9-bug fix sweep)
+        } catch { return true; }
     }
 
     if (!_v4Enabled()) {
@@ -161,55 +173,144 @@
         if (!cameraInput || !heroBtn) return;
 
         // Hero / browse → trigger native file inputs.
-        heroBtn.addEventListener('click', () => cameraInput.click());
+        // BUG 2 fix (May 2026) — on desktop, `<input capture=environment>`
+        // falls back to file picker. We detect desktop (no iOS UA + has
+        // getUserMedia) and open the existing #camera-modal instead, which
+        // uses live <video> + getUserMedia. The modal already writes
+        // state.photoDataUrl + state.photoVariants on snap (matches v4
+        // contract), so v4 just needs to refresh the thumbnail strip when
+        // the modal closes.
+        heroBtn.addEventListener('click', () => {
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            const hasGUM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+            if (!isIOS && hasGUM && typeof window.openCameraModal === 'function') {
+                // Watch state.photoDataUrl: when the user snaps, the modal
+                // writes it. After modal closes, we refresh the v4 thumb
+                // strip + advance like _handlePhoto would.
+                const _preDataUrl = _getState().photoDataUrl;
+                window.openCameraModal();
+                // Hook the close: when state.photoDataUrl changes from null
+                // → set, run the v4 post-capture flow once.
+                const _modalCloseHandler = () => {
+                    const dataUrl = _getState().photoDataUrl;
+                    if (dataUrl && dataUrl !== _preDataUrl) {
+                        // Inject into v4Photos so the thumb strip renders.
+                        if (!_getState().v4Photos) _setState({ v4Photos: [] });
+                        const photos = _getState().v4Photos;
+                        if (!photos.find((p) => p.url === dataUrl)) {
+                            photos.push({
+                                blob: _getState().photoBlob,
+                                url: dataUrl,
+                                ts: Date.now(),
+                            });
+                        }
+                        _renderThumbs();
+                        nextBtn.disabled = false;
+                        nextBtn.classList.add('is-ready');
+                        // Fire AI prefill on the captured frame too.
+                        _maybeFireAiPrefill(_getState().photoBlob || null).catch(() => {});
+                        // Auto-advance after 1.2s (same as file-input path).
+                        setTimeout(() => {
+                            if (document.querySelector('#stage-v4-capture.active')) {
+                                _goToClassify();
+                            }
+                        }, 1200);
+                    }
+                    document.removeEventListener('camera-modal-closed', _modalCloseHandler);
+                };
+                document.addEventListener('camera-modal-closed', _modalCloseHandler);
+                // Also poll as fallback in case the modal close event isn't
+                // dispatched (legacy installs without the patch). Polls
+                // every 200ms for up to 60s, then gives up.
+                let _polls = 0;
+                const _modalPoll = setInterval(() => {
+                    const m = document.getElementById('camera-modal');
+                    const stillOpen = m && getComputedStyle(m).display !== 'none';
+                    if (!stillOpen) {
+                        clearInterval(_modalPoll);
+                        _modalCloseHandler();
+                    } else if (++_polls > 300) {
+                        clearInterval(_modalPoll);
+                    }
+                }, 200);
+            } else {
+                cameraInput.click();
+            }
+        });
         browseBtn.addEventListener('click', () => browseInput.click());
 
-        // Photo handler — decode → PII blur → image variants → state update.
+        // Photo handler — delegates to v3's `__crispIngestFile` so the
+        // EXACT v3 pipeline runs:
+        //   1. Network-tier-aware resize → state.photoDataUrl  (← THIS is
+        //      the gate `submitReport()` checks for `hasPhoto`. Without it,
+        //      every v4 report uploaded as text-only on the server.)
+        //   2. ImageVariants.generate (deferred via _runWhenIdle)
+        //      → state.photoVariants {small, medium, large} for the
+        //      tier-first guaranteed-delivery upload path.
+        //   3. PII blur via BlazeFace → state.photoClientBlurApplied flag.
+        //   4. blurhash placeholder → state.blurhash.
+        //   5. state.photoGroupId set so the 3 variants share a media group.
+        //
+        // After the v3 pipeline writes state.photoDataUrl, we use it as
+        // the v4 thumbnail — same data URL, no extra encode pass.
         const _handlePhoto = async (file) => {
             if (!file) return;
             try {
-                // Reuse the same pipeline v3 uses. _blurIfPossible is on
-                // the global app.js scope; image-variants generate is
-                // on window.ImageVariants. We just need the BLOB to land
-                // in state.photoBlob and the SMALL preview in
-                // state.photoSmallDataUrl for the thumbnail.
-                let blurredBlob = file;
-                try {
-                    if (typeof window.PIIBlur !== 'undefined' && window.PIIBlur.blurFaces) {
-                        const result = await window.PIIBlur.blurFaces(file);
-                        blurredBlob = result.blob || file;
-                        _setState({ photoClientBlurApplied: !!result.blurred });
-                    } else if (typeof window.blurFaces === 'function') {
-                        const result = await window.blurFaces(file);
-                        blurredBlob = result.blob || file;
-                        _setState({ photoClientBlurApplied: !!result.blurred });
-                    }
-                } catch (e) {
-                    console.warn('[v4] PII blur failed (best-effort):', e);
+                // Make sure v3's stage-photo setup ran (it exposes
+                // __crispIngestFile via window). If not yet ready (e.g.
+                // user tapped capture before app.js boot finished), we
+                // fall back to a minimal in-place pipeline that still
+                // sets state.photoDataUrl so submitReport doesn't fail.
+                if (typeof window.__crispIngestFile === 'function') {
+                    window.__crispIngestFile(file, { asExtra: false });
+                } else {
+                    // Fallback path: set photoDataUrl manually so submit
+                    // works even if the v3 ingest helper isn't ready yet.
+                    await _v4FallbackIngest(file);
                 }
 
-                _setState({ photoBlob: blurredBlob });
+                // Wait briefly for v3's pipeline to set state.photoDataUrl
+                // (the FileReader.onload + canvas.toDataURL chain runs
+                // synchronously after the file is read; in practice
+                // ~50-200ms in real browsers, ~1s for 4MB images).
+                const startedAt = Date.now();
+                while (!_getState().photoDataUrl && Date.now() - startedAt < 4000) {
+                    await new Promise((r) => setTimeout(r, 50));
+                }
 
-                // Generate a thumbnail for the strip (data URL).
-                const thumbUrl = URL.createObjectURL(blurredBlob);
-                const photoEntry = {
-                    blob: blurredBlob,
-                    url: thumbUrl,
-                    ts: Date.now(),
-                };
-                if (!_getState().v4Photos) _setState({ v4Photos: [] });
-                _getState().v4Photos.push(photoEntry);
-                _renderThumbs();
-                nextBtn.disabled = false;
-                nextBtn.classList.add('is-ready');
+                // Render the v4 thumbnail strip from state.photoDataUrl
+                // (the same SMALL data URL v3 uses for #photo-preview).
+                const dataUrl = _getState().photoDataUrl;
+                if (dataUrl) {
+                    const photoEntry = {
+                        blob: _getState().photoBlob,
+                        url: dataUrl,
+                        ts: Date.now(),
+                    };
+                    if (!_getState().v4Photos) _setState({ v4Photos: [] });
+                    // Replace the most recent v4Photos entry on re-pick of the
+                    // primary slot, otherwise append.
+                    const photos = _getState().v4Photos;
+                    if (photos.length === 0) {
+                        photos.push(photoEntry);
+                    } else {
+                        // Subsequent files via #v4-add-more route through
+                        // browseInput (asExtra=true via state.extraPhotos).
+                        // For now we append to v4Photos for thumb display.
+                        photos.push(photoEntry);
+                    }
+                    _renderThumbs();
+                    nextBtn.disabled = false;
+                    nextBtn.classList.add('is-ready');
+                }
 
                 // Fire AI pre-fill if bandwidth is good. Don't block — the
                 // user can tap Continue immediately.
-                _maybeFireAiPrefill(blurredBlob).catch((e) =>
+                _maybeFireAiPrefill(_getState().photoBlob || file).catch((e) =>
                     console.warn('[v4] AI prefill error:', e));
 
-                // Auto-advance after 1 s if user doesn't add another photo.
-                if (_getState().v4Photos.length === 1) {
+                // Auto-advance after 1.2s if user doesn't add another photo.
+                if (_getState().v4Photos && _getState().v4Photos.length === 1) {
                     setTimeout(() => {
                         // Only advance if the user is still on this stage.
                         if (document.querySelector('#stage-v4-capture.active')) {
@@ -221,6 +322,39 @@
                 console.error('[v4] photo handler failed:', e);
             }
         };
+
+        // Fallback ingest used only if v3's __crispIngestFile isn't on
+        // window yet (race during boot — should be rare). Sets the
+        // critical state.photoDataUrl + state.photoBlob + state.photoGroupId
+        // so submitReport's hasPhoto gate works. Variants are best-effort.
+        async function _v4FallbackIngest(file) {
+            const state = _getState();
+            // Read the file as data URL.
+            const dataUrl = await new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => resolve(String(r.result || ''));
+                r.onerror = () => reject(r.error);
+                r.readAsDataURL(file);
+            });
+            state.photoDataUrl = dataUrl;
+            state.photoBlob = file;
+            state.photoGroupId = (window.crypto?.randomUUID?.() ||
+                                   ('grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10)));
+            // Best-effort variants if available.
+            try {
+                if (window.ImageVariants && window.ImageVariants.generate) {
+                    const variants = await window.ImageVariants.generate(file);
+                    if (variants) {
+                        state.photoVariants = variants;
+                        state.photoBlob = variants.small.blob || file;
+                        state.photoClientBlurApplied = Boolean(variants.clientBlurApplied);
+                        state.blurhash = variants.blurhash || null;
+                    }
+                }
+            } catch (e) {
+                console.warn('[v4 fallback] variant gen failed:', e);
+            }
+        }
 
         cameraInput.addEventListener('change', (e) => {
             const file = e.target.files && e.target.files[0];
@@ -283,12 +417,49 @@
         }
     }
 
+    // BUG 8 fix (May 2026) — prefer state.locationName (resolved by
+    // reverseGeocode → Nominatim) over raw lat/lng. Falls back to coords
+    // when offline or before the resolve completes. Triggers
+    // resolveLocationName() asynchronously so the pill updates from
+    // "12.97°, 77.59°" → "Koramangala, Bangalore" once the geocode lands.
+    function _formatLocationLabel(loc, name) {
+        if (name) return name;
+        if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lng)) {
+            const acc = Math.max(0, Math.round(loc.acc || 0));
+            return `${loc.lat.toFixed(4)}°, ${loc.lng.toFixed(4)}° · ±${acc}m`;
+        }
+        return 'Locating…';
+    }
+    function _paintV4LocationPills() {
+        const s = _getState();
+        const label = _formatLocationLabel(s.location, s.locationName);
+        const captureText = document.getElementById('v4-meta-location-text');
+        const reviewText = document.getElementById('v4-row-location-text');
+        if (captureText) captureText.textContent = label;
+        if (reviewText) reviewText.textContent = label;
+    }
+    // Re-paint whenever state.locationName resolves. v3's
+    // _paintLocationDisplays runs on resolveLocationName completion; we
+    // listen for the same gps-ready / location-resolved hooks plus
+    // re-paint on every stage-entered to handle direct nav.
+    document.addEventListener('gps-ready', _paintV4LocationPills);
+    document.addEventListener('location-resolved', _paintV4LocationPills);
+    document.addEventListener('stage-entered', (e) => {
+        const stage = typeof e.detail === 'string' ? e.detail : (e.detail?.stage || '');
+        if (stage === 'stage-v4-capture' || stage === 'stage-v4-review') {
+            _paintV4LocationPills();
+        }
+    });
+
     function _refreshGps() {
         const text = document.getElementById('v4-meta-location-text');
         if (!text) return;
-        text.textContent = 'Locating…';
+        // If we already have a locationName from a previous resolve, paint
+        // it immediately while we re-fetch GPS (the user may have moved).
+        const current = _getState();
+        text.textContent = current.locationName || 'Locating…';
         if (!navigator.geolocation) {
-            text.textContent = 'GPS unavailable';
+            text.textContent = current.locationName || 'GPS unavailable';
             return;
         }
         navigator.geolocation.getCurrentPosition((pos) => {
@@ -296,13 +467,31 @@
             _setState({
                 location: { lat: latitude, lng: longitude, acc: accuracy },
             });
-            text.textContent = `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}° · ±${Math.round(accuracy)}m`;
-            // Mirror to the review row.
-            const reviewRow = document.getElementById('v4-row-location-text');
-            if (reviewRow) reviewRow.textContent = text.textContent;
+            // Paint coords as immediate feedback; the async geocode below
+            // will replace this with a place name shortly.
+            _paintV4LocationPills();
+
+            // Trigger reverse-geocode resolve. resolveLocationName is
+            // module-scope in app.js but exposed via the implicit
+            // top-level-function-as-global pattern. Fallback: call
+            // reverseGeocode + write state.locationName ourselves.
+            (async () => {
+                try {
+                    if (typeof window.resolveLocationName === 'function') {
+                        await window.resolveLocationName();
+                    } else if (typeof window.reverseGeocode === 'function') {
+                        const name = await window.reverseGeocode(latitude, longitude);
+                        if (name) _setState({ locationName: name });
+                    }
+                } catch (e) {
+                    console.warn('[v4] reverse geocode failed:', e);
+                }
+                _paintV4LocationPills();
+                document.dispatchEvent(new CustomEvent('location-resolved'));
+            })();
         }, (err) => {
             console.warn('[v4] GPS failed:', err);
-            text.textContent = 'GPS unavailable';
+            text.textContent = current.locationName || 'GPS unavailable';
         }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
     }
 
@@ -504,15 +693,44 @@
 
     // ── Page 3: review ──────────────────────────────────────────────────
     function _initReviewStage() {
-        // Tap location → reopen building/location picker (existing helpers).
+        // BUG 5 fix (May 2026) — UNDP must-have #6: relocate the existing
+        // #building-select-box (which lives inside stage-crisis by default)
+        // into the v4 review's #v4-building-mount the first time the user
+        // lands on stage-v4-review. Done lazily so v3-mode users (when
+        // they exist) never see a moved DOM node.
+        function _ensureBuildingBoxInV4() {
+            const box = document.getElementById('building-select-box');
+            const mount = document.getElementById('v4-building-mount');
+            if (!box || !mount) return;
+            if (mount.contains(box)) return;  // already moved
+            mount.appendChild(box);
+            // BuildingSelect listens for `stage-entered: stage-v4-review`
+            // (added in May 2026). The double-rAF + setTimeout(500) inside
+            // _tryInitMap handles the layout settle for Leaflet's
+            // invalidateSize.
+        }
+
+        // Tap location → opens an inline GPS refresh + ensures the building
+        // box is mounted + map initialised. Replaces v3's _refreshGps-only
+        // behaviour so the user can ALSO pick a building footprint.
         document.getElementById('v4-edit-location').addEventListener('click', () => {
-            // Use the existing Leaflet/Overpass selector if available.
-            if (window.BuildingSelect && window.BuildingSelect.ensureMap) {
-                window.BuildingSelect.ensureMap();
-                // Existing module renders inside #building-select-box; for v4
-                // we treat the tap as "refresh GPS" until inline picker is built.
-            }
+            _ensureBuildingBoxInV4();
             _refreshGps();
+            // Eager init in case the user taps before stage-entered fires.
+            if (window.BuildingSelect && window.BuildingSelect.ensureMap) {
+                const loc = _getState().location;
+                if (loc && loc.lat && loc.lng) {
+                    window.BuildingSelect.ensureMap(loc.lat, loc.lng).catch(() => {});
+                }
+            }
+        });
+
+        // On every entry to stage-v4-review, ensure the box is mounted.
+        // Listens to the document-level `stage-entered` event (dispatched
+        // by app.js's goToStage with detail = stage id).
+        document.addEventListener('stage-entered', (e) => {
+            const stage = typeof e.detail === 'string' ? e.detail : (e.detail?.stage || '');
+            if (stage === 'stage-v4-review') _ensureBuildingBoxInV4();
         });
         // Tap classification rows → jump back to Page 2 with focus on that row.
         document.getElementById('v4-edit-infra').addEventListener('click', () => {
@@ -532,20 +750,29 @@
         });
 
         // Voice drawer — wire mic + textarea.
+        // BUG 4 fix (May 2026) — voice-only path. v4 originally forwarded
+        // btn-v4-mic clicks to btn-mic.click(), which writes to v3-only
+        // DOM (mic-icon, mic-label, rec-timer) — invisible in v4. Now
+        // we own the recorder lifecycle and update the v4 mic button
+        // visual state directly. state.audioBlob + state.transcript
+        // remain the contract submitReport() reads.
         const micBtn = document.getElementById('btn-v4-mic');
         const textArea = document.getElementById('v4-text-desc');
         if (micBtn) {
             micBtn.addEventListener('click', () => {
-                // Defer to v3's mic-record pipeline if available.
-                const v3Mic = document.getElementById('btn-mic');
-                if (v3Mic && typeof v3Mic.click === 'function') {
-                    v3Mic.click();
+                if (_isV4Recording()) {
+                    _stopV4Recording();
+                } else {
+                    _startV4Recording();
                 }
             });
         }
         if (textArea) {
             textArea.addEventListener('input', () => {
-                _setState({ description: textArea.value });
+                _setState({
+                    description: textArea.value,
+                    transcript: textArea.value,  // mirror so submit reads either
+                });
             });
         }
 
@@ -625,6 +852,114 @@
         }
     }
 
+    // ── V4 voice recorder (BUG 4 fix, May 2026) ────────────────────────
+    // Self-contained MediaRecorder wrapper. Mirrors v3's startRecording
+    // + stopRecording but updates the v4 mic-button visual state and
+    // the v4 textarea instead of v3's #live-transcript / #mic-label.
+    // state.audioBlob + state.audioChunks remain the contract submit
+    // reads — v3 + v4 share the upload path, so audio sent from v4 lands
+    // on the dashboard exactly as if it had come from v3.
+    function _isV4Recording() {
+        return !!(window.state && window.state.isRecording);
+    }
+    let _v4SpeechRecognition = null;
+    async function _startV4Recording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mr = new MediaRecorder(stream);
+            window.state.mediaRecorder = mr;
+            window.state.audioChunks = [];
+            mr.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) window.state.audioChunks.push(e.data);
+            };
+            mr.onstop = () => {
+                try {
+                    window.state.audioBlob = new Blob(
+                        window.state.audioChunks || [], { type: 'audio/webm' });
+                } catch (e) { console.warn('[v4 audio] blob assemble failed:', e); }
+                try { stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+            };
+            mr.start();
+            window.state.isRecording = true;
+            _setV4MicVisualState(true);
+            // Best-effort live transcription via Web Speech API (mirrors
+            // into the v4 textarea + state.description). Falls back to
+            // raw audio if SpeechRecognition is unavailable.
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SR) {
+                try {
+                    _v4SpeechRecognition = new SR();
+                    _v4SpeechRecognition.continuous = true;
+                    _v4SpeechRecognition.interimResults = true;
+                    _v4SpeechRecognition.lang = (window.state && window.state.speechCode) ||
+                        navigator.language || 'en-US';
+                    let _base = (window.state && window.state.transcript) || '';
+                    _v4SpeechRecognition.onresult = (ev) => {
+                        let interim = '';
+                        let finalText = _base;
+                        for (let i = 0; i < ev.results.length; i++) {
+                            const r = ev.results[i];
+                            if (r.isFinal) finalText += (finalText ? ' ' : '') + r[0].transcript;
+                            else interim += r[0].transcript;
+                        }
+                        const combined = (finalText + (interim ? ' ' + interim : '')).trim();
+                        const ta = document.getElementById('v4-text-desc');
+                        if (ta) ta.value = combined;
+                        _setState({ transcript: combined, description: combined });
+                    };
+                    _v4SpeechRecognition.onend = () => {
+                        // Auto-restart if still recording (some browsers
+                        // end after each utterance).
+                        if (_isV4Recording()) {
+                            try { _v4SpeechRecognition.start(); } catch (_) {}
+                        }
+                    };
+                    _v4SpeechRecognition.start();
+                } catch (e) {
+                    console.info('[v4 speech] start failed — raw audio still recording:', e);
+                }
+            }
+        } catch (err) {
+            console.error('[v4 mic] error:', err);
+            if (typeof window.showToast === 'function') {
+                window.showToast('Mic permission denied or unsupported.');
+            }
+        }
+    }
+    function _stopV4Recording() {
+        try {
+            if (window.state && window.state.mediaRecorder &&
+                window.state.mediaRecorder.state !== 'inactive') {
+                window.state.mediaRecorder.stop();
+            }
+        } catch (e) { console.warn('[v4 mic] stop failed:', e); }
+        if (_v4SpeechRecognition) {
+            try { _v4SpeechRecognition.stop(); } catch (_) {}
+            _v4SpeechRecognition = null;
+        }
+        window.state.isRecording = false;
+        _setV4MicVisualState(false);
+    }
+    function _setV4MicVisualState(recording) {
+        const btn = document.getElementById('btn-v4-mic');
+        if (!btn) return;
+        const icon = btn.querySelector('i');
+        const label = btn.querySelector('span');
+        if (recording) {
+            btn.classList.add('is-recording');
+            if (icon) icon.className = 'fa-solid fa-stop';
+            if (label) label.textContent = 'Stop recording';
+        } else {
+            btn.classList.remove('is-recording');
+            if (icon) icon.className = 'fa-solid fa-microphone';
+            if (label) {
+                label.textContent = (typeof window.t === 'function')
+                    ? (window.t('v4_record') || 'Record voice')
+                    : 'Record voice';
+            }
+        }
+    }
+
     // ── Send ────────────────────────────────────────────────────────────
     async function _onSend() {
         const sendBtn = document.getElementById('btn-v4-send');
@@ -666,6 +1001,51 @@
 
     // ── Stage transitions ───────────────────────────────────────────────
     function _goToCapture() {
+        // BUG 7 fix (May 2026) — clear prior report state before showing
+        // the capture stage. Without this, "Add another report" left the
+        // previous photo in v4Photos, the previous description in state,
+        // the previous buildingId / locationName / serviceStatus, and
+        // re-armed Continue prematurely. v3 already does this via resetApp
+        // → _clearCaptureState; v4 must follow the same contract.
+        if (typeof window._clearCaptureState === 'function') {
+            try { window._clearCaptureState(); } catch (e) { console.warn('[v4] reset failed:', e); }
+        }
+        // _clearCaptureState only knows about v3 fields; clear the
+        // v4-specific accumulator + thumb strip explicitly.
+        if (window.state) window.state.v4Photos = [];
+        const thumbsRow = document.getElementById('v4-thumbs');
+        if (thumbsRow) {
+            thumbsRow.innerHTML = '';
+            thumbsRow.style.display = 'none';
+        }
+        const nextBtn = document.getElementById('btn-v4-capture-next');
+        if (nextBtn) {
+            nextBtn.disabled = true;
+            nextBtn.classList.remove('is-ready');
+        }
+        // Clear the v4 summary thumb (page 3) so a stale image doesn't
+        // bleed through if user hits Back.
+        const summaryThumb = document.getElementById('v4-summary-thumb');
+        if (summaryThumb) {
+            summaryThumb.classList.remove('has-photo');
+            summaryThumb.innerHTML = '<i class="fa-solid fa-camera"></i>';
+        }
+        // Clear v4 description textarea + voice drawer state.
+        const textArea = document.getElementById('v4-text-desc');
+        if (textArea) textArea.value = '';
+        // Reset pressing-needs chips.
+        document.querySelectorAll('.v4-need-chip.is-selected').forEach((c) =>
+            c.classList.remove('is-selected'));
+        // Reset debris yes/no to default (No).
+        document.querySelectorAll('.v4-yn-btn').forEach((b) => b.classList.remove('is-active'));
+        const noBtn = document.querySelector('.v4-yn-btn[data-debris="false"]');
+        if (noBtn) noBtn.classList.add('is-active');
+        // Reset service-status selects.
+        const elec = document.getElementById('v4-elec');
+        if (elec) elec.value = '';
+        const hlth = document.getElementById('v4-health');
+        if (hlth) hlth.value = '';
+
         window.__crispGoToStage('stage-v4-capture');
         setTimeout(_refreshGps, 100);
     }
@@ -707,6 +1087,12 @@
             goToClassify: _goToClassify,
             goToReview: _goToReview,
             isEnabled: () => window.__crispUiV4 === true,
+            // BUG 4 (May 2026) — voice-only path. Exposing the recorder
+            // surface lets tests verify the contract even in headless
+            // environments without a real mic (mocking MediaRecorder).
+            startRecording: _startV4Recording,
+            stopRecording: _stopV4Recording,
+            isRecording: _isV4Recording,
         };
 
         // Initial GPS fetch when entering capture.

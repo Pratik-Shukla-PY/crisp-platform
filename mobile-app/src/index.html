@@ -556,6 +556,14 @@
                 </div>
             </div>
 
+            <!-- BUG 5 fix (May 2026) — UNDP must-have #6: building footprint
+                 selector. v4 originally only had the location row; the
+                 building picker (Leaflet + OSM polygons) was unreachable.
+                 We mount the existing #building-select-box here on first
+                 entry to stage-v4-review (see v4-flow.js _initReviewStage).
+                 Empty until that move runs — keeps the HTML clean. -->
+            <div id="v4-building-mount" class="v4-building-mount"></div>
+
             <!-- Voice / text description — collapsed by default. Tapping
                  expands a drawer with the existing mic + textarea (uses
                  the v3 stage-audio's MediaRecorder + Web Speech API
@@ -1770,7 +1778,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
         crossorigin=""></script>
-<script src="building-select.js?v=5"></script>
+<script src="building-select.js?v=6"></script>
 <script src="places.js?v=3"></script>
 <!-- Client-side PII blur: BlazeFace face detection + canvas Gaussian blur.
      Scripts load in order; pii-blur.js exposes window.PIIBlur which app.js calls
@@ -1804,10 +1812,10 @@
      consent gate sees CONSENT_KEY already populated when landing
      dismisses. -->
 <script src="install-prompt.js?v=1"></script>
-<script src="landing.js?v=1"></script>
+<script src="landing.js?v=2"></script>
 <script src="app.js?v=1010"></script>
 <!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
      applyI18n etc. Internally it _whenReady-polls until those are set. -->
-<script src="v4-flow.js?v=1"></script>
+<script src="v4-flow.js?v=4"></script>
 </body>
 </html>

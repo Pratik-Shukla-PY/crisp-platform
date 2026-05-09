@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v75';  // v75 (May 2026): UNDP regression backstop — added Wildfire crisis chip (UNDP brief explicitly mandates it; v3 was missing), Android back-button popstate handler (was exiting PWA on Android home-screen install), 29-undp-requirements.spec.ts comprehensive coverage. v4 stays default-OFF until all 9 v4 bugs are fixed.
+const CACHE_NAME = 'crisp-v78';  // v78 (May 2026): v4 RE-ENABLED default ON after the 9-bug fix sweep verified green. Same fixes as v77 + flag flipped: BUG 6 image upload chain, BUG 5 building tagging, BUG 7 state reset, BUG 4 voice-only recorder, BUG 8 location pill, BUG 1 landing flash, BUG 2 desktop webcam, BUG 3 back-button, BUG 9 offline queue. Escape hatches preserved: ?ui=v3 + localStorage['crisp_ui_v4']='off'.
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.

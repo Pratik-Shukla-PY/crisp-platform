@@ -3048,6 +3048,20 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     animation: landingFadeIn 0.32s ease;
     -webkit-overflow-scrolling: touch;
 }
+
+/* BUG 1 fix (May 2026) — landing-pending suppresses the home flash on
+   first visit. Applied synchronously by landing.js IIFE before
+   DOMContentLoaded; cleared on _dismiss + the _shouldShow=false branch.
+   Visibility (not display) so layout calculations still happen — the
+   page is "ready" the moment landing dismisses, no reflow jitter. */
+html.landing-pending .stage,
+html.landing-pending #flow-progress,
+html.landing-pending #consent-overlay,
+body.landing-pending .stage,
+body.landing-pending #flow-progress,
+body.landing-pending #consent-overlay {
+    visibility: hidden !important;
+}
 @keyframes landingFadeIn {
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }

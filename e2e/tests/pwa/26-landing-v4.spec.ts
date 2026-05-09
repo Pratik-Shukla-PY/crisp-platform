@@ -200,8 +200,10 @@ test.describe('UI v4 — Landing card', () => {
 test.describe('UI v4 — Stage CSS viewport refactor', () => {
     test('stage uses max-height 100dvh', async ({ page }) => {
         await page.goto('');  // baseURL has trailing slash; '' resolves to it
-        // Wait for at least the home stage to mount.
-        await page.waitForSelector('#stage-home', { timeout: 5000 });
+        // Wait for at least the home stage to mount IN THE DOM. May 2026:
+        // BUG 1 fix sets `visibility: hidden` on stages while landing is
+        // up, so we use state:'attached' rather than the default 'visible'.
+        await page.waitForSelector('#stage-home', { state: 'attached', timeout: 5000 });
         const cssMaxHeight = await page.evaluate(() => {
             const el = document.querySelector('#stage-home');
             if (!el) return null;

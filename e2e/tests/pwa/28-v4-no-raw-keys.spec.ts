@@ -25,6 +25,18 @@ import { test, expect, Page } from '@playwright/test';
 // Hard requirement: each spec runs without ANY pre-set localStorage.
 test.use({ storageState: { cookies: [], origins: [] } });
 
+// May 2026 — v4 default flipped OFF after the emergency rollback.
+// All tests in this file require v4 active, so we force it on via the
+// `?ui=v4` URL escape hatch + the localStorage flag for resilience
+// against any redirects.
+async function _gotoV4(page: Page, path = '') {
+    await page.addInitScript(() => {
+        try { localStorage.setItem('crisp_ui_v4', 'on'); } catch (_) {}
+    });
+    const url = path.includes('?') ? `${path}&ui=v4` : `${path}?ui=v4`;
+    await page.goto(url || '?ui=v4');
+}
+
 async function _rawKeysOnPage(page: Page): Promise<string[]> {
     return page.evaluate(() => {
         return Array.from(document.querySelectorAll('[data-i18n]'))
@@ -48,7 +60,7 @@ async function _activeStages(page: Page): Promise<string[]> {
 
 test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
     test('landing card has zero raw key leaks', async ({ page }) => {
-        await page.goto('');
+        await _gotoV4(page);
         await page.waitForSelector('#landing-overlay', { timeout: 8000 });
         await page.waitForTimeout(600);  // let async i18n loaders settle
         const leaks = await _rawKeysOnPage(page);
@@ -56,7 +68,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
     });
 
     test('all 3 v4 stages have zero raw key leaks', async ({ page }) => {
-        await page.goto('');
+        await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
         await page.waitForTimeout(600);
 
@@ -79,7 +91,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
     });
 
     test('only one .stage.active exists at any moment during navigation', async ({ page }) => {
-        await page.goto('');
+        await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
         await page.waitForTimeout(400);
 
@@ -100,7 +112,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
     });
 
     test('Page 1 camera hero is bounded ≤ 240px tall', async ({ page }) => {
-        await page.goto('');
+        await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-capture'));
         await page.waitForTimeout(400);
@@ -109,7 +121,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
     });
 
     test('Page 2 chip grids show ≥ 6 tiles visible at once', async ({ page }) => {
-        await page.goto('');
+        await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
         await page.waitForTimeout(500);
@@ -138,7 +150,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
     });
 
     test('Page 3 pressing-needs renders all 10 chips full-width', async ({ page }) => {
-        await page.goto('');
+        await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-review'));
         await page.waitForTimeout(400);
@@ -162,7 +174,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
 
     test('viewport-fit on iPhone SE (320×568) for all 3 v4 stages', async ({ page }) => {
         await page.setViewportSize({ width: 320, height: 568 });
-        await page.goto('');
+        await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
         for (const stage of ['stage-v4-capture', 'stage-v4-classify', 'stage-v4-review']) {
             await page.evaluate((s) => (window as any).__crispGoToStage(s), stage);

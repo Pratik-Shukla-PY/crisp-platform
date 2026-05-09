@@ -26,6 +26,47 @@
     const LANDING_SEEN_KEY = 'crisp_landing_seen';
     const CONSENT_KEY = 'crisp_privacy_consent';
 
+    // BUG 1 fix (May 2026) — landing page no longer fluctuates between
+    // the home stage and the new landing card on first visit.
+    //
+    // Root cause: <div class="stage active" id="stage-home"> is parsed +
+    // rendered before landing.js's DOMContentLoaded handler mounts the
+    // overlay. On slow first paints (cold cache, 4G uplink, mid-range
+    // device) the home screen flashes for 100-300ms before the landing
+    // card drops on top — the user sees the OLD design briefly, then
+    // the NEW one, hence "fluctuating".
+    //
+    // Fix: synchronously add `landing-pending` class to <body> the
+    // moment this script executes (before DOMContentLoaded). CSS in
+    // styles.css hides every .stage + #consent-overlay until the class
+    // is removed. landing.js _dismiss + _shouldShow=false branch both
+    // remove the class so legacy + returning users see no regression.
+    function _shouldShowSync() {
+        try {
+            const seen = localStorage.getItem(LANDING_SEEN_KEY);
+            const consent = localStorage.getItem(CONSENT_KEY);
+            return !(seen && consent);
+        } catch { return true; }
+    }
+    function _markPending() {
+        try { document.documentElement.classList.add('landing-pending'); } catch (_) {}
+        if (document.body) {
+            document.body.classList.add('landing-pending');
+        } else {
+            // <body> not parsed yet — defer to the next microtask. Keeps
+            // the html-level class present meanwhile so CSS selectors
+            // targeting either work.
+            queueMicrotask(() => {
+                if (document.body) document.body.classList.add('landing-pending');
+            });
+        }
+    }
+    function _clearPending() {
+        try { document.documentElement.classList.remove('landing-pending'); } catch (_) {}
+        if (document.body) document.body.classList.remove('landing-pending');
+    }
+    if (_shouldShowSync()) _markPending();
+
     // ── Channel handles config ──────────────────────────────────────────
     // Operator overrides via `window.CRISP_CHANNELS` (set before this
     // script loads, e.g. from a server-rendered <script> block) take
@@ -254,6 +295,9 @@
             _markLandingSeen();
             if (consentCheck.checked) _markConsent();
             card.classList.add('is-leaving');
+            // BUG 1 fix — clear the landing-pending class on dismiss so
+            // the home stage / consent overlay become visible.
+            _clearPending();
             setTimeout(() => card.remove(), 250);
         };
 
@@ -336,7 +380,13 @@
 
     // ── Public init ─────────────────────────────────────────────────────
     function init() {
-        if (!_shouldShow()) return false;
+        if (!_shouldShow()) {
+            // Returning visitor — clear the pending class immediately so
+            // stage-home / etc. become visible without waiting for any
+            // dismissal animation.
+            _clearPending();
+            return false;
+        }
 
         const root = document.getElementById('landing-root') || document.body;
         const card = _buildCard();
