@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v71';  // v71 (May 2026): UI v4 polish round 2 — theme-neutral surfaces (--v4-tile-bg/border CSS vars resolve correctly in BOTH light + dark mode; was rgba(255,255,255,0.03) which vanished against light cream backgrounds making chip pills look like plain text), Page 3 pressing-needs single-column override + chip flex/wrap polish (all 10 chips visible in 3 rows), small-screen step-label nowrap fix (was wrapping "STEP 1 OF / 3" on 360px), regression spec 28-v4-no-raw-keys.spec.ts catches the boot-path issues that slipped past the previous suite.
+const CACHE_NAME = 'crisp-v72';  // v72 (May 2026): UI v4 polish round 3 — header right-padding bumped 110px → 156px to clear the 140px lang-pill (was overlapping STEP 3 OF 3 on iPhone SE).
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.

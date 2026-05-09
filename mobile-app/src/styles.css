@@ -3442,16 +3442,17 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     gap: 12px;
     padding-top: 4px;
     /* May 2026 hot-fix: reserve right-side space so the "STEP X OF 3"
-       label never collides with the language-pill cluster (which lives
-       absolute-positioned in the top-right at ~110px wide on iPhone SE).
-       Without this, on 320 px viewports the step text sat behind
-       the lang pill — visible in screenshot 04-page2 of the v4-final
-       audit. */
-    padding-right: 110px;
+       label never collides with the language-pill cluster. The pill is
+       max-width: 140px (line 151) PLUS its 16px right offset = 156px
+       reserved. Earlier we used 110px which left the step text behind
+       the pill on iPhone SE — see /tmp/v4-PROD-iphone-se-p3.png. */
+    padding-right: 156px;
     min-height: 36px;
 }
 @media (min-width: 380px) {
-    .v4-header { padding-right: 100px; }
+    /* On larger screens we still need the same clearance — the lang
+       pill is fixed-width 140px regardless of viewport. */
+    .v4-header { padding-right: 156px; }
 }
 .v4-back {
     width: 36px; height: 36px;
