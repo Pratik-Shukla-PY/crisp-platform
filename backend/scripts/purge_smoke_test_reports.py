@@ -43,6 +43,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 def main(dry_run: bool, include_test_prefix: bool) -> int:
     from app.db.session import SessionLocal
+    # Import auth models first so SQLAlchemy registers the `users` table
+    # before we touch Report (which has a FK to users.id). Without this
+    # the script fails at first .query(Report) with "Foreign key
+    # associated with column 'reports.user_id' could not find table
+    # 'users'" — same gotcha as any cold-bootstrap script that bypasses
+    # the FastAPI app boot path that normally wires every model in.
+    from app.models import auth as _auth  # noqa: F401
     from app.models.report import Report, Device, Media
 
     db = SessionLocal()
