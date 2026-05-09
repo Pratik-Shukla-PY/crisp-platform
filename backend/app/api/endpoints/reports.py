@@ -2682,6 +2682,73 @@ def attach_media_chunk(
 # (bandwidth is a public property of the link; hiding this endpoint
 # doesn't add security). Rate-limited 60/min per client IP so it can't
 # be abused for DoS.
+# ── UI v4 — AI classify-suggest (Claude Haiku) ─────────────────────────────
+# Used by the v4 capture flow on Page 2: when the user takes a photo on a
+# fast network, the client POSTs the photo (+ optional GPS) here, and we ask
+# Claude Haiku for suggested infra / crisis / damage classifications. The
+# client pre-fills the 3 chip rows so the user only taps what they disagree
+# with. On slow / offline tiers, the client never calls this endpoint.
+#
+# Service: app/services/classify_suggest.py.
+# Returns 200 even on degraded paths (no API key, timeout, parse error) —
+# the response carries `source: "ai"|"fallback"` so the client can render
+# the chips appropriately.
+@router.post("/classify-suggest", status_code=status.HTTP_200_OK)
+async def classify_suggest(request: Request, payload: dict):
+    """
+    Body shape (JSON):
+      {
+        "image_b64":   "<base64-encoded JPEG/PNG, no data: prefix>",
+        "media_type":  "image/jpeg" | "image/png" | "image/webp",
+        "lat":         optional float,
+        "lng":         optional float
+      }
+
+    Response:
+      {
+        "infrastructure_type":   "RESIDENTIAL"|...|"OTHER",
+        "crisis_type":           "EARTHQUAKE"|...|"OTHER",
+        "damage_classification": "MINIMAL"|"PARTIAL"|"COMPLETE",
+        "confidence":            0.0-1.0,
+        "reasoning_short":       "<= 80 char justification>",
+        "source":                "ai" | "fallback",
+        "fallback_reason":       optional string when source=fallback
+      }
+    """
+    from app.main import check_rate_limit
+    from app.services.classify_suggest import ClassifySuggestService
+
+    client_ip = request.client.host if request.client else "unknown"
+    # Same rate limit as the bandwidth probe — these are both pre-capture
+    # signals, neither should be hammered.
+    if not check_rate_limit(f"classify:{client_ip}", max_requests=60, window=60):
+        raise HTTPException(status_code=429, detail="classify-suggest rate limit exceeded")
+
+    image_b64 = (payload or {}).get("image_b64", "")
+    if not image_b64 or not isinstance(image_b64, str):
+        raise HTTPException(status_code=422, detail="image_b64 (base64 JPEG/PNG) is required")
+
+    media_type = (payload or {}).get("media_type", "image/jpeg")
+    if media_type not in ("image/jpeg", "image/png", "image/webp"):
+        media_type = "image/jpeg"
+
+    lat = (payload or {}).get("lat")
+    lng = (payload or {}).get("lng")
+    if not isinstance(lat, (int, float)):
+        lat = None
+    if not isinstance(lng, (int, float)):
+        lng = None
+
+    service = ClassifySuggestService()
+    result = await service.suggest(
+        image_b64=image_b64,
+        media_type=media_type,
+        lat=lat,
+        lng=lng,
+    )
+    return result
+
+
 @router.post("/upload-probe", status_code=status.HTTP_200_OK)
 async def upload_probe(request: Request, data: UploadFile = File(...)):
     """Echo `len(data)` for client-side bandwidth measurement.

@@ -2365,6 +2365,11 @@ function _canAddMorePhotos() {
 // debugging. Zero production-path effect; safe to keep always-on.
 Object.defineProperty(window, 'state', { get: () => state, configurable: true });
 window.__crispGoToStage = (id) => goToStage(id);
+// May 2026 v4 — `submitReport` exposed for v4-flow.js's "Send to UNDP"
+// button. Same code path the v3 #btn-send + #btn-review-submit clicks
+// land in — guarantees the v4 review page produces an identical
+// /reports/meta payload to the legacy flow.
+window.__crispSubmitReport = () => submitReport();
 // Testability hooks for the reconcile E2E spec — let tests seed the IDB
 // queue with a stuck in-flight entry and then verify reconcile dequeues it.
 window.__crispEnqueueReport = (payload) => enqueueReport(payload);

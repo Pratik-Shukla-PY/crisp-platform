@@ -332,6 +332,328 @@
         </div>
     </div>
 
+    <!-- ══════════════════════════════════════════════════════════════
+         UI v4 (May 2026) — 3-page capture flow.
+         Gated behind UI_V4_ENABLED in app.js (defaults ON). Each stage
+         fits in 100dvh without scroll on a 320×568 viewport in any of
+         the 6 UN locales (text budget enforced by Commit C).
+
+         The v3 stages below (#stage-photo, #stage-where, #stage-infra,
+         #stage-crisis, #stage-extras, #stage-audio, #stage-review,
+         #stage-send) are LEFT IN PLACE as the fallback path —
+         localStorage['crisp_ui_v4'] = 'off' (or ?ui=v3 URL param) routes
+         btn-start through them instead. The fallback gives us a clean
+         rollback if v4 has unforeseen issues in production.
+    ══════════════════════════════════════════════════════════════ -->
+
+    <!-- V4 — Page 1: Capture (photo + auto-meta) -->
+    <div class="stage v4-stage" id="stage-v4-capture">
+        <header class="v4-header">
+            <button class="v4-back" id="btn-v4-capture-back" type="button" aria-label="Back">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div class="v4-progress" data-step="1" data-of="3">
+                <span class="v4-pip is-active"></span>
+                <span class="v4-pip"></span>
+                <span class="v4-pip"></span>
+                <span class="v4-step-label" data-i18n="v4_step_1_of_3">Step 1 of 3</span>
+            </div>
+        </header>
+
+        <div class="v4-body">
+            <!-- Auto-detected location + time pills (passive, no taps required) -->
+            <div class="v4-meta-row">
+                <div class="v4-meta-pill" id="v4-meta-location">
+                    <i class="fa-solid fa-location-dot"></i>
+                    <span class="v4-meta-text" id="v4-meta-location-text"
+                          data-i18n="v4_locating">Locating…</span>
+                    <button class="v4-meta-retry" id="btn-v4-retry-gps"
+                            type="button" aria-label="Retry GPS">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                </div>
+                <div class="v4-meta-pill v4-meta-pill-time">
+                    <i class="fa-regular fa-clock"></i>
+                    <span class="v4-meta-text" id="v4-meta-time-text"
+                          data-i18n="v4_just_now">Just now</span>
+                </div>
+            </div>
+
+            <!-- Hero camera CTA. Opens OS-native camera via <input type=file
+                 capture=environment> — no in-app <video> modal. The
+                 thumbnail + delete + add-more strip slot below is shared
+                 with the v3 photo stage's renderer to reuse all the
+                 PII-blur + variant-generation pipelines. -->
+            <button class="v4-camera-hero" id="btn-v4-camera" type="button">
+                <div class="v4-camera-icon">
+                    <i class="fa-solid fa-camera"></i>
+                </div>
+                <div class="v4-camera-label" data-i18n="v4_take_photo">Take photo</div>
+                <div class="v4-camera-sub" data-i18n="v4_camera_sub">Tap to open camera</div>
+            </button>
+
+            <!-- Hidden native file inputs — same pattern app.js's existing
+                 photo flow uses, just routed through v4 handlers. -->
+            <input type="file" id="v4-file-camera" accept="image/*" capture="environment" hidden>
+            <input type="file" id="v4-file-browse" accept="image/*" multiple hidden>
+
+            <!-- Thumbnail strip — populated after first capture. Inline
+                 "+ Add another" chip allows multi-photo without leaving
+                 the page. -->
+            <div class="v4-thumbs" id="v4-thumbs" style="display:none;"></div>
+
+            <!-- Secondary fallbacks. Smaller surface area; users mostly
+                 ignore unless camera is broken / not present (desktop). -->
+            <div class="v4-secondary-row">
+                <button class="v4-secondary-btn" id="btn-v4-browse" type="button">
+                    <i class="fa-solid fa-folder-open"></i>
+                    <span data-i18n="v4_browse">Browse files</span>
+                </button>
+                <button class="v4-secondary-btn" id="btn-v4-skip-photo" type="button">
+                    <i class="fa-solid fa-microphone"></i>
+                    <span data-i18n="v4_voice_only">Voice only</span>
+                </button>
+            </div>
+        </div>
+
+        <footer class="v4-footer">
+            <button class="v4-primary" id="btn-v4-capture-next" type="button" disabled>
+                <span data-i18n="v4_continue">Continue</span>
+                <i class="fa-solid fa-arrow-right"></i>
+            </button>
+        </footer>
+    </div>
+
+    <!-- V4 — Page 2: Classify (3 chip rows on one page) -->
+    <div class="stage v4-stage" id="stage-v4-classify">
+        <header class="v4-header">
+            <button class="v4-back" id="btn-v4-classify-back" type="button" aria-label="Back">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div class="v4-progress" data-step="2" data-of="3">
+                <span class="v4-pip is-done"></span>
+                <span class="v4-pip is-active"></span>
+                <span class="v4-pip"></span>
+                <span class="v4-step-label" data-i18n="v4_step_2_of_3">Step 2 of 3</span>
+            </div>
+        </header>
+
+        <div class="v4-body">
+            <!-- AI-pre-fill banner (transient, fades after 2s) — only
+                 appears when classify-suggest returned source="ai" so the
+                 user knows defaults came from AI vs heuristics. -->
+            <div class="v4-ai-banner" id="v4-ai-banner" style="display:none;">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span data-i18n="v4_ai_filled">AI suggested these — tap to change.</span>
+            </div>
+
+            <!-- Q1: damage classification (3 chips, defaults Partial) -->
+            <section class="v4-section">
+                <h3 class="v4-section-title" data-i18n="v4_q_damage">How bad is the damage?</h3>
+                <div class="v4-chip-row" id="v4-chips-damage" role="radiogroup">
+                    <button class="v4-chip" data-value="MINIMAL" type="button" role="radio">
+                        <span class="v4-chip-dot v4-chip-dot-min">●</span>
+                        <span class="v4-chip-label" data-i18n="damage_minimal">Minimal</span>
+                    </button>
+                    <button class="v4-chip is-selected" data-value="PARTIAL" type="button" role="radio" aria-checked="true">
+                        <span class="v4-chip-dot v4-chip-dot-partial">●</span>
+                        <span class="v4-chip-label" data-i18n="damage_partial">Partial</span>
+                    </button>
+                    <button class="v4-chip" data-value="COMPLETE" type="button" role="radio">
+                        <span class="v4-chip-dot v4-chip-dot-complete">●</span>
+                        <span class="v4-chip-label" data-i18n="damage_complete">Complete</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Q2: infrastructure type (8 UNDP super-types as carousel) -->
+            <section class="v4-section">
+                <h3 class="v4-section-title" data-i18n="v4_q_infra">What was hit?</h3>
+                <div class="v4-carousel" id="v4-carousel-infra"
+                     data-options='[
+                        {"v":"RESIDENTIAL","i":"fa-house","l":"Residential","k":"infra_residential"},
+                        {"v":"COMMERCIAL","i":"fa-store","l":"Commercial","k":"infra_commercial"},
+                        {"v":"GOVERNMENT","i":"fa-landmark","l":"Government","k":"infra_government"},
+                        {"v":"UTILITY","i":"fa-bolt","l":"Utility","k":"infra_utility"},
+                        {"v":"TRANSPORT_COMMUNICATION","i":"fa-road","l":"Transport","k":"infra_transport"},
+                        {"v":"COMMUNITY","i":"fa-school","l":"Community","k":"infra_community"},
+                        {"v":"PUBLIC_SPACES","i":"fa-tree","l":"Public space","k":"infra_public"},
+                        {"v":"OTHER","i":"fa-circle-question","l":"Other","k":"infra_other"}
+                     ]'></div>
+            </section>
+
+            <!-- Q3: crisis type (9 UNDP types as carousel) -->
+            <section class="v4-section">
+                <h3 class="v4-section-title" data-i18n="v4_q_crisis">What caused it?</h3>
+                <div class="v4-carousel" id="v4-carousel-crisis"
+                     data-options='[
+                        {"v":"EARTHQUAKE","i":"fa-house-crack","l":"Earthquake","k":"crisis_earthquake"},
+                        {"v":"FLOOD","i":"fa-water","l":"Flood","k":"crisis_flood"},
+                        {"v":"TSUNAMI","i":"fa-water-arrow-up","l":"Tsunami","k":"crisis_tsunami"},
+                        {"v":"HURRICANE","i":"fa-wind","l":"Hurricane","k":"crisis_hurricane"},
+                        {"v":"WILDFIRE","i":"fa-fire","l":"Wildfire","k":"crisis_wildfire"},
+                        {"v":"EXPLOSION","i":"fa-explosion","l":"Explosion","k":"crisis_explosion"},
+                        {"v":"CHEMICAL_INCIDENT","i":"fa-flask","l":"Chemical","k":"crisis_chemical"},
+                        {"v":"CONFLICT","i":"fa-shield","l":"Conflict","k":"crisis_conflict"},
+                        {"v":"CIVIL_UNREST","i":"fa-people-group","l":"Civil unrest","k":"crisis_unrest"}
+                     ]'></div>
+            </section>
+        </div>
+
+        <footer class="v4-footer">
+            <button class="v4-primary is-ready" id="btn-v4-classify-next" type="button">
+                <span data-i18n="v4_continue">Continue</span>
+                <i class="fa-solid fa-arrow-right"></i>
+            </button>
+        </footer>
+    </div>
+
+    <!-- V4 — Page 3: Review + send (More details EXPANDED by default,
+         compact layout to keep scroll-free per UNDP judge requirement) -->
+    <div class="stage v4-stage" id="stage-v4-review">
+        <header class="v4-header">
+            <button class="v4-back" id="btn-v4-review-back" type="button" aria-label="Back">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div class="v4-progress" data-step="3" data-of="3">
+                <span class="v4-pip is-done"></span>
+                <span class="v4-pip is-done"></span>
+                <span class="v4-pip is-active"></span>
+                <span class="v4-step-label" data-i18n="v4_step_3_of_3">Step 3 of 3</span>
+            </div>
+        </header>
+
+        <div class="v4-body">
+            <!-- Summary card — photo thumb + 4 selection rows. Each row
+                 tap-edits in place via a sheet that reopens that
+                 question's chip/carousel UI. -->
+            <div class="v4-summary">
+                <div class="v4-summary-thumb" id="v4-summary-thumb">
+                    <i class="fa-regular fa-image"></i>
+                </div>
+                <div class="v4-summary-rows">
+                    <button class="v4-summary-row" id="v4-edit-location" type="button">
+                        <i class="fa-solid fa-location-dot"></i>
+                        <span class="v4-row-text" id="v4-row-location-text"
+                              data-i18n="v4_locating">Locating…</span>
+                        <i class="fa-solid fa-pen v4-row-pen"></i>
+                    </button>
+                    <button class="v4-summary-row" id="v4-edit-infra" type="button">
+                        <i class="fa-solid fa-house"></i>
+                        <span class="v4-row-text" id="v4-row-infra-text">—</span>
+                        <i class="fa-solid fa-pen v4-row-pen"></i>
+                    </button>
+                    <button class="v4-summary-row" id="v4-edit-crisis" type="button">
+                        <i class="fa-solid fa-house-crack"></i>
+                        <span class="v4-row-text" id="v4-row-crisis-text">—</span>
+                        <i class="fa-solid fa-pen v4-row-pen"></i>
+                    </button>
+                    <button class="v4-summary-row" id="v4-edit-damage" type="button">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span class="v4-row-text" id="v4-row-damage-text">—</span>
+                        <i class="fa-solid fa-pen v4-row-pen"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Voice / text description — collapsed by default. Tapping
+                 expands a drawer with the existing mic + textarea (uses
+                 the v3 stage-audio's MediaRecorder + Web Speech API
+                 helpers). -->
+            <details class="v4-drawer" id="v4-voice-drawer">
+                <summary class="v4-drawer-summary">
+                    <i class="fa-solid fa-microphone"></i>
+                    <span data-i18n="v4_add_voice_text">Add voice or text (optional)</span>
+                    <i class="fa-solid fa-chevron-down v4-drawer-chevron"></i>
+                </summary>
+                <div class="v4-drawer-body" id="v4-voice-body">
+                    <button class="v4-mic-btn" id="btn-v4-mic" type="button">
+                        <i class="fa-solid fa-microphone"></i>
+                        <span data-i18n="v4_record">Record voice</span>
+                    </button>
+                    <textarea id="v4-text-desc" class="v4-text-desc" rows="2"
+                              data-i18n-placeholder="v4_or_type"
+                              placeholder="…or type a short description"></textarea>
+                </div>
+            </details>
+
+            <!-- More details — EXPANDED BY DEFAULT per UNDP requirement.
+                 Compact layout so it still fits without scroll. -->
+            <details class="v4-drawer v4-drawer-undp" id="v4-undp-drawer" open>
+                <summary class="v4-drawer-summary">
+                    <i class="fa-solid fa-list-check"></i>
+                    <span data-i18n="v4_undp_modules">UNDP details</span>
+                    <i class="fa-solid fa-chevron-down v4-drawer-chevron"></i>
+                </summary>
+                <div class="v4-drawer-body v4-undp-body">
+                    <!-- Debris yes/no -->
+                    <div class="v4-undp-row">
+                        <span class="v4-undp-label" data-i18n="v4_debris">Debris to clear?</span>
+                        <div class="v4-yn">
+                            <button class="v4-yn-btn" data-debris="true" type="button"
+                                    data-i18n="v4_yes">Yes</button>
+                            <button class="v4-yn-btn is-active" data-debris="false" type="button"
+                                    data-i18n="v4_no">No</button>
+                        </div>
+                    </div>
+                    <!-- Service status (compact 3-row toggle group) -->
+                    <div class="v4-undp-row">
+                        <span class="v4-undp-label" data-i18n="v4_electricity">Electricity</span>
+                        <select class="v4-select" id="v4-elec">
+                            <option value="" data-i18n="v4_unknown">Unknown</option>
+                            <option value="WORKING" data-i18n="v4_working">Working</option>
+                            <option value="INTERMITTENT" data-i18n="v4_intermittent">Intermittent</option>
+                            <option value="LOAD_SHEDDING" data-i18n="v4_load_shedding">Load shedding</option>
+                            <option value="BLACKOUT" data-i18n="v4_blackout">Blackout</option>
+                        </select>
+                    </div>
+                    <div class="v4-undp-row">
+                        <span class="v4-undp-label" data-i18n="v4_health">Health services</span>
+                        <select class="v4-select" id="v4-health">
+                            <option value="" data-i18n="v4_unknown">Unknown</option>
+                            <option value="FULLY_OPERATIONAL" data-i18n="v4_fully_op">Fully operational</option>
+                            <option value="PARTIALLY_OPERATIONAL" data-i18n="v4_partly_op">Partial</option>
+                            <option value="NOT_OPERATIONAL" data-i18n="v4_not_op">Not operational</option>
+                        </select>
+                    </div>
+                    <!-- Pressing needs as wrap-flex chips. -->
+                    <div class="v4-undp-row v4-undp-row-needs">
+                        <span class="v4-undp-label" data-i18n="v4_needs">Pressing needs</span>
+                        <div class="v4-needs" id="v4-needs">
+                            <button class="v4-need-chip" data-need="food" type="button"
+                                    data-i18n="need_food_water">Food / water</button>
+                            <button class="v4-need-chip" data-need="cash" type="button"
+                                    data-i18n="need_cash">Cash</button>
+                            <button class="v4-need-chip" data-need="health" type="button"
+                                    data-i18n="need_health">Healthcare</button>
+                            <button class="v4-need-chip" data-need="shelter" type="button"
+                                    data-i18n="need_shelter">Shelter</button>
+                            <button class="v4-need-chip" data-need="livelihoods" type="button"
+                                    data-i18n="need_livelihoods">Livelihoods</button>
+                            <button class="v4-need-chip" data-need="wash" type="button"
+                                    data-i18n="need_wash">WASH</button>
+                            <button class="v4-need-chip" data-need="basic_services" type="button"
+                                    data-i18n="need_basic_services">Basic services</button>
+                            <button class="v4-need-chip" data-need="protection" type="button"
+                                    data-i18n="need_protection">Protection</button>
+                            <button class="v4-need-chip" data-need="local_support" type="button"
+                                    data-i18n="need_local_support">Local support</button>
+                            <button class="v4-need-chip" data-need="other" type="button"
+                                    data-i18n="need_other">Other</button>
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        <footer class="v4-footer">
+            <button class="v4-primary v4-send-btn is-ready" id="btn-v4-send" type="button">
+                <i class="fa-solid fa-paper-plane"></i>
+                <span data-i18n="v4_send">Send to UNDP</span>
+            </button>
+        </footer>
+    </div>
+
     <!-- ══════════════════════════════════════
          STAGE 1 — CAPTURE IMAGE
     ══════════════════════════════════════ -->
@@ -1479,6 +1801,9 @@
      dismisses. -->
 <script src="install-prompt.js?v=1"></script>
 <script src="landing.js?v=1"></script>
-<script src="app.js?v=1000"></script>
+<script src="app.js?v=1010"></script>
+<!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
+     applyI18n etc. Internally it _whenReady-polls until those are set. -->
+<script src="v4-flow.js?v=1"></script>
 </body>
 </html>

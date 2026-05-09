@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v66';  // v66 (May 2026): UI v4 commit A — landing.js + install-prompt.js + viewport-fit .stage CSS + landing-card consent merge. Bump evicts v65 clients so the new index.html (with #landing-root mount + the two new <script src="install-prompt.js"|"landing.js">) lands on next reload.
+const CACHE_NAME = 'crisp-v67';  // v67 (May 2026): UI v4 commit B — 3-page capture flow (stage-v4-capture / classify / review) + native camera (Path B) + AI pre-fill via /reports/classify-suggest + horizontal carousel chip selectors. New asset: v4-flow.js.
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.
@@ -427,6 +427,7 @@ const STATIC_ASSETS = [
     SW_BASE + 'auth.js',             // Phase 1 (Apr 2026) optional reporter login
     SW_BASE + 'install-prompt.js',   // UI v4 (May 2026) — beforeinstallprompt + iOS sheet
     SW_BASE + 'landing.js',          // UI v4 (May 2026) — first-visit landing card + channels
+    SW_BASE + 'v4-flow.js',          // UI v4 (May 2026) — 3-page capture flow + carousels + AI pre-fill
     SW_BASE + 'components/icon-pack.js',  // UI v2 — shared Lucide SVG pack
     SW_BASE + 'styles.css',
     SW_BASE + 'manifest.json',
