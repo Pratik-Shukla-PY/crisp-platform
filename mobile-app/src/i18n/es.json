@@ -364,5 +364,8 @@
   "crisis_explosion": "Explosión",
   "crisis_chemical": "Químico",
   "crisis_conflict": "Conflicto",
-  "crisis_unrest": "Disturbios"
+  "crisis_unrest": "Disturbios",
+  "need_food_water": "Comida / agua",
+  "need_health": "Salud",
+  "need_shelter": "Refugio"
 }

@@ -365,5 +365,8 @@
   "crisis_explosion": "Explosion",
   "crisis_chemical": "Chemical",
   "crisis_conflict": "Conflict",
-  "crisis_unrest": "Civil unrest"
+  "crisis_unrest": "Civil unrest",
+  "need_food_water": "Food / water",
+  "need_health": "Healthcare",
+  "need_shelter": "Shelter"
 }

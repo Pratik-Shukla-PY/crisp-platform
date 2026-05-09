@@ -364,5 +364,8 @@
   "crisis_explosion": "Взрыв",
   "crisis_chemical": "Химич.",
   "crisis_conflict": "Конфликт",
-  "crisis_unrest": "Беспорядки"
+  "crisis_unrest": "Беспорядки",
+  "need_food_water": "Еда / вода",
+  "need_health": "Медицина",
+  "need_shelter": "Убежище"
 }

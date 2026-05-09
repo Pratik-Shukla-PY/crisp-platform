@@ -364,5 +364,8 @@
   "crisis_explosion": "爆炸",
   "crisis_chemical": "化学",
   "crisis_conflict": "冲突",
-  "crisis_unrest": "动乱"
+  "crisis_unrest": "动乱",
+  "need_food_water": "食物 / 水",
+  "need_health": "医疗",
+  "need_shelter": "避难所"
 }

@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v68';  // v68 (May 2026): UI v4 commit C — 59 new i18n keys × 6 locales (354 new translation pairs). Bump evicts v67 so the localised v4 stage labels land cleanly on next reload.
+const CACHE_NAME = 'crisp-v69';  // v69 (May 2026): UI v4 hot-fix — three serious bugs caught by post-deploy QA: (1) raw i18n keys leaking everywhere (`v4_take_photo`, `landing_title`) because window.applyI18n was undefined and async JSON load hadn't completed at first paint — fixed by exposing applyI18n on window AND inlining v4/landing keys onto I18N.{en,fr,es,ar,ru,zh}; (2) v4 stages stacked on top of each other because goToStage's deactivation list didn't include them — fixed by adding stage-v4-{capture,classify,review} to STAGES; (3) unsupported locales (e.g. Karnataka-IP user → `kn`) painted raw keys because no fallback to English fired — fixed by SUPPORTED_LANGS guard in activateLang.
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.

@@ -351,5 +351,8 @@
   "crisis_explosion": "انفجار",
   "crisis_chemical": "كيميائي",
   "crisis_conflict": "نزاع",
-  "crisis_unrest": "اضطرابات"
+  "crisis_unrest": "اضطرابات",
+  "need_food_water": "طعام / ماء",
+  "need_health": "رعاية صحية",
+  "need_shelter": "مأوى"
 }

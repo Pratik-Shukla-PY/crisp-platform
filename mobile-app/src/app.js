@@ -1366,6 +1366,214 @@ const I18N = {
     }
 };
 
+// May 2026 v4 (post-prod fix) — inline the v4/landing/carousel keys
+// onto every locale's I18N entry so applyI18n() resolves them at first
+// paint, BEFORE the async _loadLocaleJson() merge completes. Without
+// this block, landing.js / v4-flow.js mounted DOM whose data-i18n
+// attributes pointed at keys that hadn't loaded yet — every label
+// rendered as its raw key (`v4_take_photo`, `landing_title`, …).
+//
+// Translations come from mobile-app/src/i18n/{locale}.json — same
+// values; just shipped inline so there's no race between mount and
+// JSON-load. The JSON files remain the source of truth and continue
+// to load asynchronously to enrich the rest of the locale.
+Object.assign(I18N.en, {
+    v4_step_1_of_3: "Step 1 of 3", v4_step_2_of_3: "Step 2 of 3", v4_step_3_of_3: "Step 3 of 3",
+    v4_locating: "Locating…", v4_just_now: "Just now",
+    v4_take_photo: "Take photo", v4_camera_sub: "Tap to open camera",
+    v4_browse: "Browse files", v4_voice_only: "Voice only", v4_continue: "Continue",
+    v4_q_damage: "How bad is the damage?", v4_q_infra: "What was hit?", v4_q_crisis: "What caused it?",
+    v4_ai_filled: "AI suggested these — tap to change.",
+    v4_add_voice_text: "Add voice or text (optional)", v4_record: "Record voice",
+    v4_or_type: "…or type a short description", v4_undp_modules: "UNDP details",
+    v4_debris: "Debris to clear?", v4_yes: "Yes", v4_no: "No",
+    v4_electricity: "Electricity", v4_health: "Health services",
+    v4_unknown: "Unknown", v4_working: "Working", v4_intermittent: "Intermittent",
+    v4_load_shedding: "Load shedding", v4_blackout: "Blackout",
+    v4_fully_op: "Fully operational", v4_partly_op: "Partial", v4_not_op: "Not operational",
+    v4_needs: "Pressing needs", v4_send: "Send to UNDP",
+    coming_soon: "Coming soon",
+    landing_title: "Report damage. Help responders.",
+    landing_sub: "Quick, anonymous, works offline. Aligned with UNDP RAPIDA.",
+    landing_open_reporter: "Open the reporter",
+    landing_other_channels: "Or report through:", landing_get_app: "Get the app:",
+    landing_install_pwa: "Install on home screen",
+    landing_consent: "I consent to share my report data with crisis responders.",
+    landing_offline_hint: "Works offline · Open-source · UNDP-aligned",
+    infra_residential: "Residential", infra_commercial: "Commercial",
+    infra_government: "Government", infra_utility: "Utility",
+    infra_transport: "Transport", infra_community: "Community",
+    infra_public: "Public space", infra_other: "Other",
+    crisis_earthquake: "Earthquake", crisis_flood: "Flood", crisis_tsunami: "Tsunami",
+    crisis_hurricane: "Hurricane", crisis_wildfire: "Wildfire",
+    crisis_explosion: "Explosion", crisis_chemical: "Chemical",
+    crisis_conflict: "Conflict", crisis_unrest: "Civil unrest",
+    damage_minimal: "Minimal", damage_partial: "Partial", damage_complete: "Complete",
+    // 3 pressing-needs keys the v4 review page references but the
+    // existing en.json didn't have (only had `need_water` + `need_cash`).
+    need_food_water: "Food / water", need_health: "Healthcare", need_shelter: "Shelter",
+});
+Object.assign(I18N.fr || (I18N.fr = {}), {
+    v4_step_1_of_3: "Étape 1 sur 3", v4_step_2_of_3: "Étape 2 sur 3", v4_step_3_of_3: "Étape 3 sur 3",
+    v4_locating: "Localisation…", v4_just_now: "À l'instant",
+    v4_take_photo: "Prendre une photo", v4_camera_sub: "Toucher pour ouvrir",
+    v4_browse: "Parcourir", v4_voice_only: "Voix seulement", v4_continue: "Continuer",
+    v4_q_damage: "Quelle est la gravité ?", v4_q_infra: "Quoi a été touché ?", v4_q_crisis: "Quelle cause ?",
+    v4_ai_filled: "Suggestion IA — toucher pour changer.",
+    v4_add_voice_text: "Ajouter voix ou texte (optionnel)", v4_record: "Enregistrer",
+    v4_or_type: "…ou tapez une description", v4_undp_modules: "Détails PNUD",
+    v4_debris: "Débris à enlever ?", v4_yes: "Oui", v4_no: "Non",
+    v4_electricity: "Électricité", v4_health: "Services de santé",
+    v4_unknown: "Inconnu", v4_working: "Fonctionnel", v4_intermittent: "Intermittent",
+    v4_load_shedding: "Délestage", v4_blackout: "Coupure",
+    v4_fully_op: "Pleinement opérationnel", v4_partly_op: "Partiel", v4_not_op: "Inopérant",
+    v4_needs: "Besoins urgents", v4_send: "Envoyer au PNUD",
+    coming_soon: "Bientôt",
+    landing_title: "Signaler. Aider les secours.",
+    landing_sub: "Rapide, anonyme, hors ligne. Aligné avec PNUD RAPIDA.",
+    landing_open_reporter: "Ouvrir le rapporteur",
+    landing_other_channels: "Ou signaler via :", landing_get_app: "Obtenir l'app :",
+    landing_install_pwa: "Installer sur l'écran",
+    landing_consent: "J'accepte de partager mes données avec les secouristes.",
+    landing_offline_hint: "Hors ligne · Open-source · Aligné PNUD",
+    infra_residential: "Résidentiel", infra_commercial: "Commercial",
+    infra_government: "Gouvernement", infra_utility: "Service public",
+    infra_transport: "Transport", infra_community: "Communauté",
+    infra_public: "Espace public", infra_other: "Autre",
+    crisis_earthquake: "Séisme", crisis_flood: "Inondation", crisis_tsunami: "Tsunami",
+    crisis_hurricane: "Ouragan", crisis_wildfire: "Feu de forêt",
+    crisis_explosion: "Explosion", crisis_chemical: "Chimique",
+    crisis_conflict: "Conflit", crisis_unrest: "Troubles civils",
+});
+Object.assign(I18N.es || (I18N.es = {}), {
+    v4_step_1_of_3: "Paso 1 de 3", v4_step_2_of_3: "Paso 2 de 3", v4_step_3_of_3: "Paso 3 de 3",
+    v4_locating: "Ubicando…", v4_just_now: "Ahora",
+    v4_take_photo: "Tomar foto", v4_camera_sub: "Toca para abrir",
+    v4_browse: "Explorar", v4_voice_only: "Solo voz", v4_continue: "Continuar",
+    v4_q_damage: "¿Qué tan grave?", v4_q_infra: "¿Qué se afectó?", v4_q_crisis: "¿Qué lo causó?",
+    v4_ai_filled: "Sugerido por IA — toca para cambiar.",
+    v4_add_voice_text: "Voz o texto (opcional)", v4_record: "Grabar",
+    v4_or_type: "…o escribe una descripción", v4_undp_modules: "Detalles PNUD",
+    v4_debris: "¿Hay escombros?", v4_yes: "Sí", v4_no: "No",
+    v4_electricity: "Electricidad", v4_health: "Salud",
+    v4_unknown: "Desconocido", v4_working: "Funciona", v4_intermittent: "Intermitente",
+    v4_load_shedding: "Cortes", v4_blackout: "Apagón",
+    v4_fully_op: "Operativo", v4_partly_op: "Parcial", v4_not_op: "No opera",
+    v4_needs: "Necesidades", v4_send: "Enviar a PNUD",
+    coming_soon: "Próximamente",
+    landing_title: "Reporta daños. Ayuda.",
+    landing_sub: "Rápido, anónimo, sin conexión. Alineado con PNUD RAPIDA.",
+    landing_open_reporter: "Abrir reportero",
+    landing_other_channels: "O reportar por:", landing_get_app: "Obtener app:",
+    landing_install_pwa: "Instalar en inicio",
+    landing_consent: "Consiento compartir mis datos con los respondedores.",
+    landing_offline_hint: "Sin conexión · Código abierto · Alineado PNUD",
+    infra_residential: "Residencial", infra_commercial: "Comercial",
+    infra_government: "Gobierno", infra_utility: "Servicios",
+    infra_transport: "Transporte", infra_community: "Comunidad",
+    infra_public: "Espacio público", infra_other: "Otro",
+    crisis_earthquake: "Terremoto", crisis_flood: "Inundación", crisis_tsunami: "Tsunami",
+    crisis_hurricane: "Huracán", crisis_wildfire: "Incendio",
+    crisis_explosion: "Explosión", crisis_chemical: "Químico",
+    crisis_conflict: "Conflicto", crisis_unrest: "Disturbios",
+});
+Object.assign(I18N.ar || (I18N.ar = {}), {
+    v4_step_1_of_3: "الخطوة 1 من 3", v4_step_2_of_3: "الخطوة 2 من 3", v4_step_3_of_3: "الخطوة 3 من 3",
+    v4_locating: "تحديد الموقع…", v4_just_now: "الآن",
+    v4_take_photo: "التقط صورة", v4_camera_sub: "اضغط لفتح الكاميرا",
+    v4_browse: "تصفح", v4_voice_only: "صوت فقط", v4_continue: "متابعة",
+    v4_q_damage: "ما مدى الضرر؟", v4_q_infra: "ما الذي أُصيب؟", v4_q_crisis: "ما السبب؟",
+    v4_ai_filled: "اقترح الذكاء الاصطناعي — اضغط للتغيير.",
+    v4_add_voice_text: "أضف صوتاً أو نصاً (اختياري)", v4_record: "تسجيل",
+    v4_or_type: "…أو اكتب وصفاً", v4_undp_modules: "تفاصيل UNDP",
+    v4_debris: "حطام لإزالته؟", v4_yes: "نعم", v4_no: "لا",
+    v4_electricity: "كهرباء", v4_health: "خدمات صحية",
+    v4_unknown: "غير معروف", v4_working: "يعمل", v4_intermittent: "متقطع",
+    v4_load_shedding: "تخفيف الأحمال", v4_blackout: "انقطاع تام",
+    v4_fully_op: "يعمل بالكامل", v4_partly_op: "جزئي", v4_not_op: "متوقف",
+    v4_needs: "الاحتياجات الملحة", v4_send: "إرسال إلى UNDP",
+    coming_soon: "قريباً",
+    landing_title: "أبلغ عن الأضرار. ساعد الفرق.",
+    landing_sub: "سريع، مجهول، يعمل دون اتصال. متوافق مع UNDP RAPIDA.",
+    landing_open_reporter: "افتح المُبلِّغ",
+    landing_other_channels: "أو أبلغ عبر:", landing_get_app: "احصل على التطبيق:",
+    landing_install_pwa: "ثبّت على الشاشة الرئيسية",
+    landing_consent: "أوافق على مشاركة بياناتي مع فرق الاستجابة.",
+    landing_offline_hint: "يعمل دون اتصال · مفتوح المصدر · متوافق UNDP",
+    infra_residential: "سكني", infra_commercial: "تجاري",
+    infra_government: "حكومي", infra_utility: "مرافق",
+    infra_transport: "نقل", infra_community: "مجتمعي",
+    infra_public: "مكان عام", infra_other: "أخرى",
+    crisis_earthquake: "زلزال", crisis_flood: "فيضان", crisis_tsunami: "تسونامي",
+    crisis_hurricane: "إعصار", crisis_wildfire: "حريق",
+    crisis_explosion: "انفجار", crisis_chemical: "كيميائي",
+    crisis_conflict: "نزاع", crisis_unrest: "اضطرابات",
+});
+Object.assign(I18N.ru || (I18N.ru = {}), {
+    v4_step_1_of_3: "Шаг 1 из 3", v4_step_2_of_3: "Шаг 2 из 3", v4_step_3_of_3: "Шаг 3 из 3",
+    v4_locating: "Определение…", v4_just_now: "Только что",
+    v4_take_photo: "Сделать фото", v4_camera_sub: "Открыть камеру",
+    v4_browse: "Обзор", v4_voice_only: "Только голос", v4_continue: "Далее",
+    v4_q_damage: "Насколько серьёзно?", v4_q_infra: "Что повреждено?", v4_q_crisis: "Что вызвало?",
+    v4_ai_filled: "Предложено ИИ — нажмите, чтобы изменить.",
+    v4_add_voice_text: "Голос или текст (необязательно)", v4_record: "Запись",
+    v4_or_type: "…или введите описание", v4_undp_modules: "Сведения ПРООН",
+    v4_debris: "Мусор к уборке?", v4_yes: "Да", v4_no: "Нет",
+    v4_electricity: "Электричество", v4_health: "Здравоохранение",
+    v4_unknown: "Неизвестно", v4_working: "Работает", v4_intermittent: "Прерывистый",
+    v4_load_shedding: "Отключения", v4_blackout: "Полное отключение",
+    v4_fully_op: "Работает полностью", v4_partly_op: "Частично", v4_not_op: "Не работает",
+    v4_needs: "Срочные нужды", v4_send: "Отправить в ПРООН",
+    coming_soon: "Скоро",
+    landing_title: "Сообщайте об ущербе. Помогайте.",
+    landing_sub: "Быстро, анонимно, оффлайн. Соответствует ПРООН RAPIDA.",
+    landing_open_reporter: "Открыть репортёр",
+    landing_other_channels: "Или сообщите через:", landing_get_app: "Получить приложение:",
+    landing_install_pwa: "На главный экран",
+    landing_consent: "Согласен делиться данными с командами спасения.",
+    landing_offline_hint: "Оффлайн · Open-source · ПРООН",
+    infra_residential: "Жилой", infra_commercial: "Коммерч.",
+    infra_government: "Гос.", infra_utility: "ЖКХ",
+    infra_transport: "Транспорт", infra_community: "Социум",
+    infra_public: "Обществ.", infra_other: "Другое",
+    crisis_earthquake: "Землетрясение", crisis_flood: "Наводнение", crisis_tsunami: "Цунами",
+    crisis_hurricane: "Ураган", crisis_wildfire: "Пожар",
+    crisis_explosion: "Взрыв", crisis_chemical: "Химич.",
+    crisis_conflict: "Конфликт", crisis_unrest: "Беспорядки",
+});
+Object.assign(I18N.zh || (I18N.zh = {}), {
+    v4_step_1_of_3: "第 1 步 / 3", v4_step_2_of_3: "第 2 步 / 3", v4_step_3_of_3: "第 3 步 / 3",
+    v4_locating: "定位中…", v4_just_now: "刚刚",
+    v4_take_photo: "拍照", v4_camera_sub: "点击打开相机",
+    v4_browse: "浏览文件", v4_voice_only: "仅语音", v4_continue: "继续",
+    v4_q_damage: "损坏严重吗?", v4_q_infra: "什么受到了影响?", v4_q_crisis: "原因是什么?",
+    v4_ai_filled: "AI 已建议 — 点击修改。",
+    v4_add_voice_text: "添加语音或文字 (可选)", v4_record: "录音",
+    v4_or_type: "…或输入简短说明", v4_undp_modules: "开发署详情",
+    v4_debris: "需清理废墟吗?", v4_yes: "是", v4_no: "否",
+    v4_electricity: "电力", v4_health: "医疗服务",
+    v4_unknown: "未知", v4_working: "正常", v4_intermittent: "断续",
+    v4_load_shedding: "分时停电", v4_blackout: "停电",
+    v4_fully_op: "完全运行", v4_partly_op: "部分运行", v4_not_op: "停止运行",
+    v4_needs: "紧迫需求", v4_send: "发送到开发署",
+    coming_soon: "即将推出",
+    landing_title: "报告损害。协助救援。",
+    landing_sub: "快速、匿名、离线可用。符合开发署 RAPIDA。",
+    landing_open_reporter: "打开报告器",
+    landing_other_channels: "或通过以下方式报告:", landing_get_app: "获取应用:",
+    landing_install_pwa: "添加到主屏幕",
+    landing_consent: "我同意与救援人员共享我的报告数据。",
+    landing_offline_hint: "离线 · 开源 · 符合开发署",
+    infra_residential: "住宅", infra_commercial: "商业",
+    infra_government: "政府", infra_utility: "公用",
+    infra_transport: "交通", infra_community: "社区",
+    infra_public: "公共", infra_other: "其他",
+    crisis_earthquake: "地震", crisis_flood: "洪水", crisis_tsunami: "海啸",
+    crisis_hurricane: "飓风", crisis_wildfire: "野火",
+    crisis_explosion: "爆炸", crisis_chemical: "化学",
+    crisis_conflict: "冲突", crisis_unrest: "动乱",
+});
+
 const state = {
     lang: 'en',
     photoDataUrl: null,
@@ -2182,7 +2390,13 @@ let _lastRenderedReport = null;
 // Phase 1 (Apr 2026 — Optional reporter login) — `stage-login` +
 // `stage-settings` added. Both are off the capture flow; they don't
 // participate in the progress-bar counter (hidden when active).
-const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-review', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail', 'stage-login', 'stage-settings'];
+// May 2026 v4 — three new stages (capture / classify / review) for the
+// 3-page UI v4 flow. Adding them here so goToStage()'s deactivation
+// sweep (`allStages.forEach → remove .active`) correctly hides the
+// previous v4 stage when the user navigates between them. Without
+// this, transitions between v4 stages left the prior one .active
+// and the absolute-positioned stages stacked on top of each other.
+const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-review', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail', 'stage-login', 'stage-settings', 'stage-v4-capture', 'stage-v4-classify', 'stage-v4-review'];
 
 // ── Phase B4 (Apr 2026 UI v3) — 8-stage capture flow ───────────────────────
 // When `UI_V3_ENABLED` is on, the capture flow is re-ordered:
@@ -2370,6 +2584,13 @@ window.__crispGoToStage = (id) => goToStage(id);
 // land in — guarantees the v4 review page produces an identical
 // /reports/meta payload to the legacy flow.
 window.__crispSubmitReport = () => submitReport();
+// May 2026 v4 (post-prod fix) — applyI18n MUST be on window for
+// landing.js + v4-flow.js to translate dynamically-mounted DOM after
+// the initial boot pass. Without this, every [data-i18n] in the
+// v4 stages + landing card showed its raw key (e.g. `v4_take_photo`,
+// `landing_title`) because the cross-module call `window.applyI18n()`
+// was undefined and silently no-op'd.
+window.applyI18n = applyI18n;
 // Testability hooks for the reconcile E2E spec — let tests seed the IDB
 // queue with a stuck in-flight entry and then verify reconcile dequeues it.
 window.__crispEnqueueReport = (payload) => enqueueReport(payload);
@@ -3110,7 +3331,23 @@ function detectAndSetupLanguage() {
         html.lang = code || 'en';
     }
 
+    // May 2026 v4 (post-prod fix) — guard against locales we don't ship
+    // a translation for. Without this, a Karnataka-IP user got `kn`
+    // detected → `kn.json` 404 → I18N['kn'] never populated → every
+    // applyI18n() call resolved every key to its raw string. Better
+    // to silently fall back to English than display `landing_title`
+    // and `v4_take_photo` to the user.
+    const SUPPORTED_LANGS = new Set(['en', 'fr', 'es', 'ar', 'ru', 'zh', 'hi', 'kn', 'ta', 'te', 'bn', 'gu', 'mr', 'pa', 'ur']);
     function activateLang(code) {
+        // If we don't have an inline pack AND we know the JSON file
+        // doesn't exist, fall back to en immediately so we never paint
+        // raw keys. The 6 UN locales + 9 South-Asian inline packs
+        // cover what we ship — anything else routes to English.
+        const supported = SUPPORTED_LANGS.has(String(code || '').toLowerCase());
+        if (!supported && code !== 'en') {
+            console.warn(`[i18n] locale "${code}" not supported, falling back to en`);
+            code = 'en';
+        }
         state.lang = code;
         // Compose the active locale dict: start with EN baseline, layer the
         // dense EXTRA_LANG pack, then layer the April-2026 UNDP addenda on
