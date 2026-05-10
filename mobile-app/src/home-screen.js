@@ -87,25 +87,32 @@
         } catch {}
     }
 
-    // ── Channel button HTML builder ─────────────────────────────────────
-    // May 2026 (UI v3 redesign Q1) — "Coming soon" placeholders removed.
-    // Channels and native-app links render only when an actual URL is
-    // configured. If a row ends up empty, the entire section (header +
-    // wrapper) is hidden so the home page collapses cleanly. Saves
-    // ~30% of vertical real estate above the fold under stress.
-    function _buildChannelBtn(icon, label, href, key) {
-        if (!href) return '';   // skip — was "Coming soon" before
+    // ── Channel tile HTML builder ───────────────────────────────────────
+    // Phase 15 (May 2026) — replaces the small `.home-channel` row buttons
+    // with `.home-channel-tile` elements. Each tile carries a per-channel
+    // brand colour via the `--c` CSS custom property (set inline). Empty
+    // href still skips the tile (Q1 hide-when-not-configured contract
+    // preserved). Adds a small green "live" pip in the top-right corner
+    // so users see at a glance that the channel is actually configured.
+    function _buildChannelTile(icon, label, href, key, colorVar) {
+        if (!href) return '';   // Q1 contract — skip when not configured
         const targetAttr = (
             href.startsWith('tel:') || href.startsWith('sms:') || href.startsWith('exp:')
                 ? ''
                 : 'target="_blank" rel="noopener"'
         );
+        const safeColor = colorVar || '--accent';
+        const safeHref = String(href)
+            .replace(/"/g, '&quot;');
         return `
-            <a class="home-channel"
-               href="${href}" ${targetAttr}
-               data-channel="${key}">
-                <span class="lc-icon">${icon}</span>
-                <span class="lc-label">${label}</span>
+            <a class="home-channel-tile"
+               style="--c: var(${safeColor});"
+               href="${safeHref}" ${targetAttr}
+               data-channel="${key}"
+               aria-label="${String(label).replace(/"/g, '&quot;')}">
+                <span class="ct-icon" aria-hidden="true">${icon}</span>
+                <span class="ct-label">${label}</span>
+                <span class="ct-dot" aria-hidden="true" title="Available"></span>
             </a>
         `;
     }
@@ -114,33 +121,42 @@
         const channelsEl = document.getElementById('home-channels');
         if (channelsEl) {
             const html = [
-                _buildChannelBtn('<i class="fa-solid fa-phone"></i>',
-                                 'IVR call',
-                                 _telLink(CHANNELS.ivr_phone), 'ivr'),
-                _buildChannelBtn('<i class="fa-solid fa-comment-sms"></i>',
-                                 'SMS',
-                                 _smsLink(CHANNELS.sms_phone, 'CRISP help'), 'sms'),
-                _buildChannelBtn('<i class="fa-brands fa-telegram"></i>',
-                                 'Telegram',
-                                 _telegramLink(CHANNELS.telegram_bot), 'telegram'),
-                _buildChannelBtn('<i class="fa-brands fa-whatsapp"></i>',
-                                 'WhatsApp',
-                                 _whatsappLink(CHANNELS.whatsapp_phone, 'CRISP report'), 'whatsapp'),
+                // Phase 15 — IVR uses fa-phone-volume (more iconic for a
+                // call-in line than the plain handset).
+                _buildChannelTile('<i class="fa-solid fa-phone-volume"></i>',
+                                  'IVR',
+                                  _telLink(CHANNELS.ivr_phone), 'ivr',
+                                  '--brand-ivr'),
+                _buildChannelTile('<i class="fa-solid fa-message"></i>',
+                                  'SMS',
+                                  _smsLink(CHANNELS.sms_phone, 'CRISP help'), 'sms',
+                                  '--brand-sms'),
+                _buildChannelTile('<i class="fa-brands fa-telegram"></i>',
+                                  'Telegram',
+                                  _telegramLink(CHANNELS.telegram_bot), 'telegram',
+                                  '--brand-telegram'),
+                _buildChannelTile('<i class="fa-brands fa-whatsapp"></i>',
+                                  'WhatsApp',
+                                  _whatsappLink(CHANNELS.whatsapp_phone, 'CRISP report'), 'whatsapp',
+                                  '--brand-whatsapp'),
             ].filter(Boolean).join('');
             channelsEl.innerHTML = html;
-            // Hide the whole "Or report through:" section if no real channels.
+            // Hide the whole "Other ways to report" section if no real channels.
             const channelsSection = channelsEl.closest('.home-section');
             if (channelsSection) channelsSection.style.display = html.trim() ? '' : 'none';
         }
         const appsEl = document.getElementById('home-apps');
         if (appsEl) {
             const html = [
-                _buildChannelBtn('<i class="fa-brands fa-apple"></i>',
-                                 'iOS', CHANNELS.ios_app_url, 'ios'),
-                _buildChannelBtn('<i class="fa-brands fa-android"></i>',
-                                 'Android', CHANNELS.android_app_url, 'android'),
-                _buildChannelBtn('<i class="fa-solid fa-flask"></i>',
-                                 'Expo Go', CHANNELS.expo_go_url, 'expo'),
+                _buildChannelTile('<i class="fa-brands fa-apple"></i>',
+                                  'iOS', CHANNELS.ios_app_url, 'ios',
+                                  '--brand-sms'),       // neutral — placeholder for App Store grey
+                _buildChannelTile('<i class="fa-brands fa-android"></i>',
+                                  'Android', CHANNELS.android_app_url, 'android',
+                                  '--good'),            // material-green
+                _buildChannelTile('<i class="fa-solid fa-flask"></i>',
+                                  'Expo Go', CHANNELS.expo_go_url, 'expo',
+                                  '--brand-expo'),      // CRISP orange — Expo re-skinned to brand
             ].filter(Boolean).join('');
             appsEl.innerHTML = html;
             // Hide the whole "Get the app:" section if no real native apps.
@@ -238,18 +254,383 @@
             });
     }
 
+    // ── Phase 15 — Identity bar + account dropdown + device-ID badge ────
+    //
+    // The home identity bar has two slots: anonymous users see a
+    // device-ID badge (CRISP-XXXX-XXXX with copy + info buttons);
+    // logged-in users see an account pill + dropdown menu. We swap
+    // visibility on every `auth-changed` / `auth-ready` event.
+    //
+    // Backwards-compat: legacy users with `crisp_welcome_acknowledged`
+    // are treated as having seen the device-ID tooltip (so they don't
+    // get re-prompted). The tooltip auto-shows ONCE for net-new users,
+    // then sets `crisp_homedevid_tip_seen` in localStorage.
+    const TIP_SEEN_KEY = 'crisp_homedevid_tip_seen';
+    const LEGACY_WELCOME_KEY = 'crisp_welcome_acknowledged';
+
+    function _hasSeenDevidTip() {
+        try {
+            return !!(localStorage.getItem(TIP_SEEN_KEY) || localStorage.getItem(LEGACY_WELCOME_KEY));
+        } catch { return true; }      // pessimistic — don't auto-popup if storage broken
+    }
+    function _markDevidTipSeen() {
+        try { localStorage.setItem(TIP_SEEN_KEY, '1'); } catch {}
+    }
+
+    function _paintDevidBadge() {
+        const text = document.getElementById('home-devid-text');
+        if (!text) return;
+        // Try app.js helper first (formatted CRISP-XXXX-XXXX); fall back
+        // to a placeholder while the device-ID generator runs.
+        let formatted = '';
+        try {
+            if (typeof window._formatDeviceIdForDisplay === 'function') {
+                const raw = (function () {
+                    try { return localStorage.getItem('crisp_device_id_v2') || ''; }
+                    catch { return ''; }
+                })();
+                if (raw) formatted = window._formatDeviceIdForDisplay(raw);
+            }
+        } catch (_) {}
+        text.textContent = formatted || 'CRISP-····-····';
+    }
+
+    function _wireDevidBadge() {
+        const badge = document.getElementById('home-devid-badge');
+        const copyBtn = document.getElementById('btn-home-devid-copy');
+        const infoBtn = document.getElementById('btn-home-devid-info');
+        const tip = document.getElementById('home-devid-tip');
+        const tipDismiss = document.getElementById('btn-home-devid-tip-dismiss');
+        if (!badge) return;
+
+        _paintDevidBadge();
+
+        // Copy → clipboard with brief visual confirmation.
+        if (copyBtn) {
+            copyBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const txt = (document.getElementById('home-devid-text') || {}).textContent || '';
+                try {
+                    await (navigator.clipboard && navigator.clipboard.writeText
+                        ? navigator.clipboard.writeText(txt)
+                        : Promise.reject(new Error('no clipboard')));
+                    badge.classList.add('is-copied');
+                    setTimeout(() => badge.classList.remove('is-copied'), 1400);
+                } catch (_) {
+                    // Fallback: prompt the user to copy manually.
+                    try { window.prompt('Copy your reporter ID', txt); } catch {}
+                }
+            });
+        }
+
+        // Info → toggle the tooltip (also dismissed on outside-click).
+        function _showTip() {
+            if (!tip) return;
+            tip.removeAttribute('hidden');
+            if (infoBtn) infoBtn.setAttribute('aria-expanded', 'true');
+        }
+        function _hideTip() {
+            if (!tip) return;
+            tip.setAttribute('hidden', '');
+            if (infoBtn) infoBtn.setAttribute('aria-expanded', 'false');
+            _markDevidTipSeen();
+        }
+        if (infoBtn) {
+            infoBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (tip && tip.hasAttribute('hidden')) _showTip(); else _hideTip();
+            });
+        }
+        if (tipDismiss) tipDismiss.addEventListener('click', _hideTip);
+        document.addEventListener('click', (e) => {
+            if (!tip || tip.hasAttribute('hidden')) return;
+            if (tip.contains(e.target) || (infoBtn && infoBtn.contains(e.target))) return;
+            _hideTip();
+        });
+
+        // Auto-show tooltip ONCE for net-new users. Defer 1500ms so it
+        // doesn't compete with first-paint perception.
+        if (!_hasSeenDevidTip()) {
+            setTimeout(() => {
+                // Don't auto-show if user is already logged in (different
+                // identity slot) or if the tip was meanwhile dismissed.
+                if (!_isLoggedIn() && tip && tip.hasAttribute('hidden')) {
+                    _showTip();
+                    // Auto-dismiss after 8s — flag as seen.
+                    setTimeout(() => {
+                        if (!tip.hasAttribute('hidden')) _hideTip();
+                    }, 8000);
+                }
+            }, 1500);
+        }
+
+        // Repaint the badge whenever the device-ID resolves later (race
+        // between paint and async _generateDeviceIdIfMissing).
+        document.addEventListener('crisp-deviceid-ready', _paintDevidBadge);
+    }
+
+    function _isLoggedIn() {
+        try { return !!(window.AuthStore && window.AuthStore.isLoggedIn && window.AuthStore.isLoggedIn()); }
+        catch { return false; }
+    }
+
+    function _wireAccountMenu() {
+        const wrap = document.getElementById('home-account-wrap');
+        const pill = document.getElementById('account-pill');
+        const dropTrigger = document.getElementById('btn-account-settings');
+        const menu = document.getElementById('home-account-menu');
+        const myReportsBtn = document.getElementById('btn-home-menu-myreports');
+        const settingsBtn = document.getElementById('btn-home-menu-settings');
+        const logoutBtn = document.getElementById('btn-home-menu-logout');
+        if (!wrap || !menu) return;
+
+        function _toggle(force) {
+            const willOpen = (force === undefined)
+                ? menu.hasAttribute('hidden')
+                : !!force;
+            if (willOpen) {
+                menu.removeAttribute('hidden');
+                if (pill) pill.setAttribute('aria-expanded', 'true');
+            } else {
+                menu.setAttribute('hidden', '');
+                if (pill) pill.setAttribute('aria-expanded', 'false');
+            }
+        }
+
+        // Both the gear icon and the entire pill row open the menu.
+        if (dropTrigger) dropTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _toggle();
+        });
+        if (pill) pill.addEventListener('click', (e) => {
+            // Only the pill body — the gear has its own handler above.
+            if (e.target.closest('#btn-account-settings')) return;
+            _toggle();
+        });
+        // Outside-click dismisses.
+        document.addEventListener('click', (e) => {
+            if (menu.hasAttribute('hidden')) return;
+            if (wrap.contains(e.target)) return;
+            _toggle(false);
+        });
+        // Esc closes.
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !menu.hasAttribute('hidden')) _toggle(false);
+        });
+
+        if (myReportsBtn) myReportsBtn.addEventListener('click', () => {
+            _toggle(false);
+            if (typeof window.openMyReports === 'function') window.openMyReports();
+            else if (typeof window.goToStage === 'function') window.goToStage('stage-history');
+        });
+        if (settingsBtn) settingsBtn.addEventListener('click', () => {
+            _toggle(false);
+            if (typeof window.goToStage === 'function') window.goToStage('stage-settings');
+        });
+        if (logoutBtn) logoutBtn.addEventListener('click', async () => {
+            _toggle(false);
+            try {
+                if (window.AuthStore && window.AuthStore.logout) await window.AuthStore.logout();
+            } catch (_) {
+                // logout() already calls logoutLocal() on server failure.
+            }
+            // paintIdentityBar() will run on auth-changed event.
+        });
+    }
+
+    function _paintIdentityBar() {
+        const devidWrap = document.getElementById('home-devid-wrap');
+        const acctWrap = document.getElementById('home-account-wrap');
+        const acctName = document.getElementById('account-name');
+        const titleEl = document.getElementById('home-title');
+        const subEl = document.getElementById('home-title-sub');
+        const myReportsBtn = document.getElementById('btn-my-reports');
+        const loginBtn = document.getElementById('btn-login');
+        const recentBlock = document.getElementById('home-recent');
+        if (!devidWrap || !acctWrap) return;
+
+        const loggedIn = _isLoggedIn();
+        if (loggedIn) {
+            devidWrap.setAttribute('hidden', '');
+            acctWrap.removeAttribute('hidden');
+            // Account name from AuthStore.
+            try {
+                const u = window.AuthStore.getUser && window.AuthStore.getUser();
+                if (u && acctName) {
+                    acctName.textContent = u.displayName || u.id || '—';
+                }
+            } catch (_) {}
+            // Hero — personalised greeting.
+            if (titleEl) {
+                const tt = (typeof window.t === 'function') ? window.t : (k) => k;
+                const u = (window.AuthStore && window.AuthStore.getUser && window.AuthStore.getUser()) || {};
+                const name = (u.displayName || '').split(/\s+/)[0] || '';
+                const tmpl = tt('home_greeting_loggedin') || 'Welcome back, {name}.';
+                titleEl.textContent = name ? tmpl.replace('{name}', name) : (tt('home_title') || 'Report an Incident');
+            }
+            if (subEl) subEl.removeAttribute('hidden');
+            // Hide bottom secondary row buttons (My Reports + Login lives in dropdown).
+            if (myReportsBtn) myReportsBtn.style.display = 'none';
+            if (loginBtn) loginBtn.style.display = 'none';
+            // Show recent-reports block (will populate async).
+            if (recentBlock) recentBlock.removeAttribute('hidden');
+            _renderRecentReports();
+        } else {
+            acctWrap.setAttribute('hidden', '');
+            devidWrap.removeAttribute('hidden');
+            // Hero — generic title.
+            if (titleEl) {
+                const tt = (typeof window.t === 'function') ? window.t : (k) => k;
+                titleEl.textContent = tt('home_title') || 'Report an Incident';
+            }
+            if (subEl) subEl.setAttribute('hidden', '');
+            // Restore bottom secondary row.
+            if (myReportsBtn) myReportsBtn.style.display = '';
+            if (loginBtn) loginBtn.style.display = '';
+            // Hide recent-reports block.
+            if (recentBlock) recentBlock.setAttribute('hidden', '');
+        }
+    }
+
+    // ── Recent-reports (logged-in only) ────────────────────────────────
+    // Up to 3 most-recent cards. Tries AuthStore.meReports() first
+    // (server-side aggregated, includes anonymous reports linked to
+    // the account), falls back to /reports/device/{hash}/status-since
+    // when meReports() 401s, is offline, or returns < 3. Cached in
+    // sessionStorage for instant paint on return.
+    const RECENT_CACHE_KEY = 'crisp_home_recent_v1';
+    function _readRecentCache() {
+        try {
+            const raw = sessionStorage.getItem(RECENT_CACHE_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch { return null; }
+    }
+    function _writeRecentCache(arr) {
+        try { sessionStorage.setItem(RECENT_CACHE_KEY, JSON.stringify(arr)); } catch {}
+    }
+    async function _fetchRecentReports() {
+        // Logged-in path — meReports.
+        if (_isLoggedIn() && window.AuthStore && window.AuthStore.meReports) {
+            try {
+                const r = await window.AuthStore.meReports();
+                if (Array.isArray(r) && r.length) return r;
+            } catch (_) { /* fall through */ }
+        }
+        // Device-hash fallback.
+        try {
+            const hash = (function () {
+                try {
+                    return localStorage.getItem('crisp_device_id_v2')
+                        || localStorage.getItem('crisp_device_hash')
+                        || localStorage.getItem('crisp_device_id') || '';
+                } catch { return ''; }
+            })();
+            if (!hash) return [];
+            const apiBase = window.API_BASE || '/api/v1';
+            const res = await fetch(`${apiBase}/reports/device/${encodeURIComponent(hash)}/status-since?since=1970-01-01T00:00:00Z`);
+            if (!res.ok) return [];
+            const arr = await res.json();
+            return Array.isArray(arr) ? arr : [];
+        } catch (_) { return []; }
+    }
+    function _renderRecentList(reports) {
+        const listEl = document.getElementById('home-recent-list');
+        if (!listEl) return;
+        if (!reports || !reports.length) {
+            const tt = (typeof window.t === 'function') ? window.t : (k) => k;
+            listEl.innerHTML = `<div class="home-recent-empty">${tt('home_recent_reports_empty') || 'No reports yet.'}</div>`;
+            return;
+        }
+        const top3 = reports
+            .slice()
+            .sort((a, b) => {
+                const ta = new Date(a.server_created_at || a.updated_at || 0).getTime();
+                const tb = new Date(b.server_created_at || b.updated_at || 0).getTime();
+                return tb - ta;
+            })
+            .slice(0, 3);
+        listEl.innerHTML = top3.map((r) => {
+            const id = r.id || r.client_report_id || '';
+            const loc = (r.location && (r.location.user_location_name || r.location.device_location_name)) || '';
+            const when = (function () {
+                if (typeof window._timeAgo === 'function') {
+                    try { return window._timeAgo(r.server_created_at || r.updated_at) || ''; }
+                    catch { return ''; }
+                }
+                return '';
+            })();
+            const status = String(r.status || 'PENDING').toLowerCase();
+            const thumbUrl = r.thumbnail_url || '';
+            const thumb = thumbUrl
+                ? `<img src="${thumbUrl}" alt="" loading="lazy">`
+                : `<i class="fa-solid fa-camera" aria-hidden="true"></i>`;
+            const escape = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+            }[c]));
+            return `<button class="home-recent-card" type="button" data-report-id="${escape(id)}">
+                <div class="home-recent-thumb">${thumb}</div>
+                <div class="home-recent-body">
+                    <div class="home-recent-title-row">
+                        <span class="home-recent-loc">${escape(loc) || '—'}</span>
+                        <span class="home-recent-when">${escape(when)}</span>
+                    </div>
+                    <span class="home-recent-status">${escape(status)}</span>
+                </div>
+            </button>`;
+        }).join('');
+        // Wire click → open detail
+        listEl.querySelectorAll('.home-recent-card').forEach((el) => {
+            el.addEventListener('click', () => {
+                const id = el.getAttribute('data-report-id');
+                if (id && typeof window.openReportDetail === 'function') {
+                    window.openReportDetail(id);
+                }
+            });
+        });
+    }
+    async function _renderRecentReports() {
+        // Optimistic paint from cache.
+        const cached = _readRecentCache();
+        if (cached) _renderRecentList(cached);
+        // Refresh.
+        const fresh = await _fetchRecentReports();
+        if (fresh && fresh.length) {
+            _writeRecentCache(fresh.slice(0, 3));
+            _renderRecentList(fresh);
+        } else if (!cached) {
+            _renderRecentList([]);
+        }
+    }
+
     // ── Init ────────────────────────────────────────────────────────────
     function init() {
         _renderChannels();
         _wireConsent();
         _wireInstallPrompt();
         _wireChannelTelemetry();
+        _wireDevidBadge();
+        _wireAccountMenu();
+        _paintIdentityBar();
+        // View-all button in recent-reports → openMyReports
+        const viewAll = document.getElementById('btn-home-recent-viewall');
+        if (viewAll) viewAll.addEventListener('click', () => {
+            if (typeof window.openMyReports === 'function') window.openMyReports();
+            else if (typeof window.goToStage === 'function') window.goToStage('stage-history');
+        });
+        // Repaint on auth state changes.
+        document.addEventListener('auth-ready', _paintIdentityBar);
+        document.addEventListener('auth-changed', _paintIdentityBar);
+        document.addEventListener('crisp-i18n-applied', _paintIdentityBar);
         // Re-apply i18n after we built the channel buttons — every
-        // channel anchor carries `data-i18n="coming_soon"` on its badge,
-        // and applyI18n() walks the whole tree.
+        // channel anchor carries `data-i18n` on its label, and applyI18n()
+        // walks the whole tree.
         if (typeof window.applyI18n === 'function') {
             try { window.applyI18n(); } catch (e) { console.warn('[home] i18n failed', e); }
         }
+        // Notify listeners that the home is rendered.
+        try {
+            document.dispatchEvent(new CustomEvent('crisp-home-rendered'));
+        } catch (_) {}
     }
 
     // Expose for tests + late re-init (locale change re-renders channels
@@ -259,6 +640,9 @@
         renderChannels: _renderChannels,
         hasConsented: _hasConsented,
         markConsent: _markConsent,
+        paintIdentityBar: _paintIdentityBar,
+        paintDevidBadge: _paintDevidBadge,
+        renderRecentReports: _renderRecentReports,
         _channels: CHANNELS,  // for test inspection
     };
 

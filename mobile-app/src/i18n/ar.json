@@ -493,5 +493,22 @@
   "v4_cause_tech": "تكنولوجي",
   "v4_cause_tech_sub": "انفجار · حادث كيميائي",
   "v4_cause_human": "من صنع الإنسان",
-  "v4_cause_human_sub": "نزاع · اضطرابات"
+  "v4_cause_human_sub": "نزاع · اضطرابات",
+  "home_greeting_loggedin": "مرحبًا بعودتك، {name}.",
+  "home_greeting_sub": "اضغط أدناه للإبلاغ عن حادثة أخرى.",
+  "home_devid_label": "معرّف المُبلِّغ الخاص بك",
+  "home_devid_tip_title": "احفظ هذا المعرّف",
+  "home_devid_tip_body": "استخدمه للعثور على تقاريرك لاحقًا، حتى لو فقدت التطبيق. معرّفك مجهول — لا يمكننا ربطه بك.",
+  "home_devid_tip_dismiss": "حسنًا",
+  "home_devid_copy": "نسخ المعرّف",
+  "home_recent_reports_title": "تقاريرك الأخيرة",
+  "home_recent_reports_view_all": "عرض الكل",
+  "home_recent_reports_empty": "لا تقارير بعد.",
+  "home_account_menu_label": "الحساب",
+  "home_account_settings": "الإعدادات",
+  "home_logout": "تسجيل الخروج",
+  "home_consent_v2": "أوافق على مشاركة تقريري. تُموَّه الوجوه على هاتفك قبل الرفع، وترتبط التقارير بمعرّفك المجهول فقط.",
+  "home_channels_title": "طرق أخرى للإبلاغ",
+  "home_channels_lede": "استخدم القناة التي تثق بها. نفس التقرير، طريقة مختلفة.",
+  "home_channels_dot_live": "متاحة"
 }

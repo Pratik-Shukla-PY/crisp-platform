@@ -120,62 +120,15 @@
            2. "Sign in" — routes to existing stage-login flow.
          Returning anonymous users skip the welcome entirely (the
          acknowledged flag is set the first time they tap Continue). -->
-    <div id="welcome-overlay" class="welcome-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
-        <div class="welcome-sheet">
-            <div class="welcome-brand"><i class="fa-solid fa-satellite-dish"></i> <span>CRISP × UNDP</span></div>
-            <h1 id="welcome-title" class="welcome-title" data-i18n="welcome_title">Welcome.</h1>
-            <p class="welcome-lede" data-i18n="welcome_lede">
-                Report what you see during a crisis. Works offline. Free, open-source.
-            </p>
-            <div class="welcome-actions">
-                <button class="welcome-cta-primary" id="btn-welcome-anon" type="button">
-                    <i class="fa-solid fa-camera"></i>
-                    <span data-i18n="welcome_anon_cta">Continue anonymously</span>
-                </button>
-                <p class="welcome-recommend" data-i18n="welcome_anon_hint">Recommended · no sign-up needed</p>
-                <button class="welcome-cta-secondary" id="btn-welcome-signin" type="button">
-                    <i class="fa-solid fa-right-to-bracket"></i>
-                    <span data-i18n="welcome_signin_cta">Sign in to track across devices</span>
-                </button>
-            </div>
-            <p class="welcome-trust" data-i18n="welcome_trust">
-                🛡 Faces blurred on your phone before upload.
-                Your phone number, if signed in, is encrypted &amp; never shared publicly.
-            </p>
-        </div>
-    </div>
+    <!-- Phase 15 (May 2026) — Welcome overlay + Device-ID disclosure
+         overlay deleted. Both surfaces are folded into the single
+         unified #stage-home below: the device-ID lives in the
+         identity-bar #home-devid-badge with an inline tooltip on
+         first paint; sign-in remains reachable via the bottom
+         #btn-login row. _generateDeviceIdIfMissing() now runs at
+         app boot (not on welcome-anon tap), so users that bypass
+         the home (Telegram deep-link, etc.) still get a hash. -->
 
-    <!-- Device-ID disclosure overlay (UI v3 Q11) — second screen of the
-         anonymous flow. Shown after #btn-welcome-anon to give the user
-         their reporter ID with copy + save-as-image affordances. -->
-    <div id="devid-overlay" class="welcome-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="devid-title">
-        <div class="welcome-sheet">
-            <div class="welcome-brand"><i class="fa-solid fa-id-card" aria-hidden="true"></i></div>
-            <h1 id="devid-title" class="welcome-title" data-i18n="devid_title">Your reporter ID</h1>
-            <p class="welcome-lede" data-i18n="devid_lede">
-                Use this to find your reports later, even if you lose the app.
-            </p>
-            <div class="devid-card">
-                <div class="devid-num" id="devid-display">CRISP-····-····</div>
-                <p class="devid-explainer" data-i18n="devid_explainer">
-                    Your private ID. Anonymous — we cannot link this back to you.
-                </p>
-                <div class="devid-actions">
-                    <button class="welcome-cta-secondary" id="btn-devid-copy" type="button">
-                        <i class="fa-solid fa-copy"></i>
-                        <span data-i18n="devid_copy">Copy</span>
-                    </button>
-                </div>
-            </div>
-            <button class="welcome-cta-primary" id="btn-devid-continue" type="button" style="margin-top:auto;">
-                <span data-i18n="devid_continue">Continue</span>
-                <i class="fa-solid fa-arrow-right"></i>
-            </button>
-            <p class="welcome-tip" data-i18n="devid_change_mind">
-                You can change your mind &amp; sign in later.
-            </p>
-        </div>
-    </div>
 
     <!-- Language picker overlay — full list. Opened by #btn-lang-current.
          May 2026 (UI v3 redesign Q8 + Q9):
@@ -318,17 +271,81 @@
     -->
     <div class="stage active home-stage" id="stage-home">
         <div class="stage-center home-center">
-            <div class="undp-badge">
-                <i class="fa-solid fa-satellite-dish"></i>
-                <span>CRISP × UNDP</span>
+
+            <!-- Phase 15 (May 2026) — Identity bar (replaces the centred
+                 36 px brand badge). Two slots: brand chip on the left,
+                 state-adaptive identity on the right. Anonymous users
+                 see #home-devid-badge with their CRISP-XXXX-XXXX ID +
+                 copy/info buttons; logged-in users see #account-pill +
+                 dropdown. paintHeader() in app.js swaps visibility on
+                 every auth-changed event. -->
+            <div class="home-identity">
+                <span class="home-brandchip">
+                    <i class="fa-solid fa-satellite-dish" aria-hidden="true"></i>
+                    <span>CRISP × UNDP</span>
+                </span>
+
+                <!-- Anonymous slot — device-ID badge + tooltip. -->
+                <div class="home-devid-wrap" id="home-devid-wrap">
+                    <div class="home-devid-badge" id="home-devid-badge"
+                         role="group" aria-labelledby="home-devid-label">
+                        <span id="home-devid-label" class="sr-only" data-i18n="home_devid_label">Your reporter ID</span>
+                        <span class="devid-text" id="home-devid-text">CRISP-····-····</span>
+                        <button id="btn-home-devid-copy" type="button"
+                                aria-label="Copy reporter ID"
+                                title="Copy">
+                            <i class="fa-solid fa-copy" aria-hidden="true"></i>
+                        </button>
+                        <button id="btn-home-devid-info" type="button"
+                                aria-label="What is this?"
+                                aria-haspopup="true"
+                                aria-expanded="false"
+                                title="What is this?">
+                            <i class="fa-solid fa-info" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    <div class="home-devid-tip" id="home-devid-tip" hidden role="status">
+                        <strong data-i18n="home_devid_tip_title">Save this ID</strong>
+                        <span data-i18n="home_devid_tip_body">Use this to find your reports later, even if you lose the app. Your ID is anonymous — we cannot link it back to you.</span>
+                        <button id="btn-home-devid-tip-dismiss" type="button" data-i18n="home_devid_tip_dismiss">Got it</button>
+                    </div>
+                </div>
+
+                <!-- Logged-in slot — account pill + dropdown. -->
+                <div class="home-account-wrap" id="home-account-wrap" hidden>
+                    <div class="account-pill" id="account-pill" role="button"
+                         tabindex="0" aria-haspopup="true" aria-expanded="false">
+                        <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+                        <span class="account-name" id="account-name">—</span>
+                        <button class="account-settings-btn" id="btn-account-settings" type="button" aria-label="Account menu">
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div class="home-account-menu" id="home-account-menu" hidden role="menu" aria-label="Account">
+                        <button id="btn-home-menu-myreports" type="button" role="menuitem">
+                            <i class="fa-solid fa-clipboard-list" aria-hidden="true"></i>
+                            <span data-i18n="my_reports">My Reports</span>
+                        </button>
+                        <button id="btn-home-menu-settings" type="button" role="menuitem">
+                            <i class="fa-solid fa-gear" aria-hidden="true"></i>
+                            <span data-i18n="home_account_settings">Settings</span>
+                        </button>
+                        <hr>
+                        <button id="btn-home-menu-logout" type="button" role="menuitem" class="danger">
+                            <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
+                            <span data-i18n="home_logout">Log out</span>
+                        </button>
+                    </div>
+                </div>
             </div>
-            <h1 class="hero-title home-title" data-i18n="home_title">Report an Incident</h1>
+
+            <!-- Hero — title (anonymous) OR greeting (logged-in). -->
+            <h1 class="hero-title home-title" id="home-title" data-i18n="home_title">Report an Incident</h1>
+            <p class="home-title-sub" id="home-title-sub" hidden data-i18n="home_greeting_sub">Tap below to report another incident.</p>
 
             <!-- Live impact metrics. Hidden on first-ever load (no data);
                  populated by app.js::updateHomeImpactMetrics() once the
-                 backend responds. UNDP Appendix engagement-incentives
-                 alignment: Reports Verified (analyst-accepted), not raw
-                 volume. -->
+                 backend responds. -->
             <div class="home-impact" id="home-impact" style="display:none;">
                 <div class="hi-cell hi-cell-lives">
                     <div class="hi-heart" aria-hidden="true">❤</div>
@@ -342,37 +359,48 @@
                 </div>
             </div>
 
+            <!-- Recent reports (logged-in only) — last 3 reports as compact
+                 cards. Sourced from AuthStore.meReports() with device-hash
+                 fallback. Populated by home-screen.js _renderRecentReports(). -->
+            <div class="home-recent" id="home-recent" hidden>
+                <div class="home-recent-head">
+                    <h2 class="home-recent-title" data-i18n="home_recent_reports_title">Your recent reports</h2>
+                    <button class="home-recent-viewall" id="btn-home-recent-viewall" type="button" data-i18n="home_recent_reports_view_all">View all</button>
+                </div>
+                <div class="home-recent-list" id="home-recent-list">
+                    <!-- Populated by home-screen.js -->
+                </div>
+            </div>
+
             <!-- One-time consent gate. home-screen.js wires a click
                  capture-phase preempt on btn-start until consent ticks;
                  once accepted, the row is hidden + persisted in
-                 localStorage['crisp_privacy_consent']. -->
+                 localStorage['crisp_privacy_consent']. Phase 15 — copy
+                 expanded to cover anonymous-identity + face-blur. -->
             <div class="home-consent" id="home-consent">
                 <label class="home-consent-row">
                     <input type="checkbox" id="home-consent-check">
-                    <span data-i18n="landing_consent">
-                        I consent to share my report data with crisis responders.
+                    <span data-i18n="home_consent_v2">
+                        I consent to share my report. Faces are blurred on my phone before upload, and reports are linked only to my anonymous ID.
                     </span>
                 </label>
             </div>
 
-            <!-- Primary CTA. Existing handler in app.js (line 8869)
-                 routes to v4 capture (or v3 stage-where via UI_V3_ENABLED
-                 flag). Disabled by home-screen.js until consent is
-                 checked. -->
+            <!-- Primary CTA. Existing handler in app.js routes to v4 capture
+                 (or v3 stage-where via UI_V3_ENABLED). Disabled by
+                 home-screen.js until consent is checked. -->
             <button class="big-cta" id="btn-start">
                 <i class="fa-solid fa-play"></i>
                 <span data-i18n="start_btn">Start Reporting</span>
             </button>
 
-            <!-- Channels row — IVR / SMS / Telegram / WhatsApp.
-                 home-screen.js builds the buttons reactively from
-                 window.CRISP_CHANNELS (with sensible defaults). Each
-                 button is either an anchor with the deep-link or a
-                 disabled "Coming soon" button. -->
+            <!-- Phase 15 — bottom: branded reporting channels.
+                 home-screen.js builds .home-channel-tile elements with a
+                 per-tile --c brand colour. Empty href → tile not rendered
+                 (Q1 contract preserved). -->
             <div class="home-section">
-                <div class="home-section-title" data-i18n="landing_other_channels">
-                    Or report through:
-                </div>
+                <h2 class="home-section-title" data-i18n="home_channels_title">Other ways to report</h2>
+                <p class="home-section-lede" data-i18n="home_channels_lede">Use the channel you trust most. Same report, different way in.</p>
                 <div class="home-channels" id="home-channels">
                     <!-- Populated by home-screen.js _renderChannels() -->
                 </div>
@@ -380,9 +408,7 @@
 
             <!-- Native-app row — iOS / Android / Expo Go. Same pattern. -->
             <div class="home-section">
-                <div class="home-section-title" data-i18n="landing_get_app">
-                    Get the app:
-                </div>
+                <h2 class="home-section-title" data-i18n="landing_get_app">Get the app</h2>
                 <div class="home-apps" id="home-apps">
                     <!-- Populated by home-screen.js _renderChannels() -->
                 </div>
@@ -401,10 +427,11 @@
                 </button>
             </div>
 
-            <!-- Secondary actions row. Existing app.js handlers stay
-                 wired on these ids: btn-my-reports → openMyReports();
-                 btn-login → goToStage('stage-login'). -->
-            <div class="home-secondary-row">
+            <!-- Secondary actions row. Anonymous users see "Login / Sign up"
+                 (My Reports moved into the recent-reports block above for
+                 logged-in users; for anonymous users it stays here as a
+                 backup link). -->
+            <div class="home-secondary-row" id="home-secondary-row">
                 <button class="secondary-cta" id="btn-my-reports" type="button">
                     <i class="fa-solid fa-clipboard-list"></i>
                     <span data-i18n="my_reports">My Reports</span>
@@ -413,17 +440,6 @@
                 <button class="tertiary-cta" id="btn-login" type="button">
                     <i class="fa-solid fa-right-to-bracket"></i>
                     <span data-i18n="login_or_signup">Login / Sign up</span>
-                </button>
-            </div>
-
-            <!-- Account pill (logged-in state). app.js auth-state-change
-                 hides the Login button + shows this pill in the same
-                 secondary-row slot. -->
-            <div class="account-pill" id="account-pill" style="display:none;" role="group">
-                <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
-                <span class="account-name" id="account-name">—</span>
-                <button class="account-settings-btn" id="btn-account-settings" type="button" aria-label="Account settings">
-                    <i class="fa-solid fa-gear"></i>
                 </button>
             </div>
 

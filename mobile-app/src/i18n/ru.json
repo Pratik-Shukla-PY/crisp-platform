@@ -493,5 +493,22 @@
   "v4_cause_tech": "Техногенное",
   "v4_cause_tech_sub": "Взрыв · Химический инцидент",
   "v4_cause_human": "Антропогенное",
-  "v4_cause_human_sub": "Конфликт · Беспорядки"
+  "v4_cause_human_sub": "Конфликт · Беспорядки",
+  "home_greeting_loggedin": "С возвращением, {name}.",
+  "home_greeting_sub": "Нажмите ниже, чтобы сообщить о другом инциденте.",
+  "home_devid_label": "Ваш ID заявителя",
+  "home_devid_tip_title": "Сохраните этот ID",
+  "home_devid_tip_body": "Используйте его, чтобы найти свои отчёты позже, даже если потеряете приложение. Ваш ID анонимен — мы не можем связать его с вами.",
+  "home_devid_tip_dismiss": "Понятно",
+  "home_devid_copy": "Скопировать ID",
+  "home_recent_reports_title": "Ваши недавние отчёты",
+  "home_recent_reports_view_all": "Все",
+  "home_recent_reports_empty": "Отчётов пока нет.",
+  "home_account_menu_label": "Аккаунт",
+  "home_account_settings": "Настройки",
+  "home_logout": "Выйти",
+  "home_consent_v2": "Я согласен поделиться своим отчётом. Лица размываются на моём телефоне до загрузки, а отчёты связаны только с моим анонимным ID.",
+  "home_channels_title": "Другие способы сообщить",
+  "home_channels_lede": "Используйте канал, которому доверяете. Тот же отчёт, другой путь.",
+  "home_channels_dot_live": "Доступно"
 }

@@ -104,6 +104,25 @@
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
     --shadow-md: 0 8px 24px rgba(0,0,0,0.45);
     --shadow-glow: 0 0 32px rgba(249,115,22,0.18);
+    /* Phase 15 (May 2026) — branded reporting-channel tile tokens.
+       Each channel gets a foreground colour, a 16% soft-fill background,
+       and a 32% edge border so .home-channel-tile can render a brand-
+       coherent identity via a single `--c` custom property. */
+    --brand-whatsapp:        #25D366;
+    --brand-whatsapp-soft:   rgba(37,211,102,0.16);
+    --brand-whatsapp-edge:   rgba(37,211,102,0.32);
+    --brand-telegram:        #229ED9;
+    --brand-telegram-soft:   rgba(34,158,217,0.16);
+    --brand-telegram-edge:   rgba(34,158,217,0.32);
+    --brand-sms:             #cbd5e1;            /* near-white message glyph on a neutral surface */
+    --brand-sms-soft:        rgba(203,213,225,0.14);
+    --brand-sms-edge:        rgba(203,213,225,0.30);
+    --brand-ivr:             #38bdf8;            /* info blue */
+    --brand-ivr-soft:        rgba(56,189,248,0.16);
+    --brand-ivr-edge:        rgba(56,189,248,0.32);
+    --brand-expo:            #f97316;            /* CRISP orange — Expo Go re-skinned to brand */
+    --brand-expo-soft:       rgba(249,115,22,0.16);
+    --brand-expo-edge:       rgba(249,115,22,0.32);
 }
 /* Body background uses the proposal's exact aurora gradient. */
 body {
@@ -3628,32 +3647,297 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     width: 100%;
     max-width: 480px;
     margin: 0 auto;
-    padding: 28px 20px 24px;
+    padding: 16px 20px 20px;     /* Phase 15 — was 28/20/24, tighter top */
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;                   /* Phase 15 — was 14, tighter rhythm */
     box-sizing: border-box;
 }
-.home-stage .undp-badge {
-    align-self: center;
+
+/* Phase 15 (May 2026) — identity bar (replaces the centred 36 px badge).
+   One row at the top of the home stage: small brand chip on the left,
+   state-adaptive identity slot on the right (device-ID badge for
+   anonymous, account pill for logged-in). */
+.home-identity {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 4px;
+    min-height: 36px;
+}
+.home-brandchip {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 14px;
+    gap: 6px;
+    padding: 5px 11px;
     border-radius: 999px;
-    background: rgba(255, 174, 0, 0.12);
-    color: var(--brand, #ffae00);
-    font-size: 12.5px;
-    font-weight: 600;
-    margin-bottom: 6px;
+    background: rgba(249, 115, 22, 0.10);
+    border: 1px solid rgba(249, 115, 22, 0.22);
+    color: var(--accent, #f97316);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
 }
+.home-brandchip i { font-size: 10px; opacity: 0.85; }
+
+/* Device-ID badge — pill showing CRISP-XXXX-XXXX with copy + info buttons. */
+.home-devid-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px 4px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    color: var(--text-sub, #cbd5e1);
+    font-size: 10.5px;
+    font-weight: 600;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
+}
+.home-devid-badge[hidden] { display: none; }
+.home-devid-badge .devid-text {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    color: var(--text);
+    letter-spacing: 0.04em;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.home-devid-badge button {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: transparent;
+    border: 0;
+    color: var(--text-dim, var(--muted));
+    font-size: 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+}
+.home-devid-badge button:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+.home-devid-badge.is-copied {
+    background: rgba(34, 197, 94, 0.14);
+    border-color: rgba(34, 197, 94, 0.32);
+    color: #86efac;
+}
+.home-devid-badge.is-copied .devid-text { color: #86efac; }
+
+/* One-time tooltip explaining the device ID — anchored under the badge. */
+.home-devid-tip {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 240px;
+    padding: 12px;
+    background: var(--surface, #0f1622);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 12px;
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,0.45));
+    z-index: 30;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-sub, #cbd5e1);
+}
+.home-devid-tip[hidden] { display: none; }
+.home-devid-tip strong { display: block; color: var(--text); font-size: 13px; margin-bottom: 4px; }
+.home-devid-tip button {
+    margin-top: 8px;
+    padding: 6px 12px;
+    background: var(--accent, #f97316);
+    color: #1f1300;
+    border: 0;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+}
+.home-devid-tip::before {
+    /* tiny arrow pointing up */
+    content: '';
+    position: absolute;
+    top: -5px;
+    right: 12px;
+    width: 10px;
+    height: 10px;
+    background: var(--surface, #0f1622);
+    border-left: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-top: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    transform: rotate(45deg);
+}
+.home-devid-wrap { position: relative; flex-shrink: 1; min-width: 0; }
+
+/* Account pill (existing — repositioned into the identity bar). */
+.home-identity #account-pill { margin: 0; }
+
+/* Account dropdown menu — opens beneath the account pill. */
+.home-account-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 180px;
+    background: var(--surface, #0f1622);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 12px;
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,0.45));
+    padding: 6px;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.home-account-menu[hidden] { display: none; }
+.home-account-menu button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: transparent;
+    border: 0;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease;
+}
+.home-account-menu button:hover { background: rgba(255,255,255,0.06); }
+.home-account-menu button i { width: 16px; color: var(--text-dim, var(--muted)); font-size: 13px; }
+.home-account-menu button.danger { color: #f87171; }
+.home-account-menu button.danger i { color: #f87171; }
+.home-account-menu hr {
+    margin: 4px 0;
+    border: 0;
+    height: 1px;
+    background: var(--border, rgba(255,255,255,0.06));
+}
+.home-account-wrap { position: relative; flex-shrink: 0; }
+
+/* Hero — left-aligned + tighter spacing. Anonymous: simple title.
+   Logged-in: greeting + sub. */
 .home-title {
-    text-align: center;
-    margin: 0;
+    text-align: left;
+    margin: 4px 0 0;
     font-family: var(--heading, 'Outfit', sans-serif);
     font-size: 26px;
     font-weight: 800;
     line-height: 1.18;
+    letter-spacing: -0.01em;
+    color: var(--text);
+}
+.home-title-sub {
+    margin: 4px 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-dim, var(--muted));
+}
+.home-title-sub[hidden] { display: none; }
+
+/* Recent reports (logged-in only) — compact horizontal cards. */
+.home-recent {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.home-recent[hidden] { display: none; }
+.home-recent-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+.home-recent-title {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-dim, var(--muted));
+    font-weight: 700;
+    margin: 0;
+}
+.home-recent-viewall {
+    font-size: 12px;
+    color: var(--accent, #f97316);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-weight: 600;
+}
+.home-recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.home-recent-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    text-align: left;
+    color: var(--text);
+}
+.home-recent-card:hover { background: rgba(255,255,255,0.06); }
+.home-recent-thumb {
+    width: 40px; height: 40px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+    color: var(--text-mute, var(--muted));
+    font-size: 14px;
+}
+.home-recent-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.home-recent-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.home-recent-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+.home-recent-loc {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.home-recent-when { font-size: 10.5px; color: var(--text-mute, var(--muted)); flex-shrink: 0; }
+.home-recent-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10.5px;
+    color: var(--text-dim, var(--muted));
+}
+.home-recent-empty {
+    padding: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim, var(--muted));
+    background: rgba(255,255,255,0.02);
+    border: 1px dashed rgba(255,255,255,0.08);
+    border-radius: 10px;
 }
 
 /* Consent row — inline replacement of the old full-screen overlay.
@@ -3705,62 +3989,111 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     color: var(--muted, #94a3b8);
     text-transform: uppercase;
     letter-spacing: 0.8px;
-    margin-bottom: 8px;
-    font-weight: 600;
-    text-align: center;
+    margin: 0 0 4px;
+    font-weight: 700;
+    text-align: left;
+}
+.home-section-lede {
+    font-size: 12px;
+    color: var(--text-dim, var(--muted));
+    margin: 0 0 10px;
+    line-height: 1.45;
 }
 
-/* 4-up grid for IVR / SMS / Telegram / WhatsApp.
-   3-up grid for iOS / Android / Expo Go. */
+/* Phase 15 — flex-wrap layout so 4 messaging tiles + 3 app tiles flow
+   on any viewport. Each tile is a self-sized 1:1 box with min/max
+   bounds, gap 10 px. */
 .home-channels {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-start;
 }
 .home-apps {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-start;
 }
 
-.home-channel {
+/* Phase 15 — branded reporting-channel tile. Each tile carries a
+   brand colour via the `--c` custom property (set inline by
+   home-screen.js), e.g. WhatsApp green / Telegram blue / IVR
+   info-blue / SMS neutral / Expo CRISP-orange. The colour is
+   referenced via color-mix so the bg + edge tones derive from a
+   single token. */
+.home-channel-tile {
+    --c: var(--accent, #f97316);            /* fallback brand */
+    flex: 0 0 calc(25% - 8px);              /* 4-up @ 4 tiles wide */
+    min-width: 70px;
+    max-width: 88px;
+    aspect-ratio: 1 / 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    padding: 12px 6px;
-    min-height: 64px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.04);
+    gap: 6px;
+    padding: 10px 6px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--c) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c) 32%, transparent);
     color: var(--text);
     font-size: 11.5px;
     font-weight: 600;
     text-decoration: none;
     cursor: pointer;
     position: relative;
-    transition: background 0.15s ease, transform 0.1s ease;
+    box-sizing: border-box;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
-.home-channel:hover { background: rgba(255, 255, 255, 0.08); transform: translateY(-1px); }
-.home-channel .lc-icon { font-size: 18px; color: var(--brand, #ffae00); }
-.home-channel.is-disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-    pointer-events: none;
+.home-channel-tile:hover {
+    background: color-mix(in srgb, var(--c) 22%, transparent);
+    border-color: color-mix(in srgb, var(--c) 44%, transparent);
+    transform: translateY(-1px);
 }
-.home-channel .lc-soon {
+.home-channel-tile:focus-visible {
+    outline: 2px solid var(--c);
+    outline-offset: 2px;
+}
+.home-channel-tile:active { transform: scale(0.98); }
+.home-channel-tile .ct-icon {
+    font-size: 22px;
+    color: var(--c);
+    line-height: 1;
+}
+.home-channel-tile .ct-label {
+    font-size: 11px;
+    color: var(--text);
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+.home-channel-tile .ct-dot {
     position: absolute;
-    top: -6px; right: -6px;
-    background: rgba(148, 163, 184, 0.95);
-    color: #0f172a;
-    font-size: 8px;
-    font-weight: 800;
-    padding: 2px 5px;
-    border-radius: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
+    top: 7px; right: 7px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--good, #22c55e);
+    box-shadow: 0 0 0 2px var(--bg, #07090e);
 }
+[dir="rtl"] .home-channel-tile .ct-dot {
+    right: auto;
+    left: 7px;
+}
+/* Apps row — 3-up at the same tile size for visual consistency. */
+.home-apps .home-channel-tile {
+    flex: 0 0 calc(33.333% - 7px);
+    max-width: 100px;
+}
+
+/* Legacy class — kept as a no-op shim in case any external CSS
+   selector still references it (defensive; should be safe to delete
+   in a follow-up release). */
+.home-channel { display: contents; }
 
 /* Install card — only visible when InstallPrompt fires. */
 .home-install {

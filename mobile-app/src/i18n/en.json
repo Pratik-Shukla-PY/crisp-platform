@@ -494,5 +494,22 @@
   "v4_cause_tech": "Technological",
   "v4_cause_tech_sub": "Explosion · Chemical incident",
   "v4_cause_human": "Human-made",
-  "v4_cause_human_sub": "Conflict · Civil unrest"
+  "v4_cause_human_sub": "Conflict · Civil unrest",
+  "home_greeting_loggedin": "Welcome back, {name}.",
+  "home_greeting_sub": "Tap below to report another incident.",
+  "home_devid_label": "Your reporter ID",
+  "home_devid_tip_title": "Save this ID",
+  "home_devid_tip_body": "Use this to find your reports later, even if you lose the app. Your ID is anonymous — we cannot link it back to you.",
+  "home_devid_tip_dismiss": "Got it",
+  "home_devid_copy": "Copy ID",
+  "home_recent_reports_title": "Your recent reports",
+  "home_recent_reports_view_all": "View all",
+  "home_recent_reports_empty": "No reports yet.",
+  "home_account_menu_label": "Account",
+  "home_account_settings": "Settings",
+  "home_logout": "Log out",
+  "home_consent_v2": "I consent to share my report. Faces are blurred on my phone before upload, and reports are linked only to my anonymous ID.",
+  "home_channels_title": "Other ways to report",
+  "home_channels_lede": "Use the channel you trust most. Same report, different way in.",
+  "home_channels_dot_live": "Available"
 }

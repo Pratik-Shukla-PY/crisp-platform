@@ -493,5 +493,22 @@
   "v4_cause_tech": "Technologique",
   "v4_cause_tech_sub": "Explosion · Incident chimique",
   "v4_cause_human": "D'origine humaine",
-  "v4_cause_human_sub": "Conflit · Troubles civils"
+  "v4_cause_human_sub": "Conflit · Troubles civils",
+  "home_greeting_loggedin": "Bon retour, {name}.",
+  "home_greeting_sub": "Appuyez ci-dessous pour signaler un autre incident.",
+  "home_devid_label": "Votre ID de signaleur",
+  "home_devid_tip_title": "Notez cet ID",
+  "home_devid_tip_body": "Utilisez-le pour retrouver vos signalements plus tard, même si vous perdez l'app. Votre ID est anonyme — nous ne pouvons pas le relier à vous.",
+  "home_devid_tip_dismiss": "Compris",
+  "home_devid_copy": "Copier l'ID",
+  "home_recent_reports_title": "Vos signalements récents",
+  "home_recent_reports_view_all": "Tout voir",
+  "home_recent_reports_empty": "Aucun signalement pour l'instant.",
+  "home_account_menu_label": "Compte",
+  "home_account_settings": "Paramètres",
+  "home_logout": "Se déconnecter",
+  "home_consent_v2": "J'accepte de partager mon signalement. Les visages sont floutés sur mon téléphone avant l'envoi, et les signalements sont liés uniquement à mon ID anonyme.",
+  "home_channels_title": "Autres façons de signaler",
+  "home_channels_lede": "Choisissez le canal qui vous inspire confiance. Même signalement, autre entrée.",
+  "home_channels_dot_live": "Disponible"
 }

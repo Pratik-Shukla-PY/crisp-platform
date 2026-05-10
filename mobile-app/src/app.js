@@ -7228,17 +7228,24 @@ function setupAuthUI() {
     const A = window.AuthStore;
 
     // ── A. Header pill + login button state ──────────────────────────
+    // Phase 15 — repaints account name + Settings page name on every
+    // auth event. Identity-bar swap (devid badge ↔ account pill) and
+    // recent-reports rendering both live in home-screen.js's
+    // _paintIdentityBar(), which also listens to auth-ready /
+    // auth-changed independently.
     function paintHeader() {
-        const btnLogin = document.getElementById('btn-login');
-        const pill = document.getElementById('account-pill');
         const nameEl = document.getElementById('account-name');
-        const loggedIn = A.isLoggedIn();
         const user = A.getUser();
-        if (btnLogin) btnLogin.style.display = loggedIn ? 'none' : '';
-        if (pill) pill.style.display = loggedIn ? '' : 'none';
-        if (nameEl && user) nameEl.textContent = user.displayName || '—';
+        if (nameEl && user) nameEl.textContent = user.displayName || user.id || '—';
         const settingsName = document.getElementById('settings-account-name');
-        if (settingsName && user) settingsName.textContent = user.displayName || '—';
+        if (settingsName && user) settingsName.textContent = user.displayName || user.id || '—';
+        // Tell home-screen.js to repaint immediately too — covers the
+        // race between AuthStore.init() and home-screen DOMContentLoaded.
+        try {
+            if (window.CrispHome && typeof window.CrispHome.paintIdentityBar === 'function') {
+                window.CrispHome.paintIdentityBar();
+            }
+        } catch (_) {}
     }
     document.addEventListener('auth-ready', paintHeader);
     document.addEventListener('auth-changed', paintHeader);
@@ -7253,8 +7260,17 @@ function setupAuthUI() {
         _resetLoginForm();
         goToStage('stage-login');
     });
+    // Phase 15 — #btn-account-settings now opens the in-place dropdown
+    // menu (handled by home-screen.js's _wireAccountMenu). The "Settings"
+    // entry inside the dropdown routes to stage-settings; the gear button
+    // here keeps backward-compat with deep-links / shortcuts.
     const btnAccountSettings = document.getElementById('btn-account-settings');
     if (btnAccountSettings) btnAccountSettings.addEventListener('click', () => {
+        // Allow the dropdown handler to take precedence when it's already
+        // wired (home-screen.js stops propagation after toggling the menu).
+        // This stage-settings nav remains as fallback for screens where
+        // the menu isn't reachable (RN, embedded webviews, etc.).
+        if (document.getElementById('home-account-menu')) return;
         goToStage('stage-settings');
     });
 
@@ -9826,67 +9842,29 @@ function _showWelcomeToast(msg) {
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 2300);
 }
-async function showFirstRunWelcomeIfNeeded() {
-    let acknowledged = false;
-    let signedIn = false;
-    try {
-        acknowledged = !!localStorage.getItem('crisp_welcome_acknowledged');
-        signedIn = !!localStorage.getItem('crisp_token');
-    } catch (_) {}
-    if (acknowledged || signedIn) return;
-    const welcome = document.getElementById('welcome-overlay');
-    const devidOv = document.getElementById('devid-overlay');
-    if (!welcome || !devidOv) return;
-
-    welcome.style.display = 'flex';
-
-    const btnAnon = document.getElementById('btn-welcome-anon');
-    const btnSignin = document.getElementById('btn-welcome-signin');
-    const btnDevidContinue = document.getElementById('btn-devid-continue');
-    const btnDevidCopy = document.getElementById('btn-devid-copy');
-    const devidDisplay = document.getElementById('devid-display');
-
-    if (btnAnon) {
-        btnAnon.addEventListener('click', async () => {
-            const id = await _generateDeviceIdIfMissing();
-            if (devidDisplay) devidDisplay.textContent = _formatDeviceIdForDisplay(id);
-            welcome.style.display = 'none';
-            devidOv.style.display = 'flex';
-        }, { once: true });
-    }
-    if (btnSignin) {
-        btnSignin.addEventListener('click', () => {
-            try { localStorage.setItem('crisp_welcome_acknowledged', '1'); } catch (_) {}
-            welcome.style.display = 'none';
-            try { goToStage('stage-login'); } catch (_) {}
-        }, { once: true });
-    }
-    if (btnDevidContinue) {
-        btnDevidContinue.addEventListener('click', () => {
-            try { localStorage.setItem('crisp_welcome_acknowledged', '1'); } catch (_) {}
-            devidOv.style.display = 'none';
-        }, { once: true });
-    }
-    if (btnDevidCopy) {
-        btnDevidCopy.addEventListener('click', async () => {
-            const txt = devidDisplay ? devidDisplay.textContent.trim() : '';
-            if (!txt) return;
-            try {
-                await navigator.clipboard.writeText(txt);
-                _showWelcomeToast(t('devid_copied') || 'Copied!');
-            } catch (_) {
-                // Fallback for non-secure contexts — surface the ID in a prompt
-                try { window.prompt(t('devid_copy_fallback') || 'Copy this ID:', txt); } catch (__) {}
-            }
-        });
-    }
-}
+// Phase 15 (May 2026) — `showFirstRunWelcomeIfNeeded` removed.
+// The welcome overlay + device-ID disclosure overlay both deleted from
+// `index.html`; their content is folded into the unified home stage's
+// identity bar (`#home-devid-badge` + tooltip). The device-ID generator
+// runs unconditionally at boot now (see DOMContentLoaded handler below)
+// so users that bypass the home (Telegram deep-link, push notification
+// resume, etc.) still get a stable hash. `_formatDeviceIdForDisplay` and
+// `_generateDeviceIdIfMissing` are exported on `window` so home-screen.js
+// can pick up the formatted ID.
+window._formatDeviceIdForDisplay = _formatDeviceIdForDisplay;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // UI v3 (May 2026 Q11) — first-run welcome gate. Runs synchronously
-    // before any other UI is wired so the user sees the welcome card
-    // before the home page paints. Returning users see no overlay.
-    try { await showFirstRunWelcomeIfNeeded(); } catch (e) { console.warn('[welcome] failed:', e); }
+    // Phase 15 (May 2026) — generate device-ID at boot, BEFORE any UI
+    // wiring, so the home identity bar can paint the formatted ID
+    // immediately. Replaces the previous welcome-overlay-on-tap path
+    // which left users that bypassed the welcome (Telegram deep-link,
+    // push notification resume) without a hash. Idempotent.
+    try {
+        await _generateDeviceIdIfMissing();
+        // Notify home-screen.js + any other listeners that the ID is
+        // now available so the badge can repaint.
+        try { document.dispatchEvent(new CustomEvent('crisp-deviceid-ready')); } catch (_) {}
+    } catch (e) { console.warn('[boot] device-id gen failed:', e); }
 
     // UI v2 — flag the body so CSS can scope v2-only chip / header styles
     // without a runtime media-query check. Setting before setupPhotoStage

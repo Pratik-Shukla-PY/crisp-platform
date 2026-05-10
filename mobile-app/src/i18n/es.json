@@ -493,5 +493,22 @@
   "v4_cause_tech": "Tecnológico",
   "v4_cause_tech_sub": "Explosión · Incidente químico",
   "v4_cause_human": "Causado por humanos",
-  "v4_cause_human_sub": "Conflicto · Disturbios"
+  "v4_cause_human_sub": "Conflicto · Disturbios",
+  "home_greeting_loggedin": "Bienvenido de nuevo, {name}.",
+  "home_greeting_sub": "Toca abajo para reportar otro incidente.",
+  "home_devid_label": "Tu ID de reportero",
+  "home_devid_tip_title": "Guarda este ID",
+  "home_devid_tip_body": "Úsalo para encontrar tus reportes después, incluso si pierdes la app. Tu ID es anónimo — no podemos vincularlo contigo.",
+  "home_devid_tip_dismiss": "Entendido",
+  "home_devid_copy": "Copiar ID",
+  "home_recent_reports_title": "Tus reportes recientes",
+  "home_recent_reports_view_all": "Ver todos",
+  "home_recent_reports_empty": "Aún no hay reportes.",
+  "home_account_menu_label": "Cuenta",
+  "home_account_settings": "Ajustes",
+  "home_logout": "Cerrar sesión",
+  "home_consent_v2": "Acepto compartir mi reporte. Los rostros se difuminan en mi teléfono antes de subirlos, y los reportes solo se vinculan a mi ID anónimo.",
+  "home_channels_title": "Otras formas de reportar",
+  "home_channels_lede": "Usa el canal que más te inspire confianza. Mismo reporte, otra entrada.",
+  "home_channels_dot_live": "Disponible"
 }

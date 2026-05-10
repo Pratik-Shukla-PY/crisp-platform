@@ -493,5 +493,22 @@
   "v4_cause_tech": "技术性",
   "v4_cause_tech_sub": "爆炸 · 化学事件",
   "v4_cause_human": "人为",
-  "v4_cause_human_sub": "冲突 · 民众骚乱"
+  "v4_cause_human_sub": "冲突 · 民众骚乱",
+  "home_greeting_loggedin": "{name}，欢迎回来。",
+  "home_greeting_sub": "点按下方报告另一起事件。",
+  "home_devid_label": "你的报告者 ID",
+  "home_devid_tip_title": "保存这个 ID",
+  "home_devid_tip_body": "用它在以后找到你的报告，即使你丢失了应用。你的 ID 是匿名的 — 我们无法将它和你关联。",
+  "home_devid_tip_dismiss": "知道了",
+  "home_devid_copy": "复制 ID",
+  "home_recent_reports_title": "你最近的报告",
+  "home_recent_reports_view_all": "查看全部",
+  "home_recent_reports_empty": "暂无报告。",
+  "home_account_menu_label": "账户",
+  "home_account_settings": "设置",
+  "home_logout": "退出登录",
+  "home_consent_v2": "我同意分享我的报告。人脸会在上传前在手机上模糊处理，报告只与我的匿名 ID 关联。",
+  "home_channels_title": "其他报告方式",
+  "home_channels_lede": "选择你最信任的渠道。报告内容相同，入口不同。",
+  "home_channels_dot_live": "可用"
 }
