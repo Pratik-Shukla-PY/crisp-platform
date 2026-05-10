@@ -429,5 +429,7 @@
   "landmark_chip_road": "Route principale",
   "landmark_chip_religious": "Lieu de culte",
   "landmark_chip_other": "Autre repère",
-  "landmark_prefix": "Près de "
+  "landmark_prefix": "Près de ",
+  "success_impact_first": "Votre premier signalement — merci de vous être manifesté.",
+  "success_impact_nth": "Votre {n} signalement — merci !"
 }

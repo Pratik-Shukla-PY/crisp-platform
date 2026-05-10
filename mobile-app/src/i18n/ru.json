@@ -429,5 +429,7 @@
   "landmark_chip_road": "Главная дорога",
   "landmark_chip_religious": "Религиозное место",
   "landmark_chip_other": "Другой ориентир",
-  "landmark_prefix": "Рядом с "
+  "landmark_prefix": "Рядом с ",
+  "success_impact_first": "Ваш первый отчёт — спасибо за неравнодушие.",
+  "success_impact_nth": "Ваш {n}-й отчёт — спасибо!"
 }

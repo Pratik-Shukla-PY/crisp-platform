@@ -770,20 +770,117 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 
 /* PR 7 (Apr 2026): heart replaces the ✅ on the success screen. Pulses
    with a soft scale + red glow, 2s loop. Reduce-motion users get a
-   static heart (animation disabled). */
+   static heart (animation disabled).
+
+   M4 (May 2026): heart now sits inside `.success-heart-wrap` so we can
+   layer a single ripple ring + 6 tiny confetti dots behind it. The
+   ripple plays once on stage entry; confetti dots float up over 1.4s
+   with staggered delays. Heart's existing pulse loop is preserved. */
+.success-heart-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 130px;
+    height: 130px;
+    isolation: isolate;
+}
 .success-heart {
     font-size: 5rem;
     line-height: 1;
     animation: success-heart-pulse 2s ease-in-out infinite;
     filter: drop-shadow(0 0 14px rgba(239, 68, 68, 0.45));
+    position: relative;
+    z-index: 2;
 }
 @keyframes success-heart-pulse {
     0%   { transform: scale(1);     filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.35)); }
     50%  { transform: scale(1.09);  filter: drop-shadow(0 0 22px rgba(239, 68, 68, 0.65)); }
     100% { transform: scale(1);     filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.35)); }
 }
+/* M4 — ripple ring. Plays once when stage-success activates (JS adds
+   .is-active to the wrap to retrigger). 1.5s duration, no loop. */
+.success-ripple {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: 90px;
+    height: 90px;
+    margin: -45px 0 0 -45px;
+    border: 2px solid rgba(239, 68, 68, 0.6);
+    border-radius: 50%;
+    z-index: 1;
+    opacity: 0;
+    pointer-events: none;
+}
+.success-heart-wrap.is-active .success-ripple {
+    animation: success-ripple-out 1.5s ease-out forwards;
+}
+@keyframes success-ripple-out {
+    0%   { transform: scale(0.4); opacity: 0.85; border-width: 3px; }
+    100% { transform: scale(2.4); opacity: 0;    border-width: 1px; }
+}
+/* M4 — confetti dots. Six tiny circles tucked behind the heart that
+   drift up + fade. Each gets a stagger via --cf-delay and a horizontal
+   spread via --cf-x (set inline in HTML). */
+.success-confetti {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+.success-confetti-dot {
+    position: absolute;
+    left: 50%;
+    bottom: 50%;
+    width: 8px;
+    height: 8px;
+    margin: 0 0 -4px -4px;
+    border-radius: 50%;
+    background: var(--cf-color, #fb7185);
+    opacity: 0;
+    box-shadow: 0 0 6px var(--cf-color, #fb7185);
+}
+.success-heart-wrap.is-active .success-confetti-dot {
+    animation: success-confetti-rise 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation-delay: var(--cf-delay, 0s);
+}
+@keyframes success-confetti-rise {
+    0%   { transform: translate(0, 0)              scale(0.4); opacity: 0; }
+    20%  { opacity: 0.95; }
+    100% { transform: translate(var(--cf-x, 0), -90px) scale(1.0); opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) {
     .success-heart { animation: none; }
+    .success-heart-wrap.is-active .success-ripple,
+    .success-heart-wrap.is-active .success-confetti-dot { animation: none; opacity: 0; }
+}
+
+/* M4 — community-impact strip. Small green pill below the headline,
+   shown after we fetch the day's report count. Soft green so it reads
+   as a positive social signal (not an alert/warning). */
+.success-impact-strip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.32);
+    border-radius: 999px;
+    color: #4ade80;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 4px 0;
+    animation: success-impact-fade 0.5s ease-out;
+}
+.success-impact-strip > i {
+    font-size: 14px;
+}
+@keyframes success-impact-fade {
+    0%   { opacity: 0; transform: translateY(6px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .success-impact-strip { animation: none; }
 }
 .success-center h2 { font-family: var(--heading); font-size: 2.2rem; }
 .success-center p { color: var(--muted); line-height: 1.6; }

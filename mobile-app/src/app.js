@@ -2703,6 +2703,12 @@ function goToStage(id) {
     // never nag a repeat question.
     if (id === 'stage-success') {
         try { maybeShowUndpDetailsPrompt(); } catch (e) { console.warn('[M3] prompt:', e); }
+        // M4 (May 2026) — kick off the celebratory motion + impact strip
+        // every time stage-success activates (incl. submitting a second
+        // report in the same session). Both are best-effort: failures are
+        // logged but never block the success state.
+        try { _triggerSuccessMotion(); } catch (e) { console.warn('[M4] motion:', e); }
+        try { _renderSuccessImpactStrip(); } catch (e) { console.warn('[M4] strip:', e); }
     }
 }
 
@@ -8745,6 +8751,96 @@ function setupUndpDetailsStage() {
                 _exitToHome();
             }
         });
+    }
+}
+
+// ── M4 (May 2026) — submission-success motion + impact strip ──────────────
+//
+// Goal: turn the "your report was sent" moment from a static heart into
+// a small celebration. Two complementary pieces:
+//   1. Motion — a single ripple ring + 6 confetti dots on stage-success.
+//      Plays once per stage entry. Reduce-motion users get the heart
+//      pulse only (CSS handles that — see styles.css).
+//   2. Community-impact strip — a soft green pill below the headline
+//      that surfaces "Your 4th report — thank you!" using the user's
+//      own profile (auth-free `/reports/profile/<device_hash>` endpoint
+//      already exists). Encourages return engagement without pushing
+//      raw volume incentives (UNDP §3.8 frowns on those).
+function _triggerSuccessMotion() {
+    const wrap = document.querySelector('#stage-success .success-heart-wrap');
+    if (!wrap) return;
+    // Retrigger the animation by removing-then-adding `.is-active`. Browser
+    // collapses the two style mutations into one paint, so the keyframes
+    // restart cleanly even when stage-success is shown back-to-back.
+    wrap.classList.remove('is-active');
+    // Force reflow so the next class-add restarts the keyframes.
+    void wrap.offsetWidth;
+    wrap.classList.add('is-active');
+    // Self-clean after the longest animation completes (1.5s + slack).
+    setTimeout(() => { wrap.classList.remove('is-active'); }, 1900);
+}
+
+function _ordinalSuffix(n) {
+    // English ordinal — "1st", "2nd", "3rd", "4th", "21st", etc. The
+    // localised string in t('success_impact_nth') wraps the result and
+    // formats it into the per-locale phrase ("Tu 4ª denuncia — gracias",
+    // "あなたの4回目 — ありがとう"). We always emit a number even on
+    // failed locales because "4" is universal.
+    if (!Number.isFinite(n) || n < 1) return String(n);
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return n + 'st';
+    if (mod10 === 2 && mod100 !== 12) return n + 'nd';
+    if (mod10 === 3 && mod100 !== 13) return n + 'rd';
+    return n + 'th';
+}
+
+async function _renderSuccessImpactStrip() {
+    const strip = document.getElementById('success-impact-strip');
+    const text = document.getElementById('success-impact-text');
+    if (!strip || !text) return;
+    // Default-hide; we only show after we have a real number to render.
+    strip.style.display = 'none';
+    let deviceHash = '';
+    try {
+        deviceHash = localStorage.getItem('crisp_device_id_v2') ||
+                     localStorage.getItem('crisp_device_hash') ||
+                     localStorage.getItem('crisp_device_id') || '';
+    } catch (_) {}
+    if (!deviceHash) {
+        // Brand-new user with no device-hash yet — show the warmer
+        // "first report" message (no number to render). This keeps the
+        // emotional payoff from being silent.
+        text.textContent = (typeof t === 'function' && t('success_impact_first'))
+            || 'Your first report — thank you for stepping up.';
+        strip.style.display = 'inline-flex';
+        return;
+    }
+    try {
+        const res = await fetch(`${API_BASE}/reports/profile/${encodeURIComponent(deviceHash)}`);
+        if (!res.ok) throw new Error(`profile ${res.status}`);
+        const p = await res.json();
+        const reportCount = Number.isFinite(p.report_count) ? p.report_count : 0;
+        // Build the message. We always render — even reportCount=0 gets
+        // the warm "first report" line so the strip is consistent.
+        let msg;
+        if (reportCount <= 1) {
+            msg = (typeof t === 'function' && t('success_impact_first'))
+                || 'Your first report — thank you for stepping up.';
+        } else {
+            const ordinal = _ordinalSuffix(reportCount);
+            const tmpl = (typeof t === 'function' && t('success_impact_nth')) || 'Your {n} report — thank you!';
+            msg = tmpl.replace('{n}', ordinal);
+        }
+        text.textContent = msg;
+        strip.style.display = 'inline-flex';
+    } catch (e) {
+        // Network / 404 — surface the "first report" line (still warm,
+        // never raw English fallback that could leak through).
+        console.warn('[M4] impact strip fetch failed:', e);
+        text.textContent = (typeof t === 'function' && t('success_impact_first'))
+            || 'Your report — thank you for stepping up.';
+        strip.style.display = 'inline-flex';
     }
 }
 

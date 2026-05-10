@@ -430,5 +430,7 @@
   "landmark_chip_road": "Main road",
   "landmark_chip_religious": "Religious site",
   "landmark_chip_other": "Other landmark",
-  "landmark_prefix": "Near "
+  "landmark_prefix": "Near ",
+  "success_impact_first": "Your first report — thank you for stepping up.",
+  "success_impact_nth": "Your {n} report — thank you!"
 }

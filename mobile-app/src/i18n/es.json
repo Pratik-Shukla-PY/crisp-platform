@@ -429,5 +429,7 @@
   "landmark_chip_road": "Calle principal",
   "landmark_chip_religious": "Lugar religioso",
   "landmark_chip_other": "Otro punto",
-  "landmark_prefix": "Cerca de "
+  "landmark_prefix": "Cerca de ",
+  "success_impact_first": "Tu primer reporte — gracias por dar el paso.",
+  "success_impact_nth": "Tu reporte {n} — ¡gracias!"
 }

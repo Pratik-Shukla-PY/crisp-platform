@@ -1739,10 +1739,34 @@
                  "UNDP rescue teams have been notified" copy. Report ID pill
                  is kept (support ops reference). Two actions replace the
                  single "New Report" CTA: primary add-another loop + Track
-                 deep-link to the just-submitted report's detail view. -->
-            <div class="success-heart" aria-hidden="true">❤️</div>
+                 deep-link to the just-submitted report's detail view.
+
+                 M4 (May 2026): wrapped the heart in `.success-heart-wrap`
+                 so we can layer a ripple ring + tiny confetti dots behind
+                 it. Both purely-decorative; reduce-motion users get static
+                 heart only (see CSS). -->
+            <div class="success-heart-wrap" aria-hidden="true">
+                <div class="success-ripple"></div>
+                <div class="success-confetti">
+                    <span class="success-confetti-dot" style="--cf-delay:0.0s; --cf-x:-32px; --cf-color:#fb7185;"></span>
+                    <span class="success-confetti-dot" style="--cf-delay:0.15s; --cf-x:24px; --cf-color:#22c55e;"></span>
+                    <span class="success-confetti-dot" style="--cf-delay:0.3s; --cf-x:-16px; --cf-color:#fbbf24;"></span>
+                    <span class="success-confetti-dot" style="--cf-delay:0.45s; --cf-x:30px; --cf-color:#7c3aed;"></span>
+                    <span class="success-confetti-dot" style="--cf-delay:0.6s; --cf-x:-22px; --cf-color:#06b6d4;"></span>
+                    <span class="success-confetti-dot" style="--cf-delay:0.75s; --cf-x:18px; --cf-color:#f472b6;"></span>
+                </div>
+                <div class="success-heart">❤️</div>
+            </div>
             <h2 data-i18n="sent_title">Thank you.</h2>
             <p data-i18n="sent_sub">Your report can help save lives. We will keep you posted.</p>
+            <!-- M4 community-impact strip — populated by app.js once the
+                 success stage activates. Pill format: "You're part of N
+                 reports today helping responders". Hidden until count is
+                 fetched (avoids flicker / placeholder text). -->
+            <div class="success-impact-strip" id="success-impact-strip" style="display:none;">
+                <i class="fa-solid fa-users" aria-hidden="true"></i>
+                <span class="success-impact-text" id="success-impact-text">—</span>
+            </div>
             <div class="success-id-box" id="success-id-box">
                 <span data-i18n="report_id">Report ID:</span>
                 <strong id="report-id-text">—</strong>

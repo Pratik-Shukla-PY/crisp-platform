@@ -429,5 +429,7 @@
   "landmark_chip_road": "主要道路",
   "landmark_chip_religious": "宗教场所",
   "landmark_chip_other": "其他地标",
-  "landmark_prefix": "靠近 "
+  "landmark_prefix": "靠近 ",
+  "success_impact_first": "你的第一份报告 — 感谢你的挺身而出。",
+  "success_impact_nth": "你的第 {n} 份报告 — 谢谢！"
 }

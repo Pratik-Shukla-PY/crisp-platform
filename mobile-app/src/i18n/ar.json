@@ -429,5 +429,7 @@
   "landmark_chip_road": "الشارع الرئيسي",
   "landmark_chip_religious": "موقع ديني",
   "landmark_chip_other": "معلم آخر",
-  "landmark_prefix": "بالقرب من "
+  "landmark_prefix": "بالقرب من ",
+  "success_impact_first": "أول تقرير لك — شكرًا لتقدمك.",
+  "success_impact_nth": "تقريرك رقم {n} — شكرًا!"
 }
