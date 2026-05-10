@@ -435,5 +435,16 @@
   "rd_eta_initial": "En attente d'examen · ~30 min",
   "rd_eta_under_review": "Examen en cours · ~1 h",
   "rd_eta_accepted": "Aide en cours d'organisation · ~1-3 h",
-  "rd_eta_help_otw": "Aide en route · bientôt"
+  "rd_eta_help_otw": "Aide en route · bientôt",
+  "mr_filter_all": "Tous",
+  "mr_filter_review": "En examen",
+  "mr_filter_accepted": "Accepté",
+  "mr_filter_help": "Aide envoyée",
+  "mr_filter_rejected": "Rejeté",
+  "mr_group_today": "Aujourd'hui",
+  "mr_group_yesterday": "Hier",
+  "mr_group_this_week": "Cette semaine",
+  "mr_group_older": "Plus anciens",
+  "mr_empty_filtered": "Aucun signalement ne correspond à ce filtre.",
+  "mr_map_empty": "Aucun signalement avec localisation pour l'instant."
 }

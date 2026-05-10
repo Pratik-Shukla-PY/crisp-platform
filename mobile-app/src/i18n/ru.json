@@ -435,5 +435,16 @@
   "rd_eta_initial": "Ожидание проверки · ~30 мин",
   "rd_eta_under_review": "Идёт проверка · ~1 ч",
   "rd_eta_accepted": "Помощь готовится · ~1-3 ч",
-  "rd_eta_help_otw": "Помощь в пути · скоро"
+  "rd_eta_help_otw": "Помощь в пути · скоро",
+  "mr_filter_all": "Все",
+  "mr_filter_review": "На проверке",
+  "mr_filter_accepted": "Принято",
+  "mr_filter_help": "Помощь отправлена",
+  "mr_filter_rejected": "Отклонено",
+  "mr_group_today": "Сегодня",
+  "mr_group_yesterday": "Вчера",
+  "mr_group_this_week": "На этой неделе",
+  "mr_group_older": "Ранее",
+  "mr_empty_filtered": "Нет отчётов под этот фильтр.",
+  "mr_map_empty": "Пока нет отчётов с локацией."
 }

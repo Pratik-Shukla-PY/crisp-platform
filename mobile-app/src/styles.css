@@ -1782,6 +1782,112 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 .history-section { padding:0 16px 16px; }
 .history-section-title { font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:#94a3b8; font-weight:700; margin:16px 0 8px; display:flex; align-items:center; gap:6px; }
 
+/* M6 (May 2026) — My Reports filter row + view toggle. Chips set the
+   status filter (All / Review / Accepted / Help / Rejected); the
+   square toggle on the right swaps between list and map. The strip
+   wraps on narrow screens so the toggle never overflows. */
+.mr-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 0 16px 4px;
+    margin-bottom: 8px;
+}
+.mr-filter-row {
+    display: flex;
+    gap: 6px;
+    flex: 1;
+    overflow-x: auto;
+    scrollbar-width: none; /* firefox */
+    -ms-overflow-style: none; /* edge */
+}
+.mr-filter-row::-webkit-scrollbar { display: none; }
+.mr-filter-chip {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.mr-filter-chip:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+}
+.mr-filter-chip.is-active {
+    background: rgba(124, 58, 237, 0.18);
+    border-color: rgba(124, 58, 237, 0.55);
+    color: #c4b5fd;
+}
+.mr-view-toggle {
+    display: inline-flex;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.mr-view-btn {
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: 0;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.mr-view-btn:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+.mr-view-btn.is-active {
+    background: rgba(124, 58, 237, 0.22);
+    color: #c4b5fd;
+}
+
+/* M6 — group-by-date sub-headers within the synced list. Subtle
+   uppercase pill tucked just above each group ("Today" / "Yesterday"
+   / "This week" / "Older"). Uses the same color as the section title
+   above so it reads as a sub-header, not a competing primary. */
+.mr-date-group { margin-bottom: 12px; }
+.mr-date-group-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: rgba(124, 58, 237, 0.85);
+    font-weight: 700;
+    margin: 8px 0 6px;
+    padding: 0;
+}
+
+/* M6 — My Reports map view. Hidden by default; JS swaps display when
+   the user taps the map icon in the view-toggle. Markers are the
+   default Leaflet pin tinted by status (CSS filter on a wrapper div). */
+.mr-map-wrap {
+    margin: 0 16px 16px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.mr-map {
+    width: 100%;
+    height: 360px;
+    background: rgba(15, 23, 42, 0.5);
+}
+.mr-map-empty {
+    padding: 14px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+}
+
 .history-row {
     padding:12px; margin-bottom:8px;
     background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);

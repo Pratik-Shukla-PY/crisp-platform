@@ -1960,14 +1960,49 @@
             <div class="hi-stat"><div class="hi-num" id="hi-pending">0</div><div class="hi-label" data-i18n="in_flight">In flight</div></div>
         </div>
 
-        <div class="history-section">
+        <!-- M6 (May 2026) — filter chip row + view-toggle. Chips set the
+             status filter (All / Review / Accepted / Help / Rejected);
+             the toggle swaps between list and map views. The filter is
+             non-persistent — every fresh entry to My Reports starts on
+             "All / List" so the user always sees their full inventory.
+             View toggle hidden when no usable coords across the inventory
+             (we don't ship an empty map). -->
+        <div class="mr-controls" id="mr-controls" style="display:none;">
+            <div class="mr-filter-row" role="tablist" aria-label="Filter reports">
+                <button type="button" class="mr-filter-chip is-active" role="tab" data-mr-filter="all" data-i18n="mr_filter_all">All</button>
+                <button type="button" class="mr-filter-chip" role="tab" data-mr-filter="review" data-i18n="mr_filter_review">In review</button>
+                <button type="button" class="mr-filter-chip" role="tab" data-mr-filter="accepted" data-i18n="mr_filter_accepted">Accepted</button>
+                <button type="button" class="mr-filter-chip" role="tab" data-mr-filter="help" data-i18n="mr_filter_help">Help sent</button>
+                <button type="button" class="mr-filter-chip" role="tab" data-mr-filter="rejected" data-i18n="mr_filter_rejected">Rejected</button>
+            </div>
+            <div class="mr-view-toggle" role="tablist" aria-label="Layout">
+                <button type="button" class="mr-view-btn is-active" role="tab" data-mr-view="list" aria-label="List view">
+                    <i class="fa-solid fa-list" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="mr-view-btn" role="tab" data-mr-view="map" aria-label="Map view">
+                    <i class="fa-solid fa-map" aria-hidden="true"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="history-section" id="history-inflight-section">
             <h2 class="history-section-title"><i class="fa-solid fa-spinner"></i> <span data-i18n="in_flight">In flight</span></h2>
             <div id="history-partial-list"></div>
         </div>
 
-        <div class="history-section">
+        <div class="history-section" id="history-submitted-section">
             <h2 class="history-section-title"><i class="fa-solid fa-paper-plane"></i> <span data-i18n="submitted">Submitted</span></h2>
             <div id="history-synced-list"></div>
+        </div>
+
+        <!-- M6 — map view container. Sibling of the list. JS toggles
+             which one is visible. 360 px-tall Leaflet view; reports get
+             a marker each, with a popup showing the report card on tap. -->
+        <div class="mr-map-wrap" id="mr-map-wrap" style="display:none;">
+            <div id="mr-map" class="mr-map" aria-label="Reports on a map"></div>
+            <p class="mr-map-empty" id="mr-map-empty" style="display:none;" data-i18n="mr_map_empty">
+                No reports with location yet.
+            </p>
         </div>
 
         <!-- Apr 2026 "My Reports & Individual Report Management" spec:

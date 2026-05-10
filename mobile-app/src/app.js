@@ -7796,6 +7796,23 @@ function setupSendStage() {
 
 async function openMyReports() {
     goToStage('stage-history');
+    // M6 (May 2026) — reset filter + view-toggle to defaults on every fresh
+    // entry so users always start on "All / List" (no surprise persistence
+    // across sessions). Wire the controls bar once, idempotent.
+    _mrFilter = 'all';
+    _mrView = 'list';
+    try {
+        const ctrl = document.getElementById('mr-controls');
+        if (ctrl) {
+            ctrl.querySelectorAll('.mr-filter-chip').forEach((c) => {
+                c.classList.toggle('is-active', c.getAttribute('data-mr-filter') === 'all');
+            });
+            ctrl.querySelectorAll('.mr-view-btn').forEach((b) => {
+                b.classList.toggle('is-active', b.getAttribute('data-mr-view') === 'list');
+            });
+        }
+        if (typeof setupMyReportsControls === 'function') setupMyReportsControls();
+    } catch (e) { console.warn('[M6] reset:', e); }
     // Hotfix (Apr 2026): reconcile local IDB queue against server truth
     // BEFORE rendering. Fixes a class of bugs where a report reaches the
     // server successfully but one of the four client-side stage flags
@@ -8152,6 +8169,58 @@ function _synthesizeSubmittedReport(clientReportId, extra) {
 // the Track button's open-detail path can be exercised without a real submit.
 window.__crispSynthesizeSubmittedReport = _synthesizeSubmittedReport;
 
+// ── M6 (May 2026) — My Reports filter + view-toggle state ──────────────────
+//
+// Two pieces of UI state that drive _renderSubmittedReports:
+//   _mrFilter — 'all' | 'review' | 'accepted' | 'help' | 'rejected'
+//   _mrView   — 'list' | 'map'
+// Reset to defaults on every fresh stage entry (see goToStage history hook
+// in setupHistoryStage). Non-persistent on purpose: users almost always
+// want to see their full inventory first.
+let _mrFilter = 'all';
+let _mrView = 'list';
+
+function _matchesMrFilter(r, filter) {
+    if (filter === 'all') return true;
+    const verdict = (r.reviewer_verdict || 'NOT_REVIEWED').toUpperCase();
+    const status = (r.status || 'PENDING').toUpperCase();
+    if (filter === 'rejected') {
+        return verdict === 'REJECTED' || status === 'FALSE_ALARM';
+    }
+    if (filter === 'accepted') return verdict === 'ACCEPTED' && !r.help_dispatched_at;
+    if (filter === 'help') return !!r.help_dispatched_at;
+    if (filter === 'review') {
+        // "In review" = not yet verdict'd. Includes PENDING and RESPONDING
+        // when the reviewer hasn't accepted/rejected yet.
+        return verdict === 'NOT_REVIEWED' && status !== 'FALSE_ALARM';
+    }
+    return true;
+}
+
+function _bucketByDate(reports) {
+    // 4 buckets keyed in stable order so the rendered output is consistent:
+    // today / yesterday / this_week / older. We treat the boundary as the
+    // device's local midnight (Date#setHours(0,0,0,0)).
+    const now = new Date();
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+    const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    const weekStart = new Date(todayStart); weekStart.setDate(weekStart.getDate() - 6);
+    const buckets = { today: [], yesterday: [], this_week: [], older: [] };
+    for (const r of reports) {
+        const ts = r.server_created_at || r.updated_at;
+        const t = ts ? new Date(ts) : null;
+        if (!t || isNaN(t.getTime())) {
+            buckets.older.push(r);
+            continue;
+        }
+        if (t >= todayStart) buckets.today.push(r);
+        else if (t >= yesterdayStart) buckets.yesterday.push(r);
+        else if (t >= weekStart) buckets.this_week.push(r);
+        else buckets.older.push(r);
+    }
+    return buckets;
+}
+
 async function _renderSubmittedReports() {
     const list = document.getElementById('history-synced-list');
     const impactCard = document.getElementById('history-impact-card');
@@ -8160,6 +8229,9 @@ async function _renderSubmittedReports() {
     if (!deviceHash) {
         _historyEmpty(list, t('empty_submitted'), 'fa-paper-plane');
         if (impactCard) impactCard.style.display = 'none';
+        // Hide M6 controls when there are no reports.
+        const ctrl = document.getElementById('mr-controls');
+        if (ctrl) ctrl.style.display = 'none';
         return;
     }
     let reports = [];
@@ -8232,6 +8304,8 @@ async function _renderSubmittedReports() {
     }
     if (!reports.length) {
         _historyEmpty(list, t('empty_submitted'), 'fa-paper-plane');
+        const ctrl = document.getElementById('mr-controls');
+        if (ctrl) ctrl.style.display = 'none';
         return;
     }
     // Apr 2026 "My Reports" spec — cards show thumbnail + location + date
@@ -8240,7 +8314,50 @@ async function _renderSubmittedReports() {
     // doesn't round-trip to the server again.
     _submittedCache = reports.slice();
 
-    list.innerHTML = reports.map((r) => {
+    // M6 (May 2026) — show the filter + view-toggle controls now that we
+    // have at least one report. The controls bar is hidden when empty.
+    const ctrl = document.getElementById('mr-controls');
+    if (ctrl) ctrl.style.display = 'flex';
+    // Apply the active filter. The chip-row click handler updates _mrFilter
+    // and re-renders.
+    const filtered = reports.filter((r) => _matchesMrFilter(r, _mrFilter));
+
+    // M6 — view toggle. List view paints the cards; map view delegates to
+    // _renderMyReportsMap with the SAME filtered set so the user always
+    // sees coherent state across both surfaces.
+    const mapWrap = document.getElementById('mr-map-wrap');
+    const inflightSec = document.getElementById('history-inflight-section');
+    const submittedSec = document.getElementById('history-submitted-section');
+    if (_mrView === 'map') {
+        if (mapWrap) mapWrap.style.display = '';
+        // Hide list-view sections in map mode. impact-card stays.
+        if (inflightSec) inflightSec.style.display = 'none';
+        if (submittedSec) submittedSec.style.display = 'none';
+        try { _renderMyReportsMap(filtered); } catch (e) { console.warn('[M6] map render:', e); }
+        return;
+    }
+    if (mapWrap) mapWrap.style.display = 'none';
+    if (inflightSec) inflightSec.style.display = '';
+    if (submittedSec) submittedSec.style.display = '';
+
+    if (!filtered.length) {
+        _historyEmpty(list, t('mr_empty_filtered') || t('empty_submitted'), 'fa-paper-plane');
+        return;
+    }
+
+    // M6 — group by date so users with many reports get a scannable
+    // hierarchy (Today / Yesterday / This week / Older). The card
+    // markup is identical to the previous flat list; only the wrapping
+    // <div class="mr-date-group"> + section title are new.
+    const buckets = _bucketByDate(filtered);
+    const ORDER = ['today', 'yesterday', 'this_week', 'older'];
+    const titleKey = {
+        today: 'mr_group_today',
+        yesterday: 'mr_group_yesterday',
+        this_week: 'mr_group_this_week',
+        older: 'mr_group_older',
+    };
+    const renderCard = (r) => {
         const st = _mapReportStatus(r);
         const loc = r.location || {};
         // May 2026 (UI v3 redesign Q4) — prefer human place names; only fall
@@ -8311,13 +8428,112 @@ async function _renderSubmittedReports() {
                 ${pendingDelete}
             </div>
         </button>`;
+    };
+
+    // Render the date-bucketed list. Each non-empty bucket gets a
+    // sub-header pill above its cards.
+    const html = ORDER.map((bucket) => {
+        const arr = buckets[bucket];
+        if (!arr || !arr.length) return '';
+        const headLabel = (typeof t === 'function' && t(titleKey[bucket])) || bucket;
+        return `<div class="mr-date-group">
+            <h3 class="mr-date-group-title">${escapeHtmlSimple(headLabel)} · ${arr.length}</h3>
+            ${arr.map(renderCard).join('')}
+        </div>`;
     }).join('');
+    list.innerHTML = html;
 
     // Attach click handlers to open the detail view. Using event delegation
     // would be slightly cheaper but direct binding is clearer for N<100.
     list.querySelectorAll('.mr-card').forEach((el) => {
         const id = el.getAttribute('data-report-id');
         el.addEventListener('click', () => openReportDetail(id));
+    });
+}
+
+// ── M6 (May 2026) — My Reports map view ───────────────────────────────────
+//
+// Renders all (filtered) reports as Leaflet markers in a 360 px container.
+// Tapping a marker opens the report-detail page directly (skips the
+// popup carousel). Reports without coords are tallied at the bottom of
+// the map ("3 reports without location"). Empty-state surfaces when no
+// report in the filtered set has coords.
+let _mrMapInstance = null;
+let _mrMapMarkers = [];
+function _renderMyReportsMap(reports) {
+    const mapEl = document.getElementById('mr-map');
+    const emptyEl = document.getElementById('mr-map-empty');
+    if (!mapEl || typeof window.L === 'undefined') return;
+    const withCoords = reports.filter((r) => {
+        const lat = Number(r.location && r.location.lat);
+        const lng = Number(r.location && (r.location.lng || r.location.lon));
+        return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+    });
+    if (!withCoords.length) {
+        if (emptyEl) emptyEl.style.display = '';
+        mapEl.style.display = 'none';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    mapEl.style.display = '';
+    if (!_mrMapInstance) {
+        _mrMapInstance = window.L.map(mapEl, {
+            zoomControl: true,
+            attributionControl: false,
+        }).setView([withCoords[0].location.lat, withCoords[0].location.lng || withCoords[0].location.lon], 5);
+        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+        }).addTo(_mrMapInstance);
+    }
+    // Wipe previous markers (filter / data refresh).
+    _mrMapMarkers.forEach((m) => { try { _mrMapInstance.removeLayer(m); } catch (_) {} });
+    _mrMapMarkers = [];
+    const bounds = [];
+    for (const r of withCoords) {
+        const lat = Number(r.location.lat);
+        const lng = Number(r.location.lng || r.location.lon);
+        const st = _mapReportStatus(r);
+        const m = window.L.marker([lat, lng], { title: `${st.icon} ${st.label}` });
+        m.on('click', () => openReportDetail(r.id || r.client_report_id));
+        m.addTo(_mrMapInstance);
+        _mrMapMarkers.push(m);
+        bounds.push([lat, lng]);
+    }
+    if (bounds.length === 1) {
+        _mrMapInstance.setView(bounds[0], 13);
+    } else {
+        try { _mrMapInstance.fitBounds(bounds, { padding: [24, 24], maxZoom: 14 }); } catch (_) {}
+    }
+    setTimeout(() => { try { _mrMapInstance.invalidateSize(false); } catch (_) {} }, 60);
+}
+
+// M6 — wire the filter chips + view-toggle once at page load. Every
+// click flips the in-memory state and re-renders. Stage-history setup
+// resets _mrFilter / _mrView to defaults on every fresh entry so users
+// always start on "All / List".
+function setupMyReportsControls() {
+    const ctrl = document.getElementById('mr-controls');
+    if (!ctrl || ctrl.dataset.wired === '1') return;
+    ctrl.dataset.wired = '1';
+    ctrl.querySelectorAll('.mr-filter-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            const f = chip.getAttribute('data-mr-filter') || 'all';
+            _mrFilter = f;
+            ctrl.querySelectorAll('.mr-filter-chip').forEach((c) => {
+                c.classList.toggle('is-active', c === chip);
+            });
+            _renderSubmittedReports().catch(() => {});
+        });
+    });
+    ctrl.querySelectorAll('.mr-view-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const v = btn.getAttribute('data-mr-view') || 'list';
+            _mrView = v;
+            ctrl.querySelectorAll('.mr-view-btn').forEach((b) => {
+                b.classList.toggle('is-active', b === btn);
+            });
+            _renderSubmittedReports().catch(() => {});
+        });
     });
 }
 

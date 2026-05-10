@@ -435,5 +435,16 @@
   "rd_eta_initial": "等待审核 · 约 30 分钟",
   "rd_eta_under_review": "审核中 · 约 1 小时",
   "rd_eta_accepted": "援助安排中 · 约 1-3 小时",
-  "rd_eta_help_otw": "援助在路上 · 即将到达"
+  "rd_eta_help_otw": "援助在路上 · 即将到达",
+  "mr_filter_all": "全部",
+  "mr_filter_review": "审核中",
+  "mr_filter_accepted": "已接受",
+  "mr_filter_help": "援助已派出",
+  "mr_filter_rejected": "已拒绝",
+  "mr_group_today": "今天",
+  "mr_group_yesterday": "昨天",
+  "mr_group_this_week": "本周",
+  "mr_group_older": "更早",
+  "mr_empty_filtered": "没有匹配此筛选的报告。",
+  "mr_map_empty": "暂无带位置的报告。"
 }
