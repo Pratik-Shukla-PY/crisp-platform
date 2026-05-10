@@ -1695,7 +1695,14 @@ function showIncidentPreview(r, event) {
     // Phase 2: thumb-first preference (was full-first). Cuts hover-preview
     // image bandwidth ~10× when LOW + LARGE both exist for a report.
     const photoSrc = thumbUrl || fullUrl || partialPreviewUrl || blurPreviewUrl || '';
-    const satSrc = v?.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
+    // May 2026 — route sat URLs through getMediaUrl(). The backend now
+    // emits stable `/api/v1/reports/<id>/satellite/<slot>` URLs for S3-
+    // backed media; getMediaUrl() correctly handles relative paths
+    // (prepends BACKEND_HOST) and external https URLs (pass-through).
+    // The previous `${BACKEND_HOST}${...}` concat broke whenever the
+    // serializer returned an `https://s3...` presigned URL — producing
+    // `https://undp/.../https://s3.../...` → 404.
+    const satSrc = v?.satellite_image_url ? getMediaUrl(v.satellite_image_url) : '';
 
     // Verification score dots
     const scores = v?.scores || {};
@@ -1923,8 +1930,11 @@ window.selectReport = (id, skipFly = false) => {
     );
 
     // ── Satellite image HTML (with alt source toggle) ──
-    const satSrc    = v?.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
-    const satAltSrc = v?.satellite_image_url_alt ? `${BACKEND_HOST}${v.satellite_image_url_alt}` : '';
+    // May 2026 — getMediaUrl() routes both relative `/api/v1/...` URLs
+    // (prepends BACKEND_HOST) and absolute https (pass-through). See
+    // the hover-preview comment above for the full HAR-driven story.
+    const satSrc    = v?.satellite_image_url ? getMediaUrl(v.satellite_image_url) : '';
+    const satAltSrc = v?.satellite_image_url_alt ? getMediaUrl(v.satellite_image_url_alt) : '';
     const satPrimaryLabel = (v?.satellite_source || 'Satellite').split('(')[0].trim();
     const satAltLabel     = (v?.satellite_source_alt || 'Alt').split('(')[0].trim();
     const satHtml = satSrc
@@ -2344,7 +2354,10 @@ window.dpSwitchView = (reportId, view, btn) => {
                 return s.length > 30 ? s.slice(0, 30) + '…' : s;
             };
             const cells = all.slice(0, 4).map((entry, i) => {
-                const src = entry.url ? `${BACKEND_HOST}${entry.url}` : '';
+                // May 2026 — getMediaUrl() handles both relative
+                // `/api/v1/.../satellite/grid/<idx>` URLs and absolute
+                // https. Previously hard-coded BACKEND_HOST concat.
+                const src = entry.url ? getMediaUrl(entry.url) : '';
                 const label = sourceShort(entry.source);
                 const cloud = (entry.cloud_cover_pct == null) ? '' :
                     `<span class="dp-sat-meta">cloud ${Number(entry.cloud_cover_pct).toFixed(0)}%</span>`;
@@ -2413,10 +2426,12 @@ window.dpSwitchView = (reportId, view, btn) => {
             }
         } else if (v?.satellite_image_url) {
             // Legacy single-image path (chain-era verifications)
-            container.innerHTML = `<div class="dp-img" onclick="openLightbox('${BACKEND_HOST}${v.satellite_image_url}','Satellite')"><img src="${BACKEND_HOST}${v.satellite_image_url}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
+            const src = getMediaUrl(v.satellite_image_url);
+            container.innerHTML = `<div class="dp-img" onclick="openLightbox('${src}','Satellite')"><img src="${src}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
         }
     } else if (view === 'alt' && v?.satellite_image_url_alt) {
-        container.innerHTML = `<div class="dp-img" onclick="openLightbox('${BACKEND_HOST}${v.satellite_image_url_alt}','Alt Satellite')"><img src="${BACKEND_HOST}${v.satellite_image_url_alt}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
+        const src = getMediaUrl(v.satellite_image_url_alt);
+        container.innerHTML = `<div class="dp-img" onclick="openLightbox('${src}','Alt Satellite')"><img src="${src}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
     }
 };
 
@@ -2466,8 +2481,8 @@ window.dpOpenCompare = (r) => {
     const img = r.media?.find(m => m.type === 'IMAGE');
     const v = r.verification;
     const photoSrc = img?.url ? getMediaUrl(img.url) : '';
-    const satSrc = v?.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
-    const altSrc = v?.satellite_image_url_alt ? `${BACKEND_HOST}${v.satellite_image_url_alt}` : '';
+    const satSrc = v?.satellite_image_url ? getMediaUrl(v.satellite_image_url) : '';
+    const altSrc = v?.satellite_image_url_alt ? getMediaUrl(v.satellite_image_url_alt) : '';
     const scores = v?.scores || {};
     const total = v?.total_score || 0;
     const damageMatch = scores.damage_corroboration ? Math.round((scores.damage_corroboration / 25) * 100) : 0;
@@ -2815,7 +2830,7 @@ function renderVerificationSection(r) {
     const img = r.media?.find(m => m.type === 'IMAGE');
     const userImgSrc = img?.url ? getMediaUrl(img.url) : (img?.thumbnail_url ? getMediaUrl(img.thumbnail_url) : '');
 
-    const satImgSrc = v.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
+    const satImgSrc = v.satellite_image_url ? getMediaUrl(v.satellite_image_url) : '';
 
     // Key findings
     const findings = (v.key_findings || []).map(f =>
@@ -3055,10 +3070,15 @@ window.exportPDF = (id) => {
     const ts = new Date(ensureUTC(r.server_created_at)).toLocaleString();
 
     // Gather all image URLs: user photo + primary satellite + alt satellite
+    // May 2026 — getMediaUrl() handles all four cases now: relative
+    // `/static/...` (LocalStorage), relative `/api/v1/.../satellite/...`
+    // (S3-backed stable URLs), absolute https (legacy/external),
+    // data: URLs (rare inline). Previously hard-coded BACKEND_HOST
+    // concat broke `s3://...` and stable-URL paths alike.
     const imgMedia = r.media?.find(m => m.type === 'IMAGE' && m.assembly_status === 'complete' && m.url);
-    const userImgUrl = imgMedia ? `${BACKEND_HOST}${imgMedia.url.startsWith('/') ? '' : '/static/'}${imgMedia.url.replace('/static/','')}` : '';
-    const satImgUrl = v?.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
-    const satAltImgUrl = v?.satellite_image_url_alt ? `${BACKEND_HOST}${v.satellite_image_url_alt}` : '';
+    const userImgUrl = imgMedia ? getMediaUrl(imgMedia.url) : '';
+    const satImgUrl = v?.satellite_image_url ? getMediaUrl(v.satellite_image_url) : '';
+    const satAltImgUrl = v?.satellite_image_url_alt ? getMediaUrl(v.satellite_image_url_alt) : '';
     const satSource1 = (v?.satellite_source || 'Satellite').split('(')[0].trim();
     const satSource2 = (v?.satellite_source_alt || 'Alt Satellite').split('(')[0].trim();
     const satDate1 = v?.satellite_acquisition_date ? new Date(v.satellite_acquisition_date).toLocaleDateString() : '';

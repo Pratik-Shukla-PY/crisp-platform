@@ -1,5 +1,6 @@
 import base64
 import os
+import tempfile
 import time
 import logging
 import threading
@@ -3435,30 +3436,77 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
         except Exception as exc:
             logger.warning(f"Could not save satellite image {idx}: {exc}")
 
-    # ── Find user photo on disk ───────────────────────────────────────────────
+    # ── Load user photo via the storage abstraction ──────────────────────────
+    #
+    # Bug history (May 2026): the previous implementation hard-coded
+    # `os.path.join(UPLOAD_DIR, img_media.url.replace("/static/", ""))`,
+    # which works for `/static/abc.jpg` (LocalStorage) but FAILS for
+    # `s3://abc.jpg` (S3Storage) — `os.path.join` produces a nonsensical
+    # path that doesn't exist on disk, so `user_image_path` stayed None
+    # and Claude scored the satellite + text only, with NO ground-truth
+    # photo corroboration. Damage scores were silently unreliable on
+    # any deployment with MEDIA_BACKEND=s3.
+    #
+    # Fix: route through `_get_media_storage().read()` which abstracts
+    # both backends. truth_scorer.score() reads via file path (line ~175
+    # in truth_scorer.py) so we materialise the bytes to a temp file and
+    # delete it after scoring completes.
     user_image_path: Optional[str] = None
+    user_image_tmp: Optional[str] = None
     img_media = next(
         (m for m in report.media if m.type == MediaTypeEnum.IMAGE and m.url), None
     )
     if img_media:
-        candidate = os.path.join(UPLOAD_DIR, img_media.url.replace("/static/", ""))
-        if os.path.exists(candidate):
-            user_image_path = candidate
+        try:
+            img_bytes = _get_media_storage().read(img_media.url)
+            # Suffix matters for Anthropic's media-type detection downstream.
+            url_lc = (img_media.url or "").lower()
+            if url_lc.endswith((".jpg", ".jpeg")):
+                suffix = ".jpg"
+            elif url_lc.endswith(".png"):
+                suffix = ".png"
+            elif url_lc.endswith(".webp"):
+                suffix = ".webp"
+            else:
+                suffix = ".jpg"  # safe default — Claude infers from bytes anyway
+            tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+            try:
+                tmp.write(img_bytes)
+            finally:
+                tmp.close()
+            user_image_path = tmp.name
+            user_image_tmp = tmp.name
+        except Exception as exc:
+            # Don't block verification if the photo can't be loaded —
+            # Claude still scores satellite + text, with the data_quality
+            # score reflecting the missing photo via its `has_photo` input.
+            logger.warning(
+                f"Could not load user image for verification (report={report_id}): {exc}"
+            )
 
     # ── Run AI scoring ───────────────────────────────────────────────────────
     has_audio = any(m.type == MediaTypeEnum.AUDIO for m in report.media)
-    result = await truth_scorer.score(
-        report_id         = report_id,
-        infrastructure_type = report.infrastructure_type.value,
-        severity          = report.severity.value,
-        description       = report.description,
-        transcription     = ai.transcription if ai else None,
-        report_dt         = report.server_created_at,
-        user_image_path   = user_image_path,
-        satellite_data    = sat_data,
-        has_audio         = has_audio,
-        has_gps           = True,
-    )
+    try:
+        result = await truth_scorer.score(
+            report_id         = report_id,
+            infrastructure_type = report.infrastructure_type.value,
+            severity          = report.severity.value,
+            description       = report.description,
+            transcription     = ai.transcription if ai else None,
+            report_dt         = report.server_created_at,
+            user_image_path   = user_image_path,
+            satellite_data    = sat_data,
+            has_audio         = has_audio,
+            has_gps           = True,
+        )
+    finally:
+        # Clean up the temp file — both on success and on Claude API failure.
+        # Best-effort: a leaked temp file is cheaper than a 500.
+        if user_image_tmp:
+            try:
+                os.remove(user_image_tmp)
+            except Exception:
+                pass
 
     # ── Persist result ────────────────────────────────────────────────────────
     scores     = result.get("scores", {})
@@ -3780,6 +3828,133 @@ def get_media_redirect(
         status_code=302,
         headers={"Cache-Control": "public, max-age=3600"},
     )
+
+
+# ── Stable satellite URLs (May 2026) ────────────────────────────────────────
+#
+# Background — the satellite verification feature stores 1 primary image,
+# 0-1 alternate images, and a 4-cell multi-provider grid (AWS Sentinel-2 +
+# Microsoft Planetary Computer + ESA Copernicus + Mapbox). Before this
+# refactor, VerificationResponse._resolve_sat_url called
+# storage.public_url() directly, regenerating a fresh X-Amz-Signature on
+# every dashboard poll. Worse, the dashboard hard-coded
+# `${BACKEND_HOST}${v.satellite_image_url}` at 11 render sites — when
+# MEDIA_BACKEND=s3 and the serializer returned a signed
+# `https://s3.../...` URL, the dashboard prepended BACKEND_HOST and
+# produced `https://undp/.../https://s3.../...` → 404.
+#
+# Fix — VerificationResponse now emits a STABLE backend-routed URL of the
+# form `/api/v1/reports/{report_id}/satellite/<primary|alt|grid/<idx>>`.
+# This endpoint resolves to a fresh presigned target on demand and tags
+# the redirect with `Cache-Control: public, max-age=3600`. Same browser-
+# cache-friendly pattern as the media redirect above.
+#
+# Auth model — intentionally NO auth (matches `get_media_redirect` and the
+# previous behaviour where presigned URLs were embedded in API responses).
+# The report_id is a UUID, unguessable — listing report_ids still requires
+# Bearer auth via /api/v1/reports/.
+
+def _satellite_redirect(
+    db: Session,
+    report_id: str,
+    which: str,
+    grid_idx: Optional[int] = None,
+):
+    """Resolve the satellite image source on a SatelliteVerification row,
+    then 302-redirect to a fresh presigned URL (or local /static/ path).
+
+    `which` is one of "primary", "alt", "grid". For "grid", `grid_idx`
+    selects the entry from the multi-provider list.
+
+    Identical 1-hour Cache-Control as `get_media_redirect` so cold
+    caches still only hit the backend ~once per image per hour.
+    """
+    v = db.query(SatelliteVerification).filter(
+        SatelliteVerification.report_id == report_id
+    ).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="No verification result for this report")
+
+    db_url: Optional[str] = None
+    if which == "primary":
+        db_url = v.satellite_image_url
+    elif which == "alt":
+        db_url = v.satellite_image_url_alt
+    elif which == "grid":
+        # Decode the JSON column. Forgiving — malformed JSON yields no URL
+        # rather than a 500.
+        if grid_idx is None or grid_idx < 0:
+            raise HTTPException(status_code=404, detail="Invalid grid index")
+        try:
+            import json as _json
+            entries = _json.loads(v.satellite_images_json or "[]")
+        except Exception:
+            entries = []
+        if grid_idx >= len(entries):
+            raise HTTPException(status_code=404, detail="Grid index out of range")
+        entry = entries[grid_idx]
+        if isinstance(entry, dict):
+            db_url = entry.get("url")
+
+    if not db_url:
+        raise HTTPException(status_code=404, detail="No URL available for this satellite slot")
+
+    target = _get_media_storage().public_url(db_url)
+
+    # Defensive: if storage backend cannot produce a real URL (e.g. a
+    # cross-backend mismatch), surface 503 rather than redirect to garbage.
+    if not (target.startswith("http://") or target.startswith("https://") or target.startswith("/")):
+        raise HTTPException(
+            status_code=503,
+            detail="Storage backend cannot resolve URL for this satellite image",
+        )
+
+    return RedirectResponse(
+        url=target,
+        status_code=302,
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@router.get("/{report_id}/satellite/primary")
+def get_satellite_primary(
+    report_id: str,
+    db: Session = Depends(get_db),
+):
+    """Stable URL → 302 to the primary satellite image.
+
+    Maps to `SatelliteVerification.satellite_image_url`. The "primary"
+    is whichever provider the chain picked first (typically Sentinel-2
+    via AWS, Microsoft, or ESA — Mapbox only when all Sentinel-2
+    sources fail or are heavily clouded)."""
+    return _satellite_redirect(db, report_id, "primary")
+
+
+@router.get("/{report_id}/satellite/alt")
+def get_satellite_alt(
+    report_id: str,
+    db: Session = Depends(get_db),
+):
+    """Stable URL → 302 to the alternate satellite image.
+
+    Maps to `SatelliteVerification.satellite_image_url_alt` — typically
+    the higher-resolution Mapbox/Maxar fallback fetched alongside the
+    primary Sentinel-2 result."""
+    return _satellite_redirect(db, report_id, "alt")
+
+
+@router.get("/{report_id}/satellite/grid/{idx}")
+def get_satellite_grid_cell(
+    report_id: str,
+    idx: int,
+    db: Session = Depends(get_db),
+):
+    """Stable URL → 302 to the Nth cell of the multi-provider 2×2 grid.
+
+    Maps to entry `idx` in `SatelliteVerification.satellite_images_json`
+    (the Apr 2026 multi-provider fan-out — AWS / Microsoft / ESA /
+    Mapbox). Order matches what the chain returned."""
+    return _satellite_redirect(db, report_id, "grid", grid_idx=idx)
 
 
 @router.get("/media/{media_id}/duplicates")

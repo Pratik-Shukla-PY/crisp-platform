@@ -320,39 +320,62 @@ class VerificationResponse(BaseModel):
             pass
         return data
 
-    # Apr 2026 — resolve S3 keys to signed URLs on response. Same logic
-    # as MediaResponse but applied to the satellite_image_url* fields
-    # which may also point at s3:// keys after the storage refactor.
-    # The `satellite_images` list contains `url` values too — those
-    # are walked and resolved cell by cell.
+    # Apr 2026 — pass-through for `/static/...` (legacy local-disk paths)
+    # and plain http(s) URLs.
+    #
+    # May 2026 (HAR-driven rewrite, mirrors MediaResponse Phase 1) —
+    # previously this generated a fresh S3 presigned URL on every
+    # serialization. The dashboard polls /api/v1/reports/ every 1.2-4s,
+    # which means each of the 4 satellite cells in the multi-provider
+    # grid got a new X-Amz-Signature on every poll → browser cache miss
+    # every time → ~100× refetch of identical satellite bytes per
+    # analyst-shift.
+    #
+    # Worse, the dashboard hard-coded `${BACKEND_HOST}${v.satellite_image_url}`
+    # at 11 render sites — when the serializer returned a signed
+    # `https://s3.../...` URL, the dashboard prepended BACKEND_HOST and
+    # produced `https://undp/.../https://s3.../...` → 404 / 403
+    # SignatureDoesNotMatch on every PROD load.
+    #
+    # Fix — emit a STABLE `/api/v1/reports/{report_id}/satellite/<slot>`
+    # URL. The endpoint resolves to a fresh presigned URL on demand via
+    # a 302 redirect (cached for 1 h via Cache-Control). The dashboard
+    # `getMediaUrl()` helper handles relative URLs correctly already.
+    #
+    # Field-name disambiguation via `SerializationInfo.field_name`
+    # — same trick as MediaResponse — distinguishes `satellite_image_url`
+    # (→ /satellite/primary) from `satellite_image_url_alt`
+    # (→ /satellite/alt) without a second decorator method.
     @field_serializer("satellite_image_url", "satellite_image_url_alt", when_used="json")
-    def _resolve_sat_url(self, v: Optional[str]) -> Optional[str]:
+    def _resolve_sat_url(self, v: Optional[str], info: SerializationInfo) -> Optional[str]:
         if not v:
             return v
-        try:
-            from app.services.storage import get_storage
-            return get_storage().public_url(v)
-        except Exception:
-            return v
+        # `s3://...` rows: rewrite to stable backend-routed URL.
+        # `self.report_id` is a required field (line 258), but the guard
+        # avoids a dangling `/api/v1/reports//satellite/...` path if some
+        # test bypasses validation.
+        if v.startswith("s3://") and self.report_id:
+            slot = "alt" if info.field_name == "satellite_image_url_alt" else "primary"
+            return f"/api/v1/reports/{self.report_id}/satellite/{slot}"
+        # Pass-through for `/static/...` (local backend) and plain http(s)://.
+        return v
 
     @field_serializer("satellite_images", when_used="json")
     def _resolve_sat_images(self, v: Optional[List[Any]]) -> Optional[List[Any]]:
         if not v:
             return v
-        try:
-            from app.services.storage import get_storage
-            store = get_storage()
-            out: List[Any] = []
-            for entry in v:
-                if isinstance(entry, dict) and entry.get("url"):
-                    e2 = dict(entry)
-                    e2["url"] = store.public_url(entry["url"])
-                    out.append(e2)
-                else:
-                    out.append(entry)
-            return out
-        except Exception:
-            return v
+        out: List[Any] = []
+        for idx, entry in enumerate(v):
+            if isinstance(entry, dict) and entry.get("url"):
+                e2 = dict(entry)
+                u = entry["url"]
+                # `s3://...` → stable grid URL; pass-through everything else.
+                if isinstance(u, str) and u.startswith("s3://") and self.report_id:
+                    e2["url"] = f"/api/v1/reports/{self.report_id}/satellite/grid/{idx}"
+                out.append(e2)
+            else:
+                out.append(entry)
+        return out
 
 class ReportResponse(BaseModel):
     id: str
