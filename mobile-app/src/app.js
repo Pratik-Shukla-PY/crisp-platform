@@ -7969,6 +7969,103 @@ function _mapReportStatus(r) {
     return { state: 'SUBMITTED', color: '#9ca3af', icon: '⚪', label: t('rd_status_submitted') };
 }
 
+// ── M5 (May 2026) — ETA badge + mini-map for report-detail ────────────────
+//
+// The ETA badge surfaces a next-step expectation derived from the current
+// status. Backend doesn't yet emit per-report ETAs (planned for v3.1 once
+// we have enough verified-response data per region to build percentile
+// curves), so we use heuristic ranges that match what users see on the
+// dashboard side.
+function _renderRdEta(r) {
+    const badge = document.getElementById('rd-eta-badge');
+    const text = document.getElementById('rd-eta-text');
+    if (!badge || !text) return;
+    const verdict = (r.reviewer_verdict || 'NOT_REVIEWED').toUpperCase();
+    const status = (r.status || 'PENDING').toUpperCase();
+    let key = null;
+    if (r.help_arrived_at) {
+        // No ETA — help is already on-site.
+        badge.style.display = 'none';
+        return;
+    }
+    if (r.help_dispatched_at && !r.help_arrived_at) {
+        key = 'rd_eta_help_otw';
+    } else if (verdict === 'ACCEPTED') {
+        key = 'rd_eta_accepted';
+    } else if (verdict === 'REJECTED' || status === 'FALSE_ALARM') {
+        // No ETA — terminal state.
+        badge.style.display = 'none';
+        return;
+    } else if (status === 'RESPONDING') {
+        key = 'rd_eta_under_review';
+    } else {
+        // PENDING / VERIFIED-no-verdict — first-stage review.
+        key = 'rd_eta_initial';
+    }
+    const txt = (typeof t === 'function' && t(key)) || '';
+    if (!txt || txt === key) { badge.style.display = 'none'; return; }
+    text.textContent = txt;
+    badge.style.display = 'inline-flex';
+}
+
+// Mini-map: small Leaflet view showing the report's coords. We reuse the
+// already-cached Leaflet bundle from building-select.js (loaded for the
+// capture-flow building picker). If Leaflet isn't on the page yet, we
+// silently skip (degrades to no map; everything else still renders).
+let _rdMiniMapInstance = null;
+let _rdMiniMapMarker = null;
+function _renderRdMiniMap(r) {
+    const wrap = document.getElementById('rd-minimap-wrap');
+    const mapEl = document.getElementById('rd-minimap');
+    const coordsEl = document.getElementById('rd-minimap-coords');
+    if (!wrap || !mapEl) return;
+    const loc = r.location || {};
+    const lat = Number(loc.lat);
+    const lng = Number(loc.lng || loc.lon);
+    const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+    if (!hasCoords) { wrap.style.display = 'none'; return; }
+    if (typeof window.L === 'undefined') {
+        // Leaflet hasn't loaded yet (rare — building-select pulls it on
+        // boot). Hide the wrap rather than ship a broken div.
+        wrap.style.display = 'none';
+        return;
+    }
+    wrap.style.display = '';
+    if (coordsEl) coordsEl.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    try {
+        if (!_rdMiniMapInstance) {
+            _rdMiniMapInstance = window.L.map(mapEl, {
+                zoomControl: false,
+                attributionControl: false,
+                scrollWheelZoom: false,
+                doubleClickZoom: false,
+                dragging: false,
+                tap: false,
+                keyboard: false,
+            }).setView([lat, lng], 15);
+            window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+            }).addTo(_rdMiniMapInstance);
+        } else {
+            _rdMiniMapInstance.setView([lat, lng], 15);
+        }
+        if (_rdMiniMapMarker) {
+            _rdMiniMapMarker.setLatLng([lat, lng]);
+        } else {
+            _rdMiniMapMarker = window.L.marker([lat, lng]).addTo(_rdMiniMapInstance);
+        }
+        // Re-invalidate size on next paint — Leaflet under display:none
+        // won't have computed its container width yet, so the tiles
+        // render half-blank. setTimeout 0 schedules after the render.
+        setTimeout(() => {
+            try { _rdMiniMapInstance.invalidateSize(false); } catch (_) {}
+        }, 50);
+    } catch (e) {
+        console.warn('[M5] mini-map render:', e);
+        wrap.style.display = 'none';
+    }
+}
+
 // Derive the "Action taken" sentence shown on the detail view. Spec:
 // auto-derive from timestamps + verdict; if the analyst also typed
 // free-text in action_taken, append it.
@@ -8370,17 +8467,39 @@ function renderReportDetail(r) {
             },
             { key: 'help', label: t('rd_tl_help_sent'), done: dispatched || !!r.help_arrived_at, hidden: rejected },
         ];
-        tl.innerHTML = steps.filter(s => !s.hidden).map((s, i, arr) => {
+        const visibleSteps = steps.filter(s => !s.hidden);
+        // M5: identify the most recently completed step (the "current"
+        // anchor) so its dot can pulse. Falls back to the first step
+        // when nothing is done yet — mirrors the user's intuition that
+        // "I just submitted" should highlight Submitted.
+        let currentIdx = -1;
+        for (let i = visibleSteps.length - 1; i >= 0; i--) {
+            if (visibleSteps[i].done) { currentIdx = i; break; }
+        }
+        if (currentIdx === -1 && visibleSteps.length > 0) currentIdx = 0;
+        tl.innerHTML = visibleSteps.map((s, i, arr) => {
             const cls = s.done
                 ? (s.rejected ? 'rd-tl-rejected' : 'rd-tl-done')
                 : 'rd-tl-upcoming';
+            // Pulse the current anchor unless it's the rejected verdict
+            // (we don't want to celebrate a rejection state).
+            const currentCls = i === currentIdx && !s.rejected ? ' rd-tl-current' : '';
             const line = i < arr.length - 1 ? '<div class="rd-tl-line"></div>' : '';
-            return `<div class="rd-tl-step ${cls}">
+            return `<div class="rd-tl-step ${cls}${currentCls}">
                 <div class="rd-tl-dot"></div>
                 <div class="rd-tl-label">${escapeHtmlSimple(s.label)}</div>
             </div>${line}`;
         }).join('');
     }
+
+    // M5 — ETA badge below the status chip. Heuristic-based; we don't
+    // have backend ETAs (feature-flagged for v3.1) so we map the current
+    // status to an approximate next-step expectation.
+    try { _renderRdEta(r); } catch (e) { console.warn('[M5] eta:', e); }
+    // M5 — mini-map: a 130px Leaflet view with a single marker showing
+    // the report's coordinates. Best-effort — needs (a) Leaflet loaded
+    // and (b) non-zero coords. Hidden gracefully otherwise.
+    try { _renderRdMiniMap(r); } catch (e) { console.warn('[M5] mini-map:', e); }
 
     // Photo (fallback to placeholder)
     const photoWrap = document.getElementById('rd-photo-wrap');

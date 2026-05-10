@@ -2006,16 +2006,29 @@
         </div>
 
         <!-- Status chip at the top — single source of truth, same colors
-             as the list card. Text filled by renderReportDetail(). -->
+             as the list card. Text filled by renderReportDetail().
+
+             M5 (May 2026) — added an ETA badge to the right that surfaces
+             the next-step expectation derived from r.status (e.g. "Under
+             review · ~30 min", "Help on the way · ETA 1-3 h"). Set by
+             _renderRdEta() in renderReportDetail. -->
         <div class="rd-status-row">
             <span class="rd-status-chip" id="rd-status-chip">—</span>
             <span class="rd-meta" id="rd-meta-date">—</span>
+            <span class="rd-eta-badge" id="rd-eta-badge" style="display:none;">
+                <i class="fa-solid fa-clock" aria-hidden="true"></i>
+                <span id="rd-eta-text">—</span>
+            </span>
         </div>
 
         <!-- Status timeline — Submitted → Under Review → Accepted/Rejected
              → Help Sent. Each step lights up green when the corresponding
              timestamp is set. Layout mirrors the capture flow's
-             .flow-progress bar so users recognise the pattern. -->
+             .flow-progress bar so users recognise the pattern.
+
+             M5 (May 2026): the most-recent-completed step now gets a
+             pulsing dot via .rd-tl-current — gives the user a clear
+             "we're here right now" anchor in the report's lifecycle. -->
         <div class="rd-timeline" id="rd-timeline" aria-label="Report lifecycle">
             <!-- Injected by JS to keep i18n + state in one place. -->
         </div>
@@ -2024,6 +2037,19 @@
              to see the LARGE via the lightbox (existing openLightbox). -->
         <div class="rd-photo-wrap" id="rd-photo-wrap" style="display:none;">
             <img id="rd-photo" src="" alt="Report photo" loading="lazy">
+        </div>
+
+        <!-- M5 mini-map — populated by _renderRdMiniMap() when the report
+             carries non-zero coordinates. 130 px-tall static Leaflet view
+             with a single marker pinning the report. Tapping opens the
+             full building-select map (already wired) for navigation
+             context. Hidden if no coords (offline / GPS-failure submit). -->
+        <div class="rd-minimap-wrap" id="rd-minimap-wrap" style="display:none;">
+            <div id="rd-minimap" class="rd-minimap" aria-label="Report location"></div>
+            <div class="rd-minimap-foot">
+                <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+                <span id="rd-minimap-coords">—</span>
+            </div>
         </div>
 
         <!-- Description — either typed text or server-side Whisper transcript. -->

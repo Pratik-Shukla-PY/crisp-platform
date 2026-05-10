@@ -431,5 +431,9 @@
   "landmark_chip_other": "其他地标",
   "landmark_prefix": "靠近 ",
   "success_impact_first": "你的第一份报告 — 感谢你的挺身而出。",
-  "success_impact_nth": "你的第 {n} 份报告 — 谢谢！"
+  "success_impact_nth": "你的第 {n} 份报告 — 谢谢！",
+  "rd_eta_initial": "等待审核 · 约 30 分钟",
+  "rd_eta_under_review": "审核中 · 约 1 小时",
+  "rd_eta_accepted": "援助安排中 · 约 1-3 小时",
+  "rd_eta_help_otw": "援助在路上 · 即将到达"
 }

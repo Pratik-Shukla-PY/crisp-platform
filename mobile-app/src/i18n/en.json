@@ -432,5 +432,9 @@
   "landmark_chip_other": "Other landmark",
   "landmark_prefix": "Near ",
   "success_impact_first": "Your first report — thank you for stepping up.",
-  "success_impact_nth": "Your {n} report — thank you!"
+  "success_impact_nth": "Your {n} report — thank you!",
+  "rd_eta_initial": "Awaiting review · ~30 min",
+  "rd_eta_under_review": "Under review · ~1 h",
+  "rd_eta_accepted": "Help being arranged · ~1-3 h",
+  "rd_eta_help_otw": "Help on the way · soon"
 }
