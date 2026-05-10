@@ -50,6 +50,27 @@ const POLL_INTERVAL        = 4000;  // normal polling
 const POLL_INTERVAL_ACTIVE = 1200;  // fast polling while any image is uploading
 let _pollTimer = null;
 
+// Phase 3 (May 2026, HAR-driven) — incremental delta polling state.
+// Backend `/api/v1/reports/?since=<iso>` returns ONLY reports updated
+// since `since`. We track the X-Server-Time of the last response and
+// echo it back on the next poll. Idle dashboards drop from ~440 KB
+// per poll to ~1-2 KB.
+//
+// Periodic full refresh: every Nth poll we deliberately skip `since`
+// to catch deletions (24h soft-delete grace window) and any state
+// drift. 30 polls × 4 s = 2 min between full refreshes — fine for
+// admin-action latency, plenty cheap.
+let _lastServerTime = null;            // ISO 8601 cursor from previous poll
+let _pollsSinceFullRefresh = 0;
+const _FULL_REFRESH_EVERY_N_POLLS = 30;
+
+// Phase 4 (May 2026, HAR-driven) — ETag / If-None-Match. Server returns
+// an ETag header on every /reports/ response. Echo it back on the next
+// poll; if data hasn't changed, server short-circuits with 304 + no
+// body. Combined with Phase 3's `since=<cursor>`, an idle poll round-
+// trips ~50 bytes (status line + headers) instead of ~440 KB.
+let _lastReportsEtag = null;
+
 // ── State ────────────────────────────────────────────────────────────────────
 let allReports = [];
 let sortMode = 'impact';
@@ -129,13 +150,15 @@ const getMediaUrl = (url) => {
 // source was found`, which masquerades as a codec problem. Hours
 // of red-herring debugging.
 //
-// The fix is to skip the cache-buster entirely for presigned URLs.
-// The API poll cycle (every ~10s) regenerates a fresh presigned URL
-// with a new X-Amz-Date / X-Amz-Signature — that's already a natural
-// cache-buster (the URL string differs between polls, so the browser
-// HTTP cache can't share entries). For legacy `/static/...` URLs +
-// any other non-presigned URLs, the cache-buster still applies the
-// usual `?` / `&` switch.
+// May 2026 (HAR-driven rewrite) — the backend now emits STABLE
+// `/api/v1/reports/media/<id>/<file|thumb>` URLs instead of presigned
+// S3 URLs (which churned per-poll, defeating browser cache and
+// forcing 98× refetch of identical bytes). The presigned URL only
+// surfaces on the redirect target after the browser dereferences the
+// stable URL; <img> / <audio> elements never see it. So the
+// `_isPresignedS3Url` guard below mostly fires on legacy localStorage
+// cache entries (pre-fix data) and any future direct presigned URL.
+// We keep it as a safety net.
 const _isPresignedS3Url = (url) =>
     typeof url === 'string' && url.includes('X-Amz-Signature=');
 
@@ -261,6 +284,49 @@ function _buildTierSwitcher(reportId, group, activeTier) {
                         onclick="${onclick}">${label}</button>`;
     }).join('');
     return `<div class="dp-tier-switcher" role="group" aria-label="Image quality">${btns}</div>`;
+}
+
+// May 2026 (HAR-driven, Phase 2) — bandwidth policy for the inline detail
+// view. Previously every detail-panel render eagerly fetched the LARGE
+// (HIGH-tier) variant via `bestVariant()`, even when the analyst was just
+// scanning the queue. With LARGE variants typically ~500 KB and the
+// dashboard rendering 50 reports per session, that's ~25 MB of bandwidth
+// per analyst-shift the 90% case never benefits from.
+//
+// New default: render the SMALLEST complete variant inline (~50 KB), and
+// upgrade to LARGE on EXPLICIT user intent — clicking the LARGE button
+// in the tier switcher, or opening the lightbox. The auto-upgrade poll
+// (`_maybeUpgradeDetailImage`) is now bounded to LOW→MEDIUM only — it
+// never silently fetches LARGE behind the user's back.
+//
+// `thumbVariant()` mirrors `bestVariant()` but with reversed tier
+// preference. It still falls back to partials/blurhash the same way
+// so progressive rendering keeps working during in-flight uploads.
+function thumbVariant(group) {
+    if (!group || !group.members || group.members.length === 0) return null;
+    // Prefer the LOWEST-rank COMPLETED variant — the thumb-first policy.
+    const complete = group.members
+        .filter(m => m.assembly_status === 'complete' && m.url)
+        .sort((a, b) => (TIER_RANK[a.resolution_tier] || 0) - (TIER_RANK[b.resolution_tier] || 0));
+    if (complete.length > 0) {
+        const m = complete[0];
+        return { src: getMediaUrl(m.url), tier: m.resolution_tier, isFinal: true, mediaId: m.id };
+    }
+    // No complete variant yet — fall back to whatever bestVariant would
+    // surface (partial thumbnails / partial JPEG / blurhash). Keeps
+    // progressive rendering identical during uploads.
+    return bestVariant(group);
+}
+
+// Find the highest-tier complete variant for explicit "show full" actions
+// (lightbox click, LARGE button). Returns null if no complete variant
+// exists yet — caller should fall back to whatever inline tier is showing.
+function highestCompleteVariant(group) {
+    if (!group || !group.members) return null;
+    const m = group.members
+        .filter(x => x.assembly_status === 'complete' && x.url)
+        .sort((a, b) => (TIER_RANK[b.resolution_tier] || 0) - (TIER_RANK[a.resolution_tier] || 0))[0];
+    return m ? { src: getMediaUrl(m.url), tier: m.resolution_tier, mediaId: m.id } : null;
 }
 
 function bestVariant(group) {
@@ -1605,6 +1671,10 @@ function showIncidentPreview(r, event) {
     const thumbUrl = img?.thumbnail_url ? getMediaUrl(img.thumbnail_url) : '';
     const fullUrl  = img?.url && img.assembly_status === 'complete' ? getMediaUrl(img.url) : '';
     const audioUrl = audio?.url ? getMediaUrl(audio.url) : (audio?.thumbnail_url ? getMediaUrl(audio.thumbnail_url) : '');
+    // Phase 2 (May 2026): hover-preview is a 380px tooltip — no need to
+    // fetch the LARGE variant for it. Prefer the thumb (which is also
+    // already in cache from the inline detail panel render). Falls back
+    // to full only if no thumb exists (legacy single-variant rows).
     // Phase 2.2: if the best variant isn't ready yet but the backend has
     // written a partial JPEG (0 < completion_pct < 100), surface it here so
     // the hover-preview shows something recognisable within seconds of the
@@ -1622,7 +1692,9 @@ function showIncidentPreview(r, event) {
     // landed but the first chunk is still in flight). Never overrides a
     // real photo source.
     const blurPreviewUrl = blurhashToDataURL(r.blurhash);
-    const photoSrc = fullUrl || thumbUrl || partialPreviewUrl || blurPreviewUrl || '';
+    // Phase 2: thumb-first preference (was full-first). Cuts hover-preview
+    // image bandwidth ~10× when LOW + LARGE both exist for a report.
+    const photoSrc = thumbUrl || fullUrl || partialPreviewUrl || blurPreviewUrl || '';
     const satSrc = v?.satellite_image_url ? `${BACKEND_HOST}${v.satellite_image_url}` : '';
 
     // Verification score dots
@@ -1761,9 +1833,13 @@ window.selectReport = (id, skipFly = false) => {
     // `_maybeUpgradeDetailImage` below, which swaps the <img src> without
     // rebuilding the DOM.
     const primaryGroup = photoGroups[0] || null;
-    // Phase 2: honour the user's manual tier pick (if any). Falls back to
-    // `bestVariant()` which returns the highest-tier complete variant.
-    let variantPick = primaryGroup ? bestVariant(primaryGroup) : null;
+    // Phase 2 (May 2026): default to the SMALLEST complete variant inline —
+    // typical analyst flow is "skim 50 reports, pull 5 to lightbox", so
+    // pre-fetching LARGE on every detail-panel render burned ~10× the
+    // bandwidth analysts actually consumed. Honour any manual override
+    // first, then fall back to `thumbVariant()` (smallest first). The
+    // user can still click LARGE in the tier switcher to upgrade.
+    let variantPick = primaryGroup ? thumbVariant(primaryGroup) : null;
     const overrideTier = _tierOverride.get(r.id);
     if (primaryGroup && overrideTier) {
         const manual = primaryGroup.members.find(
@@ -1796,11 +1872,17 @@ window.selectReport = (id, skipFly = false) => {
     // when the hash is missing (legacy report) or malformed — in which case
     // we fall back to the original "awaiting media" icon placeholder.
     const blurDataUrl = !imgSrc ? blurhashToDataURL(r.blurhash) : null;
+    // Phase 2 (May 2026): the lightbox is the explicit "I want HQ" trigger.
+    // Even if the inline image is showing the LOW thumb, clicking opens the
+    // HIGHEST complete variant — which is what the analyst means by "show
+    // me the photo". If only LOW is uploaded so far, we just reuse that.
+    const lightboxPick = primaryGroup ? highestCompleteVariant(primaryGroup) : null;
+    const lightboxSrc = lightboxPick?.src || imgSrc;
     const imgHtml = primaryGroup ? (
         imgComplete
             ? `<div class="dp-img" data-group-id="${primaryGroup.group_id || ''}"
                    data-current-tier="${variantPick.tier}"
-                   onclick="openLightbox('${imgSrc}','${r.infrastructure_type}')">
+                   onclick="openLightbox('${lightboxSrc}','${r.infrastructure_type}')">
                    <img src="${imgSrc}" class="img-full-layer img-ready">
                    ${tierSwitcher}
                </div>`
@@ -2341,6 +2423,11 @@ window.dpSwitchView = (reportId, view, btn) => {
 // Gallery image switcher — click thumbnail to show in main view.
 // groupIdx is the index into the photo-group list (one group per captured
 // photo, regardless of how many Media variant rows it has on the server).
+//
+// Phase 2 (May 2026): switching gallery photos shows the THUMB inline,
+// not the LARGE variant. The user clicked because they want to SEE the
+// photo, not necessarily download all 500 KB of it. Lightbox click on
+// the swapped image then escalates to LARGE on demand.
 window.dpShowGalleryImage = (reportId, groupIdx, thumbEl) => {
     const r = allReports.find(x => x.id === reportId);
     if (!r) return;
@@ -2348,8 +2435,11 @@ window.dpShowGalleryImage = (reportId, groupIdx, thumbEl) => {
     const groups = groupPhotos(images);
     const grp = groups[groupIdx];
     if (!grp) return;
-    const pick = bestVariant(grp);
+    const pick = thumbVariant(grp);
     if (!pick || !pick.src) return;
+    // Lightbox click opens the HIGHEST complete variant — explicit "show me HQ".
+    const lightboxPick = highestCompleteVariant(grp);
+    const lightboxSrc = lightboxPick?.src || pick.src;
     const container = document.getElementById(`dp-img-view-${reportId}`);
     if (!container) return;
     const tierLabel = pick.tier === 'LOW' ? 'SMALL' : pick.tier === 'MEDIUM' ? 'MEDIUM' : pick.tier === 'HIGH' ? 'LARGE' : pick.tier;
@@ -2357,7 +2447,7 @@ window.dpShowGalleryImage = (reportId, groupIdx, thumbEl) => {
     // <div class="dp-img"> block. The old innerHTML= wipe lost the shield chip
     // on every thumbnail click.
     const imgWrap = container.querySelector('.dp-img');
-    const newImgHtml = `<div class="dp-img" data-group-id="${grp.groupId}" data-current-tier="${pick.tier}" onclick="openLightbox('${pick.src}','Photo ${groupIdx+1} of ${groups.length}')">
+    const newImgHtml = `<div class="dp-img" data-group-id="${grp.groupId}" data-current-tier="${pick.tier}" onclick="openLightbox('${lightboxSrc}','Photo ${groupIdx+1} of ${groups.length}')">
         <img src="${pick.src}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">
         <span class="dp-tier-chip dp-tier-${pick.tier.toLowerCase()}">${tierLabel}</span>
     </div>`;
@@ -4269,9 +4359,15 @@ function _applyReportData(data) {
 
 // ── Progressive image upgrade on poll ─────────────────────────────────────
 // Looks at every .dp-img[data-group-id] and .dp-gallery-thumb[data-group-id]
-// in the open detail panel and swaps their <img src> if bestVariant(group)
-// now resolves to a higher-tier complete variant than the one rendered.
-// Zero-cost when no upgrade is available.
+// in the open detail panel and swaps their <img src> if a better-but-still-
+// thumb variant is now available. Zero-cost when no upgrade is available.
+//
+// May 2026 (HAR-driven, Phase 2): previously this called `bestVariant()`
+// which would silently auto-upgrade to LARGE on the first poll where the
+// HIGH variant landed — defeating the bandwidth savings. Now it calls
+// `thumbVariant()` so the inline view stays small unless the user
+// explicitly picks LARGE. If the user IS holding a manual override, we
+// honour that (existing behaviour).
 function _maybeUpgradeDetailImage() {
     if (!selectedId) return;
     // Phase 2: respect manual tier override — don't auto-upgrade when the
@@ -4285,10 +4381,12 @@ function _maybeUpgradeDetailImage() {
     const groups = groupPhotos(images);
     // Build a groupId → pick lookup. Null-group entries are skipped — the
     // legacy single-media path never upgrades.
+    // Use `thumbVariant` so polling never silently fetches the LARGE tier;
+    // the user has to explicitly click LARGE to pull it.
     const groupMap = new Map();
     for (const g of groups) {
         if (!g.group_id) continue;
-        const pick = bestVariant(g);
+        const pick = thumbVariant(g);
         if (pick) groupMap.set(g.group_id, pick);
     }
     if (groupMap.size === 0) return;
@@ -4381,19 +4479,77 @@ window.__crispFetchReports = () => fetchReports();
 
 async function fetchReports() {
     try {
-        const listUrl = API.endsWith('/') ? API : API + '/';
-        console.log('[CRISP] Fetching from:', listUrl);
-        const res  = await fetch(listUrl);
+        const baseUrl = API.endsWith('/') ? API : API + '/';
+        // Phase 3: send `?since=<X-Server-Time>` on subsequent polls.
+        // First poll (no _lastServerTime) and every Nth poll skip it
+        // for a full refresh — that's how deletions get reflected.
+        const wantFullRefresh = !_lastServerTime
+            || _pollsSinceFullRefresh >= _FULL_REFRESH_EVERY_N_POLLS;
+        const listUrl = wantFullRefresh
+            ? baseUrl
+            : baseUrl + '?since=' + encodeURIComponent(_lastServerTime);
+        // Phase 4: echo back the previous ETag so the server can return
+        // 304 if nothing changed. Skip on full-refresh polls so we always
+        // get a fresh body to validate the local state against the server
+        // truth (otherwise a 304 would short-circuit the deletion-catching
+        // path the full-refresh poll exists to do).
+        const fetchOpts = {};
+        if (!wantFullRefresh && _lastReportsEtag) {
+            fetchOpts.headers = { 'If-None-Match': _lastReportsEtag };
+        }
+        console.log('[CRISP] Fetching from:', listUrl, wantFullRefresh ? '(full refresh)' : '(delta)');
+        const res = await fetch(listUrl, fetchOpts);
         console.log('[CRISP] Response:', res.status, res.url);
+        // Phase 3: capture the server's clock for the NEXT poll's cursor.
+        // Header is echoed back regardless of whether the body is empty —
+        // an idle poll still advances the cursor so the window doesn't
+        // grow unboundedly.
+        const serverTime = res.headers.get('X-Server-Time');
+        if (serverTime) _lastServerTime = serverTime;
+        // Phase 4: capture the ETag for the next poll. The server echoes
+        // the same ETag on a 304, so this works on both 200 and 304.
+        const newEtag = res.headers.get('ETag');
+        if (newEtag) _lastReportsEtag = newEtag;
+        if (wantFullRefresh) {
+            _pollsSinceFullRefresh = 0;
+        } else {
+            _pollsSinceFullRefresh += 1;
+        }
+
+        // Phase 4: 304 Not Modified — nothing to do. Local state is
+        // already canonical. Skip body parsing + render entirely.
+        if (res.status === 304) {
+            console.log('[CRISP] 304 — no changes since last poll');
+            _updateCacheBadge(false);
+            _reschedulePoller();
+            return;
+        }
+
         const data = await res.json();
-        console.log('[CRISP] Loaded', data.length, 'reports');
+        console.log('[CRISP] Loaded', data.length, wantFullRefresh ? 'reports (full)' : 'delta updates');
+
         try {
-            localStorage.setItem(REPORTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+            // Phase 3: cache the FULL list (after merge) — the delta poll
+            // body alone wouldn't be a useful offline snapshot. We only
+            // overwrite the cache on full-refresh polls so a delta poll
+            // doesn't shrink the offline cache to a single record.
+            if (wantFullRefresh) {
+                localStorage.setItem(REPORTS_CACHE_KEY,
+                    JSON.stringify({ ts: Date.now(), data }));
+            }
         } catch (_) {}
         _updateCacheBadge(false);
         // Apply rendering separately so UI errors don't look like network failures
         try {
-            _applyReportData(data);
+            // For full-refresh polls, REPLACE allReports — that's how we
+            // notice server-side deletions (the deleted id stops appearing).
+            // For delta polls, keep merging into existing state (the
+            // existing _applyReportData handles upsert by id).
+            if (wantFullRefresh) {
+                _replaceReportData(data);
+            } else {
+                _applyReportData(data);
+            }
             if (!_initialLoadDone) {
                 _initialLoadDone = true;
                 try { localStorage.setItem('crisp_seen_ids', JSON.stringify([..._seenIds])); } catch(_){}
@@ -4420,6 +4576,45 @@ async function fetchReports() {
         if (feed && !allReports.length) feed.innerHTML = `<div style="padding:20px;color:#f59e0b;font-size:13px;"><b>Connection Error:</b> ${e.message}<br><br>API: ${API}<br>Check if backend is running on port 8000.</div>`;
     }
     _reschedulePoller();
+}
+
+// Phase 3: full-refresh path. Replaces allReports with the server-truth
+// snapshot, dropping any reports the server doesn't see anymore (soft
+// deletes, purges). Notifications + selectedId guard preserved.
+function _replaceReportData(data) {
+    // Rebuild knownIds/_seenIds from scratch using the server snapshot —
+    // anything not in `data` is gone server-side.
+    const incomingIds = new Set(data.map(r => r.id));
+    // Track removals so we can clean up tier-override + selectedId.
+    for (const id of [...knownIds]) {
+        if (!incomingIds.has(id)) {
+            knownIds.delete(id);
+            _tierOverride.delete(id);
+            if (selectedId === id) {
+                // The currently-selected report disappeared server-side.
+                // Best UX is to silently close the panel rather than crash
+                // the open detail view.
+                try { window.closeDetail && window.closeDetail(); } catch (_) { /* fn may be hoisted later */ }
+            }
+        }
+    }
+    // Now feed the server snapshot through the existing upsert path.
+    // Reset allReports so it's rebuilt fresh — `_applyReportData` walks
+    // `data` and pushes anything new.
+    const prev = new Map(allReports.map(r => [r.id, r]));
+    allReports = [];
+    knownIds.clear();
+    // Restore region/country annotations from the prior in-memory copy
+    // so we don't re-geocode every report on every full refresh.
+    data.forEach(r => {
+        const old = prev.get(r.id);
+        if (old) {
+            r._region = old._region;
+            r._country = old._country;
+            r._continent_code = old._continent_code;
+        }
+    });
+    _applyReportData(data);
 }
 
 function _hasActiveUploads() {
