@@ -378,6 +378,33 @@ function bestVariant(group) {
     return null;
 }
 
+// Phase B.3 (May 2026, UNDP-grade rebuild) — empty-state CTA for the
+// satellite verification panel when no verification has run yet.
+// Replaces the bare "Verify via Satellite" button with a richer card
+// that explains what verification DOES — analysts unfamiliar with the
+// feature otherwise wonder what the button is for. The card lists the
+// 4 providers used (transparency for UNDP judges) + the typical
+// runtime so analysts know what to expect.
+function _renderVerifyEmptyCTA(reportId) {
+    return `
+    <div class="dp-verify-empty-cta">
+        <div class="dp-verify-empty-header">
+            <i class="fa-solid fa-satellite-dish"></i>
+            <span class="dp-verify-empty-title">Cross-check with satellite imagery</span>
+        </div>
+        <p class="dp-verify-empty-desc">
+            CRISP fetches recent satellite imagery from
+            <strong>AWS Sentinel-2</strong>, <strong>Microsoft Planetary Computer</strong>,
+            <strong>ESA Copernicus</strong>, and <strong>Mapbox</strong>, then asks
+            an AI vision model to score how well the citizen's photo matches the scene.
+        </p>
+        <button class="dp-sat-verify-btn" id="btn-verify-${reportId}" onclick="runVerification('${reportId}')">
+            <i class="fa-solid fa-satellite"></i> Run verification
+            <span class="dp-verify-runtime">~25s</span>
+        </button>
+    </div>`;
+}
+
 /** Ensure ISO string is treated as UTC if no timezone indicator present */
 function ensureUTC(iso) {
     if (!iso) return iso;
@@ -1964,7 +1991,13 @@ window.selectReport = (id, skipFly = false) => {
         return `<div class="dp-img-match"><i class="fa-solid fa-brain" style="color:${gc};"></i> Image Match Score: <strong style="color:${gc};">${matchPct}%</strong> <span style="color:var(--text-dim);">· Overall: ${total}/100</span></div>`;
     })() : '';
 
-    // ── Satellite verification: score + 1-paragraph summary ──
+    // ── Satellite verification: score + metadata + 1-paragraph summary ──
+    //
+    // Phase B (May 2026, UNDP-grade rebuild) — surface the metadata
+    // analysts actually need: acquisition date with sign-aware days-gap,
+    // cloud cover with traffic-light colour code, sources used count,
+    // and a "Last verified Xm ago" timestamp + re-verify CTA so analysts
+    // know when the Claude run happened and can refresh on demand.
     const vGaugeHtml = (() => {
         if (!v) return '';
         const total = v.total_score || 0;
@@ -1979,6 +2012,93 @@ window.selectReport = (id, skipFly = false) => {
         if (v.caveats?.length) parts.push('Caveat: ' + v.caveats[0]);
         const paragraph = parts.join(' ').substring(0, 250) || 'Satellite comparison completed.';
 
+        // ── Acquisition date + sign-aware days-gap ──
+        // days-gap convention (server-side): positive = satellite captured
+        // BEFORE incident; negative = AFTER. Render in plain English so
+        // analysts don't have to remember the sign.
+        let acqHtml = '';
+        if (v.satellite_acquisition_date) {
+            const acq = formatShortDate(v.satellite_acquisition_date);
+            const gap = (typeof v.satellite_days_gap === 'number') ? v.satellite_days_gap : null;
+            let gapLabel = '';
+            let gapColor = '#94a3b8'; // default neutral
+            if (gap !== null) {
+                if (gap === 0) {
+                    gapLabel = 'same day as incident';
+                    gapColor = '#22c55e';
+                } else if (gap > 0) {
+                    gapLabel = `${gap}d before incident`;
+                    // Older imagery → less reliable for damage corroboration.
+                    gapColor = gap <= 3 ? '#22c55e' : gap <= 14 ? '#eab308' : '#f97316';
+                } else {
+                    const after = Math.abs(gap);
+                    gapLabel = `${after}d after incident`;
+                    // Post-incident imagery is the gold standard for damage.
+                    gapColor = after <= 7 ? '#22c55e' : after <= 30 ? '#eab308' : '#f97316';
+                }
+            }
+            acqHtml = `<span class="dp-sat-meta-chip" style="border-color:${gapColor}40;">
+                <i class="fa-regular fa-calendar"></i>
+                <span style="color:#cbd5e1;">${acq}</span>
+                ${gapLabel ? `<span style="color:${gapColor};font-weight:600;">· ${gapLabel}</span>` : ''}
+            </span>`;
+        }
+
+        // ── Cloud cover (colour-coded badge) ──
+        let cloudHtml = '';
+        if (typeof v.satellite_cloud_cover_pct === 'number') {
+            const c = v.satellite_cloud_cover_pct;
+            const cloudColor = c <= 30 ? '#22c55e' : c <= 70 ? '#eab308' : '#ef4444';
+            cloudHtml = `<span class="dp-sat-meta-chip" style="border-color:${cloudColor}40;">
+                <i class="fa-solid fa-cloud" style="color:${cloudColor};"></i>
+                <span style="color:#cbd5e1;font-weight:600;">${c.toFixed(0)}% cloud</span>
+            </span>`;
+        }
+
+        // ── Sources used (multi-provider count) ──
+        let sourcesHtml = '';
+        const allSources = Array.isArray(v.satellite_images) ? v.satellite_images : [];
+        if (allSources.length >= 2) {
+            sourcesHtml = `<span class="dp-sat-meta-chip" title="${allSources.map(s => s.source || '').filter(Boolean).join(' · ')}">
+                <i class="fa-solid fa-layer-group"></i>
+                <span style="color:#cbd5e1;font-weight:600;">${allSources.length} sources</span>
+            </span>`;
+        } else if (v.satellite_source) {
+            // Single-source legacy verification — show the one source.
+            const shortSrc = v.satellite_source.split('(')[0].trim();
+            sourcesHtml = `<span class="dp-sat-meta-chip" title="${v.satellite_source}">
+                <i class="fa-solid fa-satellite-dish"></i>
+                <span style="color:#cbd5e1;font-weight:600;">${shortSrc}</span>
+            </span>`;
+        }
+
+        // ── "Last verified" timestamp + re-verify CTA ──
+        // `scored_at` is set server-side (Phase B.2). Falls back to a
+        // generic "Verified" label if older rows lack the timestamp.
+        const scoredAt = v.scored_at;
+        const lastVerifiedHtml = scoredAt
+            ? `<span class="dp-sat-meta-chip" title="Last AI verification run: ${new Date(ensureUTC(scoredAt)).toLocaleString()}">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+                <span style="color:#cbd5e1;">${timeAgo(scoredAt)}</span>
+              </span>`
+            : `<span class="dp-sat-meta-chip">
+                <i class="fa-solid fa-circle-check" style="color:${gc};"></i>
+                <span style="color:#cbd5e1;">Verified</span>
+              </span>`;
+
+        // ── High-cloud advisory ──
+        // When primary source is heavily clouded AND damage_corroboration
+        // is low, surface a one-liner so analysts don't over-trust the
+        // score. Threshold matches the rubric's typical "weak evidence"
+        // range (damage ≤ 10/25 ≈ 40% confidence on damage).
+        const damageScore = v.scores?.damage_corroboration ?? 25;
+        const cloudPct = v.satellite_cloud_cover_pct ?? 0;
+        const cloudWarning = (cloudPct > 70 && damageScore <= 10)
+            ? `<div class="dp-sat-warning"><i class="fa-solid fa-triangle-exclamation"></i>
+                Heavy cloud cover may have reduced visible damage detection — consider re-verifying after the next clear pass.
+              </div>`
+            : '';
+
         return `
         <div class="dp-sat-result">
             <div class="dp-sat-header-row">
@@ -1987,7 +2107,20 @@ window.selectReport = (id, skipFly = false) => {
                 <span style="font-size:11px;font-weight:700;color:${gc};text-transform:uppercase;">${vLabel}</span>
                 <div class="dp-sat-bar"><div class="dp-sat-bar-fill" style="width:${total}%;background:${gc};"></div></div>
             </div>
+            ${(acqHtml || cloudHtml || sourcesHtml || lastVerifiedHtml) ? `
+            <div class="dp-sat-meta-row">
+                ${acqHtml}${cloudHtml}${sourcesHtml}${lastVerifiedHtml}
+            </div>` : ''}
+            ${cloudWarning}
             <p class="dp-sat-para">${paragraph}${parts.join(' ').length > 250 ? '…' : ''}</p>
+            <div class="dp-sat-actions">
+                <button class="dp-reverify-btn" onclick="runVerification('${r.id}')" title="Re-run AI satellite verification (~25s)">
+                    <i class="fa-solid fa-rotate"></i> Re-verify
+                </button>
+                <button class="dp-share-evidence-btn" onclick="copyEvidenceLink('${r.id}')" title="Copy a public link to this verification — share with judges or partners">
+                    <i class="fa-solid fa-share-nodes"></i> Share evidence
+                </button>
+            </div>
         </div>`;
     })();
 
@@ -2178,15 +2311,10 @@ window.selectReport = (id, skipFly = false) => {
                 ${satAltSrc ? `<button class="dp-vt-btn" onclick="dpSwitchView('${r.id}','alt',this)"><i class="fa-solid fa-globe"></i> ${satAltLabel}</button>` : ''}
                 <button class="dp-vt-btn dp-vt-compare" onclick="dpSwitchView('${r.id}','compare',this)"><i class="fa-solid fa-columns"></i> Compare</button>
             </div>` : ''}
-            ${v ? vGaugeHtml : `<button class="dp-sat-verify-btn" id="btn-verify-${r.id}" onclick="runVerification('${r.id}')">
-                <i class="fa-solid fa-satellite"></i> Verify via Satellite
-            </button>`}
+            ${v ? vGaugeHtml : _renderVerifyEmptyCTA(r.id)}
         </div>` : `
         <div class="dp-no-image-verify">
-            <button class="dp-sat-verify-btn" id="btn-verify-${r.id}" onclick="runVerification('${r.id}')">
-                <i class="fa-solid fa-satellite"></i> ${v ? 'Re-verify Satellite' : 'Verify via Satellite'}
-            </button>
-            ${v ? vGaugeHtml : ''}
+            ${v ? vGaugeHtml : _renderVerifyEmptyCTA(r.id)}
         </div>`}
 
         <!-- ④ Audio + User Transcription -->
@@ -2975,6 +3103,38 @@ window.runVerification = async (id) => {
             btn.classList.remove('verifying');
             btn.innerHTML = '<i class="fa-solid fa-satellite"></i> Verify with Satellite';
             btn.disabled = false;
+        }
+    }
+};
+
+// Phase C.2 (May 2026, UNDP-grade rebuild) — copy a public, auth-free
+// evidence URL to the clipboard. The verification panel exposes a
+// "Share evidence" button that calls this. Resolves to a static
+// page (web-dashboard/src/evidence.html) which fetches the public
+// /api/v1/reports/<id>/evidence endpoint — no login needed.
+//
+// Trust model matches the existing presigned-URL behaviour: report_id
+// is a UUID, unguessable. UNDP judges click the link and instantly see
+// a clean truth-score card with photo + 4 satellite sources.
+window.copyEvidenceLink = async (reportId) => {
+    if (!reportId) return;
+    // Compose the URL using the page's own origin so the link works
+    // whether the dashboard is at undp.crisplabs.tech, localhost:8080,
+    // or a staging host. The path mirrors the dashboard's static layout.
+    const url = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}evidence.html?id=${encodeURIComponent(reportId)}`;
+    try {
+        // Modern Async Clipboard API. Requires HTTPS (or localhost) +
+        // user-gesture context — both satisfied here (button click).
+        await navigator.clipboard.writeText(url);
+        showToast('Evidence link copied — share with judges or partners', 'success');
+    } catch (e) {
+        // Fallback: surface the URL in a prompt so the analyst can
+        // still grab it. Triggers when navigator.clipboard is missing
+        // (older browsers, insecure origins) or permissions are denied.
+        try {
+            window.prompt('Copy this evidence link:', url);
+        } catch (_) {
+            showToast('Copy failed — paste manually: ' + url, 'error');
         }
     }
 };

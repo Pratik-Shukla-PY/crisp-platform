@@ -49,11 +49,21 @@ def _report_to_row(r):
       * damage_classification → normalised to MINIMAL / PARTIAL / COMPLETE
         (legacy 'NO_DAMAGE' persisted pre-migration is mapped on read)
       * crisis_category → derived from crisis_type at write time; falls
-        back to an on-read lookup for historical rows."""
+        back to an on-read lookup for historical rows.
+
+    Phase C.1 (May 2026, UNDP-grade rebuild) — satellite verification
+    columns. Judges + downstream analysts pulling exports need to see
+    truth scores, not just raw report data. Pulled from the related
+    SatelliteVerification row (one-to-one on report_id). When no
+    verification has run, the columns are blank rather than absent so
+    CSV/GeoJSON consumers can rely on a stable schema."""
     from app.core.taxonomy import normalise_damage, categorise_crisis
     loc = r.location
     damage = normalise_damage(r.damage_classification) or (r.damage_classification or "")
     crisis_cat = getattr(r, "crisis_category", None) or categorise_crisis(r.crisis_type) or ""
+    # Verification fields — pulled from the SatelliteVerification row
+    # if present. Single-row 1:1 relationship via Report.verification.
+    v = getattr(r, "verification", None)
     return {
         "id": r.id,
         "client_report_id": r.client_report_id or "",
@@ -75,6 +85,15 @@ def _report_to_row(r):
         "location_name": (loc.user_location_name or loc.device_location_name or "") if loc else "",
         "lives_impacted": str(r.lives_impacted) if r.lives_impacted else "",
         "timestamp": r.server_created_at.isoformat() if r.server_created_at else "",
+        # ── Satellite verification (UNDP truth-score columns) ──
+        "satellite_verdict": (v.verdict if v else "") or "",
+        "satellite_total_score": str(v.total_score) if v and v.total_score is not None else "",
+        "satellite_acquisition_date": (v.satellite_acquisition_date if v else "") or "",
+        "satellite_days_gap": str(v.satellite_days_gap) if v and v.satellite_days_gap is not None else "",
+        "satellite_cloud_cover_pct": (
+            f"{v.satellite_cloud_cover_pct:.1f}" if v and v.satellite_cloud_cover_pct is not None else ""
+        ),
+        "satellite_source": (v.satellite_source if v else "") or "",
     }
 
 
@@ -97,7 +116,13 @@ def export_csv(
         "damage_classification", "crisis_type", "crisis_category",
         "description", "debris_clearing_needed", "service_status",
         "building_id", "latitude", "longitude", "location_name",
-        "lives_impacted", "timestamp"
+        "lives_impacted", "timestamp",
+        # Phase C.1 (May 2026) — satellite verification columns. UNDP
+        # judges + downstream analysts can now see truth scores in
+        # bulk exports, not just in the dashboard.
+        "satellite_verdict", "satellite_total_score",
+        "satellite_acquisition_date", "satellite_days_gap",
+        "satellite_cloud_cover_pct", "satellite_source",
     ]
 
     def generate():

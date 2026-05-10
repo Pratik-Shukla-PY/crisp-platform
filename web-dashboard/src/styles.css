@@ -950,6 +950,91 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .dp-sat-bar { flex:1; height:4px; background:rgba(255,255,255,0.06); border-radius:2px; overflow:hidden; min-width:30px; }
 .dp-sat-bar-fill { height:100%; border-radius:2px; transition:width 0.4s ease; }
 .dp-sat-para { font-size:12px; color:#94a3b8; line-height:1.5; margin:0; }
+
+/* Phase B (May 2026) — UNDP-grade verification metadata chips: surface
+   acquisition date + sign-aware days-gap, cloud cover %, sources used,
+   and "Last verified Xm ago" inline so analysts can read the evidence
+   freshness without drilling into the AI reasoning. */
+.dp-sat-meta-row { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
+.dp-sat-meta-chip {
+    display:inline-flex; align-items:center; gap:5px;
+    padding:3px 8px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:12px;
+    font-size:11px;
+    color:#cbd5e1;
+}
+.dp-sat-meta-chip i { font-size:10px; opacity:0.85; }
+.dp-sat-warning {
+    display:flex; align-items:flex-start; gap:6px;
+    margin:6px 0;
+    padding:6px 8px;
+    background:rgba(239,68,68,0.08);
+    border-left:2px solid #ef4444;
+    border-radius:4px;
+    font-size:11px;
+    color:#fca5a5;
+    line-height:1.4;
+}
+.dp-sat-warning i { color:#ef4444; margin-top:1px; }
+.dp-sat-actions {
+    display:flex; gap:6px; margin-top:8px; padding-top:6px;
+    border-top:1px dashed rgba(255,255,255,0.08);
+}
+.dp-reverify-btn, .dp-share-evidence-btn {
+    flex:0 1 auto;
+    padding:5px 10px;
+    background:rgba(56,189,248,0.08);
+    border:1px solid rgba(56,189,248,0.25);
+    border-radius:5px;
+    color:#7dd3fc;
+    font-size:11px;
+    font-weight:600;
+    cursor:pointer;
+    display:inline-flex; align-items:center; gap:5px;
+    transition:background 0.15s, border-color 0.15s, color 0.15s;
+}
+.dp-reverify-btn:hover, .dp-share-evidence-btn:hover {
+    background:rgba(56,189,248,0.15);
+    border-color:rgba(56,189,248,0.45);
+    color:#bae6fd;
+}
+.dp-reverify-btn:disabled, .dp-share-evidence-btn:disabled {
+    opacity:0.5;
+    cursor:not-allowed;
+}
+.dp-reverify-btn i, .dp-share-evidence-btn i { font-size:10px; }
+
+/* Phase B.3 (May 2026) — empty-state CTA when no verification has run.
+   Sits in the place where vGaugeHtml would otherwise render. */
+.dp-verify-empty-cta {
+    margin-top:6px;
+    padding:10px 12px;
+    background:linear-gradient(180deg, rgba(56,189,248,0.06), rgba(56,189,248,0.02));
+    border:1px dashed rgba(56,189,248,0.25);
+    border-radius:7px;
+}
+.dp-verify-empty-header {
+    display:flex; align-items:center; gap:6px;
+    margin-bottom:5px;
+    color:#7dd3fc;
+}
+.dp-verify-empty-header i { font-size:13px; }
+.dp-verify-empty-title { font-size:12px; font-weight:700; letter-spacing:0.2px; }
+.dp-verify-empty-desc {
+    font-size:11px;
+    color:#94a3b8;
+    line-height:1.5;
+    margin:0 0 8px;
+}
+.dp-verify-empty-desc strong { color:#cbd5e1; font-weight:600; }
+.dp-verify-runtime {
+    margin-left:6px;
+    font-size:10px;
+    font-weight:500;
+    color:rgba(255,255,255,0.5);
+}
 /* PII Protected badge on images */
 .dp-pii-badge { position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.65); backdrop-filter:blur(4px); color:#22c55e; font-size:9px; font-weight:600; padding:3px 7px; border-radius:4px; display:flex; align-items:center; gap:3px; z-index:2; pointer-events:none; }
 .dp-pii-badge i { font-size:8px; }

@@ -285,6 +285,12 @@ class VerificationResponse(BaseModel):
     scored_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
+    # Phase B.2 — emit Z-suffixed UTC for `scored_at` so the dashboard's
+    # `timeAgo()` parses it correctly. Same pattern as ReportResponse.
+    @field_serializer("scored_at", when_used="json")
+    def _serialize_scored_at(self, v: Optional[datetime]) -> Optional[str]:
+        return _utc_iso(v)
+
     @model_validator(mode="before")
     @classmethod
     def _decode_satellite_images_json(cls, data: Any) -> Any:

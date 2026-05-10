@@ -3537,6 +3537,14 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
     v.satellite_days_gap           = sat_meta.get("days_gap")
     v.satellite_image_url          = sat_image_url
     v.error                        = result.get("error")
+    # Phase B.2 (May 2026, UNDP-grade rebuild) — stamp the time the
+    # Claude scoring run completed so the dashboard can render
+    # "Last verified Xm ago" + analysts know whether to re-verify.
+    # The column already exists on SatelliteVerification; the schema
+    # already exposes it (`VerificationResponse.scored_at`). Without
+    # this assignment, scored_at stays NULL and the dashboard falls
+    # back to a generic "Verified" label.
+    v.scored_at                    = datetime.now(timezone.utc)
 
     # Save alternate satellite source (e.g. Mapbox when Sentinel is primary)
     alt = sat_data.get("alt")
@@ -3955,6 +3963,151 @@ def get_satellite_grid_cell(
     (the Apr 2026 multi-provider fan-out — AWS / Microsoft / ESA /
     Mapbox). Order matches what the chain returned."""
     return _satellite_redirect(db, report_id, "grid", grid_idx=idx)
+
+
+# ── Public evidence endpoint (May 2026) ─────────────────────────────────────
+#
+# Phase C.2 of the UNDP-grade satellite-verification rebuild.
+#
+# The dashboard's verification panel now offers a "Share evidence" button
+# that copies a public URL of the form:
+#   https://undp.crisplabs.tech/web-dashboard/src/evidence.html?id=<report_id>
+#
+# That static page (web-dashboard/src/evidence.html) fetches the JSON
+# below — no Bearer auth, no login flow. Trust model matches the
+# existing presigned-URL pattern: anyone with the report_id (a UUID,
+# unguessable) can view. Listing report_ids still requires auth via
+# /api/v1/reports/.
+#
+# Returned shape is intentionally compact and stable — designed for a
+# UNDP submission demo where judges click a link and instantly see a
+# clean evidence page. NO chunked-upload metadata, NO operator-only
+# flags. Just the headline truth-score + sat imagery + reasoning.
+
+@router.get("/{report_id}/evidence")
+def get_public_evidence(
+    report_id: str,
+    db: Session = Depends(get_db),
+):
+    """Public, auth-free read of a report's verification evidence.
+
+    Returns photo URL (stable `/api/v1/reports/media/<id>/file`),
+    satellite URLs (stable `/api/v1/reports/<rid>/satellite/...`),
+    verdict, total score, sub-scores, key findings, caveats, AI
+    reasoning, plus the headline incident metadata (severity, infra
+    type, location name, time of report).
+
+    Returns 404 if the report doesn't exist or has been soft-deleted.
+    Returns 200 with `verification: null` if no verification has run
+    yet — the evidence page renders an "awaiting verification" state.
+    """
+    r = db.query(Report).options(
+        joinedload(Report.media),
+        joinedload(Report.location),
+        joinedload(Report.verification),
+    ).filter(
+        Report.id == report_id,
+        Report.deletion_requested_at.is_(None),
+    ).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    loc = r.location
+    v = r.verification
+
+    # Pick the highest-tier complete IMAGE the citizen submitted. Stable
+    # /api/v1/reports/media/<id>/file URL — no auth, browser-cacheable.
+    photo_url = None
+    img = next(
+        (m for m in r.media or [] if m.type == MediaTypeEnum.IMAGE
+         and getattr(m, "assembly_status", "") == "complete" and m.url),
+        None,
+    )
+    if img:
+        # Match what MediaResponse._resolve_url emits for s3:// rows.
+        # For local backend (`/static/...`) we pass through so judges
+        # hitting the page in dev still see the file.
+        if img.url.startswith("s3://"):
+            photo_url = f"/api/v1/reports/media/{img.id}/file"
+        else:
+            photo_url = img.url  # `/static/...` or http(s)://
+
+    # Verification block (compact, demo-friendly shape).
+    verification_block = None
+    if v:
+        # Multi-provider grid URLs — same stable URLs the dashboard uses.
+        sat_grid: List[dict] = []
+        try:
+            import json as _json
+            entries = _json.loads(v.satellite_images_json or "[]") if v.satellite_images_json else []
+        except Exception:
+            entries = []
+        for idx, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                continue
+            u = entry.get("url")
+            if u and u.startswith("s3://"):
+                ref = f"/api/v1/reports/{report_id}/satellite/grid/{idx}"
+            else:
+                ref = u
+            sat_grid.append({
+                "url": ref,
+                "source": entry.get("source"),
+                "acquisition_date": entry.get("acquisition_date"),
+                "cloud_cover_pct": entry.get("cloud_cover_pct"),
+                "resolution_m": entry.get("resolution_m"),
+            })
+
+        # Primary URL (legacy single-image path; still emitted for
+        # verifications that ran before the multi-provider chain shipped).
+        primary_url = None
+        if v.satellite_image_url:
+            if v.satellite_image_url.startswith("s3://"):
+                primary_url = f"/api/v1/reports/{report_id}/satellite/primary"
+            else:
+                primary_url = v.satellite_image_url
+
+        verification_block = {
+            "verdict": v.verdict,
+            "total_score": v.total_score,
+            "scores": v.scores or {},
+            "reasoning": v.reasoning,
+            "key_findings": v.key_findings or [],
+            "caveats": v.caveats or [],
+            "satellite_scene_description": v.satellite_scene_description,
+            "photo_analysis": v.photo_analysis,
+            "satellite_source": v.satellite_source,
+            "satellite_acquisition_date": v.satellite_acquisition_date,
+            "satellite_cloud_cover_pct": v.satellite_cloud_cover_pct,
+            "satellite_days_gap": v.satellite_days_gap,
+            "primary_url": primary_url,
+            "satellite_images": sat_grid,
+            "scored_at": (
+                v.scored_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+                if v.scored_at else None
+            ),
+        }
+
+    return {
+        "report_id": r.id,
+        "infrastructure_type": r.infrastructure_type.value if r.infrastructure_type else None,
+        "infrastructure_name": r.infrastructure_name,
+        "severity": r.severity.value if r.severity else None,
+        "crisis_type": r.crisis_type,
+        "damage_classification": r.damage_classification,
+        "description": r.description,
+        "server_created_at": (
+            r.server_created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            if r.server_created_at else None
+        ),
+        "location": {
+            "latitude": loc.latitude if loc else None,
+            "longitude": loc.longitude if loc else None,
+            "name": (loc.user_location_name or loc.device_location_name) if loc else None,
+        } if loc else None,
+        "photo_url": photo_url,
+        "verification": verification_block,
+    }
 
 
 @router.get("/media/{media_id}/duplicates")
