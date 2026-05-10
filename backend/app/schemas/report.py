@@ -1,6 +1,6 @@
 from datetime import datetime, timezone as _dt_timezone
 from typing import List, Optional, Any
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SerializationInfo, field_serializer, model_validator
 from app.models.report import (
     SourceEnum, SeverityEnum, InfraTypeEnum, MediaTypeEnum,
     ResolutionEnum, SyncStatusEnum, ReportStatusEnum, ClusterStatusEnum,
@@ -187,10 +187,8 @@ class MediaResponse(MediaBase):
 
     # Apr 2026 — UNDP scaling. The DB stores `s3://<key>` for media
     # written through the S3 backend; the dashboard can't fetch that
-    # URL directly. Resolve it to a signed presigned URL on the way
-    # out so the response is always something a browser can GET.
-    # Pass-through for `/static/...` (legacy local-disk paths) and
-    # plain http(s) URLs.
+    # URL directly. Pass-through for `/static/...` (legacy local-disk
+    # paths) and plain http(s) URLs.
     #
     # May 2026 — `thumbnail_url` MUST be resolved too. The dashboard's
     # audio player falls back to `audio.thumbnail_url` while a chunked
@@ -202,15 +200,40 @@ class MediaResponse(MediaBase):
     # → 404. Same shape applies to image fast-preview thumbnails set
     # by /reports/{id}/media/thumbnail. Pydantic v2's field_serializer
     # accepts a tuple of field names — one decorator covers both.
+    #
+    # May 2026 (HAR-driven rewrite) — previously this returned a freshly
+    # generated S3 presigned URL on EVERY serialization. The dashboard
+    # polls /api/v1/reports/ every 1.2-4s; each poll generated a new
+    # X-Amz-Signature on the same media bytes; the browser saw a new
+    # `<img src>` URL each time and refetched the bytes. HAR analysis
+    # of a 6-minute window showed the same image fetched 98× (49 unique
+    # signatures, ~2.5 MB wasted bandwidth per dashboard tab).
+    #
+    # Fix: emit a STABLE `/api/v1/reports/media/<id>/<file|thumb>` URL.
+    # That endpoint 302-redirects to a fresh presigned URL on demand,
+    # and tags the redirect with `Cache-Control: public, max-age=3600`
+    # so the browser keeps a stable cache key. Cross-poll bytes are
+    # reused; backend hits drop from per-poll to ~once-per-image-per-hour.
+    #
+    # Field-name disambiguation via `SerializationInfo.field_name`
+    # (Pydantic v2's per-call context) lets one decorator handle both
+    # `url` (→ /file) and `thumbnail_url` (→ /thumb) without a second
+    # method.
     @field_serializer("url", "thumbnail_url", when_used="json")
-    def _resolve_url(self, v: Optional[str]) -> Optional[str]:
+    def _resolve_url(self, v: Optional[str], info: SerializationInfo) -> Optional[str]:
         if not v:
             return v
-        try:
-            from app.services.storage import get_storage
-            return get_storage().public_url(v)
-        except Exception:
-            return v  # never block the response on storage glitches
+        # `s3://...` rows: rewrite to stable backend-routed URL. The
+        # endpoint resolves to a fresh presigned URL on demand.
+        # `self.id` should always be present (typed as required), but
+        # the guard avoids a dangling `/media//file` if some test path
+        # constructs a MediaResponse without id.
+        if v.startswith("s3://") and self.id:
+            suffix = "thumb" if info.field_name == "thumbnail_url" else "file"
+            return f"/api/v1/reports/media/{self.id}/{suffix}"
+        # Pass-through for `/static/...` (local backend), `data:...`
+        # (rare inline thumbs), and plain http(s):// (legacy / external).
+        return v
 
 class AIAnalysisResponse(BaseModel):
     id: str

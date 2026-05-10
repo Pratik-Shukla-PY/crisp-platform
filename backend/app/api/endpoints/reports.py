@@ -7,7 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, func as sa_func
 
@@ -3199,6 +3200,17 @@ def get_reports(
     skip: int = 0,
     limit: int = 100,
     include_deleted: bool = False,
+    since: Optional[datetime] = Query(
+        None,
+        description=(
+            "ISO 8601 timestamp (e.g. 2026-05-09T18:30:00Z). When set, returns "
+            "ONLY reports whose own row, or any of their media rows, has been "
+            "updated since this time. Dashboard reads X-Server-Time on each "
+            "response and echoes it back as `since` on the next poll for "
+            "incremental delta sync — typical poll body drops from ~440 KB to "
+            "<2 KB on idle dashboards. Omit `since` for the initial full load."
+        ),
+    ),
     user=Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
@@ -3215,14 +3227,45 @@ def get_reports(
     P2.11 — also returns X-Total-Count header and caps `limit` at 500 so a
     misbehaving client can't pull the whole table in one shot. The dashboard
     reads the header to drive its pagination / infinite-scroll.
+
+    Phase 3 (May 2026, HAR-driven) — `since` parameter enables incremental
+    delta polling. The dashboard's per-poll body shrank from ~440 KB to ~1-2 KB
+    when no reports changed in the last 4 s. We capture `cursor` BEFORE
+    running the query and emit it via X-Server-Time so any reports landing
+    DURING query execution still surface on the next poll (avoids the gap-
+    interval missed-update class of bugs).
     """
     # Safety caps: dashboard may ask for more than the DB can comfortably ship.
     safe_limit = max(1, min(limit, 500))
     safe_skip = max(0, skip)
 
+    # Phase 3: capture the server clock BEFORE running the query so any
+    # report mutated in parallel still falls within the next poll's window.
+    cursor = datetime.now(timezone.utc)
+
     q = db.query(Report)
     if not include_deleted:
         q = q.filter(Report.deletion_requested_at == None)
+
+    # Phase 3: delta filter. Match reports whose own row OR any of their
+    # media rows has updated since `since`. Media is included because the
+    # chunked-upload pipeline only bumps `report.updated_at` at assembly-
+    # complete (via received_media++); per-chunk progress lives on
+    # Media.updated_at, and partial-upload progress visualisation in the
+    # dashboard would stop animating without the EXISTS clause.
+    if since is not None:
+        # Strip tzinfo for the comparison if the column is tz-naive — but
+        # our columns are tz-aware (DateTime(timezone=True)) so a tz-aware
+        # comparand is correct. Normalise to UTC just in case the client
+        # sends an offset-bearing value.
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+        else:
+            since = since.astimezone(timezone.utc)
+        q = q.filter(or_(
+            Report.updated_at > since,
+            Report.media.any(Media.updated_at > since),
+        ))
 
     # Total count for pagination (cheap indexed count, no relationships).
     total = q.with_entities(sa_func.count(Report.id)).scalar() or 0
@@ -3241,11 +3284,68 @@ def get_reports(
          .all()
     )
 
+    # Phase 4 (May 2026, HAR-driven) — ETag / If-None-Match.
+    # Cheap fingerprint: include each report's id+updated_at AND each
+    # media row's id+updated_at+completion_pct. Catches changes in the
+    # parent report AND in chunked-upload progress (which doesn't always
+    # bump the parent's updated_at). Already-loaded SQLAlchemy objects
+    # — zero extra DB hits.
+    #
+    # When the dashboard's If-None-Match header matches our ETag, we
+    # return 304 Not Modified with no body. That skips the joinedload
+    # schema validation + JSON dump cost (significant for 100 reports
+    # with verification + AI + media nested inside). Combined with
+    # Phase 3 delta polling, idle dashboards drop to ~50-byte poll
+    # responses (304 status line + headers, no body).
+    import hashlib as _hashlib
+    fp_parts = []
+    for r in reports:
+        fp_parts.append(f"{r.id}:{r.updated_at}")
+        for m in (r.media or []):
+            fp_parts.append(f"m{m.id}:{m.updated_at}:{m.completion_pct}")
+    fingerprint = "|".join(fp_parts)
+    etag_value = '"' + _hashlib.md5(fingerprint.encode("utf-8")).hexdigest() + '"'
+
     response.headers["X-Total-Count"] = str(total)
     response.headers["X-Limit"] = str(safe_limit)
     response.headers["X-Offset"] = str(safe_skip)
+    # Phase 3: ISO 8601 with `Z` suffix — same shape as our datetime
+    # serialization elsewhere. Dashboard reads this and echoes it back
+    # as `?since=<value>` on the next poll.
+    response.headers["X-Server-Time"] = cursor.isoformat().replace("+00:00", "Z")
+    response.headers["ETag"] = etag_value
+    # `Cache-Control: no-cache` — browsers MUST revalidate (send
+    # If-None-Match) on every poll. Without this, a stale cached body
+    # would short-circuit the conditional check.
+    response.headers["Cache-Control"] = "no-cache"
     # CORS: without this the dashboard's fetch() can't actually read the header.
-    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count, X-Limit, X-Offset"
+    response.headers["Access-Control-Expose-Headers"] = (
+        "X-Total-Count, X-Limit, X-Offset, X-Server-Time, ETag"
+    )
+
+    # If the dashboard echoed our previous ETag back, short-circuit with
+    # 304 — saves the schema-validation + JSON-encoding cost on the
+    # backend AND the body-transfer bandwidth on the wire.
+    client_etag = request.headers.get("if-none-match", "")
+    if client_etag and client_etag == etag_value:
+        # 304 responses carry headers but no body. We have to construct
+        # the Response manually because FastAPI's response_model would
+        # otherwise insist on a body.
+        from fastapi import Response as _Response
+        return _Response(
+            status_code=304,
+            headers={
+                "X-Total-Count":              str(total),
+                "X-Limit":                    str(safe_limit),
+                "X-Offset":                   str(safe_skip),
+                "X-Server-Time":              cursor.isoformat().replace("+00:00", "Z"),
+                "ETag":                       etag_value,
+                "Cache-Control":              "no-cache",
+                "Access-Control-Expose-Headers":
+                    "X-Total-Count, X-Limit, X-Offset, X-Server-Time, ETag",
+            },
+        )
+
     return reports
 
 
@@ -3603,6 +3703,83 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
         "latest_id": latest_id,
         "reports": serialised,
     }
+
+
+# ── Stable media URLs (May 2026) ────────────────────────────────────────────
+#
+# Background — the dashboard's HAR analysis showed every ~4 s API poll
+# generated a FRESH presigned S3 URL for every media row, because
+# MediaResponse._resolve_url called storage.public_url() on each
+# serialization. Same image bytes → 49 different X-Amz-Signature
+# values → browser cache miss every poll → 98× refetch of identical
+# bytes (~2.5 MB wasted per dashboard tab per 6 minutes). Same story
+# for thumbnails on partial uploads.
+#
+# Fix — MediaResponse now emits a STABLE backend-routed URL of the form
+# `/api/v1/reports/media/<media_id>/<file|thumb>`. The browser caches
+# under that URL key and reuses bytes across polls. The endpoint below
+# is what those URLs resolve to: a 302 redirect to a freshly-presigned
+# S3 URL, with a 1-hour Cache-Control on the redirect itself so even
+# cold caches hit the backend at most once per hour per image.
+#
+# Auth model — intentionally NO auth on this endpoint. The previous
+# behaviour embedded presigned S3 URLs directly in the API response,
+# making media accessible to anyone who held a presigned URL (no auth
+# header needed). The new behaviour matches that exactly: anyone with
+# the media_id (a UUID, unguessable) can fetch. Listing media_ids
+# still requires Bearer auth via /api/v1/reports/.
+
+@router.get("/media/{media_id}/file")
+@router.get("/media/{media_id}/thumb")
+def get_media_redirect(
+    request: Request,
+    media_id: str,
+    db: Session = Depends(get_db),
+):
+    """Stable URL → 302 to fresh presigned S3 URL (or local /static/ for dev).
+
+    The dashboard receives this URL in MediaResponse instead of a churning
+    presigned S3 URL. Every poll renders the same `<img src>`, so the
+    browser HTTP cache reuses the bytes — eliminating the per-poll
+    refetch storm documented in HAR analysis.
+
+    `/file` → media.url (full image / audio / video)
+    `/thumb` → media.thumbnail_url (small placeholder, may be partial-
+              assembly bytes during chunked upload)
+
+    Cache-Control: public, max-age=3600 — the redirect itself is cached
+    for 1 hour, so even hard-refresh paths only hit the backend once per
+    image per hour. The actual S3 object cache TTL is set bucket-side.
+    """
+    media = db.query(Media).filter(Media.id == media_id).first()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    # Path-suffix sniff is more reliable than parsing routing params here
+    # (FastAPI doesn't expose which alternative `@router.get` matched).
+    is_thumb = request.url.path.rstrip("/").endswith("/thumb")
+    db_url = media.thumbnail_url if (is_thumb and media.thumbnail_url) else media.url
+    if not db_url:
+        raise HTTPException(status_code=404, detail="No URL available for this media")
+
+    target = _get_media_storage().public_url(db_url)
+
+    # Defensive: if storage backend can't produce a real URL (e.g. local
+    # backend asked to resolve an `s3://` row from a previously-S3 deploy),
+    # surface 503 instead of redirecting the browser to garbage.
+    if not (target.startswith("http://") or target.startswith("https://") or target.startswith("/")):
+        raise HTTPException(
+            status_code=503,
+            detail="Storage backend cannot resolve URL for this media",
+        )
+
+    # Local-disk path: prefix with the same /static/ that nginx serves.
+    # The dashboard already prepends BACKEND_HOST for relative paths.
+    return RedirectResponse(
+        url=target,
+        status_code=302,
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/media/{media_id}/duplicates")
