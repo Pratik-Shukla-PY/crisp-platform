@@ -1604,6 +1604,12 @@ const state = {
     deviceLocation: null, // Keep original GPS separately
     userLocationName: null, // Place name typed by user (for offline geocoding)
     locationName: null, // Resolved human-readable place name from reverse geocoding
+    // M9 (May 2026) — track WHY GPS failed so the landmark-fallback banner
+    // can render with a contextual message. null when GPS is healthy or
+    // hasn't resolved yet; one of: 'denied' (user said no), 'unavailable'
+    // (PositionUnavailable), 'timeout' (>8s), 'no-support' (browser),
+    // 'insecure-context' (non-HTTPS origin).
+    gpsErrorCode: null,
     isRecording: false,
     recognition: null,
     timerInterval: null,
@@ -3696,6 +3702,7 @@ function detectAndSetupLanguage() {
 
     // Try to get GPS and reverse geocode
     if (!navigator.geolocation) {
+        state.gpsErrorCode = 'no-support';
         activateLang('en');
         return;
     }
@@ -3708,6 +3715,7 @@ function detectAndSetupLanguage() {
 
     if (!isSecureContext) {
         // Non-HTTPS non-localhost: GPS blocked by browser. Try IP geo for language + coords.
+        state.gpsErrorCode = 'insecure-context';
         console.warn('GPS unavailable: non-HTTPS origin. Falling back to IP geolocation.');
         tryIPGeolocation().then(ipLoc => {
             if (ipLoc) {
@@ -3738,6 +3746,10 @@ function detectAndSetupLanguage() {
     // Don't give up too early (was 4s, GPS needs 5-10s on cold start)
     const gpsTimeout = setTimeout(() => {
         if (!state.location) {
+            // M9: mark timeout so the landmark-fallback banner can show on
+            // stage-where. Cleared if IP fallback succeeds and resolves a
+            // workable coordinate.
+            state.gpsErrorCode = 'timeout';
             console.warn('GPS timeout (8s) — trying IP fallback');
             tryIPGeolocation().then(ipLoc => {
                 if (ipLoc && !state.location) {
@@ -3752,6 +3764,8 @@ function detectAndSetupLanguage() {
     // Try coarse location first (WiFi/cell, instant), then upgrade to GPS
     navigator.geolocation.getCurrentPosition(async (pos) => {
         clearTimeout(gpsTimeout);
+        // M9: clear any earlier "timeout" mark — GPS resolved.
+        state.gpsErrorCode = null;
         state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
         state.deviceLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         // Cache raw device GPS — restored on new report (not user-corrected location)
@@ -3842,6 +3856,12 @@ function detectAndSetupLanguage() {
     }, async (err) => {
         // GPS denied/unavailable — fall back to IP geolocation for coords + language
         clearTimeout(gpsTimeout);
+        // M9: PositionError codes — 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT.
+        // We expose semantically-named values so the landmark-fallback banner
+        // can pick a contextual headline ("GPS permission denied" vs
+        // "GPS unavailable in this area" vs "GPS taking too long").
+        const codeMap = { 1: 'denied', 2: 'unavailable', 3: 'timeout' };
+        state.gpsErrorCode = codeMap[err && err.code] || 'unavailable';
         console.warn('GPS error on startup:', err.code, err.message, '— trying IP geolocation fallback');
         const ipLoc = await tryIPGeolocation();
         if (ipLoc) {
@@ -7546,6 +7566,73 @@ function _refreshV3AutoMeta() {
             }
         }
     }
+    // M9: re-evaluate landmark-fallback visibility every time the panel
+    // refreshes. Hides itself when GPS resolves (or user types a name)
+    // even mid-stage, so it never lingers stale.
+    try { _renderLandmarkFallback(); } catch (e) { console.warn('[M9] fallback:', e); }
+}
+
+// ── M9 (May 2026) — landmark fallback when GPS fails ──────────────────────
+//
+// UNDP nice-to-have #4: "If GPS is denied or unavailable, the user must
+// still be able to submit a usable location." Citizens in dense urban
+// areas (Mumbai chawls, Cairo medinas, Lagos slums) often can't get a
+// GPS lock, and rural users on entry-level Androids hit timeouts every
+// time. This banner shows on stage-where when:
+//   - GPS resolution failed (state.gpsErrorCode is set), AND
+//   - we don't have a coordinate from IP-fallback either, AND
+//   - the user hasn't already typed a place name.
+//
+// Tapping a landmark chip pre-fills the existing `#input-loc-search`
+// with "Near <Hospital>" etc., focuses the input, and opens the
+// keyboard so the user can type specifics ("Near St. Joseph's Hospital").
+// On submit, the existing place-search flow takes over and writes
+// `state.userLocationName` — feeding submitReport's payload exactly
+// the same way as a manually-picked location.
+function _renderLandmarkFallback() {
+    const banner = document.getElementById('v3-landmark-fallback');
+    if (!banner) return;
+    const hasError = !!state.gpsErrorCode;
+    const hasUsableCoords = state.location
+        && Number.isFinite(state.location.lat)
+        && Number.isFinite(state.location.lng)
+        && !(state.location.lat === 0 && state.location.lng === 0);
+    const hasManualName = !!(state.userLocationName && state.userLocationName.trim());
+    const shouldShow = hasError && !hasUsableCoords && !hasManualName;
+    banner.style.display = shouldShow ? 'block' : 'none';
+    if (!shouldShow) return;
+    // Wire the chips once. Subsequent calls just toggle visibility.
+    if (banner.dataset.wired === '1') return;
+    banner.dataset.wired = '1';
+    const prefix = (typeof t === 'function' && t('landmark_prefix')) || 'Near ';
+    banner.querySelectorAll('.landmark-fb-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            const key = chip.getAttribute('data-landmark') || 'other';
+            const labelEl = chip.querySelector('span:last-child');
+            const label = (labelEl && labelEl.textContent.trim()) || 'landmark';
+            const seed = `${prefix}${label.toLowerCase()} `;
+            const input = document.getElementById('input-loc-search');
+            if (input) {
+                input.value = seed;
+                input.focus();
+                // Move cursor to end so the user can append specifics
+                // ("Near hospital | name of the hospital").
+                try { input.setSelectionRange(seed.length, seed.length); } catch (_) {}
+                // Bubble an input event so the existing autocomplete
+                // suggester picks up the seed and starts proposing
+                // matching place names.
+                try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {}
+            }
+            // Telemetry: which chip the user picked. Useful for tuning
+            // the chip set per region. Best-effort, never blocks.
+            try {
+                if (typeof navigator.sendBeacon === 'function') {
+                    const payload = new Blob([JSON.stringify({ event: 'landmark_picked', key, ts: Date.now() })], { type: 'application/json' });
+                    navigator.sendBeacon(`${API_BASE}/telemetry/event`, payload);
+                }
+            } catch (_) {}
+        });
+    });
 }
 
 /** Gate the Continue button on each v3 stage. Returns true when the stage

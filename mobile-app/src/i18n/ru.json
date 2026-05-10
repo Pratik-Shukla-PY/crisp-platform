@@ -420,5 +420,14 @@
   "undp_save": "Сохранить",
   "undp_skip": "Пропустить",
   "undp_details_saved": "Спасибо — сохранено",
-  "undp_details_failed": "Не удалось сохранить. Попробуйте снова."
+  "undp_details_failed": "Не удалось сохранить. Попробуйте снова.",
+  "landmark_warn_title": "GPS недоступен",
+  "landmark_warn_lede": "Опишите ближайший ориентир",
+  "landmark_chip_hospital": "Больница",
+  "landmark_chip_school": "Школа",
+  "landmark_chip_market": "Рынок / магазин",
+  "landmark_chip_road": "Главная дорога",
+  "landmark_chip_religious": "Религиозное место",
+  "landmark_chip_other": "Другой ориентир",
+  "landmark_prefix": "Рядом с "
 }

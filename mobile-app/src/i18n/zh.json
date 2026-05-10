@@ -420,5 +420,14 @@
   "undp_save": "保存详情",
   "undp_skip": "暂时跳过",
   "undp_details_saved": "谢谢 — 已保存",
-  "undp_details_failed": "保存失败。请重试。"
+  "undp_details_failed": "保存失败。请重试。",
+  "landmark_warn_title": "GPS 不可用",
+  "landmark_warn_lede": "描述附近的地标",
+  "landmark_chip_hospital": "医院",
+  "landmark_chip_school": "学校",
+  "landmark_chip_market": "市场 / 商店",
+  "landmark_chip_road": "主要道路",
+  "landmark_chip_religious": "宗教场所",
+  "landmark_chip_other": "其他地标",
+  "landmark_prefix": "靠近 "
 }

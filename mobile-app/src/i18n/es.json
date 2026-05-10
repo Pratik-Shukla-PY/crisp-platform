@@ -420,5 +420,14 @@
   "undp_save": "Guardar detalles",
   "undp_skip": "Saltar por ahora",
   "undp_details_saved": "Gracias — guardado",
-  "undp_details_failed": "No se pudo guardar. Intenta de nuevo."
+  "undp_details_failed": "No se pudo guardar. Intenta de nuevo.",
+  "landmark_warn_title": "GPS no disponible",
+  "landmark_warn_lede": "Describe un punto de referencia cercano",
+  "landmark_chip_hospital": "Hospital",
+  "landmark_chip_school": "Escuela",
+  "landmark_chip_market": "Mercado / tienda",
+  "landmark_chip_road": "Calle principal",
+  "landmark_chip_religious": "Lugar religioso",
+  "landmark_chip_other": "Otro punto",
+  "landmark_prefix": "Cerca de "
 }

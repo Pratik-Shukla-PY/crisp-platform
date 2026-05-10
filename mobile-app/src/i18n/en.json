@@ -421,5 +421,14 @@
   "undp_save": "Save details",
   "undp_skip": "Skip for now",
   "undp_details_saved": "Thanks — saved",
-  "undp_details_failed": "Couldn't save. Try again."
+  "undp_details_failed": "Couldn't save. Try again.",
+  "landmark_warn_title": "GPS unavailable",
+  "landmark_warn_lede": "Describe a nearby landmark",
+  "landmark_chip_hospital": "Hospital",
+  "landmark_chip_school": "School",
+  "landmark_chip_market": "Market / shop",
+  "landmark_chip_road": "Main road",
+  "landmark_chip_religious": "Religious site",
+  "landmark_chip_other": "Other landmark",
+  "landmark_prefix": "Near "
 }

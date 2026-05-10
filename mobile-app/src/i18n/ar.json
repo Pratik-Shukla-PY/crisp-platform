@@ -420,5 +420,14 @@
   "undp_save": "حفظ التفاصيل",
   "undp_skip": "تخطّ الآن",
   "undp_details_saved": "شكرًا — تم الحفظ",
-  "undp_details_failed": "تعذّر الحفظ. أعد المحاولة."
+  "undp_details_failed": "تعذّر الحفظ. أعد المحاولة.",
+  "landmark_warn_title": "GPS غير متوفر",
+  "landmark_warn_lede": "اذكر معلمًا قريبًا",
+  "landmark_chip_hospital": "مستشفى",
+  "landmark_chip_school": "مدرسة",
+  "landmark_chip_market": "سوق / متجر",
+  "landmark_chip_road": "الشارع الرئيسي",
+  "landmark_chip_religious": "موقع ديني",
+  "landmark_chip_other": "معلم آخر",
+  "landmark_prefix": "بالقرب من "
 }

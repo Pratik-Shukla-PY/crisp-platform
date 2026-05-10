@@ -1139,6 +1139,47 @@
                 </div>
             </div>
         </div>
+        <!-- M9 (May 2026) — landmark fallback. Hidden by default; shown by
+             _renderLandmarkFallback() when GPS errors out AND no IP-fallback
+             succeeded AND no manual location. Six quick landmark chips
+             pre-fill the existing place-search input below; the user fills
+             in specifics. UNDP nice-to-have #4 — let citizens submit a
+             usable location even when GPS is denied or unavailable. -->
+        <div class="landmark-fallback" id="v3-landmark-fallback" style="display:none;" aria-live="polite">
+            <div class="landmark-fb-head">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <div class="landmark-fb-text">
+                    <strong data-i18n="landmark_warn_title">GPS unavailable</strong>
+                    <span data-i18n="landmark_warn_lede">Describe a nearby landmark</span>
+                </div>
+            </div>
+            <div class="landmark-fb-chips">
+                <button type="button" class="landmark-fb-chip" data-landmark="hospital">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">🏥</span>
+                    <span data-i18n="landmark_chip_hospital">Hospital</span>
+                </button>
+                <button type="button" class="landmark-fb-chip" data-landmark="school">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">🏫</span>
+                    <span data-i18n="landmark_chip_school">School</span>
+                </button>
+                <button type="button" class="landmark-fb-chip" data-landmark="market">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">🏪</span>
+                    <span data-i18n="landmark_chip_market">Market / shop</span>
+                </button>
+                <button type="button" class="landmark-fb-chip" data-landmark="main_road">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">🛣</span>
+                    <span data-i18n="landmark_chip_road">Main road</span>
+                </button>
+                <button type="button" class="landmark-fb-chip" data-landmark="religious">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">🕌</span>
+                    <span data-i18n="landmark_chip_religious">Religious site</span>
+                </button>
+                <button type="button" class="landmark-fb-chip" data-landmark="other">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">📍</span>
+                    <span data-i18n="landmark_chip_other">Other landmark</span>
+                </button>
+            </div>
+        </div>
         <div class="v3-slot" id="v3-slot-where"></div>
         <div class="review-nav-row v3-nav-row">
             <button class="nav-btn back-btn v3-back" id="btn-where-back"><i class="fa-solid fa-arrow-left"></i> <span data-i18n="back">Back</span></button>

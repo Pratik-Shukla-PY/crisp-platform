@@ -420,5 +420,14 @@
   "undp_save": "Enregistrer",
   "undp_skip": "Passer pour l'instant",
   "undp_details_saved": "Merci — enregistré",
-  "undp_details_failed": "Échec de l'enregistrement. Réessayez."
+  "undp_details_failed": "Échec de l'enregistrement. Réessayez.",
+  "landmark_warn_title": "GPS indisponible",
+  "landmark_warn_lede": "Décrivez un repère proche",
+  "landmark_chip_hospital": "Hôpital",
+  "landmark_chip_school": "École",
+  "landmark_chip_market": "Marché / magasin",
+  "landmark_chip_road": "Route principale",
+  "landmark_chip_religious": "Lieu de culte",
+  "landmark_chip_other": "Autre repère",
+  "landmark_prefix": "Près de "
 }
