@@ -647,6 +647,31 @@
         </header>
 
         <div class="v4-body">
+            <!-- Q10 (May 2026) — multi-modal "captured" strip. Three
+                 chips show what the user has already provided across
+                 photo / voice / text. Green when captured, grey when
+                 not — UNDP rubric Q3 wants additive capture, this
+                 makes the additive nature explicit. Tapping photo
+                 returns to capture; tapping voice/text scrolls to the
+                 v4-voice-drawer (and force-opens it if collapsed). -->
+            <div class="v4-captured-strip" id="v4-captured-strip" aria-live="polite">
+                <button class="v4-captured-chip" id="v4-captured-photo" type="button" data-cap-mod="photo">
+                    <span class="v4-captured-icon" aria-hidden="true">📷</span>
+                    <span class="v4-captured-label" data-i18n="v4_cap_photo">Photo</span>
+                    <span class="v4-captured-state" data-i18n="v4_cap_none">Not added</span>
+                </button>
+                <button class="v4-captured-chip" id="v4-captured-voice" type="button" data-cap-mod="voice">
+                    <span class="v4-captured-icon" aria-hidden="true">🎤</span>
+                    <span class="v4-captured-label" data-i18n="v4_cap_voice">Voice</span>
+                    <span class="v4-captured-state" data-i18n="v4_cap_none">Not added</span>
+                </button>
+                <button class="v4-captured-chip" id="v4-captured-text" type="button" data-cap-mod="text">
+                    <span class="v4-captured-icon" aria-hidden="true">✍️</span>
+                    <span class="v4-captured-label" data-i18n="v4_cap_text">Text</span>
+                    <span class="v4-captured-state" data-i18n="v4_cap_none">Not added</span>
+                </button>
+            </div>
+
             <!-- Summary card — photo thumb + 4 selection rows. Each row
                  tap-edits in place via a sheet that reopens that
                  question's chip/carousel UI. -->

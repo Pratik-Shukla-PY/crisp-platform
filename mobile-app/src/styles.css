@@ -4220,6 +4220,62 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 
 /* ── V4 Page 3 — review ────────────────────────────────────────────── */
 
+/* Q10 (May 2026) — multi-modal "captured" strip on stage-v4-review.
+   Three chips show user-captured modalities (photo / voice / text).
+   Green when captured, grey when not — UNDP rubric Q3 wants additive
+   capture; this makes the additive nature visible. Tap routes to the
+   respective edit point (photo → back to capture stage; voice/text →
+   scroll + open the v4-voice-drawer). */
+.v4-captured-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.v4-captured-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    min-height: 64px;
+}
+.v4-captured-chip:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text);
+}
+.v4-captured-chip.is-captured {
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.45);
+    color: #4ade80;
+}
+.v4-captured-icon {
+    font-size: 18px;
+    line-height: 1;
+}
+.v4-captured-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.v4-captured-state {
+    font-size: 10px;
+    font-weight: 500;
+    opacity: 0.85;
+}
+.v4-captured-chip.is-captured .v4-captured-state {
+    color: #86efac;
+    font-weight: 700;
+}
+
 .v4-summary {
     display: grid;
     grid-template-columns: 64px 1fr;

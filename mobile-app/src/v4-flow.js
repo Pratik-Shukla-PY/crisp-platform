@@ -754,8 +754,50 @@
         // by app.js's goToStage with detail = stage id).
         document.addEventListener('stage-entered', (e) => {
             const stage = typeof e.detail === 'string' ? e.detail : (e.detail?.stage || '');
-            if (stage === 'stage-v4-review') _ensureBuildingBoxInV4();
+            if (stage === 'stage-v4-review') {
+                _ensureBuildingBoxInV4();
+                // Q10 (May 2026) — refresh the multi-modal captured strip
+                // every time the user lands on stage-v4-review. Photo /
+                // voice / text states could have changed during navigation
+                // (back→capture→retake, drawer→record, etc.).
+                try { _refreshCapturedStrip(); } catch (err) { console.warn('[Q10] strip:', err); }
+            }
         });
+
+        // Q10 — captured-strip click handlers. Photo chip → bounce back to
+        // capture page. Voice / Text chips → open the drawer + scroll to
+        // the relevant control + focus it (so the keyboard pops up for text
+        // and the mic-button gets the keyboard tab anchor for voice).
+        const stripPhoto = document.getElementById('v4-captured-photo');
+        const stripVoice = document.getElementById('v4-captured-voice');
+        const stripText = document.getElementById('v4-captured-text');
+        const _openVoiceDrawerAnd = (focusFn) => {
+            const drawer = document.getElementById('v4-voice-drawer');
+            if (drawer && !drawer.open) drawer.open = true;
+            setTimeout(() => {
+                if (drawer) drawer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (typeof focusFn === 'function') focusFn();
+            }, 80);
+        };
+        if (stripPhoto) {
+            stripPhoto.addEventListener('click', () => {
+                window.__crispGoToStage('stage-v4-capture');
+            });
+        }
+        if (stripVoice) {
+            stripVoice.addEventListener('click', () => {
+                _openVoiceDrawerAnd(() => {
+                    document.getElementById('btn-v4-mic')?.focus();
+                });
+            });
+        }
+        if (stripText) {
+            stripText.addEventListener('click', () => {
+                _openVoiceDrawerAnd(() => {
+                    document.getElementById('v4-text-desc')?.focus();
+                });
+            });
+        }
         // Tap classification rows → jump back to Page 2 with focus on that row.
         document.getElementById('v4-edit-infra').addEventListener('click', () => {
             window.__crispGoToStage('stage-v4-classify');
@@ -797,6 +839,9 @@
                     description: textArea.value,
                     transcript: textArea.value,  // mirror so submit reads either
                 });
+                // Q10 — refresh the strip on every keystroke so the text chip
+                // turns green the moment the textarea has any content.
+                try { _refreshCapturedStrip(); } catch (_) {}
             });
         }
 
@@ -961,6 +1006,12 @@
             try { _v4SpeechRecognition.stop(); } catch (_) {}
             _v4SpeechRecognition = null;
         }
+        // Q10 — refresh the captured strip so the voice chip turns green
+        // the moment recording stops (state.audioBlob has been assembled
+        // by the MediaRecorder's onstop handler).
+        setTimeout(() => {
+            try { _refreshCapturedStrip(); } catch (_) {}
+        }, 100);
         window.state.isRecording = false;
         _setV4MicVisualState(false);
     }
@@ -981,6 +1032,58 @@
                     ? (window.t('v4_record') || 'Record voice')
                     : 'Record voice';
             }
+        }
+    }
+
+    // Q10 (May 2026) — multi-modal "captured" strip on stage-v4-review.
+    // Reads state.photoDataUrl + state.audioBlob + state.description and
+    // toggles the .is-captured class on each chip with a localized state
+    // label ("Captured", "1.2s", "12 chars", or "Not added"). Called
+    // every time stage-v4-review is entered, after recording stops, and
+    // on each keystroke in the textarea.
+    function _refreshCapturedStrip() {
+        const strip = document.getElementById('v4-captured-strip');
+        if (!strip) return;
+        const st = window.state || {};
+        const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
+        // Photo — captured if state.photoDataUrl OR thumbs strip has any
+        // primary thumb attached. The thumbs strip mirrors photoDataUrl
+        // already, so checking the primary is sufficient.
+        const photoChip = document.getElementById('v4-captured-photo');
+        const photoState = !!(st.photoDataUrl);
+        if (photoChip) {
+            photoChip.classList.toggle('is-captured', photoState);
+            const stateEl = photoChip.querySelector('.v4-captured-state');
+            if (stateEl) stateEl.textContent = photoState
+                ? tt('v4_cap_added', 'Added')
+                : tt('v4_cap_none', 'Not added');
+        }
+        // Voice — captured if state.audioBlob has size or transcript exists
+        // (the latter covers Web-Speech-only fallback where MediaRecorder
+        // failed but text came through).
+        const voiceChip = document.getElementById('v4-captured-voice');
+        const audioBlobOk = !!(st.audioBlob && st.audioBlob.size && st.audioBlob.size > 0);
+        const transcriptOk = !!(st.transcript && st.transcript.trim() && st.transcript.length > 4);
+        const voiceState = audioBlobOk || transcriptOk;
+        if (voiceChip) {
+            voiceChip.classList.toggle('is-captured', voiceState);
+            const stateEl = voiceChip.querySelector('.v4-captured-state');
+            if (stateEl) stateEl.textContent = voiceState
+                ? tt('v4_cap_added', 'Added')
+                : tt('v4_cap_none', 'Not added');
+        }
+        // Text — captured if state.description has non-whitespace content.
+        // We treat transcript === description as text too (since the
+        // textarea now mirrors transcript live).
+        const textChip = document.getElementById('v4-captured-text');
+        const textVal = (st.description || '').trim();
+        const textState = textVal.length > 0;
+        if (textChip) {
+            textChip.classList.toggle('is-captured', textState);
+            const stateEl = textChip.querySelector('.v4-captured-state');
+            if (stateEl) stateEl.textContent = textState
+                ? tt('v4_cap_added', 'Added')
+                : tt('v4_cap_none', 'Not added');
         }
     }
 

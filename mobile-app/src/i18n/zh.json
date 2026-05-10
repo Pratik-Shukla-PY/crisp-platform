@@ -446,5 +446,10 @@
   "mr_group_this_week": "本周",
   "mr_group_older": "更早",
   "mr_empty_filtered": "没有匹配此筛选的报告。",
-  "mr_map_empty": "暂无带位置的报告。"
+  "mr_map_empty": "暂无带位置的报告。",
+  "v4_cap_photo": "照片",
+  "v4_cap_voice": "语音",
+  "v4_cap_text": "文字",
+  "v4_cap_added": "已添加",
+  "v4_cap_none": "未添加"
 }

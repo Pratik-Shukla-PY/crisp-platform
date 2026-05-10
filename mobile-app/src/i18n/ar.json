@@ -446,5 +446,10 @@
   "mr_group_this_week": "هذا الأسبوع",
   "mr_group_older": "أقدم",
   "mr_empty_filtered": "لا تقارير تطابق هذا الفلتر.",
-  "mr_map_empty": "لا تقارير بموقع بعد."
+  "mr_map_empty": "لا تقارير بموقع بعد.",
+  "v4_cap_photo": "صورة",
+  "v4_cap_voice": "صوت",
+  "v4_cap_text": "نص",
+  "v4_cap_added": "مضاف",
+  "v4_cap_none": "غير مضاف"
 }

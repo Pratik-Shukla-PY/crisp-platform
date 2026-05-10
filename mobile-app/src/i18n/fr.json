@@ -446,5 +446,10 @@
   "mr_group_this_week": "Cette semaine",
   "mr_group_older": "Plus anciens",
   "mr_empty_filtered": "Aucun signalement ne correspond à ce filtre.",
-  "mr_map_empty": "Aucun signalement avec localisation pour l'instant."
+  "mr_map_empty": "Aucun signalement avec localisation pour l'instant.",
+  "v4_cap_photo": "Photo",
+  "v4_cap_voice": "Voix",
+  "v4_cap_text": "Texte",
+  "v4_cap_added": "Ajouté",
+  "v4_cap_none": "Non ajouté"
 }

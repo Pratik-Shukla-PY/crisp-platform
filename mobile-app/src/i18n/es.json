@@ -446,5 +446,10 @@
   "mr_group_this_week": "Esta semana",
   "mr_group_older": "Anteriores",
   "mr_empty_filtered": "Ningún reporte coincide con este filtro.",
-  "mr_map_empty": "Aún no hay reportes con ubicación."
+  "mr_map_empty": "Aún no hay reportes con ubicación.",
+  "v4_cap_photo": "Foto",
+  "v4_cap_voice": "Voz",
+  "v4_cap_text": "Texto",
+  "v4_cap_added": "Añadido",
+  "v4_cap_none": "Sin añadir"
 }

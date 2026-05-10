@@ -447,5 +447,10 @@
   "mr_group_this_week": "This week",
   "mr_group_older": "Older",
   "mr_empty_filtered": "No reports match this filter.",
-  "mr_map_empty": "No reports with location yet."
+  "mr_map_empty": "No reports with location yet.",
+  "v4_cap_photo": "Photo",
+  "v4_cap_voice": "Voice",
+  "v4_cap_text": "Text",
+  "v4_cap_added": "Added",
+  "v4_cap_none": "Not added"
 }
