@@ -451,5 +451,10 @@
   "v4_cap_voice": "صوت",
   "v4_cap_text": "نص",
   "v4_cap_added": "مضاف",
-  "v4_cap_none": "غير مضاف"
+  "v4_cap_none": "غير مضاف",
+  "building_pick_cta": "فتح المنتقي بشاشة كاملة",
+  "building_fs_title": "اختر مبنى",
+  "building_fs_prompt": "اضغط على مبنى في الخريطة.",
+  "building_fs_confirm": "تأكيد",
+  "building_fs_cancel": "إلغاء"
 }

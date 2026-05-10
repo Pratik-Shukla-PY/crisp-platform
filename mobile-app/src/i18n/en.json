@@ -452,5 +452,10 @@
   "v4_cap_voice": "Voice",
   "v4_cap_text": "Text",
   "v4_cap_added": "Added",
-  "v4_cap_none": "Not added"
+  "v4_cap_none": "Not added",
+  "building_pick_cta": "Open fullscreen picker",
+  "building_fs_title": "Pick a building",
+  "building_fs_prompt": "Tap a building on the map.",
+  "building_fs_confirm": "Confirm",
+  "building_fs_cancel": "Cancel"
 }

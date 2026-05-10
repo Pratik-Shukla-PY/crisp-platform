@@ -7738,6 +7738,16 @@ function setupSendStage() {
     // (Appendix-1), not must-haves.
     setupUndpDetailsStage();
 
+    // M2 polish (May 2026) — fullscreen building-picker overlay + sliding
+    // bottom sheet. UNDP must-have #6: the inline 280 px map is cramped
+    // in dense urban areas. Tapping #btn-building-fs-open lifts the map
+    // into the fullscreen overlay (Leaflet instance follows the DOM via
+    // appendChild + invalidateSize). Listens for the custom
+    // `crisp:building-selected` / `crisp:building-cleared` events emitted
+    // by building-select.js to drive the bottom sheet's enable/disable
+    // state.
+    setupBuildingFullscreenPicker();
+
     // ── Phase 5 (Apr 2026) — PWA My Reports screen ─────────────────────────
     // Parity port of crisp-mobile/App.tsx:969–982 (history screen).
     // Three sections: In-flight (IndexedDB), Submitted (status-since),
@@ -8930,6 +8940,196 @@ function _showCelebration(message) {
         toast.style.transform = 'translateY(-6px)';
         setTimeout(() => toast.remove(), 350);
     }, 3200);
+}
+
+// ── M2 polish (May 2026) — Fullscreen building-picker + bottom sheet ───────
+//
+// Goal: take the inline `#building-map` (a cramped 260 px box on small
+// phones) and let users tap a CTA to expand it into a viewport-filling
+// overlay where they can browse a 30+ polygon urban area comfortably.
+//
+// Architecture:
+// 1. Click the CTA → record where #building-map currently lives
+//    (it might be #v4-building-mount, #stage-where, or its original
+//    parent #building-select-box depending on the active stage), move
+//    it into #building-fs-mount, slide the overlay up, fire
+//    invalidateSize() so Leaflet re-measures + repaints tiles.
+// 2. While open: listen for `crisp:building-selected` /
+//    `crisp:building-cleared` events emitted by building-select.js.
+//    Each selection updates the bottom sheet's name + enables Confirm.
+// 3. Confirm → close the overlay (the selection is already committed
+//    to window.state by _commitSelection; we don't double-write).
+//    Cancel → click the existing #btn-building-clear (fires the same
+//    teardown as the inline cancel button), then close the overlay.
+//    Back-arrow → same as Cancel.
+// 4. Close: move #building-map back to its original parent + reset the
+//    bottom sheet state. Leaflet's invalidateSize handles the resize
+//    back to the inline 260 px box.
+//
+// The existing inline picker stays fully functional as a fallback so
+// users on older phones / small viewports who don't tap the CTA never
+// see the overlay; the auto-rollback on prod-smoke regressions covers
+// the safety side.
+function setupBuildingFullscreenPicker() {
+    const overlay = document.getElementById('building-fs-overlay');
+    const openBtn = document.getElementById('btn-building-fs-open');
+    const backBtn = document.getElementById('btn-building-fs-back');
+    const cancelBtn = document.getElementById('btn-building-fs-cancel');
+    const confirmBtn = document.getElementById('btn-building-fs-confirm');
+    const mount = document.getElementById('building-fs-mount');
+    const promptEl = document.getElementById('building-fs-prompt');
+    const nameRow = document.getElementById('building-fs-name-row');
+    const nameEl = document.getElementById('building-fs-name');
+    if (!overlay || !openBtn || !mount) return;
+
+    let _originalParent = null;       // where #building-map lived before we lifted it
+    let _selectionAtOpen = null;      // snapshot of state.buildingId on open (for Cancel revert)
+    let _isOpen = false;
+
+    function _setSheetIdle() {
+        // Empty / awaiting-selection state.
+        if (promptEl) promptEl.style.display = '';
+        if (nameRow) nameRow.hidden = true;
+        if (confirmBtn) confirmBtn.disabled = true;
+    }
+    function _setSheetSelected(name) {
+        if (promptEl) promptEl.style.display = 'none';
+        if (nameRow) nameRow.hidden = false;
+        if (nameEl) nameEl.textContent = name || '—';
+        if (confirmBtn) confirmBtn.disabled = false;
+    }
+
+    // Reflect the live selection state in the bottom sheet. Called on
+    // open (so already-selected buildings carry forward) + on every
+    // selected/cleared event while open.
+    function _refreshSheetFromState() {
+        const sel = (window.state && window.state.buildingOsmElement) || null;
+        if (sel) {
+            const name = sel.name || (sel.id ? `#${sel.id}` : '—');
+            _setSheetSelected(name);
+        } else {
+            _setSheetIdle();
+        }
+    }
+
+    function openOverlay() {
+        if (_isOpen) return;
+        const map = document.getElementById('building-map');
+        if (!map) return;
+        _originalParent = map.parentNode;
+        // Snapshot current selection so Cancel can revert if the user
+        // tapped a NEW polygon inside the overlay and then changed their
+        // mind. (If they had no prior selection, _selectionAtOpen stays
+        // null and Cancel just clears.)
+        _selectionAtOpen = (window.state && window.state.buildingId) || null;
+
+        // Move the live map into the overlay mount. Leaflet's internal
+        // canvas + tile layer follow via appendChild — we just need to
+        // call invalidateSize after the layout settles.
+        mount.appendChild(map);
+        overlay.hidden = false;
+        // Force one paint frame before applying the open class so the
+        // CSS transition actually animates (translateY 100% → 0).
+        requestAnimationFrame(() => {
+            overlay.classList.add('is-open');
+        });
+        _isOpen = true;
+
+        _refreshSheetFromState();
+
+        // Multi-stage invalidateSize — the same dance building-select.js
+        // uses on first init. iOS Safari sometimes needs a second tick
+        // to settle layout after a transform-then-detransform ancestor.
+        const _kick = () => {
+            try {
+                if (window.L && map._leaflet_id) {
+                    // Leaflet attaches `_leaflet_map` only on internal
+                    // structures; cleaner: ping the BuildingSelect API
+                    // which holds a private `_map` ref.
+                }
+            } catch (_) {}
+            // Use the public ensureMap path which internally calls
+            // invalidateSize. Safe to call repeatedly.
+            try {
+                const loc = (window.state && window.state.location) || null;
+                if (loc && window.BuildingSelect && typeof window.BuildingSelect.ensureMap === 'function') {
+                    window.BuildingSelect.ensureMap(loc.lat, loc.lng);
+                }
+            } catch (_) {}
+        };
+        requestAnimationFrame(() => requestAnimationFrame(_kick));
+        setTimeout(_kick, 320);   // catches the post-transition repaint
+    }
+
+    function closeOverlay() {
+        if (!_isOpen) return;
+        const map = document.getElementById('building-map');
+        overlay.classList.remove('is-open');
+        // Wait for the slide-down transition to finish before unmounting
+        // so the map doesn't pop visually mid-animation. Reduced-motion
+        // users see no transition (CSS opt-out) so the timeout is a
+        // best-effort upper bound; the actual move is idempotent.
+        setTimeout(() => {
+            if (map && _originalParent && _originalParent.isConnected) {
+                _originalParent.appendChild(map);
+            }
+            overlay.hidden = true;
+            _originalParent = null;
+            _selectionAtOpen = null;
+            _isOpen = false;
+            _setSheetIdle();
+            // Re-invalidate after the move-back so the inline view paints.
+            try {
+                const loc = (window.state && window.state.location) || null;
+                if (loc && window.BuildingSelect && typeof window.BuildingSelect.ensureMap === 'function') {
+                    window.BuildingSelect.ensureMap(loc.lat, loc.lng);
+                }
+            } catch (_) {}
+        }, 320);
+    }
+
+    function cancelOverlay() {
+        // Revert: if the user tapped a NEW polygon while the overlay was
+        // open, clear that selection so we go back to the
+        // _selectionAtOpen state. Cleanest path is the existing
+        // #btn-building-clear which routes through _clearSelection in
+        // building-select.js — same code path the inline cancel uses.
+        const currentSel = (window.state && window.state.buildingId) || null;
+        if (currentSel && currentSel !== _selectionAtOpen) {
+            const clearBtn = document.getElementById('btn-building-clear');
+            if (clearBtn) clearBtn.click();
+        }
+        closeOverlay();
+    }
+
+    openBtn.addEventListener('click', openOverlay);
+    if (backBtn) backBtn.addEventListener('click', cancelOverlay);
+    if (cancelBtn) cancelBtn.addEventListener('click', cancelOverlay);
+    if (confirmBtn) confirmBtn.addEventListener('click', closeOverlay);
+
+    // Esc key closes the overlay (treats Esc as Cancel — keyboard users
+    // shouldn't lose their original selection by pressing the escape key
+    // mid-browse).
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && _isOpen) {
+            e.preventDefault();
+            cancelOverlay();
+        }
+    });
+
+    // Wire to the custom events emitted by building-select.js's
+    // _commitSelection / _clearSelection. The bottom sheet only updates
+    // when the overlay is open — when closed, the events are still
+    // dispatched but we no-op.
+    document.addEventListener('crisp:building-selected', (e) => {
+        if (!_isOpen) return;
+        const detail = (e && e.detail) || {};
+        _setSheetSelected(detail.name || (detail.osmId ? `#${detail.osmId}` : '—'));
+    });
+    document.addEventListener('crisp:building-cleared', () => {
+        if (!_isOpen) return;
+        _setSheetIdle();
+    });
 }
 
 // ── UNDP Step 4 — post-submission details (M3, May 2026 UI v3 redesign) ────

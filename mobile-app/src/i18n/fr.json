@@ -451,5 +451,10 @@
   "v4_cap_voice": "Voix",
   "v4_cap_text": "Texte",
   "v4_cap_added": "Ajouté",
-  "v4_cap_none": "Non ajouté"
+  "v4_cap_none": "Non ajouté",
+  "building_pick_cta": "Ouvrir en plein écran",
+  "building_fs_title": "Choisir un bâtiment",
+  "building_fs_prompt": "Appuyez sur un bâtiment sur la carte.",
+  "building_fs_confirm": "Confirmer",
+  "building_fs_cancel": "Annuler"
 }

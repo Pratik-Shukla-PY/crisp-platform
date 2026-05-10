@@ -197,6 +197,23 @@
             const nameSlot = pill.querySelector('.building-selected-name');
             if (nameSlot) nameSlot.textContent = osmName || `#${element.id}`;
         }
+        // M2 polish (May 2026) — broadcast selection so external listeners
+        // (e.g. the fullscreen-picker bottom sheet in app.js) can react
+        // without poking into BuildingSelect's internals. The detail
+        // payload carries everything an external view needs to render
+        // a confirmation card. Best-effort; never throws into the click
+        // handler that called us.
+        try {
+            document.dispatchEvent(new CustomEvent('crisp:building-selected', {
+                detail: {
+                    buildingId: composite,
+                    osmType,
+                    osmId: element.id,
+                    name: osmName,
+                    tags,
+                },
+            }));
+        } catch (_) { /* CustomEvent unsupported on very old browsers — skip */ }
         console.log('[BuildingSelect] selected', composite, osmName || '(no name tag)', tags);
     }
 
@@ -222,6 +239,12 @@
         }
         const pill = document.getElementById('building-selected-pill');
         if (pill) pill.style.display = 'none';
+        // M2 polish — companion event to crisp:building-selected so the
+        // fullscreen picker's bottom sheet can revert to the empty-prompt
+        // state (or stay closed if no selection had been made).
+        try {
+            document.dispatchEvent(new CustomEvent('crisp:building-cleared'));
+        } catch (_) {}
     }
 
     // ─── Lazy-load Leaflet (Phase B, May 2026) ─────────────────────────

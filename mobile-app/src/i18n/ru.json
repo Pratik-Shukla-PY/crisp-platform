@@ -451,5 +451,10 @@
   "v4_cap_voice": "Голос",
   "v4_cap_text": "Текст",
   "v4_cap_added": "Добавлено",
-  "v4_cap_none": "Не добавлено"
+  "v4_cap_none": "Не добавлено",
+  "building_pick_cta": "Открыть в полноэкранном режиме",
+  "building_fs_title": "Выберите здание",
+  "building_fs_prompt": "Нажмите на здание на карте.",
+  "building_fs_confirm": "Подтвердить",
+  "building_fs_cancel": "Отмена"
 }

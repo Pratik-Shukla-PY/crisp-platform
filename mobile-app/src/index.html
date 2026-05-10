@@ -1615,6 +1615,17 @@
                 <i class="fa-solid fa-building" style="color:var(--accent);"></i>
                 <span data-i18n="building_select_title">Optional: pick the exact building</span>
             </p>
+            <!-- M2 polish (May 2026) — fullscreen-picker CTA. Tapping
+                 opens the fullscreen overlay where the same Leaflet map
+                 can be browsed comfortably (the inline 280 px box is
+                 cramped on small phones). The inline map stays below as
+                 a fallback for users who prefer the compact view + for
+                 offline scenarios where the overlay can be closed
+                 without re-reflowing the page. -->
+            <button class="building-fs-cta" id="btn-building-fs-open" type="button">
+                <i class="fa-solid fa-up-right-and-down-left-from-center" aria-hidden="true"></i>
+                <span data-i18n="building_pick_cta">Open fullscreen picker</span>
+            </button>
             <div id="building-map" class="building-map"
                  role="application"
                  aria-label="Pick a building from the map"></div>
@@ -2170,6 +2181,62 @@
          title="Tap to retry sync">
         <i class="fa-solid fa-cloud-arrow-up"></i>
         <span id="sync-badge-text">0 queued</span>
+    </div>
+
+    <!-- M2 polish (May 2026) — Fullscreen building-picker overlay.
+         UNDP must-have #6: the inline #building-map is 280 px tall — fine
+         for low-density rural blocks but cramped in dense urban areas
+         where 30+ polygons overlap inside the 200 m radius. This overlay
+         takes over the viewport when the user taps "Open fullscreen
+         picker", mounts #building-map inside #building-fs-mount (Leaflet
+         instance follows the DOM via appendChild), and surfaces a sliding
+         bottom sheet showing the tapped building's name with Confirm /
+         Cancel actions. Closing the overlay restores #building-map to its
+         original parent so the inline view keeps working as a fallback
+         (and Leaflet's invalidateSize call rehydrates the layout).
+
+         Selection state is whatever building-select.js wrote to
+         window.state.buildingId — we don't shadow it; Confirm just closes
+         the overlay (the selection has already been committed by the map
+         click); Cancel additionally calls _clearSelection-equivalent via
+         the existing #btn-building-clear (clean teardown, no special
+         state). -->
+    <div class="building-fs-overlay" id="building-fs-overlay" hidden role="dialog"
+         aria-modal="true" aria-labelledby="building-fs-title">
+        <header class="building-fs-header">
+            <button class="building-fs-back" id="btn-building-fs-back" type="button"
+                    aria-label="Close fullscreen picker">
+                <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+            </button>
+            <h2 class="building-fs-h2" id="building-fs-title" data-i18n="building_fs_title">
+                Pick a building
+            </h2>
+        </header>
+        <!-- Mount target: #building-map gets moved here when the overlay
+             opens and moved back when it closes. The container is full-
+             flex so the map fills the available height between the
+             header and the bottom sheet. -->
+        <div class="building-fs-mount" id="building-fs-mount" aria-live="polite"></div>
+        <!-- Bottom sheet: hidden until the user taps a building polygon.
+             Slides up via translateY transition. Houses the selected
+             building's name + Confirm / Cancel actions. -->
+        <div class="building-fs-sheet" id="building-fs-sheet" aria-live="polite">
+            <div class="building-fs-sheet-handle" aria-hidden="true"></div>
+            <div class="building-fs-sheet-body">
+                <p class="building-fs-sheet-prompt" id="building-fs-prompt"
+                   data-i18n="building_fs_prompt">Tap a building on the map.</p>
+                <div class="building-fs-sheet-name" id="building-fs-name-row" hidden>
+                    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+                    <span id="building-fs-name">—</span>
+                </div>
+                <div class="building-fs-sheet-actions">
+                    <button class="building-fs-cancel" id="btn-building-fs-cancel" type="button"
+                            data-i18n="building_fs_cancel">Cancel</button>
+                    <button class="building-fs-confirm" id="btn-building-fs-confirm" type="button"
+                            disabled data-i18n="building_fs_confirm">Confirm</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Upload Progress Overlay -->

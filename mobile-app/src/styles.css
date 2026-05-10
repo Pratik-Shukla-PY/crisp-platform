@@ -3090,6 +3090,187 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     border-radius: 14px;
     touch-action: pan-y;   /* allow vertical page scroll outside the map */
 }
+
+/* M2 polish (May 2026) — fullscreen-picker CTA inline button. Tonal
+   purple (matches the M5 ETA badge + M6 filter chip active state) so
+   it reads as the primary action above the small inline preview map. */
+.building-fs-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    padding: 8px 14px;
+    background: rgba(124, 58, 237, 0.16);
+    border: 1px solid rgba(124, 58, 237, 0.42);
+    border-radius: 999px;
+    color: #c4b5fd;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.building-fs-cta:hover {
+    background: rgba(124, 58, 237, 0.24);
+    border-color: rgba(124, 58, 237, 0.62);
+}
+.building-fs-cta > i { font-size: 11px; }
+
+/* M2 polish — Fullscreen building-picker overlay. Slides up from the
+   bottom on open (translateY transition); takes over the viewport so
+   the user can browse a 30+ polygon urban area without the squashed
+   280 px inline view. The map is moved into #building-fs-mount when
+   the overlay opens and moved back to its original parent on close —
+   Leaflet's invalidateSize handles the size flip. */
+.building-fs-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1300;
+    background: rgba(15, 23, 42, 0.96);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    transform: translateY(100%);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.building-fs-overlay.is-open {
+    transform: translateY(0);
+}
+.building-fs-overlay[hidden] { display: none !important; }
+
+.building-fs-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px 10px;
+    background: rgba(15, 23, 42, 0.85);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    /* iOS notch / Android punchhole — keep header below the safe area. */
+    padding-top: max(14px, env(safe-area-inset-top));
+}
+.building-fs-back {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+}
+.building-fs-back:hover { background: rgba(255, 255, 255, 0.10); }
+.building-fs-h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+/* Mount target. Fills the available height; the moved-in #building-map
+   inherits this via width/height: 100%. We override .building-map's
+   fixed 260 px so the fullscreen view actually goes fullscreen. */
+.building-fs-mount {
+    flex: 1 1 auto;
+    position: relative;
+    min-height: 0;        /* prevent flex blow-out when map is tall */
+    background: rgba(15, 23, 42, 0.5);
+}
+/* When #building-map is mounted inside the overlay, take the full slot. */
+.building-fs-mount > .building-map,
+.building-fs-mount > #building-map {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+}
+
+/* Bottom sheet — slides up from the bottom edge once the user taps a
+   polygon. translateY 100% (hidden) → 0 (shown). 320 ms ease-out for
+   smoothness; reduce-motion users get instant transition. */
+.building-fs-sheet {
+    flex: 0 0 auto;
+    background: rgba(17, 24, 39, 0.98);
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    transform: translateY(100%);
+    transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.4);
+}
+.building-fs-overlay.is-open .building-fs-sheet {
+    transform: translateY(0);
+}
+.building-fs-sheet-handle {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+    margin: 8px auto 6px;
+}
+.building-fs-sheet-body {
+    padding: 8px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.building-fs-sheet-prompt {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+}
+.building-fs-sheet-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    background: rgba(34, 197, 94, 0.10);
+    border: 1px solid rgba(34, 197, 94, 0.32);
+    border-radius: 10px;
+    color: #4ade80;
+    font-weight: 600;
+    font-size: 14px;
+}
+.building-fs-sheet-name > i { font-size: 14px; }
+.building-fs-sheet-name[hidden] { display: none; }
+.building-fs-sheet-actions {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 10px;
+}
+.building-fs-cancel,
+.building-fs-confirm {
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+    min-height: 48px;
+}
+.building-fs-cancel {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text);
+}
+.building-fs-cancel:hover { background: rgba(255, 255, 255, 0.10); }
+.building-fs-confirm {
+    background: var(--accent, #7c3aed);
+    border: 1px solid var(--accent, #7c3aed);
+    color: #fff;
+}
+.building-fs-confirm:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+    .building-fs-overlay,
+    .building-fs-sheet { transition: none; }
+}
 .building-select-details > .block-label {
     margin: 0 0 10px 0;
     display: flex; align-items: center; gap: 8px;

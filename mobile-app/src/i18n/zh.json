@@ -451,5 +451,10 @@
   "v4_cap_voice": "语音",
   "v4_cap_text": "文字",
   "v4_cap_added": "已添加",
-  "v4_cap_none": "未添加"
+  "v4_cap_none": "未添加",
+  "building_pick_cta": "打开全屏选择器",
+  "building_fs_title": "选择一栋建筑",
+  "building_fs_prompt": "在地图上点选一栋建筑。",
+  "building_fs_confirm": "确认",
+  "building_fs_cancel": "取消"
 }

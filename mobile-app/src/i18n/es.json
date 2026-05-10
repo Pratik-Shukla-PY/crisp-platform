@@ -451,5 +451,10 @@
   "v4_cap_voice": "Voz",
   "v4_cap_text": "Texto",
   "v4_cap_added": "Añadido",
-  "v4_cap_none": "Sin añadir"
+  "v4_cap_none": "Sin añadir",
+  "building_pick_cta": "Abrir selector pantalla completa",
+  "building_fs_title": "Elige un edificio",
+  "building_fs_prompt": "Toca un edificio en el mapa.",
+  "building_fs_confirm": "Confirmar",
+  "building_fs_cancel": "Cancelar"
 }
