@@ -536,9 +536,16 @@ const _LOCALE_JSON_CACHE = Object.create(null);
 
 async function _loadLocaleJson(code) {
     if (!code) return null;
-    // en.json is the canonical source of truth, but the inline I18N.en
-    // pack is identical and already loaded — skip the fetch.
-    if (code === 'en') return null;
+    // May 2026 (Delta-A fix) — en.json IS NOT identical to the inline
+    // I18N.en. Every key added since Phase 2 (welcome overlay, device-id,
+    // M3 UNDP details, M9 landmark fallback, M4 success impact, M5 ETA,
+    // M6 filters, Q10 captured strip, M2 fullscreen picker, ~88 keys
+    // total) lives only in the JSON file. Skipping the fetch left
+    // English users staring at raw `welcome_title`, `undp_power_label`,
+    // etc. The earlier short-circuit assumed parity that drifted; we now
+    // fetch en.json on the same path as every other locale so any future
+    // additions are visible regardless of which file the developer
+    // touched.
     if (_LOCALE_JSON_CACHE[code] !== undefined) {
         return _LOCALE_JSON_CACHE[code];
     }
