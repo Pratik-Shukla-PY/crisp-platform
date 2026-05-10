@@ -4109,6 +4109,177 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     #v4-carousel-crisis .v4-chipgrid-tile { min-height: 56px; padding: 6px 2px; }
 }
 
+/* ── UNDP Step 4 — post-submit details page (UI v3 M3) ──────────────────
+   Shown only when the user taps the "Add 4 quick details" prompt on
+   stage-success. PATCHes the existing report via /reports/{id}/classify
+   on submit. Skipping at any point keeps the base report intact.
+   Each question = card. Status-row buttons use the same colour ramp +
+   shape encoding as the v3 severity work (4-channel a11y). */
+.undp-details-cta {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 14px;
+    color: #7dd3fc;
+    font-size: 0.92rem; font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 48px;
+}
+.undp-details-cta:hover, .undp-details-cta:focus-visible {
+    background: rgba(56, 189, 248, 0.16);
+    border-color: rgba(56, 189, 248, 0.5);
+    outline: none;
+}
+.undp-details-cta-time {
+    font-size: 0.72rem; font-weight: 500;
+    opacity: 0.7;
+    margin-inline-start: 4px;
+    padding: 2px 7px;
+    background: rgba(56, 189, 248, 0.14);
+    border-radius: 999px;
+}
+.undp-details-cta-sub {
+    margin: 6px 0 0;
+    font-size: 0.7rem;
+    color: #64748b;
+    text-align: center;
+}
+
+#stage-undp-details { padding: 0; max-width: 480px; margin: 0 auto; }
+.undp-details-body {
+    padding: 16px 16px 96px;
+}
+.undp-details-intro {
+    color: #94a3b8;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.03);
+    border-left: 3px solid rgba(56,189,248,0.4);
+    border-radius: 6px;
+}
+.undp-q-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 14px 14px 16px;
+    margin-bottom: 10px;
+}
+.undp-q-header {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 12px;
+}
+.undp-q-icon {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.undp-q-icon svg { display: block; }
+.undp-q-icon-power  { background: linear-gradient(135deg, rgba(251,146,60,0.32), rgba(249,115,22,0.18)); color: #fdba74; box-shadow: 0 0 14px rgba(249,115,22,0.18); }
+.undp-q-icon-water  { background: linear-gradient(135deg, rgba(56,189,248,0.32),  rgba(14,165,233,0.18)); color: #7dd3fc; box-shadow: 0 0 14px rgba(56,189,248,0.18); }
+.undp-q-icon-health { background: linear-gradient(135deg, rgba(244,114,182,0.32), rgba(219,39,119,0.18)); color: #f9a8d4; box-shadow: 0 0 14px rgba(244,114,182,0.2); }
+.undp-q-icon-debris { background: linear-gradient(135deg, rgba(234,179,8,0.32),   rgba(202,138,4,0.18));  color: #fde68a; box-shadow: 0 0 14px rgba(234,179,8,0.18); }
+.undp-q-icon-needs  { background: linear-gradient(135deg, rgba(34,197,94,0.32),   rgba(22,163,74,0.18));  color: #86efac; box-shadow: 0 0 14px rgba(34,197,94,0.18); }
+.undp-q-text { flex: 1; min-width: 0; }
+.undp-q-label { font-size: 0.95rem; font-weight: 800; color: #f1f5f9; }
+.undp-q-hint  { font-size: 0.72rem; color: #64748b; margin-top: 1px; }
+
+.undp-status-row {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px;
+}
+.undp-lvl {
+    padding: 8px 4px 6px;
+    border-radius: 10px;
+    border: 1.5px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    text-align: center;
+    min-height: 60px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px;
+    cursor: pointer;
+    color: #94a3b8;
+    font-family: inherit;
+    transition: all 0.15s;
+}
+.undp-lvl-icon { font-size: 1.05rem; line-height: 1; font-weight: 700; }
+.undp-lvl-word { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.undp-lvl-l1 { color: #86efac; }
+.undp-lvl-l2 { color: #bef264; }
+.undp-lvl-l3 { color: #fde68a; }
+.undp-lvl-l4 { color: #fdba74; }
+.undp-lvl-l5 { color: #fca5a5; }
+.undp-lvl.is-selected {
+    background: rgba(255,255,255,0.06);
+    border-width: 2px;
+    transform: scale(1.05);
+}
+.undp-lvl-l1.is-selected { border-color: #22c55e; background: rgba(34,197,94,0.18); }
+.undp-lvl-l2.is-selected { border-color: #84cc16; background: rgba(132,204,22,0.18); }
+.undp-lvl-l3.is-selected { border-color: #eab308; background: rgba(234,179,8,0.18); }
+.undp-lvl-l4.is-selected { border-color: #fb923c; background: rgba(251,146,60,0.18); }
+.undp-lvl-l5.is-selected { border-color: #ef4444; background: rgba(239,68,68,0.18); }
+
+.undp-pill-row {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;
+}
+.undp-pill {
+    padding: 11px 14px;
+    border-radius: 999px;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: #cbd5e1;
+    font-size: 0.84rem; font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    min-height: 44px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    transition: all 0.15s;
+}
+.undp-pill:hover { border-color: rgba(255,255,255,0.2); }
+.undp-pill.is-selected {
+    border-color: #f97316;
+    background: rgba(249, 115, 22, 0.16);
+    color: #fdba74;
+    box-shadow: 0 0 10px rgba(249, 115, 22, 0.2);
+}
+.undp-pill-good.is-selected { border-color: #22c55e; background: rgba(34,197,94,0.18); color: #86efac; }
+.undp-pill-warn.is-selected { border-color: #eab308; background: rgba(234,179,8,0.18); color: #fde68a; }
+.undp-pill-bad.is-selected  { border-color: #ef4444; background: rgba(239,68,68,0.18); color: #fca5a5; }
+
+.undp-yn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.undp-yn {
+    padding: 14px 12px;
+    border-radius: 12px;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: #cbd5e1;
+    font-size: 0.95rem; font-weight: 800;
+    cursor: pointer;
+    font-family: inherit;
+    min-height: 56px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all 0.15s;
+}
+.undp-yn-icon { font-size: 1.1rem; }
+.undp-yn-yes.is-selected { border-color: #22c55e; background: rgba(34,197,94,0.16); color: #86efac; box-shadow: 0 0 12px rgba(34,197,94,0.18); }
+.undp-yn-no.is-selected  { border-color: #94a3b8; background: rgba(148,163,184,0.16); color: #cbd5e1; }
+
+.undp-needs-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+}
+
+.undp-actions {
+    display: flex; flex-direction: column; gap: 8px;
+    margin-top: 18px;
+}
+.undp-skip-btn { color: #64748b; }
+.undp-skip-btn:hover { color: #94a3b8; }
+
 /* ── Voice readout button (UI v3 redesign Phase 5 / M7 / Flag-4) ──────────
    Inline 🔊 button auto-appended to any element with data-voice="<key>".
    Tap reads the element's text aloud in the active language. Sized to

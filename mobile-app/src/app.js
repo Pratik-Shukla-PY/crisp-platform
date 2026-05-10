@@ -2381,7 +2381,7 @@ let _lastRenderedReport = null;
 // previous v4 stage when the user navigates between them. Without
 // this, transitions between v4 stages left the prior one .active
 // and the absolute-positioned stages stacked on top of each other.
-const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-review', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail', 'stage-login', 'stage-settings', 'stage-v4-capture', 'stage-v4-classify', 'stage-v4-review'];
+const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-review', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail', 'stage-login', 'stage-settings', 'stage-v4-capture', 'stage-v4-classify', 'stage-v4-review', 'stage-undp-details'];
 
 // ── Phase B4 (Apr 2026 UI v3) — 8-stage capture flow ───────────────────────
 // When `UI_V3_ENABLED` is on, the capture flow is re-ordered:
@@ -2689,6 +2689,14 @@ function goToStage(id) {
     } else {
         inactivityManager.show();
         inactivityManager.tryArm({ bustCache: true });
+    }
+
+    // M3 (May 2026) — re-evaluate the post-submission UNDP-details soft
+    // prompt every time we land on stage-success. Hidden when the user
+    // already filled debris/services during capture (Q14 v4 path), so we
+    // never nag a repeat question.
+    if (id === 'stage-success') {
+        try { maybeShowUndpDetailsPrompt(); } catch (e) { console.warn('[M3] prompt:', e); }
     }
 }
 
@@ -7628,6 +7636,15 @@ function setupSendStage() {
         });
     }
 
+    // ── M3 (UI v3 redesign, May 2026) — UNDP Step 4 details flow ──────────
+    // Soft prompt on stage-success: "Add 4 quick details · 30s". Opens a
+    // dedicated post-submission stage-undp-details page with 5 modular
+    // questions (debris / power / water / health / pressing-needs).
+    // Submit PATCHes /reports/<id>/classify with the new fields. Skipping
+    // at any point preserves the base report — these are UNDP "of interest"
+    // (Appendix-1), not must-haves.
+    setupUndpDetailsStage();
+
     // ── Phase 5 (Apr 2026) — PWA My Reports screen ─────────────────────────
     // Parity port of crisp-mobile/App.tsx:969–982 (history screen).
     // Three sections: In-flight (IndexedDB), Submitted (status-since),
@@ -8485,6 +8502,189 @@ function _showCelebration(message) {
         toast.style.transform = 'translateY(-6px)';
         setTimeout(() => toast.remove(), 350);
     }, 3200);
+}
+
+// ── UNDP Step 4 — post-submission details (M3, May 2026 UI v3 redesign) ────
+//
+// Soft prompt shown on stage-success after every successful submit (when
+// the user hasn't already filled debris + service_status during capture).
+// The page renders 5 modular UNDP Appendix-1 questions in plain language:
+//   1. Power supply (5-level status row, green→red)
+//   2. Water (4-level status row)
+//   3. Health services (4-pill row)
+//   4. Debris to clear (Yes/No)
+//   5. Most pressing needs (multi-select chips)
+//
+// On Save, the answers are PATCHed via /reports/<id>/classify (which
+// already accepts service_status + debris_clearing_needed — see
+// backend/app/api/endpoints/reports.py:1732). On Skip, the base report
+// stays as-is. Optional throughout: UNDP's brief calls these "of
+// interest", not must-haves; forcing them hurts speed.
+function setupUndpDetailsStage() {
+    const stage = document.getElementById('stage-undp-details');
+    if (!stage) return;
+
+    // Local in-memory state for the page. Reset on every fresh entry.
+    const _state = {
+        electricity: 'UNKNOWN',
+        water: 'UNKNOWN',
+        health: 'UNKNOWN',
+        debris: null,        // null | true | false
+        pressing_needs: [],  // string[]
+    };
+
+    function _clearState() {
+        _state.electricity = 'UNKNOWN';
+        _state.water = 'UNKNOWN';
+        _state.health = 'UNKNOWN';
+        _state.debris = null;
+        _state.pressing_needs = [];
+        // Also clear UI selections.
+        stage.querySelectorAll('.is-selected').forEach((el) => el.classList.remove('is-selected'));
+    }
+
+    // Wire the soft-prompt CTA on stage-success.
+    const promptBtn = document.getElementById('btn-add-undp-details');
+    const promptSub = document.getElementById('undp-details-cta-sub');
+    if (promptBtn) {
+        promptBtn.addEventListener('click', () => {
+            _clearState();
+            goToStage('stage-undp-details');
+        });
+    }
+
+    // Back / Skip → return to home (NOT success, since the user has
+    // already left it). Resets the page state.
+    const backBtn = document.getElementById('btn-undp-back');
+    const skipBtn = document.getElementById('btn-undp-skip');
+    function _exitToHome() {
+        _clearState();
+        goToStage('stage-home');
+    }
+    if (backBtn) backBtn.addEventListener('click', _exitToHome);
+    if (skipBtn) skipBtn.addEventListener('click', _exitToHome);
+
+    // ── Wire status rows (single-select per row) ──
+    stage.querySelectorAll('.undp-status-row').forEach((row) => {
+        const field = row.getAttribute('data-undp-field');
+        if (!field) return;
+        row.querySelectorAll('.undp-lvl').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                row.querySelectorAll('.undp-lvl').forEach((b) => b.classList.remove('is-selected'));
+                btn.classList.add('is-selected');
+                _state[field] = btn.getAttribute('data-value') || 'UNKNOWN';
+            });
+        });
+    });
+
+    // ── Wire pill row (single-select for health) ──
+    stage.querySelectorAll('.undp-pill-row').forEach((row) => {
+        const field = row.getAttribute('data-undp-field');
+        if (!field) return;
+        row.querySelectorAll('.undp-pill').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                row.querySelectorAll('.undp-pill').forEach((b) => b.classList.remove('is-selected'));
+                btn.classList.add('is-selected');
+                _state[field] = btn.getAttribute('data-value') || 'UNKNOWN';
+            });
+        });
+    });
+
+    // ── Wire Y/N row (debris) ──
+    stage.querySelectorAll('.undp-yn-row').forEach((row) => {
+        const field = row.getAttribute('data-undp-field');
+        if (!field) return;
+        row.querySelectorAll('.undp-yn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                row.querySelectorAll('.undp-yn').forEach((b) => b.classList.remove('is-selected'));
+                btn.classList.add('is-selected');
+                _state[field] = btn.getAttribute('data-value') === 'true';
+            });
+        });
+    });
+
+    // ── Wire multi-select chips (pressing needs) ──
+    stage.querySelectorAll('.undp-needs-grid').forEach((grid) => {
+        grid.querySelectorAll('.undp-need').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const val = btn.getAttribute('data-value');
+                btn.classList.toggle('is-selected');
+                const idx = _state.pressing_needs.indexOf(val);
+                if (idx >= 0) _state.pressing_needs.splice(idx, 1);
+                else _state.pressing_needs.push(val);
+            });
+        });
+    });
+
+    // ── Save handler — PATCH the report with the 5 fields ──
+    const saveBtn = document.getElementById('btn-undp-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            const reportId = _lastSubmittedServerId || _lastSubmittedClientId;
+            if (!reportId) {
+                if (typeof showToast === 'function') showToast(t('report_no_tracking'));
+                _exitToHome();
+                return;
+            }
+            saveBtn.disabled = true;
+            const originalLabel = saveBtn.innerHTML;
+            saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>${t('upload_sending') || 'Saving…'}</span>`;
+            try {
+                const payload = {
+                    debris_clearing_needed: _state.debris === true,
+                    service_status: {
+                        electricity: _state.electricity || 'UNKNOWN',
+                        water: _state.water || 'UNKNOWN',
+                        health: _state.health || 'UNKNOWN',
+                        pressing_needs: _state.pressing_needs.slice(),
+                    },
+                };
+                const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(reportId)}/classify`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (res.ok) {
+                    if (typeof showToast === 'function') showToast(t('undp_details_saved') || 'Details saved — thank you!');
+                } else {
+                    if (typeof showToast === 'function') showToast(t('undp_details_failed') || 'Couldn\'t save — please try again.');
+                }
+            } catch (e) {
+                console.warn('[undp-details] PATCH failed:', e);
+                if (typeof showToast === 'function') showToast(t('undp_details_failed') || 'Couldn\'t save — please try again.');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = originalLabel;
+                _exitToHome();
+            }
+        });
+    }
+}
+
+// Show / hide the post-submission UNDP-details soft prompt on stage-success.
+// Called from submitReport's success path. We hide it when the user has
+// ALREADY answered debris + service_status during the capture flow (Q14
+// fix in Phase 2 routes both v3 + v4 state shapes through the meta payload),
+// to avoid double-asking.
+function maybeShowUndpDetailsPrompt() {
+    const promptBtn = document.getElementById('btn-add-undp-details');
+    const promptSub = document.getElementById('undp-details-cta-sub');
+    if (!promptBtn || !promptSub) return;
+    // Already-answered detection: any non-default service_status field OR
+    // debris explicitly set means the user told us during capture.
+    const ss = state.serviceStatus || {};
+    const v3HasValues = (ss.electricity && ss.electricity !== 'UNKNOWN')
+        || (ss.water && ss.water !== 'UNKNOWN')
+        || (ss.health && ss.health !== 'UNKNOWN')
+        || (Array.isArray(ss.pressing_needs) && ss.pressing_needs.length);
+    const v4HasValues = state.electricity_status
+        || state.water_status
+        || state.health_status
+        || (Array.isArray(state.pressing_needs) && state.pressing_needs.length);
+    const debrisAnswered = state.debrisClearing === true || state.debris_present === true;
+    const showPrompt = !v3HasValues && !v4HasValues && !debrisAnswered;
+    promptBtn.style.display = showPrompt ? 'inline-flex' : 'none';
+    promptSub.style.display = showPrompt ? 'block' : 'none';
 }
 
 // ── Gamification Badge Fetch ─────────────────────────────────────────────────
