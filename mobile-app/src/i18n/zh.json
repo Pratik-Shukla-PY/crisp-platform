@@ -369,5 +369,19 @@
   "crisis_unrest": "动乱",
   "need_food_water": "食物 / 水",
   "need_health": "医疗",
-  "need_shelter": "避难所"
+  "need_shelter": "避难所",
+  "welcome_title": "欢迎。",
+  "welcome_lede": "在危机中报告你所见。可离线使用。免费、开源。",
+  "welcome_anon_cta": "匿名继续",
+  "welcome_anon_hint": "推荐 · 无需注册",
+  "welcome_signin_cta": "登录以跨设备追踪报告",
+  "welcome_trust": "🛡 在上传前，照片中的人脸会在你的手机上模糊处理。若你登录，手机号会被加密，绝不公开分享。",
+  "devid_title": "你的报告人 ID",
+  "devid_lede": "使用此 ID 在以后找到你的报告，即使你丢失了应用。",
+  "devid_explainer": "你的私密 ID。匿名 — 我们无法把它和你关联。",
+  "devid_copy": "复制",
+  "devid_continue": "继续",
+  "devid_change_mind": "你可以改变主意，稍后登录。",
+  "devid_copied": "已复制！",
+  "devid_copy_fallback": "复制此 ID:"
 }

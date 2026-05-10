@@ -4093,4 +4093,175 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     #v4-carousel-crisis .v4-chipgrid-tile { min-height: 56px; padding: 6px 2px; }
 }
 
+/* ── Welcome overlay (UI v3 redesign Q11) ────────────────────────────────
+   First-run gate showing two equal-weight choices: anonymous (recommended)
+   or sign-in. Followed by a device-ID disclosure screen for anonymous
+   users. Self-contained, mobile-first; the same overlay design applies
+   to both screens. */
+.welcome-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; align-items: stretch; justify-content: center;
+    background: radial-gradient(circle at 25% 15%, #0e1828 0%, #07090e 60%);
+    padding: 0;
+}
+.welcome-sheet {
+    width: 100%; max-width: 480px;
+    padding: 32px 24px 24px;
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+}
+.welcome-brand {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: #94a3b8; font-size: 0.78rem;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    margin: 24px 0 18px;
+    align-self: center;
+}
+.welcome-brand i { color: #f97316; font-size: 1rem; }
+.welcome-title {
+    font-size: 2rem; font-weight: 800;
+    text-align: center;
+    margin: 0 0 6px;
+    color: #f1f5f9;
+    letter-spacing: -0.02em;
+}
+.welcome-lede {
+    text-align: center;
+    font-size: 0.95rem;
+    color: #94a3b8;
+    line-height: 1.5;
+    margin: 0 0 32px;
+    padding: 0 12px;
+}
+.welcome-actions {
+    display: flex; flex-direction: column; gap: 10px;
+    margin-bottom: 24px;
+}
+.welcome-cta-primary {
+    width: 100%;
+    padding: 16px 18px;
+    background: linear-gradient(180deg, #fb923c, #f97316);
+    color: #1f1300;
+    border: 0;
+    border-radius: 14px;
+    font-size: 1rem; font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 0 28px rgba(249, 115, 22, 0.45);
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    min-height: 52px;
+}
+.welcome-cta-primary:hover, .welcome-cta-primary:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 0 36px rgba(249, 115, 22, 0.6);
+    outline: none;
+}
+.welcome-cta-primary:active { transform: translateY(0); }
+.welcome-recommend {
+    text-align: center;
+    font-size: 0.72rem;
+    color: #94a3b8;
+    margin: -2px 0 6px;
+}
+.welcome-cta-secondary {
+    width: 100%;
+    padding: 14px 18px;
+    background: rgba(255, 255, 255, 0.04);
+    color: #cbd5e1;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    font-size: 0.92rem; font-weight: 600;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 48px;
+}
+.welcome-cta-secondary:hover, .welcome-cta-secondary:focus-visible {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #f1f5f9;
+    outline: none;
+}
+.welcome-trust {
+    margin-top: auto;
+    padding: 12px 14px;
+    background: rgba(56, 189, 248, 0.06);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 12px;
+    font-size: 0.72rem;
+    text-align: center;
+    color: #bae6fd;
+    line-height: 1.5;
+}
+.welcome-tip {
+    text-align: center;
+    font-size: 0.72rem;
+    color: #64748b;
+    margin: 12px 0 0;
+}
+
+/* Device-ID disclosure card */
+.devid-card {
+    background: linear-gradient(140deg, rgba(34, 197, 94, 0.06), rgba(56, 189, 248, 0.04));
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 16px;
+    padding: 20px 16px;
+    margin: 0 auto 24px;
+    text-align: center;
+    max-width: 340px;
+    width: 100%;
+}
+.devid-num {
+    font: 800 1.4rem ui-monospace, "JetBrains Mono", "SF Mono", monospace;
+    color: #22c55e;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    display: inline-block;
+    margin: 4px 0 12px;
+    letter-spacing: 0.1em;
+    user-select: all;
+}
+.devid-explainer {
+    font-size: 0.75rem;
+    color: #cbd5e1;
+    line-height: 1.5;
+    margin: 0 0 12px;
+}
+.devid-actions {
+    display: grid; grid-template-columns: 1fr;
+    gap: 8px;
+}
+.devid-actions .welcome-cta-secondary {
+    padding: 9px 12px;
+    font-size: 0.84rem;
+    min-height: 40px;
+}
+
+/* Toast for "Copied!" feedback */
+.welcome-toast {
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+    background: rgba(34, 197, 94, 0.96);
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 0.85rem; font-weight: 600;
+    box-shadow: 0 4px 16px rgba(34, 197, 94, 0.45);
+    z-index: 1100;
+    pointer-events: none;
+    animation: welcomeToastFade 2.2s ease-out;
+}
+@keyframes welcomeToastFade {
+    0% { opacity: 0; transform: translate(-50%, 8px); }
+    15%, 85% { opacity: 1; transform: translate(-50%, 0); }
+    100% { opacity: 0; transform: translate(-50%, -4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .welcome-toast { animation: none; opacity: 1; }
+}
+
+@media (max-width: 380px) {
+    .welcome-title { font-size: 1.7rem; }
+    .welcome-lede { font-size: 0.88rem; padding: 0 4px; }
+    .devid-num { font-size: 1.15rem; padding: 10px 12px; letter-spacing: 0.06em; }
+}
 

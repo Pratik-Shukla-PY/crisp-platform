@@ -109,6 +109,74 @@
         </div>
     </div>
 
+    <!-- ── Welcome overlay (UI v3 Q11) ─────────────────────────────
+         First-run gate. Shown when:
+           - localStorage.crisp_welcome_acknowledged is missing AND
+           - localStorage.crisp_token is missing (not signed in already)
+         Two equal-weight choices:
+           1. "Continue anonymously" (recommended) — generates / loads the
+              device ID, shows a disclosure screen with copy + save buttons,
+              then drops the user on stage-home.
+           2. "Sign in" — routes to existing stage-login flow.
+         Returning anonymous users skip the welcome entirely (the
+         acknowledged flag is set the first time they tap Continue). -->
+    <div id="welcome-overlay" class="welcome-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+        <div class="welcome-sheet">
+            <div class="welcome-brand"><i class="fa-solid fa-satellite-dish"></i> <span>CRISP × UNDP</span></div>
+            <h1 id="welcome-title" class="welcome-title" data-i18n="welcome_title">Welcome.</h1>
+            <p class="welcome-lede" data-i18n="welcome_lede">
+                Report what you see during a crisis. Works offline. Free, open-source.
+            </p>
+            <div class="welcome-actions">
+                <button class="welcome-cta-primary" id="btn-welcome-anon" type="button">
+                    <i class="fa-solid fa-camera"></i>
+                    <span data-i18n="welcome_anon_cta">Continue anonymously</span>
+                </button>
+                <p class="welcome-recommend" data-i18n="welcome_anon_hint">Recommended · no sign-up needed</p>
+                <button class="welcome-cta-secondary" id="btn-welcome-signin" type="button">
+                    <i class="fa-solid fa-right-to-bracket"></i>
+                    <span data-i18n="welcome_signin_cta">Sign in to track across devices</span>
+                </button>
+            </div>
+            <p class="welcome-trust" data-i18n="welcome_trust">
+                🛡 Faces blurred on your phone before upload.
+                Your phone number, if signed in, is encrypted &amp; never shared publicly.
+            </p>
+        </div>
+    </div>
+
+    <!-- Device-ID disclosure overlay (UI v3 Q11) — second screen of the
+         anonymous flow. Shown after #btn-welcome-anon to give the user
+         their reporter ID with copy + save-as-image affordances. -->
+    <div id="devid-overlay" class="welcome-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="devid-title">
+        <div class="welcome-sheet">
+            <div class="welcome-brand"><i class="fa-solid fa-id-card" aria-hidden="true"></i></div>
+            <h1 id="devid-title" class="welcome-title" data-i18n="devid_title">Your reporter ID</h1>
+            <p class="welcome-lede" data-i18n="devid_lede">
+                Use this to find your reports later, even if you lose the app.
+            </p>
+            <div class="devid-card">
+                <div class="devid-num" id="devid-display">CRISP-····-····</div>
+                <p class="devid-explainer" data-i18n="devid_explainer">
+                    Your private ID. Anonymous — we cannot link this back to you.
+                </p>
+                <div class="devid-actions">
+                    <button class="welcome-cta-secondary" id="btn-devid-copy" type="button">
+                        <i class="fa-solid fa-copy"></i>
+                        <span data-i18n="devid_copy">Copy</span>
+                    </button>
+                </div>
+            </div>
+            <button class="welcome-cta-primary" id="btn-devid-continue" type="button" style="margin-top:auto;">
+                <span data-i18n="devid_continue">Continue</span>
+                <i class="fa-solid fa-arrow-right"></i>
+            </button>
+            <p class="welcome-tip" data-i18n="devid_change_mind">
+                You can change your mind &amp; sign in later.
+            </p>
+        </div>
+    </div>
+
     <!-- Language picker overlay — full list. Opened by #btn-lang-current.
          May 2026 (UI v3 redesign Q8 + Q9):
            - "UN OFFICIAL LANGUAGES" header dropped (jargon — users don't

@@ -369,5 +369,19 @@
   "crisis_unrest": "Troubles civils",
   "need_food_water": "Eau / nourriture",
   "need_health": "Santé",
-  "need_shelter": "Abri"
+  "need_shelter": "Abri",
+  "welcome_title": "Bienvenue.",
+  "welcome_lede": "Signalez ce que vous voyez en cas de crise. Fonctionne hors-ligne. Gratuit, open source.",
+  "welcome_anon_cta": "Continuer anonymement",
+  "welcome_anon_hint": "Recommandé · pas d'inscription nécessaire",
+  "welcome_signin_cta": "Se connecter pour suivre vos rapports",
+  "welcome_trust": "🛡 Les visages sont floutés sur votre téléphone avant l'envoi. Votre numéro, si vous vous connectez, est chiffré et jamais partagé publiquement.",
+  "devid_title": "Votre ID de reporter",
+  "devid_lede": "Utilisez-le pour retrouver vos rapports plus tard, même si vous perdez l'app.",
+  "devid_explainer": "Votre ID privé. Anonyme — nous ne pouvons pas le relier à vous.",
+  "devid_copy": "Copier",
+  "devid_continue": "Continuer",
+  "devid_change_mind": "Vous pouvez changer d'avis et vous connecter plus tard.",
+  "devid_copied": "Copié !",
+  "devid_copy_fallback": "Copiez cet ID :"
 }

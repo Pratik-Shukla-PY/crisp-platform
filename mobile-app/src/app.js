@@ -6338,8 +6338,34 @@ async function submitReport() {
                 // footprint later. Defaults to false when the field is missing
                 // (back-compat with pre-v3 clients).
                 infrastructure_name_from_osm: Boolean(state.infraNameFromOsm),
-                debris_clearing_needed: state.debrisClearing,
-                service_status: state.serviceStatus,
+                // May 2026 (UI v3 redesign Q14) — v4-flow.js writes to
+                // `debris_present` / `electricity_status` / `pressing_needs`
+                // on window.state, but the legacy v3 review form writes to
+                // `debrisClearing` / `serviceStatus`. Both shapes are now
+                // honoured here so UNDP details actually reach the backend
+                // regardless of which capture flow the user is on. Backend
+                // schema fields stay debris_clearing_needed + service_status.
+                debris_clearing_needed: (
+                    state.debrisClearing === true || state.debris_present === true
+                ),
+                service_status: (() => {
+                    // Prefer the v3 nested object if it has any non-default
+                    // value; otherwise build one from v4's flat fields.
+                    const v3 = state.serviceStatus || {};
+                    const hasV3Values = (v3.electricity && v3.electricity !== 'UNKNOWN')
+                        || (v3.water && v3.water !== 'UNKNOWN')
+                        || (v3.health && v3.health !== 'UNKNOWN')
+                        || (Array.isArray(v3.pressing_needs) && v3.pressing_needs.length);
+                    if (hasV3Values) return v3;
+                    // Build from v4-flow flat fields. Map nulls / undefineds
+                    // to UNKNOWN so the dashboard renders a consistent card.
+                    return {
+                        electricity: state.electricity_status || 'UNKNOWN',
+                        water: state.water_status || 'UNKNOWN',
+                        health: state.health_status || 'UNKNOWN',
+                        pressing_needs: Array.isArray(state.pressing_needs) ? state.pressing_needs : [],
+                    };
+                })(),
                 // User-selected building footprint from the Leaflet overlay
                 // on stage-review. Null unless the user explicitly tapped
                 // a polygon; the server's `_auto_assign_building_id` still
@@ -8818,7 +8844,116 @@ function setupImageViewer() {
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────────
+// May 2026 (UI v3 redesign Q11) — first-run welcome + device-ID disclosure.
+// Renders TWO overlays in sequence on first visit:
+//   1. #welcome-overlay   — anonymous (recommended) vs sign-in choice
+//   2. #devid-overlay     — shown after anonymous tap; displays the
+//                            CRISP-XXXX-XXXX reporter ID with copy button
+// Returning users (with crisp_welcome_acknowledged in localStorage) skip
+// both overlays. Signed-in users (with crisp_token) skip the welcome too.
+function _formatDeviceIdForDisplay(rawId) {
+    // PWA-3a8f29c7e5d3... → CRISP-3A8F-29C7 (4-4 hex, uppercase)
+    if (!rawId) return 'CRISP-····-····';
+    const stripped = String(rawId).replace(/^PWA-/i, '').replace(/[^0-9a-f]/gi, '').toUpperCase();
+    if (stripped.length < 8) return 'CRISP-····-····';
+    return `CRISP-${stripped.slice(0, 4)}-${stripped.slice(4, 8)}`;
+}
+async function _generateDeviceIdIfMissing() {
+    let id = '';
+    try { id = localStorage.getItem('crisp_device_id_v2') || ''; } catch (_) {}
+    if (id) return id;
+    const seed = [
+        (crypto?.randomUUID?.() || Math.random().toString(36)),
+        navigator.userAgent || '',
+        `${screen.width}x${screen.height}x${screen.colorDepth || 0}`,
+        Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+        String(Date.now()),
+    ].join('|');
+    let hex = '';
+    try {
+        const buf = new TextEncoder().encode(seed);
+        const hash = await crypto.subtle.digest('SHA-256', buf);
+        hex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (_) {
+        hex = (crypto?.randomUUID?.() || Math.random().toString(36).slice(2)) +
+              (crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
+        hex = hex.replace(/-/g, '').slice(0, 64);
+    }
+    id = 'PWA-' + hex.slice(0, 32);
+    try { localStorage.setItem('crisp_device_id_v2', id); } catch (_) {}
+    return id;
+}
+function _showWelcomeToast(msg) {
+    const existing = document.querySelector('.welcome-toast');
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.className = 'welcome-toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2300);
+}
+async function showFirstRunWelcomeIfNeeded() {
+    let acknowledged = false;
+    let signedIn = false;
+    try {
+        acknowledged = !!localStorage.getItem('crisp_welcome_acknowledged');
+        signedIn = !!localStorage.getItem('crisp_token');
+    } catch (_) {}
+    if (acknowledged || signedIn) return;
+    const welcome = document.getElementById('welcome-overlay');
+    const devidOv = document.getElementById('devid-overlay');
+    if (!welcome || !devidOv) return;
+
+    welcome.style.display = 'flex';
+
+    const btnAnon = document.getElementById('btn-welcome-anon');
+    const btnSignin = document.getElementById('btn-welcome-signin');
+    const btnDevidContinue = document.getElementById('btn-devid-continue');
+    const btnDevidCopy = document.getElementById('btn-devid-copy');
+    const devidDisplay = document.getElementById('devid-display');
+
+    if (btnAnon) {
+        btnAnon.addEventListener('click', async () => {
+            const id = await _generateDeviceIdIfMissing();
+            if (devidDisplay) devidDisplay.textContent = _formatDeviceIdForDisplay(id);
+            welcome.style.display = 'none';
+            devidOv.style.display = 'flex';
+        }, { once: true });
+    }
+    if (btnSignin) {
+        btnSignin.addEventListener('click', () => {
+            try { localStorage.setItem('crisp_welcome_acknowledged', '1'); } catch (_) {}
+            welcome.style.display = 'none';
+            try { goToStage('stage-login'); } catch (_) {}
+        }, { once: true });
+    }
+    if (btnDevidContinue) {
+        btnDevidContinue.addEventListener('click', () => {
+            try { localStorage.setItem('crisp_welcome_acknowledged', '1'); } catch (_) {}
+            devidOv.style.display = 'none';
+        }, { once: true });
+    }
+    if (btnDevidCopy) {
+        btnDevidCopy.addEventListener('click', async () => {
+            const txt = devidDisplay ? devidDisplay.textContent.trim() : '';
+            if (!txt) return;
+            try {
+                await navigator.clipboard.writeText(txt);
+                _showWelcomeToast(t('devid_copied') || 'Copied!');
+            } catch (_) {
+                // Fallback for non-secure contexts — surface the ID in a prompt
+                try { window.prompt(t('devid_copy_fallback') || 'Copy this ID:', txt); } catch (__) {}
+            }
+        });
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+    // UI v3 (May 2026 Q11) — first-run welcome gate. Runs synchronously
+    // before any other UI is wired so the user sees the welcome card
+    // before the home page paints. Returning users see no overlay.
+    try { await showFirstRunWelcomeIfNeeded(); } catch (e) { console.warn('[welcome] failed:', e); }
+
     // UI v2 — flag the body so CSS can scope v2-only chip / header styles
     // without a runtime media-query check. Setting before setupPhotoStage
     // ensures the `body[data-ui-v2] .chip-btn { min-height: 96px }` rule

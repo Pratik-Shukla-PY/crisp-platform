@@ -369,5 +369,19 @@
   "crisis_unrest": "Disturbios",
   "need_food_water": "Comida / agua",
   "need_health": "Salud",
-  "need_shelter": "Refugio"
+  "need_shelter": "Refugio",
+  "welcome_title": "Bienvenido.",
+  "welcome_lede": "Informa lo que veas durante una crisis. Funciona sin conexión. Gratis y de código abierto.",
+  "welcome_anon_cta": "Continuar anónimamente",
+  "welcome_anon_hint": "Recomendado · no se requiere registro",
+  "welcome_signin_cta": "Inicia sesión para seguir tus reportes",
+  "welcome_trust": "🛡 Los rostros se difuminan en tu teléfono antes de subir. Si inicias sesión, tu teléfono se cifra y nunca se comparte públicamente.",
+  "devid_title": "Tu ID de reportero",
+  "devid_lede": "Úsalo para encontrar tus reportes después, incluso si pierdes la app.",
+  "devid_explainer": "Tu ID privado. Anónimo — no podemos vincularlo contigo.",
+  "devid_copy": "Copiar",
+  "devid_continue": "Continuar",
+  "devid_change_mind": "Puedes cambiar de opinión e iniciar sesión luego.",
+  "devid_copied": "¡Copiado!",
+  "devid_copy_fallback": "Copia este ID:"
 }
