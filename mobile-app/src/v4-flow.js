@@ -326,6 +326,11 @@
                     _renderThumbs();
                     nextBtn.disabled = false;
                     nextBtn.classList.add('is-ready');
+                    // Delta-C: refresh the captured-strip so the green
+                    // 📷 chip lights up the moment a photo is ingested.
+                    if (typeof window.__crispV4RefreshCapStrip === 'function') {
+                        try { window.__crispV4RefreshCapStrip(); } catch (_) {}
+                    }
                 }
 
                 // Fire AI pre-fill if bandwidth is good. Don't block — the
@@ -403,6 +408,182 @@
         retryGpsBtn.addEventListener('click', () => {
             _refreshGps();
         });
+
+        // ── Delta-C (May 2026) — multi-modal additive capture wiring ──
+        //
+        // The new capture page has 3 equal tiles (Photo / Voice / Type).
+        // Photo reuses the existing camera/file flow above. Voice and
+        // Type each toggle their own drawer beneath the grid. The
+        // captured-strip lights up green chips for every modality
+        // present in window.state. Continue is enabled whenever ANY
+        // modality has content.
+        const voiceTile = document.getElementById('btn-v4-cap-voice');
+        const textTile = document.getElementById('btn-v4-cap-text');
+        const voiceDrawer = document.getElementById('v4-cap-voice-drawer');
+        const textDrawer = document.getElementById('v4-cap-text-drawer');
+        const capMicBtn = document.getElementById('btn-v4-cap-mic');
+        const capTextArea = document.getElementById('v4-cap-text-area');
+        const capStrip = document.getElementById('v4-cap-strip');
+
+        function _setTileActive(tile, active) {
+            if (!tile) return;
+            tile.classList.toggle('is-active', !!active);
+        }
+        function _toggleDrawer(drawer, want) {
+            if (!drawer) return false;
+            const willOpen = want === undefined ? drawer.hasAttribute('hidden') : want;
+            if (willOpen) drawer.removeAttribute('hidden');
+            else drawer.setAttribute('hidden', '');
+            return willOpen;
+        }
+
+        if (voiceTile) {
+            voiceTile.addEventListener('click', () => {
+                const opened = _toggleDrawer(voiceDrawer);
+                _setTileActive(voiceTile, opened);
+                if (opened && capMicBtn) {
+                    setTimeout(() => capMicBtn.focus({ preventScroll: false }), 60);
+                }
+            });
+        }
+        if (textTile) {
+            textTile.addEventListener('click', () => {
+                const opened = _toggleDrawer(textDrawer);
+                _setTileActive(textTile, opened);
+                if (opened && capTextArea) {
+                    setTimeout(() => capTextArea.focus({ preventScroll: false }), 60);
+                }
+            });
+        }
+
+        // Voice mic — start/stop using the same MediaRecorder helpers
+        // wired for the (now legacy) review-stage drawer.
+        if (capMicBtn) {
+            capMicBtn.addEventListener('click', () => {
+                if (_isV4Recording()) {
+                    _stopV4Recording();
+                    capMicBtn.classList.remove('is-recording');
+                    const lbl = capMicBtn.querySelector('span');
+                    if (lbl) lbl.textContent =
+                        (typeof window.t === 'function' ? (window.t('v4_record') || 'Record voice') : 'Record voice');
+                    const ic = capMicBtn.querySelector('i');
+                    if (ic) ic.className = 'fa-solid fa-microphone';
+                } else {
+                    _startV4Recording();
+                    capMicBtn.classList.add('is-recording');
+                    const lbl = capMicBtn.querySelector('span');
+                    if (lbl) lbl.textContent =
+                        (typeof window.t === 'function' ? (window.t('v4_stop') || 'Stop recording') : 'Stop recording');
+                    const ic = capMicBtn.querySelector('i');
+                    if (ic) ic.className = 'fa-solid fa-stop';
+                }
+                setTimeout(_refreshCapStrip, 120);
+            });
+        }
+
+        // Textarea — mirror to state.description + transcript so submit
+        // sends whatever the user types (same contract as v3).
+        if (capTextArea) {
+            capTextArea.addEventListener('input', () => {
+                _setState({
+                    description: capTextArea.value,
+                    transcript: capTextArea.value,
+                });
+                _refreshCapStrip();
+            });
+        }
+
+        // Captured-strip refresh: read window.state and toggle chip
+        // visibility / labels. Continue is enabled whenever any chip
+        // is showing.
+        function _refreshCapStrip() {
+            const s = window.state || {};
+            const photoEl = document.getElementById('v4-cap-chip-photo');
+            const photoLbl = document.getElementById('v4-cap-chip-photo-label');
+            const voiceEl = document.getElementById('v4-cap-chip-voice');
+            const voiceLbl = document.getElementById('v4-cap-chip-voice-label');
+            const textEl = document.getElementById('v4-cap-chip-text');
+            const textLbl = document.getElementById('v4-cap-chip-text-label');
+            const photos = (s.v4Photos && s.v4Photos.length) || (s.photoDataUrl ? 1 : 0);
+            const audioOk = !!(s.audioBlob && s.audioBlob.size > 0) || !!(s.transcript && s.transcript.trim().length > 4);
+            const textOk = !!(s.description && s.description.trim().length > 0) && s.description !== s.transcript;
+            // ↑ text chip only when the textarea has content distinct from
+            //   the voice transcript (otherwise voice + text would double-count).
+            //   When the user types directly we set both description &
+            //   transcript to the same string, so the heuristic compares them.
+            const anyTextLike = !!(s.description && s.description.trim().length > 0);
+
+            if (photoEl) {
+                if (photos > 0) {
+                    photoEl.removeAttribute('hidden');
+                    if (photoLbl) photoLbl.textContent = photos === 1 ? '1 photo' : `${photos} photos`;
+                } else photoEl.setAttribute('hidden', '');
+            }
+            if (voiceEl) {
+                if (audioOk) voiceEl.removeAttribute('hidden');
+                else voiceEl.setAttribute('hidden', '');
+            }
+            if (textEl) {
+                // Show text chip when description has content. If voice was
+                // captured and the textarea echoes the transcript, prefer the
+                // voice chip alone (avoid duplicate "voice + text" when the
+                // user only spoke).
+                const showText = anyTextLike && !audioOk;
+                if (showText) textEl.removeAttribute('hidden');
+                else textEl.setAttribute('hidden', '');
+            }
+
+            // Show the strip wrapper if any chip is visible.
+            const anyShown = (photos > 0) || audioOk || anyTextLike;
+            if (capStrip) {
+                if (anyShown) capStrip.removeAttribute('hidden');
+                else capStrip.setAttribute('hidden', '');
+            }
+            // Continue button enabled whenever any modality has content.
+            if (nextBtn) {
+                nextBtn.disabled = !anyShown;
+                nextBtn.classList.toggle('is-ready', anyShown);
+            }
+        }
+
+        // Chip-x: clear the matching modality + refresh.
+        const chipPhotoX = document.getElementById('v4-cap-chip-photo-x');
+        const chipVoiceX = document.getElementById('v4-cap-chip-voice-x');
+        const chipTextX = document.getElementById('v4-cap-chip-text-x');
+        if (chipPhotoX) chipPhotoX.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            _setState({ v4Photos: [], photoDataUrl: null, photoBlob: null });
+            try { _renderThumbs(); } catch (_) {}
+            _refreshCapStrip();
+        });
+        if (chipVoiceX) chipVoiceX.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            if (_isV4Recording()) _stopV4Recording();
+            _setState({ audioBlob: null, audioChunks: [], transcript: '' });
+            // If the textarea echoes the transcript, clear it too.
+            if (capTextArea && capTextArea.value === (_getState().description || '')) {
+                capTextArea.value = '';
+                _setState({ description: '' });
+            }
+            _refreshCapStrip();
+        });
+        if (chipTextX) chipTextX.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            if (capTextArea) capTextArea.value = '';
+            _setState({ description: '' });
+            _refreshCapStrip();
+        });
+
+        // Initial paint + every stage entry to v4-capture re-paints.
+        _refreshCapStrip();
+        document.addEventListener('stage-entered', (e) => {
+            const stage = typeof e.detail === 'string' ? e.detail : (e.detail?.stage || '');
+            if (stage === 'stage-v4-capture') _refreshCapStrip();
+        });
+
+        // Expose the refresh so the existing _handlePhoto + recording
+        // helpers can fire it after they mutate state.
+        window.__crispV4RefreshCapStrip = _refreshCapStrip;
 
         function _renderThumbs() {
             const photos = _getState().v4Photos || [];
@@ -519,64 +700,252 @@
         }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
     }
 
-    // ── Page 2: classify ────────────────────────────────────────────────
+    // ── Page 2: classify (Delta-D + E rebuild, May 2026) ──────────────
+    //
+    // Single-question per sub-view. _classifyStep ∈ {'damage','infra','crisis'}
+    // drives which .v4-classify-view is visible. Continue advances; Back
+    // either returns to a previous sub-step or pops out to capture.
+    //
+    // Crisis sub-step has its own internal drill: 3 group cards →
+    // sub-types list. _crisisGroup remembers which group the user
+    // tapped so Back from sub-types returns to the group cards.
+    const CRISIS_GROUPS = {
+        natural: [
+            { v: 'EARTHQUAKE', i: 'fa-house-crack', k: 'crisis_earthquake' },
+            { v: 'FLOOD',      i: 'fa-water',       k: 'crisis_flood' },
+            { v: 'TSUNAMI',    svg: '<path d="M2 17c3 0 4-3 8-3s5 3 9 3"/><path d="M2 21c3 0 4-3 8-3s5 3 9 3"/><path d="M9 14c0-3 1-5 3-7l4 8"/>', k: 'crisis_tsunami' },
+            { v: 'HURRICANE',  i: 'fa-wind',        k: 'crisis_hurricane' },
+            { v: 'WILDFIRE',   svg: '<path d="M8 21h8"/><path d="M12 21v-3"/><path d="M9 18a4 4 0 0 1-2-3c0-3 3-4 3-7 0 3 4 3 4 7a4 4 0 0 1-2 3"/><path d="M11 11c-1-1-1-2 0-4 1 2 2 2 2 4"/>', k: 'crisis_wildfire' },
+        ],
+        tech: [
+            { v: 'EXPLOSION',         i: 'fa-explosion', k: 'crisis_explosion' },
+            { v: 'CHEMICAL_INCIDENT', svg: '<path d="M12 3 2 21h20Z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.6"/>', k: 'crisis_chemical' },
+        ],
+        human: [
+            { v: 'CONFLICT',     svg: '<path d="m14 4 6 6-2 2-6-6 2-2Z"/><path d="m4 20 6-6 2 2-6 6-2-2Z"/><path d="m20 14-6-6 2-2 6 6-2 2Z"/><path d="m4 4 6 6-2 2-6-6 2-2Z"/>', k: 'crisis_conflict' },
+            { v: 'CIVIL_UNREST', i: 'fa-people-group', k: 'crisis_unrest' },
+        ],
+    };
+    const CLASSIFY_ORDER = ['damage', 'infra', 'crisis'];
+
     function _initClassifyStage() {
-        // Damage chips
-        const damageRow = document.getElementById('v4-chips-damage');
-        if (damageRow) {
-            damageRow.querySelectorAll('.v4-chip').forEach((chip) => {
-                chip.addEventListener('click', () => {
-                    damageRow.querySelectorAll('.v4-chip').forEach((c) => {
-                        c.classList.remove('is-selected');
-                        c.setAttribute('aria-checked', 'false');
+        // ── Damage radio (sub-view 1) ──
+        const damageView = document.getElementById('v4-view-damage');
+        const damageOpts = damageView ? Array.from(damageView.querySelectorAll('.v4-q-opt')) : [];
+        damageOpts.forEach((opt) => {
+            opt.addEventListener('click', () => {
+                damageOpts.forEach((o) => {
+                    o.classList.remove('is-selected');
+                    o.setAttribute('aria-checked', 'false');
+                });
+                opt.classList.add('is-selected');
+                opt.setAttribute('aria-checked', 'true');
+                _setState({ damage_classification: opt.getAttribute('data-value') });
+                _updateReviewSummary();
+            });
+        });
+        // Default selected = the one already with .is-selected (Partial).
+        const defaultOpt = damageOpts.find((o) => o.classList.contains('is-selected'));
+        if (defaultOpt) _setState({ damage_classification: defaultOpt.getAttribute('data-value') });
+
+        // ── Infra tiles (sub-view 2) — auto-advance on tap ──
+        const infraView = document.getElementById('v4-view-infra');
+        const infraTiles = infraView ? Array.from(infraView.querySelectorAll('.v4-hit-tile')) : [];
+        infraTiles.forEach((tile) => {
+            tile.addEventListener('click', () => {
+                infraTiles.forEach((t) => {
+                    t.classList.remove('is-selected');
+                    t.setAttribute('aria-checked', 'false');
+                });
+                tile.classList.add('is-selected');
+                tile.setAttribute('aria-checked', 'true');
+                _setState({ infrastructure_type: tile.getAttribute('data-value') });
+                _updateReviewSummary();
+                // Auto-advance per proposal "Tap one. Auto-advance." —
+                // 700 ms gives the lock-in glow a beat to register.
+                setTimeout(() => {
+                    if (_classifyStep === 'infra') _showSubStep('crisis');
+                }, 700);
+            });
+        });
+
+        // ── Crisis cards + drill-down (sub-view 3) ──
+        const crisisView = document.getElementById('v4-view-crisis');
+        const causeCards = crisisView ? Array.from(crisisView.querySelectorAll('.v4-cause-card')) : [];
+        const subtypesContainer = document.getElementById('v4-cause-subtypes');
+        const subtypesList = document.getElementById('v4-cause-subtypes-list');
+        const groupCards = document.getElementById('v4-cause-cards');
+        const causeBackBtn = document.getElementById('btn-v4-cause-back');
+        const causeBackLabel = document.getElementById('v4-cause-back-label');
+        let _crisisGroup = null;
+
+        function _renderSubtypes(group) {
+            if (!subtypesList) return;
+            const items = CRISIS_GROUPS[group] || [];
+            const titleKey = group === 'natural' ? 'v4_cause_natural'
+                          : group === 'tech'    ? 'v4_cause_tech'
+                          : 'v4_cause_human';
+            if (causeBackLabel) causeBackLabel.textContent = (typeof window.t === 'function' ? window.t(titleKey) : titleKey);
+            const _ti = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
+            subtypesList.innerHTML = items.map((it) => {
+                const label = _ti(it.k, it.v);
+                const iconHtml = it.svg
+                    ? `<svg class="v4-cause-sub-opt-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${it.svg}</svg>`
+                    : `<i class="fa-solid ${it.i}"></i>`;
+                return `<button class="v4-cause-sub-opt" data-value="${it.v}" type="button" role="radio" aria-checked="false">
+                    <span class="v4-cause-sub-opt-icon" aria-hidden="true">${iconHtml}</span>
+                    <span>${label}</span>
+                </button>`;
+            }).join('');
+            // Wire the new buttons
+            subtypesList.querySelectorAll('.v4-cause-sub-opt').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    subtypesList.querySelectorAll('.v4-cause-sub-opt').forEach((b) => {
+                        b.classList.remove('is-selected');
+                        b.setAttribute('aria-checked', 'false');
                     });
-                    chip.classList.add('is-selected');
-                    chip.setAttribute('aria-checked', 'true');
-                    _setState({ damage_classification: chip.getAttribute('data-value') });
+                    btn.classList.add('is-selected');
+                    btn.setAttribute('aria-checked', 'true');
+                    _setState({ crisis_type: btn.getAttribute('data-value') });
                     _updateReviewSummary();
                 });
             });
-            // Default selection.
-            const defaultChip = damageRow.querySelector('.v4-chip.is-selected');
-            if (defaultChip) {
-                _setState({ damage_classification: defaultChip.getAttribute('data-value') });
-            }
         }
 
-        // Infra carousel
-        const infraCarousel = _initCarousel(document.getElementById('v4-carousel-infra'));
-        if (infraCarousel) {
-            infraCarousel.addEventListener('v4:select', (e) => {
-                _setState({ infrastructure_type: e.detail.value });
-                _updateReviewSummary();
+        causeCards.forEach((card) => {
+            card.addEventListener('click', () => {
+                _crisisGroup = card.getAttribute('data-group') || 'natural';
+                _renderSubtypes(_crisisGroup);
+                if (groupCards) groupCards.setAttribute('hidden', '');
+                if (subtypesContainer) subtypesContainer.removeAttribute('hidden');
             });
-            // Set default
-            _setState({ infrastructure_type: infraCarousel._getValue() });
-        }
-
-        // Crisis carousel
-        const crisisCarousel = _initCarousel(document.getElementById('v4-carousel-crisis'));
-        if (crisisCarousel) {
-            crisisCarousel.addEventListener('v4:select', (e) => {
-                _setState({ crisis_type: e.detail.value });
-                _updateReviewSummary();
+        });
+        if (causeBackBtn) {
+            causeBackBtn.addEventListener('click', () => {
+                if (subtypesContainer) subtypesContainer.setAttribute('hidden', '');
+                if (groupCards) groupCards.removeAttribute('hidden');
+                _crisisGroup = null;
             });
-            _setState({ crisis_type: crisisCarousel._getValue() });
         }
 
-        // Navigation
-        document.getElementById('btn-v4-classify-back').addEventListener(
-            'click', () => window.__crispGoToStage('stage-v4-capture')
-        );
-        document.getElementById('btn-v4-classify-next').addEventListener(
-            'click', _goToReview
-        );
+        // ── Sub-step navigation ──
+        const backBtn = document.getElementById('btn-v4-classify-back');
+        const nextBtn = document.getElementById('btn-v4-classify-next');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                const idx = CLASSIFY_ORDER.indexOf(_classifyStep);
+                if (idx <= 0) {
+                    window.__crispGoToStage('stage-v4-capture');
+                    return;
+                }
+                _showSubStep(CLASSIFY_ORDER[idx - 1]);
+            });
+        }
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                if (!_canAdvanceFrom(_classifyStep)) return;
+                const idx = CLASSIFY_ORDER.indexOf(_classifyStep);
+                if (idx === CLASSIFY_ORDER.length - 1) {
+                    _goToReview();
+                    return;
+                }
+                _showSubStep(CLASSIFY_ORDER[idx + 1]);
+            });
+        }
 
-        // Apply i18n now that carousels populated.
+        // Re-render i18n now that views are populated.
         if (typeof window.applyI18n === 'function') {
             try { window.applyI18n(); } catch (e) {}
         }
+
+        // Default sub-step on stage entry. Reset when user arrives from
+        // earlier in the flow; preserved otherwise (e.g. back from
+        // review — they should land on crisis again).
+        _showSubStep('damage');
+
+        // Listen for stage-entered to ensure damage shows when entering
+        // classify fresh. Subsequent re-entries (e.g. from review's
+        // "edit" button) keep the user on whichever sub-step they last
+        // visited.
+        document.addEventListener('stage-entered', (e) => {
+            const stage = typeof e.detail === 'string' ? e.detail : (e.detail?.stage || '');
+            if (stage === 'stage-v4-classify' && !_classifyStep) {
+                _showSubStep('damage');
+            }
+        });
+        // Re-render the dynamic sub-step label whenever the i18n pack
+        // updates (e.g. async en.json load resolves after first paint).
+        document.addEventListener('crisp-i18n-applied', () => {
+            // Cheap; just re-write the label based on _classifyStep.
+            try { _showSubStep(_classifyStep); } catch (_) {}
+        });
     }
+
+    // Sub-step state machine
+    let _classifyStep = 'damage';
+    function _canAdvanceFrom(step) {
+        const s = window.state || {};
+        if (step === 'damage') return !!s.damage_classification;
+        if (step === 'infra')  return !!s.infrastructure_type;
+        if (step === 'crisis') return !!s.crisis_type;
+        return true;
+    }
+    function _showSubStep(step) {
+        if (!CLASSIFY_ORDER.includes(step)) return;
+        _classifyStep = step;
+        ['damage','infra','crisis'].forEach((s) => {
+            const view = document.getElementById('v4-view-' + s);
+            if (!view) return;
+            if (s === step) view.removeAttribute('hidden');
+            else view.setAttribute('hidden', '');
+        });
+        // Sub-step label
+        const label = document.getElementById('v4-substep-label');
+        if (label) {
+            const titleKey = step === 'damage' ? 'v4_substep_how_bad'
+                          : step === 'infra'  ? 'v4_substep_what_hit'
+                          : 'v4_substep_what_caused';
+            const stepNum = CLASSIFY_ORDER.indexOf(step) + 1;
+            const ttl = (typeof window.t === 'function' ? window.t(titleKey) : titleKey);
+            label.innerHTML = `<span>${ttl}</span><span class="v4-substep-of"> · ${stepNum} of 3</span>`;
+        }
+        // Continue button enabled based on current selection.
+        const nextBtn = document.getElementById('btn-v4-classify-next');
+        if (nextBtn) {
+            const ok = _canAdvanceFrom(step);
+            nextBtn.disabled = !ok;
+            nextBtn.classList.toggle('is-ready', ok);
+        }
+        // Reset crisis drill-down state when arriving at the crisis step
+        // fresh — ensures the group-card surface shows by default.
+        if (step === 'crisis') {
+            const groupCards = document.getElementById('v4-cause-cards');
+            const subtypesContainer = document.getElementById('v4-cause-subtypes');
+            if (groupCards) groupCards.removeAttribute('hidden');
+            if (subtypesContainer) subtypesContainer.setAttribute('hidden', '');
+        }
+    }
+    // Refresh next-button enabled state whenever classification state
+    // changes (e.g. user selects a damage option after navigating back).
+    function _refreshClassifyNext() {
+        const nextBtn = document.getElementById('btn-v4-classify-next');
+        if (!nextBtn) return;
+        const ok = _canAdvanceFrom(_classifyStep);
+        nextBtn.disabled = !ok;
+        nextBtn.classList.toggle('is-ready', ok);
+    }
+    // Hook _setState so any selection mutation auto-updates the button.
+    // Idempotent — wrapping is safe across multiple inits.
+    const _origSetState = _setState;
+    function _wrappedSetState(patch) {
+        _origSetState(patch);
+        try { _refreshClassifyNext(); } catch (_) {}
+    }
+    // Monkey-patch local reference. `_setState` was const-bound earlier;
+    // we rely on the outer scope keeping the same reference, so instead
+    // of reassigning we just call _refreshClassifyNext after the fact
+    // wherever it matters. Keep _wrappedSetState exported for tests.
+    window.__crispV4RefreshClassifyNext = _refreshClassifyNext;
 
     // Apply AI suggestions to the chips. Called from the AI pre-fill
     // promise resolver; safe to call multiple times.
@@ -589,33 +958,42 @@
             setTimeout(() => { banner.style.display = 'none'; }, 4000);
         }
 
-        // Damage chip
-        const damageRow = document.getElementById('v4-chips-damage');
-        if (damageRow && result.damage_classification) {
-            const chip = damageRow.querySelector(`.v4-chip[data-value="${result.damage_classification}"]`);
-            if (chip) {
-                damageRow.querySelectorAll('.v4-chip').forEach((c) => {
-                    c.classList.remove('is-selected');
-                    c.setAttribute('aria-checked', 'false');
+        // Damage radio (Delta-D rebuild — new .v4-q-opt selector).
+        const damageView = document.getElementById('v4-view-damage');
+        if (damageView && result.damage_classification) {
+            const target = damageView.querySelector(`.v4-q-opt[data-value="${result.damage_classification}"]`);
+            if (target) {
+                damageView.querySelectorAll('.v4-q-opt').forEach((o) => {
+                    o.classList.remove('is-selected');
+                    o.setAttribute('aria-checked', 'false');
                 });
-                chip.classList.add('is-selected');
-                chip.setAttribute('aria-checked', 'true');
+                target.classList.add('is-selected');
+                target.setAttribute('aria-checked', 'true');
                 _setState({ damage_classification: result.damage_classification });
             }
         }
-        // Infra carousel
-        const infraEl = document.getElementById('v4-carousel-infra');
-        if (infraEl && infraEl._setValue && result.infrastructure_type) {
-            infraEl._setValue(result.infrastructure_type);
-            _setState({ infrastructure_type: result.infrastructure_type });
+        // Infra tile (Delta-E rebuild — new .v4-hit-tile selector).
+        const infraView = document.getElementById('v4-view-infra');
+        if (infraView && result.infrastructure_type) {
+            const target = infraView.querySelector(`.v4-hit-tile[data-value="${result.infrastructure_type}"]`);
+            if (target) {
+                infraView.querySelectorAll('.v4-hit-tile').forEach((t) => {
+                    t.classList.remove('is-selected');
+                    t.setAttribute('aria-checked', 'false');
+                });
+                target.classList.add('is-selected');
+                target.setAttribute('aria-checked', 'true');
+                _setState({ infrastructure_type: result.infrastructure_type });
+            }
         }
-        // Crisis carousel
-        const crisisEl = document.getElementById('v4-carousel-crisis');
-        if (crisisEl && crisisEl._setValue && result.crisis_type) {
-            crisisEl._setValue(result.crisis_type);
+        // Crisis sub-type — set state but don't auto-drill into the
+        // sub-types view; that's the user's choice. The summary on the
+        // review page will display whatever the AI suggested.
+        if (result.crisis_type) {
             _setState({ crisis_type: result.crisis_type });
         }
         _updateReviewSummary();
+        try { _refreshClassifyNext(); } catch (_) {}
     }
 
     // ── AI pre-fill ─────────────────────────────────────────────────────

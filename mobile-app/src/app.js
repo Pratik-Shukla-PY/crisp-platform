@@ -2340,6 +2340,12 @@ function applyI18n() {
             el.textContent = text;
         }
     });
+    // May 2026 (Delta-D follow-up) — broadcast so components that build
+    // dynamic i18n strings (e.g. the v4 sub-step label that mixes a
+    // localised header with a numeric "1 of 3" suffix) can re-render
+    // when the language pack actually arrives. Best-effort; no listeners
+    // = no-op.
+    try { document.dispatchEvent(new CustomEvent('crisp-i18n-applied')); } catch (_) {}
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
     });

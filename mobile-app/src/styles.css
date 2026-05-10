@@ -58,18 +58,34 @@
 }
 
 /* ── Reset & Tokens ─────────────────────────────────────────── */
+/* May 2026 — Delta-B fix: swap default theme to dark to match the
+   v3 redesign proposal (UI:UX Improvements/REDESIGN-PROPOSAL.html §7
+   Design system). Tokens align 1:1 with the proposal's :root block.
+   Light-theme override removed — proposal is dark-by-design. */
 :root {
-    /* Light Mode (Default) */
-    --bg: #f8fafc;
-    --surface: #ffffff;
-    --surface2: #f1f5f9;
-    --accent: #ffae00;
-    --blue: #2563eb;
-    --green: #10b981;
+    /* Dark Mode (Default — matches proposal §7) */
+    --bg: #07090e;
+    --surface: #0f1622;
+    --surface2: #131c2c;
+    --accent: #f97316;          /* proposal orange (was #ffae00) */
+    --accent-soft: rgba(249,115,22,0.16);
+    --accent-glow: 0 0 36px rgba(249,115,22,0.35);
+    --blue: #38bdf8;            /* proposal info-blue (was #2563eb) */
+    --info: #38bdf8;
+    --green: #22c55e;           /* proposal good-green (was #10b981) */
+    --good: #22c55e;
+    --warn: #eab308;
     --red: #ef4444;
-    --text: #1e293b;
-    --muted: #64748b;
-    --border: rgba(0,0,0,0.08);
+    --bad: #ef4444;
+    --pink: #f472b6;
+    --un-blue: #5b9bd5;
+    --text: #f1f5f9;
+    --text-sub: #cbd5e1;
+    --text-dim: #94a3b8;
+    --text-mute: #64748b;
+    --muted: #94a3b8;           /* alias used widely in the codebase */
+    --border: rgba(255,255,255,0.06);
+    --border-strong: rgba(255,255,255,0.12);
     /* Apr 2026 — Noto Sans Arabic + Noto Sans SC added after Inter/Outfit.
        Browser font cascade is per-glyph: Inter handles Latin, then
        falls through to Noto Sans Arabic for Arabic codepoints (locale=ar)
@@ -78,21 +94,20 @@
        device, breaking the typography on those UNDP-mandated locales. */
     --font: 'Inter', 'Noto Sans Arabic', 'Noto Sans SC', sans-serif;
     --heading: 'Outfit', 'Noto Sans Arabic', 'Noto Sans SC', sans-serif;
-    --radius: 20px;
-    --shadow: 0 12px 30px rgba(0,0,0,0.08);
+    --r-sm: 6px;
+    --r-md: 12px;
+    --r-lg: 20px;
+    --r-xl: 28px;
+    --r-pill: 999px;
+    --radius: 20px;             /* legacy alias = --r-lg */
+    --shadow: 0 0 60px rgba(0,0,0,0.6);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+    --shadow-md: 0 8px 24px rgba(0,0,0,0.45);
+    --shadow-glow: 0 0 32px rgba(249,115,22,0.18);
 }
-
-@media (prefers-color-scheme: dark) {
-    :root {
-        /* Dark Mode Override */
-        --bg: #080b12;
-        --surface: #111827;
-        --surface2: #1f2937;
-        --text: #f8fafc;
-        --muted: #9ca3af;
-        --border: rgba(255,255,255,0.08);
-        --shadow: 0 0 60px rgba(0,0,0,0.6);
-    }
+/* Body background uses the proposal's exact aurora gradient. */
+body {
+    background: radial-gradient(circle at 20% 10%, #0e1828 0%, #07090e 55%) fixed;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -3953,6 +3968,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 
 .stage.v4-stage {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);  /* Delta-C — was unset, so the implicit column auto-sized to widest child (header) and pushed the body 32 px past the right padding edge, clipping the 3rd capture-grid tile. */
     grid-template-rows: auto 1fr auto;
     padding: 12px 18px 18px;
     gap: 14px;
@@ -4028,10 +4044,12 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     flex-direction: column;
     gap: 14px;
     overflow-y: auto;
+    overflow-x: hidden;          /* Delta-C — was causing 14 px right overflow on iPhone 12 mini */
     min-height: 0;  /* let the grid track collapse if needed */
     -webkit-overflow-scrolling: touch;
-    padding-right: 2px;  /* don't clip carousel arrows on right */
-    margin-right: -2px;
+    /* padding-right + negative margin removed: it pushed the body 14 px
+       past the v4-stage padding edge on narrow viewports, clipping the
+       3rd tile of the new capture grid. */
 }
 
 .v4-footer {
@@ -4101,49 +4119,193 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 
 .v4-camera-hero {
-    /* Apr 2026 hot-fix: was flex: 1 1 auto + min-height: 220px which
-       made the hero swell to fill the entire .v4-body — 60-74% of
-       screen on most devices. Now a fixed reasonable height with
-       clear photo affordance, leaving room for the (eventual)
-       thumbnail strip + secondary actions below. */
-    height: 220px;
-    flex: 0 0 auto;
+    /* Pre-Delta-C single camera hero. Replaced by .v4-cap-grid below.
+       Kept as a no-op shim so any external links/buttons that still
+       reference the class don't blow up the layout. */
+    display: none;
+}
+
+/* ── Delta-C (May 2026) — proposal §6.2 capture page rebuild ──────────
+   Hero copy + 3-equal-mode grid (Photo / Voice / Type) + captured
+   strip. Replaces the single camera-hero. */
+.v4-cap-title {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    margin: 8px 0 4px;
+}
+.v4-cap-lede {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-dim, var(--muted));
+    margin: 0 0 12px;
+}
+/* Captured strip — green chips showing what's already added. Sits
+   above the modality grid so users see additive progress. */
+.v4-cap-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 0;
+    border-top: 1px dashed var(--border);
+    border-bottom: 1px dashed var(--border);
+    margin-bottom: 12px;
+}
+.v4-cap-strip[hidden] { display: none; }
+.v4-cap-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 4px 5px 10px;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, 0.14);
+    border: 1px solid rgba(34, 197, 94, 0.36);
+    color: #86efac;
+    font-size: 11px;
+    font-weight: 600;
+}
+.v4-cap-chip[hidden] { display: none; }
+.v4-cap-chip-icon { font-size: 13px; line-height: 1; }
+.v4-cap-chip-label { white-space: nowrap; }
+.v4-cap-chip-x {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.20);
+    border: 0;
+    color: #4ade80;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.v4-cap-chip-x:hover { background: rgba(34, 197, 94, 0.32); color: #fff; }
+
+/* 3-equal-mode grid */
+.v4-cap-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+    width: 100%;
+}
+.v4-cap-tile {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 16px 20px;
-    border-radius: 18px;
-    border: 2px dashed rgba(255, 174, 0, 0.5);
-    background: linear-gradient(135deg, rgba(255, 107, 53, 0.08) 0%, rgba(247, 147, 30, 0.05) 100%);
+    gap: 4px;
+    min-height: 116px;
+    padding: 12px 6px;
+    background: var(--surface, #0f1622);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 14px;
     color: var(--text);
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    transition: background 0.18s ease, border-color 0.18s ease, transform 0.1s ease;
+    min-width: 0;
+    overflow: hidden;
 }
-.v4-camera-hero:hover {
-    background: linear-gradient(135deg, rgba(255, 107, 53, 0.12) 0%, rgba(247, 147, 30, 0.08) 100%);
-    border-color: rgba(255, 174, 0, 0.7);
+.v4-cap-tile:hover {
+    background: var(--surface2, #131c2c);
+    border-color: rgba(249, 115, 22, 0.5);
 }
-.v4-camera-icon {
-    width: 64px; height: 64px;
-    border-radius: 50%;
-    background: linear-gradient(180deg, #ff6b35 0%, #f7931e 100%);
+.v4-cap-tile:active { transform: scale(0.98); }
+.v4-cap-tile.is-active {
+    background: rgba(249, 115, 22, 0.12);
+    border-color: rgba(249, 115, 22, 0.6);
+    box-shadow: 0 0 24px rgba(249, 115, 22, 0.18);
+}
+.v4-cap-tile-icon { font-size: 28px; line-height: 1; }
+.v4-cap-tile-label {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+}
+.v4-cap-tile-sub {
+    font-size: 10px;
+    color: var(--text-mute, var(--muted));
+    text-align: center;
+    line-height: 1.3;
+    overflow-wrap: break-word;
+    max-width: 100%;
+}
+
+/* Voice / Text drawers — slide in below the grid when their tile
+   is tapped. */
+.v4-cap-voice-drawer,
+.v4-cap-text-drawer {
+    background: var(--surface, #0f1622);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 12px;
+    animation: v4-drawer-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.v4-cap-voice-drawer[hidden],
+.v4-cap-text-drawer[hidden] { display: none; }
+@keyframes v4-drawer-in {
+    0% { opacity: 0; transform: translateY(-6px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+.v4-cap-mic {
+    width: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 28px;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent, #f97316), #ff7a00);
+    color: #1f1300;
+    border: 0;
+    font-weight: 800;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: var(--accent-glow, 0 0 32px rgba(249,115,22,0.18));
+}
+.v4-cap-mic.is-recording {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
     color: #fff;
-    box-shadow: 0 8px 20px rgba(255, 107, 53, 0.35);
+    animation: v4-pulse-rec 1.6s ease-in-out infinite;
 }
-.v4-camera-label {
-    font-size: 18px;
-    font-weight: 700;
-    font-family: var(--heading, 'Outfit', sans-serif);
+@keyframes v4-pulse-rec {
+    0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); }
+    50%     { box-shadow: 0 0 0 14px rgba(239,68,68,0); }
 }
-.v4-camera-sub {
+.v4-cap-voice-hint {
     font-size: 12px;
-    color: var(--muted);
+    color: var(--text-mute, var(--muted));
+    text-align: center;
+    margin: 8px 0 0;
+}
+.v4-cap-text-area {
+    width: 100%;
+    min-height: 90px;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface2, #131c2c);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    resize: vertical;
+}
+.v4-cap-text-area:focus {
+    outline: 0;
+    border-color: rgba(249, 115, 22, 0.6);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+}
+@media (prefers-reduced-motion: reduce) {
+    .v4-cap-voice-drawer,
+    .v4-cap-text-drawer { animation: none; }
+    .v4-cap-mic.is-recording { animation: none; }
 }
 
 .v4-thumbs {
@@ -4397,6 +4559,255 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     background: var(--brand, #ffae00);
     width: 14px;
     border-radius: 3px;
+}
+
+/* ── V4 Page 2 — classify (Delta-D + E rebuild, May 2026) ───────────────
+   Single-question per sub-view. _classifyStep in v4-flow.js drives which
+   .v4-classify-view is visible. Layout follows proposal §6.3 (How bad),
+   §6.2.2 (What was hit), §6.2.3 (What caused it). */
+.v4-substep-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-mute, var(--muted));
+    font-weight: 700;
+    margin: 0 0 8px;
+}
+.v4-substep-of { color: var(--text-mute); font-weight: 600; }
+.v4-classify-view { display: flex; flex-direction: column; gap: 14px; }
+.v4-classify-view[hidden] { display: none; }
+.v4-q-question {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    margin: 4px 0 8px;
+}
+
+/* Sub-view 1: How bad — 3 vertical option cards */
+.v4-q-options { display: flex; flex-direction: column; gap: 10px; }
+.v4-q-opt {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    background: var(--surface, #0f1622);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 14px;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    min-height: 64px;
+}
+.v4-q-opt:hover { background: var(--surface2, #131c2c); }
+.v4-q-opt.is-selected {
+    border-color: var(--accent, #f97316);
+    background: rgba(249, 115, 22, 0.08);
+    box-shadow: 0 0 24px rgba(249, 115, 22, 0.18);
+}
+.v4-q-opt-badge {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    font-weight: 800;
+}
+.v4-q-opt-badge-good { background: rgba(34,197,94,0.16); color: #86efac; }
+.v4-q-opt-badge-warn { background: rgba(234,179,8,0.16); color: #fde68a; }
+.v4-q-opt-badge-bad  { background: rgba(239,68,68,0.16); color: #fca5a5; }
+.v4-q-opt-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.v4-q-opt-title {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+}
+.v4-q-opt-sub { font-size: 12px; color: var(--text-dim, var(--muted)); line-height: 1.4; }
+.v4-q-opt-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--text-mute, var(--muted));
+    flex-shrink: 0;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.v4-q-opt.is-selected .v4-q-opt-check {
+    background: var(--accent, #f97316);
+    border-color: var(--accent, #f97316);
+    box-shadow: 0 0 8px var(--accent, #f97316);
+}
+
+/* Sub-view 2: What was hit — 2-col grid of 8 tiles with sub-text */
+.v4-hit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+.v4-hit-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 14px;
+    background: var(--surface, #0f1622);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 14px;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    min-height: 92px;
+    min-width: 0;
+    overflow: hidden;
+}
+.v4-hit-tile:hover { background: var(--surface2, #131c2c); border-color: rgba(249, 115, 22, 0.4); }
+.v4-hit-tile:active { transform: scale(0.98); }
+.v4-hit-tile.is-selected {
+    border-color: var(--accent, #f97316);
+    background: rgba(249, 115, 22, 0.10);
+    box-shadow: 0 0 22px rgba(249, 115, 22, 0.24);
+}
+.v4-hit-tile-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: rgba(249, 115, 22, 0.12);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    line-height: 1;
+}
+.v4-hit-tile.is-selected .v4-hit-tile-icon {
+    background: rgba(249, 115, 22, 0.22);
+}
+.v4-hit-tile-title {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.25;
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: auto;
+}
+.v4-hit-tile-sub {
+    font-size: 10.5px;
+    color: var(--text-dim, var(--muted));
+    line-height: 1.35;
+    overflow-wrap: break-word;
+}
+.v4-hit-foot {
+    margin: 8px 0 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-mute, var(--muted));
+}
+
+/* Sub-view 3: What caused it — 3 large progressive cards + drill-down */
+.v4-cause-cards { display: flex; flex-direction: column; gap: 10px; }
+.v4-cause-cards[hidden] { display: none; }
+.v4-cause-card {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    background: var(--surface, #0f1622);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 14px;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    min-height: 76px;
+}
+.v4-cause-card:hover { background: var(--surface2, #131c2c); border-color: rgba(249, 115, 22, 0.4); }
+.v4-cause-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: rgba(249, 115, 22, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+}
+.v4-cause-natural .v4-cause-icon { background: rgba(56, 189, 248, 0.14); }
+.v4-cause-tech    .v4-cause-icon { background: rgba(234, 179, 8, 0.14); }
+.v4-cause-human   .v4-cause-icon { background: rgba(244, 114, 182, 0.14); }
+.v4-cause-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.v4-cause-title {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-weight: 800;
+    font-size: 15px;
+    color: var(--text);
+}
+.v4-cause-sub { font-size: 11px; color: var(--text-dim, var(--muted)); line-height: 1.4; }
+.v4-cause-chev { color: var(--text-mute, var(--muted)); font-size: 14px; flex-shrink: 0; }
+
+/* Drill-down sub-types view */
+.v4-cause-subtypes[hidden] { display: none; }
+.v4-cause-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px 8px 10px;
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 999px;
+    color: var(--text-sub, var(--muted));
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.v4-cause-back:hover { background: rgba(255, 255, 255, 0.10); color: var(--text); }
+.v4-cause-subtypes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.v4-cause-sub-opt {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--surface, #0f1622);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 12px;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    min-height: 52px;
+}
+.v4-cause-sub-opt:hover { background: var(--surface2, #131c2c); border-color: rgba(249, 115, 22, 0.4); }
+.v4-cause-sub-opt.is-selected {
+    border-color: var(--accent, #f97316);
+    background: rgba(249, 115, 22, 0.10);
+    box-shadow: 0 0 18px rgba(249, 115, 22, 0.18);
+}
+.v4-cause-sub-opt-icon {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: rgba(249, 115, 22, 0.10);
+    flex-shrink: 0;
 }
 
 /* ── V4 Page 3 — review ────────────────────────────────────────────── */

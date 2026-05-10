@@ -491,18 +491,78 @@
                 </div>
             </div>
 
-            <!-- Hero camera CTA. Opens OS-native camera via <input type=file
-                 capture=environment> — no in-app <video> modal. The
-                 thumbnail + delete + add-more strip slot below is shared
-                 with the v3 photo stage's renderer to reuse all the
-                 PII-blur + variant-generation pipelines. -->
-            <button class="v4-camera-hero" id="btn-v4-camera" type="button">
-                <div class="v4-camera-icon">
-                    <i class="fa-solid fa-camera"></i>
-                </div>
-                <div class="v4-camera-label" data-i18n="v4_take_photo">Take photo</div>
-                <div class="v4-camera-sub" data-i18n="v4_camera_sub">Tap to open camera</div>
-            </button>
+            <!-- Delta-C (May 2026) — proposal §6.2 "Capture — additive
+                 multi-modal". Hero copy reframes the page as a permission
+                 to share whatever the user has, not a forced photo. -->
+            <h1 class="v4-cap-title" data-i18n="v4_cap_show_what_you_see">Show what you see.</h1>
+            <p class="v4-cap-lede" data-i18n="v4_cap_lede">
+                A photo, a voice note, a few words — or all three. Any one is enough.
+            </p>
+
+            <!-- Captured strip — green chips showing what's already added.
+                 Live-rerendered by v4-flow.js _refreshCapturedStrip().
+                 Hidden until at least one modality is captured. -->
+            <div class="v4-cap-strip" id="v4-cap-strip" hidden aria-live="polite">
+                <span class="v4-cap-chip" id="v4-cap-chip-photo" hidden>
+                    <span class="v4-cap-chip-icon" aria-hidden="true">📷</span>
+                    <span class="v4-cap-chip-label" id="v4-cap-chip-photo-label">1 photo</span>
+                    <button class="v4-cap-chip-x" id="v4-cap-chip-photo-x" type="button" aria-label="Remove photo">×</button>
+                </span>
+                <span class="v4-cap-chip" id="v4-cap-chip-voice" hidden>
+                    <span class="v4-cap-chip-icon" aria-hidden="true">🎙</span>
+                    <span class="v4-cap-chip-label" id="v4-cap-chip-voice-label">Voice note</span>
+                    <button class="v4-cap-chip-x" id="v4-cap-chip-voice-x" type="button" aria-label="Remove voice">×</button>
+                </span>
+                <span class="v4-cap-chip" id="v4-cap-chip-text" hidden>
+                    <span class="v4-cap-chip-icon" aria-hidden="true">✏️</span>
+                    <span class="v4-cap-chip-label" id="v4-cap-chip-text-label">Note added</span>
+                    <button class="v4-cap-chip-x" id="v4-cap-chip-text-x" type="button" aria-label="Remove text">×</button>
+                </span>
+            </div>
+
+            <!-- 3-equal modality grid — Photo · Voice · Type. UNDP rubric Q3
+                 (additive capture). Each tile is a button: tapping Photo
+                 opens the OS camera, Voice toggles the in-page recorder,
+                 Type slides in a textarea drawer. Equal real estate so
+                 users without a camera (desktop) or without a microphone
+                 are never funnelled into a single mode. -->
+            <div class="v4-cap-grid">
+                <button class="v4-cap-tile v4-cap-tile-photo" id="btn-v4-camera" type="button">
+                    <span class="v4-cap-tile-icon" aria-hidden="true">📷</span>
+                    <span class="v4-cap-tile-label" data-i18n="v4_cap_photo">Photo</span>
+                    <span class="v4-cap-tile-sub" data-i18n="v4_cap_photo_sub">Take or upload</span>
+                </button>
+                <button class="v4-cap-tile v4-cap-tile-voice" id="btn-v4-cap-voice" type="button">
+                    <span class="v4-cap-tile-icon" aria-hidden="true">🎙</span>
+                    <span class="v4-cap-tile-label" data-i18n="v4_cap_voice">Voice</span>
+                    <span class="v4-cap-tile-sub" data-i18n="v4_cap_voice_sub">Speak in your language</span>
+                </button>
+                <button class="v4-cap-tile v4-cap-tile-text" id="btn-v4-cap-text" type="button">
+                    <span class="v4-cap-tile-icon" aria-hidden="true">✏️</span>
+                    <span class="v4-cap-tile-label" data-i18n="v4_cap_text">Type</span>
+                    <span class="v4-cap-tile-sub" data-i18n="v4_cap_text_sub">A quick note</span>
+                </button>
+            </div>
+
+            <!-- Voice / Text drawers — slide in when the corresponding tile
+                 is tapped. Hidden by default; the recorder + textarea
+                 share the same MediaRecorder + Web Speech API plumbing
+                 that the review-stage drawer used pre-Delta-C. -->
+            <div class="v4-cap-voice-drawer" id="v4-cap-voice-drawer" hidden>
+                <button class="v4-cap-mic" id="btn-v4-cap-mic" type="button">
+                    <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+                    <span data-i18n="v4_record">Record voice</span>
+                </button>
+                <p class="v4-cap-voice-hint" data-i18n="v4_cap_voice_hint">
+                    Tap to start. Tap again to stop.
+                </p>
+            </div>
+            <div class="v4-cap-text-drawer" id="v4-cap-text-drawer" hidden>
+                <textarea id="v4-cap-text-area" rows="3"
+                          class="v4-cap-text-area"
+                          data-i18n-placeholder="v4_cap_text_placeholder"
+                          placeholder="Describe what happened in a few words..."></textarea>
+            </div>
 
             <!-- Hidden native file inputs — same pattern app.js's existing
                  photo flow uses, just routed through v4 handlers. -->
@@ -514,18 +574,12 @@
                  the page. -->
             <div class="v4-thumbs" id="v4-thumbs" style="display:none;"></div>
 
-            <!-- Secondary fallbacks. Smaller surface area; users mostly
-                 ignore unless camera is broken / not present (desktop). -->
-            <div class="v4-secondary-row">
-                <button class="v4-secondary-btn" id="btn-v4-browse" type="button">
-                    <i class="fa-solid fa-folder-open"></i>
-                    <span data-i18n="v4_browse">Browse files</span>
-                </button>
-                <button class="v4-secondary-btn" id="btn-v4-skip-photo" type="button">
-                    <i class="fa-solid fa-microphone"></i>
-                    <span data-i18n="v4_voice_only">Voice only</span>
-                </button>
-            </div>
+            <!-- Pre-Delta-C secondary fallbacks (Browse files / Voice only)
+                 are folded into the new tile grid. Buttons are kept in the
+                 DOM as hidden fallbacks so existing keyboard / screen-reader
+                 shortcuts still work and v4-flow.js's wiring doesn't break. -->
+            <button id="btn-v4-browse" type="button" hidden></button>
+            <button id="btn-v4-skip-photo" type="button" hidden></button>
         </div>
 
         <footer class="v4-footer">
@@ -536,7 +590,13 @@
         </footer>
     </div>
 
-    <!-- V4 — Page 2: Classify (3 chip rows on one page) -->
+    <!-- V4 — Page 2: Classify
+         Delta-D + E (May 2026) — split into 3 sub-views. Proposal §6.3
+         (How bad), §6.2.2 (What was hit), §6.2.3 (What caused it).
+         The stage stays as a single ID (existing nav code unaffected);
+         _classifyStep state in v4-flow.js drives which sub-view is
+         visible. Continue advances the sub-step or routes to review
+         when the last sub-step's question is answered. -->
     <div class="stage v4-stage" id="stage-v4-classify">
         <header class="v4-header">
             <button class="v4-back" id="btn-v4-classify-back" type="button" aria-label="Back">
@@ -559,68 +619,146 @@
                 <span data-i18n="v4_ai_filled">AI suggested these — tap to change.</span>
             </div>
 
-            <!-- Q1: damage classification (3 chips, defaults Partial)
-                 May 2026 (UI v3 redesign Q13) — replaced tiny ● with 4-channel
-                 encoding: distinct SHAPE per severity (○ △ ✕) + colour + word.
-                 Colour-blind users still get full information from shape alone.
-                 SVG circles are 22 px so they're visible at the lowest tier
-                 zoom and contrast against any background. -->
-            <section class="v4-section">
-                <h2 class="v4-section-title" data-i18n="v4_q_damage" data-voice="v4_q_damage">How bad is the damage?</h2>
-                <div class="v4-chip-row" id="v4-chips-damage" role="radiogroup" aria-label="Damage severity">
-                    <button class="v4-chip" data-value="MINIMAL" type="button" role="radio" aria-checked="false">
-                        <span class="v4-chip-glyph v4-chip-glyph-min" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>
+            <!-- Sub-step header — small uppercase tag above the question -->
+            <div class="v4-substep-label" id="v4-substep-label" aria-live="polite">
+                <span data-i18n="v4_substep_how_bad">Step 2 — How bad</span>
+                <span class="v4-substep-of"> · 1 of 3</span>
+            </div>
+
+            <!-- ── Sub-view 1: How bad is the damage? ────────────── -->
+            <section class="v4-classify-view" id="v4-view-damage">
+                <h1 class="v4-q-question" data-voice="v4_q_damage">
+                    <span data-i18n="v4_q_damage">How bad is the damage?</span>
+                </h1>
+                <div class="v4-q-options" role="radiogroup" aria-label="Damage severity">
+                    <button class="v4-q-opt v4-q-opt-good" data-value="MINIMAL" type="button" role="radio" aria-checked="false">
+                        <span class="v4-q-opt-badge v4-q-opt-badge-good" aria-hidden="true">○</span>
+                        <span class="v4-q-opt-text">
+                            <span class="v4-q-opt-title" data-i18n="damage_minimal">Minimal</span>
+                            <span class="v4-q-opt-sub" data-i18n="v4_damage_minimal_sub">Cracks, broken glass — building still safe</span>
                         </span>
-                        <span class="v4-chip-label" data-i18n="damage_minimal">Minimal</span>
+                        <span class="v4-q-opt-check" aria-hidden="true"></span>
                     </button>
-                    <button class="v4-chip is-selected" data-value="PARTIAL" type="button" role="radio" aria-checked="true">
-                        <span class="v4-chip-glyph v4-chip-glyph-partial" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <button class="v4-q-opt v4-q-opt-warn is-selected" data-value="PARTIAL" type="button" role="radio" aria-checked="true">
+                        <span class="v4-q-opt-badge v4-q-opt-badge-warn" aria-hidden="true">△</span>
+                        <span class="v4-q-opt-text">
+                            <span class="v4-q-opt-title" data-i18n="damage_partial">Partly damaged</span>
+                            <span class="v4-q-opt-sub" data-i18n="v4_damage_partial_sub">Repairable, use with caution</span>
                         </span>
-                        <span class="v4-chip-label" data-i18n="damage_partial">Partly damaged</span>
+                        <span class="v4-q-opt-check" aria-hidden="true"></span>
                     </button>
-                    <button class="v4-chip" data-value="COMPLETE" type="button" role="radio" aria-checked="false">
-                        <span class="v4-chip-glyph v4-chip-glyph-complete" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                    <button class="v4-q-opt v4-q-opt-bad" data-value="COMPLETE" type="button" role="radio" aria-checked="false">
+                        <span class="v4-q-opt-badge v4-q-opt-badge-bad" aria-hidden="true">✕</span>
+                        <span class="v4-q-opt-text">
+                            <span class="v4-q-opt-title" data-i18n="damage_complete">Fully destroyed</span>
+                            <span class="v4-q-opt-sub" data-i18n="v4_damage_complete_sub">Structurally unsafe or collapsed</span>
                         </span>
-                        <span class="v4-chip-label" data-i18n="damage_complete">Fully destroyed</span>
+                        <span class="v4-q-opt-check" aria-hidden="true"></span>
                     </button>
                 </div>
             </section>
 
-            <!-- Q2: infrastructure type (8 UNDP super-types as carousel) -->
-            <section class="v4-section">
-                <h2 class="v4-section-title" data-i18n="v4_q_infra" data-voice="v4_q_infra">What was hit?</h2>
-                <div class="v4-carousel" id="v4-carousel-infra"
-                     data-options='[
-                        {"v":"RESIDENTIAL","i":"fa-house","l":"Residential","k":"infra_residential"},
-                        {"v":"COMMERCIAL","i":"fa-store","l":"Commercial","k":"infra_commercial"},
-                        {"v":"GOVERNMENT","i":"fa-landmark","l":"Government","k":"infra_government"},
-                        {"v":"UTILITY","i":"fa-bolt","l":"Utility","k":"infra_utility"},
-                        {"v":"TRANSPORT_COMMUNICATION","i":"fa-road","l":"Transport","k":"infra_transport"},
-                        {"v":"COMMUNITY","i":"fa-school","l":"Community","k":"infra_community"},
-                        {"v":"PUBLIC_SPACES","i":"fa-tree","l":"Public space","k":"infra_public"},
-                        {"v":"OTHER","i":"fa-circle-question","l":"Other","k":"infra_other"}
-                     ]'></div>
+            <!-- ── Sub-view 2: What was hit? (8-tile 2-col grid) ──── -->
+            <section class="v4-classify-view" id="v4-view-infra" hidden>
+                <h1 class="v4-q-question" data-voice="v4_q_infra">
+                    <span data-i18n="v4_q_infra">What was hit?</span>
+                </h1>
+                <div class="v4-hit-grid" role="radiogroup" aria-label="Infrastructure type">
+                    <button class="v4-hit-tile" data-value="RESIDENTIAL" type="button" role="radio" aria-checked="false">
+                        <span class="v4-hit-tile-icon" aria-hidden="true">🏠</span>
+                        <span class="v4-hit-tile-title" data-i18n="v4_infra_res_label">Houses &amp; apartments</span>
+                        <span class="v4-hit-tile-sub" data-i18n="v4_infra_res_sub">Where people live</span>
+                    </button>
+                    <button class="v4-hit-tile" data-value="COMMERCIAL" type="button" role="radio" aria-checked="false">
+                        <span class="v4-hit-tile-icon" aria-hidden="true">🏪</span>
+                        <span class="v4-hit-tile-title" data-i18n="v4_infra_com_label">Shops &amp; markets</span>
+                        <span class="v4-hit-tile-sub" data-i18n="v4_infra_com_sub">Commercial buildings</span>
+                    </button>
+                    <button class="v4-hit-tile" data-value="GOVERNMENT" type="button" role="radio" aria-checked="false">
+                        <span class="v4-hit-tile-icon" aria-hidden="true">🏛</span>
+                        <span class="v4-hit-tile-title" data-i18n="v4_infra_gov_label">Government</span>
+                        <span class="v4-hit-tile-sub" data-i18n="v4_infra_gov_sub">Police, fire, courts</span>
+                    </button>
+                    <button class="v4-hit-tile" data-value="UTILITY" type="button" role="radio" aria-checked="false">
+                        <span class="v4-hit-tile-icon" aria-hidden="true">⚡</span>
+                        <span class="v4-hit-tile-title" data-i18n="v4_infra_util_label">Power, water, waste</span>
+                        <span class="v4-hit-tile-sub" data-i18n="v4_infra_util_sub">Utility infrastructure</span>
+                    </button>
+                    <button class="v4-hit-tile" data-value="TRANSPORT_COMMUNICATION" type="button" role="radio" aria-checked="false">
+                        <span class="v4-hit-tile-icon" aria-hidden="true">🛣</span>
+                        <span class="v4-hit-tile-title" data-i18n="v4_infra_trans_label">Roads &amp; bridges</span>
+                        <span class="v4-hit-tile-sub" data-i18n="v4_infra_trans_sub">Transport &amp; transit</span>
+                    </button>
+                    <button class="v4-hit-tile" data-value="COMMUNITY" type="button" role="radio" aria-checked="false">
+                        <span class="v4-hit-tile-icon" aria-hidden="true">⛑</span>
+                        <span class="v4-hit-tile-title" data-i18n="v4_infra_comm_label">Schools &amp; hospitals</span>
+                        <span class="v4-hit-tile-sub" data-i18n="v4_infra_comm_sub">Community services</span>
+                    </button>
+                    <button class="v4-hit-tile" data-value="PUBLIC_SPACES" type="button" role="radio" aria-checked="false">
+                        <span class="v4-hit-tile-icon" aria-hidden="true">🌳</span>
+                        <span class="v4-hit-tile-title" data-i18n="v4_infra_pub_label">Stadiums, parks</span>
+                        <span class="v4-hit-tile-sub" data-i18n="v4_infra_pub_sub">Public spaces</span>
+                    </button>
+                    <button class="v4-hit-tile" data-value="OTHER" type="button" role="radio" aria-checked="false">
+                        <span class="v4-hit-tile-icon" aria-hidden="true">⋯</span>
+                        <span class="v4-hit-tile-title" data-i18n="v4_infra_other_label">Other / not listed</span>
+                        <span class="v4-hit-tile-sub" data-i18n="v4_infra_other_sub">Describe in your own words</span>
+                    </button>
+                </div>
+                <p class="v4-hit-foot" data-i18n="v4_tap_one">Tap one. Auto-advance.</p>
             </section>
 
-            <!-- Q3: crisis type (9 UNDP types as carousel) -->
-            <section class="v4-section">
-                <h2 class="v4-section-title" data-i18n="v4_q_crisis" data-voice="v4_q_crisis">What caused it?</h2>
-                <div class="v4-carousel" id="v4-carousel-crisis"
-                     data-options='[
-                        {"v":"EARTHQUAKE","i":"fa-house-crack","l":"Earthquake","k":"crisis_earthquake"},
-                        {"v":"FLOOD","i":"fa-water","l":"Flood","k":"crisis_flood"},
-                        {"v":"TSUNAMI","i":"fa-water-arrow-up","l":"Tsunami","k":"crisis_tsunami"},
-                        {"v":"HURRICANE","i":"fa-wind","l":"Hurricane","k":"crisis_hurricane"},
-                        {"v":"WILDFIRE","i":"fa-fire","l":"Wildfire","k":"crisis_wildfire"},
-                        {"v":"EXPLOSION","i":"fa-explosion","l":"Explosion","k":"crisis_explosion"},
-                        {"v":"CHEMICAL_INCIDENT","i":"fa-flask","l":"Chemical","k":"crisis_chemical"},
-                        {"v":"CONFLICT","i":"fa-shield","l":"Conflict","k":"crisis_conflict"},
-                        {"v":"CIVIL_UNREST","i":"fa-people-group","l":"Civil unrest","k":"crisis_unrest"}
-                     ]'></div>
+            <!-- ── Sub-view 3: What caused it? (progressive 3-card drill) -->
+            <section class="v4-classify-view" id="v4-view-crisis" hidden>
+                <h1 class="v4-q-question" data-voice="v4_q_crisis">
+                    <span data-i18n="v4_q_crisis">What caused it?</span>
+                </h1>
+                <!-- Group cards (visible by default) -->
+                <div class="v4-cause-cards" id="v4-cause-cards" role="radiogroup" aria-label="Crisis category">
+                    <button class="v4-cause-card v4-cause-natural" data-group="natural" type="button">
+                        <span class="v4-cause-icon" aria-hidden="true">🌊</span>
+                        <span class="v4-cause-text">
+                            <span class="v4-cause-title" data-i18n="v4_cause_natural">Natural disaster</span>
+                            <span class="v4-cause-sub" data-i18n="v4_cause_natural_sub">Earthquake · Flood · Tsunami · Hurricane · Wildfire</span>
+                        </span>
+                        <i class="fa-solid fa-chevron-right v4-cause-chev"></i>
+                    </button>
+                    <button class="v4-cause-card v4-cause-tech" data-group="tech" type="button">
+                        <span class="v4-cause-icon" aria-hidden="true">⚠</span>
+                        <span class="v4-cause-text">
+                            <span class="v4-cause-title" data-i18n="v4_cause_tech">Technological</span>
+                            <span class="v4-cause-sub" data-i18n="v4_cause_tech_sub">Explosion · Chemical incident</span>
+                        </span>
+                        <i class="fa-solid fa-chevron-right v4-cause-chev"></i>
+                    </button>
+                    <button class="v4-cause-card v4-cause-human" data-group="human" type="button">
+                        <span class="v4-cause-icon" aria-hidden="true">👥</span>
+                        <span class="v4-cause-text">
+                            <span class="v4-cause-title" data-i18n="v4_cause_human">Human-made</span>
+                            <span class="v4-cause-sub" data-i18n="v4_cause_human_sub">Conflict · Civil unrest</span>
+                        </span>
+                        <i class="fa-solid fa-chevron-right v4-cause-chev"></i>
+                    </button>
+                </div>
+                <!-- Sub-types list (revealed after a group is tapped) -->
+                <div class="v4-cause-subtypes" id="v4-cause-subtypes" hidden>
+                    <button class="v4-cause-back" id="btn-v4-cause-back" type="button">
+                        <i class="fa-solid fa-arrow-left"></i>
+                        <span class="v4-cause-back-label" id="v4-cause-back-label">Back</span>
+                    </button>
+                    <div class="v4-cause-subtypes-list" id="v4-cause-subtypes-list" role="radiogroup" aria-label="Crisis sub-type">
+                        <!-- Populated by v4-flow.js based on the tapped group -->
+                    </div>
+                </div>
             </section>
+
+            <!-- LEGACY no-op anchors for v4-flow.js's pre-Delta-D wiring.
+                 The chip / carousel handlers initialize against these DOM
+                 IDs; they're now invisible but kept so init code doesn't
+                 throw nulls. -->
+            <div id="v4-chips-damage" hidden></div>
+            <div id="v4-carousel-infra" hidden></div>
+            <div id="v4-carousel-crisis" hidden></div>
         </div>
 
         <footer class="v4-footer">
