@@ -111,6 +111,26 @@
         // May 2026 a11y — every role="radio" must carry aria-checked
         // (true OR false). Previously only the selected tile had the
         // attribute → axe-core "aria-required-attr" critical failure.
+        // M10 (May 2026) — custom Lucide-style SVG icons for the four
+        // crisis types FontAwesome handled awkwardly: tsunami (was just
+        // a generic up-arrow water), wildfire (was a single flame —
+        // visually identical to the explosion icon at small sizes),
+        // conflict (a half-shield), chemical (a flask, easily
+        // mis-read as "potion"). The new icons use a 24×24 viewBox
+        // with 2 px stroke + round caps to match the existing Lucide
+        // pack already used in headers / Step-4 cards.
+        const _svgIcons = {
+            TSUNAMI:           '<path d="M2 17c3 0 4-3 8-3s5 3 9 3"/><path d="M2 21c3 0 4-3 8-3s5 3 9 3"/><path d="M9 14c0-3 1-5 3-7l4 8"/>',
+            WILDFIRE:          '<path d="M8 21h8"/><path d="M12 21v-3"/><path d="M9 18a4 4 0 0 1-2-3c0-3 3-4 3-7 0 3 4 3 4 7a4 4 0 0 1-2 3"/><path d="M11 11c-1-1-1-2 0-4 1 2 2 2 2 4"/>',
+            CONFLICT:          '<path d="m14 4 6 6-2 2-6-6 2-2Z"/><path d="m4 20 6-6 2 2-6 6-2-2Z"/><path d="m20 14-6-6 2-2 6 6-2 2Z"/><path d="m4 4 6 6-2 2-6-6 2-2Z"/>',
+            CHEMICAL_INCIDENT: '<path d="M12 3 2 21h20Z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.6"/>',
+        };
+        const _renderIcon = (o) => {
+            if (Object.prototype.hasOwnProperty.call(_svgIcons, o.v)) {
+                return `<svg class="v4-tile-icon v4-tile-icon-svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${_svgIcons[o.v]}</svg>`;
+            }
+            return `<i class="fa-solid ${o.i} v4-tile-icon" aria-hidden="true"></i>`;
+        };
         container.innerHTML = `
             <div class="v4-chipgrid-track" role="radiogroup">
                 ${options.map((o, i) => `
@@ -119,7 +139,7 @@
                             data-value="${o.v}" data-index="${i}"
                             aria-checked="${i === 0 ? 'true' : 'false'}"
                             aria-label="${(o.l || o.v).replace(/"/g, '&quot;')}">
-                        <i class="fa-solid ${o.i} v4-tile-icon" aria-hidden="true"></i>
+                        ${_renderIcon(o)}
                         <span class="v4-tile-label" data-i18n="${o.k || ''}">${o.l}</span>
                     </button>
                 `).join('')}

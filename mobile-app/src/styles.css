@@ -4153,6 +4153,19 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     font-size: 20px;
     color: var(--brand, #ffae00);
 }
+/* M10 (May 2026) — custom Lucide-style SVGs for tsunami / wildfire /
+   conflict / chemical. Match the FontAwesome glyph footprint so layout
+   stays identical (22 px box, brand colour, 2 px stroke). */
+.v4-tile-icon-svg {
+    width: 22px;
+    height: 22px;
+    color: var(--brand, #ffae00);
+    display: inline-block;
+    flex-shrink: 0;
+}
+.v4-chipgrid-tile.is-selected .v4-tile-icon-svg {
+    color: var(--brand, #ffae00);
+}
 .v4-tile-label {
     font-size: 10.5px;
     text-align: center;
