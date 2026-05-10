@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v84';  // v84 (May 2026): UI v3 redesign Phase 2 — Q11 first-run welcome overlay (anonymous-first equal-weight CTA, recommended) + device-ID disclosure with copy button (CRISP-A8F2-9C7E format derived from existing crisp_device_id_v2). Q14 UNDP-details persistence bug fixed: meta payload now reads BOTH v3 (debrisClearing/serviceStatus) AND v4 (debris_present/electricity_status/pressing_needs) state shapes — debris + service_status now actually persist on v4 capture flow. Phase 1 (v83) wins still in.
+const CACHE_NAME = 'crisp-v85';  // v85 (May 2026): UI v3 redesign Phase 3 — Q13 severity 4-channel encoding. v4 damage chips: tiny ● dot replaced with distinct SHAPE per severity (○ for Minimal, △ for Partly damaged, ✕ for Fully destroyed) via Lucide-style 22 px SVG. Colour-blind users (~8% of men) now get full information from shape alone. Chip i18n labels also synced to plain-language Q15 wording. Phase 1 (v83) + Phase 2 (v84) wins still in.
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.

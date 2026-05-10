@@ -3743,6 +3743,22 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .v4-chip-dot-partial { color: #f59e0b; }
 .v4-chip-dot-complete { color: #ef4444; }
 
+/* May 2026 (UI v3 redesign Q13) — 4-channel severity glyphs replace
+   the tiny ● dot. Each severity gets a unique shape (○ △ ✕) so
+   colour-blind users (~8% of men) get full information from the
+   shape alone. Sized 22 px to meet ≥24 px chip-icon target after
+   stroke + padding. */
+.v4-chip-glyph {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: 26px; height: 26px;
+    flex-shrink: 0;
+}
+.v4-chip-glyph svg { display: block; }
+.v4-chip-glyph-min      { color: #22c55e; }
+.v4-chip-glyph-partial  { color: #eab308; }
+.v4-chip-glyph-complete { color: #ef4444; }
+
 /* Chip-grid (May 2026 hot-fix #2 — was carousel, see _initChipGrid in
    v4-flow.js). All 8 (infra) / 9 (crisis) chips visible at once. Tap-
    target ≥ 60×60 px on small phones. Selected state has solid brand

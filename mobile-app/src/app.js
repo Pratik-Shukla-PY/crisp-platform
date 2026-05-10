@@ -1390,7 +1390,10 @@ Object.assign(I18N.en, {
     crisis_hurricane: "Hurricane", crisis_wildfire: "Wildfire",
     crisis_explosion: "Explosion", crisis_chemical: "Chemical",
     crisis_conflict: "Conflict", crisis_unrest: "Civil unrest",
-    damage_minimal: "Minimal", damage_partial: "Partial", damage_complete: "Complete",
+    // v3 redesign Q15 (May 2026) — plain-language chip labels match the
+    // longer minimal_damage / partial_damage / complete_damage labels in
+    // i18n/*.json. Backend enum (MINIMAL / PARTIAL / COMPLETE) unchanged.
+    damage_minimal: "Minimal", damage_partial: "Partly damaged", damage_complete: "Fully destroyed",
     // 3 pressing-needs keys the v4 review page references but the
     // existing en.json didn't have (only had `need_water` + `need_cash`).
     need_food_water: "Food / water", need_health: "Healthcare", need_shelter: "Shelter",

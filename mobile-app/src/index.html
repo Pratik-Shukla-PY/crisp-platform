@@ -559,21 +559,32 @@
                 <span data-i18n="v4_ai_filled">AI suggested these — tap to change.</span>
             </div>
 
-            <!-- Q1: damage classification (3 chips, defaults Partial) -->
+            <!-- Q1: damage classification (3 chips, defaults Partial)
+                 May 2026 (UI v3 redesign Q13) — replaced tiny ● with 4-channel
+                 encoding: distinct SHAPE per severity (○ △ ✕) + colour + word.
+                 Colour-blind users still get full information from shape alone.
+                 SVG circles are 22 px so they're visible at the lowest tier
+                 zoom and contrast against any background. -->
             <section class="v4-section">
                 <h2 class="v4-section-title" data-i18n="v4_q_damage">How bad is the damage?</h2>
                 <div class="v4-chip-row" id="v4-chips-damage" role="radiogroup" aria-label="Damage severity">
                     <button class="v4-chip" data-value="MINIMAL" type="button" role="radio" aria-checked="false">
-                        <span class="v4-chip-dot v4-chip-dot-min" aria-hidden="true">●</span>
+                        <span class="v4-chip-glyph v4-chip-glyph-min" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>
+                        </span>
                         <span class="v4-chip-label" data-i18n="damage_minimal">Minimal</span>
                     </button>
                     <button class="v4-chip is-selected" data-value="PARTIAL" type="button" role="radio" aria-checked="true">
-                        <span class="v4-chip-dot v4-chip-dot-partial" aria-hidden="true">●</span>
-                        <span class="v4-chip-label" data-i18n="damage_partial">Partial</span>
+                        <span class="v4-chip-glyph v4-chip-glyph-partial" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        </span>
+                        <span class="v4-chip-label" data-i18n="damage_partial">Partly damaged</span>
                     </button>
                     <button class="v4-chip" data-value="COMPLETE" type="button" role="radio" aria-checked="false">
-                        <span class="v4-chip-dot v4-chip-dot-complete" aria-hidden="true">●</span>
-                        <span class="v4-chip-label" data-i18n="damage_complete">Complete</span>
+                        <span class="v4-chip-glyph v4-chip-glyph-complete" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                        </span>
+                        <span class="v4-chip-label" data-i18n="damage_complete">Fully destroyed</span>
                     </button>
                 </div>
             </section>
