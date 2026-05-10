@@ -2066,6 +2066,38 @@ const _backendHost = _isLocalDev
     : window.location.origin;
 const API_BASE = `${_backendHost}/api/v1`;
 
+// ── Phase 16 (May 2026) — defensive media-URL resolver ──────────────────
+//
+// Centralises every "given a media/thumbnail URL string from the API,
+// produce a fetchable URL" decision so a future backend drift can't
+// re-introduce the broken-thumbnail bug.
+//
+// Backend contract (after the Phase 16 fix to `_thumb_url` in
+// reports.py): every URL returned for `media.url` / `thumbnail_url`
+// is either:
+//   • absolute https://… (legacy or external CDN)
+//   • backend path /api/v1/reports/media/<id>/<thumb|file>
+//   • /static/uploads/… (local-disk dev backend)
+//   • data:image/… (rare inline)
+//
+// If we still see `s3://` here, the backend regressed. Log it loudly
+// and fall back to an empty string so the caller's onerror handler
+// surfaces a placeholder instead of a broken-image alt-text.
+window._resolveMediaUrl = function _resolveMediaUrl(url) {
+    if (!url || typeof url !== 'string') return '';
+    if (url.startsWith('s3://') || url.startsWith('S3://')) {
+        // Backend regressed — see backend/app/api/endpoints/reports.py
+        // `_thumb_url`. Surface a placeholder rather than 404.
+        try { console.warn('[media] raw s3:// URL — backend rewrite broke. Falling back to placeholder.', url); } catch (_) {}
+        return '';
+    }
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+        return url;
+    }
+    // Backend paths — concatenate with host.
+    return `${_backendHost}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 // ── IP Geolocation fallback ────────────────────────────────────────────────────
 // Used when GPS is unavailable (macOS desktop, HTTP non-localhost, permission denied).
 // All endpoints use HTTPS so this works on both HTTP and HTTPS pages.
@@ -8075,15 +8107,23 @@ function _renderRdMiniMap(r) {
     const mapEl = document.getElementById('rd-minimap');
     const coordsEl = document.getElementById('rd-minimap-coords');
     if (!wrap || !mapEl) return;
-    const loc = r.location || {};
-    const lat = Number(loc.lat);
-    const lng = Number(loc.lng || loc.lon);
+    // Phase 16 — backend returns `latitude` / `longitude`, not `lat`/`lng`.
+    // Read both shapes so the M5 mini-map actually renders (the Phase-9
+    // feature never worked on PROD because of this name mismatch).
+    const [lat, lng] = _coordsFromLocation(r.location);
     const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
     if (!hasCoords) { wrap.style.display = 'none'; return; }
     if (typeof window.L === 'undefined') {
-        // Leaflet hasn't loaded yet (rare — building-select pulls it on
-        // boot). Hide the wrap rather than ship a broken div.
-        wrap.style.display = 'none';
+        // Leaflet not yet loaded — kick off a lazy load via BuildingSelect
+        // (Phase 16 — was a hard exit; cold-opening My Reports / detail
+        // before visiting the capture flow never had Leaflet available).
+        if (window.BuildingSelect && typeof window.BuildingSelect.ensureLeaflet === 'function') {
+            window.BuildingSelect.ensureLeaflet().then(() => {
+                if (typeof window.L !== 'undefined') _renderRdMiniMap(r);
+            }).catch(() => { wrap.style.display = 'none'; });
+        } else {
+            wrap.style.display = 'none';
+        }
         return;
     }
     wrap.style.display = '';
@@ -8413,10 +8453,9 @@ async function _renderSubmittedReports() {
         // (UI v3 redesign Q3) — robust onerror fallback swaps to the
         // placeholder if the URL fails (covers any future presigned-URL
         // expiry / CORS / 404 case so judges never see leaking alt text).
-        const thumbUrl = r.thumbnail_url
-            ? (r.thumbnail_url.startsWith('http') ? r.thumbnail_url
-               : `${_backendHost}${r.thumbnail_url.startsWith('/') ? '' : '/'}${r.thumbnail_url}`)
-            : '';
+        // Phase 16: routed through window._resolveMediaUrl so any future
+        // s3:// regression surfaces the placeholder cleanly (never a 404).
+        const thumbUrl = window._resolveMediaUrl(r.thumbnail_url);
         const thumbHtml = thumbUrl
             ? `<img class="mr-card-thumb" src="${escapeHtmlSimple(thumbUrl)}" alt="" loading="lazy"
                     onerror="this.outerHTML='<div class=&quot;mr-card-thumb mr-card-thumb-placeholder&quot;><i class=&quot;fa-solid fa-camera&quot;></i></div>'">`
@@ -8499,13 +8538,43 @@ async function _renderSubmittedReports() {
 // report in the filtered set has coords.
 let _mrMapInstance = null;
 let _mrMapMarkers = [];
+// Phase 16 — small helper that reads BOTH the PWA-internal {lat,lng,lon}
+// shape (used by state.location) and the backend's {latitude,longitude}
+// shape (returned by the status-since aggregator). Fixes the M6 map
+// view + the M5 mini-map, which previously read `loc.lat`/`loc.lng`
+// and saw `undefined` because the backend emits `latitude/longitude`.
+function _coordsFromLocation(loc) {
+    if (!loc) return [NaN, NaN];
+    const lat = Number(loc.lat ?? loc.latitude);
+    const lng = Number(loc.lng ?? loc.lon ?? loc.longitude);
+    return [lat, lng];
+}
+
 function _renderMyReportsMap(reports) {
     const mapEl = document.getElementById('mr-map');
     const emptyEl = document.getElementById('mr-map-empty');
-    if (!mapEl || typeof window.L === 'undefined') return;
+    if (!mapEl) return;
+    // Phase 16 — was a silent early-return when window.L was undefined,
+    // which is the cold-open case (Leaflet only loads when the user
+    // visits the building picker). Now kick off a lazy load via
+    // BuildingSelect and retry once it's ready.
+    if (typeof window.L === 'undefined') {
+        if (window.BuildingSelect && typeof window.BuildingSelect.ensureLeaflet === 'function') {
+            window.BuildingSelect.ensureLeaflet().then(() => {
+                if (typeof window.L !== 'undefined') _renderMyReportsMap(reports);
+            }).catch((e) => {
+                console.warn('[M6] Leaflet eager-load failed:', e);
+                if (emptyEl) emptyEl.style.display = '';
+                mapEl.style.display = 'none';
+            });
+        } else if (emptyEl) {
+            emptyEl.style.display = '';
+            mapEl.style.display = 'none';
+        }
+        return;
+    }
     const withCoords = reports.filter((r) => {
-        const lat = Number(r.location && r.location.lat);
-        const lng = Number(r.location && (r.location.lng || r.location.lon));
+        const [lat, lng] = _coordsFromLocation(r.location);
         return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
     });
     if (!withCoords.length) {
@@ -8516,10 +8585,11 @@ function _renderMyReportsMap(reports) {
     if (emptyEl) emptyEl.style.display = 'none';
     mapEl.style.display = '';
     if (!_mrMapInstance) {
+        const [lat0, lng0] = _coordsFromLocation(withCoords[0].location);
         _mrMapInstance = window.L.map(mapEl, {
             zoomControl: true,
             attributionControl: false,
-        }).setView([withCoords[0].location.lat, withCoords[0].location.lng || withCoords[0].location.lon], 5);
+        }).setView([lat0, lng0], 5);
         window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 18,
         }).addTo(_mrMapInstance);
@@ -8529,8 +8599,7 @@ function _renderMyReportsMap(reports) {
     _mrMapMarkers = [];
     const bounds = [];
     for (const r of withCoords) {
-        const lat = Number(r.location.lat);
-        const lng = Number(r.location.lng || r.location.lon);
+        const [lat, lng] = _coordsFromLocation(r.location);
         const st = _mapReportStatus(r);
         const m = window.L.marker([lat, lng], { title: `${st.icon} ${st.label}` });
         m.on('click', () => openReportDetail(r.id || r.client_report_id));
@@ -8561,6 +8630,21 @@ function setupMyReportsControls() {
             ctrl.querySelectorAll('.mr-filter-chip').forEach((c) => {
                 c.classList.toggle('is-active', c === chip);
             });
+            // Phase 16 — chips beyond the visible viewport (Help sent /
+            // Rejected on 390px screens) used to stay off-screen after
+            // selection so the user couldn't see which filter was
+            // active. scrollIntoView centres the active chip in the
+            // scroll container.
+            try {
+                chip.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            } catch (_) {
+                // Older Safari without scrollIntoView options — fall
+                // back to a manual scrollLeft adjust.
+                try {
+                    const row = chip.parentElement;
+                    if (row) row.scrollLeft = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2;
+                } catch (__) {}
+            }
             _renderSubmittedReports().catch(() => {});
         });
     });
@@ -8756,21 +8840,31 @@ function renderReportDetail(r) {
     // and (b) non-zero coords. Hidden gracefully otherwise.
     try { _renderRdMiniMap(r); } catch (e) { console.warn('[M5] mini-map:', e); }
 
-    // Photo (fallback to placeholder)
+    // Photo (fallback to placeholder).
+    // Phase 16 — (a) URL routed through window._resolveMediaUrl so any
+    // future s3:// regression surfaces a placeholder cleanly. (b) Added
+    // onerror swap matching the card-thumb pattern (was missing — broken
+    // URLs used to surface the literal "Report photo" alt text in giant
+    // grey letters, Delta-S2 in the May 2026 audit). (c) Photo node is
+    // re-built on every render so a previous placeholder swap doesn't
+    // strand the wrap without an <img> element on the next view.
     const photoWrap = document.getElementById('rd-photo-wrap');
-    const photo = document.getElementById('rd-photo');
-    if (photoWrap && photo) {
-        const url = r.thumbnail_url
-            ? (r.thumbnail_url.startsWith('http') ? r.thumbnail_url
-                : `${_backendHost}${r.thumbnail_url.startsWith('/') ? '' : '/'}${r.thumbnail_url}`)
-            : '';
+    if (photoWrap) {
+        const url = window._resolveMediaUrl(r.thumbnail_url);
         if (url) {
+            photoWrap.innerHTML = '<img id="rd-photo" src="" alt="" loading="lazy">';
+            const photo = photoWrap.querySelector('#rd-photo');
             photo.src = url;
             photoWrap.style.display = '';
             photo.onclick = () => {
                 if (typeof window.openLightbox === 'function') {
                     window.openLightbox(url, 'Report photo');
                 }
+            };
+            photo.onerror = () => {
+                try {
+                    photoWrap.innerHTML = '<div class="rd-photo-placeholder" aria-label="Photo unavailable"><i class="fa-solid fa-camera" aria-hidden="true"></i></div>';
+                } catch (_) {}
             };
         } else {
             photoWrap.style.display = 'none';

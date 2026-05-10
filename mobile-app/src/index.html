@@ -1280,6 +1280,18 @@
                 <i class="fa-solid fa-link-slash"></i>
                 <span data-i18n="settings_unlink_device">Unlink this device</span>
             </button>
+            <!-- Phase 16 (May 2026) — bulk delete relocated here from
+                 the legacy <details class="history-advanced"> accordion at
+                 the bottom of stage-history. The existing app.js handler
+                 binds to #btn-history-delete-all by ID, so the action
+                 keeps working without code changes. Settings is the
+                 right surface for destructive account-level actions
+                 (matches Logout's placement). -->
+            <button class="nav-btn danger" id="btn-history-delete-all" type="button">
+                <i class="fa-solid fa-trash-can"></i>
+                <span data-i18n="delete_all_my_reports">Delete all my reports</span>
+            </button>
+            <p class="settings-note" data-i18n="delete_all_note">This removes every report you've sent from this device. Your data will be permanently deleted within 24 hours.</p>
             <button class="nav-btn danger" id="btn-settings-logout" type="button">
                 <i class="fa-solid fa-right-from-bracket"></i>
                 <span data-i18n="settings_logout">Logout</span>
@@ -2200,20 +2212,13 @@
              revealed via an Advanced accordion. Individual per-report
              deletion happens from each card's detail view (see
              stage-report-detail below). -->
-        <details class="history-advanced" id="history-advanced">
-            <summary class="history-advanced-summary">
-                <i class="fa-solid fa-sliders"></i>
-                <span data-i18n="advanced">Advanced</span>
-                <i class="fa-solid fa-chevron-down history-advanced-chevron"></i>
-            </summary>
-            <div class="history-advanced-body">
-                <button class="history-delete-all" id="btn-history-delete-all" type="button">
-                    <i class="fa-solid fa-trash-can"></i>
-                    <span data-i18n="delete_all_my_reports">Delete all my reports</span>
-                </button>
-                <p class="history-delete-note" data-i18n="delete_all_note">This removes every report you've sent from this device. Your data will be permanently deleted within 24 hours.</p>
-            </div>
-        </details>
+        <!-- Phase 16 (May 2026) — the legacy "Advanced" <details> with the
+             "Delete all my reports" button was visually inconsistent with
+             the M6 layout above (filter chips + groups + map). The button
+             moved into stage-settings (always reachable, plus the account
+             dropdown for logged-in users); the bulk-delete handler in
+             app.js keeps its existing #btn-history-delete-all id by being
+             rendered there. -->
     </div>
 
     <!-- ══════════════════════════════════════

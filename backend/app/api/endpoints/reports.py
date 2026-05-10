@@ -1256,7 +1256,36 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
         """Pick the SMALL photo variant if available — cheap to download,
         always sized for a card thumbnail. Falls back to MEDIUM → any
         complete IMAGE → first IMAGE's thumbnail_url. Returns None when
-        the report has no photos yet."""
+        the report has no photos yet.
+
+        May 2026 (Phase 16, Delta-thumb-S1) — bug fix: this helper used to
+        return ``m.url`` raw, which on PROD (``MEDIA_BACKEND=s3``) is an
+        ``s3://crisp-uploads/...`` URI. ``MediaResponse``'s
+        ``field_serializer`` rewrites those to ``/api/v1/reports/media/<id>/<file|thumb>``
+        on JSON encode, but this aggregator returns a plain dict so the
+        serializer never fires. Result: every PROD client received
+        ``s3://...`` and concatenated it onto the host, producing a 404 and
+        the onerror placeholder for every card thumbnail. The
+        ``_stable_url`` helper mirrors the serializer's logic so the
+        rewrite happens here too — guaranteeing stable thumbnails across
+        every list / detail / recent-reports surface that consumes this
+        endpoint.
+        """
+        def _stable_url(m, *, prefer_file=False):
+            """Mirror MediaResponse.field_serializer's rewrite for one
+            media row. Returns a stable backend route for s3:// URLs;
+            pass-through for /static/, data:, http(s)://.
+
+            ``prefer_file=False`` (default) → /thumb; ``True`` → /file.
+            We default to /thumb because every caller of _thumb_url is
+            a list-card / small-preview surface."""
+            if not (m and m.url):
+                return None
+            if m.url.startswith('s3://'):
+                suffix = 'file' if prefer_file else 'thumb'
+                return f'/api/v1/reports/media/{m.id}/{suffix}'
+            return m.url
+
         images = [m for m in (r.media or []) if m.type.value == 'IMAGE']
         if not images:
             return None
@@ -1265,13 +1294,20 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
             for m in images:
                 if (m.resolution_tier and m.resolution_tier.value == tier_preference and
                         m.assembly_status == 'complete' and m.url):
-                    return m.url
+                    return _stable_url(m)
         # Fallback: any complete variant at all.
         for m in images:
             if m.assembly_status == 'complete' and m.url:
-                return m.url
-        # Last resort: the partial-assembly preview thumbnail.
-        return images[0].thumbnail_url
+                return _stable_url(m)
+        # Last resort: the partial-assembly preview thumbnail. Still
+        # rewrite s3:// if present; the partial-thumb field is sometimes
+        # written as s3:// during chunked-upload assembly.
+        last = images[0]
+        if last and last.thumbnail_url:
+            if last.thumbnail_url.startswith('s3://'):
+                return f'/api/v1/reports/media/{last.id}/thumb'
+            return last.thumbnail_url
+        return None
 
     def _location(r):
         """Return a compact location descriptor. Prefers user-entered

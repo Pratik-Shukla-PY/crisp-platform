@@ -603,5 +603,10 @@
         });
     }
 
-    window.BuildingSelect = { ensureMap, getSelection, preCacheNearest };
+    // Phase 16 (May 2026) — `ensureLeaflet` is now part of the public
+    // surface so My Reports' map-view + the report-detail mini-map can
+    // eager-load Leaflet on first interaction. Before this, both
+    // features silently no-op'd whenever the user hadn't already entered
+    // the capture flow's building picker.
+    window.BuildingSelect = { ensureMap, getSelection, preCacheNearest, ensureLeaflet: _ensureLeaflet };
 })();

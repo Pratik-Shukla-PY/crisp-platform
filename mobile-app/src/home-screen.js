@@ -560,9 +560,16 @@
                 return '';
             })();
             const status = String(r.status || 'PENDING').toLowerCase();
-            const thumbUrl = r.thumbnail_url || '';
+            // Phase 16 — route through window._resolveMediaUrl so any
+            // future s3:// regression surfaces a placeholder cleanly.
+            // onerror handler swaps the broken <img> for the camera
+            // icon (matches the card-thumb pattern in app.js).
+            const thumbUrl = (typeof window._resolveMediaUrl === 'function')
+                ? window._resolveMediaUrl(r.thumbnail_url)
+                : (r.thumbnail_url || '');
             const thumb = thumbUrl
-                ? `<img src="${thumbUrl}" alt="" loading="lazy">`
+                ? `<img src="${thumbUrl}" alt="" loading="lazy"
+                        onerror="this.outerHTML='<i class=&quot;fa-solid fa-camera&quot; aria-hidden=&quot;true&quot;></i>'">`
                 : `<i class="fa-solid fa-camera" aria-hidden="true"></i>`;
             const escape = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',

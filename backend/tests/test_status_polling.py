@@ -220,3 +220,99 @@ class TestDeviceDeletion:
 
         # Silence unused-variable warnings; a1/a2 only seed the DB.
         del a1, a2
+
+
+class TestThumbUrlStableContract:
+    """Phase 16 (May 2026) — every `thumbnail_url` returned by
+    /reports/device/<hash>/status-since (or the general /reports/
+    listing) MUST be a stable, fetchable URL. Specifically: never a
+    raw ``s3://`` URI, because the PWA concatenates it onto the host
+    and ends up GETting ``https://undp/.../s3://...`` → 404.
+
+    Root cause history (audit MYREPORTS-AUDIT.md): `_thumb_url(r)` in
+    reports.py used to return ``m.url`` raw. On PROD `MEDIA_BACKEND=s3`
+    that's an ``s3://crisp-uploads/...`` string. The MediaResponse
+    field_serializer's ``s3://...`` → ``/api/v1/reports/media/<id>/<…>``
+    rewrite only runs when a MediaResponse instance is JSON-encoded,
+    but the aggregator returns a plain dict — bypassing the serializer.
+
+    The fix (this PR): _thumb_url now applies the same rewrite inline.
+    These tests pin the contract so any future drift fails CI.
+    """
+
+    def test_status_since_never_returns_raw_s3_url(self, client, db):
+        """Inject a Media row with an ``s3://...`` URL directly into the
+        DB, then verify that the status-since aggregator surfaces a
+        stable /api/v1/reports/media/<id>/thumb path instead of the
+        raw s3 URI.
+
+        The /meta endpoint doesn't expose a way to attach media URLs
+        from outside, so we set one directly on the SQLAlchemy model
+        for this test. This isolates the rewrite logic from the
+        upload pipeline.
+        """
+        from app.models.report import Media, MediaTypeEnum, ResolutionEnum
+
+        r = _create_report(client, "DEV-S3-CONTRACT", "thumb URL contract test")
+        # Attach a complete SMALL image variant pointing at an s3:// URL.
+        m = Media(
+            report_id=r["id"],
+            type=MediaTypeEnum.IMAGE,
+            url="s3://crisp-uploads/photo-deadbeef.jpg",
+            resolution_tier=ResolutionEnum.LOW,
+            assembly_status="complete",
+            is_synced=True,
+        )
+        db.add(m)
+        db.commit()
+
+        res = client.get(
+            "/api/v1/reports/device/DEV-S3-CONTRACT/status-since"
+        )
+        assert res.status_code == 200
+        rows = res.json()
+        assert len(rows) == 1
+        thumb = rows[0]["thumbnail_url"]
+        assert thumb is not None, \
+            "expected a stable thumbnail_url, got None"
+        assert not thumb.startswith("s3://"), (
+            f"thumbnail_url leaked a raw s3:// URL: {thumb!r}. "
+            "_thumb_url() in reports.py must rewrite s3:// → "
+            "/api/v1/reports/media/<id>/<thumb|file>."
+        )
+        # Positive assertion: the stable form.
+        assert thumb == f"/api/v1/reports/media/{m.id}/thumb", \
+            f"expected /api/v1/reports/media/{m.id}/thumb, got {thumb!r}"
+
+    def test_passes_through_https_thumb_url(self, client, db):
+        """Non-s3 URLs (legacy disk paths, absolute https://) are pass-
+        through. Only the s3:// case gets rewritten."""
+        from app.models.report import Media, MediaTypeEnum, ResolutionEnum
+
+        r = _create_report(client, "DEV-HTTPS-PASSTHRU", "https passthru test")
+        m = Media(
+            report_id=r["id"],
+            type=MediaTypeEnum.IMAGE,
+            url="https://cdn.example.com/photo.jpg",
+            resolution_tier=ResolutionEnum.LOW,
+            assembly_status="complete",
+            is_synced=True,
+        )
+        db.add(m)
+        db.commit()
+
+        res = client.get(
+            "/api/v1/reports/device/DEV-HTTPS-PASSTHRU/status-since"
+        )
+        thumb = res.json()[0]["thumbnail_url"]
+        assert thumb == "https://cdn.example.com/photo.jpg", \
+            f"non-s3 URL should pass through unchanged, got {thumb!r}"
+
+    def test_no_image_returns_null(self, client):
+        """Reports with no media → thumbnail_url is None (the PWA
+        renders the camera placeholder)."""
+        _create_report(client, "DEV-NO-IMAGE", "no media")
+        res = client.get("/api/v1/reports/device/DEV-NO-IMAGE/status-since")
+        rows = res.json()
+        assert len(rows) == 1
+        assert rows[0]["thumbnail_url"] is None
