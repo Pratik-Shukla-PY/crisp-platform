@@ -566,7 +566,7 @@
                  SVG circles are 22 px so they're visible at the lowest tier
                  zoom and contrast against any background. -->
             <section class="v4-section">
-                <h2 class="v4-section-title" data-i18n="v4_q_damage">How bad is the damage?</h2>
+                <h2 class="v4-section-title" data-i18n="v4_q_damage" data-voice="v4_q_damage">How bad is the damage?</h2>
                 <div class="v4-chip-row" id="v4-chips-damage" role="radiogroup" aria-label="Damage severity">
                     <button class="v4-chip" data-value="MINIMAL" type="button" role="radio" aria-checked="false">
                         <span class="v4-chip-glyph v4-chip-glyph-min" aria-hidden="true">
@@ -591,7 +591,7 @@
 
             <!-- Q2: infrastructure type (8 UNDP super-types as carousel) -->
             <section class="v4-section">
-                <h2 class="v4-section-title" data-i18n="v4_q_infra">What was hit?</h2>
+                <h2 class="v4-section-title" data-i18n="v4_q_infra" data-voice="v4_q_infra">What was hit?</h2>
                 <div class="v4-carousel" id="v4-carousel-infra"
                      data-options='[
                         {"v":"RESIDENTIAL","i":"fa-house","l":"Residential","k":"infra_residential"},
@@ -607,7 +607,7 @@
 
             <!-- Q3: crisis type (9 UNDP types as carousel) -->
             <section class="v4-section">
-                <h2 class="v4-section-title" data-i18n="v4_q_crisis">What caused it?</h2>
+                <h2 class="v4-section-title" data-i18n="v4_q_crisis" data-voice="v4_q_crisis">What caused it?</h2>
                 <div class="v4-carousel" id="v4-carousel-crisis"
                      data-options='[
                         {"v":"EARTHQUAKE","i":"fa-house-crack","l":"Earthquake","k":"crisis_earthquake"},
@@ -1937,6 +1937,10 @@
      ready; app.js's applyI18n re-walks them on locale activation. -->
 <script src="install-prompt.js?v=1"></script>
 <script src="home-screen.js?v=1"></script>
+<!-- v3 (May 2026, Q11/Flag-4 + M7) — voice readout button auto-attached
+     to every [data-voice="<i18n-key>"] element. Loaded BEFORE app.js
+     so the helper is available during stage-render dispatches. -->
+<script src="voice-readout.js?v=1"></script>
 <script src="app.js?v=1030"></script>
 <!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
      applyI18n etc. Internally it _whenReady-polls until those are set. -->

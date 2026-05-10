@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v85';  // v85 (May 2026): UI v3 redesign Phase 3 — Q13 severity 4-channel encoding. v4 damage chips: tiny ● dot replaced with distinct SHAPE per severity (○ for Minimal, △ for Partly damaged, ✕ for Fully destroyed) via Lucide-style 22 px SVG. Colour-blind users (~8% of men) now get full information from shape alone. Chip i18n labels also synced to plain-language Q15 wording. Phase 1 (v83) + Phase 2 (v84) wins still in.
+const CACHE_NAME = 'crisp-v86';  // v86 (May 2026): UI v3 redesign Phase 5 — M7 voice readout (Flag-4 approved). New voice-readout.js module: 🔊 button auto-attached to every [data-voice="<i18n-key>"] element. Tap reads question aloud in user's language via Web Speech API + device-local TTS voices (works offline). Wired to v4 capture-flow question titles (How bad / What was hit / What caused it). Pulses while speaking. Hidden when SpeechSynthesis unavailable. Pre-cached in STATIC_ASSETS for offline use. Phases 1-3 wins still in.
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.
@@ -427,6 +427,7 @@ const STATIC_ASSETS = [
     SW_BASE + 'auth.js',             // Phase 1 (Apr 2026) optional reporter login
     SW_BASE + 'install-prompt.js',   // UI v4 (May 2026) — beforeinstallprompt + iOS sheet
     SW_BASE + 'home-screen.js',      // May 2026 — merged always-on home (replaces landing.js)
+    SW_BASE + 'voice-readout.js',    // UI v3 (May 2026 Phase 5 / M7) — 🔊 button per question
     SW_BASE + 'v4-flow.js',          // UI v4 (May 2026) — 3-page capture flow + carousels + AI pre-fill
     // May 2026 — vendor/blazeface/model.json + .bin REMOVED from
     // pre-cache. They're loaded on demand by pii-blur.js::ensureModel
