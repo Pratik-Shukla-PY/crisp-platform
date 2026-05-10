@@ -88,34 +88,32 @@
     }
 
     // ── Channel button HTML builder ─────────────────────────────────────
-    // Mirrors landing.js's `ch()` helper exactly so the markup pattern
-    // (data-channel + lc-icon + lc-soon) stays consistent with existing
-    // styles.css selectors after the .landing-* → .home-* rename.
+    // May 2026 (UI v3 redesign Q1) — "Coming soon" placeholders removed.
+    // Channels and native-app links render only when an actual URL is
+    // configured. If a row ends up empty, the entire section (header +
+    // wrapper) is hidden so the home page collapses cleanly. Saves
+    // ~30% of vertical real estate above the fold under stress.
     function _buildChannelBtn(icon, label, href, key) {
-        const disabled = !href;
-        const tag = disabled ? 'button' : 'a';
-        const hrefAttr = disabled ? '' : `href="${href}"`;
-        const targetAttr = disabled ? '' : (
+        if (!href) return '';   // skip — was "Coming soon" before
+        const targetAttr = (
             href.startsWith('tel:') || href.startsWith('sms:') || href.startsWith('exp:')
                 ? ''
                 : 'target="_blank" rel="noopener"'
         );
         return `
-            <${tag} class="home-channel ${disabled ? 'is-disabled' : ''}"
-                    ${hrefAttr} ${targetAttr}
-                    data-channel="${key}"
-                    ${disabled ? 'aria-disabled="true" type="button"' : ''}>
+            <a class="home-channel"
+               href="${href}" ${targetAttr}
+               data-channel="${key}">
                 <span class="lc-icon">${icon}</span>
                 <span class="lc-label">${label}</span>
-                ${disabled ? '<span class="lc-soon" data-i18n="coming_soon">Coming soon</span>' : ''}
-            </${tag}>
+            </a>
         `;
     }
 
     function _renderChannels() {
         const channelsEl = document.getElementById('home-channels');
         if (channelsEl) {
-            channelsEl.innerHTML = [
+            const html = [
                 _buildChannelBtn('<i class="fa-solid fa-phone"></i>',
                                  'IVR call',
                                  _telLink(CHANNELS.ivr_phone), 'ivr'),
@@ -128,18 +126,26 @@
                 _buildChannelBtn('<i class="fa-brands fa-whatsapp"></i>',
                                  'WhatsApp',
                                  _whatsappLink(CHANNELS.whatsapp_phone, 'CRISP report'), 'whatsapp'),
-            ].join('');
+            ].filter(Boolean).join('');
+            channelsEl.innerHTML = html;
+            // Hide the whole "Or report through:" section if no real channels.
+            const channelsSection = channelsEl.closest('.home-section');
+            if (channelsSection) channelsSection.style.display = html.trim() ? '' : 'none';
         }
         const appsEl = document.getElementById('home-apps');
         if (appsEl) {
-            appsEl.innerHTML = [
+            const html = [
                 _buildChannelBtn('<i class="fa-brands fa-apple"></i>',
                                  'iOS', CHANNELS.ios_app_url, 'ios'),
                 _buildChannelBtn('<i class="fa-brands fa-android"></i>',
                                  'Android', CHANNELS.android_app_url, 'android'),
                 _buildChannelBtn('<i class="fa-solid fa-flask"></i>',
                                  'Expo Go', CHANNELS.expo_go_url, 'expo'),
-            ].join('');
+            ].filter(Boolean).join('');
+            appsEl.innerHTML = html;
+            // Hide the whole "Get the app:" section if no real native apps.
+            const appsSection = appsEl.closest('.home-section');
+            if (appsSection) appsSection.style.display = html.trim() ? '' : 'none';
         }
     }
 

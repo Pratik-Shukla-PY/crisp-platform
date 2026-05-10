@@ -648,7 +648,7 @@ const I18N = {
         autosub_click_anywhere: "Tap to cancel",
         photo_attached: "✅ Added", your_message: "Message:", type_your_msg: "Type...",
         what_damaged: "Damage?", road: "Road", hospital: "Clinic", house: "Home", power: "Power", water: "Water", other: "Other",
-        severity_label: "Severity?", minor: "Low", moderate: "Mid", severe: "High", ready_send: "READY",
+        severity_label: "Severity?", minor: "Low", moderate: "Moderate", severe: "High", ready_send: "READY",
         s4_title: "SEND", s4_sub: "Tap below",
         report_id: "ID:", send_undp: "SEND", go_back: "Edit",
         // PR 7 (Apr 2026): success screen re-framed — warm close-out instead
@@ -719,11 +719,13 @@ const I18N = {
         // (MINIMAL / PARTIAL / COMPLETE) are unchanged; only the display
         // string is UNDP-aligned. Tooltip copy in the HTML carries the
         // full UNDP description for evaluator context.
-        minimal_damage: "Minimal / No damage",
-        no_damage: "Minimal / No damage",
-        partial_damage: "Partially damaged",
-        complete_damage: "Completely damaged",
-        destroyed: "Completely damaged",
+        // v3 redesign Q15 (May 2026) — plain-language user-facing labels.
+        // Backend enum (MINIMAL / PARTIAL / COMPLETE) unchanged.
+        minimal_damage: "Minimal",
+        no_damage: "Minimal",
+        partial_damage: "Partly damaged",
+        complete_damage: "Fully destroyed",
+        destroyed: "Fully destroyed",
         // UNDP descriptive tooltips — longer form seen on hover / aria-label.
         damage_tip_minimal: "Structurally sound and functional — cosmetic or no visible damage.",
         damage_tip_partial: "Repairable, still usable with caution.",
@@ -840,10 +842,13 @@ const I18N = {
         // — Language picker chrome —
         lang_picker_title: "Choose language",
         lang_picker_close: "Close",
-        // Apr 2026 §3.1 UX rewrite — picker is split into two sections so
-        // the UNDP six-official-languages requirement is the anchor.
-        lang_picker_un_section: "UN Official Languages",
-        lang_picker_other_section: "Other Languages",
+        // May 2026 (UI v3 redesign Q8) — neutral section labels. Users
+        // don't care about the UN classification; they want THEIR
+        // language. UN-priority sort order is preserved internally.
+        lang_picker_un_section: "Most common",
+        lang_picker_other_section: "All languages",
+        lang_picker_search_placeholder: "Search 24 languages…",
+        lang_picker_no_match: "No match. Try the language name in English or its native script.",
         // — Photo stage —
         no_photo: "No photo yet",
         // — Audio stage —
@@ -2871,10 +2876,14 @@ async function updateHomeImpactMetrics() {
         }
         verifiedEl.textContent = _fmtCompactNumber(verifiedCount);
         livesEl.textContent = _fmtCompactNumber(livesImpacted);
-        // Only show the card once we have real numbers to display (don't
-        // greet fresh installs with "0 verified"). The volume signal is
-        // deliberately not displayed — UNDP-incentive policy (§3.8).
-        wrap.style.display = (verifiedCount > 0 || livesImpacted > 0) ? 'flex' : 'none';
+        // May 2026 (UI v3 redesign Q2) — raise the show-threshold from
+        // "any > 0" to "≥ 5 verified". Showing "0 / 2" greeted users with
+        // a stat that hurt trust more than it helped. The volume signal
+        // is intentionally not displayed — UNDP §3.8 disincentivises raw
+        // submission volume in favour of quality.
+        const HIDE_BELOW_VERIFIED = 5;
+        const showCard = verifiedCount >= HIDE_BELOW_VERIFIED;
+        wrap.style.display = showCard ? 'flex' : 'none';
 
         // May 2026 v4 — also paint the landing card's impact panel if
         // it's currently mounted. Same data, mirror copy. Doing this
@@ -2885,7 +2894,7 @@ async function updateHomeImpactMetrics() {
         if (landingWrap && landingVerifiedEl && landingLivesEl) {
             landingVerifiedEl.textContent = _fmtCompactNumber(verifiedCount);
             landingLivesEl.textContent = _fmtCompactNumber(livesImpacted);
-            landingWrap.style.display = (verifiedCount > 0 || livesImpacted > 0) ? 'flex' : 'none';
+            landingWrap.style.display = showCard ? 'flex' : 'none';
         }
     } catch (e) {
         console.warn('[Home] impact metrics fetch failed:', e);
@@ -3485,8 +3494,48 @@ function detectAndSetupLanguage() {
         if (pickerOverlay) pickerOverlay.style.display = 'none';
     }
     function _openLangPicker() {
-        if (pickerOverlay) pickerOverlay.style.display = 'flex';
+        if (pickerOverlay) {
+            pickerOverlay.style.display = 'flex';
+            // v3 (May 2026 Q9): clear any prior search query when reopening,
+            // so the user always lands on the full list. Focus the input
+            // after a tick so the keyboard appears on mobile.
+            const searchInput = document.getElementById('lang-picker-search-input');
+            if (searchInput) {
+                searchInput.value = '';
+                _applyLangSearchFilter('');
+                setTimeout(() => searchInput.focus(), 50);
+            }
+        }
     }
+    // v3 (May 2026 Q9): filter language tiles by typed query. Matches
+    // both the English aria-label ("French") and the native-script label
+    // ("Français") so a user who types either reaches their language.
+    // Section headers + the empty state hide / show as a whole-row.
+    function _applyLangSearchFilter(rawQuery) {
+        if (!pickerOverlay) return;
+        const query = (rawQuery || '').trim().toLowerCase();
+        const flags = pickerOverlay.querySelectorAll('.lang-picker-flag');
+        let visibleCount = 0;
+        flags.forEach((flag) => {
+            const aria = (flag.getAttribute('aria-label') || '').toLowerCase();
+            const native = (flag.querySelector('.lpf-label')?.textContent || '').toLowerCase();
+            const code = (flag.dataset.lang || '').toLowerCase();
+            const matches = !query
+                || aria.includes(query)
+                || native.includes(query)
+                || code.startsWith(query);
+            flag.classList.toggle('lpf-hidden', !matches);
+            if (matches) visibleCount += 1;
+        });
+        // Hide section title + grid wholesale if section has no matches.
+        pickerOverlay.querySelectorAll('.lang-picker-section').forEach((sec) => {
+            const visible = sec.querySelectorAll('.lang-picker-flag:not(.lpf-hidden)').length;
+            sec.style.display = visible ? '' : 'none';
+        });
+        const empty = document.getElementById('lang-picker-empty');
+        if (empty) empty.style.display = visibleCount === 0 ? 'flex' : 'none';
+    }
+
     if (currentBtn) currentBtn.addEventListener('click', _openLangPicker);
     if (changeBtn) changeBtn.addEventListener('click', _openLangPicker);
     if (pickerOverlay) {
@@ -3495,6 +3544,12 @@ function detectAndSetupLanguage() {
         });
         const closeBtn = document.getElementById('lang-picker-close');
         if (closeBtn) closeBtn.addEventListener('click', _closeLangPicker);
+        const searchInput = document.getElementById('lang-picker-search-input');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                _applyLangSearchFilter(e.target.value);
+            });
+        }
         document.querySelectorAll('#lang-picker-overlay .lang-picker-flag').forEach(flag => {
             flag.addEventListener('click', () => {
                 const code = flag.dataset.lang;
@@ -7952,18 +8007,27 @@ async function _renderSubmittedReports() {
     list.innerHTML = reports.map((r) => {
         const st = _mapReportStatus(r);
         const loc = r.location || {};
+        // May 2026 (UI v3 redesign Q4) — prefer human place names; only fall
+        // back to coords as a last resort, and even then prefix with "📍" so
+        // the user knows it's a coordinate, not random numbers. Old reports
+        // with no place_name reverse-geocode lazily on dashboard; here we
+        // just present what we have.
         const placeName = loc.user_location_name || loc.device_location_name ||
             (Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)
-                ? `${loc.latitude.toFixed(3)}°, ${loc.longitude.toFixed(3)}°`
+                ? `📍 ${loc.latitude.toFixed(3)}°, ${loc.longitude.toFixed(3)}°`
                 : '');
         // Lazy-loaded thumbnail (loading="lazy") — large lists don't pay
-        // the download cost until the card scrolls into view.
+        // the download cost until the card scrolls into view. May 2026
+        // (UI v3 redesign Q3) — robust onerror fallback swaps to the
+        // placeholder if the URL fails (covers any future presigned-URL
+        // expiry / CORS / 404 case so judges never see leaking alt text).
         const thumbUrl = r.thumbnail_url
             ? (r.thumbnail_url.startsWith('http') ? r.thumbnail_url
                : `${_backendHost}${r.thumbnail_url.startsWith('/') ? '' : '/'}${r.thumbnail_url}`)
             : '';
         const thumbHtml = thumbUrl
-            ? `<img class="mr-card-thumb" src="${escapeHtmlSimple(thumbUrl)}" alt="Report photo" loading="lazy">`
+            ? `<img class="mr-card-thumb" src="${escapeHtmlSimple(thumbUrl)}" alt="" loading="lazy"
+                    onerror="this.outerHTML='<div class=&quot;mr-card-thumb mr-card-thumb-placeholder&quot;><i class=&quot;fa-solid fa-camera&quot;></i></div>'">`
             : `<div class="mr-card-thumb mr-card-thumb-placeholder"><i class="fa-solid fa-camera"></i></div>`;
         const dateText = _timeAgo(r.server_created_at || r.updated_at);
         // Apr 2026: "N lives" string now translated. Uses one-/many-
@@ -8395,6 +8459,16 @@ function _showCelebration(message) {
 }
 
 // ── Gamification Badge Fetch ─────────────────────────────────────────────────
+//
+// May 2026 (UI v3 redesign Q5) — fixed the "Newcomer · 16 reports submitted ·
+// Next: Helper (3 reports)" copy bug. Two real bugs:
+//   1. Progress bar used `report_count` but badge_level is computed by
+//      backend from `verified_count` — so a user with 16 raw / 2 verified
+//      saw "Newcomer" with a 100%+-full bar (533% rendered as capped 100%).
+//   2. "Next: Helper (3 reports)" showed the THRESHOLD (3) not the
+//      remaining gap to next tier.
+// Fix: progress + count both use verified_count (the same number that
+// drives the level). "Next" shows REMAINING gap, not absolute threshold.
 async function fetchBadge(deviceHash) {
     // Skip cleanly when offline — no console noise mid-flow.
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
@@ -8404,21 +8478,34 @@ async function fetchBadge(deviceHash) {
         const p = await res.json();
         const badges = { NEWCOMER: '🌱', HELPER: '🤝', GUARDIAN: '🛡', HERO: '🦸' };
         const tiers = [
-            { level: 'NEWCOMER', need: 1, next: 'Helper', nextNeed: 3 },
+            { level: 'NEWCOMER', need: 0, next: 'Helper', nextNeed: 3 },
             { level: 'HELPER', need: 3, next: 'Guardian', nextNeed: 10 },
             { level: 'GUARDIAN', need: 10, next: 'Hero', nextNeed: 25 },
             { level: 'HERO', need: 25, next: null, nextNeed: 25 },
         ];
         const tier = tiers.find(t => t.level === p.badge_level) || tiers[0];
-        const pct = tier.next ? Math.min(100, Math.round((p.report_count / tier.nextNeed) * 100)) : 100;
+        // Use verified_count (the number that drives badge promotion) for
+        // both the progress bar and the displayed count. Falls back to
+        // report_count if the backend hasn't populated verified_count yet
+        // (legacy rows pre-Apr-2026 migration).
+        const verifiedCount = Number.isFinite(p.verified_count) ? p.verified_count
+                            : (Number.isFinite(p.report_count) ? p.report_count : 0);
+        const remaining = tier.next ? Math.max(0, tier.nextNeed - verifiedCount) : 0;
+        const pct = tier.next
+            ? Math.min(100, Math.round(((verifiedCount - tier.need) / (tier.nextNeed - tier.need)) * 100))
+            : 100;
 
         const card = document.getElementById('badge-card');
         if (card) {
             document.getElementById('badge-icon').textContent = badges[p.badge_level] || '🌱';
             document.getElementById('badge-level').textContent = p.badge_level.charAt(0) + p.badge_level.slice(1).toLowerCase();
-            document.getElementById('badge-count').textContent = `${p.report_count} report${p.report_count !== 1 ? 's' : ''} submitted`;
+            document.getElementById('badge-count').textContent = `${verifiedCount} verified report${verifiedCount !== 1 ? 's' : ''}`;
             document.getElementById('badge-bar-fill').style.width = pct + '%';
-            document.getElementById('badge-next').textContent = tier.next ? `Next: ${tier.next} (${tier.nextNeed} reports)` : 'Max level reached!';
+            document.getElementById('badge-next').textContent = tier.next
+                ? (remaining > 0
+                    ? `${remaining} more to ${tier.next}`
+                    : `Promoting to ${tier.next} soon…`)
+                : 'Max level reached!';
             card.style.display = 'flex';
         }
     } catch (_) {}

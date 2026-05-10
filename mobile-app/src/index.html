@@ -109,7 +109,16 @@
         </div>
     </div>
 
-    <!-- Language picker overlay — full list. Opened by #btn-lang-current. -->
+    <!-- Language picker overlay — full list. Opened by #btn-lang-current.
+         May 2026 (UI v3 redesign Q8 + Q9):
+           - "UN OFFICIAL LANGUAGES" header dropped (jargon — users don't
+             care about the UN classification, just their language). The
+             6 UN languages still float to the top by sort priority but
+             are presented under the neutral "Most common" header.
+           - Country-code prefixes (GB / FR / IN…) dropped from the visible
+             label. .lpf-iso retained for the Edge-on-Windows fallback only.
+           - "Other Languages" → "All languages" (less second-class).
+           - Search bar added at top — filters by both Latin and native script. -->
     <div id="lang-picker-overlay" class="lang-picker-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Choose language">
         <div class="lang-picker-sheet">
             <h2 class="lang-picker-title" data-i18n="lang_picker_title">Choose language</h2>
@@ -117,64 +126,68 @@
                  above the main grid when a detected local differs from the
                  active locale. "📍 Your region: ಕನ್ನಡ" style hint. -->
             <div id="lang-picker-suggested" class="lang-picker-suggested" style="display:none;"></div>
-            <!-- April 2026 §3.1 UX rewrite: language picker is now split into
-                 TWO sections so the UNDP six-official-languages requirement is
-                 surfaced prominently. The UN section renders bigger (3-column
-                 tile layout, 2rem flag) to reinforce its primacy; other locales
-                 stay in a compact 2-column list below for easy access. -->
-            <!-- ── UN Official Languages (6 tiles, larger icons) ── -->
+            <!-- v3 search bar — filters ALL .lang-picker-flag tiles below
+                 by their data-lang code, aria-label (English name) and
+                 .lpf-label text (native script). Wired by lang-picker.js. -->
+            <div class="lang-picker-search">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <input type="text" id="lang-picker-search-input"
+                       data-i18n-placeholder="lang_picker_search_placeholder"
+                       placeholder="Search 24 languages…"
+                       autocomplete="off" spellcheck="false">
+            </div>
+            <!-- ── Most common (6 UN languages — sorted first by priority) ── -->
             <div class="lang-picker-section">
                 <h4 class="lang-picker-section-title" data-i18n="lang_picker_un_section">
-                    UN Official Languages
+                    Most common
                 </h4>
                 <div class="lang-picker-grid lang-picker-grid-un">
-                    <!-- UI v2 (Apr 2026) — ISO-2 fallback under each flag.
-                         Edge on Windows renders flag emojis as monochrome
-                         "GB" / "FR" letter pairs; the extra .lpf-iso span
-                         guarantees reporters on those browsers still see a
-                         readable country code below the (colourless) glyph. -->
-                    <button class="lang-picker-flag lpf-un" data-lang="en" aria-label="English"><span class="lpf-glyph">🇬🇧</span><span class="lpf-iso">GB</span><span class="lpf-label">English</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="fr" aria-label="French"><span class="lpf-glyph">🇫🇷</span><span class="lpf-iso">FR</span><span class="lpf-label">Français</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="es" aria-label="Spanish"><span class="lpf-glyph">🇪🇸</span><span class="lpf-iso">ES</span><span class="lpf-label">Español</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="ar" aria-label="Arabic"><span class="lpf-glyph">🇸🇦</span><span class="lpf-iso">SA</span><span class="lpf-label">العربية</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="ru" aria-label="Russian"><span class="lpf-glyph">🇷🇺</span><span class="lpf-iso">RU</span><span class="lpf-label">Русский</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="zh" aria-label="Chinese"><span class="lpf-glyph">🇨🇳</span><span class="lpf-iso">CN</span><span class="lpf-label">中文</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="en" aria-label="English"><span class="lpf-glyph">🇬🇧</span><span class="lpf-label">English</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="fr" aria-label="French"><span class="lpf-glyph">🇫🇷</span><span class="lpf-label">Français</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="es" aria-label="Spanish"><span class="lpf-glyph">🇪🇸</span><span class="lpf-label">Español</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="ar" aria-label="Arabic"><span class="lpf-glyph">🇸🇦</span><span class="lpf-label">العربية</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="ru" aria-label="Russian"><span class="lpf-glyph">🇷🇺</span><span class="lpf-label">Русский</span></button>
+                    <button class="lang-picker-flag lpf-un" data-lang="zh" aria-label="Chinese"><span class="lpf-glyph">🇨🇳</span><span class="lpf-label">中文</span></button>
                 </div>
             </div>
-            <!-- ── Other Languages (2-column compact list) ── -->
+            <!-- ── All other languages (2-column compact list) ── -->
             <div class="lang-picker-section">
                 <h4 class="lang-picker-section-title" data-i18n="lang_picker_other_section">
-                    Other Languages
+                    All languages
                 </h4>
                 <div class="lang-picker-grid lang-picker-grid-other">
-                    <!-- South Asia — high UNDP footprint -->
-                    <button class="lang-picker-flag" data-lang="hi" aria-label="Hindi"><span class="lpf-glyph">🇮🇳</span><span class="lpf-iso">IN</span><span class="lpf-label">हिन्दी</span></button>
-                    <button class="lang-picker-flag" data-lang="kn" aria-label="Kannada"><span class="lpf-glyph">🇮🇳</span><span class="lpf-iso">IN</span><span class="lpf-label">ಕನ್ನಡ</span></button>
-                    <button class="lang-picker-flag" data-lang="ta" aria-label="Tamil"><span class="lpf-glyph">🇮🇳</span><span class="lpf-iso">IN</span><span class="lpf-label">தமிழ்</span></button>
-                    <button class="lang-picker-flag" data-lang="bn" aria-label="Bengali"><span class="lpf-glyph">🇧🇩</span><span class="lpf-iso">BD</span><span class="lpf-label">বাংলা</span></button>
-                    <button class="lang-picker-flag" data-lang="ur" aria-label="Urdu"><span class="lpf-glyph">🇵🇰</span><span class="lpf-iso">PK</span><span class="lpf-label">اردو</span></button>
+                    <!-- South Asia -->
+                    <button class="lang-picker-flag" data-lang="hi" aria-label="Hindi"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">हिन्दी</span></button>
+                    <button class="lang-picker-flag" data-lang="kn" aria-label="Kannada"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">ಕನ್ನಡ</span></button>
+                    <button class="lang-picker-flag" data-lang="ta" aria-label="Tamil"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">தமிழ்</span></button>
+                    <button class="lang-picker-flag" data-lang="bn" aria-label="Bengali"><span class="lpf-glyph">🇧🇩</span><span class="lpf-label">বাংলা</span></button>
+                    <button class="lang-picker-flag" data-lang="ur" aria-label="Urdu"><span class="lpf-glyph">🇵🇰</span><span class="lpf-label">اردو</span></button>
                     <!-- Europe -->
-                    <button class="lang-picker-flag" data-lang="pt" aria-label="Portuguese"><span class="lpf-glyph">🇵🇹</span><span class="lpf-iso">PT</span><span class="lpf-label">Português</span></button>
-                    <button class="lang-picker-flag" data-lang="de" aria-label="German"><span class="lpf-glyph">🇩🇪</span><span class="lpf-iso">DE</span><span class="lpf-label">Deutsch</span></button>
-                    <button class="lang-picker-flag" data-lang="it" aria-label="Italian"><span class="lpf-glyph">🇮🇹</span><span class="lpf-iso">IT</span><span class="lpf-label">Italiano</span></button>
-                    <button class="lang-picker-flag" data-lang="pl" aria-label="Polish"><span class="lpf-glyph">🇵🇱</span><span class="lpf-iso">PL</span><span class="lpf-label">Polski</span></button>
-                    <button class="lang-picker-flag" data-lang="ro" aria-label="Romanian"><span class="lpf-glyph">🇷🇴</span><span class="lpf-iso">RO</span><span class="lpf-label">Română</span></button>
-                    <button class="lang-picker-flag" data-lang="el" aria-label="Greek"><span class="lpf-glyph">🇬🇷</span><span class="lpf-iso">GR</span><span class="lpf-label">Ελληνικά</span></button>
-                    <button class="lang-picker-flag" data-lang="uk" aria-label="Ukrainian"><span class="lpf-glyph">🇺🇦</span><span class="lpf-iso">UA</span><span class="lpf-label">Українська</span></button>
-                    <button class="lang-picker-flag" data-lang="tr" aria-label="Turkish"><span class="lpf-glyph">🇹🇷</span><span class="lpf-iso">TR</span><span class="lpf-label">Türkçe</span></button>
-                    <button class="lang-picker-flag" data-lang="fa" aria-label="Persian"><span class="lpf-glyph">🇮🇷</span><span class="lpf-iso">IR</span><span class="lpf-label">فارسی</span></button>
-                    <button class="lang-picker-flag" data-lang="he" aria-label="Hebrew"><span class="lpf-glyph">🇮🇱</span><span class="lpf-iso">IL</span><span class="lpf-label">עברית</span></button>
+                    <button class="lang-picker-flag" data-lang="pt" aria-label="Portuguese"><span class="lpf-glyph">🇵🇹</span><span class="lpf-label">Português</span></button>
+                    <button class="lang-picker-flag" data-lang="de" aria-label="German"><span class="lpf-glyph">🇩🇪</span><span class="lpf-label">Deutsch</span></button>
+                    <button class="lang-picker-flag" data-lang="it" aria-label="Italian"><span class="lpf-glyph">🇮🇹</span><span class="lpf-label">Italiano</span></button>
+                    <button class="lang-picker-flag" data-lang="pl" aria-label="Polish"><span class="lpf-glyph">🇵🇱</span><span class="lpf-label">Polski</span></button>
+                    <button class="lang-picker-flag" data-lang="ro" aria-label="Romanian"><span class="lpf-glyph">🇷🇴</span><span class="lpf-label">Română</span></button>
+                    <button class="lang-picker-flag" data-lang="el" aria-label="Greek"><span class="lpf-glyph">🇬🇷</span><span class="lpf-label">Ελληνικά</span></button>
+                    <button class="lang-picker-flag" data-lang="uk" aria-label="Ukrainian"><span class="lpf-glyph">🇺🇦</span><span class="lpf-label">Українська</span></button>
+                    <button class="lang-picker-flag" data-lang="tr" aria-label="Turkish"><span class="lpf-glyph">🇹🇷</span><span class="lpf-label">Türkçe</span></button>
+                    <button class="lang-picker-flag" data-lang="fa" aria-label="Persian"><span class="lpf-glyph">🇮🇷</span><span class="lpf-label">فارسی</span></button>
+                    <button class="lang-picker-flag" data-lang="he" aria-label="Hebrew"><span class="lpf-glyph">🇮🇱</span><span class="lpf-label">עברית</span></button>
                     <!-- East / Southeast Asia -->
-                    <button class="lang-picker-flag" data-lang="ja" aria-label="Japanese"><span class="lpf-glyph">🇯🇵</span><span class="lpf-iso">JP</span><span class="lpf-label">日本語</span></button>
-                    <button class="lang-picker-flag" data-lang="ko" aria-label="Korean"><span class="lpf-glyph">🇰🇷</span><span class="lpf-iso">KR</span><span class="lpf-label">한국어</span></button>
-                    <button class="lang-picker-flag" data-lang="vi" aria-label="Vietnamese"><span class="lpf-glyph">🇻🇳</span><span class="lpf-iso">VN</span><span class="lpf-label">Tiếng Việt</span></button>
-                    <button class="lang-picker-flag" data-lang="th" aria-label="Thai"><span class="lpf-glyph">🇹🇭</span><span class="lpf-iso">TH</span><span class="lpf-label">ไทย</span></button>
-                    <button class="lang-picker-flag" data-lang="id" aria-label="Indonesian"><span class="lpf-glyph">🇮🇩</span><span class="lpf-iso">ID</span><span class="lpf-label">Bahasa Indonesia</span></button>
-                    <button class="lang-picker-flag" data-lang="ms" aria-label="Malay"><span class="lpf-glyph">🇲🇾</span><span class="lpf-iso">MY</span><span class="lpf-label">Bahasa Melayu</span></button>
+                    <button class="lang-picker-flag" data-lang="ja" aria-label="Japanese"><span class="lpf-glyph">🇯🇵</span><span class="lpf-label">日本語</span></button>
+                    <button class="lang-picker-flag" data-lang="ko" aria-label="Korean"><span class="lpf-glyph">🇰🇷</span><span class="lpf-label">한국어</span></button>
+                    <button class="lang-picker-flag" data-lang="vi" aria-label="Vietnamese"><span class="lpf-glyph">🇻🇳</span><span class="lpf-label">Tiếng Việt</span></button>
+                    <button class="lang-picker-flag" data-lang="th" aria-label="Thai"><span class="lpf-glyph">🇹🇭</span><span class="lpf-label">ไทย</span></button>
+                    <button class="lang-picker-flag" data-lang="id" aria-label="Indonesian"><span class="lpf-glyph">🇮🇩</span><span class="lpf-label">Bahasa Indonesia</span></button>
+                    <button class="lang-picker-flag" data-lang="ms" aria-label="Malay"><span class="lpf-glyph">🇲🇾</span><span class="lpf-label">Bahasa Melayu</span></button>
                     <!-- Africa -->
-                    <button class="lang-picker-flag" data-lang="sw" aria-label="Swahili"><span class="lpf-glyph">🌍</span><span class="lpf-iso">KE</span><span class="lpf-label">Kiswahili</span></button>
-                    <button class="lang-picker-flag" data-lang="am" aria-label="Amharic"><span class="lpf-glyph">🇪🇹</span><span class="lpf-iso">ET</span><span class="lpf-label">አማርኛ</span></button>
+                    <button class="lang-picker-flag" data-lang="sw" aria-label="Swahili"><span class="lpf-glyph">🌍</span><span class="lpf-label">Kiswahili</span></button>
+                    <button class="lang-picker-flag" data-lang="am" aria-label="Amharic"><span class="lpf-glyph">🇪🇹</span><span class="lpf-label">አማርኛ</span></button>
                 </div>
+            </div>
+            <div class="lang-picker-empty" id="lang-picker-empty" style="display:none;">
+                <i class="fa-solid fa-circle-question"></i>
+                <span data-i18n="lang_picker_no_match">No match. Try the language name in English or its native script.</span>
             </div>
             <button class="lang-picker-close" id="lang-picker-close" data-i18n="lang_picker_close">Close</button>
         </div>

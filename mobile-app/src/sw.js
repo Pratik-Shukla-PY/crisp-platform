@@ -14,7 +14,7 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v82';  // v82 (May 2026): Phase B — lazy-load Leaflet via building-select.js::_ensureLeaflet. Removed Leaflet <script>+<link> from index.html <head>. Added unpkg.com to RUNTIME_CACHE_HOSTS so the lazy-load is cached on first map open → offline subsequent reviews still work. Phase A still in: TF.js + BlazeFace + model files runtime-cached only.
+const CACHE_NAME = 'crisp-v83';  // v83 (May 2026): UI v3 redesign Phase 1 — Q1 hide "Coming soon" tiles, Q2 raise impact-card show threshold to ≥5 verified, Q3 thumbnail onerror fallback, Q4 prefix raw GPS with 📍, Q5 fix reputation copy (verified_count + remaining-gap), Q6 "Mid" severity → "Moderate", Q7 demote Delete CTA to subtle link, Q8 drop "UN OFFICIAL" / country-code prefixes, Q9 add search bar to language picker, Q15 plain-language damage labels (Minimal / Partly damaged / Fully destroyed). Multi-file change → cache bump mandatory.
 // v63 (Apr 2026): fix stage-where location-display mismatch (top "LOCATION (AUTO)" vs lower "Locating..." showed different cached vs fresh values). Centralised paint helper _paintLocationDisplays() called from every state.locationName mutator.
 // v62 (Apr 2026): Web Push for reporter feedback — adds push + notificationclick handlers in this SW. Bump forces stale clients to pick up the new SW so push delivery works on first install.
 // v61 (Apr 2026): UNDP §3.1e — extract 7 hardcoded English toast strings to t() keys + translate to all 6 locales.

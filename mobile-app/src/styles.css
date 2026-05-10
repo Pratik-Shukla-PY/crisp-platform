@@ -1977,19 +1977,32 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 .rd-rejection .rd-feedback-title { color: #f87171; }
 .rd-feedback-sub { font-size: 12px; color: #cbd5e1; line-height: 1.4; }
 
-.rd-delete-row { padding: 24px 16px; border-top: 1px solid rgba(255, 255, 255, 0.06); margin-top: 16px; }
+/* May 2026 (UI v3 redesign Q7) — destructive delete demoted from a
+   dominant red full-width CTA at the bottom of the tracking screen
+   to a compact, hover-revealed secondary link. The audit flagged the
+   prominence as a misclick risk — a single panicked tap could discard
+   evidence. Now: muted-text "Delete this report" link at the bottom,
+   no red border by default, only colour-shifts on hover/focus. The
+   24h soft-delete grace + undo toast (rd-delete-note) already handle
+   the recovery path. */
+.rd-delete-row { padding: 18px 16px 32px; border-top: 1px dashed rgba(255, 255, 255, 0.06); margin-top: 16px; text-align: center; }
 .rd-delete-btn {
-    width: 100%; padding: 12px;
+    padding: 8px 14px;
     background: transparent;
-    border: 1px solid rgba(239, 68, 68, 0.45);
-    border-radius: 10px;
-    color: #f87171; font-size: 14px; font-weight: 600;
+    border: 0;
+    border-radius: 8px;
+    color: #94a3b8; font-size: 12px; font-weight: 500;
     cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     transition: all 0.15s;
+    opacity: 0.7;
 }
-.rd-delete-btn:hover { background: rgba(239, 68, 68, 0.08); }
-.rd-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.rd-delete-btn:hover, .rd-delete-btn:focus-visible {
+    color: #f87171; opacity: 1;
+    background: rgba(239, 68, 68, 0.08);
+    outline: none;
+}
+.rd-delete-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .rd-delete-note {
     font-size: 12px; color: #94a3b8; text-align: center;
     margin: 8px 0 0; line-height: 1.45;
@@ -2286,6 +2299,43 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 .lang-picker-section:last-of-type {
     margin-bottom: 0;
 }
+
+/* May 2026 (UI v3 redesign Q9) — search bar at top of language picker.
+   Filters all .lang-picker-flag tiles by both the English aria-label and
+   the native-script .lpf-label. Empty state is shown when no tiles match. */
+.lang-picker-search {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    margin-bottom: 14px;
+}
+.lang-picker-search i { color: #94a3b8; font-size: 0.9rem; flex-shrink: 0; }
+.lang-picker-search input {
+    flex: 1; min-width: 0;
+    background: transparent; border: 0; outline: none;
+    color: #f1f5f9; font-size: 0.92rem;
+    font-family: inherit;
+}
+.lang-picker-search input::placeholder { color: #64748b; }
+.lang-picker-search:focus-within { border-color: rgba(249, 115, 22, 0.4); background: rgba(249, 115, 22, 0.04); }
+
+/* Hidden tiles when filtered out */
+.lang-picker-flag.lpf-hidden { display: none !important; }
+/* Empty state */
+.lang-picker-empty {
+    text-align: center;
+    padding: 24px 16px;
+    color: #94a3b8;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+.lang-picker-empty i { font-size: 1.6rem; opacity: 0.6; }
 .lang-picker-section-title {
     margin: 0 0 8px;
     font-size: 0.68rem;
