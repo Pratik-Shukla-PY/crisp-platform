@@ -45,7 +45,73 @@ logger = logging.getLogger(__name__)
 ivr_router = APIRouter()
 
 BACKEND_URL = os.getenv("CRISP_BACKEND_URL", "http://localhost:8000")
-IVR_WEBHOOK_SECRET = os.getenv("IVR_WEBHOOK_PATH_SECRET", secrets.token_urlsafe(16))
+
+
+def _resolve_ivr_secret() -> str:
+    """Resolve the IVR webhook path secret with persistence across
+    container rebuilds.
+
+    Precedence:
+      1. `IVR_WEBHOOK_PATH_SECRET` env var (operator-controlled, stable).
+      2. Cached value at `/data/.ivr_webhook_secret` (host-mounted
+         volume — survives docker rebuilds).
+      3. New random `secrets.token_urlsafe(16)`, then persisted to
+         the cache file when possible.
+
+    Without this, each backend image rebuild generated a fresh
+    random secret, silently breaking the Twilio Voice webhook URL
+    configured in the Twilio admin console (which still pointed at
+    the prior secret → 404 → Twilio plays
+    "An application error has occurred. Goodbye.").
+    """
+    env_secret = os.getenv("IVR_WEBHOOK_PATH_SECRET", "").strip()
+    if env_secret:
+        return env_secret
+    cache_path = os.getenv(
+        "IVR_WEBHOOK_SECRET_CACHE",
+        "/data/.ivr_webhook_secret",
+    )
+    # Try to read a cached value.
+    try:
+        if os.path.exists(cache_path):
+            with open(cache_path, "r") as fh:
+                cached = fh.read().strip()
+            if cached:
+                return cached
+    except (OSError, IOError):
+        pass
+    # Generate + persist.
+    fresh = secrets.token_urlsafe(16)
+    try:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with open(cache_path, "w") as fh:
+            fh.write(fresh)
+        try:
+            os.chmod(cache_path, 0o600)
+        except OSError:
+            pass
+    except (OSError, IOError):
+        # Read-only filesystem — fall back to in-memory (will rotate
+        # on every restart, but we log loudly below so the operator
+        # can re-sync Twilio).
+        pass
+    return fresh
+
+
+IVR_WEBHOOK_SECRET = _resolve_ivr_secret()
+# Phase 23.1 — emit the public webhook URL on import so the operator
+# can pick it up from `docker logs <backend-container>` after a fresh
+# deploy and verify the Twilio admin console still points at the
+# correct URL. We only log a TRUNCATED hint of the secret (last 6
+# chars) in case CloudWatch / log aggregators get exfiltrated; the
+# full URL is available via the localhost-only /webhook-url endpoint.
+logging.getLogger(__name__).info(
+    "IVR webhook secret resolved (suffix=…%s) — set IVR_WEBHOOK_PATH_SECRET "
+    "in .env.production to keep this stable across rebuilds. The full URL "
+    "is exposed via GET /api/v1/ivr/webhook-url (localhost only).",
+    IVR_WEBHOOK_SECRET[-6:] if len(IVR_WEBHOOK_SECRET) >= 6 else IVR_WEBHOOK_SECRET,
+)
+
 EXOTEL_SID = os.getenv("EXOTEL_SID", "")
 EXOTEL_API_KEY = os.getenv("EXOTEL_API_KEY", "")
 EXOTEL_API_TOKEN = os.getenv("EXOTEL_API_TOKEN", "")
@@ -150,6 +216,14 @@ async def handle_incoming_call(request: Request):
     # Gather with timeout=5; if the caller presses 1-5, the
     # location-step handler picks that language; otherwise the
     # Redirect routes to the country's default language.
+    #
+    # Phase 23.1 — the fallback URL uses `&lang=…` (not `?lang=…`)
+    # because loc_url already carries a `?sid=…` query string. The
+    # pre-23.1 form `{loc_url}?lang={default_lang}` produced
+    # `.../location-step/SECRET?sid=CA-…?lang=hi` (two `?` chars
+    # → RFC 3986 invalid → Twilio dropped the call with
+    # "An application error has occurred"). Using `&` keeps the URL
+    # valid and the Redirect actually fires.
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Gather action="{loc_url}" method="POST" numDigits="1" timeout="5">
@@ -162,7 +236,7 @@ Press 4 for French.
 Press 5 for Arabic.
 Or just start speaking after the beep.</Say>
     </Gather>
-    <Redirect method="POST">{loc_url}?lang={default_lang}</Redirect>
+    <Redirect method="POST">{loc_url}&amp;lang={default_lang}</Redirect>
 </Response>"""
 
     return Response(content=xml, media_type="application/xml")

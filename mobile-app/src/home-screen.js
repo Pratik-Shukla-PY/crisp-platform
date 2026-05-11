@@ -146,56 +146,49 @@
         if (/android/.test(ua)) return 'android';
         return 'desktop';
     }
-    // Runs on tap of the Telegram channel tile. Attempts the native
-    // scheme first; if visibility doesn't switch within ~1.2 s we
-    // assume Telegram isn't installed and redirect to the store.
+    // Runs on tap of the Telegram channel tile.
+    //
+    // Phase 23.1 — simplified to a single universal-link navigation.
+    // The earlier Phase 23 approach (transient iframe with `tg://`
+    // scheme + visibilitychange-based fallback to App Store) was
+    // unreliable on iOS 16+: when the OS shows the system "Open in
+    // Telegram?" confirmation sheet, the page technically stays
+    // visible, so visibilitychange doesn't fire within our 1.2 s
+    // window and we wrongly redirect to the App Store — even when
+    // Telegram IS installed. Real-user impact: tapping the tile on
+    // an iPhone with Telegram installed routed straight to the App
+    // Store. The universal-link form below sidesteps that entirely:
+    //
+    //   • iOS:     `https://t.me/<bot>?start=<token>` is registered
+    //              as a Universal Link by Telegram. Safari either
+    //              opens Telegram directly (if the user has previously
+    //              opted into the t.me handler) OR shows the t.me web
+    //              preview page with a "Launch in Telegram" banner
+    //              that does it on the next tap. Never wrongly
+    //              redirects to the App Store.
+    //   • Android: same URL is App-Linked to Telegram on every
+    //              device with the app installed → opens directly.
+    //              Devices without Telegram see the same web preview
+    //              with an "Install Telegram" button.
+    //   • Desktop: opens in a new tab; Telegram Web handles login +
+    //              launch.
+    //
+    // The `?start=<token>` payload still carries the PWA device-hash
+    // so the bot's /start handler can link the Telegram session to
+    // the same anonymous identity as the PWA reports.
     function _openTelegram(handle) {
         const links = _telegramDeepLink(handle, _buildTelegramStartToken());
         if (!links) return;
         const fam = _platformFamily();
-        // Telemetry breadcrumb (matches existing console.log pattern).
         console.log(`[home] channel tap: telegram (fam=${fam})`);
-
-        // Desktop: open the web preview in a new tab. Telegram Web
-        // handles the rest. One-tap UX, no fingerprinting needed.
         if (fam === 'desktop') {
             window.open(links.web, '_blank', 'noopener');
             return;
         }
-
-        // Mobile: attempt the native scheme. If Telegram is installed
-        // the OS hides this page (visibilitychange → hidden) and the
-        // fallback timer aborts.
-        let appOpened = false;
-        const onHide = () => {
-            if (document.visibilityState === 'hidden') appOpened = true;
-        };
-        document.addEventListener('visibilitychange', onHide);
-
-        const fallback = setTimeout(() => {
-            document.removeEventListener('visibilitychange', onHide);
-            if (appOpened) return;
-            const store = fam === 'ios' ? links.ios : links.android;
-            window.location.href = store;
-        }, 1200);
-
-        // Trigger the scheme. iOS Safari throws an "Address invalid"
-        // page if we navigate directly with no app handler, so we use
-        // a transient hidden iframe instead. Android Chrome handles
-        // a direct navigation cleanly.
-        if (fam === 'ios') {
-            const iframe = document.createElement('iframe');
-            iframe.style.cssText = 'display:none;width:0;height:0;border:0;';
-            iframe.src = links.native;
-            document.body.appendChild(iframe);
-            setTimeout(() => {
-                try { iframe.remove(); } catch (_) {}
-            }, 1500);
-        } else {
-            window.location.href = links.native;
-        }
-        // (fallback timer cleans itself up if appOpened flips first)
-        void fallback;
+        // Mobile: just navigate to the universal URL. iOS / Android
+        // handle the app-or-web routing natively, including the
+        // "open in app?" prompt when needed.
+        window.location.href = links.web;
     }
     // Expose for tests / external instrumentation.
     try { window.CrispHome = window.CrispHome || {}; } catch (_) {}
