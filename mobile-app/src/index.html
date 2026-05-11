@@ -82,29 +82,13 @@
         <button id="btn-lang-current" class="active" title="Tap to change language">🌐 EN</button>
     </div>
 
-    <!-- Phase 18 (May 2026) — global top-bar icons: PWA install + voice
-         readout. Live alongside the existing language pill so they're
-         visible across the whole app. Install icon is gated on
-         InstallPrompt.canInstall but `display-mode: standalone` swap
-         hides it cleanly when the app is already installed. Voice
-         readout (🔊) reads the current stage's primary content aloud
-         in the active language — UNDP rubric Q3 (voice-first for
-         low-literacy users in panic). -->
-    <div class="home-top-actions" id="home-top-actions">
-        <button id="btn-home-install-icon" type="button"
-                class="home-top-icon-btn"
-                aria-label="Install on home screen"
-                title="Install on home screen"
-                hidden>
-            <i class="fa-solid fa-download" aria-hidden="true"></i>
-        </button>
-        <button id="btn-home-voice" type="button"
-                class="home-top-icon-btn"
-                aria-label="Read this page aloud"
-                title="Read this page aloud">
-            <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
-        </button>
-    </div>
+    <!-- Phase 19 — install + voice icons MOVED to live inside the home
+         identity bar (see #home-brand-row inside #stage-home) so they
+         no longer collide with the brand text or lang pill. This empty
+         shell is retained for any non-home stage that still expects
+         the global container; home-screen.js relocates the buttons
+         into it on non-home stages. -->
+    <div class="home-top-actions" id="home-top-actions" hidden></div>
 
     <!-- Full-screen image viewer overlay (Apr 2026). Opens when the user
          taps any photo thumbnail on stage-photo. Shows the image at full
@@ -301,13 +285,38 @@
                  identity slot on the right still holds the device-ID
                  badge for anonymous users / account pill for logged-in. -->
             <div class="home-identity">
-                <div class="home-brand">
-                    <div class="home-brand-logo" aria-hidden="true">
-                        <i class="fa-solid fa-satellite-dish"></i>
+                <!-- Phase 19 — brand row is now a flex row that includes
+                     the install + voice icons on the right side, with
+                     enough right padding to clear the absolute-positioned
+                     lang pill above (right:16, ~120 px wide). -->
+                <div class="home-brand-row">
+                    <div class="home-brand">
+                        <div class="home-brand-logo" aria-hidden="true">
+                            <i class="fa-solid fa-satellite-dish"></i>
+                        </div>
+                        <div class="home-brand-text">
+                            <div class="home-brand-name">CRISP</div>
+                            <div class="home-brand-sub" data-i18n="home_brand_tagline">Crisis Reporter</div>
+                        </div>
                     </div>
-                    <div class="home-brand-text">
-                        <div class="home-brand-name">CRISP</div>
-                        <div class="home-brand-sub" data-i18n="home_brand_tagline">× UNDP · Crisis Reporter</div>
+                    <!-- Phase 19 — install + voice icons moved here as
+                         flow content. Anchored to the right with
+                         margin-left:auto. Sits in the gap between brand
+                         text (left) and the absolute lang pill (above). -->
+                    <div class="home-brand-actions" id="home-brand-actions">
+                        <button id="btn-home-install-icon" type="button"
+                                class="home-top-icon-btn"
+                                aria-label="Install on home screen"
+                                title="Install on home screen"
+                                hidden>
+                            <i class="fa-solid fa-download" aria-hidden="true"></i>
+                        </button>
+                        <button id="btn-home-voice" type="button"
+                                class="home-top-icon-btn"
+                                aria-label="Read this page aloud"
+                                title="Read this page aloud">
+                            <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
+                        </button>
                     </div>
                 </div>
 
@@ -381,22 +390,6 @@
                  supratext above the CTA via JS. -->
             <p class="home-title-sub" id="home-title-sub" hidden data-i18n="home_greeting_sub">Welcome back.</p>
 
-            <!-- Live impact metrics. Hidden on first-ever load (no data);
-                 populated by app.js::updateHomeImpactMetrics() once the
-                 backend responds. -->
-            <div class="home-impact" id="home-impact" style="display:none;">
-                <div class="hi-cell hi-cell-lives">
-                    <div class="hi-heart" aria-hidden="true">❤</div>
-                    <div class="hi-num hi-num-lives" id="home-lives-count">—</div>
-                    <div class="hi-label" data-i18n="home_metric_lives">Lives Saved</div>
-                </div>
-                <div class="hi-divider"></div>
-                <div class="hi-cell">
-                    <div class="hi-num" id="home-verified-count">—</div>
-                    <div class="hi-label" data-i18n="home_metric_verified">Reports Verified</div>
-                </div>
-            </div>
-
             <!-- Recent reports (logged-in only) — last 3 reports as compact
                  cards. Sourced from AuthStore.meReports() with device-hash
                  fallback. Populated by home-screen.js _renderRecentReports(). -->
@@ -435,6 +428,13 @@
                 <span data-i18n="home_cta_primary">Report an Incident</span>
             </button>
 
+            <!-- Phase 19 — Hero subtitle. Sits directly under the CTA;
+                 carries the value-prop the standalone H1 used to carry,
+                 keeping the page above-the-fold tight and informative. -->
+            <p class="home-hero-sub" data-i18n="home_hero_sub">
+                30-second anonymous report. Works offline, in 6 languages.
+            </p>
+
             <!-- Phase 17 + 18 — Secondary actions. Phase 18 — My Reports
                  button now carries an inline (N) count populated by
                  home-screen.js _renderMyReportsCount. Hidden when
@@ -460,6 +460,51 @@
             <div class="home-safety-hint" id="home-safety-hint" role="note">
                 <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
                 <span data-i18n="home_safety_hint">Life-threatening emergency? Call your local emergency number first. CRISP is for reporting after the event.</span>
+            </div>
+
+            <!-- Phase 19 — How CRISP works strip. Three-step micro-tutorial
+                 that fills what was empty whitespace in Phase 18, and
+                 gives first-time users the value-prop they need. Tappable
+                 → opens stage-privacy "How it works" section for the
+                 longer-form explanation. -->
+            <section class="home-howitworks" id="home-howitworks" aria-labelledby="home-how-title">
+                <h2 id="home-how-title" class="home-section-eyebrow" data-i18n="home_how_title">How CRISP works</h2>
+                <ol class="home-how-steps">
+                    <li class="home-how-step">
+                        <span class="hw-num">1</span>
+                        <i class="fa-solid fa-camera-retro hw-icon" aria-hidden="true"></i>
+                        <span class="hw-text" data-i18n="home_how_step1">Snap a photo</span>
+                    </li>
+                    <li class="home-how-step">
+                        <span class="hw-num">2</span>
+                        <i class="fa-solid fa-tags hw-icon" aria-hidden="true"></i>
+                        <span class="hw-text" data-i18n="home_how_step2">Classify damage</span>
+                    </li>
+                    <li class="home-how-step">
+                        <span class="hw-num">3</span>
+                        <i class="fa-solid fa-paper-plane hw-icon" aria-hidden="true"></i>
+                        <span class="hw-text" data-i18n="home_how_step3">Send anonymously</span>
+                    </li>
+                </ol>
+            </section>
+
+            <!-- Phase 19 — Live community impact strip. Re-uses the
+                 existing /reports/impact-stats data path wired in
+                 app.js::updateHomeImpactMetrics(). Hidden until data
+                 loads — shows social proof without claiming numbers
+                 before the backend confirms. Compact two-stat row;
+                 colour stays subtle so it doesn't compete with the
+                 orange CTA above. -->
+            <div class="home-impact" id="home-impact" hidden>
+                <div class="hi-cell hi-cell-lives">
+                    <div class="hi-num hi-num-lives" id="home-lives-count">—</div>
+                    <div class="hi-label" data-i18n="home_metric_lives">Lives Saved</div>
+                </div>
+                <div class="hi-divider"></div>
+                <div class="hi-cell">
+                    <div class="hi-num" id="home-verified-count">—</div>
+                    <div class="hi-label" data-i18n="home_metric_verified">Reports Verified</div>
+                </div>
             </div>
 
             <!-- Phase 17 — Bottom: single channels row anchored to bottom
@@ -497,7 +542,7 @@
                 <span class="home-utility-dot" aria-hidden="true">·</span>
                 <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
                 <span class="home-utility-dot" aria-hidden="true">·</span>
-                <span class="home-utility-version" id="home-utility-version">v0.7.18.1</span>
+                <span class="home-utility-version" id="home-utility-version">v0.7.19</span>
             </nav>
 
             <!-- Legacy retained DOM — kept hidden so any

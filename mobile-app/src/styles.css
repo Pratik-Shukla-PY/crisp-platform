@@ -4296,6 +4296,429 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     letter-spacing: -0.02em;
 }
 
+/* ════════════════════════════════════════════════════════════════════
+   Phase 19 (May 2026) — Professional CSS pass on the home stage.
+
+   Goals (per user feedback "Current UI is not good to submit"):
+     • Uniform 20 px horizontal edge padding throughout
+     • 8 px spacing scale (4 / 8 / 12 / 16 / 20 / 24 / 32 / 40)
+     • No overlaps — top-bar actions cleanly anchored next to lang pill
+     • Clear visual rhythm: 16 px between siblings, 12 px inside cards
+     • No `margin-top: auto` on channels — content flows naturally
+     • Tight typography hierarchy + restrained colour palette
+
+   This block OVERRIDES selected Phase 17/18 rules. Anything that was
+   already clean is left alone. Reference apps for the visual language:
+   Stripe (typography), Linear (density), Notion (cards).
+   ════════════════════════════════════════════════════════════════════ */
+
+/* — Phase 19: install + voice icons moved INSIDE the identity bar
+   (.home-brand-row) as flow content. The old absolute container at
+   the document root is kept as an empty shell (#home-top-actions
+   hidden) for back-compat. */
+.home-brand-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    /* Leave clearance for the absolute-positioned lang pill above
+       (lives at right:16, real width ≤ 90 px for 2-letter ISO codes).
+       100 px reserved → ~30 px gap between our brand-actions cluster
+       and the pill, comfortably clear. */
+    padding-right: 104px;
+    box-sizing: border-box;
+    min-height: 44px;        /* matches install/voice icon hit area */
+}
+[dir="rtl"] .home-brand-row {
+    padding-right: 0;
+    padding-left: 104px;
+}
+.home-brand { flex: 1; min-width: 0; }
+.home-brand-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+[dir="rtl"] .home-brand-actions { margin-left: 0; margin-right: auto; }
+
+/* Smaller visual circle, same 44 × 44 tap target.
+   Visible disc is 36 px (inset 4 px) so the cluster doesn't read as
+   chunky next to the lang pill. Hit area stays 44 × 44 for WCAG. */
+.home-top-icon-btn {
+    width: 44px;
+    height: 44px;
+    background-clip: padding-box;
+    padding: 4px;
+    background-color: transparent;
+    border: 0;
+    position: relative;
+    cursor: pointer;
+    color: var(--text-sub, #cbd5e1);
+}
+.home-top-icon-btn::before {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    background: rgba(15, 22, 34, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: background 0.15s ease, border-color 0.15s ease;
+    z-index: 0;
+}
+.home-top-icon-btn > i { position: relative; z-index: 1; font-size: 13px; }
+.home-top-icon-btn:hover::before {
+    background: rgba(15, 22, 34, 0.85);
+    border-color: rgba(255, 255, 255, 0.16);
+}
+.home-top-icon-btn:hover { color: var(--text, #f1f5f9); }
+.home-top-icon-btn.is-speaking { color: var(--accent, #f97316); }
+.home-top-icon-btn.is-speaking::before {
+    background: rgba(249, 115, 22, 0.18);
+    border-color: rgba(249, 115, 22, 0.45);
+}
+.home-top-icon-btn[hidden] { display: none; }
+
+/* — Home stage layout — uniform 20 px edge padding, 16 px vertical
+   rhythm between major sibling sections. Override .stage-center's
+   `align-items: center; text-align: center` defaults so children
+   stretch to the full content width and left-align by default. The
+   per-section rules opt back into `text-align: center` where wanted
+   (hero subtitle, eyebrows, channels section). */
+.home-stage .home-center {
+    padding: 20px 20px 28px;
+    gap: 16px;
+    align-items: stretch;
+    justify-content: flex-start;
+    text-align: left;
+    /* Override the global .stage padding (24 px) so the stage is
+       edge-to-edge and .home-center alone owns the 20 px gutter. */
+}
+/* Eliminate the global .stage's 24 px horizontal padding on the home
+   stage so .home-center owns the 20 px gutter exclusively. */
+.stage.home-stage { padding-left: 0; padding-right: 0; }
+
+/* — Identity bar — two flow rows: brand on row 1, device-ID + badge
+   chip on row 2. No outside margin (parent gap handles spacing). */
+.home-identity {
+    flex-direction: column;
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+}
+
+/* Brand block — restrained, doesn't fight with the CTA. */
+.home-brand { gap: 12px; }
+.home-brand-logo {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.20),
+                0 8px 24px rgba(249, 115, 22, 0.18);
+    font-size: 18px;
+}
+.home-brand-name {
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+}
+.home-brand-sub {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-mute, #94a3b8);
+    letter-spacing: 0.02em;
+    margin-top: 2px;
+    text-transform: none;
+}
+
+/* Device-ID badge — calmer surface, generous internal padding so the
+   monospace text never clips (Phase 18 had the C of "CRISP-" cut off
+   by 1-2 px because the max-width was right at content size).
+   The `[hidden]` rule is necessary because the existing `display:flex`
+   would otherwise override the UA's default `[hidden] {display:none}`,
+   leaving the wrap visible even when JS marks it hidden for logged-in
+   users. Same for the badge chip living inside it. */
+.home-devid-wrap { gap: 10px; row-gap: 8px; align-items: center; }
+.home-devid-wrap[hidden] { display: none; }
+.home-recent[hidden] { display: none; }
+.home-howitworks[hidden] { display: none; }
+.home-hero-sub[hidden] { display: none; }
+.home-devid-badge {
+    padding: 6px 8px 6px 14px;
+    max-width: none;             /* let it size to content */
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;              /* don't squeeze the ID text */
+}
+.home-devid-badge .devid-text {
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+}
+
+/* Badge chip — match the device-ID pill height for visual alignment. */
+.home-badge-chip {
+    margin-top: 0;
+    padding: 5px 11px;
+    font-size: 11px;
+    line-height: 1.2;
+    letter-spacing: 0;
+}
+.home-badge-chip .hb-emoji { font-size: 13px; }
+
+/* — Hero CTA — slightly tighter padding so it doesn't dominate at the
+   expense of the page below it. Glow softened. */
+.home-stage .big-cta {
+    padding: 16px 20px;
+    min-height: 56px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    border-radius: 14px;
+    margin: 4px 0 0;
+    letter-spacing: -0.01em;
+    box-shadow: 0 8px 28px rgba(249, 115, 22, 0.32),
+                0 0 0 1px rgba(249, 115, 22, 0.18);
+}
+.home-stage .big-cta i { font-size: 1.05rem; }
+
+/* — Hero subtitle (Phase 19, new). Sits 12 px below the CTA, centred. */
+.home-hero-sub {
+    margin: 0;
+    text-align: center;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-dim, #94a3b8);
+    padding: 0 6px;
+    letter-spacing: 0.01em;
+}
+
+/* — Secondary row (My Reports + Login). Already has min-height 44 from
+   Phase 18.1 hotfix; refine padding + alignment. */
+.home-secondary-row {
+    margin-top: 0;
+    gap: 10px;
+}
+.home-secondary-row .secondary-cta,
+.home-secondary-row .tertiary-cta {
+    padding: 11px 14px;
+    font-size: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+    transition: background 0.15s ease, border-color 0.15s ease,
+                transform 0.1s ease;
+}
+.home-secondary-row .secondary-cta:hover,
+.home-secondary-row .tertiary-cta:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.14);
+}
+.home-secondary-row .secondary-cta:active,
+.home-secondary-row .tertiary-cta:active { transform: scale(0.985); }
+
+/* — Safety hint — tighter padding, calmer warn-icon. */
+.home-safety-hint {
+    margin: 0;
+    padding: 11px 13px;
+    gap: 10px;
+    font-size: 12px;
+    line-height: 1.45;
+    background: rgba(234, 179, 8, 0.07);
+    border-color: rgba(234, 179, 8, 0.22);
+    border-radius: 10px;
+}
+.home-safety-hint > i { font-size: 13px; }
+
+/* — How it works strip (Phase 19, new). 3 equal-width cards. */
+.home-howitworks { margin: 0; }
+.home-section-eyebrow {
+    margin: 0 0 10px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    color: var(--text-mute, #94a3b8);
+    text-align: center;
+}
+.home-how-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+.home-how-step {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 14px 8px 12px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    text-align: center;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.home-how-step:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+.hw-num {
+    position: absolute;
+    top: -8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent, #f97316);
+    color: #1a0d00;
+    font-size: 10.5px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(249, 115, 22, 0.32);
+    line-height: 1;
+}
+.hw-icon {
+    font-size: 20px;
+    color: var(--text, #f1f5f9);
+    margin-top: 4px;
+}
+.hw-text {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-sub, #cbd5e1);
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+}
+
+/* — Live impact strip (Phase 19 re-style). Compact, restrained, sits
+   between how-it-works and channels. Hidden until data loads. */
+.home-stage .home-impact {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    gap: 8px;
+    width: 100%;
+    margin: 0;
+    padding: 12px 16px;
+    background: linear-gradient(135deg,
+        rgba(124, 58, 237, 0.10),
+        rgba(56, 189, 248, 0.06));
+    border: 1px solid rgba(124, 58, 237, 0.20);
+    border-radius: 12px;
+    box-sizing: border-box;
+}
+.home-stage .home-impact[hidden] { display: none; }
+.home-stage .home-impact .hi-cell {
+    flex: 1;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.home-stage .home-impact .hi-num {
+    font-size: 20px;
+    font-weight: 800;
+    color: #c4b5fd;
+    line-height: 1.05;
+}
+.home-stage .home-impact .hi-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-mute, #94a3b8);
+    margin-top: 2px;
+}
+.home-stage .home-impact .hi-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.10);
+    flex-shrink: 0;
+}
+.home-stage .home-impact .hi-heart { display: none; }
+
+/* — Channels section — REMOVE `margin-top: auto`. Let the section flow
+   naturally so the home-impact + how-it-works above fill the middle. */
+.home-stage .home-section-channels {
+    margin: 0;
+    padding: 0;
+}
+.home-stage .home-section-channels .home-section-title {
+    margin: 0 0 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    color: var(--text-mute, #94a3b8);
+    text-align: center;
+}
+.home-stage .home-section-channels .home-section-lede {
+    margin: 0 0 12px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-dim, #94a3b8);
+    text-align: center;
+}
+
+/* — Channels grid — keep 3×2, tighten visual. */
+.home-stage .home-channels {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+    width: 100%;
+}
+.home-stage .home-channel-tile {
+    aspect-ratio: auto;
+    min-height: 76px;
+    padding: 12px 6px;
+    border-radius: 12px;
+    gap: 6px;
+}
+.home-stage .home-channel-tile .ct-icon { font-size: 22px; }
+.home-stage .home-channel-tile .ct-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+}
+.home-stage .home-channel-tile.is-disabled { opacity: 0.55; }
+.home-stage .home-channel-tile.is-live { box-shadow: none; }
+
+/* — Utility footer — calmer separator, tighter, no top padding. */
+.home-utility-footer {
+    margin: 0;
+    padding: 8px 0 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    gap: 4px;
+}
+.home-utility-footer .home-utility-link,
+.home-utility-footer .home-utility-version,
+.home-utility-footer .home-utility-dot {
+    font-size: 10.5px;
+}
+
+/* — Logged-in greeting subtitle, when JS un-hides it. */
+.home-stage .home-title-sub:not([hidden]) {
+    margin: 0;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim, #94a3b8);
+}
+
+/* — Logged-in recent reports panel — tighter so it shares the page
+   gracefully with the new sections below. */
+.home-stage .home-recent { margin: 0; gap: 8px; }
+.home-stage .home-recent-head { margin-bottom: 2px; }
+
+/* End Phase 19 ───────────────────────────────────────────────────── */
+
+
 /* Phase 18 — Stage-privacy. Long-form trust + privacy + open-source
    content. Lives outside the home stage so it doesn't bloat the
    landing scroll. */
