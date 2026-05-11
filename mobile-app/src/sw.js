@@ -201,7 +201,9 @@ const CACHE_NAME = 'crisp-v114';  // v114 (May 2026): Phase 25 — bundled with 
 // crisp-mobile App.tsx. Cache bump needed because old SW clients would
 // still render the single flat grid.
 // v34 (Apr 2026) UNDP §3.1b — async locale-JSON loader.
-//   • 6 new i18n/*.json files (en, fr, es, ar, ru, zh) precached on install
+//   • All 22 i18n/*.json files (UN-6 + 9 UNDP-tier-2 + 7 Indian sub-national)
+//     precached on install — Phase 25 (May 2026) expanded the offline
+//     guarantee from the 6 UN languages to the full supported set.
 //     so offline captures in any UN language paint the full 232-key pack
 //     from cache rather than falling through to the inline ~60-key EXTRA_LANG
 //     baseline.
@@ -468,17 +470,43 @@ const STATIC_ASSETS = [
     SW_BASE + 'favicon.svg',         // May 2026 — tab icon (also served at apex /favicon.ico via nginx alias)
     SW_BASE + 'assets/icon-192.png',
     SW_BASE + 'assets/icon-512.png',
-    // UNDP §3.1b — dense 232-key translation packs, one per UN language.
-    // Precached so offline captures render in any UN language even on a
-    // cold install. `_loadLocaleJson()` in app.js fetches these lazily
-    // on `activateLang(code)`; the SW cache-first handler serves them
+    // UNDP §3.1b — full 594-key translation packs, one per supported
+    // locale. Precached so a user who installs the PWA online and goes
+    // offline can pick ANY of the 22 supported languages and see the
+    // UI in their language — not just the 6 UN languages.
+    // `_loadLocaleJson()` in app.js fetches these lazily on
+    // `activateLang(code)`; the SW cache-first handler serves them
     // from this cache without touching the network.
+    //
+    // Phase 25 (May 2026) — expanded from 6 UN JSONs to all 22:
+    //   • Tier 1 (UN official): en, zh, es, ar, fr, ru
+    //   • Tier 2 (UNDP submission set): hi, pt, bn, ja, tr, vi, ko, id, ur
+    //   • Tier 3 (Indian sub-national): kn, ta, te, ml, gu, mr, pa
+    // Total precache cost ~640 KB raw / ~150 KB gzipped — worth the
+    // offline-first guarantee for the must-have #3 (no network = no
+    // problem) and the 22-locale UNDP scope.
     SW_BASE + 'i18n/en.json',
-    SW_BASE + 'i18n/fr.json',
+    SW_BASE + 'i18n/zh.json',
     SW_BASE + 'i18n/es.json',
     SW_BASE + 'i18n/ar.json',
+    SW_BASE + 'i18n/fr.json',
     SW_BASE + 'i18n/ru.json',
-    SW_BASE + 'i18n/zh.json'
+    SW_BASE + 'i18n/hi.json',
+    SW_BASE + 'i18n/pt.json',
+    SW_BASE + 'i18n/bn.json',
+    SW_BASE + 'i18n/ja.json',
+    SW_BASE + 'i18n/tr.json',
+    SW_BASE + 'i18n/vi.json',
+    SW_BASE + 'i18n/ko.json',
+    SW_BASE + 'i18n/id.json',
+    SW_BASE + 'i18n/ur.json',
+    SW_BASE + 'i18n/kn.json',
+    SW_BASE + 'i18n/ta.json',
+    SW_BASE + 'i18n/te.json',
+    SW_BASE + 'i18n/ml.json',
+    SW_BASE + 'i18n/gu.json',
+    SW_BASE + 'i18n/mr.json',
+    SW_BASE + 'i18n/pa.json'
 ];
 
 const EXTERNAL_ASSETS = [
