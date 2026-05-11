@@ -2816,42 +2816,26 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     }
 }
 
-/* Phase 25 (May 2026) — tier-2 / tier-3 horizontal carousel.
-   The "Also supported" section now holds 16 tiles in a single-row
-   scroll-snap strip, sized roughly the same as a UN tile so the
-   two sections read as part of one picker. Display:grid is
-   overridden to display:flex when the .lang-picker-scroll-others
-   class is present so the children sit in a horizontal row. */
+/* Phase 25.2 (May 2026) — tier-2 / tier-3 GRID tiles.
+   Replaces the previous horizontal scroll-snap carousel: per user
+   feedback, all 15 "also supported" tiles are now visible at once
+   in a 3-column grid (5 rows × 3 cols, ~15 tiles after the
+   Malayalam removal) so a returning user doesn't have to discover
+   a horizontal scroll affordance to find their language. Tiles
+   keep the UN-tile flag-on-top / label-below rhythm. */
 .lang-picker-grid-other.lang-picker-scroll-others {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    /* Hide native scrollbar; users discover the row by partial-tile
-       affordance (the 16th tile peeks past the right edge). */
-    scrollbar-width: none;
-    /* iOS momentum scrolling (harmless in modern Chrome / FF). */
-    -webkit-overflow-scrolling: touch;
-    /* A little inner gutter so scroll-snap targets don't kiss the
-       sheet edge. */
     padding: 4px 2px 8px;
 }
-.lang-picker-grid-other.lang-picker-scroll-others::-webkit-scrollbar {
-    display: none;
-}
 .lang-picker-flag.lpf-scroll {
-    /* Match UN-tile vertical rhythm so the two sections feel
-       consistent: flag-on-top, label-below, centered. */
-    flex: 0 0 96px;
-    min-width: 96px;
     flex-direction: column;
     gap: 6px;
     padding: 12px 6px 10px;
     min-height: 84px;
     justify-content: center;
     text-align: center;
-    scroll-snap-align: start;
 }
 .lang-picker-flag.lpf-scroll .lpf-glyph {
     font-size: 1.6rem;
@@ -2862,8 +2846,16 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     white-space: normal;
     line-height: 1.15;
     /* Long autonyms ("Bahasa Indonesia") wrap to a second line
-       instead of overflowing the narrow scroll tile. */
+       instead of overflowing the narrow grid tile. */
     word-break: keep-all;
+}
+
+/* Narrow viewports (≤ 340 px): collapse to 2 columns so the labels
+   stay legible. Same breakpoint as the UN grid. */
+@media (max-width: 340px) {
+    .lang-picker-grid-other.lang-picker-scroll-others {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 .lang-picker-close {
     display: block;
