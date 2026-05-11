@@ -272,18 +272,20 @@
     <div class="stage active home-stage" id="stage-home">
         <div class="stage-center home-center">
 
-            <!-- Phase 15 (May 2026) — Identity bar (replaces the centred
-                 36 px brand badge). Two slots: brand chip on the left,
-                 state-adaptive identity on the right. Anonymous users
-                 see #home-devid-badge with their CRISP-XXXX-XXXX ID +
-                 copy/info buttons; logged-in users see #account-pill +
-                 dropdown. paintHeader() in app.js swaps visibility on
-                 every auth-changed event. -->
+            <!-- Phase 17 (May 2026) — Identity bar with bigger brand block
+                 (logo glyph + wordmark + tagline). The state-adaptive
+                 identity slot on the right still holds the device-ID
+                 badge for anonymous users / account pill for logged-in. -->
             <div class="home-identity">
-                <span class="home-brandchip">
-                    <i class="fa-solid fa-satellite-dish" aria-hidden="true"></i>
-                    <span>CRISP × UNDP</span>
-                </span>
+                <div class="home-brand">
+                    <div class="home-brand-logo" aria-hidden="true">
+                        <i class="fa-solid fa-satellite-dish"></i>
+                    </div>
+                    <div class="home-brand-text">
+                        <div class="home-brand-name">CRISP</div>
+                        <div class="home-brand-sub" data-i18n="home_brand_tagline">× UNDP · Crisis Reporter</div>
+                    </div>
+                </div>
 
                 <!-- Anonymous slot — device-ID badge + tooltip. -->
                 <div class="home-devid-wrap" id="home-devid-wrap">
@@ -394,43 +396,10 @@
                 <span data-i18n="start_btn">Start Reporting</span>
             </button>
 
-            <!-- Phase 15 — bottom: branded reporting channels.
-                 home-screen.js builds .home-channel-tile elements with a
-                 per-tile --c brand colour. Empty href → tile not rendered
-                 (Q1 contract preserved). -->
-            <div class="home-section">
-                <h2 class="home-section-title" data-i18n="home_channels_title">Other ways to report</h2>
-                <p class="home-section-lede" data-i18n="home_channels_lede">Use the channel you trust most. Same report, different way in.</p>
-                <div class="home-channels" id="home-channels">
-                    <!-- Populated by home-screen.js _renderChannels() -->
-                </div>
-            </div>
-
-            <!-- Native-app row — iOS / Android / Expo Go. Same pattern. -->
-            <div class="home-section">
-                <h2 class="home-section-title" data-i18n="landing_get_app">Get the app</h2>
-                <div class="home-apps" id="home-apps">
-                    <!-- Populated by home-screen.js _renderChannels() -->
-                </div>
-            </div>
-
-            <!-- PWA install prompt — shown by home-screen.js only when
-                 InstallPrompt.canInstall is true (iOS Safari without
-                 home-screen install, Android Chrome before install,
-                 desktop Chrome with installability). -->
-            <div class="home-install" id="home-install" style="display:none;">
-                <button class="home-install-btn" id="home-install-btn" type="button">
-                    <i class="fa-solid fa-mobile-screen-button"></i>
-                    <span id="home-install-label" data-i18n="landing_install_pwa">
-                        Install on home screen
-                    </span>
-                </button>
-            </div>
-
-            <!-- Secondary actions row. Anonymous users see "Login / Sign up"
-                 (My Reports moved into the recent-reports block above for
-                 logged-in users; for anonymous users it stays here as a
-                 backup link). -->
+            <!-- Phase 17 (May 2026) — secondary actions sit just below the
+                 hero CTA. My Reports + Login Sign up for anonymous users;
+                 for logged-in users both buttons hide (lives in the
+                 dropdown menu instead). -->
             <div class="home-secondary-row" id="home-secondary-row">
                 <button class="secondary-cta" id="btn-my-reports" type="button">
                     <i class="fa-solid fa-clipboard-list"></i>
@@ -443,10 +412,83 @@
                 </button>
             </div>
 
+            <!-- PWA install prompt — shown by home-screen.js only when
+                 InstallPrompt.canInstall is true. -->
+            <div class="home-install" id="home-install" style="display:none;">
+                <button class="home-install-btn" id="home-install-btn" type="button">
+                    <i class="fa-solid fa-mobile-screen-button"></i>
+                    <span id="home-install-label" data-i18n="landing_install_pwa">
+                        Install on home screen
+                    </span>
+                </button>
+            </div>
+
+            <!-- Phase 17 (May 2026) — Value-props card to fill the
+                 vertical space the previous layout left empty. Three
+                 short reassurances aligned with UNDP must-haves:
+                 anonymous (must-have #9), offline-first (#3), AI
+                 face-blur (#7). Hidden when recent-reports is showing
+                 (logged-in users get a different message there). -->
+            <div class="home-values" id="home-values">
+                <div class="home-value">
+                    <div class="home-value-icon home-value-icon-private" aria-hidden="true">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <div class="home-value-text">
+                        <div class="home-value-title" data-i18n="home_value_private_t">Anonymous</div>
+                        <div class="home-value-sub" data-i18n="home_value_private_s">No login needed</div>
+                    </div>
+                </div>
+                <div class="home-value">
+                    <div class="home-value-icon home-value-icon-offline" aria-hidden="true">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    <div class="home-value-text">
+                        <div class="home-value-title" data-i18n="home_value_offline_t">Offline-first</div>
+                        <div class="home-value-sub" data-i18n="home_value_offline_s">Syncs when back online</div>
+                    </div>
+                </div>
+                <div class="home-value">
+                    <div class="home-value-icon home-value-icon-blur" aria-hidden="true">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                    <div class="home-value-text">
+                        <div class="home-value-title" data-i18n="home_value_blur_t">Faces blurred</div>
+                        <div class="home-value-sub" data-i18n="home_value_blur_s">On your phone, before upload</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase 17 — Bottom: single channels row anchored to bottom
+                 via margin-top: auto. Six tiles in one row: Telegram /
+                 WhatsApp / SMS / IVR / Android / iOS. Working channels
+                 render with a green border + brand-coloured icon + small
+                 green live-pip. Non-working channels render with a grey
+                 border + grey icon (no pip). Tapping a non-working tile
+                 surfaces a brief toast "Coming soon" instead of doing
+                 nothing silently. home-screen.js builds each tile via
+                 _buildChannelTile(); Q1 hide-when-empty contract reverted
+                 — every channel always renders so users see the full
+                 picture. -->
+            <div class="home-section home-section-channels" id="home-section-channels">
+                <h2 class="home-section-title" data-i18n="home_channels_title">Other ways to report</h2>
+                <p class="home-section-lede" data-i18n="home_channels_lede">Pick what you trust most. Tap any to send.</p>
+                <div class="home-channels home-channels-six" id="home-channels">
+                    <!-- Populated by home-screen.js _renderChannels() -->
+                </div>
+            </div>
+
             <!-- Footer hint. -->
             <p class="home-offline-hint" data-i18n="home_offline_hint">
                 📡 Works offline and in low internet connectivity.
             </p>
+
+            <!-- Legacy retained DOM — kept hidden so any
+                 _buildChannelTile() append target remains valid for
+                 backward-compat. home-screen.js no longer renders into
+                 #home-apps as of Phase 17 (Expo Go folded into the install
+                 prompt or dropped). -->
+            <div class="home-apps" id="home-apps" hidden></div>
 
             <!-- Hidden retained DOM — old delete-data-panel refs are kept
                  invisible so legacy Telegram-bot / deep-link flows still

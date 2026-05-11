@@ -510,5 +510,13 @@
   "home_consent_v2": "Я согласен поделиться своим отчётом. Лица размываются на моём телефоне до загрузки, а отчёты связаны только с моим анонимным ID.",
   "home_channels_title": "Другие способы сообщить",
   "home_channels_lede": "Используйте канал, которому доверяете. Тот же отчёт, другой путь.",
-  "home_channels_dot_live": "Доступно"
+  "home_channels_dot_live": "Доступно",
+  "home_brand_tagline": "× UNDP · Кризисный репортёр",
+  "home_channel_coming_soon": "{ch} скоро — пока используйте Telegram или IVR",
+  "home_value_private_t": "Анонимно",
+  "home_value_private_s": "Без регистрации",
+  "home_value_offline_t": "Работает без интернета",
+  "home_value_offline_s": "Синхронизируется при подключении",
+  "home_value_blur_t": "Лица размываются",
+  "home_value_blur_s": "На телефоне, до загрузки"
 }

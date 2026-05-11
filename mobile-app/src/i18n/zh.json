@@ -510,5 +510,13 @@
   "home_consent_v2": "我同意分享我的报告。人脸会在上传前在手机上模糊处理，报告只与我的匿名 ID 关联。",
   "home_channels_title": "其他报告方式",
   "home_channels_lede": "选择你最信任的渠道。报告内容相同，入口不同。",
-  "home_channels_dot_live": "可用"
+  "home_channels_dot_live": "可用",
+  "home_brand_tagline": "× UNDP · 危机报告者",
+  "home_channel_coming_soon": "{ch} 即将上线 — 目前请使用 Telegram 或 IVR",
+  "home_value_private_t": "匿名",
+  "home_value_private_s": "无需登录",
+  "home_value_offline_t": "支持离线",
+  "home_value_offline_s": "联网后自动同步",
+  "home_value_blur_t": "人脸自动模糊",
+  "home_value_blur_s": "上传前在手机上完成"
 }

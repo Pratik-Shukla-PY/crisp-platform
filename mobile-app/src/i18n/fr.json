@@ -510,5 +510,13 @@
   "home_consent_v2": "J'accepte de partager mon signalement. Les visages sont floutés sur mon téléphone avant l'envoi, et les signalements sont liés uniquement à mon ID anonyme.",
   "home_channels_title": "Autres façons de signaler",
   "home_channels_lede": "Choisissez le canal qui vous inspire confiance. Même signalement, autre entrée.",
-  "home_channels_dot_live": "Disponible"
+  "home_channels_dot_live": "Disponible",
+  "home_brand_tagline": "× UNDP · Rapporteur de crise",
+  "home_channel_coming_soon": "{ch} bientôt disponible — utilisez Telegram ou IVR pour l'instant",
+  "home_value_private_t": "Anonyme",
+  "home_value_private_s": "Aucune connexion requise",
+  "home_value_offline_t": "Fonctionne hors ligne",
+  "home_value_offline_s": "Synchronise au retour du réseau",
+  "home_value_blur_t": "Visages floutés",
+  "home_value_blur_s": "Sur votre téléphone, avant l'envoi"
 }

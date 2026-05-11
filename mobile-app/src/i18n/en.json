@@ -511,5 +511,13 @@
   "home_consent_v2": "I consent to share my report. Faces are blurred on my phone before upload, and reports are linked only to my anonymous ID.",
   "home_channels_title": "Other ways to report",
   "home_channels_lede": "Use the channel you trust most. Same report, different way in.",
-  "home_channels_dot_live": "Available"
+  "home_channels_dot_live": "Available",
+  "home_brand_tagline": "× UNDP · Crisis Reporter",
+  "home_channel_coming_soon": "{ch} coming soon — try Telegram or IVR for now",
+  "home_value_private_t": "Anonymous",
+  "home_value_private_s": "No login needed",
+  "home_value_offline_t": "Offline-first",
+  "home_value_offline_s": "Syncs when back online",
+  "home_value_blur_t": "Faces blurred",
+  "home_value_blur_s": "On your phone, before upload"
 }

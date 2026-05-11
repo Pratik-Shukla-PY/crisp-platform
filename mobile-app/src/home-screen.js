@@ -88,28 +88,43 @@
     }
 
     // ── Channel tile HTML builder ───────────────────────────────────────
-    // Phase 15 (May 2026) — replaces the small `.home-channel` row buttons
-    // with `.home-channel-tile` elements. Each tile carries a per-channel
-    // brand colour via the `--c` CSS custom property (set inline). Empty
-    // href still skips the tile (Q1 hide-when-not-configured contract
-    // preserved). Adds a small green "live" pip in the top-right corner
-    // so users see at a glance that the channel is actually configured.
+    // Phase 17 (May 2026) — every channel always renders. Working
+    // channels (href set) get a green border + brand-coloured icon + a
+    // small green "live" pip. Non-working channels (empty href) get a
+    // grey border + grey icon + cursor:not-allowed. Tapping a non-
+    // working tile fires a brief "Coming soon" toast.
+    //
+    // The Q1 (May 2026) hide-when-empty contract is REVERTED here per
+    // explicit product direction — users want to see the full picture
+    // of which channels exist, not just the ones currently configured.
     function _buildChannelTile(icon, label, href, key, colorVar) {
-        if (!href) return '';   // Q1 contract — skip when not configured
+        const safeLabel = String(label).replace(/"/g, '&quot;');
+        const safeColor = colorVar || '--accent';
+        if (!href) {
+            // Non-working tile — grey border, grey icon, button (not
+            // anchor), tap → toast.
+            return `
+                <button type="button" class="home-channel-tile is-disabled"
+                        data-channel="${key}"
+                        aria-label="${safeLabel} — coming soon"
+                        aria-disabled="true">
+                    <span class="ct-icon" aria-hidden="true">${icon}</span>
+                    <span class="ct-label">${label}</span>
+                </button>
+            `;
+        }
         const targetAttr = (
             href.startsWith('tel:') || href.startsWith('sms:') || href.startsWith('exp:')
                 ? ''
                 : 'target="_blank" rel="noopener"'
         );
-        const safeColor = colorVar || '--accent';
-        const safeHref = String(href)
-            .replace(/"/g, '&quot;');
+        const safeHref = String(href).replace(/"/g, '&quot;');
         return `
-            <a class="home-channel-tile"
+            <a class="home-channel-tile is-live"
                style="--c: var(${safeColor});"
                href="${safeHref}" ${targetAttr}
                data-channel="${key}"
-               aria-label="${String(label).replace(/"/g, '&quot;')}">
+               aria-label="${safeLabel}">
                 <span class="ct-icon" aria-hidden="true">${icon}</span>
                 <span class="ct-label">${label}</span>
                 <span class="ct-dot" aria-hidden="true" title="Available"></span>
@@ -120,17 +135,10 @@
     function _renderChannels() {
         const channelsEl = document.getElementById('home-channels');
         if (channelsEl) {
+            // Phase 17 — Single 6-tile row, all channels always shown.
+            // Order matches the proposal screenshot: Telegram, WhatsApp,
+            // SMS, IVR, Android, iOS (left to right).
             const html = [
-                // Phase 15 — IVR uses fa-phone-volume (more iconic for a
-                // call-in line than the plain handset).
-                _buildChannelTile('<i class="fa-solid fa-phone-volume"></i>',
-                                  'IVR',
-                                  _telLink(CHANNELS.ivr_phone), 'ivr',
-                                  '--brand-ivr'),
-                _buildChannelTile('<i class="fa-solid fa-message"></i>',
-                                  'SMS',
-                                  _smsLink(CHANNELS.sms_phone, 'CRISP help'), 'sms',
-                                  '--brand-sms'),
                 _buildChannelTile('<i class="fa-brands fa-telegram"></i>',
                                   'Telegram',
                                   _telegramLink(CHANNELS.telegram_bot), 'telegram',
@@ -139,30 +147,57 @@
                                   'WhatsApp',
                                   _whatsappLink(CHANNELS.whatsapp_phone, 'CRISP report'), 'whatsapp',
                                   '--brand-whatsapp'),
-            ].filter(Boolean).join('');
-            channelsEl.innerHTML = html;
-            // Hide the whole "Other ways to report" section if no real channels.
-            const channelsSection = channelsEl.closest('.home-section');
-            if (channelsSection) channelsSection.style.display = html.trim() ? '' : 'none';
-        }
-        const appsEl = document.getElementById('home-apps');
-        if (appsEl) {
-            const html = [
-                _buildChannelTile('<i class="fa-brands fa-apple"></i>',
-                                  'iOS', CHANNELS.ios_app_url, 'ios',
-                                  '--brand-sms'),       // neutral — placeholder for App Store grey
+                _buildChannelTile('<i class="fa-solid fa-message"></i>',
+                                  'SMS',
+                                  _smsLink(CHANNELS.sms_phone, 'CRISP help'), 'sms',
+                                  '--brand-sms'),
+                _buildChannelTile('<i class="fa-solid fa-phone-volume"></i>',
+                                  'IVR',
+                                  _telLink(CHANNELS.ivr_phone), 'ivr',
+                                  '--brand-ivr'),
                 _buildChannelTile('<i class="fa-brands fa-android"></i>',
                                   'Android', CHANNELS.android_app_url, 'android',
-                                  '--good'),            // material-green
-                _buildChannelTile('<i class="fa-solid fa-flask"></i>',
-                                  'Expo Go', CHANNELS.expo_go_url, 'expo',
-                                  '--brand-expo'),      // CRISP orange — Expo re-skinned to brand
-            ].filter(Boolean).join('');
-            appsEl.innerHTML = html;
-            // Hide the whole "Get the app:" section if no real native apps.
-            const appsSection = appsEl.closest('.home-section');
-            if (appsSection) appsSection.style.display = html.trim() ? '' : 'none';
+                                  '--good'),
+                _buildChannelTile('<i class="fa-brands fa-apple"></i>',
+                                  'iOS', CHANNELS.ios_app_url, 'ios',
+                                  '--brand-ios'),
+            ].join('');
+            channelsEl.innerHTML = html;
+            // Section ALWAYS visible (Phase-17 contract change).
+            const channelsSection = channelsEl.closest('.home-section');
+            if (channelsSection) channelsSection.style.display = '';
         }
+        // Phase 17 — #home-apps is now hidden in the markup; we
+        // intentionally don't render into it. Kept as a no-op so any
+        // operator override that still references it doesn't blow up.
+        const appsEl = document.getElementById('home-apps');
+        if (appsEl) {
+            appsEl.innerHTML = '';
+        }
+    }
+
+    // Phase 17 — brief in-place toast for "coming soon" channel taps.
+    // No external dep; just appends a fixed-position div the user can
+    // tap-anywhere to dismiss or which fades out after 2.6 s.
+    function _showComingSoonToast(channelLabel) {
+        const tt = (typeof window.t === 'function') ? window.t : (k, f) => f || k;
+        const msg = tt('home_channel_coming_soon', `${channelLabel} coming soon`)
+            .replace('{ch}', channelLabel);
+        // Cap one toast on screen at a time.
+        const old = document.querySelector('.home-channel-toast');
+        if (old) old.remove();
+        const el = document.createElement('div');
+        el.className = 'home-channel-toast';
+        el.setAttribute('role', 'status');
+        el.textContent = msg;
+        document.body.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('is-visible'));
+        const dismiss = () => {
+            el.classList.remove('is-visible');
+            setTimeout(() => el.remove(), 250);
+        };
+        setTimeout(dismiss, 2600);
+        el.addEventListener('click', dismiss);
     }
 
     // ── Consent gate ────────────────────────────────────────────────────
@@ -243,12 +278,23 @@
         });
     }
 
-    // ── Channel telemetry (best-effort, no-fail) ────────────────────────
+    // ── Channel telemetry + disabled-tile toast ────────────────────────
+    // Phase 17 — non-working (`.is-disabled`) tiles surface a brief
+    // "Coming soon" toast on click. Working tiles just log a telemetry
+    // breadcrumb and let the browser follow the anchor href.
     function _wireChannelTelemetry() {
         document.querySelectorAll('#home-channels [data-channel], #home-apps [data-channel]')
             .forEach((el) => {
-                el.addEventListener('click', () => {
+                el.addEventListener('click', (e) => {
                     const key = el.getAttribute('data-channel');
+                    if (el.classList.contains('is-disabled')) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const labelEl = el.querySelector('.ct-label');
+                        const label = labelEl ? labelEl.textContent.trim() : key;
+                        _showComingSoonToast(label);
+                        return;
+                    }
                     console.log(`[home] channel tap: ${key}`);
                 });
             });
@@ -450,9 +496,14 @@
         if (!devidWrap || !acctWrap) return;
 
         const loggedIn = _isLoggedIn();
+        const valuesEl = document.getElementById('home-values');
         if (loggedIn) {
             devidWrap.setAttribute('hidden', '');
             acctWrap.removeAttribute('hidden');
+            // Phase 17 — hide the "Why CRISP" reassurance card for
+            // logged-in users; they already trust the app + the recent-
+            // reports block fills that vertical space instead.
+            if (valuesEl) valuesEl.setAttribute('hidden', '');
             // Account name from AuthStore.
             try {
                 const u = window.AuthStore.getUser && window.AuthStore.getUser();
@@ -478,6 +529,7 @@
         } else {
             acctWrap.setAttribute('hidden', '');
             devidWrap.removeAttribute('hidden');
+            if (valuesEl) valuesEl.removeAttribute('hidden');
             // Hero — generic title.
             if (titleEl) {
                 const tt = (typeof window.t === 'function') ? window.t : (k) => k;

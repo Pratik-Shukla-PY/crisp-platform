@@ -3674,11 +3674,16 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     width: 100%;
     max-width: 480px;
     margin: 0 auto;
-    padding: 16px 20px 20px;     /* Phase 15 — was 28/20/24, tighter top */
+    padding: 20px 20px 24px;     /* Phase 17 — generous top/bottom */
     display: flex;
     flex-direction: column;
-    gap: 12px;                   /* Phase 15 — was 14, tighter rhythm */
+    gap: 12px;
     box-sizing: border-box;
+    /* Phase 17 — stretch to viewport so `margin-top: auto` on the
+       channels section pushes them to the bottom of the column. The
+       `.home-stage` parent already sets `min-height: 100dvh`. */
+    min-height: 100%;
+    flex: 1;
 }
 
 /* Phase 15 (May 2026) — identity bar (replaces the centred 36 px badge).
@@ -3689,25 +3694,56 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    margin: 0 0 4px;
-    min-height: 36px;
+    gap: 12px;
+    margin: 0 0 12px;       /* Phase 17 — was 4 px; let the bigger brand block breathe */
+    min-height: 52px;        /* Phase 17 — was 36 px */
 }
-.home-brandchip {
+/* Phase 17 — larger brand block (logo glyph + wordmark + tagline) */
+.home-brand {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 11px;
-    border-radius: 999px;
-    background: rgba(249, 115, 22, 0.10);
-    border: 1px solid rgba(249, 115, 22, 0.22);
+    gap: 10px;
+    min-width: 0;
+    flex-shrink: 1;
+}
+.home-brand-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(249,115,22,0.22), rgba(249,115,22,0.06));
+    border: 1px solid rgba(249, 115, 22, 0.32);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
     color: var(--accent, #f97316);
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 18px;
+    box-shadow: 0 0 18px rgba(249, 115, 22, 0.18);
+}
+.home-brand-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+    min-width: 0;
+}
+.home-brand-name {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text, #f1f5f9);
+    letter-spacing: 0.02em;
+}
+.home-brand-sub {
+    font-size: 10.5px;
+    color: var(--text-dim, var(--muted));
     letter-spacing: 0.04em;
+    margin-top: 1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
-.home-brandchip i { font-size: 10px; opacity: 0.85; }
+/* Legacy alias — kept so any lingering reference still renders. */
+.home-brandchip { display: none; }
 
 /* Device-ID badge — pill showing CRISP-XXXX-XXXX with copy + info buttons. */
 .home-devid-badge {
@@ -3851,23 +3887,25 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .home-account-wrap { position: relative; flex-shrink: 0; }
 
-/* Hero — left-aligned + tighter spacing. Anonymous: simple title.
-   Logged-in: greeting + sub. */
+/* Phase 17 — bigger hero. Was 26 px / left-aligned. Now 30 px / centred
+   so the page feels less crowded and the CTA below has more visual
+   anchor. */
 .home-title {
-    text-align: left;
-    margin: 4px 0 0;
+    text-align: center;
+    margin: 8px 0 0;
     font-family: var(--heading, 'Outfit', sans-serif);
-    font-size: 26px;
+    font-size: 30px;
     font-weight: 800;
-    line-height: 1.18;
-    letter-spacing: -0.01em;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
     color: var(--text);
 }
 .home-title-sub {
-    margin: 4px 0 0;
-    font-size: 13px;
+    margin: 6px 0 0;
+    font-size: 14px;
     line-height: 1.45;
     color: var(--text-dim, var(--muted));
+    text-align: center;
 }
 .home-title-sub[hidden] { display: none; }
 
@@ -4027,51 +4065,139 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     line-height: 1.45;
 }
 
-/* Phase 15 — flex-wrap layout so 4 messaging tiles + 3 app tiles flow
-   on any viewport. Each tile is a self-sized 1:1 box with min/max
-   bounds, gap 10 px. */
+/* Phase 17 — Value-props 3-row card fills the empty space between the
+   secondary-row and the channels at the bottom. Subtle dark surface +
+   coloured icon tiles so the row reads as informative-not-decorative. */
+.home-values {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 12px 0 8px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+}
+.home-values[hidden] { display: none; }
+.home-value {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.home-value-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 14px;
+}
+.home-value-icon-private {
+    background: rgba(56, 189, 248, 0.14);
+    color: var(--info, #38bdf8);
+}
+.home-value-icon-offline {
+    background: rgba(34, 197, 94, 0.14);
+    color: var(--good, #22c55e);
+}
+.home-value-icon-blur {
+    background: rgba(244, 114, 182, 0.14);
+    color: var(--pink, #f472b6);
+}
+.home-value-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+}
+.home-value-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.005em;
+}
+.home-value-sub {
+    font-size: 11.5px;
+    color: var(--text-dim, var(--muted));
+    margin-top: 1px;
+}
+
+/* Phase 17 — Bottom-anchored channels section. margin-top: auto
+   pushes the section to the bottom of .home-center's flex column,
+   making good use of the empty vertical space the previous layout
+   left between the hero and the channels. */
+.home-section-channels {
+    margin-top: auto;
+    padding-top: 8px;
+}
+/* Phase 17 — 6-tile-across grid for narrow viewports (390 px and
+   up). Gap tightened from 6 → 4 px so each tile gets enough internal
+   room for "Telegram" / "WhatsApp" / "Android" labels without
+   clipping. Section gets its own horizontal padding so the grid can
+   extend edge-to-edge. */
 .home-channels {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+    justify-content: stretch;
+    /* Negative margin shaves the .home-center 20 px side padding off
+       this row only, letting the tiles use the full content width. */
+    margin-left: -4px;
+    margin-right: -4px;
 }
-.home-apps {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    justify-content: flex-start;
-}
+.home-channels-six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+/* Legacy alias — kept hidden in Phase 17 (Expo Go folded into install
+   prompt / dropped). */
+.home-apps { display: none; }
 
 /* Phase 15 — branded reporting-channel tile. Each tile carries a
    brand colour via the `--c` custom property (set inline by
-   home-screen.js), e.g. WhatsApp green / Telegram blue / IVR
-   info-blue / SMS neutral / Expo CRISP-orange. The colour is
-   referenced via color-mix so the bg + edge tones derive from a
-   single token. */
+   home-screen.js). Phase 17 — shrunk to fit 6 across; non-working
+   tiles render in a neutral grey state via .is-disabled. */
 .home-channel-tile {
-    --c: var(--accent, #f97316);            /* fallback brand */
-    flex: 0 0 calc(25% - 8px);              /* 4-up @ 4 tiles wide */
-    min-width: 70px;
-    max-width: 88px;
+    --c: var(--accent, #f97316);
     aspect-ratio: 1 / 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 10px 6px;
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--c) 16%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c) 32%, transparent);
+    gap: 4px;
+    padding: 6px 2px;       /* Phase 17 — tighter horizontal so labels fit */
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     color: var(--text);
-    font-size: 11.5px;
+    font-size: 10px;
     font-weight: 600;
     text-decoration: none;
     cursor: pointer;
     position: relative;
     box-sizing: border-box;
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+/* Working channel — green border, brand-colored icon, live pip. */
+.home-channel-tile.is-live {
+    background: color-mix(in srgb, var(--c) 12%, transparent);
+    border: 1px solid var(--good, #22c55e);
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.18);
+}
+.home-channel-tile.is-live .ct-icon { color: var(--c); }
+/* Non-working — grey border + grey icon, cursor not-allowed. */
+.home-channel-tile.is-disabled {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    cursor: pointer;        /* still tappable to trigger toast */
+    color: var(--text-mute, var(--muted));
+    opacity: 0.78;
+}
+.home-channel-tile.is-disabled .ct-icon {
+    color: var(--text-mute, var(--muted));
+}
+.home-channel-tile.is-disabled .ct-label {
+    color: var(--text-dim, var(--muted));
 }
 .home-channel-tile:hover {
     background: color-mix(in srgb, var(--c) 22%, transparent);
@@ -4082,26 +4208,38 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     outline: 2px solid var(--c);
     outline-offset: 2px;
 }
-.home-channel-tile:active { transform: scale(0.98); }
+.home-channel-tile:active { transform: scale(0.96); }
+.home-channel-tile:hover {
+    background: color-mix(in srgb, var(--c, #fff) 18%, transparent);
+}
+.home-channel-tile.is-disabled:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: none;
+}
 .home-channel-tile .ct-icon {
-    font-size: 22px;
+    font-size: 18px;         /* Phase 17 — was 22 px, shrunk for 6-across */
     color: var(--c);
     line-height: 1;
 }
 .home-channel-tile .ct-label {
-    font-size: 11px;
+    font-size: 9.5px;         /* Phase 17 — fits 6-across on 390 px viewport */
     color: var(--text);
     font-weight: 700;
     text-align: center;
-    line-height: 1.15;
+    line-height: 1.1;
+    /* Phase 17 — single-line label. The labels stay short ("Telegram",
+       "WhatsApp", "Android", "iOS") and at 9.5 px font they all fit
+       inside the ~52 px tile width without hyphenation. */
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
     white-space: nowrap;
     max-width: 100%;
+    letter-spacing: -0.01em;
 }
 .home-channel-tile .ct-dot {
     position: absolute;
-    top: 7px; right: 7px;
+    top: 5px; right: 5px;
     width: 6px; height: 6px;
     border-radius: 50%;
     background: var(--good, #22c55e);
@@ -4109,12 +4247,36 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 [dir="rtl"] .home-channel-tile .ct-dot {
     right: auto;
-    left: 7px;
+    left: 5px;
 }
-/* Apps row — 3-up at the same tile size for visual consistency. */
-.home-apps .home-channel-tile {
-    flex: 0 0 calc(33.333% - 7px);
-    max-width: 100px;
+
+/* Phase 17 — "Coming soon" toast for disabled-channel taps. */
+.home-channel-toast {
+    position: fixed;
+    bottom: max(24px, env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 1400;
+    padding: 10px 16px;
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 999px;
+    color: var(--text, #f1f5f9);
+    font-size: 12.5px;
+    font-weight: 600;
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,0.45));
+    opacity: 0;
+    transition: opacity 0.22s ease, transform 0.22s ease;
+    pointer-events: auto;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 90vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.home-channel-toast.is-visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
 }
 
 /* Legacy class — kept as a no-op shim in case any external CSS
