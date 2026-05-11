@@ -82,6 +82,30 @@
         <button id="btn-lang-current" class="active" title="Tap to change language">🌐 EN</button>
     </div>
 
+    <!-- Phase 18 (May 2026) — global top-bar icons: PWA install + voice
+         readout. Live alongside the existing language pill so they're
+         visible across the whole app. Install icon is gated on
+         InstallPrompt.canInstall but `display-mode: standalone` swap
+         hides it cleanly when the app is already installed. Voice
+         readout (🔊) reads the current stage's primary content aloud
+         in the active language — UNDP rubric Q3 (voice-first for
+         low-literacy users in panic). -->
+    <div class="home-top-actions" id="home-top-actions">
+        <button id="btn-home-install-icon" type="button"
+                class="home-top-icon-btn"
+                aria-label="Install on home screen"
+                title="Install on home screen"
+                hidden>
+            <i class="fa-solid fa-download" aria-hidden="true"></i>
+        </button>
+        <button id="btn-home-voice" type="button"
+                class="home-top-icon-btn"
+                aria-label="Read this page aloud"
+                title="Read this page aloud">
+            <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
+        </button>
+    </div>
+
     <!-- Full-screen image viewer overlay (Apr 2026). Opens when the user
          taps any photo thumbnail on stage-photo. Shows the image at full
          bleed + a Delete button with confirmation. -->
@@ -287,7 +311,7 @@
                     </div>
                 </div>
 
-                <!-- Anonymous slot — device-ID badge + tooltip. -->
+                <!-- Anonymous slot — device-ID badge + tooltip + (Phase 18) badge chip. -->
                 <div class="home-devid-wrap" id="home-devid-wrap">
                     <div class="home-devid-badge" id="home-devid-badge"
                          role="group" aria-labelledby="home-devid-label">
@@ -310,6 +334,16 @@
                         <strong data-i18n="home_devid_tip_title">Save this ID</strong>
                         <span data-i18n="home_devid_tip_body">Use this to find your reports later, even if you lose the app. Your ID is anonymous — we cannot link it back to you.</span>
                         <button id="btn-home-devid-tip-dismiss" type="button" data-i18n="home_devid_tip_dismiss">Got it</button>
+                    </div>
+                    <!-- Phase 18 — gamification badge chip. Fetched from
+                         /api/v1/reports/profile/<hash>. Mapping:
+                         NEWCOMER → 🌱 Newcomer, HELPER → ⛑ Helper,
+                         GUARDIAN → 🛡 Guardian, CHAMPION → ⭐ Champion,
+                         HERO → 🏆 Hero. Hidden until profile resolves. -->
+                    <div class="home-badge-chip" id="home-badge-chip" hidden
+                         role="status" aria-label="Reporter level">
+                        <span class="hb-emoji" id="home-badge-emoji" aria-hidden="true">🌱</span>
+                        <span class="hb-label" id="home-badge-label">Newcomer</span>
                     </div>
                 </div>
 
@@ -341,9 +375,11 @@
                 </div>
             </div>
 
-            <!-- Hero — title (anonymous) OR greeting (logged-in). -->
-            <h1 class="hero-title home-title" id="home-title" data-i18n="home_title">Report an Incident</h1>
-            <p class="home-title-sub" id="home-title-sub" hidden data-i18n="home_greeting_sub">Tap below to report another incident.</p>
+            <!-- Phase 18 — Standalone hero title removed. The orange CTA
+                 below now carries the descriptive label "Report an
+                 Incident". Logged-in greeting moves to a small grey
+                 supratext above the CTA via JS. -->
+            <p class="home-title-sub" id="home-title-sub" hidden data-i18n="home_greeting_sub">Welcome back.</p>
 
             <!-- Live impact metrics. Hidden on first-ever load (no data);
                  populated by app.js::updateHomeImpactMetrics() once the
@@ -388,22 +424,26 @@
                 </label>
             </div>
 
-            <!-- Primary CTA. Existing handler in app.js routes to v4 capture
-                 (or v3 stage-where via UI_V3_ENABLED). Disabled by
-                 home-screen.js until consent is checked. -->
+            <!-- Phase 18 — Primary CTA. Label updated from "Start Reporting"
+                 to "Report an Incident" so the standalone hero title can
+                 be removed. CSS bumps height + font so it visually
+                 anchors the page. Existing handler in app.js routes
+                 to v4 capture (or v3 stage-where via UI_V3_ENABLED).
+                 Disabled by home-screen.js until consent is checked. -->
             <button class="big-cta" id="btn-start">
                 <i class="fa-solid fa-play"></i>
-                <span data-i18n="start_btn">Start Reporting</span>
+                <span data-i18n="home_cta_primary">Report an Incident</span>
             </button>
 
-            <!-- Phase 17 (May 2026) — secondary actions sit just below the
-                 hero CTA. My Reports + Login Sign up for anonymous users;
-                 for logged-in users both buttons hide (lives in the
-                 dropdown menu instead). -->
+            <!-- Phase 17 + 18 — Secondary actions. Phase 18 — My Reports
+                 button now carries an inline (N) count populated by
+                 home-screen.js _renderMyReportsCount. Hidden when
+                 count = 0 to avoid "My Reports (0)" looking sad. -->
             <div class="home-secondary-row" id="home-secondary-row">
                 <button class="secondary-cta" id="btn-my-reports" type="button">
                     <i class="fa-solid fa-clipboard-list"></i>
                     <span data-i18n="my_reports">My Reports</span>
+                    <span class="mr-count" id="mr-count" hidden>(0)</span>
                     <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
                 </button>
                 <button class="tertiary-cta" id="btn-login" type="button">
@@ -412,51 +452,14 @@
                 </button>
             </div>
 
-            <!-- PWA install prompt — shown by home-screen.js only when
-                 InstallPrompt.canInstall is true. -->
-            <div class="home-install" id="home-install" style="display:none;">
-                <button class="home-install-btn" id="home-install-btn" type="button">
-                    <i class="fa-solid fa-mobile-screen-button"></i>
-                    <span id="home-install-label" data-i18n="landing_install_pwa">
-                        Install on home screen
-                    </span>
-                </button>
-            </div>
-
-            <!-- Phase 17 (May 2026) — Value-props card to fill the
-                 vertical space the previous layout left empty. Three
-                 short reassurances aligned with UNDP must-haves:
-                 anonymous (must-have #9), offline-first (#3), AI
-                 face-blur (#7). Hidden when recent-reports is showing
-                 (logged-in users get a different message there). -->
-            <div class="home-values" id="home-values">
-                <div class="home-value">
-                    <div class="home-value-icon home-value-icon-private" aria-hidden="true">
-                        <i class="fa-solid fa-shield-halved"></i>
-                    </div>
-                    <div class="home-value-text">
-                        <div class="home-value-title" data-i18n="home_value_private_t">Anonymous</div>
-                        <div class="home-value-sub" data-i18n="home_value_private_s">No login needed</div>
-                    </div>
-                </div>
-                <div class="home-value">
-                    <div class="home-value-icon home-value-icon-offline" aria-hidden="true">
-                        <i class="fa-solid fa-cloud-arrow-up"></i>
-                    </div>
-                    <div class="home-value-text">
-                        <div class="home-value-title" data-i18n="home_value_offline_t">Offline-first</div>
-                        <div class="home-value-sub" data-i18n="home_value_offline_s">Syncs when back online</div>
-                    </div>
-                </div>
-                <div class="home-value">
-                    <div class="home-value-icon home-value-icon-blur" aria-hidden="true">
-                        <i class="fa-solid fa-user-shield"></i>
-                    </div>
-                    <div class="home-value-text">
-                        <div class="home-value-title" data-i18n="home_value_blur_t">Faces blurred</div>
-                        <div class="home-value-sub" data-i18n="home_value_blur_s">On your phone, before upload</div>
-                    </div>
-                </div>
+            <!-- Phase 18 — Safety disambiguation hint. CRISP is for
+                 reporting AFTER a crisis event, not 911 / ambulance
+                 dispatch. Without this, a panicked user might wait on
+                 the app for life-threatening response. Subtle amber
+                 banner so it reads as guidance, not alarm. -->
+            <div class="home-safety-hint" id="home-safety-hint" role="note">
+                <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                <span data-i18n="home_safety_hint">Life-threatening emergency? Call your local emergency number first. CRISP is for reporting after the event.</span>
             </div>
 
             <!-- Phase 17 — Bottom: single channels row anchored to bottom
@@ -470,18 +473,32 @@
                  _buildChannelTile(); Q1 hide-when-empty contract reverted
                  — every channel always renders so users see the full
                  picture. -->
+            <!-- Phase 18 — Channel section. Layout reverts to a 3×2
+                 grid (was 6×1 in Phase 17) so labels fit cleanly without
+                 ellipsis and the row reads as a "panel" not a strip. -->
             <div class="home-section home-section-channels" id="home-section-channels">
                 <h2 class="home-section-title" data-i18n="home_channels_title">Other ways to report</h2>
                 <p class="home-section-lede" data-i18n="home_channels_lede">Pick what you trust most. Tap any to send.</p>
-                <div class="home-channels home-channels-six" id="home-channels">
+                <div class="home-channels home-channels-grid" id="home-channels">
                     <!-- Populated by home-screen.js _renderChannels() -->
                 </div>
             </div>
 
-            <!-- Footer hint. -->
-            <p class="home-offline-hint" data-i18n="home_offline_hint">
-                📡 Works offline and in low internet connectivity.
-            </p>
+            <!-- Phase 18 — Offline footer removed (was redundant; the
+                 Privacy page now carries the offline-first promise as
+                 part of "Why CRISP"). The new utility footer below
+                 replaces it. -->
+            <nav class="home-utility-footer" id="home-utility-footer" aria-label="Footer links">
+                <button class="home-utility-link" id="btn-home-privacy" type="button" data-i18n="home_footer_privacy">Privacy</button>
+                <span class="home-utility-dot" aria-hidden="true">·</span>
+                <a class="home-utility-link" id="btn-home-opensrc"
+                   href="https://github.com/Pratik-Shukla-PY/crisp-platform"
+                   target="_blank" rel="noopener" data-i18n="home_footer_opensrc">Open source</a>
+                <span class="home-utility-dot" aria-hidden="true">·</span>
+                <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
+                <span class="home-utility-dot" aria-hidden="true">·</span>
+                <span class="home-utility-version" id="home-utility-version">v0.7.18</span>
+            </nav>
 
             <!-- Legacy retained DOM — kept hidden so any
                  _buildChannelTile() append target remains valid for
@@ -1309,6 +1326,141 @@
 
     <!-- Settings surface (lightweight). Reachable from the account pill's
          gear icon. Contains only Logout for now; extensible. -->
+    <!-- Phase 18 (May 2026) — Privacy & Features stage. The "Why CRISP"
+         trust card was removed from the home and the long-form content
+         lives here instead. Seven sections cover UNDP rubric §3.1e
+         (explicit privacy notice), must-have #7 (PII protection),
+         must-have #9 (anonymity), must-have #3 (offline-first), and
+         the Apache-2.0 open-source disclosure. Reachable from the home
+         utility footer + the Settings stage + the account dropdown. -->
+    <div class="stage" id="stage-privacy">
+        <div class="stage-header">
+            <h2 data-i18n="privacy_title">Privacy & how it works</h2>
+            <button class="history-back" id="btn-privacy-back" type="button" aria-label="Back" title="Back">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+        </div>
+        <div class="privacy-body">
+
+            <!-- Section 1: Why CRISP (the 3 trust pillars moved from home). -->
+            <section class="privacy-section">
+                <h3 class="privacy-section-title" data-i18n="privacy_why_title">Why CRISP</h3>
+                <div class="privacy-card">
+                    <div class="privacy-card-icon privacy-icon-private" aria-hidden="true">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <div class="privacy-card-text">
+                        <strong data-i18n="home_value_private_t">Anonymous</strong>
+                        <p data-i18n="privacy_why_anon_body">Reports are linked to a private device ID that we cannot trace back to you. No phone number, no email, no login needed. You can use the app forever without revealing who you are.</p>
+                    </div>
+                </div>
+                <div class="privacy-card">
+                    <div class="privacy-card-icon privacy-icon-offline" aria-hidden="true">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    <div class="privacy-card-text">
+                        <strong data-i18n="home_value_offline_t">Offline-first</strong>
+                        <p data-i18n="privacy_why_offline_body">The app works in low-connectivity zones. Reports queue locally on your device and upload automatically once the network is back. You never lose what you've captured.</p>
+                    </div>
+                </div>
+                <div class="privacy-card">
+                    <div class="privacy-card-icon privacy-icon-blur" aria-hidden="true">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                    <div class="privacy-card-text">
+                        <strong data-i18n="home_value_blur_t">Faces blurred</strong>
+                        <p data-i18n="privacy_why_blur_body">Faces are detected and blurred on your phone before the photo is uploaded. The server never sees an unredacted face. This is a UNDP requirement (§2.9) and a CRISP guarantee.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 2: What we collect. -->
+            <section class="privacy-section">
+                <h3 class="privacy-section-title" data-i18n="privacy_collect_title">What we collect</h3>
+                <ul class="privacy-list">
+                    <li data-i18n="privacy_collect_1">Photos you take (with faces blurred client-side)</li>
+                    <li data-i18n="privacy_collect_2">Voice notes you record</li>
+                    <li data-i18n="privacy_collect_3">Text descriptions you type</li>
+                    <li data-i18n="privacy_collect_4">GPS coordinates at the time of capture</li>
+                    <li data-i18n="privacy_collect_5">Crisis type, infrastructure type, and damage classification you select</li>
+                    <li data-i18n="privacy_collect_6">A SHA-256 hash of your device fingerprint (your reporter ID)</li>
+                </ul>
+            </section>
+
+            <!-- Section 3: What we never collect. -->
+            <section class="privacy-section">
+                <h3 class="privacy-section-title" data-i18n="privacy_never_title">What we never collect</h3>
+                <ul class="privacy-list privacy-list-never">
+                    <li data-i18n="privacy_never_1">Faces (blurred on-device before upload)</li>
+                    <li data-i18n="privacy_never_2">Your real name</li>
+                    <li data-i18n="privacy_never_3">Your phone number or email (unless you choose to sign in)</li>
+                    <li data-i18n="privacy_never_4">Browser fingerprints, tracking pixels, or advertising IDs</li>
+                    <li data-i18n="privacy_never_5">Your contacts, photos library, or any data outside what you explicitly submit</li>
+                </ul>
+            </section>
+
+            <!-- Section 4: Your rights. -->
+            <section class="privacy-section">
+                <h3 class="privacy-section-title" data-i18n="privacy_rights_title">Your rights</h3>
+                <ul class="privacy-list">
+                    <li data-i18n="privacy_rights_1">Delete any single report (per-report Delete button on the detail view)</li>
+                    <li data-i18n="privacy_rights_2">Delete all your reports at once (Settings → Delete all my reports)</li>
+                    <li data-i18n="privacy_rights_3">24-hour soft-delete grace — you can undo deletion within 24 hours before permanent removal</li>
+                    <li data-i18n="privacy_rights_4">Export your reports as JSON / CSV (Settings → Export my data — coming soon)</li>
+                    <li data-i18n="privacy_rights_5">Anonymous reports stay anonymous forever; we cannot unblind them</li>
+                </ul>
+            </section>
+
+            <!-- Section 5: Open source. -->
+            <section class="privacy-section">
+                <h3 class="privacy-section-title" data-i18n="privacy_opensrc_title">Open source</h3>
+                <p data-i18n="privacy_opensrc_body">CRISP is open source under the Apache-2.0 licence. The code is published on GitHub. You can audit how your data is handled, propose changes, or self-host the platform.</p>
+                <a class="privacy-link" href="https://github.com/Pratik-Shukla-PY/crisp-platform" target="_blank" rel="noopener">
+                    <i class="fa-brands fa-github" aria-hidden="true"></i>
+                    <span data-i18n="privacy_opensrc_repo">View repository</span>
+                </a>
+                <a class="privacy-link" href="https://undp.org/" target="_blank" rel="noopener">
+                    <i class="fa-solid fa-globe" aria-hidden="true"></i>
+                    <span data-i18n="privacy_opensrc_undp">UNDP InnoCentive Challenge</span>
+                </a>
+            </section>
+
+            <!-- Section 6: How it works (3-step inline tutorial). -->
+            <section class="privacy-section" id="privacy-how-it-works">
+                <h3 class="privacy-section-title" data-i18n="privacy_how_title">How it works</h3>
+                <ol class="privacy-howto">
+                    <li>
+                        <span class="privacy-howto-num">1</span>
+                        <div>
+                            <strong data-i18n="privacy_how_1_t">Capture</strong>
+                            <p data-i18n="privacy_how_1_b">Take a photo, record a voice note, or type a quick description. Any one is enough — all three is even better.</p>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="privacy-howto-num">2</span>
+                        <div>
+                            <strong data-i18n="privacy_how_2_t">Classify</strong>
+                            <p data-i18n="privacy_how_2_b">Tap to tell us how bad the damage is, what was hit, and what caused it. Plain-language tiles — no jargon.</p>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="privacy-howto-num">3</span>
+                        <div>
+                            <strong data-i18n="privacy_how_3_t">Send</strong>
+                            <p data-i18n="privacy_how_3_b">Tap Send. If you're offline, the report queues and uploads automatically when the network is back.</p>
+                        </div>
+                    </li>
+                </ol>
+            </section>
+
+            <!-- Section 7: Multi-channel parity. -->
+            <section class="privacy-section">
+                <h3 class="privacy-section-title" data-i18n="privacy_channels_title">Multi-channel parity</h3>
+                <p data-i18n="privacy_channels_body">You can report through the PWA (this app), the Android app, an SMS, an IVR call (voice phone tree), a WhatsApp message, or a Telegram chat. Every channel produces the same report on the responder side, with the same protections.</p>
+            </section>
+        </div>
+    </div>
+
     <div class="stage" id="stage-settings">
         <div class="stage-header">
             <h2 data-i18n="settings_title">Settings</h2>
@@ -1318,6 +1470,13 @@
                 <span class="settings-label" data-i18n="settings_account">Account</span>
                 <span class="settings-value" id="settings-account-name">—</span>
             </div>
+            <!-- Phase 18 — Privacy & features entry. Routes to stage-privacy
+                 which holds the moved "Why CRISP" content + privacy notice
+                 + open-source disclosure. -->
+            <button class="nav-btn" id="btn-settings-privacy" type="button">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span data-i18n="settings_privacy">Privacy &amp; features</span>
+            </button>
             <button class="nav-btn" id="btn-settings-unlink-device" type="button">
                 <i class="fa-solid fa-link-slash"></i>
                 <span data-i18n="settings_unlink_device">Unlink this device</span>

@@ -488,7 +488,6 @@
         const devidWrap = document.getElementById('home-devid-wrap');
         const acctWrap = document.getElementById('home-account-wrap');
         const acctName = document.getElementById('account-name');
-        const titleEl = document.getElementById('home-title');
         const subEl = document.getElementById('home-title-sub');
         const myReportsBtn = document.getElementById('btn-my-reports');
         const loginBtn = document.getElementById('btn-login');
@@ -496,14 +495,9 @@
         if (!devidWrap || !acctWrap) return;
 
         const loggedIn = _isLoggedIn();
-        const valuesEl = document.getElementById('home-values');
         if (loggedIn) {
             devidWrap.setAttribute('hidden', '');
             acctWrap.removeAttribute('hidden');
-            // Phase 17 — hide the "Why CRISP" reassurance card for
-            // logged-in users; they already trust the app + the recent-
-            // reports block fills that vertical space instead.
-            if (valuesEl) valuesEl.setAttribute('hidden', '');
             // Account name from AuthStore.
             try {
                 const u = window.AuthStore.getUser && window.AuthStore.getUser();
@@ -511,15 +505,15 @@
                     acctName.textContent = u.displayName || u.id || '—';
                 }
             } catch (_) {}
-            // Hero — personalised greeting.
-            if (titleEl) {
+            // Phase 18 — supratext above the CTA reads "Welcome back, {name}."
+            if (subEl) {
                 const tt = (typeof window.t === 'function') ? window.t : (k) => k;
                 const u = (window.AuthStore && window.AuthStore.getUser && window.AuthStore.getUser()) || {};
                 const name = (u.displayName || '').split(/\s+/)[0] || '';
                 const tmpl = tt('home_greeting_loggedin') || 'Welcome back, {name}.';
-                titleEl.textContent = name ? tmpl.replace('{name}', name) : (tt('home_title') || 'Report an Incident');
+                subEl.textContent = name ? tmpl.replace('{name}', name) : '';
+                if (name) subEl.removeAttribute('hidden'); else subEl.setAttribute('hidden', '');
             }
-            if (subEl) subEl.removeAttribute('hidden');
             // Hide bottom secondary row buttons (My Reports + Login lives in dropdown).
             if (myReportsBtn) myReportsBtn.style.display = 'none';
             if (loginBtn) loginBtn.style.display = 'none';
@@ -529,12 +523,6 @@
         } else {
             acctWrap.setAttribute('hidden', '');
             devidWrap.removeAttribute('hidden');
-            if (valuesEl) valuesEl.removeAttribute('hidden');
-            // Hero — generic title.
-            if (titleEl) {
-                const tt = (typeof window.t === 'function') ? window.t : (k) => k;
-                titleEl.textContent = tt('home_title') || 'Report an Incident';
-            }
             if (subEl) subEl.setAttribute('hidden', '');
             // Restore bottom secondary row.
             if (myReportsBtn) myReportsBtn.style.display = '';
@@ -542,6 +530,203 @@
             // Hide recent-reports block.
             if (recentBlock) recentBlock.setAttribute('hidden', '');
         }
+        // Phase 18 — repaint badge chip + My Reports count for both states.
+        try { _renderBadgeChip(); } catch (_) {}
+        try { _renderMyReportsCount(); } catch (_) {}
+    }
+
+    // ── Phase 18 — badge chip + My Reports count + voice + install ────
+    //
+    // Badge chip: fetches `/api/v1/reports/profile/<device-hash>` once on
+    // home init + on each repaint. Maps `badge_level` to emoji + label
+    // (5 tiers: NEWCOMER / HELPER / GUARDIAN / CHAMPION / HERO).
+    // sessionStorage caches the last result for instant paint.
+    const BADGE_LEVELS = {
+        NEWCOMER:  { emoji: '🌱', cls: 'lvl-newcomer',  i18nKey: 'home_badge_newcomer'  },
+        HELPER:    { emoji: '⛑',  cls: 'lvl-helper',    i18nKey: 'home_badge_helper'    },
+        GUARDIAN:  { emoji: '🛡', cls: 'lvl-guardian',  i18nKey: 'home_badge_guardian'  },
+        CHAMPION:  { emoji: '⭐', cls: 'lvl-champion',  i18nKey: 'home_badge_champion'  },
+        HERO:      { emoji: '🏆', cls: 'lvl-hero',      i18nKey: 'home_badge_hero'      },
+    };
+    const BADGE_CACHE_KEY = 'crisp_home_badge_v1';
+    function _readBadgeCache() {
+        try { return JSON.parse(sessionStorage.getItem(BADGE_CACHE_KEY) || 'null'); } catch { return null; }
+    }
+    function _writeBadgeCache(level) {
+        try { sessionStorage.setItem(BADGE_CACHE_KEY, JSON.stringify(level || null)); } catch {}
+    }
+    function _paintBadgeChip(level) {
+        const chip = document.getElementById('home-badge-chip');
+        const emojiEl = document.getElementById('home-badge-emoji');
+        const labelEl = document.getElementById('home-badge-label');
+        if (!chip || !emojiEl || !labelEl) return;
+        const def = BADGE_LEVELS[String(level || '').toUpperCase()] || BADGE_LEVELS.NEWCOMER;
+        emojiEl.textContent = def.emoji;
+        // Phase 18 — `window.t(key)` returns the KEY itself when not yet
+        // resolved (en.json loads async). Treat key === t(key) as
+        // "not resolved" and fall back to a sensible English default.
+        const ENGLISH_FALLBACKS = {
+            'home_badge_newcomer': 'Newcomer',
+            'home_badge_helper':   'Helper',
+            'home_badge_guardian': 'Guardian',
+            'home_badge_champion': 'Champion',
+            'home_badge_hero':     'Hero',
+        };
+        let labelText = ENGLISH_FALLBACKS[def.i18nKey] || 'Newcomer';
+        if (typeof window.t === 'function') {
+            const t = window.t(def.i18nKey);
+            if (t && t !== def.i18nKey) labelText = t;
+        }
+        labelEl.textContent = labelText;
+        // Reset level classes then add the active one.
+        Object.values(BADGE_LEVELS).forEach((d) => chip.classList.remove(d.cls));
+        chip.classList.add(def.cls);
+        chip.removeAttribute('hidden');
+    }
+    async function _renderBadgeChip() {
+        const chip = document.getElementById('home-badge-chip');
+        if (!chip) return;
+        // Optimistic paint from cache.
+        const cached = _readBadgeCache();
+        if (cached) _paintBadgeChip(cached);
+        // Fetch fresh.
+        let hash = '';
+        try {
+            hash = localStorage.getItem('crisp_device_id_v2')
+                || localStorage.getItem('crisp_device_hash')
+                || localStorage.getItem('crisp_device_id') || '';
+        } catch (_) {}
+        if (!hash) {
+            // No device hash yet — default to NEWCOMER so the chip still
+            // shows something meaningful on first paint.
+            if (!cached) _paintBadgeChip('NEWCOMER');
+            return;
+        }
+        try {
+            const apiBase = window.API_BASE || '/api/v1';
+            const res = await fetch(`${apiBase}/reports/profile/${encodeURIComponent(hash)}`);
+            if (!res.ok) return;
+            const p = await res.json();
+            const lvl = String(p.badge_level || 'NEWCOMER').toUpperCase();
+            _paintBadgeChip(lvl);
+            _writeBadgeCache(lvl);
+        } catch (_) {
+            // Network error — fall back to cached or NEWCOMER. Never
+            // hide the chip; "Newcomer" is the honest default.
+            if (!cached) _paintBadgeChip('NEWCOMER');
+        }
+    }
+
+    // My Reports (X) count — counts local cache + in-flight queue.
+    function _renderMyReportsCount() {
+        const span = document.getElementById('mr-count');
+        if (!span) return;
+        let count = 0;
+        try {
+            // _submittedCache lives in app.js scope. Use the global lookup
+            // if exposed, otherwise count the rendered list as a fallback.
+            if (Array.isArray(window._submittedCache)) {
+                count = window._submittedCache.length;
+            }
+        } catch (_) {}
+        if (count > 0) {
+            span.textContent = `(${count})`;
+            span.removeAttribute('hidden');
+        } else {
+            span.setAttribute('hidden', '');
+        }
+    }
+
+    // PWA install icon — always visible until `display-mode: standalone`
+    // matches (i.e. the app has been added to home screen).
+    function _wireInstallIcon() {
+        const btn = document.getElementById('btn-home-install-icon');
+        if (!btn) return;
+        function refresh() {
+            // If we're already standalone (installed), hide the icon.
+            const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+                || window.navigator.standalone === true;
+            if (standalone) { btn.setAttribute('hidden', ''); return; }
+            // Otherwise show — InstallPrompt.show() figures out the right
+            // path (Chrome native vs iOS sheet) at click time.
+            btn.removeAttribute('hidden');
+        }
+        refresh();
+        if (window.matchMedia) {
+            window.matchMedia('(display-mode: standalone)').addEventListener?.('change', refresh);
+        }
+        btn.addEventListener('click', async () => {
+            try {
+                if (window.InstallPrompt && window.InstallPrompt.show) {
+                    await window.InstallPrompt.show();
+                } else {
+                    // Surface the existing iOS / fallback sheet.
+                    const fallback = document.getElementById('home-install');
+                    if (fallback) {
+                        fallback.style.display = '';
+                        fallback.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            } catch (e) {
+                console.warn('[home] install icon failed:', e);
+            }
+        });
+    }
+
+    // Voice readout — top-bar 🔊 button. Reads aloud the current
+    // home content in the active language. UNDP rubric Q3.
+    function _wireHomeVoice() {
+        const btn = document.getElementById('btn-home-voice');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+            const tt = (typeof window.t === 'function') ? window.t : (k, f) => f || k;
+            const parts = [
+                'CRISP',
+                tt('home_cta_primary', 'Report an Incident'),
+                tt('home_voice_hint', 'Tap the orange button to start. Or use Telegram, WhatsApp, SMS, or a phone call.'),
+            ];
+            const text = parts.join('. ');
+            try {
+                if (window.VoiceReadout && window.VoiceReadout.speak) {
+                    btn.classList.add('is-speaking');
+                    window.VoiceReadout.speak(text);
+                    // The speak() implementation in voice-readout.js cancels
+                    // on next call; we leave the visual state on for a few
+                    // seconds then auto-clear.
+                    setTimeout(() => btn.classList.remove('is-speaking'), 6000);
+                }
+            } catch (e) {
+                console.warn('[home] voice readout failed:', e);
+                btn.classList.remove('is-speaking');
+            }
+        });
+    }
+
+    // Utility-footer + safety-hint navigation.
+    function _wireUtilityFooter() {
+        const privacy = document.getElementById('btn-home-privacy');
+        const help = document.getElementById('btn-home-help');
+        if (privacy) privacy.addEventListener('click', () => {
+            if (typeof window.goToStage === 'function') window.goToStage('stage-privacy');
+        });
+        if (help) help.addEventListener('click', () => {
+            if (typeof window.goToStage === 'function') window.goToStage('stage-privacy');
+            // Scroll to the "How it works" section after a beat.
+            setTimeout(() => {
+                const t = document.getElementById('privacy-how-it-works');
+                if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 250);
+        });
+        // Settings → Privacy & features button.
+        const settingsPrivacy = document.getElementById('btn-settings-privacy');
+        if (settingsPrivacy) settingsPrivacy.addEventListener('click', () => {
+            if (typeof window.goToStage === 'function') window.goToStage('stage-privacy');
+        });
+        // Stage-privacy back button.
+        const back = document.getElementById('btn-privacy-back');
+        if (back) back.addEventListener('click', () => {
+            if (typeof window.goToStage === 'function') window.goToStage('stage-home');
+        });
     }
 
     // ── Recent-reports (logged-in only) ────────────────────────────────
@@ -669,6 +854,10 @@
         _wireChannelTelemetry();
         _wireDevidBadge();
         _wireAccountMenu();
+        // Phase 18 — new wirings.
+        _wireInstallIcon();
+        _wireHomeVoice();
+        _wireUtilityFooter();
         _paintIdentityBar();
         // View-all button in recent-reports → openMyReports
         const viewAll = document.getElementById('btn-home-recent-viewall');
@@ -702,6 +891,10 @@
         paintIdentityBar: _paintIdentityBar,
         paintDevidBadge: _paintDevidBadge,
         renderRecentReports: _renderRecentReports,
+        // Phase 18 — exposed for app.js to call after _submittedCache
+        // mutations + after profile fetches.
+        paintBadgeChip: _renderBadgeChip,
+        paintMyReportsCount: _renderMyReportsCount,
         _channels: CHANNELS,  // for test inspection
     };
 

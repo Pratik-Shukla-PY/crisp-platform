@@ -2432,7 +2432,7 @@ let _lastRenderedReport = null;
 // previous v4 stage when the user navigates between them. Without
 // this, transitions between v4 stages left the prior one .active
 // and the absolute-positioned stages stacked on top of each other.
-const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-review', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail', 'stage-login', 'stage-settings', 'stage-v4-capture', 'stage-v4-classify', 'stage-v4-review', 'stage-undp-details'];
+const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-review', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail', 'stage-login', 'stage-settings', 'stage-privacy', 'stage-v4-capture', 'stage-v4-classify', 'stage-v4-review', 'stage-undp-details'];
 
 // ── Phase B4 (Apr 2026 UI v3) — 8-stage capture flow ───────────────────────
 // When `UI_V3_ENABLED` is on, the capture flow is re-ordered:
@@ -8204,6 +8204,10 @@ function _timeAgo(iso) {
 
 // Cache so the detail view can hydrate instantly without another fetch.
 let _submittedCache = [];
+// Phase 18 — expose so home-screen.js's _renderMyReportsCount() can
+// read the count without duplicating fetch logic. Updated by every
+// _renderSubmittedReports / addSyntheticSubmittedReport call.
+window._submittedCache = _submittedCache;
 
 // PR 7 (Apr 2026): remember the just-submitted report so the success screen's
 // Track button can open its detail view even before the status-since poll
@@ -8392,6 +8396,15 @@ async function _renderSubmittedReports() {
     // Data for the detail view is cached in _submittedCache so the tap
     // doesn't round-trip to the server again.
     _submittedCache = reports.slice();
+    // Phase 18 — keep the window-exposed mirror in sync so home-
+    // screen.js's _renderMyReportsCount picks up fresh counts.
+    window._submittedCache = _submittedCache;
+    // Best-effort: tell home-screen.js to repaint the count.
+    try {
+        if (window.CrispHome && typeof window.CrispHome.paintMyReportsCount === 'function') {
+            window.CrispHome.paintMyReportsCount();
+        }
+    } catch (_) {}
 
     // M6 (May 2026) — show the filter + view-toggle controls now that we
     // have at least one report. The controls bar is hidden when empty.
