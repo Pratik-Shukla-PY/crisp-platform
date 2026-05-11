@@ -124,12 +124,57 @@ def _hash_phone(phone: str) -> str:
 
 
 def _get_base_url(request: Request) -> str:
-    """Get the public-facing base URL (works behind ngrok)."""
-    forwarded = request.headers.get("x-forwarded-proto", "")
-    host = request.headers.get("x-forwarded-host", "") or request.headers.get("host", "")
-    if forwarded and host:
-        return f"{forwarded}://{host}"
-    return str(request.base_url).rstrip("/")
+    """Get the public-facing base URL the caller (Twilio) should hit
+    for the next TwiML step.
+
+    Phase 23.1.1 — handles the layered-proxy gotcha. In production the
+    request path is:
+
+        Twilio  ──https──▶  ALB / CloudFront  ──http──▶  nginx  ──http──▶  backend
+
+    The ALB terminates TLS and forwards to nginx on port 80 with
+    `X-Forwarded-Proto: https` set. Nginx's own
+    `proxy_set_header X-Forwarded-Proto $scheme;` (see nginx.conf)
+    then OVERWRITES that header with `http` because nginx's own
+    `$scheme` for the ALB-to-nginx connection is http. The backend
+    ends up seeing `X-Forwarded-Proto: http` → renders TwiML callback
+    URLs as `http://undp.crisplabs.tech/...` → Twilio breaks on the
+    second hop with "An application error has occurred. Goodbye."
+
+    Fix: for known public hostnames we force `https` regardless of
+    what header value reached us. Everything else honours the header
+    if present, then falls back to nginx-supplied `$scheme`.
+    """
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").strip()
+    forwarded_host = request.headers.get("x-forwarded-host", "").strip()
+    # Multi-hop proxies can produce a comma-separated list; the
+    # left-most entry is the original client-facing value.
+    if "," in forwarded_proto:
+        forwarded_proto = forwarded_proto.split(",")[0].strip()
+    if "," in forwarded_host:
+        forwarded_host = forwarded_host.split(",")[0].strip()
+    host = forwarded_host or request.headers.get("host", "").strip()
+    if not host:
+        return str(request.base_url).rstrip("/")
+
+    # Public hostnames are HTTPS in production. The layered-proxy
+    # path strips that signal; this list pins it back deterministically.
+    is_public_https_host = (
+        host.endswith(".crisplabs.tech")
+        or host.endswith(".ngrok.io")
+        or host.endswith(".ngrok-free.app")
+        or host.endswith(".trycloudflare.com")
+    )
+    if is_public_https_host:
+        scheme = "https"
+    elif forwarded_proto in ("http", "https"):
+        scheme = forwarded_proto
+    elif host.startswith(("localhost", "127.0.0.1", "0.0.0.0", "backend")):
+        scheme = "http"
+    else:
+        # Unknown host: default to https (Twilio + most public hosts).
+        scheme = "https"
+    return f"{scheme}://{host}"
 
 
 def _extract_params(request: Request, form_data: dict = None) -> dict:

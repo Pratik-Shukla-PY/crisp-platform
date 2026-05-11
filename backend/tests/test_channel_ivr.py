@@ -144,6 +144,59 @@ def test_ivr_done_creates_report(client, monkeypatch):
 # ── Phase 23 — voice-to-map pipeline assertions ────────────────────────────
 
 
+def test_ivr_get_base_url_handles_layered_proxy():
+    """`_get_base_url` must return `https://undp.crisplabs.tech` for
+    the public host even when nginx clobbers the upstream ALB's
+    `X-Forwarded-Proto: https` with its own `$scheme` (http).
+
+    Bug repro (pre-fix):
+      Twilio sends to ALB on :443 with X-Forwarded-Proto: https.
+      ALB forwards to nginx on :80.
+      nginx sets `proxy_set_header X-Forwarded-Proto $scheme;`
+        → backend sees X-Forwarded-Proto: http (nginx's view).
+      _get_base_url returned `http://undp.crisplabs.tech/...`
+        → TwiML callback URLs were http → Twilio errored mid-call.
+
+    The fix pins HTTPS for known public hostnames (regardless of
+    whatever Forwarded-Proto value made it through the proxy chain)
+    while still honouring the header for non-public hosts.
+    """
+    class _FakeReq:
+        def __init__(self, headers, base_url="http://127.0.0.1:8000"):
+            self.headers = headers
+            self.base_url = base_url
+
+    # Production reality: nginx clobbered the proto. Function must
+    # still return https for the public host.
+    req = _FakeReq({"x-forwarded-proto": "http", "host": "undp.crisplabs.tech"})
+    assert ivr_webhook._get_base_url(req) == "https://undp.crisplabs.tech"
+
+    # ALB → nginx → backend with the multi-hop list form.
+    req = _FakeReq({"x-forwarded-proto": "https, http", "host": "undp.crisplabs.tech"})
+    assert ivr_webhook._get_base_url(req) == "https://undp.crisplabs.tech"
+
+    # x-forwarded-host takes precedence over host (CDN scenarios).
+    req = _FakeReq({"x-forwarded-host": "undp.crisplabs.tech", "host": "backend:8000"})
+    assert ivr_webhook._get_base_url(req) == "https://undp.crisplabs.tech"
+
+    # ngrok dev tunnel → also force HTTPS.
+    req = _FakeReq({"x-forwarded-proto": "https", "host": "abc123.ngrok.io"})
+    assert ivr_webhook._get_base_url(req) == "https://abc123.ngrok.io"
+
+    # Localhost dev path stays HTTP.
+    req = _FakeReq({"host": "localhost:8000"})
+    assert ivr_webhook._get_base_url(req) == "http://localhost:8000"
+
+    # No host header at all — fall back to request.base_url.
+    req = _FakeReq({}, base_url="http://127.0.0.1:8000/")
+    assert ivr_webhook._get_base_url(req) == "http://127.0.0.1:8000"
+
+    # Unknown public host with no header — default to HTTPS (safer
+    # for Twilio-style integrations).
+    req = _FakeReq({"host": "example.com"})
+    assert ivr_webhook._get_base_url(req) == "https://example.com"
+
+
 def test_ivr_country_to_lang_helper():
     """Sanity-check that `_country_to_lang` returns the expected
     defaults for the canonical examples used in production."""
