@@ -57,7 +57,7 @@
         // their backends are actually wired. Operators can override any
         // of these via `window.CRISP_CHANNELS = { ... }` before this
         // script loads.
-        ivr_phone: '',                                          // Coming soon (no webhook deployed)
+        ivr_phone: '+16626768896',                              // LIVE — operator-confirmed
         sms_phone: '',                                          // Coming soon
         telegram_bot: 'crisp_crisis_bot',                       // LIVE — https://t.me/crisp_crisis_bot
         whatsapp_phone: '',                                     // Coming soon
