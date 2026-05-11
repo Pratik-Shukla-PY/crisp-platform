@@ -146,6 +146,12 @@ class TelegramSession:
     # bail early if false. Persisted across the session lifetime so returning
     # users don't re-consent until /start wipes the session.
     consented: bool = False
+    # Phase 23 — Cross-channel link to the PWA's anonymous device-hash.
+    # Set by handlers._decode_start_token when the user lands on the bot
+    # via the PWA's Telegram tile (`/start <32-hex>`). When present,
+    # `create_report_early` writes this as `meta["device_hash"]` so the
+    # Telegram report clusters with the user's PWA reports.
+    pwa_device_hash: Optional[str] = None
 
     @property
     def has_evidence(self) -> bool:
@@ -408,8 +414,16 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
     if session.report_id:
         return session.report_id  # already created
 
+    # Phase 23 — prefer the PWA device-hash when the user landed on the
+    # bot via a /start <token> deep-link (see handlers._decode_start_token).
+    # This unifies the user's Telegram report with their PWA reports
+    # under a single device_hash without any schema change.
+    effective_device_hash = (
+        session.pwa_device_hash if getattr(session, "pwa_device_hash", None)
+        else session.user_hash
+    )
     meta = {
-        "device_hash": session.user_hash,
+        "device_hash": effective_device_hash,
         "client_report_id": session.client_report_id,
         "source": "TELEGRAM",
         "severity": session.severity,

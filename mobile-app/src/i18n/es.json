@@ -513,6 +513,7 @@
   "home_channels_dot_live": "Disponible",
   "home_brand_tagline": "Reportero de crisis",
   "home_channel_coming_soon": "{ch} próximamente — prueba Telegram, IVR o el botón naranja de arriba.",
+  "home_channel_telegram_aria": "Abrir el bot CRISP en Telegram",
   "home_value_private_t": "Anónimo",
   "home_value_private_s": "Sin necesidad de registro",
   "home_value_offline_t": "Funciona sin conexión",

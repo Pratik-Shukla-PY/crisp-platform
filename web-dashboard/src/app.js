@@ -2358,11 +2358,23 @@ window.selectReport = (id, skipFly = false) => {
             const phone = ci.phone || '';
             const netLoc = ci.network_location || [ci.network_city, ci.network_state, ci.network_country].filter(Boolean).join(', ');
             const hasCallerInfo = phone || netLoc;
+            // Phase 23 — geocoding confidence chip. Shown when the
+            // location came from a text-only channel (IVR / SMS /
+            // WhatsApp transcript) — the backend stores a float
+            // confidence + source string on the Location row.
+            const gcConf = (typeof loc?.geocoding_confidence === 'number') ? loc.geocoding_confidence : null;
+            const gcSrc  = loc?.geocoding_source || '';
+            const gcPct  = gcConf !== null ? Math.round(gcConf * 100) : null;
+            const gcCls  = gcConf === null ? ''
+                : gcConf >= 0.75 ? 'dp-geoconf-high'
+                : gcConf >= 0.45 ? 'dp-geoconf-med'
+                : 'dp-geoconf-low';
             return `<div class="dp-loc-card ${mismatch ? 'dp-loc-mismatch' : ''}">
                 <div class="dp-section-label"><i class="fa-solid fa-location-dot"></i> Location${hasCallerInfo ? ' & Contact' : ''}</div>
                 ${loc ? `<div class="dp-loc-row">
                     <i class="fa-solid fa-map-pin" style="color:${sevColor};"></i>
                     <span class="dp-loc-name">${userName}</span>
+                    ${gcPct !== null ? `<span class="dp-geoconf ${gcCls}" title="Geocoded from voice/text via ${escapeHtml(gcSrc || 'unknown')} — ${gcPct}% confidence"><i class="fa-solid fa-wand-magic-sparkles"></i> ${gcPct}%${gcSrc ? ` · ${escapeHtml(gcSrc)}` : ''}</span>` : ''}
                     <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${loc.latitude}, ${loc.longitude}'); showToast('Coords copied','success')"><i class="fa-solid fa-copy"></i></button>
                 </div>` : ''}
                 ${mismatch ? `<div class="dp-loc-row dp-loc-device">

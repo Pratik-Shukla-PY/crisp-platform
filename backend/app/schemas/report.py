@@ -34,6 +34,11 @@ class LocationBase(BaseModel):
     is_user_corrected: Optional[bool] = False
     user_location_name: Optional[str] = None
     device_location_name: Optional[str] = None
+    # Phase 23 — geocoder confidence + source. Populated when the
+    # location came from text-only channels (IVR / SMS / WhatsApp);
+    # left None for GPS-captured locations.
+    geocoding_confidence: Optional[float] = None
+    geocoding_source: Optional[str] = None
 
 class MediaBase(BaseModel):
     type: MediaTypeEnum

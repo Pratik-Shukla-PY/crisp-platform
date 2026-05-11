@@ -351,6 +351,14 @@ class Location(Base):
     is_user_corrected = Column(Boolean, default=False)
     user_location_name = Column(String, nullable=True)   # Place name selected by user (autocomplete / offline)
     device_location_name = Column(String, nullable=True) # Human-readable name of raw device GPS position
+    # Phase 23 — geocoder confidence + source. Populated when the
+    # location was inferred from text (IVR / SMS / WhatsApp transcripts)
+    # via geocode_text(); NULL for GPS-captured locations from the PWA
+    # or native apps. confidence ∈ [0.0, 1.0]; source ∈ {"mapbox",
+    # "nominatim", "claude-mapbox", "manual", …}. Dashboard renders a
+    # tonal chip when both are present (see web-dashboard/src/app.js).
+    geocoding_confidence = Column(Float, nullable=True)
+    geocoding_source = Column(String(32), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     report = relationship("Report", back_populates="location")

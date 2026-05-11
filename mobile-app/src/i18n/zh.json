@@ -513,6 +513,7 @@
   "home_channels_dot_live": "可用",
   "home_brand_tagline": "危机报告者",
   "home_channel_coming_soon": "{ch} 即将上线 — 试试 Telegram、IVR 或上方的橙色按钮。",
+  "home_channel_telegram_aria": "打开 CRISP Telegram 机器人",
   "home_value_private_t": "匿名",
   "home_value_private_s": "无需登录",
   "home_value_offline_t": "支持离线",

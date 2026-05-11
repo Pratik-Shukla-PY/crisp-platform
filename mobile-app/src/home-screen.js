@@ -89,6 +89,117 @@
         return `https://wa.me/${cleaned}${q}`;
     }
 
+    // ── Phase 23 — Telegram deep-link with PWA device-hash token ────────
+    //
+    // The cleanest onboarding flow is: tap tile → Telegram app opens
+    // directly in the bot chat → `/start <hash>` is already sent →
+    // bot greets the user with context from prior PWA reports. If the
+    // app isn't installed, fall back to the platform's app store.
+    //
+    // PWA device-hash format: `PWA-` + 32 lowercase hex chars
+    // (generated in app.js around line 6340 via SHA-256). Telegram's
+    // `start` parameter allows `[A-Za-z0-9_-]` 1-64 chars — the bare
+    // 32-hex part already qualifies, no encoding needed.
+    function _buildTelegramStartToken() {
+        try {
+            const raw = localStorage.getItem('crisp_device_id_v2')
+                || localStorage.getItem('crisp_device_hash')
+                || localStorage.getItem('crisp_device_id') || '';
+            const stripped = String(raw).replace(/^PWA-/i, '').toLowerCase();
+            // Must be exactly 32 hex chars to satisfy the bot's
+            // re-validation (`^[0-9a-f]{32}$`); otherwise fall back
+            // to a generic analytics tag so the bot still knows
+            // the visit came from the PWA tile.
+            if (/^[0-9a-f]{32}$/.test(stripped)) return stripped;
+        } catch (_) {}
+        return 'crisp_web';
+    }
+    function _telegramDeepLink(handle, startToken) {
+        const bot = String(handle || '').replace(/^@/, '');
+        if (!bot) return null;
+        const tok = encodeURIComponent(startToken || 'crisp_web');
+        const botEnc = encodeURIComponent(bot);
+        return {
+            // Native scheme — opens the installed Telegram app directly.
+            native:  `tg://resolve?domain=${botEnc}&start=${tok}`,
+            // Web URL with the same payload — handles desktop and the
+            // "Telegram not installed on mobile" case by showing the
+            // contact page with a Launch button.
+            web:     `https://t.me/${bot}?start=${tok}`,
+            // Platform-specific store URLs for the
+            // "no Telegram + native scheme failed" path.
+            ios:     'https://apps.apple.com/app/telegram-messenger/id686449807',
+            android: 'https://play.google.com/store/apps/details?id=org.telegram.messenger',
+        };
+    }
+    function _platformFamily() {
+        // Reuse InstallPrompt.platform if it's already booted (lives
+        // in install-prompt.js); otherwise inline a UA check. Returns
+        // 'ios' | 'android' | 'desktop'.
+        try {
+            const p = window.InstallPrompt && window.InstallPrompt.platform;
+            if (p === 'ios' || p === 'android') return p;
+            if (p === 'standalone') return 'ios';   // PWA on iOS reports standalone
+        } catch (_) {}
+        const ua = (navigator.userAgent || '').toLowerCase();
+        if (/iphone|ipad|ipod/.test(ua)) return 'ios';
+        if (/android/.test(ua)) return 'android';
+        return 'desktop';
+    }
+    // Runs on tap of the Telegram channel tile. Attempts the native
+    // scheme first; if visibility doesn't switch within ~1.2 s we
+    // assume Telegram isn't installed and redirect to the store.
+    function _openTelegram(handle) {
+        const links = _telegramDeepLink(handle, _buildTelegramStartToken());
+        if (!links) return;
+        const fam = _platformFamily();
+        // Telemetry breadcrumb (matches existing console.log pattern).
+        console.log(`[home] channel tap: telegram (fam=${fam})`);
+
+        // Desktop: open the web preview in a new tab. Telegram Web
+        // handles the rest. One-tap UX, no fingerprinting needed.
+        if (fam === 'desktop') {
+            window.open(links.web, '_blank', 'noopener');
+            return;
+        }
+
+        // Mobile: attempt the native scheme. If Telegram is installed
+        // the OS hides this page (visibilitychange → hidden) and the
+        // fallback timer aborts.
+        let appOpened = false;
+        const onHide = () => {
+            if (document.visibilityState === 'hidden') appOpened = true;
+        };
+        document.addEventListener('visibilitychange', onHide);
+
+        const fallback = setTimeout(() => {
+            document.removeEventListener('visibilitychange', onHide);
+            if (appOpened) return;
+            const store = fam === 'ios' ? links.ios : links.android;
+            window.location.href = store;
+        }, 1200);
+
+        // Trigger the scheme. iOS Safari throws an "Address invalid"
+        // page if we navigate directly with no app handler, so we use
+        // a transient hidden iframe instead. Android Chrome handles
+        // a direct navigation cleanly.
+        if (fam === 'ios') {
+            const iframe = document.createElement('iframe');
+            iframe.style.cssText = 'display:none;width:0;height:0;border:0;';
+            iframe.src = links.native;
+            document.body.appendChild(iframe);
+            setTimeout(() => {
+                try { iframe.remove(); } catch (_) {}
+            }, 1500);
+        } else {
+            window.location.href = links.native;
+        }
+        // (fallback timer cleans itself up if appOpened flips first)
+        void fallback;
+    }
+    // Expose for tests / external instrumentation.
+    try { window.CrispHome = window.CrispHome || {}; } catch (_) {}
+
     // ── Consent helpers (matches landing.js's previous contract) ────────
     function _hasConsented() {
         try { return !!localStorage.getItem(CONSENT_KEY); } catch { return false; }
@@ -109,10 +220,17 @@
     // The Q1 (May 2026) hide-when-empty contract is REVERTED here per
     // explicit product direction — users want to see the full picture
     // of which channels exist, not just the ones currently configured.
-    function _buildChannelTile(icon, label, href, key, colorVar) {
+    //
+    // Phase 23 (May 2026) — opts:
+    //   { dataAction: 'telegram-deeplink' } renders a <button> tile
+    //   (no href) so the click handler in _wireChannelTelemetry can
+    //   intercept and run the native-scheme → store fallback chain
+    //   instead of relying on the anchor's default navigation.
+    function _buildChannelTile(icon, label, href, key, colorVar, opts) {
         const safeLabel = String(label).replace(/"/g, '&quot;');
         const safeColor = colorVar || '--accent';
-        if (!href) {
+        const dataAction = (opts && opts.dataAction) || '';
+        if (!href && !dataAction) {
             // Non-working tile — grey border, grey icon, button (not
             // anchor), tap → toast.
             return `
@@ -122,6 +240,24 @@
                         aria-disabled="true">
                     <span class="ct-icon" aria-hidden="true">${icon}</span>
                     <span class="ct-label">${label}</span>
+                </button>
+            `;
+        }
+        if (dataAction) {
+            // Phase 23 — live tile rendered as a <button> with a
+            // data-action attribute. The click handler dispatches to
+            // _openTelegram() (or whichever action), so this tile has
+            // no href and never lets the browser perform default
+            // navigation. Keeps the same is-live styling + live pip.
+            return `
+                <button type="button" class="home-channel-tile is-live"
+                        style="--c: var(${safeColor});"
+                        data-channel="${key}"
+                        data-action="${dataAction}"
+                        aria-label="${safeLabel}">
+                    <span class="ct-icon" aria-hidden="true">${icon}</span>
+                    <span class="ct-label">${label}</span>
+                    <span class="ct-dot" aria-hidden="true" title="Available"></span>
                 </button>
             `;
         }
@@ -150,11 +286,23 @@
             // Phase 17 — Single 6-tile row, all channels always shown.
             // Order matches the proposal screenshot: Telegram, WhatsApp,
             // SMS, IVR, Android, iOS (left to right).
+            // Phase 23 — Telegram tile renders as a <button> with
+            // data-action="telegram-deeplink" so the click handler can
+            // run the native-scheme → store-fallback chain (carrying
+            // the PWA device-hash as a /start token). The bot handle
+            // still controls whether the tile is live: an empty
+            // CHANNELS.telegram_bot keeps it disabled / coming-soon.
+            const tgHandle = CHANNELS.telegram_bot;
+            const tgTile = tgHandle
+                ? _buildChannelTile('<i class="fa-brands fa-telegram"></i>',
+                                    'Telegram',
+                                    '', 'telegram', '--brand-telegram',
+                                    { dataAction: 'telegram-deeplink' })
+                : _buildChannelTile('<i class="fa-brands fa-telegram"></i>',
+                                    'Telegram', '', 'telegram',
+                                    '--brand-telegram');
             const html = [
-                _buildChannelTile('<i class="fa-brands fa-telegram"></i>',
-                                  'Telegram',
-                                  _telegramLink(CHANNELS.telegram_bot), 'telegram',
-                                  '--brand-telegram'),
+                tgTile,
                 _buildChannelTile('<i class="fa-brands fa-whatsapp"></i>',
                                   'WhatsApp',
                                   _whatsappLink(CHANNELS.whatsapp_phone, 'CRISP report'), 'whatsapp',
@@ -294,6 +442,13 @@
     // Phase 17 — non-working (`.is-disabled`) tiles surface a brief
     // "Coming soon" toast on click. Working tiles just log a telemetry
     // breadcrumb and let the browser follow the anchor href.
+    //
+    // Phase 23 — tiles carrying a `data-action` (currently only
+    // `telegram-deeplink`) are dispatched to a custom handler that
+    // runs the native-scheme → store-fallback chain instead of
+    // letting the browser navigate. preventDefault stops any
+    // accidental anchor default; stopPropagation isolates the click
+    // from the form / consent listeners.
     function _wireChannelTelemetry() {
         document.querySelectorAll('#home-channels [data-channel], #home-apps [data-channel]')
             .forEach((el) => {
@@ -305,6 +460,20 @@
                         const labelEl = el.querySelector('.ct-label');
                         const label = labelEl ? labelEl.textContent.trim() : key;
                         _showComingSoonToast(label);
+                        return;
+                    }
+                    const action = el.getAttribute('data-action');
+                    if (action === 'telegram-deeplink') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        try {
+                            _openTelegram(CHANNELS.telegram_bot);
+                        } catch (err) {
+                            console.warn('[home] telegram deep-link failed:', err);
+                            // Last-ditch fallback — open the web URL.
+                            const fallback = _telegramLink(CHANNELS.telegram_bot);
+                            if (fallback) window.open(fallback, '_blank', 'noopener');
+                        }
                         return;
                     }
                     console.log(`[home] channel tap: ${key}`);

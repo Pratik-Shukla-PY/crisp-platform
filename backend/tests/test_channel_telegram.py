@@ -199,3 +199,168 @@ def test_webhook_url_exposes_configured_secret_suffix():
     body = res.json()
     assert "webhook_url" in body
     assert f"/api/v1/telegram/webhook/{TG_PATH}" in body["webhook_url"]
+
+
+# ── Phase 23 — /start <token> device-hash linking ──────────────────────────
+
+
+def test_telegram_start_token_decoder():
+    """Unit test the pure decoder. The bot accepts:
+      • 32 lowercase hex → `PWA-<lower>`
+      • 32 uppercase / mixed-case hex → `PWA-<lower>` (case-insensitive)
+      • benign analytics tags ('crisp_web', 'crisp') → None
+      • anything else / missing → None
+    """
+    from messaging_bot.telegram.handlers import _decode_start_token
+
+    # Canonical PWA device-hash (32 hex chars) → canonical PWA- prefix.
+    assert _decode_start_token("3a8f29c7e5d3a1b2c4f6e8d0a9b7c5f1") == (
+        "PWA-3a8f29c7e5d3a1b2c4f6e8d0a9b7c5f1"
+    )
+    # Case-insensitive on the way in, lowercased on the way out.
+    assert _decode_start_token("3A8F29C7E5D3A1B2C4F6E8D0A9B7C5F1") == (
+        "PWA-3a8f29c7e5d3a1b2c4f6e8d0a9b7c5f1"
+    )
+    # Whitespace tolerated.
+    assert _decode_start_token("  3a8f29c7e5d3a1b2c4f6e8d0a9b7c5f1  ") == (
+        "PWA-3a8f29c7e5d3a1b2c4f6e8d0a9b7c5f1"
+    )
+    # Benign analytics tags → no device-hash linkage, but no crash.
+    assert _decode_start_token("crisp_web") is None
+    assert _decode_start_token("crisp") is None
+    # Malformed → None (length wrong, non-hex chars, empty).
+    assert _decode_start_token("") is None
+    assert _decode_start_token(None) is None
+    assert _decode_start_token("foobar") is None
+    assert _decode_start_token("3a8f29c7e5d3a1b2c4f6e8d0a9b7c5f1aa") is None
+    assert _decode_start_token("3a8f29c7e5d3a1b2c4f6e8d0a9b7c5fz") is None
+
+
+def test_telegram_start_token_links_pwa_device_hash(client, monkeypatch):
+    """Send a Telegram webhook update with `/start <32-hex>` →
+    the handler decodes the token, the session's `pwa_device_hash` is
+    populated, and the next Report created via create_report_early
+    uses that hash as `meta['device_hash']` (instead of the TG-prefixed
+    fallback)."""
+    import asyncio
+    from messaging_bot.telegram import handlers as tg_handlers
+    from messaging_bot.telegram import session_manager as tg_sessions
+
+    # Reset session store so any leftover from another test doesn't
+    # interfere with our user_id-keyed lookup.
+    tg_sessions._sessions.clear()
+
+    user_id = 555_001
+    chat_id = 555_001
+    pwa_hash_hex = "3a8f29c7e5d3a1b2c4f6e8d0a9b7c5f1"
+    expected = "PWA-" + pwa_hash_hex
+
+    # Stub the bot's outbound reply so we don't hit the real Telegram
+    # API during the test. The handler invokes send_welcome which goes
+    # through bot_replies.send_text → httpx — we patch the lowest layer.
+    async def _noop(*_args, **_kwargs):
+        return None
+    monkeypatch.setattr(tg_handlers, "send_welcome", _noop)
+
+    update = {
+        "update_id": 9_999_999,
+        "message": {
+            "message_id": 1,
+            "date": 1_700_000_000,
+            "from": {"id": user_id, "first_name": "Test", "language_code": "en"},
+            "chat": {"id": chat_id, "type": "private"},
+            "text": f"/start {pwa_hash_hex}",
+        },
+    }
+
+    # The webhook dispatcher accepts the update and async-fires the
+    # handler. We invoke it directly so we can await the result and
+    # then inspect the session.
+    asyncio.run(tg_handlers.handle_update(update))
+
+    # The handler stored the decoded PWA device-hash on the session
+    # so subsequent steps (create_report_early) can attribute the
+    # eventual Report row to the same anonymous user as the PWA.
+    user_hash = tg_sessions.hash_user(user_id)
+    session = tg_sessions._sessions.get(user_hash)
+    assert session is not None, "session was not created for the test user"
+    assert session.pwa_device_hash == expected, (
+        f"expected session.pwa_device_hash={expected!r}, got "
+        f"{session.pwa_device_hash!r}"
+    )
+
+    # Pre-populate enough state for create_report_early to attempt a
+    # POST, then stub httpx so we can capture the meta payload.
+    session.severity = "UNKNOWN"
+    session.infra_type = "OTHER"
+    session.text = "test"
+
+    captured = []
+
+    class _FakeResp:
+        status_code = 201
+        def json(self):
+            return {"id": "report-tg-fake"}
+        text = "fake"
+
+    class _FakeClient:
+        def __init__(self, *_a, **_kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *_a): return False
+        async def post(self, _url, json=None, **_kw):
+            captured.append(json)
+            return _FakeResp()
+
+    # session_manager imports httpx inside the function — patch the
+    # live AsyncClient on the httpx module so the in-function import
+    # picks up our fake.
+    import httpx as _httpx
+    monkeypatch.setattr(_httpx, "AsyncClient", _FakeClient)
+
+    asyncio.run(tg_sessions.create_report_early(session))
+    assert captured, "create_report_early didn't POST to /api/v1/reports"
+    meta = captured[0]
+    assert meta["device_hash"] == expected, (
+        f"create_report_early should prefer session.pwa_device_hash "
+        f"({expected!r}) over session.user_hash ({session.user_hash!r}); "
+        f"got meta['device_hash']={meta['device_hash']!r}"
+    )
+    assert meta["source"] == "TELEGRAM"
+
+
+def test_telegram_start_without_token_keeps_user_hash(client, monkeypatch):
+    """A bare `/start` (no payload) should NOT set pwa_device_hash;
+    the Report falls back to the Telegram-derived `user_hash` as
+    before. This protects the regression path where a user opens the
+    bot from a non-PWA entry point."""
+    import asyncio
+    from messaging_bot.telegram import handlers as tg_handlers
+    from messaging_bot.telegram import session_manager as tg_sessions
+
+    tg_sessions._sessions.clear()
+    user_id = 555_002
+    chat_id = 555_002
+
+    async def _noop(*_args, **_kwargs):
+        return None
+    monkeypatch.setattr(tg_handlers, "send_welcome", _noop)
+
+    update = {
+        "update_id": 9_999_998,
+        "message": {
+            "message_id": 1,
+            "date": 1_700_000_000,
+            "from": {"id": user_id, "first_name": "Test", "language_code": "en"},
+            "chat": {"id": chat_id, "type": "private"},
+            "text": "/start",
+        },
+    }
+    asyncio.run(tg_handlers.handle_update(update))
+
+    user_hash = tg_sessions.hash_user(user_id)
+    session = tg_sessions._sessions.get(user_hash)
+    assert session is not None
+    assert session.pwa_device_hash is None, (
+        f"bare /start must not set pwa_device_hash, got "
+        f"{session.pwa_device_hash!r}"
+    )

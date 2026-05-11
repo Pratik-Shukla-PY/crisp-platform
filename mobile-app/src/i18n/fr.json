@@ -513,6 +513,7 @@
   "home_channels_dot_live": "Disponible",
   "home_brand_tagline": "Rapporteur de crise",
   "home_channel_coming_soon": "{ch} bientôt disponible — essayez Telegram, IVR ou le bouton orange ci-dessus.",
+  "home_channel_telegram_aria": "Ouvrir le bot CRISP sur Telegram",
   "home_value_private_t": "Anonyme",
   "home_value_private_s": "Aucune connexion requise",
   "home_value_offline_t": "Fonctionne hors ligne",

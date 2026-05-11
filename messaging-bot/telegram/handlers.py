@@ -12,6 +12,8 @@ DESIGN PRINCIPLES:
 """
 import asyncio
 import logging
+import re
+from typing import Optional
 from .session_manager import (
     get_or_create_session, is_duplicate_message,
     create_report_early, upload_image, upload_audio, upload_video_deferred,
@@ -37,6 +39,38 @@ from .bot_replies import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# Phase 23 — /start <token> decoder.
+#
+# Telegram bot deep-links can carry a `start` payload (max 64 chars,
+# charset [A-Za-z0-9_-]). The CRISP PWA passes its anonymous
+# device-hash as the bare 32-hex part of `PWA-<32hex>` so the bot can
+# stamp the same hash on the resulting Telegram report → both
+# channels' reports cluster under one device_hash. Other recognised
+# tags (`crisp_web`, `crisp`) are analytics breadcrumbs only.
+_PWA_HASH_RE = re.compile(r"^[0-9a-fA-F]{32}$")
+_BENIGN_TOKENS = {"crisp_web", "crisp"}
+
+
+def _decode_start_token(arg: Optional[str]) -> Optional[str]:
+    """Validate a /start <arg> payload and return a usable PWA device-hash.
+
+    Returns the canonical `PWA-<32 lowercase hex>` string when the
+    payload is a CRISP device-hash; returns None for benign analytics
+    tags or any malformed payload (logged at debug level).
+    """
+    if not arg:
+        return None
+    arg = arg.strip()
+    if not arg:
+        return None
+    if arg in _BENIGN_TOKENS:
+        return None
+    if _PWA_HASH_RE.match(arg):
+        return "PWA-" + arg.lower()
+    logger.debug("telegram /start payload not recognised: %r", arg[:64])
+    return None
 
 
 def _fire_upload(session, coro):
@@ -294,12 +328,26 @@ async def handle_update(update: dict):
         session.lang = detected
     text = message.get("text", "").strip()
 
-    # /start always resets — show language picker
+    # /start always resets — show language picker.
+    # Phase 23 — also accept an optional payload (`/start <token>`).
+    # Telegram delivers t.me/<bot>?start=foo as the message text
+    # "/start foo". When the payload is a 32-hex PWA device-hash we
+    # stamp it on the session so the eventual Report row carries the
+    # same device_hash as the PWA's reports (cross-channel link).
     if text.startswith("/start"):
+        parts = text.split(maxsplit=1)
+        start_arg = parts[1].strip() if len(parts) == 2 else None
+        decoded_pwa_hash = _decode_start_token(start_arg)
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
         s.lang = detected
         s.state = "LANG_SELECT"
+        if decoded_pwa_hash:
+            s.pwa_device_hash = decoded_pwa_hash
+            logger.info(
+                "telegram /start linked to PWA device-hash (chat_id=%s)",
+                chat_id,
+            )
         await send_welcome(chat_id, s.lang)
         return
 

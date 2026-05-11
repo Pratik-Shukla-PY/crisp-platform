@@ -1163,6 +1163,40 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .dp-loc-label { font-size:12px; color:var(--text-dim); font-weight:600; flex-shrink:0; }
 .dp-loc-warn { margin-left:auto; font-size:12px; color:#fbbf24; font-weight:700; display:flex; align-items:center; gap:3px; flex-shrink:0; }
 
+/* Phase 23 — Geocoding confidence chip. Shown on report rows when
+   Location.geocoding_confidence is set (IVR / SMS / WhatsApp). Colour
+   bands: ≥75% green, 45-74% amber, <45% red. The wand icon flags
+   that the location was inferred from text rather than captured GPS. */
+.dp-geoconf {
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    flex-shrink:0;
+    padding:2px 8px;
+    border-radius:999px;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:0.01em;
+    border:1px solid;
+    cursor:default;
+}
+.dp-geoconf i { font-size:10px; }
+.dp-geoconf-high {
+    color:#86efac;
+    background:rgba(34,197,94,0.12);
+    border-color:rgba(34,197,94,0.32);
+}
+.dp-geoconf-med {
+    color:#fde68a;
+    background:rgba(234,179,8,0.12);
+    border-color:rgba(234,179,8,0.32);
+}
+.dp-geoconf-low {
+    color:#fca5a5;
+    background:rgba(239,68,68,0.10);
+    border-color:rgba(239,68,68,0.30);
+}
+
 /* Verification strip (compact) */
 .dp-verify-strip { display:flex; align-items:center; gap:10px; margin-bottom:8px; padding:8px 10px; background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.06); border-radius:10px; }
 .dp-gauge { position:relative; width:44px; height:44px; flex-shrink:0; }

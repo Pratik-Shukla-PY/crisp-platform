@@ -32,6 +32,7 @@ Endpoints:
 """
 import os
 import hashlib
+import asyncio
 import logging
 import secrets
 import base64
@@ -115,6 +116,14 @@ async def handle_incoming_call(request: Request):
         caller_country = params.get("FromCountry") or params.get("CallerCountry") or ""
         caller_zip = params.get("FromZip") or params.get("CallerZip") or ""
 
+    # Phase 23 — pre-select a default language based on the caller's
+    # country (Twilio's `FromCountry` / `CallerCountry`). The digit-
+    # pick menu still lets the caller override, but if they just stay
+    # silent during the Gather we route to their country's likely
+    # language instead of always defaulting to English. The location
+    # prompt (step 1) is then read out in that language.
+    default_lang = _country_to_lang(caller_country)
+
     _ivr_sessions[call_sid] = {
         "phone_hash": _hash_phone(phone),
         "phone": phone,
@@ -123,6 +132,7 @@ async def handle_incoming_call(request: Request):
         "caller_state": caller_state,
         "caller_country": caller_country,
         "caller_zip": caller_zip,
+        "default_lang": default_lang,
         "location_audio_url": "",
         "audio_url": "",
         "step": "record_location",
@@ -131,11 +141,15 @@ async def handle_incoming_call(request: Request):
     base = _get_base_url(request)
     loc_url = f"{base}/api/v1/ivr/location-step/{IVR_WEBHOOK_SECRET}?sid={call_sid}"
 
-    logger.info(f"IVR call from {_hash_phone(phone)}, sid={call_sid[:12]}")
+    logger.info(
+        f"IVR call from {_hash_phone(phone)}, sid={call_sid[:12]}, "
+        f"country={caller_country!r}, default_lang={default_lang}"
+    )
 
-    # Step 0: Language selection + privacy notice + ask location
-    # Uses Gather with timeout=5 — if user presses a key, route to language handler
-    # If no key pressed (timeout), default to English and proceed to location
+    # Step 0: Language selection + privacy notice + ask location.
+    # Gather with timeout=5; if the caller presses 1-5, the
+    # location-step handler picks that language; otherwise the
+    # Redirect routes to the country's default language.
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Gather action="{loc_url}" method="POST" numDigits="1" timeout="5">
@@ -148,7 +162,7 @@ Press 4 for French.
 Press 5 for Arabic.
 Or just start speaking after the beep.</Say>
     </Gather>
-    <Redirect method="POST">{loc_url}?lang=en</Redirect>
+    <Redirect method="POST">{loc_url}?lang={default_lang}</Redirect>
 </Response>"""
 
     return Response(content=xml, media_type="application/xml")
@@ -184,6 +198,89 @@ _IVR_PROMPTS = {
 }
 
 _DIGIT_LANG = {"1": "en", "2": "hi", "3": "es", "4": "fr", "5": "ar"}
+
+# Phase 23 — caller-country → default IVR language. Twilio's webhook
+# payload includes a `FromCountry` field (ISO-3166-1 alpha-2) when
+# available; we use it to pre-select a language so the caller doesn't
+# have to press a digit. Falls back to English when the country
+# isn't mapped or `FromCountry` is missing.
+_COUNTRY_LANG = {
+    # South Asia → Hindi
+    "IN": "hi", "BD": "hi", "NP": "hi", "PK": "hi", "LK": "hi",
+    # Spanish-speaking
+    "ES": "es", "MX": "es", "AR": "es", "CO": "es", "CL": "es",
+    "PE": "es", "VE": "es", "EC": "es", "GT": "es", "CU": "es",
+    "BO": "es", "DO": "es", "HN": "es", "PY": "es", "SV": "es",
+    "NI": "es", "CR": "es", "PA": "es", "UY": "es",
+    # French-speaking
+    "FR": "fr", "BE": "fr", "CH": "fr", "LU": "fr", "MC": "fr",
+    "SN": "fr", "CI": "fr", "ML": "fr", "BF": "fr", "BJ": "fr",
+    "CM": "fr", "CG": "fr", "CD": "fr", "GA": "fr", "GN": "fr",
+    "MG": "fr", "NE": "fr", "RW": "fr", "TG": "fr", "DJ": "fr",
+    "HT": "fr",
+    # Arabic-speaking
+    "SA": "ar", "AE": "ar", "EG": "ar", "JO": "ar", "KW": "ar",
+    "QA": "ar", "OM": "ar", "BH": "ar", "YE": "ar", "IQ": "ar",
+    "LY": "ar", "LB": "ar", "MA": "ar", "TN": "ar", "DZ": "ar",
+    "SY": "ar", "SD": "ar", "PS": "ar", "MR": "ar", "SO": "ar",
+}
+
+
+def _country_to_lang(country_code: str) -> str:
+    """Resolve an ISO country code to a CRISP IVR language.
+
+    Returns 'en' if the country is missing, unknown, or invalid.
+    Used to pre-select the IVR prompt language so callers don't have
+    to press 1-5 manually (they still can; the digit-pick overrides).
+    """
+    if not country_code:
+        return "en"
+    return _COUNTRY_LANG.get(country_code.strip().upper(), "en")
+
+
+def _normalise_geo_confidence(raw):
+    """Normalise a geocoder confidence value to a float in [0, 1].
+
+    The CRISP geocoder (`messaging_bot/sms/geocoder.py`) returns either
+    a string ("low" | "medium" | "high") OR an already-numeric value
+    in some code paths. Heuristic:
+      • [0, 1]   pass-through (already normalised).
+      • (1, 100] divide by 100 (looks like a percentage).
+      • >100     clamp to 1.0 (definitely out of range).
+      • <0       clamp to 0.0.
+    Slightly-over-1 values (1.0001 … 1.999) get clamped rather than
+    divided so a buggy "0.87 but encoded as 1.5" upstream doesn't
+    silently become 0.015. Returns None for missing / unrecognised
+    inputs so the dashboard's "no confidence" branch fires.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            return None
+        if v < 0:
+            return 0.0
+        if v <= 1.0:
+            return v
+        if v >= 2.0 and v <= 100.0:
+            return v / 100.0
+        # 1.0 < v < 2.0  → clamp (malformed) ; v > 100 → clamp.
+        return 1.0
+    if isinstance(raw, str):
+        s = raw.strip().lower()
+        if s in ("high", "h"):
+            return 0.9
+        if s in ("medium", "med", "m"):
+            return 0.6
+        if s in ("low", "l"):
+            return 0.3
+        try:
+            return _normalise_geo_confidence(float(s))
+        except (TypeError, ValueError):
+            return None
+    return None
 
 
 @ivr_router.api_route(f"/location-step/{IVR_WEBHOOK_SECRET}", methods=["GET", "POST"])
@@ -460,6 +557,12 @@ async def _process_ivr_report(call_sid: str):
         "caller_info": caller_info,
     }
 
+    # Phase 23 — normalise geocoder confidence ("low/medium/high" or
+    # a raw float) to a [0, 1] float that we can persist + render as
+    # a dashboard chip. Source string passes through as-is.
+    geo_conf_float = _normalise_geo_confidence(geo.get("confidence"))
+    geo_source = geo.get("source") or None
+
     if geo.get("latitude"):
         meta["location"] = {
             "latitude": geo["latitude"],
@@ -468,6 +571,11 @@ async def _process_ivr_report(call_sid: str):
             "device_longitude": geo["longitude"],
             "accuracy_meters": 5000.0 if geo.get("confidence") == "low" else 2000.0,
             "device_location_name": geo.get("location_name", location_text or ""),
+            # Phase 23 — persist these so the dashboard can render a
+            # confidence chip / colour-coded map pin tooltip on IVR
+            # reports (see web-dashboard/src/app.js for the renderer).
+            "geocoding_confidence": geo_conf_float,
+            "geocoding_source": geo_source,
         }
 
     try:
@@ -476,7 +584,11 @@ async def _process_ivr_report(call_sid: str):
             if r.status_code in (200, 201):
                 report = r.json()
                 report_id = report["id"]
-                logger.info(f"IVR report created: {report_id} loc={geo.get('location_name', 'none')}")
+                logger.info(
+                    f"IVR report created: {report_id} "
+                    f"loc={geo.get('location_name', 'none')} "
+                    f"conf={geo_conf_float} src={geo_source}"
+                )
 
                 # Attach location audio
                 if location_b64:
@@ -490,8 +602,31 @@ async def _process_ivr_report(call_sid: str):
                     await upload_media_chunked(report_id, audio_b64, "AUDIO", "audio/wav")
                     logger.info(f"IVR description audio uploaded for {report_id}")
 
-                # AI extraction removed — admin triggers AI Assessment on dashboard instead
-                # This saves 1 Claude API call per IVR report
+                # Phase 23 — restore AI extraction. Claude reads the
+                # full English transcription and back-fills
+                # infrastructure_type / severity / crisis_type /
+                # damage_classification on the Report, replacing the
+                # OTHER / SEVERE placeholders above. Wrapped in
+                # try/except so a Claude outage never blocks the
+                # report — the placeholders persist and the admin can
+                # still trigger an AI re-pass manually from the
+                # dashboard.
+                if full_text:
+                    try:
+                        from messaging_bot.ai_extractor import (
+                            extract_and_update_report,
+                        )
+                        asyncio.create_task(
+                            extract_and_update_report(report_id, full_text)
+                        )
+                        logger.info(
+                            f"IVR AI extraction scheduled for {report_id}"
+                        )
+                    except Exception as ex:
+                        logger.warning(
+                            f"IVR AI extraction kickoff failed for "
+                            f"{report_id}: {ex}"
+                        )
             else:
                 logger.error(f"IVR report creation failed ({r.status_code})")
     except Exception as e:

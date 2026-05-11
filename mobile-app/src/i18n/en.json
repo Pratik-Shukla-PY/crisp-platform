@@ -514,6 +514,7 @@
   "home_channels_dot_live": "Available",
   "home_brand_tagline": "Crisis Reporter",
   "home_channel_coming_soon": "{ch} coming soon — try Telegram, IVR, or the orange button above.",
+  "home_channel_telegram_aria": "Open the CRISP Telegram bot",
   "home_value_private_t": "Anonymous",
   "home_value_private_s": "No login needed",
   "home_value_offline_t": "Offline-first",
