@@ -45,9 +45,20 @@
     // out, no href). This lets us ship the surface today and wire real
     // numbers later without a redeploy of the static bundle.
     const DEFAULT_CHANNELS = {
-        ivr_phone: '+16626768896',                              // LIVE — operator-confirmed
+        // Phase 22 — Coming-soon for every channel whose backend isn't
+        // actually deployed on PROD. Previously `ivr_phone` and
+        // `telegram_bot` were marked LIVE but PROD has no webhook
+        // serving either (`/api/v1/telegram/webhook` and
+        // `/api/v1/ivr/webhook` both 404). Users tapping Telegram
+        // got Telegram's "Sorry, this user doesn't seem to exist"
+        // mid-flow ("breaks in between" per UNDP-prep feedback).
+        // The orange in-app CTA stays as the single guaranteed-working
+        // path; the channel grid below reads as a future-state preview
+        // until operators wire real backends and override via
+        // `window.CRISP_CHANNELS = { telegram_bot: '...', ivr_phone: '...' }`.
+        ivr_phone: '',                                          // Coming soon (no webhook deployed)
         sms_phone: '',                                          // Coming soon
-        telegram_bot: 'crisp_undp_bot',                         // LIVE — https://t.me/crisp_undp_bot
+        telegram_bot: '',                                       // Coming soon (no webhook deployed)
         whatsapp_phone: '',                                     // Coming soon
         ios_app_url: '',                                        // Coming soon
         android_app_url: '',                                    // Coming soon
