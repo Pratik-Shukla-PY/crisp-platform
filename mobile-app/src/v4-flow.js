@@ -1543,6 +1543,32 @@
         // _clearCaptureState only knows about v3 fields; clear the
         // v4-specific accumulator + thumb strip explicitly.
         if (window.state) window.state.v4Photos = [];
+        // Phase 25.3 (May 2026) — reset the classify-stage closure
+        // variables + DOM selections. _clearCaptureState (above)
+        // resets the underlying state.damage_classification /
+        // infrastructure_type / crisis_type fields it now also
+        // knows about, but the DOM .is-selected highlight + the
+        // sub-step pointer survive across submits unless explicitly
+        // reset here. Without this, the user sees the previous
+        // report's damage / infra / crisis chips still highlighted
+        // when they enter the new report's classify stage.
+        _classifyStep = 'damage';
+        document.querySelectorAll(
+            '.v4-q-opt.is-selected, ' +              // damage radio buttons
+            '.v4-hit-tile.is-selected, ' +           // infra hit-tiles
+            '.v4-cause-card.is-selected, ' +         // crisis cause group cards
+            '.v4-cause-sub-opt.is-selected, ' +      // crisis sub-types
+            '.v4-chipgrid-tile.is-selected'          // generic chipgrid tiles (catch-all)
+        ).forEach((el) => {
+            el.classList.remove('is-selected');
+            el.setAttribute('aria-checked', 'false');
+        });
+        // Collapse the crisis drill-down panel if the previous report
+        // left it expanded.
+        const subtypesContainer = document.getElementById('v4-cause-subtypes');
+        if (subtypesContainer) subtypesContainer.setAttribute('hidden', '');
+        const groupCardsCt = document.getElementById('v4-cause-cards');
+        if (groupCardsCt) groupCardsCt.removeAttribute('hidden');
         const thumbsRow = document.getElementById('v4-thumbs');
         if (thumbsRow) {
             thumbsRow.innerHTML = '';

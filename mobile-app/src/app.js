@@ -10088,6 +10088,15 @@ function _clearCaptureState() {
     state.infraType = 'ROAD'; state.severity = 'MODERATE'; state.isAutoSubmit = false;
     state.crisisType = 'FLOOD'; state.damageClass = 'PARTIAL'; state.infraName = '';
     state.debrisClearing = false; state.serviceStatus = { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] };
+    // Phase 25.3 (May 2026) — v4 uses different state-field names
+    // for the same 3 classifiers. Without these resets, the previous
+    // report's damage / infra / crisis selections silently bleed
+    // into the next report (and v4-flow.js's _canAdvanceFrom thinks
+    // the user has already chosen, so Next is armed without any
+    // user tap). Recurring user-reported bug.
+    state.damage_classification = null;
+    state.infrastructure_type = null;
+    state.crisis_type = null;
     // Building-footprint selection (OSM way id) — don't carry between reports.
     state.buildingId = null;
     // Media-recorder scaffolding — these accumulate across recordings and
