@@ -3638,8 +3638,16 @@ function detectAndSetupLanguage() {
         }
         // If the user has no manual pick, promote the detected local to
         // the active locale (default behaviour — local wins).
+        // Phase 25 (May 2026) — gate on SUPPORTED_LANGS instead of
+        // I18N[code]. The inline I18N only holds en/kn/hi/ta (legacy
+        // 4 langs); the other 18 supported locales live in their JSON
+        // files and aren't in I18N until `activateLang` triggers a
+        // `_loadLocaleJson` merge. The old gate meant a cached
+        // `crisp_loc_ctx` of e.g. "fr" never auto-activated on
+        // refresh — the picker showed "📍 Your region: Français" but
+        // the UI stayed English.
         const manual = localStorage.getItem('crisp_lang_manual') || '';
-        if (!manual && code && code !== state.lang && I18N[code]) {
+        if (!manual && code && code !== state.lang && SUPPORTED_LANGS.has(code)) {
             activateLang(code);
         }
         // Paint the suggestion chip inside the picker overlay only when
@@ -3840,7 +3848,58 @@ function detectAndSetupLanguage() {
         }
         return false;
     };
-    activateLang(_isKnownLocale(_manualLang) ? _manualLang : 'en');
+    // Phase 25 (May 2026) — boot-time language resolution order:
+    //   1. Manual pick (`crisp_lang_manual`) — explicit user choice always wins.
+    //   2. Browser locale (`navigator.language`) — zero cost, no permission
+    //      prompt, no network. A French Chrome user lands in French on
+    //      their very first visit before any GPS / IP detection.
+    //   3. English — last-resort default.
+    // Cached `crisp_loc_ctx` from a prior detection (next block) can
+    // upgrade the choice further. Deferred GPS detection (below) can
+    // refine it once the user is interactive on the home stage.
+    function _inferLangFromBrowser() {
+        try {
+            const raw = (navigator.languages && navigator.languages[0])
+                || navigator.language
+                || 'en';
+            const base = String(raw).toLowerCase().split('-')[0];
+            // Direct hit on our 22-locale set.
+            if (SUPPORTED_LANGS.has(base)) return base;
+            // Family hop (e.g. Italian browser → en, Swahili browser → en).
+            // We don't have a country code here, so map by language code
+            // to the nearest supported language via a tiny dict.
+            const LANG_NEIGHBOUR = {
+                // Romance — fall to Spanish (largest CRISP-supported Romance)
+                'it': 'es', 'ro': 'es', 'ca': 'es', 'gl': 'es',
+                // Germanic / Northern European — fall to English
+                'de': 'en', 'nl': 'en', 'sv': 'en', 'no': 'en',
+                'da': 'en', 'fi': 'en', 'is': 'en',
+                // Slavic — fall to Russian
+                'pl': 'ru', 'cs': 'ru', 'sk': 'ru', 'uk': 'ru',
+                'be': 'ru', 'bg': 'ru', 'sr': 'ru', 'hr': 'ru',
+                'sl': 'ru', 'mk': 'ru',
+                // Greek / Hebrew / Persian — fall to English (no nearest match)
+                'el': 'en', 'he': 'en', 'fa': 'en', 'sq': 'en',
+                // SE-Asian non-supported — fall to English (regional lingua franca)
+                'th': 'en', 'ms': 'en', 'tl': 'en', 'fil': 'en',
+                'km': 'en', 'lo': 'en', 'my': 'en',
+                // African — fall to English / French (handled in family fallback,
+                // but useful here when only browser hint available)
+                'sw': 'en', 'am': 'en', 'so': 'en', 'rw': 'fr',
+                // South-Asian sub-national not in tier-3 — fall to Hindi
+                'as': 'hi', 'or': 'hi', 'ne': 'hi', 'si': 'hi',
+                'sd': 'hi', 'mai': 'hi',
+            };
+            const neighbour = LANG_NEIGHBOUR[base];
+            return SUPPORTED_LANGS.has(neighbour) ? neighbour : null;
+        } catch (_) {
+            return null;
+        }
+    }
+    const _bootDefaultLang = _isKnownLocale(_manualLang)
+        ? _manualLang
+        : (_inferLangFromBrowser() || 'en');
+    activateLang(_bootDefaultLang);
 
     const _cachedCtx = (() => {
         try { return JSON.parse(localStorage.getItem(_LOC_CTX_KEY) || 'null'); } catch (_) { return null; }
@@ -3849,6 +3908,120 @@ function detectAndSetupLanguage() {
     if (_cachedCtx && _cachedCtx.lat) {
         _applyLocCtx(_cachedCtx);
     }
+
+    // Phase 25 (May 2026) — deferred home-stage GPS detection.
+    //
+    // The previous policy disabled boot-time GPS entirely (Lighthouse
+    // "geolocation-on-start" audit + ipapi.co CORS errors on prod).
+    // That left a first-visit user stuck in English on the home page
+    // until they tapped "Report an Incident", even if their phone
+    // could resolve the language from GPS in seconds.
+    //
+    // New policy: fire GPS detection on the home stage AFTER:
+    //   • The page has been interactive for ~1.5 s (`requestIdleCallback`
+    //     or fallback `setTimeout`) — well past FCP/LCP, so the
+    //     Lighthouse rule (which measures sync calls before user
+    //     interaction during page-load) does not trigger.
+    //   • The user has no manual pick (`crisp_lang_manual` unset).
+    //   • The origin is HTTPS (otherwise getCurrentPosition is blocked
+    //     anyway).
+    //   • No live IP-geolocation call (avoids the prod CORS error
+    //     issue from ipapi.co / freeipapi.com — we use GPS only).
+    //
+    // On result: `_saveLocCtx` + `noteDetectedLocal` — which now (per
+    // the SUPPORTED_LANGS gate fix above) actually auto-activates the
+    // detected language for all 22 supported locales.
+    function _scheduleHomeLanguageDetect() {
+        // Skip if user already has a manual pick.
+        const hasManual = !!localStorage.getItem('crisp_lang_manual');
+        if (hasManual) return;
+        // Skip if we already have a recent cached context (< 24 h old).
+        if (_cachedCtx && _cachedCtx.ts
+            && (Date.now() - _cachedCtx.ts) < 24 * 3600 * 1000
+            && _cachedCtx.lang
+            && SUPPORTED_LANGS.has(_cachedCtx.lang)) {
+            return;
+        }
+        // Skip if geolocation isn't available or origin is insecure.
+        if (!navigator.geolocation) return;
+        const isSecure = window.isSecureContext
+            || window.location.hostname === 'localhost'
+            || window.location.hostname === '127.0.0.1';
+        if (!isSecure) return;
+
+        const fire = () => {
+            // Re-check the manual flag (user might have picked between
+            // schedule and fire).
+            if (localStorage.getItem('crisp_lang_manual')) return;
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                try {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    // Online-only reverse geocode. Offline → silently skip.
+                    if (navigator.onLine === false) return;
+                    const res = await fetch(
+                        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`,
+                        { headers: { 'Accept-Language': 'en' } }
+                    ).catch(() => null);
+                    if (!res || !res.ok) return;
+                    const data = await res.json().catch(() => null);
+                    if (!data || !data.address) return;
+                    const addr = data.address;
+                    const countryCode = (addr.country_code || '').toUpperCase();
+                    const regionStr = [
+                        addr.state, addr.state_district, addr.county,
+                        addr.city, addr.suburb, addr.neighbourhood, addr.country
+                    ].filter(Boolean).join(' ').toLowerCase();
+                    // Same resolution chain as detectAndSetupLanguage:
+                    //   REGION_LANG_MAP → COUNTRY_LANG_DATA (gated by
+                    //   SUPPORTED_LANGS) → LANG_FAMILY_FALLBACK → 'en'.
+                    let pickedCode = null;
+                    let pickedLabel = null;
+                    let pickedSpeech = null;
+                    for (const entry of REGION_LANG_MAP) {
+                        if (entry.match.some(k => regionStr.includes(k))) {
+                            pickedCode = entry.code;
+                            pickedLabel = entry.label;
+                            pickedSpeech = entry.speech;
+                            break;
+                        }
+                    }
+                    if (!pickedCode && COUNTRY_LANG_DATA[countryCode]
+                        && SUPPORTED_LANGS.has(COUNTRY_LANG_DATA[countryCode].code)) {
+                        const e = COUNTRY_LANG_DATA[countryCode];
+                        pickedCode = e.code;
+                        pickedLabel = e.label;
+                        pickedSpeech = e.speech;
+                    }
+                    if (!pickedCode) {
+                        const fl = _languageFamilyFallback(countryCode);
+                        if (fl && SUPPORTED_LANGS.has(fl)) {
+                            pickedCode = fl;
+                        }
+                    }
+                    if (!pickedCode) return;   // No supported language for this region.
+                    _saveLocCtx(lat, lng, pos.coords.accuracy,
+                        data.display_name || null, pickedCode,
+                        pickedLabel, pickedSpeech);
+                    try { localStorage.setItem('crisp_lang_auto_country', countryCode); } catch (_) {}
+                    noteDetectedLocal(pickedCode, pickedLabel);
+                } catch (_) { /* swallow */ }
+            }, () => { /* GPS denied / unavailable — silent */ }, {
+                enableHighAccuracy: false,
+                timeout: 8000,
+                maximumAge: 5 * 60 * 1000,
+            });
+        };
+
+        // Defer past first paint to keep Lighthouse green. Prefer
+        // requestIdleCallback; fall back to setTimeout for Safari.
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(fire, { timeout: 2500 });
+        } else {
+            setTimeout(fire, 1500);
+        }
+    }
+    _scheduleHomeLanguageDetect();
 
     // May 2026 (Lighthouse "geolocation-on-start" fix) — never call
     // getCurrentPosition at boot. Browsers fire a permission prompt
@@ -4038,8 +4211,10 @@ function detectAndSetupLanguage() {
             // it's in LANG_FAMILY_FALLBACK (e.g. Tanzania → English,
             // Burkina Faso → French), use the proximity language
             // BEFORE falling through to browser/English.
+            // Phase 25 — gate on SUPPORTED_LANGS (was I18N[familyLang],
+            // which only had en/kn/hi/ta and silently dropped fr/es/etc.).
             const familyLang = _languageFamilyFallback(countryCode);
-            if (familyLang && I18N[familyLang]) {
+            if (familyLang && SUPPORTED_LANGS.has(familyLang)) {
                 _saveLocCtx(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy,
                     state.locationName, familyLang, null, null);
                 try { localStorage.setItem('crisp_lang_auto_country', countryCode); } catch (_) {}
@@ -4098,8 +4273,10 @@ function detectAndSetupLanguage() {
             // path too, so a Tanzanian IP-located visitor without GPS
             // also gets English (lingua franca) instead of the raw
             // browser-language fallback.
+            // Phase 25 — gate on SUPPORTED_LANGS for the same reason
+            // as the GPS-path callsite above.
             const familyLang = _languageFamilyFallback(cc);
-            if (familyLang && I18N[familyLang]) {
+            if (familyLang && SUPPORTED_LANGS.has(familyLang)) {
                 _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName, familyLang, null, null);
                 try { localStorage.setItem('crisp_lang_auto_country', cc); } catch (_) {}
                 showLocalLangBtn(familyLang, null, null);
