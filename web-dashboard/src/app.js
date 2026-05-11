@@ -984,10 +984,31 @@ function _applyProgressiveReveal(container) {
     cards.forEach((c, i) => { if (i >= visibleCount) c.style.display = 'none'; });
 
     // Add a sentinel div right after the last visible card.
+    //
+    // Phase 25.1 (May 2026) — anchor the sentinel by the LAST VISIBLE
+    // card, not the first-hidden card. The previous version did
+    //     cards[visibleCount - 1].parentElement
+    //         .insertBefore(sentinel, cards[visibleCount].nextSibling);
+    // which crashes when `cards[visibleCount - 1]` and
+    // `cards[visibleCount]` have different parents — exactly what
+    // happens in Queue Mode (three separate <section>s for backlog /
+    // triage / responding). A new report arriving via any channel
+    // (e.g. Telegram) triggered the re-render that pushed the cutoff
+    // across a section boundary and threw the user-visible
+    // "Failed to execute 'InsertBefore' on 'Node'" render error.
+    //
+    // Using anchor.nextSibling is null-safe (insertBefore with null
+    // appends to end of parent) and the reference node is by
+    // definition a child of anchor.parentElement.
     const sentinel = document.createElement('div');
     sentinel.className = '_feed-sentinel';
     sentinel.style.cssText = 'height:1px;width:100%;';
-    cards[visibleCount - 1].parentElement.insertBefore(sentinel, cards[visibleCount].nextSibling);
+    {
+        const anchor = cards[visibleCount - 1];
+        if (anchor && anchor.parentElement) {
+            anchor.parentElement.insertBefore(sentinel, anchor.nextSibling);
+        }
+    }
 
     _progressiveIO = new IntersectionObserver((entries) => {
         for (const e of entries) {
@@ -1001,8 +1022,15 @@ function _applyProgressiveReveal(container) {
                 return;
             }
             // Reposition sentinel after the new last-visible card.
+            // Same defensive anchor pattern as the initial placement.
             const lastVisible = cards[visibleCount - 1];
             if (lastVisible && lastVisible.parentElement) {
+                // If the previous parent differs (cross-section move
+                // during Queue Mode), detach first so insertBefore can't
+                // confuse two different DOM ancestors.
+                if (sentinel.parentElement && sentinel.parentElement !== lastVisible.parentElement) {
+                    try { sentinel.remove(); } catch (_) {}
+                }
                 lastVisible.parentElement.insertBefore(sentinel, lastVisible.nextSibling);
             }
         }

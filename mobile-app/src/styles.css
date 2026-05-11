@@ -3592,10 +3592,14 @@ html[dir="rtl"] .back-btn .fa-arrow-left {
 }
 
 /* Language-switcher overlay slides from the trailing edge — keep its
-   right/left anchoring sensible in both directions. */
+   right/left anchoring sensible in both directions.
+   Phase 25.1 (May 2026) — actually mirror the pill to the LEFT in RTL.
+   Previous version set `right: 0` which kept the pill on the same side
+   as the brand-row content (which flows right-aligned in RTL) and
+   produced the visible overlap reported on the Arabic home page. */
 html[dir="rtl"] #lang-switcher {
-    left: auto;
-    right: 0;
+    right: auto;
+    left: 16px;
 }
 
 /* Phase 25 (May 2026) — RTL critical patches.
