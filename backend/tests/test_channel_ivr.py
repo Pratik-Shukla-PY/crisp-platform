@@ -55,6 +55,35 @@ def test_ivr_webhook_greets_caller_and_returns_twiml(client):
     assert "CA-test-001" in ivr_webhook._ivr_sessions
 
 
+def test_ivr_welcome_menu_uses_native_voice_per_language(client):
+    """Phase 23.3 — each "press N for X" prompt is spoken in language
+    X's own Polly voice, not all in English. A Hindi speaker hears
+    Hindi pronunciation of "press 2 for Hindi"; an Arabic speaker
+    hears Arabic for "press 5 for Arabic"; etc.
+    """
+    res = client.post(
+        _url("webhook"),
+        data={"CallSid": "CA-test-multi-lang", "From": "+10000", "Direction": "inbound"},
+    )
+    body = res.text
+    # English line still uses Joanna.
+    assert 'voice="Polly.Joanna" language="en-US">For English' in body
+    # Hindi → Aditi voice + hi-IN locale + Devanagari script.
+    assert 'voice="Polly.Aditi" language="hi-IN">' in body
+    assert "हिन्दी" in body
+    # Spanish → Lupe voice + Spanish prompt.
+    assert 'voice="Polly.Lupe" language="es-US">' in body
+    assert "español" in body
+    # French → Lea voice + French prompt.
+    assert 'voice="Polly.Lea" language="fr-FR">' in body
+    assert "français" in body
+    # Arabic → Zeina voice + Arabic script (the prompt says "للعربية"
+    # = "for Arabic"; just check the Arabic root word "عربية" is in
+    # the body so we don't couple to the exact preposition.)
+    assert 'voice="Polly.Zeina" language="arb">' in body
+    assert "عربية" in body
+
+
 def test_ivr_location_step_captures_speech_to_text(client):
     """POST with a Digits selection → 200 TwiML with a ``<Record>`` for
     the user's spoken location.
@@ -250,9 +279,11 @@ def test_ivr_caller_country_picks_default_language(client):
     )
     assert res.status_code == 200, res.text
     body = res.text
-    # Welcome menu (the Gather <Say>) stays English — confirmed by the
-    # presence of "Press 1 for English" verbatim.
-    assert "Press 1 for English" in body
+    # The Gather still contains the English-language line "For English,
+    # press 1." — confirms the welcome menu is multilingual but still
+    # includes the English option (Phase 23.3 — each language's prompt
+    # rendered in that language's own voice).
+    assert "For English, press 1" in body
     # But the *fallback Redirect* honours the country default. This is
     # the URL the caller hits when they don't press a digit.
     assert "lang=hi" in body, (

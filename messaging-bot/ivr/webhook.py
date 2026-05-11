@@ -262,24 +262,25 @@ async def handle_incoming_call(request: Request):
     # location-step handler picks that language; otherwise the
     # Redirect routes to the country's default language.
     #
-    # Phase 23.1 — the fallback URL uses `&lang=…` (not `?lang=…`)
-    # because loc_url already carries a `?sid=…` query string. The
-    # pre-23.1 form `{loc_url}?lang={default_lang}` produced
-    # `.../location-step/SECRET?sid=CA-…?lang=hi` (two `?` chars
-    # → RFC 3986 invalid → Twilio dropped the call with
-    # "An application error has occurred"). Using `&` keeps the URL
-    # valid and the Redirect actually fires.
+    # Phase 23.3 — each language's prompt is now spoken in THAT
+    # language's own Polly voice. A Hindi speaker hears their
+    # option in Hindi ("हिन्दी के लिए 2 दबाएं") instead of an
+    # English narrator listing language names. Helps low-literacy
+    # callers recognise their language is supported. Each <Say>
+    # uses the language-appropriate Polly voice + locale.
+    #
+    # Phase 23.1 — the fallback URL uses `&amp;lang=…` (not `?lang=…`)
+    # because loc_url already carries a `?sid=…` query string.
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="{loc_url}" method="POST" numDigits="1" timeout="5">
-        <Say voice="Polly.Joanna" language="en-US">Welcome to CRISP Crisis Reporting.
-This call is recorded to help rescue teams. Your data is anonymized.
-Press 1 for English.
-Press 2 for Hindi.
-Press 3 for Spanish.
-Press 4 for French.
-Press 5 for Arabic.
-Or just start speaking after the beep.</Say>
+    <Gather action="{loc_url}" method="POST" numDigits="1" timeout="6">
+        <Say voice="Polly.Joanna" language="en-US">Welcome to CRISP Crisis Reporting. This call is recorded to help rescue teams. Your data is anonymized.</Say>
+        <Say voice="Polly.Joanna" language="en-US">For English, press 1.</Say>
+        <Say voice="Polly.Aditi" language="hi-IN">हिन्दी के लिए, 2 दबाएं।</Say>
+        <Say voice="Polly.Lupe" language="es-US">Para español, presione 3.</Say>
+        <Say voice="Polly.Lea" language="fr-FR">Pour français, appuyez sur 4.</Say>
+        <Say voice="Polly.Zeina" language="arb">للعربية، اضغط 5.</Say>
+        <Say voice="Polly.Joanna" language="en-US">Or just start speaking after the beep.</Say>
     </Gather>
     <Redirect method="POST">{loc_url}&amp;lang={default_lang}</Redirect>
 </Response>"""
@@ -709,17 +710,75 @@ async def _process_ivr_report(call_sid: str):
                     f"conf={geo_conf_float} src={geo_source}"
                 )
 
-                # Attach location audio
-                if location_b64:
-                    from messaging_bot.chunked_uploader import upload_media_chunked
-                    await upload_media_chunked(report_id, location_b64, "AUDIO", "audio/wav")
-                    logger.info(f"IVR location audio uploaded for {report_id}")
+                # Phase 23.3 — audio upload reliability hardening.
+                # Original code fired-and-forgot two chunked-uploader
+                # calls and assumed success. Real-call observation: the
+                # dashboard couldn't play back the IVR audio, suggesting
+                # the upload silently failed or attached a Media row
+                # the player couldn't load. Now we:
+                #   (a) capture the chunked uploader's return value,
+                #   (b) on failure, fall back to the single-shot
+                #       /reports/{id}/media endpoint (data: URL POST
+                #       with `audio/wav` MIME) — slower but more robust
+                #       for the small ≤2 MB WAV files Twilio returns,
+                #   (c) loudly log success/failure with byte counts so
+                #       the operator can grep for upload trouble.
+                async def _attach_audio(label, b64_data):
+                    if not b64_data:
+                        return
+                    size_kb = len(b64_data) * 3 // 4 // 1024
+                    try:
+                        from messaging_bot.chunked_uploader import upload_media_chunked
+                        ok = await upload_media_chunked(
+                            report_id, b64_data, "AUDIO", "audio/wav",
+                        )
+                        if ok:
+                            logger.info(
+                                f"IVR {label} audio uploaded (chunked) "
+                                f"for {report_id} ≈{size_kb} KB"
+                            )
+                            return
+                        logger.warning(
+                            f"IVR {label} chunked upload returned False; "
+                            f"falling back to single-shot attach"
+                        )
+                    except Exception as ex:
+                        logger.warning(
+                            f"IVR {label} chunked upload raised: {ex}; "
+                            f"falling back to single-shot attach"
+                        )
+                    # Single-shot fallback: POST the full data: URL to
+                    # /reports/{id}/media. The endpoint runs magic-byte
+                    # detection and stores with audio/wav content-type
+                    # so the dashboard's HTML5 <audio> player works.
+                    try:
+                        async with httpx.AsyncClient(timeout=60) as cf:
+                            data_url = f"data:audio/wav;base64,{b64_data}"
+                            rf = await cf.post(
+                                f"{BACKEND_URL}/api/v1/reports/{report_id}/media",
+                                json={"type": "AUDIO", "url": data_url},
+                            )
+                            if rf.status_code in (200, 201):
+                                logger.info(
+                                    f"IVR {label} audio uploaded "
+                                    f"(single-shot) for {report_id} "
+                                    f"≈{size_kb} KB"
+                                )
+                            else:
+                                logger.error(
+                                    f"IVR {label} single-shot upload "
+                                    f"failed for {report_id}: "
+                                    f"status={rf.status_code} "
+                                    f"body={rf.text[:200]}"
+                                )
+                    except Exception as ex2:
+                        logger.error(
+                            f"IVR {label} single-shot upload error "
+                            f"for {report_id}: {ex2}"
+                        )
 
-                # Attach description audio
-                if audio_b64:
-                    from messaging_bot.chunked_uploader import upload_media_chunked
-                    await upload_media_chunked(report_id, audio_b64, "AUDIO", "audio/wav")
-                    logger.info(f"IVR description audio uploaded for {report_id}")
+                await _attach_audio("location", location_b64)
+                await _attach_audio("description", audio_b64)
 
                 # Phase 23 — restore AI extraction. Claude reads the
                 # full English transcription and back-fills
