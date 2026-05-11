@@ -4380,23 +4380,48 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .home-top-icon-btn[hidden] { display: none; }
 
-/* — Home stage layout — uniform 20 px edge padding, generous 24 px
-   vertical rhythm between major sibling sections. Override
-   .stage-center's `align-items: center; text-align: center` defaults
-   so children stretch to the full content width and left-align by
-   default. The per-section rules opt back into `text-align: center`
-   where wanted (hero subtitle, channels section). */
+/* — Home stage layout — mobile-first compact baseline. Sized to fit
+   the smallest realistic viewport (iPhone 14 in Safari with toolbars
+   showing ≈ 660 px usable height) without scroll. Larger viewports
+   get more breathing room via the height media queries below. */
 .home-stage .home-center {
-    padding: 24px 20px 24px;
-    gap: 28px;
+    padding: 16px 20px 16px;
+    gap: 16px;
     align-items: stretch;
     justify-content: flex-start;
     text-align: left;
     min-height: 100dvh;
 }
 /* Eliminate the global .stage's 24 px horizontal padding on the home
-   stage so .home-center owns the 20 px gutter exclusively. */
-.stage.home-stage { padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; }
+   stage so .home-center owns the gutter exclusively. */
+.stage.home-stage { padding: 0; }
+
+/* Very narrow phones (iPhone SE / small Android, ≤ 380 px): tighter
+   horizontal gutter so 3-across channel grid keeps legible labels. */
+@media (max-width: 380px) {
+    .home-stage .home-center { padding-left: 16px; padding-right: 16px; }
+    .home-brand-row { padding-right: 96px; }
+}
+/* Comfortable on taller viewports (PWA / installed app / phablets):
+   bring back the generous spacing now that we have room. */
+@media (min-height: 700px) {
+    .home-stage .home-center {
+        padding: 20px 20px 20px;
+        gap: 22px;
+    }
+}
+@media (min-height: 800px) {
+    .home-stage .home-center {
+        padding: 28px 20px 24px;
+        gap: 28px;
+    }
+}
+@media (min-height: 900px) {
+    .home-stage .home-center {
+        padding: 32px 20px 28px;
+        gap: 32px;
+    }
+}
 
 
 /* — Identity bar — two flow rows: brand on row 1, device-ID + badge
@@ -4468,47 +4493,86 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .home-badge-chip .hb-emoji { font-size: 13px; }
 
-/* — Hero CTA — Phase 20: bigger, more confident. Carries the page. */
+/* — Hero CTA — sized to fit the compact viewport baseline. Scales up
+   on taller viewports via media queries below. */
 .home-stage .big-cta {
-    padding: 20px 24px;
-    min-height: 64px;
-    font-size: 1.35rem;
+    padding: 14px 20px;
+    min-height: 56px;
+    font-size: 1.2rem;
     font-weight: 700;
-    border-radius: 16px;
+    border-radius: 14px;
     margin: 0;
     letter-spacing: -0.01em;
-    box-shadow: 0 12px 36px rgba(249, 115, 22, 0.36),
-                0 0 0 1px rgba(249, 115, 22, 0.22);
+    box-shadow: 0 8px 28px rgba(249, 115, 22, 0.32),
+                0 0 0 1px rgba(249, 115, 22, 0.20);
     gap: 10px;
 }
-.home-stage .big-cta i { font-size: 1.15rem; }
-
-/* — Hero subtitle (Phase 19, new). Sits below the CTA, centred. */
-.home-hero-sub {
-    margin: -8px 0 0;        /* tuck right under the CTA */
-    text-align: center;
-    font-size: 13px;
-    line-height: 1.55;
-    color: var(--text-dim, #94a3b8);
-    padding: 0 4px;
-    letter-spacing: 0.01em;
+.home-stage .big-cta i { font-size: 1.05rem; }
+@media (min-height: 700px) {
+    .home-stage .big-cta {
+        padding: 16px 22px;
+        min-height: 60px;
+        font-size: 1.28rem;
+    }
+}
+@media (min-height: 800px) {
+    .home-stage .big-cta {
+        padding: 22px 24px;
+        min-height: 68px;
+        font-size: 1.4rem;
+        box-shadow: 0 12px 36px rgba(249, 115, 22, 0.36),
+                    0 0 0 1px rgba(249, 115, 22, 0.22);
+    }
+    .home-stage .big-cta i { font-size: 1.15rem; }
+}
+@media (min-height: 900px) {
+    .home-stage .big-cta {
+        padding: 26px 24px;
+        min-height: 72px;
+    }
 }
 
-/* — Secondary row (My Reports + Login). Phase 20: bigger so it
-   visually balances the larger CTA above. */
+/* Phase 21 — hero subtitle removed entirely. Rule kept as a no-op
+   for safety in case stage-privacy or another page reuses the class. */
+.home-hero-sub { display: none; }
+
+/* — Secondary row (My Reports + Login). Compact baseline; grows
+   slightly on taller viewports. */
 .home-secondary-row {
     margin-top: 0;
-    gap: 12px;
+    gap: 10px;
 }
 .home-secondary-row .secondary-cta,
 .home-secondary-row .tertiary-cta {
-    min-height: 50px;
-    padding: 13px 16px;
-    font-size: 14px;
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 13px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.025);
     transition: background 0.15s ease, border-color 0.15s ease,
                 transform 0.1s ease;
+}
+@media (min-height: 700px) {
+    .home-secondary-row .secondary-cta,
+    .home-secondary-row .tertiary-cta {
+        min-height: 48px;
+        padding: 12px 14px;
+    }
+}
+@media (min-height: 800px) {
+    .home-secondary-row .secondary-cta,
+    .home-secondary-row .tertiary-cta {
+        min-height: 54px;
+        padding: 15px 16px;
+        font-size: 14px;
+    }
+}
+@media (min-height: 900px) {
+    .home-secondary-row .secondary-cta,
+    .home-secondary-row .tertiary-cta {
+        min-height: 58px;
+        padding: 17px 16px;
+    }
 }
 .home-secondary-row .secondary-cta:hover,
 .home-secondary-row .tertiary-cta:hover {
@@ -4650,8 +4714,8 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     padding: 0;
 }
 .home-stage .home-section-channels .home-section-title {
-    margin: 0 0 6px;
-    font-size: 11px;
+    margin: 0 0 4px;
+    font-size: 10.5px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.12em;
@@ -4659,53 +4723,94 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     text-align: center;
 }
 .home-stage .home-section-channels .home-section-lede {
-    margin: 0 0 16px;
-    font-size: 12.5px;
-    line-height: 1.5;
+    margin: 0 0 10px;
+    font-size: 11.5px;
+    line-height: 1.4;
     color: var(--text-dim, #94a3b8);
     text-align: center;
 }
+@media (min-height: 700px) {
+    .home-stage .home-section-channels .home-section-title { font-size: 11px; margin-bottom: 6px; }
+    .home-stage .home-section-channels .home-section-lede { font-size: 12px; margin-bottom: 14px; }
+}
+@media (min-height: 800px) {
+    .home-stage .home-section-channels .home-section-lede { font-size: 12.5px; margin-bottom: 16px; }
+}
 
-/* — Channels grid — Phase 20: bigger tiles so the panel reads as a
-   substantial section, not a thin afterthought. */
+/* — Channels grid — compact baseline so 3 × 2 tiles fit on the
+   shortest viewport. Scales up on taller phones. */
 .home-stage .home-channels {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: 8px;
     margin: 0;
     width: 100%;
 }
 .home-stage .home-channel-tile {
     aspect-ratio: auto;
-    min-height: 104px;
-    padding: 18px 8px;
-    border-radius: 14px;
-    gap: 10px;
+    min-height: 78px;
+    padding: 12px 6px;
+    border-radius: 12px;
+    gap: 6px;
 }
-.home-stage .home-channel-tile .ct-icon { font-size: 28px; }
+.home-stage .home-channel-tile .ct-icon { font-size: 22px; }
 .home-stage .home-channel-tile .ct-label {
-    font-size: 12.5px;
+    font-size: 11.5px;
     font-weight: 600;
     letter-spacing: -0.01em;
     line-height: 1.2;
 }
+@media (min-height: 700px) {
+    .home-stage .home-channels { gap: 10px; }
+    .home-stage .home-channel-tile {
+        min-height: 92px;
+        padding: 16px 8px;
+        gap: 8px;
+    }
+    .home-stage .home-channel-tile .ct-icon { font-size: 26px; }
+    .home-stage .home-channel-tile .ct-label { font-size: 12px; }
+}
+@media (min-height: 800px) {
+    .home-stage .home-channels { gap: 12px; }
+    .home-stage .home-channel-tile {
+        min-height: 124px;
+        padding: 22px 8px;
+        gap: 12px;
+        border-radius: 14px;
+    }
+    .home-stage .home-channel-tile .ct-icon { font-size: 30px; }
+    .home-stage .home-channel-tile .ct-label { font-size: 13px; }
+}
+@media (min-height: 900px) {
+    .home-stage .home-channels { gap: 14px; }
+    .home-stage .home-channel-tile {
+        min-height: 138px;
+        padding: 26px 8px;
+    }
+}
 .home-stage .home-channel-tile.is-disabled { opacity: 0.55; }
 .home-stage .home-channel-tile.is-live { box-shadow: none; }
 
-/* — Utility footer — calmer separator, tighter, no top padding.
-   Phase 20: `margin-top: auto` pushes the footer to the very bottom
-   of the viewport-tall .home-center so the page never has dead
-   whitespace in the middle. */
+/* — Utility footer — calmer separator, tighter. Phase 20:
+   `margin-top: auto` pushes the footer to the very bottom of the
+   viewport-tall .home-center so the page never has a dead gap mid-
+   page. Phase 21: tighter compact baseline, scales up by height. */
 .home-utility-footer {
     margin: auto 0 0;
-    padding: 16px 0 4px;
+    padding: 10px 0 0;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
-    gap: 6px;
+    gap: 5px;
 }
 .home-utility-footer .home-utility-link,
 .home-utility-footer .home-utility-version,
 .home-utility-footer .home-utility-dot {
-    font-size: 11px;
+    font-size: 10.5px;
+}
+@media (min-height: 700px) {
+    .home-utility-footer { padding-top: 14px; gap: 6px; }
+    .home-utility-footer .home-utility-link,
+    .home-utility-footer .home-utility-version,
+    .home-utility-footer .home-utility-dot { font-size: 11px; }
 }
 
 /* — Logged-in greeting subtitle, when JS un-hides it. */
