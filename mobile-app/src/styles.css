@@ -4106,8 +4106,10 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     left: 158px;
 }
 .home-top-icon-btn {
-    width: 32px;
-    height: 32px;
+    /* WCAG 2.5.5 / Apple HIG: tap targets must be ≥ 44 × 44 px.
+       Visual glyph stays compact via flex centering + smaller font. */
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.35);
     border: 1px solid rgba(255, 255, 255, 0.10);
@@ -4116,7 +4118,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
+    font-size: 16px;
     transition: background 0.15s ease, color 0.15s ease;
 }
 .home-top-icon-btn:hover {
@@ -4706,7 +4708,9 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 10px;
+    /* WCAG 2.5.5 / Apple HIG: min 44 px tap target height. */
+    min-height: 44px;
+    padding: 10px 12px;
     background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
