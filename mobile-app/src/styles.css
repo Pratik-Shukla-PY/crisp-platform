@@ -4380,24 +4380,24 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .home-top-icon-btn[hidden] { display: none; }
 
-/* — Home stage layout — uniform 20 px edge padding, 16 px vertical
-   rhythm between major sibling sections. Override .stage-center's
-   `align-items: center; text-align: center` defaults so children
-   stretch to the full content width and left-align by default. The
-   per-section rules opt back into `text-align: center` where wanted
-   (hero subtitle, eyebrows, channels section). */
+/* — Home stage layout — uniform 20 px edge padding, generous 24 px
+   vertical rhythm between major sibling sections. Override
+   .stage-center's `align-items: center; text-align: center` defaults
+   so children stretch to the full content width and left-align by
+   default. The per-section rules opt back into `text-align: center`
+   where wanted (hero subtitle, channels section). */
 .home-stage .home-center {
-    padding: 20px 20px 28px;
-    gap: 16px;
+    padding: 24px 20px 24px;
+    gap: 28px;
     align-items: stretch;
     justify-content: flex-start;
     text-align: left;
-    /* Override the global .stage padding (24 px) so the stage is
-       edge-to-edge and .home-center alone owns the 20 px gutter. */
+    min-height: 100dvh;
 }
 /* Eliminate the global .stage's 24 px horizontal padding on the home
    stage so .home-center owns the 20 px gutter exclusively. */
-.stage.home-stage { padding-left: 0; padding-right: 0; }
+.stage.home-stage { padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; }
+
 
 /* — Identity bar — two flow rows: brand on row 1, device-ID + badge
    chip on row 2. No outside margin (parent gap handles spacing). */
@@ -4468,44 +4468,45 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .home-badge-chip .hb-emoji { font-size: 13px; }
 
-/* — Hero CTA — slightly tighter padding so it doesn't dominate at the
-   expense of the page below it. Glow softened. */
+/* — Hero CTA — Phase 20: bigger, more confident. Carries the page. */
 .home-stage .big-cta {
-    padding: 16px 20px;
-    min-height: 56px;
-    font-size: 1.25rem;
+    padding: 20px 24px;
+    min-height: 64px;
+    font-size: 1.35rem;
     font-weight: 700;
-    border-radius: 14px;
-    margin: 4px 0 0;
-    letter-spacing: -0.01em;
-    box-shadow: 0 8px 28px rgba(249, 115, 22, 0.32),
-                0 0 0 1px rgba(249, 115, 22, 0.18);
-}
-.home-stage .big-cta i { font-size: 1.05rem; }
-
-/* — Hero subtitle (Phase 19, new). Sits 12 px below the CTA, centred. */
-.home-hero-sub {
+    border-radius: 16px;
     margin: 0;
+    letter-spacing: -0.01em;
+    box-shadow: 0 12px 36px rgba(249, 115, 22, 0.36),
+                0 0 0 1px rgba(249, 115, 22, 0.22);
+    gap: 10px;
+}
+.home-stage .big-cta i { font-size: 1.15rem; }
+
+/* — Hero subtitle (Phase 19, new). Sits below the CTA, centred. */
+.home-hero-sub {
+    margin: -8px 0 0;        /* tuck right under the CTA */
     text-align: center;
-    font-size: 12.5px;
-    line-height: 1.5;
+    font-size: 13px;
+    line-height: 1.55;
     color: var(--text-dim, #94a3b8);
-    padding: 0 6px;
+    padding: 0 4px;
     letter-spacing: 0.01em;
 }
 
-/* — Secondary row (My Reports + Login). Already has min-height 44 from
-   Phase 18.1 hotfix; refine padding + alignment. */
+/* — Secondary row (My Reports + Login). Phase 20: bigger so it
+   visually balances the larger CTA above. */
 .home-secondary-row {
     margin-top: 0;
-    gap: 10px;
+    gap: 12px;
 }
 .home-secondary-row .secondary-cta,
 .home-secondary-row .tertiary-cta {
-    padding: 11px 14px;
-    font-size: 13px;
+    min-height: 50px;
+    padding: 13px 16px;
+    font-size: 14px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.025);
     transition: background 0.15s ease, border-color 0.15s ease,
                 transform 0.1s ease;
 }
@@ -4649,40 +4650,41 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     padding: 0;
 }
 .home-stage .home-section-channels .home-section-title {
-    margin: 0 0 4px;
-    font-size: 10.5px;
+    margin: 0 0 6px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.10em;
+    letter-spacing: 0.12em;
     color: var(--text-mute, #94a3b8);
     text-align: center;
 }
 .home-stage .home-section-channels .home-section-lede {
-    margin: 0 0 12px;
-    font-size: 12px;
-    line-height: 1.45;
+    margin: 0 0 16px;
+    font-size: 12.5px;
+    line-height: 1.5;
     color: var(--text-dim, #94a3b8);
     text-align: center;
 }
 
-/* — Channels grid — keep 3×2, tighten visual. */
+/* — Channels grid — Phase 20: bigger tiles so the panel reads as a
+   substantial section, not a thin afterthought. */
 .home-stage .home-channels {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: 12px;
     margin: 0;
     width: 100%;
 }
 .home-stage .home-channel-tile {
     aspect-ratio: auto;
-    min-height: 76px;
-    padding: 12px 6px;
-    border-radius: 12px;
-    gap: 6px;
+    min-height: 104px;
+    padding: 18px 8px;
+    border-radius: 14px;
+    gap: 10px;
 }
-.home-stage .home-channel-tile .ct-icon { font-size: 22px; }
+.home-stage .home-channel-tile .ct-icon { font-size: 28px; }
 .home-stage .home-channel-tile .ct-label {
-    font-size: 11px;
+    font-size: 12.5px;
     font-weight: 600;
     letter-spacing: -0.01em;
     line-height: 1.2;
@@ -4690,17 +4692,20 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .home-stage .home-channel-tile.is-disabled { opacity: 0.55; }
 .home-stage .home-channel-tile.is-live { box-shadow: none; }
 
-/* — Utility footer — calmer separator, tighter, no top padding. */
+/* — Utility footer — calmer separator, tighter, no top padding.
+   Phase 20: `margin-top: auto` pushes the footer to the very bottom
+   of the viewport-tall .home-center so the page never has dead
+   whitespace in the middle. */
 .home-utility-footer {
-    margin: 0;
-    padding: 8px 0 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
-    gap: 4px;
+    margin: auto 0 0;
+    padding: 16px 0 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    gap: 6px;
 }
 .home-utility-footer .home-utility-link,
 .home-utility-footer .home-utility-version,
 .home-utility-footer .home-utility-dot {
-    font-size: 10.5px;
+    font-size: 11px;
 }
 
 /* — Logged-in greeting subtitle, when JS un-hides it. */

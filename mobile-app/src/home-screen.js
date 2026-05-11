@@ -492,11 +492,8 @@
         const myReportsBtn = document.getElementById('btn-my-reports');
         const loginBtn = document.getElementById('btn-login');
         const recentBlock = document.getElementById('home-recent');
-        // Phase 19 — How-it-works strip + hero subtitle. Hidden for
-        // logged-in users (recent-reports block + personalised greeting
-        // already give context). Anonymous users get both to learn
-        // the flow + see the value-prop.
-        const howBlock = document.getElementById('home-howitworks');
+        // Phase 20 — How-it-works strip removed entirely; only the
+        // hero subtitle still toggles by auth state.
         const heroSubEl = document.querySelector('.home-hero-sub');
         if (!devidWrap || !acctWrap) return;
 
@@ -526,8 +523,8 @@
             // Show recent-reports block (will populate async).
             if (recentBlock) recentBlock.removeAttribute('hidden');
             _renderRecentReports();
-            // Phase 19 — logged-in users hide how-it-works + hero subtitle.
-            if (howBlock) howBlock.setAttribute('hidden', '');
+            // Phase 20 — logged-in users hide the hero subtitle (recent
+            // reports + greeting already cover context).
             if (heroSubEl) heroSubEl.setAttribute('hidden', '');
         } else {
             acctWrap.setAttribute('hidden', '');
@@ -538,8 +535,7 @@
             if (loginBtn) loginBtn.style.display = '';
             // Hide recent-reports block.
             if (recentBlock) recentBlock.setAttribute('hidden', '');
-            // Phase 19 — anonymous users see how-it-works + hero subtitle.
-            if (howBlock) howBlock.removeAttribute('hidden');
+            // Phase 20 — anonymous users see the hero subtitle.
             if (heroSubEl) heroSubEl.removeAttribute('hidden');
         }
         // Phase 18 — repaint badge chip + My Reports count for both states.

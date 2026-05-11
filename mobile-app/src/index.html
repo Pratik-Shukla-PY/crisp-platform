@@ -452,47 +452,14 @@
                 </button>
             </div>
 
-            <!-- Phase 18 — Safety disambiguation hint. CRISP is for
-                 reporting AFTER a crisis event, not 911 / ambulance
-                 dispatch. Without this, a panicked user might wait on
-                 the app for life-threatening response. Subtle amber
-                 banner so it reads as guidance, not alarm. -->
-            <div class="home-safety-hint" id="home-safety-hint" role="note">
-                <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-                <span data-i18n="home_safety_hint">Life-threatening emergency? Call your local emergency number first. CRISP is for reporting after the event.</span>
-            </div>
+            <!-- Phase 20 — Safety hint + How CRISP Works removed per
+                 user direction to make the UI cleaner. The original
+                 "safety_hint" wording lives on in stage-privacy under
+                 "Multi-channel parity" so first-time users can still
+                 read it from the Privacy link in the footer. -->
 
-            <!-- Phase 19 — How CRISP works strip. Three-step micro-tutorial
-                 that fills what was empty whitespace in Phase 18, and
-                 gives first-time users the value-prop they need. Tappable
-                 → opens stage-privacy "How it works" section for the
-                 longer-form explanation. -->
-            <section class="home-howitworks" id="home-howitworks" aria-labelledby="home-how-title">
-                <h2 id="home-how-title" class="home-section-eyebrow" data-i18n="home_how_title">How CRISP works</h2>
-                <ol class="home-how-steps">
-                    <li class="home-how-step">
-                        <span class="hw-num">1</span>
-                        <i class="fa-solid fa-camera-retro hw-icon" aria-hidden="true"></i>
-                        <span class="hw-text" data-i18n="home_how_step1">Snap a photo</span>
-                    </li>
-                    <li class="home-how-step">
-                        <span class="hw-num">2</span>
-                        <i class="fa-solid fa-tags hw-icon" aria-hidden="true"></i>
-                        <span class="hw-text" data-i18n="home_how_step2">Classify damage</span>
-                    </li>
-                    <li class="home-how-step">
-                        <span class="hw-num">3</span>
-                        <i class="fa-solid fa-paper-plane hw-icon" aria-hidden="true"></i>
-                        <span class="hw-text" data-i18n="home_how_step3">Send anonymously</span>
-                    </li>
-                </ol>
-            </section>
-
-            <!-- Phase 19 — Live community impact strip. Re-uses the
-                 existing /reports/impact-stats data path wired in
-                 app.js::updateHomeImpactMetrics(). Hidden until data
-                 loads — shows social proof without claiming numbers
-                 before the backend confirms. Compact two-stat row;
+            <!-- Phase 19 — Live community impact strip (retained,
+                 hidden until data loads). Compact two-stat row;
                  colour stays subtle so it doesn't compete with the
                  orange CTA above. -->
             <div class="home-impact" id="home-impact" hidden>
@@ -542,7 +509,7 @@
                 <span class="home-utility-dot" aria-hidden="true">·</span>
                 <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
                 <span class="home-utility-dot" aria-hidden="true">·</span>
-                <span class="home-utility-version" id="home-utility-version">v0.7.19</span>
+                <span class="home-utility-version" id="home-utility-version">v0.7.20</span>
             </nav>
 
             <!-- Legacy retained DOM — kept hidden so any
