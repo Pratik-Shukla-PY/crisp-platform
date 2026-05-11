@@ -516,7 +516,16 @@
             if (photoEl) {
                 if (photos > 0) {
                     photoEl.removeAttribute('hidden');
-                    if (photoLbl) photoLbl.textContent = photos === 1 ? '1 photo' : `${photos} photos`;
+                    if (photoLbl) {
+                        // Phase 25 — i18n photo count.
+                        const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
+                        if (photos === 1) {
+                            photoLbl.textContent = _t('v4_photos_count_one') || '1 photo';
+                        } else {
+                            const tmpl = _t('v4_photos_count_many') || '{n} photos';
+                            photoLbl.textContent = tmpl.replace('{n}', String(photos));
+                        }
+                    }
                 } else photoEl.setAttribute('hidden', '');
             }
             if (voiceEl) {
@@ -633,7 +642,9 @@
             const acc = Math.max(0, Math.round(loc.acc || 0));
             return `${loc.lat.toFixed(4)}°, ${loc.lng.toFixed(4)}° · ±${acc}m`;
         }
-        return 'Locating…';
+        // Phase 25 — i18n the "Locating…" status.
+        const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
+        return _t('v4_gps_locating') || 'Locating…';
     }
     function _paintV4LocationPills() {
         const s = _getState();
@@ -659,12 +670,16 @@
     function _refreshGps() {
         const text = document.getElementById('v4-meta-location-text');
         if (!text) return;
+        // Phase 25 — i18n the status strings.
+        const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
+        const LOCATING = _t('v4_gps_locating') || 'Locating…';
+        const UNAVAILABLE = _t('v4_gps_unavailable') || 'GPS unavailable';
         // If we already have a locationName from a previous resolve, paint
         // it immediately while we re-fetch GPS (the user may have moved).
         const current = _getState();
-        text.textContent = current.locationName || 'Locating…';
+        text.textContent = current.locationName || LOCATING;
         if (!navigator.geolocation) {
-            text.textContent = current.locationName || 'GPS unavailable';
+            text.textContent = current.locationName || UNAVAILABLE;
             return;
         }
         navigator.geolocation.getCurrentPosition((pos) => {
@@ -1396,19 +1411,23 @@
     function _setV4MicVisualState(recording) {
         const btn = document.getElementById('btn-v4-mic');
         if (!btn) return;
+        // Phase 25 — fully i18n the mic-button label. Both branches now
+        // resolve via window.t() with a hardcoded English last-resort
+        // fallback (so unit-tests + first-paint pre-i18n still render).
+        const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
         const icon = btn.querySelector('i');
         const label = btn.querySelector('span');
         if (recording) {
             btn.classList.add('is-recording');
             if (icon) icon.className = 'fa-solid fa-stop';
-            if (label) label.textContent = 'Stop recording';
+            if (label) label.textContent = _t('v4_stop_recording') || 'Stop recording';
         } else {
             btn.classList.remove('is-recording');
             if (icon) icon.className = 'fa-solid fa-microphone';
             if (label) {
-                label.textContent = (typeof window.t === 'function')
-                    ? (window.t('v4_record') || 'Record voice')
-                    : 'Record voice';
+                label.textContent = _t('v4_record')
+                    || _t('v4_record_voice_fallback')
+                    || 'Record voice';
             }
         }
     }
@@ -1470,7 +1489,13 @@
         const sendBtn = document.getElementById('btn-v4-send');
         sendBtn.disabled = true;
         sendBtn.classList.add('is-sending');
-        sendBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Sending…';
+        // Phase 25 — i18n the spinner label. Note: we keep the icon as a
+        // sibling so RTL layouts mirror correctly via flex flow.
+        const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
+        const sendingLabel = _t('v4_sending') || 'Sending…';
+        sendBtn.innerHTML =
+            '<i class="fa-solid fa-circle-notch fa-spin"></i> '
+            + sendingLabel;
 
         try {
             // Defer to the existing v3 submit() / queue path. v3's logic

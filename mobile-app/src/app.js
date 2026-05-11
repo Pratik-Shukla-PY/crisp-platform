@@ -2388,6 +2388,15 @@ function applyI18n() {
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
         el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
     });
+    // Phase 25 — aria-label localisation. Many back / close / modal-
+    // dismiss buttons had aria-label="Back" hardcoded in English, which
+    // is a screen-reader regression for non-English users (their
+    // narrator announces "Back" in English even when the visible UI is
+    // in Arabic / Hindi / Spanish / etc.). Now route through the same
+    // i18n chain so the aria-label matches the active locale.
+    document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+        el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria-label')));
+    });
     // Apr 2026 i18n-coverage sweep: dynamically-rendered chrome also needs
     // a refresh when the locale CHANGES. Only re-run when state.lang
     // actually differs from the last applied lang — this avoids
@@ -2942,16 +2951,18 @@ async function updateHomeImpactMetrics() {
                 }
             } catch (_) {}
         }
-        verifiedEl.textContent = _fmtCompactNumber(verifiedCount);
-        livesEl.textContent = _fmtCompactNumber(livesImpacted);
-        // May 2026 (UI v3 redesign Q2) — raise the show-threshold from
-        // "any > 0" to "≥ 5 verified". Showing "0 / 2" greeted users with
-        // a stat that hurt trust more than it helped. The volume signal
-        // is intentionally not displayed — UNDP §3.8 disincentivises raw
-        // submission volume in favour of quality.
-        const HIDE_BELOW_VERIFIED = 5;
-        const showCard = verifiedCount >= HIDE_BELOW_VERIFIED;
-        wrap.style.display = showCard ? 'flex' : 'none';
+        // Phase 24 — impact card is now ALWAYS visible (no more
+        // "hide below 5 verified" gate). The HTML ships with `—`
+        // placeholders so the card looks intentional even on the
+        // anonymous first paint; subsequent renders fill in real
+        // numbers when status-since / profile return them. Filling
+        // the bottom dead zone is more valuable than the marginal
+        // trust cost of "0 / 0" for brand-new users, which we paper
+        // over by showing "—" while the numbers are still zero.
+        const fmt = (n) => (n > 0 ? _fmtCompactNumber(n) : '—');
+        verifiedEl.textContent = fmt(verifiedCount);
+        livesEl.textContent = fmt(livesImpacted);
+        wrap.style.display = 'flex';
 
         // May 2026 v4 — also paint the landing card's impact panel if
         // it's currently mounted. Same data, mirror copy. Doing this
@@ -2960,13 +2971,16 @@ async function updateHomeImpactMetrics() {
         const landingVerifiedEl = document.getElementById('landing-verified-count');
         const landingLivesEl = document.getElementById('landing-lives-count');
         if (landingWrap && landingVerifiedEl && landingLivesEl) {
-            landingVerifiedEl.textContent = _fmtCompactNumber(verifiedCount);
-            landingLivesEl.textContent = _fmtCompactNumber(livesImpacted);
-            landingWrap.style.display = showCard ? 'flex' : 'none';
+            landingVerifiedEl.textContent = fmt(verifiedCount);
+            landingLivesEl.textContent = fmt(livesImpacted);
+            landingWrap.style.display = 'flex';
         }
     } catch (e) {
         console.warn('[Home] impact metrics fetch failed:', e);
-        wrap.style.display = 'none';
+        // Phase 24 — even on error keep the card visible with the
+        // baseline `—` placeholders. Better than the bottom dead
+        // zone reappearing whenever the backend hiccups.
+        wrap.style.display = 'flex';
     }
 }
 
@@ -3187,6 +3201,38 @@ const COUNTRY_LANG_DATA = {
     'SR': { code: 'nl', label: 'Nederlands', speech: 'nl-SR' },
     'BZ': { code: 'en', label: 'English', speech: 'en-BZ' },
 };
+
+// Phase 24 (Track B.2) — language family fallback. When neither the
+// region-keyword match nor the country-code lookup picks a
+// CRISP-supported language, this table provides a regional-proximity
+// fallback BEFORE the final English default. Each entry is the
+// closest CRISP-supported language by linguistic family / lingua
+// franca patterns. Reach matters more than perfect accuracy: a
+// caller from Tanzania hearing English-language prompts is better
+// than facing a default-English UI with no acknowledgement that we
+// considered their region.
+const LANG_FAMILY_FALLBACK = {
+    // East Africa (Swahili belt; English serves as lingua franca)
+    'TZ': 'en', 'KE': 'en', 'UG': 'en', 'ET': 'en',
+    'RW': 'fr', 'BI': 'fr',
+    // West Africa — Francophone
+    'SN': 'fr', 'CI': 'fr', 'BF': 'fr', 'ML': 'fr', 'NE': 'fr',
+    'BJ': 'fr', 'TG': 'fr', 'GN': 'fr', 'GA': 'fr', 'CM': 'fr',
+    'CG': 'fr', 'CD': 'fr', 'MG': 'fr', 'CF': 'fr', 'MR': 'fr',
+    // Central + South Asia — Hindi is the nearest CRISP language
+    'AF': 'hi', 'MM': 'hi', 'BT': 'hi',
+    // Central Asia / Mongolia — Russian as lingua franca
+    'MN': 'ru', 'KZ': 'ru', 'KG': 'ru', 'TJ': 'ru', 'TM': 'ru',
+    'UZ': 'ru', 'AZ': 'ru', 'GE': 'ru', 'AM': 'ru', 'BY': 'ru',
+    // South-east Asia — English as the regional working language
+    'TH': 'en', 'VN': 'en', 'ID': 'en', 'PH': 'en', 'MY': 'en',
+    'SG': 'en', 'KH': 'en', 'LA': 'en',
+};
+
+function _languageFamilyFallback(countryCode) {
+    const cc = String(countryCode || '').toUpperCase();
+    return LANG_FAMILY_FALLBACK[cc] || null;
+}
 
 // Sub-national regions where mapping by country alone is not enough (e.g. India)
 const REGION_LANG_MAP = [
@@ -3409,12 +3455,39 @@ function detectAndSetupLanguage() {
     const currentBtn = document.getElementById('btn-lang-current');
     const suggestedRow = document.getElementById('lang-picker-suggested');
 
+    // Phase 24 — flag emoji per locale. The picker overlay already
+    // carries the matching flag for each 6-UN tile (see
+    // index.html .lpf-un buttons); this dict lets the compact top-
+    // right pill mirror the same visual identity. Indian sub-national
+    // language codes share the 🇮🇳 country flag since they don't
+    // have their own ISO flag emoji.
+    const LANG_FLAGS = {
+        // Tier 1 — UN official languages
+        en: '🇬🇧', zh: '🇨🇳', es: '🇪🇸', ar: '🇸🇦', fr: '🇫🇷', ru: '🇷🇺',
+        // Tier 2 — UNDP submission set (national flags). Bengali is
+        // anchored on Bangladesh (national language) and Urdu on
+        // Pakistan; both reflect where the language is the official
+        // primary state rather than a sub-national region.
+        hi: '🇮🇳', pt: '🇵🇹', bn: '🇧🇩', ja: '🇯🇵', tr: '🇹🇷',
+        vi: '🇻🇳', ko: '🇰🇷', id: '🇮🇩', ur: '🇵🇰',
+        // Tier 3 — Indian sub-national (share the 🇮🇳 country flag
+        // because no per-state ISO flag emoji exists).
+        kn: '🇮🇳', ta: '🇮🇳', te: '🇮🇳', ml: '🇮🇳',
+        gu: '🇮🇳', mr: '🇮🇳', pa: '🇮🇳',
+    };
+
     // Update the one visible pill to reflect the active locale code.
+    // Phase 24 — innerHTML form so we can render `<flag> CODE` with
+    // a controllable gap, matching the lang-picker tile aesthetic.
     function _updateLangSwitcherMode(code) {
-        const upper = String(code || 'en').toUpperCase();
+        const norm = String(code || 'en').toLowerCase();
+        const upper = norm.toUpperCase();
+        const flag = LANG_FLAGS[norm] || '🌐';
         if (currentBtn) {
-            currentBtn.textContent = '🌐 ' + upper;
-            currentBtn.dataset.lang = code || 'en';
+            currentBtn.innerHTML =
+                '<span class="lps-flag" aria-hidden="true">' + flag + '</span>' +
+                '<span class="lps-code">' + upper + '</span>';
+            currentBtn.dataset.lang = norm;
         }
     }
 
@@ -3443,7 +3516,17 @@ function detectAndSetupLanguage() {
     // applyI18n() call resolved every key to its raw string. Better
     // to silently fall back to English than display `landing_title`
     // and `v4_take_photo` to the user.
-    const SUPPORTED_LANGS = new Set(['en', 'fr', 'es', 'ar', 'ru', 'zh', 'hi', 'kn', 'ta', 'te', 'bn', 'gu', 'mr', 'pa', 'ur']);
+    // Phase 25 — full 22-locale set. UN-6 + UNDP tier-2 (9) + Indian
+    // sub-national tier-3 (7). Anything else routes silently to 'en'
+    // via the warn-and-fall-back branch below.
+    const SUPPORTED_LANGS = new Set([
+        // Tier 1 — UN official
+        'en', 'zh', 'es', 'ar', 'fr', 'ru',
+        // Tier 2 — UNDP submission set
+        'hi', 'pt', 'bn', 'ja', 'tr', 'vi', 'ko', 'id', 'ur',
+        // Tier 3 — Indian sub-national
+        'kn', 'ta', 'te', 'ml', 'gu', 'mr', 'pa',
+    ]);
     function activateLang(code) {
         // If we don't have an inline pack AND we know the JSON file
         // doesn't exist, fall back to en immediately so we never paint
@@ -3474,20 +3557,58 @@ function detectAndSetupLanguage() {
         if (enBtn)   enBtn.classList.toggle('active', code === 'en');
         if (localBtn) localBtn.classList.toggle('active', code !== 'en' && localBtn.dataset.lang === code);
 
-        // UNDP §3.1b — async upgrade to the dense JSON pack (232 keys).
-        // First paint uses the inline pack above (fast, sync). The JSON
-        // pack then arrives and re-renders with the richer translations.
-        // If the user switches away before the JSON resolves, the .then()
-        // still runs but the final applyI18n() is a no-op because
-        // state.lang will have moved on — that's fine.
-        _loadLocaleJson(code).then((json) => {
-            if (!json) return;
-            // Only re-merge if the user hasn't switched to another locale
-            // in the meantime — otherwise we'd stomp on their new choice.
-            if (state.lang !== code) return;
-            I18N[code] = Object.assign({}, I18N.en, I18N[code] || {}, json);
-            applyI18n();
-        }).catch(() => { /* non-fatal — inline pack remains in use */ });
+        // Phase 25 (Track A) — i18n fallback chain repair.
+        //
+        // Bug: when the active locale is non-English (e.g. Kannada via
+        // auto-detect) the previous code fetched ONLY `kn.json`. The
+        // English JSON (`en.json`, 575 keys) was never loaded, so the
+        // `t()` fallback chain — active locale → English → raw key —
+        // failed to find keys that lived only in `en.json` and not in
+        // the smaller inline `I18N.en`. Users saw raw keys like
+        // `home_cta_primary`.
+        //
+        // Fix: ALWAYS ensure `en.json` is loaded into `I18N.en` before
+        // we render any non-English locale. Awaits the EN fetch first,
+        // then fetches the active locale and re-renders. For en-active
+        // sessions this is a single fetch (same as before).
+        (async () => {
+            try {
+                // Step 1 — always populate the full English dict if we
+                // haven't yet. Boots from the inline ~230 keys to the
+                // full 575 from the JSON. Subsequent activateLang calls
+                // skip the re-fetch (cache hit in `_loadLocaleJson`).
+                if (!I18N.__en_fully_loaded) {
+                    const enJson = await _loadLocaleJson('en');
+                    if (enJson) {
+                        I18N.en = Object.assign({}, I18N.en, enJson);
+                        I18N.__en_fully_loaded = true;
+                    }
+                }
+                // Step 2 — for non-English active locales, also fetch
+                // the locale's own JSON. The merge order ensures the
+                // active locale's translations win over English where
+                // present, but English fills any gaps.
+                if (code !== 'en') {
+                    const localeJson = await _loadLocaleJson(code);
+                    if (state.lang !== code) return;  // user moved on
+                    const merged = Object.assign(
+                        {},
+                        I18N.en,
+                        I18N[code] || {},
+                        localeJson || {}
+                    );
+                    I18N[code] = merged;
+                } else {
+                    // English active — just refresh from the (now full) en.
+                    if (state.lang !== 'en') return;
+                    I18N.en = Object.assign({}, I18N.en);
+                }
+                applyI18n();
+            } catch (_) {
+                // Non-fatal — inline packs remain in use and the
+                // partial English fallback still works.
+            }
+        })();
     }
 
     // Language policy (Apr 2026, revised):
@@ -3530,9 +3651,16 @@ function detectAndSetupLanguage() {
             suggestedRow.style.display = 'none';
             return;
         }
+        // Phase 24 — render the detected country's flag next to the
+        // "Your region" pin. Flag comes from LANG_FLAGS (the same dict
+        // used in the top-right pill). If the user is on a sub-national
+        // Indian language (kn/ta/te/…) all of those share 🇮🇳 — visually
+        // the picker chip stays consistent with the country.
+        const flagGlyph = LANG_FLAGS[String(code).toLowerCase()] || '📍';
         suggestedRow.innerHTML =
             '<button class="lang-picker-suggested-btn" data-lang="' + escapeHtmlSimple(code) + '">' +
-              '<span>📍 Your region: <strong>' + escapeHtmlSimple(label || code) + '</strong></span>' +
+              '<span><span class="lpf-glyph" aria-hidden="true">' + flagGlyph + '</span> ' +
+              'Your region: <strong>' + escapeHtmlSimple(label || code) + '</strong></span>' +
               '<span class="lpf-chevron">›</span>' +
             '</button>';
         suggestedRow.style.display = 'block';
@@ -3781,7 +3909,11 @@ function detectAndSetupLanguage() {
                     }
                 }
                 const cc = (ipLoc.country || '').toUpperCase();
-                if (COUNTRY_LANG_DATA[cc]) {
+                // Phase 25 — only honour the country's primary language
+                // if it's one of the 22 locales we actually ship. Otherwise
+                // the suggested-region pill would advertise a language we
+                // can't render (e.g. Filipino → 'tl' → no tl.json).
+                if (COUNTRY_LANG_DATA[cc] && SUPPORTED_LANGS.has(COUNTRY_LANG_DATA[cc].code)) {
                     const e = COUNTRY_LANG_DATA[cc];
                     _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName, e.code, e.label, e.speech);
                     showLocalLangBtn(e.code, e.label, e.speech);
@@ -3889,17 +4021,38 @@ function detectAndSetupLanguage() {
                     return;
                 }
             }
-            if (COUNTRY_LANG_DATA[countryCode]) {
+            // Phase 25 — gate by SUPPORTED_LANGS so a country whose
+            // primary language we don't ship (e.g. PH → 'tl', LK → 'si')
+            // falls through to the family fallback / 'en' instead of
+            // briefly painting a non-functional suggestion pill.
+            if (COUNTRY_LANG_DATA[countryCode] && SUPPORTED_LANGS.has(COUNTRY_LANG_DATA[countryCode].code)) {
                 const entry = COUNTRY_LANG_DATA[countryCode];
                 _saveLocCtx(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy,
                     state.locationName, entry.code, entry.label, entry.speech);
+                try { localStorage.setItem('crisp_lang_auto_country', countryCode); } catch (_) {}
                 showLocalLangBtn(entry.code, entry.label, entry.speech);
+                return;
+            }
+            // Phase 24 (Track B.2) — language family fallback. If the
+            // user's country isn't explicitly in COUNTRY_LANG_DATA but
+            // it's in LANG_FAMILY_FALLBACK (e.g. Tanzania → English,
+            // Burkina Faso → French), use the proximity language
+            // BEFORE falling through to browser/English.
+            const familyLang = _languageFamilyFallback(countryCode);
+            if (familyLang && I18N[familyLang]) {
+                _saveLocCtx(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy,
+                    state.locationName, familyLang, null, null);
+                try { localStorage.setItem('crisp_lang_auto_country', countryCode); } catch (_) {}
+                showLocalLangBtn(familyLang, null, null);
                 return;
             }
             const browserLang = navigator.language.split('-')[0];
             const resolvedLang = browserLang !== 'en' ? browserLang : 'en';
             _saveLocCtx(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy,
                 state.locationName, resolvedLang, null, null);
+            if (countryCode) {
+                try { localStorage.setItem('crisp_lang_auto_country', countryCode); } catch (_) {}
+            }
             if (browserLang !== 'en') { activateLang(browserLang); } else { activateLang('en'); }
         } catch {
             activateLang('en');
@@ -3933,11 +4086,27 @@ function detectAndSetupLanguage() {
                 }
             }
             const cc = (ipLoc.country || '').toUpperCase();
-            if (COUNTRY_LANG_DATA[cc]) {
+            // Phase 25 — same SUPPORTED_LANGS gate on the IP path.
+            if (COUNTRY_LANG_DATA[cc] && SUPPORTED_LANGS.has(COUNTRY_LANG_DATA[cc].code)) {
                 const e = COUNTRY_LANG_DATA[cc];
                 _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName, e.code, e.label, e.speech);
+                try { localStorage.setItem('crisp_lang_auto_country', cc); } catch (_) {}
                 showLocalLangBtn(e.code, e.label, e.speech);
                 return;
+            }
+            // Phase 24 (Track B.2) — language family fallback on the IP
+            // path too, so a Tanzanian IP-located visitor without GPS
+            // also gets English (lingua franca) instead of the raw
+            // browser-language fallback.
+            const familyLang = _languageFamilyFallback(cc);
+            if (familyLang && I18N[familyLang]) {
+                _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName, familyLang, null, null);
+                try { localStorage.setItem('crisp_lang_auto_country', cc); } catch (_) {}
+                showLocalLangBtn(familyLang, null, null);
+                return;
+            }
+            if (cc) {
+                try { localStorage.setItem('crisp_lang_auto_country', cc); } catch (_) {}
             }
         }
         activateLang('en');

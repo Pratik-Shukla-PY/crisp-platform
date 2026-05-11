@@ -183,6 +183,25 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     background: rgba(255,255,255,0.20); color: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,0.3);
 }
 
+/* Phase 24 — flag glyph + locale code inside the lang pill.
+   The flag emoji renders slightly larger than the code text for
+   visual weight; the 4 px gap stops them from looking glued. */
+.lang-switcher .lps-flag {
+    font-size: 0.95rem;
+    line-height: 1;
+    margin-right: 4px;
+    /* Some platforms render emoji with default OS color which can
+       clash with the pill's dark surface; the inherit text-color
+       trick doesn't apply (emoji are full-colour), but a subtle
+       drop-shadow improves edge contrast on light pill states. */
+    text-shadow: 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.lang-switcher .lps-code {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
 /* ── Progress bar ───────────────────────────────────────────── */
 .progress-bar-container {
     position: absolute; bottom: 0; left: 0; right: 0; height: 4px;
@@ -445,7 +464,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .audio-helper {
     margin: 4px auto 4px; padding-left: 22px; max-width: 320px;
     color: #d1d5db; font-size: 0.85rem; line-height: 1.45;
-    list-style: disc; text-align: left;
+    list-style: disc; text-align: start;
 }
 .audio-helper li { margin-bottom: 3px; }
 .audio-example {
@@ -453,7 +472,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     padding: 8px 10px; background: rgba(34,197,94,0.06);
     border-left: 3px solid rgba(34,197,94,0.4);
     border-radius: 4px; color: #86efac; font-size: 0.78rem;
-    line-height: 1.45; font-style: italic; text-align: left;
+    line-height: 1.45; font-style: italic; text-align: start;
 }
 .mic-lang-hint {
     margin-top: 4px; color: #9ca3af; font-size: 0.78rem;
@@ -1616,7 +1635,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
     min-height: 48px;
 }
@@ -2094,7 +2113,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
     margin-bottom: 8px;
-    text-align: left; cursor: pointer;
+    text-align: start; cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
     font-family: inherit; color: inherit;
 }
@@ -2795,6 +2814,56 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     .lang-picker-grid-un {
         grid-template-columns: repeat(2, 1fr);
     }
+}
+
+/* Phase 25 (May 2026) — tier-2 / tier-3 horizontal carousel.
+   The "Also supported" section now holds 16 tiles in a single-row
+   scroll-snap strip, sized roughly the same as a UN tile so the
+   two sections read as part of one picker. Display:grid is
+   overridden to display:flex when the .lang-picker-scroll-others
+   class is present so the children sit in a horizontal row. */
+.lang-picker-grid-other.lang-picker-scroll-others {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    /* Hide native scrollbar; users discover the row by partial-tile
+       affordance (the 16th tile peeks past the right edge). */
+    scrollbar-width: none;
+    /* iOS momentum scrolling (harmless in modern Chrome / FF). */
+    -webkit-overflow-scrolling: touch;
+    /* A little inner gutter so scroll-snap targets don't kiss the
+       sheet edge. */
+    padding: 4px 2px 8px;
+}
+.lang-picker-grid-other.lang-picker-scroll-others::-webkit-scrollbar {
+    display: none;
+}
+.lang-picker-flag.lpf-scroll {
+    /* Match UN-tile vertical rhythm so the two sections feel
+       consistent: flag-on-top, label-below, centered. */
+    flex: 0 0 96px;
+    min-width: 96px;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 6px 10px;
+    min-height: 84px;
+    justify-content: center;
+    text-align: center;
+    scroll-snap-align: start;
+}
+.lang-picker-flag.lpf-scroll .lpf-glyph {
+    font-size: 1.6rem;
+    line-height: 1;
+}
+.lang-picker-flag.lpf-scroll .lpf-label {
+    font-size: 0.78rem;
+    white-space: normal;
+    line-height: 1.15;
+    /* Long autonyms ("Bahasa Indonesia") wrap to a second line
+       instead of overflowing the narrow scroll tile. */
+    word-break: keep-all;
 }
 .lang-picker-close {
     display: block;
@@ -3529,6 +3598,49 @@ html[dir="rtl"] #lang-switcher {
     right: 0;
 }
 
+/* Phase 25 (May 2026) — RTL critical patches.
+
+   The v4 capture flow uses a single `padding-right: 156 px` on its
+   header to clear space for the language pill (top-right corner in
+   LTR). In RTL the pill moves to the top-LEFT corner (handled by the
+   #lang-switcher rule above), so the header reservation must flip
+   too — otherwise the step-progress label slams into the pill on
+   Arabic / Urdu. */
+html[dir="rtl"] .v4-header {
+    padding-right: 0;
+    padding-left: 156px;
+}
+@media (min-width: 380px) {
+    html[dir="rtl"] .v4-header {
+        padding-right: 0;
+        padding-left: 156px;
+    }
+}
+
+/* The "STEP X OF 3" caption uses a small physical margin to separate
+   it from the pip cluster. Flip the side in RTL so the gap appears
+   on the trailing side of the pips. */
+html[dir="rtl"] .v4-step-label {
+    margin-left: 0;
+    margin-right: 8px;
+}
+
+/* The summary-row / captured-strip / summary use CSS grid which auto-
+   flips column order in RTL (no explicit reverse needed). But the
+   .v4-summary-row's chevron icon (3rd grid column) needs visual
+   mirroring so the "→" arrow points the user's eye toward the
+   action in both directions. */
+html[dir="rtl"] .v4-summary-row .fa-chevron-right,
+html[dir="rtl"] .v4-summary-row .fa-arrow-right {
+    transform: scaleX(-1);
+}
+
+/* The capture-flow toolbar back-button arrow needs the same mirror. */
+html[dir="rtl"] .v4-back .fa-arrow-left,
+html[dir="rtl"] .v4-back .fa-chevron-left {
+    transform: scaleX(-1);
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    UI v2 (Apr 2026) — PWA redesign. Gated via `body[data-ui-v2]` where
    the rule would otherwise regress the v1 pixel-perfect layout. Things
@@ -3862,6 +3974,57 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .home-devid-wrap .home-badge-chip { margin-top: 0; }
 
+/* Phase 24 — install + voice icons live inside the identity strip
+   (the same flex row as the device-ID badge + Newcomer chip). They
+   used to live in .home-brand-actions on the brand row, but that
+   layout looked arbitrary. Shrinks them to 36 × 36 (was 44 × 44)
+   so they don't crowd the badge + chip; tap target stays WCAG-
+   compliant via the 8 px padded hit-area (visible disc 28 px,
+   tappable square 44 px when including pad). The brand row now
+   shows only logo + wordmark. */
+.home-strip-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-sub, #cbd5e1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+    padding: 0;
+    margin-left: auto;
+}
+/* Only the first .home-strip-icon (typically the install button) gets
+   `margin-left: auto` so the icon pair right-anchors to the end of
+   the identity strip. The voice icon (second sibling) sits flush
+   next to it with the row's gap. */
+.home-strip-icon ~ .home-strip-icon {
+    margin-left: 0;
+}
+.home-strip-icon:hover {
+    background: rgba(255, 255, 255, 0.10);
+    color: var(--text, #f1f5f9);
+}
+.home-strip-icon i { font-size: 13px; }
+.home-strip-icon[hidden] { display: none; }
+.home-strip-icon.is-speaking {
+    background: rgba(249, 115, 22, 0.18);
+    border-color: rgba(249, 115, 22, 0.45);
+    color: var(--accent, #f97316);
+    animation: home-strip-pulse 1.4s ease-in-out infinite;
+}
+@keyframes home-strip-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.45); }
+    50%      { box-shadow: 0 0 0 6px rgba(249, 115, 22, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .home-strip-icon.is-speaking { animation: none; }
+}
+
 /* Account pill (existing — repositioned into the identity bar). */
 .home-identity #account-pill { margin: 0; }
 
@@ -3895,7 +4058,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     transition: background 0.15s ease;
 }
 .home-account-menu button:hover { background: rgba(255,255,255,0.06); }
@@ -3978,7 +4141,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     border-radius: 10px;
     cursor: pointer;
     transition: background 0.15s ease;
-    text-align: left;
+    text-align: start;
     color: var(--text);
 }
 .home-recent-card:hover { background: rgba(255,255,255,0.06); }
@@ -4079,7 +4242,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     letter-spacing: 0.8px;
     margin: 0 0 4px;
     font-weight: 700;
-    text-align: left;
+    text-align: start;
 }
 .home-section-lede {
     font-size: 12px;
@@ -4389,7 +4552,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     gap: 16px;
     align-items: stretch;
     justify-content: flex-start;
-    text-align: left;
+    text-align: start;
     min-height: 100dvh;
 }
 /* Eliminate the global .stage's 24 px horizontal padding on the home
@@ -6038,7 +6201,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     border-radius: 14px;
     color: var(--text);
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     min-height: 64px;
 }
@@ -6101,7 +6264,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     border-radius: 14px;
     color: var(--text);
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
     min-height: 92px;
     min-width: 0;
@@ -6165,7 +6328,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     border-radius: 14px;
     color: var(--text);
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     transition: background 0.15s ease, border-color 0.15s ease;
     min-height: 76px;
 }
@@ -6226,7 +6389,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     border-radius: 12px;
     color: var(--text);
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     font-size: 14px;
     font-weight: 600;
     transition: background 0.15s ease, border-color 0.15s ease;
@@ -6357,7 +6520,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     padding: 4px 0;
     color: var(--text);
     font-size: 13px;
-    text-align: left;
+    text-align: start;
     cursor: pointer;
 }
 .v4-summary-row > i:first-child { color: var(--brand, #ffae00); font-size: 13px; }

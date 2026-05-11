@@ -244,6 +244,56 @@ def test_ivr_country_to_lang_helper():
     assert ivr_webhook._country_to_lang("in") == "hi"
 
 
+def test_ivr_country_to_lang_phase25_unmapped_locales():
+    """Phase 25 (May 2026) — the PWA gained 6 new locales (pt, ja,
+    tr, vi, ko, id). The IVR channel does NOT yet ship native Polly
+    prompts for these languages (Twilio Polly only has voices for
+    some of them; native-prompt translations are a separate
+    workstream — see docs/I18N-WORKFLOW.md §1 and the
+    `_IVR_PROMPTS` dict).
+
+    Until those land, callers from those countries fall back to
+    the English voice. This test documents the expected fallback
+    behavior so a future deploy that wires Brazilian Portuguese
+    IVR prompts (BR → 'pt') will surface as a deliberate
+    test-update, not a silent regression."""
+    # New PWA locales without IVR prompts yet — must fall to 'en'.
+    assert ivr_webhook._country_to_lang("BR") == "en"
+    assert ivr_webhook._country_to_lang("PT") == "en"
+    assert ivr_webhook._country_to_lang("JP") == "en"
+    assert ivr_webhook._country_to_lang("TR") == "en"
+    assert ivr_webhook._country_to_lang("VN") == "en"
+    assert ivr_webhook._country_to_lang("KR") == "en"
+    assert ivr_webhook._country_to_lang("ID") == "en"
+    # And the Russian/Chinese countries are similarly un-mapped today
+    # (the welcome menu offers them as digit-pick options; the
+    # auto-pick by FromCountry hasn't been extended yet).
+    assert ivr_webhook._country_to_lang("RU") == "en"
+    assert ivr_webhook._country_to_lang("CN") == "en"
+
+
+def test_ivr_country_to_lang_un6_coverage():
+    """Phase 25 (May 2026) — at least one canonical country per UN-6
+    spoken language is mapped, so a caller from that country gets
+    their language pre-selected without having to press a digit.
+
+    This is a coverage guarantee: removing any of these mappings
+    is a regression that should surface in CI immediately."""
+    # English  → covered implicitly (default fallback)
+    # Spanish  → ES / MX / AR / etc.
+    assert ivr_webhook._country_to_lang("ES") == "es"
+    assert ivr_webhook._country_to_lang("MX") == "es"
+    # French   → FR / BE / CH / SN / CI / etc.
+    assert ivr_webhook._country_to_lang("FR") == "fr"
+    assert ivr_webhook._country_to_lang("SN") == "fr"
+    # Arabic   → SA / AE / EG / MA / etc.
+    assert ivr_webhook._country_to_lang("SA") == "ar"
+    assert ivr_webhook._country_to_lang("MA") == "ar"
+    # Hindi    → IN / BD / NP / PK / LK
+    assert ivr_webhook._country_to_lang("IN") == "hi"
+    assert ivr_webhook._country_to_lang("PK") == "hi"
+
+
 def test_ivr_normalise_geo_confidence_helper():
     """Geocoder confidence values come in several flavours; this helper
     normalises them to a float in [0, 1] (or None when missing)."""

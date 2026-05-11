@@ -71,15 +71,15 @@
          clicking it opens the full picker. #btn-lang-en and #btn-lang-local
          are retained hidden in the DOM purely for Playwright back-compat
          (existing specs click them with { force: true }). -->
-    <div class="lang-switcher" id="lang-switcher" title="Tap to change language">
-        <span class="connectivity-dot connectivity-online" id="connectivity-dot" aria-label="Online" title="Online"></span>
+    <div class="lang-switcher" id="lang-switcher" title="Tap to change language" data-i18n-title="aria_tap_change_language">
+        <span class="connectivity-dot connectivity-online" id="connectivity-dot" aria-label="Online" title="Online" data-i18n-aria-label="aria_online_status" data-i18n-title="aria_online_status"></span>
         <button id="btn-lang-local" data-lang="en" style="display:none;" title="Tap to switch to local language">🌐 ...</button>
         <button id="btn-lang-en" class="active" data-lang="en" style="display:none;" title="Tap to switch to English">🌐 EN</button>
         <button id="btn-lang-change" style="display:none;" title="Change language">🌐</button>
         <!-- Primary visible pill. Text is updated by activateLang() to reflect
              the active locale code. Tapping opens #lang-picker-overlay with
              every supported language. -->
-        <button id="btn-lang-current" class="active" title="Tap to change language">🌐 EN</button>
+        <button id="btn-lang-current" class="active" title="Tap to change language" data-i18n-title="aria_tap_change_language" aria-label="Tap to change language" data-i18n-aria-label="aria_tap_change_language">🌐 EN</button>
     </div>
 
     <!-- Phase 19 — install + voice icons MOVED to live inside the home
@@ -93,8 +93,8 @@
     <!-- Full-screen image viewer overlay (Apr 2026). Opens when the user
          taps any photo thumbnail on stage-photo. Shows the image at full
          bleed + a Delete button with confirmation. -->
-    <div id="image-viewer-overlay" class="image-viewer-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Image viewer">
-        <button id="btn-image-viewer-close" class="image-viewer-close" aria-label="Close">
+    <div id="image-viewer-overlay" class="image-viewer-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Image viewer" data-i18n-aria-label="aria_image_viewer">
+        <button id="btn-image-viewer-close" class="image-viewer-close" aria-label="Close" data-i18n-aria-label="aria_close">
             <i class="fa-solid fa-xmark"></i>
         </button>
         <img id="image-viewer-img" class="image-viewer-img" src="" alt="">
@@ -148,7 +148,7 @@
              label. .lpf-iso retained for the Edge-on-Windows fallback only.
            - "Other Languages" → "All languages" (less second-class).
            - Search bar added at top — filters by both Latin and native script. -->
-    <div id="lang-picker-overlay" class="lang-picker-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Choose language">
+    <div id="lang-picker-overlay" class="lang-picker-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Choose language" data-i18n-aria-label="aria_choose_language">
         <div class="lang-picker-sheet">
             <h2 class="lang-picker-title" data-i18n="lang_picker_title">Choose language</h2>
             <!-- Populated by detectAndSetupLanguage() — shown as a top row
@@ -162,7 +162,7 @@
                 <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
                 <input type="text" id="lang-picker-search-input"
                        data-i18n-placeholder="lang_picker_search_placeholder"
-                       placeholder="Search 24 languages…"
+                       placeholder="Search 22 languages…"
                        autocomplete="off" spellcheck="false">
             </div>
             <!-- ── Most common (6 UN languages — sorted first by priority) ── -->
@@ -179,39 +179,39 @@
                     <button class="lang-picker-flag lpf-un" data-lang="zh" aria-label="Chinese"><span class="lpf-glyph">🇨🇳</span><span class="lpf-label">中文</span></button>
                 </div>
             </div>
-            <!-- ── All other languages (2-column compact list) ── -->
+            <!-- ── Tier 2 + 3 (16 tiles in priority order: UNDP set
+                 first, Indian sub-national after). Rendered as a
+                 horizontal scroll-snap carousel so the row stays
+                 thumb-reachable on phones without a long vertical
+                 scroll. Phase 25 (May 2026) — narrowed from a 24-tile
+                 grid to exactly the 22-locale supported set; the
+                 previously-listed German / Italian / Polish / Romanian
+                 / Greek / Ukrainian / Hebrew / Persian / Thai / Malay /
+                 Swahili / Amharic tiles were removed since they routed
+                 silently to English on tap. ── -->
             <div class="lang-picker-section">
                 <h4 class="lang-picker-section-title" data-i18n="lang_picker_other_section">
-                    All languages
+                    Also supported
                 </h4>
-                <div class="lang-picker-grid lang-picker-grid-other">
-                    <!-- South Asia -->
-                    <button class="lang-picker-flag" data-lang="hi" aria-label="Hindi"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">हिन्दी</span></button>
-                    <button class="lang-picker-flag" data-lang="kn" aria-label="Kannada"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">ಕನ್ನಡ</span></button>
-                    <button class="lang-picker-flag" data-lang="ta" aria-label="Tamil"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">தமிழ்</span></button>
-                    <button class="lang-picker-flag" data-lang="bn" aria-label="Bengali"><span class="lpf-glyph">🇧🇩</span><span class="lpf-label">বাংলা</span></button>
-                    <button class="lang-picker-flag" data-lang="ur" aria-label="Urdu"><span class="lpf-glyph">🇵🇰</span><span class="lpf-label">اردو</span></button>
-                    <!-- Europe -->
-                    <button class="lang-picker-flag" data-lang="pt" aria-label="Portuguese"><span class="lpf-glyph">🇵🇹</span><span class="lpf-label">Português</span></button>
-                    <button class="lang-picker-flag" data-lang="de" aria-label="German"><span class="lpf-glyph">🇩🇪</span><span class="lpf-label">Deutsch</span></button>
-                    <button class="lang-picker-flag" data-lang="it" aria-label="Italian"><span class="lpf-glyph">🇮🇹</span><span class="lpf-label">Italiano</span></button>
-                    <button class="lang-picker-flag" data-lang="pl" aria-label="Polish"><span class="lpf-glyph">🇵🇱</span><span class="lpf-label">Polski</span></button>
-                    <button class="lang-picker-flag" data-lang="ro" aria-label="Romanian"><span class="lpf-glyph">🇷🇴</span><span class="lpf-label">Română</span></button>
-                    <button class="lang-picker-flag" data-lang="el" aria-label="Greek"><span class="lpf-glyph">🇬🇷</span><span class="lpf-label">Ελληνικά</span></button>
-                    <button class="lang-picker-flag" data-lang="uk" aria-label="Ukrainian"><span class="lpf-glyph">🇺🇦</span><span class="lpf-label">Українська</span></button>
-                    <button class="lang-picker-flag" data-lang="tr" aria-label="Turkish"><span class="lpf-glyph">🇹🇷</span><span class="lpf-label">Türkçe</span></button>
-                    <button class="lang-picker-flag" data-lang="fa" aria-label="Persian"><span class="lpf-glyph">🇮🇷</span><span class="lpf-label">فارسی</span></button>
-                    <button class="lang-picker-flag" data-lang="he" aria-label="Hebrew"><span class="lpf-glyph">🇮🇱</span><span class="lpf-label">עברית</span></button>
-                    <!-- East / Southeast Asia -->
-                    <button class="lang-picker-flag" data-lang="ja" aria-label="Japanese"><span class="lpf-glyph">🇯🇵</span><span class="lpf-label">日本語</span></button>
-                    <button class="lang-picker-flag" data-lang="ko" aria-label="Korean"><span class="lpf-glyph">🇰🇷</span><span class="lpf-label">한국어</span></button>
-                    <button class="lang-picker-flag" data-lang="vi" aria-label="Vietnamese"><span class="lpf-glyph">🇻🇳</span><span class="lpf-label">Tiếng Việt</span></button>
-                    <button class="lang-picker-flag" data-lang="th" aria-label="Thai"><span class="lpf-glyph">🇹🇭</span><span class="lpf-label">ไทย</span></button>
-                    <button class="lang-picker-flag" data-lang="id" aria-label="Indonesian"><span class="lpf-glyph">🇮🇩</span><span class="lpf-label">Bahasa Indonesia</span></button>
-                    <button class="lang-picker-flag" data-lang="ms" aria-label="Malay"><span class="lpf-glyph">🇲🇾</span><span class="lpf-label">Bahasa Melayu</span></button>
-                    <!-- Africa -->
-                    <button class="lang-picker-flag" data-lang="sw" aria-label="Swahili"><span class="lpf-glyph">🌍</span><span class="lpf-label">Kiswahili</span></button>
-                    <button class="lang-picker-flag" data-lang="am" aria-label="Amharic"><span class="lpf-glyph">🇪🇹</span><span class="lpf-label">አማርኛ</span></button>
+                <div class="lang-picker-grid lang-picker-grid-other lang-picker-scroll-others">
+                    <!-- Tier 2 — UNDP submission set -->
+                    <button class="lang-picker-flag lpf-scroll" data-lang="hi" aria-label="Hindi"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">हिन्दी</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="pt" aria-label="Portuguese"><span class="lpf-glyph">🇵🇹</span><span class="lpf-label">Português</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="bn" aria-label="Bengali"><span class="lpf-glyph">🇧🇩</span><span class="lpf-label">বাংলা</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="ja" aria-label="Japanese"><span class="lpf-glyph">🇯🇵</span><span class="lpf-label">日本語</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="tr" aria-label="Turkish"><span class="lpf-glyph">🇹🇷</span><span class="lpf-label">Türkçe</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="vi" aria-label="Vietnamese"><span class="lpf-glyph">🇻🇳</span><span class="lpf-label">Tiếng Việt</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="ko" aria-label="Korean"><span class="lpf-glyph">🇰🇷</span><span class="lpf-label">한국어</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="id" aria-label="Indonesian"><span class="lpf-glyph">🇮🇩</span><span class="lpf-label">Bahasa Indonesia</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="ur" aria-label="Urdu"><span class="lpf-glyph">🇵🇰</span><span class="lpf-label">اردو</span></button>
+                    <!-- Tier 3 — Indian sub-national -->
+                    <button class="lang-picker-flag lpf-scroll" data-lang="kn" aria-label="Kannada"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">ಕನ್ನಡ</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="ta" aria-label="Tamil"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">தமிழ்</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="te" aria-label="Telugu"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">తెలుగు</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="ml" aria-label="Malayalam"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">മലയാളം</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="gu" aria-label="Gujarati"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">ગુજરાતી</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="mr" aria-label="Marathi"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">मराठी</span></button>
+                    <button class="lang-picker-flag lpf-scroll" data-lang="pa" aria-label="Punjabi"><span class="lpf-glyph">🇮🇳</span><span class="lpf-label">ਪੰਜਾਬੀ</span></button>
                 </div>
             </div>
             <div class="lang-picker-empty" id="lang-picker-empty" style="display:none;">
@@ -299,25 +299,11 @@
                             <div class="home-brand-sub" data-i18n="home_brand_tagline">Crisis Reporter</div>
                         </div>
                     </div>
-                    <!-- Phase 19 — install + voice icons moved here as
-                         flow content. Anchored to the right with
-                         margin-left:auto. Sits in the gap between brand
-                         text (left) and the absolute lang pill (above). -->
-                    <div class="home-brand-actions" id="home-brand-actions">
-                        <button id="btn-home-install-icon" type="button"
-                                class="home-top-icon-btn"
-                                aria-label="Install on home screen"
-                                title="Install on home screen"
-                                hidden>
-                            <i class="fa-solid fa-download" aria-hidden="true"></i>
-                        </button>
-                        <button id="btn-home-voice" type="button"
-                                class="home-top-icon-btn"
-                                aria-label="Read this page aloud"
-                                title="Read this page aloud">
-                            <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
-                        </button>
-                    </div>
+                    <!-- Phase 24 — install + voice icons moved OUT of the
+                         brand row and INTO the identity strip below (next
+                         to the device-ID badge + Newcomer chip). Brand row
+                         is now just logo + wordmark; the lang pill keeps
+                         floating absolute top-right via #lang-switcher. -->
                 </div>
 
                 <!-- Anonymous slot — device-ID badge + tooltip + (Phase 18) badge chip. -->
@@ -328,14 +314,17 @@
                         <span class="devid-text" id="home-devid-text">CRISP-····-····</span>
                         <button id="btn-home-devid-copy" type="button"
                                 aria-label="Copy reporter ID"
+                                data-i18n-aria-label="aria_copy_id"
                                 title="Copy">
                             <i class="fa-solid fa-copy" aria-hidden="true"></i>
                         </button>
                         <button id="btn-home-devid-info" type="button"
                                 aria-label="What is this?"
+                                data-i18n-aria-label="aria_what_is_this"
                                 aria-haspopup="true"
                                 aria-expanded="false"
-                                title="What is this?">
+                                title="What is this?"
+                                data-i18n-title="aria_what_is_this">
                             <i class="fa-solid fa-info" aria-hidden="true"></i>
                         </button>
                     </div>
@@ -354,6 +343,27 @@
                         <span class="hb-emoji" id="home-badge-emoji" aria-hidden="true">🌱</span>
                         <span class="hb-label" id="home-badge-label">Newcomer</span>
                     </div>
+                    <!-- Phase 24 — install + voice icons relocated here so
+                         the entire identity strip (device-ID + Newcomer +
+                         install + voice) reads as ONE horizontal grouping
+                         instead of scattered across two rows. -->
+                    <button id="btn-home-install-icon" type="button"
+                            class="home-strip-icon"
+                            aria-label="Install on home screen"
+                            data-i18n-aria-label="landing_install_pwa"
+                            title="Install on home screen"
+                            data-i18n-title="landing_install_pwa"
+                            hidden>
+                        <i class="fa-solid fa-download" aria-hidden="true"></i>
+                    </button>
+                    <button id="btn-home-voice" type="button"
+                            class="home-strip-icon"
+                            aria-label="Read this page aloud"
+                            data-i18n-aria-label="aria_read_aloud"
+                            title="Read this page aloud"
+                            data-i18n-title="aria_read_aloud">
+                        <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
+                    </button>
                 </div>
 
                 <!-- Logged-in slot — account pill + dropdown. -->
@@ -451,11 +461,15 @@
                  "Multi-channel parity" so first-time users can still
                  read it from the Privacy link in the footer. -->
 
-            <!-- Phase 19 — Live community impact strip (retained,
-                 hidden until data loads). Compact two-stat row;
-                 colour stays subtle so it doesn't compete with the
-                 orange CTA above. -->
-            <div class="home-impact" id="home-impact" hidden>
+            <!-- Phase 24 — Live community impact strip is now ALWAYS
+                 rendered (removed the `hidden` attribute). Acts as
+                 social proof above the channels grid AND fills the
+                 ~130 px dead zone that existed between the secondary
+                 row and the bottom-anchored channels section. Numbers
+                 default to em-dashes until `updateHomeImpactMetrics()`
+                 resolves (anonymous fresh user on first paint).
+                 Labels stay grammatical when the number is "—". -->
+            <div class="home-impact" id="home-impact">
                 <div class="hi-cell hi-cell-lives">
                     <div class="hi-num hi-num-lives" id="home-lives-count">—</div>
                     <div class="hi-label" data-i18n="home_metric_lives">Lives Saved</div>
@@ -502,7 +516,7 @@
                 <span class="home-utility-dot" aria-hidden="true">·</span>
                 <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
                 <span class="home-utility-dot" aria-hidden="true">·</span>
-                <span class="home-utility-version" id="home-utility-version">v0.7.23.3.1</span>
+                <span class="home-utility-version" id="home-utility-version">v0.7.25</span>
             </nav>
 
             <!-- Legacy retained DOM — kept hidden so any
@@ -541,7 +555,7 @@
     <!-- V4 — Page 1: Capture (photo + auto-meta) -->
     <div class="stage v4-stage" id="stage-v4-capture">
         <header class="v4-header">
-            <button class="v4-back" id="btn-v4-capture-back" type="button" aria-label="Back">
+            <button class="v4-back" id="btn-v4-capture-back" type="button" aria-label="Back" data-i18n-aria-label="aria_back">
                 <i class="fa-solid fa-arrow-left"></i>
             </button>
             <div class="v4-progress" data-step="1" data-of="3">
@@ -641,7 +655,8 @@
                 <textarea id="v4-cap-text-area" rows="3"
                           class="v4-cap-text-area"
                           data-i18n-placeholder="v4_cap_text_placeholder"
-                          placeholder="Describe what happened in a few words..."></textarea>
+                          placeholder="Describe what happened in a few words..."
+                          data-i18n-placeholder="placeholder_describe_short"></textarea>
             </div>
 
             <!-- Hidden native file inputs — same pattern app.js's existing
@@ -679,7 +694,7 @@
          when the last sub-step's question is answered. -->
     <div class="stage v4-stage" id="stage-v4-classify">
         <header class="v4-header">
-            <button class="v4-back" id="btn-v4-classify-back" type="button" aria-label="Back">
+            <button class="v4-back" id="btn-v4-classify-back" type="button" aria-label="Back" data-i18n-aria-label="aria_back">
                 <i class="fa-solid fa-arrow-left"></i>
             </button>
             <div class="v4-progress" data-step="2" data-of="3">
@@ -853,7 +868,7 @@
          compact layout to keep scroll-free per UNDP judge requirement) -->
     <div class="stage v4-stage" id="stage-v4-review">
         <header class="v4-header">
-            <button class="v4-back" id="btn-v4-review-back" type="button" aria-label="Back">
+            <button class="v4-back" id="btn-v4-review-back" type="button" aria-label="Back" data-i18n-aria-label="aria_back">
                 <i class="fa-solid fa-arrow-left"></i>
             </button>
             <div class="v4-progress" data-step="3" data-of="3">
@@ -947,7 +962,8 @@
                     </button>
                     <textarea id="v4-text-desc" class="v4-text-desc" rows="2"
                               data-i18n-placeholder="v4_or_type"
-                              placeholder="…or type a short description"></textarea>
+                              placeholder="…or type a short description"
+                              data-i18n-placeholder="placeholder_short_description"></textarea>
                 </div>
             </details>
 
@@ -1067,7 +1083,7 @@
              tests that synthesise a click still find a DOM node. -->
         <div class="extra-photos-strip" id="extra-photos-strip" style="display:none;">
             <div class="extra-photos-scroll" id="extra-photos-scroll"></div>
-            <button class="add-photo-btn add-photo-native" id="btn-add-more" type="button" title="Add another photo" aria-label="Add another photo">
+            <button class="add-photo-btn add-photo-native" id="btn-add-more" type="button" title="Add another photo" data-i18n-title="aria_add_photo" aria-label="Add another photo" data-i18n-aria-label="aria_add_photo">
                 <i class="fa-solid fa-plus"></i>
                 <span class="add-photo-label" data-i18n="add_more">Add</span>
             </button>
@@ -1144,7 +1160,7 @@
             <div class="cam-gallery-scroll" id="cam-gallery-scroll"></div>
         </div>
         <div class="cam-controls">
-            <button id="btn-cam-close" aria-label="Close camera"><i class="fa-solid fa-xmark"></i></button>
+            <button id="btn-cam-close" aria-label="Close camera" data-i18n-aria-label="aria_close_camera"><i class="fa-solid fa-xmark"></i></button>
             <button id="btn-cam-snap" aria-label="Take photo">📸</button>
             <button id="btn-cam-done" aria-label="Finish" disabled><i class="fa-solid fa-check"></i></button>
         </div>
@@ -1191,7 +1207,8 @@
         <div class="transcript-box" id="transcript-box">
             <textarea id="live-transcript" class="edit-transcript-area edit-textarea live-transcript-area"
                       data-i18n-placeholder="audio_placeholder"
-                      placeholder="Example: House collapsed, one person trapped"></textarea>
+                      placeholder="Example: House collapsed, one person trapped"
+                      data-i18n-placeholder="placeholder_describe_example"></textarea>
         </div>
 
         <!-- Apr 2026 PR 4: "Type instead" skip link removed. Mic + textarea
@@ -1341,7 +1358,7 @@
     <div class="stage" id="stage-privacy">
         <div class="stage-header">
             <h2 data-i18n="privacy_title">Privacy & how it works</h2>
-            <button class="history-back" id="btn-privacy-back" type="button" aria-label="Back" title="Back">
+            <button class="history-back" id="btn-privacy-back" type="button" aria-label="Back" data-i18n-aria-label="aria_back" title="Back" data-i18n-title="aria_back">
                 <i class="fa-solid fa-arrow-left"></i>
             </button>
         </div>
@@ -1955,7 +1972,8 @@
                     <i class="fa-solid fa-magnifying-glass loc-search-icon"></i>
                     <input type="text" id="input-loc-search" autocomplete="off" spellcheck="false"
                            data-i18n-placeholder="search_place"
-                           placeholder="Search city or place…">
+                           placeholder="Search city or place…"
+                           data-i18n-placeholder="placeholder_search_city">
                     <button id="btn-clear-loc" class="loc-clear-btn" type="button" style="display:none;" aria-label="Clear">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
@@ -2045,6 +2063,7 @@
                     inputmode="text"
                     maxlength="120"
                     placeholder="e.g. Kiambu High School / مدرسة الأمل"
+                    data-i18n-placeholder="placeholder_landmark_example"
                     aria-describedby="building-free-text-hint">
                 <p class="building-free-text-hint" id="building-free-text-hint">
                     <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
@@ -2226,7 +2245,7 @@
     <div class="stage" id="stage-undp-details">
         <div class="stage-header">
             <h2><i class="fa-solid fa-clipboard-list"></i> <span data-i18n="undp_details_title">Quick details</span></h2>
-            <button class="history-back" id="btn-undp-back" type="button" title="Back">
+            <button class="history-back" id="btn-undp-back" type="button" title="Back" data-i18n-title="aria_back" aria-label="Back" data-i18n-aria-label="aria_back">
                 <i class="fa-solid fa-arrow-left"></i>
             </button>
         </div>
@@ -2350,7 +2369,7 @@
     <div class="stage" id="stage-history">
         <div class="stage-header">
             <h2><i class="fa-solid fa-clipboard-list"></i> <span data-i18n="my_reports">My Reports</span></h2>
-            <button class="history-back" id="btn-history-back" type="button" title="Back">
+            <button class="history-back" id="btn-history-back" type="button" title="Back" data-i18n-title="aria_back" aria-label="Back" data-i18n-aria-label="aria_back">
                 <i class="fa-solid fa-arrow-left"></i>
             </button>
         </div>
@@ -2436,7 +2455,7 @@
     <div class="stage" id="stage-report-detail">
         <div class="stage-header">
             <h2 id="rd-title"><i class="fa-solid fa-file-lines"></i> <span data-i18n="report_detail">Report</span></h2>
-            <button class="history-back" id="btn-rd-back" type="button" title="Back">
+            <button class="history-back" id="btn-rd-back" type="button" title="Back" data-i18n-title="aria_back" aria-label="Back" data-i18n-aria-label="aria_back">
                 <i class="fa-solid fa-arrow-left"></i>
             </button>
         </div>

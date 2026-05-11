@@ -45,8 +45,13 @@ test.describe('PWA text direction', () => {
     await openLangAndAssertDir(page, 'ur', 'rtl');
   });
 
-  test('Hebrew flips html dir=rtl', async ({ page }) => {
-    await openLangAndAssertDir(page, 'he', 'rtl');
+  // Phase 25 (May 2026) — Hebrew was removed from the 22-locale
+  // SUPPORTED_LANGS set. activateLang('he') now warns and falls back
+  // to English (LTR). The test below documents that behavior so a
+  // future re-introduction of Hebrew is a deliberate update, not a
+  // silent regression.
+  test('Hebrew is unsupported in Phase 25 — falls back to ltr', async ({ page }) => {
+    await openLangAndAssertDir(page, 'he', 'ltr');
   });
 
   test('English stays dir=ltr', async ({ page }) => {

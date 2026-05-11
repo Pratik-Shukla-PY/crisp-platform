@@ -52,6 +52,7 @@ logs/
 
 # Uploads (runtime user data)
 backend/uploads/
+backend/uploads_test/
 
 # ML model weights
 *.pth

@@ -218,7 +218,12 @@ async def _send_reply(phone: str, message: str):
     # Twilio
     twilio_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
     twilio_token = os.getenv("TWILIO_AUTH_TOKEN", "")
-    twilio_from = os.getenv("TWILIO_PHONE_NUMBER", "")
+    # Phase 24 — accept either TWILIO_PHONE_NUMBER (canonical) or
+    # TWILIO_FROM (operator-set alternative shorthand). Some
+    # deployments shipped only TWILIO_FROM in .env.production, which
+    # silently broke outbound SMS reply because we looked only at
+    # TWILIO_PHONE_NUMBER. Either name now works.
+    twilio_from = os.getenv("TWILIO_PHONE_NUMBER", "") or os.getenv("TWILIO_FROM", "")
     if twilio_sid and twilio_token and twilio_from:
         try:
             async with httpx.AsyncClient(timeout=10) as c:

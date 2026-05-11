@@ -135,6 +135,38 @@ lhci collect --config=./lhci.config.cjs && lhci assert
   against `crisp_test` first.
 - Never `DROP SCHEMA` or `git push --force` on `main`/`origin/main`.
 
+## Env-file safety (Phase 24+, after the AWS_REGION outage)
+
+- **Backend refuses to start if required env vars are missing.**
+  See `_validate_required_env()` at the top of
+  `backend/app/main.py`. Required set: `MEDIA_BACKEND`, plus
+  `AWS_S3_BUCKET` + `AWS_REGION` when `MEDIA_BACKEND=s3`. If a
+  required var is missing the container exits with code 1 and
+  docker-compose's healthcheck flips red within 60 s — auto-rollback
+  catches the broken state BEFORE it reaches user traffic.
+- **Always run `bash scripts/verify-env.sh .env.production`** after
+  any operator edit, BEFORE `docker compose up`. It diffs the env
+  file against the required-vars manifest and flags missing keys,
+  quoted values (docker-compose may parse the quotes literally),
+  and CRLF line endings. Exits non-zero on any problem.
+- **Never quote env values.** `AWS_REGION=ap-south-1` works;
+  `AWS_REGION='ap-south-1'` and `AWS_REGION="ap-south-1"` may or
+  may not work depending on the docker-compose version.
+- **Never hand-edit on EC2 without a backup.** `cp .env.production
+  .env.production.bak` first; restore on failure.
+- **The `TWILIO_FROM` ↔ `TWILIO_PHONE_NUMBER` alias** is the only
+  pair-equivalent variable; either satisfies the outbound-SMS
+  requirement. See `messaging-bot/sms/webhook.py`.
+
+## Post-deploy operator checklist (any phase that touches infra)
+
+After `docker compose up -d --force-recreate backend`:
+1. `docker ps | grep backend` → status reads "(healthy)" within 60s.
+2. `docker logs --since 2m crisp-backend-1 2>&1 | grep -iE "FATAL|error|exception"` → empty (no startup crash).
+3. `docker exec crisp-backend-1 python3 -c "import sys; sys.path.insert(0,'/app/backend'); from app.services.storage import get_storage; s=get_storage(); print(type(s).__name__, getattr(s,'bucket','?'), getattr(s,'region','?'))"` → prints `S3Storage <bucket> <region>` without raising.
+4. `curl https://undp.crisplabs.tech/api/v1/ivr/status` → 200 with `twilio_configured: true`.
+5. Open the dashboard, click any report with media → image renders + audio plays (catches storage 500s the way Phase 23 missed).
+
 ## Commit conventions
 
 - Conventional Commits: `feat(area):`, `fix(area):`, `perf(area):`,

@@ -9,6 +9,16 @@ from datetime import datetime, timezone
 # Ensure backend app is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# Phase 24 — skip the fail-fast env-var validator in tests. Production
+# deployment refuses to start without MEDIA_BACKEND/AWS_S3_BUCKET/
+# AWS_REGION, but the pytest suite legitimately runs without those
+# (local-storage mode + mocked S3). The validator itself is exercised
+# explicitly by tests/test_env_validation.py, which calls the helper
+# function directly with crafted environments. This skip flag is read
+# at module import time in `app/main.py` before the validator runs,
+# so it MUST be set BEFORE `app.main` is imported anywhere.
+os.environ.setdefault("CRISP_SKIP_ENV_VALIDATION", "1")
+
 # Apr 2026 — SQLite fully retired. The test suite runs against Postgres
 # ONLY. DATABASE_URL precedence:
 #

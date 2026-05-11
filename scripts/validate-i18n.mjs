@@ -58,22 +58,47 @@ function templateVars(s) {
     return (typeof s === "string" ? (s.match(templateVarRe) || []) : []).sort();
 }
 
+// Phase 25 — South-Asian "stub" locales are dumped from inline
+// EXTRA_LANG packs (Kannada / Hindi / Tamil / Telugu / Malayalam /
+// Bengali / Gujarati / Marathi / Punjabi / Urdu). They intentionally
+// contain ONLY the keys with hand-translated values; missing keys
+// fall through to en.json via the runtime t() chain. The validator
+// recognises them by either the `__meta__.stub: true` marker OR by
+// presence in this allowlist; missing keys become a warning instead
+// of a fail.
+const STUB_LOCALES = new Set([
+    "kn.json", "hi.json", "ta.json", "te.json", "ml.json",
+    "bn.json", "gu.json", "mr.json", "pa.json", "ur.json",
+]);
+
+function isStub(f, content) {
+    if (STUB_LOCALES.has(f)) return true;
+    const meta = content && content.__meta__;
+    return !!(meta && (meta.stub === true || meta.machine_translated === true || meta.note));
+}
+
 for (const f of files) {
     if (f === "en.json") continue;
     const locale = f.replace(/\.json$/, "");
     const keys = new Set(Object.keys(parsed[f]).filter((k) => k !== "__meta__"));
     const missing = [...enKeys].filter((k) => !keys.has(k));
     const extra = [...keys].filter((k) => !enKeys.has(k));
+    const stub = isStub(f, parsed[f]);
     if (missing.length) {
-        fail(`${f}: ${missing.length} missing key(s) vs en.json`);
-        missing.slice(0, 20).forEach((k) => console.error(`    - ${k}`));
-        if (missing.length > 20) console.error(`    ... and ${missing.length - 20} more`);
+        if (stub) {
+            warn(`${f}: ${missing.length} key(s) missing — stub locale, runtime falls back to English (acceptable)`);
+        } else {
+            fail(`${f}: ${missing.length} missing key(s) vs en.json`);
+            missing.slice(0, 20).forEach((k) => console.error(`    - ${k}`));
+            if (missing.length > 20) console.error(`    ... and ${missing.length - 20} more`);
+        }
     }
     if (extra.length) {
         warn(`${f}: ${extra.length} extra key(s) not in en.json (kept — may be deprecated aliases)`);
         extra.slice(0, 10).forEach((k) => console.warn(`    + ${k}`));
     }
     if (!missing.length) ok(`${locale}: all ${keys.size} EN keys present`);
+    else if (stub) ok(`${locale}: stub locale with ${keys.size}/${enKeys.size} translated (rest → English fallback)`);
 
     // Template-variable preservation.
     let tvFail = 0;

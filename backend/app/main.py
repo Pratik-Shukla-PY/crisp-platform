@@ -13,6 +13,7 @@ Startup sequence:
 """
 import os
 import re
+import sys
 import logging
 import time
 from collections import defaultdict
@@ -21,6 +22,61 @@ from dotenv import load_dotenv
 # Load .env into os.environ BEFORE any service singletons are imported
 _env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
 load_dotenv(dotenv_path=_env_path, override=True)
+
+
+# ── Phase 24 — fail-fast env validation ───────────────────────────────
+#
+# Phase 23 deployed a backend with `MEDIA_BACKEND=s3` but with the
+# `AWS_REGION` line accidentally missing from `.env.production` (an
+# operator's hand-edit dropped it). The container started healthy
+# and the docker-compose healthcheck stayed green — `boto3` only
+# raised when the first media request hit it, hours later, after the
+# bad state had reached user traffic.
+#
+# Fix: refuse to start unless the required env vars are present.
+# Backend exits with code 1; docker-compose flips the healthcheck
+# red within 60 s; auto-rollback in deploy.sh catches the broken
+# config BEFORE it reaches users. Operators add a missing var,
+# `up --force-recreate`, container goes green.
+#
+# Note: this lives at module-import time on purpose. Putting it
+# inside an `@app.on_event("startup")` would run AFTER FastAPI has
+# already wired routes / accepted the first request and would not
+# block startup.
+
+_REQUIRED_BY_BACKEND = ["MEDIA_BACKEND"]
+_REQUIRED_WHEN_S3 = ["AWS_S3_BUCKET", "AWS_REGION"]
+
+
+def _validate_required_env() -> None:
+    """Refuse to start unless every required env var is present.
+
+    Centralised env-var manifest so future config drift can't silently
+    half-break a request path that's only exercised under load (the
+    Phase 23 AWS_REGION trap). The list mirrors
+    `scripts/verify-env.sh` so the operator-side check and the
+    container-side check agree on what's required.
+    """
+    missing = [v for v in _REQUIRED_BY_BACKEND if not os.getenv(v)]
+    if os.getenv("MEDIA_BACKEND", "local").lower() == "s3":
+        missing += [v for v in _REQUIRED_WHEN_S3 if not os.getenv(v)]
+    if missing:
+        sys.stderr.write(
+            "\n[FATAL] Required env vars missing: " + ", ".join(missing) +
+            "\n        Refusing to start. Fix .env.production and rerun "
+            "`docker compose up -d --force-recreate backend`.\n"
+            "        Also run `bash scripts/verify-env.sh .env.production` "
+            "before restarting to catch any other gaps.\n\n"
+        )
+        sys.exit(1)
+
+
+# Skip validation in the pytest suite — tests use a minimal env that
+# legitimately omits some of these (e.g. local-storage MEDIA_BACKEND).
+# Pytest sets PYTEST_CURRENT_TEST in the env; we use that as the
+# signal. Production / docker-compose never sets it.
+if not os.environ.get("PYTEST_CURRENT_TEST") and not os.environ.get("CRISP_SKIP_ENV_VALIDATION"):
+    _validate_required_env()
 
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
