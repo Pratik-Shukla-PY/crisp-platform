@@ -77,10 +77,11 @@ def test_ivr_welcome_menu_uses_native_voice_per_language(client):
     # French → Lea voice + French prompt.
     assert 'voice="Polly.Lea" language="fr-FR">' in body
     assert "français" in body
-    # Arabic → Zeina voice + Arabic script (the prompt says "للعربية"
-    # = "for Arabic"; just check the Arabic root word "عربية" is in
-    # the body so we don't couple to the exact preposition.)
-    assert 'voice="Polly.Zeina" language="arb">' in body
+    # Arabic → Zeina voice + ar-XA locale (NOT "arb" — Twilio's TwiML
+    # parser rejects the entire response when it sees an unrecognised
+    # language code, dropping the call with no audio at all).
+    # ar-XA matches the rest of the CRISP codebase's _IVR_VOICES map.
+    assert 'voice="Polly.Zeina" language="ar-XA">' in body
     assert "عربية" in body
 
 

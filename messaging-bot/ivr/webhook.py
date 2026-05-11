@@ -271,6 +271,13 @@ async def handle_incoming_call(request: Request):
     #
     # Phase 23.1 — the fallback URL uses `&amp;lang=…` (not `?lang=…`)
     # because loc_url already carries a `?sid=…` query string.
+    # Phase 23.3.1 — fixed Arabic language code from "arb" (AWS
+    # Polly's MSA code) → "ar-XA" so Twilio accepts it. Twilio's
+    # `<Say>` validation rejects the whole TwiML response when ANY
+    # voice/language combo is unrecognised, which silently drops
+    # the call (no audio at all on the caller end). The rest of the
+    # CRISP codebase has always used "ar-XA" with Polly.Zeina in
+    # `_IVR_VOICES`; the welcome menu now matches.
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Gather action="{loc_url}" method="POST" numDigits="1" timeout="6">
@@ -279,7 +286,7 @@ async def handle_incoming_call(request: Request):
         <Say voice="Polly.Aditi" language="hi-IN">हिन्दी के लिए, 2 दबाएं।</Say>
         <Say voice="Polly.Lupe" language="es-US">Para español, presione 3.</Say>
         <Say voice="Polly.Lea" language="fr-FR">Pour français, appuyez sur 4.</Say>
-        <Say voice="Polly.Zeina" language="arb">للعربية، اضغط 5.</Say>
+        <Say voice="Polly.Zeina" language="ar-XA">للعربية، اضغط 5.</Say>
         <Say voice="Polly.Joanna" language="en-US">Or just start speaking after the beep.</Say>
     </Gather>
     <Redirect method="POST">{loc_url}&amp;lang={default_lang}</Redirect>
