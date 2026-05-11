@@ -167,6 +167,25 @@ After `docker compose up -d --force-recreate backend`:
 4. `curl https://undp.crisplabs.tech/api/v1/ivr/status` → 200 with `twilio_configured: true`.
 5. Open the dashboard, click any report with media → image renders + audio plays (catches storage 500s the way Phase 23 missed).
 
+## Secret hygiene during operator checklists
+
+**Never paste raw `.env.production` contents into AI chats, PRs, issues,
+or any logged surface.** When `verify-env.sh` flags problems (e.g.
+quoted-values warning), paste only the validator's *header* output:
+
+```
+✓ all 12 required vars present
+⚠ missing recommended (degraded features): SENTRY_DSN
+✗ some values are quoted ...
+```
+
+The body of the warning includes the actual env values, which echo
+plaintext secrets (DB password, JWT secret, Twilio token, Anthropic
+key, etc.). If any of those land in a logged surface, treat them as
+compromised and rotate immediately. Phase 25.2 retro (May 2026) — a
+verify-env.sh failure paste leaked all 12 production secrets;
+emergency rotation followed.
+
 ## Commit conventions
 
 - Conventional Commits: `feat(area):`, `fix(area):`, `perf(area):`,
