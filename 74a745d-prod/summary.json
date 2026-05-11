@@ -1,0 +1,66 @@
+{
+  "sha": "74a745d-prod",
+  "sha_full": "74a745dec680da1b7ef3bcf0980ca1ccae9bbb3b",
+  "ts": "2026-05-11T06:26:19.680Z",
+  "ref": "refs/heads/main",
+  "actor": "Pratik-Shukla-PY",
+  "pages": {
+    "pwa-home": {
+      "url": "https://undp.crisplabs.tech/mobile-app/src/",
+      "scores": {
+        "performance": 44,
+        "accessibility": 96,
+        "best-practices": 96,
+        "pwa": 100,
+        "seo": 88
+      },
+      "metrics": {
+        "lcp": 18999.183499999992,
+        "cls": 0.16891899999999999,
+        "tbt": 345,
+        "fcp": 4798.6205,
+        "si": 7411.6857683870185
+      },
+      "run_count": 3,
+      "median_file": "lhr-1778480645683.json"
+    },
+    "pwa-home-v4": {
+      "url": "https://undp.crisplabs.tech/mobile-app/src/?ui=v4",
+      "scores": {
+        "performance": 46,
+        "accessibility": 96,
+        "best-practices": 96,
+        "pwa": 100,
+        "seo": 88
+      },
+      "metrics": {
+        "lcp": 18594.3695,
+        "cls": 0.175127,
+        "tbt": 243,
+        "fcp": 5515.065499999999,
+        "si": 7541.203184845206
+      },
+      "run_count": 3,
+      "median_file": "lhr-1778480700697.json"
+    },
+    "dashboard": {
+      "url": "https://undp.crisplabs.tech/web-dashboard/src/",
+      "scores": {
+        "performance": 57,
+        "accessibility": 91,
+        "best-practices": 100,
+        "pwa": 38,
+        "seo": 90
+      },
+      "metrics": {
+        "lcp": 8936.353,
+        "cls": 0.000178,
+        "tbt": 0,
+        "fcp": 8936.353,
+        "si": 8936.353
+      },
+      "run_count": 3,
+      "median_file": "lhr-1778480765131.json"
+    }
+  }
+}
