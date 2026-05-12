@@ -3979,8 +3979,9 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
    tappable square 44 px when including pad). The brand row now
    shows only logo + wordmark. */
 .home-strip-icon {
-    width: 36px;
-    height: 36px;
+    /* Apple HIG / WCAG 2.5.5 compliant tap target. */
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     border: 1px solid rgba(255, 255, 255, 0.10);
     background: rgba(255, 255, 255, 0.04);
@@ -4391,9 +4392,17 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     font-size: 11px;
 }
 .home-utility-link {
+    /* Apple HIG / WCAG 2.5.5: 44×44 minimum tap target. The visible
+       text stays small; min-height + horizontal padding handle the
+       hit area without disturbing the footer's compact density. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
     background: transparent;
     border: 0;
-    padding: 4px 6px;
+    padding: 4px 10px;
     color: var(--text-dim, var(--muted));
     font-size: 11px;
     font-weight: 600;
