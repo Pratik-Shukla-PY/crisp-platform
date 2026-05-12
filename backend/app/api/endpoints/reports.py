@@ -34,6 +34,7 @@ from app.core.observability import (
     time_to_first_image_seconds,
     time_to_full_image_seconds,
     chunk_transport_total,
+    media_asset_integrity_fail_total,
 )
 
 logger = logging.getLogger(__name__)
@@ -348,6 +349,39 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
         return None
 
     file_bytes = b"".join(parts)
+
+    # Phase C.1 (May 2026) — whole-asset integrity check. The PWA computes
+    # djb2 over the FULL original bytes once before chunking and ships it
+    # on chunk 0. We re-compute over the concatenated payload here and
+    # compare. NULL on the Media row means the client didn't send one
+    # (legacy / pre-Phase-C.1 PWA) — skip the check entirely, preserving
+    # back-compat. Mismatch => abort assembly, flag the row failed in the
+    # caller (`_try_full_assembly_bg` already handles None-returns), and
+    # bump the metric so the failure shows up on the Prometheus dashboard.
+    # Done BEFORE writing to storage so a corrupted assembly never lands
+    # on disk / S3 even briefly.
+    media_row = db.query(Media).filter(Media.id == media_id).first()
+    expected_checksum = getattr(media_row, "full_asset_checksum", None) if media_row else None
+    if expected_checksum:
+        computed_checksum = djb2_bytes(file_bytes)
+        if computed_checksum != expected_checksum:
+            tier_label = "LOW"
+            try:
+                tier_label = getattr(getattr(media_row, "resolution_tier", None), "value", "LOW") or "LOW"
+            except Exception:
+                pass
+            logger.error(
+                "[Assembly:integrity] %s tier=%s djb2 MISMATCH expected=%s got=%s — "
+                "aborting assembly, marking row failed. Most likely cause: "
+                "_assemble_media_file sort/decode/concat regression OR a "
+                "compromised chunk row that bypassed the per-chunk djb2 check.",
+                media_id, tier_label, expected_checksum, computed_checksum,
+            )
+            try:
+                media_asset_integrity_fail_total.labels(tier=tier_label).inc()
+            except Exception:
+                pass
+            return None
 
     # Detect audio format from magic bytes (first few bytes)
     if media_type == 'IMAGE':
@@ -2599,14 +2633,25 @@ def attach_media_chunk(
             # Subsequent chunks for the same media_id don't update it —
             # all chunks for one upload share the same blur status.
             client_blur_applied=bool(payload.client_blur_applied),
+            # Phase C.1 — whole-asset checksum from the PWA's djb2 over the
+            # full original bytes. Sent on chunk 0 only; the assembler will
+            # verify after concatenation. NULL on later chunks / legacy
+            # clients => check skipped (back-compat).
+            full_asset_checksum=(payload.full_asset_checksum if payload.seq_num == 0 else None),
         )
         db.add(media)
         db.flush()
-    elif payload.client_blur_applied and not media.client_blur_applied:
-        # Client sent the flag on a later chunk (e.g. resumed upload where
-        # first chunk predated the client-blur release). Upgrade the media
-        # row so the assembler picks it up.
-        media.client_blur_applied = True
+    else:
+        if payload.client_blur_applied and not media.client_blur_applied:
+            # Client sent the flag on a later chunk (e.g. resumed upload where
+            # first chunk predated the client-blur release). Upgrade the media
+            # row so the assembler picks it up.
+            media.client_blur_applied = True
+        # Phase C.1 — late-arriving whole-asset checksum (chunk 0 retried
+        # after others landed first). Accept iff the row doesn't already
+        # carry one; never overwrite the canonical first-write value.
+        if payload.seq_num == 0 and payload.full_asset_checksum and not media.full_asset_checksum:
+            media.full_asset_checksum = payload.full_asset_checksum
 
     # Idempotent chunk insert — check for duplicate before incrementing counter
     existing_chunk = db.query(MediaChunk).filter(
@@ -2878,6 +2923,10 @@ async def attach_media_chunk_bin(
     photo_group_id: Optional[str] = Form(None),
     client_blur_applied: str = Form("false"),
     checksum: Optional[str] = Form(None),
+    # Phase C.1 — whole-asset djb2 checksum, sent on chunk 0 only.
+    # Absent / NULL on later chunks and on legacy clients; the assembler
+    # skips the integrity check when the column is NULL on the Media row.
+    full_asset_checksum: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     """Binary variant of `/media/chunk`. See module-level comment above."""
@@ -2960,12 +3009,23 @@ async def attach_media_chunk_bin(
             completion_pct=0.0,
             assembly_status='pending',
             client_blur_applied=blur_flag,
+            # Phase C.1 — persist the PWA-computed whole-asset checksum on
+            # creation. Only chunk 0 carries this field; later chunks pass
+            # None and `seq_num != 0` short-circuits the assignment below.
+            full_asset_checksum=(full_asset_checksum if seq_num == 0 else None),
         )
         db.add(media)
         db.flush()
-    elif blur_flag and not media.client_blur_applied:
-        # Late-arriving blur flag (same upgrade path as the legacy endpoint).
-        media.client_blur_applied = True
+    else:
+        if blur_flag and not media.client_blur_applied:
+            # Late-arriving blur flag (same upgrade path as the legacy endpoint).
+            media.client_blur_applied = True
+        # Phase C.1 — late-arriving full-asset checksum. If chunk 0 was lost
+        # or re-sent after an intermediate chunk landed first, accept the
+        # value when the row doesn't already carry one. Don't overwrite an
+        # existing non-NULL value (the original is canonical).
+        if seq_num == 0 and full_asset_checksum and not media.full_asset_checksum:
+            media.full_asset_checksum = full_asset_checksum
 
     # ── Idempotent insert. Mirrors the legacy endpoint byte-for-byte
     #    except the column we write (data_binary instead of data_b64).

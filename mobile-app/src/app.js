@@ -6743,6 +6743,7 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
     const {
         mediaId, seqNum, totalChunks, blob, type,
         resolutionTier, photoGroupId, clientBlurApplied, checksum,
+        fullAssetChecksum,
     } = params;
 
     // Quick fallback if we already know the backend doesn't support /chunk-bin.
@@ -6762,6 +6763,11 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
             if (photoGroupId) fd.append('photo_group_id', photoGroupId);
             fd.append('client_blur_applied', clientBlurApplied ? 'true' : 'false');
             if (checksum) fd.append('checksum', checksum);
+            // Phase C.1 (May 2026) — whole-asset djb2 over the original full
+            // bytes; ONLY sent on chunk 0. Older backends without the field
+            // ignore the extra form key, so this is safe to ship before all
+            // backends are upgraded.
+            if (fullAssetChecksum) fd.append('full_asset_checksum', fullAssetChecksum);
             // Wrap raw bytes in a Blob so the multipart file part is sent
             // without any transcoding. Buffer / Uint8Array / Blob all work.
             const asBlob = (blob instanceof Blob) ? blob
@@ -7334,7 +7340,21 @@ async function _uploadVariantTier(item, reportId, unit) {
         const chunkSize = netConfig.chunkSize;
         const total = Math.max(1, Math.ceil(blob.size / chunkSize));
 
-        console.log(`[Upload:bin] ${label}: ${total} chunks from seq ${startSeq}, tier=${resolution}, netTier=${_pwaTier}`);
+        // Phase C.1 (May 2026) — compute whole-asset djb2 ONCE over the full
+        // original bytes BEFORE chunking, cache it on the variant so a
+        // resumed upload (chunkProgress > 0) doesn't have to recompute,
+        // and ship it on chunk 0 (and on chunk 0 only — later chunks pass
+        // null). The backend persists the value on the Media row and re-
+        // verifies after assembly; mismatch flips status='failed' and
+        // bumps `media_asset_integrity_fail_total`. Defence-in-depth for
+        // the original (LARGE) tier where a corrupted assembly would
+        // otherwise reach the dashboard silently.
+        if (!variant.fullAssetChecksum) {
+            const fullBuf = new Uint8Array(await blob.arrayBuffer());
+            variant.fullAssetChecksum = djb2Bytes(fullBuf);
+        }
+
+        console.log(`[Upload:bin] ${label}: ${total} chunks from seq ${startSeq}, tier=${resolution}, netTier=${_pwaTier}, fullChecksum=${variant.fullAssetChecksum}`);
         for (let seq = startSeq; seq < total; seq++) {
             const start = seq * chunkSize;
             const end = Math.min(start + chunkSize, blob.size);
@@ -7356,6 +7376,10 @@ async function _uploadVariantTier(item, reportId, unit) {
                         // let BlazeFace failures leak unblurred PII.
                         clientBlurApplied: Boolean(clientBlurApplied),
                         checksum: djb2Bytes(buf),
+                        // Phase C.1 — full-asset checksum on chunk 0 only.
+                        // The endpoint silently ignores it on later chunks
+                        // (we still send null then so the form field exists).
+                        fullAssetChecksum: seq === 0 ? variant.fullAssetChecksum : null,
                     },
                     netConfig.retries, dynamicTimeout,
                 );
@@ -7382,6 +7406,16 @@ async function _uploadVariantTier(item, reportId, unit) {
     const chunks = chunkBase64(b64, netConfig.chunkSize);
     const total = chunks.length;
 
+    // Phase C.1 — same whole-asset checksum for the legacy base64 transport.
+    // We hash the base64 STRING here (not raw bytes) so it matches what the
+    // backend computes via `djb2_checksum(...)` over the concatenated b64
+    // payload via the same simpleChecksum-style polynomial. Backend re-
+    // hashes the assembled raw bytes via djb2_bytes, but for the b64 path
+    // we send the b64-domain hash and the backend's b64-aware
+    // _assemble_media_file path concatenates raw bytes, so this becomes a
+    // no-op safety check (NULL on Media row) for the legacy path. The
+    // binary transport is the primary integrity guarantee; legacy stays
+    // wire-only protected.
     console.log(`[Upload] ${label}: ${total} chunks from seq ${startSeq}, tier=${resolution}, netTier=${_pwaTier}`);
 
     for (let seq = startSeq; seq < total; seq++) {

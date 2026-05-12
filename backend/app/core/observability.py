@@ -205,6 +205,18 @@ time_to_full_image_seconds = Histogram(
     "Seconds from report creation → LARGE variant complete.",
     buckets=(1, 5, 10, 30, 60, 120, 300, 600, 1800),
 )
+# Phase C.1 (May 2026) — whole-asset integrity. Counts assemblies that
+# computed a djb2 over the concatenated file and found it different from
+# the PWA-supplied checksum. Should always read 0 in steady state; any
+# non-zero value indicates either (a) a real assembler regression
+# (sort/decode/concat bug — the reason this metric exists) or (b) a
+# storage-backend corruption between assembled bytes → persistent store.
+media_asset_integrity_fail_total = Counter(
+    "crisp_media_asset_integrity_fail_total",
+    "Assemblies where the post-assembly djb2 didn't match the PWA-supplied "
+    "whole-asset checksum. Should be 0 in healthy operation.",
+    ["tier"],  # LOW | MEDIUM | HIGH | ORIGINAL — tier of the failed variant
+)
 
 # region auto-submit SLIs.
 geofence_check_total = Counter(

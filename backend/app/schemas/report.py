@@ -78,6 +78,12 @@ class MediaChunkPayload(BaseModel):
     # on assembly — avoiding a second lossy pass over already-redacted bytes.
     # Default false so legacy clients continue to get server-side blur.
     client_blur_applied: bool = False
+    # Phase C.1 (May 2026) — whole-asset djb2 checksum the PWA computes
+    # over the full original bytes BEFORE chunking. Sent on chunk 0 only;
+    # the backend persists it on the Media row and re-verifies after
+    # assembly. NULL / absent on later chunks (only chunk 0 carries it)
+    # and on legacy clients (we just skip the check, preserving back-compat).
+    full_asset_checksum: Optional[str] = Field(None, max_length=16)
 
 # API Request Payloads
 class ReportCreate(BaseModel):

@@ -398,6 +398,14 @@ class Media(Base):
     received_chunks = Column(Integer, default=0, nullable=False)
     completion_pct = Column(Float, default=0.0, nullable=False)
     assembly_status = Column(String(20), default='pending', nullable=False)  # pending|partial|complete
+    # Phase C.1 (May 2026) — whole-asset djb2 checksum the PWA computes
+    # ONCE over the full original bytes before chunking, sent on chunk 0.
+    # After assembly the backend re-computes djb2 over the concatenated
+    # file and compares; mismatch flips assembly_status='failed' and
+    # bumps `media_asset_integrity_fail_total`. NULL for legacy rows /
+    # clients that don't send the field — the check is skipped, preserving
+    # backward compatibility. djb2 hex is 8 chars; 16 is generous headroom.
+    full_asset_checksum = Column(String(16), nullable=True)
     # : clients that have already run their local PII blur (PWA
     # BlazeFace / RN equivalent) set this true; the server's own blur_pii
     # pass is then skipped to avoid a second lossy re-encode on
