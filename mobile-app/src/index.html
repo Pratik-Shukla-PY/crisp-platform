@@ -515,7 +515,7 @@
                 <span class="home-utility-dot" aria-hidden="true">·</span>
                 <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
                 <span class="home-utility-dot" aria-hidden="true">·</span>
-                <span class="home-utility-version" id="home-utility-version">v0.7.34</span>
+                <span class="home-utility-version" id="home-utility-version">v0.7.35</span>
             </nav>
 
             <!-- Legacy retained DOM — kept hidden so any
@@ -749,14 +749,6 @@
         </header>
 
         <div class="v4-body">
-            <!-- AI-pre-fill banner (transient, fades after 2s) — only
-                 appears when classify-suggest returned source="ai" so the
-                 user knows defaults came from AI vs heuristics. -->
-            <div class="v4-ai-banner" id="v4-ai-banner" style="display:none;">
-                <i class="fa-solid fa-wand-magic-sparkles"></i>
-                <span data-i18n="v4_ai_filled">AI suggested these — tap to change.</span>
-            </div>
-
             <!-- Sub-step header — small uppercase tag above the question -->
             <div class="v4-substep-label" id="v4-substep-label" aria-live="polite">
                 <span data-i18n="v4_substep_how_bad">Step 2 — How bad</span>
@@ -843,7 +835,6 @@
                         <span class="v4-hit-tile-sub" data-i18n="v4_infra_other_sub">Describe in your own words</span>
                     </button>
                 </div>
-                <p class="v4-hit-foot" data-i18n="v4_tap_one">Tap one. Auto-advance.</p>
             </section>
 
             <!-- ── Sub-view 3: What caused it? (progressive 3-card drill) -->

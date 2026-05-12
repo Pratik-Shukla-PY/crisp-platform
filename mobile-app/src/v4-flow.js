@@ -443,11 +443,9 @@
                     if (capHit && candidates.length > added) {
                         _toastCapHit();
                     }
-                    // AI prefill call retained but no-ops while
-                    // AI_PREFILL_ENABLED is false (top of file).
-                    _maybeFireAiPrefill(_getState().photoBlob || null).catch(() => {});
-                    // Phase 25.6 — auto-advance REMOVED. User taps
-                    // Continue manually.
+                    // Phase 25.6 + 25.11 — auto-advance REMOVED and AI
+                    // prefill REMOVED. User taps Continue manually after
+                    // each step.
                     document.removeEventListener('camera-modal-closed', _modalCloseHandler);
                 };
                 document.addEventListener('camera-modal-closed', _modalCloseHandler);
@@ -571,16 +569,11 @@
                     }
                 }
 
-                // Fire AI pre-fill if bandwidth is good (no-op while
-                // AI_PREFILL_ENABLED is false — see top of file).
-                _maybeFireAiPrefill(_getState().photoBlob || file).catch((e) =>
-                    console.warn('[v4] AI prefill error:', e));
-
-                // Phase 25.6 — REMOVED auto-advance. User reported the
-                // 1.2s timer made it impossible to add a second photo
-                // via the `+` button, and the abrupt stage change felt
-                // like the app was "deciding things for me". User now
-                // taps Continue manually.
+                // Phase 25.6 + 25.11 — auto-advance REMOVED + AI prefill
+                // REMOVED. The 1.2s auto-advance timer made it impossible
+                // to add a second photo via the `+` button; users now tap
+                // Continue manually. AI prefill (vision-based classify
+                // suggestions) is gone too — reporters pick deliberately.
             } catch (e) {
                 console.error('[v4] photo handler failed:', e);
             }
@@ -1085,13 +1078,21 @@
                 opt.setAttribute('aria-checked', 'true');
                 _setState({ damage_classification: opt.getAttribute('data-value') });
                 _updateReviewSummary();
+                _refreshClassifyNext();
             });
         });
         // Default selected = the one already with .is-selected (Partial).
         const defaultOpt = damageOpts.find((o) => o.classList.contains('is-selected'));
         if (defaultOpt) _setState({ damage_classification: defaultOpt.getAttribute('data-value') });
 
-        // ── Infra tiles (sub-view 2) — auto-advance on tap ──
+        // ── Infra tiles (sub-view 2) ── Phase 25.6 + 25.11 (May 2026):
+        // tap a tile to mark selection; user taps Continue to advance.
+        // No auto-advance anywhere in the classify flow — auto-advance
+        // surprised low-literacy users and made it impossible to undo a
+        // mis-tap. Phase 25.11 additionally calls _refreshClassifyNext()
+        // so the Continue button enables on first tap (the earlier
+        // _setState monkey-patch attempt was a no-op against a const
+        // binding, leaving Continue greyed even after selection).
         const infraView = document.getElementById('v4-view-infra');
         const infraTiles = infraView ? Array.from(infraView.querySelectorAll('.v4-hit-tile')) : [];
         infraTiles.forEach((tile) => {
@@ -1104,10 +1105,7 @@
                 tile.setAttribute('aria-checked', 'true');
                 _setState({ infrastructure_type: tile.getAttribute('data-value') });
                 _updateReviewSummary();
-                // Phase 25.6 (May 2026) — auto-advance to the crisis
-                // sub-step REMOVED. The user reported the automatic
-                // page transition felt like the app was deciding
-                // things for them. They tap Next to advance.
+                _refreshClassifyNext();
             });
         });
 
@@ -1150,6 +1148,7 @@
                     btn.setAttribute('aria-checked', 'true');
                     _setState({ crisis_type: btn.getAttribute('data-value') });
                     _updateReviewSummary();
+                    _refreshClassifyNext();
                 });
             });
         }
@@ -1276,176 +1275,9 @@
         nextBtn.disabled = !ok;
         nextBtn.classList.toggle('is-ready', ok);
     }
-    // Hook _setState so any selection mutation auto-updates the button.
-    // Idempotent — wrapping is safe across multiple inits.
-    const _origSetState = _setState;
-    function _wrappedSetState(patch) {
-        _origSetState(patch);
-        try { _refreshClassifyNext(); } catch (_) {}
-    }
-    // Monkey-patch local reference. `_setState` was const-bound earlier;
-    // we rely on the outer scope keeping the same reference, so instead
-    // of reassigning we just call _refreshClassifyNext after the fact
-    // wherever it matters. Keep _wrappedSetState exported for tests.
+    // Exposed for tests + late re-syncs after auth / locale changes.
     window.__crispV4RefreshClassifyNext = _refreshClassifyNext;
 
-    // Apply AI suggestions to the chips. Called from the AI pre-fill
-    // promise resolver; safe to call multiple times.
-    function _applyAiSuggestions(result) {
-        if (!result || result.source !== 'ai') return;
-
-        const banner = document.getElementById('v4-ai-banner');
-        if (banner) {
-            banner.style.display = 'flex';
-            setTimeout(() => { banner.style.display = 'none'; }, 4000);
-        }
-
-        // Damage radio (Delta-D rebuild — new .v4-q-opt selector).
-        const damageView = document.getElementById('v4-view-damage');
-        if (damageView && result.damage_classification) {
-            const target = damageView.querySelector(`.v4-q-opt[data-value="${result.damage_classification}"]`);
-            if (target) {
-                damageView.querySelectorAll('.v4-q-opt').forEach((o) => {
-                    o.classList.remove('is-selected');
-                    o.setAttribute('aria-checked', 'false');
-                });
-                target.classList.add('is-selected');
-                target.setAttribute('aria-checked', 'true');
-                _setState({ damage_classification: result.damage_classification });
-            }
-        }
-        // Infra tile (Delta-E rebuild — new .v4-hit-tile selector).
-        const infraView = document.getElementById('v4-view-infra');
-        if (infraView && result.infrastructure_type) {
-            const target = infraView.querySelector(`.v4-hit-tile[data-value="${result.infrastructure_type}"]`);
-            if (target) {
-                infraView.querySelectorAll('.v4-hit-tile').forEach((t) => {
-                    t.classList.remove('is-selected');
-                    t.setAttribute('aria-checked', 'false');
-                });
-                target.classList.add('is-selected');
-                target.setAttribute('aria-checked', 'true');
-                _setState({ infrastructure_type: result.infrastructure_type });
-            }
-        }
-        // Crisis sub-type — set state but don't auto-drill into the
-        // sub-types view; that's the user's choice. The summary on the
-        // review page will display whatever the AI suggested.
-        if (result.crisis_type) {
-            _setState({ crisis_type: result.crisis_type });
-        }
-        _updateReviewSummary();
-        try { _refreshClassifyNext(); } catch (_) {}
-    }
-
-    // Phase 25.4 (May 2026) — disable AI auto-completion of damage /
-    // infra / crisis chips per user direction. The user reported the
-    // auto-fill quality was not OK; we'd rather have the reporter
-    // pick the 3 chips deliberately than auto-fill from a Claude
-    // vision pass that occasionally guessed wrong. The pre-fill
-    // function below is preserved (call sites + UI banner unchanged)
-    // but gated by this flag so re-enabling later is a one-line edit.
-    const AI_PREFILL_ENABLED = false;
-
-    // ── AI pre-fill ─────────────────────────────────────────────────────
-    async function _maybeFireAiPrefill(blob) {
-        if (!AI_PREFILL_ENABLED) {
-            return;  // feature disabled — see AI_PREFILL_ENABLED comment above
-        }
-        // Bandwidth gate — only fire on FAST or better. The probe runs
-        // independently in app.js; we read the cached tier here. If it's
-        // missing we default to NOT firing (conservative — never block
-        // user on degraded networks).
-        let tier = null;
-        try {
-            tier = (window.getMeasuredTier && window.getMeasuredTier()) ||
-                   (window._pwaTier) ||
-                   localStorage.getItem('crisp_bw_tier');
-        } catch (e) {}
-
-        if (tier && (tier === 'VERY_SLOW' || tier === 'SLOW')) {
-            console.log('[v4] AI prefill skipped — bandwidth tier:', tier);
-            return;
-        }
-        if (!navigator.onLine) {
-            console.log('[v4] AI prefill skipped — offline');
-            return;
-        }
-
-        // Resize to ~640 px long-side to keep the upload fast.
-        const resized = await _resizeBlobForAi(blob);
-        const b64 = await _blobToBase64(resized);
-        if (!b64) return;
-
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 1500);
-
-        try {
-            const apiBase = window.API_BASE || '/api/v1';
-            const lat = _getState().location?.lat;
-            const lng = _getState().location?.lng;
-            const res = await fetch(`${apiBase}/reports/classify-suggest`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    image_b64: b64,
-                    media_type: 'image/jpeg',
-                    lat: typeof lat === 'number' ? lat : undefined,
-                    lng: typeof lng === 'number' ? lng : undefined,
-                }),
-                signal: ctrl.signal,
-            });
-            clearTimeout(timer);
-            if (!res.ok) {
-                console.log('[v4] classify-suggest non-200:', res.status);
-                return;
-            }
-            const result = await res.json();
-            console.log('[v4] AI suggested:', result);
-            _applyAiSuggestions(result);
-        } catch (e) {
-            clearTimeout(timer);
-            if (e.name === 'AbortError') {
-                console.log('[v4] AI prefill aborted (>1.5s)');
-            } else {
-                console.warn('[v4] AI prefill failed:', e);
-            }
-        }
-    }
-
-    function _resizeBlobForAi(blob) {
-        return new Promise((resolve) => {
-            const img = new Image();
-            const url = URL.createObjectURL(blob);
-            img.onload = () => {
-                const max = 640;
-                const ratio = Math.min(1, max / Math.max(img.width, img.height));
-                const w = Math.round(img.width * ratio);
-                const h = Math.round(img.height * ratio);
-                const canvas = document.createElement('canvas');
-                canvas.width = w;
-                canvas.height = h;
-                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                URL.revokeObjectURL(url);
-                canvas.toBlob((b) => resolve(b || blob), 'image/jpeg', 0.7);
-            };
-            img.onerror = () => { URL.revokeObjectURL(url); resolve(blob); };
-            img.src = url;
-        });
-    }
-
-    function _blobToBase64(blob) {
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                const result = reader.result || '';
-                const i = result.indexOf(',');
-                resolve(i >= 0 ? result.slice(i + 1) : '');
-            };
-            reader.onerror = () => resolve('');
-            reader.readAsDataURL(blob);
-        });
-    }
 
     // ── Page 3: review ──────────────────────────────────────────────────
     function _initReviewStage() {
