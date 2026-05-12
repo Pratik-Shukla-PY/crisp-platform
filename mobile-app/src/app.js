@@ -4723,88 +4723,90 @@ function setupPhotoStage() {
             img.onload = () => {
                 detectPWANetworkTier();
                 const netCfg = getPWAAdaptiveConfig();
-                const maxDim = netCfg.imageMaxWidth;
-                const quality = netCfg.imageQuality;
+                const previewMaxDim = netCfg.imageMaxWidth;
+                const previewQuality = netCfg.imageQuality;
 
+                // Generate a small preview dataUrl ONLY for the in-page
+                // thumbnail strip. The original File blob is preserved
+                // verbatim and used as the LARGE tier's source, so the
+                // dashboard's archival copy keeps the camera's native
+                // fidelity — not a network-tier-degraded re-encode.
                 const canvas = document.createElement('canvas');
                 let w = img.width, h = img.height;
-                if (w > maxDim || h > maxDim) {
-                    if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
-                    else { w = Math.round(w * maxDim / h); h = maxDim; }
+                if (w > previewMaxDim || h > previewMaxDim) {
+                    if (w > h) { h = Math.round(h * previewMaxDim / w); w = previewMaxDim; }
+                    else { w = Math.round(w * previewMaxDim / h); h = previewMaxDim; }
                 }
                 canvas.width = w; canvas.height = h;
                 canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                const previewDataUrl = canvas.toDataURL('image/jpeg', previewQuality);
 
                 if (!asExtra) {
-                    state.photoDataUrl = dataUrl;
-                    showPreview(dataUrl);
+                    state.photoDataUrl = previewDataUrl;
+                    showPreview(previewDataUrl);
                 }
 
-                canvas.toBlob((rawBlob) => {
-                    if (asExtra) {
-                        if (!_canAddMorePhotos()) return;
-                        const entry = { dataUrl, blob: rawBlob, groupId: genUUID(), variants: null };
-                        state.extraPhotos.push(entry);
-                        _updateExtraPhotoStrip();
-                        // Defer blur+variants via _runWhenIdle so the UI can
-                        // paint + handle taps before TF.js saturates the main
-                        // thread. See _runWhenIdle doc.
-                        _trackBlur(_runWhenIdle(async () => {
-                            const variants = window.ImageVariants
-                                ? await window.ImageVariants.generate(rawBlob).catch(e => { _silent('imageVariants.extraFile', e); return null; })
-                                : null;
-                            if (variants) {
-                                entry.variants = variants;
-                                entry.blob = variants.small.blob;
-                                entry.clientBlurApplied = Boolean(variants.clientBlurApplied);
-                                try { entry.dataUrl = await _blobToDataUrl(variants.small.blob); _updateExtraPhotoStrip(); } catch (_) {}
-                            } else {
-                                const br = await _blurIfPossible(rawBlob);
-                                entry.blob = br.blob;
-                                entry.clientBlurApplied = br.blurred;
-                                if (br.blob !== rawBlob) {
-                                    try { entry.dataUrl = await _blobToDataUrl(br.blob); _updateExtraPhotoStrip(); } catch (_) {}
-                                }
-                            }
-                        }));
-                        return;
-                    }
-                    // Primary-photo path.
-                    state.photoBlob = rawBlob;
-                    state.photoGroupId = genUUID();
+                // Use the ORIGINAL File blob as the source for the variants
+                // pipeline. SMALL/MEDIUM still downscale via canvas inside
+                // image-variants.js, but LARGE passes through the original
+                // bytes (post-blur, if faces are present).
+                const sourceBlob = file;
+
+                if (asExtra) {
+                    if (!_canAddMorePhotos()) return;
+                    const entry = { dataUrl: previewDataUrl, blob: sourceBlob, groupId: genUUID(), variants: null };
+                    state.extraPhotos.push(entry);
+                    _updateExtraPhotoStrip();
                     _trackBlur(_runWhenIdle(async () => {
                         const variants = window.ImageVariants
-                            ? await window.ImageVariants.generate(rawBlob).catch(e => { _silent('imageVariants.file', e); return null; })
+                            ? await window.ImageVariants.generate(sourceBlob).catch(e => { _silent('imageVariants.extraFile', e); return null; })
                             : null;
                         if (variants) {
-                            state.photoVariants = variants;
-                            state.photoBlob = variants.small.blob;
-                            state.photoClientBlurApplied = Boolean(variants.clientBlurApplied);
-                            // Phase-1 progressive-upload — capture the blurhash
-                            // so submitReport() can thread it into the meta POST.
-                            // Only the PRIMARY photo's hash is used as the
-                            // report-level placeholder; extras don't need one.
-                            state.blurhash = variants.blurhash || null;
-                            try {
-                                const smallUrl = await _blobToDataUrl(variants.small.blob);
-                                state.photoDataUrl = smallUrl;
-                                showPreview(smallUrl);
-                            } catch (_) {}
+                            entry.variants = variants;
+                            entry.blob = variants.small.blob;
+                            entry.clientBlurApplied = Boolean(variants.clientBlurApplied);
+                            try { entry.dataUrl = await _blobToDataUrl(variants.small.blob); _updateExtraPhotoStrip(); } catch (_) {}
                         } else {
-                            const br = await _blurIfPossible(rawBlob);
-                            state.photoBlob = br.blob;
-                            state.photoClientBlurApplied = br.blurred;
-                            if (br.blob !== rawBlob) {
-                                try {
-                                    const blurredUrl = await _blobToDataUrl(br.blob);
-                                    state.photoDataUrl = blurredUrl;
-                                    showPreview(blurredUrl);
-                                } catch (_) {}
+                            const br = await _blurIfPossible(sourceBlob);
+                            entry.blob = br.blob;
+                            entry.clientBlurApplied = br.blurred;
+                            if (br.blob !== sourceBlob) {
+                                try { entry.dataUrl = await _blobToDataUrl(br.blob); _updateExtraPhotoStrip(); } catch (_) {}
                             }
                         }
-                    })());
-                }, 'image/jpeg', quality);
+                    }));
+                    return;
+                }
+                // Primary-photo path.
+                state.photoBlob = sourceBlob;
+                state.photoGroupId = genUUID();
+                _trackBlur(_runWhenIdle(async () => {
+                    const variants = window.ImageVariants
+                        ? await window.ImageVariants.generate(sourceBlob).catch(e => { _silent('imageVariants.file', e); return null; })
+                        : null;
+                    if (variants) {
+                        state.photoVariants = variants;
+                        state.photoBlob = variants.small.blob;
+                        state.photoClientBlurApplied = Boolean(variants.clientBlurApplied);
+                        state.blurhash = variants.blurhash || null;
+                        try {
+                            const smallUrl = await _blobToDataUrl(variants.small.blob);
+                            state.photoDataUrl = smallUrl;
+                            showPreview(smallUrl);
+                        } catch (_) {}
+                    } else {
+                        const br = await _blurIfPossible(sourceBlob);
+                        state.photoBlob = br.blob;
+                        state.photoClientBlurApplied = br.blurred;
+                        if (br.blob !== sourceBlob) {
+                            try {
+                                const blurredUrl = await _blobToDataUrl(br.blob);
+                                state.photoDataUrl = blurredUrl;
+                                showPreview(blurredUrl);
+                            } catch (_) {}
+                        }
+                    }
+                })());
             };
             img.src = ev.target.result;
         };
@@ -4937,6 +4939,10 @@ function setupCameraModal() {
         canvas.getContext('2d').drawImage(video, 0, 0);
         detectPWANetworkTier();
         const camCfg = getPWAAdaptiveConfig();
+        // Adaptive quality is used only for the in-modal preview dataUrl.
+        // The actual upload-source blob below is encoded at a fixed high
+        // quality (CAMERA_CAPTURE_QUALITY) so the LARGE archival variant
+        // preserves the camera's native fidelity regardless of network tier.
         const dataUrl = canvas.toDataURL('image/jpeg', camCfg.imageQuality);
 
         // Decide routing synchronously: first snap fills primary; rest become
@@ -5043,7 +5049,7 @@ function setupCameraModal() {
                     }
                 }
             })());
-        }, 'image/jpeg', camCfg.imageQuality);
+        }, 'image/jpeg', CAMERA_CAPTURE_QUALITY);
     });
 }
 
@@ -6167,13 +6173,27 @@ async function generateThumbnail(dataUrl, maxDim = 80, quality = 0.25) {
 }
 
 // ── PWA Adaptive Network Engine ─────────────────────────────────────────────
-// Mirrors crisp-mobile/services/networkAdaptive.ts for browser context
+// Mirrors crisp-mobile/services/networkAdaptive.ts for browser context.
+//
+// `imageQuality` / `imageMaxWidth` here drive the in-modal PREVIEW thumbnail
+// only (fast local paint, never uploaded to backend). The actual
+// upload-source blob is captured at CAMERA_CAPTURE_QUALITY (camera path) or
+// passed through verbatim from the original File (gallery path), so the
+// LARGE archival variant always preserves native camera fidelity regardless
+// of the device's current network tier.
 const PWA_NETWORK_TIERS = {
     FAST:      { chunkSize: 524288, retries: 4, timeout: 30000, imageQuality: 0.85, imageMaxWidth: 1280 },  // 512KB (req: 512KB-1MB)
     MEDIUM:    { chunkSize: 131072, retries: 5, timeout: 30000, imageQuality: 0.65, imageMaxWidth: 1024 },  // 128KB (req: 128-512KB)
     SLOW:      { chunkSize: 32768,  retries: 8, timeout: 45000, imageQuality: 0.50, imageMaxWidth: 720  },  // 32KB  (req: 32-128KB)
     VERY_SLOW: { chunkSize: 1024,   retries: 15, timeout: 60000, imageQuality: 0.35, imageMaxWidth: 480  },  // 1KB   (req: 1KB min)
 };
+
+// Fixed JPEG quality for the camera-modal upload-source blob. Decoupled
+// from the network tier so a SLOW connection doesn't permanently degrade
+// the archival LARGE variant. The bandwidth-aware variant pipeline still
+// produces SMALL/MEDIUM downsamples for fast delivery; LARGE inherits this.
+const CAMERA_CAPTURE_QUALITY = 0.95;
+
 let _pwaTier = 'MEDIUM';
 let _pwaSuccessStreak = 0;
 
