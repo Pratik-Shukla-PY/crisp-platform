@@ -5682,39 +5682,152 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 
 /* ── V4 Page 1 — capture ───────────────────────────────────────────── */
 
-.v4-meta-row {
+/* Phase 25.8 (May 2026) — capture-stage meta card. Replaces the old
+   v4-meta-row pills with a single card that gives location + time
+   real estate to breathe, makes the location editable (for users
+   with broken GPS), and shows the actual timestamp + timezone
+   instead of "Just now". */
+.v4-meta-card {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--v4-tile-bg, rgba(255,255,255,0.04));
+    border: 1px solid var(--v4-tile-bg-hover, rgba(255,255,255,0.08));
+    border-radius: 14px;
+    margin-bottom: 14px;
 }
-.v4-meta-pill {
-    display: inline-flex;
+.v4-meta-loc-row {
+    display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    border-radius: 999px;
-    background: var(--v4-tile-bg);
-    border: 1px solid var(--v4-tile-bg-hover);
-    font-size: 12px;
-    color: var(--muted);
+    gap: 12px;
+    min-width: 0;
+}
+.v4-meta-loc-icon {
+    color: var(--brand, #ffae00);
+    font-size: 18px;
+    flex-shrink: 0;
+}
+.v4-meta-loc-text {
     flex: 1;
     min-width: 0;
 }
-.v4-meta-pill .v4-meta-text {
+.v4-meta-loc-name {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.3;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
 }
-.v4-meta-pill i { color: var(--brand, #ffae00); flex-shrink: 0; }
-.v4-meta-retry {
-    background: transparent;
-    border: 0;
-    color: var(--muted);
-    cursor: pointer;
-    font-size: 12px;
-    padding: 0 4px;
+.v4-meta-loc-coords {
+    color: var(--text-mute, var(--muted));
+    font-size: 11px;
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.v4-meta-loc-coords:empty { display: none; }
+.v4-meta-loc-actions {
+    display: flex;
+    gap: 6px;
     flex-shrink: 0;
 }
+.v4-meta-loc-action {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.v4-meta-loc-action:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(249, 115, 22, 0.4);
+}
+.v4-meta-loc-action:active { transform: scale(0.96); }
+/* Inline location editor — slides in below the location row. */
+.v4-meta-loc-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 0 4px;
+    border-top: 1px dashed var(--border, rgba(255,255,255,0.08));
+}
+.v4-meta-loc-edit[hidden] { display: none; }
+.v4-meta-loc-input {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--surface2, #131c2c);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+}
+.v4-meta-loc-input:focus {
+    outline: 0;
+    border-color: rgba(249, 115, 22, 0.6);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+}
+.v4-meta-loc-edit-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+.v4-meta-loc-cancel,
+.v4-meta-loc-save {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 0;
+}
+.v4-meta-loc-cancel {
+    background: transparent;
+    color: var(--muted);
+}
+.v4-meta-loc-cancel:hover { color: var(--text); }
+.v4-meta-loc-save {
+    background: linear-gradient(135deg, var(--accent, #f97316), #ff7a00);
+    color: #1f1300;
+}
+.v4-meta-loc-save:hover { filter: brightness(1.05); }
+/* Time row */
+.v4-meta-time-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border, rgba(255,255,255,0.08));
+}
+.v4-meta-time-icon {
+    color: var(--brand, #ffae00);
+    font-size: 14px;
+    flex-shrink: 0;
+}
+.v4-meta-time-text {
+    color: var(--text-mute, var(--muted));
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+/* Phase 25.8 — legacy v4-meta-row + v4-meta-pill kept as a hidden
+   shim so any older code paths that still query the selectors
+   don't throw. New code uses .v4-meta-card above. */
+.v4-meta-row { display: none; }
 
 .v4-camera-hero {
     /* Pre-Delta-C single camera hero. Replaced by .v4-cap-grid below.
@@ -5728,18 +5841,142 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
    strip. Replaces the single camera-hero. */
 .v4-cap-title {
     font-family: var(--heading, 'Outfit', sans-serif);
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 800;
     line-height: 1.2;
     letter-spacing: -0.01em;
     color: var(--text);
-    margin: 8px 0 4px;
+    margin: 4px 0 10px;
 }
 .v4-cap-lede {
+    /* Phase 25.8 — lede removed in the redesign (sections carry their
+       own sub-labels). Kept as a 0-height shim in case other code
+       paths reference it. */
+    display: none;
+}
+
+/* Phase 25.8 (May 2026) — 3 stacked capture sections. Replaces the
+   old 3-tile grid + drawer-on-tap pattern. Each section is a
+   labelled card with its action surface always visible: tap a
+   button (Photo), tap to record (Voice), or just type (Text).
+   No hidden state; no auto-advance; works for low-literacy
+   reporters because every interaction is a labelled button. */
+.v4-cap-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.v4-cap-section {
+    background: var(--surface, #0f1622);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 14px;
+    overflow: hidden;
+}
+.v4-cap-section-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+}
+.v4-cap-section-icon {
+    font-size: 18px;
+    line-height: 1;
+}
+.v4-cap-section-title {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.v4-cap-section-label {
+    font-family: var(--heading, 'Outfit', sans-serif);
     font-size: 13px;
-    line-height: 1.5;
-    color: var(--text-dim, var(--muted));
-    margin: 0 0 12px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.v4-cap-section-sub {
+    font-size: 11px;
+    color: var(--text-mute, var(--muted));
+    line-height: 1.3;
+    margin-top: 1px;
+}
+.v4-cap-section-count,
+.v4-cap-section-status {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-mute, var(--muted));
+    font-variant-numeric: tabular-nums;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 999px;
+    padding: 3px 9px;
+    flex-shrink: 0;
+}
+.v4-cap-section-status:empty {
+    display: none;
+}
+.v4-cap-section-status.is-captured {
+    background: rgba(34, 197, 94, 0.16);
+    color: #86efac;
+    border: 1px solid rgba(34, 197, 94, 0.35);
+}
+.v4-cap-section-body {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Photo section — two action buttons (Camera, Browse) plus the
+   thumb strip (rendered by v4-flow.js's _renderThumbs). */
+.v4-cap-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.v4-cap-actions[hidden] { display: none; }
+.v4-cap-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+.v4-cap-action:active { transform: scale(0.98); }
+.v4-cap-action i { font-size: 14px; }
+.v4-cap-action-primary {
+    background: linear-gradient(135deg, var(--accent, #f97316), #ff7a00);
+    color: #1f1300;
+    border-color: transparent;
+}
+.v4-cap-action-primary:hover { filter: brightness(1.05); }
+.v4-cap-action-secondary {
+    background: var(--surface2, #131c2c);
+    color: var(--text);
+}
+.v4-cap-action-secondary:hover {
+    border-color: rgba(249, 115, 22, 0.4);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* Phase 25.8 — legacy v4-cap-grid + chip strip + drawers are kept
+   as hidden DOM shims so v4-flow.js's handlers don't throw, but
+   they're never displayed. The new sections above are the real UI. */
+.v4-cap-grid,
+.v4-cap-strip,
+.v4-cap-voice-drawer,
+.v4-cap-text-drawer {
+    display: none !important;
 }
 /* Captured strip — green chips showing what's already added. Sits
    above the modality grid so users see additive progress. */

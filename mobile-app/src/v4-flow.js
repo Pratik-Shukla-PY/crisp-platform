@@ -204,6 +204,81 @@
 
         if (!cameraInput || !heroBtn) return;
 
+        // Phase 25.8 (May 2026) — wire the new meta-card location editor.
+        // The pen button reveals an inline text input where the user can
+        // type a place name or landmark (for cases where GPS is broken,
+        // they're indoors, or the geocode returned the wrong area). On
+        // Save we write to state.userLocationName + state.locationName
+        // (the same shared fields the v3 path uses), repaint the label,
+        // and hide the editor. Cancel just hides without writing.
+        const locEditBtn = document.getElementById('btn-v4-loc-edit');
+        const locEditWrap = document.getElementById('v4-meta-loc-edit');
+        const locEditInput = document.getElementById('v4-meta-loc-input');
+        const locEditCancelBtn = document.getElementById('btn-v4-loc-cancel');
+        const locEditSaveBtn = document.getElementById('btn-v4-loc-save');
+        function _openLocEdit() {
+            if (!locEditWrap || !locEditInput) return;
+            const s = _getState();
+            locEditInput.value = s.userLocationName || s.locationName || '';
+            locEditWrap.removeAttribute('hidden');
+            setTimeout(() => locEditInput.focus(), 30);
+        }
+        function _closeLocEdit() {
+            if (locEditWrap) locEditWrap.setAttribute('hidden', '');
+        }
+        function _saveLocEdit() {
+            if (!locEditInput) return;
+            const name = locEditInput.value.trim();
+            if (name) {
+                _setState({
+                    userLocationName: name,
+                    locationName: name,
+                });
+                _paintV4LocationPills();
+            }
+            _closeLocEdit();
+        }
+        if (locEditBtn) locEditBtn.addEventListener('click', _openLocEdit);
+        if (locEditCancelBtn) locEditCancelBtn.addEventListener('click', _closeLocEdit);
+        if (locEditSaveBtn) locEditSaveBtn.addEventListener('click', _saveLocEdit);
+        if (locEditInput) {
+            locEditInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); _saveLocEdit(); }
+                else if (e.key === 'Escape') { e.preventDefault(); _closeLocEdit(); }
+            });
+        }
+
+        // Phase 25.8 — section status badges (Photo n/5 count + Voice /
+        // Text "Captured" pills). Driven by _refreshCapStrip's existing
+        // call sites; this just adds a paint of the new per-section
+        // elements alongside the now-hidden legacy chip strip.
+        function _refreshSectionBadges() {
+            const s = window.state || {};
+            const photos = (s.v4Photos && s.v4Photos.length) || (s.photoDataUrl ? 1 : 0);
+            const audioOk = !!(s.audioBlob && s.audioBlob.size > 0)
+                || !!(s.transcript && s.transcript.trim().length > 4);
+            const anyText = !!(s.description && s.description.trim().length > 0);
+            const photoCount = document.getElementById('v4-cap-section-photo-count');
+            if (photoCount) {
+                photoCount.textContent = `${photos}/${V4_MAX_PHOTOS}`;
+                photoCount.classList.toggle('is-captured', photos > 0);
+            }
+            const voiceStatus = document.getElementById('v4-cap-section-voice-status');
+            if (voiceStatus) {
+                const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
+                voiceStatus.textContent = audioOk ? (_t('v4_cap_added') || 'Added') : '';
+                voiceStatus.classList.toggle('is-captured', audioOk);
+            }
+            const textStatus = document.getElementById('v4-cap-section-text-status');
+            if (textStatus) {
+                const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
+                textStatus.textContent = anyText ? (_t('v4_cap_added') || 'Added') : '';
+                textStatus.classList.toggle('is-captured', anyText);
+            }
+        }
+        // Expose so _renderThumbs + other mutators can call it.
+        window.__crispV4RefreshSectionBadges = _refreshSectionBadges;
+
         // Phase 25.4 — show a toast (via app.js's helper if available)
         // when the user tries to add a 6th photo. Stays user-visible
         // without blocking the rest of the capture flow.
@@ -708,6 +783,13 @@
                 nextBtn.disabled = !anyShown;
                 nextBtn.classList.toggle('is-ready', anyShown);
             }
+            // Phase 25.8 — also paint the new per-section status badges
+            // (photo n/5, voice / text "Added"). Keeps the legacy chip
+            // strip and the new section badges in sync since both react
+            // to the same state changes.
+            if (typeof window.__crispV4RefreshSectionBadges === 'function') {
+                try { window.__crispV4RefreshSectionBadges(); } catch (_) {}
+            }
         }
 
         // Chip-x: clear the matching modality + refresh.
@@ -812,12 +894,81 @@
     }
     function _paintV4LocationPills() {
         const s = _getState();
-        const label = _formatLocationLabel(s.location, s.locationName);
+        // Phase 25.8 — prefer the user-typed name if present, then the
+        // reverse-geocoded name, then the formatted coords. The coords
+        // row in the new meta card is filled independently when GPS
+        // resolves so the user can still see lat/lng even after they've
+        // typed a custom landmark.
+        const userName = s.userLocationName || '';
+        const label = userName || _formatLocationLabel(s.location, s.locationName);
         const captureText = document.getElementById('v4-meta-location-text');
         const reviewText = document.getElementById('v4-row-location-text');
         if (captureText) captureText.textContent = label;
         if (reviewText) reviewText.textContent = label;
+        // Coords sub-line. Hidden when no GPS yet, shown as "12.9716°N,
+        // 77.5946°E · ±20m" otherwise.
+        const coordsEl = document.getElementById('v4-meta-loc-coords');
+        if (coordsEl) {
+            const loc = s.location;
+            if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lng)) {
+                const acc = Math.max(0, Math.round(loc.acc || 0));
+                coordsEl.textContent =
+                    `${loc.lat.toFixed(4)}°, ${loc.lng.toFixed(4)}°` +
+                    (acc > 0 ? ` · ±${acc} m` : '');
+            } else {
+                coordsEl.textContent = '';
+            }
+        }
     }
+
+    // Phase 25.8 (May 2026) — actual timestamp + timezone in the meta
+    // card. The user reported "Just now" was unhelpful — for crisis
+    // forensics they want to see the literal capture time. Paints
+    //   YYYY-MM-DD HH:MM:SS TZ
+    // on stage-v4-capture entry and refreshes every second while the
+    // user is on that stage so it stays current. Interval cleared
+    // when the user navigates away.
+    let _v4CapTimeInterval = null;
+    function _paintCaptureTimestamp() {
+        const el = document.getElementById('v4-meta-time-text');
+        if (!el) return;
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const datePart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        const timePart = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        // Timezone abbreviation via Intl (e.g. "IST", "PDT"). Falls
+        // back to GMT±NN if the browser doesn't supply a short name.
+        let tz = '';
+        try {
+            const parts = new Intl.DateTimeFormat(undefined, {
+                timeZoneName: 'short',
+            }).formatToParts(now);
+            tz = (parts.find((p) => p.type === 'timeZoneName') || {}).value || '';
+        } catch (_) {}
+        if (!tz) {
+            const offMin = -now.getTimezoneOffset();
+            const sign = offMin >= 0 ? '+' : '-';
+            const abs = Math.abs(offMin);
+            tz = `GMT${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+        }
+        el.textContent = `${datePart} ${timePart} ${tz}`;
+    }
+    function _startCaptureTimer() {
+        _paintCaptureTimestamp();
+        if (_v4CapTimeInterval) clearInterval(_v4CapTimeInterval);
+        _v4CapTimeInterval = setInterval(_paintCaptureTimestamp, 1000);
+    }
+    function _stopCaptureTimer() {
+        if (_v4CapTimeInterval) {
+            clearInterval(_v4CapTimeInterval);
+            _v4CapTimeInterval = null;
+        }
+    }
+    document.addEventListener('stage-entered', (e) => {
+        const stage = typeof e.detail === 'string' ? e.detail : (e.detail?.stage || '');
+        if (stage === 'stage-v4-capture') _startCaptureTimer();
+        else _stopCaptureTimer();
+    });
     // Re-paint whenever state.locationName resolves. v3's
     // _paintLocationDisplays runs on resolveLocationName completion; we
     // listen for the same gps-ready / location-resolved hooks plus

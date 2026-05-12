@@ -515,7 +515,7 @@
                 <span class="home-utility-dot" aria-hidden="true">·</span>
                 <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
                 <span class="home-utility-dot" aria-hidden="true">·</span>
-                <span class="home-utility-version" id="home-utility-version">v0.7.31</span>
+                <span class="home-utility-version" id="home-utility-version">v0.7.32</span>
             </nav>
 
             <!-- Legacy retained DOM — kept hidden so any
@@ -566,96 +566,144 @@
         </header>
 
         <div class="v4-body">
-            <!-- Auto-detected location + time pills (passive, no taps required) -->
-            <div class="v4-meta-row">
-                <div class="v4-meta-pill" id="v4-meta-location">
-                    <i class="fa-solid fa-location-dot"></i>
-                    <span class="v4-meta-text" id="v4-meta-location-text"
-                          data-i18n="v4_locating">Locating…</span>
-                    <button class="v4-meta-retry" id="btn-v4-retry-gps"
-                            type="button" aria-label="Retry GPS">
-                        <i class="fa-solid fa-rotate"></i>
-                    </button>
+            <!-- Phase 25.8 (May 2026) — bigger location + time card. Replaces
+                 the compact pills row. Location is editable so users with
+                 broken GPS can type a place name or landmark; time shows the
+                 actual capture timestamp with timezone, not "Just now". -->
+            <div class="v4-meta-card" id="v4-meta-card">
+                <div class="v4-meta-loc-row">
+                    <i class="fa-solid fa-location-dot v4-meta-loc-icon" aria-hidden="true"></i>
+                    <div class="v4-meta-loc-text">
+                        <div class="v4-meta-loc-name" id="v4-meta-location-text"
+                             data-i18n="v4_locating">Locating…</div>
+                        <div class="v4-meta-loc-coords" id="v4-meta-loc-coords" aria-hidden="true"></div>
+                    </div>
+                    <div class="v4-meta-loc-actions">
+                        <button class="v4-meta-loc-action" id="btn-v4-retry-gps"
+                                type="button" aria-label="Refresh GPS"
+                                title="Refresh GPS">
+                            <i class="fa-solid fa-rotate"></i>
+                        </button>
+                        <button class="v4-meta-loc-action" id="btn-v4-loc-edit"
+                                type="button" aria-label="Change location"
+                                title="Change location">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                    </div>
                 </div>
-                <div class="v4-meta-pill v4-meta-pill-time">
-                    <i class="fa-regular fa-clock"></i>
-                    <span class="v4-meta-text" id="v4-meta-time-text"
-                          data-i18n="v4_just_now">Just now</span>
+                <!-- Inline location edit (hidden until user taps the pen). -->
+                <div class="v4-meta-loc-edit" id="v4-meta-loc-edit" hidden>
+                    <input type="text" id="v4-meta-loc-input"
+                           class="v4-meta-loc-input"
+                           autocomplete="off"
+                           placeholder="Type place name or landmark"
+                           data-i18n-placeholder="placeholder_landmark_example">
+                    <div class="v4-meta-loc-edit-actions">
+                        <button class="v4-meta-loc-cancel" id="btn-v4-loc-cancel"
+                                type="button" data-i18n="cancel">Cancel</button>
+                        <button class="v4-meta-loc-save" id="btn-v4-loc-save"
+                                type="button" data-i18n="undp_save">Save</button>
+                    </div>
+                </div>
+                <div class="v4-meta-time-row">
+                    <i class="fa-regular fa-clock v4-meta-time-icon" aria-hidden="true"></i>
+                    <span class="v4-meta-time-text" id="v4-meta-time-text">—</span>
                 </div>
             </div>
 
-            <!-- Delta-C (May 2026) — proposal §6.2 "Capture — additive
-                 multi-modal". Hero copy reframes the page as a permission
-                 to share whatever the user has, not a forced photo. -->
+            <!-- Title kept; subtitle removed in the redesign — three labelled
+                 sections below already make the multi-modal intent obvious. -->
             <h1 class="v4-cap-title" data-i18n="v4_cap_show_what_you_see">Show what you see.</h1>
-            <p class="v4-cap-lede" data-i18n="v4_cap_lede">
-                A photo, a voice note, a few words — or all three. Any one is enough.
-            </p>
 
-            <!-- Captured strip — green chips showing what's already added.
-                 Live-rerendered by v4-flow.js _refreshCapturedStrip().
-                 Hidden until at least one modality is captured. -->
+            <!-- Legacy captured-strip kept in DOM (hidden via CSS) so
+                 _refreshCapStrip() in v4-flow.js doesn't throw. New per-
+                 section status badges below take over the UI role. -->
             <div class="v4-cap-strip" id="v4-cap-strip" hidden aria-live="polite">
                 <span class="v4-cap-chip" id="v4-cap-chip-photo" hidden>
-                    <span class="v4-cap-chip-icon" aria-hidden="true">📷</span>
                     <span class="v4-cap-chip-label" id="v4-cap-chip-photo-label">1 photo</span>
                     <button class="v4-cap-chip-x" id="v4-cap-chip-photo-x" type="button" aria-label="Remove photo">×</button>
                 </span>
                 <span class="v4-cap-chip" id="v4-cap-chip-voice" hidden>
-                    <span class="v4-cap-chip-icon" aria-hidden="true">🎙</span>
                     <span class="v4-cap-chip-label" id="v4-cap-chip-voice-label">Voice note</span>
                     <button class="v4-cap-chip-x" id="v4-cap-chip-voice-x" type="button" aria-label="Remove voice">×</button>
                 </span>
                 <span class="v4-cap-chip" id="v4-cap-chip-text" hidden>
-                    <span class="v4-cap-chip-icon" aria-hidden="true">✏️</span>
                     <span class="v4-cap-chip-label" id="v4-cap-chip-text-label">Note added</span>
                     <button class="v4-cap-chip-x" id="v4-cap-chip-text-x" type="button" aria-label="Remove text">×</button>
                 </span>
             </div>
 
-            <!-- 3-equal modality grid — Photo · Voice · Type. UNDP rubric Q3
-                 (additive capture). Each tile is a button: tapping Photo
-                 opens the OS camera, Voice toggles the in-page recorder,
-                 Type slides in a textarea drawer. Equal real estate so
-                 users without a camera (desktop) or without a microphone
-                 are never funnelled into a single mode. -->
-            <div class="v4-cap-grid">
-                <button class="v4-cap-tile v4-cap-tile-photo" id="btn-v4-camera" type="button">
-                    <span class="v4-cap-tile-icon" aria-hidden="true">📷</span>
-                    <span class="v4-cap-tile-label" data-i18n="v4_cap_photo">Photo</span>
-                    <span class="v4-cap-tile-sub" data-i18n="v4_cap_photo_sub">Take or upload</span>
-                </button>
-                <button class="v4-cap-tile v4-cap-tile-voice" id="btn-v4-cap-voice" type="button">
-                    <span class="v4-cap-tile-icon" aria-hidden="true">🎙</span>
-                    <span class="v4-cap-tile-label" data-i18n="v4_cap_voice">Voice</span>
-                    <span class="v4-cap-tile-sub" data-i18n="v4_cap_voice_sub">Speak in your language</span>
-                </button>
-                <button class="v4-cap-tile v4-cap-tile-text" id="btn-v4-cap-text" type="button">
-                    <span class="v4-cap-tile-icon" aria-hidden="true">✏️</span>
-                    <span class="v4-cap-tile-label" data-i18n="v4_cap_text">Type</span>
-                    <span class="v4-cap-tile-sub" data-i18n="v4_cap_text_sub">A quick note</span>
-                </button>
-            </div>
+            <!-- Phase 25.8 — 3 stacked sections (Photo / Voice / Text). Each
+                 occupies its own card and is always visible (no toggling
+                 drawers). User can tap into any one in any order. Designed
+                 for low-literacy reporters: every interaction is a labelled
+                 button with an icon, no hidden state. -->
+            <div class="v4-cap-sections">
+                <!-- ── Photo section ──────────────────────────────────── -->
+                <section class="v4-cap-section v4-cap-section-photo">
+                    <header class="v4-cap-section-head">
+                        <span class="v4-cap-section-icon" aria-hidden="true">📷</span>
+                        <div class="v4-cap-section-title">
+                            <span class="v4-cap-section-label" data-i18n="v4_cap_photo">Photo</span>
+                            <span class="v4-cap-section-sub" data-i18n="v4_cap_photo_sub">Take or upload</span>
+                        </div>
+                        <span class="v4-cap-section-count" id="v4-cap-section-photo-count">0/5</span>
+                    </header>
+                    <div class="v4-cap-section-body">
+                        <div class="v4-cap-actions" id="v4-cap-photo-actions">
+                            <button class="v4-cap-action v4-cap-action-primary" id="btn-v4-camera" type="button">
+                                <i class="fa-solid fa-camera"></i>
+                                <span data-i18n="chooser_camera">Camera</span>
+                            </button>
+                            <button class="v4-cap-action v4-cap-action-secondary" id="btn-v4-browse" type="button">
+                                <i class="fa-solid fa-image"></i>
+                                <span data-i18n="chooser_gallery">Browse files</span>
+                            </button>
+                        </div>
+                        <!-- Thumbnail strip — rendered by v4-flow.js _renderThumbs.
+                             Empty until first photo lands. -->
+                        <div class="v4-thumbs" id="v4-thumbs" style="display:none;"></div>
+                    </div>
+                </section>
 
-            <!-- Voice / Text drawers — slide in when the corresponding tile
-                 is tapped. Hidden by default; the recorder + textarea
-                 share the same MediaRecorder + Web Speech API plumbing
-                 that the review-stage drawer used pre-Delta-C. -->
-            <div class="v4-cap-voice-drawer" id="v4-cap-voice-drawer" hidden>
-                <button class="v4-cap-mic" id="btn-v4-cap-mic" type="button">
-                    <i class="fa-solid fa-microphone" aria-hidden="true"></i>
-                    <span data-i18n="v4_record">Record voice</span>
-                </button>
-                <p class="v4-cap-voice-hint" data-i18n="v4_cap_voice_hint">
-                    Tap to start. Tap again to stop.
-                </p>
-            </div>
-            <div class="v4-cap-text-drawer" id="v4-cap-text-drawer" hidden>
-                <textarea id="v4-cap-text-area" rows="3"
-                          class="v4-cap-text-area"
-                          data-i18n-placeholder="v4_cap_text_placeholder"
-                          placeholder="Describe what happened in a few words..."
-                          data-i18n-placeholder="placeholder_describe_short"></textarea>
+                <!-- ── Voice section ──────────────────────────────────── -->
+                <section class="v4-cap-section v4-cap-section-voice">
+                    <header class="v4-cap-section-head">
+                        <span class="v4-cap-section-icon" aria-hidden="true">🎙</span>
+                        <div class="v4-cap-section-title">
+                            <span class="v4-cap-section-label" data-i18n="v4_cap_voice">Voice</span>
+                            <span class="v4-cap-section-sub" data-i18n="v4_cap_voice_sub">Speak in your language</span>
+                        </div>
+                        <span class="v4-cap-section-status" id="v4-cap-section-voice-status"></span>
+                    </header>
+                    <div class="v4-cap-section-body">
+                        <button class="v4-cap-mic" id="btn-v4-cap-mic" type="button">
+                            <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+                            <span data-i18n="v4_record">Record voice</span>
+                        </button>
+                        <p class="v4-cap-voice-hint" data-i18n="v4_cap_voice_hint">
+                            Tap to start. Tap again to stop.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- ── Text section ───────────────────────────────────── -->
+                <section class="v4-cap-section v4-cap-section-text">
+                    <header class="v4-cap-section-head">
+                        <span class="v4-cap-section-icon" aria-hidden="true">✏️</span>
+                        <div class="v4-cap-section-title">
+                            <span class="v4-cap-section-label" data-i18n="v4_cap_text">Text</span>
+                            <span class="v4-cap-section-sub" data-i18n="v4_cap_text_sub">A quick note</span>
+                        </div>
+                        <span class="v4-cap-section-status" id="v4-cap-section-text-status"></span>
+                    </header>
+                    <div class="v4-cap-section-body">
+                        <textarea id="v4-cap-text-area" rows="3"
+                                  class="v4-cap-text-area"
+                                  placeholder="Describe what happened in a few words..."
+                                  data-i18n-placeholder="placeholder_describe_short"></textarea>
+                    </div>
+                </section>
             </div>
 
             <!-- Hidden native file inputs — same pattern app.js's existing
@@ -663,17 +711,13 @@
             <input type="file" id="v4-file-camera" accept="image/*" capture="environment" hidden>
             <input type="file" id="v4-file-browse" accept="image/*" multiple hidden>
 
-            <!-- Thumbnail strip — populated after first capture. Inline
-                 "+ Add another" chip allows multi-photo without leaving
-                 the page. -->
-            <div class="v4-thumbs" id="v4-thumbs" style="display:none;"></div>
-
-            <!-- Pre-Delta-C secondary fallbacks (Browse files / Voice only)
-                 are folded into the new tile grid. Buttons are kept in the
-                 DOM as hidden fallbacks so existing keyboard / screen-reader
-                 shortcuts still work and v4-flow.js's wiring doesn't break. -->
-            <button id="btn-v4-browse" type="button" hidden></button>
+            <!-- Legacy hidden fallbacks so existing v4-flow.js handlers
+                 attached to these IDs continue to wire without throws. -->
+            <button id="btn-v4-cap-voice" type="button" hidden></button>
+            <button id="btn-v4-cap-text" type="button" hidden></button>
             <button id="btn-v4-skip-photo" type="button" hidden></button>
+            <div class="v4-cap-voice-drawer" id="v4-cap-voice-drawer" hidden></div>
+            <div class="v4-cap-text-drawer" id="v4-cap-text-drawer" hidden></div>
         </div>
 
         <footer class="v4-footer">
