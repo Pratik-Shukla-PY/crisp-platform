@@ -288,32 +288,78 @@
                 const _preCount = (_getState().v4Photos || []).length;
                 window.openCameraModal();
                 const _modalCloseHandler = () => {
+                    // Phase 25.7 (May 2026) — the camera modal supports
+                    // MULTI-SNAP: first snap → state.photoDataUrl, every
+                    // subsequent snap → state.extraPhotos.push(...).
+                    // The previous close handler only read photoDataUrl,
+                    // so users who took 5+ snaps inside the modal saw
+                    // only ONE thumbnail in the v4 strip after closing
+                    // (user-reported bug with screenshot showing 11
+                    // thumbs in the modal gallery → 1/5 in v4).
+                    // Now we pull the primary + each extra, dedupe, and
+                    // hard-cap at V4_MAX_PHOTOS.
+                    if (!_getState().v4Photos) _setState({ v4Photos: [] });
+                    const photosNow = _getState().v4Photos;
                     const dataUrl = _getState().photoDataUrl;
+                    const extras = _getState().extraPhotos || [];
+
+                    // Collect candidates in capture order: primary first
+                    // (if it actually changed since modal open), then
+                    // each extra in the order the user shot them.
+                    const candidates = [];
                     if (dataUrl && dataUrl !== _preDataUrl) {
-                        if (!_getState().v4Photos) _setState({ v4Photos: [] });
-                        const photosNow = _getState().v4Photos;
-                        // Cap recheck — between modal open and snap the
-                        // user might have hit the cap via another path.
-                        if (photosNow.length >= V4_MAX_PHOTOS) {
-                            _toastCapHit();
-                        } else if (!photosNow.find((p) => p.url === dataUrl)) {
-                            photosNow.push({
-                                blob: _getState().photoBlob,
-                                url: dataUrl,
+                        candidates.push({
+                            blob: _getState().photoBlob,
+                            url: dataUrl,
+                            ts: Date.now(),
+                        });
+                    }
+                    for (const ex of extras) {
+                        if (ex && ex.dataUrl) {
+                            candidates.push({
+                                blob: ex.blob || null,
+                                url: ex.dataUrl,
                                 ts: Date.now(),
                             });
                         }
+                    }
+
+                    // Push each candidate, respecting the V4_MAX_PHOTOS
+                    // hard cap and de-duping by data URL.
+                    let added = 0;
+                    let capHit = false;
+                    for (const cand of candidates) {
+                        if (photosNow.length >= V4_MAX_PHOTOS) {
+                            capHit = true;
+                            break;
+                        }
+                        if (!photosNow.find((p) => p.url === cand.url)) {
+                            photosNow.push(cand);
+                            added++;
+                        }
+                    }
+
+                    // Phase 25.7 — after we copy the modal's snaps into
+                    // v4Photos, CLEAR state.extraPhotos so the v3-shape
+                    // accumulator doesn't double-count on the next
+                    // modal session. (We keep state.photoDataUrl + blob
+                    // because submitReport's `hasPhoto` gate reads them
+                    // and the v3 path still relies on the primary slot.)
+                    _setState({ extraPhotos: [] });
+
+                    if (added > 0) {
                         _renderThumbs();
                         nextBtn.disabled = false;
                         nextBtn.classList.add('is-ready');
-                        // AI prefill call retained but no-ops while
-                        // AI_PREFILL_ENABLED is false (top of file).
-                        _maybeFireAiPrefill(_getState().photoBlob || null).catch(() => {});
-                        // Phase 25.6 — auto-advance REMOVED. User reported
-                        // the abrupt stage-switch made it impossible to
-                        // add more photos via the `+` button. They now
-                        // tap Continue manually.
                     }
+                    if (capHit && candidates.length > added) {
+                        _toastCapHit();
+                    }
+                    // AI prefill call retained but no-ops while
+                    // AI_PREFILL_ENABLED is false (top of file).
+                    _maybeFireAiPrefill(_getState().photoBlob || null).catch(() => {});
+                    // Phase 25.6 — auto-advance REMOVED. User taps
+                    // Continue manually.
                     document.removeEventListener('camera-modal-closed', _modalCloseHandler);
                 };
                 document.addEventListener('camera-modal-closed', _modalCloseHandler);

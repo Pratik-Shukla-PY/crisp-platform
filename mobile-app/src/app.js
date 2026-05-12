@@ -4900,6 +4900,24 @@ function setupCameraModal() {
         const canvas = document.getElementById('camera-canvas');
         if (!video || !video.videoWidth || !state.cameraStream) return; // stream not ready
 
+        // Phase 25.7 (May 2026) — pre-flight cap check.
+        // Previously the cap check (_canAddMorePhotos) ran AFTER the
+        // gallery thumb was already added to the DOM, so users tapping
+        // the shutter past the cap saw 11+ thumbs in the modal even
+        // though state.extraPhotos only retained 4. Now we check
+        // upfront: if a snap would be the 6th (1 primary + 5 extras
+        // attempted), refuse the entire snap, including the gallery
+        // thumb. The toast in _canAddMorePhotos already informs the
+        // user.
+        const _primaryCount = state.photoDataUrl ? 1 : 0;
+        const _extrasCount = (state.extraPhotos || []).length;
+        if (_primaryCount + _extrasCount >= MAX_PHOTOS_TOTAL) {
+            // Show the toast even on a refused snap so the user
+            // understands why nothing happened.
+            _canAddMorePhotos();
+            return;
+        }
+
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
