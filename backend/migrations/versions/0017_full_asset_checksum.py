@@ -37,6 +37,18 @@ def upgrade() -> None:
     # djb2 output is a 32-bit value rendered as 8-char hex; 16 bytes is
     # generous (room for a future bump to djb2_64 or sha256-truncated
     # without another migration).
+    #
+    # Idempotency guard (May 2026 hotfix) — the docstring claimed the
+    # migration was a no-op on re-run, but op.add_column doesn't have
+    # an IF NOT EXISTS semantic. tests/test_migrations.py broke
+    # cross-test because pytest reuses the same Postgres DB and the
+    # column persists between runs. Pattern borrowed from
+    # 0013_push_subscriptions.py — inspect the live schema first.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_cols = {c["name"] for c in inspector.get_columns("media")}
+    if "full_asset_checksum" in existing_cols:
+        return
     op.add_column(
         "media",
         sa.Column("full_asset_checksum", sa.String(length=16), nullable=True),
@@ -44,4 +56,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Same idempotent shape on the down path — drop only if present.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_cols = {c["name"] for c in inspector.get_columns("media")}
+    if "full_asset_checksum" not in existing_cols:
+        return
     op.drop_column("media", "full_asset_checksum")
