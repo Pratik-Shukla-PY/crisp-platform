@@ -7216,37 +7216,45 @@ async function _uploadVariantTier(item, reportId, unit) {
     // `_pwaTier` as a side effect.
     await adaptTierViaProbe();
 
-    // variant cap by network tier. At very-slow links (≤ 80
-    // Kbps) the HIGH-resolution variant takes 60+ minutes to upload at
-    // 1 KB chunks, holding the queue badge open long after the report
-    // (with a SMALL thumbnail) has already shown up on the dashboard.
-    // UNDP brief explicitly mandates "operate both online and offline";
-    // at 2 Kbps the right tradeoff is "submit fast, low-res" rather than
-    // "wait an hour for full-res." We mark MEDIUM/LARGE complete locally
-    // (so the queue clears) but DON'T transmit them — the report is
-    // visible on the dashboard with SMALL the moment its first chunk
-    // lands. If the operator regains bandwidth and re-captures, that
-    // session uploads at the better tier normally.
+    // Defer-on-slow-bandwidth (was: skip-and-mark-complete).
     //
-    // Cap matrix (variants attempted vs. tier picked by probe):
+    // On weak links, MEDIUM/LARGE chunks would saturate the connection
+    // and block SMALL from landing the report on the dashboard quickly.
+    // The previous strategy was to mark those tiers `complete=true`
+    // without uploading — that "cleared the queue" but permanently
+    // orphaned the higher-fidelity bytes, leaving the dashboard with
+    // SMALL forever.
     //
-    //   FAST       → SMALL + MEDIUM + LARGE   (all 3, ~5 s total at 8 Mbps)
-    //   MEDIUM     → SMALL + MEDIUM + LARGE   (all 3, ~30 s total at 1 Mbps)
-    //   SLOW       → SMALL + MEDIUM only      (LARGE skipped — saves ~10 min)
-    //   VERY_SLOW  → SMALL only               (M+L skipped — saves ~85 min)
+    // New behaviour: defer the tier instead. It stays in the queue with
+    // `variant.deferred=true`; the retry loop re-checks every cycle and
+    // attempts the tier as soon as the measured bandwidth tier upgrades.
+    // The report still shows up on the dashboard immediately once SMALL
+    // lands; LARGE arrives in the background whenever the device sees
+    // FAST/MEDIUM bandwidth — even hours later.
+    //
+    // Defer matrix:
+    //   FAST       → SMALL + MEDIUM + LARGE   (all 3 transmit immediately)
+    //   MEDIUM     → SMALL + MEDIUM + LARGE   (all 3 transmit immediately)
+    //   SLOW       → SMALL + MEDIUM transmit; LARGE deferred
+    //   VERY_SLOW  → SMALL transmits; MEDIUM + LARGE deferred
     if (tier !== 'small') {
-        if (_pwaTier === 'VERY_SLOW') {
-            console.log(`[Upload] ${label}: skipped — tier=VERY_SLOW caps at SMALL only`);
-            variant.complete = true;
+        const shouldDefer = (_pwaTier === 'VERY_SLOW')
+            || (_pwaTier === 'SLOW' && tier === 'large');
+        if (shouldDefer) {
+            console.log(`[Upload] ${label}: deferred — netTier=${_pwaTier}, awaiting bandwidth upgrade`);
+            variant.deferred = true;
+            variant.deferredReason = 'bandwidth-tier';
+            variant.deferredAt = Date.now();
+            // Do NOT set variant.complete = true. The retry loop must
+            // pick this back up on the next pass after a tier upgrade.
             try { await enqueueReport(item); } catch (_) {}
             return;
         }
-        if (_pwaTier === 'SLOW' && tier === 'large') {
-            console.log(`[Upload] ${label}: skipped — tier=SLOW caps at MEDIUM`);
-            variant.complete = true;
-            try { await enqueueReport(item); } catch (_) {}
-            return;
-        }
+    }
+    // Clear any prior deferral — we're actually uploading this time.
+    if (variant.deferred) {
+        variant.deferred = false;
+        variant.deferredReason = null;
     }
     const netConfig = getPWAAdaptiveConfig();
     const startSeq = variant.chunkProgress || 0;
@@ -7499,10 +7507,19 @@ async function trySendQueuedReport(item) {
                 if (workUnits.length > 0) {
                     for (const unit of workUnits) {
                         if (unit.variant.complete) continue;
+                        // Deferred units are STILL re-attempted on every
+                        // pass — `_uploadVariantTier` re-probes the tier
+                        // and either uploads (if bandwidth has improved)
+                        // or re-defers. The deferred flag is a hint for
+                        // dequeue + UI surfaces, not a permanent skip.
                         await _uploadVariantTier(item, reportId, unit);
                     }
-                    // All variants done ⇒ stage photo complete.
+                    // `stages.photo` only flips true when EVERY variant has
+                    // landed at the backend (complete, not just non-deferred).
+                    // Deferred variants keep the report in the queue so the
+                    // retry loop can finish delivery once bandwidth allows.
                     const allComplete = workUnits.every(u => u.variant.complete);
+                    const anyDeferred = workUnits.some(u => u.variant.deferred);
                     if (allComplete) {
                         item.stages.photo = true;
                         // Clear variant payloads to free memory on retries/restart.
@@ -7521,6 +7538,15 @@ async function trySendQueuedReport(item) {
                         item.extraPhotos = [];
                         try { await enqueueReport(item); } catch (_) {}
                         console.log('Photo + extras fully delivered (all variants)');
+                    } else if (anyDeferred) {
+                        // Persist the deferred state so a page reload picks
+                        // it back up. Don't touch stages.photo — the report
+                        // stays "photo pending" until the deferred tiers land.
+                        try { await enqueueReport(item); } catch (_) {}
+                        const deferredLabels = workUnits
+                            .filter(u => u.variant.deferred)
+                            .map(u => u.label || u.tier);
+                        console.log(`Photo upload partial: deferred tiers awaiting bandwidth — ${deferredLabels.join(', ')}`);
                     }
                 } else if (item.photo) {
                     // Legacy single-photo path (no variants on this queue item).
