@@ -6568,6 +6568,31 @@ function getCurrentPWATier() { return _pwaTier; }
 
 function getPWAAdaptiveConfig() { return PWA_NETWORK_TIERS[_pwaTier]; }
 
+// May 2026 — testability hook. The top-level `function` declarations
+// above SHOULD bind to window via classic-script semantics, but in
+// practice the e2e harness sometimes can't reach them (suspected: a
+// downstream IIFE or DCE pass). Explicit assignment makes the
+// contract unambiguous + lets Playwright pin the chunk-size /
+// tier-mutation contracts without spelunking through module internals.
+if (typeof window !== 'undefined') {
+    window.getCurrentPWATier    = getCurrentPWATier;
+    window.getPWAAdaptiveConfig = getPWAAdaptiveConfig;
+    window.getMeasuredBandwidth = getMeasuredBandwidth;
+    window.pickTierFromBandwidth = pickTierFromBandwidth;
+    window.adaptTierViaProbe    = adaptTierViaProbe;
+    window.measureUploadBandwidth = measureUploadBandwidth;
+    window.computeChunkTimeout  = computeChunkTimeout;
+    window.detectPWANetworkTier = detectPWANetworkTier;
+    // Test-only setter so the e2e suite can pin tier-specific code paths
+    // without driving a real bandwidth probe (which takes ~2 s + needs
+    // a live backend). Production code never touches this.
+    window.__crispSetPWATier = (tier) => {
+        if (['FAST', 'MEDIUM', 'SLOW', 'VERY_SLOW'].includes(tier)) {
+            _pwaTier = tier;
+        }
+    };
+}
+
 function pwaNetworkDowngrade() {
     const order = ['FAST', 'MEDIUM', 'SLOW', 'VERY_SLOW'];
     const idx = order.indexOf(_pwaTier);
