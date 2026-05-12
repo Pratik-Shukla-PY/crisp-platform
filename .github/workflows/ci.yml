@@ -3,8 +3,28 @@ name: CI
 on:
   push:
     branches: [main, master, develop, "Pratik's"]
+    # Skip CI on changes that can't affect runtime behaviour. Saves
+    # ~3-4 minutes per docs / comment / baseline-only commit.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'LICENSE.*'
+      - 'CRISP-Presentation.html'
+      - '.gitignore'
+      - 'e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/**'
+      - '.github/workflows/visual-baselines.yml'
   pull_request:
     branches: [main, master, develop, "Pratik's"]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'LICENSE.*'
+      - 'CRISP-Presentation.html'
+      - '.gitignore'
+      - 'e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/**'
+      - '.github/workflows/visual-baselines.yml'
 
 permissions:
   contents: read

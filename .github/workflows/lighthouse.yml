@@ -13,8 +13,29 @@ name: Lighthouse QA
 on:
   push:
     branches: [main]
+    # Skip Lighthouse on changes that can't shift the score (docs,
+    # comments, image-baseline-only commits). Saves ~5-6 minutes per
+    # such commit (Extended QA + the Lighthouse audit itself).
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'LICENSE.*'
+      - 'CRISP-Presentation.html'
+      - '.gitignore'
+      - 'e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/**'
+      - '.github/workflows/visual-baselines.yml'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'LICENSE.*'
+      - 'CRISP-Presentation.html'
+      - '.gitignore'
+      - 'e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/**'
+      - '.github/workflows/visual-baselines.yml'
 
 # One run per ref. Force-pushes / new commits cancel the in-flight audit.
 concurrency:
@@ -184,11 +205,26 @@ jobs:
           cache: npm
           cache-dependency-path: e2e/package-lock.json
 
+      # Cache the Playwright browser binaries (~280 MB Chromium + libs).
+      # Saves ~2 min per run on cache hit.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+
       - name: Install Playwright deps + Chromium
         working-directory: e2e
+        env:
+          PLAYWRIGHT_CACHE_HIT: ${{ steps.playwright-cache.outputs.cache-hit }}
         run: |
           npm ci --prefer-offline --no-audit --no-fund
-          npx playwright install --with-deps chromium
+          if [ "$PLAYWRIGHT_CACHE_HIT" = "true" ]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
 
       - name: Boot static server + run extended QA tests
         # Consolidated in ONE step — backgrounded server processes from

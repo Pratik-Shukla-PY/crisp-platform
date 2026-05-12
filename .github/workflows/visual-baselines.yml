@@ -23,6 +23,12 @@ on:
         type: boolean
         default: false
 
+# Cancel an in-flight refresh if the user dispatches again — only the
+# latest baselines should land.
+concurrency:
+  group: visual-baselines
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -41,11 +47,24 @@ jobs:
           cache: npm
           cache-dependency-path: e2e/package-lock.json
 
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+
       - name: Install Playwright + Chromium
         working-directory: e2e
+        env:
+          PLAYWRIGHT_CACHE_HIT: ${{ steps.playwright-cache.outputs.cache-hit }}
         run: |
           npm ci --prefer-offline --no-audit --no-fund
-          npx playwright install --with-deps chromium
+          if [ "$PLAYWRIGHT_CACHE_HIT" = "true" ]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
 
       - name: Boot static server
         run: |

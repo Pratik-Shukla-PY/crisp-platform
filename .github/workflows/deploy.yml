@@ -7,6 +7,20 @@ name: Deploy to Production
 on:
   push:
     branches: [main]
+    # Skip deploy on changes that can't affect what's served to users.
+    # Comment-only / docs-only / image-baseline commits don't need to
+    # rebuild + ship to EC2. Saves ~9-10 Actions minutes per such commit.
+    # Anything that affects runtime (mobile-app/, backend/, scripts/,
+    # workflows/, sw.js, configs) still triggers normally.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'LICENSE.*'
+      - 'CRISP-Presentation.html'
+      - '.gitignore'
+      - 'e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/**'
+      - '.github/workflows/visual-baselines.yml'
   workflow_dispatch:
     inputs:
       branch:
@@ -244,13 +258,29 @@ jobs:
           cache: npm
           cache-dependency-path: e2e/package-lock.json
 
+      # Cache the Playwright browser binaries (~280 MB Chromium + libs).
+      # Saves ~2 min per run on cache hit. Keyed on the lockfile so a
+      # Playwright version bump invalidates correctly.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+
       - name: Install Playwright deps + Chromium
         working-directory: e2e
+        env:
+          PLAYWRIGHT_CACHE_HIT: ${{ steps.playwright-cache.outputs.cache-hit }}
         run: |
           npm ci --prefer-offline --no-audit --no-fund
-          # Chromium-only; we don't need Firefox/Webkit for prod-smoke.
-          # --with-deps installs the OS-level shared libs Playwright needs.
-          npx playwright install --with-deps chromium webkit
+          # On cache hit, install just the system shared libs (fast).
+          # On miss, install the full Chromium + WebKit binaries too.
+          if [ "$PLAYWRIGHT_CACHE_HIT" = "true" ]; then
+            npx playwright install-deps chromium webkit
+          else
+            npx playwright install --with-deps chromium webkit
+          fi
 
       - name: Run prod-smoke against undp.crisplabs.tech
         working-directory: e2e
