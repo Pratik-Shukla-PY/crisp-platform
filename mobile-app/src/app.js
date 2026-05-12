@@ -419,13 +419,21 @@ async function dequeueReport(clientReportId) {
 }
 
 // Reconcile a queue item against the server's tier-status view before
-// deleting the IndexedDB row. Returns `{ ok: bool, missing: [{ variant }] }`.
+// deleting the IndexedDB row. Returns `{ ok, missing, breakdown, totalExpected }`.
 // When ok=true every variant the PWA expected to send is server-side
 // `assembly_status='complete'`. When ok=false the caller should roll
 // stages.photo back to false and clear the missing variants' completion
 // flags so the next retry-loop pass re-uploads them.
+//
+// Phase C.3 (May 2026) — `breakdown` returns `{ LOW, MEDIUM, HIGH }` complete
+// counts pulled from the same server response so the caller can emit a
+// single verification log line like:
+//   [Upload:verify] report <id> → 5 photo groups × 3 tiers; backend has
+//   15/15 rows; complete: SMALL=5 MEDIUM=5 LARGE=5
+// Trivial to compute (one extra reduce) and avoids a second tier-status
+// round-trip just for logging.
 async function _reconcileBeforeDequeue(item, reportId) {
-    if (!reportId) return { ok: true, missing: [] };
+    if (!reportId) return { ok: true, missing: [], breakdown: { LOW: 0, MEDIUM: 0, HIGH: 0 }, totalExpected: 0 };
     // Collect every (variant, mediaId) we believe we sent.
     const expected = [];
     const collect = (variants, label) => {
@@ -439,9 +447,12 @@ async function _reconcileBeforeDequeue(item, reportId) {
     };
     collect(item.photoVariants, 'main');
     (item.extraPhotosVariants || []).forEach((ev, i) => collect(ev, `extra[${i}]`));
-    if (!expected.length) return { ok: true, missing: [] };
+    const totalExpected = expected.length;
+    const emptyBreakdown = { LOW: 0, MEDIUM: 0, HIGH: 0 };
+    if (!expected.length) return { ok: true, missing: [], breakdown: emptyBreakdown, totalExpected };
     // Fetch the server's view.
     let serverComplete;
+    let breakdown = { LOW: 0, MEDIUM: 0, HIGH: 0 };
     try {
         const res = await fetch(
             `${API_BASE}/reports/${reportId}/tier-status`,
@@ -453,20 +464,26 @@ async function _reconcileBeforeDequeue(item, reportId) {
             // arrives at the server and we never know. The deferred-tier
             // protection above is the primary defence; this is reconciliation
             // belt-and-suspenders.
-            return { ok: true, missing: [] };
+            return { ok: true, missing: [], breakdown: emptyBreakdown, totalExpected };
         }
         const body = await res.json();
+        const mediaArr = body.media || [];
         serverComplete = new Set(
-            (body.media || [])
+            mediaArr
                 .filter(m => m && m.assembly_status === 'complete')
                 .map(m => m.id),
         );
+        for (const m of mediaArr) {
+            if (!m || m.assembly_status !== 'complete') continue;
+            const t = m.resolution_tier;
+            if (t && breakdown[t] !== undefined) breakdown[t] += 1;
+        }
     } catch (e) {
         // Network failed — same fail-open policy as above.
-        return { ok: true, missing: [] };
+        return { ok: true, missing: [], breakdown: emptyBreakdown, totalExpected };
     }
     const missing = expected.filter(e => !serverComplete.has(e.mediaId));
-    return { ok: missing.length === 0, missing };
+    return { ok: missing.length === 0, missing, breakdown, totalExpected };
 }
 
 async function getAllQueued() {
@@ -7628,10 +7645,21 @@ async function trySendQueuedReport(item) {
                         // it back up. Don't touch stages.photo — the report
                         // stays "photo pending" until the deferred tiers land.
                         try { await enqueueReport(item); } catch (_) {}
-                        const deferredLabels = workUnits
-                            .filter(u => u.variant.deferred)
-                            .map(u => u.label || u.tier);
-                        console.log(`Photo upload partial: deferred tiers awaiting bandwidth — ${deferredLabels.join(', ')}`);
+                        const deferredUnits = workUnits.filter(u => u.variant.deferred);
+                        const deferredLabels = deferredUnits.map(u => u.label || u.tier);
+                        // Phase C.3 (May 2026) — structured deferred-tier log
+                        // with the dominant deferred reason and next retry
+                        // window so operators correlating console logs against
+                        // network history have one line per defer event.
+                        const reason = deferredUnits.find(u => u.variant.deferredReason)?.variant?.deferredReason || 'bandwidth-tier';
+                        const nextRetryAt = new Date(Date.now() + 15000).toISOString().replace(/\.\d+Z$/, 'Z');
+                        console.log(
+                            `[Upload:verify] report ${reportId} photo partial: ` +
+                            `pending_tiers=[${deferredLabels.join(', ')}] ` +
+                            `deferred_reason=${reason} ` +
+                            `net_tier=${_pwaTier} ` +
+                            `next_retry_at=${nextRetryAt}`,
+                        );
                     }
                 } else if (item.photo) {
                     // Legacy single-photo path (no variants on this queue item).
@@ -7704,7 +7732,34 @@ async function trySendQueuedReport(item) {
                 const reconciled = await _reconcileBeforeDequeue(item, reportId);
                 if (reconciled.ok) {
                     try { await dequeueReport(item.client_report_id); } catch (_) {}
-                    console.log('Report fully synced:', reportId);
+                    // Phase C.3 (May 2026) — structured verification log so
+                    // operators tailing the console can confirm at a glance
+                    // that every expected tier landed at the backend before
+                    // the queue row was deleted. Pulls the per-tier complete
+                    // counts straight off `_reconcileBeforeDequeue`'s response
+                    // so it's free (we already fetched tier-status).
+                    const expectedRows = reconciled.totalExpected || 0;
+                    const actualRows = (reconciled.breakdown.LOW || 0)
+                                     + (reconciled.breakdown.MEDIUM || 0)
+                                     + (reconciled.breakdown.HIGH || 0);
+                    const photoGroupCount = (function () {
+                        const ids = new Set();
+                        const collect = (variants) => {
+                            if (!variants) return;
+                            const v = variants.small || variants.medium || variants.large;
+                            if (v && v.photoGroupId) ids.add(v.photoGroupId);
+                        };
+                        collect(item.photoVariants);
+                        (item.extraPhotosVariants || []).forEach(collect);
+                        return ids.size;
+                    })();
+                    console.log(
+                        `[Upload:verify] report ${reportId} → ${photoGroupCount} photo group(s); ` +
+                        `expected ${expectedRows} variant row(s), backend confirms ${actualRows}; ` +
+                        `complete tiers: SMALL=${reconciled.breakdown.LOW || 0} ` +
+                        `MEDIUM=${reconciled.breakdown.MEDIUM || 0} ` +
+                        `LARGE=${reconciled.breakdown.HIGH || 0}`,
+                    );
                 } else {
                     // Server is missing one or more tiers we thought we sent.
                     // Roll the relevant flags back so the retry loop tries again.
@@ -7716,12 +7771,25 @@ async function trySendQueuedReport(item) {
                         }
                     }
                     try { await enqueueReport(item); } catch (_) {}
-                    console.warn(`Reconciliation: backend missing ${reconciled.missing.length} tier(s) for ${reportId} — re-queued for retry`);
+                    // Phase C.3 — structured re-queue log. Lists which
+                    // variant labels (e.g. "main/large", "extra[2]/medium")
+                    // came back missing so operators can correlate against
+                    // the network-tier history without spelunking through
+                    // the IndexedDB row by hand.
+                    const missLabels = (reconciled.missing || []).map(m => m.label).join(', ');
+                    console.warn(
+                        `[Upload:verify] report ${reportId} reconcile FAIL — ` +
+                        `backend missing ${reconciled.missing.length} of ${reconciled.totalExpected} variant row(s) ` +
+                        `(${missLabels}); re-queued, next retry in ~15s.`,
+                    );
                 }
             } catch (e) {
                 // Reconciliation network call failed — leave the report
                 // in the queue and try again on the next retry-loop pass.
-                console.warn('Reconciliation call failed, deferring dequeue:', e.message);
+                console.warn(
+                    `[Upload:verify] report ${reportId} reconcile network error: ${e.message}; ` +
+                    `deferring dequeue, will re-attempt on next retry pass.`,
+                );
             }
         }
     } catch (e) {
