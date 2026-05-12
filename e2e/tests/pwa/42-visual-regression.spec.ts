@@ -40,23 +40,11 @@ test.skip(
     'Visual regression baselines are Linux-only (committed). Set CI=1 or LH_VISUAL_FORCE=1 to override locally.',
 );
 
-// Phase 25 (May 2026) — visual baselines temporarily stale after the
-// home redesign + picker grid + RTL pill-mirror + Malayalam removal.
-// 8 tests currently fail in CI (6 layout-changed baselines + 2 new
-// locale variants without baselines: stage-home-ar, stage-home-zh).
-// To refresh:
-//   1. CI workflow_dispatch on this branch with `--update-snapshots`,
-//      OR locally on a Linux box: `CI=1 npx playwright test \
-//      42-visual-regression --update-snapshots`.
-//   2. Commit the resulting `*-pwa-linux.png` files in
-//      e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/.
-//   3. Remove the env-gate below (or flip default to enabled).
-// Until then the spec is skipped to keep Lighthouse QA green and not
-// auto-rollback PROD on every PR.
-test.skip(
-    !process.env.CRISP_VISUAL_BASELINES_REFRESHED,
-    'Phase 25 baselines stale (commit 6431691). Set CRISP_VISUAL_BASELINES_REFRESHED=1 + --update-snapshots to regenerate.',
-);
+// To refresh baselines after an intentional layout change: dispatch
+// the `Update visual-regression baselines` workflow from the Actions
+// tab (or run `CI=1 npx playwright test 42-visual-regression
+// --update-snapshots --project=pwa` on a Linux runner) and commit
+// the resulting `*-pwa-linux.png` files.
 
 async function bootPwa(page: Page) {
     await page.addInitScript(() => {
