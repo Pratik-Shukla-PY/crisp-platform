@@ -1058,6 +1058,22 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .dp-gallery-pending-chip i { font-size:9px; }
 .dp-gallery-label { justify-content:flex-start; }
 
+/* Phase B (May 2026) — PhotoSwipe per-slide tier tabs (Small/Medium/Original).
+   Rendered into PhotoSwipe's top bar via uiRegister(). Matches the in-panel
+   `.dp-tier-switcher` aesthetic so analysts have the same controls in both
+   the inline preview and the full-screen gallery. */
+.pswp .pswp-tier-tabs { display:flex; align-items:center; gap:14px; margin-right:auto; padding:6px 10px; }
+.pswp .pswp-tier-caption { font-size:11px; color:rgba(255,255,255,0.7); text-transform:uppercase; letter-spacing:0.5px; }
+.pswp .pswp-tier-buttons { display:flex; align-items:center; gap:4px; background:rgba(0,0,0,0.35); border-radius:6px; padding:3px; }
+.pswp .pswp-tier-tab { background:transparent; border:1px solid transparent; color:rgba(255,255,255,0.7); font-size:11px; font-weight:600; padding:5px 10px; border-radius:4px; cursor:pointer; letter-spacing:0.3px; text-transform:uppercase; transition:all .15s; }
+.pswp .pswp-tier-tab:hover:not(.disabled) { color:#fff; background:rgba(255,255,255,0.08); }
+.pswp .pswp-tier-tab.active { color:#0b1220; background:#38bdf8; border-color:#38bdf8; }
+.pswp .pswp-tier-tab.disabled { color:rgba(255,255,255,0.35); cursor:not-allowed; }
+.pswp .pswp-tier-tab .pswp-tier-pct { font-size:9px; opacity:0.7; margin-left:3px; font-weight:500; }
+/* The lightbox bar sits at the top. Give it a darker background when the
+   tier tabs are present so the text reads clearly over varied images. */
+.pswp__top-bar { background:linear-gradient(to bottom, rgba(0,0,0,0.55), transparent); }
+
 /* Guaranteed-delivery tier chip — tells analysts which variant they're seeing
    so they know whether a higher-quality one is still in-flight.
    LOW = SMALL (amber, "still uploading" feel)

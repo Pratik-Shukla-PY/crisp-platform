@@ -2011,7 +2011,7 @@ window.selectReport = (id, skipFly = false) => {
         imgComplete
             ? `<div class="dp-img" data-group-id="${primaryGroup.group_id || ''}"
                    data-current-tier="${variantPick.tier}"
-                   onclick="openLightbox('${lightboxSrc}','${r.infrastructure_type}')">
+                   onclick="openGallery('${r.id}', 0)">
                    <img src="${imgSrc}" class="img-full-layer img-ready">
                    ${tierSwitcher}
                </div>`
@@ -2590,7 +2590,7 @@ window.dpSwitchView = (reportId, view, btn) => {
     // Reset to single view aspect ratio
     container.closest('.dp-evidence-card').querySelector('.dp-img-view .dp-img')?.style?.removeProperty?.('aspect-ratio');
     if (view === 'photo' && img?.url) {
-        container.innerHTML = `<div class="dp-img" onclick="openLightbox('${getMediaUrl(img.url)}','Photo')"><img src="${getMediaUrl(img.url)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
+        container.innerHTML = `<div class="dp-img" onclick="openGallery('${r.id}', 0)"><img src="${getMediaUrl(img.url)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
     } else if (view === 'sat') {
         // Apr 2026 — multi-provider fan-out: render every successful
         // satellite source side-by-side (AWS Sentinel-2 / Microsoft
@@ -2718,7 +2718,7 @@ window.dpShowGalleryImage = (reportId, groupIdx, thumbEl) => {
     // <div class="dp-img"> block. The old innerHTML= wipe lost the shield chip
     // on every thumbnail click.
     const imgWrap = container.querySelector('.dp-img');
-    const newImgHtml = `<div class="dp-img" data-group-id="${grp.groupId}" data-current-tier="${pick.tier}" onclick="openLightbox('${lightboxSrc}','Photo ${groupIdx+1} of ${groups.length}')">
+    const newImgHtml = `<div class="dp-img" data-group-id="${grp.groupId}" data-current-tier="${pick.tier}" onclick="openGallery('${reportId}', ${groupIdx})">
         <img src="${pick.src}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">
         <span class="dp-tier-chip dp-tier-${pick.tier.toLowerCase()}">${tierLabel}</span>
     </div>`;
@@ -2985,7 +2985,7 @@ window.setDetailImageTier = (reportId, groupId, tier, btnEl) => {
         wrap.setAttribute('data-current-tier', tier);
         wrap.classList.remove('dp-img-uploading');
         wrap.setAttribute('onclick',
-            `openLightbox('${src.replace(/'/g, "%27")}','${(r.infrastructure_type || 'Photo')}')`);
+            `openGallery('${r.id}', 0)`);
     }
 
     // Update active button state inside the switcher.
@@ -3125,7 +3125,7 @@ function renderVerificationSection(r) {
             <div class="sat-compare-frame">
                 <div class="sat-compare-label"><i class="fa-solid fa-user"></i> Reporter Photo</div>
                 ${userImgSrc
-                    ? `<img src="${userImgSrc}" class="sat-compare-img" onclick="openLightbox('${userImgSrc}','User Photo')" title="Click to enlarge">`
+                    ? `<img src="${userImgSrc}" class="sat-compare-img" onclick="openGallery('${r.id}', 0)" title="Click to open gallery">`
                     : `<div class="sat-compare-img" style="display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-dim);">No photo</div>`
                 }
             </div>
@@ -3692,18 +3692,215 @@ function formatTime(s) {
     return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
-// ── Lightbox ─────────────────────────────────────────────────────────────────
+// ── Gallery (PhotoSwipe v5) ─────────────────────────────────────────────────
+// May 2026 — replaces the original 6-line `openLightbox()` overlay. The old
+// version showed one URL with no swipe / keyboard / zoom, so multi-image
+// reports felt "stuck on the first photo" — exactly the UX problem behind
+// the user's bug report. PhotoSwipe v5 brings:
+//   · swipe navigation (touch + mouse)
+//   · ←/→/Esc keyboard nav
+//   · pinch + double-tap zoom
+//   · responsive layout that fills available viewport
+//
+// On top of the stock lightbox we register a custom UI element ("tier-tabs")
+// that lets the analyst toggle Small / Medium / Original variants from inside
+// the gallery — implementing the user's "tabs/groups for Small / Medium /
+// Original" requirement. The active tier highlights, disabled tiers carry an
+// "uploading X%" tooltip so it's obvious why the analyst can't click it yet.
+//
+// Single-image satellite/comparison call sites still use `openLightbox(url,
+// caption)` — kept as a shim that routes through PhotoSwipe single-slide
+// mode so we never have two distinct lightbox UIs side by side.
+
+const _TIER_BUTTONS = [
+    { tier: 'LOW',    label: 'Small'    },
+    { tier: 'MEDIUM', label: 'Medium'   },
+    { tier: 'HIGH',   label: 'Original' },
+];
+
+// Tracks the currently-displayed tier per photo_group_id inside a live
+// PhotoSwipe session, so when the analyst clicks "Original" we know what
+// slide to swap. Cleared when the lightbox closes.
+let _currentGalleryTiers = new Map(); // photo_group_id → 'LOW' | 'MEDIUM' | 'HIGH'
+
+function _buildGallerySlides(report, startGroupIdx) {
+    const allImages = (report.media || []).filter(m => m.type === 'IMAGE');
+    const groups = groupPhotos(allImages);
+    const totalGroups = groups.length;
+    return groups.map((g, idx) => {
+        // Start at the highest complete variant so the gallery opens at full
+        // fidelity. If the user hasn't picked an override yet, that's the
+        // best behaviour. Fall back to whatever bestVariant() surfaces (which
+        // includes partials/thumbnails for in-flight uploads).
+        const pick = highestCompleteVariant(g) || bestVariant(g);
+        _currentGalleryTiers.set(g.group_id || `loose-${idx}`, pick?.tier || 'HIGH');
+        // PhotoSwipe needs intrinsic dimensions to size the slide. Real
+        // images carry these in the DB (`width`/`height` columns aren't
+        // populated in the schema), so we use generous viewport defaults
+        // and rely on PhotoSwipe's `dataSource.fit` policy to scale.
+        return {
+            src: pick?.src || '',
+            width: 1920,
+            height: 1440,
+            alt: `Photo ${idx+1} of ${totalGroups}`,
+            // Custom payload that the tier-tabs UI reads.
+            _groupId: g.group_id || `loose-${idx}`,
+            _groupIdx: idx,
+            _totalGroups: totalGroups,
+            _reportId: report.id,
+            _members: g.members,
+        };
+    });
+}
+
+window.openGallery = function (reportId, startGroupIdx) {
+    if (typeof PhotoSwipe === 'undefined') {
+        console.warn('[openGallery] PhotoSwipe not loaded — falling back to single-image overlay');
+        const r0 = allReports.find(x => x.id === reportId);
+        if (r0) {
+            const groups0 = groupPhotos((r0.media || []).filter(m => m.type === 'IMAGE'));
+            const pick0 = highestCompleteVariant(groups0[startGroupIdx || 0] || groups0[0]);
+            if (pick0?.src) _openSingleOverlay(pick0.src, `Photo ${(startGroupIdx||0)+1} of ${groups0.length}`);
+        }
+        return;
+    }
+    const r = allReports.find(x => x.id === reportId);
+    if (!r) return;
+    const slides = _buildGallerySlides(r, startGroupIdx || 0);
+    if (slides.length === 0) return;
+
+    _currentGalleryTiers = new Map(); // reset for this session
+    // Re-seed with each slide's chosen tier so the swatch reads correctly
+    // when the user navigates between groups.
+    slides.forEach(s => _currentGalleryTiers.set(s._groupId, s._members
+        .filter(m => m.assembly_status === 'complete' && m.url)
+        .sort((a,b) => (TIER_RANK[b.resolution_tier]||0) - (TIER_RANK[a.resolution_tier]||0))[0]?.resolution_tier || 'HIGH'));
+
+    const pswp = new PhotoSwipe({
+        dataSource: slides,
+        index: Math.max(0, Math.min(startGroupIdx || 0, slides.length - 1)),
+        bgOpacity: 0.94,
+        showHideAnimationType: 'fade',
+        // Smooth Esc / outside-tap dismissal.
+        closeOnVerticalDrag: true,
+        // Disable pinch-to-close on iOS — collides with pinch-zoom.
+        pinchToClose: false,
+    });
+
+    // Register the per-slide tier-tabs UI in the top-bar area. Runs once at
+    // open; the element updates itself via the `change` event when the
+    // analyst swipes / arrows to a new slide.
+    pswp.on('uiRegister', () => {
+        pswp.ui.registerElement({
+            name: 'tier-tabs',
+            order: 9,
+            isButton: false,
+            appendTo: 'bar',
+            html: '<div class="pswp-tier-tabs" id="pswp-tier-tabs"></div>',
+            onInit: (el, pswpInst) => {
+                const render = () => {
+                    const slide = pswpInst.currSlide?.data;
+                    if (!slide || !slide._members) {
+                        el.innerHTML = '';
+                        return;
+                    }
+                    const activeTier = _currentGalleryTiers.get(slide._groupId) || 'HIGH';
+                    const byTier = Object.fromEntries(
+                        slide._members.map(m => [m.resolution_tier, m])
+                    );
+                    const btns = _TIER_BUTTONS.map(({ tier, label }) => {
+                        const m = byTier[tier];
+                        const complete = m && m.assembly_status === 'complete' && m.url;
+                        const pct = m ? Math.round(m.completion_pct || 0) : 0;
+                        const isActive = tier === activeTier;
+                        const title = complete
+                            ? `Show ${label} variant`
+                            : (m ? `${label} — uploading ${pct}%` : `${label} — not available`);
+                        return `<button type="button"
+                                    class="pswp-tier-tab ${isActive ? 'active' : ''} ${complete ? '' : 'disabled'}"
+                                    data-tier="${tier}"
+                                    ${complete ? '' : 'aria-disabled="true"'}
+                                    title="${title}">${label}${!complete && m ? ` <span class="pswp-tier-pct">${pct}%</span>` : ''}</button>`;
+                    }).join('');
+                    const captionBits = [
+                        `Photo ${slide._groupIdx + 1} of ${slide._totalGroups}`,
+                        `group ${(slide._groupId || '').slice(0, 8)}`,
+                    ];
+                    el.innerHTML = `
+                        <div class="pswp-tier-caption">${captionBits.join(' · ')}</div>
+                        <div class="pswp-tier-buttons">${btns}</div>
+                    `;
+                    // Wire clicks. Re-bound every render — the inner HTML
+                    // was just rewritten so prior listeners are gone.
+                    el.querySelectorAll('.pswp-tier-tab').forEach(btn => {
+                        btn.onclick = (e) => {
+                            e.stopPropagation();
+                            const tier = btn.getAttribute('data-tier');
+                            const target = byTier[tier];
+                            if (!target || target.assembly_status !== 'complete' || !target.url) return;
+                            const newSrc = getMediaUrl(target.url);
+                            // Update the in-memory slide so re-render uses
+                            // the new src; PhotoSwipe doesn't re-query dataSource
+                            // on its own.
+                            slide.src = newSrc;
+                            _currentGalleryTiers.set(slide._groupId, tier);
+                            // Force the current slide's <img> to point at
+                            // the new URL. We update the underlying
+                            // dataSource AND swap the live <img> element so
+                            // the swap is instant.
+                            const currSlide = pswpInst.currSlide;
+                            if (currSlide && currSlide.container) {
+                                const img = currSlide.container.querySelector('img');
+                                if (img) img.src = newSrc;
+                            }
+                            render(); // refresh the active-state highlight
+                        };
+                    });
+                };
+                pswpInst.on('change', render);
+                render();
+            },
+        });
+    });
+
+    pswp.on('close', () => {
+        _currentGalleryTiers = new Map();
+    });
+
+    pswp.init();
+};
+
+// Backward-compat shim. Old single-image call sites (satellite popups, sat
+// compare panels) keep using openLightbox() — route them through PhotoSwipe
+// so the user always sees the same lightbox UI. When PhotoSwipe isn't
+// loaded, fall back to the original simple overlay.
 window.openLightbox = function (url, caption) {
+    if (typeof PhotoSwipe === 'undefined') { _openSingleOverlay(url, caption); return; }
+    const pswp = new PhotoSwipe({
+        dataSource: [{ src: url, width: 1920, height: 1440, alt: caption || '' }],
+        index: 0,
+        bgOpacity: 0.94,
+        showHideAnimationType: 'fade',
+        closeOnVerticalDrag: true,
+        pinchToClose: false,
+    });
+    pswp.init();
+};
+
+// Final-fallback simple overlay (used if PhotoSwipe failed to load — e.g.
+// CDN blocked on a restrictive operator network). Mirrors the legacy
+// behaviour so the worst case is "no swipe" rather than "image unviewable".
+function _openSingleOverlay(url, caption) {
     const overlay = document.createElement('div');
     overlay.className = 'lightbox-overlay';
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
     overlay.innerHTML = `
         <button class="lightbox-close" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>
-        <img src="${url}" alt="${caption}">
-        <div class="lightbox-caption">${caption}</div>
+        <img src="${url}" alt="${caption || ''}">
+        <div class="lightbox-caption">${caption || ''}</div>
     `;
     document.body.appendChild(overlay);
-};
+}
 
 // ── Map ──────────────────────────────────────────────────────────────────────
 let map;
@@ -4738,8 +4935,11 @@ function _maybeUpgradeDetailImage() {
             const activeBtn = switcher.querySelector(`.dp-tier-btn.dp-tier-${pick.tier.toLowerCase()}`);
             if (activeBtn) activeBtn.classList.add('active');
         }
-        // Refresh the onclick handler so the lightbox opens the upgraded image
-        el.setAttribute('onclick', `openLightbox('${pick.src}','${(r.infrastructure_type || 'Photo')}')`);
+        // Refresh the onclick handler so the gallery still opens at this
+        // photo group when the analyst clicks the upgraded primary image.
+        // groupIdx 0 = primary group; the gallery re-derives the full list
+        // at open time so subsequently-added photos still appear.
+        el.setAttribute('onclick', `openGallery('${r.id}', 0)`);
     });
 
     // Gallery strip thumbs (for reports with multiple photos)

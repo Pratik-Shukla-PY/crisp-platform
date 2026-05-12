@@ -24,6 +24,12 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PhotoSwipe v5 — MIT, vanilla JS, ~37 KB gzipped. Gives the multi-photo
+         lightbox swipe / pinch-zoom / keyboard nav out of the box. CDN pattern
+         matches the existing Leaflet / Turf approach (no bundler — package.json
+         is empty by design). UMD build because the dashboard loads modules via
+         classic <script> tags. -->
+    <link rel="stylesheet" href="https://unpkg.com/photoswipe@5.4.4/dist/photoswipe.css">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -329,11 +335,18 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+<!-- PhotoSwipe v5 — UMD bundle exposes `window.PhotoSwipe` and
+     `window.PhotoSwipeLightbox`. Must load BEFORE app.js so openGallery()
+     can construct a lightbox on the first click. We load the lightbox
+     wrapper *after* the core (its bundle wraps core access through
+     `PhotoSwipe`). MIT licensed, project-Apache-2.0-compatible. -->
+<script src="https://unpkg.com/photoswipe@5.4.4/dist/umd/photoswipe.umd.min.js"></script>
+<script src="https://unpkg.com/photoswipe@5.4.4/dist/umd/photoswipe-lightbox.umd.min.js"></script>
 <!-- BlurHash decoder (Phase 1.5) — must load BEFORE app.js so the global
      `window.BlurHash` is ready when the first `renderFeed()` / `selectReport()`
      runs. Same vendored file as the PWA; see src/blurhash.js header. -->
 <script src="blurhash.js?v=1"></script>
-<script src="app.js?v=760"></script>
+<script src="app.js?v=761"></script>
 <script src="predictions.js?v=110"></script>
 
 <!-- Offline status banner -->
