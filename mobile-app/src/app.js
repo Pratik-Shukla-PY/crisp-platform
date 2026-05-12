@@ -2871,7 +2871,13 @@ window.applyI18n = applyI18n;
 // queue with a stuck in-flight entry and then verify reconcile dequeues it.
 window.__crispEnqueueReport = (payload) => enqueueReport(payload);
 window.__crispGetAllQueued = () => getAllQueued();
+window.__crispDequeueReport = (clientReportId) => dequeueReport(clientReportId);
 window.__crispReconcileQueue = () => _reconcileQueueAgainstServer();
+// May 2026 — let tests trigger the My Reports / queued-list render
+// without driving the home → My Reports button click (which depends
+// on auth + privacy banner state that's noisy to set up in tests).
+window.__crispRenderPartialReports = () => (typeof _renderPartialReports === 'function'
+    ? _renderPartialReports() : Promise.resolve());
 // Auto-submit diagnostic hooks — used by e2e specs to assert state
 // transitions + by DevTools (`__crispInactivityStatus()` in console) to
 // inspect the region-match / arm / waiting-for-input state machine.
@@ -8772,7 +8778,14 @@ async function _renderPartialReports() {
             : `<span class="hr-chip hr-chip-queue">${t('status_queued')}</span>`;
         const crisis = (it.meta && it.meta.crisis_type) || '—';
         const infra = (it.meta && it.meta.infrastructure_type) || '—';
-        return `<div class="history-row">
+        // BUGFIX May 2026 — `data-client-report-id` enables the
+        // click handler bound below. Without it the user could see a
+        // queued report card but tapping it was a silent no-op (the
+        // submitted-reports list at line 9301 had the equivalent
+        // wiring; in-flight had been shipped without it — an original
+        // omission, never had click handling).
+        return `<div class="history-row" role="button" tabindex="0"
+                     data-client-report-id="${escapeHtmlSimple(it.client_report_id)}">
             <div class="hr-top">
                 <span class="hr-title">${escapeHtmlSimple(crisis)} · ${escapeHtmlSimple(infra)}</span>
                 ${statusChip}
@@ -8781,7 +8794,104 @@ async function _renderPartialReports() {
             <div class="hr-meta">${pct}% · ${it.client_report_id.slice(0, 8)}</div>
         </div>`;
     }).join('');
+    // Wire click + keyboard (Enter / Space) handlers AFTER innerHTML. We
+    // can't use inline onclick= here because the captured client_report_id
+    // would be passed through a string interpolation that's tricky to
+    // escape safely; addEventListener avoids that whole class of issue.
+    list.querySelectorAll('.history-row').forEach((el) => {
+        const crid = el.getAttribute('data-client-report-id');
+        if (!crid) return;
+        el.addEventListener('click', () => {
+            if (typeof window.openQueuedReportDetail === 'function') {
+                window.openQueuedReportDetail(crid);
+            }
+        });
+        el.addEventListener('keydown', (e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && typeof window.openQueuedReportDetail === 'function') {
+                e.preventDefault();
+                window.openQueuedReportDetail(crid);
+            }
+        });
+    });
 }
+
+// BUGFIX May 2026 — open the report-detail stage for a queued/in-flight
+// item that hasn't fully synced yet. Mirrors openReportDetail() but
+// reads from the LOCAL IndexedDB queue instead of _submittedCache /
+// the status-since aggregator (neither of which knows about
+// pre-sync items).
+//
+// Resolution order:
+//   1) If the queue item already has a serverId (the meta POST landed
+//      and we got an id back), try openReportDetail(serverId) first —
+//      that's the full backend-state-driven view.
+//   2) Otherwise (pure-offline or meta-not-yet-acked), synthesise a
+//      report-like object from item.meta + the captured state and
+//      hand it to renderReportDetail. The detail page is forgiving
+//      about missing fields (every photo/location/timeline lookup
+//      has a guard) so the synthesised view renders cleanly with
+//      blanks for anything the queue doesn't know about.
+window.openQueuedReportDetail = async function (clientReportId) {
+    if (!clientReportId) return;
+    let queued = null;
+    try {
+        const all = await getAllQueued();
+        queued = (all || []).find((q) => q && q.client_report_id === clientReportId);
+    } catch (e) {
+        console.warn('[openQueuedReportDetail] IDB read failed:', e);
+    }
+    // Path 1 — the meta POST landed already, so the backend knows
+    // about this report; defer to the canonical detail flow.
+    if (queued && queued.serverId && typeof window.openReportDetail === 'function') {
+        try { await window.openReportDetail(queued.serverId); return; } catch (_) {}
+    }
+    if (!queued) {
+        // The item may have been dequeued between render + click (e.g. a
+        // retry-loop pass succeeded). Tell the user + refresh the list.
+        if (typeof showToast === 'function') showToast(t('report_not_found'), 'info');
+        try { await _renderPartialReports(); } catch (_) {}
+        return;
+    }
+    // Path 2 — synthesise a report-shaped object from the queue.
+    // _synthesizeSubmittedReport already exists for the post-submit
+    // optimistic path; we can't reuse it directly (it pulls from
+    // window.state, not from the queue item), but we mirror its
+    // shape exactly so renderReportDetail's field reads succeed.
+    const meta = queued.meta || {};
+    const locObj = meta.location || {};
+    const nowIso = new Date().toISOString();
+    const synthetic = {
+        id: queued.serverId || null,
+        client_report_id: queued.client_report_id,
+        server_created_at: meta.client_created_at || nowIso,
+        updated_at: nowIso,
+        infrastructure_type: meta.infrastructure_type || null,
+        crisis_type: meta.crisis_type || null,
+        severity: meta.severity || null,
+        damage_classification: meta.damage_classification || null,
+        description: queued.text || meta.description || '',
+        location_name: meta.location_name
+            || (locObj.location_name || locObj.device_location_name || null),
+        latitude: locObj.latitude ?? null,
+        longitude: locObj.longitude ?? null,
+        verdict: 'NOT_REVIEWED',
+        // `_mapReportStatus` treats a row without server_created_at +
+        // server-side timestamps as "pending"; we set the status field
+        // explicitly so the chip reads "Queued" / "Uploading" instead
+        // of falling through to a generic Submitted state.
+        status: queued.status === 'syncing' ? 'UPLOADING' : 'QUEUED',
+        photo_group_id: meta.photo_group_id || null,
+        __queued: true,            // diagnostic flag — UI may key off this later
+        __queue_pct: _inflightPct(queued),
+    };
+    try {
+        renderReportDetail(synthetic);
+        goToStage('stage-report-detail');
+    } catch (e) {
+        console.warn('[openQueuedReportDetail] render failed:', e);
+        if (typeof showToast === 'function') showToast(t('report_not_found'), 'error');
+    }
+};
 
 function _inflightPct(item) {
     const st = item.stages || {};
@@ -10618,6 +10728,66 @@ function _clearCaptureState() {
     if (_bs) { _bs.disabled = false; _bs.innerHTML = `<i class="fa-solid fa-paper-plane"></i> <span>${t('send_undp')}</span>`; }
     const _brs = document.getElementById('btn-review-submit');
     if (_brs) _brs.disabled = false;
+
+    // BUGFIX May 2026 — v4-flow Send button + upload overlay + chip
+    // statuses. The v4 review screen ships its OWN send button
+    // (#btn-v4-send) which sets `disabled=true` + `.is-sending` class
+    // on submit and clears them ONLY on error (v4-flow.js:_onSend).
+    // After a successful submit + "Add another report", the button DOM
+    // persists across the stage transitions in stuck state — next
+    // submit attempt is a silent no-op because click lands on a
+    // disabled button. Same pattern for #upload-overlay (auto-hides
+    // after 1.2 s on success but if the user taps "Add another report"
+    // before the timeout fires, the overlay persists on the new
+    // capture screen). And the v4 capture chips (#v4-cap-chip-voice,
+    // #v4-cap-chip-text) carry `.is-captured` + `.is-on` classes that
+    // bleed across reports.
+    const _bv4s = document.getElementById('btn-v4-send');
+    if (_bv4s) {
+        _bv4s.disabled = false;
+        _bv4s.classList.remove('is-sending');
+        // Reset innerHTML to the original "Send to UNDP" markup — the
+        // submit handler replaces this with a spinner + "Sending…"
+        // label which would otherwise persist.
+        _bv4s.innerHTML = '<i class="fa-solid fa-paper-plane"></i> <span data-i18n="v4_send">Send to UNDP</span>';
+        if (typeof applyI18n === 'function') {
+            try { applyI18n(_bv4s); } catch (_) {}
+        }
+    }
+    const _upov = document.getElementById('upload-overlay');
+    if (_upov) _upov.style.display = 'none';
+    // v4 captured-chip badges (text + voice). Without clearing, the
+    // green-dot indicator from the previous report's voice/text capture
+    // shows on the new clean capture screen — operator-confusing.
+    for (const id of ['v4-cap-chip-voice', 'v4-cap-chip-text']) {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('is-captured', 'is-expanded');
+    }
+    for (const id of ['v4-cap-chip-voice-status', 'v4-cap-chip-text-status']) {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('is-on');
+    }
+    // v4 panels under the chips — collapse them so the next capture
+    // session opens with the same minimal-by-default layout as a
+    // fresh load.
+    for (const id of ['v4-cap-voice-panel', 'v4-cap-text-panel']) {
+        const el = document.getElementById(id);
+        if (el) el.setAttribute('hidden', '');
+    }
+    // v4 thumbnail strip — _renderThumbs reads state.v4Photos which we
+    // cleared above, but the DOM was painted before the reset. Force a
+    // repaint via the existing window hook so the strip clears.
+    if (typeof window.__crispV4RefreshSectionBadges === 'function') {
+        try { window.__crispV4RefreshSectionBadges(); } catch (_) {}
+    }
+    // v4-flow.js exposes a thumb-strip re-render hook on
+    // window.__crispV4RefreshCapStrip — also call it (defensively
+    // typeof-checked since the v4 flow may not be active in v3 mode).
+    if (typeof window.__crispV4RefreshCapStrip === 'function') {
+        try { window.__crispV4RefreshCapStrip(); } catch (_) {}
+    }
+    // Drop the v4Photos array so the strip's render sees empty state.
+    state.v4Photos = [];
 }
 
 // Expose for the post-submit hook and tests. The pure form (no navigation)
