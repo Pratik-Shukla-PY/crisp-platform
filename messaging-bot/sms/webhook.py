@@ -149,12 +149,31 @@ async def _process_sms(phone: str, text: str):
     # damage_classification is an enum-validated field on the backend
     # schema — pass None (not "") when the parser couldn't classify,
     # otherwise /reports/meta returns 422 and the SMS is silently lost.
+    #
+    # UNDP "Other, please specify" rule (report.py:185) — when the SMS
+    # parser couldn't match a specific infrastructure keyword it returns
+    # OTHER. The backend then requires a non-empty infrastructure_name.
+    # We synthesise one from the first line of the SMS description so
+    # the report lands cleanly rather than 422-ing on every keyword-
+    # less SMS (which is the common case for "earthquake at Sector 7"
+    # style submissions).
+    infra_type = parsed["infrastructure_type"]
+    infra_name = parsed.get("infrastructure_name")
+    if infra_type == "OTHER" and not (infra_name and infra_name.strip()):
+        # Use the first 40 chars of the description (the SMS body)
+        # as the "please specify" text — gives operators something
+        # meaningful to triage on. Falls back to a sentinel if even
+        # the description is empty.
+        snippet = (parsed.get("description") or "").strip()
+        infra_name = snippet[:40] if snippet else "Reporter did not specify"
+
     meta = {
         "device_hash": device_hash,
         "client_report_id": str(uuid4()),
         "source": "SMS",
         "severity": parsed["severity"],
-        "infrastructure_type": parsed["infrastructure_type"],
+        "infrastructure_type": infra_type,
+        "infrastructure_name": infra_name,
         "description": parsed["description"],
         "expected_media": 0,
         "caller_info": {"phone": phone, "source": "SMS"},

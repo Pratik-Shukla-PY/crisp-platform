@@ -34,6 +34,10 @@ class TestConcurrentSubmissions:
         res = client.post("/api/v1/reports/meta", json={
             "device_hash": "PERF-1", "client_report_id": f"perf-{time.time()}",
             "source": "APP", "expected_media": 0,
+            # infrastructure_type explicit — defaults to OTHER which
+            # the UNDP "please specify" validator (report.py:185)
+            # would reject without an infrastructure_name.
+            "infrastructure_type": "ROAD",
             "location": {"latitude": 10, "longitude": 20},
         })
         elapsed = time.time() - start

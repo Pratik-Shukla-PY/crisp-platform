@@ -46,6 +46,11 @@ class TestReportSubmission:
         client.post("/api/v1/reports/meta", json={
             "device_hash": "TEST-BADGE", "client_report_id": "badge-001",
             "source": "APP", "expected_media": 0,
+            # infrastructure_type explicit — defaults to OTHER which
+            # the UNDP "please specify" validator rejects without
+            # infrastructure_name. We just want a profile auto-created
+            # here, not to exercise the OTHER rule.
+            "infrastructure_type": "ROAD",
             "location": {"latitude": 10, "longitude": 20},
         })
         res = client.get("/api/v1/reports/profile/TEST-BADGE")

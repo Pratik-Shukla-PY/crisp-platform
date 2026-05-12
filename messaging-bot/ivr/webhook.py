@@ -671,13 +671,27 @@ async def _process_ivr_report(call_sid: str):
     caller_info["network_location"] = ", ".join(net_parts) if net_parts else ""
 
     # ── 5. Create CRISP report (type=OTHER, severity=SEVERE as defaults) ─────
-    # AI extractor will update type + severity after analyzing the text
+    # AI extractor will update type + severity after analyzing the text.
+    #
+    # UNDP "Other, please specify" rule (backend report.py:185) — when
+    # we default to OTHER we MUST supply a non-empty infrastructure_name
+    # or /reports/meta returns 422 and the IVR call is silently lost.
+    # The AI extractor runs ASYNC after the report lands, so we need a
+    # placeholder that's informative for the operator until the extractor
+    # rewrites it. First ~40 chars of the transcript work well; otherwise
+    # a sentinel that flags "voice-only, type unknown".
+    _ivr_snippet = (full_text or "").strip()
+    _ivr_name_placeholder = (
+        _ivr_snippet[:40] if _ivr_snippet
+        else "Voice report — type pending AI analysis"
+    )
     meta = {
         "device_hash": phone_hash,
         "client_report_id": str(uuid4()),
         "source": "IVR",
         "severity": "SEVERE",
         "infrastructure_type": "OTHER",
+        "infrastructure_name": _ivr_name_placeholder,
         "description": full_text or "Voice report — awaiting AI analysis",
         "expected_media": (1 if location_b64 else 0) + (1 if audio_b64 else 0),
         "caller_info": caller_info,

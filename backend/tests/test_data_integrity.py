@@ -3,11 +3,20 @@ import pytest
 from tests.conftest import auth_header
 
 
+# NOTE: every /reports/meta POST in this file passes infrastructure_type
+# explicitly (ROAD / HOSPITAL etc.) because the schema defaults to OTHER
+# and the UNDP "Other, please specify" validator (report.py:185) would
+# reject any payload that defaults + omits infrastructure_name. Tests
+# here are about dedup / status flows, not the OTHER-specifies rule —
+# that's covered in tests/test_undp_taxonomy.py.
+
+
 class TestDeduplication:
     def test_same_client_id_returns_same_report(self, client):
         payload = {
             "device_hash": "DEDUP-1", "client_report_id": "dedup-fixed-id",
             "source": "APP", "expected_media": 0,
+            "infrastructure_type": "ROAD",
             "location": {"latitude": 10, "longitude": 20},
         }
         r1 = client.post("/api/v1/reports/meta", json=payload)
@@ -17,6 +26,7 @@ class TestDeduplication:
     def test_different_client_ids_create_different_reports(self, client):
         base = {
             "device_hash": "DEDUP-2", "source": "APP", "expected_media": 0,
+            "infrastructure_type": "ROAD",
             "location": {"latitude": 10, "longitude": 20},
         }
         r1 = client.post("/api/v1/reports/meta", json={**base, "client_report_id": "diff-001"})
@@ -29,6 +39,7 @@ class TestStatusTransitions:
         r = client.post("/api/v1/reports/meta", json={
             "device_hash": "TRANS-1", "client_report_id": "trans-001",
             "source": "APP", "expected_media": 0,
+            "infrastructure_type": "ROAD",
             "location": {"latitude": 10, "longitude": 20},
         })
         rid = r.json()["id"]
@@ -40,6 +51,7 @@ class TestStatusTransitions:
         r = client.post("/api/v1/reports/meta", json={
             "device_hash": "TRANS-2", "client_report_id": "trans-002",
             "source": "APP", "expected_media": 0,
+            "infrastructure_type": "ROAD",
             "location": {"latitude": 10, "longitude": 20},
         })
         rid = r.json()["id"]

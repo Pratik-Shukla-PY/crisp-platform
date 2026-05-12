@@ -158,6 +158,18 @@ async def submit_report(session: SessionBuffer) -> Optional[str]:
         "crisis_type": session.crisis_type or None,
         "damage_classification": session.damage_class or None,
     }
+    # UNDP "Other, please specify" rule (backend report.py:185) — when
+    # the WhatsApp user picked OTHER (or fell through the chip menu
+    # without picking), backend rejects with 422. Synthesise a name
+    # from the description snippet so the report lands rather than
+    # being silently lost.
+    if (session.infra_type or "").upper() == "OTHER":
+        snippet = (session.text or "").strip()
+        meta["infrastructure_name"] = (
+            snippet[:40] if snippet
+            else "Reporter did not specify"
+        )
+        meta["infrastructure_name_from_osm"] = False
 
     if session.has_location:
         meta["location"] = {

@@ -438,6 +438,18 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
     if session.infra_name:
         meta["infrastructure_name"] = session.infra_name
         meta["infrastructure_name_from_osm"] = False
+    # UNDP "Other, please specify" rule (report.py:185) — when the
+    # Telegram user picked OTHER without typing a name (or skipped the
+    # infra-name question entirely), backend rejects with 422. Fall
+    # back to a description snippet so the early-create lands; the
+    # reporter can refine via /classify or the AI extractor can update.
+    if (session.infra_type or "").upper() == "OTHER" and not meta.get("infrastructure_name"):
+        snippet = (session.text or "").strip()
+        meta["infrastructure_name"] = (
+            snippet[:40] if snippet
+            else "Reporter did not specify"
+        )
+        meta["infrastructure_name_from_osm"] = False
     # Telegram UX polish — OSM building pick goes into meta too.
     # When present, the dashboard skips the "needs mapping" badge (the
     # footprint IS the mapping). infrastructure_name_from_osm is TRUE

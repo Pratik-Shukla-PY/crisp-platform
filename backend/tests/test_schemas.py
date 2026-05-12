@@ -32,8 +32,12 @@ class TestReportMetaCreate:
         assert meta.device_hash == "DEV-ABC123"
 
     def test_max_length_description(self):
+        # Note: infrastructure_type='ROAD' (not the InfraTypeEnum.OTHER
+        # default) so the UNDP "Other, please specify" validator at
+        # report.py:185 doesn't reject this for missing infrastructure_name.
         meta = ReportMetaCreate(
             device_hash="DEV-X", client_report_id="r-002",
+            infrastructure_type="ROAD",
             description="x" * 5000,  # Max allowed
         )
         assert len(meta.description) == 5000
@@ -42,11 +46,19 @@ class TestReportMetaCreate:
         with pytest.raises(ValidationError):
             ReportMetaCreate(
                 device_hash="DEV-X", client_report_id="r-003",
+                infrastructure_type="ROAD",
                 description="x" * 5001,
             )
 
     def test_undp_fields_optional(self):
-        meta = ReportMetaCreate(device_hash="DEV-X", client_report_id="r-004")
+        # When the reporter picks any concrete infrastructure_type (here
+        # ROAD), all UNDP-extension fields stay optional. The OTHER-
+        # specific "please specify" rule is exercised in
+        # tests/test_undp_taxonomy.py — see TestSpecOtherRequiresName.
+        meta = ReportMetaCreate(
+            device_hash="DEV-X", client_report_id="r-004",
+            infrastructure_type="ROAD",
+        )
         assert meta.crisis_type is None
         assert meta.damage_classification is None
         assert meta.infrastructure_name is None

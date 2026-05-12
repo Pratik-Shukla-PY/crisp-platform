@@ -74,6 +74,10 @@ class TestBlurhashRoundTrip:
             "client_report_id": "bhtest-0000-0000-0000-000000000001",
             "expected_media": 0,
             "blurhash": hash,
+            # infrastructure_type defaults to OTHER which the UNDP
+            # validator requires infrastructure_name for; we pass a
+            # concrete value so this test stays focused on blurhash.
+            "infrastructure_type": "RESIDENTIAL",
         }
         res = client.post("/api/v1/reports/meta", json=payload)
         assert res.status_code == 201, res.text
@@ -93,6 +97,7 @@ class TestBlurhashRoundTrip:
             "client_report_id": "9b9c0a7e-5d31-4a8e-a0b1-1d11f0ba0010",
             "expected_media": 0,
             "blurhash": hash,
+            "infrastructure_type": "RESIDENTIAL",  # see UNDP validator note above
         }
         res = client.post("/api/v1/reports/meta", json=payload)
         assert res.status_code == 201, res.text
@@ -116,6 +121,7 @@ class TestBlurhashRoundTrip:
             "device_hash": "TEST-BH-DEVICE-02",
             "client_report_id": "bhtest-0000-0000-0000-000000000002",
             "expected_media": 0,
+            "infrastructure_type": "RESIDENTIAL",  # see UNDP validator note above
             # no `blurhash` key at all — should default to None.
         }
         res = client.post("/api/v1/reports/meta", json=payload)
@@ -129,6 +135,7 @@ class TestBlurhashRoundTrip:
             "device_hash": "TEST-BH-DEVICE-03",
             "client_report_id": "bhtest-0000-0000-0000-000000000003",
             "expected_media": 0,
+            "infrastructure_type": "RESIDENTIAL",
             "blurhash": "x" * 200,
         }
         res = client.post("/api/v1/reports/meta", json=payload)
