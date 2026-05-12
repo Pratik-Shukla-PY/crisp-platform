@@ -2260,6 +2260,81 @@ const _backendHost = _isLocalDev
     : window.location.origin;
 const API_BASE = `${_backendHost}/api/v1`;
 
+// ── Single-flight + short-TTL fetch cache (May 2026, HAR-driven) ────────────
+// A landing-page HAR trace revealed two read-amplification patterns:
+//   · 7× duplicate GET /reports/profile/<device-hash> per page load (3 call
+//     sites + race + retry-on-404 cascade)
+//   · 3× duplicate GET /reports/device/<hash>/status-since per load
+//     (boot reporter-stats + My Reports panel + home-stats badges all
+//     race the same URL on first paint)
+// Wasted ~150 ms cumulative + 45 KB on a fresh load. Solution: single-flight
+// promise dedupe + a short TTL response cache, keyed on (URL + method +
+// auth header). In-flight requests for the same key reuse the same Promise;
+// fresh-cached responses skip the network entirely until TTL expires.
+//
+// Intentionally simple: GETs only, no fancy LRU. Memory-bounded by
+// `_INFLIGHT_TTL_MS` (10 s default); stale entries get GC'd lazily on the
+// next call for the same key.
+const _INFLIGHT_FETCH_TTL_MS = 10_000;
+const _inflightFetchPromises = new Map();  // key → in-flight Promise<Response>
+const _inflightFetchCache    = new Map();  // key → { body, ts, status, contentType }
+
+function _singleFlightFetch(url, init, ttlMs) {
+    init = init || {};
+    const method = (init.method || 'GET').toUpperCase();
+    // Only dedupe idempotent GETs. POST/DELETE/PATCH always pass through.
+    if (method !== 'GET') return fetch(url, init);
+    const ttl = (typeof ttlMs === 'number') ? ttlMs : _INFLIGHT_FETCH_TTL_MS;
+    // Auth header is part of the key — anonymous vs logged-in get separate
+    // caches (the response shape differs).
+    const auth = (init.headers && (init.headers.Authorization || init.headers.authorization)) || '';
+    const key = `${method}|${url}|${auth}`;
+    // 1. Serve from cache if within TTL.
+    const cached = _inflightFetchCache.get(key);
+    const now = Date.now();
+    if (cached && (now - cached.ts) < ttl) {
+        // Re-construct a Response-like object the caller can .json()/.ok-check.
+        return Promise.resolve(new Response(cached.body, {
+            status: cached.status,
+            headers: cached.contentType ? { 'content-type': cached.contentType } : undefined,
+        }));
+    }
+    // 2. Coalesce concurrent in-flight requests onto one Promise.
+    const inflight = _inflightFetchPromises.get(key);
+    if (inflight) return inflight.then((r) => r.clone());  // clone so each caller can read independently
+    // 3. Fire the actual fetch. Cache successful responses for TTL.
+    const p = fetch(url, init)
+        .then(async (res) => {
+            // Cache 2xx + 404. 404s for profile / report-not-found are stable
+            // for the device's lifetime — no point hammering on every poll.
+            if (res.ok || res.status === 404) {
+                try {
+                    const clone = res.clone();
+                    const body = await clone.text();
+                    _inflightFetchCache.set(key, {
+                        body,
+                        ts: Date.now(),
+                        status: res.status,
+                        contentType: res.headers.get('content-type'),
+                    });
+                } catch (_) { /* non-readable response, skip cache */ }
+            }
+            return res;
+        })
+        .finally(() => {
+            _inflightFetchPromises.delete(key);
+        });
+    _inflightFetchPromises.set(key, p);
+    return p;
+}
+
+// Tests + debug surface.
+window.__crispSingleFlightFetch = _singleFlightFetch;
+window.__crispClearFetchCache = () => {
+    _inflightFetchCache.clear();
+    _inflightFetchPromises.clear();
+};
+
 // ── Phase 16 — defensive media-URL resolver ──────────────────
 //
 // Centralises every "given a media/thumbnail URL string from the API,
@@ -3122,7 +3197,12 @@ async function updateHomeImpactMetrics() {
             // number — resolves the stale-counter UX bug.
             let statusList = null;
             try {
-                const statusRes = await fetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
+                // HAR-driven (May 2026) — was a raw fetch that raced 2-3
+                // other init paths on the same URL, producing 3 duplicate
+                // 15 KB responses per page load. _singleFlightFetch
+                // dedupes within a 10 s window so only ONE network call
+                // fires; the other callers reuse the cached body.
+                const statusRes = await _singleFlightFetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
                 if (statusRes.ok) statusList = await statusRes.json();
             } catch (_) {}
             if (Array.isArray(statusList)) {
@@ -3139,7 +3219,10 @@ async function updateHomeImpactMetrics() {
             // ``verified_count`` bumped whenever an analyst dispatches /
             // resolves a report (_mark_report_verified_for_credibility).
             try {
-                const profileRes = await fetch(`${API_BASE}/reports/profile/${deviceHash}`);
+                // HAR-driven (May 2026) — see _singleFlightFetch comment above.
+                // Was hit 7× per page load (3 call sites + retry-on-404 race
+                // + multiple init paths). Now coalesces to ONE network call.
+                const profileRes = await _singleFlightFetch(`${API_BASE}/reports/profile/${deviceHash}`);
                 if (profileRes.ok) {
                     const p = await profileRes.json();
                     if (Number.isFinite(p.verified_count) && p.verified_count > verifiedCount) {
@@ -8679,7 +8762,8 @@ async function _reconcileQueueAgainstServer() {
     if (!deviceHash) return;
     let serverReports = [];
     try {
-        const res = await fetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
+        // HAR-driven dedupe — see _singleFlightFetch helper.
+        const res = await _singleFlightFetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
         if (!res.ok) return;
         serverReports = await res.json();
     } catch (_) {
@@ -9191,7 +9275,8 @@ async function _renderSubmittedReports() {
     }
     let reports = [];
     try {
-        const res = await fetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
+        // HAR-driven dedupe — see _singleFlightFetch helper.
+        const res = await _singleFlightFetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
         if (res.ok) reports = await res.json();
     } catch (e) {
         console.warn('[MyReports] status-since failed:', e);
@@ -9574,13 +9659,26 @@ function _isDeleteQueued(id) {
     } catch { return false; }
 }
 
-/** Add a delete request to the offline queue. De-duplicated on id. */
+/** Add a delete request to the offline queue. De-duplicated on id.
+ *  Captures the current auth token (if any) at enqueue time — same
+ *  offline-grace pattern the queued-report path uses (app.js:7012).
+ *  This lets `_syncDeleteQueue` send the right bearer even if the
+ *  user logged out between deletion + reconnect. */
 function _enqueueDelete(entry) {
     let q = [];
     try {
         const raw = localStorage.getItem(_DELETE_QUEUE_KEY);
         if (raw) q = JSON.parse(raw) || [];
     } catch { q = []; }
+    // Stamp the captured-at-deletion auth token. Pass-through if the
+    // caller already set one (e.g. a future code path that wants to
+    // delete on behalf of a different identity).
+    if (!entry.auth_token) {
+        try {
+            const tok = window.AuthStore && window.AuthStore.getAccessToken && window.AuthStore.getAccessToken();
+            if (tok) entry.auth_token = tok;
+        } catch (_) {}
+    }
     if (!q.some(e => e.id === entry.id)) q.push(entry);
     try { localStorage.setItem(_DELETE_QUEUE_KEY, JSON.stringify(q)); } catch(_) {}
 }
@@ -9605,12 +9703,48 @@ async function _syncDeleteQueue() {
     } catch { return; }
     if (!q.length) return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    // BUGFIX May 2026 (HAR-driven) — surface from `/Users/pks/Desktop/logs-1.har`
+    // showed every delete-queue replay returning 401:
+    //   DELETE /api/v1/reports/<id>  → 401 Unauthorized (19 ms)
+    //   DELETE /api/v1/reports/<id>  → 401 Unauthorized ( 4 ms)
+    // Net effect: queued deletes NEVER drained — they retried on every
+    // reconnect, accumulating forever in localStorage and polluting the
+    // network log on every page load. Root cause: the fetch below was
+    // sent without an Authorization header. The backend's DELETE
+    // endpoint requires an authenticated user (the device-hash-based
+    // ownership check was never wired). Captured token (if any) lives
+    // on `entry.auth_token` for tokens that existed AT THE TIME OF
+    // DELETION (offline-grace pattern — same shape as the queued-report
+    // path at line ~7016). Falls back to the current AuthStore token
+    // for entries that pre-dated the offline-grace wiring.
+    function _bearerForDeleteEntry(entry) {
+        const captured = entry && entry.auth_token;
+        if (captured) return captured;
+        try {
+            const live = window.AuthStore && window.AuthStore.getAccessToken && window.AuthStore.getAccessToken();
+            return live || null;
+        } catch (_) { return null; }
+    }
     for (const entry of q.slice()) {
         try {
-            const res = await fetch(`${API_BASE}/reports/${entry.id}`, { method: 'DELETE' });
+            const headers = {};
+            const tok = _bearerForDeleteEntry(entry);
+            if (tok) headers['Authorization'] = `Bearer ${tok}`;
+            const res = await fetch(`${API_BASE}/reports/${entry.id}`, {
+                method: 'DELETE',
+                headers,
+            });
             // 200/204 = success; 404 = already gone (server purged) — both OK.
+            // 401 = the captured token expired AND there's no live one —
+            // the entry stays in the queue but we stop retrying noisily.
             if (res.ok || res.status === 204 || res.status === 404) {
                 _dequeueDelete(entry.id);
+            } else if (res.status === 401) {
+                // Loud once-per-session warning so operators tailing
+                // devtools know why their delete isn't landing. Don't
+                // dequeue — the user may log back in and the retry
+                // will succeed.
+                console.warn(`[DeleteQueue] 401 on ${entry.id} — login required for the delete to land`);
             }
         } catch (e) {
             console.warn('[DeleteQueue] sync failed:', entry.id, e);
@@ -9631,7 +9765,8 @@ window.openReportDetail = async function (id) {
         const deviceHash = _deviceHashForHistory();
         if (deviceHash) {
             try {
-                const res = await fetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
+                // HAR-driven dedupe — see _singleFlightFetch helper.
+                const res = await _singleFlightFetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
                 if (res.ok) {
                     const arr = await res.json();
                     _submittedCache = arr;
@@ -10360,7 +10495,8 @@ async function _renderSuccessImpactStrip() {
         return;
     }
     try {
-        const res = await fetch(`${API_BASE}/reports/profile/${encodeURIComponent(deviceHash)}`);
+        // HAR-driven dedupe — see _singleFlightFetch helper near API_BASE.
+        const res = await _singleFlightFetch(`${API_BASE}/reports/profile/${encodeURIComponent(deviceHash)}`);
         if (!res.ok) throw new Error(`profile ${res.status}`);
         const p = await res.json();
         const reportCount = Number.isFinite(p.report_count) ? p.report_count : 0;
@@ -10428,7 +10564,10 @@ async function fetchBadge(deviceHash) {
     // Skip cleanly when offline — no console noise mid-flow.
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     try {
-        const res = await fetch(`${API_BASE}/reports/profile/${deviceHash}`);
+        // HAR-driven dedupe — fetchBadge runs on every home-screen
+        // paint + on every status-since refresh. _singleFlightFetch
+        // collapses concurrent + repeat calls within 10 s.
+        const res = await _singleFlightFetch(`${API_BASE}/reports/profile/${deviceHash}`);
         if (!res.ok) return;
         const p = await res.json();
         const badges = { NEWCOMER: '🌱', HELPER: '🤝', GUARDIAN: '🛡', HERO: '🦸' };

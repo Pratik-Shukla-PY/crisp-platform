@@ -940,7 +940,14 @@
             })();
             if (!hash) return [];
             const apiBase = window.API_BASE || '/api/v1';
-            const res = await fetch(`${apiBase}/reports/device/${encodeURIComponent(hash)}/status-since?since=1970-01-01T00:00:00Z`);
+            // HAR-driven dedupe (May 2026) — see _singleFlightFetch
+            // helper in app.js. Home-screen.js init races app.js's own
+            // status-since fetch (and the My Reports panel's later fetch);
+            // the helper coalesces all three to one network call within
+            // a 10 s window. Falls back to plain fetch if app.js hasn't
+            // booted yet (helper not on window).
+            const dedupedFetch = (typeof window !== 'undefined' && window.__crispSingleFlightFetch) || fetch;
+            const res = await dedupedFetch(`${apiBase}/reports/device/${encodeURIComponent(hash)}/status-since?since=1970-01-01T00:00:00Z`);
             if (!res.ok) return [];
             const arr = await res.json();
             return Array.isArray(arr) ? arr : [];
