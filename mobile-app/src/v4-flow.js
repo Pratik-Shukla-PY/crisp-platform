@@ -589,13 +589,27 @@
                         }
                     }
 
-                    // after we copy the modal's snaps into
-                    // v4Photos, CLEAR state.extraPhotos so the v3-shape
-                    // accumulator doesn't double-count on the next
-                    // modal session. (We keep state.photoDataUrl + blob
-                    // because submitReport's `hasPhoto` gate reads them
-                    // and the v3 path still relies on the primary slot.)
-                    _setState({ extraPhotos: [] });
+                    // BUGFIX May 2026 — we used to clear state.extraPhotos
+                    // here ("so the v3-shape accumulator doesn't
+                    // double-count on the next modal session"). That
+                    // turned out to be catastrophic: submitReport at
+                    // app.js:7100 reads `state.extraPhotos.map(ep => …)`
+                    // to build the upload work list, so wiping it dropped
+                    // every camera-snap photo beyond the primary BEFORE
+                    // the queue item was ever built. Every multi-snap
+                    // capture submitted as a single-photo report.
+                    //
+                    // The "double-count" concern is already handled at
+                    // line ~586 by the de-dupe-by-URL check inside this
+                    // very candidates loop: if the modal opens a SECOND
+                    // time with extras still in state, the new snaps push
+                    // to state.extraPhotos as before, but the URL-set
+                    // check refuses to re-add already-known entries to
+                    // v4Photos. So leaving state.extraPhotos populated is
+                    // safe across modal re-opens.
+                    // (Do not re-introduce the clear without a test
+                    // covering multi-snap → submit → backend asserts
+                    // received_media >= snap_count × 3 tiers.)
 
                     if (added > 0) {
                         _renderThumbs();
@@ -672,16 +686,43 @@
                 return;
             }
             try {
+                // BUGFIX May 2026 — `asExtra` MUST be true for every photo
+                // beyond the first one in this session. Previously this
+                // call was hard-coded `asExtra: false`, which made the v3
+                // ingest helper write the new file into state.photoDataUrl
+                // + state.photoVariants — OVERWRITING the primary slot
+                // every time. Net result of a multi-select browse of N
+                // files: only the LAST file's variants survived in state;
+                // photos 1..N-1 were never pushed to state.extraPhotos +
+                // were silently lost before submitReport even built the
+                // queue item. DB census from the day proved it: every
+                // recent APP-source report had media=3 groups=1 (just the
+                // primary's three tiers) regardless of how many photos
+                // the reporter actually captured.
+                //
+                // First photo: photoDataUrl is null AND v4Photos is empty
+                // → goes to primary slot (asExtra=false). Subsequent
+                // photos: append to state.extraPhotos so submitReport's
+                // extraPhotosVariants.map(...) at app.js:7100 actually
+                // finds them.
+                const _hasPrimary = !!_getState().photoDataUrl
+                                  || (_getState().v4Photos || []).length > 0;
+                const asExtra = _hasPrimary;
+
                 // Make sure v3's stage-photo setup ran (it exposes
                 // __crispIngestFile via window). If not yet ready (e.g.
                 // user tapped capture before app.js boot finished), we
                 // fall back to a minimal in-place pipeline that still
                 // sets state.photoDataUrl so submitReport doesn't fail.
                 if (typeof window.__crispIngestFile === 'function') {
-                    window.__crispIngestFile(file, { asExtra: false });
+                    window.__crispIngestFile(file, { asExtra });
                 } else {
                     // Fallback path: set photoDataUrl manually so submit
                     // works even if the v3 ingest helper isn't ready yet.
+                    // The fallback only knows about the primary slot —
+                    // multi-photo via fallback is a corner case (would
+                    // require __crispIngestFile to fail to load), and
+                    // the previous behavior was already lossy.
                     await _v4FallbackIngest(file);
                 }
 
@@ -696,19 +737,44 @@
                 // pushes a duplicate into v4Photos. User-visible: only
                 // 1 thumbnail ever appears, no matter how many photos
                 // are taken.
+                // Branch on asExtra: primary writes to state.photoDataUrl,
+                // extras append to state.extraPhotos[len-1].dataUrl. We
+                // wait for the appropriate signal to land before reading
+                // the new URL for the v4 thumbnail strip.
                 const _preDataUrl = _getState().photoDataUrl;
+                const _preExtrasLen = (_getState().extraPhotos || []).length;
                 const startedAt = Date.now();
-                while (_getState().photoDataUrl === _preDataUrl
-                       && Date.now() - startedAt < 4000) {
-                    await new Promise((r) => setTimeout(r, 50));
+                if (asExtra) {
+                    // Wait for the new entry to land at state.extraPhotos[len].
+                    while ((_getState().extraPhotos || []).length === _preExtrasLen
+                           && Date.now() - startedAt < 4000) {
+                        await new Promise((r) => setTimeout(r, 50));
+                    }
+                } else {
+                    // Primary path — same wait-for-change loop as before.
+                    while (_getState().photoDataUrl === _preDataUrl
+                           && Date.now() - startedAt < 4000) {
+                        await new Promise((r) => setTimeout(r, 50));
+                    }
                 }
 
-                // Render the v4 thumbnail strip from state.photoDataUrl
-                // (the same SMALL data URL v3 uses for #photo-preview).
-                const dataUrl = _getState().photoDataUrl;
-                if (dataUrl && dataUrl !== _preDataUrl) {
+                // Render the v4 thumbnail strip. For the primary the URL
+                // is state.photoDataUrl; for extras the new entry sits
+                // at the tail of state.extraPhotos.
+                let dataUrl;
+                let entryBlob;
+                if (asExtra) {
+                    const extras = _getState().extraPhotos || [];
+                    const tail = extras[extras.length - 1];
+                    dataUrl = tail?.dataUrl || null;
+                    entryBlob = tail?.blob || null;
+                } else {
+                    dataUrl = _getState().photoDataUrl;
+                    entryBlob = _getState().photoBlob;
+                }
+                if (dataUrl && (asExtra || dataUrl !== _preDataUrl)) {
                     const photoEntry = {
-                        blob: _getState().photoBlob,
+                        blob: entryBlob,
                         url: dataUrl,
                         ts: Date.now(),
                     };
@@ -954,11 +1020,58 @@
                 btn.addEventListener('click', (ev) => {
                     ev.stopPropagation();
                     const idx = parseInt(btn.getAttribute('data-idx') || '0', 10);
-                    _getState().v4Photos.splice(idx, 1);
-                    if (_getState().v4Photos.length === 0) {
+                    const state = _getState();
+                    const removed = state.v4Photos[idx];
+                    state.v4Photos.splice(idx, 1);
+
+                    // BUGFIX May 2026 — keep state.extraPhotos in sync.
+                    // submitReport reads from state.extraPhotos to build
+                    // the upload work list. If a user removes a thumbnail
+                    // here but the corresponding extraPhotos entry stays,
+                    // submit queues a deleted photo. Match by dataUrl.
+                    if (removed && state.extraPhotos && state.extraPhotos.length > 0) {
+                        const extraIdx = state.extraPhotos.findIndex(
+                            (e) => e && e.dataUrl === removed.url
+                        );
+                        if (extraIdx >= 0) state.extraPhotos.splice(extraIdx, 1);
+                    }
+
+                    // If the user removed the PRIMARY (idx === 0) and
+                    // there's at least one other photo, promote the new
+                    // first v4Photo into the primary slot — its variants
+                    // live in state.extraPhotos (because the asExtra
+                    // pipeline persisted them there). Copy the variants
+                    // up into state.photoVariants so submitReport's
+                    // primary-photo branch finds them.
+                    if (idx === 0 && state.v4Photos.length > 0) {
+                        const newPrimary = state.v4Photos[0];
+                        // Find the matching extraPhotos entry for the
+                        // promoted photo (still there if it was an
+                        // extra) and lift its data into primary slots.
+                        const promotedExtraIdx = state.extraPhotos.findIndex(
+                            (e) => e && e.dataUrl === newPrimary.url
+                        );
+                        if (promotedExtraIdx >= 0) {
+                            const promoted = state.extraPhotos[promotedExtraIdx];
+                            state.photoDataUrl = promoted.dataUrl;
+                            state.photoBlob = promoted.blob;
+                            state.photoVariants = promoted.variants || null;
+                            state.photoGroupId = promoted.groupId || state.photoGroupId;
+                            state.photoClientBlurApplied = Boolean(promoted.clientBlurApplied);
+                            // Once promoted, drop the extras entry — it's
+                            // now represented in the primary slot.
+                            state.extraPhotos.splice(promotedExtraIdx, 1);
+                        }
+                    }
+                    if (state.v4Photos.length === 0) {
                         nextBtn.disabled = true;
                         nextBtn.classList.remove('is-ready');
-                        _setState({ photoBlob: null });
+                        _setState({
+                            photoBlob: null,
+                            photoDataUrl: null,
+                            photoVariants: null,
+                            extraPhotos: [],
+                        });
                     }
                     _renderThumbs();
                 });

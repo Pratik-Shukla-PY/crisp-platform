@@ -7106,6 +7106,29 @@ async function submitReport() {
             } : null),
         };
 
+        // BUGFIX May 2026 — drift detector. If the v4 thumb strip shows N
+        // photos but only 1 made it through the variant pipeline, the user
+        // sees their multi-photo capture silently submitted as a single-
+        // photo report. The two-bug interaction in v4-flow.js (browse
+        // path always passed asExtra=false; modal-close cleared extras)
+        // exactly caused this and shipped to PROD without being caught.
+        // This warning is the ratchet: any future regression that lets
+        // v4Photos.length and extraPhotosVariants drift trips this branch
+        // and logs a structured `[submit:drift]` line operators can find
+        // in the PWA console for an in-the-field repro.
+        const _v4Count = (state.v4Photos || []).length;
+        const _queuedCount = (queueItem.photoVariants ? 1 : 0)
+                           + queueItem.extraPhotosVariants.filter(v => v).length;
+        if (_v4Count > 1 && _queuedCount < _v4Count) {
+            console.warn(
+                `[submit:drift] v4Photos has ${_v4Count} thumbnails but only ` +
+                `${_queuedCount} variant set(s) made it into the queue item — ` +
+                `${_v4Count - _queuedCount} photo(s) will NOT upload. Most likely ` +
+                `cause: v4 ingest path didn't push to state.extraPhotos, or ` +
+                `state.extraPhotos was cleared between capture + submit.`,
+            );
+        }
+
         // Encode each photo variant's blob to a data URL so IndexedDB can
         // persist them across app restarts (Blobs survive IDB but data URLs
         // survive app-restart + storage-migration more predictably in
