@@ -614,12 +614,36 @@ async function updateSyncBadge() {
 }
 
 // ── Manual Sync Fallback (for browsers without Background Sync) ──────────────
-async function syncQueueManual() {
+//
+// BUGFIX May 2026 — user reported tapping the "N queued" pill at the top of
+// the capture screen was a silent no-op ("nothing happens"). The click DID
+// trigger this function via the inline onclick on #sync-badge (see
+// index.html:2617), but the user got zero visual feedback so it felt broken.
+// Added entry + exit toasts; existing callers (boot path) can pass
+// `{ showFeedback: false }` to suppress toasting in non-user-initiated
+// contexts.
+async function syncQueueManual(opts) {
+    const showFeedback = !opts || opts.showFeedback !== false;
+    const showT = (msg, kind) => {
+        if (!showFeedback) return;
+        try { if (typeof showToast === 'function') showToast(msg, kind || 'info'); }
+        catch (_) {}
+    };
     let items;
     try { items = await getAllQueued(); } catch (_) { return; }
-    if (items.length === 0) return;
+    if (items.length === 0) {
+        showT(t('sync_nothing_queued') || 'Nothing in the queue right now.', 'info');
+        return;
+    }
 
-    console.log(`Manual sync: ${items.length} queued reports`);
+    // Entry toast — user immediately sees "Retrying N reports…" so the
+    // tap registers visually even before any network round-trip.
+    const _initialCount = items.length;
+    const _retryMsg = (t('sync_retrying') || 'Retrying {n} queued report(s)…')
+        .replace('{n}', String(_initialCount));
+    showT(_retryMsg, 'info');
+
+    console.log(`Manual sync: ${_initialCount} queued reports`);
     for (const item of items) {
         try {
             const stages = item.stages || {};
@@ -708,6 +732,30 @@ async function syncQueueManual() {
         }
     }
     updateSyncBadge();
+
+    // Exit toast — count what's left vs what started; tell the user.
+    // If we drained everything, celebrate. If some are still queued,
+    // be honest about how many remain so they know to try again later
+    // (network might still be flaky).
+    if (showFeedback) {
+        try {
+            const remaining = await getAllQueued();
+            const _stillQueued = remaining.length;
+            const _drained = _initialCount - _stillQueued;
+            if (_stillQueued === 0) {
+                showT(t('sync_all_done') || 'All queued reports synced!', 'success');
+            } else if (_drained > 0) {
+                const msg = (t('sync_partial') || '{done} synced, {pending} still queued.')
+                    .replace('{done}', String(_drained))
+                    .replace('{pending}', String(_stillQueued));
+                showT(msg, 'warn');
+            } else {
+                const msg = (t('sync_none_drained') || '{n} still queued — check your connection.')
+                    .replace('{n}', String(_stillQueued));
+                showT(msg, 'warn');
+            }
+        } catch (_) { /* getAllQueued race — silent */ }
+    }
 }
 
 // ── i18n strings ──────────────────────────────────────────────────────────────
@@ -1074,6 +1122,12 @@ const I18N = {
         sync_syncing: "Syncing...",
         sync_queued: "queued",
         sync_failed: "failed",
+        // — Manual-sync toast feedback (May 2026, HAR-driven) —
+        sync_nothing_queued: "Nothing in the queue right now.",
+        sync_retrying: "Retrying {n} queued report(s)…",
+        sync_all_done: "All queued reports synced!",
+        sync_partial: "{done} synced, {pending} still queued.",
+        sync_none_drained: "{n} still queued — check your connection.",
         // — Review / confirm summary —
         summary_incident: "Incident",
         summary_details: "Details",
@@ -10927,6 +10981,28 @@ function _clearCaptureState() {
     }
     // Drop the v4Photos array so the strip's render sees empty state.
     state.v4Photos = [];
+
+    // BUGFIX May 2026 — broadcast a "capture state cleared" event so
+    // module-scoped state living OUTSIDE app.js (v4-flow.js's
+    // `_classifyStep` cursor, `_crisisGroup` drill-down, the UNDP-
+    // details prompt's local flags, etc.) can reset itself too.
+    //
+    // The user-visible bug this closes: after "Add Another Report",
+    // the v4 classify stage was re-entered with `_classifyStep` still
+    // pointing at 'crisis' from the previous report. The DOM showed
+    // the crisis sub-step (3 of 3 — "What caused it?") even though
+    // the user expected to start over at 'damage' (1 of 3). Worse,
+    // the Continue button's enable/disable state was last evaluated
+    // when crisis_type was set, so it remained whatever value the
+    // PRIOR report ended on — clicking a fresh crisis chip didn't
+    // visibly change anything from the user's perspective.
+    //
+    // Listeners pattern (v4-flow.js mirrors this): the receiver
+    // resets its own module-state + repaints whatever DOM it owns.
+    // Belt-and-braces; never fails if no one listens.
+    try {
+        document.dispatchEvent(new CustomEvent('crisp-capture-state-cleared'));
+    } catch (_) {}
 }
 
 // Expose for the post-submit hook and tests. The pure form (no navigation)

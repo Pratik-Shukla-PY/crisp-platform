@@ -7,11 +7,11 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 579,
-    "gap_key_count": 18,
-    "coverage_percent": 97,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 23,
+    "coverage_percent": 96.2,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "report_id",
@@ -30,7 +30,12 @@
       "v4_infra_other_prompt",
       "v4_infra_other_placeholder",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "개인정보 보호는 중요합니다",
@@ -629,5 +634,10 @@
   "privacy_how_3_t": "전송",
   "privacy_how_3_b": "전송을 탭하세요. 오프라인이면 보고서가 대기열에 들어가고 네트워크 복귀 시 자동으로 업로드됩니다.",
   "privacy_channels_title": "다중 채널 동등성",
-  "privacy_channels_body": "PWA(이 앱), Android 앱, SMS, IVR 통화(음성 메뉴), WhatsApp 메시지 또는 Telegram 채팅을 통해 신고할 수 있습니다. 각 채널은 대응자 측에서 동일한 보고서를 생성하며, 동일한 보호 기능을 제공합니다."
+  "privacy_channels_body": "PWA(이 앱), Android 앱, SMS, IVR 통화(음성 메뉴), WhatsApp 메시지 또는 Telegram 채팅을 통해 신고할 수 있습니다. 각 채널은 대응자 측에서 동일한 보고서를 생성하며, 동일한 보호 기능을 제공합니다.",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

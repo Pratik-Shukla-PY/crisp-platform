@@ -7,11 +7,11 @@
     "tier": 3,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 580,
-    "gap_key_count": 17,
-    "coverage_percent": 97.2,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 22,
+    "coverage_percent": 96.3,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "report_id",
@@ -29,7 +29,12 @@
       "v4_infra_other_prompt",
       "v4_infra_other_placeholder",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "உங்கள் தனியுரிமை முக்கியம்",
@@ -628,5 +633,10 @@
   "privacy_how_3_t": "அனுப்பு",
   "privacy_how_3_b": "அனுப்பு தட்டவும். ஆஃப்லைனில் இருந்தால் அறிக்கை வரிசைக்கு வந்து பிணையம் திரும்பும்போது தானாக பதிவேற்றப்படும்.",
   "privacy_channels_title": "பல சேனல் சமத்துவம்",
-  "privacy_channels_body": "PWA (இந்த பயன்பாடு), Android பயன்பாடு, SMS, IVR அழைப்பு (குரல் தொலைபேசி மரம்), வாட்ஸ்அப் செய்தி அல்லது டெலிகிராம் அரட்டை மூலம் அறிக்கையிடலாம். ஒவ்வொரு சேனலும் பதிலளிப்பவர் பக்கத்தில் அதே அறிக்கையை, அதே பாதுகாப்புகளுடன் உருவாக்குகிறது."
+  "privacy_channels_body": "PWA (இந்த பயன்பாடு), Android பயன்பாடு, SMS, IVR அழைப்பு (குரல் தொலைபேசி மரம்), வாட்ஸ்அப் செய்தி அல்லது டெலிகிராம் அரட்டை மூலம் அறிக்கையிடலாம். ஒவ்வொரு சேனலும் பதிலளிப்பவர் பக்கத்தில் அதே அறிக்கையை, அதே பாதுகாப்புகளுடன் உருவாக்குகிறது.",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

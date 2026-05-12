@@ -1614,6 +1614,38 @@
                 _showSubStep('damage');
             }
         });
+        // BUGFIX May 2026 — _clearCaptureState() (app.js, end) dispatches
+        // this event after wiping state. Without this listener, the
+        // user-visible flow after "Add Another Report" was:
+        //   · _classifyStep stayed 'crisis' from the prior submit
+        //   · DOM still showed the crisis sub-step ("WHAT CAUSED IT · 3 of 3")
+        //   · state.crisis_type was null (correctly cleared)
+        //   · Continue button kept whichever enabled/disabled state the
+        //     LAST _refreshClassifyNext call had set — confusing
+        // Reset the local cursors + DOM cursor here so the next entry
+        // starts at sub-step 1 with the gated Continue correctly disabled.
+        document.addEventListener('crisp-capture-state-cleared', () => {
+            _classifyStep = 'damage';
+            _crisisGroup = null;
+            try { _showSubStep('damage'); } catch (_) {}
+            // Defensively re-evaluate the Continue gate against the fresh
+            // (cleared) state. _showSubStep already does this, but if the
+            // listener fires while the user is mid-stage (rare edge case
+            // where a parallel reset path races) we want the gate to
+            // immediately reflect emptiness.
+            try { _refreshClassifyNext(); } catch (_) {}
+            // Reset the crisis-cards drill-down: show the group cards,
+            // hide the subtype list. Otherwise the previous-report's
+            // "subtype-list visible" state leaks and the user lands on
+            // the Explosion/Chemical list without seeing the parent
+            // Technological/Natural/Human cards first.
+            try {
+                const groupCards = document.getElementById('v4-cause-cards');
+                const subtypesContainer = document.getElementById('v4-cause-subtypes');
+                if (groupCards) groupCards.removeAttribute('hidden');
+                if (subtypesContainer) subtypesContainer.setAttribute('hidden', '');
+            } catch (_) {}
+        });
         // Re-render the dynamic sub-step label whenever the i18n pack
         // updates (e.g. async en.json load resolves after first paint).
         document.addEventListener('crisp-i18n-applied', () => {

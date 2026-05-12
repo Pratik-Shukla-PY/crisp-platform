@@ -7,11 +7,11 @@
     "tier": 3,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 580,
-    "gap_key_count": 17,
-    "coverage_percent": 97.2,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 22,
+    "coverage_percent": 96.3,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "report_id",
@@ -29,7 +29,12 @@
       "v4_infra_other_prompt",
       "v4_infra_other_placeholder",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "તમારી ગોપનીયતા મહત્વપૂર્ણ છે",
@@ -628,5 +633,10 @@
   "privacy_how_3_t": "મોકલો",
   "privacy_how_3_b": "મોકલો ટેપ. ઓફલાઈન હો તો રિપોર્ટ કતારમાં જાય અને નેટવર્ક પાછું આવ્યે સ્વયંચાલિત અપલોડ.",
   "privacy_channels_title": "મલ્ટી-ચેનલ સમાનતા",
-  "privacy_channels_body": "તમે PWA (આ એપ), Android એપ, SMS, IVR કોલ (વોઈસ ફોન ટ્રી), વોટ્સએપ સંદેશ, અથવા ટેલિગ્રામ ચેટ દ્વારા રિપોર્ટ કરી શકો. દરેક ચેનલ પ્રતિક્રિયા આપનાર બાજુ સમાન રિપોર્ટ, સમાન સુરક્ષાઓ સાથે, બનાવે છે."
+  "privacy_channels_body": "તમે PWA (આ એપ), Android એપ, SMS, IVR કોલ (વોઈસ ફોન ટ્રી), વોટ્સએપ સંદેશ, અથવા ટેલિગ્રામ ચેટ દ્વારા રિપોર્ટ કરી શકો. દરેક ચેનલ પ્રતિક્રિયા આપનાર બાજુ સમાન રિપોર્ટ, સમાન સુરક્ષાઓ સાથે, બનાવે છે.",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

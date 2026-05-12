@@ -7,11 +7,11 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 580,
-    "gap_key_count": 17,
-    "coverage_percent": 97.2,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 22,
+    "coverage_percent": 96.3,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "report_id",
@@ -29,7 +29,12 @@
       "v4_infra_other_prompt",
       "v4_infra_other_placeholder",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "آپ کی پرائیویسی اہم ہے",
@@ -628,5 +633,10 @@
   "privacy_how_3_t": "بھیجیں",
   "privacy_how_3_b": "بھیجیں ٹیپ کریں۔ اگر آپ آف لائن ہیں، رپورٹ قطار میں جاتی ہے اور نیٹ ورک واپس آنے پر خودکار اپ لوڈ ہوتی ہے۔",
   "privacy_channels_title": "ملٹی چینل برابری",
-  "privacy_channels_body": "آپ PWA (یہ ایپ)، Android ایپ، SMS، IVR کال (وائس فون ٹری)، واٹس ایپ پیغام، یا ٹیلی گرام چیٹ کے ذریعے رپورٹ کر سکتے ہیں۔ ہر چینل ردِعمل دہندہ کی طرف سے ایک ہی رپورٹ تیار کرتا ہے، ایک ہی تحفظات کے ساتھ۔"
+  "privacy_channels_body": "آپ PWA (یہ ایپ)، Android ایپ، SMS، IVR کال (وائس فون ٹری)، واٹس ایپ پیغام، یا ٹیلی گرام چیٹ کے ذریعے رپورٹ کر سکتے ہیں۔ ہر چینل ردِعمل دہندہ کی طرف سے ایک ہی رپورٹ تیار کرتا ہے، ایک ہی تحفظات کے ساتھ۔",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

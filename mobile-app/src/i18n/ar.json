@@ -7,11 +7,11 @@
     "tier": 1,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 582,
-    "gap_key_count": 15,
-    "coverage_percent": 97.5,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 20,
+    "coverage_percent": 96.7,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "summary_none",
@@ -27,7 +27,12 @@
       "v4_infra_other_prompt",
       "v4_infra_other_placeholder",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "خصوصيتك مهمة",
@@ -626,5 +631,10 @@
   "privacy_how_3_t": "إرسال",
   "privacy_how_3_b": "اضغط إرسال. إذا كنت بلا اتصال، يُدرَج التقرير في قائمة الانتظار ويُرفع تلقائيًا عند عودة الشبكة.",
   "privacy_channels_title": "التوافق عبر القنوات",
-  "privacy_channels_body": "يمكنك الإبلاغ عبر PWA (هذا التطبيق)، أو تطبيق Android، أو SMS، أو مكالمة IVR، أو رسالة WhatsApp، أو محادثة Telegram. كل قناة تنتج التقرير ذاته لدى المستجيبين، بنفس الحماية."
+  "privacy_channels_body": "يمكنك الإبلاغ عبر PWA (هذا التطبيق)، أو تطبيق Android، أو SMS، أو مكالمة IVR، أو رسالة WhatsApp، أو محادثة Telegram. كل قناة تنتج التقرير ذاته لدى المستجيبين، بنفس الحماية.",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

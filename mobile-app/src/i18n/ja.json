@@ -7,11 +7,11 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 580,
-    "gap_key_count": 17,
-    "coverage_percent": 97.2,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 22,
+    "coverage_percent": 96.3,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "need_wash",
@@ -29,7 +29,12 @@
       "v4_infra_other_prompt",
       "v4_infra_other_placeholder",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "プライバシーは大切です",
@@ -628,5 +633,10 @@
   "privacy_how_3_t": "送信",
   "privacy_how_3_b": "送信をタップ。オフラインの場合は報告がキューに入り、ネットワーク復帰時に自動送信されます。",
   "privacy_channels_title": "マルチチャネル対応",
-  "privacy_channels_body": "PWA（このアプリ）、Androidアプリ、SMS、IVR通話（音声メニュー）、WhatsAppメッセージ、Telegramチャットから報告できます。各チャネルは対応者側で同じ報告を生成し、同じ保護を提供します。"
+  "privacy_channels_body": "PWA（このアプリ）、Androidアプリ、SMS、IVR通話（音声メニュー）、WhatsAppメッセージ、Telegramチャットから報告できます。各チャネルは対応者側で同じ報告を生成し、同じ保護を提供します。",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

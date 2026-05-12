@@ -7,11 +7,11 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 574,
-    "gap_key_count": 23,
-    "coverage_percent": 96.1,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 28,
+    "coverage_percent": 95.3,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "report_id",
@@ -35,7 +35,12 @@
       "v4_infra_other_placeholder",
       "aria_online_status",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "A Sua Privacidade Importa",
@@ -634,5 +639,10 @@
   "privacy_how_3_t": "Enviar",
   "privacy_how_3_b": "Toque em Enviar. Se estiver offline, o relatório fica em fila e envia automaticamente quando a rede voltar.",
   "privacy_channels_title": "Paridade multicanal",
-  "privacy_channels_body": "Pode reportar pela PWA (esta app), pela app Android, por SMS, por chamada IVR (árvore de voz), por mensagem WhatsApp ou por chat Telegram. Cada canal produz o mesmo relatório do lado dos socorristas, com as mesmas proteções."
+  "privacy_channels_body": "Pode reportar pela PWA (esta app), pela app Android, por SMS, por chamada IVR (árvore de voz), por mensagem WhatsApp ou por chat Telegram. Cada canal produz o mesmo relatório do lado dos socorristas, com as mesmas proteções.",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

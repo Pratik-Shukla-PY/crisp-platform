@@ -7,11 +7,11 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 580,
-    "gap_key_count": 17,
-    "coverage_percent": 97.2,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 22,
+    "coverage_percent": 96.3,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "report_id",
@@ -29,7 +29,12 @@
       "v4_infra_other_prompt",
       "v4_infra_other_placeholder",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "আপনার গোপনীয়তা গুরুত্বপূর্ণ",
@@ -628,5 +633,10 @@
   "privacy_how_3_t": "পাঠান",
   "privacy_how_3_b": "পাঠান ট্যাপ করুন। অফলাইন থাকলে প্রতিবেদন সারিতে যায় এবং নেটওয়ার্ক ফিরলে স্বয়ংক্রিয়ভাবে আপলোড হয়।",
   "privacy_channels_title": "মাল্টি-চ্যানেল সমতা",
-  "privacy_channels_body": "আপনি PWA (এই অ্যাপ), Android অ্যাপ, SMS, IVR কল (ভয়েস ফোন ট্রি), হোয়াটসঅ্যাপ বার্তা, বা টেলিগ্রাম চ্যাটের মাধ্যমে রিপোর্ট করতে পারেন। প্রতিটি চ্যানেল প্রতিক্রিয়াকারী পক্ষে একই প্রতিবেদন তৈরি করে, একই সুরক্ষা সহ।"
+  "privacy_channels_body": "আপনি PWA (এই অ্যাপ), Android অ্যাপ, SMS, IVR কল (ভয়েস ফোন ট্রি), হোয়াটসঅ্যাপ বার্তা, বা টেলিগ্রাম চ্যাটের মাধ্যমে রিপোর্ট করতে পারেন। প্রতিটি চ্যানেল প্রতিক্রিয়াকারী পক্ষে একই প্রতিবেদন তৈরি করে, একই সুরক্ষা সহ।",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

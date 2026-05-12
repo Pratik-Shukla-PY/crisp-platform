@@ -7,11 +7,11 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 579,
-    "gap_key_count": 18,
-    "coverage_percent": 97,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 23,
+    "coverage_percent": 96.2,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "tsunami",
@@ -30,7 +30,12 @@
       "v4_infra_other_prompt",
       "v4_infra_other_placeholder",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "Gizliliğiniz Önemlidir",
@@ -629,5 +634,10 @@
   "privacy_how_3_t": "Gönder",
   "privacy_how_3_b": "Gönder'e dokun. Çevrimdışıysanız bildirim kuyruğa girer ve ağ döndüğünde otomatik yüklenir.",
   "privacy_channels_title": "Çoklu kanal eşitliği",
-  "privacy_channels_body": "PWA (bu uygulama), Android uygulaması, SMS, IVR araması (sesli menü), WhatsApp mesajı veya Telegram sohbeti ile bildirim yapabilirsiniz. Her kanal aynı bildirimi müdahale tarafında aynı korumalarla üretir."
+  "privacy_channels_body": "PWA (bu uygulama), Android uygulaması, SMS, IVR araması (sesli menü), WhatsApp mesajı veya Telegram sohbeti ile bildirim yapabilirsiniz. Her kanal aynı bildirimi müdahale tarafında aynı korumalarla üretir.",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

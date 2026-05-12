@@ -7,11 +7,11 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 571,
-    "gap_key_count": 26,
-    "coverage_percent": 95.6,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 31,
+    "coverage_percent": 94.9,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "report_id",
@@ -38,7 +38,12 @@
       "home_value_offline_t",
       "aria_online_status",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "Privasi Anda Penting",
@@ -637,5 +642,10 @@
   "privacy_how_3_t": "Kirim",
   "privacy_how_3_b": "Sentuh Kirim. Jika offline, laporan mengantri dan diunggah otomatis saat jaringan kembali.",
   "privacy_channels_title": "Kesetaraan multi-saluran",
-  "privacy_channels_body": "Anda dapat melapor melalui PWA (aplikasi ini), aplikasi Android, SMS, panggilan IVR (pohon suara), pesan WhatsApp, atau obrolan Telegram. Setiap saluran menghasilkan laporan yang sama di sisi responden, dengan perlindungan yang sama."
+  "privacy_channels_body": "Anda dapat melapor melalui PWA (aplikasi ini), aplikasi Android, SMS, panggilan IVR (pohon suara), pesan WhatsApp, atau obrolan Telegram. Setiap saluran menghasilkan laporan yang sama di sisi responden, dengan perlindungan yang sama.",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

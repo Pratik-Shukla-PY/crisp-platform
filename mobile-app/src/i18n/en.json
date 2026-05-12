@@ -603,5 +603,10 @@
   "privacy_how_3_t": "Send",
   "privacy_how_3_b": "Tap Send. If you're offline, the report queues and uploads automatically when the network is back.",
   "privacy_channels_title": "Multi-channel parity",
-  "privacy_channels_body": "You can report through the PWA (this app), the Android app, an SMS, an IVR call (voice phone tree), a WhatsApp message, or a Telegram chat. Every channel produces the same report on the responder side, with the same protections."
+  "privacy_channels_body": "You can report through the PWA (this app), the Android app, an SMS, an IVR call (voice phone tree), a WhatsApp message, or a Telegram chat. Every channel produces the same report on the responder side, with the same protections.",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

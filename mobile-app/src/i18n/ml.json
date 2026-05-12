@@ -7,11 +7,11 @@
     "tier": 3,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 20,
-    "gap_key_count": 577,
-    "coverage_percent": 3.4,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 582,
+    "coverage_percent": 3.3,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "consent_title",
       "consent_desc",
@@ -589,7 +589,12 @@
       "privacy_how_3_t",
       "privacy_how_3_b",
       "privacy_channels_title",
-      "privacy_channels_body"
+      "privacy_channels_body",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "Your Privacy Matters",
@@ -1188,5 +1193,10 @@
   "privacy_how_3_t": "Send",
   "privacy_how_3_b": "Tap Send. If you're offline, the report queues and uploads automatically when the network is back.",
   "privacy_channels_title": "Multi-channel parity",
-  "privacy_channels_body": "You can report through the PWA (this app), the Android app, an SMS, an IVR call (voice phone tree), a WhatsApp message, or a Telegram chat. Every channel produces the same report on the responder side, with the same protections."
+  "privacy_channels_body": "You can report through the PWA (this app), the Android app, an SMS, an IVR call (voice phone tree), a WhatsApp message, or a Telegram chat. Every channel produces the same report on the responder side, with the same protections.",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

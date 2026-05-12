@@ -7,11 +7,11 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 580,
-    "gap_key_count": 17,
-    "coverage_percent": 97.2,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 22,
+    "coverage_percent": 96.3,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "report_id",
@@ -29,7 +29,12 @@
       "v4_infra_other_prompt",
       "v4_infra_other_placeholder",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "आपकी गोपनीयता महत्वपूर्ण है",
@@ -628,5 +633,10 @@
   "privacy_how_3_t": "भेजें",
   "privacy_how_3_b": "भेजें टैप करें। यदि ऑफ़लाइन हैं, तो रिपोर्ट कतार में जाती है और नेटवर्क लौटने पर स्वतः अपलोड हो जाती है।",
   "privacy_channels_title": "मल्टी-चैनल समानता",
-  "privacy_channels_body": "आप PWA (यह ऐप), Android ऐप, SMS, IVR कॉल (वॉइस फोन ट्री), व्हाट्सएप संदेश, या टेलीग्राम चैट के माध्यम से रिपोर्ट कर सकते हैं। प्रत्येक चैनल प्रतिक्रिया पक्ष पर समान रिपोर्ट उत्पन्न करता है, समान सुरक्षा के साथ।"
+  "privacy_channels_body": "आप PWA (यह ऐप), Android ऐप, SMS, IVR कॉल (वॉइस फोन ट्री), व्हाट्सएप संदेश, या टेलीग्राम चैट के माध्यम से रिपोर्ट कर सकते हैं। प्रत्येक चैनल प्रतिक्रिया पक्ष पर समान रिपोर्ट उत्पन्न करता है, समान सुरक्षा के साथ।",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }

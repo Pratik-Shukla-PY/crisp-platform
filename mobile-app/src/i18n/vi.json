@@ -7,11 +7,11 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 597,
+    "en_key_count": 602,
     "translated_key_count": 579,
-    "gap_key_count": 18,
-    "coverage_percent": 97,
-    "generated_at": "2026-05-12T14:26:04.424Z",
+    "gap_key_count": 23,
+    "coverage_percent": 96.2,
+    "generated_at": "2026-05-12T19:21:18.836Z",
     "gap_keys": [
       "home_sub",
       "report_id",
@@ -30,7 +30,12 @@
       "v4_infra_other_prompt",
       "v4_infra_other_placeholder",
       "pwa_update_available",
-      "pwa_update_now"
+      "pwa_update_now",
+      "sync_nothing_queued",
+      "sync_retrying",
+      "sync_all_done",
+      "sync_partial",
+      "sync_none_drained"
     ]
   },
   "consent_title": "Quyền riêng tư của bạn quan trọng",
@@ -629,5 +634,10 @@
   "privacy_how_3_t": "Gửi",
   "privacy_how_3_b": "Chạm Gửi. Nếu ngoại tuyến, báo cáo xếp hàng và tự động tải lên khi có mạng.",
   "privacy_channels_title": "Tương đương đa kênh",
-  "privacy_channels_body": "Bạn có thể báo cáo qua PWA (ứng dụng này), ứng dụng Android, SMS, cuộc gọi IVR (cây thoại), tin nhắn WhatsApp, hoặc trò chuyện Telegram. Mỗi kênh tạo ra cùng một báo cáo phía đội ứng phó, với cùng mức bảo vệ."
+  "privacy_channels_body": "Bạn có thể báo cáo qua PWA (ứng dụng này), ứng dụng Android, SMS, cuộc gọi IVR (cây thoại), tin nhắn WhatsApp, hoặc trò chuyện Telegram. Mỗi kênh tạo ra cùng một báo cáo phía đội ứng phó, với cùng mức bảo vệ.",
+  "sync_nothing_queued": "Nothing in the queue right now.",
+  "sync_retrying": "Retrying {n} queued report(s)…",
+  "sync_all_done": "All queued reports synced!",
+  "sync_partial": "{done} synced, {pending} still queued.",
+  "sync_none_drained": "{n} still queued — check your connection."
 }
