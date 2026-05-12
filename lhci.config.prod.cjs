@@ -22,8 +22,10 @@ module.exports = {
             numberOfRuns: dev.ci.collect.numberOfRuns,
             // No staticDistDir — LHCI audits external URLs as-is.
             url: [
+                // Phase 25.10 — `?ui=v4` audit URL removed (v4 is default-on
+                // since Phase 25.3, both URLs rendered identical flows). Keep
+                // dev + prod URL lists in lockstep for apples-to-apples runs.
                 'https://undp.crisplabs.tech/mobile-app/src/',
-                'https://undp.crisplabs.tech/mobile-app/src/?ui=v4',
                 'https://undp.crisplabs.tech/web-dashboard/src/',
             ],
         },

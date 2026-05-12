@@ -33,7 +33,7 @@
 // (The LHCI config is the source of truth; this script duplicates the
 // numbers for the human-friendly Markdown rendering + regression delta.)
 //
-//   pwa-home / pwa-home-v4 (current FLOOR — ratchet up as fixes land):
+//   pwa-home (current FLOOR — ratchet up as fixes land):
 //     performance      ≥ 45   (block)
 //     accessibility    ≥ 70   (block)   target: 90
 //     best-practices   ≥ 85   (block)
@@ -65,7 +65,6 @@ const APPROVED = ['1', 'true', 'yes'].includes(
 
 const PAGE_THRESHOLDS = {
     'pwa-home':     { performance: 45, accessibility: 70, 'best-practices': 85, pwa: 80 },
-    'pwa-home-v4':  { performance: 45, accessibility: 70, 'best-practices': 85, pwa: 80 },
     dashboard:      { performance: 55, accessibility: 85, 'best-practices': 85, pwa: null },
 };
 

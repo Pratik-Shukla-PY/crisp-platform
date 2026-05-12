@@ -59,7 +59,6 @@ function urlToPageKey(url) {
     try {
         const u = new URL(url);
         const p = u.pathname + u.search;
-        if (p.match(/\/mobile-app\/src\/\?ui=v4/)) return 'pwa-home-v4';
         if (p.match(/\/mobile-app\/src\//))         return 'pwa-home';
         if (p.match(/\/web-dashboard\/src\//))      return 'dashboard';
         // Fallback — should never hit if URL list in lhci.config.cjs

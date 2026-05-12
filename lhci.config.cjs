@@ -95,8 +95,13 @@ module.exports = {
             // audits for the v4 capture / classify / review stages
             // (those require Lighthouse's userFlow API, not lhci collect).
             url: [
+                // May 2026 (Phase 25.10) — `/mobile-app/src/?ui=v4` removed.
+                // v4 is default-on for everyone since Phase 25.3; both URLs
+                // rendered the same capture flow and produced near-identical
+                // scores (perf 47 vs 46). The `?ui=v4` param now only matters
+                // as an escape hatch for users who flipped `crisp_ui_v4=off`
+                // in localStorage — irrelevant to a fresh Lighthouse run.
                 '/mobile-app/src/',
-                '/mobile-app/src/?ui=v4',
                 '/web-dashboard/src/',
             ],
         },
