@@ -398,13 +398,34 @@
     // Kick off a lazy model load right after the page is idle, so the *first*
     // photo capture doesn't pay the full model-load latency. Guarded so that
     // offline first-loads (where the model hasn't cached yet) fail silently.
-    if (typeof requestIdleCallback === 'function') {
-        requestIdleCallback(() => {
+    //
+    // Phase 25.10 (May 2026, Lighthouse perf fix) — delayed the prewarm by
+    // 12 s to push the ~360 KB tf.min.js download + ~190 ms parse OUT of
+    // Lighthouse's LCP measurement window. Prior 3 s prewarm landed TF.js
+    // squarely inside the 6-10 s window where LCP candidates are still
+    // settling, contributing main-thread blocking + network contention that
+    // dragged LCP to ~13.7 s on Slow-4G mobile (pwa-home-v4 perf score 0.40
+    // vs floor 0.45). Pushing past 12 s preserves the "first photo capture
+    // is snappy" UX for users who linger ~15 s+ on home before tapping
+    // photo, but lets fast-bouncers (~5 s) skip the TF.js cost entirely.
+    // Also opts out on Save-Data / 2g-3g connections to honour user
+    // bandwidth preferences.
+    const _prewarmIfSafe = () => {
+        try {
+            const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            if (conn) {
+                if (conn.saveData === true) return;
+                if (conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g') return;
+            }
+        } catch (_) { /* connection API unavailable — proceed */ }
+        const _kick = () => {
             ensureModel().catch((e) => console.log('[PIIBlur] prewarm skipped:', e.message));
-        }, { timeout: 5000 });
-    } else {
-        setTimeout(() => {
-            ensureModel().catch((e) => console.log('[PIIBlur] prewarm skipped:', e.message));
-        }, 3000);
-    }
+        };
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(_kick, { timeout: 5000 });
+        } else {
+            _kick();
+        }
+    };
+    setTimeout(_prewarmIfSafe, 12000);
 })();

@@ -36,14 +36,27 @@
 
     function _whenReady(cb) {
         if (_ready()) { cb(); return; }
-        const t = setInterval(() => {
-            if (_ready()) {
-                clearInterval(t);
-                cb();
-            }
-        }, 50);
-        // Timeout — never silently hang.
-        setTimeout(() => clearInterval(t), 8000);
+        // Phase 25.10 (Lighthouse perf fix) — 50 ms poll competed for the
+        // main thread during initial boot and inflated TBT on pwa-home-v4
+        // (~25 ms TBT delta + measurable bootup-time hit). 200 ms is plenty
+        // — app.js exposes `__crispGoToStage` within the first ~50-100 ms
+        // of DOMContentLoaded; a single extra 200 ms wait worst-case is
+        // invisible to the user but reclaims one entire frame budget per
+        // tick. Use requestIdleCallback to yield to render work + cap with
+        // a hard 8 s deadline so we never loop forever if app.js never
+        // exposes its public surface.
+        const _deadline = Date.now() + 8000;
+        const _tick = () => {
+            if (_ready()) { cb(); return; }
+            if (Date.now() >= _deadline) return;
+            setTimeout(_schedule, 200);
+        };
+        const _schedule = () => {
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(_tick, { timeout: 250 });
+            } else { _tick(); }
+        };
+        _schedule();
     }
 
     // ── Feature flag ────────────────────────────────────────────────────
