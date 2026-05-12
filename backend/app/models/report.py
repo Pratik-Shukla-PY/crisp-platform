@@ -93,37 +93,51 @@ class DamageClassEnum(str, enum.Enum):
     COMPLETE = "COMPLETE"
 
 class CrisisTypeEnum(str, enum.Enum):
-    """UNDP-aligned crisis taxonomy (Problem Statement Appendix 1).
+    """UNDP-aligned crisis taxonomy (Problem Statement page 8).
 
-    Grouped (see CRISIS_CATEGORY for the canonical mapping):
-      - Natural:        EARTHQUAKE, FLOOD, TSUNAMI, CYCLONE, LANDSLIDE
-      - Technological:  EXPLOSION, CHEMICAL_INCIDENT, PANDEMIC
-      - Human-made:     CONFLICT, CIVIL_UNREST
-      - OTHER for anything that does not fit cleanly.
+    UNDP's nine required crisis types map to nine members below:
 
-    HURRICANE and WILDFIRE are CRISP legacy values kept for backward
-    compatibility with seed data + historical reports. New UIs should
-    surface HURRICANE as CYCLONE (basin-localised label) and WILDFIRE
-    under OTHER with a sub-type. They still appear here so rows written
-    before the April-2026 UNDP alignment continue to validate.
+      Natural hazards:
+        EARTHQUAKE, FLOOD, TSUNAMI, CYCLONE, WILDFIRE
+      Technological hazards:
+        EXPLOSION, CHEMICAL_INCIDENT
+      Human-made crises:
+        CONFLICT, CIVIL_UNREST
+
+    OTHER is the always-available catch-all.
+
+    HURRICANE remains as a legacy alias for CYCLONE — UNDP wording is
+    'Hurricane/Cyclone' (single category). The application + Pydantic
+    layers normalise HURRICANE -> CYCLONE on every new write
+    (`_normalize_crisis_type` in api/endpoints/reports.py + the
+    `_enforce_undp_taxonomy` validator in schemas/report.py).
+    Migration 0016 backfilled historical HURRICANE rows. The enum
+    member is kept so old DB rows continue to validate at the
+    SQLAlchemy layer, but no new write reaches it.
+
+    LANDSLIDE and PANDEMIC are not on the UNDP spec. The Pydantic
+    validator rejects new submissions carrying them (422). Existing
+    rows are preserved for back-compat; they would only be removed
+    by a destructive Postgres ALTER TYPE (deferred to a v2 cleanup).
     """
-    # UNDP natural crises
+    # UNDP natural hazards
     EARTHQUAKE = "EARTHQUAKE"
     FLOOD = "FLOOD"
     TSUNAMI = "TSUNAMI"
     CYCLONE = "CYCLONE"
-    LANDSLIDE = "LANDSLIDE"
-    # UNDP technological crises
+    WILDFIRE = "WILDFIRE"
+    # UNDP technological hazards
     EXPLOSION = "EXPLOSION"
     CHEMICAL_INCIDENT = "CHEMICAL_INCIDENT"
-    PANDEMIC = "PANDEMIC"
     # UNDP human-made crises
     CONFLICT = "CONFLICT"
     CIVIL_UNREST = "CIVIL_UNREST"
-    # Legacy / catch-all
-    HURRICANE = "HURRICANE"   # legacy — UNDP lumps with CYCLONE
-    WILDFIRE = "WILDFIRE"     # legacy — UNDP lumps under OTHER
+    # Always-available catch-all
     OTHER = "OTHER"
+    # Back-compat aliases (rejected for new writes, kept so DB rows validate)
+    HURRICANE = "HURRICANE"   # alias for CYCLONE; normalised on write
+    LANDSLIDE = "LANDSLIDE"   # not on UNDP spec; Pydantic-rejected on write
+    PANDEMIC = "PANDEMIC"     # not on UNDP spec; Pydantic-rejected on write
 
 
 class CrisisCategoryEnum(str, enum.Enum):
