@@ -9,7 +9,7 @@
 //  Exposed as a global `PIIBlur` object so `app.js` (non-module vanilla JS) can
 //  call it without a bundler. The same pattern TF.js uses via CDN.
 //
-//  Dependencies — LAZY-LOADED at first ensureModel() call (May 2026):
+//  Dependencies — LAZY-LOADED at first ensureModel() call:
 //    - tf           (@tensorflow/tfjs@4) — ~360 KB
 //    - blazeface    (@tensorflow-models/blazeface@0.1) — ~70 KB
 //  These were eagerly downloaded at boot before this change → cost
@@ -84,7 +84,7 @@
         if (_model) return _model;
         if (_loading) return _loading;
 
-        // May 2026 — lazy-load the scripts before checking the globals.
+        // lazy-load the scripts before checking the globals.
         await _ensureScripts();
 
         if (typeof tf === 'undefined' || typeof blazeface === 'undefined') {
@@ -95,7 +95,7 @@
             // Prefer WebGL for speed; fall back to CPU if unavailable.
             try { await tf.setBackend('webgl'); } catch (_) { await tf.setBackend('cpu'); }
             await tf.ready();
-            // May 2026 — vendor the BlazeFace model locally.
+            // vendor the BlazeFace model locally.
             // Default `blazeface.load()` fetches from tfhub.dev/Kaggle
             // which return CORS-blocked 404s on production. Loading from
             // same-origin avoids both CORS issues + the 0.5 s + extra
@@ -159,7 +159,7 @@
 
         const preds = await model.estimateFaces(off, /*returnTensors=*/false, /*flipHorizontal=*/false);
         const invScale = 1 / scale;
-        // Apr 2026 (revised) — lowered threshold from 0.85 → 0.5.
+        // (revised) — lowered threshold from 0.85 → 0.5.
         //
         // The previous 0.85 threshold filtered out real faces at side
         // profiles, distant, partial, or low-light — BlazeFace's
@@ -204,7 +204,7 @@
      * Paint a blurred ellipse over each face region. Mirrors the server's
      * treatment in backend/app/services/pii_blur.py (oval mask).
      *
-     * Apr 2026 tuning:
+     * tuning:
      *  - Lighter radius (bbox/10 capped 6–60 px, was bbox/6 capped 12–120 px).
      *    Still obscures identity; no longer turns faces into giant smears.
      *  - Blur runs on a downscaled working canvas (long side ≤ 800 px) then
@@ -287,7 +287,7 @@
      * @returns {Promise<Blob>}
      */
     /**
-     * Detect + blur faces in `srcBlob`. Apr 2026: now returns a detailed
+     * Detect + blur faces in `srcBlob`. : now returns a detailed
      * result object — was just returning the Blob, which hid failures from
      * callers. Shape:
      *   {
@@ -309,7 +309,7 @@
         const t0 = performance.now();
         const quality = (opts && typeof opts.quality === 'number') ? opts.quality : 0.85;
 
-        // May 2026 — lazy-load tf.js + blazeface scripts on first call.
+        // lazy-load tf.js + blazeface scripts on first call.
         // Prior to this change the libraries were always preloaded via
         // <script> tags in index.html (~430 KB tax on the home page).
         // _ensureScripts() is idempotent + concurrent-safe.
@@ -355,7 +355,7 @@
             return { blob: srcBlob, blurred: true, facesDetected: 0, skipped: false };
         }
 
-        // Apr 2026: yield to the event loop before the heavy paint pass so
+        // : yield to the event loop before the heavy paint pass so
         // any queued UI interactions (e.g. the user tapping Next the moment
         // the preview appears) have a chance to dispatch. Without this the
         // sync drawImage + filter + canvas-clip work blocked the main
@@ -399,7 +399,7 @@
     // photo capture doesn't pay the full model-load latency. Guarded so that
     // offline first-loads (where the model hasn't cached yet) fail silently.
     //
-    // Phase 25.10 (May 2026, Lighthouse perf fix) — delayed the prewarm by
+    // delayed the prewarm by
     // 12 s to push the ~360 KB tf.min.js download + ~190 ms parse OUT of
     // Lighthouse's LCP measurement window. Prior 3 s prewarm landed TF.js
     // squarely inside the 6-10 s window where LCP candidates are still

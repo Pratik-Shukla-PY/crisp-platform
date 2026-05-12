@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────────────────────────────────
 // CRISP — Always-on home screen.
 //
-// Replaces landing.js (deleted May 2026). The first-visit-only landing
+// Replaces landing.js. The first-visit-only landing
 // overlay is gone — every visit lands on the same merged home page that
 // surfaces:
 //   • PWA "Start Reporting" (primary CTA, anonymous default)
@@ -45,7 +45,7 @@
     // out, no href). This lets us ship the surface today and wire real
     // numbers later without a redeploy of the static bundle.
     const DEFAULT_CHANNELS = {
-        // Phase 22.1 — Telegram bot username corrected to @crisp_crisis_bot
+        // Telegram bot username corrected to @crisp_crisis_bot
         // per operator confirmation. Old `crisp_undp_bot` was a reserved
         // placeholder (Telegram page showed "Contact @crisp_undp_bot" with
         // the generic Send-Message button → no real bot → "breaks in
@@ -148,7 +148,7 @@
     }
     // Runs on tap of the Telegram channel tile.
     //
-    // Phase 23.1 — simplified to a single universal-link navigation.
+    // simplified to a single universal-link navigation.
     // The earlier Phase 23 approach (transient iframe with `tg://`
     // scheme + visibilitychange-based fallback to App Store) was
     // unreliable on iOS 16+: when the OS shows the system "Open in
@@ -204,17 +204,17 @@
     }
 
     // ── Channel tile HTML builder ───────────────────────────────────────
-    // Phase 17 (May 2026) — every channel always renders. Working
+    // every channel always renders. Working
     // channels (href set) get a green border + brand-coloured icon + a
     // small green "live" pip. Non-working channels (empty href) get a
     // grey border + grey icon + cursor:not-allowed. Tapping a non-
     // working tile fires a brief "Coming soon" toast.
     //
-    // The Q1 (May 2026) hide-when-empty contract is REVERTED here per
+    // The Q1 hide-when-empty contract is REVERTED here per
     // explicit product direction — users want to see the full picture
     // of which channels exist, not just the ones currently configured.
     //
-    // Phase 23 (May 2026) — opts:
+    // opts:
     //   { dataAction: 'telegram-deeplink' } renders a <button> tile
     //   (no href) so the click handler in _wireChannelTelemetry can
     //   intercept and run the native-scheme → store fallback chain
@@ -237,7 +237,7 @@
             `;
         }
         if (dataAction) {
-            // Phase 23 — live tile rendered as a <button> with a
+            // live tile rendered as a <button> with a
             // data-action attribute. The click handler dispatches to
             // _openTelegram() (or whichever action), so this tile has
             // no href and never lets the browser perform default
@@ -276,10 +276,10 @@
     function _renderChannels() {
         const channelsEl = document.getElementById('home-channels');
         if (channelsEl) {
-            // Phase 17 — Single 6-tile row, all channels always shown.
+            // Single 6-tile row, all channels always shown.
             // Order matches the proposal screenshot: Telegram, WhatsApp,
             // SMS, IVR, Android, iOS (left to right).
-            // Phase 23 — Telegram tile renders as a <button> with
+            // Telegram tile renders as a <button> with
             // data-action="telegram-deeplink" so the click handler can
             // run the native-scheme → store-fallback chain (carrying
             // the PWA device-hash as a /start token). The bot handle
@@ -320,7 +320,7 @@
             const channelsSection = channelsEl.closest('.home-section');
             if (channelsSection) channelsSection.style.display = '';
         }
-        // Phase 17 — #home-apps is now hidden in the markup; we
+        // #home-apps is now hidden in the markup; we
         // intentionally don't render into it. Kept as a no-op so any
         // operator override that still references it doesn't blow up.
         const appsEl = document.getElementById('home-apps');
@@ -329,7 +329,7 @@
         }
     }
 
-    // Phase 17 — brief in-place toast for "coming soon" channel taps.
+    // brief in-place toast for "coming soon" channel taps.
     // No external dep; just appends a fixed-position div the user can
     // tap-anywhere to dismiss or which fades out after 2.6 s.
     function _showComingSoonToast(channelLabel) {
@@ -432,11 +432,11 @@
     }
 
     // ── Channel telemetry + disabled-tile toast ────────────────────────
-    // Phase 17 — non-working (`.is-disabled`) tiles surface a brief
+    // non-working (`.is-disabled`) tiles surface a brief
     // "Coming soon" toast on click. Working tiles just log a telemetry
     // breadcrumb and let the browser follow the anchor href.
     //
-    // Phase 23 — tiles carrying a `data-action` (currently only
+    // tiles carrying a `data-action` (currently only
     // `telegram-deeplink`) are dispatched to a custom handler that
     // runs the native-scheme → store-fallback chain instead of
     // letting the browser navigate. preventDefault stops any
@@ -666,7 +666,7 @@
         const myReportsBtn = document.getElementById('btn-my-reports');
         const loginBtn = document.getElementById('btn-login');
         const recentBlock = document.getElementById('home-recent');
-        // Phase 21 — hero subtitle also removed. No optional sections
+        // hero subtitle also removed. No optional sections
         // toggle by auth state on the home stage anymore.
         if (!devidWrap || !acctWrap) return;
 
@@ -681,7 +681,7 @@
                     acctName.textContent = u.displayName || u.id || '—';
                 }
             } catch (_) {}
-            // Phase 18 — supratext above the CTA reads "Welcome back, {name}."
+            // supratext above the CTA reads "Welcome back, {name}."
             if (subEl) {
                 const tt = (typeof window.t === 'function') ? window.t : (k) => k;
                 const u = (window.AuthStore && window.AuthStore.getUser && window.AuthStore.getUser()) || {};
@@ -706,7 +706,7 @@
             // Hide recent-reports block.
             if (recentBlock) recentBlock.setAttribute('hidden', '');
         }
-        // Phase 18 — repaint badge chip + My Reports count for both states.
+        // repaint badge chip + My Reports count for both states.
         try { _renderBadgeChip(); } catch (_) {}
         try { _renderMyReportsCount(); } catch (_) {}
     }
@@ -738,7 +738,7 @@
         if (!chip || !emojiEl || !labelEl) return;
         const def = BADGE_LEVELS[String(level || '').toUpperCase()] || BADGE_LEVELS.NEWCOMER;
         emojiEl.textContent = def.emoji;
-        // Phase 18 — `window.t(key)` returns the KEY itself when not yet
+        // `window.t(key)` returns the KEY itself when not yet
         // resolved (en.json loads async). Treat key === t(key) as
         // "not resolved" and fall back to a sensible English default.
         const ENGLISH_FALLBACKS = {
@@ -973,7 +973,7 @@
                 return '';
             })();
             const status = String(r.status || 'PENDING').toLowerCase();
-            // Phase 16 — route through window._resolveMediaUrl so any
+            // route through window._resolveMediaUrl so any
             // future s3:// regression surfaces a placeholder cleanly.
             // onerror handler swaps the broken <img> for the camera
             // icon (matches the card-thumb pattern in app.js).
@@ -1030,7 +1030,7 @@
         _wireChannelTelemetry();
         _wireDevidBadge();
         _wireAccountMenu();
-        // Phase 18 — new wirings.
+        // new wirings.
         _wireInstallIcon();
         _wireHomeVoice();
         _wireUtilityFooter();
@@ -1067,7 +1067,7 @@
         paintIdentityBar: _paintIdentityBar,
         paintDevidBadge: _paintDevidBadge,
         renderRecentReports: _renderRecentReports,
-        // Phase 18 — exposed for app.js to call after _submittedCache
+        // exposed for app.js to call after _submittedCache
         // mutations + after profile fetches.
         paintBadgeChip: _renderBadgeChip,
         paintMyReportsCount: _renderMyReportsCount,

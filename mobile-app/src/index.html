@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- May 2026 — `maximum-scale=1.0, user-scalable=no` REMOVED.
+    <!-- `maximum-scale=1.0, user-scalable=no` REMOVED.
          WCAG 1.4.4 (Resize text) and the UNDP a11y brief require that
          low-vision users be able to pinch-zoom. The v4 layout is
          responsive and survives zoom-in without breaking. -->
@@ -16,7 +16,7 @@
     <meta name="apple-mobile-web-app-title" content="CRISP">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="assets/icon-192.png">
-    <!-- May 2026 (Lighthouse perf fix) — DNS prefetch + preconnect for
+    <!-- (Lighthouse perf fix) — DNS prefetch + preconnect for
          CDN origins so the TLS handshake happens in parallel with HTML
          parse. Saves ~200ms on Slow 4G first paint. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="dns-prefetch" href="https://unpkg.com">
 
-    <!-- May 2026 (Lighthouse perf fix) — fonts + FontAwesome + Leaflet
+    <!-- (Lighthouse perf fix) — fonts + FontAwesome + Leaflet
          CSS were render-blocking ~6 seconds. Switched to async loading
          pattern (media=print → onload swap). On-screen text initially
          uses system fallback (very fast), then upgrades to webfont when
@@ -40,7 +40,7 @@
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
           media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
-    <!-- May 2026 Phase B — Leaflet CSS REMOVED from <head> entirely.
+    <!-- — Leaflet CSS REMOVED from <head> entirely.
          building-select.js::_ensureLeaflet() injects both the <link>
          + <script> on first map init. Saves the round-trip even on
          the deferred async path. -->
@@ -50,7 +50,7 @@
 </head>
 <body>
 
-<!-- May 2026 — #landing-root + legacy #consent-overlay both REMOVED.
+<!-- #landing-root + legacy #consent-overlay both REMOVED.
      The merged always-on home page (#stage-home below) now hosts the
      channel buttons + install prompt + inline consent checkbox + impact
      metrics + login. Owned by mobile-app/src/home-screen.js. -->
@@ -58,12 +58,12 @@
 <div class="mobile-screen" id="app-root">
 
     <!-- ── LANGUAGE SWITCHER + CONNECTIVITY DOT ── -->
-    <!-- Apr 2026 PR 3 — 🟢/🔴 dot as the first child inside the switcher
+    <!-- PR 3 — 🟢/🔴 dot as the first child inside the switcher
          pill so it sits at the fixed right-edge cluster without a
          second absolute-positioned element fighting for 320 px worth
          of real estate. Live-updated on navigator online/offline events
          by _applyOnlineDot() in app.js. -->
-    <!-- Apr 2026 language-UX rewrite: app defaults to English on every load.
+    <!-- UX rewrite: app defaults to English on every load.
          The region's local language is still auto-detected in the background
          and surfaced INSIDE the picker overlay with a "📍 Your region" badge
          so users discover it without being force-switched into a locale they
@@ -82,7 +82,7 @@
         <button id="btn-lang-current" class="active" title="Tap to change language" data-i18n-title="aria_tap_change_language" aria-label="Tap to change language" data-i18n-aria-label="aria_tap_change_language">🌐 EN</button>
     </div>
 
-    <!-- Phase 19 — install + voice icons MOVED to live inside the home
+    <!-- install + voice icons MOVED to live inside the home
          identity bar (see #home-brand-row inside #stage-home) so they
          no longer collide with the brand text or lang pill. This empty
          shell is retained for any non-home stage that still expects
@@ -90,7 +90,7 @@
          into it on non-home stages. -->
     <div class="home-top-actions" id="home-top-actions" hidden></div>
 
-    <!-- Full-screen image viewer overlay (Apr 2026). Opens when the user
+    <!-- Full-screen image viewer overlay. Opens when the user
          taps any photo thumbnail on stage-photo. Shows the image at full
          bleed + a Delete button with confirmation. -->
     <div id="image-viewer-overlay" class="image-viewer-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Image viewer" data-i18n-aria-label="aria_image_viewer">
@@ -128,7 +128,7 @@
            2. "Sign in" — routes to existing stage-login flow.
          Returning anonymous users skip the welcome entirely (the
          acknowledged flag is set the first time they tap Continue). -->
-    <!-- Phase 15 (May 2026) — Welcome overlay + Device-ID disclosure
+    <!-- Welcome overlay + Device-ID disclosure
          overlay deleted. Both surfaces are folded into the single
          unified #stage-home below: the device-ID lives in the
          identity-bar #home-devid-badge with an inline tooltip on
@@ -183,11 +183,11 @@
                  first, Indian sub-national after). Rendered as a
                  horizontal scroll-snap carousel so the row stays
                  thumb-reachable on phones without a long vertical
-                 scroll. Phase 25 (May 2026) — narrowed from a 24-tile
-                 grid to exactly the 22-locale supported set; the
-                 previously-listed German / Italian / Polish / Romanian
-                 / Greek / Ukrainian / Hebrew / Persian / Thai / Malay /
-                 Swahili / Amharic tiles were removed since they routed
+                 scroll. The set is exactly the 22 supported locales;
+                 the previously-listed German / Italian / Polish /
+                 Romanian / Greek / Ukrainian / Hebrew / Persian / Thai
+                 / Malay / Swahili / Amharic tiles were removed because
+                 they routed
                  silently to English on tap. ── -->
             <div class="lang-picker-section">
                 <h4 class="lang-picker-section-title" data-i18n="lang_picker_other_section">
@@ -221,7 +221,7 @@
         </div>
     </div>
 
-    <!-- Apr 2026 UX rewrite — unified color-coded flow-progress bar.
+    <!-- UX rewrite — unified color-coded flow-progress bar.
          Visible only on capture stages (photo → details → review → send).
          updateFlowProgress() in app.js flips each step through the states:
          done (green ✓) · active (accent) · missing (red !) · upcoming (grey).
@@ -263,7 +263,7 @@
     <!-- ══════════════════════════════════════
          STAGE 0 — WELCOME / HOME
     ══════════════════════════════════════ -->
-    <!-- May 2026 — merged always-on home page (replaces v4 first-visit
+    <!-- merged always-on home page (replaces v4 first-visit
          landing overlay + v3 minimal home). Single screen surfaces the
          FULL multi-channel story every load:
            • PWA "Start Reporting" big CTA (anonymous default)
@@ -279,12 +279,12 @@
     <div class="stage active home-stage" id="stage-home">
         <div class="stage-center home-center">
 
-            <!-- Phase 17 (May 2026) — Identity bar with bigger brand block
+            <!-- Identity bar with bigger brand block
                  (logo glyph + wordmark + tagline). The state-adaptive
                  identity slot on the right still holds the device-ID
                  badge for anonymous users / account pill for logged-in. -->
             <div class="home-identity">
-                <!-- Phase 19 — brand row is now a flex row that includes
+                <!-- brand row is now a flex row that includes
                      the install + voice icons on the right side, with
                      enough right padding to clear the absolute-positioned
                      lang pill above (right:16, ~120 px wide). -->
@@ -298,14 +298,14 @@
                             <div class="home-brand-sub" data-i18n="home_brand_tagline">Crisis Reporter</div>
                         </div>
                     </div>
-                    <!-- Phase 24 — install + voice icons moved OUT of the
+                    <!-- install + voice icons moved OUT of the
                          brand row and INTO the identity strip below (next
                          to the device-ID badge + Newcomer chip). Brand row
                          is now just logo + wordmark; the lang pill keeps
                          floating absolute top-right via #lang-switcher. -->
                 </div>
 
-                <!-- Anonymous slot — device-ID badge + tooltip + (Phase 18) badge chip. -->
+                <!-- Anonymous slot — device-ID badge + tooltip + badge chip. -->
                 <div class="home-devid-wrap" id="home-devid-wrap">
                     <div class="home-devid-badge" id="home-devid-badge"
                          role="group" aria-labelledby="home-devid-label">
@@ -332,7 +332,7 @@
                         <span data-i18n="home_devid_tip_body">Use this to find your reports later, even if you lose the app. Your ID is anonymous — we cannot link it back to you.</span>
                         <button id="btn-home-devid-tip-dismiss" type="button" data-i18n="home_devid_tip_dismiss">Got it</button>
                     </div>
-                    <!-- Phase 18 — gamification badge chip. Fetched from
+                    <!-- gamification badge chip. Fetched from
                          /api/v1/reports/profile/<hash>. Mapping:
                          NEWCOMER → 🌱 Newcomer, HELPER → ⛑ Helper,
                          GUARDIAN → 🛡 Guardian, CHAMPION → ⭐ Champion,
@@ -342,7 +342,7 @@
                         <span class="hb-emoji" id="home-badge-emoji" aria-hidden="true">🌱</span>
                         <span class="hb-label" id="home-badge-label">Newcomer</span>
                     </div>
-                    <!-- Phase 24 — install + voice icons relocated here so
+                    <!-- install + voice icons relocated here so
                          the entire identity strip (device-ID + Newcomer +
                          install + voice) reads as ONE horizontal grouping
                          instead of scattered across two rows. -->
@@ -393,7 +393,7 @@
                 </div>
             </div>
 
-            <!-- Phase 18 — Standalone hero title removed. The orange CTA
+            <!-- Standalone hero title removed. The orange CTA
                  below now carries the descriptive label "Report an
                  Incident". Logged-in greeting moves to a small grey
                  supratext above the CTA via JS. -->
@@ -426,7 +426,7 @@
                 </label>
             </div>
 
-            <!-- Phase 18 — Primary CTA. Label updated from "Start Reporting"
+            <!-- Primary CTA. Label updated from "Start Reporting"
                  to "Report an Incident" so the standalone hero title can
                  be removed. CSS bumps height + font so it visually
                  anchors the page. Existing handler in app.js routes
@@ -454,13 +454,13 @@
                 </button>
             </div>
 
-            <!-- Phase 20 — Safety hint + How CRISP Works removed per
+            <!-- Safety hint + How CRISP Works removed per
                  user direction to make the UI cleaner. The original
                  "safety_hint" wording lives on in stage-privacy under
                  "Multi-channel parity" so first-time users can still
                  read it from the Privacy link in the footer. -->
 
-            <!-- Phase 24 — Live community impact strip is now ALWAYS
+            <!-- Live community impact strip is now ALWAYS
                  rendered (removed the `hidden` attribute). Acts as
                  social proof above the channels grid AND fills the
                  ~130 px dead zone that existed between the secondary
@@ -480,7 +480,7 @@
                 </div>
             </div>
 
-            <!-- Phase 17 — Bottom: single channels row anchored to bottom
+            <!-- Bottom: single channels row anchored to bottom
                  via margin-top: auto. Six tiles in one row: Telegram /
                  WhatsApp / SMS / IVR / Android / iOS. Working channels
                  render with a green border + brand-coloured icon + small
@@ -491,7 +491,7 @@
                  _buildChannelTile(); Q1 hide-when-empty contract reverted
                  — every channel always renders so users see the full
                  picture. -->
-            <!-- Phase 18 — Channel section. Layout reverts to a 3×2
+            <!-- Channel section. Layout reverts to a 3×2
                  grid (was 6×1 in Phase 17) so labels fit cleanly without
                  ellipsis and the row reads as a "panel" not a strip. -->
             <div class="home-section home-section-channels" id="home-section-channels">
@@ -502,7 +502,7 @@
                 </div>
             </div>
 
-            <!-- Phase 18 — Offline footer removed (was redundant; the
+            <!-- Offline footer removed (was redundant; the
                  Privacy page now carries the offline-first promise as
                  part of "Why CRISP"). The new utility footer below
                  replaces it. -->
@@ -566,7 +566,7 @@
         </header>
 
         <div class="v4-body">
-            <!-- Phase 25.8 (May 2026) — bigger location + time card. Replaces
+            <!-- bigger location + time card. Replaces
                  the compact pills row. Location is editable so users with
                  broken GPS can type a place name or landmark; time shows the
                  actual capture timestamp with timezone, not "Just now". -->
@@ -592,12 +592,12 @@
                     </div>
                 </div>
                 <!-- Inline location edit (hidden until user taps the pen).
-                     Phase 25.12 (May 2026) — added offline autocomplete: as the
-                     user types, the dropdown below shows up to 5 matches from
-                     `placeSearch` (bundled cities + nearby GPS-prefetched +
-                     localStorage cache) — works fully offline. Tap a match
-                     to fill the input; Save commits state.locationName +
-                     lat/lng (when the match has coords). -->
+                     As the user types, the dropdown below shows up to 5
+                     matches from `placeSearch` (bundled cities + nearby
+                     GPS-prefetched + localStorage cache) — works fully
+                     offline. Tap a match to fill the input; Save commits
+                     state.locationName + lat/lng (when the match has
+                     coords). -->
                 <div class="v4-meta-loc-edit" id="v4-meta-loc-edit" hidden>
                     <input type="text" id="v4-meta-loc-input"
                            class="v4-meta-loc-input"
@@ -640,7 +640,7 @@
                 </span>
             </div>
 
-            <!-- Phase 25.8 — 3 stacked sections (Photo / Voice / Text). Each
+            <!-- 3 stacked sections (Photo / Voice / Text). Each
                  occupies its own card and is always visible (no toggling
                  drawers). User can tap into any one in any order. Designed
                  for low-literacy reporters: every interaction is a labelled
@@ -673,15 +673,11 @@
                     </div>
                 </section>
 
-                <!-- ── Optional extras (Voice + Text) ─────────────────────
-                     Phase 25.13 (May 2026) — demoted Voice + Text from
-                     full-bleed stacked sections to compact chip toggles.
-                     User feedback: "Image capture should get more space
-                     on screen and preview. Audio and Text are low priority
-                     items so should be treated like that." Each chip
-                     expands its panel inline on tap; status badge on the
-                     chip shows captured-state without forcing the panel
-                     open. -->
+                <!-- Optional extras (Voice + Text). Compact chip toggles
+                     under the photo section; each chip expands its panel
+                     inline on tap. Captured-state shows as a small green
+                     dot on the chip so users see content lands without
+                     having to keep the panel open. -->
                 <div class="v4-cap-extras">
                     <span class="v4-cap-extras-label" data-i18n="v4_cap_extras_label">Add more (optional)</span>
                     <div class="v4-cap-extras-row">
@@ -926,7 +922,7 @@
         </header>
 
         <div class="v4-body">
-            <!-- Q10 (May 2026) — multi-modal "captured" strip. Three
+            <!-- Q10 — multi-modal "captured" strip. Three
                  chips show what the user has already provided across
                  photo / voice / text. Green when captured, grey when
                  not — UNDP rubric Q3 wants additive capture, this
@@ -983,7 +979,7 @@
                 </div>
             </div>
 
-            <!-- BUG 5 fix (May 2026) — UNDP must-have #6: building footprint
+            <!-- UNDP must-have #6: building footprint
                  selector. v4 originally only had the location row; the
                  building picker (Leaflet + OSM polygons) was unreachable.
                  We mount the existing #building-select-box here on first
@@ -1163,16 +1159,16 @@
 
         <!-- Hidden inputs -->
         <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none">
-        <!-- PR 5 (Apr 2026): multi-select on browse. File picker returns an
+        <!-- PR 5: multi-select on browse. File picker returns an
              array; iterate it and push each through the same compress+blur
              pipeline used for single photos. First file lands in the primary
              slot (if empty); rest go to extraPhotos. -->
         <input type="file" id="file-browse" accept="image/*" multiple style="display:none">
-        <!-- Legacy single-input (pre-Phase A5 `#btn-add-more-photo` path).
+        <!-- Legacy single-input (pre-`#btn-add-more-photo` path).
              Retained so any offline-queued code path referencing `file-extra`
              still finds the element. -->
         <input type="file" id="file-extra" accept="image/*" style="display:none">
-        <!-- Phase A5 (Apr 2026 UI v3) — explicit Camera vs Gallery inputs for
+        <!-- explicit Camera vs Gallery inputs for
              the extras strip. The camera input carries capture="environment"
              so mobile browsers open the rear camera directly (no chooser
              sheet). The browse input drops capture + has multiple so the
@@ -1188,7 +1184,7 @@
          primary photo; the rest go into state.extraPhotos.
          Close (X) tears everything down without saving anything mid-session —
          Done is the confirm path. -->
-    <!-- Hotfix (Apr 2026): on desktop Edge/Chrome the previous flex-column
+    <!-- Hotfix: on desktop Edge/Chrome the previous flex-column
          layout with `flex:1` on the <video> could push the controls row off
          the bottom of the viewport — the video's intrinsic aspect ratio beat
          the flex-basis and there was no z-index to keep the shutter on top.
@@ -1218,7 +1214,7 @@
     <div class="stage" id="stage-audio">
         <div class="stage-header">
             <!-- step-dots replaced by the global #flow-progress bar. -->
-            <!-- Apr 2026 UX rewrite: title + bullet helper + worked example,
+            <!-- UX rewrite: title + bullet helper + worked example,
                  designed for low-literacy / crisis users. See the plan at
                  /Users/pks/.claude/plans/swirling-forging-raccoon.md. -->
             <h2 data-i18n="s2_title">Tell us what happened</h2>
@@ -1245,7 +1241,7 @@
             </div>
         </div>
 
-        <!-- Apr 2026 UX rewrite: dropped the `.transcript-label-row` chip —
+        <!-- UX rewrite: dropped the `.transcript-label-row` chip —
              it was rendering the literal key "TYPE_TEXT" because that key
              was missing from every locale (t() falls back to the key when
              no translation exists). Textarea with a worked-example
@@ -1257,7 +1253,7 @@
                       data-i18n-placeholder="placeholder_describe_example"></textarea>
         </div>
 
-        <!-- Apr 2026 PR 4: "Type instead" skip link removed. Mic + textarea
+        <!-- PR 4: "Type instead" skip link removed. Mic + textarea
              coexist today, so the toggle only added cognitive load without
              hiding anything. Typed descriptions still work — user just taps
              the textarea and goes straight to Continue. -->
@@ -1394,7 +1390,7 @@
 
     <!-- Settings surface (lightweight). Reachable from the account pill's
          gear icon. Contains only Logout for now; extensible. -->
-    <!-- Phase 18 (May 2026) — Privacy & Features stage. The "Why CRISP"
+    <!-- Privacy & Features stage. The "Why CRISP"
          trust card was removed from the home and the long-form content
          lives here instead. Seven sections cover UNDP rubric §3.1e
          (explicit privacy notice), must-have #7 (PII protection),
@@ -1538,7 +1534,7 @@
                 <span class="settings-label" data-i18n="settings_account">Account</span>
                 <span class="settings-value" id="settings-account-name">—</span>
             </div>
-            <!-- Phase 18 — Privacy & features entry. Routes to stage-privacy
+            <!-- Privacy & features entry. Routes to stage-privacy
                  which holds the moved "Why CRISP" content + privacy notice
                  + open-source disclosure. -->
             <button class="nav-btn" id="btn-settings-privacy" type="button">
@@ -1549,7 +1545,7 @@
                 <i class="fa-solid fa-link-slash"></i>
                 <span data-i18n="settings_unlink_device">Unlink this device</span>
             </button>
-            <!-- Phase 16 (May 2026) — bulk delete relocated here from
+            <!-- bulk delete relocated here from
                  the legacy <details class="history-advanced"> accordion at
                  the bottom of stage-history. The existing app.js handler
                  binds to #btn-history-delete-all by ID, so the action
@@ -1576,7 +1572,7 @@
         <div class="stage-header">
             <h2 data-i18n="stage2_title">Where and how bad?</h2>
         </div>
-        <!-- Phase B4 (Apr 2026 UI v3) — auto Date + Time panel. Rendered
+        <!-- auto Date + Time panel. Rendered
              client-side from `new Date()` at stage entry; zero network
              dependency and zero waiting period. The `auto-meta` block
              sits ABOVE the v3-slot so the reporter sees their device's
@@ -1599,7 +1595,7 @@
                 </div>
             </div>
         </div>
-        <!-- M9 (May 2026) — landmark fallback. Hidden by default; shown by
+        <!-- M9 — landmark fallback. Hidden by default; shown by
              _renderLandmarkFallback() when GPS errors out AND no IP-fallback
              succeeded AND no manual location. Six quick landmark chips
              pre-fill the existing place-search input below; the user fills
@@ -1720,7 +1716,7 @@
 
         </div><!-- /page-1 -->
 
-        <!-- Phase 3 (Apr 2026): merged into Page 1. Second `data-review-page="1"`
+        <!-- Phase 3: merged into Page 1. Second `data-review-page="1"`
              div makes showReviewPage(1) display BOTH the description block and
              the details grid together on one scrollable screen. -->
         <div class="review-page" data-review-page="1">
@@ -1739,7 +1735,7 @@
                 <i class="fa-solid fa-circle-question" style="color:var(--accent);"></i>
                 What is damaged?
             </p>
-            <!-- UI v3 (Apr 2026 Phase B4) — UNDP Appendix-1 super-types (8).
+            <!-- UNDP Appendix-1 super-types (8).
                  Replaces the 9 legacy chips (ROAD/HOSPITAL/HOUSE/POWER/WATER/
                  SCHOOL/TELECOM/GOVERNMENT/OTHER) with the 7 UNDP super-types
                  + OTHER. Enum values match `InfraTypeEnum` on the backend
@@ -1799,7 +1795,7 @@
                     <span class="infra-severity-chip" id="infra-severity-chip-name">Road</span>
                 </p>
                 <div class="sev-big-row">
-                    <!-- Apr 2026 UI v2.1 — UNDP-aligned damage labels.
+                    <!-- UI v2.1 — UNDP-aligned damage labels.
                          UNDP Appendix-1 exact wording: "Minimal / No damage",
                          "Partially damaged", "Completely damaged". Tooltip
                          text (data-i18n-title) carries the full UNDP
@@ -1841,7 +1837,7 @@
                 <i class="fa-solid fa-cloud-bolt" style="color:var(--accent);"></i>
                 What caused damage?
             </p>
-            <!-- UI v3 (Apr 2026 Phase B4) — crisis chips grouped into the
+            <!-- crisis chips grouped into the
                  three UNDP categories so evaluators cross-reference stage 4
                  directly against UNDP Appendix-1 nomenclature. Each subgroup
                  has a small uppercase label. Under v2 the single flat grid
@@ -1853,7 +1849,7 @@
                     <button class="chip-btn selected" data-crisis="FLOOD"><i class="fa-solid fa-water"></i><span data-i18n="flood">Flood</span></button>
                     <button class="chip-btn" data-crisis="TSUNAMI"><i class="fa-solid fa-water"></i><span data-i18n="tsunami">Tsunami</span></button>
                     <button class="chip-btn" data-crisis="CYCLONE"><i class="fa-solid fa-tornado"></i><span data-i18n="cyclone">Cyclone</span></button>
-                    <!-- May 2026 — UNDP brief explicitly lists Wildfire under Natural hazards
+                    <!-- UNDP brief explicitly lists Wildfire under Natural hazards
                          (was missing from v3; the regression spec
                          29-undp-requirements.spec.ts caught this). -->
                     <button class="chip-btn" data-crisis="WILDFIRE"><i class="fa-solid fa-fire"></i><span data-i18n="wildfire">Wildfire</span></button>
@@ -1874,14 +1870,14 @@
             </div>
         </div>
 
-        <!-- PR 6 (Apr 2026): standalone "Damage Level", "Building/Road Name"
+        <!-- PR 6: standalone "Damage Level", "Building/Road Name"
              input, and "Needs debris clearing" toggle all removed. Damage is
              merged with the infra chip above; the name/debris fields were
              near-universally skipped by submitters so the form cost wasn't
              earning its keep. state.infraName / state.debrisClearing stay
              in the state shape ('' / false defaults) for backend compat. -->
 
-        <!-- SERVICE STATUS — always-visible section (Apr 2026 UI v2.1).
+        <!-- SERVICE STATUS — always-visible section.
              Was <details>/<summary> with the content hidden behind a
              disclosure triangle; field tests showed low-literacy users
              don't recognise/expand the triangle, so the section was
@@ -1889,7 +1885,7 @@
              the same block-label header as every other review block.
              "Optional:" label kept so users know skipping is fine.
              Renders on the second review page ("How bad + where?"). -->
-        <!-- Phase B4 (Apr 2026 UI v3) — debris-clearing Yes/No toggle
+        <!-- debris-clearing Yes/No toggle
              re-added. Tapping "Yes" sets `state.debrisClearing = true`
              and highlights the button; tapping "No" flips it back.
              Migrates into stage-extras along with the service-details /
@@ -1949,7 +1945,7 @@
                 </div>
                 <div class="svc-row">
                     <span data-i18n="needs_label">🆘 Pressing Needs</span>
-                    <!-- Apr 2026 UI v2.1: chip list expanded from 5 → 10 to match
+                    <!-- UI v2.1: chip list expanded from 5 → 10 to match
                          UNDP Appendix-1 pressing-needs taxonomy (all 9 required
                          options + Other). Old `security` key retained server-
                          side + in the enum-translator map for legacy rows, but
@@ -2033,7 +2029,7 @@
             </div>
         </div>
 
-        <!-- UNDP Appendix building-footprint selector (Apr 2026 UI v2.1).
+        <!-- UNDP Appendix building-footprint selector.
              Problem Statement: "Buildings of interest shall be selected by
              users via ... buildings shall be made available for users to pick
              from a (satellite) map underlayer in the field app."
@@ -2051,7 +2047,7 @@
                 <i class="fa-solid fa-building" style="color:var(--accent);"></i>
                 <span data-i18n="building_select_title">Optional: pick the exact building</span>
             </p>
-            <!-- M2 polish (May 2026) — fullscreen-picker CTA. Tapping
+            <!-- M2 polish — fullscreen-picker CTA. Tapping
                  opens the fullscreen overlay where the same Leaflet map
                  can be browsed comfortably (the inline 280 px box is
                  cramped on small phones). The inline map stays below as
@@ -2087,7 +2083,7 @@
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
-            <!-- Phase B2 (Apr 2026 UI v3) — free-text building name fallback.
+            <!-- free-text building name fallback.
                  When the Leaflet map / Overpass fetch is unavailable (offline,
                  rate-limited, CDN blocked, pre-cache empty) the reporter can
                  type the building name in their native language. Backend
@@ -2120,7 +2116,7 @@
 
         </div><!-- /page-2 -->
 
-        <!-- Phase 3 (Apr 2026): renamed 3 → 2 (old Page 2 merged into Page 1).
+        <!-- Phase 3: renamed 3 → 2 (old Page 2 merged into Page 1).
              UI v2: this summary card lives on Page 3 ("Describe + confirm")
              immediately above the Submit button. -->
         <div class="review-page" data-review-page="2" data-v2-page="3" style="display:none;">
@@ -2206,7 +2202,7 @@
     ══════════════════════════════════════ -->
     <div class="stage" id="stage-success">
         <div class="stage-center success-center">
-            <!-- PR 7 (Apr 2026): glowing heart replaces the green ✅. The
+            <!-- PR 7: glowing heart replaces the green ✅. The
                  message re-frames submission as "your report can help save
                  lives" — a warmer close-out than the prior bureaucratic
                  "UNDP rescue teams have been notified" copy. Report ID pill
@@ -2266,7 +2262,7 @@
                 <i class="fa-solid fa-map-pin"></i>
                 <span data-i18n="track_report">Track your report</span>
             </button>
-            <!-- May 2026 (UI v3 redesign M3) — soft prompt for the optional
+            <!-- (UI v3 redesign M3) — soft prompt for the optional
                  UNDP Step 4 details (debris / power / water / health / needs).
                  Hidden by default; shown by app.js after a successful submit
                  IF the user hasn't already filled them in capture flow. Tap
@@ -2422,7 +2418,7 @@
 
         <!-- Impact summary card — green, celebratory -->
         <div class="history-impact" id="history-impact-card" style="display:none;">
-            <!-- Apr 2026 UI v2.1: labels now translatable. Was plain-text
+            <!-- UI v2.1: labels now translatable. Was plain-text
                  English; Chinese / Arabic / Russian users saw the rest of
                  the screen in their locale but these three labels leaked
                  as "RESOLVED / LIVES IMPACTED / IN FLIGHT". Added
@@ -2433,7 +2429,7 @@
             <div class="hi-stat"><div class="hi-num" id="hi-pending">0</div><div class="hi-label" data-i18n="in_flight">In flight</div></div>
         </div>
 
-        <!-- M6 (May 2026) — filter chip row + view-toggle. Chips set the
+        <!-- M6 — filter chip row + view-toggle. Chips set the
              status filter (All / Review / Accepted / Help / Rejected);
              the toggle swaps between list and map views. The filter is
              non-persistent — every fresh entry to My Reports starts on
@@ -2478,12 +2474,12 @@
             </p>
         </div>
 
-        <!-- Apr 2026 "My Reports & Individual Report Management" spec:
+        <!-- "My Reports & Individual Report Management" spec:
              bulk "Delete all my reports" is hidden by default and only
              revealed via an Advanced accordion. Individual per-report
              deletion happens from each card's detail view (see
              stage-report-detail below). -->
-        <!-- Phase 16 (May 2026) — the legacy "Advanced" <details> with the
+        <!-- the legacy "Advanced" <details> with the
              "Delete all my reports" button was visually inconsistent with
              the M6 layout above (filter chips + groups + map). The button
              moved into stage-settings (always reachable, plus the account
@@ -2598,7 +2594,7 @@
         <div class="progress-bar-fill" id="progress-bar-fill"></div>
     </div>
 
-    <!-- Sync Status Badge — Apr 2026: tap-to-retry wired.
+    <!-- Sync Status Badge — : tap-to-retry wired.
          Tapping triggers syncQueueManual() which (a) reconciles each queued
          item against the server (clears items already accepted but where
          the queue tracking lost the chunk-ack), (b) re-attempts upload of
@@ -2613,7 +2609,7 @@
         <span id="sync-badge-text">0 queued</span>
     </div>
 
-    <!-- M2 polish (May 2026) — Fullscreen building-picker overlay.
+    <!-- M2 polish — Fullscreen building-picker overlay.
          UNDP must-have #6: the inline #building-map is 280 px tall — fine
          for low-density rural blocks but cramped in dense urban areas
          where 30+ polygons overlap inside the 200 m radius. This overlay
@@ -2684,14 +2680,14 @@
     </div>
 
 </div>
-<!-- May 2026 (Lighthouse perf, Phase B) — Leaflet is now LAZY-LOADED.
+<!-- (Lighthouse perf, ) — Leaflet is now LAZY-LOADED.
      Was eagerly loaded here (~42 KB + ~4 KB CSS); the building-
      footprint selector only renders on stage-v4-review (after photo
      + classify). building-select.js::_ensureLeaflet() injects the
      <script> + <link> tags on first map init.  -->
 <script src="building-select.js?v=7"></script>
 <script src="places.js?v=3"></script>
-<!-- May 2026 (Lighthouse perf fix) — TF.js + BlazeFace are LAZY-LOADED.
+<!-- (Lighthouse perf fix) — TF.js + BlazeFace are LAZY-LOADED.
      They were eagerly downloaded (~360 KB tfjs + ~70 KB blazeface) at
      boot even though only the photo-capture flow uses them. Most users
      who land on the home page never get to capture (they tap a channel
@@ -2699,7 +2695,7 @@
      pii-blur.js's `ensureModel()` now dynamically injects the script
      tags on first call. -->
 <script src="pii-blur.js?v=3"></script>
-<!-- Progressive-upload Phase 1 (Apr 2026). Exposes window.BlurHash —
+<!-- Progressive-upload Phase 1. Exposes window.BlurHash —
      compact ~28-char DCT encoding consumed by image-variants.js at
      capture time and sent in the meta POST. Loaded ahead of
      image-variants.js so the encoder is available when the pipeline
@@ -2708,16 +2704,16 @@
 <!-- Guaranteed-delivery image variants: depends on pii-blur.js for per-tier
      blur, so must load AFTER it and BEFORE app.js. Exposes window.ImageVariants. -->
 <script src="image-variants.js?v=3"></script>
-<!-- Apr 2026 UI v2 — shared SVG icon pack. Loaded as a module so app.js can
+<!-- UI v2 — shared SVG icon pack. Loaded as a module so app.js can
      pick up `window.CrispIconPack` / `window.crispIconFor(key)` on first
      paint of stage-review. Stays lightweight (~6 KB) and is precached by
      the service worker (see STATIC_ASSETS in sw.js). -->
 <script type="module" src="components/icon-pack.js?v=1"></script>
-<!-- Phase 1 (Apr 2026 — Optional reporter login). Loads BEFORE app.js
+<!-- Phase 1. Loads BEFORE app.js
      so the AuthStore singleton is available when the DOMContentLoaded
      boot hook calls AuthStore.init(). -->
 <script src="auth.js?v=1"></script>
-<!-- May 2026 — install-prompt.js MUST load BEFORE home-screen.js so
+<!-- install-prompt.js MUST load BEFORE home-screen.js so
      `window.InstallPrompt.onChange()` is callable when home-screen wires
      its install button. home-screen.js owns the merged always-on home
      surface (channels + install + consent + secondary actions). It
@@ -2725,7 +2721,7 @@
      ready; app.js's applyI18n re-walks them on locale activation. -->
 <script src="install-prompt.js?v=1"></script>
 <script src="home-screen.js?v=1"></script>
-<!-- v3 (May 2026, Q11/Flag-4 + M7) — voice readout button auto-attached
+<!-- v3 — voice readout button auto-attached
      to every [data-voice="<i18n-key>"] element. Loaded BEFORE app.js
      so the helper is available during stage-render dispatches. -->
 <script src="voice-readout.js?v=1"></script>

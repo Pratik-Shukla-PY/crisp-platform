@@ -1,4 +1,4 @@
-// ── UI v2 feature flag (Apr 2026 UNDP PWA rewrite) ─────────────────────────
+// ── UI v2 feature flag ─────────────────────────
 // Default ON. Users can disable via `localStorage.setItem('crisp_ui_v2','off')`
 // to revert to the previous 2-page review + FontAwesome chip icons exactly.
 // Exposed on window for Playwright + devtools. `body[data-ui-v2]` is set in
@@ -11,7 +11,7 @@ const UI_V2_ENABLED = (() => {
 })();
 window.__crispUiV2 = UI_V2_ENABLED;
 
-// ── UI v3 feature flag (Apr 2026 Phase B — UNDP 8-stage reorder prep) ───────
+// ── UI v3 feature flag ───────
 // v3 delivers three user-visible improvements on top of v2:
 //   1. Building-footprint pre-cache — 10 nearest buildings are downloaded
 //      into IndexedDB on app boot / GPS-ready, so offline capture flows
@@ -37,7 +37,7 @@ const UI_V3_ENABLED = (() => {
 window.__crispUiV3 = UI_V3_ENABLED;
 
 // ── Privacy Consent ─────────────────────────────────────────────────────
-// May 2026 — the legacy `_initConsentGate()` full-screen overlay was
+// the legacy `_initConsentGate()` full-screen overlay was
 // REMOVED. Consent now lives inline on the merged always-on home page
 // (#stage-home → #home-consent), wired by mobile-app/src/home-screen.js.
 // The same `localStorage['crisp_privacy_consent']` key is shared, so
@@ -53,7 +53,7 @@ if ('serviceWorker' in navigator) {
             .then((reg) => {
                 console.log('SW registered, scope:', reg.scope);
                 setInterval(() => reg.update(), 60 * 60 * 1000);
-                // Phase 25.5 (May 2026) — wire the in-app "New version
+                // wire the in-app "New version
                 // available" banner for installed PWAs. See
                 // _wireUpdatePrompt below.
                 _wireUpdatePrompt(reg);
@@ -62,7 +62,7 @@ if ('serviceWorker' in navigator) {
                 console.warn('SW registration failed:', err);
             });
 
-        // Apr 2026 — when the SW handles a notificationclick, it
+        // when the SW handles a notificationclick, it
         // postMessage's `NOTIFICATION_OPEN` so we can route in-app
         // without a hard reload.
         if (navigator.serviceWorker.addEventListener) {
@@ -80,7 +80,7 @@ if ('serviceWorker' in navigator) {
         }
     });
 
-    // Phase 25.5 (May 2026) — PWA update prompt wiring.
+    // PWA update prompt wiring.
     //
     // Problem: previously sw.js called self.skipWaiting() on install,
     // so a new version silently took over on the next navigation.
@@ -103,7 +103,7 @@ if ('serviceWorker' in navigator) {
     //      first SW takes control), so new users don't see a
     //      misleading "Update" prompt for their initial install.
     let _pwaUpdateReloading = false;
-    // Phase 25.9 (May 2026) — only reload after the user explicitly
+    // only reload after the user explicitly
     // taps "Update now". Previous code reloaded on EVERY
     // 'controllerchange', which on a first-visit (no existing
     // controller) fires when the brand-new SW activates → spurious
@@ -137,7 +137,7 @@ if ('serviceWorker' in navigator) {
         // 'controllerchange' fires. Reload exactly once so the page
         // re-fetches the new assets through the new SW.
         //
-        // Phase 25.9 — gated by _pwaUpdateClicked so this listener
+        // gated by _pwaUpdateClicked so this listener
         // does NOT fire a reload on the FIRST install (when there's
         // no existing controller and the new SW activates naturally).
         // Without this gate, every fresh browser context — Playwright
@@ -189,7 +189,7 @@ if ('serviceWorker' in navigator) {
             const btn = banner.querySelector('.pwa-update-banner-btn');
             btn.disabled = true;
             btn.textContent = _t('upload_sending') || 'Updating…';
-            // Phase 25.9 — arm the reload gate. controllerchange will
+            // arm the reload gate. controllerchange will
             // now reload, but ONLY because this explicit user tap
             // armed the flag.
             _pwaUpdateClicked = true;
@@ -209,7 +209,7 @@ if ('serviceWorker' in navigator) {
     }
 }
 
-// ── Web Push subscription flow (Apr 2026 — UNDP reporter feedback) ──────────
+// ── Web Push subscription flow ──────────
 //
 // Strategy:
 //   1. After a successful FIRST submit, prompt for notification permission.
@@ -559,7 +559,7 @@ async function syncQueueManual() {
 
             // Stage 1: metadata
             if (!stages.meta && item.meta) {
-                // Phase 1 (Apr 2026 — Optional reporter login) — attach
+                // attach
                 // the Bearer token that was captured at enqueue time
                 // (`item.auth_token`). Server silently accepts anonymous
                 // when the token has expired beyond offline grace, so no
@@ -643,7 +643,7 @@ async function syncQueueManual() {
 }
 
 // ── i18n strings ──────────────────────────────────────────────────────────────
-// ── UNDP §3.1b — Async locale-JSON loader (Apr 2026) ─────────────────────────
+// ── UNDP §3.1b — Async locale-JSON loader ─────────────────────────
 //
 // The inline I18N + EXTRA_LANG + UNDP_I18N_EXTRA dicts below are the SYNC
 // first-paint baseline. They are intentionally kept because:
@@ -668,7 +668,7 @@ const _LOCALE_JSON_CACHE = Object.create(null);
 
 async function _loadLocaleJson(code) {
     if (!code) return null;
-    // May 2026 (Delta-A fix) — en.json IS NOT identical to the inline
+    // (Delta-A fix) — en.json IS NOT identical to the inline
     // I18N.en. Every key added since Phase 2 (welcome overlay, device-id,
     // M3 UNDP details, M9 landmark fallback, M4 success impact, M5 ETA,
     // M6 filters, Q10 captured strip, M2 fullscreen picker, ~88 keys
@@ -720,11 +720,11 @@ const I18N = {
         consent_accept: "Accept & Continue",
         delete_my_data: "Delete My Data", your_reports: "Your Submitted Reports", delete_all: "Delete All Reports",
         delete_confirm: "Delete this report? Your data will be permanently deleted within 24 hours. You can undo this within that time.",
-        // Apr 2026 UX rewrite — landing copy simplified; old 4-card roadmap
+        // UX rewrite — landing copy simplified; old 4-card roadmap
         // removed so rs1..rs4 are dead but retained for back-compat with
         // downstream i18n consumers. New fp_* keys label the flow-progress
         // bar that replaces the step-dots on each capture stage.
-        // Apr 2026 PR 3 — removed the "Tap the button when you're ready"
+        // PR 3 — removed the "Tap the button when you're ready"
         // sub-copy; the big orange CTA already communicates the primary
         // action and the offline-hint at the bottom reassures users the
         // tool works in low connectivity. home_sub kept for back-compat
@@ -732,7 +732,7 @@ const I18N = {
         // but is empty so nothing renders.
         home_title: "Report an Incident", home_sub: "",
         home_metric_reports: "Reports Submitted", home_metric_verified: "Reports Verified", home_metric_lives: "Lives Saved",
-        // UNDP building-footprint selector copy (§3.2 Apr 2026).
+        // UNDP building-footprint selector copy.
         building_select_title: "Optional: pick the exact building",
         building_select_hint: "Tap a building outline to mark it as damaged.",
         building_selected: "Building selected",
@@ -740,7 +740,7 @@ const I18N = {
         home_offline_hint: "📡 Works offline and in low internet connectivity.",
         fp_photo: "Photo", fp_details: "Details", fp_review: "Review", fp_send: "Send",
         my_reports: "My Reports",
-        // Apr 2026 UI v2.1 — impact-card labels shown at the top of
+        // UI v2.1 — impact-card labels shown at the top of
         // stage-history. `in_flight` already exists; `mr_resolved` +
         // `mr_lives_impacted` are new (were hardcoded English before).
         mr_resolved: "Resolved",
@@ -748,7 +748,7 @@ const I18N = {
         delete_all_my_reports: "Delete all my reports",
         delete_all_note: "This removes every report you've sent from this device. Your data will be permanently deleted within 24 hours.",
         in_flight: "In flight", submitted: "Submitted",
-        // Apr 2026 "My Reports" spec — individual report management.
+        // "My Reports" spec — individual report management.
         report_detail: "Report", details_label: "Details",
         delete_this_report: "Delete this report", rejected_reason: "Not valid",
         advanced: "Advanced",
@@ -757,7 +757,7 @@ const I18N = {
         s1_title: "PHOTO", s1_sub: "Take picture",
         no_photo: "No photo", use_camera: "Camera", browse: "Files", photo_required: "Please capture or upload an image to continue", next: "Continue",
         pii_warning: "Avoid faces or personal documents. Faces will be auto-blurred for privacy.",
-        // Apr 2026 UX rewrite (see plan at ~/.claude/plans/swirling-forging-raccoon.md):
+        // UX rewrite (see plan at ~/.claude/plans/swirling-forging-raccoon.md):
         // audio screen speaks to low-literacy / crisis users. Bullets + example
         // remove "what should I write?" paralysis. "Tap and speak clearly" +
         // "You can speak in your language" tells users native language is OK.
@@ -790,7 +790,7 @@ const I18N = {
         severity_label: "Severity?", minor: "Low", moderate: "Moderate", severe: "High", ready_send: "READY",
         s4_title: "SEND", s4_sub: "Tap below",
         report_id: "ID:", send_undp: "SEND", go_back: "Edit",
-        // PR 7 (Apr 2026): success screen re-framed — warm close-out instead
+        // PR 7: success screen re-framed — warm close-out instead
         // of the prior bureaucratic "UNDP rescue teams have been notified".
         // `new_report` kept for back-compat with downstream deep-link flows;
         // the DOM now renders `add_another_report` but legacy consumers can
@@ -803,7 +803,7 @@ const I18N = {
         loc_verified: "Verified", loc_missing: "No GPS",
         loc_error: "GPS Error", loc_not_supported: "No GPS",
         retry_gps: "Tap 🔄 to retry",
-        // Apr 2026 PR 1 — English authoritative values for keys that were
+        // PR 1 — English authoritative values for keys that were
         // missing from EN and rendering as raw UPPERCASE_KEY names on the
         // review page (especially in non-English locales where the old
         // t() short-circuit never fell back to English). See the plan at
@@ -811,7 +811,7 @@ const I18N = {
         back: "Back",
         // Review page block labels — user-facing form sections.
         description_label: "Description",
-        // PR 6 (Apr 2026): crisis label reframed as causal question.
+        // PR 6: crisis label reframed as causal question.
         crisis_label: "What caused damage?",
         // PR 6: damage_label is now the inline sub-label on the merged
         // severity picker ("How bad?"). Kept as an EN key because it's still
@@ -825,7 +825,7 @@ const I18N = {
         needs_label: "🆘 Pressing Needs",
         review_details_title: "Details",
         confirm_title: "Confirm",
-        // UI v2 (Apr 2026) — titles for the 3-page stage-review split.
+        // titles for the 3-page stage-review split.
         // Page 1: What happened? (infra chips + inline damage dots + crisis chips)
         // Page 2: How bad + where? (severity row + location + services)
         // Page 3: Describe + confirm (textarea + building footprint + summary)
@@ -835,7 +835,7 @@ const I18N = {
         // New flow-progress labels for the 5-step v2 bar.
         fp_audio: "Audio",
         fp_what: "What",
-        // Native alert()/confirm() → toast + custom modal migration (UI v2).
+        // Native alert()/confirm() → toast + custom modal migration.
         // Keys below are the messages previously surfaced via window.alert()
         // or window.confirm() at 11 call-sites in app.js. Translators now
         // have targets; the RN parity layer picks these up through the
@@ -853,12 +853,12 @@ const I18N = {
         confirm_no: "Cancel",
         confirm_delete: "Delete",
         // Damage-classification labels — UNDP Appendix-1 verbatim phrasing
-        // (Apr 2026 UI v2.1). Previously "Minimal / Partial / Destroyed" —
+        // (UI v2.1). Previously "Minimal / Partial / Destroyed" —
         // shorter but diverged from UNDP. The enum values on the wire
         // (MINIMAL / PARTIAL / COMPLETE) are unchanged; only the display
         // string is UNDP-aligned. Tooltip copy in the HTML carries the
         // full UNDP description for evaluator context.
-        // v3 redesign Q15 (May 2026) — plain-language user-facing labels.
+        // v3 redesign Q15 — plain-language user-facing labels.
         // Backend enum (MINIMAL / PARTIAL / COMPLETE) unchanged.
         minimal_damage: "Minimal",
         no_damage: "Minimal",
@@ -882,16 +882,16 @@ const I18N = {
         community: "Community",
         community_infra: "Community",   // v3 stage-infra chip (Apr 2026 Phase B4)
         public_spaces: "Public Spaces",
-        // v3 stage-crisis group headings (Apr 2026 Phase B4).
+        // v3 stage-crisis group headings.
         crisis_group_natural: "Natural",
         crisis_group_technological: "Technological",
         crisis_group_human_made: "Human-made",
-        // v3 stage-extras debris Yes/No toggle (Apr 2026 Phase B4).
+        // v3 stage-extras debris Yes/No toggle.
         debris_yes: "Yes",
         debris_no: "No",
-        // v3 stage-photo single Add-more button (Apr 2026 Phase B4).
+        // v3 stage-photo single Add-more button.
         add_more: "Add",
-        // Phase 1 (Apr 2026 — Optional reporter login) — auth UI keys.
+        // auth UI keys.
         // Inline here AS WELL AS in i18n/*.json so stage-login renders
         // correctly during the brief boot window before the JSON pack
         // finishes loading (and when the service worker serves a stale
@@ -920,7 +920,7 @@ const I18N = {
         settings_account: "Account",
         settings_unlink_device: "Unlink this device",
         settings_logout: "Logout",
-        // Apr 2026 — UNDP §3.1e. Toast strings extracted from hardcoded
+        // UNDP §3.1e. Toast strings extracted from hardcoded
         // English literals so AR / FR / ES / RU / ZH locales render
         // properly. {n}, {detail}, {error} are template placeholders
         // resolved by `.replace('{name}', String(value))` at the call-site.
@@ -964,7 +964,7 @@ const I18N = {
         shelter: "Shelter",
         medical: "Medical",
         security: "Security",
-        // UNDP Appendix-1 pressing-needs additions (Apr 2026 UI v2.1).
+        // UNDP Appendix-1 pressing-needs additions.
         // Expanded from 5 → 10 chips to cover all UNDP-required options.
         need_cash: "Cash",
         need_livelihoods: "Livelihoods",
@@ -973,7 +973,7 @@ const I18N = {
         need_protection: "Protection",
         need_local_support: "Local support",
         need_other: "Other",
-        // Apr 2026 i18n-coverage sweep — every user-visible string that
+        // i18n-coverage sweep — every user-visible string that
         // was previously hardcoded in index.html or app.js now has a key
         // so 100% of the UI follows the selected language. Missing keys
         // in non-English locales fall through cleanly to English via
@@ -981,7 +981,7 @@ const I18N = {
         // — Language picker chrome —
         lang_picker_title: "Choose language",
         lang_picker_close: "Close",
-        // May 2026 (UI v3 redesign Q8) — neutral section labels. Users
+        // (UI v3 redesign Q8) — neutral section labels. Users
         // don't care about the UN classification; they want THEIR
         // language. UN-priority sort order is preserved internally.
         lang_picker_un_section: "Most common",
@@ -1051,14 +1051,14 @@ const I18N = {
         take_another_body: "Take another?",
         take_another_yes: "Yes",
         take_another_done: "Done",
-        // Apr 2026: image viewer + thumbnail-delete.
+        // : image viewer + thumbnail-delete.
         image_delete_btn: "Delete image",
         image_delete_confirm_title: "Delete this image?",
         image_delete_confirm_body: "This image will be removed from your report.",
         image_delete_yes: "Delete",
         image_delete_cancel: "Cancel",
         image_close: "Close",
-        // Apr 2026: report-detail view strings. Previously hardcoded inside
+        // : report-detail view strings. Previously hardcoded inside
         // renderReportDetail/_mapReportStatus/_deriveActionTaken.
         rd_status_submitted: "Submitted",
         rd_status_under_review: "Under Review",
@@ -1109,7 +1109,7 @@ const I18N = {
         start_btn: "ವರದಿ ಪ್ರಾರಂಭಿಸಿ",
         s1_title: "ಫೋಟೋ", s1_sub: "ಚಿತ್ರ ತೆಗೆಯಿರಿ",
         no_photo: "ಹಾಕಿ", use_camera: "ಕ್ಯಾಮೆರಾ", browse: "ಹುಡುಕಿ", skip_photo: "ಬಿಟ್ಟುಬಿಡಿ", next: "ಮುಂದುವರಿಸಿ",
-        // Apr 2026 UX rewrite — low-literacy-friendly copy (see en block above).
+        // UX rewrite — low-literacy-friendly copy (see en block above).
         s2_title: "ಏನಾಯಿತು ಎಂದು ಹೇಳಿ", s2_sub: "ಮಾತನಾಡಿ ಅಥವಾ ಟೈಪ್ ಮಾಡಿ:",
         audio_bullet_1: "ಏನು ಹಾನಿಯಾಗಿದೆ? (ಮನೆ, ರಸ್ತೆ, ಜನರು…)",
         audio_bullet_2: "ಎಷ್ಟು ಹಾನಿ? (ಸಣ್ಣ / ದೊಡ್ಡ / ಸಂಪೂರ್ಣ ಹಾನಿ)",
@@ -1131,7 +1131,7 @@ const I18N = {
         loc_verified: "ಪರಿಶೀಲಿಸಲಾಗಿದೆ", loc_missing: "GPS ಇಲ್ಲ",
         loc_error: "GPS ದೋಷ", loc_not_supported: "GPS ಇಲ್ಲ",
         retry_gps: "Tap 🔄 ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲು",
-        // Apr 2026 i18n-coverage sweep — Kannada translations for the
+        // i18n-coverage sweep — Kannada translations for the
         // full set of previously-hardcoded strings. Missing keys fall
         // through to English via the per-key t() chain (PR 1).
         lang_picker_title: "ಭಾಷೆಯನ್ನು ಆರಿಸಿ",
@@ -1242,7 +1242,7 @@ const I18N = {
         s1_title: "फोटो", s1_sub: "चित्र लें",
         no_photo: "नहीं है", use_camera: "कैमरा", browse: "फाइल", skip_photo: "छोड़ें", next: "आगे बढ़ें",
         pii_warning: "चेहरे या व्यक्तिगत दस्तावेज न दिखाएं। चेहरे गोपनीयता के लिए स्वचालित रूप से धुंधले होंगे।",
-        // Apr 2026 UX rewrite — low-literacy-friendly copy.
+        // UX rewrite — low-literacy-friendly copy.
         s2_title: "हमें बताएं क्या हुआ", s2_sub: "बोलें या टाइप करें:",
         audio_bullet_1: "क्या नुकसान हुआ है? (घर, सड़क, लोग…)",
         audio_bullet_2: "कितना बुरा है? (छोटा / बड़ा / पूरी तरह नष्ट)",
@@ -1264,7 +1264,7 @@ const I18N = {
         loc_verified: "सत्यापित", loc_missing: "GPS नहीं",
         loc_error: "GPS त्रुटि", loc_not_supported: "GPS नहीं",
         retry_gps: "Tap 🔄 फिर से",
-        // Apr 2026 i18n-coverage sweep — Hindi translations.
+        // i18n-coverage sweep — Hindi translations.
         lang_picker_title: "भाषा चुनें",
         lang_picker_close: "बंद करें",
         no_photo: "अभी तक कोई फोटो नहीं",
@@ -1369,7 +1369,7 @@ const I18N = {
         fp_photo: "புகைப்படம்", fp_details: "விவரங்கள்", fp_review: "மதிப்பாய்வு", fp_send: "அனுப்பு",
         my_reports: "எனது அறிக்கைகள்",
         start_btn: "அறிக்கை தொடங்கு",
-        // Apr 2026 UX rewrite — low-literacy-friendly copy.
+        // UX rewrite — low-literacy-friendly copy.
         next: "தொடரவும்",
         s2_title: "என்ன நடந்தது என்று சொல்லுங்கள்", s2_sub: "பேசவும் அல்லது தட்டச்சு செய்யவும்:",
         audio_bullet_1: "என்ன சேதமடைந்துள்ளது? (வீடு, சாலை, மக்கள்…)",
@@ -1392,7 +1392,7 @@ const I18N = {
         loc_verified: "இடம் சரிபார்க்கப்பட்டது", loc_missing: "இடம் இல்லை",
         loc_error: "ஜிபிஎஸ் பிழை", loc_not_supported: "ஜிபிಎಸ್ ஆதரிக்கப்படவில்லை",
         retry_gps: "மீண்டும் முயற்சிக்க புதுப்பிக்கவும்",
-        // Apr 2026 i18n-coverage sweep — Tamil translations.
+        // i18n-coverage sweep — Tamil translations.
         lang_picker_title: "மொழியைத் தேர்ந்தெடுக்கவும்",
         lang_picker_close: "மூடு",
         no_photo: "இன்னும் புகைப்படம் இல்லை",
@@ -1487,7 +1487,7 @@ const I18N = {
     }
 };
 
-// May 2026 v4 (post-prod fix) — inline the v4/landing/carousel keys
+// v4 (post-prod fix) — inline the v4/landing/carousel keys
 // onto every locale's I18N entry so applyI18n() resolves them at first
 // paint, BEFORE the async _loadLocaleJson() merge completes. Without
 // this block, landing.js / v4-flow.js mounted DOM whose data-i18n
@@ -1528,7 +1528,7 @@ Object.assign(I18N.en, {
     crisis_hurricane: "Hurricane", crisis_wildfire: "Wildfire",
     crisis_explosion: "Explosion", crisis_chemical: "Chemical",
     crisis_conflict: "Conflict", crisis_unrest: "Civil unrest",
-    // v3 redesign Q15 (May 2026) — plain-language chip labels match the
+    // v3 redesign Q15 — plain-language chip labels match the
     // longer minimal_damage / partial_damage / complete_damage labels in
     // i18n/*.json. Backend enum (MINIMAL / PARTIAL / COMPLETE) unchanged.
     damage_minimal: "Minimal", damage_partial: "Partly damaged", damage_complete: "Fully destroyed",
@@ -1707,7 +1707,7 @@ const state = {
     audioBlob: null,
     transcript: '',
     description: '',
-    // Phase B4 (Apr 2026 UI v3) — default infraType = the first UNDP
+    // default infraType = the first UNDP
     // super-type chip (RESIDENTIAL). Was 'ROAD' under v2 legacy chips.
     // Backend InfraTypeEnum accepts both the legacy + super-type values
     // so offline queues built by pre-v3 clients keep replaying cleanly.
@@ -1716,7 +1716,7 @@ const state = {
     crisisType: 'FLOOD',
     damageClass: 'PARTIAL',
     infraName: '',
-    // Phase B2 (Apr 2026 UI v3) — distinguisher between user-typed names and
+    // distinguisher between user-typed names and
     // names auto-filled from the OSM building-select tap. `false` (or
     // absent) = user typed it; `true` = building-select.js auto-filled
     // from the OSM tags. Dashboard uses this to flag `building_id = NULL
@@ -1727,7 +1727,7 @@ const state = {
     // free-text autocomplete); `buildingId` remains the truth for any actual
     // selection.
     nearbyBuildings: [],
-    // Phase B3 (Apr 2026 UI v3) — W6 applicable-modules cache per crisis type.
+    // W6 applicable-modules cache per crisis type.
     // Populated by fetchApplicableModules on crisis-chip tap. Consumed by the
     // future inline renderer on stage-review.
     applicableModules: [],
@@ -1737,7 +1737,7 @@ const state = {
     deviceLocation: null, // Keep original GPS separately
     userLocationName: null, // Place name typed by user (for offline geocoding)
     locationName: null, // Resolved human-readable place name from reverse geocoding
-    // M9 (May 2026) — track WHY GPS failed so the landmark-fallback banner
+    // M9 — track WHY GPS failed so the landmark-fallback banner
     // can render with a contextual message. null when GPS is healthy or
     // hasn't resolved yet; one of: 'denied' (user said no), 'unavailable'
     // (PositionUnavailable), 'timeout' (>8s), 'no-support' (browser),
@@ -1755,7 +1755,7 @@ const state = {
     inactivityTimeoutMs: 120 * 1000 // 2 minutes in milliseconds
 };
 
-// ── Phase 4 (Apr 2026) — Region-gated Auto-Submit Timer ─────────────────────
+// ── Phase 4 — Region-gated Auto-Submit Timer ─────────────────────
 // When a user taps "Start Report" AND their GPS falls inside an admin-enabled
 // region, a 2-minute countdown runs throughout the capture flow. On T=0 the
 // report auto-submits whatever has been captured; Cancel at any time returns
@@ -1789,7 +1789,7 @@ function _haversineKm(lat1, lng1, lat2, lng2) {
 
 /** Fetch enabled regions from the public endpoint.
  *
- *  Cache strategy (v2, Apr 2026):
+ *  Cache strategy:
  *  1. Short-lived in-memory cache (10 s) prevents stage-transition hammering.
  *  2. Persisted localStorage cache (24 h TTL) for offline fallback ONLY —
  *     live fetch is always preferred when network is reachable.
@@ -1809,7 +1809,7 @@ async function _fetchEnabledRegions(opts = {}) {
         persisted = JSON.parse(localStorage.getItem(_REGION_CACHE_KEY) || 'null');
     } catch (_) {}
     try {
-        // Apr 2026 — early-init fallback (API_BASE not yet bound). Pick a
+        // early-init fallback (API_BASE not yet bound). Pick a
         // sensible default per host: localhost dev → :8000, prod → same origin
         // (behind nginx /api/ proxy). Don't blindly suffix :8000 — that
         // pointed at a closed port behind the ALB.
@@ -1876,7 +1876,7 @@ async function _findActiveRegion(opts = {}) {
  *  Start Report onwards. User may cancel at any time; otherwise the
  *  report auto-submits at T=0.
  *
- *  v3 (Apr 2026) changes:
+ *  v3 changes:
  *    - `tryArm({bustCache:true})` is called on every `goToStage` so
  *      dashboard-flipped regions propagate without a 24 h cache wait.
  *    - `hasMinimumInput()` gate — the timer refuses to arm until the
@@ -1906,7 +1906,7 @@ class InactivityManager {
         el.id = 'auto-submit-banner';
         el.setAttribute('role', 'status');
         el.setAttribute('aria-live', 'polite');
-        // v3 (Apr 2026, Phase A4) — banner rebuilt for usability:
+        // v3 — banner rebuilt for usability:
         //   • Whole-banner tap cancels (field testers consistently tapped the
         //     banner thinking it would dismiss the timer, but only the 6 × 12
         //     px "Cancel" text caught the tap).
@@ -2181,7 +2181,7 @@ const inactivityManager = new InactivityManager(state.inactivityTimeoutMs, handl
 //   - LAN IP (mobile on same Wi-Fi)        → http://192.168.x.y:8000
 //   - production (https://undp.crisplabs.tech, behind nginx /api/ proxy)
 //                                          → https://undp.crisplabs.tech
-// Apr 2026 — added prod branch. Previous unconditional ":8000" suffix
+// added prod branch. Previous unconditional ":8000" suffix
 // pointed at a closed port behind the ALB and was the root cause of
 // "submission shows successful but never reaches the backend": the
 // chunked upload's offline queue caught the failed POST and the UI
@@ -2192,7 +2192,7 @@ const _backendHost = _isLocalDev
     : window.location.origin;
 const API_BASE = `${_backendHost}/api/v1`;
 
-// ── Phase 16 (May 2026) — defensive media-URL resolver ──────────────────
+// ── Phase 16 — defensive media-URL resolver ──────────────────
 //
 // Centralises every "given a media/thumbnail URL string from the API,
 // produce a fetchable URL" decision so a future backend drift can't
@@ -2332,7 +2332,7 @@ async function resolveLocationName() {
         state.locationName = name;
         // Persist the resolved name so next reload shows it instantly (no "Resolving...")
         _patchLocCtx({ name });
-        // Apr 2026 — use the centralised paint helper so EVERY visible
+        // use the centralised paint helper so EVERY visible
         // location display (#v3-auto-loc on stage-where, #loc-coords in
         // the review block which is slotted into stage-where in v3,
         // #summary-loc on stage-review) gets the same updated value
@@ -2343,7 +2343,7 @@ async function resolveLocationName() {
     }
 }
 
-// Apr 2026 — single source of truth for painting every location display
+// single source of truth for painting every location display
 // in the PWA. Reads `state.userLocationName` (manual pick) → falls back
 // to `state.locationName` (auto-resolved) → falls back to lat/lng → falls
 // back to the localised "Detecting..." string. Called from every place
@@ -2375,7 +2375,7 @@ function _paintLocationDisplays() {
     if (summaryEl) summaryEl.textContent = display;
 }
 
-// Apr 2026 PR 3 — update the 🟢/🔴 connectivity dot in the lang-switcher
+// PR 3 — update the 🟢/🔴 connectivity dot in the lang-switcher
 // pill. Called from the online/offline listeners + on boot. Setting
 // aria-label + title keeps it accessible.
 function _applyOnlineDot(online) {
@@ -2394,7 +2394,7 @@ function _applyOnlineDot(online) {
     }
 }
 
-// Connectivity probe (Apr 2026, revised).
+// Connectivity probe.
 //
 // Earlier iteration polled every 15 s regardless of state (240 calls/hr
 // per idle user). That was wasteful — the polling only matters when
@@ -2498,7 +2498,7 @@ function applyI18n() {
             el.textContent = text;
         }
     });
-    // May 2026 (Delta-D follow-up) — broadcast so components that build
+    // (Delta-D follow-up) — broadcast so components that build
     // dynamic i18n strings (e.g. the v4 sub-step label that mixes a
     // localised header with a numeric "1 of 3" suffix) can re-render
     // when the language pack actually arrives. Best-effort; no listeners
@@ -2507,14 +2507,14 @@ function applyI18n() {
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
     });
-    // Apr 2026 UI v2.1 — `data-i18n-title` drives the `title` HTML attribute
+    // UI v2.1 — `data-i18n-title` drives the `title` HTML attribute
     // (hover tooltip). Used by the UNDP-aligned damage chips to carry the
     // full Appendix-1 description ("Structurally sound and functional …").
     // Evaluators hovering a chip read the spec language verbatim.
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
         el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
     });
-    // Phase 25 — aria-label localisation. Many back / close / modal-
+    // aria-label localisation. Many back / close / modal-
     // dismiss buttons had aria-label="Back" hardcoded in English, which
     // is a screen-reader regression for non-English users (their
     // narrator announces "Back" in English even when the visible UI is
@@ -2523,7 +2523,7 @@ function applyI18n() {
     document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
         el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria-label')));
     });
-    // Apr 2026 i18n-coverage sweep: dynamically-rendered chrome also needs
+    // i18n-coverage sweep: dynamically-rendered chrome also needs
     // a refresh when the locale CHANGES. Only re-run when state.lang
     // actually differs from the last applied lang — this avoids
     // unnecessary status-since network calls on every boot
@@ -2558,10 +2558,10 @@ function applyI18n() {
 let _lastRenderedReport = null;
 
 // ── Stage navigation ───────────────────────────────────────────────────────────
-// Phase 1 (Apr 2026 — Optional reporter login) — `stage-login` +
+// `stage-login` +
 // `stage-settings` added. Both are off the capture flow; they don't
 // participate in the progress-bar counter (hidden when active).
-// May 2026 v4 — three new stages (capture / classify / review) for the
+// v4 — three new stages (capture / classify / review) for the
 // 3-page UI v4 flow. Adding them here so goToStage()'s deactivation
 // sweep (`allStages.forEach → remove .active`) correctly hides the
 // previous v4 stage when the user navigates between them. Without
@@ -2569,7 +2569,7 @@ let _lastRenderedReport = null;
 // and the absolute-positioned stages stacked on top of each other.
 const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-review', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail', 'stage-login', 'stage-settings', 'stage-privacy', 'stage-v4-capture', 'stage-v4-classify', 'stage-v4-review', 'stage-undp-details'];
 
-// ── Phase B4 (Apr 2026 UI v3) — 8-stage capture flow ───────────────────────
+// ── — 8-stage capture flow ───────────────────────
 // When `UI_V3_ENABLED` is on, the capture flow is re-ordered:
 //
 //   1 home → 2 where+damage → 3 infra → 4 crisis+name
@@ -2591,7 +2591,7 @@ const STAGES_V3 = [
     'stage-success',
     'stage-history',
     'stage-report-detail',
-    // Phase 1 (Apr 2026) — off-flow auth stages. Not part of the 7-step
+    // off-flow auth stages. Not part of the 7-step
     // progress bar; reachable only via the Login button on stage-home.
     'stage-login',
     'stage-settings',
@@ -2720,7 +2720,7 @@ function _v3AutoDeriveSeverity() {
     }
 }
 
-// Apr 2026 UI v3 — per-incident photo cap. UNDP brief doesn't mandate a
+// UI v3 — per-incident photo cap. UNDP brief doesn't mandate a
 // max, but field testers showed 95 % of captures land within 4–5 photos
 // and the chunked-upload pipeline slows markedly past 5 on 2 G. We cap
 // EXTRAS at 4 so main + extras = 5 max. Guarded at every push site
@@ -2744,14 +2744,14 @@ function _canAddMorePhotos() {
     return true;
 }
 
-// Apr 2026 PR 1 — testability hooks. Mirrors the dashboard pattern from the
+// PR 1 — testability hooks. Mirrors the dashboard pattern from the
 // previous sprint (web-dashboard/src/app.js). Exposes the module-scope
 // `state` + `goToStage` on window for Playwright E2E access + DevTools
 // debugging. Zero production-path effect; safe to keep always-on.
 Object.defineProperty(window, 'state', { get: () => state, configurable: true });
 window.__crispGoToStage = (id) => goToStage(id);
 
-// May 2026 — Android hardware back button + desktop browser back.
+// Android hardware back button + desktop browser back.
 // When user presses back, we get a popstate with the PREVIOUS history
 // entry's state. If it's a v3/v4 stage we navigate there. If we're
 // already on stage-home, allow the default back (which exits the PWA
@@ -2787,12 +2787,12 @@ window.addEventListener('popstate', (e) => {
         window.__crispIsHistoryNav = false;
     }
 });
-// May 2026 v4 — `submitReport` exposed for v4-flow.js's "Send to UNDP"
+// v4 — `submitReport` exposed for v4-flow.js's "Send to UNDP"
 // button. Same code path the v3 #btn-send + #btn-review-submit clicks
 // land in — guarantees the v4 review page produces an identical
 // /reports/meta payload to the legacy flow.
 window.__crispSubmitReport = () => submitReport();
-// May 2026 v4 (post-prod fix) — applyI18n MUST be on window for
+// v4 (post-prod fix) — applyI18n MUST be on window for
 // landing.js + v4-flow.js to translate dynamically-mounted DOM after
 // the initial boot pass. Without this, every [data-i18n] in the
 // v4 stages + landing card showed its raw key (e.g. `v4_take_photo`,
@@ -2832,7 +2832,7 @@ function goToStage(id) {
     const pbarContainer = document.getElementById('progress-bar-container');
     if (pbarContainer) pbarContainer.style.display = (id === 'stage-home' || id === 'stage-success') ? 'none' : 'block';
 
-    // Apr 2026 UX rewrite — unified 4-step flow-progress bar. Visible on
+    // UX rewrite — unified 4-step flow-progress bar. Visible on
     // capture stages (photo / audio / review / send); hidden on home,
     // success, history. `updateFlowProgress` colour-codes each step:
     // green ✓ done · accent ● active · red ! missing · grey ○ upcoming.
@@ -2849,7 +2849,7 @@ function goToStage(id) {
     // pager uses this to reset to page 1 each time the user arrives.
     document.dispatchEvent(new CustomEvent('stage-entered', { detail: id }));
 
-    // May 2026 — push a history entry on every stage transition so the
+    // push a history entry on every stage transition so the
     // Android hardware back button (and browser back button) navigates
     // BETWEEN stages instead of exiting the PWA. Without this, users
     // who installed CRISP to their home screen and pressed Back on
@@ -2877,13 +2877,13 @@ function goToStage(id) {
         inactivityManager.tryArm({ bustCache: true });
     }
 
-    // M3 (May 2026) — re-evaluate the post-submission UNDP-details soft
+    // M3 — re-evaluate the post-submission UNDP-details soft
     // prompt every time we land on stage-success. Hidden when the user
     // already filled debris/services during capture (Q14 v4 path), so we
     // never nag a repeat question.
     if (id === 'stage-success') {
         try { maybeShowUndpDetailsPrompt(); } catch (e) { console.warn('[M3] prompt:', e); }
-        // M4 (May 2026) — kick off the celebratory motion + impact strip
+        // M4 — kick off the celebratory motion + impact strip
         // every time stage-success activates (incl. submitting a second
         // report in the same session). Both are best-effort: failures are
         // logged but never block the success state.
@@ -2897,7 +2897,7 @@ function hasMinimumInput() {
     return !!(state.photoDataUrl || state.audioBlob || (state.description && state.description.trim()));
 }
 
-// ── Apr 2026 UX rewrite — unified flow-progress bar ────────────────────────
+// ── UX rewrite — unified flow-progress bar ────────────────────────
 // Maps the internal stage names to the 4 user-visible steps:
 //   Photo     · stage-photo
 //   Details   · stage-audio  (the voice+text step is the "details" kickoff)
@@ -2968,7 +2968,7 @@ function updateFlowProgress(currentStage) {
         return;
     }
 
-    // UI v2 (Apr 2026): 5 steps — Photo / Audio / What / Details / Send —
+    // UI v2: 5 steps — Photo / Audio / What / Details / Send —
     // mapped to data-step=1..5 in index.html. Step 3 ("What") lives on
     // review-page 1, step 4 ("Details") on review-page 2, step 5 ("Send")
     // on review-page 3 (the confirm summary). When UI_V2 is off, step-3's
@@ -3077,7 +3077,7 @@ async function updateHomeImpactMetrics() {
                 }
             } catch (_) {}
         }
-        // Phase 24 — impact card is now ALWAYS visible (no more
+        // impact card is now ALWAYS visible (no more
         // "hide below 5 verified" gate). The HTML ships with `—`
         // placeholders so the card looks intentional even on the
         // anonymous first paint; subsequent renders fill in real
@@ -3090,7 +3090,7 @@ async function updateHomeImpactMetrics() {
         livesEl.textContent = fmt(livesImpacted);
         wrap.style.display = 'flex';
 
-        // May 2026 v4 — also paint the landing card's impact panel if
+        // v4 — also paint the landing card's impact panel if
         // it's currently mounted. Same data, mirror copy. Doing this
         // here keeps the single-source-of-truth in updateHomeImpactMetrics().
         const landingWrap = document.getElementById('landing-impact');
@@ -3103,7 +3103,7 @@ async function updateHomeImpactMetrics() {
         }
     } catch (e) {
         console.warn('[Home] impact metrics fetch failed:', e);
-        // Phase 24 — even on error keep the card visible with the
+        // even on error keep the card visible with the
         // baseline `—` placeholders. Better than the bottom dead
         // zone reappearing whenever the backend hiccups.
         wrap.style.display = 'flex';
@@ -3328,7 +3328,7 @@ const COUNTRY_LANG_DATA = {
     'BZ': { code: 'en', label: 'English', speech: 'en-BZ' },
 };
 
-// Phase 24 (Track B.2) — language family fallback. When neither the
+// language family fallback. When neither the
 // region-keyword match nor the country-code lookup picks a
 // CRISP-supported language, this table provides a regional-proximity
 // fallback BEFORE the final English default. Each entry is the
@@ -3436,7 +3436,7 @@ const UNDP_I18N_EXTRA = {
         building_select_title: 'Optionnel : choisir le bâtiment exact',
         building_select_hint: "Appuyez sur un contour pour le marquer comme endommagé.",
         building_selected: 'Bâtiment sélectionné',
-        // UI v2 (Apr 2026) review-split + alert/confirm migration keys.
+        // UI v2 review-split + alert/confirm migration keys.
         review_v2_title_what: "Que s'est-il passé ?",
         review_v2_title_how: "Gravité et lieu ?",
         review_v2_title_confirm: "Vérifier et envoyer",
@@ -3574,14 +3574,14 @@ function detectAndSetupLanguage() {
     const localBtn = document.getElementById('btn-lang-local');
     const enBtn = document.getElementById('btn-lang-en');
     const changeBtn = document.getElementById('btn-lang-change');
-    // Apr 2026 language-UX rewrite — primary visible control. Always shows
+    // UX rewrite — primary visible control. Always shows
     // the current active locale; click opens the full picker. All legacy
     // buttons (#btn-lang-local / #btn-lang-en / #btn-lang-change) are kept
     // in the DOM hidden for Playwright back-compat.
     const currentBtn = document.getElementById('btn-lang-current');
     const suggestedRow = document.getElementById('lang-picker-suggested');
 
-    // Phase 24 — flag emoji per locale. The picker overlay already
+    // flag emoji per locale. The picker overlay already
     // carries the matching flag for each 6-UN tile (see
     // index.html .lpf-un buttons); this dict lets the compact top-
     // right pill mirror the same visual identity. Indian sub-national
@@ -3603,7 +3603,7 @@ function detectAndSetupLanguage() {
     };
 
     // Update the one visible pill to reflect the active locale code.
-    // Phase 24 — innerHTML form so we can render `<flag> CODE` with
+    // innerHTML form so we can render `<flag> CODE` with
     // a controllable gap, matching the lang-picker tile aesthetic.
     function _updateLangSwitcherMode(code) {
         const norm = String(code || 'en').toLowerCase();
@@ -3636,13 +3636,13 @@ function detectAndSetupLanguage() {
         html.lang = code || 'en';
     }
 
-    // May 2026 v4 (post-prod fix) — guard against locales we don't ship
+    // v4 (post-prod fix) — guard against locales we don't ship
     // a translation for. Without this, a Karnataka-IP user got `kn`
     // detected → `kn.json` 404 → I18N['kn'] never populated → every
     // applyI18n() call resolved every key to its raw string. Better
     // to silently fall back to English than display `landing_title`
     // and `v4_take_photo` to the user.
-    // Phase 25 — full 22-locale set. UN-6 + UNDP tier-2 (9) + Indian
+    // full 22-locale set. UN-6 + UNDP tier-2 (9) + Indian
     // sub-national tier-3 (7). Anything else routes silently to 'en'
     // via the warn-and-fall-back branch below.
     const SUPPORTED_LANGS = new Set([
@@ -3683,7 +3683,7 @@ function detectAndSetupLanguage() {
         if (enBtn)   enBtn.classList.toggle('active', code === 'en');
         if (localBtn) localBtn.classList.toggle('active', code !== 'en' && localBtn.dataset.lang === code);
 
-        // Phase 25 (Track A) — i18n fallback chain repair.
+        // i18n fallback chain repair.
         //
         // Bug: when the active locale is non-English (e.g. Kannada via
         // auto-detect) the previous code fetched ONLY `kn.json`. The
@@ -3737,7 +3737,7 @@ function detectAndSetupLanguage() {
         })();
     }
 
-    // Language policy (Apr 2026, revised):
+    // Language policy:
     //   1. User's manual pick (localStorage['crisp_lang_manual']) always wins.
     //   2. Otherwise, auto-activate the detected local language (GPS / IP
     //      geo → REGION_LANG_MAP / COUNTRY_LANG_DATA).
@@ -3745,11 +3745,11 @@ function detectAndSetupLanguage() {
     //
     // This was flipped-then-reverted-once: earlier we defaulted to English
     // and showed the local as a "Your region" suggestion in the picker.
-    // User feedback: for most CRISP users (low-literacy, crisis, native
-    // speakers of the local language) defaulting to English adds friction.
-    // So the app now opens in the detected local by default, but users
-    // who picked English (or any other locale) once have their choice
-    // remembered across reloads.
+    // For most CRISP users (low-literacy, crisis, native speakers of
+    // the local language) defaulting to English adds friction. The app
+    // opens in the detected local by default; users who pick English
+    // (or any other locale) once have their choice remembered across
+    // reloads.
     //
     // `state.detectedLang` / `state.detectedLangLabel` are still populated
     // so the picker can show a "Detected: ಕನ್ನಡ" hint row when the user
@@ -3764,7 +3764,7 @@ function detectAndSetupLanguage() {
         }
         // If the user has no manual pick, promote the detected local to
         // the active locale (default behaviour — local wins).
-        // Phase 25 (May 2026) — gate on SUPPORTED_LANGS instead of
+        // gate on SUPPORTED_LANGS instead of
         // I18N[code]. The inline I18N only holds en/kn/hi/ta (legacy
         // 4 langs); the other 18 supported locales live in their JSON
         // files and aren't in I18N until `activateLang` triggers a
@@ -3785,7 +3785,7 @@ function detectAndSetupLanguage() {
             suggestedRow.style.display = 'none';
             return;
         }
-        // Phase 24 — render the detected country's flag next to the
+        // render the detected country's flag next to the
         // "Your region" pin. Flag comes from LANG_FLAGS (the same dict
         // used in the top-right pill). If the user is on a sub-national
         // Indian language (kn/ta/te/…) all of those share 🇮🇳 — visually
@@ -3826,7 +3826,7 @@ function detectAndSetupLanguage() {
     function _openLangPicker() {
         if (pickerOverlay) {
             pickerOverlay.style.display = 'flex';
-            // v3 (May 2026 Q9): clear any prior search query when reopening,
+            // v3: clear any prior search query when reopening,
             // so the user always lands on the full list. Focus the input
             // after a tick so the keyboard appears on mobile.
             const searchInput = document.getElementById('lang-picker-search-input');
@@ -3837,7 +3837,7 @@ function detectAndSetupLanguage() {
             }
         }
     }
-    // v3 (May 2026 Q9): filter language tiles by typed query. Matches
+    // v3: filter language tiles by typed query. Matches
     // both the English aria-label ("French") and the native-script label
     // ("Français") so a user who types either reaches their language.
     // Section headers + the empty state hide / show as a whole-row.
@@ -3913,7 +3913,7 @@ function detectAndSetupLanguage() {
         state.location     = { lat: ctx.lat, lng: ctx.lng, acc: ctx.acc };
         state.deviceLocation = { lat: ctx.lat, lng: ctx.lng };
         state.locationName = ctx.name || null;
-        // Language policy (revised Apr 2026): auto-activate the cached
+        // Language policy: auto-activate the cached
         // local lang unless the user has a manual override — see
         // noteDetectedLocal for the full policy. When no cache match,
         // the live GPS / IP paths below will call noteDetectedLocal
@@ -3921,7 +3921,7 @@ function detectAndSetupLanguage() {
         if (ctx.lang && ctx.langLabel) {
             noteDetectedLocal(ctx.lang, ctx.langLabel);
         }
-        // Apr 2026 — paint every location display from the central
+        // paint every location display from the central
         // helper so the boot-cache restore can't desync from later
         // async resolves. Previous bug: this function painted
         // #loc-coords + #summary-loc directly with the cached name,
@@ -3938,7 +3938,7 @@ function detectAndSetupLanguage() {
         }
     }
 
-    // Apr 2026 language-UX rewrite: start with English by default, then
+    // UX rewrite: start with English by default, then
     // upgrade to the user's manual choice (from localStorage) if present.
     // GPS / IP detection proceeds in the background purely to populate
     // the "Your region" suggestion — never to force-switch the UI.
@@ -3974,7 +3974,7 @@ function detectAndSetupLanguage() {
         }
         return false;
     };
-    // Phase 25 (May 2026) — boot-time language resolution order:
+    // boot-time language resolution order:
     //   1. Manual pick (`crisp_lang_manual`) — explicit user choice always wins.
     //   2. Browser locale (`navigator.language`) — zero cost, no permission
     //      prompt, no network. A French Chrome user lands in French on
@@ -4035,7 +4035,7 @@ function detectAndSetupLanguage() {
         _applyLocCtx(_cachedCtx);
     }
 
-    // Phase 25 (May 2026) — deferred home-stage GPS detection.
+    // deferred home-stage GPS detection.
     //
     // The previous policy disabled boot-time GPS entirely (Lighthouse
     // "geolocation-on-start" audit + ipapi.co CORS errors on prod).
@@ -4149,7 +4149,7 @@ function detectAndSetupLanguage() {
     }
     _scheduleHomeLanguageDetect();
 
-    // May 2026 (Lighthouse "geolocation-on-start" fix) — never call
+    // (Lighthouse "geolocation-on-start" fix) — never call
     // getCurrentPosition at boot. Browsers fire a permission prompt
     // synchronously on the first invocation, which scares users + tanks
     // the Best-Practices score. GPS is requested by v4-flow's
@@ -4208,7 +4208,7 @@ function detectAndSetupLanguage() {
                     }
                 }
                 const cc = (ipLoc.country || '').toUpperCase();
-                // Phase 25 — only honour the country's primary language
+                // only honour the country's primary language
                 // if it's one of the 22 locales we actually ship. Otherwise
                 // the suggested-region pill would advertise a language we
                 // can't render (e.g. Filipino → 'tl' → no tl.json).
@@ -4258,12 +4258,12 @@ function detectAndSetupLanguage() {
             }));
         } catch (_) {}
         console.log('GPS Fixed:', state.location);
-        // Apr 2026 UI v2.1 — broadcast GPS-ready so the building-footprint
+        // UI v2.1 — broadcast GPS-ready so the building-footprint
         // map can init the first time location resolves. Other listeners
         // (region match, offline cache) are free to subscribe the same
         // hook rather than polling `state.location`.
         try { document.dispatchEvent(new CustomEvent('gps-ready', { detail: state.location })); } catch (_) {}
-        // Phase B2 (Apr 2026 UI v3) — warm the IndexedDB building cache with
+        // warm the IndexedDB building cache with
         // the 10 nearest footprints. Non-blocking, best-effort; the capture
         // flow never waits on this. Once populated, the map overlay (and
         // the free-text autocomplete) paint instantly on later flow entries
@@ -4320,7 +4320,7 @@ function detectAndSetupLanguage() {
                     return;
                 }
             }
-            // Phase 25 — gate by SUPPORTED_LANGS so a country whose
+            // gate by SUPPORTED_LANGS so a country whose
             // primary language we don't ship (e.g. PH → 'tl', LK → 'si')
             // falls through to the family fallback / 'en' instead of
             // briefly painting a non-functional suggestion pill.
@@ -4332,12 +4332,12 @@ function detectAndSetupLanguage() {
                 showLocalLangBtn(entry.code, entry.label, entry.speech);
                 return;
             }
-            // Phase 24 (Track B.2) — language family fallback. If the
+            // language family fallback. If the
             // user's country isn't explicitly in COUNTRY_LANG_DATA but
             // it's in LANG_FAMILY_FALLBACK (e.g. Tanzania → English,
             // Burkina Faso → French), use the proximity language
             // BEFORE falling through to browser/English.
-            // Phase 25 — gate on SUPPORTED_LANGS (was I18N[familyLang],
+            // gate on SUPPORTED_LANGS (was I18N[familyLang],
             // which only had en/kn/hi/ta and silently dropped fr/es/etc.).
             const familyLang = _languageFamilyFallback(countryCode);
             if (familyLang && SUPPORTED_LANGS.has(familyLang)) {
@@ -4387,7 +4387,7 @@ function detectAndSetupLanguage() {
                 }
             }
             const cc = (ipLoc.country || '').toUpperCase();
-            // Phase 25 — same SUPPORTED_LANGS gate on the IP path.
+            // same SUPPORTED_LANGS gate on the IP path.
             if (COUNTRY_LANG_DATA[cc] && SUPPORTED_LANGS.has(COUNTRY_LANG_DATA[cc].code)) {
                 const e = COUNTRY_LANG_DATA[cc];
                 _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName, e.code, e.label, e.speech);
@@ -4395,11 +4395,11 @@ function detectAndSetupLanguage() {
                 showLocalLangBtn(e.code, e.label, e.speech);
                 return;
             }
-            // Phase 24 (Track B.2) — language family fallback on the IP
+            // language family fallback on the IP
             // path too, so a Tanzanian IP-located visitor without GPS
             // also gets English (lingua franca) instead of the raw
             // browser-language fallback.
-            // Phase 25 — gate on SUPPORTED_LANGS for the same reason
+            // gate on SUPPORTED_LANGS for the same reason
             // as the GPS-path callsite above.
             const familyLang = _languageFamilyFallback(cc);
             if (familyLang && SUPPORTED_LANGS.has(familyLang)) {
@@ -4507,10 +4507,10 @@ function setupPhotoStage() {
             scroll.appendChild(thumb);
         });
 
-        // Apr 2026 UI v3 — disable every "add more photo" surface when the
+        // UI v3 — disable every "add more photo" surface when the
         // per-incident cap is reached. Three buttons can trigger an extra
         // add: the inline + button, the camera-modal's "add another" shutter,
-        // and the v3 photo-stage "Camera / Gallery" row (Phase A issue 5).
+        // and the v3 photo-stage "Camera / Gallery" row (issue 5).
         // Also update the counter chip if the DOM carries one so the user
         // sees why the buttons greyed out.
         const mainCount = state.photoDataUrl ? 1 : 0;
@@ -4602,7 +4602,7 @@ function setupPhotoStage() {
     window.__crispCloseImageViewer = _closeImageViewer;
     window.__crispViewerContext = () => _viewerContext;
     window.__crispDeletePrimaryPhoto = _deletePrimaryPhoto;
-    // PR 5 (Apr 2026): camera modal's "Done" button needs a refresh hook so
+    // PR 5: camera modal's "Done" button needs a refresh hook so
     // snaps taken inside the modal appear in the stage-photo extras strip.
     window.__crispRefreshPhotoStrip = () => {
         const strip = document.getElementById('extra-photos-strip');
@@ -4611,7 +4611,7 @@ function setupPhotoStage() {
     };
 
     // ── "Add more photos" path ─────────────────────────────────────────
-    // Phase A5 (Apr 2026 UI v3) — migrated from a single "+" button to an
+    // migrated from a single "+" button to an
     // explicit Camera vs Gallery chooser row. The legacy `#btn-add-more-photo`
     // is kept as a hidden sentinel element so any orphaned code paths that
     // reference it still find a DOM node and no-op gracefully. The shared
@@ -4710,7 +4710,7 @@ function setupPhotoStage() {
         document.getElementById('file-browse').click();
     });
 
-    // PR 5 (Apr 2026): shared ingest pipeline for File objects — camera-fallback
+    // PR 5: shared ingest pipeline for File objects — camera-fallback
     // AND browse (both single + multi-select). `asExtra=true` appends into
     // state.extraPhotos; `asExtra=false` fills the primary photo slot. The
     // caller decides routing once, synchronously, based on whether the primary
@@ -4886,7 +4886,7 @@ function _closeCameraModal() {
     if (doneBtn) doneBtn.disabled = true;
 }
 
-// PR 5 (Apr 2026): camera modal now supports multi-snap. Each tap of the
+// PR 5: camera modal now supports multi-snap. Each tap of the
 // shutter captures a frame WITHOUT tearing down the stream so the user can
 // keep shooting. First snap → primary photo; subsequent → state.extraPhotos
 // (same shape the "Add more photos" file-extra path uses).
@@ -4914,7 +4914,7 @@ function setupCameraModal() {
         const canvas = document.getElementById('camera-canvas');
         if (!video || !video.videoWidth || !state.cameraStream) return; // stream not ready
 
-        // Phase 25.7 (May 2026) — pre-flight cap check.
+        // pre-flight cap check.
         // Previously the cap check (_canAddMorePhotos) ran AFTER the
         // gallery thumb was already added to the DOM, so users tapping
         // the shutter past the cap saw 11+ thumbs in the modal even
@@ -5052,7 +5052,7 @@ function setupCameraModal() {
 // original blob comes back so the pipeline continues. The backend still runs
 // its own full PII pass as the safety net.
 //
-// Apr 2026 — `_blurIfPossible` now returns the truthful result object so the
+// `_blurIfPossible` now returns the truthful result object so the
 // upload pipeline can set `client_blur_applied` accurately. Before this fix
 // every upload hardcoded `client_blur_applied: true`, so a silent BlazeFace
 // failure (CDN blocked, paint crash, etc.) would let unblurred PII slide past
@@ -5083,7 +5083,7 @@ async function _blurIfPossible(rawBlob) {
 // state.photoBlob. Each capture site tracks its wrapping promise here; the
 // submit path awaits them all before constructing the queued item.
 //
-// PR 5 (Apr 2026): upgraded from single-slot promise to an array. Multi-snap
+// PR 5: upgraded from single-slot promise to an array. Multi-snap
 // in the camera modal and multi-file browse both fire many blur promises in
 // parallel; the old single-slot code let later captures clobber earlier ones
 // so awaitPendingBlur() would skip them. _trackBlur pushes; awaitPendingBlur
@@ -5096,7 +5096,7 @@ function _trackBlur(promise) {
     return promise;
 }
 
-// Apr 2026: field-reported UX bug — the Next button on stage-photo and the
+// : field-reported UX bug — the Next button on stage-photo and the
 // "Done" button inside the camera modal felt "sticky" for 300–800 ms after
 // a capture. Root cause: the code enabled Next synchronously in showPreview()
 // but IMMEDIATELY afterwards kicked off the blur+variants pipeline
@@ -5206,7 +5206,7 @@ function setupAudioStage() {
     const recTimer = document.getElementById('rec-timer');
     const timerText = document.getElementById('timer-text');
     const nextBtn = document.getElementById('btn-audio-next');
-    // Apr 2026 PR 4: `#audio-skip-link` ("Type instead") removed from DOM.
+    // PR 4: `#audio-skip-link` ("Type instead") removed from DOM.
     // The textarea and mic coexist — users type without any toggle.
 
     // Keep state.transcript synced with manual edits. UI v3: the
@@ -5218,7 +5218,7 @@ function setupAudioStage() {
         if (UI_V3_ENABLED) state.description = liveTranscript.value;
     });
 
-    // Phase B4 (Apr 2026 UI v3) — Web Speech API live transcription.
+    // Web Speech API live transcription.
     // Uses `webkitSpeechRecognition` / `SpeechRecognition` when the browser
     // ships it (Chrome, Edge, Safari iOS 14.5+, Chrome Android). Sets
     // `recognition.lang` to `state.speechCode` so the device's engine
@@ -5708,7 +5708,7 @@ function setupReviewStage() {
             document.querySelectorAll('.chip-btn[data-crisis]').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             state.crisisType = btn.dataset.crisis;
-            // Phase B3 (Apr 2026 UI v3) — warm the W6 applicable-modules cache
+            // warm the W6 applicable-modules cache
             // when crisis type changes. The modules endpoint's response is
             // small (one JSON blob per crisis), rate-cheap (lru_cached on
             // the server), and the result drives the optional per-crisis
@@ -5720,7 +5720,7 @@ function setupReviewStage() {
         });
     });
 
-    // PR 6 (Apr 2026): infra-chip click now ALSO drives the inline severity
+    // PR 6: infra-chip click now ALSO drives the inline severity
     // picker below the grid. Tapping the already-selected chip collapses
     // the severity row (but keeps the stored damageClass — silent default
     // PARTIAL is preserved across collapses). Tapping a different chip
@@ -5781,14 +5781,14 @@ function setupReviewStage() {
             document.querySelectorAll('.damage-chip').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             state.damageClass = btn.dataset.damage;
-            // Phase B4 (Apr 2026 UI v3) — severity auto-derived from damage
+            // severity auto-derived from damage
             // class so stage-extras can drop the explicit severity chips.
             // No-op when v3 is off.
             _v3AutoDeriveSeverity();
         });
     });
 
-    // PR 6 (Apr 2026): #toggle-debris and #input-infra-name no longer exist
+    // PR 6: #toggle-debris and #input-infra-name no longer exist
     // in the DOM (dropped from the review form). state.debrisClearing and
     // state.infraName keep their '' / false defaults so the backend contract
     // (debris_clearing_needed, infrastructure_name) is unchanged.
@@ -5799,7 +5799,7 @@ function setupReviewStage() {
     // ── Phase 6: paginate the Review stage ──────────────────────
     // UI v1 (default pre-Apr-2026): 2 pages — Details (all blocks) + Confirm
     //   (summary card). Filter by `[data-review-page]`.
-    // UI v2 (Apr 2026, feature-flagged): 3 pages — "What happened?" (infra
+    // UI v2: 3 pages — "What happened?" (infra
     //   + damage + crisis chips) + "How bad + where?" (severity row +
     //   location + services) + "Describe + confirm" (textarea + building
     //   footprint + summary). Filter by `[data-v2-page]`.
@@ -5844,7 +5844,7 @@ function setupReviewStage() {
     function showReviewPage(n) {
         state.reviewPage = Math.min(Math.max(n, 1), TOTAL_REVIEW_PAGES);
         reviewRoot.setAttribute('data-review-page', String(state.reviewPage));
-        // Apr 2026 UI v2.1 — broadcast so building-select.js (and any
+        // UI v2.1 — broadcast so building-select.js (and any
         // future page-aware listener) can react without reaching into
         // module-scope state. Detail carries the 1-based page number.
         try {
@@ -5931,7 +5931,7 @@ function setupReviewStage() {
         const ss = state.serviceStatus || {};
         const photoCount = (state.photoDataUrl ? 1 : 0) + (state.extraPhotos || []).length;
 
-        // Apr 2026 UI v2.1 — translate every enum value that lands on
+        // UI v2.1 — translate every enum value that lands on
         // the confirm card. Before: raw `state.crisisType` ("FLOOD"),
         // `state.infraType` ("ROAD"), severity/damage/service-status
         // enums, and the joined `food, security` need keys all leaked
@@ -5973,7 +5973,7 @@ function setupReviewStage() {
             need: {
                 // UNDP Appendix-1 pressing-needs taxonomy (all 9 required
                 // options + Other). `security` retained as a legacy alias
-                // so reports submitted before Apr 2026 still translate
+                // so reports submitted before still translate
                 // cleanly on the confirm card.
                 food:'food', water:'need_water',
                 cash:'need_cash', medical:'medical', shelter:'shelter',
@@ -6183,7 +6183,7 @@ function detectPWANetworkTier() {
     if (conn) {
         const ect = conn.effectiveType; // '4g', '3g', '2g', 'slow-2g'
         const dl = Number(conn.downlink); // Mbps estimate, 0 = "I don't know"
-        // Apr 2026 fix: Chrome DevTools throttling leaves `effectiveType` at '4g'
+        // fix: Chrome DevTools throttling leaves `effectiveType` at '4g'
         // regardless of the simulated speed, but DOES update `downlink` — so a
         // reading of `downlink: 0` on '4g' is the browser explicitly telling us
         // it has no reliable measurement. Treat that as "slow until proven
@@ -6205,7 +6205,7 @@ function detectPWANetworkTier() {
     return _pwaTier;
 }
 
-// ── Upload-bandwidth probe (Apr 2026) ──────────────────────────────────────
+// ── Upload-bandwidth probe ──────────────────────────────────────
 //
 // Chrome DevTools throttling does NOT update `navigator.connection.effectiveType`.
 // At 2 Kbps, ECT is still '4g' and our detector (before this fix) defaulted
@@ -6327,7 +6327,7 @@ function computeChunkTimeout(chunkSize, measuredBytesPerSec = null) {
  *  first successful probe. Used by `computeChunkTimeout` + tests. */
 function getMeasuredBandwidth() { return _lastProbeBytesPerSec; }
 
-// ─── Phase-1 Adaptive Upgrades (Apr 2026) ────────────────────────────────────
+// ─── Phase-1 Adaptive Upgrades ────────────────────────────────────
 // 1. Per-device bandwidth cache — skip the first probe round-trip for
 //    repeat sessions. Saves ~500 ms of cold-start latency on typical links.
 // 2. Mid-upload re-probe with hysteresis — detect "user walked into a
@@ -6579,7 +6579,7 @@ async function sendWithRetry(url, payload, retries = 5, timeoutMs = 30000) {
     }
 }
 
-// ── UNDP §5 binary-chunk transport (Apr 2026, Option A) ──────────────────────
+// ── UNDP §5 binary-chunk transport ──────────────────────
 // Master feature flag for the new transport. Default ON — every new build
 // uses binary chunks. If the flag is off, every call-site falls back to the
 // legacy base64 path without any behavioural change.
@@ -6878,7 +6878,7 @@ async function submitReport() {
             (extrasWithVariants * 3) + extrasWithoutVariants +
             (hasAudio ? 1 : 0);
 
-        // Phase 1 (Apr 2026 — Optional reporter login) — capture the
+        // capture the
         // bearer token at enqueue time so offline replay submits under
         // the user who captured the data, even if they log out while the
         // queue drains. The token goes into `/reports/meta`'s auth
@@ -6903,14 +6903,14 @@ async function submitReport() {
                 crisis_type: state.crisisType,
                 damage_classification: state.damageClass,
                 infrastructure_name: state.infraName || null,
-                // Phase B2 (Apr 2026 UI v3) — distinguisher between OSM-picked
+                // distinguisher between OSM-picked
                 // and user-typed names. Dashboard treats `building_id IS NULL
                 // AND infrastructure_name_from_osm = false` as "needs mapping"
                 // so an operator can resolve the free-text entry to a real OSM
                 // footprint later. Defaults to false when the field is missing
                 // (back-compat with pre-v3 clients).
                 infrastructure_name_from_osm: Boolean(state.infraNameFromOsm),
-                // May 2026 (UI v3 redesign Q14) — v4-flow.js writes to
+                // (UI v3 redesign Q14) — v4-flow.js writes to
                 // `debris_present` / `electricity_status` / `pressing_needs`
                 // on window.state, but the legacy v3 review form writes to
                 // `debrisClearing` / `serviceStatus`. Both shapes are now
@@ -6990,7 +6990,7 @@ async function submitReport() {
             // offset. Absent if ImageVariants failed to generate.
             photoGroupId: hasPhoto ? (state.photoGroupId || genUUID()) : null,
             photoVariants: (hasPhoto && mainHasVariants) ? {
-                // Apr 2026 — truthful client_blur_applied. Was hardcoded `true`
+                // truthful client_blur_applied. Was hardcoded `true`
                 // at every upload call-site, which silently let PII through
                 // whenever BlazeFace failed (CDN blocked, paint crash, model
                 // missing). Now sourced from the actual blur pipeline result
@@ -7090,7 +7090,7 @@ async function submitReport() {
         // Fetch gamification badge (non-blocking)
         fetchBadge(deviceHash);
 
-        // Apr 2026 — UNDP reporter feedback channel. After the user has
+        // UNDP reporter feedback channel. After the user has
         // just submitted (high-motivation moment), ask once for
         // notification permission so they get pinged when the report's
         // status changes. Subsequent visits won't re-prompt — the helper
@@ -7156,7 +7156,7 @@ function _buildVariantWork(item) {
                 tier,
                 groupId: item.photoGroupId,
                 variant: item.photoVariants[tier],
-                // Apr 2026 — propagate the truthful client_blur_applied
+                // propagate the truthful client_blur_applied
                 // flag from the parent photo onto each work unit so the
                 // upload loop can send it per-chunk. Previously every
                 // chunk hardcoded `client_blur_applied: true`, which
@@ -7187,7 +7187,7 @@ async function _uploadVariantTier(item, reportId, unit) {
         console.warn(`[Upload] ${label}: missing dataUrl (skip)`);
         return;
     }
-    // Apr 2026 — adaptive bandwidth probe BEFORE first chunk. Picks
+    // adaptive bandwidth probe BEFORE first chunk. Picks
     // tier from actual measured throughput rather than trusting
     // `navigator.connection.effectiveType` (which Chrome DevTools
     // throttling doesn't update). Cached 60 s so three variants of the
@@ -7196,7 +7196,7 @@ async function _uploadVariantTier(item, reportId, unit) {
     // `_pwaTier` as a side effect.
     await adaptTierViaProbe();
 
-    // Apr 2026 — variant cap by network tier. At very-slow links (≤ 80
+    // variant cap by network tier. At very-slow links (≤ 80
     // Kbps) the HIGH-resolution variant takes 60+ minutes to upload at
     // 1 KB chunks, holding the queue badge open long after the report
     // (with a SMALL thumbnail) has already shown up on the dashboard.
@@ -7241,7 +7241,7 @@ async function _uploadVariantTier(item, reportId, unit) {
     const measuredBps = getMeasuredBandwidth();
     const dynamicTimeout = computeChunkTimeout(netConfig.chunkSize, measuredBps || null);
 
-    // UNDP §5 (Apr 2026) — binary-chunk transport. When the feature flag
+    // UNDP §5 — binary-chunk transport. When the feature flag
     // is enabled (default), upload the variant as raw bytes via
     // multipart/form-data. If the backend returns 404 on the new
     // endpoint, sendBinaryChunkWithRetry falls back to base64
@@ -7272,7 +7272,7 @@ async function _uploadVariantTier(item, reportId, unit) {
                         type: 'IMAGE',
                         resolutionTier: resolution,
                         photoGroupId: groupId,
-                        // Apr 2026 — TRUTHFUL flag. `false` → server runs
+                        // TRUTHFUL flag. `false` → server runs
                         // its own PII blur. Was hardcoded `true` which
                         // let BlazeFace failures leak unblurred PII.
                         clientBlurApplied: Boolean(clientBlurApplied),
@@ -7319,7 +7319,7 @@ async function _uploadVariantTier(item, reportId, unit) {
                     checksum: simpleChecksum(data),
                     resolution_tier: resolution,
                     photo_group_id: groupId,
-                    // Apr 2026 — TRUTHFUL flag. Sourced from the variant
+                    // TRUTHFUL flag. Sourced from the variant
                     // pipeline's actual blur result, not hardcoded true.
                     // If the client-side blur failed for any reason, we
                     // send `false` and the server performs its own PII
@@ -7366,7 +7366,7 @@ async function _uploadLegacyPhoto(item, reportId) {
             }
         } catch (e) { console.warn('Thumbnail failed (non-fatal):', e.message); }
     }
-    // Apr 2026 — truthful flag for the legacy (no-variants) path too.
+    // truthful flag for the legacy (no-variants) path too.
     // If a reporter's photo went through _blurIfPossible and BlazeFace
     // failed, we now correctly report `false` so the server's PII pass
     // runs. `item.clientBlurApplied` is set at queue-construction time
@@ -7393,7 +7393,7 @@ async function _uploadLegacyPhoto(item, reportId) {
 }
 
 // ── Background sender: processes one queued report through all stages ─────────
-// Apr 2026 — in-flight guard. `startRetryLoop` fires every N seconds
+// in-flight guard. `startRetryLoop` fires every N seconds
 // and can call `trySendQueuedReport` on the SAME item that the primary
 // submit flow is already processing. Duplicate POSTs waste bandwidth
 // we can't spare on 2 Kbps links and produce redundant retries in the
@@ -7412,7 +7412,7 @@ async function trySendQueuedReport(item) {
         const stages = item.stages;
         let reportId = item.serverId;
 
-        // Apr 2026 — run the upload-bandwidth probe at the TOP of the
+        // run the upload-bandwidth probe at the TOP of the
         // send pipeline so every stage (meta, text, chunks) gets a
         // timeout sized to actual throughput. Previously only the chunk
         // loop probed; meta+text used hardcoded 15s/20s timeouts that
@@ -7588,7 +7588,7 @@ async function startRetryLoop() {
 
     while (true) {
         try {
-            // Hotfix (Apr 2026): BEFORE retrying uploads, reconcile against
+            // Hotfix: BEFORE retrying uploads, reconcile against
             // server truth. If a report has already landed server-side but a
             // stage flag is still false locally (chunk ack lost, variant
             // accepted but response failed, etc.), purge it from the queue
@@ -7631,7 +7631,7 @@ function triggerBackgroundSync() {
 
 // Legacy syncQueue replaced by IndexedDB-based syncQueueManual (defined above)
 
-// ── Phase B3 (Apr 2026 UI v3) — W6 applicable-modules consumer ──────────────
+// ── — W6 applicable-modules consumer ──────────────
 // The backend exposes `GET /api/v1/modules/applicable?crisis_type=X&…` which
 // returns a list of modular form definitions relevant to the current capture.
 // PWA scope is small here: fetch + cache + expose on window so dashboards +
@@ -7684,7 +7684,7 @@ window.__crispFetchApplicableModules = fetchApplicableModules;
 window.__crispW6ModuleCache = _w6ModuleCache;
 
 
-// ── Phase B2 (Apr 2026 UI v3) — free-text building-name fallback ────────────
+// ── — free-text building-name fallback ────────────
 // When the Leaflet map / Overpass fetch is unavailable, the reporter can type
 // the building name in any language. The submit handler already emits
 // `infrastructure_name` (see submitReport → `infrastructure_name: state.infraName`).
@@ -7731,7 +7731,7 @@ function setupBuildingFreeText() {
     }
 }
 
-// ── Phase B4 (Apr 2026 UI v3) — 8-stage Continue/Back wiring ───────────────
+// ── — 8-stage Continue/Back wiring ───────────────
 // Hooks the Continue / Back buttons on the four new v3 stages (where,
 // infra, crisis, extras). Each button delegates to nextStageId / prevStageId
 // which walks STAGES_V3 so the chain stays in a single place.
@@ -7740,7 +7740,7 @@ function setupBuildingFreeText() {
 // leaving stage-where, infra type before stage-infra, etc. These validators
 // short-circuit to a toast when unmet — matches the "Photo required" gate
 // on stage-photo in the legacy flow.
-// ── Phase 1 (Apr 2026 — Optional reporter login) — UI wiring ────────────────
+// ── Phase 1 — UI wiring ────────────────
 // All state lives in AuthStore (auth.js); this function is purely DOM
 // glue: bind buttons, paint the header pill, navigate between the 3
 // login steps + Settings. Offline-safe — every handler exits silently
@@ -7750,7 +7750,7 @@ function setupAuthUI() {
     const A = window.AuthStore;
 
     // ── A. Header pill + login button state ──────────────────────────
-    // Phase 15 — repaints account name + Settings page name on every
+    // repaints account name + Settings page name on every
     // auth event. Identity-bar swap (devid badge ↔ account pill) and
     // recent-reports rendering both live in home-screen.js's
     // _paintIdentityBar(), which also listens to auth-ready /
@@ -7782,7 +7782,7 @@ function setupAuthUI() {
         _resetLoginForm();
         goToStage('stage-login');
     });
-    // Phase 15 — #btn-account-settings now opens the in-place dropdown
+    // #btn-account-settings now opens the in-place dropdown
     // menu (handled by home-screen.js's _wireAccountMenu). The "Settings"
     // entry inside the dropdown routes to stage-settings; the gear button
     // here keeps backward-compat with deep-links / shortcuts.
@@ -8108,7 +8108,7 @@ function _refreshV3AutoMeta() {
             timeEl.textContent = new Date().toISOString().replace('T', ' ').slice(0, 16);
         }
     }
-    // Apr 2026 — delegate to the central paint helper so this top panel
+    // delegate to the central paint helper so this top panel
     // and the lower review-block display (which is also rendered in
     // stage-where via `data-v3-slot="where"`) can never diverge.
     if (locEl) {
@@ -8129,7 +8129,7 @@ function _refreshV3AutoMeta() {
     try { _renderLandmarkFallback(); } catch (e) { console.warn('[M9] fallback:', e); }
 }
 
-// ── M9 (May 2026) — landmark fallback when GPS fails ──────────────────────
+// ── M9 — landmark fallback when GPS fails ──────────────────────
 //
 // UNDP nice-to-have #4: "If GPS is denied or unavailable, the user must
 // still be able to submit a usable location." Citizens in dense urban
@@ -8261,7 +8261,7 @@ function setupSendStage() {
     if (_bsb) _bsb.addEventListener('click', () => goToStage('stage-review'));
     document.getElementById('btn-new-report').addEventListener('click', resetApp);
 
-    // PR 7 (Apr 2026): Track button on the success screen. Opens the detail
+    // PR 7: Track button on the success screen. Opens the detail
     // view for the just-submitted report. openReportDetail() first looks in
     // _submittedCache; if the status-since poll hasn't fired yet, submitReport()
     // seeds a synthetic local row (see submitReport → _synthesizeSubmittedReport)
@@ -8280,7 +8280,7 @@ function setupSendStage() {
         });
     }
 
-    // ── M3 (UI v3 redesign, May 2026) — UNDP Step 4 details flow ──────────
+    // ── M3 — UNDP Step 4 details flow ──────────
     // Soft prompt on stage-success: "Add 4 quick details · 30s". Opens a
     // dedicated post-submission stage-undp-details page with 5 modular
     // questions (debris / power / water / health / pressing-needs).
@@ -8289,7 +8289,7 @@ function setupSendStage() {
     // (Appendix-1), not must-haves.
     setupUndpDetailsStage();
 
-    // M2 polish (May 2026) — fullscreen building-picker overlay + sliding
+    // M2 polish — fullscreen building-picker overlay + sliding
     // bottom sheet. UNDP must-have #6: the inline 280 px map is cramped
     // in dense urban areas. Tapping #btn-building-fs-open lifts the map
     // into the fullscreen overlay (Leaflet instance follows the DOM via
@@ -8299,7 +8299,7 @@ function setupSendStage() {
     // state.
     setupBuildingFullscreenPicker();
 
-    // ── Phase 5 (Apr 2026) — PWA My Reports screen ─────────────────────────
+    // ── Phase 5 — PWA My Reports screen ─────────────────────────
     // Parity port of crisp-mobile/App.tsx:969–982 (history screen).
     // Three sections: In-flight (IndexedDB), Submitted (status-since),
     // Impact (aggregated lives_impacted).
@@ -8314,11 +8314,11 @@ function setupSendStage() {
         goToStage('stage-history');
         _renderSubmittedReports().catch(() => {});
     });
-    // Apr 2026 "My Reports" spec — try to flush any queued deletes from
+    // "My Reports" spec — try to flush any queued deletes from
     // prior offline sessions as soon as the user opens the app.
     setTimeout(() => { _syncDeleteQueue().catch(() => {}); }, 2000);
 
-    // Apr 2026 UX rewrite — "Delete all my reports" moved from the landing
+    // UX rewrite — "Delete all my reports" moved from the landing
     // screen's Delete-My-Data panel INTO the history screen. Keeps data
     // management in one place. Wraps the existing purge-device endpoint.
     const _daBtn = document.getElementById('btn-history-delete-all');
@@ -8357,7 +8357,7 @@ function setupSendStage() {
 
 async function openMyReports() {
     goToStage('stage-history');
-    // M6 (May 2026) — reset filter + view-toggle to defaults on every fresh
+    // M6 — reset filter + view-toggle to defaults on every fresh
     // entry so users always start on "All / List" (no surprise persistence
     // across sessions). Wire the controls bar once, idempotent.
     _mrFilter = 'all';
@@ -8374,7 +8374,7 @@ async function openMyReports() {
         }
         if (typeof setupMyReportsControls === 'function') setupMyReportsControls();
     } catch (e) { console.warn('[M6] reset:', e); }
-    // Hotfix (Apr 2026): reconcile local IDB queue against server truth
+    // Hotfix: reconcile local IDB queue against server truth
     // BEFORE rendering. Fixes a class of bugs where a report reaches the
     // server successfully but one of the four client-side stage flags
     // (`meta`/`text`/`photo`/`audio`) never flipped true — usually because
@@ -8458,7 +8458,7 @@ function _deviceHashForHistory() {
     // or `crisp_device_id` — keep those as fallbacks so their history still
     // resolves post-migration.
     //
-    // HOTFIX (Apr 2026): was previously reading only the legacy keys, which
+    // HOTFIX: was previously reading only the legacy keys, which
     // caused submitted reports to disappear from "My Reports" because the
     // server's status-since lookup used the wrong hash.
     return localStorage.getItem('crisp_device_id_v2') ||
@@ -8518,7 +8518,7 @@ function _inflightPct(item) {
     return Math.round((done / total) * 100);
 }
 
-// ── Apr 2026 "My Reports" spec — shared helpers ───────────────────────────
+// ── "My Reports" spec — shared helpers ───────────────────────────
 // Map the backend's two orthogonal fields (`status` enum + `reviewer_verdict`)
 // to a single 4-state user-facing view.
 //
@@ -8547,7 +8547,7 @@ function _mapReportStatus(r) {
     return { state: 'SUBMITTED', color: '#9ca3af', icon: '⚪', label: t('rd_status_submitted') };
 }
 
-// ── M5 (May 2026) — ETA badge + mini-map for report-detail ────────────────
+// ── M5 — ETA badge + mini-map for report-detail ────────────────
 //
 // The ETA badge surfaces a next-step expectation derived from the current
 // status. Backend doesn't yet emit per-report ETAs (planned for v3.1 once
@@ -8597,7 +8597,7 @@ function _renderRdMiniMap(r) {
     const mapEl = document.getElementById('rd-minimap');
     const coordsEl = document.getElementById('rd-minimap-coords');
     if (!wrap || !mapEl) return;
-    // Phase 16 — backend returns `latitude` / `longitude`, not `lat`/`lng`.
+    // backend returns `latitude` / `longitude`, not `lat`/`lng`.
     // Read both shapes so the M5 mini-map actually renders (the Phase-9
     // feature never worked on PROD because of this name mismatch).
     const [lat, lng] = _coordsFromLocation(r.location);
@@ -8694,12 +8694,12 @@ function _timeAgo(iso) {
 
 // Cache so the detail view can hydrate instantly without another fetch.
 let _submittedCache = [];
-// Phase 18 — expose so home-screen.js's _renderMyReportsCount() can
+// expose so home-screen.js's _renderMyReportsCount() can
 // read the count without duplicating fetch logic. Updated by every
 // _renderSubmittedReports / addSyntheticSubmittedReport call.
 window._submittedCache = _submittedCache;
 
-// PR 7 (Apr 2026): remember the just-submitted report so the success screen's
+// PR 7: remember the just-submitted report so the success screen's
 // Track button can open its detail view even before the status-since poll
 // has refreshed _submittedCache. Cleared on resetApp() / fresh submit.
 let _lastSubmittedClientId = null;
@@ -8742,7 +8742,7 @@ function _synthesizeSubmittedReport(clientReportId, extra) {
 // the Track button's open-detail path can be exercised without a real submit.
 window.__crispSynthesizeSubmittedReport = _synthesizeSubmittedReport;
 
-// ── M6 (May 2026) — My Reports filter + view-toggle state ──────────────────
+// ── M6 — My Reports filter + view-toggle state ──────────────────
 //
 // Two pieces of UI state that drive _renderSubmittedReports:
 //   _mrFilter — 'all' | 'review' | 'accepted' | 'help' | 'rejected'
@@ -8814,7 +8814,7 @@ async function _renderSubmittedReports() {
     } catch (e) {
         console.warn('[MyReports] status-since failed:', e);
     }
-    // Phase 5e (Apr 2026) — celebratory delta notification. Compare each
+    // Phase 5e — celebratory delta notification. Compare each
     // report to the snapshot we saved last time My Reports was opened:
     //  - verdict NOT_REVIEWED → ACCEPTED       → "🎉 Your report was accepted!"
     //  - lives_impacted went up                 → "💚 You helped N more lives"
@@ -8881,12 +8881,12 @@ async function _renderSubmittedReports() {
         if (ctrl) ctrl.style.display = 'none';
         return;
     }
-    // Apr 2026 "My Reports" spec — cards show thumbnail + location + date
+    // "My Reports" spec — cards show thumbnail + location + date
     // + single colored status chip. Tapping a card opens the detail view.
     // Data for the detail view is cached in _submittedCache so the tap
     // doesn't round-trip to the server again.
     _submittedCache = reports.slice();
-    // Phase 18 — keep the window-exposed mirror in sync so home-
+    // keep the window-exposed mirror in sync so home-
     // screen.js's _renderMyReportsCount picks up fresh counts.
     window._submittedCache = _submittedCache;
     // Best-effort: tell home-screen.js to repaint the count.
@@ -8896,7 +8896,7 @@ async function _renderSubmittedReports() {
         }
     } catch (_) {}
 
-    // M6 (May 2026) — show the filter + view-toggle controls now that we
+    // M6 — show the filter + view-toggle controls now that we
     // have at least one report. The controls bar is hidden when empty.
     const ctrl = document.getElementById('mr-controls');
     if (ctrl) ctrl.style.display = 'flex';
@@ -8942,7 +8942,7 @@ async function _renderSubmittedReports() {
     const renderCard = (r) => {
         const st = _mapReportStatus(r);
         const loc = r.location || {};
-        // May 2026 (UI v3 redesign Q4) — prefer human place names; only fall
+        // (UI v3 redesign Q4) — prefer human place names; only fall
         // back to coords as a last resort, and even then prefix with "📍" so
         // the user knows it's a coordinate, not random numbers. Old reports
         // with no place_name reverse-geocode lazily on dashboard; here we
@@ -8952,7 +8952,7 @@ async function _renderSubmittedReports() {
                 ? `📍 ${loc.latitude.toFixed(3)}°, ${loc.longitude.toFixed(3)}°`
                 : '');
         // Lazy-loaded thumbnail (loading="lazy") — large lists don't pay
-        // the download cost until the card scrolls into view. May 2026
+        // the download cost until the card scrolls into view. 
         // (UI v3 redesign Q3) — robust onerror fallback swaps to the
         // placeholder if the URL fails (covers any future presigned-URL
         // expiry / CORS / 404 case so judges never see leaking alt text).
@@ -8964,7 +8964,7 @@ async function _renderSubmittedReports() {
                     onerror="this.outerHTML='<div class=&quot;mr-card-thumb mr-card-thumb-placeholder&quot;><i class=&quot;fa-solid fa-camera&quot;></i></div>'">`
             : `<div class="mr-card-thumb mr-card-thumb-placeholder"><i class="fa-solid fa-camera"></i></div>`;
         const dateText = _timeAgo(r.server_created_at || r.updated_at);
-        // Apr 2026: "N lives" string now translated. Uses one-/many-
+        // : "N lives" string now translated. Uses one-/many-
         // plural keys (reusing the report-detail rd_people_helped_* pack).
         const lives = Number.isFinite(r.lives_impacted) && r.lives_impacted > 0
             ? `<span class="mr-card-lives">💚 ${escapeHtmlSimple(
@@ -8975,7 +8975,7 @@ async function _renderSubmittedReports() {
         const pendingDelete = _isDeleteQueued(r.id || r.client_report_id)
             ? `<div class="mr-card-pending"><i class="fa-solid fa-clock-rotate-left"></i> ${escapeHtmlSimple(t('rd_delete_queued'))}</div>`
             : '';
-        // Apr 2026: translate enum values in the card title. Maps crisis /
+        // : translate enum values in the card title. Maps crisis /
         // infrastructure keys (lowercase) via the same translateEnum helper
         // used in renderReportDetail. Falls back to a prettified raw enum
         // when no i18n key exists (e.g. a newly-added crisis type before
@@ -9032,7 +9032,7 @@ async function _renderSubmittedReports() {
     });
 }
 
-// ── M6 (May 2026) — My Reports map view ───────────────────────────────────
+// ── M6 — My Reports map view ───────────────────────────────────
 //
 // Renders all (filtered) reports as Leaflet markers in a 360 px container.
 // Tapping a marker opens the report-detail page directly (skips the
@@ -9041,7 +9041,7 @@ async function _renderSubmittedReports() {
 // report in the filtered set has coords.
 let _mrMapInstance = null;
 let _mrMapMarkers = [];
-// Phase 16 — small helper that reads BOTH the PWA-internal {lat,lng,lon}
+// small helper that reads BOTH the PWA-internal {lat,lng,lon}
 // shape (used by state.location) and the backend's {latitude,longitude}
 // shape (returned by the status-since aggregator). Fixes the M6 map
 // view + the M5 mini-map, which previously read `loc.lat`/`loc.lng`
@@ -9057,7 +9057,7 @@ function _renderMyReportsMap(reports) {
     const mapEl = document.getElementById('mr-map');
     const emptyEl = document.getElementById('mr-map-empty');
     if (!mapEl) return;
-    // Phase 16 — was a silent early-return when window.L was undefined,
+    // was a silent early-return when window.L was undefined,
     // which is the cold-open case (Leaflet only loads when the user
     // visits the building picker). Now kick off a lazy load via
     // BuildingSelect and retry once it's ready.
@@ -9133,7 +9133,7 @@ function setupMyReportsControls() {
             ctrl.querySelectorAll('.mr-filter-chip').forEach((c) => {
                 c.classList.toggle('is-active', c === chip);
             });
-            // Phase 16 — chips beyond the visible viewport (Help sent /
+            // chips beyond the visible viewport (Help sent /
             // Rejected on 390px screens) used to stay off-screen after
             // selection so the user couldn't see which filter was
             // active. scrollIntoView centres the active chip in the
@@ -9177,7 +9177,7 @@ function escapeHtmlSimple(s) {
     return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// ── Apr 2026 "My Reports" spec — individual report detail + delete ─────────
+// ── "My Reports" spec — individual report detail + delete ─────────
 
 const _DELETE_QUEUE_KEY = 'crisp_report_delete_queue_v1';
 
@@ -9344,11 +9344,11 @@ function renderReportDetail(r) {
     try { _renderRdMiniMap(r); } catch (e) { console.warn('[M5] mini-map:', e); }
 
     // Photo (fallback to placeholder).
-    // Phase 16 — (a) URL routed through window._resolveMediaUrl so any
+    // (a) URL routed through window._resolveMediaUrl so any
     // future s3:// regression surfaces a placeholder cleanly. (b) Added
     // onerror swap matching the card-thumb pattern (was missing — broken
     // URLs used to surface the literal "Report photo" alt text in giant
-    // grey letters, Delta-S2 in the May 2026 audit). (c) Photo node is
+    // grey letters, Delta-S2 in the audit). (c) Photo node is
     // re-built on every render so a previous placeholder swap doesn't
     // strand the wrap without an <img> element on the next view.
     const photoWrap = document.getElementById('rd-photo-wrap');
@@ -9568,7 +9568,7 @@ function _showCelebration(message) {
     }, 3200);
 }
 
-// ── M2 polish (May 2026) — Fullscreen building-picker + bottom sheet ───────
+// ── M2 polish — Fullscreen building-picker + bottom sheet ───────
 //
 // Goal: take the inline `#building-map` (a cramped 260 px box on small
 // phones) and let users tap a CTA to expand it into a viewport-filling
@@ -9758,7 +9758,7 @@ function setupBuildingFullscreenPicker() {
     });
 }
 
-// ── UNDP Step 4 — post-submission details (M3, May 2026 UI v3 redesign) ────
+// ── UNDP Step 4 — post-submission details ────
 //
 // Soft prompt shown on stage-success after every successful submit (when
 // the user hasn't already filled debris + service_status during capture).
@@ -9915,7 +9915,7 @@ function setupUndpDetailsStage() {
     }
 }
 
-// ── M4 (May 2026) — submission-success motion + impact strip ──────────────
+// ── M4 — submission-success motion + impact strip ──────────────
 //
 // Goal: turn the "your report was sent" moment from a static heart into
 // a small celebration. Two complementary pieces:
@@ -10033,7 +10033,7 @@ function maybeShowUndpDetailsPrompt() {
 
 // ── Gamification Badge Fetch ─────────────────────────────────────────────────
 //
-// May 2026 (UI v3 redesign Q5) — fixed the "Newcomer · 16 reports submitted ·
+// (UI v3 redesign Q5) — fixed the "Newcomer · 16 reports submitted ·
 // Next: Helper (3 reports)" copy bug. Two real bugs:
 //   1. Progress bar used `report_count` but badge_level is computed by
 //      backend from `verified_count` — so a user with 16 raw / 2 verified
@@ -10183,11 +10183,11 @@ function crispConfirm(message, yesKey, noKey) {
 window.crispConfirm = crispConfirm;
 
 // ─── Capture-state reset ────────────────────────────────────────────────────
-// Field-report bug (Apr 2026): after a successful submit, the user reported
-// the next capture flow showed the PREVIOUS report's photo and text until
-// they hard-refreshed. Root cause: `resetApp()` was only wired to the
-// "Add another report" button on the success screen. Users who navigated
-// away by any other route (My Reports → Home, browser back, service-worker
+// State-bleed: without explicit reset, the next capture flow would
+// surface the previous report's photo and text until a hard refresh.
+// `resetApp()` was only wired to the "Add another report" button on
+// the success screen, so navigating away by any other route (My
+// Reports → Home, browser back, service-worker
 // refresh, IndexedDB sync-on-boot then btn-start) would land on stage-photo
 // with stale `state.*` and — crucially — with `<img>.src` still pointing at
 // the previous photo's data URL.
@@ -10224,7 +10224,7 @@ function _clearCaptureState() {
     // Phase-1 progressive-upload: clear blurhash so it doesn't leak from the
     // previous capture into the next report's meta payload.
     state.blurhash = null;
-    // Apr 2026 PII-blur hardening leaves a per-capture truthful flag on
+    // PII-blur hardening leaves a per-capture truthful flag on
     // state. Clearing it means the next capture starts from "unknown until
     // the pipeline runs", not from the previous report's answer.
     state.photoClientBlurApplied = undefined;
@@ -10232,12 +10232,12 @@ function _clearCaptureState() {
     state.infraType = 'ROAD'; state.severity = 'MODERATE'; state.isAutoSubmit = false;
     state.crisisType = 'FLOOD'; state.damageClass = 'PARTIAL'; state.infraName = '';
     state.debrisClearing = false; state.serviceStatus = { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] };
-    // Phase 25.3 (May 2026) — v4 uses different state-field names
+    // v4 uses different state-field names
     // for the same 3 classifiers. Without these resets, the previous
     // report's damage / infra / crisis selections silently bleed
     // into the next report (and v4-flow.js's _canAdvanceFrom thinks
     // the user has already chosen, so Next is armed without any
-    // user tap). Recurring user-reported bug.
+    // user tap). Recurring state-bleed regression — keep these resets.
     state.damage_classification = null;
     state.infrastructure_type = null;
     state.crisis_type = null;
@@ -10294,7 +10294,7 @@ function _clearCaptureState() {
         _btnPhotoNext.style.display = 'none';
         _btnPhotoNext.disabled = true;
     }
-    // Apr 2026: #photo-skip-link DOM element was removed in Phase 2 when
+    // : #photo-skip-link DOM element was removed in Phase 2 when
     // photo became mandatory. Guarded lookup so reset doesn't throw if the
     // element is absent.
     const _skipLink = document.getElementById('photo-skip-link');
@@ -10400,7 +10400,7 @@ function setupImageViewer() {
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────────
-// May 2026 (UI v3 redesign Q11) — first-run welcome + device-ID disclosure.
+// (UI v3 redesign Q11) — first-run welcome + device-ID disclosure.
 // Renders TWO overlays in sequence on first visit:
 //   1. #welcome-overlay   — anonymous (recommended) vs sign-in choice
 //   2. #devid-overlay     — shown after anonymous tap; displays the
@@ -10448,7 +10448,7 @@ function _showWelcomeToast(msg) {
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 2300);
 }
-// Phase 15 (May 2026) — `showFirstRunWelcomeIfNeeded` removed.
+// `showFirstRunWelcomeIfNeeded` removed.
 // The welcome overlay + device-ID disclosure overlay both deleted from
 // `index.html`; their content is folded into the unified home stage's
 // identity bar (`#home-devid-badge` + tooltip). The device-ID generator
@@ -10460,7 +10460,7 @@ function _showWelcomeToast(msg) {
 window._formatDeviceIdForDisplay = _formatDeviceIdForDisplay;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // Phase 15 (May 2026) — generate device-ID at boot, BEFORE any UI
+    // generate device-ID at boot, BEFORE any UI
     // wiring, so the home identity bar can paint the formatted ID
     // immediately. Replaces the previous welcome-overlay-on-tap path
     // which left users that bypassed the welcome (Telegram deep-link,
@@ -10481,7 +10481,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (UI_V3_ENABLED) {
         document.body.dataset.uiV3 = 'on';
-        // Phase B4 (Apr 2026) — relocate the chip + service + location blocks
+        // relocate the chip + service + location blocks
         // out of stage-review into the new v3 stages BEFORE setupReviewStage
         // binds its handlers. Same DOM nodes, different parents — handlers
         // attach to the right elements in their final resting place.
@@ -10494,14 +10494,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupAudioStage();
     setupReviewStage();
     setupSendStage();
-    // Phase B2 (Apr 2026 UI v3) — wire the free-text building-name fallback.
+    // wire the free-text building-name fallback.
     // See the <div id="building-free-text-block"> in index.html.
     setupBuildingFreeText();
-    // Phase B4 (Apr 2026 UI v3) — wire the 4 new stage Continue/Back buttons.
+    // wire the 4 new stage Continue/Back buttons.
     if (UI_V3_ENABLED) {
         try { setupV3StageNavigation(); } catch (e) { console.warn('[v3] nav wiring failed:', e); }
     }
-    // Phase 1 (Apr 2026 — Optional reporter login). Must run AFTER
+    // Phase 1. Must run AFTER
     // AuthStore is loaded (auth.js imported before app.js in index.html)
     // so the init() call below picks up any persisted session.
     try { setupAuthUI(); } catch (e) { console.warn('[auth] UI wiring failed:', e); }
@@ -10512,7 +10512,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 2. Start language detection (it will call applyI18n when ready or fallback)
     detectAndSetupLanguage();
 
-    // 2b. Consent gate moved inline to home-screen.js (May 2026 — the
+    // 2b. Consent gate moved inline to home-screen.js (— the
     //     legacy full-screen overlay was deleted; consent is now a small
     //     checkbox above the Start CTA on #stage-home).
 
@@ -10600,13 +10600,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // 8. Setup start button. Phase 4 (Apr 2026, v3 Apr 2026): the auto-submit
+    // 8. Setup start button. Phase 4: the auto-submit
     // timer is armed inside goToStage() via inactivityManager.tryArm({bustCache:true})
     // on every stage transition away from home/success. bustCache=true forces a
     // fresh `/regions/enabled` fetch so dashboard-flipped regions propagate
     // immediately (was 24 h before). tryArm() also gates on hasMinimumInput()
     // and is a silent no-op outside any enabled region, so start is safe.
-    // Phase B4 (Apr 2026 UI v3) — start button lands on stage-where when v3
+    // start button lands on stage-where when v3
     // is on so the flow opens with location + damage. Legacy v2 goes straight
     // to stage-photo. The choice of entry point is the ONLY difference
     // visible to the user at this instant; subsequent navigation uses

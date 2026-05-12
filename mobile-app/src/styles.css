@@ -58,7 +58,7 @@
 }
 
 /* ── Reset & Tokens ─────────────────────────────────────────── */
-/* May 2026 — Delta-B fix: swap default theme to dark to match the
+/* Delta-B fix: swap default theme to dark to match the
    v3 redesign proposal (UI:UX Improvements/REDESIGN-PROPOSAL.html §7
    Design system). Tokens align 1:1 with the proposal's :root block.
    Light-theme override removed — proposal is dark-by-design. */
@@ -86,7 +86,7 @@
     --muted: #94a3b8;           /* alias used widely in the codebase */
     --border: rgba(255,255,255,0.06);
     --border-strong: rgba(255,255,255,0.12);
-    /* Apr 2026 — Noto Sans Arabic + Noto Sans SC added after Inter/Outfit.
+    /* Noto Sans Arabic + Noto Sans SC added after Inter/Outfit.
        Browser font cascade is per-glyph: Inter handles Latin, then
        falls through to Noto Sans Arabic for Arabic codepoints (locale=ar)
        and Noto Sans SC for CJK (locale=zh). Without these in the cascade,
@@ -104,7 +104,7 @@
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
     --shadow-md: 0 8px 24px rgba(0,0,0,0.45);
     --shadow-glow: 0 0 32px rgba(249,115,22,0.18);
-    /* Phase 15 (May 2026) — branded reporting-channel tile tokens.
+    /* branded reporting-channel tile tokens.
        Each channel gets a foreground colour, a 16% soft-fill background,
        and a 32% edge border so .home-channel-tile can render a brand-
        coherent identity via a single `--c` custom property. */
@@ -150,7 +150,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     gap: 3px;
     background: rgba(0,0,0,0.3); border-radius: 20px; padding: 4px 6px;
     border: 1px solid rgba(255,255,255,0.1);
-    /* HOTFIX Apr 2026: pill is now guaranteed compact — JS writes
+    /* HOTFIX : pill is now guaranteed compact — JS writes
        `🌐 EN` / `🌐 KN` (2-letter ISO codes, not native-script names),
        so the pill never exceeds ~120px regardless of locale. No more
        wrap-to-two-lines overlap with the flow-progress bar's Send step. */
@@ -159,7 +159,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .lang-switcher button {
     background: none; border: none;
-    /* May 2026 (Lighthouse a11y) — pill itself is dark (rgba(0,0,0,0.3))
+    /* (Lighthouse a11y) — pill itself is dark (rgba(0,0,0,0.3))
        so light text on it is fine on light-theme. But the audit treats
        the underlying body color as the comparison point in some cases.
        Bump to 0.85 white from 0.6 so we clear 4.5:1 on every theme. */
@@ -183,7 +183,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     background: rgba(255,255,255,0.20); color: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,0.3);
 }
 
-/* Phase 24 — flag glyph + locale code inside the lang pill.
+/* flag glyph + locale code inside the lang pill.
    The flag emoji renders slightly larger than the code text for
    visual weight; the 4 px gap stops them from looking glued. */
 .lang-switcher .lps-flag {
@@ -237,7 +237,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 
 /* ── Stage System ───────────────────────────────────────────── */
-/* May 2026 v4 viewport-fit refactor:
+/* v4 viewport-fit refactor:
    - Use `100dvh` for the height (was implicit 100% from `inset: 0`) so
      mobile browser chrome (URL bar, bottom nav) doesn't visually clip
      the bottom of the stage. `dvh` is "dynamic viewport height" and
@@ -310,7 +310,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .undp-badge {
     display: flex; align-items: center; gap: 8px;
     background: rgba(255,174,0,0.1); border: 1px solid rgba(255,174,0,0.3);
-    /* May 2026 (Lighthouse a11y) — light-theme contrast: orange
+    /* (Lighthouse a11y) — light-theme contrast: orange
        #ffae00 on rgba(255,174,0,0.1) is ~3:1 against white-ish bg.
        Darker color (#a85a00) hits 4.5:1 in light theme. Dark-theme
        override below. */
@@ -453,7 +453,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     font-size: 1rem; color: var(--muted); font-weight: 600;
 }
 
-/* Apr 2026 UX rewrite — low-literacy helpers on the audio capture screen.
+/* UX rewrite — low-literacy helpers on the audio capture screen.
    Bullets give the user 3 concrete things to say; the green example shows
    a worked sample so they don't freeze on "what should I write?". The mic
    language hint reassures non-English speakers that native language is OK. */
@@ -668,7 +668,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
 
-/* ── Service status section (Apr 2026 UI v2.1 — always-visible flat) ───────
+/* ── Service status section ───────
    Was <details>/<summary> (collapsible). Field testing showed low-literacy
    users didn't expand the disclosure triangle, so the whole block was
    invisible in practice. Flattened to a plain <section> that renders
@@ -749,7 +749,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 /* ── Phase 6 additions: multi-page Review layout ─────────────── */
 .review-page { display: block; }
 
-/* HOTFIX Apr 2026: review-nav-row was clipping the Submit button in
+/* HOTFIX : review-nav-row was clipping the Submit button in
    non-English locales where "Submit" translates to a longer word
    (e.g. Kannada "ಕಳುಹಿಸಿ" + paper-plane icon). Root cause: the two
    flex-1 buttons inherited a min-width from their content that
@@ -821,7 +821,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .success-icon { font-size: 5rem; animation: pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 @keyframes pop { from { transform: scale(0) rotate(-10deg); opacity: 0; } to { transform: scale(1) rotate(0deg); opacity: 1; } }
 
-/* PR 7 (Apr 2026): heart replaces the ✅ on the success screen. Pulses
+/* PR 7: heart replaces the ✅ on the success screen. Pulses
    with a soft scale + red glow, 2s loop. Reduce-motion users get a
    static heart (animation disabled).
 
@@ -1248,7 +1248,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .extra-photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .extra-photo-thumb.active { border-color: var(--accent); box-shadow: 0 0 8px rgba(124,58,237,0.3); }
 .extra-photo-remove {
-    /* Apr 2026: moved to bottom-left per UX spec ("❌ bottom-left corner").
+    /* : moved to bottom-left per UX spec ("❌ bottom-left corner").
        Slightly bigger touch target (22x22) so the button is reliably tappable
        on thumb-sized touch surfaces. */
     position: absolute;
@@ -1277,7 +1277,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .add-photo-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-/* ── Phase 1 (Apr 2026 — Optional reporter login) ─────────────────────────
+/* ── Phase 1 ─────────────────────────
    Landing-page tertiary "Login / Sign up" button + account pill. Secondary
    to the primary "Start Reporting" CTA; both must be visible at once so
    the anonymous path is a single tap and the login path is one extra
@@ -1309,7 +1309,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .account-pill .account-settings-btn:hover { background: rgba(255,255,255,0.06); }
 
-/* Phase 1 (Apr 2026 — Optional reporter login) — stage-login layout.
+/* stage-login layout.
    v2 polish (Apr-23 screenshot fix): form was cramped top-left with
    dead space below. Re-centered the card + tightened the field
    hierarchy + shrunk the country-code dropdown + gave the whole stage
@@ -1495,7 +1495,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .nav-btn.danger:hover { background: rgba(239,68,68,0.08); }
 
-/* ── Phase B4 (Apr 2026 UI v3) — 8-stage capture flow ──────────────────
+/* ── — 8-stage capture flow ──────────────────
    Four new stages (where / infra / crisis / extras) live as `.v3-stage`
    containers. Each has a v3-slot (filled at runtime by migrateV3Blocks)
    + a standard .review-nav-row with Back/Continue buttons.
@@ -1579,7 +1579,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     white-space: nowrap;
 }
 
-/* M9 (May 2026) — landmark fallback when GPS fails on stage-where.
+/* M9 — landmark fallback when GPS fails on stage-where.
    Yellow warning band with 6 quick chips ("Hospital", "School", etc.)
    that pre-fill the existing place-search input below. Designed to
    sit between the auto-meta panel and the v3-slot so the user sees
@@ -1651,7 +1651,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     flex-shrink: 0;
 }
 
-/* v3 stage-extras debris Yes/No toggle (Phase B4, Apr 2026). Two large
+/* v3 stage-extras debris Yes/No toggle. Two large
    tappable pills side-by-side; `.selected` class drives the colour
    (Yes → amber, No → grey). Mirrors the damage-chip button style so
    it feels familiar in the capture flow. */
@@ -1693,7 +1693,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
 }
 
-/* v3 stage-crisis grouped chips (Phase B4, Apr 2026). Each of the three
+/* v3 stage-crisis grouped chips. Each of the three
    UNDP categories (Natural / Technological / Human-made) gets its own
    small uppercase heading above a compact category-grid. Headings are
    slim + muted so they read as section labels, not competing buttons. */
@@ -1735,7 +1735,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 .fp-v3-seg.active { background: var(--accent); box-shadow: 0 0 6px rgba(124, 58, 237, 0.4); }
 .fp-v3-seg.upcoming { background: rgba(255, 255, 255, 0.08); }
 
-/* Phase B4 (Apr 2026 UI v3 spec-align) — single "Add more" button that
+/* single "Add more" button that
    opens the OS native file-picker sheet (Camera + Library + Files in one
    surface). Same 56px square as the thumbnails, with a + icon above a
    tiny "Add" label so the path is self-documenting on low-literacy
@@ -1753,7 +1753,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     opacity: 0.85;
 }
 
-/* Phase A5 (Apr 2026 UI v3) — Camera vs Gallery chooser row replacing the
+/* Camera vs Gallery chooser row replacing the
    single "+" button. Two 56px tiles side-by-side with an icon above a tiny
    label so the path is self-documenting on low-literacy devices. `gap:6px`
    matches the extra-photo-thumb gap so the row feels continuous with the
@@ -1798,7 +1798,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     border-color: rgba(239,68,68,0.9);
 }
 
-/* ── Phase 5 (Apr 2026) — PWA My Reports screen (parity port of RN) ──────── */
+/* ── Phase 5 — PWA My Reports screen (parity port of RN) ──────── */
 .secondary-cta {
     display:flex; align-items:center; justify-content:center; gap:8px;
     width:100%; padding:12px 14px; margin-top:10px;
@@ -1835,7 +1835,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 .history-section { padding:0 16px 16px; }
 .history-section-title { font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:#94a3b8; font-weight:700; margin:16px 0 8px; display:flex; align-items:center; gap:6px; }
 
-/* M6 (May 2026) — My Reports filter row + view toggle. Chips set the
+/* M6 — My Reports filter row + view toggle. Chips set the
    status filter (All / Review / Accepted / Help / Rejected); the
    square toggle on the right swaps between list and map. The strip
    wraps on narrow screens so the toggle never overflows. */
@@ -1970,7 +1970,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 .history-empty i { font-size:32px; opacity:0.4; display:block; margin-bottom:8px; }
 .history-empty p { font-size:13px; margin:0; }
 
-/* ── Apr 2026 UX rewrite — landing screen ───────────────────────────────── */
+/* ── UX rewrite — landing screen ───────────────────────────────── */
 
 /* Home impact metrics: two-column card. Hidden until we have real numbers.
    Big numbers, small labels — reads at a glance even in peripheral vision. */
@@ -2000,7 +2000,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     display: flex; align-items: center; gap: 4px;
     padding: 12px 14px 6px;
     background: transparent;
-    /* PR 6 (Apr 2026): stack the progress bar above the lang-switcher pill
+    /* PR 6: stack the progress bar above the lang-switcher pill
        (z:100) so the 🟢/🔴 connectivity dot doesn't clip the progress
        labels at narrow viewports. Explicit stacking is cheaper than
        restructuring the stage DOM. */
@@ -2102,7 +2102,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     white-space: nowrap; border: 0;
 }
 
-/* ── Apr 2026 "My Reports" spec — redesigned cards ──────────────────────── */
+/* ── "My Reports" spec — redesigned cards ──────────────────────── */
 
 /* Tappable card: full-width button with thumbnail + body stacked horizontally.
    The spec wants photo + location + date + colored status at a glance. */
@@ -2135,7 +2135,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     font-size: 13px; font-weight: 600; color: #e5e7eb;
     text-transform: uppercase; letter-spacing: 0.3px;
     flex: 1; min-width: 0;
-    /* Phase 16 (May 2026) — was nowrap+ellipsis, which clipped most
+    /* was nowrap+ellipsis, which clipped most
        titles to "EARTHQUAKE..." next to the status chip on 390 px
        screens. 2-line clamp keeps both the crisis-type and infra-type
        readable while still bounding the card height. */
@@ -2172,13 +2172,13 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 .mr-status-accepted     { color: #22c55e; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.4); }
 .mr-status-rejected     { color: #ef4444; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); }
 
-/* Phase 16 (May 2026) — `.history-advanced` rules retained as no-op
+/* `.history-advanced` rules retained as no-op
    shims in case any external bookmarklet / CSS still queries them.
    The accordion HTML moved out of stage-history into stage-settings.
    The handler still binds to #btn-history-delete-all by id. */
 .history-advanced, .history-advanced-summary, .history-advanced-body { display: none; }
 
-/* Phase 16 — settings-note: muted explainer under destructive buttons
+/* settings-note: muted explainer under destructive buttons
    in stage-settings. Mirrors the old history-delete-note styling. */
 .settings-note {
     font-size: 11.5px;
@@ -2188,7 +2188,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     padding: 0 4px;
 }
 
-/* Phase 16 — fallback placeholder when the report-detail photo URL
+/* fallback placeholder when the report-detail photo URL
    fails to load. Mirrors the .mr-card-thumb-placeholder pattern; sized
    to match the 16:10 aspect of the photo wrap so the layout stays
    stable. */
@@ -2205,7 +2205,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     border-radius: 12px;
 }
 
-/* Phase 16 — stage-history header polish: title icon was crowding the
+/* stage-history header polish: title icon was crowding the
    back-arrow; add breathing room. */
 #stage-history .stage-header h2 {
     padding-left: 6px;
@@ -2296,7 +2296,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 .rd-tl-step.rd-tl-rejected .rd-tl-dot { background: rgba(239, 68, 68, 0.22); border-color: rgba(239, 68, 68, 0.7); }
 .rd-tl-step.rd-tl-rejected .rd-tl-label { color: #f87171; }
 
-/* M5 (May 2026) — pulse the most-recently-completed timeline step so the
+/* M5 — pulse the most-recently-completed timeline step so the
    user gets a clear "we're here right now" anchor in the lifecycle.
    2s ease-in-out loop; reduce-motion users get the static accent ring. */
 .rd-tl-step.rd-tl-current .rd-tl-dot {
@@ -2400,7 +2400,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 .rd-rejection .rd-feedback-title { color: #f87171; }
 .rd-feedback-sub { font-size: 12px; color: #cbd5e1; line-height: 1.4; }
 
-/* May 2026 (UI v3 redesign Q7) — destructive delete demoted from a
+/* (UI v3 redesign Q7) — destructive delete demoted from a
    dominant red full-width CTA at the bottom of the tracking screen
    to a compact, hover-revealed secondary link. The audit flagged the
    prominence as a misclick risk — a single panicked tap could discard
@@ -2434,7 +2434,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     border-radius: 4px;
 }
 
-/* ── Apr 2026 PR 3 — Copy + landing polish ─────────────────────────────── */
+/* ── PR 3 — Copy + landing polish ─────────────────────────────── */
 
 /* Lives Saved heart-pulse on the home impact card. Positive-affect visual
    — draws the eye first, signals "this works" before the user has done
@@ -2497,7 +2497,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     border: 1px solid rgba(56, 189, 248, 0.35);
     border-radius: 10px;
     background: rgba(56, 189, 248, 0.06);
-    /* May 2026 (Lighthouse a11y) — darker default for >=4.5:1 contrast
+    /* (Lighthouse a11y) — darker default for >=4.5:1 contrast
        on the light-theme background (#f8fafc). #0e7490 (cyan-700) is
        darker than the original #7dd3fc (cyan-300) which only met
        contrast on the dark theme. */
@@ -2709,7 +2709,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 }
 .lang-picker-flag .lpf-glyph { font-size: 1.25rem; }
 
-/* Apr 2026 §3.1 UX — picker sections.
+/* §3.1 UX — picker sections.
    The UN section (6 tiles) gets a 3-column grid with stacked flag-above-
    label tiles, a subtly highlighted tint, and a 2rem flag glyph so the
    UNDP six-official-languages requirement is the visual anchor of the
@@ -2723,7 +2723,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     margin-bottom: 0;
 }
 
-/* May 2026 (UI v3 redesign Q9) — search bar at top of language picker.
+/* (UI v3 redesign Q9) — search bar at top of language picker.
    Filters all .lang-picker-flag tiles by both the English aria-label and
    the native-script .lpf-label. Empty state is shown when no tiles match. */
 .lang-picker-search {
@@ -2816,7 +2816,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     }
 }
 
-/* Phase 25.2 (May 2026) — tier-2 / tier-3 GRID tiles.
+/* tier-2 / tier-3 GRID tiles.
    Replaces the previous horizontal scroll-snap carousel: per user
    feedback, all 15 "also supported" tiles are now visible at once
    in a 3-column grid (5 rows × 3 cols, ~15 tiles after the
@@ -2872,7 +2872,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     background: rgba(255, 255, 255, 0.12);
 }
 
-/* Apr 2026 language-UX rewrite — "📍 Your region" suggestion row. Rendered
+/* UX rewrite — "📍 Your region" suggestion row. Rendered
    above the full grid when GPS / IP detection resolves a locale the user
    hasn't explicitly picked. Clicking it activates that locale and closes
    the overlay in one tap. */
@@ -3199,7 +3199,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     word-break: break-word;
 }
 
-/* ── UNDP building-footprint selector (Apr 2026 UI v2.1, flattened) ────
+/* ── UNDP building-footprint selector ────
    Leaflet map lives in an always-visible <section> on v2-page-3. The
    legacy <details> rules below (list-style, summary arrow) were removed
    — the map + hint now render unconditionally, matching the UNDP
@@ -3213,7 +3213,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     touch-action: pan-y;   /* allow vertical page scroll outside the map */
 }
 
-/* M2 polish (May 2026) — fullscreen-picker CTA inline button. Tonal
+/* M2 polish — fullscreen-picker CTA inline button. Tonal
    purple (matches the M5 ETA badge + M6 filter chip active state) so
    it reads as the primary action above the small inline preview map. */
 .building-fs-cta {
@@ -3408,7 +3408,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     overflow: hidden;
     background: #0f172a;        /* tile-load fallback colour */
     position: relative;
-    /* Apr 2026 — initially added `transform: translate3d(0,0,0)` here as a
+    /* initially added `transform: translate3d(0,0,0)` here as a
        GPU-layer trigger to force layout flush in iOS Safari. Backed it out:
        parent transform creates a new stacking context AND a containing
        block for absolute descendants, which interfered with Leaflet's
@@ -3483,7 +3483,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     color: #86efac;
 }
 
-/* Phase B2 (Apr 2026 UI v3) — free-text building-name fallback.
+/* free-text building-name fallback.
    Sits under the map so the reporter still tries the footprint tap first,
    but has an obvious fallback path when the map doesn't render (offline,
    Overpass rate-limit, Leaflet blocked by corporate proxy). Input accepts
@@ -3540,7 +3540,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
 }
 
-/* ── RTL layout (UNDP §3.1, Apr 2026) ──────────────────────────────────
+/* ── RTL layout ──────────────────────────────────
    Arabic / Urdu / Hebrew / Persian / Pashto / Kurdish / Sindhi /
    Uyghur / Yiddish reporters. `<html dir="rtl">` is set by
    `_applyTextDirection` in app.js whenever an RTL locale activates.
@@ -3584,9 +3584,9 @@ html[dir="rtl"] .back-btn .fa-arrow-left {
 }
 
 /* Language-switcher overlay slides from the trailing edge — keep its
-   right/left anchoring sensible in both directions.
-   Phase 25.1 (May 2026) — actually mirror the pill to the LEFT in RTL.
-   Previous version set `right: 0` which kept the pill on the same side
+   right/left anchoring sensible in both directions. Mirrors the pill
+   to the LEFT in RTL locales (Arabic / Urdu).
+   The earlier `right: 0` rule kept the pill on the same side
    as the brand-row content (which flows right-aligned in RTL) and
    produced the visible overlap reported on the Arabic home page. */
 html[dir="rtl"] #lang-switcher {
@@ -3594,7 +3594,7 @@ html[dir="rtl"] #lang-switcher {
     left: 16px;
 }
 
-/* Phase 25 (May 2026) — RTL critical patches.
+/* RTL critical patches.
 
    The v4 capture flow uses a single `padding-right: 156 px` on its
    header to clear space for the language pill (top-right corner in
@@ -3765,7 +3765,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     }
 }
 
-/* ─── Merged always-on home page (May 2026) ───────────────────────────────
+/* ─── Merged always-on home page ───────────────────────────────
    Replaces the v4 first-visit landing overlay. All channel buttons,
    install prompt, consent, impact metrics, login + my-reports live
    inside #stage-home now. Visible on every load — no first-visit-only
@@ -3787,14 +3787,14 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     flex-direction: column;
     gap: 12px;
     box-sizing: border-box;
-    /* Phase 17 — stretch to viewport so `margin-top: auto` on the
+    /* stretch to viewport so `margin-top: auto` on the
        channels section pushes them to the bottom of the column. The
        `.home-stage` parent already sets `min-height: 100dvh`. */
     min-height: 100%;
     flex: 1;
 }
 
-/* Phase 15 (May 2026) — identity bar (replaces the centred 36 px badge).
+/* identity bar (replaces the centred 36 px badge).
    One row at the top of the home stage: small brand chip on the left,
    state-adaptive identity slot on the right (device-ID badge for
    anonymous, account pill for logged-in). */
@@ -3818,7 +3818,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     width: 100%;
     align-self: stretch;
 }
-/* Phase 17 — larger brand block (logo glyph + wordmark + tagline) */
+/* larger brand block (logo glyph + wordmark + tagline) */
 .home-brand {
     display: inline-flex;
     align-items: center;
@@ -3961,7 +3961,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     position: relative;
     flex-shrink: 1;
     min-width: 0;
-    /* Phase 18 — flow the device-ID pill + badge chip side-by-side on
+    /* flow the device-ID pill + badge chip side-by-side on
        one row. wrap to two rows on narrow viewports. */
     display: flex;
     align-items: center;
@@ -3970,7 +3970,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .home-devid-wrap .home-badge-chip { margin-top: 0; }
 
-/* Phase 24 — install + voice icons live inside the identity strip
+/* install + voice icons live inside the identity strip
    (the same flex row as the device-ID badge + Newcomer chip). They
    used to live in .home-brand-actions on the brand row, but that
    layout looked arbitrary. Shrinks them to 36 × 36 (was 44 × 44)
@@ -4069,7 +4069,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .home-account-wrap { position: relative; flex-shrink: 0; }
 
-/* Phase 17 — bigger hero. Was 26 px / left-aligned. Now 30 px / centred
+/* bigger hero. Was 26 px / left-aligned. Now 30 px / centred
    so the page feels less crowded and the CTA below has more visual
    anchor. */
 .home-title {
@@ -4247,7 +4247,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     line-height: 1.45;
 }
 
-/* Phase 18 — global top-bar action icons (PWA install + voice readout).
+/* global top-bar action icons (PWA install + voice readout).
    Live alongside the existing #lang-switcher in the absolute top-right
    of every stage. Compact 36 × 36 px circle buttons; same dark surface
    as the lang pill so they read as a single utility cluster. */
@@ -4297,7 +4297,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     .home-top-icon-btn.is-speaking { animation: none; }
 }
 
-/* Phase 18 — Bigger merged hero CTA. Replaces the standalone
+/* Bigger merged hero CTA. Replaces the standalone
    "Report an Incident" h1 title that lived above it; the button
    now carries the descriptive label. */
 .home-stage .big-cta {
@@ -4312,7 +4312,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .home-stage .big-cta i { font-size: 1.2rem; }
 
-/* Phase 18 — Gamification badge chip. Lives in the identity bar
+/* Gamification badge chip. Lives in the identity bar
    alongside the device-ID badge. Compact pill; brand-coloured emoji +
    short label. Tap → navigate to stage-privacy (where the badge ladder
    could be explained in v2). */
@@ -4340,7 +4340,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .home-badge-chip.lvl-champion  { background: rgba(244, 114, 182, 0.14); border-color: rgba(244, 114, 182, 0.36); color: #f9a8d4; }
 .home-badge-chip.lvl-hero      { background: rgba(249, 115, 22, 0.16); border-color: rgba(249, 115, 22, 0.42); color: #fdba74; box-shadow: 0 0 14px rgba(249,115,22,0.18); }
 
-/* Phase 18 — My Reports count pill inline. */
+/* My Reports count pill inline. */
 .mr-count {
     display: inline-block;
     margin-left: 4px;
@@ -4354,7 +4354,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .mr-count[hidden] { display: none; }
 
-/* Phase 18 — Safety disambiguation hint between the secondary row and
+/* Safety disambiguation hint between the secondary row and
    the channels. Subtle amber tonal banner — guidance, not alarm. */
 .home-safety-hint {
     display: flex;
@@ -4376,7 +4376,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     margin-top: 1px;
 }
 
-/* Phase 18 — Utility footer at the very bottom of the home stage.
+/* Utility footer at the very bottom of the home stage.
    Replaces the old "Works offline" trust line. Four small text
    links (Privacy · Open source · Help · version chip). */
 .home-utility-footer {
@@ -4411,7 +4411,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     padding: 0 4px;
 }
 
-/* Phase 18 — Channel grid revert: 6-across → 3×2 grid so labels fit
+/* Channel grid revert: 6-across → 3×2 grid so labels fit
    without clipping. Same brand-token CSS for working state; the
    disabled state now overrides icon colour to a true grey (was leaking
    brand tint through). */
@@ -4422,11 +4422,11 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     margin-left: 0;
     margin-right: 0;
 }
-/* Phase 18 — Phase-17 .home-channels-six rule kept as a fallback alias
+/* Phase-17 .home-channels-six rule kept as a fallback alias
    for the rare operator config that overrides into a 6-across row. */
 .home-channels-six { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
 
-/* Phase 18 — Greyer disabled channel state (was leaking brand color
+/* Greyer disabled channel state (was leaking brand color
    even though border was grey). Now icon + label both render in the
    text-mute tone so the tile reads as obviously inactive. */
 .home-channel-tile.is-disabled {
@@ -4456,9 +4456,9 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   Phase 19 (May 2026) — Professional CSS pass on the home stage.
+   Home stage — design pass.
 
-   Goals (per user feedback "Current UI is not good to submit"):
+   Goals:
      • Uniform 20 px horizontal edge padding throughout
      • 8 px spacing scale (4 / 8 / 12 / 16 / 20 / 24 / 32 / 40)
      • No overlaps — top-bar actions cleanly anchored next to lang pill
@@ -4691,7 +4691,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     }
 }
 
-/* Phase 21 — hero subtitle removed entirely. Rule kept as a no-op
+/* hero subtitle removed entirely. Rule kept as a no-op
    for safety in case stage-privacy or another page reuses the class. */
 .home-hero-sub { display: none; }
 
@@ -4988,7 +4988,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 /* End Phase 19 ───────────────────────────────────────────────────── */
 
 
-/* Phase 18 — Stage-privacy. Long-form trust + privacy + open-source
+/* Stage-privacy. Long-form trust + privacy + open-source
    content. Lives outside the home stage so it doesn't bloat the
    landing scroll. */
 .privacy-body {
@@ -5130,16 +5130,16 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     line-height: 1.5;
 }
 
-/* Phase 18 — `.home-values` retained as a no-op shim. Phase 17 added
+/* `.home-values` retained as a no-op shim. Phase 17 added
    it inline on the home stage; Phase 18 moves the content to
    stage-privacy and hides the home-stage variant. */
 .home-values { display: none !important; }
 
-/* Phase 18 — home-offline-hint no longer rendered (footer removed
+/* home-offline-hint no longer rendered (footer removed
    in favour of `.home-utility-footer`). Retained as no-op shim. */
 .home-offline-hint { display: none !important; }
 
-/* Phase 17 — Value-props 3-row card fills the empty space between the
+/* Value-props 3-row card fills the empty space between the
    secondary-row and the channels at the bottom. Subtle dark surface +
    coloured icon tiles so the row reads as informative-not-decorative. */
 .home-values--phase17 {
@@ -5198,7 +5198,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     margin-top: 1px;
 }
 
-/* Phase 17 — Bottom-anchored channels section. margin-top: auto
+/* Bottom-anchored channels section. margin-top: auto
    pushes the section to the bottom of .home-center's flex column,
    making good use of the empty vertical space the previous layout
    left between the hero and the channels. */
@@ -5206,7 +5206,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     margin-top: auto;
     padding-top: 8px;
 }
-/* Phase 17 — 6-tile-across grid for narrow viewports (390 px and
+/* 6-tile-across grid for narrow viewports (390 px and
    up). Gap tightened from 6 → 4 px so each tile gets enough internal
    room for "Telegram" / "WhatsApp" / "Android" labels without
    clipping. Section gets its own horizontal padding so the grid can
@@ -5226,7 +5226,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
    prompt / dropped). */
 .home-apps { display: none; }
 
-/* Phase 15 — branded reporting-channel tile. Each tile carries a
+/* branded reporting-channel tile. Each tile carries a
    brand colour via the `--c` custom property (set inline by
    home-screen.js). Phase 17 — shrunk to fit 6 across; non-working
    tiles render in a neutral grey state via .is-disabled. */
@@ -5302,7 +5302,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     font-weight: 700;
     text-align: center;
     line-height: 1.1;
-    /* Phase 17 — single-line label. The labels stay short ("Telegram",
+    /* single-line label. The labels stay short ("Telegram",
        "WhatsApp", "Android", "iOS") and at 9.5 px font they all fit
        inside the ~52 px tile width without hyphenation. */
     overflow: hidden;
@@ -5324,7 +5324,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     left: 5px;
 }
 
-/* Phase 17 — "Coming soon" toast for disabled-channel taps. */
+/* "Coming soon" toast for disabled-channel taps. */
 .home-channel-toast {
     position: fixed;
     bottom: max(24px, env(safe-area-inset-bottom, 0px));
@@ -5538,7 +5538,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     .home-section-title { font-size: 10.5px; }
 }
 
-/* ─── UI v4 — 3-page capture flow (May 2026) ─────────────────────────────
+/* ─── UI v4 — 3-page capture flow ─────────────────────────────
    Each .v4-stage uses a grid layout (header / body / footer pinned at
    the viewport edges) so primary CTAs are always reachable without
    scroll. .v4-body absorbs overflow if absolutely necessary.
@@ -5577,7 +5577,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     align-items: center;
     gap: 12px;
     padding-top: 4px;
-    /* May 2026 hot-fix: reserve right-side space so the "STEP X OF 3"
+    /* fix: reserve right-side space so the "STEP X OF 3"
        label never collides with the language-pill cluster. The pill is
        max-width: 140px (line 151) PLUS its 16px right offset = 156px
        reserved. Earlier we used 110px which left the step text behind
@@ -5682,7 +5682,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 
 /* ── V4 Page 1 — capture ───────────────────────────────────────────── */
 
-/* Phase 25.8 (May 2026) — capture-stage meta card. Replaces the old
+/* capture-stage meta card. Replaces the old
    v4-meta-row pills with a single card that gives location + time
    real estate to breathe, makes the location editable (for users
    with broken GPS), and shows the actual timestamp + timezone
@@ -5780,7 +5780,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     border-color: rgba(249, 115, 22, 0.6);
     box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
 }
-/* Phase 25.12 — offline autocomplete dropdown under the location edit
+/* offline autocomplete dropdown under the location edit
    input. Mirrors the v3 #place-suggestions look but stays inline inside
    the meta card (no fixed-positioning gymnastics needed because the
    editor is part of the flow). */
@@ -5881,7 +5881,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     letter-spacing: 0.02em;
 }
 
-/* Phase 25.8 — legacy v4-meta-row + v4-meta-pill kept as a hidden
+/* legacy v4-meta-row + v4-meta-pill kept as a hidden
    shim so any older code paths that still query the selectors
    don't throw. New code uses .v4-meta-card above. */
 .v4-meta-row { display: none; }
@@ -5893,7 +5893,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     display: none;
 }
 
-/* ── Delta-C (May 2026) — proposal §6.2 capture page rebuild ──────────
+/* ── Delta-C — proposal §6.2 capture page rebuild ──────────
    Hero copy + 3-equal-mode grid (Photo / Voice / Type) + captured
    strip. Replaces the single camera-hero. */
 .v4-cap-title {
@@ -5906,13 +5906,13 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     margin: 4px 0 10px;
 }
 .v4-cap-lede {
-    /* Phase 25.8 — lede removed in the redesign (sections carry their
+    /* lede removed in the redesign (sections carry their
        own sub-labels). Kept as a 0-height shim in case other code
        paths reference it. */
     display: none;
 }
 
-/* Phase 25.8 (May 2026) — 3 stacked capture sections. Replaces the
+/* 3 stacked capture sections. Replaces the
    old 3-tile grid + drawer-on-tap pattern. Each section is a
    labelled card with its action surface always visible: tap a
    button (Photo), tap to record (Voice), or just type (Text).
@@ -5988,9 +5988,9 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     gap: 10px;
 }
 
-/* Photo section — Phase 25.13: dominant on the capture stage. Larger
-   action buttons + roomier thumb-strip gutters. Voice + Text moved to
-   compact chip toggles below. */
+/* Photo section — dominant on the capture stage. Larger action
+   buttons + roomier thumb-strip gutters. Voice + Text live below as
+   compact chip toggles. */
 .v4-cap-section-photo .v4-cap-section-body {
     padding: 14px 14px 16px;
     gap: 14px;
@@ -6031,13 +6031,12 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     background: rgba(255, 255, 255, 0.06);
 }
 
-/* ── Phase 25.13: compact Voice + Text chip toggles ──────────────
-   Replaces the prior full-bleed Voice / Text section cards. Users
-   asked for image capture to dominate the screen and treated audio +
-   text as low-priority extras. Each chip expands its inline panel
-   on tap; collapsed-by-default to keep the stage compact. Captured
-   state is signalled with a small green dot on the chip so users see
-   their content lands without having to keep the panel open. */
+/* Compact Voice + Text chip toggles. Image capture dominates the
+   stage; audio + text are treated as low-priority extras. Each chip
+   expands its inline panel on tap; collapsed-by-default to keep the
+   stage compact. Captured state is signalled with a small green dot
+   on the chip so users see their content lands without having to
+   keep the panel open. */
 .v4-cap-extras {
     margin-top: 4px;
     display: flex;
@@ -6114,7 +6113,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Phase 25.8 — legacy v4-cap-grid + chip strip + drawers are kept
+/* legacy v4-cap-grid + chip strip + drawers are kept
    as hidden DOM shims so v4-flow.js's handlers don't throw, but
    they're never displayed. The new sections above are the real UI. */
 .v4-cap-grid,
@@ -6295,7 +6294,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     padding: 6px 4px 8px;
     -webkit-overflow-scrolling: touch;
 }
-/* Phase 25.13 — thumbs bumped from 64 px → 92 px so the preview is
+/* thumbs bumped from 64 px → 92 px so the preview is
    actually legible after the user shoots a photo. The strip stays
    horizontally scrollable for the 2nd-5th photos. */
 .v4-thumb {
@@ -6330,7 +6329,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     cursor: pointer;
     font-size: 20px;
 }
-/* Phase 25.4 — n/5 photo-count chip rendered at the end of the
+/* n/5 photo-count chip rendered at the end of the
    thumbs row. Reuses the muted "info" color and the same height
    as the thumbs so the row reads as one unit. */
 .v4-thumb-count {
@@ -6350,7 +6349,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     margin-left: 4px;
 }
 
-/* Phase 25.4 — action-sheet shown when the `+` thumb button is
+/* action-sheet shown when the `+` thumb button is
    tapped. Two big buttons (Camera / Browse) over a dim backdrop;
    tapping the backdrop or Cancel dismisses. Anchored to bottom on
    phones, centered on wider viewports. */
@@ -6422,7 +6421,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     .v4-photo-chooser-sheet { margin-bottom: 0; }
 }
 
-/* Phase 25.5 (May 2026) — PWA update banner. Surfaced by app.js when
+/* PWA update banner. Surfaced by app.js when
    a new service-worker version is waiting. Slides up from the bottom
    so it doesn't fight the existing top toolbar. The "Update" button
    posts SKIP_WAITING to the SW; controllerchange triggers a reload.
@@ -6569,7 +6568,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .v4-chip-dot-partial { color: #f59e0b; }
 .v4-chip-dot-complete { color: #ef4444; }
 
-/* May 2026 (UI v3 redesign Q13) — 4-channel severity glyphs replace
+/* (UI v3 redesign Q13) — 4-channel severity glyphs replace
    the tiny ● dot. Each severity gets a unique shape (○ △ ✕) so
    colour-blind users (~8% of men) get full information from the
    shape alone. Sized 22 px to meet ≥24 px chip-icon target after
@@ -6585,7 +6584,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .v4-chip-glyph-partial  { color: #eab308; }
 .v4-chip-glyph-complete { color: #ef4444; }
 
-/* Chip-grid (May 2026 hot-fix #2 — was carousel, see _initChipGrid in
+/* Chip-grid (hot-fix #2 — was carousel, see _initChipGrid in
    v4-flow.js). All 8 (infra) / 9 (crisis) chips visible at once. Tap-
    target ≥ 60×60 px on small phones. Selected state has solid brand
    border + tinted background. */
@@ -6636,7 +6635,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     font-size: 20px;
     color: var(--brand, #ffae00);
 }
-/* M10 (May 2026) — custom Lucide-style SVGs for tsunami / wildfire /
+/* M10 — custom Lucide-style SVGs for tsunami / wildfire /
    conflict / chemical. Match the FontAwesome glyph footprint so layout
    stays identical (22 px box, brand colour, 2 px stroke). */
 .v4-tile-icon-svg {
@@ -6701,7 +6700,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     border-radius: 3px;
 }
 
-/* ── V4 Page 2 — classify (Delta-D + E rebuild, May 2026) ───────────────
+/* ── V4 Page 2 — classify ───────────────
    Single-question per sub-view. _classifyStep in v4-flow.js drives which
    .v4-classify-view is visible. Layout follows proposal §6.3 (How bad),
    §6.2.2 (What was hit), §6.2.3 (What caused it). */
@@ -6945,7 +6944,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 
 /* ── V4 Page 3 — review ────────────────────────────────────────────── */
 
-/* Q10 (May 2026) — multi-modal "captured" strip on stage-v4-review.
+/* Q10 — multi-modal "captured" strip on stage-v4-review.
    Three chips show user-captured modalities (photo / voice / text).
    Green when captured, grey when not — UNDP rubric Q3 wants additive
    capture; this makes the additive nature visible. Tap routes to the
@@ -7126,7 +7125,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .v4-undp-body { gap: 10px; }
 .v4-undp-row {
     display: grid;
-    /* May 2026 hot-fix: was 110px 1fr — the right column collapsed
+    /* fix: was 110px 1fr — the right column collapsed
        to ~210px on iPhone SE which couldn't fit the 5-option select
        OR the 10-chip pressing-needs flow. New 90px label + 1fr
        control gives the control column ~205px on the smallest

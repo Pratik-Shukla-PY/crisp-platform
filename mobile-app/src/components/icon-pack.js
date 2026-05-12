@@ -1,5 +1,5 @@
 /**
- * CRISP icon pack — shared SVG sprites (Apr 2026 UI v2).
+ * CRISP icon pack — shared SVG sprites.
  *
  * Single source of truth for every chip icon on the capture flow, so
  * both the PWA (inline SVG) and RN (react-native-svg) render the same

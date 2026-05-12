@@ -7,7 +7,7 @@
 //      MEDIUM  max 800 px   quality 0.60   ~100–200 KB
 //      LARGE   ORIGINAL     no re-encode   raw-capture bytes
 //
-//  Apr 2026 update: LARGE is now the original capture (post-PII-blur) with
+//  update: LARGE is now the original capture (post-PII-blur) with
 //  no resize and no JPEG re-encode. Previously we'd downscale to 1600 px at
 //  q=0.82, which silently discarded detail that responders might have
 //  zoomed into (license plates, fine structural damage). User-visible
@@ -114,7 +114,7 @@
      * Public API. Given a source Blob (the raw captured JPEG), return
      * { small: {blob, bytes}, medium: {...}, large: {...} }.
      *
-     * Phase 1 (Apr 2026): blur-once-then-resize.
+     * Phase 1: blur-once-then-resize.
      *  - OLD pipeline called _maybeBlur per tier → BlazeFace ran 3× on 3
      *    different downsampled images, producing inconsistent redaction
      *    across variants (SMALL at 320 px sometimes missed small faces that
@@ -132,7 +132,7 @@
     async function generate(srcBlob) {
         if (!srcBlob) throw new Error('ImageVariants.generate: srcBlob is null');
 
-        // Step 1 — blur ONCE on the original bitmap. Apr 2026: we also
+        // Step 1 — blur ONCE on the original bitmap. : we also
         // capture the truthful `blurred` flag here so every variant of
         // this capture reports accurate `client_blur_applied` to the
         // server. If BlazeFace failed, the raw pixels go up AND the
@@ -152,7 +152,7 @@
             return { small: fallback, medium: fallback, large: fallback, clientBlurApplied };
         }
 
-        // Step 3 — render each tier. `passthrough` tiers (LARGE, Apr 2026)
+        // Step 3 — render each tier. `passthrough` tiers
         // skip the canvas round-trip entirely — the blurred source blob
         // ships as-is, preserving full capture fidelity for archival use.
         // Downscaled tiers (SMALL/MEDIUM) go through the canvas path for

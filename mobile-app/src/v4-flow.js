@@ -36,7 +36,7 @@
 
     function _whenReady(cb) {
         if (_ready()) { cb(); return; }
-        // Phase 25.10 (Lighthouse perf fix) — 50 ms poll competed for the
+        // 50 ms poll competed for the
         // main thread during initial boot and inflated TBT on pwa-home-v4
         // (~25 ms TBT delta + measurable bootup-time hit). 200 ms is plenty
         // — app.js exposes `__crispGoToStage` within the first ~50-100 ms
@@ -60,7 +60,7 @@
     }
 
     // ── Feature flag ────────────────────────────────────────────────────
-    // May 2026 — re-enabled default ON after the 9-bug fix sweep.
+    // re-enabled default ON after the 9-bug fix sweep.
     // Bugs covered + verified by tests in 30-v4-bug-fixes.spec.ts:
     //   1. Landing-page fluctuation (landing-pending CSS gate)
     //   2. Desktop webcam (route to openCameraModal on getUserMedia presence)
@@ -100,7 +100,7 @@
     window.__crispUiV4 = true;
 
     // ── Chip-grid component (replaces v3 carousel) ─────────────────────
-    // May 2026 hot-fix #2: the original carousel showed only 1 chip at
+    // fix #2: the original carousel showed only 1 chip at
     // a time, wasting 50–70 % of vertical screen on Page 2 with empty
     // space below the second carousel. Field reporters had to swipe 4–7
     // times to reach the right infra/crisis chip. Replaced with a 4×2
@@ -121,10 +121,10 @@
         container.classList.add('v4-chipgrid');
         container.classList.remove('v4-carousel');
 
-        // May 2026 a11y — every role="radio" must carry aria-checked
+        // a11y — every role="radio" must carry aria-checked
         // (true OR false). Previously only the selected tile had the
         // attribute → axe-core "aria-required-attr" critical failure.
-        // M10 (May 2026) — custom Lucide-style SVG icons for the four
+        // M10 — custom Lucide-style SVG icons for the four
         // crisis types FontAwesome handled awkwardly: tsunami (was just
         // a generic up-arrow water), wildfire (was a single flame —
         // visually identical to the explosion icon at small sizes),
@@ -195,12 +195,12 @@
     }
     function _getState() { return window.state; }
 
-    // Phase 25.4 (May 2026) — hard cap on photos per report. Matches
-    // the v3 MAX_PHOTOS_TOTAL (4 extras + 1 primary). User-reported
-    // bug: the `+` button in the v4 thumb strip would keep accepting
-    // photos past the cap because v4's _handlePhoto didn't check.
-    // Now enforced at three gates: _handlePhoto, _renderThumbs (hides
-    // the + button at the cap), and the chooser overlay.
+    // Hard cap on photos per report. Matches the v3 MAX_PHOTOS_TOTAL
+    // (4 extras + 1 primary). Earlier, the `+` button in the v4 thumb
+    // strip accepted photos past the cap because v4's _handlePhoto did
+    // not check. Now enforced at three gates: _handlePhoto,
+    // _renderThumbs (hides the + button at the cap), and the chooser
+    // overlay.
     const V4_MAX_PHOTOS = 5;
 
     // ── Page 1: capture ─────────────────────────────────────────────────
@@ -217,7 +217,7 @@
 
         if (!cameraInput || !heroBtn) return;
 
-        // Phase 25.8 (May 2026) — wire the new meta-card location editor.
+        // wire the new meta-card location editor.
         // The pen button reveals an inline text input where the user can
         // type a place name or landmark (for cases where GPS is broken,
         // they're indoors, or the geocode returned the wrong area). On
@@ -230,7 +230,7 @@
         const locEditCancelBtn = document.getElementById('btn-v4-loc-cancel');
         const locEditSaveBtn = document.getElementById('btn-v4-loc-save');
         const locSuggestBox = document.getElementById('v4-meta-loc-suggest');
-        // Phase 25.12 (May 2026) — offline autocomplete for the location edit
+        // offline autocomplete for the location edit
         // input. Reuses the same `placeSearch` singleton (mobile-app/src/places.js)
         // that powers v3's location search: ~700 bundled cities + nearby
         // GPS-prefetched places + localStorage cache. Fully offline-capable.
@@ -380,7 +380,7 @@
             });
         }
 
-        // Phase 25.8 — section status badges (Photo n/5 count + Voice /
+        // section status badges (Photo n/5 count + Voice /
         // Text "Captured" pills). Driven by _refreshCapStrip's existing
         // call sites; this just adds a paint of the new per-section
         // elements alongside the now-hidden legacy chip strip.
@@ -395,7 +395,7 @@
                 photoCount.textContent = `${photos}/${V4_MAX_PHOTOS}`;
                 photoCount.classList.toggle('is-captured', photos > 0);
             }
-            // Phase 25.13 — Voice + Text are now compact chip toggles
+            // Voice + Text are now compact chip toggles
             // (`#v4-cap-chip-voice-status` / `#v4-cap-chip-text-status`)
             // instead of full-bleed sections with header badges. Status
             // shows up as a green dot on the chip when content exists.
@@ -411,7 +411,7 @@
         // Expose so _renderThumbs + other mutators can call it.
         window.__crispV4RefreshSectionBadges = _refreshSectionBadges;
 
-        // Phase 25.13 — Voice + Text are now collapsed-by-default compact
+        // Voice + Text are now collapsed-by-default compact
         // chips. Tapping a chip expands its inline panel (mic or
         // textarea) and collapses the other. Once the chip carries a
         // recording or text content, it stays styled as "captured" via
@@ -456,7 +456,7 @@
             });
         }
 
-        // Phase 25.4 — show a toast (via app.js's helper if available)
+        // show a toast (via app.js's helper if available)
         // when the user tries to add a 6th photo. Stays user-visible
         // without blocking the rest of the capture flow.
         function _toastCapHit() {
@@ -469,7 +469,7 @@
             }
         }
 
-        // Phase 25.4 — small action sheet shown when the `+` button on
+        // small action sheet shown when the `+` button on
         // the thumb strip is tapped. Replaces the previous single-click
         // straight-to-cameraInput behaviour (which on desktop fell back
         // to a file picker, hiding any way for the user to ACTUALLY
@@ -522,7 +522,7 @@
             });
         }
 
-        // Phase 25.4 — extracted from the heroBtn click handler so the
+        // extracted from the heroBtn click handler so the
         // `+` chooser's Camera option can re-use the SAME smart camera
         // logic (live getUserMedia modal on desktop with the existing
         // openCameraModal helper, OS-native camera-capture input on
@@ -540,14 +540,12 @@
                 const _preCount = (_getState().v4Photos || []).length;
                 window.openCameraModal();
                 const _modalCloseHandler = () => {
-                    // Phase 25.7 (May 2026) — the camera modal supports
+                    // the camera modal supports
                     // MULTI-SNAP: first snap → state.photoDataUrl, every
                     // subsequent snap → state.extraPhotos.push(...).
                     // The previous close handler only read photoDataUrl,
-                    // so users who took 5+ snaps inside the modal saw
-                    // only ONE thumbnail in the v4 strip after closing
-                    // (user-reported bug with screenshot showing 11
-                    // thumbs in the modal gallery → 1/5 in v4).
+                    // so taking 5+ snaps inside the modal surfaced only
+                    // ONE thumbnail in the v4 strip after closing.
                     // Now we pull the primary + each extra, dedupe, and
                     // hard-cap at V4_MAX_PHOTOS.
                     if (!_getState().v4Photos) _setState({ v4Photos: [] });
@@ -591,7 +589,7 @@
                         }
                     }
 
-                    // Phase 25.7 — after we copy the modal's snaps into
+                    // after we copy the modal's snaps into
                     // v4Photos, CLEAR state.extraPhotos so the v3-shape
                     // accumulator doesn't double-count on the next
                     // modal session. (We keep state.photoDataUrl + blob
@@ -607,9 +605,8 @@
                     if (capHit && candidates.length > added) {
                         _toastCapHit();
                     }
-                    // Phase 25.6 + 25.11 — auto-advance REMOVED and AI
-                    // prefill REMOVED. User taps Continue manually after
-                    // each step.
+                    // User taps Continue manually after each step — no
+                    // auto-advance, no AI-assisted prefill.
                     document.removeEventListener('camera-modal-closed', _modalCloseHandler);
                 };
                 document.addEventListener('camera-modal-closed', _modalCloseHandler);
@@ -630,7 +627,7 @@
         }
 
         // Hero / browse → trigger native file inputs.
-        // BUG 2 fix (May 2026) — on desktop, `<input capture=environment>`
+        // on desktop, `<input capture=environment>`
         // falls back to file picker. We detect desktop (no iOS UA + has
         // getUserMedia) and open the existing #camera-modal instead, which
         // uses live <video> + getUserMedia. The modal already writes
@@ -666,7 +663,7 @@
         // the v4 thumbnail — same data URL, no extra encode pass.
         const _handlePhoto = async (file) => {
             if (!file) return;
-            // Phase 25.4 — hard 5-photo cap. The previous code would
+            // hard 5-photo cap. The previous code would
             // accept indefinite photos via the `+` button. Bail before
             // the v3 ingest pipeline runs so we don't leak state.
             const photosNow = _getState().v4Photos || [];
@@ -688,7 +685,7 @@
                     await _v4FallbackIngest(file);
                 }
 
-                // Phase 25.6 (May 2026) — wait for state.photoDataUrl to
+                // wait for state.photoDataUrl to
                 // CHANGE, not just to become truthy. The previous version
                 // checked `!_getState().photoDataUrl`, which works for
                 // photo #1 but races on photo #2: state.photoDataUrl is
@@ -733,11 +730,9 @@
                     }
                 }
 
-                // Phase 25.6 + 25.11 — auto-advance REMOVED + AI prefill
-                // REMOVED. The 1.2s auto-advance timer made it impossible
-                // to add a second photo via the `+` button; users now tap
-                // Continue manually. AI prefill (vision-based classify
-                // suggestions) is gone too — reporters pick deliberately.
+                // No auto-advance from here. Users tap Continue manually
+                // so they can add more photos via the `+` button.
+                // Classify-step prefill is reporter-driven (no AI).
             } catch (e) {
                 console.error('[v4] photo handler failed:', e);
             }
@@ -782,7 +777,7 @@
             cameraInput.value = '';  // allow re-selecting the same file
         });
         browseInput.addEventListener('change', (e) => {
-            // Phase 25.4 — multi-select from gallery: slice down to the
+            // multi-select from gallery: slice down to the
             // remaining cap so a user who picks 10 files at once doesn't
             // race past the per-call check inside _handlePhoto (each call
             // reads state synchronously before any push, so without this
@@ -809,7 +804,7 @@
             _refreshGps();
         });
 
-        // ── Delta-C (May 2026) — multi-modal additive capture wiring ──
+        // ── Delta-C — multi-modal additive capture wiring ──
         //
         // The new capture page has 3 equal tiles (Photo / Voice / Type).
         // Photo reuses the existing camera/file flow above. Voice and
@@ -917,7 +912,7 @@
                 if (photos > 0) {
                     photoEl.removeAttribute('hidden');
                     if (photoLbl) {
-                        // Phase 25 — i18n photo count.
+                        // i18n photo count.
                         const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
                         if (photos === 1) {
                             photoLbl.textContent = _t('v4_photos_count_one') || '1 photo';
@@ -953,7 +948,7 @@
                 nextBtn.disabled = !anyShown;
                 nextBtn.classList.toggle('is-ready', anyShown);
             }
-            // Phase 25.8 — also paint the new per-section status badges
+            // also paint the new per-section status badges
             // (photo n/5, voice / text "Added"). Keeps the legacy chip
             // strip and the new section badges in sync since both react
             // to the same state changes.
@@ -1008,7 +1003,7 @@
                 return;
             }
             thumbsRow.style.display = 'flex';
-            // Phase 25.4 — hide the `+` button entirely once at the cap.
+            // hide the `+` button entirely once at the cap.
             // Photo count badge (n/5) goes on the row regardless.
             const atCap = photos.length >= V4_MAX_PHOTOS;
             const addBtnHtml = atCap ? '' : `
@@ -1041,13 +1036,13 @@
                 });
             });
             const addBtn = thumbsRow.querySelector('#v4-add-more');
-            // Phase 25.4 — `+` opens the Camera / Browse chooser instead
+            // `+` opens the Camera / Browse chooser instead
             // of jumping straight to a file picker on desktop.
             if (addBtn) addBtn.addEventListener('click', () => _openAddPhotoChooser());
         }
     }
 
-    // BUG 8 fix (May 2026) — prefer state.locationName (resolved by
+    // prefer state.locationName (resolved by
     // reverseGeocode → Nominatim) over raw lat/lng. Falls back to coords
     // when offline or before the resolve completes. Triggers
     // resolveLocationName() asynchronously so the pill updates from
@@ -1058,13 +1053,13 @@
             const acc = Math.max(0, Math.round(loc.acc || 0));
             return `${loc.lat.toFixed(4)}°, ${loc.lng.toFixed(4)}° · ±${acc}m`;
         }
-        // Phase 25 — i18n the "Locating…" status.
+        // i18n the "Locating…" status.
         const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
         return _t('v4_gps_locating') || 'Locating…';
     }
     function _paintV4LocationPills() {
         const s = _getState();
-        // Phase 25.8 — prefer the user-typed name if present, then the
+        // prefer the user-typed name if present, then the
         // reverse-geocoded name, then the formatted coords. The coords
         // row in the new meta card is filled independently when GPS
         // resolves so the user can still see lat/lng even after they've
@@ -1091,9 +1086,9 @@
         }
     }
 
-    // Phase 25.8 (May 2026) — actual timestamp + timezone in the meta
-    // card. The user reported "Just now" was unhelpful — for crisis
-    // forensics they want to see the literal capture time. Paints
+    // Live timestamp + timezone in the meta card. For crisis
+    // forensics responders need the literal capture time, not "Just
+    // now". Paints
     //   YYYY-MM-DD HH:MM:SS TZ
     // on stage-v4-capture entry and refreshes every second while the
     // user is on that stage so it stays current. Interval cleared
@@ -1155,7 +1150,7 @@
     function _refreshGps() {
         const text = document.getElementById('v4-meta-location-text');
         if (!text) return;
-        // Phase 25 — i18n the status strings.
+        // i18n the status strings.
         const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
         const LOCATING = _t('v4_gps_locating') || 'Locating…';
         const UNAVAILABLE = _t('v4_gps_unavailable') || 'GPS unavailable';
@@ -1200,7 +1195,7 @@
         }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
     }
 
-    // ── Page 2: classify (Delta-D + E rebuild, May 2026) ──────────────
+    // ── Page 2: classify ──────────────
     //
     // Single-question per sub-view. _classifyStep ∈ {'damage','infra','crisis'}
     // drives which .v4-classify-view is visible. Continue advances; Back
@@ -1249,14 +1244,13 @@
         const defaultOpt = damageOpts.find((o) => o.classList.contains('is-selected'));
         if (defaultOpt) _setState({ damage_classification: defaultOpt.getAttribute('data-value') });
 
-        // ── Infra tiles (sub-view 2) ── Phase 25.6 + 25.11 (May 2026):
-        // tap a tile to mark selection; user taps Continue to advance.
-        // No auto-advance anywhere in the classify flow — auto-advance
-        // surprised low-literacy users and made it impossible to undo a
-        // mis-tap. Phase 25.11 additionally calls _refreshClassifyNext()
-        // so the Continue button enables on first tap (the earlier
-        // _setState monkey-patch attempt was a no-op against a const
-        // binding, leaving Continue greyed even after selection).
+        // Infra tiles (sub-view 2). Tap a tile to mark selection;
+        // user taps Continue to advance. No auto-advance anywhere in
+        // the classify flow — it surprised low-literacy users and
+        // made it impossible to undo a mis-tap. _refreshClassifyNext()
+        // is called explicitly so the Continue button enables on first
+        // tap (a `_setState` wrap-and-reassign is a silent no-op against
+        // a const binding, so direct invocation is the right contract).
         const infraView = document.getElementById('v4-view-infra');
         const infraTiles = infraView ? Array.from(infraView.querySelectorAll('.v4-hit-tile')) : [];
         infraTiles.forEach((tile) => {
@@ -1445,7 +1439,7 @@
 
     // ── Page 3: review ──────────────────────────────────────────────────
     function _initReviewStage() {
-        // BUG 5 fix (May 2026) — UNDP must-have #6: relocate the existing
+        // UNDP must-have #6: relocate the existing
         // #building-select-box (which lives inside stage-crisis by default)
         // into the v4 review's #v4-building-mount the first time the user
         // lands on stage-v4-review. Done lazily so v3-mode users (when
@@ -1457,7 +1451,7 @@
             if (mount.contains(box)) return;  // already moved
             mount.appendChild(box);
             // BuildingSelect listens for `stage-entered: stage-v4-review`
-            // (added in May 2026). The double-rAF + setTimeout(500) inside
+            // (added in ). The double-rAF + setTimeout(500) inside
             // _tryInitMap handles the layout settle for Leaflet's
             // invalidateSize.
         }
@@ -1484,7 +1478,7 @@
             const stage = typeof e.detail === 'string' ? e.detail : (e.detail?.stage || '');
             if (stage === 'stage-v4-review') {
                 _ensureBuildingBoxInV4();
-                // Q10 (May 2026) — refresh the multi-modal captured strip
+                // Q10 — refresh the multi-modal captured strip
                 // every time the user lands on stage-v4-review. Photo /
                 // voice / text states could have changed during navigation
                 // (back→capture→retake, drawer→record, etc.).
@@ -1544,7 +1538,7 @@
         });
 
         // Voice drawer — wire mic + textarea.
-        // BUG 4 fix (May 2026) — voice-only path. v4 originally forwarded
+        // voice-only path. v4 originally forwarded
         // btn-v4-mic clicks to btn-mic.click(), which writes to v3-only
         // DOM (mic-icon, mic-label, rec-timer) — invisible in v4. Now
         // we own the recorder lifecycle and update the v4 mic button
@@ -1632,7 +1626,7 @@
             ? s.damage_classification.charAt(0) + s.damage_classification.slice(1).toLowerCase()
             : '—');
 
-        // Photo thumb. May 2026 hot-fix: add `.has-photo` class so the
+        // Photo thumb. hot-fix: add `.has-photo` class so the
         // dashed-border placeholder styling flips to a clean image card.
         const photos = s.v4Photos || [];
         const thumbDiv = document.getElementById('v4-summary-thumb');
@@ -1649,7 +1643,7 @@
         }
     }
 
-    // ── V4 voice recorder (BUG 4 fix, May 2026) ────────────────────────
+    // ── V4 voice recorder ────────────────────────
     // Self-contained MediaRecorder wrapper. Mirrors v3's startRecording
     // + stopRecording but updates the v4 mic-button visual state and
     // the v4 textarea instead of v3's #live-transcript / #mic-label.
@@ -1746,7 +1740,7 @@
     function _setV4MicVisualState(recording) {
         const btn = document.getElementById('btn-v4-mic');
         if (!btn) return;
-        // Phase 25 — fully i18n the mic-button label. Both branches now
+        // fully i18n the mic-button label. Both branches now
         // resolve via window.t() with a hardcoded English last-resort
         // fallback (so unit-tests + first-paint pre-i18n still render).
         const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
@@ -1767,7 +1761,7 @@
         }
     }
 
-    // Q10 (May 2026) — multi-modal "captured" strip on stage-v4-review.
+    // Q10 — multi-modal "captured" strip on stage-v4-review.
     // Reads state.photoDataUrl + state.audioBlob + state.description and
     // toggles the .is-captured class on each chip with a localized state
     // label ("Captured", "1.2s", "12 chars", or "Not added"). Called
@@ -1824,7 +1818,7 @@
         const sendBtn = document.getElementById('btn-v4-send');
         sendBtn.disabled = true;
         sendBtn.classList.add('is-sending');
-        // Phase 25 — i18n the spinner label. Note: we keep the icon as a
+        // i18n the spinner label. Note: we keep the icon as a
         // sibling so RTL layouts mirror correctly via flex flow.
         const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
         const sendingLabel = _t('v4_sending') || 'Sending…';
@@ -1866,7 +1860,7 @@
 
     // ── Stage transitions ───────────────────────────────────────────────
     function _goToCapture() {
-        // BUG 7 fix (May 2026) — clear prior report state before showing
+        // clear prior report state before showing
         // the capture stage. Without this, "Add another report" left the
         // previous photo in v4Photos, the previous description in state,
         // the previous buildingId / locationName / serviceStatus, and
@@ -1878,7 +1872,7 @@
         // _clearCaptureState only knows about v3 fields; clear the
         // v4-specific accumulator + thumb strip explicitly.
         if (window.state) window.state.v4Photos = [];
-        // Phase 25.3 (May 2026) — reset the classify-stage closure
+        // reset the classify-stage closure
         // variables + DOM selections. _clearCaptureState (above)
         // resets the underlying state.damage_classification /
         // infrastructure_type / crisis_type fields it now also
@@ -1978,7 +1972,7 @@
             goToClassify: _goToClassify,
             goToReview: _goToReview,
             isEnabled: () => window.__crispUiV4 === true,
-            // BUG 4 (May 2026) — voice-only path. Exposing the recorder
+            // BUG 4 — voice-only path. Exposing the recorder
             // surface lets tests verify the contract even in headless
             // environments without a real mic (mocking MediaRecorder).
             startRecording: _startV4Recording,

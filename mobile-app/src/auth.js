@@ -1,6 +1,6 @@
 /* global API_BASE, showToast, t, state, goToStage */
 // ─────────────────────────────────────────────────────────────────────────────
-//  CRISP AuthStore — Phase 1 (Apr 2026) Optional reporter login.
+//  CRISP AuthStore — Phase 1 Optional reporter login.
 //
 //  Anonymous-first design:
 //    * Reporting NEVER blocks on login.

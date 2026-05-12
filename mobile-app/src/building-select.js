@@ -191,13 +191,13 @@
         const pill = document.getElementById('building-selected-pill');
         if (pill) {
             pill.style.display = 'flex';
-            // Apr 2026 UI v2.1 — show the OSM name inside the pill so
+            // UI v2.1 — show the OSM name inside the pill so
             // the reporter gets immediate confirmation of WHAT they
             // just picked, not just "Building selected" generically.
             const nameSlot = pill.querySelector('.building-selected-name');
             if (nameSlot) nameSlot.textContent = osmName || `#${element.id}`;
         }
-        // M2 polish (May 2026) — broadcast selection so external listeners
+        // M2 polish — broadcast selection so external listeners
         // (e.g. the fullscreen-picker bottom sheet in app.js) can react
         // without poking into BuildingSelect's internals. The detail
         // payload carries everything an external view needs to render
@@ -247,7 +247,7 @@
         } catch (_) {}
     }
 
-    // ─── Lazy-load Leaflet (Phase B, May 2026) ─────────────────────────
+    // ─── Lazy-load Leaflet ─────────────────────────
     // Was eagerly loaded via <script> + <link> in index.html (~46 KB
     // home-page tax). Now injected on first ensureMap call. Idempotent
     // + concurrent-safe via a cached promise.
@@ -299,7 +299,7 @@
     /** Public entry point — init the map (idempotent). Callers pass the
      * current lat/lng so we don't depend on any particular state shape. */
     async function ensureMap(lat, lng) {
-        // May 2026 — lazy-load Leaflet on first ensureMap call. Was
+        // lazy-load Leaflet on first ensureMap call. Was
         // eagerly loaded via <script> in index.html.
         try {
             await _ensureLeaflet();
@@ -318,7 +318,7 @@
         _initInFlight = true;
 
         try {
-            // P5 scroll-lock fix (Apr 2026): explicit wheel/touch/dragging
+            // P5 scroll-lock fix: explicit wheel/touch/dragging
             // flags so the outer PWA page scroll reaches past the map
             // instead of being swallowed by Leaflet's default `passive:
             // false` wheel handler. Mouse-wheel zoom is disabled on the
@@ -327,7 +327,7 @@
             // arrow keys would fight. touchZoom + dragging stay on so
             // users can still interact; `tap` stays on for mobile hit
             // detection on building polygons.
-            // Apr 2026 — `tap: true` removed. Deprecated in Leaflet 1.7+,
+            // `tap: true` removed. Deprecated in Leaflet 1.7+,
             // accepted-but-ignored in 1.9.4 we ship; on iOS Safari the
             // legacy tap-handler path used to fight with native click
             // synthesis and produced double-tap-zoom regressions on
@@ -340,7 +340,7 @@
                 touchZoom: true,
                 dragging: true,
                 keyboard: false,
-                // Apr 2026 — `preferCanvas: true` makes Leaflet render
+                // `preferCanvas: true` makes Leaflet render
                 // overlays via a single <canvas> instead of one <svg>
                 // path per polygon. iOS Safari's SVG renderer occasionally
                 // failed to paint inside a transformed-then-detransformed
@@ -401,7 +401,7 @@
     // safe to call multiple times; `ensureMap` itself is idempotent, and
     // we clear the placeholder only after a successful tile fetch.
     //
-    // Apr 2026 — Safari fix: defer the init with double-rAF instead of
+    // Safari fix: defer the init with double-rAF instead of
     // setTimeout(0). The stage transition from display:none → block
     // queues a style change that hasn't flushed by the next macrotask
     // tick, so setTimeout(0) saw container.getBoundingClientRect() ===
@@ -436,7 +436,7 @@
                 if (!_map) return;
                 try { _map.invalidateSize({ animate: false }); } catch (_) {}
 
-                // Apr 2026 — second-chance invalidateSize 500 ms later.
+                // second-chance invalidateSize 500 ms later.
                 // iOS Safari sometimes settles layout AFTER the rAF cycle
                 // (when fetching CSS from cache, or when the page's flex
                 // tree finishes during the same task as our init). The
@@ -465,7 +465,7 @@
         }));
     }
 
-    // Apr 2026 UI v2.1 — wire up the flat <section>. The box is always
+    // UI v2.1 — wire up the flat <section>. The box is always
     // present in the DOM; the map initialises the first time the user
     // lands on v2-page-3 WITH a GPS fix. Previous design hung the
     // toggle off the <details> `toggle` event; after the flatten we
@@ -487,7 +487,7 @@
         // the submit-then-edit flow.
         document.addEventListener('stage-entered', (e) => {
             if (!e) return;
-            // Phase B4 (Apr 2026 UI v3) — the building-select box now lives
+            // the building-select box now lives
             // inside stage-crisis (moved there by migrateV3Blocks in app.js).
             // Init the map the moment the reporter lands there so the
             // Leaflet overlay is ready WHILE they're picking a crisis type.
@@ -539,7 +539,7 @@
         _wire();
     }
 
-    // ── Phase B2 (Apr 2026 UI v3) — building pre-cache ────────────────────
+    // ── — building pre-cache ────────────────────
     // Proactively warm the IndexedDB cache with the buildings nearest to
     // the user's current GPS position so an offline capture immediately
     // after opening the app (tunnel, crisis-zone cell-tower drop) still
@@ -603,7 +603,7 @@
         });
     }
 
-    // Phase 16 (May 2026) — `ensureLeaflet` is now part of the public
+    // `ensureLeaflet` is now part of the public
     // surface so My Reports' map-view + the report-detail mini-map can
     // eager-load Leaflet on first interaction. Before this, both
     // features silently no-op'd whenever the user hadn't already entered

@@ -1,5 +1,5 @@
 // ── voice-readout.js ─────────────────────────────────────────────────
-// CRISP UI v3 redesign — Phase 5 (May 2026, Q11/Flag-4 + M7).
+// CRISP UI v3 redesign — Phase 5.
 //
 // Purpose: every <element data-voice="<i18n-key>"> in the DOM gets a
 // 🔊 button auto-prepended. Tapping reads the question text aloud in
