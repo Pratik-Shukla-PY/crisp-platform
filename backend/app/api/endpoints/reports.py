@@ -58,6 +58,30 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # call-sites don't have to know which backend is active.
 from app.services.storage import get_storage as _get_media_storage  # noqa: E402
 
+def _normalize_crisis_type(value):
+    """Normalise crisis-type wire values to UNDP-canonical enums.
+
+    UNDP Problem Statement (page 8) lists 'Hurricane/Cyclone' as a single
+    natural-hazard category. The codebase historically accepted both
+    `HURRICANE` (legacy clients) and `CYCLONE` (UNDP-aligned), which let
+    the same physical event populate two different enum buckets in the
+    DB and confused dashboard filtering / counts. We pick `CYCLONE` as
+    the canonical name (matches the UNDP-aligned grouping in the backend
+    enum file) and rewrite `HURRICANE` to `CYCLONE` at every write site.
+
+    Idempotent — passing through `CYCLONE`, `EARTHQUAKE`, etc. returns
+    them unchanged. `None` / empty string / unknown values are returned
+    unchanged too (validation happens at the Pydantic / SQLAlchemy enum
+    layer, not here).
+    """
+    if value is None:
+        return None
+    s = value.value if hasattr(value, "value") else str(value)
+    if s == "HURRICANE":
+        return "CYCLONE"
+    return value
+
+
 def _content_type_for(filename: str) -> str:
     """Best-effort content-type from filename suffix. Used for S3 PUT
     so the dashboard's <img> / <audio> tags get the right MIME."""
@@ -1752,7 +1776,7 @@ def update_report_classification(report_id: str, request: dict, db: Session = De
     if "damage_classification" in request and request["damage_classification"]:
         report.damage_classification = request["damage_classification"]
     if "crisis_type" in request and request["crisis_type"]:
-        report.crisis_type = request["crisis_type"]
+        report.crisis_type = _normalize_crisis_type(request["crisis_type"])
     if "infrastructure_name" in request and request["infrastructure_name"]:
         report.infrastructure_name = request["infrastructure_name"]
     # channel bots (Telegram/WhatsApp/SMS) that
@@ -2221,7 +2245,7 @@ Compute the score breakdown and return JSON as specified."""
                 if inferred_sev in valid_sevs:
                     report.severity = SeverityEnum(inferred_sev)
                 if inferred_crisis:
-                    report.crisis_type = inferred_crisis
+                    report.crisis_type = _normalize_crisis_type(inferred_crisis)
                 if inferred_damage:
                     report.damage_classification = inferred_damage
 
