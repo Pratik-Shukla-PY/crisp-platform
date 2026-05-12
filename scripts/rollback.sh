@@ -5,7 +5,7 @@
 # downgrade IF the operator confirms (migration downgrades are usually
 # the danger zone), and restarts containers.
 #
-# Apr 2026 — built as the manual companion to deploy.sh's auto-rollback.
+# built as the manual companion to deploy.sh's auto-rollback.
 # Use this when:
 #   • The auto-rollback ran but landed on a bad earlier commit.
 #   • A bug surfaces hours after a green deploy.

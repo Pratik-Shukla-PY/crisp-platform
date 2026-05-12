@@ -15,7 +15,7 @@
 // After applying, run `node scripts/build-locale-skeletons.mjs` to
 // refresh the __meta__ block (coverage stats / gap_keys).
 //
-// Phase 25 (May 2026) — used to land native translations en-masse
+// used to land native translations en-masse
 // for the 22-locale UNDP submission set.
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';

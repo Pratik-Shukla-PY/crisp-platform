@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // scripts/lighthouse-pr-comment.mjs
 //
-// Renders a raw, deterministic (no AI) PR-comment Markdown summarizing
-// the most recent Lighthouse run. Designed to be POSTed by a follow-up
-// gh-script step in `.github/workflows/lighthouse.yml`.
+// Renders a deterministic PR-comment Markdown summarising the most
+// recent Lighthouse run. POSTed by a follow-up gh-script step in
+// `.github/workflows/lighthouse.yml`.
 //
 // Reads:
 //   .lighthouseci/summary.json (written by lighthouse-publish.mjs)

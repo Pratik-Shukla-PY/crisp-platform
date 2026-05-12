@@ -1,7 +1,7 @@
 #!/bin/bash
 # CRISP — production deploy script (runs on the EC2 host).
 #
-# Apr 2026 — single-host Docker Compose deploy. Pulls the latest commit
+# single-host Docker Compose deploy. Pulls the latest commit
 # on a branch, optionally rebuilds the backend image, runs Alembic
 # migrations, brings the stack up, and waits for the health endpoint.
 # If health doesn't go green within HEALTH_TIMEOUT_S, the script rolls

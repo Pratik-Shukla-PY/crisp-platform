@@ -14,17 +14,14 @@
 //   .lighthouseci/flow-report.html   (interactive timeline)
 //   .lighthouseci/flow-report.json   (machine-readable)
 //
-// Phase 4 — runnable on demand. CI integration deferred until the flow
-// stabilises (depends on what flake the multi-step audit shows on real
-// stages with TF.js / Mapbox cold-starts).
+// Runnable on demand. CI integration is deferred until the flow
+// stabilises (depends on the flake profile the multi-step audit shows
+// on real stages with TF.js / Mapbox cold-starts).
 //
 // Env:
 //   LH_FLOW_URL  — base URL (default: http://localhost:8080/mobile-app/src/)
 //   LH_FLOW_OUT  — output dir (default: .lighthouseci/)
 //   LH_HEADLESS  — '1' to run headless (default), '0' to open browser
-//
-// Open Claude Code and ask "analyze the latest user-flow audit" to get
-// AI prioritization of stage-transition perf issues.
 
 import fs from 'node:fs';
 import path from 'node:path';

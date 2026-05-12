@@ -3,11 +3,11 @@
 #
 # Diff an env file against the required-vars manifest before
 # `docker compose up -d --force-recreate backend`. Catches the
-# Phase 23 trap where an operator hand-edited `.env.production` and
-# accidentally dropped AWS_REGION, then restarted the container —
-# backend looked healthy because `S3Storage.get_storage()` only
-# raises on the first media request, hours after the bad state
-# reached user traffic.
+# silent-corruption trap where an operator hand-edits
+# `.env.production`, accidentally drops e.g. AWS_REGION, then
+# restarts: the backend looks healthy on boot because
+# `S3Storage.get_storage()` only raises on the first media request —
+# hours after the bad state has already reached user traffic.
 #
 # Usage:
 #   bash scripts/verify-env.sh                    # checks ~/crisp/.env.production
@@ -40,13 +40,13 @@ fi
 
 # ── manifests ────────────────────────────────────────────────────────
 #
-# REQUIRED: backend refuses to start (Phase 24 _validate_required_env)
+# REQUIRED: backend refuses to start 
 #           or a core feature is fully broken without it.
 # RECOMMENDED: nice-to-have; missing one degrades a feature but the
 #           backend still boots.
 
 REQUIRED=(
-    # Storage (the Phase 23 trap)
+    # Storage
     MEDIA_BACKEND
     AWS_S3_BUCKET
     AWS_REGION

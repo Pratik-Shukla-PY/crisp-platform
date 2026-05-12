@@ -16,7 +16,7 @@
 //   node scripts/import-i18n-worksheet.mjs --all           # all worksheets
 //   node scripts/import-i18n-worksheet.mjs <lang> --dry-run
 //
-// Phase 25 (May 2026) — UNDP submission deliverable. See
+// UNDP submission deliverable. See
 // docs/i18n-workflow.md.
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';

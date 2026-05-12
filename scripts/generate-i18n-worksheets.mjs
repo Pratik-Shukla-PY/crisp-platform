@@ -18,7 +18,7 @@
 // Re-run anytime; existing worksheets are overwritten (a translator's
 // in-progress work should live in a separate branch / sheet).
 //
-// Phase 25 (May 2026) — UNDP submission deliverable. See
+// UNDP submission deliverable. See
 // docs/i18n-workflow.md.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';

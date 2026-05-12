@@ -102,7 +102,7 @@ else
     echo "  Make sure the backend is running (bash start.sh)"
 fi
 
-# Apr 2026 — single-quote the trap body so $NGROK_PID expands when the
+# single-quote the trap body so $NGROK_PID expands when the
 # trap FIRES, not when it's registered (SC2064). Functionally identical
 # here (NGROK_PID is set before this line) but matches shellcheck's
 # safer-default expectation, and keeps the script copy-paste-correct

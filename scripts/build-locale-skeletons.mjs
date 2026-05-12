@@ -17,7 +17,7 @@
 //   node scripts/build-locale-skeletons.mjs            # write
 //   node scripts/build-locale-skeletons.mjs --dry-run  # report only
 //
-// Phase 25 (May 2026) — UNDP submission deliverable. See
+// UNDP submission deliverable. See
 // docs/i18n-workflow.md.
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';

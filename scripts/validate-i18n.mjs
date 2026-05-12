@@ -58,7 +58,7 @@ function templateVars(s) {
     return (typeof s === "string" ? (s.match(templateVarRe) || []) : []).sort();
 }
 
-// Phase 25 — South-Asian "stub" locales are dumped from inline
+// South-Asian "stub" locales are dumped from inline
 // EXTRA_LANG packs (Kannada / Hindi / Tamil / Telugu / Malayalam /
 // Bengali / Gujarati / Marathi / Punjabi / Urdu). They intentionally
 // contain ONLY the keys with hand-translated values; missing keys

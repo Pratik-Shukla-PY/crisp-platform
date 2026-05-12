@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dev-setup.sh — one-shot Postgres provisioning for CRISP local dev.
 #
-# Apr 2026 — CRISP is Postgres-only. This script gets you from a clean
+# CRISP is Postgres-only. This script gets you from a clean
 # `git clone` to a running backend in under 2 minutes on macOS + Linux.
 #
 # Two paths, tried in order:
