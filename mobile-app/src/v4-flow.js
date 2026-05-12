@@ -395,21 +395,66 @@
                 photoCount.textContent = `${photos}/${V4_MAX_PHOTOS}`;
                 photoCount.classList.toggle('is-captured', photos > 0);
             }
-            const voiceStatus = document.getElementById('v4-cap-section-voice-status');
-            if (voiceStatus) {
-                const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
-                voiceStatus.textContent = audioOk ? (_t('v4_cap_added') || 'Added') : '';
-                voiceStatus.classList.toggle('is-captured', audioOk);
-            }
-            const textStatus = document.getElementById('v4-cap-section-text-status');
-            if (textStatus) {
-                const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
-                textStatus.textContent = anyText ? (_t('v4_cap_added') || 'Added') : '';
-                textStatus.classList.toggle('is-captured', anyText);
-            }
+            // Phase 25.13 — Voice + Text are now compact chip toggles
+            // (`#v4-cap-chip-voice-status` / `#v4-cap-chip-text-status`)
+            // instead of full-bleed sections with header badges. Status
+            // shows up as a green dot on the chip when content exists.
+            const voiceChipStatus = document.getElementById('v4-cap-chip-voice-status');
+            const voiceChip = document.getElementById('v4-cap-chip-voice');
+            if (voiceChip) voiceChip.classList.toggle('is-captured', audioOk);
+            if (voiceChipStatus) voiceChipStatus.classList.toggle('is-on', audioOk);
+            const textChipStatus = document.getElementById('v4-cap-chip-text-status');
+            const textChip = document.getElementById('v4-cap-chip-text');
+            if (textChip) textChip.classList.toggle('is-captured', anyText);
+            if (textChipStatus) textChipStatus.classList.toggle('is-on', anyText);
         }
         // Expose so _renderThumbs + other mutators can call it.
         window.__crispV4RefreshSectionBadges = _refreshSectionBadges;
+
+        // Phase 25.13 — Voice + Text are now collapsed-by-default compact
+        // chips. Tapping a chip expands its inline panel (mic or
+        // textarea) and collapses the other. Once the chip carries a
+        // recording or text content, it stays styled as "captured" via
+        // the green dot regardless of expand state. Auto-expand on first
+        // tap of `Voice` / `Text` chip; user can manually collapse to
+        // free vertical space.
+        const voiceChipBtn = document.getElementById('v4-cap-chip-voice');
+        const textChipBtn = document.getElementById('v4-cap-chip-text');
+        const voicePanel = document.getElementById('v4-cap-voice-panel');
+        const textPanel = document.getElementById('v4-cap-text-panel');
+        function _setChipExpanded(chip, panel, on) {
+            if (!chip || !panel) return;
+            if (on) {
+                panel.removeAttribute('hidden');
+                chip.classList.add('is-expanded');
+                chip.setAttribute('aria-expanded', 'true');
+            } else {
+                panel.setAttribute('hidden', '');
+                chip.classList.remove('is-expanded');
+                chip.setAttribute('aria-expanded', 'false');
+            }
+        }
+        if (voiceChipBtn && voicePanel) {
+            voiceChipBtn.addEventListener('click', () => {
+                const expanding = voiceChipBtn.getAttribute('aria-expanded') !== 'true';
+                _setChipExpanded(voiceChipBtn, voicePanel, expanding);
+                // Auto-collapse the other chip's panel to keep the
+                // capture stage compact — only one extra surface open
+                // at a time.
+                if (expanding) _setChipExpanded(textChipBtn, textPanel, false);
+            });
+        }
+        if (textChipBtn && textPanel) {
+            textChipBtn.addEventListener('click', () => {
+                const expanding = textChipBtn.getAttribute('aria-expanded') !== 'true';
+                _setChipExpanded(textChipBtn, textPanel, expanding);
+                if (expanding) {
+                    _setChipExpanded(voiceChipBtn, voicePanel, false);
+                    const ta = document.getElementById('v4-cap-text-area');
+                    if (ta) setTimeout(() => ta.focus(), 60);
+                }
+            });
+        }
 
         // Phase 25.4 — show a toast (via app.js's helper if available)
         // when the user tries to add a 6th photo. Stays user-visible

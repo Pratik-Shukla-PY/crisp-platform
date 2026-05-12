@@ -7,14 +7,15 @@
     "tier": 1,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 596,
-    "translated_key_count": 592,
-    "gap_key_count": 4,
-    "coverage_percent": 99.3,
-    "generated_at": "2026-05-12T04:32:38.297Z",
+    "en_key_count": 595,
+    "translated_key_count": 590,
+    "gap_key_count": 5,
+    "coverage_percent": 99.2,
+    "generated_at": "2026-05-12T07:17:41.652Z",
     "gap_keys": [
       "home_sub",
       "summary_none",
+      "v4_cap_extras_label",
       "pwa_update_available",
       "pwa_update_now"
     ]
@@ -459,6 +460,7 @@
   "mr_group_older": "أقدم",
   "mr_empty_filtered": "لا تقارير تطابق هذا الفلتر.",
   "mr_map_empty": "لا تقارير بموقع بعد.",
+  "v4_cap_extras_label": "Add more (optional)",
   "v4_cap_photo": "صورة",
   "v4_cap_voice": "صوت",
   "v4_cap_text": "نص",

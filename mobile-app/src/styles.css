@@ -5988,29 +5988,34 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     gap: 10px;
 }
 
-/* Photo section — two action buttons (Camera, Browse) plus the
-   thumb strip (rendered by v4-flow.js's _renderThumbs). */
+/* Photo section — Phase 25.13: dominant on the capture stage. Larger
+   action buttons + roomier thumb-strip gutters. Voice + Text moved to
+   compact chip toggles below. */
+.v4-cap-section-photo .v4-cap-section-body {
+    padding: 14px 14px 16px;
+    gap: 14px;
+}
 .v4-cap-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    gap: 10px;
 }
 .v4-cap-actions[hidden] { display: none; }
 .v4-cap-action {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 12px;
-    border-radius: 10px;
+    gap: 10px;
+    padding: 18px 12px;
+    border-radius: 12px;
     border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 .v4-cap-action:active { transform: scale(0.98); }
-.v4-cap-action i { font-size: 14px; }
+.v4-cap-action i { font-size: 18px; }
 .v4-cap-action-primary {
     background: linear-gradient(135deg, var(--accent, #f97316), #ff7a00);
     color: #1f1300;
@@ -6024,6 +6029,89 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .v4-cap-action-secondary:hover {
     border-color: rgba(249, 115, 22, 0.4);
     background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Phase 25.13: compact Voice + Text chip toggles ──────────────
+   Replaces the prior full-bleed Voice / Text section cards. Users
+   asked for image capture to dominate the screen and treated audio +
+   text as low-priority extras. Each chip expands its inline panel
+   on tap; collapsed-by-default to keep the stage compact. Captured
+   state is signalled with a small green dot on the chip so users see
+   their content lands without having to keep the panel open. */
+.v4-cap-extras {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.v4-cap-extras-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-mute, var(--muted));
+    margin-left: 4px;
+}
+.v4-cap-extras-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.v4-cap-chip {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    background: var(--surface2, #131c2c);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.v4-cap-chip:active { transform: scale(0.98); }
+.v4-cap-chip-icon {
+    font-size: 14px;
+    color: var(--text-mute, var(--muted));
+}
+.v4-cap-chip.is-expanded {
+    border-color: rgba(249, 115, 22, 0.55);
+    background: rgba(249, 115, 22, 0.08);
+}
+.v4-cap-chip.is-expanded .v4-cap-chip-icon {
+    color: var(--accent, #f97316);
+}
+.v4-cap-chip.is-captured {
+    border-color: rgba(34, 197, 94, 0.45);
+}
+.v4-cap-chip-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: transparent;
+    transition: background 0.15s;
+}
+.v4-cap-chip-status.is-on {
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+.v4-cap-chip-panel {
+    padding: 12px 14px;
+    border: 1px solid var(--border, rgba(255,255,255,0.08));
+    border-radius: 12px;
+    background: var(--surface, #0f1622);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: v4CapPanelIn 0.18s ease both;
+}
+.v4-cap-chip-panel[hidden] { display: none; }
+@keyframes v4CapPanelIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Phase 25.8 — legacy v4-cap-grid + chip strip + drawers are kept
@@ -6202,14 +6290,17 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 
 .v4-thumbs {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     overflow-x: auto;
-    padding: 4px;
+    padding: 6px 4px 8px;
     -webkit-overflow-scrolling: touch;
 }
+/* Phase 25.13 — thumbs bumped from 64 px → 92 px so the preview is
+   actually legible after the user shoots a photo. The strip stays
+   horizontally scrollable for the 2nd-5th photos. */
 .v4-thumb {
-    width: 64px; height: 64px;
-    border-radius: 10px;
+    width: 92px; height: 92px;
+    border-radius: 12px;
     overflow: hidden;
     position: relative;
     flex-shrink: 0;

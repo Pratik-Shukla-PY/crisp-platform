@@ -7,11 +7,11 @@
     "tier": 1,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 596,
-    "translated_key_count": 581,
-    "gap_key_count": 15,
-    "coverage_percent": 97.5,
-    "generated_at": "2026-05-12T04:32:38.297Z",
+    "en_key_count": 595,
+    "translated_key_count": 579,
+    "gap_key_count": 16,
+    "coverage_percent": 97.3,
+    "generated_at": "2026-05-12T07:17:41.652Z",
     "gap_keys": [
       "home_sub",
       "report_id",
@@ -26,6 +26,7 @@
       "undp_lvl_ok",
       "undp_no",
       "landmark_chip_hospital",
+      "v4_cap_extras_label",
       "pwa_update_available",
       "pwa_update_now"
     ]
@@ -470,6 +471,7 @@
   "mr_group_older": "Anteriores",
   "mr_empty_filtered": "Ningún reporte coincide con este filtro.",
   "mr_map_empty": "Aún no hay reportes con ubicación.",
+  "v4_cap_extras_label": "Add more (optional)",
   "v4_cap_photo": "Foto",
   "v4_cap_voice": "Voz",
   "v4_cap_text": "Texto",

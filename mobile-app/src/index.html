@@ -515,7 +515,7 @@
                 <span class="home-utility-dot" aria-hidden="true">·</span>
                 <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
                 <span class="home-utility-dot" aria-hidden="true">·</span>
-                <span class="home-utility-version" id="home-utility-version">v0.7.36</span>
+                <span class="home-utility-version" id="home-utility-version">v0.7.37</span>
             </nav>
 
             <!-- Legacy retained DOM — kept hidden so any
@@ -673,17 +673,34 @@
                     </div>
                 </section>
 
-                <!-- ── Voice section ──────────────────────────────────── -->
-                <section class="v4-cap-section v4-cap-section-voice">
-                    <header class="v4-cap-section-head">
-                        <span class="v4-cap-section-icon" aria-hidden="true">🎙</span>
-                        <div class="v4-cap-section-title">
-                            <span class="v4-cap-section-label" data-i18n="v4_cap_voice">Voice</span>
-                            <span class="v4-cap-section-sub" data-i18n="v4_cap_voice_sub">Speak in your language</span>
-                        </div>
-                        <span class="v4-cap-section-status" id="v4-cap-section-voice-status"></span>
-                    </header>
-                    <div class="v4-cap-section-body">
+                <!-- ── Optional extras (Voice + Text) ─────────────────────
+                     Phase 25.13 (May 2026) — demoted Voice + Text from
+                     full-bleed stacked sections to compact chip toggles.
+                     User feedback: "Image capture should get more space
+                     on screen and preview. Audio and Text are low priority
+                     items so should be treated like that." Each chip
+                     expands its panel inline on tap; status badge on the
+                     chip shows captured-state without forcing the panel
+                     open. -->
+                <div class="v4-cap-extras">
+                    <span class="v4-cap-extras-label" data-i18n="v4_cap_extras_label">Add more (optional)</span>
+                    <div class="v4-cap-extras-row">
+                        <button class="v4-cap-chip" id="v4-cap-chip-voice"
+                                type="button" aria-expanded="false"
+                                aria-controls="v4-cap-voice-panel">
+                            <i class="fa-solid fa-microphone v4-cap-chip-icon" aria-hidden="true"></i>
+                            <span class="v4-cap-chip-label" data-i18n="v4_cap_voice">Voice</span>
+                            <span class="v4-cap-chip-status" id="v4-cap-chip-voice-status" aria-hidden="true"></span>
+                        </button>
+                        <button class="v4-cap-chip" id="v4-cap-chip-text"
+                                type="button" aria-expanded="false"
+                                aria-controls="v4-cap-text-panel">
+                            <i class="fa-solid fa-pen v4-cap-chip-icon" aria-hidden="true"></i>
+                            <span class="v4-cap-chip-label" data-i18n="v4_cap_text">Text</span>
+                            <span class="v4-cap-chip-status" id="v4-cap-chip-text-status" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                    <div class="v4-cap-chip-panel" id="v4-cap-voice-panel" hidden>
                         <button class="v4-cap-mic" id="btn-v4-cap-mic" type="button">
                             <i class="fa-solid fa-microphone" aria-hidden="true"></i>
                             <span data-i18n="v4_record">Record voice</span>
@@ -692,25 +709,13 @@
                             Tap to start. Tap again to stop.
                         </p>
                     </div>
-                </section>
-
-                <!-- ── Text section ───────────────────────────────────── -->
-                <section class="v4-cap-section v4-cap-section-text">
-                    <header class="v4-cap-section-head">
-                        <span class="v4-cap-section-icon" aria-hidden="true">✏️</span>
-                        <div class="v4-cap-section-title">
-                            <span class="v4-cap-section-label" data-i18n="v4_cap_text">Text</span>
-                            <span class="v4-cap-section-sub" data-i18n="v4_cap_text_sub">A quick note</span>
-                        </div>
-                        <span class="v4-cap-section-status" id="v4-cap-section-text-status"></span>
-                    </header>
-                    <div class="v4-cap-section-body">
+                    <div class="v4-cap-chip-panel" id="v4-cap-text-panel" hidden>
                         <textarea id="v4-cap-text-area" rows="3"
                                   class="v4-cap-text-area"
                                   placeholder="Describe what happened in a few words..."
                                   data-i18n-placeholder="placeholder_describe_short"></textarea>
                     </div>
-                </section>
+                </div>
             </div>
 
             <!-- Hidden native file inputs — same pattern app.js's existing
