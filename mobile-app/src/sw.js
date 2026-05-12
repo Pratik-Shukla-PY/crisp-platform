@@ -299,12 +299,37 @@ async function syncAllReports() {
         ? self.location.origin.replace(/:\d+$/, ':8000')
         : self.location.origin;
     console.log(`SW: Syncing ${items.length} queued reports`);
+
+    // If any active client (page) is open, wake its retry loop —
+    // the page-side code owns the chunked-variant pipeline. The SW's
+    // legacy single-PATCH path below only handles old-shape items
+    // (no `photoVariants`); modern items get processed by the page.
+    try {
+        const clients = await self.clients.matchAll({ includeUncontrolled: true });
+        const hasModernItems = items.some(it => it.photoVariants || (it.extraPhotosVariants || []).length);
+        if (clients.length && hasModernItems) {
+            clients.forEach((c) => {
+                try { c.postMessage({ type: 'SW_SYNC_WAKE', count: items.length }); } catch (_) {}
+            });
+            // Don't return — still process legacy-shape items below.
+        }
+    } catch (_) {}
+
     let synced = 0;
 
     for (const item of items) {
         try {
             const stages = item.stages || {};
             let reportId = item.serverId || null;
+
+            // Skip modern variant-shape items in the legacy path — they're
+            // owned by the page's retry loop, which knows about deferred
+            // tiers + per-chunk progress + reconciliation. Touching them
+            // here would risk falsely marking stages.photo true before
+            // every tier has actually landed.
+            if (item.photoVariants || (item.extraPhotosVariants || []).length) {
+                continue;
+            }
 
             // Stage 1: Send metadata if not done
             if (!stages.meta && item.meta) {
