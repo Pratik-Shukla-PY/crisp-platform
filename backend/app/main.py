@@ -17,6 +17,7 @@ import sys
 import logging
 import time
 from collections import defaultdict
+from contextlib import asynccontextmanager  # May 2026: FastAPI lifespan
 from dotenv import load_dotenv
 
 # Load .env into os.environ BEFORE any service singletons are imported
@@ -238,11 +239,29 @@ except RuntimeError as _err:
         _err, APP_ENV,
     )
 
+# May 2026 — FastAPI lifespan handler. Replaces the deprecated
+# @app.on_event("startup") decorator (warning was firing on every test
+# run + would have failed outright on FastAPI 1.x). Both startup AND
+# shutdown branches live in one async context manager:
+#   yield ⇒ everything before is startup, everything after is shutdown.
+# Today the shutdown branch is empty — the purge worker + Telegram poll
+# task are daemon threads / asyncio tasks that exit with the process.
+# Adding a shutdown step (e.g. graceful Telegram poll cancellation)
+# would slot in after the `yield`.
+@asynccontextmanager
+async def lifespan(app: "FastAPI"):  # forward-ref string is fine at module scope
+    await _run_startup_tasks()
+    yield
+    # (no shutdown work today; add cleanup here if/when threads need
+    # graceful join — currently they're daemons and exit with the process)
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    description="Community-driven Rapid Infrastructure Sensing Platform Backend API"
+    description="Community-driven Rapid Infrastructure Sensing Platform Backend API",
+    lifespan=lifespan,
 )
 
 # CORS — P2.7: tighter rules in production.
@@ -597,8 +616,10 @@ def _purge_loop():
         import time as _t
         _t.sleep(900)  # 15 minutes
 
-@app.on_event("startup")
-async def start_background_workers():
+async def _run_startup_tasks():
+    """Body runs once at app startup, invoked from the lifespan handler
+    above (line ~241). Was @app.on_event('startup') before May 2026;
+    rename + decorator removal closed the FastAPI deprecation warning."""
     # Purge worker
     t = threading.Thread(target=_purge_loop, daemon=True)
     t.start()
