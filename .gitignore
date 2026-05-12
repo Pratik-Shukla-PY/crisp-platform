@@ -62,6 +62,9 @@ backend/uploads_test/
 # eliminates the Kaggle CORS 404 PII-blur production bug.
 !mobile-app/src/vendor/blazeface/*.bin
 
+# Local developer notes (untracked working files; not part of the product)
+CLAUDE.md
+
 # IDE
 .vscode/
 .idea/
