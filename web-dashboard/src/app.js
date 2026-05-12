@@ -97,7 +97,74 @@ let priorityZones = new Set(JSON.parse(localStorage.getItem('crisp_priority_zone
 
 const SEV_SCORE = { CRITICAL: 10, SEVERE: 7, MODERATE: 4, MINOR: 2, UNKNOWN: 1 };
 const INFRA_WEIGHTS = { HOSPITAL: 10, POWER_PLANT: 8, POWER: 8, WATER_TREATMENT: 7, WATER: 7, ROAD: 3, BRIDGE: 5, SCHOOL: 4, HOUSE: 2, OTHER: 1 };
-const INFRA_ICONS = { HOSPITAL: 'fa-hospital', POWER: 'fa-bolt', WATER: 'fa-droplet', ROAD: 'fa-road', HOUSE: 'fa-house-crack', SCHOOL: 'fa-school', TELECOM: 'fa-tower-cell', GOVERNMENT: 'fa-landmark', OTHER: 'fa-triangle-exclamation' };
+// UNDP super-type icons + labels. Same labels appear on PWA tile titles
+// and dashboard badges — single source of truth across the two surfaces.
+// Legacy enum values (HOSPITAL, POWER, WATER, ROAD, HOUSE, SCHOOL, TELECOM)
+// alias to the UNDP super-type they were collapsed into during the Phase
+// 22 migration, so historical rows still render with a meaningful icon
+// and label.
+const INFRA_ICONS = {
+    // UNDP super-types (canonical)
+    RESIDENTIAL:             'fa-house',
+    COMMERCIAL:              'fa-shop',
+    GOVERNMENT:              'fa-landmark',
+    UTILITY:                 'fa-bolt',
+    TRANSPORT_COMMUNICATION: 'fa-road-bridge',
+    COMMUNITY:               'fa-hospital',
+    PUBLIC_SPACES:           'fa-tree-city',
+    OTHER:                   'fa-triangle-exclamation',
+    // Legacy aliases (rendered as their UNDP-aligned successor)
+    HOUSE:                   'fa-house',
+    HOSPITAL:                'fa-hospital',
+    SCHOOL:                  'fa-hospital',
+    POWER:                   'fa-bolt',
+    WATER:                   'fa-bolt',
+    ROAD:                    'fa-road-bridge',
+    TELECOM:                 'fa-road-bridge',
+};
+const INFRA_LABELS = {
+    RESIDENTIAL:             'Houses & apartments',
+    COMMERCIAL:              'Shops & markets',
+    GOVERNMENT:              'Government',
+    UTILITY:                 'Power, water, waste',
+    TRANSPORT_COMMUNICATION: 'Roads & bridges',
+    COMMUNITY:               'Schools & hospitals',
+    PUBLIC_SPACES:           'Stadiums, parks',
+    OTHER:                   'Other',
+    // Legacy aliases
+    HOUSE:                   'Houses & apartments',
+    HOSPITAL:                'Schools & hospitals',
+    SCHOOL:                  'Schools & hospitals',
+    POWER:                   'Power, water, waste',
+    WATER:                   'Power, water, waste',
+    ROAD:                    'Roads & bridges',
+    TELECOM:                 'Roads & bridges',
+};
+const CRISIS_LABELS = {
+    // Natural
+    EARTHQUAKE:        'Earthquake',
+    FLOOD:             'Flood',
+    TSUNAMI:           'Tsunami',
+    CYCLONE:           'Hurricane / Cyclone',
+    WILDFIRE:          'Wildfire',
+    // Technological
+    EXPLOSION:         'Explosion',
+    CHEMICAL_INCIDENT: 'Chemical',
+    // Human-made
+    CONFLICT:          'Conflict',
+    CIVIL_UNREST:      'Civil unrest',
+    // Catch-all
+    OTHER:             'Other',
+    // Legacy aliases (historical rows pre-migration-0016)
+    HURRICANE:         'Hurricane / Cyclone',
+    LANDSLIDE:         'Landslide',
+    PANDEMIC:          'Pandemic',
+};
+// Helpers — used wherever enum-style strings used to leak through
+// .replace(/_/g, ' ') into the UI. Pass through unknown values so a
+// future enum addition doesn't break the render.
+const infraLabel  = (v) => INFRA_LABELS[v]  || (v ? String(v).replace(/_/g, ' ') : '');
+const crisisLabel = (v) => CRISIS_LABELS[v] || (v ? String(v).replace(/_/g, ' ') : '');
 const SEV_COLORS = { CRITICAL: '#ef4444', SEVERE: '#f97316', MODERATE: '#eab308', MINOR: '#22c55e', UNKNOWN: '#64748b' };
 
 // ── QRT Queue State ───────────────────────────────────────────────────────────
@@ -1289,7 +1356,7 @@ function createIncidentCard(r) {
                 <span class="qrt-source-badge qrt-src-${(r.source || 'APP').toLowerCase()}" title="Source: ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i>',ANDROID:'<i class="fa-solid fa-robot"></i>',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i>',TELEGRAM:'<i class="fa-brands fa-telegram"></i>',SMS:'<i class="fa-solid fa-comment-sms"></i>',IVR:'<i class="fa-solid fa-phone"></i>'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i>'}</span>
             </div>
             ${r.crisis_type || r.damage_classification ? `<div class="qrt-undp-tags">
-                ${r.crisis_type ? `<span class="qrt-tag qrt-tag-crisis">${r.crisis_type.replace(/_/g,' ')}</span>` : ''}
+                ${r.crisis_type ? `<span class="qrt-tag qrt-tag-crisis">${crisisLabel(r.crisis_type)}</span>` : ''}
                 ${r.damage_classification ? `<span class="qrt-tag qrt-tag-dmg-${r.damage_classification}">${r.damage_classification.replace(/_/g,' ')}</span>` : ''}
             </div>` : ''}
             <div class="qrt-where">
@@ -1770,7 +1837,7 @@ function showIncidentPreview(r, event) {
             <div class="fp-header-info">
                 <div class="fp-title-row">
                     <i class="fa-solid ${INFRA_ICONS[r.infrastructure_type] || 'fa-triangle-exclamation'}" style="color:${sevColor};"></i>
-                    <span class="fp-type">${r.infrastructure_type.replace(/_/g,' ')}</span>
+                    <span class="fp-type">${infraLabel(r.infrastructure_type)}</span>
                     <span class="fp-sev-badge" style="background:${sevColor}20;color:${sevColor};">${r.severity}</span>
                     <span class="fp-status-badge fp-st-${r.status}">${r.status === 'RESPONDING' || r.status === 'RESOLVED' ? 'HELPED' : r.status === 'FALSE_ALARM' ? 'FALSE' : r.status}</span>
                 </div>
@@ -2156,7 +2223,7 @@ window.selectReport = (id, skipFly = false) => {
     // Header: type + severity + status + confidence + time
     document.getElementById('detail-title').innerHTML = `
         <i class="fa-solid ${infraIcon}" style="color:${sevColor};"></i>
-        ${r.infrastructure_type.replace(/_/g,' ')}
+        ${infraLabel(r.infrastructure_type)}
         <span class="detail-sev-badge detail-sev-${r.severity}">${r.severity}</span>
         <span class="status-badge status-${r.status}">${r.status}</span>
         <span class="dp-source-badge dp-src-${(r.source || 'APP').toLowerCase()}" title="Reported via ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i> App',ANDROID:'<i class="fa-solid fa-robot"></i> Android',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i> WhatsApp',TELEGRAM:'<i class="fa-brands fa-telegram"></i> Telegram',SMS:'<i class="fa-solid fa-comment-sms"></i> SMS',IVR:'<i class="fa-solid fa-phone"></i> Call'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i> App'}</span>
@@ -2260,7 +2327,7 @@ window.selectReport = (id, skipFly = false) => {
         <!-- ②b UNDP fields -->
         ${r.crisis_type || r.damage_classification || r.infrastructure_name || r.building_id || r.service_status ? `
         <div class="dp-undp-fields" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;">
-            ${r.crisis_type ? `<span class="dp-field-badge" style="background:rgba(124,58,237,0.15);color:#a78bfa;"><i class="fa-solid fa-cloud-bolt"></i> ${r.crisis_type.replace(/_/g,' ')}</span>` : ''}
+            ${r.crisis_type ? `<span class="dp-field-badge" style="background:rgba(124,58,237,0.15);color:#a78bfa;"><i class="fa-solid fa-cloud-bolt"></i> ${crisisLabel(r.crisis_type)}</span>` : ''}
             ${r.damage_classification ? `<span class="dp-field-badge" style="background:${r.damage_classification==='COMPLETE'?'rgba(239,68,68,0.15);color:#f87171':r.damage_classification==='PARTIAL'?'rgba(249,115,22,0.15);color:#fb923c':'rgba(34,197,94,0.15);color:#4ade80'};"><i class="fa-solid fa-building-circle-xmark"></i> ${r.damage_classification.replace(/_/g,' ')}</span>` : ''}
             ${r.infrastructure_name ? `<span class="dp-field-badge" style="background:rgba(59,130,246,0.15);color:#93c5fd;"><i class="fa-solid fa-building"></i> ${escapeHtml(r.infrastructure_name)}</span>` : ''}
             ${r.debris_clearing_needed ? `<span class="dp-field-badge" style="background:rgba(245,158,11,0.15);color:#fbbf24;"><i class="fa-solid fa-truck-pickup"></i> Debris clearing</span>` : ''}
@@ -2694,7 +2761,7 @@ window.dpOpenCompare = (r) => {
 
     overlay.innerHTML = `
         <div class="dp-compare-header">
-            <div class="dp-compare-title"><i class="fa-solid fa-columns"></i> Image Comparison — ${r.infrastructure_type.replace(/_/g,' ')} · ${r.severity}</div>
+            <div class="dp-compare-title"><i class="fa-solid fa-columns"></i> Image Comparison — ${infraLabel(r.infrastructure_type)} · ${r.severity}</div>
             <div class="dp-compare-overall">Overall: <strong style="color:${gc(total)};">${total}/100</strong></div>
             <button class="dp-compare-close" onclick="document.getElementById('dp-compare-overlay').style.display='none'"><i class="fa-solid fa-xmark"></i></button>
         </div>
@@ -3317,10 +3384,10 @@ window.exportPDF = (id) => {
       <button class="btn-print" onclick="window.print();">Print</button>
     </div>
 
-    <div class="hdr"><div><h1>CRISP Incident Report</h1><span class="rid">ID: ${r.id}</span></div><div style="text-align:right;"><div style="font-size:13px;font-weight:700;">${r.infrastructure_type.replace(/_/g,' ')}</div><span class="badge sev-${r.severity}">${r.severity}</span><span class="badge" style="background:#f1f5f9;border:1px solid #cbd5e1;">${r.status}</span></div></div>
+    <div class="hdr"><div><h1>CRISP Incident Report</h1><span class="rid">ID: ${r.id}</span></div><div style="text-align:right;"><div style="font-size:13px;font-weight:700;">${infraLabel(r.infrastructure_type)}</div><span class="badge sev-${r.severity}">${r.severity}</span><span class="badge" style="background:#f1f5f9;border:1px solid #cbd5e1;">${r.status}</span></div></div>
 
     <div class="section"><div class="section-title">Incident Overview</div>
-      <div class="row"><span class="k">Type</span><span class="v">${r.infrastructure_type.replace(/_/g,' ')}</span></div>
+      <div class="row"><span class="k">Type</span><span class="v">${infraLabel(r.infrastructure_type)}</span></div>
       <div class="row"><span class="k">Severity</span><span class="v">${r.severity}</span></div>
       <div class="row"><span class="k">Status</span><span class="v">${r.status}</span></div>
       <div class="row"><span class="k">Source</span><span class="v">${srcLabel}</span></div>
