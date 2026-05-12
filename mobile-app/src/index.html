@@ -515,7 +515,7 @@
                 <span class="home-utility-dot" aria-hidden="true">·</span>
                 <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
                 <span class="home-utility-dot" aria-hidden="true">·</span>
-                <span class="home-utility-version" id="home-utility-version">v0.7.42</span>
+                <span class="home-utility-version" id="home-utility-version">v0.7.43</span>
             </nav>
 
             <!-- Legacy retained DOM — kept hidden so any
@@ -612,9 +612,23 @@
                                 type="button" data-i18n="undp_save">Save</button>
                     </div>
                 </div>
+                <!-- May 2026 — three-line timestamp: IANA timezone name,
+                     human-readable timezone label, and local 12-hour
+                     clock. Replaces the previous single-line "YYYY-MM-DD
+                     HH:MM:SS GMT+05:30" which buried the meaningful
+                     pieces (timezone label + local clock) behind the
+                     numeric offset operators don't recognise at a
+                     glance. v4-flow.js _paintCaptureTimestamp() writes
+                     each span; the legacy #v4-meta-time-text id is
+                     preserved (now the local-clock slot) so any test
+                     selector pinned to it still finds something. -->
                 <div class="v4-meta-time-row">
                     <i class="fa-regular fa-clock v4-meta-time-icon" aria-hidden="true"></i>
-                    <span class="v4-meta-time-text" id="v4-meta-time-text">—</span>
+                    <div class="v4-meta-time-stack">
+                        <span class="v4-meta-time-tz-iana" id="v4-meta-time-tz-iana">—</span>
+                        <span class="v4-meta-time-tz-label" id="v4-meta-time-tz-label">—</span>
+                        <span class="v4-meta-time-text" id="v4-meta-time-text">—</span>
+                    </div>
                 </div>
             </div>
 

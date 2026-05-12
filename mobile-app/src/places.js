@@ -564,6 +564,14 @@ class PlaceSearch {
     }
 }
 
-// Global singleton
+// Global singleton — also exposed on `window` so test harnesses
+// (Playwright's page.evaluate) and devtools can reach it. The
+// script-scoped `const` alone isn't a property of the global
+// object (classic-script lexical binding); v4-flow.js's
+// `window.placeSearch` fallback at v4-flow.js:347 already assumed
+// this exposure, but it wasn't actually being written.
 const placeSearch = new PlaceSearch();
 placeSearch.loadNearbyFromCache();
+if (typeof window !== 'undefined') {
+    window.placeSearch = placeSearch;
+}

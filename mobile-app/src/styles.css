@@ -5818,6 +5818,25 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .v4-meta-loc-suggest-item.is-active {
     background: rgba(249, 115, 22, 0.10);
 }
+/* May 2026 — status hint surface inside the suggestion dropdown.
+   Three variants:
+     · -searching: "Searching nearby places…" (online, fetching remote)
+     · -offline:   "Offline — only cached places searched."
+     · -empty:     "No matches yet — try a nearby city or be more specific."
+   All non-interactive (no pointer cursor), small + muted so they
+   don't compete with real suggestions. */
+.v4-meta-loc-suggest-hint {
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 0;
+    cursor: default;
+}
+.v4-meta-loc-suggest-hint-searching { color: var(--muted); }
+.v4-meta-loc-suggest-hint-offline   { color: #f59e0b; }
+.v4-meta-loc-suggest-hint-empty     { color: var(--muted); }
 .v4-meta-loc-suggest-icon {
     color: var(--accent, #f97316);
     font-size: 13px;
@@ -5873,7 +5892,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 /* Time row */
 .v4-meta-time-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;  /* stack inside aligns with icon top */
     gap: 10px;
     padding-top: 8px;
     border-top: 1px dashed var(--border, rgba(255,255,255,0.08));
@@ -5882,10 +5901,35 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     color: var(--brand, #ffae00);
     font-size: 14px;
     flex-shrink: 0;
+    margin-top: 2px;  /* visual baseline with .v4-meta-time-tz-iana */
+}
+/* May 2026 — three-line timestamp stack.
+     · v4-meta-time-tz-iana  → "Asia/Kolkata" (IANA name, mono small)
+     · v4-meta-time-tz-label → "India Standard Time" (human label)
+     · v4-meta-time-text     → "10:42 PM" (local 12-hour clock) */
+.v4-meta-time-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.v4-meta-time-tz-iana {
+    color: var(--text-mute, var(--muted));
+    font-size: 11px;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.01em;
+    opacity: 0.85;
+}
+.v4-meta-time-tz-label {
+    color: var(--text, #e5e7eb);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
 }
 .v4-meta-time-text {
-    color: var(--text-mute, var(--muted));
-    font-size: 12px;
+    color: var(--brand, #ffae00);
+    font-size: 14px;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
 }

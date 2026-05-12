@@ -335,21 +335,122 @@
         if (locEditCancelBtn) locEditCancelBtn.addEventListener('click', _closeLocEdit);
         if (locEditSaveBtn) locEditSaveBtn.addEventListener('click', _saveLocEdit);
         if (locEditInput) {
-            locEditInput.addEventListener('input', () => {
-                _locSelected = null;
-                const q = locEditInput.value.trim();
-                // placeSearch.search() returns [] below 3 chars by design
-                // (too noisy on 1-2 char prefixes). Mirror that here.
-                if (q.length < 3) { _hideLocSuggestions(); return; }
+            // May 2026 — debounced remote fallback. Previously the input
+            // handler ONLY called placeSearch.search() (offline: ~700
+            // bundled cities + nearby-GPS pre-fetch + localStorage cache).
+            // Anything outside that set — "Dudhwa National Park", a
+            // village, a landmark, a town outside the prefetch box —
+            // returned [] and the user saw NO suggestions. The
+            // searchRemote() helper exists in places.js:498 and hits
+            // Nominatim; it was just never wired into v4. Now:
+            //   · Local results render INSTANTLY (cached + bundled) for
+            //     responsive typing
+            //   · Remote fetch fires after 350ms of typing pause + only
+            //     when online; results merge with local + re-render
+            //   · navigator.onLine off → skip remote, hint "offline —
+            //     limited suggestions"
+            //   · Empty merged results → hint "no matches — try a
+            //     nearby city or be more specific"
+            // searchRemote() caches the Nominatim response keyed by
+            // query, so a repeat type of the same prefix is instant.
+            let _remoteDebounce = null;
+            let _remoteInFlightFor = null;
+            function _hintEl() {
+                // Reuses the suggestion box as the hint surface so we
+                // don't grow new DOM. Cleared by _hideLocSuggestions /
+                // _renderLocSuggestions.
+                return locSuggestBox;
+            }
+            function _showHint(text, kind) {
+                if (!locSuggestBox) return;
+                const escText = String(text).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+                locSuggestBox.innerHTML =
+                    `<div class="v4-meta-loc-suggest-hint v4-meta-loc-suggest-hint-${kind}" role="status">${escText}</div>`;
+                locSuggestBox.removeAttribute('hidden');
+            }
+            function _runLocalSearch(q) {
                 let results = [];
                 try {
                     const ps = (typeof placeSearch !== 'undefined') ? placeSearch
                              : (typeof window !== 'undefined' && window.placeSearch) || null;
                     if (ps && typeof ps.search === 'function') {
-                        results = ps.search(q);
+                        results = ps.search(q) || [];
                     }
-                } catch (_) { /* placeSearch unavailable — gracefully no suggestions */ }
-                _renderLocSuggestions(results);
+                } catch (_) {}
+                return results;
+            }
+            function _mergeAndRender(q, localResults, remoteResults) {
+                // Dedupe by name|country. Local first (already-known
+                // results stay on top — they're frequently the user's
+                // own previously-picked places via cache).
+                const seen = new Set();
+                const merged = [];
+                for (const list of [localResults, remoteResults || []]) {
+                    for (const p of list) {
+                        if (!p || !p.name) continue;
+                        const key = (p.name + '|' + (p.country || '')).toLowerCase();
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        merged.push(p);
+                    }
+                }
+                if (merged.length) {
+                    _renderLocSuggestions(merged.slice(0, 8));
+                    return;
+                }
+                // No matches at all.
+                if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                    _showHint('Offline — only cached places searched. Connect to find more.', 'offline');
+                } else {
+                    _showHint('No matches yet — try a nearby city or be more specific.', 'empty');
+                }
+            }
+
+            locEditInput.addEventListener('input', () => {
+                _locSelected = null;
+                const q = locEditInput.value.trim();
+                // placeSearch.search() returns [] below 3 chars by design
+                // (too noisy on 1-2 char prefixes). Mirror that here.
+                if (q.length < 3) {
+                    _hideLocSuggestions();
+                    if (_remoteDebounce) { clearTimeout(_remoteDebounce); _remoteDebounce = null; }
+                    return;
+                }
+
+                // Instant local results.
+                const localResults = _runLocalSearch(q);
+                if (localResults.length) {
+                    _renderLocSuggestions(localResults);
+                } else if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                    _showHint('Offline — searching cached places only…', 'offline');
+                } else {
+                    _showHint('Searching nearby places…', 'searching');
+                }
+
+                // Debounced remote enrichment (online only).
+                if (_remoteDebounce) clearTimeout(_remoteDebounce);
+                if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+                _remoteDebounce = setTimeout(() => {
+                    _remoteDebounce = null;
+                    // Don't fire if the user has typed past this query
+                    // already (avoid stale paint after fast typing).
+                    const currentQ = locEditInput.value.trim();
+                    if (currentQ !== q) return;
+                    _remoteInFlightFor = q;
+                    try {
+                        const ps = (typeof placeSearch !== 'undefined') ? placeSearch
+                                 : (typeof window !== 'undefined' && window.placeSearch) || null;
+                        if (!ps || typeof ps.searchRemote !== 'function') return;
+                        ps.searchRemote(q, (remoteResults) => {
+                            // Race guard: the user may have kept typing
+                            // while Nominatim was responding. Only render
+                            // if this callback is still the latest in-flight.
+                            if (_remoteInFlightFor !== q) return;
+                            if (locEditInput.value.trim() !== q) return;
+                            _mergeAndRender(q, _runLocalSearch(q), remoteResults);
+                        });
+                    } catch (_) { /* searchRemote unavailable — keep local hint */ }
+                }, 350);
             });
             locEditInput.addEventListener('keydown', (e) => {
                 const hasList = _locSuggestions.length > 0;
@@ -1135,29 +1236,87 @@
     // user is on that stage so it stays current. Interval cleared
     // when the user navigates away.
     let _v4CapTimeInterval = null;
+    // May 2026 — three-line timestamp. Was a single line like
+    // "2026-05-12 22:39:35 GMT+5:30" which buried the meaningful
+    // bits behind a numeric offset operators don't recognise at a
+    // glance. New layout (top → bottom):
+    //   • IANA timezone name           e.g. "Asia/Kolkata"
+    //   • Human-readable timezone      e.g. "India Standard Time"
+    //   • Local 12-hour clock          e.g. "10:42 PM"
+    // All three drawn from Intl.DateTimeFormat — supported by every
+    // PWA-target browser (Chrome 24+, Safari 10+, Firefox 29+, every
+    // Android WebView since 2016). Locale follows navigator.language
+    // so non-English PWA users get a label in their own language
+    // ("Heure normale d'Inde", "Indische Standardzeit" etc.); we
+    // pass `'en'` only as a fallback if Intl rejects the auto-detected
+    // locale. Falls back gracefully on the rare browser without
+    // timeZoneName 'long' support.
     function _paintCaptureTimestamp() {
-        const el = document.getElementById('v4-meta-time-text');
-        if (!el) return;
+        // Local-clock slot (kept the legacy id so any existing
+        // selector pinned to #v4-meta-time-text still finds something).
+        const elClock = document.getElementById('v4-meta-time-text');
+        const elIana  = document.getElementById('v4-meta-time-tz-iana');
+        const elLabel = document.getElementById('v4-meta-time-tz-label');
+        if (!elClock && !elIana && !elLabel) return;
         const now = new Date();
-        const pad = (n) => String(n).padStart(2, '0');
-        const datePart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-        const timePart = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-        // Timezone abbreviation via Intl (e.g. "IST", "PDT"). Falls
-        // back to GMT±NN if the browser doesn't supply a short name.
-        let tz = '';
+        const browserLocale = (typeof navigator !== 'undefined' && navigator.language) || 'en';
+
+        // 1. IANA timezone name — resolvedOptions.timeZone returns the
+        // current zone in canonical form ("Asia/Kolkata"). On the rare
+        // browser that returns "UTC" or an empty string we fall back
+        // to a synthesised offset label.
+        let iana = '';
         try {
-            const parts = new Intl.DateTimeFormat(undefined, {
-                timeZoneName: 'short',
-            }).formatToParts(now);
-            tz = (parts.find((p) => p.type === 'timeZoneName') || {}).value || '';
+            iana = new Intl.DateTimeFormat(browserLocale).resolvedOptions().timeZone || '';
         } catch (_) {}
-        if (!tz) {
+        if (!iana) {
             const offMin = -now.getTimezoneOffset();
             const sign = offMin >= 0 ? '+' : '-';
             const abs = Math.abs(offMin);
-            tz = `GMT${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+            const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+            const mm = String(abs % 60).padStart(2, '0');
+            iana = `UTC${sign}${hh}:${mm}`;
         }
-        el.textContent = `${datePart} ${timePart} ${tz}`;
+
+        // 2. Human-readable timezone label — timeZoneName 'long' gives
+        // the full name ("India Standard Time", "Pacific Daylight
+        // Time"). Fallback to 'short' (IST, PDT) if the long form
+        // isn't supported, then to the offset.
+        let label = '';
+        try {
+            const longParts = new Intl.DateTimeFormat(browserLocale, {
+                timeZoneName: 'long',
+            }).formatToParts(now);
+            label = (longParts.find((p) => p.type === 'timeZoneName') || {}).value || '';
+        } catch (_) {}
+        if (!label) {
+            try {
+                const shortParts = new Intl.DateTimeFormat(browserLocale, {
+                    timeZoneName: 'short',
+                }).formatToParts(now);
+                label = (shortParts.find((p) => p.type === 'timeZoneName') || {}).value || '';
+            } catch (_) {}
+        }
+        if (!label) label = iana;  // last-ditch fallback
+
+        // 3. Local 12-hour clock — "10:42 PM". hour: 'numeric' (not
+        // '2-digit') so we get "9:05 PM" instead of "09:05 PM", which
+        // matches the operator's mental model.
+        let clock = '';
+        try {
+            clock = new Intl.DateTimeFormat(browserLocale, {
+                hour: 'numeric', minute: '2-digit', hour12: true,
+            }).format(now);
+        } catch (_) {
+            const h = now.getHours();
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const h12 = h % 12 || 12;
+            clock = `${h12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
+        }
+
+        if (elIana)  elIana.textContent  = iana;
+        if (elLabel) elLabel.textContent = label;
+        if (elClock) elClock.textContent = clock;
     }
     function _startCaptureTimer() {
         _paintCaptureTimestamp();
