@@ -307,7 +307,12 @@
      */
     async function blurFaces(srcBlob, opts) {
         const t0 = performance.now();
-        const quality = (opts && typeof opts.quality === 'number') ? opts.quality : 0.85;
+        // High default quality (0.95) so the post-blur blob feeding the
+        // LARGE archival variant preserves source fidelity. The visible
+        // re-encode is unavoidable (canvas has to materialise the blur
+        // paint somehow), but 0.95 is visually lossless on JPEG vs. the
+        // previous 0.85 which compounded with the upstream encode.
+        const quality = (opts && typeof opts.quality === 'number') ? opts.quality : 0.95;
 
         // lazy-load tf.js + blazeface scripts on first call.
         // Prior to this change the libraries were always preloaded via
