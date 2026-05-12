@@ -182,6 +182,14 @@
     }
     function _getState() { return window.state; }
 
+    // Phase 25.4 (May 2026) — hard cap on photos per report. Matches
+    // the v3 MAX_PHOTOS_TOTAL (4 extras + 1 primary). User-reported
+    // bug: the `+` button in the v4 thumb strip would keep accepting
+    // photos past the cap because v4's _handlePhoto didn't check.
+    // Now enforced at three gates: _handlePhoto, _renderThumbs (hides
+    // the + button at the cap), and the chooser overlay.
+    const V4_MAX_PHOTOS = 5;
+
     // ── Page 1: capture ─────────────────────────────────────────────────
     function _initCaptureStage() {
         const cameraInput = document.getElementById('v4-file-camera');
@@ -196,33 +204,100 @@
 
         if (!cameraInput || !heroBtn) return;
 
-        // Hero / browse → trigger native file inputs.
-        // BUG 2 fix (May 2026) — on desktop, `<input capture=environment>`
-        // falls back to file picker. We detect desktop (no iOS UA + has
-        // getUserMedia) and open the existing #camera-modal instead, which
-        // uses live <video> + getUserMedia. The modal already writes
-        // state.photoDataUrl + state.photoVariants on snap (matches v4
-        // contract), so v4 just needs to refresh the thumbnail strip when
-        // the modal closes.
-        heroBtn.addEventListener('click', () => {
+        // Phase 25.4 — show a toast (via app.js's helper if available)
+        // when the user tries to add a 6th photo. Stays user-visible
+        // without blocking the rest of the capture flow.
+        function _toastCapHit() {
+            const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
+            const msg = _t('photo_cap_reached') || `Max ${V4_MAX_PHOTOS} photos per report`;
+            if (typeof window.showToast === 'function') {
+                window.showToast(msg, 'info');
+            } else {
+                console.warn('[v4]', msg);
+            }
+        }
+
+        // Phase 25.4 — small action sheet shown when the `+` button on
+        // the thumb strip is tapped. Replaces the previous single-click
+        // straight-to-cameraInput behaviour (which on desktop fell back
+        // to a file picker, hiding any way for the user to ACTUALLY
+        // open the live camera). Two options:
+        //   • Camera   — opens the same smart camera path as the hero
+        //                button (live getUserMedia on desktop, OS
+        //                camera on iOS / Android).
+        //   • Browse   — opens the existing file-picker (gallery).
+        // Tapping the dim backdrop or Cancel dismisses with no action.
+        function _openAddPhotoChooser() {
+            const photos = _getState().v4Photos || [];
+            if (photos.length >= V4_MAX_PHOTOS) {
+                _toastCapHit();
+                return;
+            }
+            const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
+            // Reuse if already present in DOM.
+            let sheet = document.getElementById('v4-photo-chooser');
+            if (!sheet) {
+                sheet = document.createElement('div');
+                sheet.id = 'v4-photo-chooser';
+                sheet.className = 'v4-photo-chooser';
+                document.body.appendChild(sheet);
+            }
+            sheet.innerHTML = `
+                <div class="v4-photo-chooser-backdrop" data-action="cancel"></div>
+                <div class="v4-photo-chooser-sheet" role="dialog" aria-modal="true">
+                    <button class="v4-photo-chooser-btn" data-action="camera" type="button">
+                        <i class="fa-solid fa-camera"></i>
+                        <span>${_t('chooser_camera') || 'Camera'}</span>
+                    </button>
+                    <button class="v4-photo-chooser-btn" data-action="browse" type="button">
+                        <i class="fa-solid fa-image"></i>
+                        <span>${_t('chooser_gallery') || 'Browse files'}</span>
+                    </button>
+                    <button class="v4-photo-chooser-cancel" data-action="cancel" type="button">${_t('cancel') || 'Cancel'}</button>
+                </div>
+            `;
+            sheet.style.display = 'flex';
+            const _close = () => { sheet.style.display = 'none'; };
+            sheet.querySelectorAll('[data-action]').forEach((el) => {
+                el.addEventListener('click', (ev) => {
+                    const action = el.getAttribute('data-action');
+                    _close();
+                    if (action === 'camera') _openCameraSmart();
+                    else if (action === 'browse') browseInput.click();
+                    // 'cancel' just closes
+                    ev.stopPropagation();
+                });
+            });
+        }
+
+        // Phase 25.4 — extracted from the heroBtn click handler so the
+        // `+` chooser's Camera option can re-use the SAME smart camera
+        // logic (live getUserMedia modal on desktop with the existing
+        // openCameraModal helper, OS-native camera-capture input on
+        // mobile/iOS where getUserMedia isn't reliable).
+        function _openCameraSmart() {
+            const photos = _getState().v4Photos || [];
+            if (photos.length >= V4_MAX_PHOTOS) {
+                _toastCapHit();
+                return;
+            }
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
             const hasGUM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
             if (!isIOS && hasGUM && typeof window.openCameraModal === 'function') {
-                // Watch state.photoDataUrl: when the user snaps, the modal
-                // writes it. After modal closes, we refresh the v4 thumb
-                // strip + advance like _handlePhoto would.
                 const _preDataUrl = _getState().photoDataUrl;
+                const _preCount = (_getState().v4Photos || []).length;
                 window.openCameraModal();
-                // Hook the close: when state.photoDataUrl changes from null
-                // → set, run the v4 post-capture flow once.
                 const _modalCloseHandler = () => {
                     const dataUrl = _getState().photoDataUrl;
                     if (dataUrl && dataUrl !== _preDataUrl) {
-                        // Inject into v4Photos so the thumb strip renders.
                         if (!_getState().v4Photos) _setState({ v4Photos: [] });
-                        const photos = _getState().v4Photos;
-                        if (!photos.find((p) => p.url === dataUrl)) {
-                            photos.push({
+                        const photosNow = _getState().v4Photos;
+                        // Cap recheck — between modal open and snap the
+                        // user might have hit the cap via another path.
+                        if (photosNow.length >= V4_MAX_PHOTOS) {
+                            _toastCapHit();
+                        } else if (!photosNow.find((p) => p.url === dataUrl)) {
+                            photosNow.push({
                                 blob: _getState().photoBlob,
                                 url: dataUrl,
                                 ts: Date.now(),
@@ -231,21 +306,21 @@
                         _renderThumbs();
                         nextBtn.disabled = false;
                         nextBtn.classList.add('is-ready');
-                        // Fire AI prefill on the captured frame too.
+                        // AI prefill call retained but no-ops in 25.4
+                        // due to AI_PREFILL_ENABLED = false.
                         _maybeFireAiPrefill(_getState().photoBlob || null).catch(() => {});
-                        // Auto-advance after 1.2s (same as file-input path).
-                        setTimeout(() => {
-                            if (document.querySelector('#stage-v4-capture.active')) {
-                                _goToClassify();
-                            }
-                        }, 1200);
+                        // Only auto-advance from the FIRST photo, not subsequent ones.
+                        if (_preCount === 0) {
+                            setTimeout(() => {
+                                if (document.querySelector('#stage-v4-capture.active')) {
+                                    _goToClassify();
+                                }
+                            }, 1200);
+                        }
                     }
                     document.removeEventListener('camera-modal-closed', _modalCloseHandler);
                 };
                 document.addEventListener('camera-modal-closed', _modalCloseHandler);
-                // Also poll as fallback in case the modal close event isn't
-                // dispatched (legacy installs without the patch). Polls
-                // every 200ms for up to 60s, then gives up.
                 let _polls = 0;
                 const _modalPoll = setInterval(() => {
                     const m = document.getElementById('camera-modal');
@@ -260,8 +335,28 @@
             } else {
                 cameraInput.click();
             }
+        }
+
+        // Hero / browse → trigger native file inputs.
+        // BUG 2 fix (May 2026) — on desktop, `<input capture=environment>`
+        // falls back to file picker. We detect desktop (no iOS UA + has
+        // getUserMedia) and open the existing #camera-modal instead, which
+        // uses live <video> + getUserMedia. The modal already writes
+        // state.photoDataUrl + state.photoVariants on snap (matches v4
+        // contract), so v4 just needs to refresh the thumbnail strip when
+        // the modal closes.
+        // Hero button (first-capture slot) — uses the extracted smart
+        // camera path. Same behaviour as before; logic now lives in
+        // _openCameraSmart so the `+` chooser can re-use it.
+        heroBtn.addEventListener('click', () => _openCameraSmart());
+        browseBtn.addEventListener('click', () => {
+            const photos = _getState().v4Photos || [];
+            if (photos.length >= V4_MAX_PHOTOS) {
+                _toastCapHit();
+                return;
+            }
+            browseInput.click();
         });
-        browseBtn.addEventListener('click', () => browseInput.click());
 
         // Photo handler — delegates to v3's `__crispIngestFile` so the
         // EXACT v3 pipeline runs:
@@ -279,6 +374,14 @@
         // the v4 thumbnail — same data URL, no extra encode pass.
         const _handlePhoto = async (file) => {
             if (!file) return;
+            // Phase 25.4 — hard 5-photo cap. The previous code would
+            // accept indefinite photos via the `+` button. Bail before
+            // the v3 ingest pipeline runs so we don't leak state.
+            const photosNow = _getState().v4Photos || [];
+            if (photosNow.length >= V4_MAX_PHOTOS) {
+                _toastCapHit();
+                return;
+            }
             try {
                 // Make sure v3's stage-photo setup ran (it exposes
                 // __crispIngestFile via window). If not yet ready (e.g.
@@ -391,7 +494,16 @@
             cameraInput.value = '';  // allow re-selecting the same file
         });
         browseInput.addEventListener('change', (e) => {
-            Array.from(e.target.files || []).forEach((f) => _handlePhoto(f));
+            // Phase 25.4 — multi-select from gallery: slice down to the
+            // remaining cap so a user who picks 10 files at once doesn't
+            // race past the per-call check inside _handlePhoto (each call
+            // reads state synchronously before any push, so without this
+            // slice the first 10 calls would all see length=0).
+            const incoming = Array.from(e.target.files || []);
+            const current = (_getState().v4Photos || []).length;
+            const remaining = Math.max(0, V4_MAX_PHOTOS - current);
+            if (incoming.length > remaining) _toastCapHit();
+            incoming.slice(0, remaining).forEach((f) => _handlePhoto(f));
             browseInput.value = '';
         });
 
@@ -601,6 +713,15 @@
                 return;
             }
             thumbsRow.style.display = 'flex';
+            // Phase 25.4 — hide the `+` button entirely once at the cap.
+            // Photo count badge (n/5) goes on the row regardless.
+            const atCap = photos.length >= V4_MAX_PHOTOS;
+            const addBtnHtml = atCap ? '' : `
+                <button class="v4-thumb v4-thumb-add" id="v4-add-more" type="button"
+                        aria-label="Add another photo">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+            `;
             thumbsRow.innerHTML = photos.map((p, i) => `
                 <div class="v4-thumb">
                     <img src="${p.url}" alt="">
@@ -608,10 +729,8 @@
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
-            `).join('') + `
-                <button class="v4-thumb v4-thumb-add" id="v4-add-more" type="button">
-                    <i class="fa-solid fa-plus"></i>
-                </button>
+            `).join('') + addBtnHtml + `
+                <span class="v4-thumb-count" aria-live="polite">${photos.length}/${V4_MAX_PHOTOS}</span>
             `;
             thumbsRow.querySelectorAll('.v4-thumb-x').forEach((btn) => {
                 btn.addEventListener('click', (ev) => {
@@ -627,7 +746,9 @@
                 });
             });
             const addBtn = thumbsRow.querySelector('#v4-add-more');
-            if (addBtn) addBtn.addEventListener('click', () => cameraInput.click());
+            // Phase 25.4 — `+` opens the Camera / Browse chooser instead
+            // of jumping straight to a file picker on desktop.
+            if (addBtn) addBtn.addEventListener('click', () => _openAddPhotoChooser());
         }
     }
 
@@ -1011,8 +1132,20 @@
         try { _refreshClassifyNext(); } catch (_) {}
     }
 
+    // Phase 25.4 (May 2026) — disable AI auto-completion of damage /
+    // infra / crisis chips per user direction. The user reported the
+    // auto-fill quality was not OK; we'd rather have the reporter
+    // pick the 3 chips deliberately than auto-fill from a Claude
+    // vision pass that occasionally guessed wrong. The pre-fill
+    // function below is preserved (call sites + UI banner unchanged)
+    // but gated by this flag so re-enabling later is a one-line edit.
+    const AI_PREFILL_ENABLED = false;
+
     // ── AI pre-fill ─────────────────────────────────────────────────────
     async function _maybeFireAiPrefill(blob) {
+        if (!AI_PREFILL_ENABLED) {
+            return;  // feature disabled — see AI_PREFILL_ENABLED comment above
+        }
         // Bandwidth gate — only fire on FAST or better. The probe runs
         // independently in app.js; we read the cached tier here. If it's
         // missing we default to NOT firing (conservative — never block

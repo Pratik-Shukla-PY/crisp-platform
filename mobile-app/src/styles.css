@@ -5945,6 +5945,97 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     cursor: pointer;
     font-size: 20px;
 }
+/* Phase 25.4 — n/5 photo-count chip rendered at the end of the
+   thumbs row. Reuses the muted "info" color and the same height
+   as the thumbs so the row reads as one unit. */
+.v4-thumb-count {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    padding: 0 10px;
+    height: 28px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--muted, #94a3b8);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+/* Phase 25.4 — action-sheet shown when the `+` thumb button is
+   tapped. Two big buttons (Camera / Browse) over a dim backdrop;
+   tapping the backdrop or Cancel dismisses. Anchored to bottom on
+   phones, centered on wider viewports. */
+.v4-photo-chooser {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+}
+.v4-photo-chooser-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    cursor: pointer;
+}
+.v4-photo-chooser-sheet {
+    position: relative;
+    width: min(420px, calc(100vw - 24px));
+    margin: 0 12px max(12px, env(safe-area-inset-bottom));
+    background: var(--bg, #0b0f17);
+    border: 1px solid var(--v4-tile-border, rgba(255,255,255,0.1));
+    border-radius: 14px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+}
+.v4-photo-chooser-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--v4-tile-bg, rgba(255,255,255,0.04));
+    border: 1px solid var(--v4-tile-border, rgba(255,255,255,0.1));
+    border-radius: 10px;
+    color: var(--text, #f1f5f9);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.v4-photo-chooser-btn:hover {
+    background: var(--v4-tile-bg-hover, rgba(255,255,255,0.08));
+}
+.v4-photo-chooser-btn i {
+    font-size: 18px;
+    color: var(--brand, #ffae00);
+    width: 24px;
+    text-align: center;
+}
+.v4-photo-chooser-cancel {
+    margin-top: 4px;
+    padding: 12px;
+    background: transparent;
+    border: 0;
+    color: var(--muted, #94a3b8);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+.v4-photo-chooser-cancel:hover {
+    color: var(--text, #f1f5f9);
+}
+@media (min-width: 600px) {
+    .v4-photo-chooser { align-items: center; }
+    .v4-photo-chooser-sheet { margin-bottom: 0; }
+}
 
 .v4-secondary-row {
     display: grid;
