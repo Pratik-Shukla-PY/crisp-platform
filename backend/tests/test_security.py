@@ -33,6 +33,35 @@ class TestPasswordHashing:
         h2 = hash_password("Same@Pass1")
         assert h1 != h2  # bcrypt uses random salt
 
+    def test_legacy_passlib_hash_verifies(self):
+        # Back-compat lock for the May 2026 passlib → direct-bcrypt migration.
+        # This is a literal hash that passlib 1.7.4's CryptContext(schemes=
+        # ["bcrypt"]) produced for password "LegacyPass@2026" in its prior
+        # deployed configuration ($2b$12$ format, 12-round cost factor —
+        # passlib's default at the time of the migration).
+        #
+        # If a future refactor changes hash_password() or verify_password()
+        # in a way that breaks this readback, every pre-migration user in
+        # the production users table is locked out. The check must hold
+        # indefinitely — or at least until a deliberate one-way password-
+        # rotation campaign runs.
+        legacy_hash = "$2b$12$/XXwl3csqM//p8GrvwbxseLSTBo0K8LgoJfLHNWOjm9zPDLqhD/Vq"
+        assert verify_password("LegacyPass@2026", legacy_hash) is True, (
+            "Direct-bcrypt verify failed against a passlib-era hash — "
+            "BREAKING CHANGE for every pre-migration user. Investigate "
+            "_bcrypt.checkpw signature drift before merging."
+        )
+        # Negative control: wrong password against the same legacy hash.
+        assert verify_password("WrongPass@2026", legacy_hash) is False
+
+    def test_verify_handles_malformed_hash(self):
+        # passlib's CryptContext.verify returned False on garbage input
+        # rather than raising. Our shim preserves that contract so call
+        # sites in auth.py don't need a try/except.
+        assert verify_password("anything", "not-a-hash") is False
+        assert verify_password("anything", "") is False
+        assert verify_password("anything", None) is False  # type: ignore[arg-type]
+
 
 # ── Password Policy ──────────────────────────────────────────────────────────
 

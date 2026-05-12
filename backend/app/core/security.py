@@ -22,7 +22,12 @@ from email.mime.multipart import MIMEMultipart
 # tests) don't have to change.
 import jwt
 from jwt import PyJWTError as JWTError
-from passlib.context import CryptContext
+# May 2026 — Password hashing migrated OFF passlib (last release 2020;
+# imports the removed-in-Python-3.13 `crypt` stdlib module; its
+# detect_wrap_bug self-test breaks on bcrypt 5.x). We call bcrypt
+# directly. Wire format unchanged ($2b$12$…) so historical password
+# hashes still verify cleanly through the cutover.
+import bcrypt as _bcrypt
 
 logger = logging.getLogger(__name__)
 
@@ -72,15 +77,41 @@ SMTP_FROM = os.getenv("SMTP_FROM", "CRISP Platform <noreply@crisp.undp.org>")
 
 # ── Password Hashing ─────────────────────────────────────────────────────────
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt has a hard 72-byte password limit baked into the algorithm.
+# passlib silently truncated, bcrypt 4.x silently truncated too, bcrypt
+# 5.x raises ValueError instead. Truncating explicitly here makes the
+# behavior identical across all three eras so a future bcrypt 5.x bump
+# (currently blocked by the pin in requirements.txt) is a one-line move.
+_BCRYPT_MAX_PASSWORD_BYTES = 72
+_BCRYPT_ROUNDS = 12  # matches the cost factor passlib defaulted to
 
 
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    """Hash a plaintext password with bcrypt. Returns the standard
+    $2b$<rounds>$<salt><hash> string format passlib used to emit, so a
+    user who registered before this migration keeps logging in unchanged.
+    """
+    pw_bytes = plain.encode("utf-8")[:_BCRYPT_MAX_PASSWORD_BYTES]
+    return _bcrypt.hashpw(pw_bytes, _bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)).decode("ascii")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verify a plaintext against a stored bcrypt hash. Accepts BOTH new
+    hashes (produced by this module) AND legacy hashes from the passlib
+    era — same $2b$… wire format, so back-compat is byte-level identity.
+    Returns False on any error (malformed hash, wrong algorithm prefix)
+    rather than raising — matches passlib's prior contract so call sites
+    in auth.py don't change."""
+    if not hashed or not isinstance(hashed, str):
+        return False
+    try:
+        pw_bytes = plain.encode("utf-8")[:_BCRYPT_MAX_PASSWORD_BYTES]
+        return _bcrypt.checkpw(pw_bytes, hashed.encode("utf-8"))
+    except (ValueError, TypeError):
+        # Malformed hash (e.g. legacy non-bcrypt prefix, empty, or
+        # mutated bytes) — same outcome as passlib's CryptContext.verify
+        # when the input isn't a recognisable hash.
+        return False
 
 
 def validate_password_strength(password: str) -> tuple[bool, str]:
