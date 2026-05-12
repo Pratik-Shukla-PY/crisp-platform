@@ -5,7 +5,7 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v129';
+const CACHE_NAME = 'crisp-v130';
 
 // Derive base path from SW's own URL (works regardless of where the app is served)
 const SW_BASE = self.location.href.replace(/sw\.js$/, '');
