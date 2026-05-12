@@ -825,6 +825,24 @@
                         <span class="v4-hit-tile-sub" data-i18n="v4_infra_other_sub">Describe in your own words</span>
                     </button>
                 </div>
+                <!-- Conditional reveal — only visible when the OTHER tile is
+                     selected. UNDP "Other, please specify": the reporter MUST
+                     provide a free-text descriptor. _initClassifyStage in
+                     v4-flow.js toggles the [hidden] attribute on tile click
+                     and gates the Continue button on this input being
+                     non-empty. -->
+                <div id="v4-infra-other-prompt" class="v4-other-prompt" hidden>
+                    <label for="v4-infra-other-input"
+                           class="v4-other-prompt-label"
+                           data-i18n="v4_infra_other_prompt">Please describe what type of infrastructure</label>
+                    <input id="v4-infra-other-input"
+                           type="text"
+                           class="v4-other-prompt-input"
+                           autocomplete="off"
+                           maxlength="120"
+                           placeholder="e.g. cell tower, religious site, agricultural shed"
+                           data-i18n-placeholder="v4_infra_other_placeholder">
+                </div>
             </section>
 
             <!-- ── Sub-view 3: What caused it? (progressive 3-card drill) -->

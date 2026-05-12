@@ -1137,7 +1137,11 @@
             { v: 'EARTHQUAKE', i: 'fa-house-crack', k: 'crisis_earthquake' },
             { v: 'FLOOD',      i: 'fa-water',       k: 'crisis_flood' },
             { v: 'TSUNAMI',    svg: '<path d="M2 17c3 0 4-3 8-3s5 3 9 3"/><path d="M2 21c3 0 4-3 8-3s5 3 9 3"/><path d="M9 14c0-3 1-5 3-7l4 8"/>', k: 'crisis_tsunami' },
-            { v: 'HURRICANE',  i: 'fa-wind',        k: 'crisis_hurricane' },
+            // UNDP wording is "Hurricane/Cyclone" — one category. CYCLONE
+            // is the canonical wire-format enum (matches backend +
+            // dashboard). The i18n key keeps its historical name; only
+            // its English VALUE changed to "Hurricane / Cyclone".
+            { v: 'CYCLONE',    i: 'fa-wind',        k: 'crisis_hurricane' },
             { v: 'WILDFIRE',   svg: '<path d="M8 21h8"/><path d="M12 21v-3"/><path d="M9 18a4 4 0 0 1-2-3c0-3 3-4 3-7 0 3 4 3 4 7a4 4 0 0 1-2 3"/><path d="M11 11c-1-1-1-2 0-4 1 2 2 2 2 4"/>', k: 'crisis_wildfire' },
         ],
         tech: [
@@ -1181,6 +1185,8 @@
         // a const binding, so direct invocation is the right contract).
         const infraView = document.getElementById('v4-view-infra');
         const infraTiles = infraView ? Array.from(infraView.querySelectorAll('.v4-hit-tile')) : [];
+        const otherPrompt = document.getElementById('v4-infra-other-prompt');
+        const otherInput = document.getElementById('v4-infra-other-input');
         infraTiles.forEach((tile) => {
             tile.addEventListener('click', () => {
                 infraTiles.forEach((t) => {
@@ -1189,11 +1195,31 @@
                 });
                 tile.classList.add('is-selected');
                 tile.setAttribute('aria-checked', 'true');
-                _setState({ infrastructure_type: tile.getAttribute('data-value') });
+                const value = tile.getAttribute('data-value');
+                _setState({ infrastructure_type: value });
+                // UNDP "Other, please specify": reveal the free-text input
+                // when OTHER is selected; hide it (and clear any stale text)
+                // when any other tile is selected.
+                if (otherPrompt && otherInput) {
+                    if (value === 'OTHER') {
+                        otherPrompt.removeAttribute('hidden');
+                        setTimeout(() => { try { otherInput.focus(); } catch (_) {} }, 60);
+                    } else {
+                        otherPrompt.setAttribute('hidden', '');
+                        otherInput.value = '';
+                        _setState({ infrastructure_name: null });
+                    }
+                }
                 _updateReviewSummary();
                 _refreshClassifyNext();
             });
         });
+        if (otherInput) {
+            otherInput.addEventListener('input', () => {
+                _setState({ infrastructure_name: otherInput.value });
+                _refreshClassifyNext();
+            });
+        }
 
         // ── Crisis cards + drill-down (sub-view 3) ──
         const crisisView = document.getElementById('v4-view-crisis');
@@ -1313,7 +1339,16 @@
     function _canAdvanceFrom(step) {
         const s = window.state || {};
         if (step === 'damage') return !!s.damage_classification;
-        if (step === 'infra')  return !!s.infrastructure_type;
+        if (step === 'infra') {
+            if (!s.infrastructure_type) return false;
+            // UNDP "Other, please specify": when OTHER is the selection,
+            // require a non-empty descriptor before allowing Continue.
+            if (s.infrastructure_type === 'OTHER') {
+                const name = (s.infrastructure_name || '').trim();
+                return name.length > 0;
+            }
+            return true;
+        }
         if (step === 'crisis') return !!s.crisis_type;
         return true;
     }
