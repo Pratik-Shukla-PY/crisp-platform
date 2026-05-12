@@ -3874,6 +3874,80 @@ def get_media_redirect(
     )
 
 
+# ── Tier-status reconciliation ───────────────────────────────────
+#
+# The PWA caches its in-flight upload state (`item.photoVariants`,
+# `item.extraPhotosVariants`) in IndexedDB and decides locally when a
+# report is "fully delivered" before deleting its queue row. This
+# endpoint lets the PWA reconcile that local view against the
+# authoritative server state before dequeueing: "does the backend
+# actually have every Media row I think I sent, and is every row
+# assembled?" If a tier is missing or stuck partial, the PWA keeps
+# the queue item and retries on the next sync pass.
+#
+# No Bearer auth — same anonymity contract as the chunk endpoints
+# (UNDP must-have #9: submission must work without login). The
+# report_id is a UUID and only the original submitter knows the
+# media_ids associated with it.
+@router.get("/{report_id}/tier-status")
+def get_report_tier_status(
+    report_id: str,
+    db: Session = Depends(get_db),
+):
+    """Return the server-side assembly status of every Media row for a report.
+
+    Used by the PWA's pre-dequeue reconciliation step. The PWA matches
+    each row's `id` against its local `photoVariants[tier].mediaId` /
+    `extraPhotosVariants[i][tier].mediaId` to confirm every expected
+    tier was assembled before deleting the IndexedDB queue row.
+
+    Response shape:
+        {
+          "report_id": "...",
+          "media": [
+            {
+              "id": "<media UUID>",
+              "photo_group_id": "<group UUID or null>",
+              "type": "IMAGE" | "AUDIO",
+              "resolution_tier": "LOW" | "MEDIUM" | "HIGH" | "ORIGINAL",
+              "assembly_status": "complete" | "assembling" | "pending" | "failed",
+              "completion_pct": 0-100,
+              "received_chunks": int,
+              "chunk_count": int
+            },
+            ...
+          ]
+        }
+    """
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    media_rows = db.query(Media).filter(Media.id.in_(
+        db.query(Media.id).filter(Media.report_id == report_id)
+    )).all() if False else db.query(Media).filter(Media.report_id == report_id).all()
+
+    return {
+        "report_id": report_id,
+        "media": [
+            {
+                "id": m.id,
+                "photo_group_id": getattr(m, "photo_group_id", None),
+                "type": (m.type.value if hasattr(m.type, "value") else str(m.type)) if m.type else None,
+                "resolution_tier": (
+                    m.resolution_tier.value
+                    if hasattr(m.resolution_tier, "value") else str(m.resolution_tier)
+                ) if m.resolution_tier else None,
+                "assembly_status": m.assembly_status or "pending",
+                "completion_pct": float(m.completion_pct or 0),
+                "received_chunks": int(m.received_chunks or 0),
+                "chunk_count": int(m.chunk_count or 0),
+            }
+            for m in media_rows
+        ],
+    }
+
+
 # ── Stable satellite URLs ────────────────────────────────────────
 #
 # Background — the satellite verification feature stores 1 primary image,
