@@ -41,7 +41,7 @@ from .bot_replies import (
 logger = logging.getLogger(__name__)
 
 
-# Phase 23 — /start <token> decoder.
+# /start <token> decoder.
 #
 # Telegram bot deep-links can carry a `start` payload (max 64 chars,
 # charset [A-Za-z0-9_-]). The CRISP PWA passes its anonymous
@@ -180,7 +180,7 @@ async def _capture_any_media(session, message: dict):
             session.type_answered = True
             captured = True
         elif session.state == "STEP_BUILDING_NAME" and not session.infra_name_answered:
-            # Phase D (Apr 2026 UI v3) — native-language building name. Cap at
+            # native-language building name. Cap at
             # 120 chars to match backend `infrastructure_name` column width.
             # Never overwritten by subsequent messages — once answered, subsequent
             # text falls through to the description slot below.
@@ -206,7 +206,7 @@ def _next_missing_step(session) -> str:
     phones via SMS/IVR-class channels — must still be able to file a report
     even if they can't attach a photo.
     """
-    # Phase B4 (Apr 2026 UI v3) — question sequence reordered to match the
+    # question sequence reordered to match the
     # PWA's 8-stage capture flow:
     #
     #   1 Evidence (photo / voice / text)     → STEP_PHOTO
@@ -226,7 +226,7 @@ def _next_missing_step(session) -> str:
     # include a caption with their first media — by the time we reach
     # STEP_DESCRIPTION `session.text` is almost always populated, and we
     # skip to READY.
-    # Apr 2026 UX fix — match the PWA/RN 8-stage capture-flow sequence
+    # UX fix — match the PWA/RN 8-stage capture-flow sequence
     # exactly so evaluators comparing channels see the same order:
     #
     #   1 home           ← handled by /start + consent
@@ -281,7 +281,7 @@ async def _prompt_for_step(session, chat_id: int, step: str):
     elif step == "STEP_SEVERITY":
         await send_step_severity(chat_id, lang)
     elif step == "STEP_BUILDING_NAME":
-        # Apr 2026 UX fix — if we have GPS, try to offer nearby OSM
+        # UX fix — if we have GPS, try to offer nearby OSM
         # buildings as tap-to-pick chips first. Reporter taps one → done.
         # Timeout/empty-result falls through to the free-text prompt.
         picked = False
@@ -329,7 +329,7 @@ async def handle_update(update: dict):
     text = message.get("text", "").strip()
 
     # /start always resets — show language picker.
-    # Phase 23 — also accept an optional payload (`/start <token>`).
+    # also accept an optional payload (`/start <token>`).
     # Telegram delivers t.me/<bot>?start=foo as the message text
     # "/start foo". When the payload is a 32-hex PWA device-hash we
     # stamp it on the session so the eventual Report row carries the
@@ -453,7 +453,7 @@ async def _handle_callback(callback_query: dict):
         session.lang = detected
     lang = session.lang
 
-    # Apr 2026 UX fix — multi-tap debounce. Users tap a chip, see nothing
+    # UX fix — multi-tap debounce. Users tap a chip, see nothing
     # for 500-800 ms while the backend roundtrip runs, tap again in
     # frustration. Without this guard the second callback fires the
     # same handler (crisis_type clicked twice → re-sends the next-step
@@ -582,7 +582,7 @@ async def _handle_callback(callback_query: dict):
         await _finalize(session)
         return
 
-    # ── Apr 2026 Telegram UX — OSM building pick: `bldg:osm:way:<id>`
+    # ── Telegram UX — OSM building pick: `bldg:osm:way:<id>`
     # (or `bldg:osm:relation:<id>`). Resolves directly to session.building_id
     # + mirrors the OSM name into `infra_name` via update_report_metadata.
     if data.startswith("bldg:osm:"):
@@ -605,7 +605,7 @@ async def _handle_callback(callback_query: dict):
         await send_step_building_name(chat_id, session.lang or detected)
         return
 
-    # ── Phase D (Apr 2026 UI v3) — skip the native-language building prompt.
+    # ── — skip the native-language building prompt.
     # The reporter chose not to name the building. Mark the slot answered so
     # `_next_missing_step` advances; `infra_name` stays empty.
     if data == "skip_building":
@@ -619,7 +619,7 @@ async def _handle_callback(callback_query: dict):
             await _prompt_for_step(session, chat_id, next_step)
         return
 
-    # ── Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No.
+    # ── — debris Yes/No.
     # Tapping either flips `debris_answered=True` and records the value
     # on `debris_needed`; the flow then advances to the next missing step.
     if data in DEBRIS_MAP:
@@ -635,7 +635,7 @@ async def _handle_callback(callback_query: dict):
             await _prompt_for_step(session, chat_id, next_step)
         return
 
-    # Phase B4 — grouped crisis keyboard renders "— GROUP —" separator
+    # — grouped crisis keyboard renders "— GROUP —" separator
     # buttons for visual clarity. They carry a `noop_group_*` callback
     # that silently ACKs the tap so the user doesn't see a spinner.
     if data.startswith("noop_"):
@@ -690,7 +690,7 @@ async def _handle_callback(callback_query: dict):
         return
 
     # ── Damage classification buttons ──
-    # Apr 2026 UX parity with PWA — severity is auto-derived from damage:
+    # UX parity with PWA — severity is auto-derived from damage:
     # MINIMAL→MINOR, PARTIAL→MODERATE, COMPLETE→SEVERE. Saves one chip
     # step and matches what the PWA / RN flows do. Reporters can still
     # override on the severity prompt if we ever keep it in the future.

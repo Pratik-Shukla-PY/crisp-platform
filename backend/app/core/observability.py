@@ -129,7 +129,7 @@ chunks_rejected_total = Counter(
     ["reason"],
 )
 
-# Apr 2026 — binary-chunk transport migration (Option A).
+# binary-chunk transport migration (Option A).
 # Split by transport format so operators can watch the base64 → binary
 # shift in real time and catch anomalous fall-back rates (binary → base64
 # after a 404 on legacy backends). Intentionally a NEW counter rather than
@@ -140,7 +140,7 @@ chunk_transport_total = Counter(
     ["transport", "outcome"],  # transport ∈ {base64,binary}  outcome ∈ {accepted,rejected}
 )
 
-# Apr 2026 — server-side PII-blur visibility. Answers the operator
+# server-side PII-blur visibility. Answers the operator
 # question "are any reports reaching the dashboard with unblurred PII?"
 # by surfacing the 'skipped' outcome separately from 'complete'. Skipped
 # = both MediaPipe + easyocr unavailable on this deploy = images are
@@ -206,7 +206,7 @@ time_to_full_image_seconds = Histogram(
     buckets=(1, 5, 10, 30, 60, 120, 300, 600, 1800),
 )
 
-# Phase 4 (Apr 2026) — region auto-submit SLIs.
+# region auto-submit SLIs.
 geofence_check_total = Counter(
     "crisp_geofence_check_total",
     "Result of a client-side geofence check at 'Start Report'.",
@@ -218,7 +218,7 @@ auto_submit_count = Counter(
     ["reason"],  # timeout | cancel | leave_zone
 )
 
-# Phase 5 (Apr 2026) — reviewer verdict counter.
+# reviewer verdict counter.
 reports_reviewed_total = Counter(
     "crisp_reports_reviewed_total",
     "Reports moved through the analyst review flow.",

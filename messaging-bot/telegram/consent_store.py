@@ -1,10 +1,11 @@
 """Persistent consent store for Telegram reporters.
 
-Apr 2026 UX fix — the bot was re-asking for consent on every `/start`,
-which got in the way after the first session (in-memory `TelegramSession`
-instances are lost on bot restart + new instances every N minutes). This
-module persists consent grants in a tiny SQLite DB keyed by the Telegram
-user_id, so a returning reporter never re-sees the consent card.
+Persists consent grants in a tiny SQLite DB keyed by the Telegram
+user_id so a returning reporter never re-sees the consent card. The
+in-memory `TelegramSession` instances are lost on bot restart + new
+instances every N minutes; without a persistence layer the bot would
+re-ask for consent on every `/start`, which gets in the way after the
+first session.
 
 Design notes:
   * SQLite on disk — zero external deps, survives bot restarts, trivial

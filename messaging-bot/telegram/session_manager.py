@@ -23,7 +23,7 @@ SEVERITY_MAP = {
     "severe": "SEVERE", "moderate": "MODERATE", "minor": "MINOR",
 }
 TYPE_MAP = {
-    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — 8 UNDP Appendix-1
+    # 8 UNDP Appendix-1
     # super-types exposed as the canonical chip set. Legacy chip callbacks
     # (type_road / type_hospital / etc.) are still accepted so users on
     # offline-queued pre-v3 buttons don't break — the backend's taxonomy
@@ -108,19 +108,19 @@ class TelegramSession:
     infra_type: str = "OTHER"
     crisis_type: str = ""          # EARTHQUAKE / FLOOD / CONFLICT / etc.
     damage_class: str = ""         # NO_DAMAGE / PARTIAL / COMPLETE
-    # Phase D (Apr 2026 UI v3) — native-language building name the reporter
+    # native-language building name the reporter
     # types in-chat when asked. Sent to the backend as `infrastructure_name`
     # with `infrastructure_name_from_osm=False` so the dashboard knows it
     # needs to be mapped to an OSM footprint by an operator. Optional — the
     # reporter can skip and the field stays empty.
     infra_name: str = ""
     infra_name_answered: bool = False
-    # Apr 2026 UX fix — when the reporter taps an Overpass suggestion
+    # UX fix — when the reporter taps an Overpass suggestion
     # chip, this holds the `osm:way:<id>` / `osm:relation:<id>` string.
     # Emitted on the meta payload as `building_id` so dashboard pins the
     # report to the exact footprint without needing operator mapping.
     building_id: str = ""
-    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No answer.
+    # debris Yes/No answer.
     # `debris_answered` is the flow gate; `debris_needed` the value.
     # Submitted to the backend as `debris_clearing_needed` (already a
     # column on Report + a field on ReportMetaCreate).
@@ -131,7 +131,7 @@ class TelegramSession:
     created_at: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     last_activity: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     message_ids: set = field(default_factory=set)
-    # Apr 2026 UX fix — Telegram callback_query.id dedupe. Every chip tap
+    # UX fix — Telegram callback_query.id dedupe. Every chip tap
     # fires a callback that the bot answers + acts on. Network lag means
     # the user may tap twice before the first reply paints, so the second
     # callback_query arrives with a fresh id but identical `data`. We
@@ -146,7 +146,7 @@ class TelegramSession:
     # bail early if false. Persisted across the session lifetime so returning
     # users don't re-consent until /start wipes the session.
     consented: bool = False
-    # Phase 23 — Cross-channel link to the PWA's anonymous device-hash.
+    # Cross-channel link to the PWA's anonymous device-hash.
     # Set by handlers._decode_start_token when the user lands on the bot
     # via the PWA's Telegram tile (`/start <32-hex>`). When present,
     # `create_report_early` writes this as `meta["device_hash"]` so the
@@ -414,7 +414,7 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
     if session.report_id:
         return session.report_id  # already created
 
-    # Phase 23 — prefer the PWA device-hash when the user landed on the
+    # prefer the PWA device-hash when the user landed on the
     # bot via a /start <token> deep-link (see handlers._decode_start_token).
     # This unifies the user's Telegram report with their PWA reports
     # under a single device_hash without any schema change.
@@ -431,21 +431,21 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
         "description": session.text or None,
         "expected_media": 2,  # assume photo + audio (will adjust)
     }
-    # Phase D (Apr 2026 UI v3) — propagate the reporter-typed building name
+    # propagate the reporter-typed building name
     # on early-create so the dashboard can render it the instant the row
     # lands. `infrastructure_name_from_osm=False` is the distinguisher that
     # triggers the "needs manual mapping" badge.
     if session.infra_name:
         meta["infrastructure_name"] = session.infra_name
         meta["infrastructure_name_from_osm"] = False
-    # Apr 2026 Telegram UX polish — OSM building pick goes into meta too.
+    # Telegram UX polish — OSM building pick goes into meta too.
     # When present, the dashboard skips the "needs mapping" badge (the
     # footprint IS the mapping). infrastructure_name_from_osm is TRUE
     # so the needs_manual_mapping derivation treats it as resolved.
     if session.building_id:
         meta["building_id"] = session.building_id
         meta["infrastructure_name_from_osm"] = True
-    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris-clearing answer.
+    # debris-clearing answer.
     if session.debris_answered:
         meta["debris_clearing_needed"] = bool(session.debris_needed)
 
@@ -540,19 +540,19 @@ async def update_report_metadata(session: TelegramSession):
                 payload["crisis_type"] = session.crisis_type
             if session.damage_class:
                 payload["damage_classification"] = session.damage_class
-            # Phase D (Apr 2026 UI v3) — native-language building name the
+            # native-language building name the
             # reporter typed in chat. Always tagged as NOT OSM-authoritative
             # so the dashboard flags these rows for manual mapping.
             if session.infra_name:
                 payload["infrastructure_name"] = session.infra_name
                 payload["infrastructure_name_from_osm"] = False
-            # Apr 2026 Telegram UX polish — OSM building pick via the
+            # Telegram UX polish — OSM building pick via the
             # suggestion chips. Overrides the free-text from-osm=False
             # branch above because the pick IS the mapping.
             if session.building_id:
                 payload["building_id"] = session.building_id
                 payload["infrastructure_name_from_osm"] = True
-            # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris answer.
+            # debris answer.
             # Only emitted once the reporter has actually answered; pre-
             # answer the column stays NULL on the backend (distinguishable
             # from explicit False).

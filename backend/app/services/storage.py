@@ -164,7 +164,7 @@ class S3Storage:
         # migration script walks that dir and uploads each file; until
         # then, S3Storage.read() falls back to local disk for those.
         self.legacy_local_dir = upload_dir_for_legacy_reads
-        # May 2026 — explicit `addressing_style='virtual'` + regional
+        # explicit `addressing_style='virtual'` + regional
         # endpoint URL forces boto3 to generate virtual-hosted-regional
         # URLs (`<bucket>.s3.<region>.amazonaws.com/...`) instead of the
         # legacy global form (`<bucket>.s3.amazonaws.com/...`). Without

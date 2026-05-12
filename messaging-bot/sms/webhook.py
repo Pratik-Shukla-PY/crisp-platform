@@ -218,7 +218,7 @@ async def _send_reply(phone: str, message: str):
     # Twilio
     twilio_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
     twilio_token = os.getenv("TWILIO_AUTH_TOKEN", "")
-    # Phase 24 — accept either TWILIO_PHONE_NUMBER (canonical) or
+    # accept either TWILIO_PHONE_NUMBER (canonical) or
     # TWILIO_FROM (operator-set alternative shorthand). Some
     # deployments shipped only TWILIO_FROM in .env.production, which
     # silently broke outbound SMS reply because we looked only at

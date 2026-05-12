@@ -30,7 +30,7 @@ try:
 except Exception:
     pass
 
-# ── Module health state (Apr 2026) ───────────────────────────────────────────
+# ── Module health state ───────────────────────────────────────────
 # Tracks availability of the two deep-learning backends so the
 # `/api/v1/health/pii` endpoint can surface status loudly. Pre-April 2026
 # a missing MediaPipe model would silently no-op the face-blur pass,
@@ -163,7 +163,7 @@ def blur_pii(image_path: str) -> dict:
         },
     }
 
-    # Apr 2026 — if NEITHER backend is available, short-circuit with an
+    # if NEITHER backend is available, short-circuit with an
     # explicit error. The assembly worker uses this to mark the media
     # `pii_blur_status = 'skipped'` rather than silently passing through.
     if _face_detector is None and _ocr_reader is None:
@@ -203,7 +203,7 @@ def blur_pii(image_path: str) -> dict:
                 for det in detections.detections:
                     bb = det.bounding_box
                     fx, fy, fw, fh = bb.origin_x, bb.origin_y, bb.width, bb.height
-                    # Phase 1 (Apr 2026): bbox padding 20 % → 5 %.
+                    # Phase 1: bbox padding 20 % → 5 %.
                     # The client already blurs the face at capture time with
                     # its own bbox padding, so stacking a 20 % server pad
                     # on top of that produced a visible soft-glow well past
@@ -255,7 +255,7 @@ def blur_pii(image_path: str) -> dict:
                     x2, y2 = pts[:, 0].max(), pts[:, 1].max()
                     valid_texts.append((x1, y1, x2, y2, text, conf))
 
-                # Phase 1 (Apr 2026): DROPPED the "≥5 text regions → blur all
+                # Phase 1: DROPPED the "≥5 text regions → blur all
                 # text" escalation and the "has_face → blur all text" clause.
                 # Both over-redacted legitimate crisis information —
                 # "DANGER HIGH VOLTAGE", "EVACUATION ROUTE", store signage,
@@ -291,7 +291,7 @@ def blur_pii(image_path: str) -> dict:
         # ═══════════════════════════════════════════════════════════════
         all_regions = face_regions + text_blur_regions
         if all_regions:
-            # Phase 1 (Apr 2026): narrowed kernels.
+            # Phase 1: narrowed kernels.
             # Client ALREADY blurs faces at capture time (24 px Gaussian on
             # PWA, 8–16 px pixelation on RN). Stacking a cap-71 server
             # Gaussian on top produced the visible bloat the user saw. We

@@ -117,7 +117,7 @@ def export_csv(
         "description", "debris_clearing_needed", "service_status",
         "building_id", "latitude", "longitude", "location_name",
         "lives_impacted", "timestamp",
-        # Phase C.1 (May 2026) — satellite verification columns. UNDP
+        # .1 — satellite verification columns. UNDP
         # judges + downstream analysts can now see truth scores in
         # bulk exports, not just in the dashboard.
         "satellite_verdict", "satellite_total_score",

@@ -59,7 +59,7 @@ class RegionPublicResponse(BaseModel):
     radius_meters: int
 
 
-# ── Reviewer workflow (Phase 5) ─────────────────────────────────────────────
+# ── Reviewer workflow ─────────────────────────────────────────────
 
 class ReviewPatch(BaseModel):
     """Analyst's accept/reject verdict. action_taken required when REJECTED

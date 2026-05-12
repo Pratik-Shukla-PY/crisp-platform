@@ -36,7 +36,7 @@ LOCKOUT_MINUTES = 15
 OTP_RATE_LIMIT = 3          # Max OTP requests per email per 10 min
 OTP_MAX_ATTEMPTS = 5
 
-# Apr 2026 — single-admin dashboard lockdown.
+# single-admin dashboard lockdown.
 # When ALLOW_REGISTRATION=false (set in prod .env), the /auth/register
 # endpoint returns 410 Gone with a clear "contact admin" message. Default
 # stays "true" so dev / test environments + the PWA reporter signup flow
@@ -52,7 +52,7 @@ class RegisterRequest(BaseModel):
     full_name: Optional[str] = Field(None, max_length=255)
 
 
-# Phase 1 (Apr 2026 — Optional reporter login) — OTP schemas generalised
+# OTP schemas generalised
 # to accept EMAIL or PHONE. `destination` holds whichever the reporter
 # chose; `channel` disambiguates. Legacy `email`-only OTPRequest kept as
 # an alias path that the endpoint auto-promotes to EMAIL+destination
@@ -98,7 +98,7 @@ class UnlinkDeviceRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    # Apr 2026 — TOTP authenticator code, required when the user has
+    # TOTP authenticator code, required when the user has
     # `mfa_enabled = True` (set during admin provisioning). Optional in
     # the schema so legacy non-MFA accounts still work; the login handler
     # rejects with 400 if the user IS mfa_enabled but the field is empty.
@@ -211,7 +211,7 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
     db.flush()
 
     # Generate and send OTP
-    # Phase 1 (Apr 2026 — Optional reporter login): OTPRecord now
+    # Phase 1: OTPRecord now
     # requires `destination` + `channel`. Legacy email-only callers
     # must populate both. `email` column retained for audit compat.
     code = generate_otp()
@@ -558,7 +558,7 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
 
-    # MFA check — Apr 2026 single-admin lockdown: TOTP authenticator app
+    # MFA check — single-admin lockdown: TOTP authenticator app
     # (Google Authenticator / Authy / 1Password) instead of the legacy
     # email-OTP fallback. The shared secret was generated during admin
     # provisioning (scripts/create_admin.py) and is stored in
@@ -646,7 +646,7 @@ def logout(request: Request, user: User = Depends(get_current_user), db: Session
     return {"message": "Logged out successfully"}
 
 
-# ── Phase 1 (Apr 2026 — Optional reporter login): device-linking ──────────────
+# ── Phase 1: device-linking ──────────────
 
 @router.post("/link-device")
 def link_device(

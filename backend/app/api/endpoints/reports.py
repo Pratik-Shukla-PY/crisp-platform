@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Apr 2026 — env-configurable upload dir. Prod defaults to `backend/uploads/`;
+# env-configurable upload dir. Prod defaults to `backend/uploads/`;
 # pytest's conftest overrides via CRISP_UPLOAD_DIR so test-generated media
 # lands in a separate dir (`backend/uploads_test/`) that's safe to wipe on
 # session teardown. Production uploads are therefore NEVER touched by pytest.
@@ -51,7 +51,7 @@ _UPLOAD_DEFAULT = os.path.join(
 UPLOAD_DIR = os.environ.get("CRISP_UPLOAD_DIR", _UPLOAD_DEFAULT)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Apr 2026 — UNDP scaling. Media reads/writes route through the
+# UNDP scaling. Media reads/writes route through the
 # pluggable storage backend (LocalStorage by default; S3Storage when
 # MEDIA_BACKEND=s3). UPLOAD_DIR remains the local-disk path so legacy
 # rows keep working — the abstraction handles the actual file IO so
@@ -74,7 +74,7 @@ def _content_type_for(filename: str) -> str:
     return "application/octet-stream"
 
 
-# May 2026 — fix for "Uncaught NotSupportedError: Failed to load
+# fix for "Uncaught NotSupportedError: Failed to load
 # because no supported source was found" on dashboard audio playback.
 #
 # Root cause: the legacy single-shot base64 attach path (attach_media
@@ -144,7 +144,7 @@ def _detect_audio_format(data_url_header: str, raw_bytes: bytes) -> tuple[str, s
     return ("m4a", "audio/mp4")
 
 
-# Apr 2026 — UNDP scaling, Phase 2. The inline processing pipeline
+# UNDP scaling, Phase 2. The inline processing pipeline
 # (CAFF→WAV transcode, server-side PII blur, perceptual hash, Whisper
 # transcription) is filesystem-based — cv2.imread, PIL.Image.open,
 # faster-whisper all expect a path on disk. To keep the persistent
@@ -350,7 +350,7 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
 
     filename = f"{media_id}_assembled.{ext}"
 
-    # Apr 2026 (PR 2 — UNDP scaling) — the assembly path no longer
+    # (PR 2 — UNDP scaling) — the assembly path no longer
     # writes to UPLOAD_DIR. CAFF→WAV transcode runs on PyAV BytesIO
     # in memory; the assembled bytes go directly to the storage
     # backend (S3 in prod). Workers receive the storage URL +
@@ -600,7 +600,7 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
         logger.warning(f"Partial assembly decode failed for {media_id}: {e}")
         return None
 
-    # Phase-2.3 safeguards (Apr 2026) — don't write an unreadable partial.
+    # Phase-2.3 safeguards — don't write an unreadable partial.
     #   (a) Validate JPEG Start-Of-Image marker. A truncated JPEG at least
     #       has to start with 0xFFD8 to even attempt to render; without
     #       this the dashboard shows a "broken image" icon which is worse
@@ -626,7 +626,7 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
 
     filename = f"{media_id}_partial.jpg"
 
-    # Apr 2026 (PR 2) — partial-image PII blur via /tmp/ tempfile so
+    # (PR 2) — partial-image PII blur via /tmp/ tempfile so
     # we never write to UPLOAD_DIR. blur_pii is filesystem-based; we
     # stage briefly, blur in place, read back, and storage.save().
     # Tempfile is auto-deleted on context exit.
@@ -702,7 +702,7 @@ def _assemble_partial_audio(media_id: str, db: Session) -> Optional[str]:
 
     filename = f"{media_id}_partial.{ext}"
 
-    # Apr 2026 (PR 2) — direct in-memory persist via storage abstraction.
+    # (PR 2) — direct in-memory persist via storage abstraction.
     # The partial-transcription worker (Whisper, _run_partial_transcription_bg)
     # reads via storage.read() + a /tmp/ tempfile when it runs, so we
     # don't need to keep a local working copy here.
@@ -1043,7 +1043,7 @@ def resolve_report(report_id: str, user=Depends(require_analyst), db: Session = 
     return report
 
 
-# ── Phase 5 (Apr 2026) — reviewer workflow ─────────────────────────────────
+# ── Phase 5 — reviewer workflow ─────────────────────────────────
 
 @router.patch("/{report_id}/review", response_model=ReportResponse)
 def set_review_verdict(
@@ -1335,14 +1335,14 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
         "lives_impacted": r.lives_impacted,
         "server_created_at": _iso(r.server_created_at),
         "updated_at": _iso(r.updated_at),
-        # Reviewer workflow (Apr 2026 Phase 5).
+        # Reviewer workflow.
         "reviewer_verdict": r.reviewer_verdict or "NOT_REVIEWED",
         "action_taken": r.action_taken,
         "help_dispatched_at": _iso(r.help_dispatched_at),
         "help_arrived_at": _iso(r.help_arrived_at),
         "reviewed_at": _iso(r.reviewed_at),
         "response_time_seconds": _rt(r),
-        # My Reports card / detail view surfaces (Apr 2026 spec).
+        # My Reports card / detail view surfaces.
         "location": _location(r),
         "thumbnail_url": _thumb_url(r),
         "deletion_requested_at": _iso(r.deletion_requested_at),
@@ -1664,7 +1664,7 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
 
     # Create report
     report_dict = meta_in.model_dump(exclude={"location", "device_hash"})
-    # Phase 1 (Apr 2026 — Optional reporter login): attach user_id if the
+    # Phase 1: attach user_id if the
     # client presented a valid Bearer token. Anonymous path leaves it NULL.
     extra_cols = {}
     if auth_user is not None:
@@ -1755,7 +1755,7 @@ def update_report_classification(report_id: str, request: dict, db: Session = De
         report.crisis_type = request["crisis_type"]
     if "infrastructure_name" in request and request["infrastructure_name"]:
         report.infrastructure_name = request["infrastructure_name"]
-    # Phase D (Apr 2026 UI v3) — channel bots (Telegram/WhatsApp/SMS) that
+    # channel bots (Telegram/WhatsApp/SMS) that
     # prompted the reporter to type the building name in their native
     # language tag the classify call with `infrastructure_name_from_osm:
     # False`. Dashboard flags these rows for manual OSM mapping. Accept
@@ -1820,7 +1820,7 @@ async def geocode_from_description(payload: dict):
                     "message": "Provide ≥ 3 characters of location description."},
         )
     country_hint = str(payload.get("country_hint", "India")).strip() or "India"
-    # Apr 2026 — UNDP §3.1f.5. Caller passes the active UI locale so the
+    # UNDP §3.1f.5. Caller passes the active UI locale so the
     # geocoder echoes place names in the same script (e.g. Arabic place
     # names in Arabic instead of Latin transliteration).
     language = _normalise_language(str(payload.get("language", "en")))
@@ -2273,7 +2273,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
         raise HTTPException(status_code=404, detail="Report not found")
 
     # Decode and save the base64 media via the storage abstraction.
-    # May 2026 — extension + content-type now come from
+    # extension + content-type now come from
     # _detect_audio_format/the data: URL header (was hardcoded to
     # "webm" for everything non-image, which produced unplayable
     # audio when iOS recorded MP4/AAC).
@@ -2292,7 +2292,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                 ext, content_type = _detect_audio_format(header, file_data)
             filename = f"{report.id}_{time.time()}.{ext}"
 
-            # Apr 2026 (PR 2) — single-shot attach path. PII blur runs
+            # (PR 2) — single-shot attach path. PII blur runs
             # via /tmp/ tempfile (filesystem-based cv2), then we
             # storage.save() the (possibly blurred) bytes.
             final_data = file_data
@@ -2366,7 +2366,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
 
     db.commit()
 
-    # Trigger AI pipeline for this specific media. May 2026 (PR 3) —
+    # Trigger AI pipeline for this specific media. (PR 3) —
     # was previously gated on `file_url.startswith("/static/")`, which
     # silently skipped both transcription + image-vision once the
     # storage backend flipped to S3 (every new file_url is `s3://...`).
@@ -2430,7 +2430,7 @@ def attach_thumbnail(report_id: str, payload: ThumbnailPayload, db: Session = De
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # Decode + persist via the storage abstraction. May 2026 (PR 3) —
+    # Decode + persist via the storage abstraction. (PR 3) —
     # was previously writing directly to UPLOAD_DIR + emitting
     # `/static/<file>`. Under MEDIA_BACKEND=s3 that violated the
     # zero-persistent-disk mandate (every fast-preview thumbnail
@@ -2571,7 +2571,7 @@ def attach_media_chunk(
             received_chunks=0,
             completion_pct=0.0,
             assembly_status='pending',
-            # Apr 2026: persist the client-blur flag from the first chunk.
+            # : persist the client-blur flag from the first chunk.
             # Subsequent chunks for the same media_id don't update it —
             # all chunks for one upload share the same blur status.
             client_blur_applied=bool(payload.client_blur_applied),
@@ -2601,7 +2601,7 @@ def attach_media_chunk(
         ))
         # P-6 fix: atomic SQL-level increment avoids race condition on concurrent retries
         #
-        # Phase-2.4 invariant (Apr 2026) — `chunk_count` is updated on every
+        # Phase-2.4 invariant — `chunk_count` is updated on every
         # chunk insert to `payload.total_chunks`. The assumption this relies
         # on: **chunks within a single media_id are UNIFORM size**, so
         # `total_chunks` never changes mid-upload. Clients enforce this via
@@ -2705,7 +2705,7 @@ def attach_media_chunk(
     }
 
 
-# ── Upload-bandwidth probe (Apr 2026) ──────────────────────────────────────
+# ── Upload-bandwidth probe ──────────────────────────────────────
 #
 # Lightweight endpoint the PWA/RN client hits BEFORE the first chunk of
 # a media upload to measure actual upload throughput. Fixes a class of
@@ -2812,7 +2812,7 @@ async def upload_probe(request: Request, data: UploadFile = File(...)):
     }
 
 
-# ── Binary-chunk endpoint (Apr 2026, Option A) ─────────────────────────────
+# ── Binary-chunk endpoint ─────────────────────────────
 #
 # UNDP scale work: replaces the base64-over-JSON chunk transport with a raw
 # multipart/form-data binary upload. The request body carries:
@@ -3135,7 +3135,7 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
                         logger.warning("Empty file data after base64 decode")
                         raise ValueError("Base64 decoding produced empty data")
 
-                    # May 2026 — magic-byte detection (see _detect_audio_format
+                    # magic-byte detection (see _detect_audio_format
                     # comment block). Was hardcoded to .webm for all audio,
                     # which broke iOS captures (MP4 bytes in a .webm wrapper
                     # → browser decode failure).
@@ -3146,7 +3146,7 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
                         ext, content_type = _detect_audio_format(header, file_data)
                     filename = f"{db_report.id}_{time.time()}.{ext}"
 
-                    # Apr 2026 (PR 2) — write through the storage
+                    # (PR 2) — write through the storage
                     # backend (S3 in prod). No persistent EC2 disk usage.
                     file_url = _get_media_storage().save(filename, file_data, content_type)
                     logger.info(
@@ -3321,7 +3321,7 @@ def get_reports(
          .all()
     )
 
-    # Phase 4 (May 2026, HAR-driven) — ETag / If-None-Match.
+    # ETag / If-None-Match.
     # Cheap fingerprint: include each report's id+updated_at AND each
     # media row's id+updated_at+completion_pct. Catches changes in the
     # parent report AND in chunked-upload progress (which doesn't always
@@ -3449,7 +3449,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
     except Exception as exc:
         logger.warning(f"Could not save satellite image: {exc}")
 
-    # Apr 2026 — multi-provider fan-out: save EVERY successful provider's
+    # multi-provider fan-out: save EVERY successful provider's
     # image to the storage backend so the dashboard can render a 2×2
     # grid. The primary is duplicated as `images[0]` for consistency —
     # we save with the suffixed filename so the response can list every
@@ -3474,7 +3474,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
 
     # ── Load user photo via the storage abstraction ──────────────────────────
     #
-    # Bug history (May 2026): the previous implementation hard-coded
+    # Bug history: the previous implementation hard-coded
     # `os.path.join(UPLOAD_DIR, img_media.url.replace("/static/", ""))`,
     # which works for `/static/abc.jpg` (LocalStorage) but FAILS for
     # `s3://abc.jpg` (S3Storage) — `os.path.join` produces a nonsensical
@@ -3573,7 +3573,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
     v.satellite_days_gap           = sat_meta.get("days_gap")
     v.satellite_image_url          = sat_image_url
     v.error                        = result.get("error")
-    # Phase B.2 (May 2026, UNDP-grade rebuild) — stamp the time the
+    # .2 — stamp the time the
     # Claude scoring run completed so the dashboard can render
     # "Last verified Xm ago" + analysts know whether to re-verify.
     # The column already exists on SatelliteVerification; the schema
@@ -3599,7 +3599,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
         except Exception as exc:
             logger.warning(f"Could not save alt satellite image: {exc}")
 
-    # Apr 2026 — persist the full multi-provider list so /verification
+    # persist the full multi-provider list so /verification
     # GET reads back the same set on subsequent loads (otherwise refresh
     # would only show the primary).
     if sat_images_list:
@@ -3797,7 +3797,7 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
     }
 
 
-# ── Stable media URLs (May 2026) ────────────────────────────────────────────
+# ── Stable media URLs ────────────────────────────────────────────
 #
 # Background — the dashboard's HAR analysis showed every ~4 s API poll
 # generated a FRESH presigned S3 URL for every media row, because
@@ -3874,7 +3874,7 @@ def get_media_redirect(
     )
 
 
-# ── Stable satellite URLs (May 2026) ────────────────────────────────────────
+# ── Stable satellite URLs ────────────────────────────────────────
 #
 # Background — the satellite verification feature stores 1 primary image,
 # 0-1 alternate images, and a 4-cell multi-provider grid (AWS Sentinel-2 +
@@ -4001,9 +4001,9 @@ def get_satellite_grid_cell(
     return _satellite_redirect(db, report_id, "grid", grid_idx=idx)
 
 
-# ── Public evidence endpoint (May 2026) ─────────────────────────────────────
+# ── Public evidence endpoint ─────────────────────────────────────
 #
-# Phase C.2 of the UNDP-grade satellite-verification rebuild.
+# .2 of the UNDP-grade satellite-verification rebuild.
 #
 # The dashboard's verification panel now offers a "Share evidence" button
 # that copies a public URL of the form:

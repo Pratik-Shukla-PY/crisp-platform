@@ -170,7 +170,7 @@ def main(dry_run: bool) -> int:
                     )
                     # 2. Update any DB row pointing at the old key.
                     # `media.url` and `media.thumbnail_url` are the two
-                    # places audio URLs land. After Phase B the legacy
+                    # places audio URLs land. After the legacy
                     # /static/ path is also rewritten so we cover s3://
                     # exclusively.
                     old_db_url = f"s3://{key}"

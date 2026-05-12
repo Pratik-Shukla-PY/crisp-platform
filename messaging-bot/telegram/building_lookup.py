@@ -1,11 +1,11 @@
 """Nearby-building suggestions for the Telegram bot.
 
-Apr 2026 UX fix — the bot was asking the reporter to type a building
-name freehand, which is slow on Telegram (small keyboard, crisis
-stress, low literacy). This module adds a fast-path: immediately after
-the reporter drops a location pin, we query OSM Overpass for the
-nearest buildings in a 150 m radius and offer the top 5 as inline
-buttons. One tap → `building_id = osm:way:<id>` on the session.
+Free-text building-name entry on Telegram is slow on a small keyboard
+under crisis stress, and even more so for low-literacy reporters.
+This module adds a fast-path: immediately after the reporter drops a
+location pin, we query OSM Overpass for the nearest buildings in a
+150 m radius and offer the top 5 as inline buttons. One tap →
+`building_id = osm:way:<id>` on the session.
 
 Design notes:
   * Overpass is a public best-effort service. Timeouts (8 s) are tight
@@ -35,7 +35,7 @@ _OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 _RADIUS_M = 150                                # bounded: quick query, still covers blocks
 _TIMEOUT_S = 8.0
 # Overpass rejects the default `python-httpx/…` User-Agent with HTTP 406
-# (confirmed Apr 2026 against overpass-api.de). Any identifiable UA
+# (confirmed against overpass-api.de). Any identifiable UA
 # string makes it pass. We send a descriptive one so ops can contact us
 # if our query load ever tips into abusive territory.
 _USER_AGENT = "CRISP-TelegramBot/1.0 (+github.com/Pratik-Shukla-PY/crisp-platform)"

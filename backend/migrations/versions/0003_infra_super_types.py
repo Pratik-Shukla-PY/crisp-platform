@@ -72,7 +72,7 @@ def upgrade() -> None:
     # 2. Backfill: copy legacy chip into sub_type, promote infrastructure_type
     # to the UNDP super-type.
     #
-    # Postgres (Apr 2026 — sole supported dialect):
+    # Postgres:
     #
     #   (a) Widen the ENUM type BEFORE the UPDATE. `ALTER TYPE ... ADD
     #       VALUE IF NOT EXISTS` must be OUTSIDE any transaction per
@@ -101,7 +101,7 @@ def downgrade() -> None:
     # back to the first legacy chip we find via sub_type. If sub_type is
     # empty the row cannot be round-tripped losslessly.
     #
-    # Portability note (Apr 2026 — full-Postgres switch): the original
+    # Portability note: the original
     # code wrote `infrastructure_sub_type` (varchar) straight into
     # `infrastructure_type` (infratypeenum). On SQLite the enum is just a
     # CHECK constraint so the cast is implicit; on Postgres it's a real

@@ -216,7 +216,7 @@ class Report(Base):
     id = Column(String(36), primary_key=True, default=gen_uuid)
     client_report_id = Column(String(36), unique=True, nullable=True, index=True)
     device_id = Column(String(36), ForeignKey("devices.id", ondelete="SET NULL"))
-    # Phase 1 (Apr 2026 — Optional reporter login) — nullable FK to the
+    # nullable FK to the
     # authenticated reporter. NULL = anonymous (legacy + skip-login path).
     # `ON DELETE SET NULL` is the key guarantee from the user spec: when
     # a reporter hits "Delete my account", their linked reports revert to
@@ -236,7 +236,7 @@ class Report(Base):
     # automatically from the user-facing chip by the taxonomy hook so
     # export CSVs and dashboard analytics align with Appendix 1.
     infrastructure_type = Column(Enum(InfraTypeEnum), default=InfraTypeEnum.OTHER, nullable=False)
-    # Apr 2026 — original fine-grained chip the reporter tapped
+    # original fine-grained chip the reporter tapped
     # (ROAD / TELECOM / HOSPITAL / POWER / WATER / SCHOOL / HOUSE ...).
     # Populated by the taxonomy hook when `infrastructure_type` is a
     # legacy chip. Preserves the richer signal for dashboard drill-down
@@ -258,13 +258,13 @@ class Report(Base):
     # UNDP required fields
     damage_classification = Column(String(20), nullable=True)   # MINIMAL / PARTIAL / COMPLETE  (legacy NO_DAMAGE accepted + normalised)
     crisis_type = Column(String(30), nullable=True)             # EARTHQUAKE / FLOOD / TSUNAMI / EXPLOSION / etc.
-    # Apr 2026 — UNDP Appendix-1 alignment. Derived on write from crisis_type
+    # UNDP Appendix-1 alignment. Derived on write from crisis_type
     # (see app.core.taxonomy.CRISIS_CATEGORY_OF). Stored so dashboards can
     # filter 'all human-made crises' without duplicating the mapping
     # client-side. Nullable for backward compatibility with pre-migration rows.
     crisis_category = Column(String(20), nullable=True)          # NATURAL / TECHNOLOGICAL / HUMAN_MADE / OTHER
     infrastructure_name = Column(String(255), nullable=True)    # Specific building/road name
-    # Phase B2 (Apr 2026 UI v3) — distinguisher between OSM-auto-filled and
+    # distinguisher between OSM-auto-filled and
     # user-typed `infrastructure_name`.
     #   True  → client auto-filled the name from an OSM building-select tap.
     #   False → user typed it as free text (map unavailable / offline /
@@ -279,7 +279,7 @@ class Report(Base):
     debris_clearing_needed = Column(Boolean, nullable=True)     # Does this location need debris clearing?
     service_status = Column(JSON, nullable=True)                # {"electricity":"DISRUPTED","water":"OPERATIONAL",...}
     building_id = Column(String(36), nullable=True, index=True) # Links multiple reports about same structure
-    # Progressive-upload placeholder (Apr 2026, Phase 1). Compact blurhash
+    # Progressive-upload placeholder. Compact blurhash
     # of the main photo — decoded on the dashboard to render a fuzzy colour
     # impression the instant the meta POST lands, BEFORE any media chunk
     # arrives. See app/schemas/report.py::ReportMetaCreate.blurhash for the
@@ -287,7 +287,7 @@ class Report(Base):
     # go up to 9x9 DCT later without another migration.
     blurhash = Column(String(96), nullable=True)
 
-    # Phase 5 (Apr 2026) — reviewer-accountability workflow.
+    # reviewer-accountability workflow.
     #   reviewer_verdict → explicit human verdict ({NOT_REVIEWED,ACCEPTED,REJECTED})
     #   reviewed_at       → timestamp of the verdict decision
     #   action_taken      → free-text note (rejection reason OR response action)
@@ -307,7 +307,7 @@ class Report(Base):
     ai_analysis = relationship("AIAnalysis",  back_populates="report", uselist=False, cascade="all, delete-orphan")
     verification = relationship("SatelliteVerification", back_populates="report", uselist=False, cascade="all, delete-orphan")
 
-    # Apr 2026 UI v2.1 — performance indexes for 500k-scale crisis queries.
+    # UI v2.1 — performance indexes for 500k-scale crisis queries.
     # Mirror migration 0008. Names match exactly so `alembic upgrade` from
     # an empty DB and `Base.metadata.create_all` from pytest's conftest
     # both produce the same physical index names on Postgres.
@@ -351,7 +351,7 @@ class Location(Base):
     is_user_corrected = Column(Boolean, default=False)
     user_location_name = Column(String, nullable=True)   # Place name selected by user (autocomplete / offline)
     device_location_name = Column(String, nullable=True) # Human-readable name of raw device GPS position
-    # Phase 23 — geocoder confidence + source. Populated when the
+    # geocoder confidence + source. Populated when the
     # location was inferred from text (IVR / SMS / WhatsApp transcripts)
     # via geocode_text(); NULL for GPS-captured locations from the PWA
     # or native apps. confidence ∈ [0.0, 1.0]; source ∈ {"mapbox",
@@ -384,12 +384,12 @@ class Media(Base):
     received_chunks = Column(Integer, default=0, nullable=False)
     completion_pct = Column(Float, default=0.0, nullable=False)
     assembly_status = Column(String(20), default='pending', nullable=False)  # pending|partial|complete
-    # Apr 2026: clients that have already run their local PII blur (PWA
+    # : clients that have already run their local PII blur (PWA
     # BlazeFace / RN equivalent) set this true; the server's own blur_pii
     # pass is then skipped to avoid a second lossy re-encode on
     # already-redacted pixels. Defaults false for legacy clients.
     client_blur_applied = Column(Boolean, default=False, nullable=False)
-    # Apr 2026 — server-side PII blur outcome. Legacy rows are NULL.
+    # server-side PII blur outcome. Legacy rows are NULL.
     # Values:
     #   not_needed — client_blur_applied=true and client pipeline
     #                asserted success (no server pass required).
@@ -401,7 +401,7 @@ class Media(Base):
     #                unavailable (MediaPipe + easyocr both missing); the
     #                file is on disk UNBLURRED. Dashboard should flag.
     pii_blur_status = Column(String(16), nullable=True, index=True)
-    # Apr 2026 UI v2.1 — perceptual hash (pHash) of the assembled image
+    # UI v2.1 — perceptual hash (pHash) of the assembled image
     # for redundancy detection (UNDP nice-to-have #3: "spot duplicates
     # with same time-stamp of submission, or over-reporting"). Computed
     # once post-assembly in `_ai_executor`, stored as a 16-char hex
@@ -418,7 +418,7 @@ class Media(Base):
     report = relationship("Report", back_populates="media")
     chunks = relationship("MediaChunk", back_populates="media", cascade="all, delete-orphan")
 
-    # Apr 2026 UI v2.1 — pHash dedup endpoint windows by `created_at` for
+    # UI v2.1 — pHash dedup endpoint windows by `created_at` for
     # the last 24 h. Mirrors migration 0008.
     __table_args__ = (
         Index("ix_media_created_at", "created_at"),
@@ -529,7 +529,7 @@ class SatelliteVerification(Base):
     satellite_acquisition_date_alt = Column(String(50))
     satellite_resolution_m_alt   = Column(Float)
 
-    # Apr 2026 — multi-provider fan-out. JSON list of every successful
+    # multi-provider fan-out. JSON list of every successful
     # provider's saved-image URL + metadata. Lets the dashboard render
     # a 2×2 grid showing all 4 sources side-by-side. Format:
     #   [{"url": "/static/...", "source": "...",
@@ -613,7 +613,7 @@ class AutoSubmitRegion(Base):
 
 
 # ── Taxonomy normalisation (UNDP Appendix-1) ──────────────────────────────────
-# Apr 2026 — ensure every Report row is written with:
+# ensure every Report row is written with:
 #   * damage_classification normalised to MINIMAL / PARTIAL / COMPLETE
 #     (the legacy string "NO_DAMAGE" stays accepted as input but is stored
 #      as "MINIMAL" per the UNDP spec label)

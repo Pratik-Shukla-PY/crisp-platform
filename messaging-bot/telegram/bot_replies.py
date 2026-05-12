@@ -60,21 +60,21 @@ _STRINGS = {
         "photo_ack": "✅ Got your photo!",
         "desc_ack": "✅ Got it!",
         "step_loc_text_hint": "Or type the place name",
-        # Phase D (Apr 2026 UI v3) — native-language building-name prompt.
+        # native-language building-name prompt.
         # Reporter types the name (e.g. "Koramangala High School", "مدرسة الأمل")
         # in their own language. The dashboard tags these rows as "needs
         # manual mapping" so an operator can resolve to an OSM footprint.
         "step_building": "🏛 *Name the building?*\n\nType the building name in your own language — or skip.",
         "step_building_skip": "⏭ Skip",
         "step_building_ack": "✅ Got the name!",
-        # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No step.
+        # debris Yes/No step.
         "step_debris":     "🚜 *Does this need debris clearing?*",
         "debris_yes":      "✅ Yes",
         "debris_no":       "❌ No",
-        # Apr 2026 UX fix — OSM building suggestions after location drop.
+        # UX fix — OSM building suggestions after location drop.
         "bldg_which":      "🏛 *Which building?* Tap one, or type the name.",
         "bldg_type_instead": "Type name instead",
-        # Apr 2026 UX fix — simplified consent prompt (used when the
+        # UX fix — simplified consent prompt (used when the
         # locale pack hasn't shipped a translation yet; see _tf() in
         # send_consent_prompt for the fallback resolver).
         "consent_title":   "🛡 Your privacy matters",
@@ -548,7 +548,7 @@ async def _send(method: str, data: dict):
     `*bold*` or a trailing `/command`). Historically this used to
     silently drop the message on the user — they'd tap a button and
     get nothing back, looking like "the bot hangs after language
-    select". Apr 2026: on any `400 Bad Request: can't parse entities`
+    select". On any `400 Bad Request: can't parse entities`
     we re-POST the same payload with `parse_mode` stripped so the user
     at least sees the plain-text version. Logs the original parse
     error so we can still fix the root-cause template afterwards.
@@ -664,7 +664,7 @@ async def send_step_photo_first(chat_id: int, lang: str):
 # consent card so Telegram users get the same privacy disclosures (location,
 # photo, audio, retention) before any data is collected.
 async def send_consent_prompt(chat_id: int, lang: str):
-    # Apr 2026 — the `t(lang, key) or "default"` pattern that used to live
+    # the `t(lang, key) or "default"` pattern that used to live
     # here silently failed, because `t()` returns the raw key as a STRING
     # when a translation is missing — always truthy → fallback never fires.
     # That's why the bot was showing literal `consent_title` / `consent_body`
@@ -693,7 +693,7 @@ async def send_consent_prompt(chat_id: int, lang: str):
     )
     yes_label = _tf("consent_yes", "✅ I agree")
     no_label = _tf("consent_no", "❌ No, cancel")
-    # Apr 2026 — drop `parse_mode=Markdown`. Telegram's legacy Markdown
+    # drop `parse_mode=Markdown`. Telegram's legacy Markdown
     # parser rejects this body with "Can't find end of the entity
     # starting at byte offset 24" because the fallback text mixes `*`
     # (bold markers), `(...)` (URL-like groups), `/delete` (command
@@ -748,7 +748,7 @@ async def send_step_severity(chat_id: int, lang: str):
 
 
 async def send_step_type(chat_id: int, lang: str):
-    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — 8 UNDP Appendix-1
+    # 8 UNDP Appendix-1
     # super-types in a 3×3 keyboard (last cell is OTHER). Legacy
     # type_road / type_hospital / etc. callbacks still resolve via the
     # TYPE_MAP in session_manager, so any pre-v3 client that still sends
@@ -773,7 +773,7 @@ async def send_step_type(chat_id: int, lang: str):
 
 
 async def send_step_crisis_type(chat_id: int, lang: str):
-    # Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — crisis chips grouped
+    # crisis chips grouped
     # into the three UNDP Appendix-1 categories. Telegram's inline_keyboard
     # doesn't support group headers natively, so we prepend the group name
     # to the body text in bold and visually separate each group's row.
@@ -855,8 +855,7 @@ async def send_step_text(chat_id: int, lang: str):
 
 
 async def send_building_suggestions(chat_id: int, lang: str, buildings: list) -> None:
-    """Phase B2 follow-up (Apr 2026 Telegram UX polish) — offer the top-5
-    OSM-nearby buildings as tap-to-pick inline buttons.
+    """Offer the top-5 OSM-nearby buildings as tap-to-pick inline buttons.
 
     `buildings` is the list returned by `building_lookup.nearby_buildings`
     — `[{id, name, distance_m}, ...]`. Renders one button per building
@@ -887,9 +886,9 @@ async def send_building_suggestions(chat_id: int, lang: str, buildings: list) ->
 
 
 async def send_step_debris(chat_id: int, lang: str):
-    """Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No step.
+    """Debris Yes/No step.
 
-    Added between CRISIS+BUILDING and SEVERITY/DESCRIPTION so the
+    Sits between CRISIS+BUILDING and SEVERITY/DESCRIPTION so the
     reporter answers the Appendix-1 "needs debris clearing?" question
     while the scene is fresh in their mind. Two inline buttons; no
     skip — both options are answers, so the flow always advances."""
@@ -908,7 +907,7 @@ async def send_step_debris(chat_id: int, lang: str):
 
 
 async def send_step_building_name(chat_id: int, lang: str):
-    """Phase D (Apr 2026 UI v3) — native-language building name prompt.
+    """Native-language building-name prompt.
 
     Telegram doesn't ship a Leaflet/Overpass picker the way PWA + RN do, so
     we ask the reporter to type the building name in their own language.

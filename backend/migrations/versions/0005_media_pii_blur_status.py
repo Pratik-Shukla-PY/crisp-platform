@@ -56,7 +56,7 @@ def upgrade() -> None:
     # Keep this migration conservative: do NOT backfill 'complete' on old
     # rows. Leave them NULL and let the dashboard treat NULL as "legacy,
     # pre-tracking". Only new writes populate the column.
-    # Postgres-only (Apr 2026 — SQLite retired). `:truthy` bind with a
+    # Postgres-only. `:truthy` bind with a
     # Python True compiles to TRUE on Postgres. The previous literal
     # `client_blur_applied = 1` crashed with "operator does not exist:
     # boolean = integer" and was the proof-point for dropping SQLite.

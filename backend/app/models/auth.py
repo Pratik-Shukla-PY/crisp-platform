@@ -93,7 +93,7 @@ class User(Base):
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
     email = Column(String(255), unique=True, nullable=True, index=True)   # now nullable — phone-only OK
-    # Phase 1 (Apr 2026 reporter login) — E.164 international phone.
+    # E.164 international phone.
     phone_number = Column(String(32), unique=True, nullable=True, index=True)
     phone_verified = Column(Boolean, default=False, nullable=False)
     # EMAIL | PHONE — the channel the user most recently verified.
@@ -105,7 +105,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)         # True after OTP verification
     mfa_enabled = Column(Boolean, default=False)
-    # Apr 2026 — TOTP authenticator app (Google Authenticator / Authy / 1Password).
+    # TOTP authenticator app (Google Authenticator / Authy / 1Password).
     # `mfa_secret` is the base32-encoded 160-bit shared secret per RFC 4648 + 6238;
     # generated once at enrollment, scanned via QR into the user's app, and
     # verified via pyotp.TOTP(secret).verify(code) at login time. NULL until
@@ -124,7 +124,7 @@ class User(Base):
 
     organization = relationship("Organization", back_populates="users")
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
-    # Phase 1 — join rows binding this user to every device they've authed on.
+    # join rows binding this user to every device they've authed on.
     # Cascade-deletes on user removal so a GDPR account-delete wipes these too.
     devices = relationship(
         "UserDeviceLink", back_populates="user", cascade="all, delete-orphan"
@@ -192,7 +192,7 @@ class AuthAuditLog(Base):
     details = Column(JSON, nullable=True)                # Extra context
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Apr 2026 UI v2.1 — time-range scans (30-day retention purge,
+    # UI v2.1 — time-range scans (30-day retention purge,
     # forensic queries) need an index on created_at. Mirrors 0008.
     __table_args__ = (
         Index("ix_auth_audit_log_created_at", "created_at"),

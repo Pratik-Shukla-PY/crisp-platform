@@ -163,12 +163,12 @@ def main(dry_run: bool, limit: Optional[int]) -> int:
             rewritten_media.append((m.id, old, new))
 
         # ── Pass 2b: rewrite media.thumbnail_url rows pointing at /static/ ──
-        # May 2026 — original migration only rewrote `media.url`. The
+        # original migration only rewrote `media.url`. The
         # `thumbnail_url` column (set by attach_thumbnail for image
         # fast-previews and by _try_partial_audio_bg for streaming
         # audio) still pointed at the old /static/ path even though
         # Pass 1 already uploaded the file to S3. The dashboard's
-        # MediaResponse._resolve_url field_serializer (May 2026 fix)
+        # MediaResponse._resolve_url field_serializer
         # then signed an /static/-pass-through URL — works only while
         # the local UPLOAD_DIR still has the file. Once we GC the
         # local mirror, those rows would 404.

@@ -167,7 +167,7 @@ from app.models.report import Base
 import app.models.auth        # Ensure auth tables are registered with Base.metadata
 import app.models.prediction  # Prediction zone + result tables
 
-# Apr 2026 — SQLite fully retired. Alembic is the sole schema authority.
+# SQLite fully retired. Alembic is the sole schema authority.
 # Before starting uvicorn, run `alembic upgrade head` (dev + prod).
 # The previous `Base.metadata.create_all(bind=engine)` call was a
 # SQLite-era zero-install shortcut that raced with Alembic on Postgres

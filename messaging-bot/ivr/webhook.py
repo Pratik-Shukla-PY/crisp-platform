@@ -99,7 +99,7 @@ def _resolve_ivr_secret() -> str:
 
 
 IVR_WEBHOOK_SECRET = _resolve_ivr_secret()
-# Phase 23.1 — emit the public webhook URL on import so the operator
+# emit the public webhook URL on import so the operator
 # can pick it up from `docker logs <backend-container>` after a fresh
 # deploy and verify the Twilio admin console still points at the
 # correct URL. We only log a TRUNCATED hint of the secret (last 6
@@ -127,8 +127,7 @@ def _get_base_url(request: Request) -> str:
     """Get the public-facing base URL the caller (Twilio) should hit
     for the next TwiML step.
 
-    Phase 23.1.1 — handles the layered-proxy gotcha. In production the
-    request path is:
+    Handles the layered-proxy gotcha. In production the request path is:
 
         Twilio  ──https──▶  ALB / CloudFront  ──http──▶  nginx  ──http──▶  backend
 
@@ -227,7 +226,7 @@ async def handle_incoming_call(request: Request):
         caller_country = params.get("FromCountry") or params.get("CallerCountry") or ""
         caller_zip = params.get("FromZip") or params.get("CallerZip") or ""
 
-    # Phase 23 — pre-select a default language based on the caller's
+    # pre-select a default language based on the caller's
     # country (Twilio's `FromCountry` / `CallerCountry`). The digit-
     # pick menu still lets the caller override, but if they just stay
     # silent during the Gather we route to their country's likely
@@ -262,17 +261,17 @@ async def handle_incoming_call(request: Request):
     # location-step handler picks that language; otherwise the
     # Redirect routes to the country's default language.
     #
-    # Phase 23.3 — each language's prompt is now spoken in THAT
+    # each language's prompt is now spoken in THAT
     # language's own Polly voice. A Hindi speaker hears their
     # option in Hindi ("हिन्दी के लिए 2 दबाएं") instead of an
     # English narrator listing language names. Helps low-literacy
     # callers recognise their language is supported. Each <Say>
     # uses the language-appropriate Polly voice + locale.
     #
-    # Phase 23.1 — the fallback URL uses `&amp;lang=…` (not `?lang=…`)
+    # the fallback URL uses `&amp;lang=…` (not `?lang=…`)
     # because loc_url already carries a `?sid=…` query string.
-    # Phase 23.3.1 — fixed Arabic language code from "arb" (AWS
-    # Polly's MSA code) → "ar-XA" so Twilio accepts it. Twilio's
+    # Arabic language code is "ar-XA" (Twilio's accepted form) — not
+    # "arb" (AWS Polly's MSA code, which Twilio rejects). Twilio's
     # `<Say>` validation rejects the whole TwiML response when ANY
     # voice/language combo is unrecognised, which silently drops
     # the call (no audio at all on the caller end). The rest of the
@@ -326,7 +325,7 @@ _IVR_PROMPTS = {
 
 _DIGIT_LANG = {"1": "en", "2": "hi", "3": "es", "4": "fr", "5": "ar"}
 
-# Phase 23 — caller-country → default IVR language. Twilio's webhook
+# caller-country → default IVR language. Twilio's webhook
 # payload includes a `FromCountry` field (ISO-3166-1 alpha-2) when
 # available; we use it to pre-select a language so the caller doesn't
 # have to press a digit. Falls back to English when the country
@@ -684,7 +683,7 @@ async def _process_ivr_report(call_sid: str):
         "caller_info": caller_info,
     }
 
-    # Phase 23 — normalise geocoder confidence ("low/medium/high" or
+    # normalise geocoder confidence ("low/medium/high" or
     # a raw float) to a [0, 1] float that we can persist + render as
     # a dashboard chip. Source string passes through as-is.
     geo_conf_float = _normalise_geo_confidence(geo.get("confidence"))
@@ -698,7 +697,7 @@ async def _process_ivr_report(call_sid: str):
             "device_longitude": geo["longitude"],
             "accuracy_meters": 5000.0 if geo.get("confidence") == "low" else 2000.0,
             "device_location_name": geo.get("location_name", location_text or ""),
-            # Phase 23 — persist these so the dashboard can render a
+            # persist these so the dashboard can render a
             # confidence chip / colour-coded map pin tooltip on IVR
             # reports (see web-dashboard/src/app.js for the renderer).
             "geocoding_confidence": geo_conf_float,
@@ -717,7 +716,7 @@ async def _process_ivr_report(call_sid: str):
                     f"conf={geo_conf_float} src={geo_source}"
                 )
 
-                # Phase 23.3 — audio upload reliability hardening.
+                # audio upload reliability hardening.
                 # Original code fired-and-forgot two chunked-uploader
                 # calls and assumed success. Real-call observation: the
                 # dashboard couldn't play back the IVR audio, suggesting
@@ -787,7 +786,7 @@ async def _process_ivr_report(call_sid: str):
                 await _attach_audio("location", location_b64)
                 await _attach_audio("description", audio_b64)
 
-                # Phase 23 — restore AI extraction. Claude reads the
+                # restore AI extraction. Claude reads the
                 # full English transcription and back-fills
                 # infrastructure_type / severity / crisis_type /
                 # damage_classification on the Report, replacing the

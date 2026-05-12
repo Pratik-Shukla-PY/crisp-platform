@@ -21,7 +21,7 @@ router = APIRouter()
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class ZoneCreate(BaseModel):
-    # Apr 2026 — added pydantic bounds so the API rejects invalid
+    # added pydantic bounds so the API rejects invalid
     # geographies at the edge instead of silently persisting a bogus
     # row that breaks downstream map/heatmap rendering. Latitude and
     # longitude use WGS-84 ranges; radius_km is capped at 2000

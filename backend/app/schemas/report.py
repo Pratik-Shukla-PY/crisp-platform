@@ -34,7 +34,7 @@ class LocationBase(BaseModel):
     is_user_corrected: Optional[bool] = False
     user_location_name: Optional[str] = None
     device_location_name: Optional[str] = None
-    # Phase 23 — geocoder confidence + source. Populated when the
+    # geocoder confidence + source. Populated when the
     # location came from text-only channels (IVR / SMS / WhatsApp);
     # left None for GPS-captured locations.
     geocoding_confidence: Optional[float] = None
@@ -72,7 +72,7 @@ class MediaChunkPayload(BaseModel):
     # drop that hard-coding and trust this field instead).
     resolution_tier: ResolutionEnum = ResolutionEnum.LOW
     photo_group_id: Optional[str] = Field(None, max_length=36)
-    # Apr 2026: when `true`, the client has already run its PII blur (face
+    # : when `true`, the client has already run its PII blur (face
     # redaction via BlazeFace on PWA / similar on RN) against the original
     # image before chunking. The server-side blur_pii() pass is then skipped
     # on assembly — avoiding a second lossy pass over already-redacted bytes.
@@ -118,7 +118,7 @@ class ReportMetaCreate(BaseModel):
     damage_classification: Optional[DamageClassEnum] = None
     crisis_type: Optional[CrisisTypeEnum] = None
     infrastructure_name: Optional[str] = Field(None, max_length=255)
-    # Phase B2 (Apr 2026 UI v3) — distinguisher between OSM-auto-filled and
+    # distinguisher between OSM-auto-filled and
     # user-typed building names. True = the PWA / RN client auto-filled
     # `infrastructure_name` from the OSM building the reporter tapped. False
     # = the reporter typed the name as free text in their native language
@@ -135,7 +135,7 @@ class ReportMetaCreate(BaseModel):
     # — the auto-assign logic in `_auto_assign_building_id` runs first
     # but an explicit pick overrides the coarse match.
     building_id: Optional[str] = Field(None, max_length=64)
-    # Phase 1 progressive-upload stack (Apr 2026). Blurhash encodes a
+    # Phase 1 progressive-upload stack. Blurhash encodes a
     # ~4x3 DCT of the main photo into a short string (~25-35 chars); the
     # dashboard decodes it into a blurred colour impression and renders
     # it as a placeholder the instant the meta POST lands, BEFORE any
@@ -176,13 +176,13 @@ class MediaResponse(MediaBase):
     # Guaranteed-delivery: dashboard groups media by this id and picks the
     # best-available complete variant (LARGE > MEDIUM > SMALL > partial).
     photo_group_id: Optional[str] = None
-    # Apr 2026 — server-side PII-blur outcome. Dashboard MUST warn/flag
+    # server-side PII-blur outcome. Dashboard MUST warn/flag
     # any row where this is 'skipped' or 'failed' — the file is on disk
     # and may contain unredacted PII. 'not_needed' = client handled it,
     # 'complete' = server-side pass succeeded, 'pending' = blur
     # in flight, NULL = legacy row (pre-tracking).
     pii_blur_status: Optional[str] = None
-    # Apr 2026 UI v2.1 — perceptual-hash fingerprint of the assembled
+    # UI v2.1 — perceptual-hash fingerprint of the assembled
     # photo for redundancy detection (UNDP nice-to-have #3). 16-char
     # hex string; NULL for audio / legacy / not-yet-scanned rows. The
     # dashboard groups media with near-identical hashes (Hamming
@@ -190,12 +190,12 @@ class MediaResponse(MediaBase):
     photo_phash: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
-    # Apr 2026 — UNDP scaling. The DB stores `s3://<key>` for media
+    # UNDP scaling. The DB stores `s3://<key>` for media
     # written through the S3 backend; the dashboard can't fetch that
     # URL directly. Pass-through for `/static/...` (legacy local-disk
     # paths) and plain http(s) URLs.
     #
-    # May 2026 — `thumbnail_url` MUST be resolved too. The dashboard's
+    # `thumbnail_url` MUST be resolved too. The dashboard's
     # audio player falls back to `audio.thumbnail_url` while a chunked
     # upload is still in flight (it stores the partial-assembled WebM/
     # M4A under that field, see _try_partial_audio_bg in
@@ -206,7 +206,7 @@ class MediaResponse(MediaBase):
     # by /reports/{id}/media/thumbnail. Pydantic v2's field_serializer
     # accepts a tuple of field names — one decorator covers both.
     #
-    # May 2026 (HAR-driven rewrite) — previously this returned a freshly
+    # (HAR-driven rewrite) — previously this returned a freshly
     # generated S3 presigned URL on EVERY serialization. The dashboard
     # polls /api/v1/reports/ every 1.2-4s; each poll generated a new
     # X-Amz-Signature on the same media bytes; the browser saw a new
@@ -279,7 +279,7 @@ class VerificationResponse(BaseModel):
     satellite_source_alt: Optional[str] = None
     satellite_acquisition_date_alt: Optional[str] = None
     satellite_resolution_m_alt: Optional[float] = None
-    # Apr 2026 — multi-provider fan-out. List of every satellite source
+    # multi-provider fan-out. List of every satellite source
     # that returned successfully (AWS Sentinel-2, Microsoft Planetary
     # Computer, ESA Copernicus, Mapbox). Dashboard renders 2×2 grid.
     # Empty list when verification ran with the legacy single-source
@@ -290,7 +290,7 @@ class VerificationResponse(BaseModel):
     scored_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
-    # Phase B.2 — emit Z-suffixed UTC for `scored_at` so the dashboard's
+    # .2 — emit Z-suffixed UTC for `scored_at` so the dashboard's
     # `timeAgo()` parses it correctly. Same pattern as ReportResponse.
     @field_serializer("scored_at", when_used="json")
     def _serialize_scored_at(self, v: Optional[datetime]) -> Optional[str]:
@@ -331,10 +331,10 @@ class VerificationResponse(BaseModel):
             pass
         return data
 
-    # Apr 2026 — pass-through for `/static/...` (legacy local-disk paths)
+    # pass-through for `/static/...` (legacy local-disk paths)
     # and plain http(s) URLs.
     #
-    # May 2026 (HAR-driven rewrite, mirrors MediaResponse Phase 1) —
+    # (HAR-driven rewrite, mirrors MediaResponse Phase 1) —
     # previously this generated a fresh S3 presigned URL on every
     # serialization. The dashboard polls /api/v1/reports/ every 1.2-4s,
     # which means each of the 4 satellite cells in the multi-provider
@@ -418,7 +418,7 @@ class ReportResponse(BaseModel):
     crisis_type: Optional[str] = None               # see CrisisTypeEnum for the full UNDP list
     crisis_category: Optional[str] = None           # NATURAL / TECHNOLOGICAL / HUMAN_MADE / OTHER
     infrastructure_sub_type: Optional[str] = None   # original UI chip (ROAD, HOSPITAL, ...) for drill-down
-    # Phase 1 (Apr 2026 — Optional reporter login) — `user_id` stays
+    # `user_id` stays
     # NULL on anonymous submissions. Dashboard treats NULL == anonymous.
     # PII fields (email/phone) are never embedded in this response; the
     # dashboard calls `/auth/users/{user_id}` separately when an operator
@@ -432,7 +432,7 @@ class ReportResponse(BaseModel):
     # /auth/users/{user_id} to see PII.
     reporter_badge: Optional[str] = None
     infrastructure_name: Optional[str] = None
-    # Phase B2 (Apr 2026 UI v3) — see ReportMetaCreate.infrastructure_name_from_osm.
+    # see ReportMetaCreate.infrastructure_name_from_osm.
     # Exposed on the response so the dashboard can render a "needs mapping"
     # badge when the reporter typed a free-text building name. Three-state
     # column:
@@ -456,7 +456,7 @@ class ReportResponse(BaseModel):
     # submitted before Phase-1 won't have one.
     blurhash: Optional[str] = None
 
-    # Phase 5 (Apr 2026) — reviewer workflow surface.
+    # reviewer workflow surface.
     # `response_time_seconds` is COMPUTED at read time from
     # help_arrived_at (or help_dispatched_at) minus reviewed_at. Not stored
     # to avoid two-source-of-truth drift.
@@ -478,7 +478,7 @@ class ReportResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    # Apr 2026: use model_validator(mode='after') — the previous
+    # : use model_validator(mode='after') — the previous
     # `model_validate` classmethod override fired on direct calls but was
     # skipped by FastAPI's list-response serialisation path (which uses a
     # TypeAdapter under the hood). `model_validator(after)` runs on EVERY
@@ -501,7 +501,7 @@ class ReportResponse(BaseModel):
                 pass
         return self
 
-    # Phase 1 (Apr 2026 — Optional reporter login) — derive the masked
+    # derive the masked
     # reporter badge. `reporter_badge` is ALWAYS safe for the default
     # ANALYST view: 8-char truncation of the user_id ("User abc12345").
     # Operators with ADMIN role who need PII hit /auth/users/{user_id}
@@ -518,7 +518,7 @@ class ReportResponse(BaseModel):
             self.is_anonymous = True
         return self
 
-    # Phase B2 (Apr 2026 UI v3) — derive the dashboard-friendly
+    # derive the dashboard-friendly
     # `needs_manual_mapping` flag from the three source columns
     # (`infrastructure_name`, `building_id`, `infrastructure_name_from_osm`).
     # Computed here — not stored — so the rule stays in one place and every

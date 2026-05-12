@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
 
     # ── Web Push (VAPID) ────────────────────────────────────────────────
-    # Apr 2026 — reporter-feedback channel. Generate via
+    # reporter-feedback channel. Generate via
     # `scripts/generate_vapid.py` once per environment, then put the
     # output in .env.production + AWS Secrets Manager. The PUBLIC key
     # is safe to ship to clients; only the PRIVATE key is sensitive.
