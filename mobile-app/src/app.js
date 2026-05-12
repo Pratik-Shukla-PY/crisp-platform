@@ -10698,8 +10698,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('online', async () => {
         console.log('Back online — triggering sync');
         _applyOnlineDot(true);
-        _stopConnectivityProbe();        // kill the recovery poll if it was armed
-        startRetryLoop();                // resume any queued uploads
+        _stopConnectivityProbe();
+        // Force a fresh bandwidth probe so any deferred-tier variants
+        // (LARGE on SLOW, MEDIUM+LARGE on VERY_SLOW) get re-evaluated
+        // against the new connection. Without this, the cached
+        // `_lastProbeBytesPerSec` from the previous network keeps the
+        // tier pinned at SLOW even after the device walks into Wi-Fi.
+        try { detectPWANetworkTier(); } catch (_) {}
+        try { await adaptTierViaProbe({ force: true }); } catch (_) {}
+        startRetryLoop();
         updateSyncBadge();
     });
 
@@ -10715,12 +10722,54 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 7. Listen for sync success messages from service worker
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('message', (event) => {
-            if (event.data.type === 'SYNC_SUCCESS') {
+            const data = event.data || {};
+            if (data.type === 'SYNC_SUCCESS') {
                 showToast(t('queue_synced_toast'));
                 updateSyncBadge();
+            } else if (data.type === 'SW_SYNC_WAKE') {
+                // SW saw a `sync` event with modern variant-shape items
+                // in the queue. Run our retry loop from the page side,
+                // which owns the chunked-variant + deferred-tier logic.
+                console.log(`[SW wake] ${data.count} queued report(s) — running retry loop`);
+                try { adaptTierViaProbe({ force: true }).catch(() => {}); } catch (_) {}
+                try { startRetryLoop(); } catch (_) {}
             }
         });
     }
+
+    // Periodic sweep of the pending-reports queue. Catches deferred-tier
+    // variants that may have been waiting hours/days for bandwidth, plus
+    // any orphans the connectivity event listeners missed. Runs every
+    // 5 minutes when the page is visible, skipped while hidden so we
+    // don't burn battery on a backgrounded tab. The retry loop itself
+    // is a no-op when the queue is empty, so the cost is one IDB read
+    // per tick when there's nothing pending.
+    const _PERIODIC_SWEEP_MS = 5 * 60 * 1000;
+    function _startPeriodicSweep() {
+        let timer = null;
+        const tick = () => {
+            if (document.visibilityState === 'visible' && navigator.onLine) {
+                try { startRetryLoop(); } catch (_) {}
+            }
+        };
+        const arm = () => {
+            if (timer) return;
+            timer = setInterval(tick, _PERIODIC_SWEEP_MS);
+        };
+        const disarm = () => {
+            if (timer) { clearInterval(timer); timer = null; }
+        };
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                arm();
+                tick();  // immediate kick on return-to-foreground
+            } else {
+                disarm();
+            }
+        });
+        arm();
+    }
+    try { _startPeriodicSweep(); } catch (e) { _silent('periodicSweep', e); }
 
     // 8. Setup start button. Phase 4: the auto-submit
     // timer is armed inside goToStage() via inactivityManager.tryArm({bustCache:true})
