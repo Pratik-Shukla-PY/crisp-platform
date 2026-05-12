@@ -1,60 +1,29 @@
 /**
- * CRISP — Lighthouse CI configuration.
+ * Lighthouse CI configuration.
  *
- * Audited URLs (Phase 1):
- *   1. PWA home               — http://localhost:8080/mobile-app/src/
- *   2. PWA home (?ui=v4 forced) — http://localhost:8080/mobile-app/src/?ui=v4
- *   3. Dashboard              — http://localhost:8080/web-dashboard/src/
- *
- * Form factor: mobile by default (Slow 4G + 4× CPU slowdown — matches a
- * realistic worst-case CRISP user). Dashboard relaxes mobile thresholds
- * via assertMatrix because it's a desktop-first ops surface.
- *
- * Threshold gate strategy: thresholds are the FLOOR (regression guard),
- * not the TARGET. They sit just below the current verified scores so
- * the bootstrap doesn't self-block. As fixes raise scores to a new
- * stable level, ratchet the thresholds up here. See the
- * "Ratcheting" section in docs/LIGHTHOUSE_QA.md for the policy.
- *
- * Current FLOOR thresholds (HARD — block PR merge if violated):
- *   • Performance     ≥ 0.45 mobile  / ≥ 0.55 dashboard (mobile-throttled)
- *   • Accessibility   ≥ 0.70 everywhere
- *   • Best Practices  ≥ 0.85 everywhere
- *   • PWA             ≥ 0.80 (PWA pages only)
- *   • CLS             ≤ 0.25 (block — confuses low-literacy users)
- *   • LCP             ≤ 12000 ms warn (TF.js/BlazeFace cold start)
- *   • TBT             ≤ 1500 ms warn (heavy main-thread blockers)
- *
- * Aspirational TARGET thresholds (raise the gate to these as fixes land):
- *   • Performance ≥ 0.60 mobile / ≥ 0.70 dashboard
- *   • Accessibility ≥ 0.90 (UNDP must-have)
- *   • LCP ≤ 4000 ms / TBT ≤ 600 ms
- *
- * Override path: apply the `lighthouse-approved` label to the PR. The
- * workflow's threshold-gate step skips when this label is present.
- * Operators bear responsibility for the override; it's logged in the
- * PR comment + workflow audit log.
+ * Audits two URLs under a Slow-4G mobile profile: the PWA home and the
+ * dashboard. Thresholds below are floors (regression guards), not
+ * targets — see docs/LIGHTHOUSE_QA.md for the ratcheting policy and
+ * the `lighthouse-approved` PR-label override.
  *
  * Reports are archived to the `lighthouse-history` orphan Git branch
- * by `scripts/lighthouse-publish.mjs` after every run on main, so
- * regression analysis (done in chat by Claude Code) can pull baselines
- * via `git fetch origin lighthouse-history`. See docs/LIGHTHOUSE_QA.md
- * for the full operator runbook.
+ * by `scripts/lighthouse-publish.mjs` after every main-branch run, so
+ * historical baselines stay available via `git fetch origin
+ * lighthouse-history`.
  */
 module.exports = {
     ci: {
         collect: {
             // LHCI auto-spins up a static-server rooted at staticDistDir
-            // and audits the URLs (relative to that root). No need to run
-            // `npx serve` separately — saves CI minutes + avoids port
-            // collisions.
+            // and audits the URLs relative to it. Saves spinning up a
+            // separate `npx serve` + avoids port collisions in CI.
             staticDistDir: '.',
-            // 3 runs per URL; the median is what we assert + publish.
-            // Lighthouse is naturally noisy (3-5 points run-to-run);
-            // medians stabilise the comparison.
+            // 3 runs per URL; we assert + publish the median. Lighthouse
+            // is naturally noisy (3-5 points run-to-run); medians keep
+            // the comparison stable.
             numberOfRuns: 3,
-            // Mobile defaults — Slow 4G + 4× CPU slowdown. Matches the
-            // realistic CRISP user (low-end Android in disaster zone).
+            // Slow 4G + 4× CPU slowdown. Matches a realistic CRISP user
+            // (low-end Android in a disaster zone).
             settings: {
                 formFactor: 'mobile',
                 throttling: {
@@ -76,11 +45,9 @@ module.exports = {
                     'Mozilla/5.0 (Linux; Android 11; moto g power) AppleWebKit/537.36 ' +
                     '(KHTML, like Gecko) Chrome/96.0.4664.45 Mobile Safari/537.36 ' +
                     'Chrome-Lighthouse',
-                // Skip flaky / not-applicable audits:
-                //   uses-rel-preconnect — relies on real DNS+TCP timing,
-                //     misleading under throttle simulation.
-                //   is-crawlable / canonical / etc. — SEO concerns
-                //     not relevant to a private crisis-reporter PWA.
+                // uses-rel-preconnect relies on real DNS+TCP timing and
+                // is misleading under throttle simulation; is-crawlable
+                // doesn't apply to a private crisis-reporter PWA.
                 skipAudits: ['uses-rel-preconnect', 'is-crawlable'],
                 onlyCategories: [
                     'performance',
@@ -90,31 +57,23 @@ module.exports = {
                     'seo',
                 ],
             },
-            // Audited URLs. Paths are relative to staticDistDir.
-            // Phase 1 — 3 URLs. Phase 4 will add multi-step user-flow
-            // audits for the v4 capture / classify / review stages
-            // (those require Lighthouse's userFlow API, not lhci collect).
+            // Audited URLs (relative to staticDistDir). `?ui=v4` is the
+            // default capture flow now, so it's covered by the bare PWA
+            // home URL — no separate audit needed.
             url: [
-                // May 2026 (Phase 25.10) — `/mobile-app/src/?ui=v4` removed.
-                // v4 is default-on for everyone since Phase 25.3; both URLs
-                // rendered the same capture flow and produced near-identical
-                // scores (perf 47 vs 46). The `?ui=v4` param now only matters
-                // as an escape hatch for users who flipped `crisp_ui_v4=off`
-                // in localStorage — irrelevant to a fresh Lighthouse run.
                 '/mobile-app/src/',
                 '/web-dashboard/src/',
             ],
         },
         assert: {
             // Per-URL assertion matrix. LHCI requires either
-            // `assertions` OR `assertMatrix`, not both — so the
-            // PWA-page block contains the "default" set, and the
-            // dashboard block overrides what's different (no PWA
-            // category, relaxed perf gate).
+            // `assertions` OR `assertMatrix`, not both, so PWA pages
+            // carry the default set and the dashboard block overrides
+            // what differs (no PWA category, relaxed perf gate).
             assertMatrix: [
                 {
-                    // PWA pages — current FLOOR thresholds. Ratchet up
-                    // as fixes raise the scores to a new stable level.
+                    // PWA pages — current floor thresholds. Ratchet up
+                    // as fixes lift the scores to a new stable level.
                     matchingUrlPattern: '.*/mobile-app/src/.*',
                     assertions: {
                         'categories:performance':    ['error', { minScore: 0.45 }],
@@ -154,9 +113,8 @@ module.exports = {
         upload: {
             // We don't run an LHCI server — `scripts/lighthouse-publish.mjs`
             // archives reports to the `lighthouse-history` orphan branch
-            // ourselves (free, durable, Git-native). filesystem upload
-            // here just keeps `.lighthouseci/` populated for the
-            // publish + comment scripts to read.
+            // itself. The filesystem target here just keeps `.lighthouseci/`
+            // populated for the publish + PR-comment scripts to read.
             target: 'filesystem',
             outputDir: './.lighthouseci/output',
             reportFilenamePattern: '%%PATHNAME%%-%%DATETIME%%-report.%%EXTENSION%%',
