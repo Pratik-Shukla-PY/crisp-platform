@@ -818,7 +818,10 @@
         const textDrawer = document.getElementById('v4-cap-text-drawer');
         const capMicBtn = document.getElementById('btn-v4-cap-mic');
         const capTextArea = document.getElementById('v4-cap-text-area');
-        const capStrip = document.getElementById('v4-cap-strip');
+        // Legacy capture-strip element was removed from the DOM; the
+        // function below keeps the same name so other modules that call
+        // `__crispV4RefreshCapStrip` continue to work, but its only job
+        // now is the Continue-button enable + section-badge repaint.
 
         function _setTileActive(tile, active) {
             if (!tile) return;
@@ -888,102 +891,27 @@
             });
         }
 
-        // Captured-strip refresh: read window.state and toggle chip
-        // visibility / labels. Continue is enabled whenever any chip
-        // is showing.
+        // Re-evaluate the capture-stage Continue button against the
+        // current state and repaint the per-section status badges.
+        // Named for back-compat with `window.__crispV4RefreshCapStrip`
+        // call sites; no longer touches a chip strip (those elements
+        // are gone — the compact Voice/Text chips above handle their
+        // own UI).
         function _refreshCapStrip() {
             const s = window.state || {};
-            const photoEl = document.getElementById('v4-cap-chip-photo');
-            const photoLbl = document.getElementById('v4-cap-chip-photo-label');
-            const voiceEl = document.getElementById('v4-cap-chip-voice');
-            const voiceLbl = document.getElementById('v4-cap-chip-voice-label');
-            const textEl = document.getElementById('v4-cap-chip-text');
-            const textLbl = document.getElementById('v4-cap-chip-text-label');
             const photos = (s.v4Photos && s.v4Photos.length) || (s.photoDataUrl ? 1 : 0);
-            const audioOk = !!(s.audioBlob && s.audioBlob.size > 0) || !!(s.transcript && s.transcript.trim().length > 4);
-            const textOk = !!(s.description && s.description.trim().length > 0) && s.description !== s.transcript;
-            // ↑ text chip only when the textarea has content distinct from
-            //   the voice transcript (otherwise voice + text would double-count).
-            //   When the user types directly we set both description &
-            //   transcript to the same string, so the heuristic compares them.
+            const audioOk = !!(s.audioBlob && s.audioBlob.size > 0)
+                || !!(s.transcript && s.transcript.trim().length > 4);
             const anyTextLike = !!(s.description && s.description.trim().length > 0);
-
-            if (photoEl) {
-                if (photos > 0) {
-                    photoEl.removeAttribute('hidden');
-                    if (photoLbl) {
-                        // i18n photo count.
-                        const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
-                        if (photos === 1) {
-                            photoLbl.textContent = _t('v4_photos_count_one') || '1 photo';
-                        } else {
-                            const tmpl = _t('v4_photos_count_many') || '{n} photos';
-                            photoLbl.textContent = tmpl.replace('{n}', String(photos));
-                        }
-                    }
-                } else photoEl.setAttribute('hidden', '');
-            }
-            if (voiceEl) {
-                if (audioOk) voiceEl.removeAttribute('hidden');
-                else voiceEl.setAttribute('hidden', '');
-            }
-            if (textEl) {
-                // Show text chip when description has content. If voice was
-                // captured and the textarea echoes the transcript, prefer the
-                // voice chip alone (avoid duplicate "voice + text" when the
-                // user only spoke).
-                const showText = anyTextLike && !audioOk;
-                if (showText) textEl.removeAttribute('hidden');
-                else textEl.setAttribute('hidden', '');
-            }
-
-            // Show the strip wrapper if any chip is visible.
             const anyShown = (photos > 0) || audioOk || anyTextLike;
-            if (capStrip) {
-                if (anyShown) capStrip.removeAttribute('hidden');
-                else capStrip.setAttribute('hidden', '');
-            }
-            // Continue button enabled whenever any modality has content.
             if (nextBtn) {
                 nextBtn.disabled = !anyShown;
                 nextBtn.classList.toggle('is-ready', anyShown);
             }
-            // also paint the new per-section status badges
-            // (photo n/5, voice / text "Added"). Keeps the legacy chip
-            // strip and the new section badges in sync since both react
-            // to the same state changes.
             if (typeof window.__crispV4RefreshSectionBadges === 'function') {
                 try { window.__crispV4RefreshSectionBadges(); } catch (_) {}
             }
         }
-
-        // Chip-x: clear the matching modality + refresh.
-        const chipPhotoX = document.getElementById('v4-cap-chip-photo-x');
-        const chipVoiceX = document.getElementById('v4-cap-chip-voice-x');
-        const chipTextX = document.getElementById('v4-cap-chip-text-x');
-        if (chipPhotoX) chipPhotoX.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            _setState({ v4Photos: [], photoDataUrl: null, photoBlob: null });
-            try { _renderThumbs(); } catch (_) {}
-            _refreshCapStrip();
-        });
-        if (chipVoiceX) chipVoiceX.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            if (_isV4Recording()) _stopV4Recording();
-            _setState({ audioBlob: null, audioChunks: [], transcript: '' });
-            // If the textarea echoes the transcript, clear it too.
-            if (capTextArea && capTextArea.value === (_getState().description || '')) {
-                capTextArea.value = '';
-                _setState({ description: '' });
-            }
-            _refreshCapStrip();
-        });
-        if (chipTextX) chipTextX.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            if (capTextArea) capTextArea.value = '';
-            _setState({ description: '' });
-            _refreshCapStrip();
-        });
 
         // Initial paint + every stage entry to v4-capture re-paints.
         _refreshCapStrip();

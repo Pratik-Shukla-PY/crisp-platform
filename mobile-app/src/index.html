@@ -515,7 +515,7 @@
                 <span class="home-utility-dot" aria-hidden="true">·</span>
                 <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
                 <span class="home-utility-dot" aria-hidden="true">·</span>
-                <span class="home-utility-version" id="home-utility-version">v0.7.38</span>
+                <span class="home-utility-version" id="home-utility-version">v0.7.39</span>
             </nav>
 
             <!-- Legacy retained DOM — kept hidden so any
@@ -621,24 +621,6 @@
             <!-- Title kept; subtitle removed in the redesign — three labelled
                  sections below already make the multi-modal intent obvious. -->
             <h1 class="v4-cap-title" data-i18n="v4_cap_show_what_you_see">Show what you see.</h1>
-
-            <!-- Legacy captured-strip kept in DOM (hidden via CSS) so
-                 _refreshCapStrip() in v4-flow.js doesn't throw. New per-
-                 section status badges below take over the UI role. -->
-            <div class="v4-cap-strip" id="v4-cap-strip" hidden aria-live="polite">
-                <span class="v4-cap-chip" id="v4-cap-chip-photo" hidden>
-                    <span class="v4-cap-chip-label" id="v4-cap-chip-photo-label">1 photo</span>
-                    <button class="v4-cap-chip-x" id="v4-cap-chip-photo-x" type="button" aria-label="Remove photo">×</button>
-                </span>
-                <span class="v4-cap-chip" id="v4-cap-chip-voice" hidden>
-                    <span class="v4-cap-chip-label" id="v4-cap-chip-voice-label">Voice note</span>
-                    <button class="v4-cap-chip-x" id="v4-cap-chip-voice-x" type="button" aria-label="Remove voice">×</button>
-                </span>
-                <span class="v4-cap-chip" id="v4-cap-chip-text" hidden>
-                    <span class="v4-cap-chip-label" id="v4-cap-chip-text-label">Note added</span>
-                    <button class="v4-cap-chip-x" id="v4-cap-chip-text-x" type="button" aria-label="Remove text">×</button>
-                </span>
-            </div>
 
             <!-- 3 stacked sections (Photo / Voice / Text). Each
                  occupies its own card and is always visible (no toggling
