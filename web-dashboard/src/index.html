@@ -339,7 +339,12 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+<!-- Turf bumped May 2026 from 6.5.0 → 7.2.0. Two API call sites in
+     web-dashboard/src/app.js (turf.point + turf.booleanPointInPolygon
+     in the in-polygon filter at ~line 4741); both APIs are stable
+     across the 6 → 7 boundary. 7.x ships ES modules + tree-shaking
+     for any future bundler-based build. -->
+<script src="https://unpkg.com/@turf/turf@7.2.0/turf.min.js"></script>
 <!-- PhotoSwipe v5 — UMD bundle exposes `window.PhotoSwipe` and
      `window.PhotoSwipeLightbox`. Must load BEFORE app.js so openGallery()
      can construct a lightbox on the first click. We load the lightbox
@@ -351,7 +356,7 @@
      `window.BlurHash` is ready when the first `renderFeed()` / `selectReport()`
      runs. Same vendored file as the PWA; see src/blurhash.js header. -->
 <script src="blurhash.js?v=1"></script>
-<script src="app.js?v=761"></script>
+<script src="app.js?v=762"></script>
 <script src="predictions.js?v=110"></script>
 
 <!-- Offline status banner -->
