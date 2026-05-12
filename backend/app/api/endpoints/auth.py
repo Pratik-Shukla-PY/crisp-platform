@@ -26,7 +26,7 @@ from app.core.security import (
 )
 from app.core.deps import get_current_user, require_admin, require_super_admin
 from app.services.sms import send_otp_sms, validate_e164, SMSSendError
-from jose import JWTError
+from jwt import PyJWTError as JWTError  # May 2026: jose → PyJWT (CVE closure)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

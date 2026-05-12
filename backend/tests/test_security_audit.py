@@ -15,7 +15,7 @@ class TestTokenSecurity:
     def test_expired_token_rejected(self, client):
         # Craft a token that's already expired
         from app.core.security import JWT_SECRET, JWT_ALGORITHM
-        from jose import jwt
+        import jwt  # May 2026: jose → PyJWT
         from datetime import datetime, timezone, timedelta
         expired = jwt.encode({"sub": "u1", "role": "ADMIN", "type": "access",
                               "exp": datetime.now(timezone.utc) - timedelta(hours=1)},

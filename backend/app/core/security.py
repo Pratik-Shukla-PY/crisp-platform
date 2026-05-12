@@ -13,7 +13,15 @@ from typing import Optional, Any
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-from jose import jwt, JWTError
+# May 2026 — JWT migrated from python-jose → PyJWT to close
+# CVE-2024-33663 (algorithm confusion) + CVE-2024-33664 (DoS via crafted
+# JWE). PyJWT signs HS256 byte-for-byte identically, so existing tokens
+# in DB / cookies / clients keep verifying through the cutover. We
+# re-export PyJWT's base exception class as `JWTError` so the existing
+# `except JWTError:` call sites (app.core.deps, app.api.endpoints.auth,
+# tests) don't have to change.
+import jwt
+from jwt import PyJWTError as JWTError
 from passlib.context import CryptContext
 
 logger = logging.getLogger(__name__)

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.core.security import decode_token
 from app.models.auth import User, RoleEnum
-from jose import JWTError
+from jwt import PyJWTError as JWTError  # May 2026: jose → PyJWT (CVE closure)
 
 logger = logging.getLogger(__name__)
 

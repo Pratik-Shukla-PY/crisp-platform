@@ -2,7 +2,8 @@
 import pytest
 import time
 from datetime import datetime, timezone, timedelta
-from jose import jwt, JWTError
+import jwt
+from jwt import PyJWTError as JWTError  # May 2026: jose → PyJWT
 
 from app.core.security import (
     hash_password, verify_password, validate_password_strength,
