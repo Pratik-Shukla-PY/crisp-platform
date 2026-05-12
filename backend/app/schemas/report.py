@@ -147,6 +147,40 @@ class ReportMetaCreate(BaseModel):
     # chars) but our encoder uses 4x3, which yields ~30 chars.
     blurhash: Optional[str] = Field(None, max_length=96)
 
+    # UNDP taxonomy guards — applied AFTER field-level enum coercion so
+    # we see the post-Pydantic values. Three checks in one pass:
+    #   1) HURRICANE → CYCLONE normalisation (UNDP lists them as one
+    #      category; CYCLONE is the canonical name in the codebase).
+    #   2) Reject LANDSLIDE / PANDEMIC — historical extras that are not
+    #      on the UNDP Problem Statement spec (page 8).
+    #   3) When infrastructure_type == OTHER, infrastructure_name must
+    #      be non-empty (UNDP "Other, please specify" requirement).
+    @model_validator(mode="after")
+    def _enforce_undp_taxonomy(self):
+        # 1. Normalise HURRICANE → CYCLONE.
+        if self.crisis_type is not None:
+            ct_value = self.crisis_type.value if hasattr(self.crisis_type, "value") else str(self.crisis_type)
+            if ct_value == "HURRICANE":
+                self.crisis_type = CrisisTypeEnum.CYCLONE
+            # 2. Reject extras not on the UNDP spec.
+            elif ct_value in ("LANDSLIDE", "PANDEMIC"):
+                raise ValueError(
+                    f"crisis_type='{ct_value}' is not on the UNDP Problem Statement "
+                    f"crisis-type list. Accepted values: EARTHQUAKE, FLOOD, TSUNAMI, "
+                    f"CYCLONE, WILDFIRE, EXPLOSION, CHEMICAL_INCIDENT, CONFLICT, "
+                    f"CIVIL_UNREST, OTHER."
+                )
+        # 3. infrastructure_name required when infrastructure_type=OTHER.
+        if self.infrastructure_type == InfraTypeEnum.OTHER:
+            name = (self.infrastructure_name or "").strip()
+            if len(name) < 1:
+                raise ValueError(
+                    "infrastructure_type='OTHER' requires a non-empty "
+                    "infrastructure_name (UNDP 'Other, please specify' rule)."
+                )
+        return self
+
+
 # Single media attachment (Stage 2/3 — one file at a time)
 class MediaAttach(BaseModel):
     type: MediaTypeEnum
