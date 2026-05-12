@@ -306,17 +306,13 @@
                         _renderThumbs();
                         nextBtn.disabled = false;
                         nextBtn.classList.add('is-ready');
-                        // AI prefill call retained but no-ops in 25.4
-                        // due to AI_PREFILL_ENABLED = false.
+                        // AI prefill call retained but no-ops while
+                        // AI_PREFILL_ENABLED is false (top of file).
                         _maybeFireAiPrefill(_getState().photoBlob || null).catch(() => {});
-                        // Only auto-advance from the FIRST photo, not subsequent ones.
-                        if (_preCount === 0) {
-                            setTimeout(() => {
-                                if (document.querySelector('#stage-v4-capture.active')) {
-                                    _goToClassify();
-                                }
-                            }, 1200);
-                        }
+                        // Phase 25.6 — auto-advance REMOVED. User reported
+                        // the abrupt stage-switch made it impossible to
+                        // add more photos via the `+` button. They now
+                        // tap Continue manually.
                     }
                     document.removeEventListener('camera-modal-closed', _modalCloseHandler);
                 };
@@ -396,34 +392,39 @@
                     await _v4FallbackIngest(file);
                 }
 
-                // Wait briefly for v3's pipeline to set state.photoDataUrl
-                // (the FileReader.onload + canvas.toDataURL chain runs
-                // synchronously after the file is read; in practice
-                // ~50-200ms in real browsers, ~1s for 4MB images).
+                // Phase 25.6 (May 2026) — wait for state.photoDataUrl to
+                // CHANGE, not just to become truthy. The previous version
+                // checked `!_getState().photoDataUrl`, which works for
+                // photo #1 but races on photo #2: state.photoDataUrl is
+                // already set (from photo #1), so the loop exits
+                // immediately BEFORE __crispIngestFile finishes its async
+                // FileReader → canvas.toDataURL chain for photo #2. The
+                // local `dataUrl` then captures the OLD photo's URL and
+                // pushes a duplicate into v4Photos. User-visible: only
+                // 1 thumbnail ever appears, no matter how many photos
+                // are taken.
+                const _preDataUrl = _getState().photoDataUrl;
                 const startedAt = Date.now();
-                while (!_getState().photoDataUrl && Date.now() - startedAt < 4000) {
+                while (_getState().photoDataUrl === _preDataUrl
+                       && Date.now() - startedAt < 4000) {
                     await new Promise((r) => setTimeout(r, 50));
                 }
 
                 // Render the v4 thumbnail strip from state.photoDataUrl
                 // (the same SMALL data URL v3 uses for #photo-preview).
                 const dataUrl = _getState().photoDataUrl;
-                if (dataUrl) {
+                if (dataUrl && dataUrl !== _preDataUrl) {
                     const photoEntry = {
                         blob: _getState().photoBlob,
                         url: dataUrl,
                         ts: Date.now(),
                     };
                     if (!_getState().v4Photos) _setState({ v4Photos: [] });
-                    // Replace the most recent v4Photos entry on re-pick of the
-                    // primary slot, otherwise append.
                     const photos = _getState().v4Photos;
-                    if (photos.length === 0) {
-                        photos.push(photoEntry);
-                    } else {
-                        // Subsequent files via #v4-add-more route through
-                        // browseInput (asExtra=true via state.extraPhotos).
-                        // For now we append to v4Photos for thumb display.
+                    // De-dupe defensively in case the same data URL is
+                    // re-ingested (e.g. user picks the same gallery item
+                    // twice).
+                    if (!photos.find((p) => p.url === dataUrl)) {
                         photos.push(photoEntry);
                     }
                     _renderThumbs();
@@ -436,20 +437,16 @@
                     }
                 }
 
-                // Fire AI pre-fill if bandwidth is good. Don't block — the
-                // user can tap Continue immediately.
+                // Fire AI pre-fill if bandwidth is good (no-op while
+                // AI_PREFILL_ENABLED is false — see top of file).
                 _maybeFireAiPrefill(_getState().photoBlob || file).catch((e) =>
                     console.warn('[v4] AI prefill error:', e));
 
-                // Auto-advance after 1.2s if user doesn't add another photo.
-                if (_getState().v4Photos && _getState().v4Photos.length === 1) {
-                    setTimeout(() => {
-                        // Only advance if the user is still on this stage.
-                        if (document.querySelector('#stage-v4-capture.active')) {
-                            _goToClassify();
-                        }
-                    }, 1200);
-                }
+                // Phase 25.6 — REMOVED auto-advance. User reported the
+                // 1.2s timer made it impossible to add a second photo
+                // via the `+` button, and the abrupt stage change felt
+                // like the app was "deciding things for me". User now
+                // taps Continue manually.
             } catch (e) {
                 console.error('[v4] photo handler failed:', e);
             }
@@ -897,11 +894,10 @@
                 tile.setAttribute('aria-checked', 'true');
                 _setState({ infrastructure_type: tile.getAttribute('data-value') });
                 _updateReviewSummary();
-                // Auto-advance per proposal "Tap one. Auto-advance." —
-                // 700 ms gives the lock-in glow a beat to register.
-                setTimeout(() => {
-                    if (_classifyStep === 'infra') _showSubStep('crisis');
-                }, 700);
+                // Phase 25.6 (May 2026) — auto-advance to the crisis
+                // sub-step REMOVED. The user reported the automatic
+                // page transition felt like the app was deciding
+                // things for them. They tap Next to advance.
             });
         });
 
