@@ -103,6 +103,12 @@ if ('serviceWorker' in navigator) {
     //      first SW takes control), so new users don't see a
     //      misleading "Update" prompt for their initial install.
     let _pwaUpdateReloading = false;
+    // Phase 25.9 (May 2026) — only reload after the user explicitly
+    // taps "Update now". Previous code reloaded on EVERY
+    // 'controllerchange', which on a first-visit (no existing
+    // controller) fires when the brand-new SW activates → spurious
+    // reload + execution-context-destroyed during prod-smoke tests.
+    let _pwaUpdateClicked = false;
     function _wireUpdatePrompt(reg) {
         // Case 1: there's already a worker in 'waiting' from a previous
         // visit (user dismissed the banner, then reloaded the tab).
@@ -130,7 +136,17 @@ if ('serviceWorker' in navigator) {
         // skipWaiting(); now the new worker has taken control and
         // 'controllerchange' fires. Reload exactly once so the page
         // re-fetches the new assets through the new SW.
+        //
+        // Phase 25.9 — gated by _pwaUpdateClicked so this listener
+        // does NOT fire a reload on the FIRST install (when there's
+        // no existing controller and the new SW activates naturally).
+        // Without this gate, every fresh browser context — Playwright
+        // included — got force-reloaded on SW activation, which
+        // destroyed the page-evaluate context mid-test and broke
+        // prod-smoke's "service worker cache version is current"
+        // assertion.
         navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!_pwaUpdateClicked) return;
             if (_pwaUpdateReloading) return;
             _pwaUpdateReloading = true;
             window.location.reload();
@@ -173,6 +189,10 @@ if ('serviceWorker' in navigator) {
             const btn = banner.querySelector('.pwa-update-banner-btn');
             btn.disabled = true;
             btn.textContent = _t('upload_sending') || 'Updating…';
+            // Phase 25.9 — arm the reload gate. controllerchange will
+            // now reload, but ONLY because this explicit user tap
+            // armed the flag.
+            _pwaUpdateClicked = true;
             try { worker.postMessage({ type: 'SKIP_WAITING' }); }
             catch (e) {
                 // postMessage failed — fall back to a hard reload so
