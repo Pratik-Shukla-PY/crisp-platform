@@ -262,6 +262,9 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .stat-pill.unverified { border-color: rgba(100,116,139,0.3); color: #94a3b8; background: rgba(100,116,139,0.08); }
 .stat-pill.avg-response { border-color: rgba(56,189,248,0.3); color: var(--info); background: rgba(56,189,248,0.08); }
 .stat-pill.media-pending { border-color: rgba(249,115,22,0.3); color: var(--severe); background: rgba(249,115,22,0.08); }
+/* Phase C.2 — Originals-pending filter pill. Amber so it visually
+   rhymes with the in-card ORIG chip + the gallery-strip pending chip. */
+.stat-pill.originals_pending { border-color: rgba(245,158,11,0.4); color: #f59e0b; background: rgba(245,158,11,0.10); }
 .clickable-pill { cursor:pointer; transition:all 0.2s; }
 .clickable-pill:hover { transform:scale(1.05); box-shadow:0 2px 12px rgba(255,255,255,0.1); }
 .clickable-pill.pill-active { box-shadow:0 0 0 2px var(--accent); transform:scale(1.08); }
@@ -1870,6 +1873,21 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 .truth-partial  { color: var(--moderate); border-color: rgba(234,179,8,0.4);   background: rgba(234,179,8,0.08);  }
 .truth-low      { color: var(--severe);   border-color: rgba(249,115,22,0.4);  background: rgba(249,115,22,0.08); }
 .truth-unverified{ color: var(--text-dim);border-color: var(--border);         background: transparent;           }
+
+/* Phase C.2 (May 2026) — per-card "Original pending" chip. Sits in the
+   card footer next to the truth badge so operators see at a glance which
+   reports still have an in-flight LARGE variant. Pulsing cloud icon
+   matches the same visual language used in the inline preview's gallery
+   pending chip. */
+.qrt-orig-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 700; padding: 2px 7px;
+    border-radius: 8px; flex-shrink: 0; letter-spacing: 0.3px;
+    color: #f59e0b; border: 1px solid rgba(245,158,11,0.4);
+    background: rgba(245,158,11,0.10); text-transform: uppercase;
+}
+.qrt-orig-chip i { font-size: 10px; }
+.qrt-orig-chip .qrt-orig-chip-pct { font-weight: 800; opacity: 0.85; }
 
 /* ══ RESPONSIVE ════════════════════════════════════════════ */
 @media (max-width: 1400px) {

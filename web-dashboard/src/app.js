@@ -1123,6 +1123,21 @@ function renderTriageQueue(el) {
         reports = reports.filter(r => r.status === 'RESPONDING');
     } else if (_activePillFilter === 'resolved') {
         reports = reports.filter(r => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM');
+    } else if (_activePillFilter === 'originals_pending') {
+        // Phase C.2 — surface reports where the LARGE (HIGH) tier hasn't
+        // finished assembling for at least one captured photo. Helps
+        // operators monitor the "Original delayed by poor connectivity"
+        // case before silently shipping medium-tier previews to the
+        // archive.
+        reports = reports.filter(r => {
+            const imgs = (r.media || []).filter(m => m.type === 'IMAGE');
+            if (imgs.length === 0) return false;
+            const groups = groupPhotos(imgs);
+            return groups.some(g => {
+                const hi = g.members.find(m => m.resolution_tier === 'HIGH');
+                return !hi || hi.assembly_status !== 'complete';
+            });
+        });
     }
     // 'all' or null = no additional filter
 
@@ -1346,6 +1361,31 @@ function createIncidentCard(r) {
         </span>`;
     }
 
+    // Phase C.2 (May 2026) — "Original pending" badge. Fires whenever
+    // any captured photo's LARGE (HIGH) tier hasn't finished assembling.
+    // Surfaces the "reporter is on a slow link, Original is in the
+    // background queue" case from the UNDP spec so operators don't
+    // mistake the SMALL/MEDIUM previews for the final-quality file.
+    // Counts groups for which LARGE is missing or incomplete; shows
+    // worst-case completion_pct for context.
+    const _imgRows = (r.media || []).filter(m => m.type === 'IMAGE');
+    const _groups = groupPhotos(_imgRows);
+    let origPendingCount = 0;
+    let origMinPct = 100;
+    for (const g of _groups) {
+        const hi = g.members.find(m => m.resolution_tier === 'HIGH');
+        if (!hi || hi.assembly_status !== 'complete') {
+            origPendingCount += 1;
+            const pct = hi ? Math.round(hi.completion_pct || 0) : 0;
+            if (pct < origMinPct) origMinPct = pct;
+        }
+    }
+    const origPendingChip = origPendingCount > 0 && _groups.length > 0
+        ? `<span class="qrt-orig-chip" title="${origPendingCount} of ${_groups.length} ${origPendingCount === 1 ? 'Original is' : 'Originals are'} still uploading (worst pct: ${origMinPct}%). Click to open the report and see the full tier breakdown.">
+               <i class="fa-solid fa-cloud-arrow-up fa-pulse"></i> ORIG <span class="qrt-orig-chip-pct">${origPendingCount}/${_groups.length}</span>
+           </span>`
+        : '';
+
     card.innerHTML = `
         <div class="qrt-sev-strip strip-${sev}"></div>
         <div class="qrt-card-body">
@@ -1384,6 +1424,7 @@ function createIncidentCard(r) {
                 </span>` : ''}
             </div>
             <div class="qrt-card-footer">
+                ${origPendingChip}
                 ${truthBadge}
                 ${actionEl}
             </div>
@@ -1470,6 +1511,25 @@ function updateCommandStats() {
     _set('count-responding', responding);
     _set('count-resolved', resolved);
     _set('count-total', reports.length);
+
+    // Phase C.2 — Originals-pending count. Show the pill only when > 0
+    // so the command bar doesn't grow a permanent "0 ORIG PENDING" chip
+    // (which would mislead operators into thinking it's broken).
+    let origPending = 0;
+    for (const r of reports) {
+        const imgs = (r.media || []).filter(m => m.type === 'IMAGE');
+        if (imgs.length === 0) continue;
+        const grps = groupPhotos(imgs);
+        if (grps.some(g => {
+            const hi = g.members.find(m => m.resolution_tier === 'HIGH');
+            return !hi || hi.assembly_status !== 'complete';
+        })) {
+            origPending += 1;
+        }
+    }
+    _set('count-originals-pending', origPending);
+    const origPill = document.getElementById('stat-originals-pending');
+    if (origPill) origPill.style.display = origPending > 0 ? '' : 'none';
 
     // Average wait time of pending reports
     const pendingReports = reports.filter(r => r.status === 'PENDING' || r.status === 'VERIFIED');

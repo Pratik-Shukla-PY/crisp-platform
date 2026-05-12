@@ -58,6 +58,11 @@
             <div class="stat-pill responding clickable-pill" id="stat-responding" onclick="filterByPill('responding')" title="Click to filter helped incidents"><span id="count-responding">0</span><label>HELPED</label></div>
             <div class="stat-pill resolved clickable-pill" id="stat-resolved" onclick="filterByPill('resolved')" title="Click to filter closed incidents"><span id="count-resolved">0</span><label>CLOSED</label></div>
             <div class="stat-pill total clickable-pill" id="stat-total" onclick="filterByPill('all')" title="Show all incidents"><span id="count-total">0</span><label>TOTAL</label></div>
+            <!-- Phase C.2 — surfaces reports where the LARGE (Original) tier
+                 hasn't finished assembling yet (slow-link uploads, deferred
+                 by the PWA's bandwidth probe). Only visible when the count > 0
+                 so it doesn't clutter the empty case. -->
+            <div class="stat-pill originals_pending clickable-pill" id="stat-originals-pending" onclick="filterByPill('originals_pending')" title="Click to filter reports whose Original-quality (LARGE) image is still uploading" style="display:none;"><span id="count-originals-pending">0</span><label>ORIG PENDING</label></div>
             <div class="stat-pill avg-response" id="stat-avg-response" title="Average wait time of pending incidents"><span id="count-avg-response">—</span><label>AVG WAIT</label></div>
             <button class="stat-pill analytics-toggle" onclick="toggleAnalytics()" title="Analytics Dashboard">
                 <i class="fa-solid fa-chart-bar"></i><label>ANALYTICS</label>
