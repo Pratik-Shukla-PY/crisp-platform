@@ -69,7 +69,7 @@ jobs:
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install LHCI
         # Pin the major version. LHCI 0.13.x is the stable line as of
@@ -201,7 +201,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: e2e/package-lock.json
 
