@@ -266,7 +266,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+          # Cache key qualifier v2 (May 2026) — Playwright 1.47 → 1.60
+          # bumped the WebKit binary directory from webkit-2191 to
+          # webkit-2287. The hashFiles() segment changed too (lockfile
+          # rewrite), but a stale 1.47-era cache somehow still resolved
+          # against the new key in one deploy run — the install step
+          # short-circuited via the cache-hit branch and only ran
+          # `install-deps` (system libs), so webkit-2287's pw_run.sh
+          # never landed and the mobile-safari prod-smoke tests failed
+          # with "Executable doesn't exist". Auto-rollback then reverted
+          # PROD off a perfectly-good app fix. The `-v2-` qualifier
+          # forces a one-shot cache miss to flush the stale dir.
+          key: playwright-v2-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
 
       - name: Install Playwright deps + Chromium
         working-directory: e2e
@@ -281,6 +292,17 @@ jobs:
           else
             npx playwright install --with-deps chromium webkit
           fi
+          # Belt-and-suspenders: even on cache hit, verify the actual
+          # browser executables exist. If either binary is missing
+          # (cache drift after a Playwright bump) we re-run the full
+          # browser install. ~10s if everything is fine; ~2 min if we
+          # need to download — far better than an auto-rollback.
+          for browser in chromium webkit; do
+            if ! npx playwright install --dry-run "$browser" | grep -q 'is already installed'; then
+              echo "::warning::Playwright $browser binary missing from cache — installing"
+              npx playwright install "$browser"
+            fi
+          done
 
       - name: Run prod-smoke against undp.crisplabs.tech
         working-directory: e2e
@@ -425,14 +447,17 @@ jobs:
         # Verify the rollback actually fixed prod. If even the previous
         # commit's smoke fails, we have a deeper issue (broken EC2,
         # broken external CDN) that no amount of rolling back fixes.
+        # May 2026 — explicit chromium+webkit install with --force so
+        # ANY cache-state inconsistency (incl. partial download from a
+        # killed prior job) gets blown away. The rollback job is the last
+        # line of defence — it must not silently fail to launch a browser
+        # the way the main prod-smoke job did.
         working-directory: e2e
         env:
           CRISP_PROD_BASE_URL: https://undp.crisplabs.tech
         run: |
-          # Need to re-install Playwright since this is a fresh job.
-          # Cached from the earlier setup-node step on the same SHA.
           npm ci --prefer-offline --no-audit --no-fund
-          npx playwright install --with-deps chromium webkit
+          npx playwright install --with-deps --force chromium webkit
           # Smoke against the now-rolled-back prod.
           npm run check:prod || echo "::error::Rollback smoke also failed — manual intervention required"
 

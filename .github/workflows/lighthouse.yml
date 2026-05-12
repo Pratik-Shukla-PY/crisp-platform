@@ -212,7 +212,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+          # v2 qualifier (May 2026) — same reason as deploy.yml: the
+          # Playwright 1.47 → 1.60 bump moved binary directories;
+          # bumping the cache key forces a one-time fresh install.
+          key: playwright-v2-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
 
       - name: Install Playwright deps + Chromium
         working-directory: e2e
@@ -224,6 +227,13 @@ jobs:
             npx playwright install-deps chromium
           else
             npx playwright install --with-deps chromium
+          fi
+          # Defence-in-depth — re-install chromium if its binary is
+          # missing from the cache even on a cache hit (catches Playwright
+          # version drift between cache contents and current package).
+          if ! npx playwright install --dry-run chromium | grep -q 'is already installed'; then
+            echo "::warning::Playwright chromium binary missing from cache — installing"
+            npx playwright install chromium
           fi
 
       - name: Boot static server + run extended QA tests
