@@ -158,7 +158,14 @@ async def upload_media_chunked(
                 thumb_url = f"data:{mime_type};base64,{thumb_b64}"
                 await c.post(
                     f"{BACKEND_URL}/api/v1/reports/{report_id}/media/thumbnail",
-                    json={"media_id": media_id, "thumbnail_data": thumb_url},
+                    # Tier matches the LOW the chunk POSTs send below — the
+                    # backend used to hard-code MEDIUM on this row regardless,
+                    # which left every messaging-bot photo mis-tagged.
+                    json={
+                        "media_id": media_id,
+                        "thumbnail_data": thumb_url,
+                        "resolution_tier": "LOW",
+                    },
                 )
             except Exception:
                 pass

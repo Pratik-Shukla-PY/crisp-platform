@@ -2537,7 +2537,7 @@ def attach_thumbnail(report_id: str, payload: ThumbnailPayload, db: Session = De
             id=payload.media_id,
             report_id=report_id,
             type=MediaTypeEnum.IMAGE,
-            resolution_tier=ResolutionEnum.MEDIUM,
+            resolution_tier=payload.resolution_tier,
             url='',
             is_synced=False,
             thumbnail_url=thumbnail_url,
@@ -2652,6 +2652,15 @@ def attach_media_chunk(
         # carry one; never overwrite the canonical first-write value.
         if payload.seq_num == 0 and payload.full_asset_checksum and not media.full_asset_checksum:
             media.full_asset_checksum = payload.full_asset_checksum
+        # Tier upgrade: /media/thumbnail used to hard-code MEDIUM when it
+        # created the row, which stranded HIGH-tier rows at MEDIUM whenever
+        # the thumbnail landed first. Conservative rule — only upgrade
+        # LOW/MEDIUM → HIGH, never downgrade — so the dashboard "Originals
+        # pending" pill (filters on resolution_tier === 'HIGH') sees the
+        # full-quality variant once the chunks declare it.
+        if (payload.resolution_tier == ResolutionEnum.HIGH
+                and media.resolution_tier in (ResolutionEnum.LOW, ResolutionEnum.MEDIUM)):
+            media.resolution_tier = ResolutionEnum.HIGH
 
     # Idempotent chunk insert — check for duplicate before incrementing counter
     existing_chunk = db.query(MediaChunk).filter(
@@ -3026,6 +3035,12 @@ async def attach_media_chunk_bin(
         # existing non-NULL value (the original is canonical).
         if seq_num == 0 and full_asset_checksum and not media.full_asset_checksum:
             media.full_asset_checksum = full_asset_checksum
+        # Tier upgrade — same conservative rule as the legacy JSON endpoint.
+        # See attach_media_chunk's else branch for the full why.
+        from app.models.report import ResolutionEnum as _RE2
+        if (tier_upper == "HIGH"
+                and media.resolution_tier in (_RE2.LOW, _RE2.MEDIUM)):
+            media.resolution_tier = _RE2.HIGH
 
     # ── Idempotent insert. Mirrors the legacy endpoint byte-for-byte
     #    except the column we write (data_binary instead of data_b64).

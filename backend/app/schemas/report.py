@@ -50,6 +50,11 @@ class MediaBase(BaseModel):
 class ThumbnailPayload(BaseModel):
     media_id: str
     thumbnail_data: str  # full data:image/jpeg;base64,... URL (≤20KB)
+    # Optional tier hint so the thumbnail endpoint stops hard-coding MEDIUM
+    # when it creates the Media row. Default stays MEDIUM for back-compat
+    # (PWA clients pre-dating this field). The downstream chunk POSTs may
+    # still upgrade LOW/MEDIUM → HIGH on the existing row.
+    resolution_tier: ResolutionEnum = ResolutionEnum.MEDIUM
 
 # Chunked upload: adaptive packets 1KB-512KB (network-aware)
 class MediaChunkPayload(BaseModel):
