@@ -1,10 +1,10 @@
-# Lighthouse + Claude Code QA Pipeline — Operator Runbook
+# Lighthouse QA Pipeline — Operator Runbook
 
 CRISP runs Google Lighthouse against the PWA + Dashboard on every PR
 and every production deploy. **Threshold violations block the merge**
-and (on PROD) trigger auto-rollback. AI analysis happens
-**interactively in Claude Code** when you ask for it — not in CI.
-Zero AI cost in CI.
+and (on PROD) trigger auto-rollback. Optional deeper analysis happens
+interactively in whichever code-review LLM the maintainer prefers —
+not in CI. Zero AI cost in CI.
 
 ---
 
@@ -14,22 +14,21 @@ Zero AI cost in CI.
 * **Status check red** → PR can't merge until you fix it OR apply the `lighthouse-approved` label.
 * **Push to main** → Lighthouse re-runs → if green, deploy proceeds. Pre-deploy preflight verifies the Lighthouse status was green.
 * **Post-deploy** → audit runs against `https://undp.crisplabs.tech`. If thresholds violated on PROD, auto-rollback fires.
-* **Want a deeper analysis?** Open Claude Code and say *"analyze the latest Lighthouse report"*. Claude Code pulls the JSON from the `lighthouse-history` branch, prioritizes fixes for low-bandwidth / low-literacy / accessibility, and proposes a fix plan you can approve.
+* **Want a deeper analysis?** Open your code-review LLM of choice in the repo and ask it to analyse the latest Lighthouse report. It pulls the JSON from the `lighthouse-history` branch, prioritises fixes for low-bandwidth / low-literacy / accessibility, and proposes a fix plan you can approve.
 
 ---
 
 ## What's audited
 
-Three URLs, mobile form factor, Slow 4G + 4× CPU slowdown (matches
+Two URLs, mobile form factor, Slow 4G + 4× CPU slowdown (matches
 realistic worst-case CRISP user — low-end Android in disaster zone):
 
-| Page key       | URL                                            | Why |
-|----------------|------------------------------------------------|---|
-| `pwa-home`     | `/mobile-app/src/`                             | First impression — landing page |
-| `pwa-home-v4`  | `/mobile-app/src/?ui=v4`                       | v4-forced variant (regression guard for v4-default) |
-| `dashboard`    | `/web-dashboard/src/`                          | Analyst ops surface |
+| Page key    | URL                          | Why |
+|-------------|------------------------------|---|
+| `pwa-home`  | `/mobile-app/src/`           | First impression — landing page |
+| `dashboard` | `/web-dashboard/src/`        | Analyst ops surface |
 
-3 runs per URL × 3 URLs = 9 Lighthouse audits per CI run. Median is
+3 runs per URL × 2 URLs = 6 Lighthouse audits per CI run. Median is
 picked for stable comparisons. Reports archived to the
 [`lighthouse-history`](https://github.com/Pratik-Shukla-PY/crisp-platform/tree/lighthouse-history)
 branch on every main-branch push.
@@ -41,11 +40,10 @@ branch on every main-branch push.
 These are the **floor**, not the target. They block PR merge if the
 audit drops below them.
 
-| Page          | Performance | Accessibility | Best Practices | PWA   |
-|---------------|------------:|--------------:|---------------:|------:|
-| pwa-home      | 45          | 70            | 85             | 80    |
-| pwa-home-v4   | 45          | 70            | 85             | 80    |
-| dashboard     | 55          | 85            | 85             | n/a   |
+| Page      | Performance | Accessibility | Best Practices | PWA   |
+|-----------|------------:|--------------:|---------------:|------:|
+| pwa-home  | 45          | 70            | 85             | 80    |
+| dashboard | 55          | 85            | 85             | n/a   |
 
 **Plus**: CLS ≤ 0.25 hard-fails everywhere. LCP / TBT are warn-only
 (reported in the comment, don't block).
@@ -69,33 +67,31 @@ pointing at the values to update.
 
 ---
 
-## How to use Claude Code for analysis
+## How to use an LLM assistant for deeper analysis
 
-Open Claude Code in the repo root and say:
+Open your code-review LLM in the repo root and ask it something like:
 
-> *"Analyze the latest Lighthouse report on PR #128"*
+> *"Analyse the latest Lighthouse report on PR #128"*
 
 or
 
-> *"Compare the Lighthouse scores for the last 3 main-branch runs and tell me which axes are trending down"*
+> *"Compare the Lighthouse scores for the last 3 main-branch runs and tell me which axes are trending down."*
 
-Claude Code will:
+A good prompt will produce:
 
 1. `git fetch origin lighthouse-history`
-2. Read the relevant `<sha>/summary.json` files (and the median LHR
-   JSONs when needed for deeper drilling).
-3. Prioritize issues by user impact, weighted toward:
+2. A read of the relevant `<sha>/summary.json` files (and the median
+   LHR JSONs when needed for deeper drilling).
+3. A prioritisation by user impact, weighted toward:
    * 4× — accessibility / low-literacy UX
    * 3× — offline-first reliability / low-bandwidth
    * 2× — mobile responsiveness
    * 1× — desktop / SEO
-4. Produce a Critical/High/Medium/Low list with file paths + specific fixes.
-5. Wait for your approval before implementing.
-6. After approval, write the fixes (the same way it implements bug
-   fixes today), push, and the new CI run will pick up the new scores.
+4. A Critical / High / Medium / Low list with file paths + specific fixes.
+5. A confirmation step before implementing.
 
-Claude Code does NOT need an API key for this — it's the agent you're
-chatting with directly.
+After approval, the maintainer writes the fixes (or has the assistant
+write them), pushes, and the next CI run picks up the new scores.
 
 ---
 
@@ -127,7 +123,6 @@ and when. Don't override silently.
 | Page         | Performance | Accessibility | Best-practices | Pwa | Seo |
 |--------------|------------:|--------------:|---------------:|----:|----:|
 | pwa-home     | 78 ↘ (-3)   | 92 · (0)      | 95 ↗ (+1)      | 92  | 87  |
-| pwa-home-v4  | 76 ↘ (-2)   | 91 · (0)      | 94 ↗ (+1)      | 92  | 87  |
 | dashboard    | 82 · (0)    | 93 · (0)      | 100 · (0)      | n/a | 70  |
 
 Threshold check: ✅ All pass
@@ -198,7 +193,7 @@ PR opened/updated
   5. Post comment to PR via gh-script
   6. Set status check (success / failure)
     ↓
-You review the comment / ask Claude Code for analysis
+You review the comment / ask your code-review LLM for analysis
     ↓
 Push to main triggers .github/workflows/deploy.yml:
   1. preflight checks Lighthouse status was green on this SHA
@@ -235,7 +230,7 @@ Lighthouse alone is not enough. Phase 4 of the rollout adds these:
 | Multi-stage user flow perf (capture → classify → review) | Lighthouse user-flow API + Puppeteer | `scripts/lighthouse-flow.mjs` |
 | Visual regression (CSS drift) | Playwright `toHaveScreenshot()` | New `e2e/tests/pwa/42-visual-regression.spec.ts` |
 | React Native parity | Detox + RN Testing Library | New `crisp-mobile/.detoxrc.js` (CI integration TBD) |
-| Cognitive load / low-literacy UX | Claude Code reviews screenshots | Manual on demand |
+| Cognitive load / low-literacy UX | LLM-assisted screenshot review | Manual on demand |
 
 Run them all locally:
 
@@ -265,8 +260,8 @@ and pick the median. If you're still seeing flakiness:
    cause perf scores to swing. Re-run.
 2. Check for upstream CDN flakiness (Mapbox, FontAwesome, Google
    Fonts) in the Network tab of the LH HTML report.
-3. Open Claude Code and ask *"compare last 5 main-branch lighthouse
-   reports for variance"* — Claude can spot patterns.
+3. Ask your code-review LLM to *"compare the last 5 main-branch
+   Lighthouse reports for variance"* — it can spot patterns.
 
 ### "I want to add a new URL to audit"
 
@@ -292,8 +287,8 @@ ratchet pwa-home a11y floor 70 → 80"*.
 The workflow dashboard shows which job failed (prod-smoke OR
 prod-lighthouse-audit). Read the comment / artifacts on the failed
 job. The rollback already restored HEAD~1; you have time to
-investigate. Open Claude Code: *"the prod lighthouse audit fired
-auto-rollback at sha=abc1234, what regressed?"*.
+investigate. Ask your code-review LLM: *"the prod Lighthouse audit
+fired auto-rollback at sha=abc1234, what regressed?"*.
 
 ---
 
@@ -301,14 +296,14 @@ auto-rollback at sha=abc1234, what regressed?"*.
 
 * **CI minutes**: ~12 minutes per run (3 URLs × 3 runs at ~80 sec
   each + setup overhead). Free-tier GitHub Actions covers it easily.
-* **Anthropic API**: $0 — analysis is interactive in Claude Code, no
-  background API calls.
+* **AI assistant API**: $0 — the deeper analysis path is interactive
+  in a local LLM assistant; no background API calls.
 * **Storage**: `lighthouse-history` orphan branch ≈ 50 KB / commit ×
   ~1000 commits/year ≈ 50 MB/year of repo bloat. Squash to last 12
   months once a year if it ever becomes a problem.
 
 ---
 
-*Last updated: May 2026 (Phase 1 + 2 + 3 shipped). Phase 4
-(axe-core, user-flow, offline strict, visual regression, Detox)
-follows in the same PR.*
+*Coverage extension (axe-core, user-flow, offline-strict, visual
+regression, Detox) is rolled in via subsequent PRs as the surfaces
+stabilise.*
