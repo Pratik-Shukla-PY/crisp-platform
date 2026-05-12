@@ -1039,6 +1039,25 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .dp-pii-badge { position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.65); backdrop-filter:blur(4px); color:#22c55e; font-size:9px; font-weight:600; padding:3px 7px; border-radius:4px; display:flex; align-items:center; gap:3px; z-index:2; pointer-events:none; }
 .dp-pii-badge i { font-size:8px; }
 
+/* Phase A (May 2026) — multi-photo count badge. Sits on the inline preview
+   so operators see at a glance that the report carries more than one
+   captured photo. The number after "Photo" updates live as the analyst
+   clicks through the thumbnail strip (dpShowGalleryImage keeps it in sync).
+   Bottom-left so it doesn't collide with the PII badge (top-right) or the
+   tier chip (top-left). */
+.dp-img-count-badge { position:absolute; bottom:6px; left:6px; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); color:#e2e8f0; font-size:10px; font-weight:600; padding:3px 8px; border-radius:4px; display:flex; align-items:center; gap:5px; z-index:2; pointer-events:none; letter-spacing:0.2px; }
+.dp-img-count-badge i { font-size:9px; color:var(--cyan); }
+.dp-img-count-badge .dp-img-count-active { color:#fff; font-weight:700; }
+
+/* Phase A (May 2026) — "+N originals pending" chip on the gallery label.
+   Surfaces the case where a reporter on a slow link uploaded SMALL/MEDIUM
+   tiers but LARGE is still in flight, so operators don't mistake the
+   medium-quality preview for the final-quality Original. Amber pulse
+   matches the existing partial-upload aesthetic. */
+.dp-gallery-pending-chip { display:inline-flex; align-items:center; gap:5px; margin-left:auto; padding:3px 8px; border-radius:4px; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); color:#f59e0b; font-size:10px; font-weight:600; text-transform:none; letter-spacing:0; }
+.dp-gallery-pending-chip i { font-size:9px; }
+.dp-gallery-label { justify-content:flex-start; }
+
 /* Guaranteed-delivery tier chip — tells analysts which variant they're seeing
    so they know whether a higher-quality one is still in-flight.
    LOW = SMALL (amber, "still uploading" feel)

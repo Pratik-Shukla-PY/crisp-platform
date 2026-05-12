@@ -2375,10 +2375,30 @@ window.selectReport = (id, skipFly = false) => {
             <div class="dp-img-view" id="dp-img-view-${r.id}" style="position:relative;">
                 ${imgHtml}
                 <div class="dp-pii-badge"><i class="fa-solid fa-shield-halved"></i> PII Protected</div>
+                ${photoGroups.length > 1 ? `<div class="dp-img-count-badge" title="This report has ${photoGroups.length} captured photos — tap a thumbnail or the image to open the gallery.">
+                    <i class="fa-solid fa-images"></i> Photo <span class="dp-img-count-active">1</span> of ${photoGroups.length}
+                </div>` : ''}
             </div>
-            ${photoGroups.length > 1 ? `
+            ${photoGroups.length > 0 ? (() => {
+                // May 2026 — render the strip even for single-photo reports
+                // so operators get a consistent layout AND see at a glance
+                // when more variants are still uploading. "+N originals
+                // pending" reads off the LARGE tier's assembly_status across
+                // every photo group — this surfaces the "Original may be
+                // delayed by poor connectivity" case from the UNDP spec.
+                const labelText = photoGroups.length === 1
+                    ? 'Photo 1 of 1'
+                    : `${photoGroups.length} Photos`;
+                const origPending = photoGroups.filter(g => {
+                    const large = g.members.find(m => m.resolution_tier === 'HIGH');
+                    return !large || large.assembly_status !== 'complete';
+                }).length;
+                const pendingChip = origPending > 0
+                    ? `<span class="dp-gallery-pending-chip" title="Original (LARGE) tier hasn't finished assembling for ${origPending} ${origPending === 1 ? 'photo' : 'photos'} — the Original will appear here once the reporter's device finishes uploading."><i class="fa-solid fa-cloud-arrow-up fa-pulse"></i> ${origPending} ${origPending === 1 ? 'original' : 'originals'} pending</span>`
+                    : '';
+                return `
             <div class="dp-gallery">
-                <div class="dp-gallery-label"><i class="fa-solid fa-images"></i> ${photoGroups.length} Photos</div>
+                <div class="dp-gallery-label"><i class="fa-solid fa-images"></i> ${labelText} ${pendingChip}</div>
                 <div class="dp-gallery-strip">
                     ${photoGroups.map((g, idx) => {
                         // Guaranteed-delivery: pick the best complete variant
@@ -2399,7 +2419,8 @@ window.selectReport = (id, skipFly = false) => {
                         </div>`;
                     }).join('')}
                 </div>
-            </div>` : ''}
+            </div>`;
+            })() : ''}
             ${v && satSrc ? `<div class="dp-view-toggle">
                 <button class="dp-vt-btn active" onclick="dpSwitchView('${r.id}','photo',this)"><i class="fa-solid fa-camera"></i> Photo</button>
                 <button class="dp-vt-btn" onclick="dpSwitchView('${r.id}','sat',this)"><i class="fa-solid fa-satellite"></i> Satellite</button>
@@ -2709,6 +2730,12 @@ window.dpShowGalleryImage = (reportId, groupIdx, thumbEl) => {
     // Update active thumb
     thumbEl.parentElement.querySelectorAll('.dp-gallery-thumb').forEach(t => t.classList.remove('active'));
     thumbEl.classList.add('active');
+    // Phase A — keep the "Photo X of N" count badge in sync with the active thumb
+    // so the inline preview always advertises which photo of the multi-image
+    // capture is currently on screen. Cheap one-line DOM update; no-op when
+    // the badge isn't rendered (single-photo reports).
+    const countActive = container.querySelector('.dp-img-count-active');
+    if (countActive) countActive.textContent = String(groupIdx + 1);
 };
 
 // Full-screen multi-image compare overlay
