@@ -539,6 +539,8 @@
   "aria_copy_id": "Copy reporter ID",
   "aria_retry_sync": "Tap to retry sync",
   "aria_read_aloud": "Read this page aloud",
+  "pwa_update_available": "New version available",
+  "pwa_update_now": "Update",
   "v4_sending": "Sending…",
   "v4_record_voice_fallback": "Record voice",
   "v4_stop_recording": "Stop recording",

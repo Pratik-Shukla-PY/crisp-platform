@@ -53,6 +53,10 @@ if ('serviceWorker' in navigator) {
             .then((reg) => {
                 console.log('SW registered, scope:', reg.scope);
                 setInterval(() => reg.update(), 60 * 60 * 1000);
+                // Phase 25.5 (May 2026) — wire the in-app "New version
+                // available" banner for installed PWAs. See
+                // _wireUpdatePrompt below.
+                _wireUpdatePrompt(reg);
             })
             .catch((err) => {
                 console.warn('SW registration failed:', err);
@@ -75,6 +79,114 @@ if ('serviceWorker' in navigator) {
             });
         }
     });
+
+    // Phase 25.5 (May 2026) — PWA update prompt wiring.
+    //
+    // Problem: previously sw.js called self.skipWaiting() on install,
+    // so a new version silently took over on the next navigation.
+    // Installed-to-homescreen users who kept the same tab/window
+    // open for days would either never see the update OR lose
+    // in-progress capture state when the SW flipped under them.
+    //
+    // New flow:
+    //   1. sw.js's install handler no longer auto-skipWaiting (the
+    //      new worker stays in 'waiting' state when there's an
+    //      existing controller).
+    //   2. This function detects 'waiting' / 'updatefound' and
+    //      renders a small bottom banner: "New version available · Update".
+    //   3. On tap, the page postMessages SKIP_WAITING to the waiting
+    //      SW, which calls self.skipWaiting() and then fires
+    //      'controllerchange' on this page. We catch that, debounce
+    //      against multiple SWs racing, and reload.
+    //   4. First-ever install bypasses the banner entirely
+    //      (navigator.serviceWorker.controller is null until the
+    //      first SW takes control), so new users don't see a
+    //      misleading "Update" prompt for their initial install.
+    let _pwaUpdateReloading = false;
+    function _wireUpdatePrompt(reg) {
+        // Case 1: there's already a worker in 'waiting' from a previous
+        // visit (user dismissed the banner, then reloaded the tab).
+        // Surface the banner immediately.
+        if (reg.waiting && navigator.serviceWorker.controller) {
+            _showPwaUpdateBanner(reg.waiting);
+        }
+        // Case 2: an update is being installed right now (the
+        // hourly reg.update() in the .then above just discovered a
+        // newer sw.js). Listen for the new worker reaching 'installed'.
+        reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            if (!newWorker) return;
+            newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed'
+                    && navigator.serviceWorker.controller) {
+                    // 'installed' + existing controller = real update
+                    // (not first install). Show banner.
+                    _showPwaUpdateBanner(newWorker);
+                }
+            });
+        });
+
+        // Case 3: the user tapped Update on the banner; the SW called
+        // skipWaiting(); now the new worker has taken control and
+        // 'controllerchange' fires. Reload exactly once so the page
+        // re-fetches the new assets through the new SW.
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (_pwaUpdateReloading) return;
+            _pwaUpdateReloading = true;
+            window.location.reload();
+        });
+    }
+
+    function _showPwaUpdateBanner(worker) {
+        // Don't render twice if statechange + waiting both fire.
+        if (document.getElementById('pwa-update-banner')) return;
+        // Respect a session-scoped dismiss so the banner doesn't keep
+        // re-appearing on every async detection within the same tab.
+        // (A page reload clears sessionStorage so the user does still
+        // get re-prompted on the next visit.)
+        try {
+            if (sessionStorage.getItem('crisp_pwa_update_dismissed') === '1') {
+                return;
+            }
+        } catch (_) {}
+        const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
+        const banner = document.createElement('div');
+        banner.id = 'pwa-update-banner';
+        banner.className = 'pwa-update-banner';
+        banner.setAttribute('role', 'status');
+        banner.setAttribute('aria-live', 'polite');
+        banner.innerHTML =
+            '<span class="pwa-update-banner-msg">'
+            + (_t('pwa_update_available') || 'New version available')
+            + '</span>'
+            + '<button class="pwa-update-banner-btn" type="button">'
+            + (_t('pwa_update_now') || 'Update')
+            + '</button>'
+            + '<button class="pwa-update-banner-dismiss" type="button" '
+            + 'aria-label="' + (_t('aria_close') || 'Dismiss') + '">'
+            + '<i class="fa-solid fa-xmark"></i></button>';
+        document.body.appendChild(banner);
+
+        banner.querySelector('.pwa-update-banner-btn').addEventListener('click', () => {
+            // Disable button so the user doesn't double-tap during the
+            // brief skipWaiting → controllerchange → reload race.
+            const btn = banner.querySelector('.pwa-update-banner-btn');
+            btn.disabled = true;
+            btn.textContent = _t('upload_sending') || 'Updating…';
+            try { worker.postMessage({ type: 'SKIP_WAITING' }); }
+            catch (e) {
+                // postMessage failed — fall back to a hard reload so
+                // the user at least gets a fresh fetch of sw.js.
+                console.warn('SW postMessage failed:', e);
+                window.location.reload();
+            }
+        });
+        banner.querySelector('.pwa-update-banner-dismiss').addEventListener('click', () => {
+            banner.remove();
+            try { sessionStorage.setItem('crisp_pwa_update_dismissed', '1'); }
+            catch (_) {}
+        });
+    }
 }
 
 // ── Web Push subscription flow (Apr 2026 — UNDP reporter feedback) ──────────

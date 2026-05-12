@@ -14,7 +14,8 @@
 // metrics + single CTA + merged My Reports/Delete, plus new unified
 // flow-progress bar on capture stages (replaces step-dots). Multi-file
 // change (index.html + app.js + styles.css) so cache-bump is mandatory.
-const CACHE_NAME = 'crisp-v117';  // v117 (May 2026): Phase 25.2 — completed native translations for all 7 Indian sub-national locales (kn/ta/te/gu/mr/pa at 99.3%; Malayalam ml explicitly skipped per user direction). Picker "Also supported" section converted from horizontal scroll-snap carousel to 3-column grid tiles (per user feedback that single-row scroll required discovery). Malayalam tile removed from picker; ml remains in SUPPORTED_LANGS so GPS-routed Kerala users still get the partial-Malayalam locale (falls through to English for ungap'd keys via the t() chain). Search placeholder count updated 22 → 21 to match the reduced picker.
+const CACHE_NAME = 'crisp-v118';  // v118 (May 2026, LOCAL ONLY — not yet deployed): Phase 25.5 — in-app PWA update prompt for installed-to-homescreen users. (1) sw.js install handler no longer self.skipWaiting()s on update; new workers stay in 'waiting' until the user taps Update on the in-app banner. First-install path unaffected (no existing controller → activates directly). (2) New SKIP_WAITING message handler in sw.js promotes a waiting worker on demand. (3) New _wireUpdatePrompt() in app.js detects updatefound + already-waiting states, shows a slide-up banner with "New version available · Update · X", debounces controllerchange to reload exactly once. (4) Also bundles Phase 25.3 state-bleed-across-reports fix + Phase 25.4 AI auto-fill disabled / photo chooser + 5-image hard cap. NOT deployed.
+// v117 (May 2026): Phase 25.2 — completed native translations for all 7 Indian sub-national locales (kn/ta/te/gu/mr/pa at 99.3%; Malayalam ml explicitly skipped per user direction). Picker "Also supported" section converted from horizontal scroll-snap carousel to 3-column grid tiles (per user feedback that single-row scroll required discovery). Malayalam tile removed from picker; ml remains in SUPPORTED_LANGS so GPS-routed Kerala users still get the partial-Malayalam locale (falls through to English for ungap'd keys via the t() chain). Search placeholder count updated 22 → 21 to match the reduced picker.
 // v116 (May 2026): Phase 25.1 hotfixes — (1) RTL lang-switcher actually mirrors to the LEFT in Arabic / Urdu instead of staying at right:0 alongside the brand-row content (visible pill+brand overlap on Arabic home page). (2) Dashboard progressive-feed sentinel insertBefore no longer crashes when the visibility cutoff falls across a Queue-Mode section boundary (backlog/triage/responding sections have different parents). Surfaced when a Telegram report submission triggered a re-render that pushed the cutoff over a boundary, throwing "Failed to execute 'InsertBefore' on 'Node'".
 // v115 (May 2026): Phase 25 follow-up — auto-activate detected language on home-page refresh. (1) Three I18N[code] guards in noteDetectedLocal + family-fallback callers replaced with SUPPORTED_LANGS.has(code). The old check only matched the legacy inline dict (en/kn/hi/ta); for the other 18 supported locales (fr/es/ar/ru/zh/hi/pt/bn/ja/tr/vi/ko/id/ur + sub-nationals) the cached `crisp_loc_ctx` lang silently no-op'd on refresh — picker showed "📍 Your region: Français" but UI stayed English. (2) New _inferLangFromBrowser() boot-time hint: `navigator.language` checked against SUPPORTED_LANGS + a ~25-entry neighbour map (Italian → Spanish, Polish → Russian, Filipino → English, etc.) so a first-visit user lands in their browser language before any GPS / cache resolves. Zero network, zero permission prompt, zero Lighthouse penalty. (3) Deferred home-stage GPS detection via requestIdleCallback (or setTimeout 1500ms fallback): fires only when no manual pick + no fresh cached ctx + HTTPS. GPS-only (no ipapi.co CORS errors); reverse-geocodes via Nominatim; routes through the same REGION_LANG_MAP → COUNTRY_LANG_DATA (SUPPORTED_LANGS gated) → LANG_FAMILY_FALLBACK chain as the capture-flow path. Result is persisted to `crisp_loc_ctx` so the NEXT refresh has it cached and activates synchronously.
 // v114 (May 2026): Phase 25 — bundled with Phase 24. Full 22-locale support (UN-6 + 9 UNDP tier-2 + 7 Indian sub-national); every locale JSON has 100% key coverage from en.json via scripts/build-locale-skeletons.mjs. New scripts: build-locale-skeletons, generate-i18n-worksheets, import-i18n-worksheet. UNDP submission workflow doc at docs/I18N-WORKFLOW.md. Picker overlay restructured into UN-6 prominent grid + 16-tile horizontal scroll carousel (unsupported tiles removed: German/Italian/Polish/Swahili/etc.). SUPPORTED_LANGS gate added so PH→tl no longer surfaces non-functional pill. RTL critical patches: .v4-header padding flip, 13 text-align left/right → start/end, chevron + back-arrow mirroring. v4-flow.js final i18n (Sending… / Stop recording / Record voice). Phase 24 wins retained: flag pill, LANG_FAMILY_FALLBACK, home Option-1 layout, env-validation guards, verify-env.sh.
@@ -542,7 +543,26 @@ self.addEventListener('install', (event) => {
                 }));
         })
     );
-    self.skipWaiting();
+    // Phase 25.5 (May 2026) — DO NOT auto-skipWaiting. We want a new
+    // version to stay in the 'waiting' state until the user taps
+    // "Update now" on the in-app banner (wired by app.js). Without
+    // this gate, installed-PWA users on the home screen never get a
+    // chance to consent to the upgrade — the app just silently flips
+    // version on the next navigation, dropping the user's in-progress
+    // capture state in the worst case.
+    //
+    // First-install path is unaffected: there's no existing active
+    // worker to wait for, so the installed worker activates directly.
+});
+
+// Phase 25.5 (May 2026) — accept SKIP_WAITING from the page. app.js
+// posts this when the user taps the in-app update banner; it
+// promotes a 'waiting' worker to 'active', which fires
+// `controllerchange` on the page and triggers a clean reload.
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 // ── Activate: clean old caches ───────────────────────────────────────────────
