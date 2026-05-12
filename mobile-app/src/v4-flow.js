@@ -229,24 +229,104 @@
         const locEditInput = document.getElementById('v4-meta-loc-input');
         const locEditCancelBtn = document.getElementById('btn-v4-loc-cancel');
         const locEditSaveBtn = document.getElementById('btn-v4-loc-save');
+        const locSuggestBox = document.getElementById('v4-meta-loc-suggest');
+        // Phase 25.12 (May 2026) — offline autocomplete for the location edit
+        // input. Reuses the same `placeSearch` singleton (mobile-app/src/places.js)
+        // that powers v3's location search: ~700 bundled cities + nearby
+        // GPS-prefetched places + localStorage cache. Fully offline-capable.
+        // Suggestions render inside the modal as a tap-list; selecting one
+        // fills the input + (when coords exist) stages a lat/lng update too.
+        let _locSelected = null;  // last picked suggestion {name, lat, lng, ...}
+        let _locActiveIdx = -1;
+        let _locSuggestions = [];
+        function _renderLocSuggestions(list) {
+            if (!locSuggestBox) return;
+            _locSuggestions = list || [];
+            _locActiveIdx = -1;
+            if (!_locSuggestions.length) {
+                locSuggestBox.setAttribute('hidden', '');
+                locSuggestBox.innerHTML = '';
+                return;
+            }
+            locSuggestBox.innerHTML = _locSuggestions.slice(0, 5).map((p, i) => {
+                const sub = [p.region, p.country].filter(Boolean).join(', ');
+                const escName = String(p.name).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+                const escSub = String(sub).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+                return `<div class="v4-meta-loc-suggest-item" data-idx="${i}" role="option">
+                    <i class="fa-solid fa-location-dot v4-meta-loc-suggest-icon" aria-hidden="true"></i>
+                    <span class="v4-meta-loc-suggest-info">
+                        <span class="v4-meta-loc-suggest-name">${escName}</span>
+                        ${sub ? `<span class="v4-meta-loc-suggest-sub">${escSub}</span>` : ''}
+                    </span>
+                </div>`;
+            }).join('');
+            locSuggestBox.removeAttribute('hidden');
+            locSuggestBox.querySelectorAll('.v4-meta-loc-suggest-item').forEach((el) => {
+                // Use pointerdown so the suggestion fires before the input
+                // blur event closes the dropdown.
+                el.addEventListener('pointerdown', (e) => {
+                    e.preventDefault();
+                    const idx = parseInt(el.getAttribute('data-idx'), 10) || 0;
+                    _pickLocSuggestion(_locSuggestions[idx]);
+                });
+            });
+        }
+        function _hideLocSuggestions() {
+            if (locSuggestBox) {
+                locSuggestBox.setAttribute('hidden', '');
+                locSuggestBox.innerHTML = '';
+            }
+            _locSuggestions = [];
+            _locActiveIdx = -1;
+        }
+        function _pickLocSuggestion(place) {
+            if (!place || !locEditInput) return;
+            _locSelected = place;
+            locEditInput.value = place.name;
+            _hideLocSuggestions();
+            // Keep focus so the user can keep editing if they want.
+            locEditInput.focus();
+        }
+        function _highlightLocSuggestion(idx) {
+            if (!locSuggestBox) return;
+            locSuggestBox.querySelectorAll('.v4-meta-loc-suggest-item').forEach((el, i) => {
+                el.classList.toggle('is-active', i === idx);
+            });
+        }
         function _openLocEdit() {
             if (!locEditWrap || !locEditInput) return;
             const s = _getState();
             locEditInput.value = s.userLocationName || s.locationName || '';
+            _locSelected = null;
+            _hideLocSuggestions();
             locEditWrap.removeAttribute('hidden');
             setTimeout(() => locEditInput.focus(), 30);
         }
         function _closeLocEdit() {
             if (locEditWrap) locEditWrap.setAttribute('hidden', '');
+            _hideLocSuggestions();
         }
         function _saveLocEdit() {
             if (!locEditInput) return;
             const name = locEditInput.value.trim();
             if (name) {
-                _setState({
+                const patch = {
                     userLocationName: name,
                     locationName: name,
-                });
+                };
+                // If the user picked a suggestion AND didn't edit the text
+                // after, also update lat/lng + the location object so the
+                // map + coords sub-line reflect the corrected place.
+                if (_locSelected && _locSelected.name === name &&
+                    Number.isFinite(_locSelected.lat) && Number.isFinite(_locSelected.lng)) {
+                    patch.location = {
+                        lat: _locSelected.lat,
+                        lng: _locSelected.lng,
+                        accuracy: null,
+                        source: 'user_corrected',
+                    };
+                }
+                _setState(patch);
                 _paintV4LocationPills();
             }
             _closeLocEdit();
@@ -255,9 +335,48 @@
         if (locEditCancelBtn) locEditCancelBtn.addEventListener('click', _closeLocEdit);
         if (locEditSaveBtn) locEditSaveBtn.addEventListener('click', _saveLocEdit);
         if (locEditInput) {
+            locEditInput.addEventListener('input', () => {
+                _locSelected = null;
+                const q = locEditInput.value.trim();
+                // placeSearch.search() returns [] below 3 chars by design
+                // (too noisy on 1-2 char prefixes). Mirror that here.
+                if (q.length < 3) { _hideLocSuggestions(); return; }
+                let results = [];
+                try {
+                    const ps = (typeof placeSearch !== 'undefined') ? placeSearch
+                             : (typeof window !== 'undefined' && window.placeSearch) || null;
+                    if (ps && typeof ps.search === 'function') {
+                        results = ps.search(q);
+                    }
+                } catch (_) { /* placeSearch unavailable — gracefully no suggestions */ }
+                _renderLocSuggestions(results);
+            });
             locEditInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') { e.preventDefault(); _saveLocEdit(); }
-                else if (e.key === 'Escape') { e.preventDefault(); _closeLocEdit(); }
+                const hasList = _locSuggestions.length > 0;
+                if (e.key === 'ArrowDown' && hasList) {
+                    e.preventDefault();
+                    _locActiveIdx = Math.min(_locActiveIdx + 1, Math.min(_locSuggestions.length, 5) - 1);
+                    _highlightLocSuggestion(_locActiveIdx);
+                } else if (e.key === 'ArrowUp' && hasList) {
+                    e.preventDefault();
+                    _locActiveIdx = Math.max(_locActiveIdx - 1, 0);
+                    _highlightLocSuggestion(_locActiveIdx);
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (hasList && _locActiveIdx >= 0) {
+                        _pickLocSuggestion(_locSuggestions[_locActiveIdx]);
+                    } else {
+                        _saveLocEdit();
+                    }
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (hasList) _hideLocSuggestions();
+                    else _closeLocEdit();
+                }
+            });
+            locEditInput.addEventListener('blur', () => {
+                // Delay so a pointerdown on a suggestion lands before close.
+                setTimeout(_hideLocSuggestions, 180);
             });
         }
 

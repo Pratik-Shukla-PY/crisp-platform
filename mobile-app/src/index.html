@@ -515,7 +515,7 @@
                 <span class="home-utility-dot" aria-hidden="true">·</span>
                 <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
                 <span class="home-utility-dot" aria-hidden="true">·</span>
-                <span class="home-utility-version" id="home-utility-version">v0.7.35</span>
+                <span class="home-utility-version" id="home-utility-version">v0.7.36</span>
             </nav>
 
             <!-- Legacy retained DOM — kept hidden so any
@@ -591,13 +591,20 @@
                         </button>
                     </div>
                 </div>
-                <!-- Inline location edit (hidden until user taps the pen). -->
+                <!-- Inline location edit (hidden until user taps the pen).
+                     Phase 25.12 (May 2026) — added offline autocomplete: as the
+                     user types, the dropdown below shows up to 5 matches from
+                     `placeSearch` (bundled cities + nearby GPS-prefetched +
+                     localStorage cache) — works fully offline. Tap a match
+                     to fill the input; Save commits state.locationName +
+                     lat/lng (when the match has coords). -->
                 <div class="v4-meta-loc-edit" id="v4-meta-loc-edit" hidden>
                     <input type="text" id="v4-meta-loc-input"
                            class="v4-meta-loc-input"
                            autocomplete="off"
                            placeholder="Type place name or landmark"
                            data-i18n-placeholder="placeholder_landmark_example">
+                    <div class="v4-meta-loc-suggest" id="v4-meta-loc-suggest" hidden role="listbox"></div>
                     <div class="v4-meta-loc-edit-actions">
                         <button class="v4-meta-loc-cancel" id="btn-v4-loc-cancel"
                                 type="button" data-i18n="cancel">Cancel</button>
