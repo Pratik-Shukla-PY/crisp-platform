@@ -953,7 +953,23 @@
             const current = (_getState().v4Photos || []).length;
             const remaining = Math.max(0, V4_MAX_PHOTOS - current);
             if (incoming.length > remaining) _toastCapHit();
-            incoming.slice(0, remaining).forEach((f) => _handlePhoto(f));
+            // BUGFIX May 2026 — serialise the per-file ingest calls.
+            // forEach fired all N calls IN PARALLEL; each _handlePhoto
+            // reads state.photoDataUrl synchronously to decide asExtra,
+            // so 3 simultaneous calls all see photoDataUrl=null at the
+            // same instant and all dispatch with asExtra=false → all
+            // overwrite the primary slot → photos 1..N-1 are lost. The
+            // sibling test 44-v4-multi-photo.spec.ts exposes this race
+            // (multi-select via setInputFiles delivers all files in
+            // one tick). Sequential await chains each call so by the
+            // time iteration 2 starts, iteration 1 has already set
+            // photoDataUrl + iteration 2's asExtra computation reads
+            // the correct value.
+            (async () => {
+                for (const f of incoming.slice(0, remaining)) {
+                    await _handlePhoto(f);
+                }
+            })();
             browseInput.value = '';
         });
 
