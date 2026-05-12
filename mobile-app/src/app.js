@@ -418,6 +418,57 @@ async function dequeueReport(clientReportId) {
     });
 }
 
+// Reconcile a queue item against the server's tier-status view before
+// deleting the IndexedDB row. Returns `{ ok: bool, missing: [{ variant }] }`.
+// When ok=true every variant the PWA expected to send is server-side
+// `assembly_status='complete'`. When ok=false the caller should roll
+// stages.photo back to false and clear the missing variants' completion
+// flags so the next retry-loop pass re-uploads them.
+async function _reconcileBeforeDequeue(item, reportId) {
+    if (!reportId) return { ok: true, missing: [] };
+    // Collect every (variant, mediaId) we believe we sent.
+    const expected = [];
+    const collect = (variants, label) => {
+        if (!variants) return;
+        for (const tier of ['small', 'medium', 'large']) {
+            const v = variants[tier];
+            if (v && v.mediaId && v.complete) {
+                expected.push({ mediaId: v.mediaId, variant: v, label: `${label}/${tier}` });
+            }
+        }
+    };
+    collect(item.photoVariants, 'main');
+    (item.extraPhotosVariants || []).forEach((ev, i) => collect(ev, `extra[${i}]`));
+    if (!expected.length) return { ok: true, missing: [] };
+    // Fetch the server's view.
+    let serverComplete;
+    try {
+        const res = await fetch(
+            `${API_BASE}/reports/${reportId}/tier-status`,
+            { method: 'GET', credentials: 'omit' },
+        );
+        if (!res.ok) {
+            // Endpoint missing (old backend) or transient error — fail open
+            // and trust the local stages.* view. Worst case is a tier never
+            // arrives at the server and we never know. The deferred-tier
+            // protection above is the primary defence; this is reconciliation
+            // belt-and-suspenders.
+            return { ok: true, missing: [] };
+        }
+        const body = await res.json();
+        serverComplete = new Set(
+            (body.media || [])
+                .filter(m => m && m.assembly_status === 'complete')
+                .map(m => m.id),
+        );
+    } catch (e) {
+        // Network failed — same fail-open policy as above.
+        return { ok: true, missing: [] };
+    }
+    const missing = expected.filter(e => !serverComplete.has(e.mediaId));
+    return { ok: missing.length === 0, missing };
+}
+
 async function getAllQueued() {
     const db = await openIDB();
     return new Promise((resolve, reject) => {
@@ -7609,10 +7660,35 @@ async function trySendQueuedReport(item) {
             }
         }
 
-        // All done?
+        // All done? Reconcile with server before deleting the queue row.
+        // The local stages.* flags can lie (e.g. if a previous version of
+        // this code marked a tier complete without uploading). Asking the
+        // backend "do you have every media row I expected to send?" is
+        // the only way to be sure before throwing away local state.
         if (item.stages.meta && item.stages.text && item.stages.photo && item.stages.audio) {
-            try { await dequeueReport(item.client_report_id); } catch (_) {}
-            console.log('Report fully synced:', reportId);
+            try {
+                const reconciled = await _reconcileBeforeDequeue(item, reportId);
+                if (reconciled.ok) {
+                    try { await dequeueReport(item.client_report_id); } catch (_) {}
+                    console.log('Report fully synced:', reportId);
+                } else {
+                    // Server is missing one or more tiers we thought we sent.
+                    // Roll the relevant flags back so the retry loop tries again.
+                    item.stages.photo = false;
+                    for (const m of (reconciled.missing || [])) {
+                        if (m.variant) {
+                            m.variant.complete = false;
+                            m.variant.chunkProgress = 0;
+                        }
+                    }
+                    try { await enqueueReport(item); } catch (_) {}
+                    console.warn(`Reconciliation: backend missing ${reconciled.missing.length} tier(s) for ${reportId} — re-queued for retry`);
+                }
+            } catch (e) {
+                // Reconciliation network call failed — leave the report
+                // in the queue and try again on the next retry-loop pass.
+                console.warn('Reconciliation call failed, deferring dequeue:', e.message);
+            }
         }
     } catch (e) {
         console.warn('trySendQueuedReport error:', e);
