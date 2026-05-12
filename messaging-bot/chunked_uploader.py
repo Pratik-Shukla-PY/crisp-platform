@@ -8,7 +8,28 @@ Chunk sizes:
   Normal (localhost):  64KB chunks, 5 concurrent
   Slow (high latency): 8KB chunks, 2 concurrent
   Degraded:            1KB chunks, sequential
+
+Transport (May 2026)
+====================
+Primary path: multipart/form-data raw bytes to
+``POST /api/v1/reports/{id}/media/chunk-bin``. Matches the modern PWA
+binary transport — saves the ~33% base64 bandwidth overhead and the
+JSON encode/decode round-trip per chunk. Server-to-server is already
+fast, so the saving translates directly to lower assembly latency on
+the dashboard side.
+
+Fallback path: JSON+base64 to ``POST .../media/chunk`` if the binary
+endpoint isn't on this backend yet (a 404 response). Process-scoped
+sticky flag — once we fall back, we stay on base64 for the rest of
+this bot process. Restart picks up the binary path again.
+
+Caller contract is unchanged: pass a base64 string in, get a bool
+back. The Telegram/WhatsApp/IVR adapters all hand us base64 today
+(extracted from data URLs via ``extract_b64_from_data_url``), so we
+decode once at the top of ``upload_media_chunked`` and chunk raw
+bytes downstream.
 """
+import base64
 import os
 import time
 import logging
@@ -27,12 +48,35 @@ _concurrency = 5
 _consecutive_successes = 0
 _consecutive_failures = 0
 
+# Process-scoped sticky fallback flag. Once the binary endpoint returns
+# 404 (backend too old / temporarily routed elsewhere), every subsequent
+# upload in THIS bot process uses the legacy base64 path. Resets on
+# restart. Mirrors the PWA's `_binaryChunkFallback404`.
+_binary_chunk_unavailable = False
+
 
 def _djb2_checksum(data: str) -> str:
-    """DJB2 hash — must match backend exactly."""
+    """DJB2 hash over a text/base64 string — kept for the legacy
+    base64 fallback path and any external callers. The polynomial
+    is identical to `_djb2_bytes`; only the input alphabet differs."""
     h = 5381
     for ch in data:
         h = ((h << 5) + h) ^ ord(ch)
+        h &= 0xFFFFFFFF
+    return format(h, '08x')
+
+
+def _djb2_bytes(data: bytes) -> str:
+    """DJB2 hash over raw bytes — mirrors backend ``djb2_bytes``.
+
+    For pure-ASCII input ``_djb2_bytes(b"x") == _djb2_checksum("x")``
+    because ``ord(char) == byte``. The byte variant exists because the
+    new ``/media/chunk-bin`` endpoint reads raw bytes (not base64
+    text), so the checksum must match what the server computes after
+    reading the multipart file part."""
+    h = 5381
+    for b in data:
+        h = ((h << 5) + h) ^ b
         h &= 0xFFFFFFFF
     return format(h, '08x')
 
@@ -66,51 +110,87 @@ async def upload_media_chunked(
     media_type: str,
     mime_type: str = "image/jpeg",
 ) -> bool:
-    """Upload media with adaptive chunk sizing and concurrent batching."""
-    media_id = str(uuid4())
-    total_len = len(data_b64)
+    """Upload media with adaptive chunk sizing and concurrent batching.
 
+    Caller still passes base64 (Telegram / WhatsApp / IVR adapters all
+    give us base64 today). Internally we decode once to raw bytes and
+    chunk on byte boundaries for the binary transport — saves the
+    ~33 % base64 bloat over the wire. Old base64 transport stays as
+    a process-scoped fallback if the binary endpoint 404s.
+    """
+    media_id = str(uuid4())
+
+    # Decode base64 once. Pad if needed — Telegram/WhatsApp sometimes
+    # strip padding on data URLs. Same padding behaviour as the legacy
+    # backend assembler used to apply per-chunk.
+    try:
+        padded = data_b64 + '=' * ((4 - len(data_b64) % 4) % 4)
+        raw_bytes = base64.b64decode(padded)
+    except Exception as e:
+        logger.error(f"Upload: base64 decode failed: {e}")
+        return False
+
+    total_len = len(raw_bytes)
     if total_len == 0:
         return False
 
-    logger.info(f"Upload: {media_type} {total_len:,} chars, chunk={_chunk_size}B, concurrency={_concurrency}")
+    # Phase C.1 — compute whole-asset djb2 once over the raw payload.
+    # Sent on chunk 0 only; the backend stores it on the Media row and
+    # re-verifies post-assembly. Gives the messaging-bot path the same
+    # integrity guarantee the modern PWA has.
+    full_asset_checksum = _djb2_bytes(raw_bytes)
+
+    logger.info(
+        f"Upload[bin]: {media_type} {total_len:,} bytes, "
+        f"chunk={_chunk_size}B, concurrency={_concurrency}, "
+        f"fullChecksum={full_asset_checksum}"
+    )
 
     async with httpx.AsyncClient(timeout=30) as c:
-        # Thumbnail for instant preview
+        # Thumbnail for instant preview. Stays on the JSON+base64
+        # ``/media/thumbnail`` endpoint — payload is capped at ~20 KB so
+        # the b64 overhead is negligible, and the endpoint expects a
+        # data URL string anyway.
         if media_type == "IMAGE":
-            thumb_size = min(total_len, 20000)
-            thumb_b64 = data_b64[:thumb_size]
-            pad = (4 - len(thumb_b64) % 4) % 4
-            thumb_url = f"data:{mime_type};base64,{thumb_b64 + '=' * pad}"
+            thumb_size = min(total_len, 15000)  # ≈ 20 KB after b64 expansion
             try:
-                await c.post(f"{BACKEND_URL}/api/v1/reports/{report_id}/media/thumbnail",
-                             json={"media_id": media_id, "thumbnail_data": thumb_url})
+                thumb_b64 = base64.b64encode(raw_bytes[:thumb_size]).decode("ascii")
+                thumb_url = f"data:{mime_type};base64,{thumb_b64}"
+                await c.post(
+                    f"{BACKEND_URL}/api/v1/reports/{report_id}/media/thumbnail",
+                    json={"media_id": media_id, "thumbnail_data": thumb_url},
+                )
             except Exception:
                 pass
 
-        # Adaptive chunked upload
+        # Adaptive chunked upload — binary transport.
         offset = 0
         total_chunks = (total_len + _chunk_size - 1) // _chunk_size
         success_count = 0
         start_time = time.time()
 
         while offset < total_len:
-            # Build batch of chunks
+            # Build batch of chunks.
             batch = []
             for _ in range(_concurrency):
                 if offset >= total_len:
                     break
                 end = min(offset + _chunk_size, total_len)
-                chunk_data = data_b64[offset:end]
-                seq = len(batch) + (success_count)
-                batch.append((seq, chunk_data, offset))
+                chunk_bytes = raw_bytes[offset:end]
+                seq = len(batch) + success_count
+                batch.append((seq, chunk_bytes, offset))
                 offset += _chunk_size
 
-            # Send batch concurrently
+            # Send batch concurrently. Chunk 0 carries the whole-asset
+            # checksum; later chunks pass None and the backend silently
+            # ignores the field.
             tasks = [
-                _send_chunk_with_retry(c, report_id, media_id, media_type,
-                                       seq, total_chunks, chunk_data)
-                for seq, chunk_data, _ in batch
+                _send_chunk_with_retry(
+                    c, report_id, media_id, media_type, seq,
+                    total_chunks, chunk_bytes,
+                    full_asset_checksum=(full_asset_checksum if seq == 0 else None),
+                )
+                for seq, chunk_bytes, _ in batch
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -123,19 +203,94 @@ async def upload_media_chunked(
 
         elapsed = time.time() - start_time
         speed = total_len / 1024 / max(elapsed, 0.01)
-        logger.info(f"Upload done: {success_count} chunks, {elapsed:.1f}s, {speed:.0f} KB/s")
+        transport = "b64-fallback" if _binary_chunk_unavailable else "bin"
+        logger.info(
+            f"Upload[{transport}] done: {success_count} chunks, "
+            f"{elapsed:.1f}s, {speed:.0f} KB/s"
+        )
         return success_count > 0
 
 
-async def _send_chunk_with_retry(client, report_id, media_id, media_type, seq, total, data):
-    """Send a single chunk with exponential backoff retry."""
-    checksum = _djb2_checksum(data)
+async def _send_chunk_with_retry(client, report_id, media_id, media_type,
+                                  seq, total, chunk_bytes,
+                                  full_asset_checksum=None):
+    """Send a single chunk with exponential backoff retry.
+
+    Primary path: ``POST /media/chunk-bin`` with raw bytes as a
+    multipart file part. Fallback: ``POST /media/chunk`` with the
+    same chunk re-encoded as base64 in a JSON body. The fallback
+    fires the FIRST time the binary endpoint 404s for this process,
+    after which every subsequent call uses base64 until restart.
+    """
+    global _binary_chunk_unavailable
+
+    if _binary_chunk_unavailable:
+        return await _send_chunk_b64_fallback(
+            client, report_id, media_id, media_type, seq, total, chunk_bytes,
+        )
+
+    checksum = _djb2_bytes(chunk_bytes)
+    form = {
+        "media_id": media_id,
+        "seq_num": str(seq),
+        "total_chunks": str(total),
+        "type": media_type,
+        # Single-tier transport: messaging-channel media isn't run
+        # through the PWA's SMALL/MEDIUM/LARGE variant ladder. Keep
+        # `LOW` as the default tier so existing dashboard rendering
+        # logic doesn't see an unexpected HIGH-only row.
+        "resolution_tier": "LOW",
+        "client_blur_applied": "false",  # server runs its PII pass on assembly
+        "checksum": checksum,
+    }
+    if full_asset_checksum:
+        form["full_asset_checksum"] = full_asset_checksum
+    files = {"data": ("chunk.bin", chunk_bytes, "application/octet-stream")}
+
+    delays = [2, 5, 10, 30]
+    for attempt in range(len(delays) + 1):
+        try:
+            r = await client.post(
+                f"{BACKEND_URL}/api/v1/reports/{report_id}/media/chunk-bin",
+                data=form,
+                files=files,
+            )
+            if r.status_code == 200:
+                return True
+            # Endpoint missing — backend predates April 2026 binary
+            # transport. Flip the sticky flag + retry via base64. We
+            # also reattempt THIS chunk via the fallback so the upload
+            # doesn't lose a chunk to the version-skew window.
+            if r.status_code == 404:
+                logger.warning(
+                    "/media/chunk-bin returned 404 — backend predates "
+                    "binary transport; falling back to base64 for the "
+                    "rest of this process."
+                )
+                _binary_chunk_unavailable = True
+                return await _send_chunk_b64_fallback(
+                    client, report_id, media_id, media_type,
+                    seq, total, chunk_bytes,
+                )
+        except Exception as e:
+            logger.debug(f"chunk seq={seq} attempt {attempt+1} failed: {e}")
+        if attempt < len(delays):
+            await asyncio.sleep(delays[attempt])
+    return False
+
+
+async def _send_chunk_b64_fallback(client, report_id, media_id, media_type,
+                                    seq, total, chunk_bytes):
+    """Legacy JSON+base64 chunk POST. Used only when ``/media/chunk-bin``
+    is unavailable on this backend (process-sticky fallback)."""
+    data_b64 = base64.b64encode(chunk_bytes).decode("ascii")
+    checksum = _djb2_checksum(data_b64)
     payload = {
         "media_id": media_id, "type": media_type,
         "seq_num": seq, "total_chunks": total,
-        "data": data, "checksum": checksum,
+        "data": data_b64, "checksum": checksum,
     }
-    delays = [2, 5, 10, 30]  # Exponential backoff (req: 2→5→10→30s)
+    delays = [2, 5, 10, 30]
     for attempt in range(len(delays) + 1):
         try:
             r = await client.post(
