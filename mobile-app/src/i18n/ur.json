@@ -7,16 +7,18 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 594,
+    "en_key_count": 596,
     "translated_key_count": 590,
-    "gap_key_count": 4,
-    "coverage_percent": 99.3,
-    "generated_at": "2026-05-11T18:46:32.572Z",
+    "gap_key_count": 6,
+    "coverage_percent": 99,
+    "generated_at": "2026-05-12T04:32:38.297Z",
     "gap_keys": [
       "home_sub",
       "report_id",
       "need_wash",
-      "summary_none"
+      "summary_none",
+      "pwa_update_available",
+      "pwa_update_now"
     ]
   },
   "consent_title": "آپ کی پرائیویسی اہم ہے",
@@ -551,6 +553,8 @@
   "aria_copy_id": "رپورٹر ID کاپی کریں",
   "aria_retry_sync": "ہم وقتی دوبارہ کوشش کے لیے ٹیپ کریں",
   "aria_read_aloud": "اس صفحے کو بلند آواز سے پڑھیں",
+  "pwa_update_available": "New version available",
+  "pwa_update_now": "Update",
   "v4_sending": "بھیج رہے ہیں…",
   "v4_record_voice_fallback": "آواز ریکارڈ کریں",
   "v4_stop_recording": "ریکارڈنگ بند کریں",

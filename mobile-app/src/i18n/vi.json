@@ -7,17 +7,19 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 594,
+    "en_key_count": 596,
     "translated_key_count": 589,
-    "gap_key_count": 5,
-    "coverage_percent": 99.2,
-    "generated_at": "2026-05-11T18:46:32.572Z",
+    "gap_key_count": 7,
+    "coverage_percent": 98.8,
+    "generated_at": "2026-05-12T04:32:38.297Z",
     "gap_keys": [
       "home_sub",
       "report_id",
       "summary_none",
       "login_channel_email",
-      "undp_lvl_ok"
+      "undp_lvl_ok",
+      "pwa_update_available",
+      "pwa_update_now"
     ]
   },
   "consent_title": "Quyền riêng tư của bạn quan trọng",
@@ -552,6 +554,8 @@
   "aria_copy_id": "Sao chép ID người báo cáo",
   "aria_retry_sync": "Chạm để thử đồng bộ lại",
   "aria_read_aloud": "Đọc to trang này",
+  "pwa_update_available": "New version available",
+  "pwa_update_now": "Update",
   "v4_sending": "Đang gửi…",
   "v4_record_voice_fallback": "Ghi âm",
   "v4_stop_recording": "Dừng ghi",

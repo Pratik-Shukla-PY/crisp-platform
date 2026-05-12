@@ -7,16 +7,18 @@
     "tier": 3,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 594,
+    "en_key_count": 596,
     "translated_key_count": 590,
-    "gap_key_count": 4,
-    "coverage_percent": 99.3,
-    "generated_at": "2026-05-11T18:46:32.572Z",
+    "gap_key_count": 6,
+    "coverage_percent": 99,
+    "generated_at": "2026-05-12T04:32:38.297Z",
     "gap_keys": [
       "home_sub",
       "report_id",
       "need_wash",
-      "summary_none"
+      "summary_none",
+      "pwa_update_available",
+      "pwa_update_now"
     ]
   },
   "consent_title": "మీ గోప్యత ముఖ్యం",
@@ -551,6 +553,8 @@
   "aria_copy_id": "రిపోర్టర్ ID కాపీ చేయి",
   "aria_retry_sync": "సింక్ మళ్ళీ ప్రయత్నించడానికి నొక్కు",
   "aria_read_aloud": "ఈ పేజీని పెద్దగా చదువు",
+  "pwa_update_available": "New version available",
+  "pwa_update_now": "Update",
   "v4_sending": "పంపుతోంది…",
   "v4_record_voice_fallback": "వాయిస్ రికార్డ్",
   "v4_stop_recording": "రికార్డింగ్ ఆపు",

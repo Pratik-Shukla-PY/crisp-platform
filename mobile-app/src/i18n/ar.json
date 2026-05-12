@@ -7,14 +7,16 @@
     "tier": 1,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 594,
+    "en_key_count": 596,
     "translated_key_count": 592,
-    "gap_key_count": 2,
-    "coverage_percent": 99.7,
-    "generated_at": "2026-05-11T18:46:32.572Z",
+    "gap_key_count": 4,
+    "coverage_percent": 99.3,
+    "generated_at": "2026-05-12T04:32:38.297Z",
     "gap_keys": [
       "home_sub",
-      "summary_none"
+      "summary_none",
+      "pwa_update_available",
+      "pwa_update_now"
     ]
   },
   "consent_title": "خصوصيتك مهمة",
@@ -549,6 +551,8 @@
   "aria_copy_id": "نسخ معرف المبلِّغ",
   "aria_retry_sync": "اضغط لإعادة المزامنة",
   "aria_read_aloud": "اقرأ هذه الصفحة بصوت عالٍ",
+  "pwa_update_available": "New version available",
+  "pwa_update_now": "Update",
   "v4_sending": "جارٍ الإرسال…",
   "v4_record_voice_fallback": "تسجيل الصوت",
   "v4_stop_recording": "إيقاف التسجيل",

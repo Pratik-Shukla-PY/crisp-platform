@@ -7,17 +7,19 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 594,
+    "en_key_count": 596,
     "translated_key_count": 589,
-    "gap_key_count": 5,
-    "coverage_percent": 99.2,
-    "generated_at": "2026-05-11T18:46:32.572Z",
+    "gap_key_count": 7,
+    "coverage_percent": 98.8,
+    "generated_at": "2026-05-12T04:32:38.297Z",
     "gap_keys": [
       "home_sub",
       "report_id",
       "need_wash",
       "summary_none",
-      "undp_lvl_ok"
+      "undp_lvl_ok",
+      "pwa_update_available",
+      "pwa_update_now"
     ]
   },
   "consent_title": "개인정보 보호는 중요합니다",
@@ -552,6 +554,8 @@
   "aria_copy_id": "신고자 ID 복사",
   "aria_retry_sync": "동기화 재시도를 위해 탭",
   "aria_read_aloud": "이 페이지 소리내어 읽기",
+  "pwa_update_available": "New version available",
+  "pwa_update_now": "Update",
   "v4_sending": "전송 중…",
   "v4_record_voice_fallback": "음성 녹음",
   "v4_stop_recording": "녹음 중지",

@@ -7,17 +7,19 @@
     "tier": 2,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 594,
+    "en_key_count": 596,
     "translated_key_count": 589,
-    "gap_key_count": 5,
-    "coverage_percent": 99.2,
-    "generated_at": "2026-05-11T18:46:32.572Z",
+    "gap_key_count": 7,
+    "coverage_percent": 98.8,
+    "generated_at": "2026-05-12T04:32:38.297Z",
     "gap_keys": [
       "home_sub",
       "tsunami",
       "summary_none",
       "crisis_tsunami",
-      "undp_lvl_ok"
+      "undp_lvl_ok",
+      "pwa_update_available",
+      "pwa_update_now"
     ]
   },
   "consent_title": "Gizliliğiniz Önemlidir",
@@ -552,6 +554,8 @@
   "aria_copy_id": "Bildirici kimliğini kopyala",
   "aria_retry_sync": "Eşitlemeyi tekrar denemek için dokun",
   "aria_read_aloud": "Bu sayfayı sesli oku",
+  "pwa_update_available": "New version available",
+  "pwa_update_now": "Update",
   "v4_sending": "Gönderiliyor…",
   "v4_record_voice_fallback": "Sesi kaydet",
   "v4_stop_recording": "Kaydı durdur",
