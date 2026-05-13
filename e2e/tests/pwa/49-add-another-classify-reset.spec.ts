@@ -122,10 +122,12 @@ test.describe('PWA — Add Another Report classify reset (Bug 2 follow-up)', () 
         expect(nextDisabled, 'Continue must be disabled when state is fresh').toBe(true);
     });
 
-    test('after Add Another, crisis drill-down opens at group-cards layer (not stale subtypes)', async ({ page }) => {
-        // Drive into the crisis subtypes list, then Add Another, then
-        // re-enter crisis sub-step and verify the GROUP cards are
-        // visible again (not the previously-rendered subtype list).
+    test('after Add Another, no crisis tile is selected (stale highlight is cleared)', async ({ page }) => {
+        // May 2026 — the crisis drill-down was flattened to a single
+        // grid of all 9 tiles. Pre-flatten this test asserted the
+        // group-cards layer was the visible one (vs. a leaked
+        // subtypes-list layer). Post-flatten the equivalent property
+        // is: no `.v4-cause-tile.is-selected` survives Add Another.
         await page.evaluate(() => {
             const s = (window as any).state;
             s.damage_classification = 'PARTIAL';
@@ -135,17 +137,15 @@ test.describe('PWA — Add Another Report classify reset (Bug 2 follow-up)', () 
         await page.locator('#btn-v4-classify-next').click();  // damage → infra
         await page.locator('#btn-v4-classify-next').click();  // infra → crisis
 
-        // Open the Technological drill-down.
-        await page.locator('.v4-cause-card[data-group="tech"]').click();
-        await expect(page.locator('#v4-cause-subtypes')).toBeVisible({ timeout: 2000 });
+        // Pick a tile so we have a selected highlight to clear later.
+        await page.locator('.v4-cause-tile[data-value="EXPLOSION"]').click();
+        await expect(page.locator('.v4-cause-tile.is-selected')).toHaveCount(1);
 
         // Add Another.
         await page.evaluate(() => (window as any)._clearCaptureState());
 
         // Re-enter classify + walk to crisis.
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
-        // After the reset, _classifyStep is 'damage'. Set state so we can
-        // Continue twice without manually picking chips.
         await page.evaluate(() => {
             const s = (window as any).state;
             s.damage_classification = 'PARTIAL';
@@ -156,12 +156,11 @@ test.describe('PWA — Add Another Report classify reset (Bug 2 follow-up)', () 
         await page.locator('#btn-v4-classify-next').click();
         await page.locator('#btn-v4-classify-next').click();
 
-        // Crisis sub-step now visible. Group cards MUST be the visible
-        // layer (not the stale subtype list from before Add Another).
-        await expect(page.locator('#v4-cause-cards'),
-            'crisis drill-down must show group cards after reset').toBeVisible();
-        await expect(page.locator('#v4-cause-subtypes'),
-            'subtype list must be hidden after reset').toBeHidden();
+        // Crisis sub-step visible. The grid must be present + NO tile
+        // carries the is-selected class (was the stale EXPLOSION highlight).
+        await expect(page.locator('#v4-cause-grid')).toBeVisible();
+        await expect(page.locator('.v4-cause-tile.is-selected'),
+            'no crisis tile may carry stale highlight after Add Another').toHaveCount(0);
     });
 
     test('Bug 1: tapping the queued pill shows a toast (no silent no-op)', async ({ page }) => {

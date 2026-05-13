@@ -1449,9 +1449,11 @@
     // drives which .v4-classify-view is visible. Continue advances; Back
     // either returns to a previous sub-step or pops out to capture.
     //
-    // Crisis sub-step has its own internal drill: 3 group cards →
-    // sub-types list. _crisisGroup remembers which group the user
-    // tapped so Back from sub-types returns to the group cards.
+    // Crisis sub-step renders as a single flat grid (May 2026 rewrite —
+    // was a drill-down with group cards + subtype-list; operator
+    // flagged the extra click). All 9 crisis types visible at once,
+    // organised under 3 visual section headers. Same i18n keys + same
+    // server contract (single `state.crisis_type` UNDP enum value).
     const CRISIS_GROUPS = {
         natural: [
             { v: 'EARTHQUAKE', i: 'fa-house-crack', k: 'crisis_earthquake' },
@@ -1541,63 +1543,83 @@
             });
         }
 
-        // ── Crisis cards + drill-down (sub-view 3) ──
-        const crisisView = document.getElementById('v4-view-crisis');
-        const causeCards = crisisView ? Array.from(crisisView.querySelectorAll('.v4-cause-card')) : [];
-        const subtypesContainer = document.getElementById('v4-cause-subtypes');
-        const subtypesList = document.getElementById('v4-cause-subtypes-list');
-        const groupCards = document.getElementById('v4-cause-cards');
-        const causeBackBtn = document.getElementById('btn-v4-cause-back');
-        const causeBackLabel = document.getElementById('v4-cause-back-label');
-        let _crisisGroup = null;
+        // ── Crisis tiles, flat layout (sub-view 3) — May 2026 ──
+        //
+        // Operator-reported: the previous 3-group drill-down (tap
+        // Natural → see Earthquake/Flood/…) cost 2 clicks per
+        // selection + the drill-down had its own state-leak history
+        // (commit c4d2087 _crisisGroup reset, then the smarter Add-
+        // Another listener in 0a26c7a). Flattening to one screen
+        // with all 9 crisis tiles visible under 3 section headers
+        // removes a click AND retires _crisisGroup entirely.
+        //
+        // Single source of truth for the tile list stays
+        // CRISIS_GROUPS (module-level at line ~1455). _renderCrisisGrid
+        // walks the dict in fixed order (natural → tech → human),
+        // emits a `.v4-cause-group` block per section + a
+        // `.v4-cause-tile` button per crisis type. Click handler is
+        // bound delegated-style on the grid container so adding /
+        // removing groups in CRISIS_GROUPS doesn't require any code
+        // changes here.
+        const crisisGrid = document.getElementById('v4-cause-grid');
+        const CRISIS_GROUP_ORDER = ['natural', 'tech', 'human'];
+        const CRISIS_GROUP_TITLE_KEY = {
+            natural: 'v4_cause_natural',
+            tech:    'v4_cause_tech',
+            human:   'v4_cause_human',
+        };
 
-        function _renderSubtypes(group) {
-            if (!subtypesList) return;
-            const items = CRISIS_GROUPS[group] || [];
-            const titleKey = group === 'natural' ? 'v4_cause_natural'
-                          : group === 'tech'    ? 'v4_cause_tech'
-                          : 'v4_cause_human';
-            if (causeBackLabel) causeBackLabel.textContent = (typeof window.t === 'function' ? window.t(titleKey) : titleKey);
+        function _renderCrisisGrid() {
+            if (!crisisGrid) return;
             const _ti = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
-            subtypesList.innerHTML = items.map((it) => {
-                const label = _ti(it.k, it.v);
-                const iconHtml = it.svg
-                    ? `<svg class="v4-cause-sub-opt-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${it.svg}</svg>`
-                    : `<i class="fa-solid ${it.i}"></i>`;
-                return `<button class="v4-cause-sub-opt" data-value="${it.v}" type="button" role="radio" aria-checked="false">
-                    <span class="v4-cause-sub-opt-icon" aria-hidden="true">${iconHtml}</span>
-                    <span>${label}</span>
-                </button>`;
+            const escAttr = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+            crisisGrid.innerHTML = CRISIS_GROUP_ORDER.map((group) => {
+                const items = CRISIS_GROUPS[group] || [];
+                if (!items.length) return '';
+                const headerKey = CRISIS_GROUP_TITLE_KEY[group];
+                const headerLabel = _ti(headerKey, group);
+                const tilesHtml = items.map((it) => {
+                    const label = _ti(it.k, it.v);
+                    const iconHtml = it.svg
+                        ? `<svg class="v4-cause-tile-svg" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${it.svg}</svg>`
+                        : `<i class="fa-solid ${escAttr(it.i)}"></i>`;
+                    return `<button class="v4-cause-tile" data-value="${escAttr(it.v)}" data-group="${escAttr(group)}" type="button" role="radio" aria-checked="false">
+                        <span class="v4-cause-tile-icon" aria-hidden="true">${iconHtml}</span>
+                        <span class="v4-cause-tile-label">${escAttr(label)}</span>
+                    </button>`;
+                }).join('');
+                return `<div class="v4-cause-group v4-cause-group-${escAttr(group)}">
+                    <div class="v4-cause-group-header">${escAttr(headerLabel)}</div>
+                    <div class="v4-cause-group-tiles">${tilesHtml}</div>
+                </div>`;
             }).join('');
-            // Wire the new buttons
-            subtypesList.querySelectorAll('.v4-cause-sub-opt').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    subtypesList.querySelectorAll('.v4-cause-sub-opt').forEach((b) => {
-                        b.classList.remove('is-selected');
-                        b.setAttribute('aria-checked', 'false');
-                    });
-                    btn.classList.add('is-selected');
-                    btn.setAttribute('aria-checked', 'true');
-                    _setState({ crisis_type: btn.getAttribute('data-value') });
-                    _updateReviewSummary();
-                    _refreshClassifyNext();
-                });
-            });
         }
-
-        causeCards.forEach((card) => {
-            card.addEventListener('click', () => {
-                _crisisGroup = card.getAttribute('data-group') || 'natural';
-                _renderSubtypes(_crisisGroup);
-                if (groupCards) groupCards.setAttribute('hidden', '');
-                if (subtypesContainer) subtypesContainer.removeAttribute('hidden');
-            });
+        // Render now (initial paint) + re-render on i18n changes so
+        // localized labels swap when the user re-picks a language.
+        _renderCrisisGrid();
+        document.addEventListener('crisp-i18n-applied', () => {
+            try { _renderCrisisGrid(); } catch (_) {}
         });
-        if (causeBackBtn) {
-            causeBackBtn.addEventListener('click', () => {
-                if (subtypesContainer) subtypesContainer.setAttribute('hidden', '');
-                if (groupCards) groupCards.removeAttribute('hidden');
-                _crisisGroup = null;
+
+        // Delegated click handler — survives the innerHTML rewrites
+        // that _renderCrisisGrid does (no need to re-attach on each
+        // re-render). Sets state.crisis_type, paints the selected
+        // ring, refreshes the Continue gate.
+        if (crisisGrid) {
+            crisisGrid.addEventListener('click', (e) => {
+                const tile = e.target && e.target.closest && e.target.closest('.v4-cause-tile');
+                if (!tile || !crisisGrid.contains(tile)) return;
+                const value = tile.getAttribute('data-value');
+                if (!value) return;
+                crisisGrid.querySelectorAll('.v4-cause-tile').forEach((b) => {
+                    b.classList.remove('is-selected');
+                    b.setAttribute('aria-checked', 'false');
+                });
+                tile.classList.add('is-selected');
+                tile.setAttribute('aria-checked', 'true');
+                _setState({ crisis_type: value });
+                _updateReviewSummary();
+                _refreshClassifyNext();
             });
         }
 
@@ -1658,7 +1680,6 @@
         // starts at sub-step 1 with the gated Continue correctly disabled.
         document.addEventListener('crisp-capture-state-cleared', () => {
             _classifyStep = 'damage';
-            _crisisGroup = null;
             try { _showSubStep('damage'); } catch (_) {}
             // Defensively re-evaluate the Continue gate against the fresh
             // (cleared) state. _showSubStep already does this, but if the
@@ -1666,16 +1687,19 @@
             // where a parallel reset path races) we want the gate to
             // immediately reflect emptiness.
             try { _refreshClassifyNext(); } catch (_) {}
-            // Reset the crisis-cards drill-down: show the group cards,
-            // hide the subtype list. Otherwise the previous-report's
-            // "subtype-list visible" state leaks and the user lands on
-            // the Explosion/Chemical list without seeing the parent
-            // Technological/Natural/Human cards first.
+            // Clear any selected crisis tile so the user doesn't see a
+            // stale highlight on the next entry. May 2026 — replaces
+            // the older "_crisisGroup = null + show group cards / hide
+            // subtypes" reset; the drill-down was retired when the
+            // crisis sub-step was flattened to a single grid.
             try {
-                const groupCards = document.getElementById('v4-cause-cards');
-                const subtypesContainer = document.getElementById('v4-cause-subtypes');
-                if (groupCards) groupCards.removeAttribute('hidden');
-                if (subtypesContainer) subtypesContainer.setAttribute('hidden', '');
+                const grid = document.getElementById('v4-cause-grid');
+                if (grid) {
+                    grid.querySelectorAll('.v4-cause-tile.is-selected').forEach((t) => {
+                        t.classList.remove('is-selected');
+                        t.setAttribute('aria-checked', 'false');
+                    });
+                }
             } catch (_) {}
         });
         // Re-render the dynamic sub-step label whenever the i18n pack

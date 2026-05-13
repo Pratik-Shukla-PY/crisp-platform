@@ -867,47 +867,33 @@
                 </div>
             </section>
 
-            <!-- ── Sub-view 3: What caused it? (progressive 3-card drill) -->
+            <!-- ── Sub-view 3: What caused it? (flat tile grid, May 2026)
+                 Operator-reported: the previous 3-card drill-down (tap
+                 group → see subtypes) was 2 clicks per selection. Now
+                 all 9 crisis types are visible at once, organised under
+                 3 section headers (Natural / Technological / Human-made).
+                 Single tap to select. Icons use the same responsive
+                 cascade as the "What was hit?" tiles for visual
+                 consistency. -->
             <section class="v4-classify-view" id="v4-view-crisis" hidden>
                 <h1 class="v4-q-question" data-voice="v4_q_crisis">
                     <span data-i18n="v4_q_crisis">What caused it?</span>
                 </h1>
-                <!-- Group cards (visible by default) -->
-                <div class="v4-cause-cards" id="v4-cause-cards" role="radiogroup" aria-label="Crisis category">
-                    <button class="v4-cause-card v4-cause-natural" data-group="natural" type="button">
-                        <span class="v4-cause-icon" aria-hidden="true">🌊</span>
-                        <span class="v4-cause-text">
-                            <span class="v4-cause-title" data-i18n="v4_cause_natural">Natural disaster</span>
-                            <span class="v4-cause-sub" data-i18n="v4_cause_natural_sub">Earthquake · Flood · Tsunami · Hurricane · Wildfire</span>
-                        </span>
-                        <i class="fa-solid fa-chevron-right v4-cause-chev"></i>
-                    </button>
-                    <button class="v4-cause-card v4-cause-tech" data-group="tech" type="button">
-                        <span class="v4-cause-icon" aria-hidden="true">⚠</span>
-                        <span class="v4-cause-text">
-                            <span class="v4-cause-title" data-i18n="v4_cause_tech">Technological</span>
-                            <span class="v4-cause-sub" data-i18n="v4_cause_tech_sub">Explosion · Chemical incident</span>
-                        </span>
-                        <i class="fa-solid fa-chevron-right v4-cause-chev"></i>
-                    </button>
-                    <button class="v4-cause-card v4-cause-human" data-group="human" type="button">
-                        <span class="v4-cause-icon" aria-hidden="true">👥</span>
-                        <span class="v4-cause-text">
-                            <span class="v4-cause-title" data-i18n="v4_cause_human">Human-made</span>
-                            <span class="v4-cause-sub" data-i18n="v4_cause_human_sub">Conflict · Civil unrest</span>
-                        </span>
-                        <i class="fa-solid fa-chevron-right v4-cause-chev"></i>
-                    </button>
-                </div>
-                <!-- Sub-types list (revealed after a group is tapped) -->
-                <div class="v4-cause-subtypes" id="v4-cause-subtypes" hidden>
-                    <button class="v4-cause-back" id="btn-v4-cause-back" type="button">
-                        <i class="fa-solid fa-arrow-left"></i>
-                        <span class="v4-cause-back-label" id="v4-cause-back-label">Back</span>
-                    </button>
-                    <div class="v4-cause-subtypes-list" id="v4-cause-subtypes-list" role="radiogroup" aria-label="Crisis sub-type">
-                        <!-- Populated by v4-flow.js based on the tapped group -->
-                    </div>
+                <!-- The whole grid is one radiogroup spanning 3 visual
+                     sections. Populated by v4-flow.js's _initClassifyStage
+                     on first mount from the CRISIS_GROUPS module-level
+                     dict (single source of truth for v/icon/key tuples). -->
+                <div class="v4-cause-grid" id="v4-cause-grid"
+                     role="radiogroup" aria-label="Crisis type">
+                    <!-- Populated at runtime — see _renderCrisisGrid in
+                         v4-flow.js. Structure per group:
+                         <div class="v4-cause-group">
+                           <div class="v4-cause-group-header">{label}</div>
+                           <div class="v4-cause-group-tiles">
+                             <button class="v4-cause-tile" data-value="…">…</button>
+                             …
+                           </div>
+                         </div>  -->
                 </div>
             </section>
 

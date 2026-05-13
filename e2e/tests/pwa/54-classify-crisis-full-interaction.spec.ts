@@ -84,40 +84,34 @@ test.describe('PWA — full crisis interaction after Add Another (Bug 2 re-verif
         await expect(page.locator('#btn-v4-classify-next')).toBeEnabled();
         await page.locator('#btn-v4-classify-next').click();
 
-        // 7. NOW the user sees the crisis sub-step at the GROUP-CARDS layer.
-        //    Continue is disabled. The screenshot's state.
+        // 7. NOW the user sees the flat crisis grid (May 2026 flatten —
+        //    drill-down retired). Continue is disabled until a tile is
+        //    selected.
         await expect(page.locator('#v4-view-crisis')).toBeVisible();
-        await expect(page.locator('#v4-cause-cards'),
-            'group cards layer must be visible (subtypes hidden) before tap').toBeVisible();
-        await expect(page.locator('#v4-cause-subtypes')).toBeHidden();
+        await expect(page.locator('#v4-cause-grid'),
+            'flat crisis grid must be visible').toBeVisible();
+        await expect(page.locator('.v4-cause-tile')).toHaveCount(9);
         await expect(page.locator('#btn-v4-classify-next'),
-            'Continue must be disabled before a crisis subtype is selected').toBeDisabled();
+            'Continue must be disabled before a crisis tile is selected').toBeDisabled();
 
-        // 8. Tap the "Natural disaster" group card.
-        //    EXPECTATION: drill-down opens, group cards hide, subtypes
-        //    container reveals.
-        await page.locator('.v4-cause-card[data-group="natural"]').click();
-        await expect(page.locator('#v4-cause-subtypes'),
-            'subtypes container must reveal after tapping a group card').toBeVisible({ timeout: 2000 });
-        await expect(page.locator('#v4-cause-cards')).toBeHidden();
-
-        // 9. Tap the Flood subtype chip.
+        // 8 + 9. Tap the Flood tile directly — no drill-down click.
         //    EXPECTATION: state.crisis_type = 'FLOOD', Continue enables.
-        await page.locator('.v4-cause-sub-opt[data-value="FLOOD"]').click();
+        await page.locator('.v4-cause-tile[data-value="FLOOD"]').click();
 
         // 10. THE CRITICAL ASSERTION: Continue must enable.
         await expect(page.locator('#btn-v4-classify-next'),
-            'Continue MUST enable after tapping a crisis subtype chip after Add Another').toBeEnabled({ timeout: 2000 });
+            'Continue MUST enable after tapping a crisis tile after Add Another').toBeEnabled({ timeout: 2000 });
 
         // And state must reflect the selection.
         const crisisType = await page.evaluate(() => (window as any).state.crisis_type);
         expect(crisisType, 'state.crisis_type must be set to FLOOD').toBe('FLOOD');
     });
 
-    test('tapping a group card after Add Another correctly opens the subtypes layer (handlers not stale)', async ({ page }) => {
-        // Spec 49 already proves the LAYER reset (group cards visible
-        // after Add Another). This proves the click HANDLERS still
-        // function — the specific concern the operator raised.
+    test('tapping a crisis tile after Add Another sets state + enables Continue (handlers not stale)', async ({ page }) => {
+        // Spec 49 already proves the stale-highlight is cleared on
+        // Add Another. This proves the click HANDLERS still function
+        // — the specific concern the operator raised that led to the
+        // c4d2087 / 0a26c7a fixes.
         await page.evaluate(() => {
             const s = (window as any).state;
             s.damage_classification = 'PARTIAL';
@@ -127,9 +121,10 @@ test.describe('PWA — full crisis interaction after Add Another (Bug 2 re-verif
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
         await page.locator('#btn-v4-classify-next').click();
         await page.locator('#btn-v4-classify-next').click();
-        // Pre-Add-Another: tap Technological → subtypes appear.
-        await page.locator('.v4-cause-card[data-group="tech"]').click();
-        await expect(page.locator('#v4-cause-subtypes')).toBeVisible();
+        // Pre-Add-Another: tap Explosion tile so we have a selection
+        // to clear on the next pass.
+        await page.locator('.v4-cause-tile[data-value="EXPLOSION"]').click();
+        await expect(page.locator('.v4-cause-tile.is-selected')).toHaveCount(1);
 
         // Add Another.
         await page.evaluate(() => (window as any)._clearCaptureState());
@@ -146,15 +141,10 @@ test.describe('PWA — full crisis interaction after Add Another (Bug 2 re-verif
         await page.locator('#btn-v4-classify-next').click();
         await page.locator('#btn-v4-classify-next').click();
 
-        // Tap Natural group card AFTER Add Another. Subtypes layer
-        // must reveal — proves handlers are still wired.
-        await page.locator('.v4-cause-card[data-group="natural"]').click();
-        await expect(page.locator('#v4-cause-subtypes'),
-            'tapping group card after Add Another must reveal subtypes').toBeVisible({ timeout: 2000 });
-        await expect(page.locator('#v4-cause-cards')).toBeHidden();
-
-        // Tap an Earthquake chip. crisis_type must set + Continue enables.
-        await page.locator('.v4-cause-sub-opt[data-value="EARTHQUAKE"]').click();
+        // Stale highlight cleared (per spec 49) — and the Earthquake
+        // tile is tappable + sets state.crisis_type.
+        await expect(page.locator('.v4-cause-tile.is-selected')).toHaveCount(0);
+        await page.locator('.v4-cause-tile[data-value="EARTHQUAKE"]').click();
         const crisisType = await page.evaluate(() => (window as any).state.crisis_type);
         expect(crisisType).toBe('EARTHQUAKE');
         await expect(page.locator('#btn-v4-classify-next')).toBeEnabled();

@@ -58,6 +58,24 @@ test.describe('@theme-visual PWA — color theme rewrite (May 2026)', () => {
         });
     });
 
+    test('classify crisis step (flat grid)', async ({ page }) => {
+        await bootV4(page);
+        await page.evaluate(() => {
+            const s = (window as any).state;
+            s.damage_classification = 'PARTIAL';
+            s.infrastructure_type   = 'ROAD';
+        });
+        await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
+        await page.locator('#btn-v4-classify-next').click();
+        await page.locator('#btn-v4-classify-next').click();
+        await page.waitForTimeout(200);
+        await page.screenshot({
+            path: 'test-results/theme-screenshots/05-classify-crisis-grid.png',
+            fullPage: true,
+        });
+        await expect(page.locator('.v4-cause-tile')).toHaveCount(9);
+    });
+
     test('My Reports (empty)', async ({ page }) => {
         await bootV4(page);
         // Patch fetch so the status-since call returns 0 reports.
