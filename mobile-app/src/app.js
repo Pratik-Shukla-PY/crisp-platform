@@ -2470,6 +2470,16 @@ const _backendHost = _isLocalDev
     ? `http://${window.location.hostname}:8000`
     : window.location.origin;
 const API_BASE = `${_backendHost}/api/v1`;
+// May 2026 — expose API_BASE on window so external modules
+// (home-screen.js, badge-studio.js, etc.) can hit the same backend
+// origin. Pre-fix home-screen.js fell back to `/api/v1` (relative
+// to the PWA's :8080 static-server origin) which 404'd on dev
+// because the static server has no API endpoints. Symptom:
+// /profile fetches silently failed → badge chip stuck at T1_SCOUT
+// even though the app.js Lives Saved card worked (it uses the
+// module-scoped API_BASE directly). Exposing the constant once
+// here heals every consumer in one line.
+window.API_BASE = API_BASE;
 
 // ── Single-flight + short-TTL fetch cache (May 2026, HAR-driven) ────────────
 // A landing-page HAR trace revealed two read-amplification patterns:

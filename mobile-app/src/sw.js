@@ -5,7 +5,22 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v146';
+const CACHE_NAME = 'crisp-v147';
+// v146 → v147 (May 2026, operator-reported tier-stuck-at-Scout bug).
+// Two-line fix to the reward-system v2 surfaces:
+//   1) app.js now exposes API_BASE as `window.API_BASE` (was a
+//      module-scoped const). Pre-fix home-screen.js's three fetch
+//      sites fell back to `/api/v1`, which on local dev resolves
+//      against the PWA's :8080 origin (the static file server)
+//      and 404s — symptom: badge chip stuck at T1_SCOUT even though
+//      the user is T4_LIFEKEEPER with 8 lives saved (the Lives Saved
+//      card kept working because app.js uses the module-scoped
+//      API_BASE directly). Exposing once heals all consumers.
+//   2) home-secondary-row layout tidied — pre-fix the three buttons
+//      (My Reports / Rewards / Login) wrapped awkwardly as 2+1 in
+//      a 2-col grid. New rule pins Login to a full-width row via
+//      grid-column:1/-1 so My Reports + Rewards share row 1 + Login
+//      gets its own row.
 // v145 → v146 (May 2026 reward-system v2, second pass) — separated
 // the "level up info + badges + sharing" surface from the home badge
 // chip. Pre-fix the chip doubled as both a status display AND a

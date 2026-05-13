@@ -5857,12 +5857,25 @@ body.tier-t4 .home-impact {
 /* Secondary actions row (My Reports + Login). On stage-home, .secondary-cta
    and .tertiary-cta inside .home-secondary-row sit side-by-side. The
    inherited .secondary-cta / .tertiary-cta block-level styling is overridden
-   below so the two buttons share a 2-column grid. */
+   below so the two buttons share a 2-column grid.
+
+   May 2026 (reward-system v2 second pass) — a third button (#btn-rewards)
+   joined the row. With a plain 3-column grid each tile reads too cramped
+   on narrow phones (~110 px wide). Instead we keep the 2-column grid
+   and let My Reports + Rewards occupy row 1 (equal width, content
+   actions), then force Login to span the full row beneath via
+   `grid-column: 1 / -1`. Result: 2 tidy content tiles up top, 1 wide
+   auth tile underneath — visually distinct grouping that signals
+   "these two are about your reports, this one is about your account". */
 .home-secondary-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     margin-top: 4px;
+}
+.home-secondary-row #btn-login,
+.home-secondary-row .tertiary-cta {
+    grid-column: 1 / -1;   /* full-width row below the 2-col content tiles */
 }
 .home-secondary-row .secondary-cta,
 .home-secondary-row .tertiary-cta {
