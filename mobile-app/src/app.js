@@ -9424,7 +9424,7 @@ function _mapReportStatus(r) {
     const verdict = r.reviewer_verdict || 'NOT_REVIEWED';
     const status = (r.status || 'PENDING').toUpperCase();
     if (verdict === 'ACCEPTED') {
-        return { state: 'ACCEPTED', color: '#22c55e', icon: '🟢', label: t('rd_status_accepted') };
+        return { state: 'ACCEPTED', color: '#80EE98', icon: '🟢', label: t('rd_status_accepted') };
     }
     if (verdict === 'REJECTED' || status === 'FALSE_ALARM') {
         return { state: 'REJECTED', color: '#ef4444', icon: '🔴', label: t('rd_status_rejected') };
@@ -10738,7 +10738,7 @@ function _showCelebration(message) {
     })();
     const toast = document.createElement('div');
     toast.textContent = message;
-    toast.style.cssText = 'background:linear-gradient(90deg,#16a34a,#22c55e);color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;font-weight:700;box-shadow:0 6px 16px rgba(34,197,94,0.35);white-space:nowrap;opacity:0;transform:translateY(-6px);transition:opacity .3s, transform .3s;';
+    toast.style.cssText = 'background:linear-gradient(90deg,#46DFB1,#80EE98);color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;font-weight:700;box-shadow:0 6px 16px rgba(128,238,152,0.35);white-space:nowrap;opacity:0;transform:translateY(-6px);transition:opacity .3s, transform .3s;';
     host.appendChild(toast);
     requestAnimationFrame(() => {
         toast.style.opacity = '1';
@@ -12003,7 +12003,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     function _renderDeleteList(reports) {
         if (!ddpList) return;
         if (!reports.length) {
-            ddpList.innerHTML = '<div class="ddp-empty"><i class="fa-solid fa-circle-check" style="color:#22c55e;font-size:20px;"></i><br>No data on server</div>';
+            ddpList.innerHTML = '<div class="ddp-empty"><i class="fa-solid fa-circle-check" style="color:#80EE98;font-size:20px;"></i><br>No data on server</div>';
             ddpDeleteAll.style.display = 'none';
             return;
         }
@@ -12031,7 +12031,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             return `<div class="ddp-item ${isPending ? 'ddp-item-pending' : ''}" data-id="${r.id}">
                 <div class="ddp-item-info">
-                    <div class="ddp-item-type"><i class="fa-solid fa-triangle-exclamation" style="color:${r.severity === 'SEVERE' ? '#ef4444' : r.severity === 'MODERATE' ? '#f59e0b' : '#22c55e'};"></i> ${r.infrastructure_type} — ${r.severity}</div>
+                    <div class="ddp-item-type"><i class="fa-solid fa-triangle-exclamation" style="color:${r.severity === 'SEVERE' ? '#ef4444' : r.severity === 'MODERATE' ? '#f59e0b' : '#80EE98'};"></i> ${r.infrastructure_type} — ${r.severity}</div>
                     <div class="ddp-item-meta">${loc} · ${time}</div>
                     ${isPending ? `<div class="ddp-pending-label"><i class="fa-solid fa-clock"></i> Deletion scheduled — ${countdown}</div>` : `
                     <div class="ddp-item-media">

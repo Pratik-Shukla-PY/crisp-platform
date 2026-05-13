@@ -5,7 +5,20 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v139';
+const CACHE_NAME = 'crisp-v140';
+// v139 → v140 (May 2026) — color-theme rewrite. Operator-supplied
+// 6-color palette swap (no functional / structural changes):
+//   · #213A58 navy        — page background base (was near-black)
+//   · #0C6478 dark teal   — elevated surfaces (cards, accordions)
+//   · #15919B medium teal — borders + secondary accents (was purple)
+//   · #09D1C7 vivid teal  — PRIMARY accent / CTA (was orange)
+//   · #46DFB1 mint        — soft accents + count chips
+//   · #80EE98 lime        — success states (was emerald green)
+// Reds (errors), ambers (warnings), UN-blue brand mark, flag SVG
+// colors, and gray text tokens kept unchanged for accessibility +
+// semantic stability. CSS + app.js + building-select.js + index.html
+// + manifest.json all touched; bump CACHE_NAME so returning users
+// pick up the new theme.
 // v138 → v139 (May 2026) — My Reports UX redesign (operator-reported):
 //   · filter chips replaced with a native <select> dropdown ("All"
 //     default) — no more horizontal overflow on 390px screens

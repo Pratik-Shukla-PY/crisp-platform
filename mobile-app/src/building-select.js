@@ -155,7 +155,7 @@
         // Clear any previous highlight
         if (_selectedLayer) {
             _selectedLayer.setStyle({
-                color: '#2563eb', weight: 1, fillColor: '#3b82f6', fillOpacity: 0.15,
+                color: '#09D1C7', weight: 1, fillColor: '#46DFB1', fillOpacity: 0.15,
             });
         }
         layer.setStyle({
@@ -234,7 +234,7 @@
     function _clearSelection() {
         if (_selectedLayer) {
             _selectedLayer.setStyle({
-                color: '#2563eb', weight: 1, fillColor: '#3b82f6', fillOpacity: 0.15,
+                color: '#09D1C7', weight: 1, fillColor: '#46DFB1', fillOpacity: 0.15,
             });
             _selectedLayer = null;
         }
@@ -336,9 +336,9 @@
                 const latlngs = _buildingLatLngs(el);
                 if (!latlngs) return;
                 const poly = L.polygon(latlngs, {
-                    color: '#2563eb',
+                    color: '#09D1C7',
                     weight: 1,
-                    fillColor: '#3b82f6',
+                    fillColor: '#46DFB1',
                     fillOpacity: 0.15,
                 }).addTo(_overlay);
                 poly.on('click', () => _commitSelection(el.id, poly, el));
