@@ -5,7 +5,22 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v137';
+const CACHE_NAME = 'crisp-v138';
+// v137 → v138 (May 2026) — operator-reported "1 queued never leaves
+// even on 50+ Mbps." Four coordinated fixes:
+//   · reconcile soft-drain: dequeue when SMALL of every photo lands +
+//     meta/text/audio done; MEDIUM/HIGH missing on the server are
+//     marked deferred and the queue row is removed (was infinitely
+//     re-queuing pre-fix)
+//   · race-safe path for SMALL mid-assembly (server has the row but
+//     assembly_status='partial' — wait one tick instead of rolling
+//     back the chunk progress and re-uploading)
+//   · UNDP-details queue 24h TTL purge — stale entries from before
+//     a fixed bug no longer inflate the pill indefinitely
+//   · pill now shows "% complete" + a thin green progress bar
+//     underneath the text so the operator sees draining in real time
+// index.html + styles.css + app.js all touched; bump CACHE_NAME so
+// returning users actually see the new UI.
 // v135 → v136 (May 2026) — inline-SVG flag rendering in the language
 // picker. Every cached HTML/CSS/JS now carries the data-cc swap; bump
 // CACHE_NAME so returning Windows-Chrome / Linux users actually pick

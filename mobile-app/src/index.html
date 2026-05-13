@@ -2621,6 +2621,14 @@
          title="Tap to retry sync">
         <i class="fa-solid fa-cloud-arrow-up"></i>
         <span id="sync-badge-text">0 queued</span>
+        <!-- May 2026 — progress fill rendered as a thin bar underneath
+             the text. updateSyncBadge() computes the % from completed
+             stages across all queued items + the details-queue, sets
+             #sync-badge-fill's width. Gives operators "how much longer"
+             visibility without opening My Reports. -->
+        <div class="sync-badge-bar" aria-hidden="true">
+            <div id="sync-badge-fill" class="sync-badge-fill" style="width:0%"></div>
+        </div>
     </div>
 
     <!-- M2 polish — Fullscreen building-picker overlay.

@@ -433,15 +433,50 @@ async function dequeueReport(clientReportId) {
 // Trivial to compute (one extra reduce) and avoids a second tier-status
 // round-trip just for logging.
 async function _reconcileBeforeDequeue(item, reportId) {
-    if (!reportId) return { ok: true, missing: [], breakdown: { LOW: 0, MEDIUM: 0, HIGH: 0 }, totalExpected: 0 };
-    // Collect every (variant, mediaId) we believe we sent.
+    // BUGFIX May 2026 (operator-reported, "1 queued never leaves") —
+    // soft-drain reconcile.
+    //
+    // Pre-fix this function returned `ok: missing.length === 0` —
+    // EVERY local complete=true variant had to be present server-
+    // side, or the queue entry rolled back (stages.photo=false) and
+    // got re-queued forever. On good bandwidth this still happened
+    // when MEDIUM/HIGH chunks landed but the server's async assembly
+    // hadn't completed in the reconcile window (2-5 s), OR when a
+    // chunk POST silently failed mid-stream (5xx / S3 hiccup) leaving
+    // the client thinking the tier was uploaded but the server with
+    // a partial asset that never finished assembling.
+    //
+    // New rule: the report is fundamentally DONE the moment SMALL of
+    // every photo group is on the server. Originals (MEDIUM/HIGH) are
+    // progressive enhancement — the dashboard's "Original pending"
+    // pill already covers the case where they finish later.
+    //
+    // Returns:
+    //   ok          — true if SMALL of every photo group is on the server
+    //                  (and there are no photos at all is also ok)
+    //   softDrain   — true when ok=true but at least one MEDIUM/HIGH the
+    //                  client thought it sent is missing server-side
+    //                  (caller marks those `deferred` for background retry
+    //                  and dequeues the report — no more "1 queued forever")
+    //   missing     — the variants the caller should mark deferred (soft-drain)
+    //                  or reset to retry (hard-fail when SMALL is missing)
+    //   smallMissing— variants whose SMALL tier is missing server-side;
+    //                  caller MUST roll back and re-upload (this is the
+    //                  only hard-fail case)
+    //   breakdown   — counts of each tier present on the server (operator
+    //                  log surface)
+    //   totalExpected — number of variants the client believed it sent
+    if (!reportId) return { ok: true, softDrain: false, missing: [], smallMissing: [], breakdown: { LOW: 0, MEDIUM: 0, HIGH: 0 }, totalExpected: 0 };
+    // Collect every (variant, mediaId) we believe we sent, AND track
+    // which ones are the SMALL tier of their photo group (those are
+    // the "must be on the server" set; MEDIUM/HIGH are softer).
     const expected = [];
     const collect = (variants, label) => {
         if (!variants) return;
         for (const tier of ['small', 'medium', 'large']) {
             const v = variants[tier];
             if (v && v.mediaId && v.complete) {
-                expected.push({ mediaId: v.mediaId, variant: v, label: `${label}/${tier}` });
+                expected.push({ mediaId: v.mediaId, variant: v, tier, label: `${label}/${tier}` });
             }
         }
     };
@@ -449,7 +484,9 @@ async function _reconcileBeforeDequeue(item, reportId) {
     (item.extraPhotosVariants || []).forEach((ev, i) => collect(ev, `extra[${i}]`));
     const totalExpected = expected.length;
     const emptyBreakdown = { LOW: 0, MEDIUM: 0, HIGH: 0 };
-    if (!expected.length) return { ok: true, missing: [], breakdown: emptyBreakdown, totalExpected };
+    if (!expected.length) {
+        return { ok: true, softDrain: false, missing: [], smallMissing: [], breakdown: emptyBreakdown, totalExpected };
+    }
     // Fetch the server's view.
     let serverComplete;
     let breakdown = { LOW: 0, MEDIUM: 0, HIGH: 0 };
@@ -459,12 +496,9 @@ async function _reconcileBeforeDequeue(item, reportId) {
             { method: 'GET', credentials: 'omit' },
         );
         if (!res.ok) {
-            // Endpoint missing (old backend) or transient error — fail open
-            // and trust the local stages.* view. Worst case is a tier never
-            // arrives at the server and we never know. The deferred-tier
-            // protection above is the primary defence; this is reconciliation
-            // belt-and-suspenders.
-            return { ok: true, missing: [], breakdown: emptyBreakdown, totalExpected };
+            // Endpoint missing (old backend) or transient error — fail
+            // open and trust local stages.*. Same fail-open as before.
+            return { ok: true, softDrain: false, missing: [], smallMissing: [], breakdown: emptyBreakdown, totalExpected };
         }
         const body = await res.json();
         const mediaArr = body.media || [];
@@ -473,17 +507,52 @@ async function _reconcileBeforeDequeue(item, reportId) {
                 .filter(m => m && m.assembly_status === 'complete')
                 .map(m => m.id),
         );
+        // Also track every media row that EXISTS on the server (any
+        // assembly status). Distinguishes "truly absent" (chunks never
+        // arrived) from "uploading or mid-assembly" (chunks landed,
+        // server hasn't finished stitching).
+        var serverHas = new Set(
+            mediaArr.filter(m => m && m.id).map(m => m.id),
+        );
         for (const m of mediaArr) {
             if (!m || m.assembly_status !== 'complete') continue;
             const t = m.resolution_tier;
             if (t && breakdown[t] !== undefined) breakdown[t] += 1;
         }
     } catch (e) {
-        // Network failed — same fail-open policy as above.
-        return { ok: true, missing: [], breakdown: emptyBreakdown, totalExpected };
+        return { ok: true, softDrain: false, missing: [], smallMissing: [], breakdown: emptyBreakdown, totalExpected };
     }
-    const missing = expected.filter(e => !serverComplete.has(e.mediaId));
-    return { ok: missing.length === 0, missing, breakdown, totalExpected };
+    // For each expected variant:
+    //   · `notComplete` = server doesn't show assembly_status='complete'
+    //   · `notPresent`  = server doesn't have a row for this mediaId at all
+    // A SMALL tier `notPresent` is hard-fail (must re-upload). A SMALL
+    // tier `notComplete but present` is mid-assembly — wait, don't fail.
+    // MEDIUM/HIGH `notComplete` (either case) → soft drain.
+    const notComplete = expected.filter(e => !serverComplete.has(e.mediaId));
+    const smallMissing = notComplete.filter(
+        e => e.tier === 'small' && !serverHas.has(e.mediaId),
+    );
+    // SMALL tiers that exist on the server but aren't done assembling.
+    // These shouldn't fail OR soft-drain — caller should wait one
+    // more retry-loop tick (~15 s) for the server to finish.
+    const smallAssembling = notComplete.filter(
+        e => e.tier === 'small' && serverHas.has(e.mediaId),
+    );
+    const softMissing = notComplete.filter(e => e.tier !== 'small');
+    // Hard-fail ONLY when a SMALL chunk never landed. Mid-assembly
+    // → return ok=false but with empty smallMissing so the caller
+    // can keep the queue entry without rolling back chunk progress.
+    const ok = smallMissing.length === 0 && smallAssembling.length === 0;
+    const softDrain = ok && softMissing.length > 0;
+    return {
+        ok,
+        softDrain,
+        missing: ok ? softMissing : notComplete,
+        smallMissing,
+        smallAssembling,
+        breakdown,
+        totalExpected,
+    };
 }
 
 async function getAllQueued() {
@@ -601,6 +670,7 @@ async function updateSyncBadge() {
     try {
         const badge = document.getElementById('sync-badge');
         const text = document.getElementById('sync-badge-text');
+        const fill = document.getElementById('sync-badge-fill');
         // BUGFIX May 2026 (operator-reported, second pass) — user sees
         // the "N queued" pill and reads it as "my UNDP details aren't
         // syncing." Pre-fix the pill ONLY counted IndexedDB report
@@ -626,15 +696,46 @@ async function updateSyncBadge() {
         const syncing = items.filter(i => i.status === 'syncing').length;
         const failed = items.filter(i => i.status === 'failed').length;
 
+        // BUGFIX May 2026 (operator-reported, "1 queued never leaves")
+        // — compute a stage-based progress % across the queue so the
+        // user has visibility into how close the queue is to draining.
+        // Each report has 4 stages (meta/text/photo/audio); a UNDP-
+        // details patch is binary (queued = 0%, drained = removed from
+        // queue so doesn't count). The % is: sum of completed stages
+        // across all queued reports / (items.length * 4) clamped 0-99
+        // when queue isn't empty (100% would imply nothing left, which
+        // is the hidden-pill case above).
+        let pct = 0;
+        if (items.length > 0) {
+            let totalStages = 0;
+            for (const it of items) {
+                const st = it.stages || {};
+                totalStages += (st.meta ? 1 : 0) + (st.text ? 1 : 0)
+                            + (st.photo ? 1 : 0) + (st.audio ? 1 : 0);
+            }
+            const denom = items.length * 4;
+            pct = Math.min(99, Math.round((totalStages / denom) * 100));
+        }
+        // Details-queue items don't carry stage progress — they're
+        // either queued (0%) or drained (gone from queue). If ALL
+        // remaining items are details patches (no reports), keep
+        // pct at 0 — accurate for "patch hasn't been attempted yet".
+        if (fill) fill.style.width = `${pct}%`;
+
         if (syncing > 0) {
             badge.className = 'sync-badge syncing';
-            text.textContent = `${t('sync_syncing')} ${syncing}/${total}`;
+            text.textContent = `${t('sync_syncing')} ${syncing}/${total} · ${pct}%`;
         } else if (failed > 0) {
             badge.className = 'sync-badge error';
             text.textContent = `${total} ${t('sync_queued')} (${failed} ${t('sync_failed')})`;
         } else {
             badge.className = 'sync-badge';
-            text.textContent = `${total} ${t('sync_queued')}`;
+            // Append the % only when there's report-queue progress to
+            // show. Pure-details-queue case (pct=0, no reports) just
+            // says "N queued" without a misleading "0%".
+            text.textContent = items.length > 0
+                ? `${total} ${t('sync_queued')} · ${pct}%`
+                : `${total} ${t('sync_queued')}`;
         }
     } catch (e) {
         console.warn('Sync badge update failed:', e);
@@ -8045,13 +8146,41 @@ async function trySendQueuedReport(item) {
             try {
                 const reconciled = await _reconcileBeforeDequeue(item, reportId);
                 if (reconciled.ok) {
+                    // BUGFIX May 2026 (operator-reported, "1 queued never
+                    // leaves") — soft-drain handoff. If reconcile is OK
+                    // because SMALL of every photo landed, but some
+                    // MEDIUM/HIGH we thought we sent isn't on the server
+                    // yet, mark those as `deferred` with a timestamp so
+                    // the retry-loop's existing deferred-tier path picks
+                    // them up. We DEQUEUE the report regardless — it's
+                    // visible on the dashboard with at least SMALL, which
+                    // is the UNDP must-have. The Originals can finish
+                    // later (the dashboard's "Original pending" pill
+                    // already handles that UX).
+                    if (reconciled.softDrain) {
+                        const now = Date.now();
+                        for (const m of (reconciled.missing || [])) {
+                            if (m.variant) {
+                                m.variant.deferred = true;
+                                m.variant.deferredAt = m.variant.deferredAt || now;
+                                m.variant.deferredReason = 'reconcile-soft-drain';
+                                // Reset chunk progress so the next retry
+                                // re-attempts the full tier upload (avoids
+                                // resuming a half-sent stream the server
+                                // never finished assembling).
+                                m.variant.chunkProgress = 0;
+                                m.variant.complete = false;
+                            }
+                        }
+                    }
                     try { await dequeueReport(item.client_report_id); } catch (_) {}
-                    // Phase C.3 (May 2026) — structured verification log so
-                    // operators tailing the console can confirm at a glance
-                    // that every expected tier landed at the backend before
-                    // the queue row was deleted. Pulls the per-tier complete
-                    // counts straight off `_reconcileBeforeDequeue`'s response
-                    // so it's free (we already fetched tier-status).
+                    // Fix 3 — refresh the pill immediately on dequeue so
+                    // the operator-visible "N queued" count drops within
+                    // a frame rather than waiting for the next retry-loop
+                    // tick. The finally-block updateSyncBadge below also
+                    // fires; this is the synchronous-after-dequeue belt.
+                    try { updateSyncBadge(); } catch (_) {}
+                    // Phase C.3 (May 2026) — structured verification log.
                     const expectedRows = reconciled.totalExpected || 0;
                     const actualRows = (reconciled.breakdown.LOW || 0)
                                      + (reconciled.breakdown.MEDIUM || 0)
@@ -8067,34 +8196,50 @@ async function trySendQueuedReport(item) {
                         (item.extraPhotosVariants || []).forEach(collect);
                         return ids.size;
                     })();
+                    const drainKind = reconciled.softDrain ? 'SOFT-DRAIN' : 'OK';
                     console.log(
-                        `[Upload:verify] report ${reportId} → ${photoGroupCount} photo group(s); ` +
+                        `[Upload:verify ${drainKind}] report ${reportId} → ${photoGroupCount} photo group(s); ` +
                         `expected ${expectedRows} variant row(s), backend confirms ${actualRows}; ` +
                         `complete tiers: SMALL=${reconciled.breakdown.LOW || 0} ` +
                         `MEDIUM=${reconciled.breakdown.MEDIUM || 0} ` +
-                        `LARGE=${reconciled.breakdown.HIGH || 0}`,
+                        `LARGE=${reconciled.breakdown.HIGH || 0}` +
+                        (reconciled.softDrain
+                            ? ` — ${reconciled.missing.length} tier(s) deferred for background retry: ` +
+                              reconciled.missing.map(m => m.label).join(', ')
+                            : ''),
                     );
+                } else if ((reconciled.smallAssembling || []).length > 0
+                           && (reconciled.smallMissing || []).length === 0) {
+                    // Race-safe path: SMALL is on the server but the
+                    // server is mid-assembly (assembly_status='partial').
+                    // DO NOT roll back chunk progress — the server has
+                    // every chunk, just hasn't stitched them yet. Wait
+                    // one retry-loop tick (~15 s) and reconcile again.
+                    const labels = reconciled.smallAssembling.map(m => m.label).join(', ');
+                    console.log(
+                        `[Upload:verify WAIT-ASSEMBLY] report ${reportId} — ` +
+                        `${reconciled.smallAssembling.length} SMALL tier(s) on server but ` +
+                        `still assembling (${labels}); deferring dequeue 15s.`,
+                    );
+                    // Leave the queue entry as-is; retry loop will revisit.
                 } else {
-                    // Server is missing one or more tiers we thought we sent.
-                    // Roll the relevant flags back so the retry loop tries again.
+                    // Hard-fail: SMALL of at least one photo is missing
+                    // ON THE SERVER ENTIRELY (chunks never landed). MUST
+                    // roll back and re-upload — the report has no usable
+                    // image otherwise.
                     item.stages.photo = false;
-                    for (const m of (reconciled.missing || [])) {
+                    for (const m of (reconciled.smallMissing || [])) {
                         if (m.variant) {
                             m.variant.complete = false;
                             m.variant.chunkProgress = 0;
                         }
                     }
                     try { await enqueueReport(item); } catch (_) {}
-                    // Phase C.3 — structured re-queue log. Lists which
-                    // variant labels (e.g. "main/large", "extra[2]/medium")
-                    // came back missing so operators can correlate against
-                    // the network-tier history without spelunking through
-                    // the IndexedDB row by hand.
-                    const missLabels = (reconciled.missing || []).map(m => m.label).join(', ');
+                    const missLabels = (reconciled.smallMissing || []).map(m => m.label).join(', ');
                     console.warn(
-                        `[Upload:verify] report ${reportId} reconcile FAIL — ` +
-                        `backend missing ${reconciled.missing.length} of ${reconciled.totalExpected} variant row(s) ` +
-                        `(${missLabels}); re-queued, next retry in ~15s.`,
+                        `[Upload:verify HARD-FAIL] report ${reportId} reconcile FAIL — ` +
+                        `backend missing ${reconciled.smallMissing.length} SMALL tier(s) (${missLabels}); ` +
+                        `re-queued, next retry in ~15s.`,
                     );
                 }
             } catch (e) {
@@ -10067,7 +10212,41 @@ function _dequeueDetails(reportId) {
     try { if (typeof updateSyncBadge === 'function') updateSyncBadge(); } catch (_) {}
 }
 
+// BUGFIX May 2026 (operator-reported, "1 queued never leaves") — a
+// stuck UNDP-details patch from a previous session was inflating the
+// unified "N queued" pill even though no new report was actually
+// pending. Add a hard 24-hour TTL: any entry older than that gets
+// purged from localStorage. The PATCH endpoint is idempotent and
+// merges fields, so worst-case a 24h-stale patch is lost — the
+// report itself is already on the dashboard with everything else.
+const _DETAILS_QUEUE_TTL_MS = 24 * 60 * 60 * 1000;  // 24 hours
+
+function _purgeStaleDetails() {
+    try {
+        const raw = localStorage.getItem(_DETAILS_QUEUE_KEY);
+        if (!raw) return;
+        const q = JSON.parse(raw) || [];
+        const now = Date.now();
+        const fresh = q.filter(e => {
+            const age = now - (e.queuedAt || now);
+            return age < _DETAILS_QUEUE_TTL_MS;
+        });
+        if (fresh.length !== q.length) {
+            const dropped = q.length - fresh.length;
+            console.warn(
+                `[DetailsQueue] purged ${dropped} entry/entries older than 24 h ` +
+                `(report ids: ${q.filter(e => !fresh.includes(e)).map(e => e.reportId).join(', ')})`,
+            );
+            localStorage.setItem(_DETAILS_QUEUE_KEY, JSON.stringify(fresh));
+            try { updateSyncBadge(); } catch (_) {}
+        }
+    } catch (_) { /* localStorage corruption — leave it alone */ }
+}
+
 async function _syncDetailsQueue() {
+    // Always purge stale entries first so the drain loop doesn't keep
+    // attempting (and failing) on patches that will never succeed.
+    _purgeStaleDetails();
     let q = [];
     try {
         const raw = localStorage.getItem(_DETAILS_QUEUE_KEY);
@@ -10119,6 +10298,7 @@ setTimeout(() => { _syncDetailsQueue().catch(() => {}); }, 2000);
 // Exposed for tests + manual retry from the My Reports detail view.
 window.__crispEnqueueDetails = _enqueueDetails;
 window.__crispSyncDetailsQueue = _syncDetailsQueue;
+window.__crispPurgeStaleDetails = _purgeStaleDetails;
 
 /** Open the detail view for a report. Populates stage-report-detail from
  *  the submitted-cache (populated by _renderSubmittedReports). */
