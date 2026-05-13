@@ -383,6 +383,23 @@
             // re-run `_paintBuildings`. Within 50 m we treat it as GPS
             // jitter and skip the Overpass round-trip.
             if (_map) {
+                // BUGFIX May 2026 — fullscreen-picker partial render.
+                //
+                // The picker's `openOverlay` (app.js:10347) re-parents
+                // `#building-map` from the inline ~300×300 mount into the
+                // fullscreen overlay (~viewport). Leaflet caches the
+                // container's size on init; without an `invalidateSize`
+                // here, `_map._size` stayed at the original 300×300 →
+                // tile layer only loaded tiles for that top-left rectangle
+                // and the polygon canvas drew at the small size, leaving
+                // the right half of the fullscreen view blank AND most of
+                // the rendered building polygons clipped out of view.
+                //
+                // Calling `invalidateSize` BEFORE `setView` so the new
+                // viewport bounds are computed against the correct
+                // container dimensions; the subsequent setView + paint
+                // operate on the right rectangle.
+                try { _map.invalidateSize({ animate: false }); } catch (_) {}
                 _map.setView([lat, lng], _map.getZoom());
                 try { L.marker([lat, lng], { zIndexOffset: 1000 }).addTo(_map); } catch (_) {}
                 const moved = (_lastFetchLat === null || _lastFetchLng === null)
@@ -393,6 +410,21 @@
                         console.warn('[BuildingSelect] re-paint after location change failed:', e?.message || e);
                     });
                 }
+                // Second-chance invalidateSize on the next tick.
+                // Mirrors the dance in `_tryInitMap` (line ~518): iOS
+                // Safari sometimes settles the new container's layout
+                // AFTER our first call — the chained call fires after
+                // Safari has painted at least once, picking up the final
+                // dimensions and forcing a tile re-fetch for any region
+                // we missed on the first pass.
+                setTimeout(() => {
+                    if (!_map) return;
+                    try {
+                        _map.invalidateSize({ animate: false });
+                        const c = _map.getCenter();
+                        _map.setView([c.lat, c.lng], _map.getZoom(), { animate: false });
+                    } catch (_) {}
+                }, 320);
             }
             return;
         }
