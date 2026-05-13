@@ -39,6 +39,20 @@
     let _overlay = null;
     let _selectedLayer = null;
     let _initInFlight = false;
+    // BUGFIX May 2026 — track the lat/lng we last fetched buildings for.
+    // When the reporter changes the report's location (e.g. picks a place
+    // 700 km away via the Step-3 inline location editor), `ensureMap` is
+    // re-called with new coords. The old fast-path early-returned after
+    // `setView` — buildings stayed cached for the *original* GPS bbox and
+    // the user saw terrain with zero tappable polygons (UNDP must-have #6
+    // regression). Tracking the last fetch lets us detect "user moved
+    // beyond the current buildings tile" and re-fetch.
+    let _lastFetchLat = null;
+    let _lastFetchLng = null;
+    // ~50 m at the equator; well inside the 200 m fetch radius so we don't
+    // re-fetch on a GPS jitter wobble, but well below the 220 m cache-tile
+    // size so a cross-tile move triggers a re-fetch reliably.
+    const _REFETCH_THRESHOLD_DEG = 0.0005;
 
     function _cacheKey(lat, lng) {
         const r = (n) => n.toFixed(CACHE_KEY_PRECISION);
@@ -298,6 +312,48 @@
 
     /** Public entry point — init the map (idempotent). Callers pass the
      * current lat/lng so we don't depend on any particular state shape. */
+    /**
+     * Repaint the building-polygon overlay for the given lat/lng. Clears
+     * any prior polygons on `_overlay`, fetches the OSM buildings for
+     * the new bbox, and draws + wires tap handlers. Updates the cache
+     * tracker so subsequent jitter calls don't re-fetch needlessly.
+     *
+     * Idempotent + safe to call on an already-mounted map. Used by both
+     * the first-init path inside `ensureMap` AND the "user moved the
+     * report location" re-fetch path.
+     */
+    async function _paintBuildings(lat, lng) {
+        if (!_map || !_overlay) return;
+        const elems = await _fetchBuildings(lat, lng);
+        // Clear the old polygons BEFORE drawing the new ones so a
+        // remote-location move doesn't leave the previous neighbourhood's
+        // outlines floating in space. _selectedLayer is also reset so a
+        // stale selection doesn't survive a location change.
+        try { _overlay.clearLayers(); } catch (_) {}
+        _selectedLayer = null;
+        if (Array.isArray(elems)) {
+            elems.forEach((el) => {
+                const latlngs = _buildingLatLngs(el);
+                if (!latlngs) return;
+                const poly = L.polygon(latlngs, {
+                    color: '#2563eb',
+                    weight: 1,
+                    fillColor: '#3b82f6',
+                    fillOpacity: 0.15,
+                }).addTo(_overlay);
+                poly.on('click', () => _commitSelection(el.id, poly, el));
+            });
+            console.log(
+                `[BuildingSelect] painted ${elems.length} building(s) ` +
+                `near (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+            );
+        } else {
+            console.log('[BuildingSelect] no building data — map-only fallback');
+        }
+        _lastFetchLat = lat;
+        _lastFetchLng = lng;
+    }
+
     async function ensureMap(lat, lng) {
         // lazy-load Leaflet on first ensureMap call. Was
         // eagerly loaded via <script> in index.html.
@@ -311,8 +367,33 @@
         if (!container || typeof L === 'undefined') return;
         if (!(Number.isFinite(lat) && Number.isFinite(lng))) return;
         if (_map || _initInFlight) {
-            // Already initialised — just recenter if the GPS moved noticeably.
-            if (_map) _map.setView([lat, lng], _map.getZoom());
+            // Already initialised — recentre + optionally re-fetch buildings.
+            //
+            // BUGFIX May 2026 — UNDP must-have #6 regression.
+            //
+            // Pre-fix: this branch only called `_map.setView` and returned.
+            // The basemap tiles updated (Leaflet fetches them automatically)
+            // but the building-polygon overlay still held the polygons from
+            // the original lat/lng. A reporter who manually changed the
+            // report's location to a city 700 km away saw the new terrain
+            // with ZERO tappable buildings — UNDP must-have #6 silently
+            // dropped, forcing them onto the free-text fallback.
+            //
+            // Post-fix: if the new coords are >~50 m from the last fetch we
+            // re-run `_paintBuildings`. Within 50 m we treat it as GPS
+            // jitter and skip the Overpass round-trip.
+            if (_map) {
+                _map.setView([lat, lng], _map.getZoom());
+                try { L.marker([lat, lng], { zIndexOffset: 1000 }).addTo(_map); } catch (_) {}
+                const moved = (_lastFetchLat === null || _lastFetchLng === null)
+                    || Math.abs(lat - _lastFetchLat) > _REFETCH_THRESHOLD_DEG
+                    || Math.abs(lng - _lastFetchLng) > _REFETCH_THRESHOLD_DEG;
+                if (moved) {
+                    _paintBuildings(lat, lng).catch((e) => {
+                        console.warn('[BuildingSelect] re-paint after location change failed:', e?.message || e);
+                    });
+                }
+            }
             return;
         }
         _initInFlight = true;
@@ -368,22 +449,11 @@
             L.marker([lat, lng], { zIndexOffset: 1000 }).addTo(_map);
 
             _overlay = L.layerGroup().addTo(_map);
-            const elems = await _fetchBuildings(lat, lng);
-            if (Array.isArray(elems)) {
-                elems.forEach((el) => {
-                    const latlngs = _buildingLatLngs(el);
-                    if (!latlngs) return;
-                    const poly = L.polygon(latlngs, {
-                        color: '#2563eb',
-                        weight: 1,
-                        fillColor: '#3b82f6',
-                        fillOpacity: 0.15,
-                    }).addTo(_overlay);
-                    poly.on('click', () => _commitSelection(el.id, poly, el));
-                });
-            } else {
-                console.log('[BuildingSelect] no building data — map-only fallback');
-            }
+            // Single source of truth for the polygon paint; `_paintBuildings`
+            // both fetches + draws + updates the `_lastFetchLat/Lng` cache
+            // tracker so the re-fetch threshold check above works on every
+            // subsequent ensureMap call.
+            await _paintBuildings(lat, lng);
         } finally {
             _initInFlight = false;
         }
@@ -519,6 +589,24 @@
         // the Geolocation API resolves). Safe to call unconditionally —
         // `_tryInitMap` re-checks every precondition.
         document.addEventListener('gps-ready', _tryInitMap);
+
+        // Trigger 4 (May 2026, UNDP must-have #6 follow-up) — the reporter
+        // changed the report's location to a place far from their GPS fix.
+        // The dispatcher (v4-flow.js's `_saveLocEdit`) carries the new
+        // lat/lng on `event.detail`. We pass those straight through to
+        // `ensureMap`, which then either initialises the Leaflet instance
+        // (first time) or re-fetches buildings for the new bbox (already
+        // mounted). The `_REFETCH_THRESHOLD_DEG` check in `ensureMap`
+        // protects against noise from minor GPS-corrected updates.
+        document.addEventListener('crisp-location-changed', (e) => {
+            const lat = e && e.detail && e.detail.lat;
+            const lng = e && e.detail && e.detail.lng;
+            if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                ensureMap(lat, lng).catch((err) => {
+                    console.warn('[BuildingSelect] location-changed handler failed:', err?.message || err);
+                });
+            }
+        });
 
         // Legacy safety net — if someone flips the feature flag back
         // to v1, `<section>` becomes `<details>` again after a reload

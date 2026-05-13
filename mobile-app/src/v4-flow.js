@@ -314,6 +314,7 @@
                     userLocationName: name,
                     locationName: name,
                 };
+                let _locationMoved = false;
                 // If the user picked a suggestion AND didn't edit the text
                 // after, also update lat/lng + the location object so the
                 // map + coords sub-line reflect the corrected place.
@@ -325,9 +326,40 @@
                         accuracy: null,
                         source: 'user_corrected',
                     };
+                    _locationMoved = true;
                 }
                 _setState(patch);
                 _paintV4LocationPills();
+                // BUGFIX May 2026 — UNDP must-have #6 regression.
+                //
+                // Operator-reported: reporter physically in Electronic City
+                // changed the report's location to Panaji, Goa (~700 km away).
+                // The v4 Step-3 inline map updated its terrain but NO OSM
+                // building outlines appeared — the "Tap a building outline"
+                // instruction was moot, forcing free-text fallback and silently
+                // breaking UNDP must-have #6.
+                //
+                // Root cause: `_saveLocEdit` updated `state.location` but never
+                // told BuildingSelect to re-fetch buildings for the new bbox.
+                // The fullscreen picker had a workaround call site (app.js
+                // line 10374); the inline editor was missing the equivalent.
+                //
+                // Fix: dispatch a `crisp-location-changed` CustomEvent that
+                // BuildingSelect listens to, and as a defence-in-depth call
+                // `ensureMap` directly here. Either path repaints the
+                // building polygon overlay for the new lat/lng.
+                if (_locationMoved && patch.location) {
+                    try {
+                        document.dispatchEvent(new CustomEvent('crisp-location-changed', {
+                            detail: { lat: patch.location.lat, lng: patch.location.lng, source: 'user_corrected' },
+                        }));
+                    } catch (_) {}
+                    try {
+                        if (window.BuildingSelect && typeof window.BuildingSelect.ensureMap === 'function') {
+                            window.BuildingSelect.ensureMap(patch.location.lat, patch.location.lng).catch(() => {});
+                        }
+                    } catch (_) {}
+                }
             }
             _closeLocEdit();
         }
