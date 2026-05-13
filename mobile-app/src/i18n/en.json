@@ -421,6 +421,7 @@
   "undp_skip": "Skip for now",
   "undp_details_saved": "Thanks — saved",
   "undp_details_failed": "Couldn't save. Try again.",
+  "undp_details_queued": "Saved offline — we'll sync these details as soon as you're back online.",
   "landmark_warn_title": "GPS unavailable",
   "landmark_warn_lede": "Describe a nearby landmark",
   "landmark_chip_hospital": "Hospital",

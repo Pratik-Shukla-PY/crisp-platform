@@ -651,6 +651,24 @@
 
         const clearBtn = document.getElementById('btn-building-clear');
         if (clearBtn) clearBtn.addEventListener('click', _clearSelection);
+
+        // Trigger 5 (May 2026, operator-reported) — "Add Another Report"
+        // didn't clear the previous selection. `_clearCaptureState` in
+        // app.js zeroes `state.buildingId` but leaves three things in a
+        // stale state that BuildingSelect owns:
+        //   · `_selectedLayer` — the highlighted Leaflet polygon
+        //   · `state.buildingOsmElement` — the OSM element snapshot
+        //   · `#building-selected-pill` DOM — the green "Building
+        //     selected: <name>" badge stays visible
+        // The user's repro: tap Add Another → start a new report → the
+        // pill from the previous report is still visible AND the
+        // polygon's red highlight persists, so the new submission
+        // silently carries the old `building_id`. `_clearSelection`
+        // already does the right reset for all three; we just need
+        // to fire it on the cleared event the app dispatches.
+        document.addEventListener('crisp-capture-state-cleared', () => {
+            try { _clearSelection(); } catch (_) {}
+        });
     }
 
     if (document.readyState === 'loading') {

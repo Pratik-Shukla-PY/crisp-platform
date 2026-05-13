@@ -9931,6 +9931,111 @@ async function _syncDeleteQueue() {
 // Sync on boot + every time the tab regains connectivity.
 window.addEventListener('online', () => { _syncDeleteQueue().catch(() => {}); });
 
+// ── UNDP-details offline queue (May 2026, operator-reported) ──────────
+//
+// The post-submission "UNDP details" screen (stage-undp-details) lets
+// the reporter add power/water/health/debris/pressing-needs context
+// after the main report has landed. The save handler used to do a
+// raw `fetch` PATCH and show "Couldn't save — please try again" on
+// any failure (offline OR a 5xx blip). Operator: "After saving it
+// says could not save. Ideally based on internet speed this should
+// also reach the dashboard."
+//
+// Mirrors the delete-queue pattern above:
+//   · `_enqueueDetails({reportId, payload, auth_token?})` — captures
+//     the patch + auth at the moment of save
+//   · `_syncDetailsQueue()` — drains on `online` + on boot
+//   · 401 → keep queued (user may re-login)
+//   · 4xx (other) → dequeue (bad payload won't succeed on retry)
+//   · 5xx / network error → keep queued for next attempt
+
+const _DETAILS_QUEUE_KEY = 'crisp_report_details_queue_v1';
+
+function _enqueueDetails(entry) {
+    let q = [];
+    try {
+        const raw = localStorage.getItem(_DETAILS_QUEUE_KEY);
+        if (raw) q = JSON.parse(raw) || [];
+    } catch { q = []; }
+    // Offline-grace: stamp the captured auth token at save time so a
+    // later logout doesn't strand the queued patch with no credentials.
+    if (!entry.auth_token) {
+        try {
+            const tok = window.AuthStore && window.AuthStore.getAccessToken && window.AuthStore.getAccessToken();
+            if (tok) entry.auth_token = tok;
+        } catch (_) {}
+    }
+    entry.queuedAt = entry.queuedAt || Date.now();
+    // De-dup by reportId — latest save wins. The PATCH endpoint is
+    // idempotent + merges fields, so a single drained entry per
+    // report is sufficient.
+    q = q.filter(e => e.reportId !== entry.reportId);
+    q.push(entry);
+    try { localStorage.setItem(_DETAILS_QUEUE_KEY, JSON.stringify(q)); } catch (_) {}
+}
+
+function _dequeueDetails(reportId) {
+    try {
+        const raw = localStorage.getItem(_DETAILS_QUEUE_KEY);
+        if (!raw) return;
+        const q = (JSON.parse(raw) || []).filter(e => e.reportId !== reportId);
+        localStorage.setItem(_DETAILS_QUEUE_KEY, JSON.stringify(q));
+    } catch (_) {}
+}
+
+async function _syncDetailsQueue() {
+    let q = [];
+    try {
+        const raw = localStorage.getItem(_DETAILS_QUEUE_KEY);
+        if (raw) q = JSON.parse(raw) || [];
+    } catch { return; }
+    if (!q.length) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    for (const entry of q.slice()) {
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            const captured = entry.auth_token;
+            const tok = captured || (() => {
+                try { return window.AuthStore && window.AuthStore.getAccessToken && window.AuthStore.getAccessToken(); }
+                catch (_) { return null; }
+            })();
+            if (tok) headers['Authorization'] = `Bearer ${tok}`;
+            const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(entry.reportId)}/classify`, {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify(entry.payload || {}),
+            });
+            if (res.ok) {
+                _dequeueDetails(entry.reportId);
+                console.log(`[DetailsQueue] synced ${entry.reportId}`);
+            } else if (res.status === 401) {
+                // Stay queued — auth issue, user may re-login + retry.
+                console.warn(`[DetailsQueue] 401 on ${entry.reportId} — login required`);
+            } else if (res.status >= 400 && res.status < 500) {
+                // 4xx other than 401 — payload won't succeed on retry.
+                // Dequeue to avoid an infinite loop on a permanently-
+                // bad row (e.g. report was hard-deleted server-side).
+                console.warn(`[DetailsQueue] ${res.status} on ${entry.reportId} — dropping unredeemable entry`);
+                _dequeueDetails(entry.reportId);
+            }
+            // 5xx → leave in queue, retry next time.
+        } catch (e) {
+            console.warn('[DetailsQueue] sync failed:', entry.reportId, e);
+            // Leave queued; retry on next 'online' event.
+        }
+    }
+}
+
+window.addEventListener('online', () => { _syncDetailsQueue().catch(() => {}); });
+// Best-effort boot drain — kicks off on next macrotask so we don't
+// block the initial render. Most users will be online at boot, so
+// this lands any stragglers from a prior offline session.
+setTimeout(() => { _syncDetailsQueue().catch(() => {}); }, 2000);
+
+// Exposed for tests + manual retry from the My Reports detail view.
+window.__crispEnqueueDetails = _enqueueDetails;
+window.__crispSyncDetailsQueue = _syncDetailsQueue;
+
 /** Open the detail view for a report. Populates stage-report-detail from
  *  the submitted-cache (populated by _renderSubmittedReports). */
 window.openReportDetail = async function (id) {
@@ -10575,34 +10680,79 @@ function setupUndpDetailsStage() {
             saveBtn.disabled = true;
             const originalLabel = saveBtn.innerHTML;
             saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>${t('upload_sending') || 'Saving…'}</span>`;
+            const payload = {
+                debris_clearing_needed: _state.debris === true,
+                service_status: {
+                    electricity: _state.electricity || 'UNKNOWN',
+                    water: _state.water || 'UNKNOWN',
+                    health: _state.health || 'UNKNOWN',
+                    pressing_needs: _state.pressing_needs.slice(),
+                },
+            };
+            // BUGFIX May 2026 (operator-reported) — offline-first save.
+            //
+            // Pre-fix: a raw `fetch` PATCH with "Couldn't save — please
+            // try again" on any failure (offline OR a transient 5xx).
+            // User filled the form on a flaky connection, hit Save,
+            // saw the failure toast, navigated home → DATA LOST. The
+            // main report submission has had IndexedDB queueing since
+            // day one; UNDP details was the only post-submit surface
+            // that didn't. Operator: "Ideally based on internet speed
+            // this should also reach the dashboard."
+            //
+            // Post-fix: enqueue FIRST (offline-safe), then attempt the
+            // immediate PATCH. On 2xx we drain the just-enqueued entry
+            // (no-op for the user, idempotent on the server). On any
+            // failure we leave it queued; `_syncDetailsQueue` drains
+            // on the next `online` event + on next app boot.
             try {
-                const payload = {
-                    debris_clearing_needed: _state.debris === true,
-                    service_status: {
-                        electricity: _state.electricity || 'UNKNOWN',
-                        water: _state.water || 'UNKNOWN',
-                        health: _state.health || 'UNKNOWN',
-                        pressing_needs: _state.pressing_needs.slice(),
-                    },
-                };
+                _enqueueDetails({ reportId, payload });
+            } catch (e) {
+                console.warn('[undp-details] enqueue failed (continuing):', e);
+            }
+            let immediateOk = false;
+            try {
+                const headers = { 'Content-Type': 'application/json' };
+                try {
+                    const tok = window.AuthStore && window.AuthStore.getAccessToken && window.AuthStore.getAccessToken();
+                    if (tok) headers['Authorization'] = `Bearer ${tok}`;
+                } catch (_) {}
                 const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(reportId)}/classify`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers,
                     body: JSON.stringify(payload),
                 });
                 if (res.ok) {
-                    if (typeof showToast === 'function') showToast(t('undp_details_saved') || 'Details saved — thank you!');
-                } else {
-                    if (typeof showToast === 'function') showToast(t('undp_details_failed') || 'Couldn\'t save — please try again.');
+                    immediateOk = true;
+                    _dequeueDetails(reportId);
+                } else if (res.status >= 400 && res.status < 500 && res.status !== 401) {
+                    // Bad-payload class — dequeue so we don't loop on a
+                    // permanently-bad submission (e.g. report hard-
+                    // deleted server-side). 401 stays queued in case
+                    // the user re-logs in.
+                    _dequeueDetails(reportId);
                 }
             } catch (e) {
-                console.warn('[undp-details] PATCH failed:', e);
-                if (typeof showToast === 'function') showToast(t('undp_details_failed') || 'Couldn\'t save — please try again.');
-            } finally {
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = originalLabel;
-                _exitToHome();
+                console.warn('[undp-details] immediate PATCH failed; queued for retry:', e);
             }
+            if (immediateOk) {
+                if (typeof showToast === 'function') showToast(t('undp_details_saved') || 'Details saved — thank you!');
+            } else {
+                // Queued for retry. Frame the toast as a success ("will
+                // sync when you're online") rather than a failure, because
+                // the data IS persisted locally and WILL reach the
+                // dashboard the moment connectivity returns.
+                if (typeof showToast === 'function') {
+                    showToast(
+                        t('undp_details_queued') ||
+                        'Saved offline — we\'ll sync these details as soon as you\'re back online.',
+                        'info'
+                    );
+                }
+            }
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = originalLabel;
+            _exitToHome();
         });
     }
 }

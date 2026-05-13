@@ -5,8 +5,8 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v134';
-// v133 → v134 (May 2026) — covers the recent batch of unpushed PWA-asset
+const CACHE_NAME = 'crisp-v135';
+// v133 → v134 (May 2026) — covered the recent batch of unpushed PWA-asset
 // changes that previously slipped past the cache-bump policy:
 //   · c4d2087  app.js + v4-flow.js — Add-Another reset + queued-pill toast
 //   · f60aa5b  app.js — SMALL-tier gate / queue drain
@@ -14,10 +14,17 @@ const CACHE_NAME = 'crisp-v134';
 //             manual location change (UNDP must-have #6)
 //   · ecc14a2  building-select.js — fullscreen picker invalidateSize
 //
-// Without this bump, returning users serve the stale snapshot from
-// CACHE_NAME=crisp-v131 (origin/main) or v133 and never receive the
-// May-2026 v4-flow.js fixes — which is exactly the "the bug is back"
-// repro the operator reported even though the spec-49 fix is shipped.
+// v134 → v135 (May 2026) — building-select state-cleared listener +
+// offline queue for the UNDP-details PATCH:
+//   · building-select.js  Add Another now clears _selectedLayer +
+//                          state.buildingOsmElement + the green pill
+//                          (was leaking across reports)
+//   · app.js              UNDP-details save enqueues to
+//                          `crisp_report_details_queue_v1` on failure
+//                          and drains on `online` — matches the
+//                          offline-first guarantee of the main report
+//                          submit instead of losing data on transient
+//                          network blips ("could not save" → data gone)
 
 // Derive base path from SW's own URL (works regardless of where the app is served)
 const SW_BASE = self.location.href.replace(/sw\.js$/, '');
