@@ -1128,6 +1128,12 @@ const I18N = {
         sync_all_done: "All queued reports synced!",
         sync_partial: "{done} synced, {pending} still queued.",
         sync_none_drained: "{n} still queued — check your connection.",
+        // — Stuck-reason hint on My Reports in-flight cards (May 2026) —
+        stuck_reason: "waiting: {stages}",
+        stage_meta: "details",
+        stage_text: "description",
+        stage_photo: "photo",
+        stage_audio: "audio",
         // — Review / confirm summary —
         summary_incident: "Incident",
         summary_details: "Details",
@@ -7807,34 +7813,72 @@ async function trySendQueuedReport(item) {
                         // dequeue + UI surfaces, not a permanent skip.
                         await _uploadVariantTier(item, reportId, unit);
                     }
-                    // `stages.photo` only flips true when EVERY variant has
-                    // landed at the backend (complete, not just non-deferred).
-                    // Deferred variants keep the report in the queue so the
-                    // retry loop can finish delivery once bandwidth allows.
+                    // BUGFIX May 2026 — SMALL-tier gates the photo stage.
+                    //
+                    // Previously `stages.photo` only flipped when ALL THREE
+                    // tiers (SMALL+MEDIUM+LARGE) of every photo landed. On
+                    // SLOW / VERY_SLOW networks `_uploadVariantTier`
+                    // *deliberately defers* MEDIUM/LARGE (lines 7505-7517)
+                    // — leaving `complete=false` on those tiers indefinitely.
+                    // The `allComplete` check was therefore false forever,
+                    // `stages.photo` never flipped, the My Reports card
+                    // showed "QUEUED 75%" forever even though the report
+                    // was fully visible on the dashboard.
+                    //
+                    // New gate: SMALL of every photo + extra must complete.
+                    // SMALL is the dashboard-visible tier; once it lands the
+                    // report is functionally submitted. MEDIUM/LARGE keep
+                    // uploading on subsequent retry passes (the queue item
+                    // stays in IDB with non-complete medium/large variants)
+                    // until either bandwidth upgrades and they land, or
+                    // until full reconcile drains the entry once everything
+                    // is at the backend.
+                    const smallUnits  = workUnits.filter(u => u.tier === 'small');
                     const allComplete = workUnits.every(u => u.variant.complete);
+                    const allSmallDone =
+                        smallUnits.length > 0 &&
+                        smallUnits.every(u => u.variant.complete);
                     const anyDeferred = workUnits.some(u => u.variant.deferred);
-                    if (allComplete) {
+                    if (allSmallDone) {
                         item.stages.photo = true;
-                        // Clear variant payloads to free memory on retries/restart.
-                        if (item.photoVariants) {
+                        // Clear ONLY the variant payloads that have actually
+                        // landed at the backend; pending tiers must keep
+                        // their dataUrl so the retry loop can re-send.
+                        const clearLandedDataUrls = (variantsObj) => {
+                            if (!variantsObj) return;
                             for (const t of ['small', 'medium', 'large']) {
-                                item.photoVariants[t].dataUrl = null;
+                                if (variantsObj[t] && variantsObj[t].complete) {
+                                    variantsObj[t].dataUrl = null;
+                                }
                             }
-                        }
+                        };
+                        clearLandedDataUrls(item.photoVariants);
                         for (const ev of (item.extraPhotosVariants || [])) {
-                            if (!ev) continue;
-                            for (const t of ['small', 'medium', 'large']) {
-                                ev[t].dataUrl = null;
-                            }
+                            clearLandedDataUrls(ev);
                         }
-                        item.photo = null;
-                        item.extraPhotos = [];
+                        if (allComplete) {
+                            // Full delivery — free the legacy fallback blobs too.
+                            item.photo = null;
+                            item.extraPhotos = [];
+                        }
                         try { await enqueueReport(item); } catch (_) {}
-                        console.log('Photo + extras fully delivered (all variants)');
+                        if (allComplete) {
+                            console.log('Photo + extras fully delivered (all variants)');
+                        } else {
+                            const pendingLabels = workUnits
+                                .filter(u => !u.variant.complete)
+                                .map(u => u.label || u.tier).join(', ');
+                            console.log(
+                                `[Upload:verify] report ${reportId} photo SMALL ` +
+                                `landed; stages.photo=true. Pending higher tiers: ` +
+                                `[${pendingLabels}] — retrying in background ` +
+                                `without blocking My Reports.`,
+                            );
+                        }
                     } else if (anyDeferred) {
                         // Persist the deferred state so a page reload picks
-                        // it back up. Don't touch stages.photo — the report
-                        // stays "photo pending" until the deferred tiers land.
+                        // it back up. Don't touch stages.photo — SMALL isn't
+                        // up yet, the report is still genuinely in flight.
                         try { await enqueueReport(item); } catch (_) {}
                         const deferredUnits = workUnits.filter(u => u.variant.deferred);
                         const deferredLabels = deferredUnits.map(u => u.label || u.tier);
@@ -8852,14 +8896,61 @@ async function _reconcileQueueAgainstServer() {
         const expected = (item.meta && typeof item.meta.expected_media === 'number')
             ? item.meta.expected_media
             : 0;
-        const have = Array.isArray(srv.media) ? srv.media.length : 0;
-        if (expected > 0 && have < expected) {
-            console.log(`[Reconcile] ${item.client_report_id.slice(0, 8)}: server has ${have}/${expected} media — keep queued to finish upload`);
-            continue;
+        const haveAll = Array.isArray(srv.media) ? srv.media.length : 0;
+        if (expected > 0 && haveAll < expected) {
+            // BUGFIX May 2026 — staged reconcile.
+            //
+            // The old "have < expected" gate kept the queue full forever
+            // when the deliberately-deferred MEDIUM/LARGE tiers never made
+            // it to the backend on SLOW/VERY_SLOW networks. Result: every
+            // report-with-photo stayed in My Reports as "QUEUED" indefinitely
+            // even though SMALL had landed and the report was fully visible
+            // on the dashboard.
+            //
+            // New behaviour: if the server has at least one LOW-tier media
+            // row for every photo the client tried to send (i.e. SMALL of
+            // every photo is up), treat the report as drainable from the
+            // user-facing perspective. The queue item stays in IDB so the
+            // retry loop can keep pushing MEDIUM/LARGE on subsequent passes;
+            // we just stop blocking the My Reports UI on those higher tiers.
+            const photoCount =
+                (item.photoVariants ? 1 : 0)
+                + (Array.isArray(item.extraPhotosVariants)
+                    ? item.extraPhotosVariants.filter(Boolean).length
+                    : 0);
+            const haveSmall = Array.isArray(srv.media)
+                ? srv.media.filter(m => (m.resolution_tier || '').toUpperCase() === 'LOW').length
+                : 0;
+            if (photoCount > 0 && haveSmall < photoCount) {
+                console.log(
+                    `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
+                    `server has ${haveSmall}/${photoCount} SMALL — keep queued ` +
+                    `to finish the dashboard-visible tier`,
+                );
+                continue;
+            }
+            // SMALL is up for every photo — dequeue the local row. The
+            // dashboard already shows the report; missing MEDIUM/LARGE are
+            // a quality regression, not a correctness one. Better than
+            // leaving the user staring at "QUEUED 75%" forever.
+            if (photoCount > 0) {
+                console.log(
+                    `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
+                    `SMALL of all ${photoCount} photo(s) landed; backend ` +
+                    `media rows ${haveAll}/${expected} — dequeue (higher ` +
+                    `tiers were deferred or dropped).`,
+                );
+            } else {
+                console.log(
+                    `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
+                    `server has ${haveAll}/${expected} media — keep queued`,
+                );
+                continue;
+            }
         }
         try {
             await dequeueReport(item.client_report_id);
-            console.log(`[Reconcile] dequeued ${item.client_report_id.slice(0, 8)} — server has it (${have}/${expected} media)`);
+            console.log(`[Reconcile] dequeued ${item.client_report_id.slice(0, 8)} — server has it (${haveAll}/${expected} media)`);
         } catch (e) {
             console.warn('[Reconcile] dequeue failed:', e);
         }
@@ -8903,6 +8994,16 @@ async function _renderPartialReports() {
         const st = it.stages || {};
         return !(st.meta && st.photo && st.audio && st.text);
     });
+    // BUGFIX May 2026 — owning the inflight stat update here, not in
+    // `_renderSubmittedReports`. The two renderers used to run in
+    // `Promise.all(...)`, and `_renderSubmittedReports` read
+    // `#history-partial-list .history-row` BEFORE this function had
+    // painted the cards. Result: the "IN FLIGHT: 0" pill at the top of
+    // My Reports disagreed with the 3 visible cards below it. Owning the
+    // count inside the renderer that paints the cards makes the read
+    // strictly-after-write within this function.
+    const _hiPending = document.getElementById('hi-pending');
+    if (_hiPending) _hiPending.textContent = String(inflight.length);
     if (!inflight.length) {
         _historyEmpty(list, t('empty_in_flight'), 'fa-cloud-check');
         return;
@@ -8916,6 +9017,25 @@ async function _renderPartialReports() {
             : `<span class="hr-chip hr-chip-queue">${t('status_queued')}</span>`;
         const crisis = (it.meta && it.meta.crisis_type) || '—';
         const infra = (it.meta && it.meta.infrastructure_type) || '—';
+        // BUGFIX May 2026 — stuck-reason hint.
+        //
+        // A QUEUED card with "75% · <id>" tells the user nothing about WHY
+        // their report is in flight. Pre-fix: the user reported the same
+        // bug three times before we found the photo-stage gate was wrong.
+        // Surfacing the missing stage(s) on the card means the next bug
+        // gives the user something concrete to send us ("stuck on PHOTO")
+        // instead of just "still queued".
+        const _stuckReason = (() => {
+            const st = it.stages || {};
+            const missing = [];
+            if (!st.meta)  missing.push(t('stage_meta')  || 'meta');
+            if (!st.text)  missing.push(t('stage_text')  || 'text');
+            if (!st.photo) missing.push(t('stage_photo') || 'photo');
+            if (!st.audio) missing.push(t('stage_audio') || 'audio');
+            if (!missing.length) return '';
+            const tpl = t('stuck_reason') || 'waiting: {stages}';
+            return tpl.replace('{stages}', missing.join(', '));
+        })();
         // BUGFIX May 2026 — `data-client-report-id` enables the
         // click handler bound below. Without it the user could see a
         // queued report card but tapping it was a silent no-op (the
@@ -8929,7 +9049,7 @@ async function _renderPartialReports() {
                 ${statusChip}
             </div>
             <div class="hr-progress-track"><div class="hr-progress-fill" style="width:${pct}%"></div></div>
-            <div class="hr-meta">${pct}% · ${it.client_report_id.slice(0, 8)}</div>
+            <div class="hr-meta">${pct}% · ${it.client_report_id.slice(0, 8)}${_stuckReason ? ` · ${escapeHtmlSimple(_stuckReason)}` : ''}</div>
         </div>`;
     }).join('');
     // Wire click + keyboard (Enter / Space) handlers AFTER innerHTML. We
@@ -9379,11 +9499,12 @@ async function _renderSubmittedReports() {
     // Impact summary.
     const resolved = reports.filter(r => r.status === 'RESOLVED').length;
     const livesTotal = reports.reduce((n, r) => n + (Number.isFinite(r.lives_impacted) ? r.lives_impacted : 0), 0);
-    const inflightCount = document.querySelectorAll('#history-partial-list .history-row').length;
+    // Note: `hi-pending` is owned by `_renderPartialReports` (which has
+    // first-hand knowledge of how many cards it just painted). Reading
+    // the DOM here used to race against the parallel-running renderer.
     if (impactCard) {
         document.getElementById('hi-resolved').textContent = String(resolved);
         document.getElementById('hi-lives').textContent = String(livesTotal);
-        document.getElementById('hi-pending').textContent = String(inflightCount);
         impactCard.style.display = 'flex';
     }
     // Update the home-screen badge.

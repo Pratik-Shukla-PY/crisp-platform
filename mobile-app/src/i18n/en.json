@@ -608,5 +608,10 @@
   "sync_retrying": "Retrying {n} queued report(s)…",
   "sync_all_done": "All queued reports synced!",
   "sync_partial": "{done} synced, {pending} still queued.",
-  "sync_none_drained": "{n} still queued — check your connection."
+  "sync_none_drained": "{n} still queued — check your connection.",
+  "stuck_reason": "waiting: {stages}",
+  "stage_meta": "details",
+  "stage_text": "description",
+  "stage_photo": "photo",
+  "stage_audio": "audio"
 }

@@ -7,11 +7,11 @@
     "tier": 1,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 602,
+    "en_key_count": 607,
     "translated_key_count": 571,
-    "gap_key_count": 31,
-    "coverage_percent": 94.9,
-    "generated_at": "2026-05-12T19:21:18.836Z",
+    "gap_key_count": 36,
+    "coverage_percent": 94.1,
+    "generated_at": "2026-05-13T03:56:34.300Z",
     "gap_keys": [
       "home_sub",
       "report_id",
@@ -43,7 +43,12 @@
       "sync_retrying",
       "sync_all_done",
       "sync_partial",
-      "sync_none_drained"
+      "sync_none_drained",
+      "stuck_reason",
+      "stage_meta",
+      "stage_text",
+      "stage_photo",
+      "stage_audio"
     ]
   },
   "consent_title": "Su privacidad importa",
@@ -647,5 +652,10 @@
   "sync_retrying": "Retrying {n} queued report(s)…",
   "sync_all_done": "All queued reports synced!",
   "sync_partial": "{done} synced, {pending} still queued.",
-  "sync_none_drained": "{n} still queued — check your connection."
+  "sync_none_drained": "{n} still queued — check your connection.",
+  "stuck_reason": "waiting: {stages}",
+  "stage_meta": "details",
+  "stage_text": "description",
+  "stage_photo": "photo",
+  "stage_audio": "audio"
 }
