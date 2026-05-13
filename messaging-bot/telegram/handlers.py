@@ -27,6 +27,8 @@ from .consent_store import (
     has_consented as consent_has,
     grant as consent_grant,
     revoke as consent_revoke,
+    get_lang as consent_get_lang,
+    set_lang as consent_set_lang,
 )
 from .media_handler import download_media, download_and_split_video
 from .bot_replies import (
@@ -354,7 +356,15 @@ async def handle_update(update: dict):
         decoded_pwa_hash = _decode_start_token(start_arg)
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
-        s.lang = detected
+        # BUGFIX May 2026 (operator-reported) — pre-fix this was an
+        # unconditional `s.lang = detected`, which reverted any
+        # previously-picked language back to the Telegram-locale
+        # default on every `/start`. The user's pick is persisted to
+        # `consent_store.lang` (via `consent_set_lang` from the
+        # lang-picker callback below + `consent_grant` at consent
+        # time) — read it back here to restore their choice across
+        # session resets.
+        s.lang = consent_get_lang(user_id) or detected
         s.state = "LANG_SELECT"
         if decoded_pwa_hash:
             s.pwa_device_hash = decoded_pwa_hash
@@ -371,7 +381,8 @@ async def handle_update(update: dict):
             await delete_report(session)
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
-        s.lang = detected
+        # Same restore-from-store pattern as /start above.
+        s.lang = consent_get_lang(user_id) or detected
         s.state = "LANG_SELECT"
         track_prompt_msg(s, await send_welcome(chat_id, s.lang))
         return
@@ -532,6 +543,18 @@ async def _handle_callback(callback_query: dict):
         # Hydrate from the consent store — asked once, remembered forever.
         if not session.consented and consent_has(user_id):
             session.consented = True
+        # BUGFIX May 2026 (operator-reported) — persist the user's pick
+        # to the consent_store so `/start` (which calls clear_session)
+        # can restore it instead of reverting to the Telegram-locale
+        # default. UPDATE-only on the store row: only takes effect
+        # AFTER the user consents (when grant() creates the row with
+        # their then-current session.lang). Pre-consent picks survive
+        # via session.lang alone, which is fine for the unbroken flow.
+        try:
+            if session.consented:
+                consent_set_lang(user_id, new_lang)
+        except Exception:
+            pass
         if session.consented:
             session.state = _next_missing_step(session)
             await _prompt_for_step(session, chat_id, session.state)
@@ -567,9 +590,13 @@ async def _handle_callback(callback_query: dict):
     # the reporter isn't re-prompted between reports.
     if data == "start_report":
         persisted_consent = session.consented or consent_has(user_id)
+        # Capture the current language BEFORE clear_session wipes it.
+        # Prefer the in-memory pick (most recent), fall back to the
+        # consent_store (across-restart durability), then geo-detected.
+        carried_lang = session.lang or consent_get_lang(user_id) or detected
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
-        s.lang = session.lang or detected
+        s.lang = carried_lang
         s.consented = persisted_consent
         if s.consented:
             s.state = _next_missing_step(s)
@@ -606,9 +633,12 @@ async def _handle_callback(callback_query: dict):
         if session.report_id:
             await delete_report(session)
         await answer_callback(cq_id)
+        # Preserve the user's pick — see the /start handler in
+        # _handle_text for the same restore pattern.
+        carried_lang = session.lang or consent_get_lang(user_id) or detected
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
-        s.lang = detected
+        s.lang = carried_lang
         s.state = "LANG_SELECT"
         track_prompt_msg(s, await send_welcome(chat_id, s.lang))
         return
@@ -617,7 +647,15 @@ async def _handle_callback(callback_query: dict):
     if data == "skip_photo":
         session.state = "STEP_DESCRIPTION"
         await answer_callback(cq_id)
-        await send_step_description(chat_id, lang)
+        # BUGFIX May 2026 — track this prompt's message_id on the session
+        # so the stale-message dedupe at the top of _handle_callback
+        # doesn't silently DROP the next callback as "stale". Pre-fix,
+        # this `send_step_description` was untracked → active_prompt_msg_id
+        # still pointed at the previous (STEP_PHOTO) prompt → every
+        # callback on the description prompt was rejected → user saw
+        # the same screen and tapped repeatedly, looking like the bot
+        # was repeating the same message at them.
+        track_prompt_msg(session, await send_step_description(chat_id, lang))
         return
 
     # ── Skip description → advance to type ──
@@ -657,7 +695,11 @@ async def _handle_callback(callback_query: dict):
     # User prefers to type the name freehand. Show the free-text prompt.
     if data == "bldg_type":
         await answer_callback(cq_id)
-        await send_step_building_name(chat_id, session.lang or detected)
+        # BUGFIX May 2026 — track this prompt's message_id (same reason
+        # as the skip_photo branch above). Without this, the user's
+        # next text reply / button tap on the free-text building prompt
+        # would be dropped as stale by is_stale_callback_message.
+        track_prompt_msg(session, await send_step_building_name(chat_id, session.lang or detected))
         return
 
     # ── — skip the native-language building prompt.

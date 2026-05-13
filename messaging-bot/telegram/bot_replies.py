@@ -625,7 +625,7 @@ async def edit_reply_markup_clear(chat_id: int, message_id: int):
 
 async def send_welcome(chat_id: int, lang: str):
     """Show language picker only. Picking a language immediately starts the reporting flow."""
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": f"{t(lang, 'welcome_1')}\n\n{t(lang, 'lang_select')}",
         "parse_mode": "Markdown",
@@ -652,7 +652,7 @@ async def send_welcome(chat_id: int, lang: str):
 
 
 async def send_step_location(chat_id: int, lang: str):
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_loc_num") + "\n\n" + t(lang, "step_loc_text_hint"),
         "parse_mode": "Markdown",
@@ -666,7 +666,7 @@ async def send_step_location(chat_id: int, lang: str):
 
 async def send_step_photo(chat_id: int, lang: str):
     """Ask for evidence — photo, voice, or text. Any one is enough."""
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_photo"),
         "parse_mode": "Markdown",
@@ -686,7 +686,7 @@ async def send_step_evidence(chat_id: int, lang: str):
 
 async def send_step_photo_first(chat_id: int, lang: str):
     """First step after language selection: ask for photo/voice/text evidence."""
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_photo_first"),
         "parse_mode": "Markdown",
@@ -742,7 +742,7 @@ async def send_consent_prompt(chat_id: int, lang: str):
     # eliminates the 400 that was stalling the flow right after
     # language select. If rich formatting is needed later, switch to
     # `parse_mode=HTML` with `<b>...</b>` — HTML's parser is saner.
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": f"{title}\n\n{body}",
         "reply_markup": {
@@ -756,7 +756,7 @@ async def send_consent_prompt(chat_id: int, lang: str):
 
 async def send_step_description(chat_id: int, lang: str):
     """Ask for text description of the incident."""
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_desc"),
         "parse_mode": "Markdown",
@@ -769,7 +769,7 @@ async def send_step_description(chat_id: int, lang: str):
 
 
 async def send_step_severity(chat_id: int, lang: str):
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_sev_num"),
         "parse_mode": "Markdown",
@@ -792,7 +792,7 @@ async def send_step_type(chat_id: int, lang: str):
     # type_road / type_hospital / etc. callbacks still resolve via the
     # TYPE_MAP in session_manager, so any pre-v3 client that still sends
     # them keeps submitting valid reports.
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_type_num"),
         "parse_mode": "Markdown",
@@ -822,7 +822,7 @@ async def send_step_crisis_type(chat_id: int, lang: str):
         t(lang, "step_crisis") + "\n\n"
         + "*" + t(lang, "crisis_group_natural") + "*"
     )
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": body,
         "parse_mode": "Markdown",
@@ -855,7 +855,7 @@ async def send_step_crisis_type(chat_id: int, lang: str):
 
 
 async def send_step_damage_class(chat_id: int, lang: str):
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_damage"),
         "parse_mode": "Markdown",
@@ -871,7 +871,7 @@ async def send_step_damage_class(chat_id: int, lang: str):
 
 async def send_step_voice(chat_id: int, lang: str):
     """Ask for voice note OR text — one is required."""
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_voice"),
         "parse_mode": "Markdown",
@@ -885,7 +885,7 @@ async def send_step_voice(chat_id: int, lang: str):
 
 async def send_step_text(chat_id: int, lang: str):
     """Ask for optional text description after audio — or skip to submit."""
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_text"),
         "parse_mode": "Markdown",
@@ -921,7 +921,7 @@ async def send_building_suggestions(chat_id: int, lang: str, buildings: list) ->
         {"text": "⏭ " + (t(lang, "step_building_skip") or "Skip"),
          "callback_data": "skip_building"},
     ])
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "bldg_which") or "🏛 *Which building?* Tap one, or type the name.",
         "parse_mode": "Markdown",
@@ -936,7 +936,7 @@ async def send_step_debris(chat_id: int, lang: str):
     reporter answers the Appendix-1 "needs debris clearing?" question
     while the scene is fresh in their mind. Two inline buttons; no
     skip — both options are answers, so the flow always advances."""
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_debris"),
         "parse_mode": "Markdown",
@@ -962,7 +962,7 @@ async def send_step_building_name(chat_id: int, lang: str):
     Optional — the reporter can skip. Ships with a "Skip" inline button
     for single-tap bypass + the usual Cancel escape hatch.
     """
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_building"),
         "parse_mode": "Markdown",
@@ -994,6 +994,8 @@ async def send_confirmation(chat_id: int, lang: str, report_id: str,
         f"━━━━━━━━━━━━━━━━━━━\n"
         f"{t(lang, 'done_2')}"
     )
+    # Message 1 — confirmation summary. No inline keyboard, so we
+    # don't need its message_id for the stale-callback guard.
     await _send("sendMessage", {
         "chat_id": chat_id,
         "text": msg,
@@ -1001,8 +1003,12 @@ async def send_confirmation(chat_id: int, lang: str, report_id: str,
         "reply_markup": {"remove_keyboard": True},
     })
 
-    # Message 2: Post-submit options (add more / report another / done)
-    await _send("sendMessage", {
+    # Message 2 — post-submit options. This one IS the prompt with the
+    # inline keyboard, so `return` it so `track_prompt_msg` can record
+    # its message_id (May 2026 fix — was an unreached `return` statement
+    # below the early one above, an obvious bug introduced when the
+    # sed pass to add `return` to every send_* matched both calls).
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "done_another_prompt"),
         "parse_mode": "Markdown",
@@ -1018,7 +1024,7 @@ async def send_confirmation(chat_id: int, lang: str, report_id: str,
 
 async def send_add_more_prompt(chat_id: int, lang: str):
     """Ask user to send additional details for their existing report."""
-    await _send("sendMessage", {
+    return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "add_more_prompt"),
         "parse_mode": "Markdown",

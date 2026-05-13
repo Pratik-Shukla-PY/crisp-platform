@@ -95,3 +95,53 @@ def revoke(user_id: int) -> None:
             c.commit()
     except Exception as e:
         logger.warning("[consent_store] revoke error: %s", e)
+
+
+def get_lang(user_id: int) -> Optional[str]:
+    """Return the last language code this user explicitly picked (via the
+    lang-picker keyboard), or None when the user has never picked or has
+    no consent row yet.
+
+    Added May 2026 (operator-reported) — previously the user's language
+    choice was held only in the in-memory `TelegramSession.lang`, which
+    means `/start` (which calls `clear_session`) wiped it back to the
+    Telegram-locale default. Persisting picks here lets `/start` restore
+    the user's last choice instead of reverting to geo-detected.
+    """
+    try:
+        with _conn() as c:
+            row = c.execute(
+                "SELECT lang FROM telegram_consent WHERE user_id = ?",
+                (int(user_id),),
+            ).fetchone()
+            if row and row[0]:
+                return str(row[0])
+            return None
+    except Exception as e:
+        logger.warning("[consent_store] get_lang error: %s", e)
+        return None
+
+
+def set_lang(user_id: int, lang: str) -> None:
+    """Persist the user's most recent explicit language pick. Idempotent —
+    repeated calls overwrite. Safe to call from the lang-picker callback
+    on every tap.
+
+    UPDATE-only on purpose: writing this row would make has_consented()
+    return True (it just checks for row existence). The row only gets
+    created by `grant()` at consent time, with the user's then-current
+    language. Pre-consent language picks live in session.lang only —
+    once the user consents, `grant(user_id, session.lang)` persists
+    their pick and subsequent set_lang calls update it.
+    """
+    if not lang:
+        return
+    try:
+        with _conn() as c:
+            c.execute(
+                "UPDATE telegram_consent SET lang = ? WHERE user_id = ?",
+                (lang, int(user_id)),
+            )
+            c.commit()
+    except Exception as e:
+        logger.warning("[consent_store] set_lang error: %s", e)

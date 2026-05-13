@@ -465,10 +465,28 @@ async def resolve_location_name(session: TelegramSession):
                 if not detected_lang:
                     detected_lang = _COUNTRY_LANG.get(country_code, "")
 
-                if detected_lang:
-                    old_lang = session.lang
+                # BUGFIX May 2026 (operator-reported) — pre-fix this
+                # block was `if detected_lang:` (no guard). It
+                # UNCONDITIONALLY overwrote `session.lang` with the
+                # geo-detected default, including the case where the
+                # user had explicitly tapped a language button earlier
+                # in the conversation. Repro: user is in India with
+                # Telegram locale=hi, taps the 🇬🇧 English chip, then
+                # shares GPS. resolve_location_name detected IN → hi
+                # and overwrote session.lang="en" back to "hi". User's
+                # explicit choice silently lost on every location
+                # share.
+                #
+                # Post-fix: only fill from geo when session.lang is
+                # still empty (the cold-start case). Mirrors the
+                # `if not session.lang: session.lang = detected`
+                # guard everywhere else in the codebase (handlers.py
+                # _handle_text line 341 / _handle_callback line 468).
+                if detected_lang and not session.lang:
                     session.lang = detected_lang
-                    logger.info(f"Language overridden by location: {old_lang} → {detected_lang} (country={country_code}, region={state})")
+                    logger.info(f"Language filled from location: → {detected_lang} (country={country_code}, region={state})")
+                elif detected_lang:
+                    logger.info(f"Location-detected lang {detected_lang} ignored — user already on {session.lang}")
     except Exception as e:
         logger.warning(f"Reverse geocode failed: {e}")
 
