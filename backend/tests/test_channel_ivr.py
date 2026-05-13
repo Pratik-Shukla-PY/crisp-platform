@@ -171,6 +171,160 @@ def test_ivr_done_creates_report(client, monkeypatch):
     assert ivr_webhook._ivr_sessions[call_sid]["step"] == "done"
 
 
+# ── May 2026 — press-star early-finish prompt + ru/zh language menu ────────
+
+
+def test_ivr_welcome_menu_includes_russian_and_chinese_options(client):
+    """May 2026 (operator-supplied scope) — the welcome menu now lists
+    Russian (press 6) and Chinese (press 7) alongside the original 5
+    languages. Voice IDs for ru/zh existed in `_IVR_VOICES` since day
+    one (Polly.Tatyana + Polly.Zhiyu), but the Gather verb never
+    surfaced them as DTMF options."""
+    res = client.post(
+        _url("webhook"),
+        data={"CallSid": "CA-test-ru-zh-menu", "From": "+10000", "Direction": "inbound"},
+    )
+    body = res.text
+    # Russian — Polly.Tatyana voice, ru-RU locale, Cyrillic script.
+    assert 'voice="Polly.Tatyana" language="ru-RU">' in body, (
+        "Russian welcome line missing from menu Gather"
+    )
+    assert "русского" in body, "Russian prompt script missing"
+    # Chinese — Polly.Zhiyu voice, cmn-CN locale, Han script.
+    assert 'voice="Polly.Zhiyu" language="cmn-CN">' in body, (
+        "Chinese welcome line missing from menu Gather"
+    )
+    assert "中文" in body, "Chinese prompt script missing"
+
+
+def test_ivr_digit_six_routes_to_russian(client):
+    """Pressing 6 selects Russian — the location step's TwiML must use
+    Polly.Tatyana / ru-RU and carry the new Cyrillic press-star prompt."""
+    call_sid = "CA-test-digit-6"
+    ivr_webhook._ivr_sessions[call_sid] = {
+        "phone_hash": "IVR-seed",
+        "phone": "+7000",
+        "caller_number": "+7000",
+        "step": "record_location",
+    }
+    res = client.post(
+        _url("location-step"),
+        data={"CallSid": call_sid, "sid": call_sid, "Digits": "6"},
+    )
+    assert res.status_code == 200
+    body = res.text
+    assert ivr_webhook._ivr_sessions[call_sid]["lang"] == "ru"
+    assert 'voice="Polly.Tatyana" language="ru-RU">' in body
+    # Press-star prompt rendered in Cyrillic.
+    assert "звёздочку" in body, (
+        f"Russian press-star prompt missing from location TwiML; body: {body[:300]}"
+    )
+
+
+def test_ivr_digit_seven_routes_to_chinese(client):
+    """Pressing 7 selects Chinese — same shape as ru."""
+    call_sid = "CA-test-digit-7"
+    ivr_webhook._ivr_sessions[call_sid] = {
+        "phone_hash": "IVR-seed",
+        "phone": "+8600",
+        "caller_number": "+8600",
+        "step": "record_location",
+    }
+    res = client.post(
+        _url("location-step"),
+        data={"CallSid": call_sid, "sid": call_sid, "Digits": "7"},
+    )
+    assert res.status_code == 200
+    body = res.text
+    assert ivr_webhook._ivr_sessions[call_sid]["lang"] == "zh"
+    assert 'voice="Polly.Zhiyu" language="cmn-CN">' in body
+    # Press-star prompt rendered in Mandarin (星号 = "star/asterisk key").
+    assert "星号" in body, (
+        f"Chinese press-star prompt missing from location TwiML; body: {body[:300]}"
+    )
+
+
+_PRESS_STAR_NEEDLE = {
+    "en": "press star",
+    "hi": "स्टार दबाएं",
+    "es": "presione asterisco",
+    "fr": "appuyez sur etoile",
+    "ar": "اضغط على النجمة",
+    "ru": "нажмите звёздочку",
+    "zh": "按星号键",
+}
+
+
+@pytest.mark.parametrize("digit,lang", [
+    ("1", "en"), ("2", "hi"), ("3", "es"), ("4", "fr"),
+    ("5", "ar"), ("6", "ru"), ("7", "zh"),
+])
+def test_ivr_location_step_has_press_star_prompt_in_every_language(client, digit, lang):
+    """The location <Record> step now ends with a native-language
+    "press star to finish" instruction. Operator-reported: speaking
+    quickly meant 10 s of silence-timeout wasted; the capability
+    (finishOnKey="*") was already wired since day one but had no
+    audio surface. This test pins the prompt across all 7 supported
+    IVR languages."""
+    call_sid = f"CA-test-press-star-loc-{digit}"
+    ivr_webhook._ivr_sessions[call_sid] = {
+        "phone_hash": "IVR-seed",
+        "phone": "+10",
+        "caller_number": "+10",
+        "step": "record_location",
+    }
+    res = client.post(
+        _url("location-step"),
+        data={"CallSid": call_sid, "sid": call_sid, "Digits": digit},
+    )
+    assert res.status_code == 200
+    body = res.text
+    needle = _PRESS_STAR_NEEDLE[lang]
+    assert needle in body, (
+        f"press-star prompt missing for {lang} (looking for '{needle}'); "
+        f"body excerpt: {body[:400]}"
+    )
+    # And the Record verb still carries `finishOnKey="*"` so the
+    # capability the prompt advertises is actually wired.
+    assert 'finishOnKey="*"' in body, (
+        f"finishOnKey=\"*\" missing from {lang} location TwiML — "
+        "press-star prompt would be a lie without it"
+    )
+
+
+@pytest.mark.parametrize("digit,lang", [
+    ("1", "en"), ("2", "hi"), ("3", "es"), ("4", "fr"),
+    ("5", "ar"), ("6", "ru"), ("7", "zh"),
+])
+def test_ivr_describe_step_has_press_star_prompt_in_every_language(client, digit, lang):
+    """Same press-star prompt assertion on the description <Record>
+    step (the 20 s timeout — the operator's most acute pain point)."""
+    call_sid = f"CA-test-press-star-desc-{digit}"
+    ivr_webhook._ivr_sessions[call_sid] = {
+        "phone_hash": "IVR-seed",
+        "phone": "+10",
+        "caller_number": "+10",
+        "lang": lang,
+        "location_audio_url": "https://fake/loc.wav",
+        "step": "record_description",
+    }
+    res = client.post(
+        _url("describe"),
+        data={
+            "CallSid": call_sid, "sid": call_sid,
+            "RecordingUrl": "https://fake/loc.wav",
+        },
+    )
+    assert res.status_code == 200
+    body = res.text
+    needle = _PRESS_STAR_NEEDLE[lang]
+    assert needle in body, (
+        f"press-star prompt missing for {lang} on describe step; "
+        f"body excerpt: {body[:400]}"
+    )
+    assert 'finishOnKey="*"' in body
+
+
 # ── Phase 23 — voice-to-map pipeline assertions ────────────────────────────
 
 

@@ -277,6 +277,12 @@ async def handle_incoming_call(request: Request):
     # the call (no audio at all on the caller end). The rest of the
     # CRISP codebase has always used "ar-XA" with Polly.Zeina in
     # `_IVR_VOICES`; the welcome menu now matches.
+    # May 2026 — extended language menu from 5 → 7 options. Russian +
+    # Chinese added with native-voice <Say> lines (Polly.Tatyana ru-RU,
+    # Polly.Zhiyu cmn-CN — voice IDs already in _IVR_VOICES). The
+    # Gather's `timeout="6"` is silence-after-prompt, not total time,
+    # so the additional ~4 s of menu audio doesn't change the effective
+    # DTMF wait.
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Gather action="{loc_url}" method="POST" numDigits="1" timeout="6">
@@ -286,6 +292,8 @@ async def handle_incoming_call(request: Request):
         <Say voice="Polly.Lupe" language="es-US">Para español, presione 3.</Say>
         <Say voice="Polly.Lea" language="fr-FR">Pour français, appuyez sur 4.</Say>
         <Say voice="Polly.Zeina" language="ar-XA">للعربية، اضغط 5.</Say>
+        <Say voice="Polly.Tatyana" language="ru-RU">Для русского языка, нажмите 6.</Say>
+        <Say voice="Polly.Zhiyu" language="cmn-CN">中文请按 7。</Say>
         <Say voice="Polly.Joanna" language="en-US">Or just start speaking after the beep.</Say>
     </Gather>
     <Redirect method="POST">{loc_url}&amp;lang={default_lang}</Redirect>
@@ -305,25 +313,46 @@ _IVR_VOICES = {
     "zh": ("Polly.Zhiyu", "cmn-CN"),
 }
 
+# May 2026 (operator-reported) — each `loc` and `desc` prompt now ends
+# with a native-language "press star to finish" instruction so callers
+# who speak quickly don't sit through the silence timeout (10 s for
+# location, 20 s for description). Capability has been in place since
+# day one (`finishOnKey="*"` on both <Record> verbs at line ~441,493),
+# but no audio prompt told callers it existed. Discovery fix only —
+# no logic / timeout changes.
+#
+# Russian + Chinese added in the same change (operator scope expansion).
+# Voice IDs already existed in `_IVR_VOICES` above (Polly.Tatyana / ru-RU
+# and Polly.Zhiyu / cmn-CN); only the prompts + the welcome-menu digit
+# mapping needed wiring.
 _IVR_PROMPTS = {
-    "en": {"loc": "Please say your location. Your village, city, or nearest landmark.",
-           "desc": "Now describe your problem. What happened and how serious is it.",
+    "en": {"loc": "Please say your location. Your village, city, or nearest landmark. When you're done speaking, press star.",
+           "desc": "Now describe your problem. What happened and how serious is it. When you're done speaking, press star.",
            "done": "Thank you. Your report has been received. Rescue teams will be notified. Stay safe. Goodbye."},
-    "hi": {"loc": "कृपया अपना स्थान बताएं। गांव, शहर, या नजदीकी स्थान।",
-           "desc": "अब अपनी समस्या बताएं। क्या हुआ और कितना गंभीर है।",
+    "hi": {"loc": "कृपया अपना स्थान बताएं। गांव, शहर, या नजदीकी स्थान। बोलने के बाद, स्टार दबाएं।",
+           "desc": "अब अपनी समस्या बताएं। क्या हुआ और कितना गंभीर है। बोलने के बाद, स्टार दबाएं।",
            "done": "धन्यवाद। आपकी रिपोर्ट मिल गई। बचाव दल को सूचित किया जाएगा। सुरक्षित रहें।"},
-    "es": {"loc": "Diga su ubicacion. Pueblo, ciudad o punto de referencia.",
-           "desc": "Describa su problema. Que paso y que tan grave es.",
+    "es": {"loc": "Diga su ubicacion. Pueblo, ciudad o punto de referencia. Cuando termine de hablar, presione asterisco.",
+           "desc": "Describa su problema. Que paso y que tan grave es. Cuando termine de hablar, presione asterisco.",
            "done": "Gracias. Su reporte ha sido recibido. Los equipos de rescate seran notificados."},
-    "fr": {"loc": "Dites votre emplacement. Village, ville ou repere.",
-           "desc": "Decrivez votre probleme. Que s'est-il passe.",
+    "fr": {"loc": "Dites votre emplacement. Village, ville ou repere. Lorsque vous avez termine, appuyez sur etoile.",
+           "desc": "Decrivez votre probleme. Que s'est-il passe. Lorsque vous avez termine, appuyez sur etoile.",
            "done": "Merci. Votre rapport a ete recu. Les secours seront alertes."},
-    "ar": {"loc": "قل موقعك. القرية أو المدينة أو أقرب معلم.",
-           "desc": "صف مشكلتك. ماذا حدث وما مدى خطورته.",
+    "ar": {"loc": "قل موقعك. القرية أو المدينة أو أقرب معلم. عندما تنتهي من الكلام، اضغط على النجمة.",
+           "desc": "صف مشكلتك. ماذا حدث وما مدى خطورته. عندما تنتهي من الكلام، اضغط على النجمة.",
            "done": "شكراً. تم استلام تقريرك. سيتم إبلاغ فرق الإنقاذ."},
+    "ru": {"loc": "Пожалуйста, скажите ваше местоположение. Деревня, город или ближайший ориентир. Закончив говорить, нажмите звёздочку.",
+           "desc": "Теперь опишите вашу проблему. Что случилось и насколько серьёзно. Закончив говорить, нажмите звёздочку.",
+           "done": "Спасибо. Ваш отчёт получен. Спасательные службы будут уведомлены. Будьте в безопасности."},
+    "zh": {"loc": "请说出您的位置。村庄、城市或最近的地标。说完后请按星号键。",
+           "desc": "现在请描述您的问题。发生了什么以及严重程度。说完后请按星号键。",
+           "done": "谢谢您。您的报告已收到。救援队伍将收到通知。请保持安全。"},
 }
 
-_DIGIT_LANG = {"1": "en", "2": "hi", "3": "es", "4": "fr", "5": "ar"}
+# Welcome-menu DTMF map. May 2026 — extended from 5 → 7 languages
+# (added Russian = 6 and Chinese = 7). The Gather verb in
+# handle_incoming_call below renders one <Say> line per language.
+_DIGIT_LANG = {"1": "en", "2": "hi", "3": "es", "4": "fr", "5": "ar", "6": "ru", "7": "zh"}
 
 # caller-country → default IVR language. Twilio's webhook
 # payload includes a `FromCountry` field (ISO-3166-1 alpha-2) when
