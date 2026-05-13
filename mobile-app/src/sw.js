@@ -5,7 +5,14 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v140';
+const CACHE_NAME = 'crisp-v141';
+// v140 → v141 (May 2026, operator-reported) — single-stat home
+// impact card. "Reports Verified" tile removed; "Lives Saved" now
+// occupies the card centred + slightly larger. Companion change on
+// the dashboard adds an analyst-only "Lives helped" input on the
+// report detail panel (closes the capability gap where lives_impacted
+// was settable by API but had no UI). app.js + index.html +
+// styles.css all touched.
 // v139 → v140 (May 2026) — color-theme rewrite. Operator-supplied
 // 6-color palette swap (no functional / structural changes):
 //   · #213A58 navy        — page background base (was near-black)

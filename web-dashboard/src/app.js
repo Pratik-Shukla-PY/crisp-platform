@@ -2925,6 +2925,44 @@ function _renderReviewerActions(r) {
     const actionTxt = (verdict === 'REJECTED' && r.action_taken)
         ? `<div class="dp-reviewer-note"><i class="fa-solid fa-comment-dots"></i> ${escapeHtml(r.action_taken)}</div>` : '';
 
+    // May 2026 (operator-reported) — Lives helped input.
+    //
+    // The PWA home shows "Lives Saved" sourced from each report's
+    // `lives_impacted` integer (analyst-only `PATCH /reports/{id}/impact`
+    // endpoint, which has existed since April 2026). But no dashboard
+    // UI exposed it — analysts had no way to set the number short of
+    // a curl. Reporters' home cards therefore always showed "—".
+    //
+    // This input is gated by the same role pattern as the other
+    // analyst actions: the buttons call /review, /dispatch, /resolve
+    // (all `require_analyst` on the backend), so a non-analyst's
+    // requests return 403. We don't hide the input client-side; we
+    // rely on the server's gate. (Hiding would require a role check
+    // we don't reliably have on every dashboard surface.)
+    const livesCurrent = Number.isFinite(r.lives_impacted) ? r.lives_impacted : 0;
+    const livesInputHtml = `
+        <div class="dp-reviewer-lives">
+            <label class="dp-reviewer-lives-label" for="dp-lives-input-${r.id}">
+                <i class="fa-solid fa-heart-pulse"></i> Lives helped
+            </label>
+            <div class="dp-reviewer-lives-row">
+                <input type="number" min="0" max="100000" step="1"
+                       class="dp-reviewer-lives-input"
+                       id="dp-lives-input-${r.id}"
+                       value="${livesCurrent}"
+                       data-original="${livesCurrent}"
+                       aria-label="Lives helped by this report" />
+                <button type="button" class="dp-reviewer-btn dp-reviewer-lives-save"
+                        onclick="setLivesImpacted('${r.id}')"
+                        title="Save the lives-helped count">
+                    <i class="fa-solid fa-floppy-disk"></i> Save
+                </button>
+            </div>
+            <div class="dp-reviewer-lives-hint">
+                Reporter's home shows this number under "Lives Saved" once set.
+            </div>
+        </div>`;
+
     return `<div class="dp-reviewer">
         <div class="dp-reviewer-top">
             <span class="dp-reviewer-chip dp-reviewer-${verdictClass}">${verdictLabel}</span>
@@ -2948,8 +2986,59 @@ function _renderReviewerActions(r) {
                     onclick="stampResponderTime('${r.id}','arrived')"
                     ${r.help_arrived_at ? 'disabled' : ''}><i class="fa-solid fa-map-pin"></i> Arrived</button>
         </div>
+        ${livesInputHtml}
     </div>`;
 }
+
+// May 2026 (operator-reported) — analyst-side setter for the per-report
+// `lives_impacted` integer. Backend gates the endpoint with
+// `require_analyst`; the dashboard fetch carries the JWT cookie
+// automatically. On 403 we surface a toast that explains why (helps
+// new operators onboard without confusion).
+window.setLivesImpacted = async (reportId) => {
+    const input = document.getElementById(`dp-lives-input-${reportId}`);
+    if (!input) return;
+    const raw = input.value;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) {
+        return showToast('Lives helped must be a non-negative number.', 'error');
+    }
+    const original = Number(input.getAttribute('data-original') || '0');
+    if (n === original) {
+        return showToast('No change to save.', 'info');
+    }
+    try {
+        const res = await fetch(`${API}/${reportId}/impact`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ lives_impacted: n }),
+        });
+        if (res.status === 401 || res.status === 403) {
+            return showToast('Only analysts can set "Lives helped". Sign in with an analyst account.', 'error');
+        }
+        if (!res.ok) {
+            let detail = `HTTP ${res.status}`;
+            try { detail = (await res.json()).detail || detail; } catch (_) {}
+            return showToast(`Save failed: ${detail}`, 'error');
+        }
+        const body = await res.json();
+        const idx = allReports.findIndex(x => x.id === reportId);
+        if (idx >= 0) {
+            allReports[idx].lives_impacted = body.lives_impacted;
+        }
+        input.setAttribute('data-original', String(body.lives_impacted));
+        showToast(
+            body.lives_impacted === 0
+                ? 'Cleared lives-helped count.'
+                : `Saved — ${body.lives_impacted} ${body.lives_impacted === 1 ? 'life' : 'lives'} helped.`,
+            'success',
+        );
+        renderFeed();
+    } catch (e) {
+        showToast(`Save error: ${e.message}`, 'error');
+    }
+};
 
 window.setReviewVerdict = async (reportId, verdict, actionTaken = null) => {
     try {

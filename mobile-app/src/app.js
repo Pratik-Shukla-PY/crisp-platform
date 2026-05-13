@@ -3385,15 +3385,22 @@ function updateFlowProgress(currentStage) {
 // people report, lives get saved". Falls back to hiding the card on error.
 async function updateHomeImpactMetrics() {
     const wrap = document.getElementById('home-impact');
-    // April 2026 — renamed to `home-verified-count` because the metric
-    // surfaced to users is now "Reports Verified" (quality signal) rather
-    // than raw "Reports Submitted" (volume signal). The DOM swap happens
-    // in index.html. The fall-through to `home-reports-count` keeps any
-    // pre-cached index.html from breaking catastrophically.
+    // April 2026 — `home-verified-count` was the user-facing
+    // "Reports Verified" tile. May 2026 (operator-reported) — that
+    // tile is gone from the markup; only `home-lives-count` remains.
+    // We KEEP the verifiedCount fetch logic below because the badge
+    // ladder (Newcomer / Contributor / Trusted) in home-screen.js
+    // still reads it via the profile endpoint. We just no longer
+    // write it into the DOM.
+    //
+    // verifiedEl is left as an optional lookup — null on the current
+    // HTML, present only if an old pre-fix cached index.html happens
+    // to be served. The fmt-and-write below is guarded so a missing
+    // element is a no-op.
     const verifiedEl = document.getElementById('home-verified-count')
         || document.getElementById('home-reports-count');
     const livesEl = document.getElementById('home-lives-count');
-    if (!wrap || !verifiedEl || !livesEl) return;
+    if (!wrap || !livesEl) return;
     try {
         const deviceHash = localStorage.getItem('crisp_device_id_v2') ||
                            localStorage.getItem('crisp_device_hash') ||
@@ -3454,18 +3461,22 @@ async function updateHomeImpactMetrics() {
         // trust cost of "0 / 0" for brand-new users, which we paper
         // over by showing "—" while the numbers are still zero.
         const fmt = (n) => (n > 0 ? _fmtCompactNumber(n) : '—');
-        verifiedEl.textContent = fmt(verifiedCount);
+        if (verifiedEl) verifiedEl.textContent = fmt(verifiedCount);
         livesEl.textContent = fmt(livesImpacted);
         wrap.style.display = 'flex';
 
         // v4 — also paint the landing card's impact panel if
         // it's currently mounted. Same data, mirror copy. Doing this
         // here keeps the single-source-of-truth in updateHomeImpactMetrics().
+        // May 2026 — verified-count writes guarded: the tile was
+        // removed in the same commit; landing card now shows only
+        // lives. Verified-count fetch is still useful for the badge
+        // ladder (home-screen.js) which reads it separately.
         const landingWrap = document.getElementById('landing-impact');
         const landingVerifiedEl = document.getElementById('landing-verified-count');
         const landingLivesEl = document.getElementById('landing-lives-count');
-        if (landingWrap && landingVerifiedEl && landingLivesEl) {
-            landingVerifiedEl.textContent = fmt(verifiedCount);
+        if (landingWrap && landingLivesEl) {
+            if (landingVerifiedEl) landingVerifiedEl.textContent = fmt(verifiedCount);
             landingLivesEl.textContent = fmt(livesImpacted);
             landingWrap.style.display = 'flex';
         }

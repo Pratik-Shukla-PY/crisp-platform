@@ -2333,3 +2333,73 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 .dp-reviewer-btn:disabled { opacity:0.45; cursor:not-allowed; }
 .dp-reviewer-btn.dp-reviewer-accept.active { color:#22c55e; border-color:rgba(34,197,94,0.65); background:rgba(34,197,94,0.12); }
 .dp-reviewer-btn.dp-reviewer-reject.active { color:#ef4444; border-color:rgba(239,68,68,0.65); background:rgba(239,68,68,0.12); }
+
+/* May 2026 (operator-reported) — analyst input for `lives_impacted`.
+   Backend endpoint existed since April but had no UI surface. The
+   PWA home card's "Lives Saved" tile is fed by the sum of this
+   number across all the user's reports; without an analyst UI it
+   stayed at — for every reporter forever. */
+.dp-reviewer-lives {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+.dp-reviewer-lives-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #cbd5e1;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 6px;
+}
+.dp-reviewer-lives-label i {
+    color: #46DFB1;  /* mint accent — matches PWA's home-impact tile */
+}
+.dp-reviewer-lives-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+.dp-reviewer-lives-input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(70, 223, 177, 0.32);
+    border-radius: 6px;
+    color: #f1f5f9;
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.dp-reviewer-lives-input:focus {
+    outline: none;
+    border-color: rgba(70, 223, 177, 0.7);
+    background: rgba(70, 223, 177, 0.06);
+}
+.dp-reviewer-lives-input::-webkit-outer-spin-button,
+.dp-reviewer-lives-input::-webkit-inner-spin-button {
+    /* Keep the spinner but tighten so it doesn't overflow the rounded input */
+    margin: 0;
+}
+.dp-reviewer-lives-save {
+    /* Lives-Save button reuses the reviewer-btn base look but with a
+       teal accent on hover to signal "this is the lives-side action,
+       not the verdict action." */
+    flex: 0 0 auto;
+    min-width: 84px;
+}
+.dp-reviewer-lives-save:hover:not(:disabled) {
+    color: #46DFB1;
+    border-color: rgba(70, 223, 177, 0.55);
+    background: rgba(70, 223, 177, 0.10);
+}
+.dp-reviewer-lives-hint {
+    margin-top: 6px;
+    font-size: 10.5px;
+    color: #94a3b8;
+    line-height: 1.4;
+}

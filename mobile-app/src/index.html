@@ -468,15 +468,23 @@
                  default to em-dashes until `updateHomeImpactMetrics()`
                  resolves (anonymous fresh user on first paint).
                  Labels stay grammatical when the number is "—". -->
-            <div class="home-impact" id="home-impact">
+            <!-- May 2026 (operator-reported) — single-stat impact card.
+                 The previous two-stat layout (Lives Saved + Reports
+                 Verified) doubled up signals that didn't add up for
+                 reporters: "Reports Verified" was a backend
+                 quality-gate count that few users actually understood,
+                 while "Lives Saved" is the metric reporters relate to
+                 ("did my report help anyone?"). Verified-count is
+                 still tracked server-side (drives the badge ladder
+                 above) — it's just no longer surfaced as a competing
+                 number here. Layout is now a single centred cell.
+                 The empty state stays "—" until an analyst sets
+                 lives_impacted via the dashboard's analyst-only
+                 input (shipped in the same commit). -->
+            <div class="home-impact home-impact-single" id="home-impact">
                 <div class="hi-cell hi-cell-lives">
                     <div class="hi-num hi-num-lives" id="home-lives-count">—</div>
                     <div class="hi-label" data-i18n="home_metric_lives">Lives Saved</div>
-                </div>
-                <div class="hi-divider"></div>
-                <div class="hi-cell">
-                    <div class="hi-num" id="home-verified-count">—</div>
-                    <div class="hi-label" data-i18n="home_metric_verified">Reports Verified</div>
                 </div>
             </div>
 

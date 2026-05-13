@@ -2103,6 +2103,25 @@ details.mr-date-group[open] .mr-date-group-chevron {
 .home-impact .hi-num { font-size: 28px; font-weight: 900; color: #46DFB1; line-height: 1.05; }
 .home-impact .hi-label { font-size: 10px; color: #46DFB1; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
 .hi-divider { width: 1px; height: 36px; background: rgba(70, 223, 177, 0.3); }
+/* May 2026 — single-stat variant (Lives Saved only). Wider tile +
+   slightly larger number so it doesn't look diminished compared to
+   the previous two-stat layout. Also slightly more vertical padding
+   to balance the card's visual weight. */
+.home-impact.home-impact-single {
+    padding: 18px 12px;
+    justify-content: center;
+}
+.home-impact.home-impact-single .hi-cell {
+    flex: 0 0 auto;
+    max-width: 100%;
+}
+.home-impact.home-impact-single .hi-num {
+    font-size: 34px;
+}
+.home-impact.home-impact-single .hi-label {
+    font-size: 11px;
+    letter-spacing: 0.7px;
+}
 
 /* Flow-progress bar — unified 4-step indicator that replaces per-stage
    step-dots. Lives at the top of capture stages.
