@@ -2321,11 +2321,26 @@
                 <i class="fa-solid fa-plus"></i>
                 <span data-i18n="add_another_report">Add another report</span>
             </button>
-            <!-- Secondary CTA — opens the just-submitted report's detail view. -->
-            <button class="secondary-cta" id="btn-track-report">
-                <i class="fa-solid fa-map-pin"></i>
-                <span data-i18n="track_report">Track your report</span>
-            </button>
+            <!-- May 2026 (reward-system v2 second pass) — secondary 3-col
+                 row replaces the previous single Track button. Gives
+                 the user three clean off-ramps after a submit:
+                 Track → report detail · Rewards → stage-rewards ·
+                 Home → reset + stage-home. Same .home-secondary-row
+                 grid pattern as the home page for consistency. -->
+            <div class="success-secondary-row home-secondary-row">
+                <button class="secondary-cta" id="btn-track-report" type="button">
+                    <i class="fa-solid fa-map-pin"></i>
+                    <span data-i18n="track_report">Track your report</span>
+                </button>
+                <button class="secondary-cta home-rewards-btn" id="btn-success-rewards" type="button">
+                    <i class="fa-solid fa-medal"></i>
+                    <span data-i18n="success_btn_rewards">Rewards</span>
+                </button>
+                <button class="secondary-cta" id="btn-success-home" type="button">
+                    <i class="fa-solid fa-house"></i>
+                    <span data-i18n="success_btn_home">Home</span>
+                </button>
+            </div>
             <!-- (UI v3 redesign M3) — soft prompt for the optional
                  UNDP Step 4 details (debris / power / water / health / needs).
                  Hidden by default; shown by app.js after a successful submit
@@ -2531,6 +2546,16 @@
                     <i class="fa-solid fa-map" aria-hidden="true"></i>
                 </button>
             </div>
+            <!-- May 2026 (reward-system v2 second pass) — Rewards
+                 shortcut button on My Reports. Same icon-button look
+                 as the view-toggle, separate from it so the medal
+                 reads as a different affordance. Tap opens the
+                 dedicated Rewards page (stage-rewards). -->
+            <button type="button" class="mr-view-btn mr-rewards-btn" id="btn-mr-rewards"
+                    aria-label="Rewards" title="Rewards"
+                    data-i18n-aria-label="rewards_btn" data-i18n-title="rewards_btn">
+                <i class="fa-solid fa-medal" aria-hidden="true"></i>
+            </button>
         </div>
 
         <div class="history-section" id="history-inflight-section">
@@ -2704,18 +2729,54 @@
             </button>
         </div>
 
+        <!-- May 2026 (futuristic-badge pass) — character picker.
+             4x2 grid of stylised hero silhouettes (4 comic + 4
+             responder archetypes). Active tile carries .is-selected.
+             Tile tap → state.selectedCharacter → repaint canvas.
+             Populated at runtime from window.crispCharacterPack. -->
+        <div class="bs-section-title" data-i18n="badge_studio_pick_hero">Choose your hero</div>
+        <div class="bs-char-grid" id="bs-char-grid" role="radiogroup" aria-label="Hero picker"></div>
+
         <!-- Canvas preview (live render of the selected template) -->
         <div class="badge-studio-canvas-wrap">
             <canvas id="bs-canvas" class="badge-studio-canvas" aria-label="Badge preview"></canvas>
         </div>
 
-        <!-- Optional photo + face-blur controls -->
+        <!-- May 2026 (futuristic-badge pass) — share-message picker.
+             Visible on every template; only paints into the canvas
+             on the "story" template (Canvas drawStoryContent reads
+             state.selectedMessageIdx). -1 = Surprise me (rotation). -->
+        <div class="bs-section-title" data-i18n="badge_studio_pick_message">Share message</div>
+        <select id="bs-message-select" class="bs-message-picker" aria-label="Share message">
+            <option value="-1" data-i18n="bs_message_surprise">✨ Surprise me</option>
+            <option value="0" data-i18n="bs_message_1">Saw it. Said it. Saved lives. 💚</option>
+            <option value="1" data-i18n="bs_message_2">Real ones spot real problems. Reported. Got results.</option>
+            <option value="2" data-i18n="bs_message_3">My report turned into someone's good day. ⚡</option>
+            <option value="3" data-i18n="bs_message_4">Plot twist: I'm the help that arrived.</option>
+            <option value="4" data-i18n="bs_message_5">Crisis tried me. I CRISP'd back.</option>
+            <option value="5" data-i18n="bs_message_6">Bystander? Never met them. I'm a Lifekeeper. 🦸</option>
+            <option value="6" data-i18n="bs_message_7">Verified reporter. Verified impact. ✓</option>
+            <option value="7" data-i18n="bs_message_8">First on scene with a phone in my hand. 📡</option>
+        </select>
+
+        <!-- Optional photo + face-blur controls.
+             May 2026 (photo-consent pass) — the "Choose photo" label
+             no longer triggers the file input directly. It now opens
+             the consent modal (#photo-consent-overlay) which routes
+             to the hidden file input after explicit user OK.  -->
         <div class="badge-studio-controls">
-            <label class="bs-upload">
+            <button type="button" class="bs-upload" id="btn-bs-photo">
                 <i class="fa-solid fa-camera" aria-hidden="true"></i>
                 <span data-i18n="badge_studio_upload_photo">Choose photo</span>
-                <input type="file" id="bs-photo-input" accept="image/*" hidden>
-            </label>
+            </button>
+            <input type="file" id="bs-photo-input" accept="image/*" hidden>
+            <div class="bs-photo-thumb" id="bs-photo-thumb" hidden>
+                <img id="bs-photo-thumb-img" alt="">
+                <button type="button" class="bs-photo-thumb-clear" id="btn-bs-photo-clear"
+                        aria-label="Remove photo" title="Remove photo">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+            </div>
             <label class="bs-toggle">
                 <input type="checkbox" id="bs-blur-toggle" checked>
                 <span data-i18n="badge_studio_face_blur">Apply face blur</span>
@@ -2999,10 +3060,40 @@
 <script src="app.js?v=1030"></script>
 <!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
      applyI18n etc. Internally it _whenReady-polls until those are set. -->
+<!-- May 2026 (photo-consent pass) — modal shown ONCE per device when
+     the user first taps "Choose photo" inside Badge Studio. Persisted
+     via localStorage `crisp_photo_studio_consent_v1`. Reuses the
+     `.upload-overlay` + `.upload-progress-card` chrome from the
+     existing upload-progress modal so it feels native. -->
+<div class="photo-consent-overlay upload-overlay" id="photo-consent-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="photo-consent-title">
+    <div class="photo-consent-card upload-progress-card">
+        <div class="photo-consent-emoji" aria-hidden="true">📸</div>
+        <h3 id="photo-consent-title" class="photo-consent-title" data-i18n="photo_consent_title">Use your photo on your badge?</h3>
+        <ul class="photo-consent-bullets">
+            <li data-i18n="photo_consent_bullet_1">Your photo stays on this device.</li>
+            <li data-i18n="photo_consent_bullet_2">CRISP never uploads it.</li>
+            <li data-i18n="photo_consent_bullet_3">Face blur is on by default.</li>
+        </ul>
+        <div class="photo-consent-actions">
+            <button type="button" class="bs-btn photo-consent-cancel" id="btn-photo-consent-cancel">
+                <span data-i18n="photo_consent_cancel">Cancel</span>
+            </button>
+            <button type="button" class="bs-btn bs-btn-primary photo-consent-ok" id="btn-photo-consent-ok">
+                <i class="fa-solid fa-camera" aria-hidden="true"></i>
+                <span data-i18n="photo_consent_ok">OK, choose photo</span>
+            </button>
+        </div>
+    </div>
+</div>
 <script src="v4-flow.js?v=4"></script>
+<!-- May 2026 reward-system v2 (futuristic pass) — 8 hero caricature
+     SVGs. Loaded BEFORE badge-studio.js so the composer can read
+     `window.crispCharacterPack` synchronously on first paint. -->
+<script src="character-pack.js?v=1"></script>
 <!-- May 2026 reward-system v2 — Badge Studio Canvas composer + share
      dispatch. Loaded last because it depends on window.t (app.js i18n),
-     window.applyPiiBlur (pii-blur.js BlazeFace), and window.goToStage. -->
-<script src="badge-studio.js?v=1"></script>
+     window.applyPiiBlur (pii-blur.js BlazeFace), window.goToStage, and
+     window.crispCharacterPack (loaded just above). -->
+<script src="badge-studio.js?v=2"></script>
 </body>
 </html>

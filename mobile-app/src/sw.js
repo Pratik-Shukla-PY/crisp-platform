@@ -5,7 +5,45 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v148';
+const CACHE_NAME = 'crisp-v149';
+// v148 → v149 (May 2026, Badge Studio futuristic + share-flow polish).
+// Operator: "Make it a bit futuristic with 5-10 options of different
+// life savers… amazing messages for people to share… When user
+// uploads, ask for consent and storage. Show the image uploaded.
+// Add Rewards shortcut on Track my reports and post submission Final
+// Window. Also show Home button there."
+//
+// Phase A — Badge Studio hero pack:
+//   • New character-pack.js with 8 original hero caricatures (4 comic
+//     archetypes + 4 first-responder archetypes — Caped Guardian /
+//     Sky Sentinel / Iron Ally / Beacon Light / Field Medic /
+//     Firefighter / Lifeguard / Rescue Pilot). Apache-2.0 originals,
+//     no trademark exposure (NOT Batman/Superman/Black Panther).
+//   • Canvas paint helpers: hex-grid HUD backdrop + concentric arc
+//     tick-marks + neon edge halo + diagonal sweep glow. Pure Canvas;
+//     no external libs.
+//   • Character picker (4×2 grid) + share-message picker (8 messages
+//     + Surprise me) in stage-badge-studio.
+//
+// Phase C — Photo consent + thumbnail + applyPiiBlur fix:
+//   • Consent modal shown on FIRST "Choose photo" tap (persisted
+//     localStorage `crisp_photo_studio_consent_v1`).
+//   • Preview thumbnail (56×56) confirms the uploaded image.
+//   • _maybeBlurFaces now correctly unwraps applyPiiBlur's
+//     {blob, blurred, skipped, ...} return shape. Pre-fix it
+//     duck-typed for Blob|canvas and silently fell through to
+//     the unblurred bitmap on every real upload — UNDP must-have #7
+//     bug fixed in passing.
+//
+// Phases D+E — Rewards shortcuts everywhere:
+//   • #btn-mr-rewards medal on My Reports controls row.
+//   • Success page secondary row replaces the single Track button
+//     with Track + Rewards + Home in a 3-column grid.
+//
+// Phase F — i18n × 22 locales (+20 new keys).
+//
+// STATIC_ASSETS adds character-pack.js so the studio works fully
+// offline once installed.
 // v147 → v148 (May 2026, operator-reported stage-stacking bug).
 // `goToStage` was iterating only the hard-coded STAGES + STAGES_V3
 // lists when removing `.active` from the prior stage. The new
@@ -172,7 +210,8 @@ const STATIC_ASSETS = [
     SW_BASE + 'home-screen.js',
     SW_BASE + 'voice-readout.js',
     SW_BASE + 'v4-flow.js',
-    SW_BASE + 'badge-studio.js',   // Phase D — reward-system v2 Canvas composer
+    SW_BASE + 'badge-studio.js',     // reward-system v2 Canvas composer
+    SW_BASE + 'character-pack.js',   // reward-system v2 second pass — 8 hero SVGs
     // vendor/blazeface/model.json + .bin are NOT precached. They're
     // loaded on demand by pii-blur.js::ensureModel on first photo
     // capture and runtime-cached by the fetch handler below.

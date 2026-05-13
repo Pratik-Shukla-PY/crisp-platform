@@ -57,6 +57,11 @@
         lives: 0,
         reports: 0,
         responded: 0,
+        // May 2026 — character picker + share-message picker added
+        // alongside the futuristic backdrop.
+        selectedCharacter: 'caped_guardian',
+        usePhotoInsteadOfCharacter: false,
+        selectedMessageIdx: -1,         // -1 = "Surprise me" (deterministic random)
         template: 'ring',               // 'ring' | 'wa' | 'story'
         userPhotoBlob: null,            // ImageBitmap or HTMLImageElement
         faceBlur: true,
@@ -118,6 +123,8 @@
             g.addColorStop(1, '#0C6478');
             ctx.fillStyle = g;
             ctx.fillRect(0, 0, w, h);
+            // Futuristic backdrop on top of the navy base for WA.
+            _paintFuturisticBackdrop(ctx, w, h, tier);
         } else {
             // story
             const meta = TIER_META[tier] || TIER_META.T4_LIFEKEEPER;
@@ -129,7 +136,82 @@
             // Soft overlay so foreground text reads cleanly.
             ctx.fillStyle = 'rgba(12, 30, 45, 0.35)';
             ctx.fillRect(0, 0, w, h);
+            // Subtle futuristic backdrop on story too (full bleed).
+            _paintFuturisticBackdrop(ctx, w, h, tier);
         }
+    }
+
+    /**
+     * Paint a sci-fi HUD-style backdrop behind the avatar:
+     *   - sparse hex-grid pattern (low alpha)
+     *   - 3 concentric arc tick-marks (HUD reticle)
+     *   - diagonal sweep glow top-left
+     * Centered on the canvas. Pure Canvas paint; no external deps.
+     */
+    function _paintFuturisticBackdrop(ctx, w, h, tier) {
+        const meta = TIER_META[tier] || TIER_META.T4_LIFEKEEPER;
+        const cx = w / 2;
+        const cy = h * 0.42;
+        const baseRadius = Math.min(w, h) * 0.30;
+
+        ctx.save();
+
+        // 1. Hex-grid pattern — sparse cells across the whole canvas.
+        ctx.strokeStyle = 'rgba(70, 223, 177, 0.07)'; // tier-mint, very low alpha
+        ctx.lineWidth = 2;
+        const hexR = 38;
+        const hexW = hexR * Math.sqrt(3);
+        const hexH = hexR * 1.5;
+        for (let y = -hexR; y < h + hexR; y += hexH) {
+            const rowOffset = (Math.floor(y / hexH) % 2) ? hexW / 2 : 0;
+            for (let x = -hexW + rowOffset; x < w + hexW; x += hexW) {
+                _drawHexagon(ctx, x, y, hexR);
+            }
+        }
+
+        // 2. Concentric arc tick-marks around the avatar circle.
+        //    Three radii, each with a small gap (HUD reticle vibe).
+        const tickRadii = [baseRadius * 1.18, baseRadius * 1.32, baseRadius * 1.46];
+        ctx.strokeStyle = `${meta.ringEnd}`;
+        tickRadii.forEach((r, i) => {
+            ctx.globalAlpha = 0.32 - i * 0.06;
+            ctx.lineWidth = 3;
+            // Draw 3/4 of the arc with a gap on the right.
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, Math.PI * 0.18, Math.PI * 1.82);
+            ctx.stroke();
+            // Short tick on the opposite side.
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, -Math.PI * 0.10, Math.PI * 0.10);
+            ctx.stroke();
+        });
+        ctx.globalAlpha = 1;
+
+        // 3. Diagonal sweep glow — soft radial highlight 30° top-left.
+        const sweepGrad = ctx.createRadialGradient(
+            w * 0.20, h * 0.15, 10,
+            w * 0.20, h * 0.15, Math.max(w, h) * 0.7,
+        );
+        sweepGrad.addColorStop(0, `${meta.ringEnd}26`);  // 26 hex = ~15% alpha
+        sweepGrad.addColorStop(0.5, `${meta.ringEnd}0d`); // 0d hex = ~5% alpha
+        sweepGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = sweepGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.restore();
+    }
+
+    function _drawHexagon(ctx, cx, cy, r) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (Math.PI / 3) * i + Math.PI / 6; // pointy-top hex
+            const x = cx + r * Math.cos(angle);
+            const y = cy + r * Math.sin(angle);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
     }
 
     function _drawCircularPhoto(ctx, bitmap, cx, cy, radius) {
@@ -163,6 +245,70 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(meta.emoji, cx, cy + radius * 0.05);
+    }
+
+    /**
+     * Paint the user's chosen character silhouette into the avatar
+     * circle. The character SVG ships in `character-pack.js` and is
+     * rendered to an Image element via a data: URL; we then clip
+     * to a circle and drawImage like a regular bitmap.
+     *
+     * The circle is filled first with a dark-teal base so the
+     * silhouette pops against the futuristic backdrop instead of
+     * blending into the canvas gradient. The character SVG paints
+     * coloured via the tier's gradient-end value (mint / lime / teal
+     * depending on tier).
+     */
+    async function _drawCharacterAvatar(ctx, cx, cy, radius, tier, slug) {
+        const meta = TIER_META[tier] || TIER_META.T1_SCOUT;
+        // 1. Tier-tinted base disc.
+        ctx.save();
+        const baseGrad = ctx.createRadialGradient(
+            cx - radius * 0.3, cy - radius * 0.3, radius * 0.1,
+            cx, cy, radius,
+        );
+        baseGrad.addColorStop(0, '#0C6478');   // mid-teal centre
+        baseGrad.addColorStop(0.7, '#0a1b2a');
+        baseGrad.addColorStop(1, '#06121e');   // dark navy edge
+        ctx.fillStyle = baseGrad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        // 2. Inner glow ring just outside the silhouette zone.
+        ctx.save();
+        ctx.strokeStyle = meta.ringEnd;
+        ctx.globalAlpha = 0.22;
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 0.92, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        // 3. Character silhouette — coloured via the character pack's
+        // own gradient end-stop so each character has a distinct
+        // accent. Defer-loaded; if it fails we fall through to the
+        // emoji placeholder so the canvas never has a hole.
+        if (!window.crispCharacterPack) {
+            _drawAvatarPlaceholder(ctx, cx, cy, radius, tier);
+            return;
+        }
+        try {
+            const charMeta = window.crispCharacterPack.meta(slug);
+            const img = await window.crispCharacterPack.loadAsImage(
+                slug, charMeta.gradient[1],
+            );
+            // Center + scale so the silhouette fills ~90% of the circle.
+            const D = radius * 1.8;
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(img, cx - D / 2, cy - D / 2 + radius * 0.05, D, D);
+            ctx.restore();
+        } catch (e) {
+            console.warn('[BadgeStudio] character load failed; falling back:', e);
+            _drawAvatarPlaceholder(ctx, cx, cy, radius, tier);
+        }
     }
 
     function _drawTierRing(ctx, cx, cy, radius, tier) {
@@ -219,7 +365,39 @@
         ctx.fillText(`${meta.emoji}  ${tierLabel.toUpperCase()}`, cx, y + pillH / 2 + 4 * scale);
     }
 
-    function _drawStoryContent(ctx, w, h, tier, stats) {
+    // ── Share-card message pack (Phase B) ──────────────────────────
+    //
+    // 8 GenZ-friendly messages the user can pick from on the story
+    // template. "Surprise me" rotates deterministically based on
+    // Date.now() % 8 so the same session gets a stable pick. Each
+    // message ≤ 70 chars to fit the 1080×1920 layout under the
+    // tier name without wrapping into a 3rd line.
+    //
+    // English fallbacks here mirror the i18n keys
+    // `bs_message_1` … `bs_message_8`. Caller passes `messageIdx`
+    // (0..7); -1 means "Surprise me".
+    const SHARE_MESSAGES = [
+        { key: 'bs_message_1', en: 'Saw it. Said it. Saved lives. 💚' },
+        { key: 'bs_message_2', en: 'Real ones spot real problems. Reported. Got results.' },
+        { key: 'bs_message_3', en: "My report turned into someone's good day. ⚡" },
+        { key: 'bs_message_4', en: "Plot twist: I'm the help that arrived." },
+        { key: 'bs_message_5', en: "Crisis tried me. I CRISP'd back." },
+        { key: 'bs_message_6', en: "Bystander? Never met them. I'm a Lifekeeper. 🦸" },
+        { key: 'bs_message_7', en: 'Verified reporter. Verified impact. ✓' },
+        { key: 'bs_message_8', en: 'First on scene with a phone in my hand. 📡' },
+    ];
+
+    function _resolveShareMessage(idx) {
+        // -1 = Surprise me — deterministic per ~minute so the preview
+        // is stable but tomorrow's session pulls a different message.
+        const pickIdx = (idx < 0 || idx >= SHARE_MESSAGES.length)
+            ? Math.floor((Date.now() / 60000) % SHARE_MESSAGES.length)
+            : idx;
+        const m = SHARE_MESSAGES[pickIdx];
+        return _t(m.key, m.en);
+    }
+
+    function _drawStoryContent(ctx, w, h, tier, stats, messageIdx) {
         const meta = TIER_META[tier] || TIER_META.T4_LIFEKEEPER;
         const cx = w / 2;
         // Emoji large + centred near the top third.
@@ -227,17 +405,24 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = `${260}px "Inter", system-ui, sans-serif`;
-        ctx.fillText(meta.emoji, cx, h * 0.30);
+        ctx.fillText(meta.emoji, cx, h * 0.28);
         // Tier name.
         ctx.font = `900 96px "Outfit", "Inter", system-ui, sans-serif`;
         const tierLabel = _t(`tier_${tier.toLowerCase()}_label`, meta.label);
-        ctx.fillText(tierLabel.toUpperCase(), cx, h * 0.46);
+        ctx.fillText(tierLabel.toUpperCase(), cx, h * 0.44);
         // Stats line.
         ctx.font = `600 48px "Inter", system-ui, sans-serif`;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.86)';
         const lives = Number.isFinite(stats.lives) ? stats.lives : 0;
         const reps  = Number.isFinite(stats.reports) ? stats.reports : 0;
-        ctx.fillText(`${reps} reports · ${lives} lives saved`, cx, h * 0.56);
+        ctx.fillText(`${reps} reports · ${lives} lives saved`, cx, h * 0.52);
+        // GenZ share message — bold, identity-forward.
+        const msg = _resolveShareMessage(
+            typeof messageIdx === 'number' ? messageIdx : state.selectedMessageIdx
+        );
+        ctx.font = `700 52px "Inter", system-ui, sans-serif`;
+        ctx.fillStyle = '#ffffff';
+        _wrapText(ctx, msg, cx, h * 0.62, w - 160, 64);
         // Brand block at the bottom.
         ctx.font = `800 72px "Outfit", "Inter", system-ui, sans-serif`;
         ctx.fillStyle = '#ffffff';
@@ -248,23 +433,52 @@
         ctx.fillText(tagline, cx, h * 0.89);
     }
 
-    async function _composeBadgeImage(template, userBitmap, tier, stats) {
+    /** Simple word-wrap text painter — splits on spaces, keeps lines
+     *  under `maxWidth`. Up to 3 lines centred at `(cx, y)`. */
+    function _wrapText(ctx, text, cx, y, maxWidth, lineHeight) {
+        const words = String(text || '').split(/\s+/);
+        const lines = [];
+        let line = '';
+        for (const w of words) {
+            const test = line ? `${line} ${w}` : w;
+            if (ctx.measureText(test).width > maxWidth && line) {
+                lines.push(line);
+                line = w;
+            } else {
+                line = test;
+            }
+            if (lines.length >= 3) break;
+        }
+        if (line && lines.length < 3) lines.push(line);
+        const totalH = (lines.length - 1) * lineHeight;
+        const yStart = y - totalH / 2;
+        lines.forEach((ln, i) => ctx.fillText(ln, cx, yStart + i * lineHeight));
+    }
+
+    async function _composeBadgeImage(template, userBitmap, tier, stats, opts) {
         const { w, h } = _dimensions(template);
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Canvas 2D context unavailable');
+        opts = opts || {};
+        const usePhoto = opts.usePhoto !== false && !!userBitmap;
+        const characterSlug = opts.characterSlug || state.selectedCharacter;
+        const messageIdx = (typeof opts.messageIdx === 'number')
+            ? opts.messageIdx : state.selectedMessageIdx;
 
-        // 1. Background.
+        // 1. Background (now carries the futuristic backdrop).
         _paintBackground(ctx, template, tier);
 
-        // 2. Profile photo / avatar placeholder.
+        // 2. Avatar — photo > character > emoji placeholder.
         if (template !== 'story') {
             const cx = w / 2;
             const cy = h * 0.42;
             const radius = Math.min(w, h) * 0.30;
-            if (userBitmap) {
+            if (usePhoto && userBitmap) {
                 _drawCircularPhoto(ctx, userBitmap, cx, cy, radius);
+            } else if (window.crispCharacterPack) {
+                await _drawCharacterAvatar(ctx, cx, cy, radius, tier, characterSlug);
             } else {
                 _drawAvatarPlaceholder(ctx, cx, cy, radius, tier);
             }
@@ -274,7 +488,7 @@
             _drawTierBadge(ctx, cx, cy + radius + 100, template === 'wa' ? 1.05 : 1.0, tier);
         } else {
             // Story template — no profile photo; full content block.
-            _drawStoryContent(ctx, w, h, tier, stats);
+            _drawStoryContent(ctx, w, h, tier, stats, messageIdx);
         }
 
         return new Promise((resolve, reject) => {
@@ -300,19 +514,22 @@
         // CSS sizing is set in styles.css via `.badge-studio-canvas`.
         const ctx = canvas.getContext('2d');
         _paintBackground(ctx, state.template, state.tier);
+        const usePhoto = state.usePhotoInsteadOfCharacter && !!state.userPhotoBlob;
         if (state.template !== 'story') {
             const cx = w / 2;
             const cy = h * 0.42;
             const radius = Math.min(w, h) * 0.30;
-            if (state.userPhotoBlob) {
+            if (usePhoto) {
                 _drawCircularPhoto(ctx, state.userPhotoBlob, cx, cy, radius);
+            } else if (window.crispCharacterPack) {
+                await _drawCharacterAvatar(ctx, cx, cy, radius, state.tier, state.selectedCharacter);
             } else {
                 _drawAvatarPlaceholder(ctx, cx, cy, radius, state.tier);
             }
             _drawTierRing(ctx, cx, cy, radius, state.tier);
             _drawTierBadge(ctx, cx, cy + radius + 100, state.template === 'wa' ? 1.05 : 1.0, state.tier);
         } else {
-            _drawStoryContent(ctx, w, h, state.tier, { lives: state.lives, reports: state.reports });
+            _drawStoryContent(ctx, w, h, state.tier, { lives: state.lives, reports: state.reports }, state.selectedMessageIdx);
         }
     }
 
@@ -347,20 +564,35 @@
         if (!state.faceBlur) return bitmap;
         if (typeof window.applyPiiBlur !== 'function') return bitmap;
         try {
-            // applyPiiBlur typically takes a Blob/File; convert if needed.
-            // The existing pii-blur.js variations accept an HTMLImageElement
-            // OR a canvas-rendered ImageData. We render to a working canvas
-            // and pass it through.
+            // pii-blur.js's `applyPiiBlur` returns
+            //   { blob, blurred, facesDetected, skipped, error }
+            // — NOT a Blob/canvas directly. Pre-fix this function
+            // duck-typed for Blob|canvas, missed every real return
+            // value, and silently returned the original bitmap →
+            // blur looked like it was working but actually never ran
+            // on the studio's photo path. Fixed in the second-pass
+            // futuristic-badge work (May 2026).
+            //
+            // The function takes a File/Blob input. Convert the
+            // bitmap to a blob via a working canvas.
             const c = document.createElement('canvas');
             c.width = bitmap.width || bitmap.naturalWidth;
             c.height = bitmap.height || bitmap.naturalHeight;
             c.getContext('2d').drawImage(bitmap, 0, 0);
-            // applyPiiBlur returns either a Blob or a canvas — we accept either.
-            const blurred = await window.applyPiiBlur(c);
-            if (blurred instanceof Blob) {
-                return await _readImageFile(blurred);
-            } else if (blurred && typeof blurred.getContext === 'function') {
-                return blurred; // a canvas drawable
+            const inputBlob = await new Promise((resolve, reject) => {
+                c.toBlob((b) => b ? resolve(b) : reject(new Error('toBlob null')), 'image/jpeg', 0.92);
+            });
+            const result = await window.applyPiiBlur(inputBlob);
+            if (!result || typeof result !== 'object') return bitmap;
+            if (result.skipped) {
+                // Model load / detect failed — fall back to the original
+                // bitmap + tell the user we couldn't blur this time.
+                _toast(_t('photo_blur_unavailable',
+                    'Face blur unavailable; using the original photo.'), 'info');
+                return bitmap;
+            }
+            if (result.blob instanceof Blob) {
+                return await _readImageFile(result.blob);
             }
             return bitmap;
         } catch (e) {
@@ -530,7 +762,9 @@
             let bm = await _readImageFile(file);
             bm = await _maybeBlurFaces(bm);
             state.userPhotoBlob = bm;
+            state.usePhotoInsteadOfCharacter = true;  // explicit upload → prefer photo
             state.lastPngBlob = null;
+            _showPhotoThumbnail(file);
             _renderPreview();
         } catch (e) {
             console.warn('[BadgeStudio] photo decode failed:', e);
@@ -538,12 +772,137 @@
         }
     }
 
+    // ── Phase A — character picker ─────────────────────────────────
+
+    function _buildCharacterGrid() {
+        const grid = document.getElementById('bs-char-grid');
+        if (!grid || !window.crispCharacterPack) return;
+        const chars = window.crispCharacterPack.list();
+        grid.innerHTML = '';
+        chars.forEach((c) => {
+            const tile = document.createElement('button');
+            tile.type = 'button';
+            tile.className = 'bs-char-tile';
+            tile.setAttribute('role', 'radio');
+            tile.setAttribute('data-slug', c.slug);
+            tile.setAttribute('aria-label', c.label_en);
+            tile.setAttribute('title', c.label_en);
+            const previewColor = c.gradient ? c.gradient[1] : '#46DFB1';
+            tile.innerHTML = window.crispCharacterPack.previewHtml(c.slug, previewColor);
+            tile.addEventListener('click', () => _selectCharacter(c.slug));
+            grid.appendChild(tile);
+        });
+        _highlightCharacter(state.selectedCharacter);
+    }
+
+    function _highlightCharacter(slug) {
+        document.querySelectorAll('.bs-char-tile').forEach((t) => {
+            const sel = t.getAttribute('data-slug') === slug;
+            t.classList.toggle('is-selected', sel);
+            t.setAttribute('aria-checked', sel ? 'true' : 'false');
+        });
+    }
+
+    function _selectCharacter(slug) {
+        state.selectedCharacter = slug;
+        // Picking a character disables photo-mode automatically — the
+        // user is signalling they want a hero, not their selfie.
+        state.usePhotoInsteadOfCharacter = false;
+        state.lastPngBlob = null;
+        _highlightCharacter(slug);
+        _renderPreview();
+    }
+
+    // ── Phase B — share-message picker ─────────────────────────────
+
+    function _selectMessage(idx) {
+        const n = Number(idx);
+        state.selectedMessageIdx = Number.isFinite(n) ? n : -1;
+        state.lastPngBlob = null;
+        _renderPreview();
+    }
+
+    // ── Phase C — photo consent modal + thumbnail ──────────────────
+
+    const PHOTO_CONSENT_KEY = 'crisp_photo_studio_consent_v1';
+
+    function _hasPhotoConsent() {
+        try { return localStorage.getItem(PHOTO_CONSENT_KEY) === '1'; } catch (_) { return false; }
+    }
+    function _grantPhotoConsent() {
+        try { localStorage.setItem(PHOTO_CONSENT_KEY, '1'); } catch (_) {}
+    }
+
+    function _openPhotoConsentModal() {
+        const ov = document.getElementById('photo-consent-overlay');
+        if (!ov) return;
+        ov.hidden = false;
+        ov.style.display = 'flex';
+    }
+    function _closePhotoConsentModal() {
+        const ov = document.getElementById('photo-consent-overlay');
+        if (!ov) return;
+        ov.hidden = true;
+        ov.style.display = 'none';
+    }
+
+    function _onChoosePhotoClicked() {
+        if (_hasPhotoConsent()) {
+            _triggerPhotoFilePicker();
+        } else {
+            _openPhotoConsentModal();
+        }
+    }
+    function _triggerPhotoFilePicker() {
+        const photoIn = document.getElementById('bs-photo-input');
+        if (photoIn) photoIn.click();
+    }
+
+    function _showPhotoThumbnail(file) {
+        const wrap = document.getElementById('bs-photo-thumb');
+        const img  = document.getElementById('bs-photo-thumb-img');
+        if (!wrap || !img) return;
+        // Revoke any previous object URL we minted to keep memory clean.
+        if (img._lastUrl) {
+            try { URL.revokeObjectURL(img._lastUrl); } catch (_) {}
+        }
+        const url = URL.createObjectURL(file);
+        img._lastUrl = url;
+        img.src = url;
+        wrap.hidden = false;
+    }
+    function _clearPhotoThumbnail() {
+        const wrap = document.getElementById('bs-photo-thumb');
+        const img  = document.getElementById('bs-photo-thumb-img');
+        if (img && img._lastUrl) {
+            try { URL.revokeObjectURL(img._lastUrl); } catch (_) {}
+            img._lastUrl = null; img.src = '';
+        }
+        if (wrap) wrap.hidden = true;
+        // Also clear the file input value so the user can re-pick the same file.
+        const photoIn = document.getElementById('bs-photo-input');
+        if (photoIn) photoIn.value = '';
+        state.userPhotoBlob = null;
+        state.usePhotoInsteadOfCharacter = false;
+        state.lastPngBlob = null;
+        _renderPreview();
+    }
+
     function _initStage() {
         // Tab switching.
         document.querySelectorAll('.badge-studio-tabs .bs-tab').forEach((b) => {
             b.addEventListener('click', () => _setActiveTab(b.getAttribute('data-template')));
         });
-        // Photo input.
+        // Character picker — populated on first stage entry.
+        _buildCharacterGrid();
+        // Share-message picker.
+        const msgSel = document.getElementById('bs-message-select');
+        if (msgSel) {
+            msgSel.addEventListener('change', () => _selectMessage(msgSel.value));
+        }
+        // Photo input — handler stays, but the trigger is now the
+        // consent-modal-OK button (or direct file picker if previously
+        // consented).
         const photoIn = document.getElementById('bs-photo-input');
         if (photoIn) {
             photoIn.addEventListener('change', (ev) => {
@@ -551,6 +910,21 @@
                 if (f) _onPhotoSelected(f);
             });
         }
+        // "Choose photo" entry button — gates through consent modal.
+        const btnPhoto = document.getElementById('btn-bs-photo');
+        if (btnPhoto) btnPhoto.addEventListener('click', _onChoosePhotoClicked);
+        // Thumbnail clear button.
+        const btnClear = document.getElementById('btn-bs-photo-clear');
+        if (btnClear) btnClear.addEventListener('click', _clearPhotoThumbnail);
+        // Photo-consent modal buttons.
+        const ok = document.getElementById('btn-photo-consent-ok');
+        if (ok) ok.addEventListener('click', () => {
+            _grantPhotoConsent();
+            _closePhotoConsentModal();
+            _triggerPhotoFilePicker();
+        });
+        const cancel = document.getElementById('btn-photo-consent-cancel');
+        if (cancel) cancel.addEventListener('click', _closePhotoConsentModal);
         // Face-blur toggle.
         const blurT = document.getElementById('bs-blur-toggle');
         if (blurT) {
@@ -599,6 +973,9 @@
             state.responded = cache.responded;
         }
         _updateTierPreviewHeader();
+        // Rebuild character grid in case it wasn't populated at boot
+        // (character-pack.js may have raced the first stage paint).
+        _buildCharacterGrid();
         try { window.goToStage('stage-badge-studio'); } catch (_) {}
         // Set the active tab to "ring" by default + paint.
         _setActiveTab(state.template || 'ring');

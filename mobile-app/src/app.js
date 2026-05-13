@@ -8986,6 +8986,25 @@ function setupSendStage() {
             }
         });
     }
+    // May 2026 (reward-system v2 second pass) — Rewards + Home
+    // shortcuts on the success page, alongside Track. Gives the user
+    // three clean off-ramps after a submit.
+    const successRewardsBtn = document.getElementById('btn-success-rewards');
+    if (successRewardsBtn) {
+        successRewardsBtn.addEventListener('click', () => goToStage('stage-rewards'));
+    }
+    const successHomeBtn = document.getElementById('btn-success-home');
+    if (successHomeBtn) {
+        // Mirror the resetApp() behaviour from #btn-new-report so the
+        // capture state doesn't leak into the next visit, then route
+        // home explicitly (resetApp itself also navigates to stage-home,
+        // so this is idempotent — both calls converge on the same
+        // final state).
+        successHomeBtn.addEventListener('click', () => {
+            try { resetApp(); } catch (_) {}
+            try { goToStage('stage-home'); } catch (_) {}
+        });
+    }
 
     // ── M3 — UNDP Step 4 details flow ──────────
     // Soft prompt on stage-success: "Add 4 quick details · 30s". Opens a
@@ -9014,6 +9033,10 @@ function setupSendStage() {
     const _mrBack = document.getElementById('btn-history-back');
     if (_mrBtn) _mrBtn.addEventListener('click', openMyReports);
     if (_mrBack) _mrBack.addEventListener('click', () => goToStage('stage-home'));
+    // May 2026 (reward-system v2 second pass) — Rewards shortcut on
+    // the My Reports controls row. Goes straight to stage-rewards.
+    const _mrRewardsBtn = document.getElementById('btn-mr-rewards');
+    if (_mrRewardsBtn) _mrRewardsBtn.addEventListener('click', () => goToStage('stage-rewards'));
     // Back from detail view → return to history list. Re-render so any
     // queued-delete state reflects immediately.
     const _rdBack = document.getElementById('btn-rd-back');
