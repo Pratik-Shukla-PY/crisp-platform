@@ -9240,14 +9240,13 @@ async function _renderPartialReports() {
         const st = it.stages || {};
         return !(st.meta && st.photo && st.audio && st.text);
     });
-    // BUGFIX May 2026 — owning the inflight stat update here, not in
-    // `_renderSubmittedReports`. The two renderers used to run in
-    // `Promise.all(...)`, and `_renderSubmittedReports` read
-    // `#history-partial-list .history-row` BEFORE this function had
-    // painted the cards. Result: the "IN FLIGHT: 0" pill at the top of
-    // My Reports disagreed with the 3 visible cards below it. Owning the
-    // count inside the renderer that paints the cards makes the read
-    // strictly-after-write within this function.
+    // May 2026 (operator-reported, second pass) — the "IN FLIGHT"
+    // tile at the top of My Reports was retired (the section header
+    // below already carries the signal). The previous owner-of-the-
+    // stat refactor that put this write here is preserved as a
+    // no-op (`if (_hiPending)`) so any old cached index.html still in
+    // the wild keeps painting a sane number until the SW serves the
+    // new shell.
     const _hiPending = document.getElementById('hi-pending');
     if (_hiPending) _hiPending.textContent = String(inflight.length);
     // May 2026 (operator-reported) — hide the entire IN FLIGHT section
@@ -9773,14 +9772,17 @@ async function _renderSubmittedReports() {
         console.warn('[MyReports] delta check failed:', e);
     }
     // Impact summary.
-    const resolved = reports.filter(r => r.status === 'RESOLVED').length;
+    // May 2026 (operator-reported, second pass) — single-stat card.
+    // Was a 3-tile card (RESOLVED / LIVES IMPACTED / IN FLIGHT); the
+    // first and third tiles were dropped from the markup, so we no
+    // longer compute or write `resolved`. `hi-pending` is also gone
+    // (the in-flight section header below already carries that
+    // signal). Only `lives_impacted` survives — analyst-set on the
+    // dashboard, summed across the device's reports.
     const livesTotal = reports.reduce((n, r) => n + (Number.isFinite(r.lives_impacted) ? r.lives_impacted : 0), 0);
-    // Note: `hi-pending` is owned by `_renderPartialReports` (which has
-    // first-hand knowledge of how many cards it just painted). Reading
-    // the DOM here used to race against the parallel-running renderer.
     if (impactCard) {
-        document.getElementById('hi-resolved').textContent = String(resolved);
-        document.getElementById('hi-lives').textContent = String(livesTotal);
+        const livesEl = document.getElementById('hi-lives');
+        if (livesEl) livesEl.textContent = String(livesTotal);
         impactCard.style.display = 'flex';
     }
     // Update the home-screen badge.

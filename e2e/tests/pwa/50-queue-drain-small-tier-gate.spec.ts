@@ -38,6 +38,13 @@
  *     so the next bug gives the user something concrete to report.
  *   · `_renderPartialReports` owns the `hi-pending` stat — it can read
  *     `inflight.length` directly instead of querying the DOM.
+ *
+ * May 2026 second-pass update — the `#hi-pending` tile was retired
+ * along with `#hi-resolved` (operator: "they don't carry significance
+ * to the user"). The impact card is now single-stat (Lives Saved).
+ * The race condition can no longer recur because the contested
+ * element is gone; the equivalent invariant is asserted via card
+ * count in #history-partial-list instead.
  */
 import { test, expect, Page } from '@playwright/test';
 
@@ -92,9 +99,14 @@ test.describe('PWA — Queue drain SMALL-tier gate (May 2026)', () => {
         });
     });
 
-    test('hi-pending stat matches the visible cards (no parallel-render race)', async ({ page }) => {
-        // Enqueue 3 in-flight reports and verify the "IN FLIGHT" stat
-        // displays 3 (not 0) after the My Reports panel renders.
+    test('in-flight cards render with matching count (no parallel-render race)', async ({ page }) => {
+        // May 2026 (operator-reported, second pass) — the impact card
+        // at the top of My Reports is now SINGLE-stat (Lives Saved
+        // only); the IN-FLIGHT / RESOLVED tiles were retired. The race
+        // this test originally guarded against (parallel `_renderSubmittedReports`
+        // overwriting the in-flight pill with 0) cannot recur because
+        // the pill is gone. We keep an equivalent invariant: enqueueing
+        // 3 reports causes 3 cards to render in the in-flight section.
         await page.evaluate(() => {
             for (let i = 0; i < 3; i++) {
                 (window as any).__crispEnqueueReport({
@@ -114,25 +126,16 @@ test.describe('PWA — Queue drain SMALL-tier gate (May 2026)', () => {
                 });
             }
         });
-        // Drive both renderers exactly the way openMyReports does — in
-        // parallel via Promise.all. The race we're guarding against is
-        // _renderSubmittedReports reading the DOM count before
-        // _renderPartialReports has painted.
         await page.evaluate(async () => {
-            await Promise.all([
-                (window as any).__crispRenderPartialReports(),
-                // _renderSubmittedReports is private; the public surface is
-                // the public renderer which awaits both internally. The
-                // partial renderer now owns the stat update, so we don't
-                // need to call _renderSubmittedReports in this test — what
-                // we're proving is that the partial renderer's own write
-                // matches the rendered count.
-            ]);
+            await (window as any).__crispRenderPartialReports();
         });
         const cards = await page.locator('#history-partial-list .history-row').count();
         expect(cards).toBe(3);
-        const pendingText = await page.locator('#hi-pending').innerText();
-        expect(pendingText, 'hi-pending stat must match rendered card count').toBe('3');
+        // The single-stat impact card no longer exposes an in-flight
+        // tile to assert; the section is implicit from the visible
+        // card count above. The `#hi-pending` element is intentionally
+        // absent from the DOM after the redesign.
+        await expect(page.locator('#hi-pending')).toHaveCount(0);
         // Cleanup.
         await page.evaluate(async () => {
             for (let i = 0; i < 3; i++) {

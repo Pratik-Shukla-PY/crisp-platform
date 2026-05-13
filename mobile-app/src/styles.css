@@ -1865,6 +1865,45 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 .hi-num { font-size:26px; font-weight:800; color:#80EE98; line-height:1.1; }
 .hi-label { font-size:11px; color:#a5f3b3; text-transform:uppercase; letter-spacing:0.4px; margin-top:3px; }
 
+/* May 2026 (operator-reported, second pass) — My Reports single-stat
+   variant. Same "Lives Saved" tile as the home card: pulsing green
+   heart above a centred big number, "LIVES SAVED" label below. The
+   Resolved + In-Flight tiles were dropped because reporters didn't
+   read them as actionable signal. The card retains its green-glow
+   border so the celebratory tone matches the home screen. */
+.history-impact.history-impact-single {
+    justify-content: center;
+    padding: 20px 16px 18px;
+}
+.history-impact.history-impact-single .hi-cell {
+    position: relative;
+    flex: 0 1 auto;
+    min-width: 180px;
+    max-width: 280px;
+    text-align: center;
+    padding-top: 4px;
+}
+.history-impact.history-impact-single .hi-num {
+    font-size: 34px;
+    font-weight: 900;
+    color: #80EE98;
+    line-height: 1.05;
+    text-shadow: 0 0 8px rgba(128, 238, 152, 0.35);
+    margin-top: 22px; /* room for the heart above */
+}
+.history-impact.history-impact-single .hi-label {
+    font-size: 11px;
+    margin-top: 6px;
+    color: #a5f3b3;
+}
+/* Soft radial glow behind the cell mirrors the home card aesthetic. */
+.history-impact .hi-cell-lives::before {
+    content: ''; position: absolute; inset: -6px -12px;
+    border-radius: 14px;
+    background: radial-gradient(circle at center, rgba(128,238,152,0.12) 0%, transparent 70%);
+    pointer-events: none; z-index: -1;
+}
+
 .history-section { padding:0 16px 16px; }
 .history-section-title { font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:#94a3b8; font-weight:700; margin:16px 0 8px; display:flex; align-items:center; gap:6px; }
 
@@ -1885,13 +1924,43 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
    The legacy `.mr-filter-row` / `.mr-filter-chip` selectors are kept
    as no-op rules below in case any embedded build still ships them;
    the chip row is gone from index.html so they normally won't match. */
-.mr-filter-select {
+/* May 2026 (operator-reported, second pass) — the previous styling
+   inherited `.v4-select`'s neutral dark chrome, which read as a
+   light-mode dropdown dropped onto the teal/navy theme (washed-out
+   grey border + gray chevron). The override below repaints the
+   chrome to match: dark-teal surface, teal border, teal chevron,
+   white text. The native <option> chrome can't be themed
+   cross-browser, but the trigger sits cleanly inside the My Reports
+   section. Selector is chained `.mr-controls .mr-filter-select` to
+   defeat `.v4-select`'s same-specificity wins-by-source-order rule
+   (the chrome class is defined ~5700 lines later in the file). */
+.mr-controls .mr-filter-select {
     flex: 1;
     max-width: 200px;
-    /* `.v4-select` already supplies the dark dropdown chrome
-       (chevron SVG background, dark background, white text, padding).
-       This rule narrows the width so the dropdown sits comfortably
-       next to the view-toggle (map/list) buttons. */
+    padding: 8px 32px 8px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(9, 209, 199, 0.32);
+    background-color: rgba(12, 100, 120, 0.32);      /* dark-teal surface */
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    /* Teal chevron SVG instead of the inherited grey one. */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%2346DFB1' d='M6 9L2 5h8z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.mr-controls .mr-filter-select:hover,
+.mr-controls .mr-filter-select:focus {
+    border-color: rgba(70, 223, 177, 0.6);
+    background-color: rgba(12, 100, 120, 0.42);
+    outline: none;
+}
+.mr-controls .mr-filter-select:focus-visible {
+    box-shadow: 0 0 0 3px rgba(9, 209, 199, 0.22);
 }
 .mr-filter-row {
     /* Legacy — no-op fallback. */

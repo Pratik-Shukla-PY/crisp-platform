@@ -210,4 +210,50 @@ test.describe('PWA — My Reports dropdown + accordion + lazy-load', () => {
         const weekOpen = await week.evaluate((el) => (el as HTMLDetailsElement).open);
         expect(weekOpen).toBe(false);
     });
+
+    // ── May 2026 second-pass UX — single-stat Lives Saved card ─────────
+
+    test('@smoke impact card shows only Lives Saved (no Resolved, no In-Flight)', async ({ page }) => {
+        // Seed two reports so the impact card paints (it hides on
+        // 0 reports / empty deviceHash).
+        await seedAndOpenMyReports(page, makeReports({ today: 2, yesterday: 0, thisWeek: 0, older: 0 }));
+        const card = page.locator('#history-impact-card');
+        await expect(card).toBeVisible();
+        // Single-stat modifier class is applied.
+        await expect(card).toHaveClass(/history-impact-single/);
+        // Exactly ONE cell inside (Lives Saved), wrapped in .hi-cell-lives.
+        await expect(card.locator('.hi-cell-lives')).toHaveCount(1);
+        // The two retired tiles must NOT be present.
+        await expect(page.locator('#hi-resolved')).toHaveCount(0);
+        await expect(page.locator('#hi-pending')).toHaveCount(0);
+        // The Lives-Saved number element survives.
+        await expect(page.locator('#hi-lives')).toBeVisible();
+        // Heart icon decorates the cell.
+        await expect(card.locator('.hi-heart')).toHaveCount(1);
+        // Label is the home-screen i18n key.
+        const labelKey = await card.locator('.hi-label').getAttribute('data-i18n');
+        expect(labelKey).toBe('home_metric_lives');
+    });
+
+    test('filter dropdown carries the teal/navy theme overrides', async ({ page }) => {
+        await seedAndOpenMyReports(page, makeReports({ today: 2, yesterday: 0, thisWeek: 0, older: 0 }));
+        const sel = page.locator('#mr-filter-select');
+        const styles = await sel.evaluate((el) => {
+            const cs = window.getComputedStyle(el);
+            return {
+                borderColor: cs.borderColor,
+                backgroundColor: cs.backgroundColor,
+            };
+        });
+        // Border + background must reference the teal palette (not the
+        // washed-out neutral/light-mode values the page used to inherit
+        // from .v4-select). The exact rgba is what we set in styles.css;
+        // compare on the channel breakdown so a future tweak to the
+        // alpha doesn't break the test, but a regression back to the
+        // grey neutral chrome would.
+        // Border: rgba(9, 209, 199, *) — teal-leaning.
+        expect(styles.borderColor).toMatch(/9, 209, 199/);
+        // Background: rgba(12, 100, 120, *) — dark-teal surface.
+        expect(styles.backgroundColor).toMatch(/12, 100, 120/);
+    });
 });

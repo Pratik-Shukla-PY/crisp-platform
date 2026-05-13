@@ -5,7 +5,23 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v142';
+const CACHE_NAME = 'crisp-v144';
+// v143 → v144 (May 2026, operator-reported, second-pass UX) — My
+// Reports redesign #2: dropped the RESOLVED + IN-FLIGHT tiles from
+// the impact-card header (they read as 0 · 0 for most users and
+// added no signal). Card is now single-stat "Lives Saved" with a
+// pulsing green heart, matching the home screen. Filter dropdown
+// (`.mr-filter-select`) was using neutral light-mode chrome that
+// looked washed out on the teal/navy theme; repainted with a teal
+// border + chevron + dark-teal surface. HTML + styles.css + app.js
+// (drop `hi-resolved` write) all touched.
+// v142 → v143 (May 2026, operator-reported) — flattened "What caused
+// it?" crisis sub-step. Was a 3-card drill-down (Natural / Tech /
+// Human-made → tap one → subtype list); now all 9 crisis types
+// visible at once under 3 section headers as a 2-column tile grid.
+// One tap to select (was two). Icons use the same responsive cascade
+// as the infra "What was hit?" tiles (48×48 → 68×68 across
+// breakpoints). HTML + v4-flow.js + styles.css all touched.
 // v141 → v142 (May 2026, operator-reported) — bumped infra-classify
 // tile icon sizes. Was 38×38/20px, now scales 48×48/28px (default)
 // → 56×56/32px (≥380w) → 60×60/34px (≥700h) → 64×64/36px (≥800h)

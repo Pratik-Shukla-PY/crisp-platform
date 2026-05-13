@@ -2424,17 +2424,23 @@
             </button>
         </div>
 
-        <!-- Impact summary card — green, celebratory -->
-        <div class="history-impact" id="history-impact-card" style="display:none;">
-            <!-- UI v2.1: labels now translatable. Was plain-text
-                 English; Chinese / Arabic / Russian users saw the rest of
-                 the screen in their locale but these three labels leaked
-                 as "RESOLVED / LIVES IMPACTED / IN FLIGHT". Added
-                 `data-i18n` so applyI18n() routes through the inline
-                 I18N pack (`mr_resolved`, `mr_lives_impacted`, `in_flight`). -->
-            <div class="hi-stat"><div class="hi-num" id="hi-resolved">0</div><div class="hi-label" data-i18n="mr_resolved">Resolved</div></div>
-            <div class="hi-stat"><div class="hi-num" id="hi-lives">0</div><div class="hi-label" data-i18n="mr_lives_impacted">Lives impacted</div></div>
-            <div class="hi-stat"><div class="hi-num" id="hi-pending">0</div><div class="hi-label" data-i18n="in_flight">In flight</div></div>
+        <!-- Impact summary card — single-stat, green, celebratory.
+             May 2026 (operator-reported, second pass) — the previous
+             three-tile layout (RESOLVED · LIVES IMPACTED · IN FLIGHT)
+             didn't carry signal for reporters. "Resolved" and
+             "In flight" mostly read as "0 · 0", and the in-flight
+             count was already legible from the section header below.
+             Layout matches the home-screen single-stat card: green
+             heart pulsing above a centred number with "Lives Saved"
+             below. The home and My Reports cards now share the same
+             metric (lives_impacted, set by analysts on the dashboard)
+             and the same i18n key (`home_metric_lives`). -->
+        <div class="history-impact history-impact-single" id="history-impact-card" style="display:none;">
+            <div class="hi-cell hi-cell-lives">
+                <i class="fa-solid fa-heart hi-heart" aria-hidden="true"></i>
+                <div class="hi-num hi-num-lives" id="hi-lives">0</div>
+                <div class="hi-label" data-i18n="home_metric_lives">Lives Saved</div>
+            </div>
         </div>
 
         <!-- M6 — filter chip row + view-toggle. Chips set the
