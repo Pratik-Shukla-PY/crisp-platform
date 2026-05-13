@@ -37,6 +37,9 @@ async function bootV4(page: Page) {
             JSON.stringify({ accepted: true, ts: Date.now() }));
         localStorage.setItem('crisp_landing_seen', '1');
         localStorage.setItem('crisp_ui_v4', 'on');
+        // Force English so locale-based label assertions are stable on
+        // systems with a non-en system locale (Kannada/Hindi/etc).
+        localStorage.setItem('crisp_lang', 'en');
     });
     await page.goto('index.html?ui=v4');
     await page.waitForFunction(
@@ -92,8 +95,9 @@ test.describe('PWA — Add Another Report classify reset (Bug 2 follow-up)', () 
         // already enabled because state is pre-seeded.
         await page.locator('#btn-v4-classify-next').click();
         await page.locator('#btn-v4-classify-next').click();
-        // Now on crisis sub-step. Confirm via the label text.
-        await expect(page.locator('#v4-substep-label')).toContainText(/WHAT CAUSED|caused/i, { timeout: 2000 });
+        // Now on crisis sub-step. Confirm via the locale-independent
+        // sub-step counter ("3 of 3") rather than the translated label.
+        await expect(page.locator('#v4-substep-label')).toContainText(/3 of 3/i, { timeout: 2000 });
 
         // ── Simulate "Add Another Report" — _clearCaptureState fires
         //    the new event; v4-flow.js's listener resets the cursor.
@@ -107,7 +111,7 @@ test.describe('PWA — Add Another Report classify reset (Bug 2 follow-up)', () 
         //    AND the Continue button must be DISABLED (state empty).
         await expect(page.locator('#v4-substep-label'),
             'must land on damage sub-step (1 of 3) after Add Another')
-            .toContainText(/HOW BAD|bad/i, { timeout: 2000 });
+            .toContainText(/1 of 3/i, { timeout: 2000 });
         await expect(page.locator('#v4-view-damage'),
             'damage view must be visible (not hidden)').toBeVisible();
         await expect(page.locator('#v4-view-crisis'),
