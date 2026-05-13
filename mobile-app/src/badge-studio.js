@@ -604,32 +604,16 @@
         _setActiveTab(state.template || 'ring');
     };
 
-    // ── Wire badge-chip tap → openBadgeStudio (or toast at T1/T2) ──
-    function _wireChipTap() {
-        const chip = document.getElementById('home-badge-chip');
-        if (!chip || chip.__bsWired) return;
-        chip.__bsWired = true;
-        chip.addEventListener('click', () => window.openBadgeStudio());
-        chip.addEventListener('keydown', (ev) => {
-            if (ev.key === 'Enter' || ev.key === ' ') {
-                ev.preventDefault();
-                window.openBadgeStudio();
-            }
-        });
-    }
-
     // ── Boot — initialise stage handlers on DOMContentLoaded ──
+    //
+    // May 2026 (second pass) — the home badge chip is DECORATIVE-ONLY.
+    // Badge Studio is now reached via the dedicated #btn-rewards →
+    // stage-rewards → #btn-rewards-open-studio path wired in
+    // home-screen.js (`_wireRewardsNav` / `_openRewardsStage`).
+    // Direct callers (other modules or tests) still invoke the
+    // `window.openBadgeStudio()` entry point exported below.
     function _boot() {
         try { _initStage(); } catch (e) { console.warn('[BadgeStudio] init:', e); }
-        // The badge chip may not exist yet on first paint (home-screen.js
-        // renders it after profile fetch). Poll briefly.
-        let tries = 0;
-        const wireTimer = setInterval(() => {
-            tries++;
-            const chip = document.getElementById('home-badge-chip');
-            if (chip) { _wireChipTap(); clearInterval(wireTimer); }
-            if (tries > 40) clearInterval(wireTimer); // ~10 s upper bound
-        }, 250);
     }
 
     if (document.readyState === 'loading') {

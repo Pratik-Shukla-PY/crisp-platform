@@ -357,20 +357,26 @@
                         <span data-i18n="home_devid_tip_body">Use this to find your reports later, even if you lose the app. Your ID is anonymous — we cannot link it back to you.</span>
                         <button id="btn-home-devid-tip-dismiss" type="button" data-i18n="home_devid_tip_dismiss">Got it</button>
                     </div>
-                    <!-- May 2026 — gamification badge chip rewritten
-                         to the 4-tier identity-forward ladder.
-                         Backend `/profile` returns one of:
+                    <!-- May 2026 — gamification badge chip showing the
+                         user's current tier in the 4-tier identity-
+                         forward ladder:
                            T1_SCOUT       🌱 Scout
                            T2_SIGNAL      📣 Signal
-                           T3_CHANGEMAKER ⚡ Changemaker  (unlocks Badge Studio)
-                           T4_LIFEKEEPER  🦸 Lifekeeper   (unlocks Badge Studio)
+                           T3_CHANGEMAKER ⚡ Changemaker
+                           T4_LIFEKEEPER  🦸 Lifekeeper
                          The `hb-progress` sub-line tells the user
-                         what action moves them up next. T3+ makes
-                         the chip tappable (opens Badge Studio); T1/T2
-                         tap is a toast hint. Hidden until profile
-                         resolves so we never paint a stale tier. -->
+                         what action moves them up next.
+
+                         May 2026 (second pass) — chip is now
+                         DECORATIVE-ONLY. The previous tap-to-open-
+                         Badge-Studio behavior was confusing
+                         (chip reads as status, but tapping had
+                         functional effect). All level-up + share
+                         actions moved into the dedicated Rewards
+                         page (stage-rewards), reached via
+                         #btn-rewards in the home secondary row. -->
                     <div class="home-badge-chip" id="home-badge-chip" hidden
-                         role="button" tabindex="0"
+                         role="status" aria-live="polite"
                          aria-label="Reporter level">
                         <span class="hb-emoji" id="home-badge-emoji" aria-hidden="true">🌱</span>
                         <span class="hb-stack">
@@ -483,6 +489,20 @@
                     <span data-i18n="my_reports">My Reports</span>
                     <span class="mr-count" id="mr-count" hidden>(0)</span>
                     <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
+                </button>
+                <!-- May 2026 (reward-system v2, second pass) — dedicated
+                     Rewards entry button. Pre-fix the home badge chip was
+                     doubling as both a status display AND a tap-to-open-
+                     Badge-Studio button, which confused users (the chip
+                     reads as decorative, but tapping it had functional
+                     effect). The chip is now decorative-only; this
+                     button opens the new stage-rewards page where users
+                     can see the full 4-tier ladder, their progress to the
+                     next tier, and tap through to Badge Studio when they
+                     reach T3+. -->
+                <button class="secondary-cta home-rewards-btn" id="btn-rewards" type="button">
+                    <i class="fa-solid fa-medal"></i>
+                    <span data-i18n="rewards_btn">Rewards</span>
                 </button>
                 <button class="tertiary-cta" id="btn-login" type="button">
                     <i class="fa-solid fa-right-to-bracket"></i>
@@ -2545,6 +2565,92 @@
              dropdown for logged-in users); the bulk-delete handler in
              app.js keeps its existing #btn-history-delete-all id by being
              rendered there. -->
+    </div>
+
+    <!-- ══════════════════════════════════════
+         STAGE REWARDS — May 2026 reward-system v2 (second pass)
+         Dedicated rewards / level-up info page reached via the
+         home #btn-rewards button. Shows:
+           - Current tier (hero card with emoji + name + progress)
+           - All 4 tiers as a vertical ladder with criteria + state
+             (done / current / locked)
+           - "Share my badge" CTA at the bottom → opens
+             stage-badge-studio (gated to T3+).
+         Rendered + populated by home-screen.js _renderRewardsPage()
+         when the stage activates.
+    ══════════════════════════════════════ -->
+    <div class="stage" id="stage-rewards">
+        <div class="stage-header">
+            <h2>
+                <i class="fa-solid fa-medal" aria-hidden="true"></i>
+                <span data-i18n="rewards_title">Your Rewards</span>
+            </h2>
+            <button class="history-back" id="btn-rewards-back" type="button"
+                    title="Back" aria-label="Back" data-i18n-title="aria_back" data-i18n-aria-label="aria_back">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+        </div>
+
+        <!-- Current tier hero card -->
+        <div class="rewards-hero" id="rewards-hero">
+            <div class="rh-emoji" id="rh-emoji" aria-hidden="true">🌱</div>
+            <div class="rh-stack">
+                <div class="rh-label" data-i18n="rewards_current_tier">Current tier</div>
+                <div class="rh-name" id="rh-name">Scout</div>
+                <div class="rh-progress" id="rh-progress">Submit your first report to level up</div>
+            </div>
+        </div>
+
+        <!-- 4-tier ladder. Each card carries data-tier so
+             home-screen.js can mark the user's tier as `is-current`,
+             completed tiers as `is-done`, and yet-to-reach tiers as
+             `is-locked`. Criteria copy is i18n-driven. -->
+        <div class="rewards-section-title" data-i18n="rewards_ladder_title">How to level up</div>
+        <div class="rewards-ladder" id="rewards-ladder">
+            <div class="rt-card" data-tier="T1_SCOUT">
+                <div class="rt-emoji" aria-hidden="true">🌱</div>
+                <div class="rt-body">
+                    <div class="rt-name" data-i18n="tier_t1_scout_label">Scout</div>
+                    <div class="rt-criteria" data-i18n="rewards_t1_criteria">Default tier — every new reporter starts here.</div>
+                </div>
+                <div class="rt-state" aria-hidden="true"></div>
+            </div>
+            <div class="rt-card" data-tier="T2_SIGNAL">
+                <div class="rt-emoji" aria-hidden="true">📣</div>
+                <div class="rt-body">
+                    <div class="rt-name" data-i18n="tier_t2_signal_label">Signal</div>
+                    <div class="rt-criteria" data-i18n="rewards_t2_criteria">Submit your first report.</div>
+                </div>
+                <div class="rt-state" aria-hidden="true"></div>
+            </div>
+            <div class="rt-card" data-tier="T3_CHANGEMAKER">
+                <div class="rt-emoji" aria-hidden="true">⚡</div>
+                <div class="rt-body">
+                    <div class="rt-name" data-i18n="tier_t3_changemaker_label">Changemaker</div>
+                    <div class="rt-criteria" data-i18n="rewards_t3_criteria">Your report leads to help being dispatched.</div>
+                </div>
+                <div class="rt-state" aria-hidden="true"></div>
+            </div>
+            <div class="rt-card" data-tier="T4_LIFEKEEPER">
+                <div class="rt-emoji" aria-hidden="true">🦸</div>
+                <div class="rt-body">
+                    <div class="rt-name" data-i18n="tier_t4_lifekeeper_label">Lifekeeper</div>
+                    <div class="rt-criteria" data-i18n="rewards_t4_criteria">Your report helps save at least 1 life.</div>
+                </div>
+                <div class="rt-state" aria-hidden="true"></div>
+            </div>
+        </div>
+
+        <!-- Share CTA — opens Badge Studio at T3+, shows lock toast otherwise. -->
+        <div class="rewards-share-block">
+            <p class="rewards-share-hint" id="rewards-share-hint" data-i18n="rewards_share_hint_locked">
+                Reach Changemaker to unlock badge sharing on LinkedIn, Instagram, WhatsApp.
+            </p>
+            <button type="button" class="bs-btn bs-btn-primary rewards-share-btn" id="btn-rewards-open-studio">
+                <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+                <span data-i18n="rewards_open_studio">Open Badge Studio</span>
+            </button>
+        </div>
     </div>
 
     <!-- ══════════════════════════════════════

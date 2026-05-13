@@ -8442,4 +8442,197 @@ body.tier-t4 .home-impact {
     .bs-btn, .bs-share-chip, .bs-tab { transition: none; }
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   REWARDS PAGE — May 2026 reward-system v2 (second pass)
+   Dedicated stage that hosts the tier-ladder explanation + the Badge
+   Studio entry CTA. Pre-fix this content was shoehorned into the home
+   badge chip (which doubled as a tap target). Now the chip is
+   decorative + the rewards page owns the level-up + share affordances.
+   ══════════════════════════════════════════════════════════════════════ */
+
+#stage-rewards { padding: 0 16px 24px; }
+
+/* Hero card — current tier emoji + name + progress sub-line.
+   Visually distinct from the chip so users read it as "your current
+   status" rather than "tap me". */
+.rewards-hero {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 18px;
+    margin: 12px 0 20px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(9, 209, 199, 0.14) 0%, rgba(70, 223, 177, 0.10) 100%);
+    border: 1px solid rgba(9, 209, 199, 0.34);
+    box-shadow: 0 6px 24px rgba(9, 209, 199, 0.10);
+}
+.rh-emoji { font-size: 56px; line-height: 1; flex: 0 0 auto; }
+.rh-stack { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rh-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: rgba(255, 255, 255, 0.62);
+    font-weight: 700;
+}
+.rh-name {
+    font-size: 22px;
+    font-weight: 900;
+    color: #80EE98;
+    line-height: 1.1;
+    letter-spacing: 0.01em;
+}
+.rh-progress {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.84);
+    line-height: 1.35;
+    margin-top: 2px;
+}
+
+/* Section title above the ladder. */
+.rewards-section-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: rgba(255, 255, 255, 0.62);
+    font-weight: 700;
+    margin: 4px 4px 10px;
+}
+
+/* The ladder — vertical stack of 4 cards, each carrying tier state. */
+.rewards-ladder {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+/* Tier card layout: emoji | body | state-icon */
+.rt-card {
+    display: grid;
+    grid-template-columns: 56px 1fr 32px;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    border-radius: 12px;
+    background: rgba(12, 100, 120, 0.18);
+    border: 1px solid rgba(21, 145, 155, 0.28);
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+.rt-emoji {
+    font-size: 32px;
+    line-height: 1;
+    text-align: center;
+    opacity: 0.85;
+}
+.rt-name {
+    font-size: 16px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.92);
+    line-height: 1.15;
+}
+.rt-criteria {
+    font-size: 12.5px;
+    color: rgba(255, 255, 255, 0.66);
+    line-height: 1.4;
+    margin-top: 2px;
+}
+.rt-state::after {
+    content: '';
+    display: block;
+    width: 22px;
+    height: 22px;
+    margin-left: auto;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.16);
+    background: transparent;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+/* State variants — done / current / locked.
+   * is-done    — checkmark-style filled mint dot
+   * is-current — pulsing teal ring + brighter card border
+   * is-locked  — dim card, padlock-style outline */
+.rt-card.is-done {
+    background: rgba(128, 238, 152, 0.10);
+    border-color: rgba(128, 238, 152, 0.38);
+}
+.rt-card.is-done .rt-emoji { opacity: 1; }
+.rt-card.is-done .rt-name { color: #80EE98; }
+.rt-card.is-done .rt-state::after {
+    background: #80EE98;
+    border-color: #80EE98;
+}
+
+.rt-card.is-current {
+    background: rgba(9, 209, 199, 0.18);
+    border-color: rgba(70, 223, 177, 0.62);
+    box-shadow: 0 4px 18px rgba(9, 209, 199, 0.22);
+    transform: translateY(-1px);
+}
+.rt-card.is-current .rt-emoji { opacity: 1; }
+.rt-card.is-current .rt-name { color: #46DFB1; }
+.rt-card.is-current .rt-state::after {
+    background: #46DFB1;
+    border-color: #46DFB1;
+    animation: rt-current-pulse 2.4s ease-in-out infinite;
+}
+@keyframes rt-current-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(70, 223, 177, 0.55); }
+    50%      { box-shadow: 0 0 0 7px rgba(70, 223, 177, 0); }
+}
+
+.rt-card.is-locked {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.08);
+    opacity: 0.7;
+}
+.rt-card.is-locked .rt-emoji { opacity: 0.45; filter: grayscale(0.4); }
+.rt-card.is-locked .rt-name { color: rgba(255, 255, 255, 0.66); }
+.rt-card.is-locked .rt-criteria { color: rgba(255, 255, 255, 0.42); }
+.rt-card.is-locked .rt-state::after {
+    border-style: dashed;
+}
+
+/* Share CTA block at the bottom. Hint copy + the button (which
+   .rt-card.is-locked-equivalent style on disabled). */
+.rewards-share-block {
+    padding: 16px 4px 0;
+    border-top: 1px dashed rgba(21, 145, 155, 0.22);
+}
+.rewards-share-hint {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.76);
+    line-height: 1.45;
+    margin: 0 0 14px;
+    text-align: center;
+}
+.rewards-share-btn {
+    width: 100%;
+}
+.rewards-share-btn.is-locked,
+.rewards-share-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+}
+.rewards-share-btn.is-locked:hover,
+.rewards-share-btn:disabled:hover {
+    transform: none;
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.10);
+}
+
+/* Rewards button on the home secondary row — matches the existing
+   .secondary-cta look but with a medal-coloured accent so it stands
+   out as the "rewards" entry. */
+.home-rewards-btn i { color: #46DFB1; }
+
+@media (prefers-reduced-motion: reduce) {
+    .rt-card, .rt-card.is-current { transition: none; transform: none; }
+    .rt-card.is-current .rt-state::after { animation: none; }
+}
+
 

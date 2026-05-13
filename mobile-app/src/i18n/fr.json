@@ -710,5 +710,16 @@
   "badge_studio_linkedin_hint": "Image enregistrée — joignez-la manuellement à votre publication LinkedIn.",
   "badge_studio_lock_t1_t2": "Atteignez Acteur du changement pour débloquer Studio Badge",
   "badge_studio_photo_failed": "Impossible de charger cette photo",
-  "badge_studio_share_card_tagline": "Signalez ce que vous voyez — crisplabs.tech"
+  "badge_studio_share_card_tagline": "Signalez ce que vous voyez — crisplabs.tech",
+  "rewards_btn": "Récompenses",
+  "rewards_title": "Vos récompenses",
+  "rewards_current_tier": "Niveau actuel",
+  "rewards_ladder_title": "Comment monter en niveau",
+  "rewards_t1_criteria": "Niveau par défaut — chaque nouveau signaleur commence ici.",
+  "rewards_t2_criteria": "Soumettez votre premier rapport.",
+  "rewards_t3_criteria": "Votre rapport entraîne l'envoi de secours.",
+  "rewards_t4_criteria": "Votre rapport aide à sauver au moins 1 vie.",
+  "rewards_share_hint_locked": "Atteignez Acteur du changement pour débloquer le partage de badge sur LinkedIn, Instagram, WhatsApp.",
+  "rewards_share_hint_unlocked": "Appuyez pour créer une image de badge prête à partager sur LinkedIn, WhatsApp, Instagram et plus.",
+  "rewards_open_studio": "Ouvrir Studio Badge"
 }

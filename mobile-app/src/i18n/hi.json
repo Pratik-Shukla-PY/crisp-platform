@@ -687,5 +687,16 @@
   "badge_studio_linkedin_hint": "छवि सहेजी गई — LinkedIn पोस्ट में मैन्युअल रूप से संलग्न करें।",
   "badge_studio_lock_t1_t2": "बैज स्टूडियो अनलॉक करने के लिए बदलाव लाने वाला तक पहुंचें",
   "badge_studio_photo_failed": "वह फ़ोटो लोड नहीं हो सकी",
-  "badge_studio_share_card_tagline": "जो आप देखें उसकी रिपोर्ट करें — crisplabs.tech"
+  "badge_studio_share_card_tagline": "जो आप देखें उसकी रिपोर्ट करें — crisplabs.tech",
+  "rewards_btn": "पुरस्कार",
+  "rewards_title": "आपके पुरस्कार",
+  "rewards_current_tier": "वर्तमान स्तर",
+  "rewards_ladder_title": "स्तर कैसे बढ़ाएं",
+  "rewards_t1_criteria": "डिफ़ॉल्ट स्तर — हर नया रिपोर्टर यहाँ से शुरू होता है।",
+  "rewards_t2_criteria": "अपनी पहली रिपोर्ट भेजें।",
+  "rewards_t3_criteria": "आपकी रिपोर्ट से मदद भेजी जाती है।",
+  "rewards_t4_criteria": "आपकी रिपोर्ट कम से कम 1 जीवन बचाने में मदद करती है।",
+  "rewards_share_hint_locked": "बैज शेयरिंग को LinkedIn, Instagram, WhatsApp पर अनलॉक करने के लिए बदलाव लाने वाला तक पहुँचें।",
+  "rewards_share_hint_unlocked": "LinkedIn, WhatsApp, Instagram आदि के लिए शेयर-तैयार बैज छवि बनाने हेतु टैप करें।",
+  "rewards_open_studio": "बैज स्टूडियो खोलें"
 }

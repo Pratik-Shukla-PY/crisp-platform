@@ -650,5 +650,16 @@
   "badge_studio_linkedin_hint": "Image saved — attach it to your LinkedIn post manually.",
   "badge_studio_lock_t1_t2": "Reach Changemaker to unlock Badge Studio",
   "badge_studio_photo_failed": "Could not load that photo",
-  "badge_studio_share_card_tagline": "Report what you see — crisplabs.tech"
+  "badge_studio_share_card_tagline": "Report what you see — crisplabs.tech",
+  "rewards_btn": "Rewards",
+  "rewards_title": "Your Rewards",
+  "rewards_current_tier": "Current tier",
+  "rewards_ladder_title": "How to level up",
+  "rewards_t1_criteria": "Default tier — every new reporter starts here.",
+  "rewards_t2_criteria": "Submit your first report.",
+  "rewards_t3_criteria": "Your report leads to help being dispatched.",
+  "rewards_t4_criteria": "Your report helps save at least 1 life.",
+  "rewards_share_hint_locked": "Reach Changemaker to unlock badge sharing on LinkedIn, Instagram, WhatsApp.",
+  "rewards_share_hint_unlocked": "Tap to create a share-ready badge image for LinkedIn, WhatsApp, Instagram, and more.",
+  "rewards_open_studio": "Open Badge Studio"
 }

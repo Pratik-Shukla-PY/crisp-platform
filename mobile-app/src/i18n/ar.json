@@ -685,5 +685,16 @@
   "badge_studio_linkedin_hint": "تم حفظ الصورة — أرفقها يدوياً بمنشور لينكدإن.",
   "badge_studio_lock_t1_t2": "الوصول إلى صانع التغيير لفتح استوديو الشارة",
   "badge_studio_photo_failed": "تعذر تحميل تلك الصورة",
-  "badge_studio_share_card_tagline": "أبلغ عما ترى — crisplabs.tech"
+  "badge_studio_share_card_tagline": "أبلغ عما ترى — crisplabs.tech",
+  "rewards_btn": "المكافآت",
+  "rewards_title": "مكافآتك",
+  "rewards_current_tier": "المستوى الحالي",
+  "rewards_ladder_title": "كيف ترتقي",
+  "rewards_t1_criteria": "المستوى الافتراضي — كل مراسل جديد يبدأ هنا.",
+  "rewards_t2_criteria": "أرسل أول تقرير لك.",
+  "rewards_t3_criteria": "تقريرك يؤدي إلى إرسال المساعدة.",
+  "rewards_t4_criteria": "تقريرك يساعد في إنقاذ حياة واحدة على الأقل.",
+  "rewards_share_hint_locked": "الوصول إلى صانع التغيير لفتح مشاركة الشارة على لينكدإن وإنستغرام وواتساب.",
+  "rewards_share_hint_unlocked": "انقر لإنشاء صورة شارة جاهزة للمشاركة على لينكدإن وواتساب وإنستغرام والمزيد.",
+  "rewards_open_studio": "فتح استوديو الشارة"
 }

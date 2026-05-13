@@ -685,5 +685,16 @@
   "badge_studio_linkedin_hint": "图片已保存 — 手动附加到你的 LinkedIn 帖子。",
   "badge_studio_lock_t1_t2": "达到改变者级别后解锁徽章工作室",
   "badge_studio_photo_failed": "无法加载该照片",
-  "badge_studio_share_card_tagline": "报告所见 — crisplabs.tech"
+  "badge_studio_share_card_tagline": "报告所见 — crisplabs.tech",
+  "rewards_btn": "奖励",
+  "rewards_title": "你的奖励",
+  "rewards_current_tier": "当前等级",
+  "rewards_ladder_title": "如何升级",
+  "rewards_t1_criteria": "默认等级 — 每位新报告者从这里开始。",
+  "rewards_t2_criteria": "提交你的第一份报告。",
+  "rewards_t3_criteria": "你的报告促成救援。",
+  "rewards_t4_criteria": "你的报告帮助挽救至少 1 条生命。",
+  "rewards_share_hint_locked": "达到改变者级别后解锁徽章分享到 LinkedIn、Instagram、WhatsApp。",
+  "rewards_share_hint_unlocked": "点击为 LinkedIn、WhatsApp、Instagram 等创建可分享的徽章图片。",
+  "rewards_open_studio": "打开徽章工作室"
 }

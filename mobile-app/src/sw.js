@@ -5,7 +5,20 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v145';
+const CACHE_NAME = 'crisp-v146';
+// v145 → v146 (May 2026 reward-system v2, second pass) — separated
+// the "level up info + badges + sharing" surface from the home badge
+// chip. Pre-fix the chip doubled as both a status display AND a
+// tap-to-open-Badge-Studio button, which read as confusing
+// (operator-flagged: "looks decorative but tapping does something").
+// Now: chip is purely decorative; new home #btn-rewards button opens
+// a dedicated `stage-rewards` page that hosts the 4-tier ladder
+// explanation + Badge Studio entry CTA. Touches index.html (new
+// stage + new button + chip role change), home-screen.js (new
+// `_renderRewardsPage`/`_wireRewardsNav`/`_openRewardsStage`),
+// badge-studio.js (drops the chip-tap wiring since chip is no
+// longer a button), styles.css (Rewards-page styles), 22 locale
+// files (+11 new i18n keys each).
 // v144 → v145 (May 2026 reward-system v2) — full gamification
 // rewrite per operator request. 4-tier identity-forward ladder
 // (Scout / Signal / Changemaker / Lifekeeper) with progress sub-line

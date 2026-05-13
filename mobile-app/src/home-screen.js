@@ -709,6 +709,7 @@
         // repaint badge chip + My Reports count for both states.
         try { _renderBadgeChip(); } catch (_) {}
         try { _renderMyReportsCount(); } catch (_) {}
+        try { _wireRewardsNav(); } catch (_) {}
     }
 
     // ── Phase 18 — badge chip + My Reports count + voice + install ────
@@ -889,6 +890,161 @@
             // Network error — fall back to cached or T1_SCOUT. Never
             // hide the chip; "Scout" is the honest default.
             if (!cached) _paintBadgeChip('T1_SCOUT');
+        }
+    }
+
+    // ── Rewards page (stage-rewards) — May 2026 second-pass UX ──
+    // Renders the user's current tier + the 4-tier ladder + the
+    // Badge Studio entry CTA. Reads sessionStorage `crisp_home_badge_v2`
+    // (warm cache from _renderBadgeChip) for instant paint, then
+    // re-fetches /profile in the background to refresh.
+    const TIER_ORDER = ['T1_SCOUT', 'T2_SIGNAL', 'T3_CHANGEMAKER', 'T4_LIFEKEEPER'];
+    const TIER_EMOJI = { T1_SCOUT: '🌱', T2_SIGNAL: '📣', T3_CHANGEMAKER: '⚡', T4_LIFEKEEPER: '🦸' };
+    const TIER_UNLOCKED = new Set(['T3_CHANGEMAKER', 'T4_LIFEKEEPER']);
+
+    function _resolveLevelFromAny(raw) {
+        // Mirror of _renderBadgeChip's _resolveLevel — separate copy
+        // so the rewards page can hydrate without touching the chip's
+        // closure. Recognises both 4-tier identifiers and legacy
+        // 3-tier names.
+        const key = String(raw || '').toUpperCase();
+        if (TIER_EMOJI[key]) return key;
+        if (key === 'CONTRIBUTOR') return 'T3_CHANGEMAKER';
+        if (key === 'TRUSTED')     return 'T4_LIFEKEEPER';
+        if (key === 'NEWCOMER')    return 'T2_SIGNAL';   // matches LEGACY_MAP above
+        return 'T1_SCOUT';
+    }
+
+    function _paintRewardsPage(payload) {
+        // `payload` is the v2 sessionStorage shape: { level, progressLabelKey, lives, reports, responded }.
+        const level = _resolveLevelFromAny(payload && payload.level);
+        const emoji = TIER_EMOJI[level] || '🌱';
+        const labelKey = `tier_${level.toLowerCase()}_label`;
+        const tString = (k, fb) => {
+            try { if (typeof window.t === 'function') {
+                const v = window.t(k); if (v && v !== k) return v;
+            } } catch (_) {}
+            return fb;
+        };
+
+        // Hero card.
+        const emojiEl = document.getElementById('rh-emoji');
+        const nameEl  = document.getElementById('rh-name');
+        const progEl  = document.getElementById('rh-progress');
+        if (emojiEl) emojiEl.textContent = emoji;
+        if (nameEl) {
+            const fb = ({ T1_SCOUT: 'Scout', T2_SIGNAL: 'Signal', T3_CHANGEMAKER: 'Changemaker', T4_LIFEKEEPER: 'Lifekeeper' })[level];
+            nameEl.textContent = tString(labelKey, fb);
+        }
+        if (progEl) {
+            const pk = (payload && payload.progressLabelKey) || (
+                level === 'T1_SCOUT'       ? 'tier_progress_first_report' :
+                level === 'T2_SIGNAL'      ? 'tier_progress_verified_1'   :
+                level === 'T3_CHANGEMAKER' ? 'tier_progress_lives_1'      :
+                                             'tier_progress_top_share'
+            );
+            const fbProg = ({
+                tier_progress_first_report: 'Submit your first report to level up',
+                tier_progress_verified_1:   'Get 1 report verified by an analyst',
+                tier_progress_lives_1:      'Help save 1 life through your reports',
+                tier_progress_top_share:    'Top tier reached — tap to share your badge',
+            })[pk] || '';
+            progEl.textContent = tString(pk, fbProg);
+        }
+
+        // Ladder — each card carries .is-done / .is-current / .is-locked.
+        const currentIdx = TIER_ORDER.indexOf(level);
+        TIER_ORDER.forEach((tier, idx) => {
+            const card = document.querySelector(`.rt-card[data-tier="${tier}"]`);
+            if (!card) return;
+            card.classList.toggle('is-done', idx < currentIdx);
+            card.classList.toggle('is-current', idx === currentIdx);
+            card.classList.toggle('is-locked', idx > currentIdx);
+        });
+
+        // Share CTA — copy + state depend on whether Badge Studio is
+        // unlocked at the user's current tier.
+        const hintEl = document.getElementById('rewards-share-hint');
+        const btnEl  = document.getElementById('btn-rewards-open-studio');
+        const unlocked = TIER_UNLOCKED.has(level);
+        if (hintEl) {
+            const hintKey = unlocked ? 'rewards_share_hint_unlocked' : 'rewards_share_hint_locked';
+            const fb = unlocked
+                ? 'Tap to create a share-ready badge image for LinkedIn, WhatsApp, Instagram, and more.'
+                : 'Reach Changemaker to unlock badge sharing on LinkedIn, Instagram, WhatsApp.';
+            hintEl.textContent = tString(hintKey, fb);
+        }
+        if (btnEl) {
+            btnEl.disabled = !unlocked;
+            btnEl.classList.toggle('is-locked', !unlocked);
+        }
+    }
+
+    async function _refreshRewardsFromServer() {
+        // Pull fresh /profile so the rewards page never lags the chip.
+        let hash = '';
+        try {
+            hash = localStorage.getItem('crisp_device_id_v2')
+                || localStorage.getItem('crisp_device_hash')
+                || localStorage.getItem('crisp_device_id') || '';
+        } catch (_) {}
+        if (!hash) return;
+        try {
+            const apiBase = window.API_BASE || '/api/v1';
+            const res = await fetch(`${apiBase}/reports/profile/${encodeURIComponent(hash)}`);
+            if (!res.ok) return;
+            const p = await res.json();
+            const payload = {
+                level: _resolveLevelFromAny(p.badge_level),
+                progressLabelKey: p.tier && p.tier.progress && p.tier.progress.label_key,
+                lives: Number.isFinite(p.lives_saved_total) ? p.lives_saved_total : 0,
+                reports: Number.isFinite(p.report_count) ? p.report_count : 0,
+                responded: Number.isFinite(p.responded_count) ? p.responded_count : 0,
+            };
+            // Update the cache so the chip + rewards page stay in sync.
+            try { sessionStorage.setItem('crisp_home_badge_v2', JSON.stringify(payload)); } catch (_) {}
+            _paintRewardsPage(payload);
+        } catch (_) {}
+    }
+
+    function _openRewardsStage() {
+        // Read cache for instant paint, then go to the stage, then
+        // refresh in the background.
+        let cached = null;
+        try { cached = JSON.parse(sessionStorage.getItem('crisp_home_badge_v2') || 'null'); } catch (_) {}
+        _paintRewardsPage(cached || { level: 'T1_SCOUT' });
+        try {
+            if (typeof window.goToStage === 'function') window.goToStage('stage-rewards');
+        } catch (_) {}
+        // Background refresh — no await; the cache paint is good enough.
+        _refreshRewardsFromServer();
+    }
+
+    function _wireRewardsNav() {
+        // Home #btn-rewards opens the rewards stage.
+        const rewardsBtn = document.getElementById('btn-rewards');
+        if (rewardsBtn && !rewardsBtn.__wired) {
+            rewardsBtn.__wired = true;
+            rewardsBtn.addEventListener('click', _openRewardsStage);
+        }
+        // Back button returns to home.
+        const back = document.getElementById('btn-rewards-back');
+        if (back && !back.__wired) {
+            back.__wired = true;
+            back.addEventListener('click', () => {
+                try { if (typeof window.goToStage === 'function') window.goToStage('stage-home'); } catch (_) {}
+            });
+        }
+        // Rewards page "Open Badge Studio" button — gated on tier.
+        const openStudio = document.getElementById('btn-rewards-open-studio');
+        if (openStudio && !openStudio.__wired) {
+            openStudio.__wired = true;
+            openStudio.addEventListener('click', () => {
+                // openBadgeStudio() enforces its own T3+ lock + toast.
+                try {
+                    if (typeof window.openBadgeStudio === 'function') window.openBadgeStudio();
+                } catch (_) {}
+            });
         }
     }
 

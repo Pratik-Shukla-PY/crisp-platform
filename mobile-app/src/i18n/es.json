@@ -696,5 +696,16 @@
   "badge_studio_linkedin_hint": "Imagen guardada — adjúntala manualmente a tu publicación de LinkedIn.",
   "badge_studio_lock_t1_t2": "Alcanza Agente de cambio para desbloquear el Estudio de insignias",
   "badge_studio_photo_failed": "No se pudo cargar esa foto",
-  "badge_studio_share_card_tagline": "Reporta lo que ves — crisplabs.tech"
+  "badge_studio_share_card_tagline": "Reporta lo que ves — crisplabs.tech",
+  "rewards_btn": "Recompensas",
+  "rewards_title": "Tus recompensas",
+  "rewards_current_tier": "Nivel actual",
+  "rewards_ladder_title": "Cómo subir de nivel",
+  "rewards_t1_criteria": "Nivel predeterminado — cada nuevo informante empieza aquí.",
+  "rewards_t2_criteria": "Envía tu primer informe.",
+  "rewards_t3_criteria": "Tu informe lleva al despacho de ayuda.",
+  "rewards_t4_criteria": "Tu informe ayuda a salvar al menos 1 vida.",
+  "rewards_share_hint_locked": "Alcanza Agente de cambio para desbloquear el compartir insignia en LinkedIn, Instagram, WhatsApp.",
+  "rewards_share_hint_unlocked": "Toca para crear una imagen de insignia lista para compartir en LinkedIn, WhatsApp, Instagram y más.",
+  "rewards_open_studio": "Abrir Estudio de insignias"
 }

@@ -52,52 +52,41 @@ async function bootHomeAtTier(page: Page, tier: string) {
         null, { timeout: 8000 });
 }
 
-test.describe('PWA — Badge Studio (lock + unlock + share dispatch)', () => {
+// May 2026 (reward-system v2 second pass) — Badge Studio is reached
+// via the new Rewards page, not by tapping the (now decorative) home
+// badge chip. All "open studio" navigation in these tests goes
+// through #btn-rewards → #btn-rewards-open-studio. The lock invariant
+// (T1/T2 can't open Studio) is covered by spec 66 against the Studio
+// button's `disabled` state; the assertions below focus on the
+// Studio's own behaviour once it's open.
+async function navigateToBadgeStudio(page: Page) {
+    await page.locator('#btn-rewards').click();
+    await page.locator('#stage-rewards.active').waitFor({ state: 'visible' });
+    await page.locator('#btn-rewards-open-studio').click();
+    await page.locator('#stage-badge-studio.active').waitFor({ state: 'visible' });
+}
 
-    test('@smoke T1 chip tap shows lock toast (does NOT open Badge Studio)', async ({ page }) => {
-        await bootHomeAtTier(page, 'T1_SCOUT');
-        // Capture toasts.
-        await page.evaluate(() => {
-            (window as any).__toasts = [];
-            const orig = (window as any).showToast;
-            (window as any).showToast = (msg: string, kind?: string) => {
-                (window as any).__toasts.push(String(msg));
-                if (typeof orig === 'function') return orig(msg, kind);
-            };
-        });
-        await page.locator('#home-badge-chip').click();
-        await page.waitForTimeout(200);
-        const toasts = await page.evaluate(() => (window as any).__toasts || []);
-        // Lock toast must fire (English fallback or i18n).
-        expect(toasts.find((t: string) => /Changemaker|unlock/i.test(t))).toBeTruthy();
-        // Stage must NOT have changed.
-        await expect(page.locator('#stage-badge-studio.active')).toHaveCount(0);
-    });
+test.describe('PWA — Badge Studio (open via Rewards page + share dispatch)', () => {
 
-    test('@smoke T3 chip tap opens stage-badge-studio', async ({ page }) => {
+    test('@smoke T3 user reaches Badge Studio via the Rewards page', async ({ page }) => {
         await bootHomeAtTier(page, 'T3_CHANGEMAKER');
-        await page.locator('#home-badge-chip').click();
-        await expect(page.locator('#stage-badge-studio.active')).toBeVisible({ timeout: 3000 });
-        // Tier preview header reflects the unlocked tier.
+        await navigateToBadgeStudio(page);
         await expect(page.locator('#bs-tier-emoji')).toHaveText('⚡');
         await expect(page.locator('#bs-tier-name')).toContainText(/Changemaker/i);
     });
 
-    test('@smoke T4 chip tap opens stage with Lifekeeper preview', async ({ page }) => {
+    test('@smoke T4 user reaches Badge Studio with Lifekeeper preview', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        await page.locator('#home-badge-chip').click();
-        await expect(page.locator('#stage-badge-studio.active')).toBeVisible();
+        await navigateToBadgeStudio(page);
         await expect(page.locator('#bs-tier-emoji')).toHaveText('🦸');
         await expect(page.locator('#bs-tier-name')).toContainText(/Lifekeeper/i);
-        // Stats line carries the seeded counts.
         await expect(page.locator('#bs-tier-stats')).toContainText(/7 reports/i);
         await expect(page.locator('#bs-tier-stats')).toContainText(/3 lives/i);
     });
 
     test('template tabs switch + canvas repaints', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        await page.locator('#home-badge-chip').click();
-        await expect(page.locator('#stage-badge-studio.active')).toBeVisible();
+        await navigateToBadgeStudio(page);
         // Initial tab is "ring" → canvas dimensions 1080×1080.
         let dim = await page.locator('#bs-canvas').evaluate((el: any) => ({ w: el.width, h: el.height }));
         expect(dim.w).toBe(1080);
@@ -114,8 +103,7 @@ test.describe('PWA — Badge Studio (lock + unlock + share dispatch)', () => {
 
     test('download button generates an image/png blob', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        await page.locator('#home-badge-chip').click();
-        await expect(page.locator('#stage-badge-studio.active')).toBeVisible();
+        await navigateToBadgeStudio(page);
         // Intercept the click that creates the anchor + click.
         // Easier path: call the internal composer directly via the
         // test surface exposed at window.__crispBadgeStudio.
@@ -130,8 +118,7 @@ test.describe('PWA — Badge Studio (lock + unlock + share dispatch)', () => {
 
     test('share button calls navigator.share when available', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        await page.locator('#home-badge-chip').click();
-        await expect(page.locator('#stage-badge-studio.active')).toBeVisible();
+        await navigateToBadgeStudio(page);
         // Stub navigator.share + canShare.
         await page.evaluate(() => {
             (window as any).__shareCalls = [];
@@ -154,8 +141,7 @@ test.describe('PWA — Badge Studio (lock + unlock + share dispatch)', () => {
 
     test('WhatsApp button opens wa.me/?text= URL', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        await page.locator('#home-badge-chip').click();
-        await expect(page.locator('#stage-badge-studio.active')).toBeVisible();
+        await navigateToBadgeStudio(page);
         // Intercept window.open to capture the URL without launching a
         // second tab.
         const openedUrls: string[] = [];
@@ -175,8 +161,7 @@ test.describe('PWA — Badge Studio (lock + unlock + share dispatch)', () => {
 
     test('LinkedIn button opens the share-offsite URL', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        await page.locator('#home-badge-chip').click();
-        await expect(page.locator('#stage-badge-studio.active')).toBeVisible();
+        await navigateToBadgeStudio(page);
         const openedUrls: string[] = [];
         await page.exposeFunction('__captureOpen2', (url: string) => { openedUrls.push(url); });
         await page.evaluate(() => {
@@ -193,8 +178,7 @@ test.describe('PWA — Badge Studio (lock + unlock + share dispatch)', () => {
 
     test('back button returns to home stage', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        await page.locator('#home-badge-chip').click();
-        await expect(page.locator('#stage-badge-studio.active')).toBeVisible();
+        await navigateToBadgeStudio(page);
         await page.locator('#btn-badge-studio-back').click();
         await expect(page.locator('#stage-home.active')).toBeVisible();
     });

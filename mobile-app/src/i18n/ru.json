@@ -687,5 +687,16 @@
   "badge_studio_linkedin_hint": "Изображение сохранено — прикрепите его вручную к публикации в LinkedIn.",
   "badge_studio_lock_t1_t2": "Достигните уровня Перемен, чтобы открыть Студию значков",
   "badge_studio_photo_failed": "Не удалось загрузить фото",
-  "badge_studio_share_card_tagline": "Сообщайте о том, что видите — crisplabs.tech"
+  "badge_studio_share_card_tagline": "Сообщайте о том, что видите — crisplabs.tech",
+  "rewards_btn": "Награды",
+  "rewards_title": "Ваши награды",
+  "rewards_current_tier": "Текущий уровень",
+  "rewards_ladder_title": "Как повысить уровень",
+  "rewards_t1_criteria": "Уровень по умолчанию — каждый новый автор начинает здесь.",
+  "rewards_t2_criteria": "Отправьте свой первый отчёт.",
+  "rewards_t3_criteria": "Ваш отчёт приводит к отправке помощи.",
+  "rewards_t4_criteria": "Ваш отчёт помогает спасти хотя бы 1 жизнь.",
+  "rewards_share_hint_locked": "Достигните уровня Перемен, чтобы открыть значок для LinkedIn, Instagram, WhatsApp.",
+  "rewards_share_hint_unlocked": "Нажмите, чтобы создать готовое к публикации изображение значка для LinkedIn, WhatsApp, Instagram и других.",
+  "rewards_open_studio": "Открыть Студию значков"
 }
