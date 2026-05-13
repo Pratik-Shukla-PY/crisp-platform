@@ -583,13 +583,41 @@ function showUploadQueued() {
 }
 
 // ── Sync Badge ───────────────────────────────────────────────────────────────
+// Helper — returns the count of UNDP-details patches sitting in
+// localStorage waiting to drain. Defined here so updateSyncBadge can
+// reference it BEFORE _DETAILS_QUEUE_KEY is declared (the const lives
+// further down in the file, but localStorage reads it by string key
+// so the ordering doesn't matter at runtime).
+function _queuedDetailsCount() {
+    try {
+        const raw = localStorage.getItem('crisp_report_details_queue_v1');
+        if (!raw) return 0;
+        const q = JSON.parse(raw);
+        return Array.isArray(q) ? q.length : 0;
+    } catch (_) { return 0; }
+}
+
 async function updateSyncBadge() {
     try {
         const badge = document.getElementById('sync-badge');
         const text = document.getElementById('sync-badge-text');
+        // BUGFIX May 2026 (operator-reported, second pass) — user sees
+        // the "N queued" pill and reads it as "my UNDP details aren't
+        // syncing." Pre-fix the pill ONLY counted IndexedDB report
+        // queue items (`getAllQueued()`) — it had no awareness of the
+        // localStorage UNDP-details queue (`crisp_report_details_
+        // queue_v1`) added in dab0544. So:
+        //   · a stuck UNDP-details patch was invisible to the user
+        //   · a stuck regular report looked (to the user) like a stuck
+        //     UNDP-details patch
+        //   · tapping the pill only drained the report queue
+        // Single source of truth fix: pill = reports + details. Tap
+        // drains both (see syncQueueManual below).
         const items = await getAllQueued();
+        const detailsCount = _queuedDetailsCount();
+        const total = items.length + detailsCount;
 
-        if (items.length === 0) {
+        if (total === 0) {
             badge.style.display = 'none';
             return;
         }
@@ -600,13 +628,13 @@ async function updateSyncBadge() {
 
         if (syncing > 0) {
             badge.className = 'sync-badge syncing';
-            text.textContent = `${t('sync_syncing')} ${syncing}/${items.length}`;
+            text.textContent = `${t('sync_syncing')} ${syncing}/${total}`;
         } else if (failed > 0) {
             badge.className = 'sync-badge error';
-            text.textContent = `${items.length} ${t('sync_queued')} (${failed} ${t('sync_failed')})`;
+            text.textContent = `${total} ${t('sync_queued')} (${failed} ${t('sync_failed')})`;
         } else {
             badge.className = 'sync-badge';
-            text.textContent = `${items.length} ${t('sync_queued')}`;
+            text.textContent = `${total} ${t('sync_queued')}`;
         }
     } catch (e) {
         console.warn('Sync badge update failed:', e);
@@ -631,14 +659,28 @@ async function syncQueueManual(opts) {
     };
     let items;
     try { items = await getAllQueued(); } catch (_) { return; }
-    if (items.length === 0) {
+    // BUGFIX May 2026 (operator-reported, second pass) — also drain the
+    // UNDP-details localStorage queue. Pre-fix, tapping the pill only
+    // retried regular reports; UNDP-details patches stuck offline would
+    // sit there until the next `online` event or the 2s post-boot tick
+    // fired. User saw "1 queued" + tapped + nothing happened to the
+    // details. Now: tap drains BOTH queues. Fire-and-forget so the
+    // existing report-queue loop below isn't blocked on the patch
+    // round-trips.
+    const _detailsCountAtStart = _queuedDetailsCount();
+    if (_detailsCountAtStart > 0 && typeof _syncDetailsQueue === 'function') {
+        try { _syncDetailsQueue().catch(() => {}); } catch (_) {}
+    }
+    if (items.length === 0 && _detailsCountAtStart === 0) {
         showT(t('sync_nothing_queued') || 'Nothing in the queue right now.', 'info');
         return;
     }
 
     // Entry toast — user immediately sees "Retrying N reports…" so the
-    // tap registers visually even before any network round-trip.
-    const _initialCount = items.length;
+    // tap registers visually even before any network round-trip. The
+    // count includes the UNDP-details queue so "3 queued" reflects
+    // everything the user sees as pending.
+    const _initialCount = items.length + _detailsCountAtStart;
     const _retryMsg = (t('sync_retrying') || 'Retrying {n} queued report(s)…')
         .replace('{n}', String(_initialCount));
     showT(_retryMsg, 'info');
@@ -737,10 +779,18 @@ async function syncQueueManual(opts) {
     // If we drained everything, celebrate. If some are still queued,
     // be honest about how many remain so they know to try again later
     // (network might still be flaky).
+    //
+    // _stillQueued counts BOTH the report queue (IndexedDB) AND the
+    // UNDP-details queue (localStorage) so the toast reflects the
+    // unified pill count. The _syncDetailsQueue() fired above runs
+    // in parallel and may not be finished yet when this exit toast
+    // computes — that's fine, the remaining count is still accurate
+    // for "what's in front of the user right now" and a follow-up
+    // `online`/boot tick will keep retrying any stragglers.
     if (showFeedback) {
         try {
             const remaining = await getAllQueued();
-            const _stillQueued = remaining.length;
+            const _stillQueued = remaining.length + _queuedDetailsCount();
             const _drained = _initialCount - _stillQueued;
             if (_stillQueued === 0) {
                 showT(t('sync_all_done') || 'All queued reports synced!', 'success');
@@ -10001,6 +10051,9 @@ function _enqueueDetails(entry) {
     q = q.filter(e => e.reportId !== entry.reportId);
     q.push(entry);
     try { localStorage.setItem(_DETAILS_QUEUE_KEY, JSON.stringify(q)); } catch (_) {}
+    // Refresh the "N queued" pill so the user sees the count tick
+    // up immediately on save (May 2026 unified-pill fix).
+    try { if (typeof updateSyncBadge === 'function') updateSyncBadge(); } catch (_) {}
 }
 
 function _dequeueDetails(reportId) {
@@ -10010,6 +10063,8 @@ function _dequeueDetails(reportId) {
         const q = (JSON.parse(raw) || []).filter(e => e.reportId !== reportId);
         localStorage.setItem(_DETAILS_QUEUE_KEY, JSON.stringify(q));
     } catch (_) {}
+    // Refresh the pill so the count drops immediately on drain.
+    try { if (typeof updateSyncBadge === 'function') updateSyncBadge(); } catch (_) {}
 }
 
 async function _syncDetailsQueue() {

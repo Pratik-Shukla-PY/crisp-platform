@@ -5,12 +5,18 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v136';
+const CACHE_NAME = 'crisp-v137';
 // v135 → v136 (May 2026) — inline-SVG flag rendering in the language
 // picker. Every cached HTML/CSS/JS now carries the data-cc swap; bump
 // CACHE_NAME so returning Windows-Chrome / Linux users actually pick
 // up the fix instead of serving the pre-fix snapshot where their
 // flags rendered as monochrome "GB" / "FR" / "IN" letter pairs.
+//
+// v136 → v137 (May 2026) — unified "N queued" pill across the report
+// queue AND the UNDP-details queue. Operator-reported (second pass):
+// the pill only counted IndexedDB reports, so a stuck UNDP-details
+// patch was either invisible OR confused for a stuck report. The
+// pill now sums both queues + tapping it drains both.
 // v133 → v134 (May 2026) — covered the recent batch of unpushed PWA-asset
 // changes that previously slipped past the cache-bump policy:
 //   · c4d2087  app.js + v4-flow.js — Add-Another reset + queued-pill toast
