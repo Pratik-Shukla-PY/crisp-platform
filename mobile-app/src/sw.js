@@ -5,7 +5,19 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v144';
+const CACHE_NAME = 'crisp-v145';
+// v144 → v145 (May 2026 reward-system v2) — full gamification
+// rewrite per operator request. 4-tier identity-forward ladder
+// (Scout / Signal / Changemaker / Lifekeeper) with progress sub-line
+// on the home badge chip, body-class theme affect at T3+, tier-up
+// celebration toast on My Reports open, and a new Badge Studio
+// stage (Canvas composer + 3 templates + WA/Insta/LinkedIn share
+// dispatch). Backend /reports/profile/<hash> returns a richer shape
+// (tier object + responded_count + lives_saved_total + legacy
+// alias); new /share/<token> endpoint serves OG-meta share pages
+// for LinkedIn. badge-studio.js added to STATIC_ASSETS so the
+// stage works fully offline once the PWA is installed. ~30 new
+// i18n keys across all 22 locale files.
 // v143 → v144 (May 2026, operator-reported, second-pass UX) — My
 // Reports redesign #2: dropped the RESOLVED + IN-FLIGHT tiles from
 // the impact-card header (they read as 0 · 0 for most users and
@@ -120,6 +132,7 @@ const STATIC_ASSETS = [
     SW_BASE + 'home-screen.js',
     SW_BASE + 'voice-readout.js',
     SW_BASE + 'v4-flow.js',
+    SW_BASE + 'badge-studio.js',   // Phase D — reward-system v2 Canvas composer
     // vendor/blazeface/model.json + .bin are NOT precached. They're
     // loaded on demand by pii-blur.js::ensureModel on first photo
     // capture and runtime-cached by the fetch handler below.

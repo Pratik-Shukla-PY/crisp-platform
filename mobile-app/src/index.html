@@ -47,6 +47,31 @@
     <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"></noscript>
     <!-- Local app stylesheet — required for first paint, kept synchronous. -->
     <link rel="stylesheet" href="styles.css">
+    <!-- May 2026 — apply reward-tier body class BEFORE the stylesheet
+         attaches per-tier affects (logo accent ring at T3+, theme tint
+         at T4). Reading from sessionStorage cache here avoids a flash
+         of unstyled affect on the cold paint; the home-screen.js
+         refresh path corrects the class on the next /profile read.
+         Cache key matches BADGE_CACHE_KEY in home-screen.js (v2). -->
+    <script>
+      (function () {
+          try {
+              var raw = sessionStorage.getItem('crisp_home_badge_v2');
+              if (!raw) return;
+              var p = JSON.parse(raw);
+              var lvl = (p && (typeof p === 'string' ? p : p.level)) || 'T1_SCOUT';
+              lvl = String(lvl).toUpperCase();
+              var classMap = { T1_SCOUT: 'tier-t1', T2_SIGNAL: 'tier-t2', T3_CHANGEMAKER: 'tier-t3', T4_LIFEKEEPER: 'tier-t4' };
+              var cls = classMap[lvl];
+              if (cls && document.documentElement && document.documentElement.dataset) {
+                  // Use <html> dataset since <body> doesn't exist at this
+                  // point in parsing. CSS body-class selectors fall back
+                  // via a top-level descendant rule (see styles.css note).
+                  document.documentElement.dataset.tier = cls;
+              }
+          } catch (_) {}
+      })();
+    </script>
 </head>
 <body>
 
@@ -332,15 +357,26 @@
                         <span data-i18n="home_devid_tip_body">Use this to find your reports later, even if you lose the app. Your ID is anonymous — we cannot link it back to you.</span>
                         <button id="btn-home-devid-tip-dismiss" type="button" data-i18n="home_devid_tip_dismiss">Got it</button>
                     </div>
-                    <!-- gamification badge chip. Fetched from
-                         /api/v1/reports/profile/<hash>. Mapping:
-                         NEWCOMER → 🌱 Newcomer, HELPER → ⛑ Helper,
-                         GUARDIAN → 🛡 Guardian, CHAMPION → ⭐ Champion,
-                         HERO → 🏆 Hero. Hidden until profile resolves. -->
+                    <!-- May 2026 — gamification badge chip rewritten
+                         to the 4-tier identity-forward ladder.
+                         Backend `/profile` returns one of:
+                           T1_SCOUT       🌱 Scout
+                           T2_SIGNAL      📣 Signal
+                           T3_CHANGEMAKER ⚡ Changemaker  (unlocks Badge Studio)
+                           T4_LIFEKEEPER  🦸 Lifekeeper   (unlocks Badge Studio)
+                         The `hb-progress` sub-line tells the user
+                         what action moves them up next. T3+ makes
+                         the chip tappable (opens Badge Studio); T1/T2
+                         tap is a toast hint. Hidden until profile
+                         resolves so we never paint a stale tier. -->
                     <div class="home-badge-chip" id="home-badge-chip" hidden
-                         role="status" aria-label="Reporter level">
+                         role="button" tabindex="0"
+                         aria-label="Reporter level">
                         <span class="hb-emoji" id="home-badge-emoji" aria-hidden="true">🌱</span>
-                        <span class="hb-label" id="home-badge-label">Newcomer</span>
+                        <span class="hb-stack">
+                            <span class="hb-label" id="home-badge-label">Scout</span>
+                            <span class="hb-progress" id="home-badge-progress">Submit your first report to level up</span>
+                        </span>
                     </div>
                     <!-- install + voice icons relocated here so
                          the entire identity strip (device-ID + Newcomer +
@@ -2512,6 +2548,104 @@
     </div>
 
     <!-- ══════════════════════════════════════
+         STAGE BADGE-STUDIO — May 2026 reward-system v2
+         In-app Canvas composer for the user's earned tier badge.
+         Generates 3 share-ready images:
+           - Profile ring (LinkedIn / WA profile photo — circular crop
+             of optional user selfie with a tier-coloured ring)
+           - WhatsApp profile (1080×1080 opaque, tier badge enlarged)
+           - Story card (1080×1920 portrait, full bleed, stats + tagline)
+         Locked behind T3 CHANGEMAKER; T1/T2 chip tap toasts a hint.
+         Share dispatch: Web Share API (with file) + WA/Insta/LinkedIn
+         deep-links + plain download. PII-safe — composition is pure
+         Canvas, no upload of the user's photo to any server. Optional
+         face-blur reuses the existing pii-blur.js BlazeFace pipeline.
+    ══════════════════════════════════════ -->
+    <div class="stage" id="stage-badge-studio">
+        <div class="stage-header">
+            <h2>
+                <i class="fa-solid fa-medal" aria-hidden="true"></i>
+                <span data-i18n="badge_studio_title">Badge Studio</span>
+            </h2>
+            <button class="history-back" id="btn-badge-studio-back" type="button"
+                    title="Back" aria-label="Back" data-i18n-title="aria_back" data-i18n-aria-label="aria_back">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+        </div>
+
+        <!-- Live tier preview header -->
+        <div class="badge-studio-tier" id="bs-tier-preview">
+            <span class="bs-tier-emoji" id="bs-tier-emoji" aria-hidden="true">🦸</span>
+            <div class="bs-tier-stack">
+                <div class="bs-tier-name" id="bs-tier-name">Lifekeeper</div>
+                <div class="bs-tier-stats" id="bs-tier-stats">— reports · — lives saved</div>
+            </div>
+        </div>
+
+        <!-- Template tabs -->
+        <div class="badge-studio-tabs" role="tablist" aria-label="Template">
+            <button type="button" class="bs-tab is-active" role="tab" data-template="ring" aria-selected="true">
+                <i class="fa-solid fa-circle-user" aria-hidden="true"></i>
+                <span data-i18n="badge_studio_template_ring">Profile ring</span>
+            </button>
+            <button type="button" class="bs-tab" role="tab" data-template="wa" aria-selected="false">
+                <i class="fa-solid fa-comment-dots" aria-hidden="true"></i>
+                <span data-i18n="badge_studio_template_wa">WhatsApp</span>
+            </button>
+            <button type="button" class="bs-tab" role="tab" data-template="story" aria-selected="false">
+                <i class="fa-solid fa-mobile-screen" aria-hidden="true"></i>
+                <span data-i18n="badge_studio_template_story">Story card</span>
+            </button>
+        </div>
+
+        <!-- Canvas preview (live render of the selected template) -->
+        <div class="badge-studio-canvas-wrap">
+            <canvas id="bs-canvas" class="badge-studio-canvas" aria-label="Badge preview"></canvas>
+        </div>
+
+        <!-- Optional photo + face-blur controls -->
+        <div class="badge-studio-controls">
+            <label class="bs-upload">
+                <i class="fa-solid fa-camera" aria-hidden="true"></i>
+                <span data-i18n="badge_studio_upload_photo">Choose photo</span>
+                <input type="file" id="bs-photo-input" accept="image/*" hidden>
+            </label>
+            <label class="bs-toggle">
+                <input type="checkbox" id="bs-blur-toggle" checked>
+                <span data-i18n="badge_studio_face_blur">Apply face blur</span>
+            </label>
+        </div>
+
+        <!-- Primary share actions -->
+        <div class="badge-studio-actions">
+            <button type="button" class="bs-btn bs-btn-primary" id="btn-bs-download">
+                <i class="fa-solid fa-download" aria-hidden="true"></i>
+                <span data-i18n="badge_studio_download">Download</span>
+            </button>
+            <button type="button" class="bs-btn" id="btn-bs-share">
+                <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+                <span data-i18n="badge_studio_share">Share</span>
+            </button>
+        </div>
+
+        <!-- Platform-specific deep-links -->
+        <div class="badge-studio-share-row">
+            <button type="button" class="bs-share-chip" id="btn-bs-wa">
+                <i class="fa-solid fa-comment-sms" aria-hidden="true"></i>
+                <span data-i18n="badge_studio_share_wa">WhatsApp</span>
+            </button>
+            <button type="button" class="bs-share-chip" id="btn-bs-insta">
+                <i class="fa-solid fa-camera-retro" aria-hidden="true"></i>
+                <span data-i18n="badge_studio_share_insta">Instagram</span>
+            </button>
+            <button type="button" class="bs-share-chip" id="btn-bs-linkedin">
+                <i class="fa-solid fa-link" aria-hidden="true"></i>
+                <span data-i18n="badge_studio_share_linkedin">LinkedIn</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
          STAGE REPORT-DETAIL — Apr 2026 "My Reports" spec
          Individual report view with status timeline, metadata, feedback,
          and per-report delete. Rendered content is populated by
@@ -2760,5 +2894,9 @@
 <!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
      applyI18n etc. Internally it _whenReady-polls until those are set. -->
 <script src="v4-flow.js?v=4"></script>
+<!-- May 2026 reward-system v2 — Badge Studio Canvas composer + share
+     dispatch. Loaded last because it depends on window.t (app.js i18n),
+     window.applyPiiBlur (pii-blur.js BlazeFace), and window.goToStage. -->
+<script src="badge-studio.js?v=1"></script>
 </body>
 </html>

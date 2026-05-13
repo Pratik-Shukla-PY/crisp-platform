@@ -713,56 +713,141 @@
 
     // ── Phase 18 — badge chip + My Reports count + voice + install ────
     //
-    // Badge chip: fetches `/api/v1/reports/profile/<device-hash>` once on
-    // home init + on each repaint. Maps `badge_level` to emoji + label
-    // (5 tiers: NEWCOMER / HELPER / GUARDIAN / CHAMPION / HERO).
-    // sessionStorage caches the last result for instant paint.
+    // Badge chip — May 2026 second-pass rewrite to the 4-tier
+    // identity-forward ladder driven by /reports/profile/<hash>:
+    //   T1 SCOUT       🌱 — default (0 reports)
+    //   T2 SIGNAL      📣 — ≥1 report submitted
+    //   T3 CHANGEMAKER ⚡ — ≥1 report dispatched (RESPONDING/RESOLVED)
+    //   T4 LIFEKEEPER  🦸 — ≥1 life saved (analyst-set lives_impacted)
+    //
+    // Pre-fix the map carried 5 legacy tier names (NEWCOMER / HELPER /
+    // GUARDIAN / CHAMPION / HERO) that the backend stopped emitting in
+    // April 2026. Any reporter at CONTRIBUTOR / TRUSTED was rendering
+    // as "🌱 Newcomer" forever because the lookup fell through to the
+    // default. LEGACY_MAP below catches a stale backend response from
+    // before the v1→v2 deploy completes; new shells read `badge_level`
+    // directly.
+    //
+    // sessionStorage caches the last paint payload for instant repaint.
     const BADGE_LEVELS = {
-        NEWCOMER:  { emoji: '🌱', cls: 'lvl-newcomer',  i18nKey: 'home_badge_newcomer'  },
-        HELPER:    { emoji: '⛑',  cls: 'lvl-helper',    i18nKey: 'home_badge_helper'    },
-        GUARDIAN:  { emoji: '🛡', cls: 'lvl-guardian',  i18nKey: 'home_badge_guardian'  },
-        CHAMPION:  { emoji: '⭐', cls: 'lvl-champion',  i18nKey: 'home_badge_champion'  },
-        HERO:      { emoji: '🏆', cls: 'lvl-hero',      i18nKey: 'home_badge_hero'      },
+        T1_SCOUT:        { emoji: '🌱', cls: 'lvl-t1', i18nKey: 'tier_t1_scout_label',        bodyCls: 'tier-t1' },
+        T2_SIGNAL:       { emoji: '📣', cls: 'lvl-t2', i18nKey: 'tier_t2_signal_label',       bodyCls: 'tier-t2' },
+        T3_CHANGEMAKER:  { emoji: '⚡', cls: 'lvl-t3', i18nKey: 'tier_t3_changemaker_label',  bodyCls: 'tier-t3' },
+        T4_LIFEKEEPER:   { emoji: '🦸', cls: 'lvl-t4', i18nKey: 'tier_t4_lifekeeper_label',   bodyCls: 'tier-t4' },
     };
-    const BADGE_CACHE_KEY = 'crisp_home_badge_v1';
+    // Legacy 3-tier name → new 4-tier identifier. Lets the PWA cope
+    // with a backend that has not yet been upgraded (or a sessionStorage
+    // cache from a pre-v145 PWA shell).
+    const LEGACY_MAP = {
+        NEWCOMER:    'T2_SIGNAL',       // 3-tier NEWCOMER mapped to "submitted reports" tier
+        CONTRIBUTOR: 'T3_CHANGEMAKER',
+        TRUSTED:     'T4_LIFEKEEPER',
+    };
+    // English fallbacks used while the JSON i18n bundle is still
+    // loading (window.t() returns the key itself when not resolved).
+    const ENGLISH_FALLBACKS = {
+        'tier_t1_scout_label':        'Scout',
+        'tier_t2_signal_label':       'Signal',
+        'tier_t3_changemaker_label':  'Changemaker',
+        'tier_t4_lifekeeper_label':   'Lifekeeper',
+        'tier_progress_first_report': 'Submit your first report to level up',
+        'tier_progress_verified_1':   'Get 1 report verified by an analyst',
+        'tier_progress_lives_1':      'Help save 1 life through your reports',
+        'tier_progress_top_share':    'Top tier reached — tap to share your badge',
+    };
+    const BADGE_CACHE_KEY = 'crisp_home_badge_v2'; // bumped v1→v2 for new shape
     function _readBadgeCache() {
         try { return JSON.parse(sessionStorage.getItem(BADGE_CACHE_KEY) || 'null'); } catch { return null; }
     }
-    function _writeBadgeCache(level) {
-        try { sessionStorage.setItem(BADGE_CACHE_KEY, JSON.stringify(level || null)); } catch {}
+    function _writeBadgeCache(payload) {
+        try { sessionStorage.setItem(BADGE_CACHE_KEY, JSON.stringify(payload || null)); } catch {}
     }
-    function _paintBadgeChip(level) {
+    function _resolveLevel(rawLevel) {
+        // Normalize backend response to a known T1-T4 identifier.
+        // Order: exact 4-tier match → legacy 3-tier fallback → T1_SCOUT
+        // (never hide the chip).
+        const key = String(rawLevel || '').toUpperCase();
+        if (BADGE_LEVELS[key]) return key;
+        if (LEGACY_MAP[key]) return LEGACY_MAP[key];
+        return 'T1_SCOUT';
+    }
+    function _tString(key) {
+        // Resolve an i18n key with the EN fallback when t() hasn't
+        // hydrated yet. Used for the progress sub-line where the
+        // backend tells us WHICH key to render.
+        const fallback = ENGLISH_FALLBACKS[key] || '';
+        if (typeof window.t === 'function') {
+            const v = window.t(key);
+            if (v && v !== key) return v;
+        }
+        return fallback;
+    }
+    function _applyBodyTierClass(level) {
+        // Apply a body-level tier class so per-tier CSS (logo accent
+        // ring at T3+, theme tint at T4) attaches without a JS render
+        // round-trip. We strip every other tier class first so a
+        // demotion (rare; would only happen via a manual DB tweak)
+        // cleans up too.
+        try {
+            const body = document.body;
+            if (!body) return;
+            Object.values(BADGE_LEVELS).forEach((d) => body.classList.remove(d.bodyCls));
+            const def = BADGE_LEVELS[level] || BADGE_LEVELS.T1_SCOUT;
+            body.classList.add(def.bodyCls);
+        } catch (_) {}
+    }
+    function _paintBadgeChip(payload) {
+        // `payload` may be either a bare string (legacy cache from
+        // v1) or the new v2 object {level, progress, lives, ...}.
+        // Normalize both forms.
+        let level, progressKey;
+        if (typeof payload === 'string') {
+            level = _resolveLevel(payload);
+            progressKey = null;
+        } else if (payload && typeof payload === 'object') {
+            level = _resolveLevel(payload.level);
+            progressKey = payload.progressLabelKey || null;
+        } else {
+            level = 'T1_SCOUT';
+            progressKey = 'tier_progress_first_report';
+        }
         const chip = document.getElementById('home-badge-chip');
         const emojiEl = document.getElementById('home-badge-emoji');
         const labelEl = document.getElementById('home-badge-label');
+        const progEl  = document.getElementById('home-badge-progress');
         if (!chip || !emojiEl || !labelEl) return;
-        const def = BADGE_LEVELS[String(level || '').toUpperCase()] || BADGE_LEVELS.NEWCOMER;
+        const def = BADGE_LEVELS[level] || BADGE_LEVELS.T1_SCOUT;
         emojiEl.textContent = def.emoji;
-        // `window.t(key)` returns the KEY itself when not yet
-        // resolved (en.json loads async). Treat key === t(key) as
-        // "not resolved" and fall back to a sensible English default.
-        const ENGLISH_FALLBACKS = {
-            'home_badge_newcomer': 'Newcomer',
-            'home_badge_helper':   'Helper',
-            'home_badge_guardian': 'Guardian',
-            'home_badge_champion': 'Champion',
-            'home_badge_hero':     'Hero',
-        };
-        let labelText = ENGLISH_FALLBACKS[def.i18nKey] || 'Newcomer';
-        if (typeof window.t === 'function') {
-            const t = window.t(def.i18nKey);
-            if (t && t !== def.i18nKey) labelText = t;
+        labelEl.textContent = _tString(def.i18nKey) || 'Scout';
+        // Progress sub-line — backend tells us WHICH key to render;
+        // we resolve it locally so EN fallback works without a hydrated
+        // i18n bundle. The sub-line element may be absent on cached
+        // shells without the v145 markup; guard accordingly.
+        if (progEl) {
+            const key = progressKey || (
+                level === 'T1_SCOUT'       ? 'tier_progress_first_report' :
+                level === 'T2_SIGNAL'      ? 'tier_progress_verified_1'   :
+                level === 'T3_CHANGEMAKER' ? 'tier_progress_lives_1'      :
+                                             'tier_progress_top_share'
+            );
+            progEl.textContent = _tString(key);
         }
-        labelEl.textContent = labelText;
         // Reset level classes then add the active one.
         Object.values(BADGE_LEVELS).forEach((d) => chip.classList.remove(d.cls));
         chip.classList.add(def.cls);
+        chip.dataset.tier = level;
+        // Top tier unlocks Badge Studio — surface this via a tappable
+        // hint class so styles.css can render the chip slightly larger
+        // / with a subtle "tap me" cue.
+        chip.classList.toggle('chip-unlocked', level === 'T3_CHANGEMAKER' || level === 'T4_LIFEKEEPER');
+        _applyBodyTierClass(level);
         chip.removeAttribute('hidden');
     }
     async function _renderBadgeChip() {
         const chip = document.getElementById('home-badge-chip');
         if (!chip) return;
-        // Optimistic paint from cache.
+        // Optimistic paint from cache (legacy v1 cache also accepted —
+        // _paintBadgeChip normalizes both shapes).
         const cached = _readBadgeCache();
         if (cached) _paintBadgeChip(cached);
         // Fetch fresh.
@@ -773,23 +858,37 @@
                 || localStorage.getItem('crisp_device_id') || '';
         } catch (_) {}
         if (!hash) {
-            // No device hash yet — default to NEWCOMER so the chip still
-            // shows something meaningful on first paint.
-            if (!cached) _paintBadgeChip('NEWCOMER');
+            // No device hash yet — default to T1_SCOUT so the chip
+            // still shows something meaningful on first paint.
+            if (!cached) _paintBadgeChip('T1_SCOUT');
             return;
         }
         try {
             const apiBase = window.API_BASE || '/api/v1';
             const res = await fetch(`${apiBase}/reports/profile/${encodeURIComponent(hash)}`);
-            if (!res.ok) return;
+            if (!res.ok) {
+                // Backend error (4xx / 5xx) — keep the existing cached
+                // paint if we have one, otherwise fall back to T1_SCOUT
+                // so the chip never stays hidden. Returning early
+                // without a fallback was the pre-fix behaviour and
+                // left the chip invisible on any /profile 500.
+                if (!cached) _paintBadgeChip('T1_SCOUT');
+                return;
+            }
             const p = await res.json();
-            const lvl = String(p.badge_level || 'NEWCOMER').toUpperCase();
-            _paintBadgeChip(lvl);
-            _writeBadgeCache(lvl);
+            const payload = {
+                level: _resolveLevel(p.badge_level),
+                progressLabelKey: p.tier && p.tier.progress && p.tier.progress.label_key,
+                lives: Number.isFinite(p.lives_saved_total) ? p.lives_saved_total : 0,
+                reports: Number.isFinite(p.report_count) ? p.report_count : 0,
+                responded: Number.isFinite(p.responded_count) ? p.responded_count : 0,
+            };
+            _paintBadgeChip(payload);
+            _writeBadgeCache(payload);
         } catch (_) {
-            // Network error — fall back to cached or NEWCOMER. Never
-            // hide the chip; "Newcomer" is the honest default.
-            if (!cached) _paintBadgeChip('NEWCOMER');
+            // Network error — fall back to cached or T1_SCOUT. Never
+            // hide the chip; "Scout" is the honest default.
+            if (!cached) _paintBadgeChip('T1_SCOUT');
         }
     }
 

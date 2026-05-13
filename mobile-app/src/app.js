@@ -9734,15 +9734,24 @@ async function _renderSubmittedReports() {
     // report to the snapshot we saved last time My Reports was opened:
     //  - verdict NOT_REVIEWED → ACCEPTED       → "🎉 Your report was accepted!"
     //  - lives_impacted went up                 → "💚 You helped N more lives"
-    // Snapshot is keyed by client_report_id so a new report doesn't trigger
-    // a false positive on the first visit.
+    //  - reward tier moved up (T1→T2 / T2→T3 / T3→T4)
+    //                                          → "📣/⚡/🦸 Tier-up celebration"
+    //
+    // Snapshot v2 (May 2026 reward-system rewrite) — wraps the legacy
+    // per-report block in `{ tier: ..., reports: { ... } }`. First read
+    // at v2 ignores any v1 payload so the tier-up toast doesn't fire
+    // a false positive on the migration boundary. Existing acceptance
+    // + lives-delta toasts still fire with the new key (which is also
+    // localised — see Phase F i18n).
     try {
-        const snapRaw = localStorage.getItem('crisp_mr_snapshot_v1');
-        const snap = snapRaw ? JSON.parse(snapRaw) : {};
+        const snapRaw = localStorage.getItem('crisp_mr_snapshot_v2');
+        const snap = snapRaw ? JSON.parse(snapRaw) : null;
+        const prevReports = (snap && snap.reports) || {};
+        const prevTier = (snap && snap.tier) || null;
         let acceptedN = 0;
         let livesDelta = 0;
         for (const r of reports) {
-            const prev = snap[r.client_report_id];
+            const prev = prevReports[r.client_report_id];
             if (prev) {
                 if (prev.verdict !== 'ACCEPTED' && r.reviewer_verdict === 'ACCEPTED') acceptedN++;
                 const prevL = Number.isFinite(prev.lives) ? prev.lives : 0;
@@ -9750,22 +9759,80 @@ async function _renderSubmittedReports() {
                 if (nowL > prevL) livesDelta += (nowL - prevL);
             }
         }
-        // Update snapshot for next open.
-        const next = {};
+        // Fetch the device's tier alongside report deltas. The /profile
+        // endpoint is the single source of truth for the tier the home
+        // chip just painted; we read the same value here so the
+        // celebration toast matches the chip on screen. We tolerate a
+        // failed fetch — no tier toast in that case, but the report
+        // deltas still fire below.
+        let nowTier = null;
+        try {
+            const hash = deviceHash;
+            if (hash) {
+                const profRes = await _singleFlightFetch(`${API_BASE}/reports/profile/${hash}`);
+                if (profRes.ok) {
+                    const p = await profRes.json();
+                    nowTier = String(p.badge_level || '').toUpperCase() || null;
+                }
+            }
+        } catch (_) {}
+
+        // Update snapshot for next open. Always write v2, never v1.
+        const nextReports = {};
         for (const r of reports) {
-            next[r.client_report_id] = {
+            nextReports[r.client_report_id] = {
                 verdict: r.reviewer_verdict || 'NOT_REVIEWED',
                 lives: Number.isFinite(r.lives_impacted) ? r.lives_impacted : 0,
             };
         }
-        try { localStorage.setItem('crisp_mr_snapshot_v1', JSON.stringify(next)); } catch (_) {}
-        // Emit toasts (only if we had a prior snapshot — i.e. not first visit).
+        try {
+            localStorage.setItem('crisp_mr_snapshot_v2',
+                JSON.stringify({ tier: nowTier, reports: nextReports }));
+            // Remove the v1 key so legacy data doesn't take up space
+            // forever (the v2 cycle now owns the snapshot contract).
+            localStorage.removeItem('crisp_mr_snapshot_v1');
+        } catch (_) {}
+
+        // Emit toasts (only if we had a prior snapshot — i.e. not first
+        // visit at v2). Tier-up takes precedence visually because it's
+        // the bigger moment; acceptance + lives toasts stack underneath.
         if (snapRaw) {
+            const TIER_ORDER = {
+                T1_SCOUT: 0, T2_SIGNAL: 1, T3_CHANGEMAKER: 2, T4_LIFEKEEPER: 3,
+                // Legacy aliases so a backend that hasn't been upgraded
+                // mid-roll-out doesn't trigger a false demotion toast.
+                NEWCOMER: 0, CONTRIBUTOR: 2, TRUSTED: 3,
+            };
+            if (prevTier && nowTier && TIER_ORDER[nowTier] > TIER_ORDER[prevTier]) {
+                const tierKey = `celebration_tier_up_${String(nowTier).toLowerCase()}`;
+                // English fallback for the three promotions; t() takes
+                // precedence when the i18n bundle has hydrated.
+                const TIER_FALLBACK = {
+                    t2_signal: "📣 You're a Signal now — your first report reached the team.",
+                    t3_changemaker: "⚡ Changemaker unlocked! Your report sent help.",
+                    t4_lifekeeper: "🦸 You're a Lifekeeper. Tap the badge to share your story.",
+                };
+                const localised = (typeof t === 'function' && t(tierKey) !== tierKey)
+                    ? t(tierKey)
+                    : (TIER_FALLBACK[String(nowTier).toLowerCase()] || `🎉 Tier up: ${nowTier}`);
+                _showCelebration(localised);
+            }
             if (acceptedN > 0) {
-                _showCelebration(`🎉 ${acceptedN} report${acceptedN > 1 ? 's' : ''} accepted — thank you for reporting!`);
+                // Localised celebration — see Phase F i18n.
+                const key = acceptedN === 1 ? 'celebration_accepted_one' : 'celebration_accepted_many';
+                const fallback = acceptedN === 1
+                    ? '🎉 1 report accepted — thank you for reporting!'
+                    : `🎉 ${acceptedN} reports accepted — thank you for reporting!`;
+                const tpl = (typeof t === 'function' && t(key) !== key) ? t(key) : fallback;
+                _showCelebration(String(tpl).replace('{n}', String(acceptedN)));
             }
             if (livesDelta > 0) {
-                _showCelebration(`💚 Your reports helped ${livesDelta} more ${livesDelta > 1 ? 'lives' : 'life'}!`);
+                const key = livesDelta === 1 ? 'celebration_lives_one' : 'celebration_lives_many';
+                const fallback = livesDelta === 1
+                    ? '💚 Your reports helped 1 more life!'
+                    : `💚 Your reports helped ${livesDelta} more lives!`;
+                const tpl = (typeof t === 'function' && t(key) !== key) ? t(key) : fallback;
+                _showCelebration(String(tpl).replace('{n}', String(livesDelta)));
             }
         }
     } catch (e) {
@@ -9839,7 +9906,15 @@ async function _renderSubmittedReports() {
         return;
     }
     if (mapWrap) mapWrap.style.display = 'none';
-    if (inflightSec) inflightSec.style.display = '';
+    // May 2026 second pass — DO NOT override `inflightSec.style.display`
+    // here. The in-flight section's visibility is owned exclusively by
+    // `_renderPartialReports` (which sets it to 'none' when the queue
+    // is empty + back to '' when reports land). Resetting it
+    // unconditionally here was a race against the parallel partial
+    // renderer in `Promise.all([_renderPartialReports(),
+    // _renderSubmittedReports()])` — the addition of a tier-up /profile
+    // fetch in this function nudged the timing enough to make the race
+    // manifest reliably in spec 59's "empty IN FLIGHT" test.
     if (submittedSec) submittedSec.style.display = '';
 
     if (!filtered.length) {

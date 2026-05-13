@@ -4668,29 +4668,141 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
    alongside the device-ID badge. Compact pill; brand-coloured emoji +
    short label. Tap → navigate to stage-privacy (where the badge ladder
    could be explained in v2). */
+/* May 2026 second-pass — rewritten for the 4-tier identity-forward
+   ladder (SCOUT / SIGNAL / CHANGEMAKER / LIFEKEEPER). Pre-fix the
+   chip was a single-line pill with emoji + label; now it carries
+   an additional `hb-progress` sub-line that tells the user what
+   moves them to the next tier. Chip becomes tappable at T3+
+   (Badge Studio entry point). */
 .home-badge-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
+    gap: 8px;
+    padding: 6px 12px;
     margin-top: 6px;
-    border-radius: 999px;
+    border-radius: 14px;
     background: rgba(128, 238, 152, 0.12);
     border: 1px solid rgba(128, 238, 152, 0.32);
     color: #a5f3b3;
-    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.02em;
-    white-space: nowrap;
+    text-align: left;
+    cursor: default;
+    transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
 }
 .home-badge-chip[hidden] { display: none; }
-.home-badge-chip .hb-emoji { font-size: 12px; line-height: 1; }
-/* Badge-level colour ramp — newcomer green → hero gold. */
-.home-badge-chip.lvl-newcomer  { background: rgba(128, 238, 152, 0.12); border-color: rgba(128, 238, 152, 0.32); color: #a5f3b3; }
-.home-badge-chip.lvl-helper    { background: rgba(9, 209, 199, 0.12); border-color: rgba(9, 209, 199, 0.32); color: #46DFB1; }
-.home-badge-chip.lvl-guardian  { background: rgba(21, 145, 155, 0.16); border-color: rgba(21, 145, 155, 0.40); color: #46DFB1; }
-.home-badge-chip.lvl-champion  { background: rgba(244, 114, 182, 0.14); border-color: rgba(244, 114, 182, 0.36); color: #f9a8d4; }
-.home-badge-chip.lvl-hero      { background: rgba(9, 209, 199, 0.16); border-color: rgba(9, 209, 199, 0.42); color: #80EE98; box-shadow: 0 0 14px rgba(9,209,199,0.18); }
+.home-badge-chip .hb-emoji { font-size: 18px; line-height: 1; flex: 0 0 auto; }
+.home-badge-chip .hb-stack {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 1px;
+    line-height: 1.1;
+}
+.home-badge-chip .hb-label { font-size: 12px; font-weight: 800; }
+.home-badge-chip .hb-progress {
+    font-size: 10px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.62);
+    letter-spacing: 0.01em;
+    white-space: normal;
+    max-width: 220px;
+}
+/* Tappable cue at T3+ (Badge Studio unlocked). */
+.home-badge-chip.chip-unlocked { cursor: pointer; }
+.home-badge-chip.chip-unlocked:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(9, 209, 199, 0.22);
+    border-color: rgba(70, 223, 177, 0.5);
+}
+.home-badge-chip.chip-unlocked:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(9, 209, 199, 0.32);
+}
+
+/* Tier colour ramp — T1 mint → T2 teal → T3 vivid teal → T4 lime + glow.
+   Mirrors the home Lives-Saved card aesthetic so the chip reads as
+   the SAME emotional surface as the lives stat. */
+.home-badge-chip.lvl-t1 { background: rgba(128, 238, 152, 0.12); border-color: rgba(128, 238, 152, 0.32); color: #a5f3b3; }
+.home-badge-chip.lvl-t2 { background: rgba(9, 209, 199, 0.12); border-color: rgba(9, 209, 199, 0.32); color: #46DFB1; }
+.home-badge-chip.lvl-t3 { background: rgba(21, 145, 155, 0.18); border-color: rgba(21, 145, 155, 0.46); color: #46DFB1; box-shadow: 0 0 10px rgba(21,145,155,0.18); }
+.home-badge-chip.lvl-t4 { background: rgba(9, 209, 199, 0.16); border-color: rgba(9, 209, 199, 0.50); color: #80EE98; box-shadow: 0 0 16px rgba(9,209,199,0.28); }
+
+/* T3+: subtle pulse animation on the chip so the unlock moment
+   reads as something happened. `prefers-reduced-motion` respected. */
+@keyframes chip-pulse {
+    0%, 100% { box-shadow: 0 0 14px rgba(9, 209, 199, 0.22); }
+    50%      { box-shadow: 0 0 22px rgba(9, 209, 199, 0.42); }
+}
+.home-badge-chip.lvl-t3, .home-badge-chip.lvl-t4 {
+    animation: chip-pulse 3.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .home-badge-chip.lvl-t3, .home-badge-chip.lvl-t4 { animation: none; }
+    .home-badge-chip { transition: none; }
+}
+
+/* Body-class tier affects — applied to <body> by home-screen.js so
+   per-tier visual cues (logo ring at T3+, theme tint at T4) attach
+   without per-tier JS branching. The CSS spec is the source of truth
+   for "what changes per tier"; JS only flips the class.
+
+   Pre-paint affect: an inline <script> in <head> writes the tier
+   to `<html data-tier="...">` because <body> doesn't exist yet at
+   parse time. Selectors below match BOTH `body.tier-tN` (post-JS)
+   and `html[data-tier="tier-tN"]` (pre-JS) so cold loads don't
+   flash with the wrong affect. */
+html[data-tier="tier-t3"] .home-logo,
+html[data-tier="tier-t4"] .home-logo,
+body.tier-t3 .home-logo,
+body.tier-t4 .home-logo {
+    /* Small accent ring around the home logo at T3+. The home logo is
+       any element with class `.home-logo` — currently the brand
+       wordmark on stage-home. Using outline (vs box-shadow) so it
+       doesn't perturb the parent layout. */
+    outline: 2px solid rgba(70, 223, 177, 0.36);
+    outline-offset: 4px;
+    border-radius: 6px;
+    transition: outline-color 0.4s ease;
+}
+html[data-tier="tier-t4"] .home-logo,
+body.tier-t4 .home-logo {
+    outline-color: rgba(128, 238, 152, 0.52);
+    outline-width: 3px;
+}
+html[data-tier="tier-t4"] .home-stage .big-cta,
+body.tier-t4 .home-stage .big-cta {
+    /* Subtle lime accent on the primary CTA at the top tier — same
+       brand colours, just nudged to celebrate the milestone. The
+       button is functionally unchanged; only the accent shifts. */
+    background: linear-gradient(135deg, #46DFB1 0%, #80EE98 100%);
+    color: #0b1018;
+}
+html[data-tier="tier-t4"] .home-impact,
+body.tier-t4 .home-impact {
+    /* Soft radial mint glow behind the Lives Saved card at T4 —
+       reinforces the "you helped save lives" narrative since the
+       same number is the trigger for this tier. */
+    box-shadow: 0 0 32px rgba(70, 223, 177, 0.16);
+}
+@media (prefers-reduced-motion: reduce) {
+    body.tier-t3 .home-logo, body.tier-t4 .home-logo,
+    body.tier-t4 .home-impact { transition: none; }
+}
+
+/* Legacy 5-tier selectors retained as `display: inherit` no-ops so any
+   cached pre-v145 shell still painting the old class names doesn't
+   leak default browser styling. Each rule explicitly inherits the
+   new T2 tier colours as a sensible fallback. */
+.home-badge-chip.lvl-newcomer,
+.home-badge-chip.lvl-helper,
+.home-badge-chip.lvl-guardian,
+.home-badge-chip.lvl-champion,
+.home-badge-chip.lvl-hero {
+    background: rgba(9, 209, 199, 0.12);
+    border-color: rgba(9, 209, 199, 0.32);
+    color: #46DFB1;
+}
 
 /* My Reports count pill inline. */
 .mr-count {
@@ -8137,4 +8249,197 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     .welcome-lede { font-size: 0.88rem; padding: 0 4px; }
     .devid-num { font-size: 1.15rem; padding: 10px 12px; letter-spacing: 0.06em; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   BADGE STUDIO — May 2026 reward-system v2
+   In-app Canvas composer + share dispatch. Stage layout mirrors
+   stage-history (header + body sections); the canvas preview is the
+   focal element, with template tabs + photo controls + share buttons
+   stacked beneath. Theme = teal/navy across the board.
+   ══════════════════════════════════════════════════════════════════════ */
+
+#stage-badge-studio { padding: 0 16px 24px; }
+
+/* Live tier preview header — emoji + tier name + stats line. Sits
+   below the back/title row so the user sees "what they earned" at the
+   top of the studio. */
+.badge-studio-tier {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    margin: 12px 0 16px;
+    border-radius: 14px;
+    background: rgba(9, 209, 199, 0.10);
+    border: 1px solid rgba(9, 209, 199, 0.32);
+}
+.bs-tier-emoji { font-size: 36px; line-height: 1; }
+.bs-tier-stack { display: flex; flex-direction: column; gap: 2px; line-height: 1.15; }
+.bs-tier-name { font-size: 18px; font-weight: 900; color: #80EE98; letter-spacing: 0.02em; }
+.bs-tier-stats { font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, 0.66); }
+
+/* Template tabs — 3 horizontal pills the user taps to swap between
+   ring / WhatsApp / story templates. Active tab gets the teal accent. */
+.badge-studio-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+}
+.bs-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 8px;
+    border: 1px solid rgba(21, 145, 155, 0.32);
+    background: rgba(12, 100, 120, 0.20);
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.bs-tab i { font-size: 18px; color: #46DFB1; }
+.bs-tab:hover { background: rgba(12, 100, 120, 0.32); }
+.bs-tab.is-active {
+    background: rgba(9, 209, 199, 0.16);
+    border-color: rgba(9, 209, 199, 0.50);
+    color: #80EE98;
+}
+
+/* Canvas preview — pinned to the visible width with a fixed aspect-
+   ratio container. The underlying canvas paints at full export
+   resolution (1080×1080 / 1080×1920); CSS just constrains the
+   on-screen size. */
+.badge-studio-canvas-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 0 16px;
+    padding: 12px;
+    background: rgba(12, 30, 45, 0.45);
+    border: 1px solid rgba(21, 145, 155, 0.28);
+    border-radius: 12px;
+}
+.badge-studio-canvas {
+    width: 100%;
+    max-width: 320px;
+    height: auto;
+    border-radius: 10px;
+    background: transparent;
+    image-rendering: -webkit-optimize-contrast;
+}
+
+/* Photo + face-blur controls row. */
+.badge-studio-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.bs-upload {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: rgba(12, 100, 120, 0.32);
+    border: 1px solid rgba(21, 145, 155, 0.40);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.bs-upload i { color: #46DFB1; }
+.bs-upload:hover { background: rgba(12, 100, 120, 0.42); }
+.bs-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+}
+.bs-toggle input[type="checkbox"] {
+    accent-color: #46DFB1;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+/* Primary actions — Download + Share-via-app side by side. */
+.badge-studio-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.bs-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(9, 209, 199, 0.40);
+    background: rgba(9, 209, 199, 0.10);
+    color: #80EE98;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.bs-btn:hover { transform: translateY(-1px); background: rgba(9, 209, 199, 0.18); border-color: rgba(70, 223, 177, 0.6); }
+.bs-btn-primary {
+    background: linear-gradient(135deg, #09D1C7 0%, #46DFB1 100%);
+    color: #0b1018;
+    border-color: transparent;
+}
+.bs-btn-primary:hover {
+    background: linear-gradient(135deg, #46DFB1 0%, #80EE98 100%);
+    color: #0b1018;
+}
+
+/* Platform-specific share-chip row. Three chips: WA / Insta / LinkedIn.
+   These open the platform's share intent + (for image-only platforms)
+   trigger a Download fallback as part of the click handler. */
+.badge-studio-share-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+.bs-share-chip {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 6px;
+    border-radius: 10px;
+    border: 1px solid rgba(21, 145, 155, 0.32);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.bs-share-chip i { font-size: 18px; color: #46DFB1; }
+.bs-share-chip:hover {
+    background: rgba(21, 145, 155, 0.16);
+    border-color: rgba(70, 223, 177, 0.50);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bs-btn, .bs-share-chip, .bs-tab { transition: none; }
+}
+
 
