@@ -5,7 +5,12 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v141';
+const CACHE_NAME = 'crisp-v142';
+// v141 → v142 (May 2026, operator-reported) — bumped infra-classify
+// tile icon sizes. Was 38×38/20px, now scales 48×48/28px (default)
+// → 56×56/32px (≥380w) → 60×60/34px (≥700h) → 64×64/36px (≥800h)
+// → 68×68/38px (≥900h). Matches the home-stage CTA responsive
+// cascade so v4 capture stays visually consistent.
 // v140 → v141 (May 2026, operator-reported) — single-stat home
 // impact card. "Reports Verified" tile removed; "Lives Saved" now
 // occupies the card centred + slightly larger. Companion change on
