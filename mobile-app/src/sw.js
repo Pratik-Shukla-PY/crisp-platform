@@ -5,7 +5,17 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v138';
+const CACHE_NAME = 'crisp-v139';
+// v138 → v139 (May 2026) — My Reports UX redesign (operator-reported):
+//   · filter chips replaced with a native <select> dropdown ("All"
+//     default) — no more horizontal overflow on 390px screens
+//   · IN FLIGHT section hides entirely when empty (no more
+//     "Nothing in flight" placeholder wasting vertical space)
+//   · submitted reports grouped into <details> accordions by date
+//     (Today / Yesterday / This week / Older); ONLY the latest non-
+//     empty group expanded by default
+//   · "Load 5 more" lazy-render per group; older groups lazy-render
+//     their cards on first user-expand
 // v137 → v138 (May 2026) — operator-reported "1 queued never leaves
 // even on 50+ Mbps." Four coordinated fixes:
 //   · reconcile soft-drain: dequeue when SMALL of every photo lands +

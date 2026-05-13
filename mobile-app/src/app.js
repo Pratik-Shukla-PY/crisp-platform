@@ -9045,9 +9045,20 @@ async function openMyReports() {
     // across sessions). Wire the controls bar once, idempotent.
     _mrFilter = 'all';
     _mrView = 'list';
+    // May 2026 — reset the accordion pagination state on every fresh
+    // entry so the "latest non-empty group expanded, others collapsed,
+    // first 5 cards each" default is what greets the user.
+    try { _mrResetPagination(); } catch (_) {}
     try {
         const ctrl = document.getElementById('mr-controls');
         if (ctrl) {
+            // Filter dropdown reset (chip selectors below are legacy
+            // — they're now no-ops since the chip markup was removed
+            // in May 2026 but the calls stay harmless on a missing
+            // selector. Kept as a defence-in-depth for any embedded
+            // builds that still ship the old markup).
+            const filterSelect = document.getElementById('mr-filter-select');
+            if (filterSelect) filterSelect.value = 'all';
             ctrl.querySelectorAll('.mr-filter-chip').forEach((c) => {
                 c.classList.toggle('is-active', c.getAttribute('data-mr-filter') === 'all');
             });
@@ -9228,10 +9239,23 @@ async function _renderPartialReports() {
     // strictly-after-write within this function.
     const _hiPending = document.getElementById('hi-pending');
     if (_hiPending) _hiPending.textContent = String(inflight.length);
+    // May 2026 (operator-reported) — hide the entire IN FLIGHT section
+    // when empty. Pre-fix the section header + a "Nothing in flight…"
+    // empty-state still rendered, wasting ~120 px of vertical real
+    // estate above the user's actual report list. The IN FLIGHT count
+    // on the impact-card pill at the top of the page already conveys
+    // the "0 in flight" state.
+    const _inflightSec = document.getElementById('history-inflight-section');
     if (!inflight.length) {
-        _historyEmpty(list, t('empty_in_flight'), 'fa-cloud-check');
+        if (_inflightSec) _inflightSec.style.display = 'none';
+        // Clear the list so a previously-painted card doesn't linger
+        // behind the hidden section if a future render flips it back.
+        if (list) list.innerHTML = '';
         return;
     }
+    // Non-empty: ensure the section is visible (covers the
+    // "had-zero-then-got-one" flip).
+    if (_inflightSec) _inflightSec.style.display = '';
     list.innerHTML = inflight.map((it) => {
         const pct = _inflightPct(it);
         const status = it.status || 'queued';
@@ -9616,6 +9640,23 @@ window.__crispSynthesizeSubmittedReport = _synthesizeSubmittedReport;
 // want to see their full inventory first.
 let _mrFilter = 'all';
 let _mrView = 'list';
+// May 2026 (operator-reported) — paginate the submitted-reports list
+// inside date-grouped <details> accordions. `_mrGroupPage` maps a
+// bucket name ('today'/'yesterday'/'this_week'/'older') to the number
+// of cards currently rendered in that bucket. Initial value 5 (page
+// size). `_mrExpandedGroups` tracks user-toggled-open groups so a
+// re-render preserves their open state. `_mrInitialExpanded` is the
+// single group that opens by default (the latest non-empty one).
+const _MR_PAGE_SIZE = 5;
+let _mrGroupPage = { today: _MR_PAGE_SIZE, yesterday: _MR_PAGE_SIZE, this_week: _MR_PAGE_SIZE, older: _MR_PAGE_SIZE };
+let _mrExpandedGroups = new Set();
+let _mrInitialExpanded = null;
+
+function _mrResetPagination() {
+    _mrGroupPage = { today: _MR_PAGE_SIZE, yesterday: _MR_PAGE_SIZE, this_week: _MR_PAGE_SIZE, older: _MR_PAGE_SIZE };
+    _mrExpandedGroups = new Set();
+    _mrInitialExpanded = null;
+}
 
 function _matchesMrFilter(r, filter) {
     if (filter === 'all') return true;
@@ -9877,24 +9918,112 @@ async function _renderSubmittedReports() {
         </button>`;
     };
 
-    // Render the date-bucketed list. Each non-empty bucket gets a
-    // sub-header pill above its cards.
+    // May 2026 (operator-reported) — date-grouped <details> accordions
+    // with "Load 5 more" lazy-render per group.
+    //
+    // Pre-fix: every non-empty bucket rendered ALL its cards at once
+    // and the list was always flat-expanded. On the operator's PROD
+    // device with 14 reports today + 30+ older, the user had to
+    // scroll past everything to find the date breaks.
+    //
+    // Post-fix:
+    //   · Each non-empty bucket wraps in a <details> accordion.
+    //   · Only the LATEST non-empty bucket is `open` by default.
+    //   · Other buckets render summary-only (count badge); inner
+    //     cards lazy-render on the first user expand via the
+    //     `toggle` event handler below.
+    //   · Per-bucket pagination: render first 5 cards initially,
+    //     show a "Load 5 more · N remaining" button at the bottom
+    //     of the group when more exist. Click → append next 5.
+    //
+    // The <details>/<summary> is native HTML, fully accessible,
+    // keyboard-toggleable, and survives a JS reload without state
+    // loss (browsers persist the open attribute).
+
+    // First non-empty bucket = the one expanded by default on first
+    // render. After the first render the user-controlled expanded set
+    // takes over (preserves their explicit toggles).
+    if (_mrInitialExpanded === null) {
+        for (const bucket of ORDER) {
+            const arr = buckets[bucket];
+            if (arr && arr.length) {
+                _mrInitialExpanded = bucket;
+                _mrExpandedGroups.add(bucket);
+                break;
+            }
+        }
+    }
+
     const html = ORDER.map((bucket) => {
         const arr = buckets[bucket];
         if (!arr || !arr.length) return '';
         const headLabel = (typeof t === 'function' && t(titleKey[bucket])) || bucket;
-        return `<div class="mr-date-group">
-            <h3 class="mr-date-group-title">${escapeHtmlSimple(headLabel)} · ${arr.length}</h3>
-            ${arr.map(renderCard).join('')}
-        </div>`;
+        const isOpen = _mrExpandedGroups.has(bucket);
+        const renderedCount = isOpen
+            ? Math.min(_mrGroupPage[bucket] || _MR_PAGE_SIZE, arr.length)
+            : 0;
+        const remaining = arr.length - renderedCount;
+        const cardsHtml = isOpen
+            ? arr.slice(0, renderedCount).map(renderCard).join('')
+            : '';
+        const loadMoreLabel = (typeof t === 'function' && t('mr_load_more'))
+            || 'Load 5 more';
+        const loadMoreBtn = (isOpen && remaining > 0)
+            ? `<button type="button" class="mr-load-more" data-mr-bucket="${escapeHtmlSimple(bucket)}">
+                   <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+                   <span>${escapeHtmlSimple(loadMoreLabel)} · ${remaining} ${remaining === 1 ? 'more' : 'more'}</span>
+               </button>`
+            : '';
+        return `<details class="mr-date-group" data-mr-bucket="${escapeHtmlSimple(bucket)}"${isOpen ? ' open' : ''}>
+            <summary class="mr-date-group-summary">
+                <span class="mr-date-group-label">${escapeHtmlSimple(headLabel)}</span>
+                <span class="mr-date-group-count">${arr.length}</span>
+                <i class="fa-solid fa-chevron-down mr-date-group-chevron" aria-hidden="true"></i>
+            </summary>
+            <div class="mr-date-group-list" data-mr-bucket="${escapeHtmlSimple(bucket)}">
+                ${cardsHtml}
+            </div>
+            ${loadMoreBtn}
+        </details>`;
     }).join('');
     list.innerHTML = html;
 
-    // Attach click handlers to open the detail view. Using event delegation
-    // would be slightly cheaper but direct binding is clearer for N<100.
+    // Card-click handlers — bind to every rendered card.
     list.querySelectorAll('.mr-card').forEach((el) => {
         const id = el.getAttribute('data-report-id');
         el.addEventListener('click', () => openReportDetail(id));
+    });
+
+    // Lazy-render on first <details> expand. Browsers fire `toggle`
+    // every time the open state changes; we render cards the first
+    // time a collapsed group opens. Subsequent toggles are free.
+    list.querySelectorAll('details.mr-date-group').forEach((det) => {
+        det.addEventListener('toggle', () => {
+            const bucket = det.getAttribute('data-mr-bucket');
+            if (!bucket) return;
+            if (det.open) {
+                if (!_mrExpandedGroups.has(bucket)) {
+                    _mrExpandedGroups.add(bucket);
+                    _renderSubmittedReports().catch(() => {});
+                }
+            } else {
+                _mrExpandedGroups.delete(bucket);
+            }
+        });
+    });
+
+    // "Load 5 more" buttons — append the next page of cards in that
+    // bucket. We re-render the whole list (cheap at our scale) so the
+    // accordion + page counters stay coherent.
+    list.querySelectorAll('.mr-load-more').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const bucket = btn.getAttribute('data-mr-bucket');
+            if (!bucket) return;
+            _mrGroupPage[bucket] = (_mrGroupPage[bucket] || _MR_PAGE_SIZE) + _MR_PAGE_SIZE;
+            _renderSubmittedReports().catch(() => {});
+        });
     });
 }
 
@@ -9992,31 +10121,24 @@ function setupMyReportsControls() {
     const ctrl = document.getElementById('mr-controls');
     if (!ctrl || ctrl.dataset.wired === '1') return;
     ctrl.dataset.wired = '1';
-    ctrl.querySelectorAll('.mr-filter-chip').forEach((chip) => {
-        chip.addEventListener('click', () => {
-            const f = chip.getAttribute('data-mr-filter') || 'all';
-            _mrFilter = f;
-            ctrl.querySelectorAll('.mr-filter-chip').forEach((c) => {
-                c.classList.toggle('is-active', c === chip);
-            });
-            // chips beyond the visible viewport (Help sent /
-            // Rejected on 390px screens) used to stay off-screen after
-            // selection so the user couldn't see which filter was
-            // active. scrollIntoView centres the active chip in the
-            // scroll container.
-            try {
-                chip.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-            } catch (_) {
-                // Older Safari without scrollIntoView options — fall
-                // back to a manual scrollLeft adjust.
-                try {
-                    const row = chip.parentElement;
-                    if (row) row.scrollLeft = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2;
-                } catch (__) {}
-            }
+    // May 2026 — filter dropdown replaces the chip row. Single `change`
+    // listener handles all 5 options; legacy `.mr-filter-chip` markup
+    // has been removed from index.html.
+    const filterSelect = document.getElementById('mr-filter-select');
+    if (filterSelect) {
+        // Re-sync the <select> with whatever _mrFilter is on entry —
+        // stage-history re-init resets _mrFilter to 'all' (app.js:9046)
+        // so the dropdown value should reflect that.
+        filterSelect.value = _mrFilter || 'all';
+        filterSelect.addEventListener('change', () => {
+            _mrFilter = filterSelect.value || 'all';
+            // Reset pagination state — a fresh filter means a fresh
+            // view, so the latest non-empty group is expanded again
+            // and per-group page counters start from 5.
+            try { _mrResetPagination(); } catch (_) {}
             _renderSubmittedReports().catch(() => {});
         });
-    });
+    }
     ctrl.querySelectorAll('.mr-view-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
             const v = btn.getAttribute('data-mr-view') || 'list';

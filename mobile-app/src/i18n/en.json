@@ -446,6 +446,7 @@
   "mr_group_yesterday": "Yesterday",
   "mr_group_this_week": "This week",
   "mr_group_older": "Older",
+  "mr_load_more": "Load 5 more",
   "mr_empty_filtered": "No reports match this filter.",
   "mr_map_empty": "No reports with location yet.",
   "v4_cap_extras_label": "Add more (optional)",
