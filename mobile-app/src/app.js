@@ -3804,6 +3804,16 @@ function detectAndSetupLanguage() {
     // right pill mirror the same visual identity. Indian sub-national
     // language codes share the 🇮🇳 country flag since they don't
     // have their own ISO flag emoji.
+    //
+    // BUGFIX May 2026 (operator-reported, "fallback is appearing for
+    // different windows laptops and browsers") — every emoji here was
+    // the native Unicode flag character. Chrome/Edge on Windows 10 +
+    // many Linux distros don't ship colour flag glyphs and render
+    // them as monochrome "GB"/"FR"/"IN" letter pairs. The companion
+    // dict below tracks the ISO alpha-2 country code so the CSS
+    // `.lps-flag[data-cc="<cc>"]` rule can swap in an inline SVG.
+    // Emoji is kept ONLY as accessible text content for screen
+    // readers — visually hidden via `color: transparent` in styles.css.
     const LANG_FLAGS = {
         // Tier 1 — UN official languages
         en: '🇬🇧', zh: '🇨🇳', es: '🇪🇸', ar: '🇸🇦', fr: '🇫🇷', ru: '🇷🇺',
@@ -3818,6 +3828,16 @@ function detectAndSetupLanguage() {
         kn: '🇮🇳', ta: '🇮🇳', te: '🇮🇳', ml: '🇮🇳',
         gu: '🇮🇳', mr: '🇮🇳', pa: '🇮🇳',
     };
+    // ISO alpha-2 codes for the SVG-flag CSS swap (May 2026 fix).
+    // Lower-case to match the kebab-style data attribute the CSS
+    // expects (e.g. `data-cc="gb"`).
+    const LANG_COUNTRY = {
+        en: 'gb', zh: 'cn', es: 'es', ar: 'sa', fr: 'fr', ru: 'ru',
+        hi: 'in', pt: 'pt', bn: 'bd', ja: 'jp', tr: 'tr',
+        vi: 'vn', ko: 'kr', id: 'id', ur: 'pk',
+        kn: 'in', ta: 'in', te: 'in', ml: 'in',
+        gu: 'in', mr: 'in', pa: 'in',
+    };
 
     // Update the one visible pill to reflect the active locale code.
     // innerHTML form so we can render `<flag> CODE` with
@@ -3826,9 +3846,11 @@ function detectAndSetupLanguage() {
         const norm = String(code || 'en').toLowerCase();
         const upper = norm.toUpperCase();
         const flag = LANG_FLAGS[norm] || '🌐';
+        const cc = LANG_COUNTRY[norm];
+        const ccAttr = cc ? ` data-cc="${cc}"` : '';
         if (currentBtn) {
             currentBtn.innerHTML =
-                '<span class="lps-flag" aria-hidden="true">' + flag + '</span>' +
+                '<span class="lps-flag" aria-hidden="true"' + ccAttr + '>' + flag + '</span>' +
                 '<span class="lps-code">' + upper + '</span>';
             currentBtn.dataset.lang = norm;
         }
@@ -4007,10 +4029,17 @@ function detectAndSetupLanguage() {
         // used in the top-right pill). If the user is on a sub-national
         // Indian language (kn/ta/te/…) all of those share 🇮🇳 — visually
         // the picker chip stays consistent with the country.
-        const flagGlyph = LANG_FLAGS[String(code).toLowerCase()] || '📍';
+        const codeLower = String(code).toLowerCase();
+        const flagGlyph = LANG_FLAGS[codeLower] || '📍';
+        // May-2026 cross-browser flag fix — emit `data-cc` so the CSS
+        // background-SVG rule in styles.css renders the same flag on
+        // Windows-Chrome / Linux-without-Noto-Emoji where the native
+        // Unicode emoji falls back to monochrome region letters.
+        const cc = LANG_COUNTRY[codeLower];
+        const ccAttr = cc ? ` data-cc="${cc}"` : '';
         suggestedRow.innerHTML =
             '<button class="lang-picker-suggested-btn" data-lang="' + escapeHtmlSimple(code) + '">' +
-              '<span><span class="lpf-glyph" aria-hidden="true">' + flagGlyph + '</span> ' +
+              '<span><span class="lpf-glyph" aria-hidden="true"' + ccAttr + '>' + flagGlyph + '</span> ' +
               'Your region: <strong>' + escapeHtmlSimple(label || code) + '</strong></span>' +
               '<span class="lpf-chevron">›</span>' +
             '</button>';

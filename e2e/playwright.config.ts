@@ -69,6 +69,33 @@ export default defineConfig({
         baseURL: PWA_BASE,
       },
     },
+    // ── Cross-browser projects (May 2026) ──────────────────────────
+    // Operator-reported: language-picker flags didn't render on
+    // Windows-Chrome / Linux. The CSS-SVG fix (commit alongside
+    // spec 56) is browser-engine-agnostic by construction, but
+    // these projects run a focused subset of specs across all three
+    // major engines so we'd catch any future engine-specific
+    // regressions (e.g. a data:image/svg+xml URL parser quirk).
+    //
+    // Only `tests/pwa/56-flag-rendering-cross-browser.spec.ts`
+    // matches by default — full PWA suite stays on Chromium for
+    // runtime budget reasons.
+    {
+      name: 'pwa-firefox',
+      testMatch: /pwa\/56-.*\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Firefox'],
+        baseURL: PWA_BASE,
+      },
+    },
+    {
+      name: 'pwa-webkit',
+      testMatch: /pwa\/56-.*\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Safari'],
+        baseURL: PWA_BASE,
+      },
+    },
     {
       name: 'dashboard',
       testMatch: /dashboard\/.*\.spec\.ts$/,

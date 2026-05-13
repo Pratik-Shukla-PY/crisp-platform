@@ -2709,6 +2709,153 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
 }
 .lang-picker-flag .lpf-glyph { font-size: 1.25rem; }
 
+/* ── Cross-browser flag rendering (May 2026, operator-reported) ──────
+   The native Unicode flag emojis we use (🇬🇧 🇫🇷 🇮🇳 …) only render as
+   colour glyphs on Apple Color Emoji (macOS / iOS), Noto Color Emoji
+   (Android / most Linux), and Firefox-on-Windows (bundles its own
+   EmojiOne fallback). Chrome + Edge on Windows 10 — and on any Linux
+   without `fonts-noto-color-emoji` — fall back to the OS emoji font
+   which renders flags as monochrome two-letter region codes ("GB",
+   "FR", "IN"). UNDP reviewers running Windows-Chrome would have hit
+   exactly that.
+
+   Fix: render each flag as an inline SVG via CSS background-image on a
+   `data-cc="<iso-alpha-2>"` attribute. The literal emoji glyph remains
+   in the DOM (text-content) for screen-reader speech + accessibility
+   tooling and as a "what would have rendered" semantic fallback; we
+   hide it visually with `color: transparent` so on Apple/Android the
+   user sees ONLY the SVG (consistent visual everywhere) and not a
+   stack of "SVG + native emoji" overlapping.
+
+   No external dep, no CDN, fully offline-first (SVGs are inline data
+   URIs). 15 unique country flags cover the 22 PWA languages (the 7
+   Indian-script locales share the IN flag). */
+.lpf-glyph[data-cc] {
+    /* Box geometry — proportional 3:2 ratio. The default .lpf-glyph
+       above carries the font-size for the now-invisible emoji; we
+       override here so the SVG box matches its layout footprint
+       across the .lpf-un + .lpf-scroll tiles. */
+    display: inline-block;
+    width: 1.8em;
+    height: 1.2em;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+    border-radius: 2px;
+    /* Hide the native emoji so we don't render twice on Apple/Android */
+    color: transparent;
+    /* Soft border so a flag with a white edge (e.g. JP, KR) stays
+       visible against the dark tile background. */
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+    /* Force LTR even inside RTL containers — flags read the same. */
+    direction: ltr;
+}
+/* Each flag SVG is intentionally minimal: clear, recognisable, ~200-
+   500 bytes inline. Detailed coats of arms (PT, ES) and complex
+   roundels (KR yin-yang trigrams) are simplified — readers identify
+   the country from the colour-and-symbol pattern + the adjacent
+   native-script label, not from forensic accuracy. */
+.lpf-glyph[data-cc="gb"] {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 36'><rect width='60' height='36' fill='%23012169'/><path d='M0 0l60 36M60 0L0 36' stroke='%23fff' stroke-width='7.2'/><path d='M0 0l60 36M60 0L0 36' stroke='%23C8102E' stroke-width='4.8' clip-path='polygon(0 0, 50%25 50%25, 100%25 0)'/><path d='M30 0v36M0 18h60' stroke='%23fff' stroke-width='12'/><path d='M30 0v36M0 18h60' stroke='%23C8102E' stroke-width='7.2'/></svg>");
+}
+.lpf-glyph[data-cc="fr"] {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'><rect width='1' height='2' fill='%23002395'/><rect x='1' width='1' height='2' fill='%23fff'/><rect x='2' width='1' height='2' fill='%23ED2939'/></svg>");
+}
+.lpf-glyph[data-cc="es"] {
+    /* Tricolour — red/yellow/red (3:1 wide yellow band). Crest
+       deliberately omitted; recognisable from band pattern alone. */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 4'><rect width='6' height='1' fill='%23AA151B'/><rect y='1' width='6' height='2' fill='%23F1BF00'/><rect y='3' width='6' height='1' fill='%23AA151B'/></svg>");
+}
+.lpf-glyph[data-cc="sa"] {
+    /* Plain green field; shahada + sword omitted (renders illegible
+       at 1.8em anyway). Reader IDs it from the green + the adjacent
+       العربية label. */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'><rect width='3' height='2' fill='%23006C35'/><rect x='0.3' y='1.5' width='2.4' height='0.06' fill='%23fff'/></svg>");
+}
+.lpf-glyph[data-cc="ru"] {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'><rect width='3' height='0.667' fill='%23fff'/><rect y='0.667' width='3' height='0.667' fill='%230039A6'/><rect y='1.333' width='3' height='0.667' fill='%23D52B1E'/></svg>");
+}
+.lpf-glyph[data-cc="cn"] {
+    /* Red field + simplified star (single yellow centre star instead
+       of the canonical 1-large-4-small constellation). */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23DE2910'/><polygon points='7,3 8.2,6.4 11.8,6.4 8.9,8.6 10,12 7,9.9 4,12 5.1,8.6 2.2,6.4 5.8,6.4' fill='%23FFDE00'/></svg>");
+}
+.lpf-glyph[data-cc="in"] {
+    /* Saffron / white / green with a blue Ashoka chakra approximation
+       (24-spoke wheel → small filled circle ring for readability). */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'><rect width='9' height='2' fill='%23FF9933'/><rect y='2' width='9' height='2' fill='%23fff'/><rect y='4' width='9' height='2' fill='%23138808'/><circle cx='4.5' cy='3' r='0.7' fill='none' stroke='%23000080' stroke-width='0.1'/><circle cx='4.5' cy='3' r='0.1' fill='%23000080'/></svg>");
+}
+.lpf-glyph[data-cc="pt"] {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 4'><rect width='2.4' height='4' fill='%23006600'/><rect x='2.4' width='3.6' height='4' fill='%23FF0000'/><circle cx='2.4' cy='2' r='0.5' fill='%23FFFF00' stroke='%23000080' stroke-width='0.05'/></svg>");
+}
+.lpf-glyph[data-cc="bd"] {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><rect width='10' height='6' fill='%23006A4E'/><circle cx='4.5' cy='3' r='2' fill='%23F42A41'/></svg>");
+}
+.lpf-glyph[data-cc="jp"] {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23fff'/><circle cx='15' cy='10' r='6' fill='%23BC002D'/></svg>");
+}
+.lpf-glyph[data-cc="tr"] {
+    /* Red field + simplified crescent + 5-point star */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23E30A17'/><circle cx='11.5' cy='10' r='4' fill='%23fff'/><circle cx='12.5' cy='10' r='3.2' fill='%23E30A17'/><polygon points='17,10 18.4,9.55 17.55,10.75 18.4,11.95 17,11.5 15.6,11.95 16.45,10.75 15.6,9.55' fill='%23fff'/></svg>");
+}
+.lpf-glyph[data-cc="vn"] {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23DA251D'/><polygon points='15,5 16.85,10.7 22.83,10.7 17.99,14.2 19.84,20 15,16.5 10.16,20 12.01,14.2 7.17,10.7 13.15,10.7' fill='%23FFFF00'/></svg>");
+}
+.lpf-glyph[data-cc="kr"] {
+    /* White field + simplified red/blue taegeuk (yin-yang) without
+       trigrams (4 corner trigrams omitted — illegible at 1.8em). */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23fff'/><path d='M15 5a5 5 0 0 1 0 10 2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 0 0-5z' fill='%23CD2E3A'/><path d='M15 5a5 5 0 0 0 0 10 2.5 2.5 0 0 0 0-5 2.5 2.5 0 0 1 0-5z' fill='%230047A0'/></svg>");
+}
+.lpf-glyph[data-cc="id"] {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'><rect width='3' height='1' fill='%23FF0000'/><rect y='1' width='3' height='1' fill='%23fff'/></svg>");
+}
+.lpf-glyph[data-cc="pk"] {
+    /* Green field with white left stripe + simplified crescent
+       (5-point star omitted at this size). */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23006633'/><rect width='7.5' height='20' fill='%23fff'/><circle cx='19' cy='10' r='4' fill='%23fff'/><circle cx='20.2' cy='10' r='3.4' fill='%23006633'/></svg>");
+}
+
+/* Companion rule for the top-right language-pill flag (.lps-flag inside
+   .lang-switcher) — same data-cc swap mechanism, smaller geometry. */
+.lps-flag[data-cc] {
+    display: inline-block;
+    width: 1.4em;
+    height: 0.95em;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+    border-radius: 2px;
+    color: transparent;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+    direction: ltr;
+}
+/* All flag SVGs are inherited from the .lpf-glyph[data-cc] rules above
+   via descendant-style attribute matching. Browsers don't combine
+   selectors that way automatically though, so re-declare the
+   background-image rules for .lps-flag with the same data URIs.
+   Kept in one block per flag so the audit trail stays single-source. */
+.lps-flag[data-cc="gb"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 36'><rect width='60' height='36' fill='%23012169'/><path d='M0 0l60 36M60 0L0 36' stroke='%23fff' stroke-width='7.2'/><path d='M30 0v36M0 18h60' stroke='%23fff' stroke-width='12'/><path d='M30 0v36M0 18h60' stroke='%23C8102E' stroke-width='7.2'/></svg>"); }
+.lps-flag[data-cc="fr"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'><rect width='1' height='2' fill='%23002395'/><rect x='1' width='1' height='2' fill='%23fff'/><rect x='2' width='1' height='2' fill='%23ED2939'/></svg>"); }
+.lps-flag[data-cc="es"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 4'><rect width='6' height='1' fill='%23AA151B'/><rect y='1' width='6' height='2' fill='%23F1BF00'/><rect y='3' width='6' height='1' fill='%23AA151B'/></svg>"); }
+.lps-flag[data-cc="sa"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'><rect width='3' height='2' fill='%23006C35'/><rect x='0.3' y='1.5' width='2.4' height='0.06' fill='%23fff'/></svg>"); }
+.lps-flag[data-cc="ru"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'><rect width='3' height='0.667' fill='%23fff'/><rect y='0.667' width='3' height='0.667' fill='%230039A6'/><rect y='1.333' width='3' height='0.667' fill='%23D52B1E'/></svg>"); }
+.lps-flag[data-cc="cn"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23DE2910'/><polygon points='7,3 8.2,6.4 11.8,6.4 8.9,8.6 10,12 7,9.9 4,12 5.1,8.6 2.2,6.4 5.8,6.4' fill='%23FFDE00'/></svg>"); }
+.lps-flag[data-cc="in"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'><rect width='9' height='2' fill='%23FF9933'/><rect y='2' width='9' height='2' fill='%23fff'/><rect y='4' width='9' height='2' fill='%23138808'/><circle cx='4.5' cy='3' r='0.7' fill='none' stroke='%23000080' stroke-width='0.1'/><circle cx='4.5' cy='3' r='0.1' fill='%23000080'/></svg>"); }
+.lps-flag[data-cc="pt"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 4'><rect width='2.4' height='4' fill='%23006600'/><rect x='2.4' width='3.6' height='4' fill='%23FF0000'/><circle cx='2.4' cy='2' r='0.5' fill='%23FFFF00' stroke='%23000080' stroke-width='0.05'/></svg>"); }
+.lps-flag[data-cc="bd"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><rect width='10' height='6' fill='%23006A4E'/><circle cx='4.5' cy='3' r='2' fill='%23F42A41'/></svg>"); }
+.lps-flag[data-cc="jp"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23fff'/><circle cx='15' cy='10' r='6' fill='%23BC002D'/></svg>"); }
+.lps-flag[data-cc="tr"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23E30A17'/><circle cx='11.5' cy='10' r='4' fill='%23fff'/><circle cx='12.5' cy='10' r='3.2' fill='%23E30A17'/><polygon points='17,10 18.4,9.55 17.55,10.75 18.4,11.95 17,11.5 15.6,11.95 16.45,10.75 15.6,9.55' fill='%23fff'/></svg>"); }
+.lps-flag[data-cc="vn"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23DA251D'/><polygon points='15,5 16.85,10.7 22.83,10.7 17.99,14.2 19.84,20 15,16.5 10.16,20 12.01,14.2 7.17,10.7 13.15,10.7' fill='%23FFFF00'/></svg>"); }
+.lps-flag[data-cc="kr"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23fff'/><path d='M15 5a5 5 0 0 1 0 10 2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 0 0-5z' fill='%23CD2E3A'/><path d='M15 5a5 5 0 0 0 0 10 2.5 2.5 0 0 0 0-5 2.5 2.5 0 0 1 0-5z' fill='%230047A0'/></svg>"); }
+.lps-flag[data-cc="id"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'><rect width='3' height='1' fill='%23FF0000'/><rect y='1' width='3' height='1' fill='%23fff'/></svg>"); }
+.lps-flag[data-cc="pk"] { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'><rect width='30' height='20' fill='%23006633'/><rect width='7.5' height='20' fill='%23fff'/><circle cx='19' cy='10' r='4' fill='%23fff'/><circle cx='20.2' cy='10' r='3.4' fill='%23006633'/></svg>"); }
+/* "Unknown" / globe fallback for any language whose `data-cc` is
+   missing or pointing at a country we didn't ship a glyph for. */
+.lpf-glyph:not([data-cc]),
+.lps-flag:not([data-cc]) {
+    /* no override — falls back to the native emoji text rendering */
+}
+
 /* §3.1 UX — picker sections.
    The UN section (6 tiles) gets a 3-column grid with stacked flag-above-
    label tiles, a subtly highlighted tint, and a 2rem flag glyph so the
