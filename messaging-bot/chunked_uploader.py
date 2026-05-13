@@ -237,16 +237,38 @@ async def _send_chunk_with_retry(client, report_id, media_id, media_type,
         )
 
     checksum = _djb2_bytes(chunk_bytes)
+    # BUGFIX May 2026 — Telegram-channel Originals never reached the
+    # dashboard (operator-reported).
+    #
+    # Single-tier transport: messaging-channel media isn't run through
+    # the PWA's SMALL/MEDIUM/LARGE variant ladder. The previous default
+    # (`LOW` for every chunk) made the bot's full-resolution photo
+    # land on the backend as a LOW row, and the dashboard's
+    # "Open original" / Originals UI strictly filters on
+    # `resolution_tier === 'HIGH'`. Net effect: every Telegram photo
+    # was permanently hidden from the Originals tab.
+    #
+    # Telegram serves photos in 4-5 progressively larger renditions
+    # (max 1280×1280 for legacy Bot API). The bot already picks
+    # `photos[-1]` — the largest the channel can deliver — so those
+    # bytes ARE the "Original" for that report from Telegram's
+    # perspective. Tag the chunks as HIGH for IMAGE uploads so the
+    # dashboard surfaces them as the Original. AUDIO/VIDEO stay LOW
+    # because the resolution_tier semantics there are still LOW-only
+    # on the dashboard side.
+    #
+    # The backend's existing tier-upgrade logic at
+    # `attach_media_chunk` (line ~2661) already allows a chunk to
+    # *upgrade* an existing LOW/MEDIUM row to HIGH — so even if the
+    # thumbnail (LOW) lands first via /media/thumbnail, the chunks'
+    # HIGH tag wins and the Media row ends up at HIGH for IMAGE.
+    tier = "HIGH" if media_type == "IMAGE" else "LOW"
     form = {
         "media_id": media_id,
         "seq_num": str(seq),
         "total_chunks": str(total),
         "type": media_type,
-        # Single-tier transport: messaging-channel media isn't run
-        # through the PWA's SMALL/MEDIUM/LARGE variant ladder. Keep
-        # `LOW` as the default tier so existing dashboard rendering
-        # logic doesn't see an unexpected HIGH-only row.
-        "resolution_tier": "LOW",
+        "resolution_tier": tier,
         "client_blur_applied": "false",  # server runs its PII pass on assembly
         "checksum": checksum,
     }
@@ -292,10 +314,16 @@ async def _send_chunk_b64_fallback(client, report_id, media_id, media_type,
     is unavailable on this backend (process-sticky fallback)."""
     data_b64 = base64.b64encode(chunk_bytes).decode("ascii")
     checksum = _djb2_checksum(data_b64)
+    # Match the HIGH-tier-for-IMAGE behaviour of the primary binary
+    # path. Otherwise a backend that 404s on /media/chunk-bin would
+    # still mis-tag every Telegram photo as LOW and hide it from the
+    # Originals tab. (See the long comment in the bin path above.)
+    tier = "HIGH" if media_type == "IMAGE" else "LOW"
     payload = {
         "media_id": media_id, "type": media_type,
         "seq_num": seq, "total_chunks": total,
         "data": data_b64, "checksum": checksum,
+        "resolution_tier": tier,
     }
     delays = [2, 5, 10, 30]
     for attempt in range(len(delays) + 1):

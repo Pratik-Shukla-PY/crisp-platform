@@ -552,9 +552,15 @@ async def _send(method: str, data: dict):
     we re-POST the same payload with `parse_mode` stripped so the user
     at least sees the plain-text version. Logs the original parse
     error so we can still fix the root-cause template afterwards.
+
+    Returns the parsed JSON response (`{ok, result, ...}`) on success
+    so callers can capture the `message_id` of a sent prompt (needed
+    for the May-2026 stale-message dedupe: the bot tracks which message
+    holds the *active* inline keyboard and ignores callback presses
+    from older messages).
     """
     if not BOT_TOKEN:
-        return
+        return None
     try:
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.post(f"{API_BASE}/{method}", json=data)
@@ -568,18 +574,51 @@ async def _send(method: str, data: dict):
                 r = await c.post(f"{API_BASE}/{method}", json=safe)
             if r.status_code != 200:
                 logger.warning(f"TG API error ({r.status_code}): {r.text[:200]}")
+                return None
+            try:
+                return r.json()
+            except Exception:
+                return None
     except Exception as e:
         logger.error(f"TG send error: {e}")
+        return None
 
 
 async def send_text(chat_id: int, text: str, **kwargs):
     data = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
     data.update(kwargs)
-    await _send("sendMessage", data)
+    return await _send("sendMessage", data)
 
 
 async def answer_callback(cq_id: str, text: str = ""):
     await _send("answerCallbackQuery", {"callback_query_id": cq_id, "text": text})
+
+
+async def edit_reply_markup_clear(chat_id: int, message_id: int):
+    """Strip the inline keyboard from a previously-sent message.
+
+    Called once a callback handler has accepted a button press, so a
+    user who scrolls back to the old message can't tap the same button
+    twice (e.g. open the bot in two phone-tabs, pick crisis type once,
+    pick again from the stale tab — the second press would re-fire the
+    handler). Telegram's `editMessageReplyMarkup` with an empty markup
+    removes the inline keyboard entirely; the message body stays so
+    the conversation transcript is intact.
+    """
+    if message_id is None:
+        return
+    try:
+        await _send("editMessageReplyMarkup", {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "reply_markup": {"inline_keyboard": []},
+        })
+    except Exception as e:
+        # Best-effort — a 400 here just means the message is older than
+        # 48 h (Telegram's edit window) or already had its markup
+        # cleared. Either way the bot continues; the dedupe in the
+        # callback handler is the second line of defence.
+        logger.debug(f"edit_reply_markup_clear no-op for msg {message_id}: {e}")
 
 
 # ── Step-by-Step Guided Messages ───────────────────────────────────────────────
@@ -787,6 +826,12 @@ async def send_step_crisis_type(chat_id: int, lang: str):
         "chat_id": chat_id,
         "text": body,
         "parse_mode": "Markdown",
+        # UNDP-canonical crisis chips only (CLAUDE.md must-have #5).
+        # LANDSLIDE + PANDEMIC removed in May 2026 — the backend's
+        # `_enforce_undp_taxonomy` rejects them with 422, so surfacing
+        # them as tap targets was a guaranteed submission failure. The
+        # back-compat aliases in `CRISIS_MAP` still map any stale-chat
+        # taps to OTHER so older history doesn't error.
         "reply_markup": {
             "inline_keyboard": [
                 # Natural
@@ -794,12 +839,11 @@ async def send_step_crisis_type(chat_id: int, lang: str):
                  {"text": "🌊 " + t(lang, "crisis_flood"),       "callback_data": "crisis_flood"},
                  {"text": "🌊 " + t(lang, "crisis_tsunami"),     "callback_data": "crisis_tsunami"}],
                 [{"text": "🌪 " + t(lang, "crisis_cyclone"),     "callback_data": "crisis_cyclone"},
-                 {"text": "🏔 " + t(lang, "crisis_landslide"),   "callback_data": "crisis_landslide"}],
+                 {"text": "🔥 " + t(lang, "crisis_wildfire"),    "callback_data": "crisis_wildfire"}],
                 # Technological
                 [{"text": "— " + t(lang, "crisis_group_technological") + " —", "callback_data": "noop_group_tech"}],
                 [{"text": "💥 " + t(lang, "crisis_explosion"),           "callback_data": "crisis_explosion"},
-                 {"text": "☣️ " + t(lang, "crisis_chemical_incident"),   "callback_data": "crisis_chemical_incident"},
-                 {"text": "🦠 " + t(lang, "crisis_pandemic"),            "callback_data": "crisis_pandemic"}],
+                 {"text": "☣️ " + t(lang, "crisis_chemical_incident"),   "callback_data": "crisis_chemical_incident"}],
                 # Human-made
                 [{"text": "— " + t(lang, "crisis_group_human_made") + " —", "callback_data": "noop_group_human"}],
                 [{"text": "⚔️ " + t(lang, "crisis_conflict"),    "callback_data": "crisis_conflict"},

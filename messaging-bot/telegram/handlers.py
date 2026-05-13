@@ -21,6 +21,7 @@ from .session_manager import (
     clear_session, SEVERITY_MAP, TYPE_MAP, CRISIS_MAP, DAMAGE_MAP, DEBRIS_MAP, hash_user,
     resolve_location_name,
     is_duplicate_callback,
+    is_stale_callback_message, track_prompt_msg,
 )
 from .consent_store import (
     has_consented as consent_has,
@@ -34,7 +35,7 @@ from .bot_replies import (
     send_step_crisis_type, send_step_damage_class, send_step_building_name,
     send_step_debris, send_building_suggestions,
     send_step_text, send_step_description, send_confirmation, send_add_more_prompt,
-    send_text, answer_callback,
+    send_text, answer_callback, edit_reply_markup_clear,
     detect_lang, t,
 )
 
@@ -266,20 +267,31 @@ def _next_missing_step(session) -> str:
 
 
 async def _prompt_for_step(session, chat_id: int, step: str):
-    """Send the appropriate prompt for the given step."""
+    """Send the appropriate prompt for the given step.
+
+    Captures the sent message's `message_id` onto the session via
+    `track_prompt_msg` so the stale-message dedupe in `_handle_callback`
+    can reject button presses from older messages. This is the
+    operator-reported "open the bot in two tabs and tap from the stale
+    one" defence. Each `send_*` helper returns the Telegram Bot API
+    response; `track_prompt_msg` is a best-effort write — bad responses
+    leave `active_prompt_msg_id` alone and the dedupe falls back to the
+    existing 2-second-window `is_duplicate_callback`.
+    """
     lang = session.lang
+    result = None
     if step == "STEP_PHOTO":
-        await send_step_photo_first(chat_id, lang)
+        result = await send_step_photo_first(chat_id, lang)
     elif step == "STEP_DESCRIPTION":
-        await send_step_description(chat_id, lang)
+        result = await send_step_description(chat_id, lang)
     elif step == "STEP_TYPE":
-        await send_step_type(chat_id, lang)
+        result = await send_step_type(chat_id, lang)
     elif step == "STEP_CRISIS_TYPE":
-        await send_step_crisis_type(chat_id, lang)
+        result = await send_step_crisis_type(chat_id, lang)
     elif step == "STEP_DAMAGE_CLASS":
-        await send_step_damage_class(chat_id, lang)
+        result = await send_step_damage_class(chat_id, lang)
     elif step == "STEP_SEVERITY":
-        await send_step_severity(chat_id, lang)
+        result = await send_step_severity(chat_id, lang)
     elif step == "STEP_BUILDING_NAME":
         # UX fix — if we have GPS, try to offer nearby OSM
         # buildings as tap-to-pick chips first. Reporter taps one → done.
@@ -290,16 +302,18 @@ async def _prompt_for_step(session, chat_id: int, step: str):
                 from .building_lookup import nearby_buildings
                 suggestions = await nearby_buildings(session.latitude, session.longitude, limit=5)
                 if suggestions:
-                    await send_building_suggestions(chat_id, lang, suggestions)
+                    result = await send_building_suggestions(chat_id, lang, suggestions)
                     picked = True
             except Exception:
                 picked = False
         if not picked:
-            await send_step_building_name(chat_id, lang)
+            result = await send_step_building_name(chat_id, lang)
     elif step == "STEP_DEBRIS":
-        await send_step_debris(chat_id, lang)
+        result = await send_step_debris(chat_id, lang)
     elif step == "STEP_LOCATION":
-        await send_step_location(chat_id, lang)
+        result = await send_step_location(chat_id, lang)
+    if result is not None:
+        track_prompt_msg(session, result)
 
 
 async def handle_update(update: dict):
@@ -348,7 +362,7 @@ async def handle_update(update: dict):
                 "telegram /start linked to PWA device-hash (chat_id=%s)",
                 chat_id,
             )
-        await send_welcome(chat_id, s.lang)
+        track_prompt_msg(s, await send_welcome(chat_id, s.lang))
         return
 
     # /cancel always aborts
@@ -359,13 +373,13 @@ async def handle_update(update: dict):
         s = get_or_create_session(user_id, chat_id)
         s.lang = detected
         s.state = "LANG_SELECT"
-        await send_welcome(chat_id, s.lang)
+        track_prompt_msg(s, await send_welcome(chat_id, s.lang))
         return
 
     # If in START, DONE, or LANG_SELECT — show language picker
     if session.state in ("START", "DONE", "LANG_SELECT"):
         session.state = "LANG_SELECT"
-        await send_welcome(chat_id, session.lang)
+        track_prompt_msg(session, await send_welcome(chat_id, session.lang))
         return
 
     # P3.5 — Consent-gate: if waiting on consent (or never consented), any
@@ -376,7 +390,7 @@ async def handle_update(update: dict):
     if not session.consented and consent_has(user_id):
         session.consented = True
     if session.state == "AWAIT_CONSENT" or not session.consented:
-        await send_consent_prompt(chat_id, session.lang)
+        track_prompt_msg(session, await send_consent_prompt(chat_id, session.lang))
         return
 
     # ADD_MORE state — user is adding details to an already-submitted report
@@ -440,7 +454,9 @@ async def handle_update(update: dict):
 async def _handle_callback(callback_query: dict):
     user = callback_query.get("from", {})
     user_id = user.get("id")
-    chat_id = callback_query.get("message", {}).get("chat", {}).get("id")
+    msg = callback_query.get("message", {}) or {}
+    chat_id = msg.get("chat", {}).get("id")
+    callback_msg_id = msg.get("message_id")
     data = callback_query.get("data", "")
     cq_id = callback_query.get("id", "")
     if not user_id or not chat_id:
@@ -453,6 +469,35 @@ async def _handle_callback(callback_query: dict):
         session.lang = detected
     lang = session.lang
 
+    # BUGFIX May 2026 — stale-message dedupe (operator-reported).
+    #
+    # Scenario: user opens the bot in two phone tabs. They pick the
+    # crisis type from tab A — state advances, a new prompt is sent.
+    # They scroll up in tab B (or come back hours later) and tap the
+    # same crisis chip on the OLD inline keyboard. Different cq_id,
+    # identical `data`, way outside the 2 s `is_duplicate_callback`
+    # window → handler used to re-fire and state advanced again.
+    #
+    # `is_stale_callback_message` compares the callback's message_id
+    # against the last prompt-with-keyboard we sent. Mismatch = stale.
+    # Ack the press (clear the user's spinner) and silently drop. As
+    # an additional defence, clear the inline keyboard on the stale
+    # message so it physically can't be tapped again.
+    if is_stale_callback_message(session, callback_msg_id):
+        try:
+            await answer_callback(cq_id)
+        except Exception:
+            pass
+        try:
+            await edit_reply_markup_clear(chat_id, callback_msg_id)
+        except Exception:
+            pass
+        logger.info(
+            f"telegram callback dropped — stale message {callback_msg_id} "
+            f"vs active {session.active_prompt_msg_id} (data={data})"
+        )
+        return
+
     # UX fix — multi-tap debounce. Users tap a chip, see nothing
     # for 500-800 ms while the backend roundtrip runs, tap again in
     # frustration. Without this guard the second callback fires the
@@ -464,6 +509,16 @@ async def _handle_callback(callback_query: dict):
         except Exception:
             pass
         return
+
+    # The callback has been accepted as fresh — clear the inline
+    # keyboard on the *active* prompt so the user can't physically
+    # tap the same button again from this message. The next prompt
+    # (sent below by `_prompt_for_step`) becomes the new active one.
+    try:
+        if session.active_prompt_msg_id is not None:
+            await edit_reply_markup_clear(chat_id, session.active_prompt_msg_id)
+    except Exception:
+        pass
 
     # P3.5 — Language selection routes through consent before any data is
     # captured. Apr-2026 fix: consent is persisted to SQLite keyed by
@@ -482,7 +537,7 @@ async def _handle_callback(callback_query: dict):
             await _prompt_for_step(session, chat_id, session.state)
         else:
             session.state = "AWAIT_CONSENT"
-            await send_consent_prompt(chat_id, new_lang)
+            track_prompt_msg(session, await send_consent_prompt(chat_id, new_lang))
         return
 
     # User accepted the consent card — proceed to reporting flow.
@@ -523,7 +578,7 @@ async def _handle_callback(callback_query: dict):
         else:
             s.state = "AWAIT_CONSENT"
             await answer_callback(cq_id)
-            await send_consent_prompt(chat_id, s.lang)
+            track_prompt_msg(s, await send_consent_prompt(chat_id, s.lang))
         return
 
     if data == "stop":
@@ -538,7 +593,7 @@ async def _handle_callback(callback_query: dict):
         session.report_id = report_id
         session.state = "ADD_MORE"
         await answer_callback(cq_id)
-        await send_add_more_prompt(chat_id, lang)
+        track_prompt_msg(session, await send_add_more_prompt(chat_id, lang))
         return
 
     if data == "add_more_done":
@@ -555,7 +610,7 @@ async def _handle_callback(callback_query: dict):
         s = get_or_create_session(user_id, chat_id)
         s.lang = detected
         s.state = "LANG_SELECT"
-        await send_welcome(chat_id, s.lang)
+        track_prompt_msg(s, await send_welcome(chat_id, s.lang))
         return
 
     # ── Skip photo → go to description ──

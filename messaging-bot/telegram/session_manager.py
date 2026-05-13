@@ -55,24 +55,34 @@ TYPE_MAP = {
     "school": "COMMUNITY", "telecom": "UTILITY",
 }
 CRISIS_MAP = {
-    # UNDP Appendix-1 taxonomy — Natural / Technological / Human-made.
+    # UNDP-canonical taxonomy (CLAUDE.md must-have #5):
+    #   EARTHQUAKE / FLOOD / TSUNAMI / CYCLONE (HURRICANE alias)
+    #   WILDFIRE / EXPLOSION / CHEMICAL_INCIDENT
+    #   CONFLICT / CIVIL_UNREST / OTHER
+    # — and nothing else. The backend's `_enforce_undp_taxonomy`
+    # validator rejects any other value with 422.
     # Natural
     "crisis_earthquake":         "EARTHQUAKE",
     "crisis_flood":              "FLOOD",
     "crisis_tsunami":            "TSUNAMI",
     "crisis_cyclone":            "CYCLONE",
-    "crisis_landslide":          "LANDSLIDE",
+    "crisis_wildfire":           "WILDFIRE",
     # Technological
     "crisis_explosion":          "EXPLOSION",
     "crisis_chemical_incident":  "CHEMICAL_INCIDENT",
-    "crisis_pandemic":           "PANDEMIC",
     # Human-made
     "crisis_conflict":           "CONFLICT",
     "crisis_civil_unrest":       "CIVIL_UNREST",
     "crisis_other":              "OTHER",
-    # Legacy callbacks retained for back-compat with older clients.
+    # Legacy callbacks retained for back-compat with older Telegram
+    # clients whose chat history still contains the old chip ids.
+    # Tapping a stale chip from before the May-2026 fix falls back
+    # to OTHER (UNDP-valid) instead of the previous LANDSLIDE/
+    # PANDEMIC values that the backend would 422-reject. Hurricane
+    # remains a CYCLONE alias (synonym, not back-compat).
     "crisis_hurricane":          "CYCLONE",
-    "crisis_wildfire":           "OTHER",
+    "crisis_landslide":          "OTHER",
+    "crisis_pandemic":           "OTHER",
 }
 DAMAGE_MAP = {
     "dmg_none": "MINIMAL",      # UNDP Appendix-1: renamed NO_DAMAGE → MINIMAL
@@ -140,6 +150,23 @@ class TelegramSession:
     # no-op. Bounded queue → never grows unbounded.
     callback_ids: set = field(default_factory=set)
     callback_recent_data: list = field(default_factory=list)   # [(data, ts)]
+    # BUGFIX May 2026 — stale-message dedupe.
+    #
+    # The 2-second `(data, ts)` window above caught only rapid double-taps
+    # (network-lag → user taps twice). It did NOT catch the operator-
+    # reported case: user keeps the bot open in two phone tabs, picks
+    # crisis type from the FIRST tab, then days later picks the SAME
+    # crisis chip from the SECOND tab's stale inline keyboard. Different
+    # cq_id, identical `data`, way outside the 2 s window → handler
+    # re-fires, state advances twice.
+    #
+    # Fix: every time the bot sends a prompt with an inline keyboard,
+    # remember its message_id here. A callback arriving on any OTHER
+    # message_id is treated as stale and silently dropped (after the
+    # answer_callback ack so the user's spinner stops). The active
+    # message is also edited to clear its keyboard once a press lands,
+    # so the user can't physically tap it again.
+    active_prompt_msg_id: Optional[int] = None
     submitted_report_id: Optional[str] = None
     # P3.5 — tracks whether the user has consented to data capture. Flipped
     # true only by the explicit "I consent" callback; all data handlers
@@ -284,6 +311,47 @@ def is_duplicate_message(session: TelegramSession, message_id: int) -> bool:
         return True
     session.message_ids.add(message_id)
     return False
+
+
+def is_stale_callback_message(session: TelegramSession, message_id) -> bool:
+    """True when the callback came from an older message whose inline
+    keyboard has been superseded by a newer prompt.
+
+    `active_prompt_msg_id` is set every time we send a prompt with an
+    inline keyboard (`session_manager._track_prompt_msg` is wired up
+    from the `_prompt_for_step` helper). If the click arrives on any
+    other message_id, the user has tapped a stale button — drop it.
+
+    Treat the case where `active_prompt_msg_id` is None as "not stale"
+    so the very first interaction (no prompt sent yet) still works.
+    """
+    if session.active_prompt_msg_id is None:
+        return False
+    if message_id is None:
+        return False
+    return int(message_id) != int(session.active_prompt_msg_id)
+
+
+def track_prompt_msg(session: TelegramSession, send_result) -> None:
+    """Save the message_id of the latest prompt-with-inline-keyboard.
+
+    `send_result` is what `bot_replies._send` returns — the Telegram
+    Bot API response object `{ok, result: {message_id, ...}}`. We grab
+    the message_id off `result` and stash it on the session so the
+    stale-message dedupe in `_handle_callback` can match against it.
+
+    Best-effort: any unexpected response shape (None, malformed JSON,
+    network error) leaves `active_prompt_msg_id` unchanged — the bot
+    falls back to the existing (data, 2s window) dedupe.
+    """
+    if not isinstance(send_result, dict):
+        return
+    if not send_result.get("ok"):
+        return
+    result = send_result.get("result") or {}
+    msg_id = result.get("message_id")
+    if isinstance(msg_id, int):
+        session.active_prompt_msg_id = msg_id
 
 
 # ── Language detection — EXACT SAME logic as mobile app (COUNTRY_LANG_DATA + REGION_LANG_MAP) ──
