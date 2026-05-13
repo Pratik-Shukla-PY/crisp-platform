@@ -5,7 +5,19 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v147';
+const CACHE_NAME = 'crisp-v148';
+// v147 → v148 (May 2026, operator-reported stage-stacking bug).
+// `goToStage` was iterating only the hard-coded STAGES + STAGES_V3
+// lists when removing `.active` from the prior stage. The new
+// stage-rewards + stage-badge-studio (from reward-system v2) were
+// missing from both lists → tapping "Open Badge Studio" on the
+// Rewards page added `.active` to stage-badge-studio WITHOUT
+// removing it from stage-rewards, so both stages rendered with
+// non-zero opacity → operator screenshot showed Badge Studio
+// overlapping the Rewards ladder. Fix: walk every `.stage` element
+// in the DOM and clear `.active` before assigning the new target;
+// self-heals for any future stage too. Companion test in spec 66
+// pins the "exactly one .stage.active" invariant.
 // v146 → v147 (May 2026, operator-reported tier-stuck-at-Scout bug).
 // Two-line fix to the reward-system v2 surfaces:
 //   1) app.js now exposes API_BASE as `window.API_BASE` (was a

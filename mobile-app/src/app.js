@@ -3185,11 +3185,14 @@ function goToStage(id) {
     // present in STAGES. De-activate BOTH the legacy and v3 lists so a
     // transition between chains doesn't leave an orphan ".active" behind.
     const ACTIVE_LIST = _activeStageList();
-    const allStages = new Set([...STAGES, ...STAGES_V3]);
-    allStages.forEach(s => {
-        const el = document.getElementById(s);
-        if (el) el.classList.remove('active');
-    });
+    // May 2026 — deactivate EVERY `.stage` element instead of relying
+    // on the STAGES + STAGES_V3 lists. The lists were drifting out of
+    // sync as new stages were added (stage-rewards, stage-badge-studio
+    // in the reward-system v2 work were missing → goToStage left them
+    // `.active` while painting the new target → overlapping render
+    // shown in operator screenshot). Iterating the DOM is the source
+    // of truth and self-heals for any future stage.
+    document.querySelectorAll('.stage').forEach((el) => el.classList.remove('active'));
     const target = document.getElementById(id);
     if (target) target.classList.add('active');
 

@@ -178,4 +178,31 @@ test.describe('PWA — dedicated Rewards page (reward-system v2 second pass)', (
         await page.locator('#btn-rewards-back').click();
         await expect(page.locator('#stage-home.active')).toBeVisible();
     });
+
+    test('@smoke navigating Home → Rewards → Badge Studio never leaves two stages .active at once', async ({ page }) => {
+        // Operator-flagged May 2026 — `goToStage` was iterating a
+        // hard-coded STAGES + STAGES_V3 list, missing the new
+        // stage-rewards + stage-badge-studio. Result: tapping
+        // "Open Badge Studio" added .active to stage-badge-studio
+        // without removing it from stage-rewards → both rendered
+        // simultaneously, overlapping content shown in operator
+        // screenshot. This test pins the invariant that exactly ONE
+        // .stage carries `.active` at every navigation hop.
+        await bootHomeAtTier(page, 'T4_LIFEKEEPER');
+
+        async function assertExactlyOneActive(expectedId: string) {
+            const count = await page.locator('.stage.active').count();
+            expect(count, `expected exactly one .stage.active; got ${count}`).toBe(1);
+            await expect(page.locator(`#${expectedId}.active`)).toBeVisible();
+        }
+
+        await assertExactlyOneActive('stage-home');
+        await page.locator('#btn-rewards').click();
+        await assertExactlyOneActive('stage-rewards');
+        await page.locator('#btn-rewards-open-studio').click();
+        await assertExactlyOneActive('stage-badge-studio');
+        // Bounce back to home and confirm everything cleans up.
+        await page.locator('#btn-badge-studio-back').click();
+        await assertExactlyOneActive('stage-home');
+    });
 });
