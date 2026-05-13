@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push
+from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -32,3 +32,8 @@ api_router.include_router(modules.router, prefix="/modules", tags=["modules"])
 # device_hash only. The endpoint URL itself is the per-subscription
 # secret (provider-issued, hard to guess).
 api_router.include_router(push.router, prefix="/push", tags=["push"])
+# Badge Studio share-page (Phase D.6 of swirling-forging-raccoon plan).
+# Mints + serves signed share tokens used by LinkedIn's share dialog
+# (which scrapes OG meta from a URL rather than accepting an image
+# attachment). Public, no auth — the token signature is the only state.
+api_router.include_router(share.router, prefix="", tags=["share"])

@@ -55,8 +55,13 @@ class TestReportSubmission:
         })
         res = client.get("/api/v1/reports/profile/TEST-BADGE")
         assert res.status_code == 200
-        assert res.json()["badge_level"] == "NEWCOMER"
-        assert res.json()["report_count"] >= 1
+        body = res.json()
+        # May 2026 — submitting a report promotes from T1_SCOUT to
+        # T2_SIGNAL. Legacy 3-tier alias still maps to NEWCOMER until
+        # the v1 → v2 PWA shell rollout completes.
+        assert body["badge_level"] == "T2_SIGNAL"
+        assert body["badge_legacy"] == "NEWCOMER"
+        assert body["report_count"] >= 1
 
 
 class TestReportDashboard:

@@ -159,19 +159,26 @@ class TestUNDPQualityBasedCredibility:
     """
 
     def test_volume_never_upgrades_badge(self, client, db, device_hash):
-        """Volume alone (un-verified submissions) must NOT upgrade a
-        badge — the old ladder rewarded raw count which UNDP explicitly
-        warned against. The rate-limiter tops us at 30/min/device, so
-        4 rapid submissions is enough to demonstrate the invariant:
-        none of them trigger a badge change."""
+        """Volume alone (un-verified submissions) must NEVER unlock the
+        higher tiers — the old volume-keyed ladder rewarded raw count
+        which UNDP explicitly warned against.
+
+        May 2026 (4-tier redesign) — the FIRST submit promotes from T1
+        to T2 (SIGNAL); all subsequent submits stay at T2 because
+        promotion to T3 requires analyst dispatch. The invariant the
+        test guards is: 'no number of submissions alone unlocks
+        T3 CHANGEMAKER or T4 LIFEKEEPER'.
+        """
         for i in range(4):
             _seed_report(client, device_hash, f"vol-{i}")
         profile = db.query(ReporterProfile).filter(
             ReporterProfile.device_hash == device_hash).first()
         assert profile.report_count == 4
         assert profile.verified_count == 0
-        assert profile.badge_level == "NEWCOMER", \
-            "raw volume must not unlock a higher badge (UNDP incentive rule)"
+        # 4 submitted reports → T2_SIGNAL only. T3 CHANGEMAKER (dispatched)
+        # and T4 LIFEKEEPER (lives saved) remain locked.
+        assert profile.badge_level == "T2_SIGNAL", \
+            "raw volume must not unlock a higher tier (UNDP incentive rule)"
 
     def test_dispatch_promotes_first_report_to_verified(self, client, db, admin_token, analyst_token, device_hash):
         """Dispatching an analyst against a PENDING report should bump
@@ -189,7 +196,13 @@ class TestUNDPQualityBasedCredibility:
             f"dispatch should bump verified_count, got {profile.verified_count}"
 
     def test_3_verified_reports_upgrade_to_contributor(self, client, db, analyst_token, device_hash):
-        """CONTRIBUTOR at 3 verified; badge ladder reflects QUALITY."""
+        """May 2026 (4-tier redesign) — under the new ladder, the FIRST
+        dispatch already promotes the reporter to T3_CHANGEMAKER (no
+        '≥3 verified' gate any more). The 3-verified case is no
+        different from the 1-verified case at the tier level; the
+        cumulative verified_count is still tracked separately for
+        credibility scoring + dashboard fraud-detection.
+        """
         ids = []
         for i in range(3):
             rid = _seed_report(client, device_hash, f"qual-{i}")
@@ -202,7 +215,9 @@ class TestUNDPQualityBasedCredibility:
             ReporterProfile.device_hash == device_hash).first()
         db.refresh(profile)
         assert profile.verified_count == 3
-        assert profile.badge_level == "CONTRIBUTOR"
+        # New 4-tier name. Legacy alias would surface as CONTRIBUTOR
+        # for any unupgraded pre-v145 PWA shell.
+        assert profile.badge_level == "T3_CHANGEMAKER"
 
     def test_dispatch_twice_does_not_double_count(self, client, db, analyst_token, device_hash):
         """Idempotency — moving an already-dispatched report to RESOLVED

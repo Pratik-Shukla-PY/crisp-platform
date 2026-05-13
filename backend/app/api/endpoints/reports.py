@@ -1409,12 +1409,27 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
 
 @router.patch("/{report_id}/impact")
 def set_lives_impacted(report_id: str, payload: dict, user=Depends(require_analyst), db: Session = Depends(get_db)):
-    """Set the number of lives impacted by this incident."""
+    """Set the number of lives impacted by this incident.
+
+    May 2026 — also recomputes the reporter's tier so a transition
+    from 0 → ≥1 lives saved fires the T4 LIFEKEEPER promotion on the
+    next /profile read. The PWA picks this up via the My-Reports
+    tier-up delta toast (see ``_renderSubmittedReports`` snapshot-v2
+    logic).
+    """
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     report.lives_impacted = payload.get("lives_impacted", 0)
     db.commit()
+    # Tier recompute walks the device's reports; runs AFTER the commit
+    # above so the SUM query sees the new value. Failures here must
+    # never break the analyst's PATCH — wrap defensively.
+    try:
+        _mark_report_lives_impacted_for_tier(report, db)
+        db.commit()
+    except Exception as e:  # pragma: no cover — observability only
+        logger.warning(f"[Tier] recompute on /impact failed for report {report_id[:8]}: {e}")
     return {"id": report_id, "lives_impacted": report.lives_impacted}
 
 
@@ -3722,7 +3737,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
 
 @router.get("/profile/{device_hash}")
 def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
-    """Get reporter's gamification profile (badge level, report count, impact).
+    """Get reporter's gamification profile (4-tier ladder + impact + progress).
 
     Apr 2026 PR 2 — defense-in-depth against stored-counter drift. The
     stored `ReporterProfile.report_count` is only decremented in
@@ -3731,11 +3746,34 @@ def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
     rows. We report the MIN of stored vs live so the UI never shows a
     number that's greater than the reports the user can actually see.
     Same for `verified_count`.
+
+    May 2026 second-pass — extended response shape for the 4-tier
+    reward ladder (SCOUT / SIGNAL / CHANGEMAKER / LIFEKEEPER):
+
+      * ``responded_count`` — live count of reports in
+        {RESPONDING, RESOLVED} (drives the T3 promotion).
+      * ``lives_saved_total`` — sum of ``lives_impacted`` across the
+        device's reports (drives the T4 promotion + the home/My-Reports
+        Lives Saved aggregate).
+      * ``badge_level`` — one of T1_SCOUT / T2_SIGNAL / T3_CHANGEMAKER
+        / T4_LIFEKEEPER. Recomputed on the fly here so a stale stored
+        value (e.g. from before the v2 migration) corrects itself on
+        the next read.
+      * ``badge_legacy`` — same tier mapped to the old 3-tier names
+        (NEWCOMER / CONTRIBUTOR / TRUSTED) for pre-v145 PWA shells
+        that haven't picked up the new BADGE_LEVELS map yet. Removed
+        in a post-submission cleanup once SW cache invalidation has
+        propagated.
+      * ``tier`` object — current tier id, next tier id, and a
+        machine-readable ``progress`` block telling the PWA exactly
+        what action moves the user up. The PWA renders this verbatim
+        in the badge-chip sub-line so backend stays the single source
+        of truth for the progression copy.
     """
     from app.models.report import ReporterProfile
     profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
     if not profile:
-        profile = ReporterProfile(device_hash=device_hash, report_count=0, badge_level="NEWCOMER", impact_score=0)
+        profile = ReporterProfile(device_hash=device_hash, report_count=0, badge_level="T1_SCOUT", impact_score=0)
         db.add(profile)
         db.commit()
         db.refresh(profile)
@@ -3744,29 +3782,82 @@ def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
     # doesn't exist (rare — only for fresh profiles), fall back to 0.
     live_count = 0
     live_verified = 0
+    live_responded = 0
+    live_lives_total = 0
     device = db.query(Device).filter(Device.device_hash == device_hash).first()
     if device:
-        live_count = db.query(Report).filter(
+        base_q = db.query(Report).filter(
             Report.device_id == device.id,
             Report.deletion_requested_at.is_(None),
-        ).count()
+        )
+        live_count = base_q.count()
         # Verified = status transitioned out of PENDING via AI or responder.
-        live_verified = db.query(Report).filter(
-            Report.device_id == device.id,
-            Report.deletion_requested_at.is_(None),
+        live_verified = base_q.filter(
             Report.status.in_([
                 ReportStatusEnum.VERIFIED,
                 ReportStatusEnum.RESPONDING,
                 ReportStatusEnum.RESOLVED,
-            ]),
+            ])
         ).count()
+        # Responded = analyst dispatched / resolved (the T3 trigger).
+        live_responded = base_q.filter(
+            Report.status.in_([
+                ReportStatusEnum.RESPONDING,
+                ReportStatusEnum.RESOLVED,
+            ])
+        ).count()
+        # Lives saved aggregate (the T4 trigger + the home stat).
+        live_lives_total = (
+            base_q.with_entities(sa_func.coalesce(sa_func.sum(Report.lives_impacted), 0)).scalar() or 0
+        )
+
+    # Recompute tier on every read so a stale stored value (e.g. from
+    # before the v1→v2 migration, or if a recompute call site was
+    # missed during the rollout) self-corrects without a job.
+    _recompute_tier(profile, db)
+    db.commit()
+    db.refresh(profile)
+
+    # ── Tier progress block ────────────────────────────────────────
+    # Tells the PWA what the user needs to do to level up next. The
+    # backend owns this copy so the PWA doesn't drift on tier
+    # thresholds. ``label_key`` is an i18n key the PWA resolves
+    # locally; ``needs`` / ``needed`` / ``have`` are machine-readable
+    # so a future "you're 1 verified away from CHANGEMAKER" progress
+    # bar can read the numbers directly.
+    _TIER_ORDER = ["T1_SCOUT", "T2_SIGNAL", "T3_CHANGEMAKER", "T4_LIFEKEEPER"]
+    _LEGACY_MAP = {
+        "T1_SCOUT":       "NEWCOMER",
+        "T2_SIGNAL":      "NEWCOMER",
+        "T3_CHANGEMAKER": "CONTRIBUTOR",
+        "T4_LIFEKEEPER":  "TRUSTED",
+    }
+    current = profile.badge_level or "T1_SCOUT"
+    cur_idx = _TIER_ORDER.index(current) if current in _TIER_ORDER else 0
+    next_tier = _TIER_ORDER[cur_idx + 1] if cur_idx + 1 < len(_TIER_ORDER) else None
+    if current == "T1_SCOUT":
+        progress = {"needs": "submitted", "needed": 1, "have": live_count, "label_key": "tier_progress_first_report"}
+    elif current == "T2_SIGNAL":
+        progress = {"needs": "responded", "needed": 1, "have": live_responded, "label_key": "tier_progress_verified_1"}
+    elif current == "T3_CHANGEMAKER":
+        progress = {"needs": "lives_saved", "needed": 1, "have": live_lives_total, "label_key": "tier_progress_lives_1"}
+    else:  # T4 — top tier
+        progress = {"needs": None, "needed": 0, "have": live_lives_total, "label_key": "tier_progress_top_share"}
 
     return {
         "device_hash": profile.device_hash,
         "report_count": min(profile.report_count or 0, live_count),
         "verified_count": min(profile.verified_count or 0, live_verified),
-        "badge_level": profile.badge_level,
-        "impact_score": profile.impact_score,
+        "responded_count": live_responded,
+        "lives_saved_total": live_lives_total,
+        "badge_level": current,
+        "badge_legacy": _LEGACY_MAP.get(current, "NEWCOMER"),
+        "tier": {
+            "current": current,
+            "next": next_tier,
+            "progress": progress,
+        },
+        "impact_score": live_lives_total,  # alias retained for back-compat with the dashboard credibility readout
     }
 
 
@@ -3781,12 +3872,21 @@ def _update_reporter_profile(device_hash: str, db: Session):
     ``report_count`` — i.e. it rewarded exactly the behaviour UNDP
     warned against.
 
-    The new ladder is keyed off **verified** reports — the public-facing
-    metric the home screen now surfaces is "reports verified" instead
-    of "reports submitted", so more submissions without verification
-    produce zero incentive uplift. The legacy ``report_count`` field is
-    retained as an internal-only counter used by the dashboard to spot
-    abusive floods, but it no longer drives badges.
+    May 2026 second-pass — extended to a 4-tier identity-forward
+    ladder (SCOUT → SIGNAL → CHANGEMAKER → LIFEKEEPER). Promotion
+    triggers are concrete impact events, never raw volume:
+      * T2 SIGNAL       — ≥1 report submitted (this function)
+      * T3 CHANGEMAKER  — ≥1 report dispatched (RESPONDING/RESOLVED
+                          — see ``_mark_report_verified_for_credibility``)
+      * T4 LIFEKEEPER   — analyst set ``lives_impacted ≥ 1`` on any
+                          report owned by the device (see the
+                          ``set_lives_impacted`` PATCH handler at
+                          ~line 1410, which now calls
+                          ``_recompute_tier`` after committing).
+
+    The legacy ``report_count`` field is retained as an internal-only
+    counter used by the dashboard to spot abusive floods, but it
+    NEVER drives badges.
     """
     from app.models.report import ReporterProfile
     profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
@@ -3795,25 +3895,88 @@ def _update_reporter_profile(device_hash: str, db: Session):
         db.add(profile)
     # Increment raw count (internal signal for dashboard fraud detection).
     profile.report_count = (profile.report_count or 0) + 1
-    # Badge tier is driven by verified_count, NOT report_count.
-    _recompute_badge_from_verified(profile)
+    # Recompute tier (T2 SIGNAL promotion may fire on first submit).
+    _recompute_tier(profile, db)
 
 
-def _recompute_badge_from_verified(profile) -> None:
-    """Quality-first badge ladder:
-      * TRUSTED    — ≥ 10 verified reports (reports that were accepted
-                     and dispatched / resolved by an analyst)
-      * CONTRIBUTOR — ≥ 3 verified reports
-      * NEWCOMER    — default
-    Volume alone never produces a badge upgrade; volume without
-    verification is treated as neutral."""
+def _recompute_tier(profile, db: Session) -> None:
+    """4-tier reward ladder — May 2026 second-pass redesign.
+
+    Replaces ``_recompute_badge_from_verified`` (3-tier, verified-count
+    only). The new ladder is quality-driven across THREE signals:
+    submission, dispatch (help sent), and lives impacted. Every
+    promotion requires either an analyst action or a real downstream
+    impact event — never raw volume alone.
+
+    Tier criteria:
+      * T4 LIFEKEEPER   — sum(lives_impacted across device's reports) ≥ 1
+                          (requires analyst to call ``/impact``)
+      * T3 CHANGEMAKER  — ≥1 report in {RESPONDING, RESOLVED}
+                          (requires analyst to call ``/dispatch`` or
+                          ``/resolve``)
+      * T2 SIGNAL       — ≥1 report submitted (any status)
+      * T1 SCOUT        — default
+
+    Backwards compat: the ``profile.badge_level`` column still carries
+    the chosen tier as a string; the new identifiers are
+    ``T1_SCOUT``/``T2_SIGNAL``/``T3_CHANGEMAKER``/``T4_LIFEKEEPER``.
+    The /profile endpoint emits both the new ``badge_level`` AND a
+    ``badge_legacy`` field (mapped to the old 3-tier names) so
+    pre-v145 PWA shells don't crash on the new string.
+    """
+    from app.models.report import Report, Device, ReporterProfile
+    if not profile or not profile.device_hash:
+        return
+    device = db.query(Device).filter(Device.device_hash == profile.device_hash).first()
+    if not device:
+        profile.badge_level = "T1_SCOUT"
+        return
+
+    # Soft-deleted rows are excluded — they were either restored within
+    # the grace window or genuinely retracted; either way they should
+    # not keep contributing to a tier promotion.
+    base_q = db.query(Report).filter(
+        Report.device_id == device.id,
+        Report.deletion_requested_at.is_(None),
+    )
+
+    lives_total = (
+        base_q.with_entities(sa_func.coalesce(sa_func.sum(Report.lives_impacted), 0)).scalar() or 0
+    )
+    responded = base_q.filter(
+        Report.status.in_([
+            ReportStatusEnum.RESPONDING,
+            ReportStatusEnum.RESOLVED,
+        ])
+    ).count()
+    submitted = base_q.count()
+
+    if lives_total >= 1:
+        profile.badge_level = "T4_LIFEKEEPER"
+    elif responded >= 1:
+        profile.badge_level = "T3_CHANGEMAKER"
+    elif submitted >= 1:
+        profile.badge_level = "T2_SIGNAL"
+    else:
+        profile.badge_level = "T1_SCOUT"
+
+
+# Backwards-compat alias for any external caller still importing the old
+# 3-tier name. Both call sites in this file have been updated to
+# ``_recompute_tier``; the alias remains for one release cycle.
+def _recompute_badge_from_verified(profile) -> None:  # pragma: no cover
+    """DEPRECATED — kept as a shim so any external import doesn't crash
+    during the v1 → v2 transition. The new function ``_recompute_tier``
+    requires the db session; callers should migrate."""
     vc = profile.verified_count or 0
     if vc >= 10:
-        profile.badge_level = "TRUSTED"
+        profile.badge_level = "T4_LIFEKEEPER"
     elif vc >= 3:
-        profile.badge_level = "CONTRIBUTOR"
+        profile.badge_level = "T3_CHANGEMAKER"
+    elif vc >= 1:
+        profile.badge_level = "T2_SIGNAL"
     else:
-        profile.badge_level = "NEWCOMER"
+        profile.badge_level = "T1_SCOUT"
 
 
 def _mark_report_verified_for_credibility(report, db: Session) -> None:
@@ -3822,6 +3985,10 @@ def _mark_report_verified_for_credibility(report, db: Session) -> None:
     Idempotent via the ``ReviewerVerdictEnum`` check downstream — we bump
     ``verified_count`` at most once per report by gating on the
     transition that takes it out of PENDING for the first time.
+
+    May 2026 — also calls ``_recompute_tier`` so T3 CHANGEMAKER promotion
+    fires immediately on first dispatch / resolve (without waiting for
+    the next submit).
     """
     from app.models.report import Device, ReporterProfile
     if not report or not report.device_id:
@@ -3836,7 +4003,34 @@ def _mark_report_verified_for_credibility(report, db: Session) -> None:
         profile = ReporterProfile(device_hash=device.device_hash)
         db.add(profile)
     profile.verified_count = (profile.verified_count or 0) + 1
-    _recompute_badge_from_verified(profile)
+    _recompute_tier(profile, db)
+
+
+def _mark_report_lives_impacted_for_tier(report, db: Session) -> None:
+    """Called when an analyst PATCHes ``lives_impacted`` on a report.
+
+    The report row itself is already updated by the caller; we just
+    look up the device's profile and recompute the tier so T4
+    LIFEKEEPER promotion is visible on the next /profile read (the
+    PWA also celebrates this via the tier-up delta-detection block
+    on My Reports open).
+
+    Idempotent: re-PATCHing the same value triggers a no-op recompute
+    that lands on the same tier.
+    """
+    from app.models.report import Device, ReporterProfile
+    if not report or not report.device_id:
+        return
+    device = db.query(Device).filter(Device.id == report.device_id).first()
+    if not device or not device.device_hash:
+        return
+    profile = db.query(ReporterProfile).filter(
+        ReporterProfile.device_hash == device.device_hash
+    ).first()
+    if not profile:
+        profile = ReporterProfile(device_hash=device.device_hash)
+        db.add(profile)
+    _recompute_tier(profile, db)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
