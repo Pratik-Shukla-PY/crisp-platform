@@ -30,11 +30,20 @@ test.describe('@theme-visual PWA — color theme rewrite (May 2026)', () => {
 
     test('home page', async ({ page }) => {
         await bootV4(page);
+        // Dismiss any first-visit coachmark / "Save this ID" tooltip so
+        // the full primary CTA is visible in the screenshot.
+        await page.evaluate(() => {
+            document.querySelectorAll(
+                '.coach-mark, .home-id-tooltip, .save-id-tooltip, ' +
+                '[class*="coachmark"], [class*="tooltip"]'
+            ).forEach((el) => (el as HTMLElement).style.display = 'none');
+            localStorage.setItem('crisp_id_seen', '1');
+        });
+        await page.waitForTimeout(150);
         await page.screenshot({
             path: 'test-results/theme-screenshots/01-home.png',
             fullPage: true,
         });
-        // Sanity assertion — stage-home is the active stage.
         await expect(page.locator('#stage-home.active')).toBeVisible({ timeout: 5000 });
     });
 

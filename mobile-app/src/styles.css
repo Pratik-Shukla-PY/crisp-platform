@@ -353,7 +353,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 /* ── BIG CTA button ─────────────────────────────────────────── */
 .big-cta {
     width: 100%; padding: 22px;
-    background: linear-gradient(135deg, var(--accent), #0C6478);
+    background: var(--accent);
     color: #000; border: none; border-radius: 18px;
     font-size: 1.2rem; font-weight: 800; cursor: pointer;
     display: flex; align-items: center; justify-content: center; gap: 12px;
@@ -392,7 +392,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .choice-btn i { font-size: 3rem; }
 
 .camera-btn {
-    background: linear-gradient(135deg, var(--accent), #0C6478);
+    background: var(--accent);
     color: #000; box-shadow: 0 8px 24px rgba(9,209,199,0.3);
 }
 .browse-btn {
@@ -5943,9 +5943,9 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     transition: background 0.2s ease, transform 0.1s ease;
 }
 .v4-primary.is-ready {
-    background: linear-gradient(180deg, #ff6b35 0%, #f7931e 100%);
+    background: linear-gradient(180deg, #09D1C7 0%, #0AB8B0 100%);
     color: #fff;
-    box-shadow: 0 6px 20px rgba(255, 107, 53, 0.25);
+    box-shadow: 0 6px 20px rgba(9, 209, 199, 0.25);
     cursor: pointer;
 }
 .v4-primary.is-ready:hover { transform: translateY(-1px); }
@@ -6148,7 +6148,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .v4-meta-loc-cancel:hover { color: var(--text); }
 .v4-meta-loc-save {
-    background: linear-gradient(135deg, var(--accent, #09D1C7), #0C6478);
+    background: var(--accent, #09D1C7);
     color: #0a1f30;
 }
 .v4-meta-loc-save:hover { filter: brightness(1.05); }
@@ -6333,7 +6333,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .v4-cap-action:active { transform: scale(0.98); }
 .v4-cap-action i { font-size: 18px; }
 .v4-cap-action-primary {
-    background: linear-gradient(135deg, var(--accent, #09D1C7), #0C6478);
+    background: var(--accent, #09D1C7);
     color: #0a1f30;
     border-color: transparent;
 }
@@ -6556,7 +6556,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     gap: 10px;
     padding: 14px;
     border-radius: 12px;
-    background: linear-gradient(135deg, var(--accent, #09D1C7), #0C6478);
+    background: var(--accent, #09D1C7);
     color: #0a1f30;
     border: 0;
     font-weight: 800;
@@ -7372,7 +7372,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     width: 72px; height: 72px;
     border-radius: 12px;
     overflow: hidden;
-    background: linear-gradient(135deg, rgba(255, 107, 53, 0.12) 0%, rgba(247, 147, 30, 0.06) 100%);
+    background: linear-gradient(135deg, rgba(9, 209, 199, 0.12) 0%, rgba(9, 209, 199, 0.06) 100%);
     border: 1.5px dashed rgba(9, 209, 199, 0.35);
     display: flex;
     align-items: center;
@@ -7675,7 +7675,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     flex-shrink: 0;
 }
 .undp-q-icon svg { display: block; }
-.undp-q-icon-power  { background: linear-gradient(135deg, rgba(251,146,60,0.32), rgba(9,209,199,0.18)); color: #80EE98; box-shadow: 0 0 14px rgba(9,209,199,0.18); }
+.undp-q-icon-power  { background: linear-gradient(135deg, rgba(9,209,199,0.32), rgba(9,209,199,0.18)); color: #80EE98; box-shadow: 0 0 14px rgba(9,209,199,0.18); }
 .undp-q-icon-water  { background: linear-gradient(135deg, rgba(9,209,199,0.32),  rgba(14,165,233,0.18)); color: #46DFB1; box-shadow: 0 0 14px rgba(9,209,199,0.18); }
 .undp-q-icon-health { background: linear-gradient(135deg, rgba(244,114,182,0.32), rgba(219,39,119,0.18)); color: #f9a8d4; box-shadow: 0 0 14px rgba(244,114,182,0.2); }
 .undp-q-icon-debris { background: linear-gradient(135deg, rgba(234,179,8,0.32),   rgba(202,138,4,0.18));  color: #fde68a; box-shadow: 0 0 14px rgba(234,179,8,0.18); }
@@ -7716,7 +7716,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .undp-lvl-l1.is-selected { border-color: #80EE98; background: rgba(128,238,152,0.18); }
 .undp-lvl-l2.is-selected { border-color: #84cc16; background: rgba(132,204,22,0.18); }
 .undp-lvl-l3.is-selected { border-color: #eab308; background: rgba(234,179,8,0.18); }
-.undp-lvl-l4.is-selected { border-color: #09D1C7; background: rgba(251,146,60,0.18); }
+.undp-lvl-l4.is-selected { border-color: #09D1C7; background: rgba(9,209,199,0.18); }
 .undp-lvl-l5.is-selected { border-color: #ef4444; background: rgba(239,68,68,0.18); }
 
 .undp-pill-row {
