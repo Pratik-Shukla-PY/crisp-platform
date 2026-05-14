@@ -11534,25 +11534,27 @@ body { background-color: #10284a; }
     width: 100%;
     padding: 22px 16px 18px;
     position: relative;
-    overflow: hidden;       /* clip the ripple + halo to rounded corners */
-    /* Frosted-glass card matching the channels-grid / action-tile look */
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    /* v8.2 (May 2026, operator) — NO rectangular card. Background +
+       border + backdrop-filter removed; just the number + halo +
+       label sit free on the home stage. `overflow: hidden` is kept
+       (with a generous radius) SOLELY so the ripple animation clips
+       inside the click area instead of bleeding into siblings. The
+       radius itself isn't visible because there's nothing painted
+       at the edges. */
+    overflow: hidden;
+    background: transparent;
+    border: 0;
     border-radius: 22px;
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.18s ease;
+    transition: transform 0.18s ease;
     -webkit-tap-highlight-color: transparent;
     min-height: 156px;
 }
-.home-stage .home-nearby-number-block:hover,
+/* Keyboard focus: subtle outline only (no fill) so a11y is preserved
+   without re-introducing the card look. */
 .home-stage .home-nearby-number-block:focus-visible {
-    background: rgba(70, 223, 177, 0.07);
-    border-color: rgba(70, 223, 177, 0.30);
-}
-.home-stage .home-nearby-number-block:focus-visible {
-    outline: 2px solid rgba(70, 223, 177, 0.55);
-    outline-offset: 2px;
+    outline: 2px solid rgba(70, 223, 177, 0.45);
+    outline-offset: 4px;
+    border-radius: 22px;
 }
 .home-stage .home-nearby-number-block:active {
     transform: scale(0.985);

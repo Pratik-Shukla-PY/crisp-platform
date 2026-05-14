@@ -5,7 +5,21 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v184';
+const CACHE_NAME = 'crisp-v185';
+// v184 → v185 (May 2026 — Nearby v8.2 frameless number block).
+// Operator: "Don't make a rectangular Block. the Border and
+// background is not needed around the reports nearby."
+// Removed:
+//   · background: rgba(255,255,255,0.04)
+//   · border: 1px solid rgba(255,255,255,0.07)
+//   · backdrop-filter: blur(4px)
+//   · hover background/border tint
+// Kept: overflow:hidden + border-radius (so the ripple still clips
+// to the click bounds), focus-visible outline (a11y), min-height,
+// active scale press feedback. The pulse halo + number + label
+// now sit free on the home stage with no surrounding card. RN
+// companion mirrored (numberBlock background → transparent,
+// borderWidth → 0).
 // v183 → v184 (May 2026 — Nearby Reports v8.1 self-bootstrap fix).
 //
 // Operator's console logs after v8 deploy showed NO `[NearbyIntel]`

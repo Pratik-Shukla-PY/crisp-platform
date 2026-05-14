@@ -590,13 +590,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  // v8 — aggregate number block (front-of-home)
+  // v8.2 (May 2026, operator) — aggregate number block with NO card
+  // framing. Background + border removed; number / halo / label sit
+  // free on the home stage. overflow:hidden + borderRadius retained
+  // only so a future ripple animation can clip cleanly to the click
+  // area (RN doesn't paint ripples today but the bounds are ready).
   numberBlock: {
     width: '100%',
     paddingHorizontal: 16,
     paddingTop: 22, paddingBottom: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.07)',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
     borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
     minHeight: 156,
