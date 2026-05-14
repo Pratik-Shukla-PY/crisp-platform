@@ -5,7 +5,18 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v165';
+const CACHE_NAME = 'crisp-v166';
+// v165 → v166 (May 2026 — IndexedDB queue orphan self-heal).
+// Operator (2026-05-13): a submission was interrupted mid-flight and
+// left a `pending-reports` row with stages.meta/text/audio=true but
+// serverId=null AND zero payload (description empty, no audio, every
+// photo variant at chunkProgress=0). The row sat ~24h, invisible to
+// the soft-drain dequeue path (gated on stages.photo) and skipped by
+// the retry loop (photo-upload threw on null serverId before bumping
+// retryCount). _isOrphanQueueRow + _selfHealOrphans now auto-dequeue
+// such rows on boot and on every syncQueueManual entry. 10-min age
+// gate protects genuinely in-flight submissions. Spec:
+// e2e/tests/pwa/84-queue-orphan-self-heal.spec.ts.
 // v164 → v165 (May 2026 — Stage 2 classify auto-progress).
 // Operator: "When the user selects any tile/card option in Stage 2,
 //  the app should automatically progress to the next step/page

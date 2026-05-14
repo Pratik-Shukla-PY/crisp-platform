@@ -584,6 +584,69 @@ async function updateQueueItemStatus(clientReportId, status, retryCount) {
     });
 }
 
+// ── Self-heal orphan detection ──────────────────────────────────────────
+// BUGFIX May 2026 (operator-reported 2026-05-13) — a submission was
+// interrupted mid-flight (page close or JS error) and left a row in
+// `pending-reports` with `stages.meta = stages.text = stages.audio = true`
+// but `serverId = null` AND zero actual payload (description empty, no
+// audio blob, every photo variant at chunkProgress=0). The row sat ~24h:
+//   · invisible to the soft-drain dequeue path — that branch is gated by
+//     `stages.meta && text && photo && audio` and stages.photo was false.
+//   · skipped by the retry loop — the photo-upload call threw on null
+//     serverId before bumping retryCount, so the item ricocheted between
+//     "not ready" and "errored" with no forward progress.
+//
+// Self-heal rule: when stages claim ANY upload happened but there is
+//   (a) no server-side report id, AND
+//   (b) no local payload bytes for any stage,
+// the row cannot make forward progress — there is literally nothing to
+// send. The 10-minute age gate avoids racing a genuine in-flight
+// submission whose stages haven't fully populated yet.
+function _isOrphanQueueRow(item) {
+    if (!item || !item.client_report_id) return false;
+    const stages = item.stages || {};
+    const stagesClaimSent = !!(stages.meta || stages.text || stages.audio);
+    // Field is `serverId` in the current schema; legacy callers may have
+    // written `serverReportId` and `reportId` — check all three so a
+    // genuine server-acked row is never auto-dequeued.
+    const noServerId = !item.serverId && !item.serverReportId && !item.reportId;
+    // The description lives at `item.text` in the queue payload (see
+    // submitReport — text: state.description || state.transcript || '').
+    // Also check `description` in case future commits rename.
+    const txt = item.text || item.description || '';
+    const noTextPayload = !txt || txt.length === 0;
+    const noAudioPayload = !item.audioBlob;
+    const _variantHasBytes = (v) => !!(v && (v.complete || (v.chunkProgress || 0) > 0 || v.dataUrl));
+    const mainPhotoEmpty = !item.photoVariants
+        || !Object.values(item.photoVariants).some(_variantHasBytes);
+    const extrasEmpty = !Array.isArray(item.extraPhotosVariants)
+        || item.extraPhotosVariants.every(ev => !ev || !Object.values(ev).some(_variantHasBytes));
+    // Legacy non-variant photo path
+    const noLegacyPhoto = !item.photo;
+    const noPhotoBytes = mainPhotoEmpty && extrasEmpty && noLegacyPhoto;
+    const age = Date.now() - (item.timestamp || 0);
+    return stagesClaimSent && noServerId && noTextPayload && noAudioPayload && noPhotoBytes && age > 10 * 60 * 1000;
+}
+
+async function _selfHealOrphans() {
+    let items;
+    try { items = await getAllQueued(); } catch (_) { return 0; }
+    let healed = 0;
+    for (const it of items) {
+        if (_isOrphanQueueRow(it)) {
+            console.warn(
+                `[Queue:self-heal] orphan ${it.client_report_id} — ` +
+                `stages claim sent but no payload + no serverId. Auto-dequeue.`,
+            );
+            try { await dequeueReport(it.client_report_id); healed += 1; } catch (_) {}
+        }
+    }
+    if (healed > 0) {
+        try { updateSyncBadge(); } catch (_) {}
+    }
+    return healed;
+}
+
 // ── Upload Progress Helpers ──────────────────────────────────────────────────
 function sendWithProgress(url, payload) {
     return new Promise((resolve, reject) => {
@@ -758,6 +821,11 @@ async function syncQueueManual(opts) {
         try { if (typeof showToast === 'function') showToast(msg, kind || 'info'); }
         catch (_) {}
     };
+    // BUGFIX May 2026 (operator-reported 2026-05-13) — sweep orphans
+    // BEFORE pulling the queue snapshot so a stuck zero-payload row from
+    // a prior interrupted submission doesn't inflate the "Retrying N
+    // reports…" toast count or get probed against an unreachable server.
+    try { await _selfHealOrphans(); } catch (_) {}
     let items;
     try { items = await getAllQueued(); } catch (_) { return; }
     // BUGFIX May 2026 (operator-reported, second pass) — also drain the
@@ -3173,6 +3241,9 @@ window.__crispEnqueueReport = (payload) => enqueueReport(payload);
 window.__crispGetAllQueued = () => getAllQueued();
 window.__crispDequeueReport = (clientReportId) => dequeueReport(clientReportId);
 window.__crispReconcileQueue = () => _reconcileQueueAgainstServer();
+// Queue self-heal hooks for the orphan-detection E2E spec.
+window.__crispIsOrphanQueueRow = (item) => _isOrphanQueueRow(item);
+window.__crispSelfHealOrphans = () => _selfHealOrphans();
 // May 2026 — let tests trigger the My Reports / queued-list render
 // without driving the home → My Reports button click (which depends
 // on auth + privacy banner state that's noisy to set up in tests).
@@ -11987,6 +12058,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) {
         console.warn('localStorage migration failed:', e);
     }
+
+    // 3b. One-shot orphan self-heal. Catches "stages claim sent but
+    // payload is empty + no serverId" rows from a prior session whose
+    // submission was interrupted mid-flight (page close, JS error). Runs
+    // BEFORE startRetryLoop so the retry loop doesn't waste a tick
+    // pounding on a row it can't make progress on. Idempotent — the
+    // 10-min age gate inside _isOrphanQueueRow protects in-flight rows.
+    try { await _selfHealOrphans(); } catch (e) { _silent('selfHealOrphans:boot', e); }
 
     // 4. Start persistent retry loop for any queued reports
     startRetryLoop();
