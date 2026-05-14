@@ -8793,31 +8793,70 @@ body.tier-t4 .home-impact {
     flex: 1 1 auto;
 }
 
-/* Photo-consent modal overlay. Reuses .upload-overlay base for the
-   fullscreen dim + centered card, but with reward-system tinting. */
+/* Photo-consent modal — May 2026, second-pass polish.
+   Pre-fix: markup inherited `.upload-overlay { display: flex }` which
+   beat the `[hidden]` UA rule and caused the modal to appear on every
+   cold app load (operator screenshot). Plus the OK button text was
+   wrapping to 3 lines because the 2-col grid gave it half-width.
+   Now self-contained — own classes only — with explicit `[hidden]`
+   `display: none` so the bug can't recur, an asymmetric 1fr/1.8fr
+   action grid so "OK, choose photo" stays on one line, an inline
+   SVG camera glyph (sharper than the 📸 emoji at any rendering size),
+   and a softer entrance animation. */
 .photo-consent-overlay {
+    position: fixed;
+    inset: 0;
     z-index: 350;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(5, 12, 22, 0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    animation: photo-consent-fade-in 0.22s ease-out;
+}
+.photo-consent-overlay[hidden] { display: none; }   /* the bug-fix rule */
+@keyframes photo-consent-fade-in {
+    from { opacity: 0; backdrop-filter: blur(0); }
+    to   { opacity: 1; backdrop-filter: blur(6px); }
 }
 .photo-consent-card {
-    max-width: 360px;
-    width: 92vw;
-    padding: 28px 24px 20px;
+    width: 100%;
+    max-width: 380px;
+    padding: 28px 26px 22px;
     text-align: center;
-    background: linear-gradient(180deg, rgba(33, 58, 88, 0.98) 0%, rgba(12, 30, 45, 0.98) 100%);
-    border: 1px solid rgba(70, 223, 177, 0.30);
-    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(170deg, #1a3552 0%, #0b1c2c 100%);
+    border: 1px solid rgba(70, 223, 177, 0.38);
+    border-radius: 22px;
+    box-shadow:
+        0 24px 64px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(9, 209, 199, 0.10) inset,
+        0 0 38px rgba(70, 223, 177, 0.10);
+    animation: photo-consent-card-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.1);
 }
-.photo-consent-emoji {
-    font-size: 44px;
-    margin-bottom: 8px;
-    line-height: 1;
+@keyframes photo-consent-card-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.photo-consent-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 16px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(9, 209, 199, 0.22), rgba(70, 223, 177, 0.10));
+    border: 1px solid rgba(70, 223, 177, 0.32);
+    display: flex; align-items: center; justify-content: center;
+    color: #80EE98;
 }
 .photo-consent-title {
+    font-family: var(--heading, 'Outfit', sans-serif);
     font-size: 18px;
     font-weight: 800;
-    margin: 0 0 14px;
+    margin: 0 0 18px;
     color: #80EE98;
     line-height: 1.3;
+    letter-spacing: 0.01em;
 }
 .photo-consent-bullets {
     list-style: none;
@@ -8826,37 +8865,79 @@ body.tier-t4 .home-impact {
     text-align: left;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 .photo-consent-bullets li {
     position: relative;
-    padding-left: 22px;
-    font-size: 13px;
-    line-height: 1.4;
-    color: rgba(255, 255, 255, 0.86);
+    padding-left: 26px;
+    font-size: 13.5px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.88);
 }
 .photo-consent-bullets li::before {
-    content: '✓';
+    content: '';
     position: absolute;
-    left: 0;
-    top: 0;
-    font-weight: 800;
-    color: #46DFB1;
+    left: 0; top: 2px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: rgba(70, 223, 177, 0.18);
+    border: 1px solid rgba(70, 223, 177, 0.42);
 }
+.photo-consent-bullets li::after {
+    content: '';
+    position: absolute;
+    left: 6px; top: 7px;
+    width: 8px; height: 4px;
+    border: 1.6px solid #46DFB1;
+    border-top: 0; border-right: 0;
+    transform: rotate(-45deg);
+}
+/* Asymmetric grid so "OK, choose photo" gets the room it needs.
+   Pre-fix the text wrapped to 3 lines (operator screenshot). */
 .photo-consent-actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1.8fr;
     gap: 10px;
 }
-.photo-consent-actions .bs-btn {
-    flex: 1 1 0;
+.photo-consent-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 48px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
+    white-space: nowrap;
 }
 .photo-consent-cancel {
     background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.16);
     color: rgba(255, 255, 255, 0.84);
 }
 .photo-consent-cancel:hover {
-    background: rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.24);
+}
+.photo-consent-ok {
+    background: linear-gradient(135deg, #09D1C7 0%, #46DFB1 100%);
+    border: 0;
+    color: #0b1018;
+    box-shadow: 0 6px 18px rgba(9, 209, 199, 0.28);
+}
+.photo-consent-ok:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(9, 209, 199, 0.42);
+}
+.photo-consent-ok:active { transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+    .photo-consent-overlay,
+    .photo-consent-card { animation: none; }
+    .photo-consent-btn { transition: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

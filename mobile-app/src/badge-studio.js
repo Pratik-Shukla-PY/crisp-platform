@@ -834,16 +834,21 @@
     }
 
     function _openPhotoConsentModal() {
+        // May 2026 — toggle ONLY via the `hidden` attribute; the
+        // CSS (`.photo-consent-overlay[hidden] { display: none }`)
+        // handles visibility. Setting `style.display = 'flex'`
+        // previously masked the original bug (where `.upload-overlay`
+        // class inherited `display:flex` and the modal appeared on
+        // every load), so removing both the inherited class AND the
+        // inline-style write together is the proper fix.
         const ov = document.getElementById('photo-consent-overlay');
         if (!ov) return;
-        ov.hidden = false;
-        ov.style.display = 'flex';
+        ov.removeAttribute('hidden');
     }
     function _closePhotoConsentModal() {
         const ov = document.getElementById('photo-consent-overlay');
         if (!ov) return;
-        ov.hidden = true;
-        ov.style.display = 'none';
+        ov.setAttribute('hidden', '');
     }
 
     function _onChoosePhotoClicked() {

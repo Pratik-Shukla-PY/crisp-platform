@@ -5,7 +5,21 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v150';
+const CACHE_NAME = 'crisp-v151';
+// v150 → v151 (May 2026, operator-reported photo-consent modal bugs).
+// Two fixes:
+//   1) Modal appeared on every cold app load because its markup
+//      carried `class="upload-overlay"` which set `display: flex`
+//      and overrode the `[hidden]` UA rule. Now self-contained
+//      `.photo-consent-overlay` class with explicit
+//      `[hidden] { display: none }`. JS toggles via `hidden`
+//      attribute only — no `style.display` writes.
+//   2) Visual polish — replaced the 📸 emoji with an inline SVG
+//      camera glyph (sharper, theme-tinted), asymmetric 1fr/1.8fr
+//      action grid so "OK, choose photo" no longer wraps to 3 lines,
+//      softer entrance animation (fade + slight scale), check
+//      bullets rendered with CSS pseudo-elements instead of the
+//      ✓ character (smoother + scaling-safe).
 // v149 → v150 (May 2026 Lighthouse perf pass — CLS + LCP fixes).
 // Three-phase no-feature-change perf rewrite:
 //   Phase 1: slot-reservation CSS so late DOM reveals (badge chip,

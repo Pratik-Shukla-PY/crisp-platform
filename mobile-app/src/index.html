@@ -3261,12 +3261,23 @@
      applyI18n etc. Internally it _whenReady-polls until those are set. -->
 <!-- May 2026 (photo-consent pass) — modal shown ONCE per device when
      the user first taps "Choose photo" inside Badge Studio. Persisted
-     via localStorage `crisp_photo_studio_consent_v1`. Reuses the
-     `.upload-overlay` + `.upload-progress-card` chrome from the
-     existing upload-progress modal so it feels native. -->
-<div class="photo-consent-overlay upload-overlay" id="photo-consent-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="photo-consent-title">
-    <div class="photo-consent-card upload-progress-card">
-        <div class="photo-consent-emoji" aria-hidden="true">📸</div>
+     via localStorage `crisp_photo_studio_consent_v1`.
+
+     Bug-fix pass — pre-fix the markup carried `class="upload-overlay"`
+     which inherited `display: flex` from the upload-progress modal's
+     base style; that beat the `[hidden]` UA rule (attribute selector
+     has lower specificity than a class) and made the modal appear on
+     every cold app load. Now self-contained: own classes only, with
+     an explicit `.photo-consent-overlay[hidden] { display: none }`
+     in CSS so the bug can't recur. -->
+<div class="photo-consent-overlay" id="photo-consent-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="photo-consent-title">
+    <div class="photo-consent-card">
+        <div class="photo-consent-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="36" height="36">
+                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/>
+                <circle cx="12" cy="13" r="4"/>
+            </svg>
+        </div>
         <h3 id="photo-consent-title" class="photo-consent-title" data-i18n="photo_consent_title">Use your photo on your badge?</h3>
         <ul class="photo-consent-bullets">
             <li data-i18n="photo_consent_bullet_1">Your photo stays on this device.</li>
@@ -3274,11 +3285,11 @@
             <li data-i18n="photo_consent_bullet_3">Face blur is on by default.</li>
         </ul>
         <div class="photo-consent-actions">
-            <button type="button" class="bs-btn photo-consent-cancel" id="btn-photo-consent-cancel">
+            <button type="button" class="photo-consent-btn photo-consent-cancel" id="btn-photo-consent-cancel">
                 <span data-i18n="photo_consent_cancel">Cancel</span>
             </button>
-            <button type="button" class="bs-btn bs-btn-primary photo-consent-ok" id="btn-photo-consent-ok">
-                <i class="fa-solid fa-camera" aria-hidden="true"></i>
+            <button type="button" class="photo-consent-btn photo-consent-ok" id="btn-photo-consent-ok">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="4"/></svg>
                 <span data-i18n="photo_consent_ok">OK, choose photo</span>
             </button>
         </div>
