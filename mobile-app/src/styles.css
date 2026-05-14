@@ -10010,6 +10010,50 @@ body.tier-t4 .home-impact {
     .v4-cap-tip-icon { transition: none; }
 }
 
+/* ───────────────────────────────────────────────────────────────────
+   May 2026 — Classify-stage auto-progress
+   Operator: "When the user selects any tile/card option in Stage 2,
+   the app should automatically progress to the next step. The
+   currently selected tile should briefly show an active/selected
+   animation state before auto-navigation occurs."
+
+   .is-tap-confirmed is added to the tapped tile right before the
+   200 ms timer fires `_doClassifyAdvance`. The keyframe pulses the
+   tile (scale 1 → 1.04 → 1) with a mint halo so the user sees their
+   tap acknowledged before the sub-view transitions away.
+   ─────────────────────────────────────────────────────────────────── */
+
+@keyframes v4-tap-confirm {
+    0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(70, 223, 177, 0); }
+    45%  { transform: scale(1.04); box-shadow: 0 0 0 6px rgba(70, 223, 177, 0.24); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(70, 223, 177, 0); }
+}
+.v4-q-opt.is-tap-confirmed,
+.v4-hit-tile.is-tap-confirmed,
+.v4-cause-tile.is-tap-confirmed {
+    animation: v4-tap-confirm 200ms ease-out;
+    /* Ensure animated transform doesn't get clipped by parent overflow */
+    z-index: 2;
+    position: relative;
+}
+
+/* Reduced-motion: skip the scale pulse; the .is-selected ring + faster
+   80ms advance already acknowledge the tap. */
+@media (prefers-reduced-motion: reduce) {
+    .v4-q-opt.is-tap-confirmed,
+    .v4-hit-tile.is-tap-confirmed,
+    .v4-cause-tile.is-tap-confirmed { animation: none; }
+}
+
+/* Hide the Continue button on stage-v4-classify — auto-progress
+   replaces it. Kept in DOM (not removed) so any spec / analytics /
+   keyboard-shortcut path that addresses #btn-v4-classify-next
+   still has a target. The v4-footer collapses to zero height so
+   we reclaim the vertical real-estate for the tile grid. */
+#stage-v4-classify .v4-footer {
+    display: none !important;
+}
+
 /* Tighter layout on the shortest viewports so the tips don't push
    the Continue button off-screen. */
 @media (max-height: 700px) {

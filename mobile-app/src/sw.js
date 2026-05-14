@@ -5,7 +5,41 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v164';
+const CACHE_NAME = 'crisp-v165';
+// v164 → v165 (May 2026 — Stage 2 classify auto-progress).
+// Operator: "When the user selects any tile/card option in Stage 2,
+//  the app should automatically progress to the next step/page
+//  immediately after selection. The transition should feel smooth,
+//  intentional, and responsive. The currently selected tile should
+//  briefly show an active/selected animation state before auto-
+//  navigation occurs. Navigation delay should be minimal (~150–300ms)."
+// Tile-tap UX in v4 classify (damage → infra → crisis → review):
+//   t=0    user taps tile  →  .is-selected + state save + summary
+//                              update + .is-tap-confirmed class
+//   t=200  pulse animation completes (scale 1 → 1.04 → 1 + mint halo)
+//          → _doClassifyAdvance(step) navigates to next sub-view OR
+//          stage-v4-review if step === 'crisis'
+//   prefers-reduced-motion → t=80 ms, no pulse animation
+// Race guards:
+//   _advancingFromStep flag bails on rapid double-taps so only one
+//   navigation fires per tap-burst. _showSubStep clears the guard on
+//   sub-view entry so re-taps after back-nav work normally.
+// OTHER infra tile: doesn't auto-navigate on tap (would skip past
+//   the required free-text input). Tile gets the pulse + state set;
+//   advance fires on Enter key OR blur of #v4-infra-other-input,
+//   only when state.infrastructure_type === 'OTHER' AND
+//   infrastructure_name non-empty.
+// Continue button (#btn-v4-classify-next) kept in DOM for back-compat
+// but hidden via `#stage-v4-classify .v4-footer { display: none }`.
+// Spec: e2e/tests/pwa/83-classify-auto-progress.spec.ts (8 cases
+// covering auto-advance, OTHER trigger, back-state preservation,
+// rapid-tap race guard, reduced-motion, offline-state persistence,
+// Continue hidden).
+// Smoke verified end-to-end via /tmp/crisp_classify_autoprogress_smoke.mjs:
+//   damage tap → infra view (state.damage_classification = COMPLETE)
+//   infra tap → crisis view (state.infrastructure_type = RESIDENTIAL)
+//   crisis tap → review stage (state.crisis_type = EARTHQUAKE)
+//   Back → damage view with prior selection still .is-selected
 // v163 → v164 (May 2026 — v4 capture-stage smart contextual tips).
 // Operator: "Redesign the layout so the space between Voice/Text
 //  and Continue feels intentional and useful rather than empty.

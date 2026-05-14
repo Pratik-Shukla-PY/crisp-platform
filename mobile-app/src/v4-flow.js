@@ -1497,6 +1497,7 @@
             opt.addEventListener('click', () => {
                 damageOpts.forEach((o) => {
                     o.classList.remove('is-selected');
+                    o.classList.remove('is-tap-confirmed');
                     o.setAttribute('aria-checked', 'false');
                 });
                 opt.classList.add('is-selected');
@@ -1504,6 +1505,9 @@
                 _setState({ damage_classification: opt.getAttribute('data-value') });
                 _updateReviewSummary();
                 _refreshClassifyNext();
+                // Auto-progress to "What was hit?" after a 200ms
+                // confirmation pulse. Race-guarded.
+                _scheduleClassifyAdvance('damage', opt);
             });
         });
         // Default selected = the one already with .is-selected (Partial).
@@ -1525,6 +1529,7 @@
             tile.addEventListener('click', () => {
                 infraTiles.forEach((t) => {
                     t.classList.remove('is-selected');
+                    t.classList.remove('is-tap-confirmed');
                     t.setAttribute('aria-checked', 'false');
                 });
                 tile.classList.add('is-selected');
@@ -1546,6 +1551,11 @@
                 }
                 _updateReviewSummary();
                 _refreshClassifyNext();
+                // Auto-progress to "What caused it?" after a 200ms
+                // confirmation pulse. OTHER tile bypasses the navigate
+                // step (still pulses) — advance waits for Enter/blur on
+                // the free-text input. See _wireInfraOtherAdvance.
+                _scheduleClassifyAdvance('infra', tile);
             });
         });
         if (otherInput) {
@@ -1554,6 +1564,10 @@
                 _refreshClassifyNext();
             });
         }
+        // Wire Enter/blur auto-advance for the OTHER free-text input
+        // — see helper above. Idempotent (sets a sentinel on the
+        // element so repeat init calls don't double-bind).
+        _wireInfraOtherAdvance();
 
         // ── Crisis tiles, flat layout (sub-view 3) — May 2026 ──
         //
@@ -1625,6 +1639,7 @@
                 if (!value) return;
                 crisisGrid.querySelectorAll('.v4-cause-tile').forEach((b) => {
                     b.classList.remove('is-selected');
+                    b.classList.remove('is-tap-confirmed');
                     b.setAttribute('aria-checked', 'false');
                 });
                 tile.classList.add('is-selected');
@@ -1632,6 +1647,8 @@
                 _setState({ crisis_type: value });
                 _updateReviewSummary();
                 _refreshClassifyNext();
+                // Auto-progress to Stage 3 (review) after 200ms pulse.
+                _scheduleClassifyAdvance('crisis', tile);
             });
         }
 
@@ -1740,8 +1757,117 @@
         if (step === 'crisis') return !!s.crisis_type;
         return true;
     }
+    // ── Auto-progress helpers — May 2026 ──────────────────────────────
+    //
+    // Operator: "When the user selects any tile/card option in Stage 2
+    // or Stage 3, the app should automatically progress to the next
+    // step/page immediately after selection."
+    //
+    // For Stage 2 (damage → infra → crisis → review), each tile click
+    // already does state save + .is-selected toggle. We add a thin
+    // wrapper that fires AFTER the click handler completes:
+    //   t=0   .is-tap-confirmed class added (CSS pulse: scale 1 → 1.04
+    //         → 1 + tier-glow halo, 200ms ease-out)
+    //   t=200 ms  _doClassifyAdvance(step) called → _showSubStep(next)
+    //         OR _goToReview() if step === 'crisis'
+    //
+    // Race-condition guards:
+    //   _advancingFromStep flag bails out on rapid double-tap so the
+    //   advance only fires ONCE per user-tap-burst. Cleared after the
+    //   timer fires (or on early-exit conditions like OTHER tile
+    //   waiting for free-text input).
+    //
+    // prefers-reduced-motion users skip the 200 ms pulse and advance
+    // at 80 ms so the experience still acknowledges the tap without
+    // a scale animation.
+    //
+    // The OTHER tile on the infra sub-view does NOT auto-advance on
+    // tap — it reveals the free-text input and waits for the user to
+    // press Enter or blur the input with non-empty text. See the
+    // separate _wireInfraOtherAdvance() below.
+    const CLASSIFY_ADVANCE_MS = 200;
+    const CLASSIFY_ADVANCE_MS_REDUCED = 80;
+    let _advancingFromStep = null;
+
+    function _doClassifyAdvance(step) {
+        if (!_canAdvanceFrom(step)) return;
+        const idx = CLASSIFY_ORDER.indexOf(step);
+        if (idx === -1) return;
+        if (idx === CLASSIFY_ORDER.length - 1) {
+            _goToReview();
+            return;
+        }
+        _showSubStep(CLASSIFY_ORDER[idx + 1]);
+    }
+
+    function _scheduleClassifyAdvance(step, tileEl) {
+        // Race guard — bail if an advance is already in flight from
+        // this step. Allows the FIRST tap of a rapid double-tap to
+        // win + ignores the second.
+        if (_advancingFromStep === step) return;
+        _advancingFromStep = step;
+
+        // Special-case OTHER infra: don't auto-advance on the tile
+        // click; wait for the user to fill the free-text input + press
+        // Enter / blur (handled by _wireInfraOtherAdvance below). The
+        // OTHER tile still gets the confirmation pulse so the tap is
+        // acknowledged.
+        const isOther = (step === 'infra'
+            && (window.state && window.state.infrastructure_type === 'OTHER'));
+
+        if (tileEl) tileEl.classList.add('is-tap-confirmed');
+
+        const reduced = (typeof window !== 'undefined'
+            && window.matchMedia
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        const delay = reduced ? CLASSIFY_ADVANCE_MS_REDUCED : CLASSIFY_ADVANCE_MS;
+
+        setTimeout(() => {
+            if (tileEl) tileEl.classList.remove('is-tap-confirmed');
+            // Clear the guard BEFORE _doClassifyAdvance so re-selection
+            // works smoothly when user comes back via the Back button
+            // and picks again.
+            _advancingFromStep = null;
+            if (isOther) {
+                // OTHER tile: don't navigate — input is now visible +
+                // focused; user finishes by typing + Enter/blur.
+                return;
+            }
+            _doClassifyAdvance(step);
+        }, delay);
+    }
+
+    function _wireInfraOtherAdvance() {
+        const otherInput = document.getElementById('v4-infra-other-input');
+        if (!otherInput || otherInput.__crispOtherWired) return;
+        otherInput.__crispOtherWired = true;
+        // Enter on the input commits + advances (we trigger blur which
+        // fires the blur listener below).
+        otherInput.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            otherInput.blur();
+        });
+        // Blur with non-empty text + state still set to OTHER advances.
+        // (If the user has since clicked another tile, the state won't
+        // match — we no-op.)
+        otherInput.addEventListener('blur', () => {
+            const s = window.state || {};
+            if (s.infrastructure_type !== 'OTHER') return;
+            const name = (s.infrastructure_name || '').trim();
+            if (name.length === 0) return;
+            // Tiny delay so the user sees the input value commit before
+            // the page transitions away.
+            setTimeout(() => { _doClassifyAdvance('infra'); }, 120);
+        });
+    }
+
     function _showSubStep(step) {
         if (!CLASSIFY_ORDER.includes(step)) return;
+        // If the user navigated back via the Back button (or programmatic
+        // _showSubStep call), clear any pending advance from the
+        // departing step.
+        _advancingFromStep = null;
         _classifyStep = step;
         ['damage','infra','crisis'].forEach((s) => {
             const view = document.getElementById('v4-view-' + s);
