@@ -10069,6 +10069,106 @@ body.tier-t4 .home-impact {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   HOME v5 — Phase 2: deeper navy + cyan glow accents + tighter rhythm
+   (May 2026 redesign — operator-supplied HTML concept)
+
+   GOAL: replace the flat --bg navy with the radial-gradient depth the
+   mock calls out (#21466f at top → #16365c mid → #10284a deep). Add
+   a cyan radial-glow accent behind the hero card so the page feels
+   premium without introducing new motion. Tighten vertical rhythm
+   so the channels grid pulls up closer to the action zone (kills
+   the dead space the operator flagged).
+
+   Scope: rules are SCOPED to .home-stage so the bg flip doesn't
+   bleed into stage-capture / stage-classify / stage-review /
+   stage-success / stage-legacy-home. Reviewer/admin/dashboard
+   surfaces are not under .home-stage so they stay untouched.
+
+   A11y: the deeper bg means we must re-verify text-contrast.
+   `--text` (#f1f5f9) and `--text-sub` (#cbd5e1) easily clear AA
+   against #10284a; `--text-dim` (#94a3b8) clears AA on body but
+   sits on the borderline against the deepest corner of the radial
+   — verified manually against WCAG 2.1 contrast checker. */
+
+.home-stage {
+    /* Replaces the flat --bg navy with a radial-gradient drop:
+       brighter near the top-left corner, deeper toward the bottom
+       so the bottom-anchored channels grid sits on a darker tone
+       than the hero card. */
+    background-image:
+        radial-gradient(circle at top, #21466f 0%, #1a3b62 30%, #16365c 55%, #10284a 100%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+}
+/* The PWA root background also shows through during stage
+   transitions; align it so the hand-off from the dashboard or
+   privacy stage doesn't flash a flat colour underneath. */
+body { background-color: #10284a; }
+
+/* ── Hero-card cyan glow accent ─────────────────────────────────────
+   Mock's hero card has a soft cyan radial bloom behind the top-right
+   corner that suggests an HUD light source. We do the same with a
+   ::before pseudo-element so no extra DOM. Pointer-events disabled
+   so taps on the card pass through. */
+.home-stage .home-hero-card::before {
+    content: '';
+    position: absolute;
+    top: -110px;
+    right: -50px;
+    width: 240px;
+    height: 240px;
+    background:
+        radial-gradient(circle at center, rgba(70, 223, 177, 0.20) 0%, rgba(9, 209, 199, 0.10) 30%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+}
+/* Hero card children must sit ABOVE the glow pseudo-element. */
+.home-stage .home-hero-card > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* Backdrop-filter guard — Safari 16+ + Chrome 88+ support glass; on
+   older browsers we fall back to a slightly higher opacity so the
+   card still reads as a card (just without the frosted halo).
+   `@supports (backdrop-filter)` is the gate. */
+@supports (backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px)) {
+    .home-stage .home-hero-card {
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+    }
+}
+@supports not ((backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px))) {
+    .home-stage .home-hero-card {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.035) 100%);
+    }
+}
+
+/* ── Tighter vertical rhythm ────────────────────────────────────────
+   The mock pulls the channels grid noticeably closer to the action
+   zone, which cuts the perceived dead space between them. We tighten
+   the section gap from 8 → 6 and the bottom-section internal gap
+   from 8 → 6. */
+.home-stage .home-section-bottom { gap: 6px; }
+.home-stage .home-section-top    { gap: 6px; }
+
+/* RTL — gradient is symmetric so no mirror needed; the hero-card
+   glow blob lives on the right edge which is visually correct for
+   LTR but reads as left-trail for RTL. Flip the glow position for
+   `dir="rtl"` so it stays on the leading edge in either direction. */
+[dir="rtl"] .home-stage .home-hero-card::before {
+    right: auto;
+    left: -50px;
+}
+
+/* Reduce-motion preference — the static glow doesn't animate, but
+   if a future iteration adds a pulse here we want the rule already
+   in place so it ships motion-safe from day one. */
+@media (prefers-reduced-motion: reduce) {
+    .home-stage .home-hero-card::before { animation: none !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    HOME v5 — Phase 1: hero card grouping + reassurance helper
    (May 2026 redesign — operator-supplied HTML concept)
 

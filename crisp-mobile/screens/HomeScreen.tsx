@@ -36,11 +36,74 @@ import {
   useWindowDimensions,
   Linking,
 } from 'react-native';
-import Svg, { Rect, Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
+import Svg, { Rect, Circle, Defs, LinearGradient, RadialGradient, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '../constants/colors';
 import { t, getAvailableLanguages } from '../services/i18n';
+
+// ── Deep navy bg gradient (Phase 2 v5 redesign) ────────────────────
+// SVG full-screen rect with radial gradient — RN doesn't support CSS
+// radial-gradient on Views so we paint an absolute-positioned SVG
+// behind the ScrollView content. Matches the PWA's
+// `radial-gradient(circle at top, #21466f 0%, #1a3b62 30%, #16365c 55%, #10284a 100%)`.
+function BgRadial({ width, height }: { width: number; height: number }) {
+  return (
+    <Svg
+      width={width}
+      height={height}
+      style={{ position: 'absolute', top: 0, left: 0 }}
+      pointerEvents="none"
+    >
+      <Defs>
+        <RadialGradient
+          id="homeBgRadial"
+          cx="50%" cy="0%"
+          rx="100%" ry="80%"
+          fx="50%" fy="0%"
+          gradientUnits="userSpaceOnUse"
+        >
+          <Stop offset="0" stopColor="#21466f" stopOpacity="1" />
+          <Stop offset="0.30" stopColor="#1a3b62" stopOpacity="1" />
+          <Stop offset="0.55" stopColor="#16365c" stopOpacity="1" />
+          <Stop offset="1" stopColor="#10284a" stopOpacity="1" />
+        </RadialGradient>
+      </Defs>
+      <Rect width={width} height={height} fill="url(#homeBgRadial)" />
+    </Svg>
+  );
+}
+
+// ── Cyan glow blob (Phase 2 v5 — sits behind the hero card) ─────────
+// Mock's hero card has a soft cyan radial bloom behind the top-right
+// corner that suggests an HUD light source. RN port via an absolute-
+// positioned SVG circle with a radial fade. PWA parity:
+// `.home-stage .home-hero-card::before`.
+function HeroGlowBlob() {
+  return (
+    <Svg
+      width={240}
+      height={240}
+      style={{ position: 'absolute', top: -110, right: -50 }}
+      pointerEvents="none"
+    >
+      <Defs>
+        <RadialGradient
+          id="heroGlow"
+          cx="50%" cy="50%"
+          rx="50%" ry="50%"
+          fx="50%" fy="50%"
+          gradientUnits="objectBoundingBox"
+        >
+          <Stop offset="0" stopColor="#46DFB1" stopOpacity="0.20" />
+          <Stop offset="0.30" stopColor="#09D1C7" stopOpacity="0.10" />
+          <Stop offset="0.70" stopColor="#09D1C7" stopOpacity="0" />
+        </RadialGradient>
+      </Defs>
+      <Circle cx={120} cy={120} r={120} fill="url(#heroGlow)" />
+    </Svg>
+  );
+}
 
 // ── Brand mark — port of mobile-app/src/favicon.svg ─────────────────
 // 256×256 viewBox, dark-navy tile with 4 concentric response rings
@@ -145,7 +208,7 @@ export interface HomeScreenProps {
 
 export default function HomeScreen(props: HomeScreenProps) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const langs = useMemo(() => getAvailableLanguages(), []);
   const _t = (key: string, fallback?: string): string => {
     const v = t(key);
@@ -192,18 +255,24 @@ export default function HomeScreen(props: HomeScreenProps) {
   const isShortViewport = width < 380;
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: Colors.bg }}
-      contentContainerStyle={{
-        paddingTop: Math.max(16, insets.top),
-        paddingBottom: Math.max(12, insets.bottom),
-        paddingHorizontal: 20,
-        minHeight: '100%',
-      }}
-      // Single-page no-scroll is the goal; ScrollView is here only as a
-      // safety net for content overflow on very small landscape phones.
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={{ flex: 1, backgroundColor: '#10284a' }}>
+      {/* Phase 2 v5: deep-navy radial behind everything. SVG-painted so
+          the gradient is consistent across iOS / Android (RN doesn't
+          support CSS radial-gradient on Views). Sized to viewport. */}
+      <BgRadial width={width} height={height} />
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingTop: Math.max(16, insets.top),
+          paddingBottom: Math.max(12, insets.bottom),
+          paddingHorizontal: 20,
+          minHeight: '100%',
+        }}
+        // Single-page no-scroll is the goal; ScrollView is here only as a
+        // safety net for content overflow on very small landscape phones.
+        showsVerticalScrollIndicator={false}
+      >
       {/* ── §A.1 Header row — brand left, lang pill right ─────── */}
       <View style={styles.headerRow} testID="home-header">
         <View style={styles.brandWrap}>
@@ -243,8 +312,14 @@ export default function HomeScreen(props: HomeScreenProps) {
           glass card. Matches the PWA's .home-hero-card in
           mobile-app/src/index.html. Eliminates the "floating
           disconnected cards" feel and gives the viewport a single
-          visual anchor. */}
+          visual anchor. Phase 2 v5: cyan radial glow blob behind the
+          card's top-right corner (HUD-light suggestion). */}
       <View style={styles.heroCard} testID="home-hero-card">
+
+        {/* Cyan glow accent — sits BEHIND the card content via
+            absolute positioning + parent overflow:hidden. PWA parity:
+            .home-stage .home-hero-card::before. */}
+        <HeroGlowBlob />
 
         {/* §B.1 Lifekeeper inline pill (top of card) */}
         {tier && (
@@ -436,7 +511,8 @@ export default function HomeScreen(props: HomeScreenProps) {
           </View>
         </View>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -514,6 +590,8 @@ const styles = StyleSheet.create({
 
   // §B Hero card — Phase 1 v5 redesign (May 2026). Groups
   // Lifekeeper + consent + CTA + helper into one glass block.
+  // Phase 2 v5: cyan glow blob lives inside (overflow:hidden clips
+  // it to the card's rounded corners).
   heroCard: {
     marginTop: 8,
     padding: 18,
@@ -525,6 +603,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 14, shadowOffset: { width: 0, height: 8 },
     elevation: 6,
     overflow: 'hidden',
+    position: 'relative',     // anchor for the absolute-positioned glow blob
   },
   heroHelper: {
     color: 'rgba(255, 255, 255, 0.62)',
