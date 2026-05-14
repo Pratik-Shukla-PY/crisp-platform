@@ -5,7 +5,26 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v158';
+const CACHE_NAME = 'crisp-v159';
+// v158 → v159 (May 2026 — operator-reported blank slot in action
+// tiles row).
+//   "When someone downloads the app the download button disappears
+//    but the remaining blocks dont adjust and align and are not
+//    responsive. The blank area looks bad."
+// Diagnosed with Playwright at 960×900 + 390×900:
+//   BEFORE — 4 visible tiles each 71.6 px wide, last tile ends at
+//   x=595 but row ends at x=675 → ~80 px blank slot on the right.
+//   Same on mobile, ~72 px blank.
+// Root cause: .home-action-tiles was `display: grid;
+// grid-template-columns: repeat(5, 1fr)` which RESERVES five
+// columns always — when a child has `display: none` (install tile
+// hidden once PWA is installed) its column stays empty.
+// Fix: swap to flex with `flex: 1 1 0; min-width: 0` on each tile
+// so every VISIBLE tile grows to share the row evenly.
+//   AFTER  — 4 visible tiles each 91.5 px wide (desktop) /
+//   81.5 px (mobile), last tile ends exactly at the row's right
+//   edge → 0 px blank. 5 tiles still 71.6 / 63.6 px wide as
+//   before (no regression on the all-visible state).
 // v157 → v158 (May 2026, action-tiles pass).
 // Operator: "1. CRISP logo and CRISP we can Align with Language bar.
 //            2. Reduce the size of the Lifekeeper Icon.

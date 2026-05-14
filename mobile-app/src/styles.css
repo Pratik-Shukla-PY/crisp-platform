@@ -4859,15 +4859,31 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
    top-right icon cluster (install + voice + login) AND the 2-col
    secondary row (My Reports + Rewards) that used to sit below the
    CTA. Reads as a clear toolkit positioned above the reward hero. */
+/* May 2026 — flex layout, not fixed 5-col grid. Pre-fix this was
+   `grid-template-columns: repeat(5, 1fr)` which reserved 5 columns
+   ALWAYS; when the install tile (hidden until beforeinstallprompt
+   fires, AND hidden permanently once the PWA is installed) wasn't
+   visible, the remaining 4 tiles stayed in columns 1-4 and column
+   5 stayed empty — ~80 px of dead space on the right of the row
+   (operator-reported "blank area looks bad"). Flex with
+   `flex: 1 1 0` lets every visible child grow to share the
+   available width evenly, regardless of how many siblings are
+   visible. 5 tiles → 20 % each; 4 tiles → 25 % each. */
 .home-action-tiles {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    display: flex;
+    align-items: stretch;
     gap: 8px;
     width: 100%;
     margin: 8px 0 12px;
 }
 .home-action-tile {
     position: relative;
+    /* flex: 1 1 0 — every visible tile grows to fill an equal share
+       of the row. min-width: 0 lets long labels (Download App) wrap
+       inside the flex item instead of forcing the tile wider than
+       its share. */
+    flex: 1 1 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
