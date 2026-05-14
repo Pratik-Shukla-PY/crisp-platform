@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v178';
+const CACHE_NAME = 'crisp-v179';
+// v178 → v179 (May 2026 — lang pill v6.4 halo removal).
+// Operator: "the background green glow is also not required here."
+// Dropped the cyan/teal pill halo (`0 0 32px 3px rgba(9,209,199,
+// 0.55)` from the box-shadow stack). Pill now reads cleanly via
+// just the teal-tinted border + translucent glass + drop shadow.
+// The live-indicator green LED dot keeps ITS halo (that's the
+// actual liveness signal, not decoration); only the wider pill
+// halo is gone.
 // v177 → v178 (May 2026 — lang pill v6.3 clean glass pass).
 // Operator: "still looks dark BG, I need clean look like I shared."
 // The v6.2 solid navy gradient (#1b2a44 → #0e1828) was rendering
