@@ -5,7 +5,28 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v160';
+const CACHE_NAME = 'crisp-v161';
+// v160 → v161 (May 2026 — channels back to 3 × 2 grid).
+//   Operator: "You have kept all channel icons in one row. This is
+//    not Ok. It was looking great earlier. Now its bad. Put in 3
+//    rows adjust box sizes accordingly."
+// v160 had compressed channels to a single horizontal flex row to
+// fit everything in viewport; operator preferred the prior 3-col
+// × 2-row grid (which is two rows visually, three tiles each).
+// Re-laid as `grid-template-columns: repeat(3, 1fr)` with COMPACT
+// tile sizing so the section still fits the home stage in 100dvh:
+//   tile min-height  46 / 58 / 66 / 74 px across height breakpoints
+//   icon font-size   17 / 20 / 22 px
+//   label font-size  10 / 11 / 11.5 px
+//   gap              5 / 8 / 10 / 12 px
+// Plus home-center gap dropped to 8 on the base + breakpoints
+// raised (700→740, 800→820, 900→920) so 720 px desktops stay on
+// the compact base. Re-verified at 5 viewports:
+//   iPhone SE   390×667   scrolls=false  devid_bottom=654 of 667
+//   iPhone 14   390×844   scrolls=false  devid_bottom=824 of 844
+//   Pixel 7     412×915   scrolls=false  devid_bottom=895 of 915
+//   iPad        768×1024  scrolls=false  devid_bottom=1002 of 1024
+//   desktop sh  1280×720  scrolls=false  devid_bottom=704 of 720
 // v159 → v160 (May 2026 — operator-reported scroll on home stage).
 //   "The entire app should be responsive and load on a single page
 //    along the height of the screen without using scroll on all

@@ -5383,13 +5383,12 @@ body.tier-t4 .home-impact {
    showing ≈ 660 px usable height) without scroll. Larger viewports
    get more breathing room via the height media queries below. */
 .home-stage .home-center {
-    /* May 2026 (fit-in-viewport pass) — gap 14 → 10 px so the seven
-       direct children stack tighter. Top padding still 16 to match
-       the absolute lang pill at top:16. Combined with the per-section
-       padding compressions above, the home stage now fits in ~720 px
-       of viewport height without scroll on most phones / tablets. */
+    /* May 2026 (fit-in-viewport pass v2) — gap dropped to 8 px on
+       the shortest viewports (iPhone SE 667 / desktop 720) so the
+       3 × 2 channels grid fits with the rest of the stage. Larger
+       viewports get bumped via the media queries below. */
     padding: 16px 20px 12px;
-    gap: 10px;
+    gap: 8px;
     align-items: stretch;
     justify-content: flex-start;
     text-align: start;
@@ -5405,26 +5404,25 @@ body.tier-t4 .home-impact {
     .home-stage .home-center { padding-left: 16px; padding-right: 16px; }
     .home-brand-row { padding-right: 96px; }
 }
-/* May 2026 (fit-in-viewport pass) — gaps trimmed across all height
-   breakpoints (was 20/24/28 → now 12/14/16) so the home stage fits
-   into 100dvh on more devices without scroll. Top padding still
-   pinned at 16 so brand-row aligns with the lang pill. */
-@media (min-height: 700px) {
+/* May 2026 (fit-in-viewport pass v2) — breakpoints raised so 720 px
+   desktop viewports stay on the compact base (gap: 8 px) and only
+   genuinely taller phones get bumped gaps. */
+@media (min-height: 740px) {
     .home-stage .home-center {
         padding: 16px 20px 14px;
+        gap: 10px;
+    }
+}
+@media (min-height: 820px) {
+    .home-stage .home-center {
+        padding: 16px 20px 16px;
         gap: 12px;
     }
 }
-@media (min-height: 800px) {
-    .home-stage .home-center {
-        padding: 16px 20px 16px;
-        gap: 14px;
-    }
-}
-@media (min-height: 900px) {
+@media (min-height: 920px) {
     .home-stage .home-center {
         padding: 16px 20px 18px;
-        gap: 16px;
+        gap: 14px;
     }
 }
 
@@ -5778,69 +5776,62 @@ body.tier-t4 .home-impact {
     .home-stage .home-section-channels .home-section-lede { font-size: 12.5px; margin-bottom: 16px; }
 }
 
-/* — Channels row — May 2026 (fit-in-viewport pass).
-   Operator: "The entire app should be responsive and load on a
-   single page along the height of the screen without using scroll
-   on all screens, browsers and OSs."
-   Pre-fix this was a 3 × 2 grid where each tile was 78-138 px tall
-   → section took 180-310 px including the title, the single
-   biggest contributor to the home stage overflowing. Now: one
-   horizontal flex row of 6 compact channel chips, each ~46-56 px
-   tall. The full section fits in ~70-100 px. Tiles still show
-   their FA icon + name + green live-dot (icon-only on the
-   narrowest viewports for breathing room). */
+/* — Channels grid — May 2026 (fit-in-viewport pass v2).
+   Operator: "You have kept all channel icons in one row. This is
+   not Ok. It was looking great earlier. Now its bad. Put in 3 rows
+   adjust box sizes accordingly."
+   Reverting to the 3-column × 2-row grid the operator previously
+   liked (3 tiles per row, 2 rows of channels), but with COMPACT
+   tile sizing so the section fits in ~120-160 px (vs the original
+   180-310 px) and the whole home stage stays inside 100dvh. Each
+   tile renders icon + label + green live-dot for live channels;
+   "Coming soon" tiles get a muted grey treatment via .is-disabled. */
 .home-stage .home-channels {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 6px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
     margin: 0;
     width: 100%;
 }
 .home-stage .home-channel-tile {
-    flex: 1 1 0;
-    min-width: 0;
     aspect-ratio: auto;
     min-height: 46px;
-    padding: 6px 4px;
+    padding: 4px 4px;
     border-radius: 10px;
-    gap: 4px;
+    gap: 3px;
 }
-.home-stage .home-channel-tile .ct-icon { font-size: 16px; }
+.home-stage .home-channel-tile .ct-icon { font-size: 17px; }
 .home-stage .home-channel-tile .ct-label {
     font-size: 10px;
     font-weight: 600;
     letter-spacing: -0.01em;
     line-height: 1.1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 100%;
 }
 @media (min-height: 700px) {
     .home-stage .home-channels { gap: 8px; }
     .home-stage .home-channel-tile {
-        min-height: 52px;
-        padding: 8px 4px;
-        gap: 4px;
-    }
-    .home-stage .home-channel-tile .ct-icon { font-size: 18px; }
-    .home-stage .home-channel-tile .ct-label { font-size: 10.5px; }
-}
-@media (min-height: 800px) {
-    .home-stage .home-channels { gap: 10px; }
-    .home-stage .home-channel-tile {
-        min-height: 60px;
-        padding: 10px 6px;
+        min-height: 58px;
+        padding: 8px 6px;
         gap: 5px;
-        border-radius: 12px;
     }
     .home-stage .home-channel-tile .ct-icon { font-size: 20px; }
     .home-stage .home-channel-tile .ct-label { font-size: 11px; }
 }
+@media (min-height: 800px) {
+    .home-stage .home-channels { gap: 10px; }
+    .home-stage .home-channel-tile {
+        min-height: 66px;
+        padding: 10px 6px;
+        gap: 6px;
+        border-radius: 12px;
+    }
+    .home-stage .home-channel-tile .ct-icon { font-size: 22px; }
+    .home-stage .home-channel-tile .ct-label { font-size: 11.5px; }
+}
 @media (min-height: 900px) {
     .home-stage .home-channels { gap: 12px; }
     .home-stage .home-channel-tile {
-        min-height: 66px;
+        min-height: 74px;
         padding: 12px 6px;
     }
 }
