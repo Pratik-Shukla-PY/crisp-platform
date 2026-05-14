@@ -64,6 +64,7 @@
   "home_metric_reports": "Gönderilen Bildirimler",
   "home_metric_verified": "Doğrulanan Bildirimler",
   "home_metric_lives": "Kurtarılan Hayatlar",
+  "home_pulse_label": "doğrulanmış raporlar sayesinde",
   "building_select_title": "İsteğe bağlı: bina seçin",
   "building_waiting_gps": "Yakındaki binaları yüklemek için GPS bekleniyor…",
   "building_select_hint": "Hasarlı olarak işaretlemek için bir bina dış çizgisine dokunun.",

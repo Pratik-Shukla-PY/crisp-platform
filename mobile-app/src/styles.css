@@ -10069,6 +10069,106 @@ body.tier-t4 .home-impact {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   HOME v5 — Phase 3: pulse stat block (real data, motion-gated)
+   (May 2026 redesign — operator-supplied HTML concept)
+
+   GOAL: replace the flat lives-saved counter with a pulsing HUD
+   stat block — two concentric expanding rings around the number so
+   the metric feels alive. Wires to the same #home-lives-count
+   element + updateHomeImpactMetrics() painter; the pulse is pure
+   decoration over real data (no faked numbers).
+
+   Motion safety: animation is gated by `prefers-reduced-motion:
+   reduce` per UNDP a11y guidance. Reduced-motion users get a static
+   halo (the inner ring without animation) so they still get the
+   visual elevation, just without motion.
+
+   Performance: uses `transform: scale()` + `opacity` only — GPU-
+   cheap, no layout/paint thrash. Tested ok on low-end Android.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@keyframes crisp-home-pulse-ring {
+    0%   { transform: scale(0.8); opacity: 0.65; }
+    100% { transform: scale(1.6); opacity: 0;    }
+}
+
+.home-stage .home-impact.home-impact-pulse {
+    position: relative;
+    /* Gives ::before/::after a centre to expand from. */
+    isolation: isolate;
+    padding: 18px 0 6px;
+    overflow: visible;
+}
+
+.home-stage .home-impact.home-impact-pulse .hi-cell-lives {
+    /* The cell becomes the pulse anchor — pseudo-elements expand
+       from its centre. */
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 14px 22px;
+    border-radius: 50%;
+    z-index: 1;
+}
+
+.home-stage .home-impact.home-impact-pulse .hi-cell-lives::before,
+.home-stage .home-impact.home-impact-pulse .hi-cell-lives::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 140px;
+    height: 140px;
+    margin-top: -70px;
+    margin-left: -70px;
+    border-radius: 50%;
+    border: 1px solid rgba(70, 223, 177, 0.28);
+    background:
+        radial-gradient(circle, rgba(70, 223, 177, 0.08) 0%, rgba(9, 209, 199, 0.04) 35%, transparent 72%);
+    pointer-events: none;
+    z-index: -1;
+}
+.home-stage .home-impact.home-impact-pulse .hi-cell-lives::before {
+    animation: crisp-home-pulse-ring 3.2s ease-out infinite;
+}
+.home-stage .home-impact.home-impact-pulse .hi-cell-lives::after {
+    animation: crisp-home-pulse-ring 3.2s ease-out infinite;
+    animation-delay: 1.6s;
+}
+
+/* Caption under the label — secondary line that gives the metric
+   meaning ("through verified reports"). Smaller + dimmer than the
+   label so it doesn't compete. */
+.home-stage .home-impact.home-impact-pulse .hi-caption {
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.52);
+    margin-top: 2px;
+    text-align: center;
+}
+@media (min-height: 740px) {
+    .home-stage .home-impact.home-impact-pulse .hi-caption { font-size: 11px; }
+}
+
+/* Reduced motion — static halo, no animation. Inner ring fades to
+   a stable low-alpha presence; outer ring is hidden so the user
+   gets visual elevation but zero motion. */
+@media (prefers-reduced-motion: reduce) {
+    .home-stage .home-impact.home-impact-pulse .hi-cell-lives::before,
+    .home-stage .home-impact.home-impact-pulse .hi-cell-lives::after {
+        animation: none !important;
+        transform: scale(1);
+        opacity: 0.35;
+    }
+    .home-stage .home-impact.home-impact-pulse .hi-cell-lives::after {
+        display: none;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    HOME v5 — Phase 2: deeper navy + cyan glow accents + tighter rhythm
    (May 2026 redesign — operator-supplied HTML concept)
 

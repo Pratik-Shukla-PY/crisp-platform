@@ -72,6 +72,7 @@
   "home_metric_reports": "Laporan Terkirim",
   "home_metric_verified": "Laporan Terverifikasi",
   "home_metric_lives": "Nyawa Diselamatkan",
+  "home_pulse_label": "melalui laporan terverifikasi",
   "building_select_title": "Opsional: pilih bangunan",
   "building_waiting_gps": "Menunggu GPS untuk memuat bangunan terdekat…",
   "building_select_hint": "Sentuh garis bangunan untuk menandainya sebagai rusak.",

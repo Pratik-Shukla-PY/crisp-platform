@@ -63,6 +63,7 @@
   "home_metric_reports": "送信された報告",
   "home_metric_verified": "確認済み報告",
   "home_metric_lives": "救われた命",
+  "home_pulse_label": "確認済みの報告を通じて",
   "building_select_title": "任意：建物を選択",
   "building_waiting_gps": "近くの建物を読み込むためGPSを待機中…",
   "building_select_hint": "建物の輪郭をタップして被害をマークしてください。",

@@ -61,6 +61,7 @@
   "home_metric_reports": "已提交报告",
   "home_metric_verified": "已验证报告",
   "home_metric_lives": "挽救的生命",
+  "home_pulse_label": "通过经过核实的报告",
   "building_select_title": "可选：选择具体建筑",
   "building_waiting_gps": "正在等待 GPS 加载附近建筑…",
   "building_select_hint": "点击建筑轮廓以标记为损坏。",

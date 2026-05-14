@@ -72,6 +72,7 @@
   "home_metric_reports": "Informes enviados",
   "home_metric_verified": "Informes verificados",
   "home_metric_lives": "Vidas salvadas",
+  "home_pulse_label": "gracias a informes verificados",
   "building_select_title": "Opcional: elegir el edificio exacto",
   "building_waiting_gps": "Esperando el GPS para cargar edificios cercanos…",
   "building_select_hint": "Toque el contorno de un edificio para marcarlo como dañado.",

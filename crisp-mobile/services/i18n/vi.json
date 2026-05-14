@@ -64,6 +64,7 @@
   "home_metric_reports": "Báo cáo đã gửi",
   "home_metric_verified": "Báo cáo đã xác minh",
   "home_metric_lives": "Số người được cứu",
+  "home_pulse_label": "qua các báo cáo đã xác minh",
   "building_select_title": "Tùy chọn: chọn tòa nhà",
   "building_waiting_gps": "Đang chờ GPS để tải các tòa nhà gần đó…",
   "building_select_hint": "Chạm vào đường viền tòa nhà để đánh dấu thiệt hại.",

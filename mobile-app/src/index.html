@@ -831,10 +831,19 @@
                  The empty state stays "—" until an analyst sets
                  lives_impacted via the dashboard's analyst-only
                  input (shipped in the same commit). -->
-            <div class="home-impact home-impact-single" id="home-impact">
+            <!-- v5 Phase 3 (May 2026) — pulse stat block. Animated
+                 ring halos around the lives-saved counter so the
+                 "Lives Saved" metric feels alive and humanitarian-grade
+                 rather than a flat number. Wires to the SAME
+                 #home-lives-count element + updateHomeImpactMetrics()
+                 painter — pulse is pure decoration over real data. The
+                 .home-impact-pulse modifier opts into the animation;
+                 prefers-reduced-motion users get a static halo only. -->
+            <div class="home-impact home-impact-single home-impact-pulse" id="home-impact">
                 <div class="hi-cell hi-cell-lives">
                     <div class="hi-num hi-num-lives" id="home-lives-count">—</div>
                     <div class="hi-label" data-i18n="home_metric_lives">Lives Saved</div>
+                    <div class="hi-caption" data-i18n="home_pulse_label">through verified reports</div>
                 </div>
             </div>
 

@@ -61,6 +61,7 @@
   "home_metric_reports": "التقارير المُرسَلة",
   "home_metric_verified": "التقارير المُتحقَّق منها",
   "home_metric_lives": "الأرواح المُنقَذة",
+  "home_pulse_label": "من خلال تقارير موثقة",
   "building_select_title": "اختياري: اختر المبنى بالضبط",
   "building_waiting_gps": "بانتظار GPS لتحميل المباني القريبة…",
   "building_select_hint": "اضغط على محيط مبنى لتحديده كمبنى متضرر.",

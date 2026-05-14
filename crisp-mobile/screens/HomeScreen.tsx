@@ -25,7 +25,7 @@
  * without mocking the entire App.tsx tree.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -35,6 +35,9 @@ import {
   StyleSheet,
   useWindowDimensions,
   Linking,
+  Animated,
+  Easing,
+  AccessibilityInfo,
 } from 'react-native';
 import Svg, { Rect, Circle, Defs, LinearGradient, RadialGradient, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -210,6 +213,41 @@ export default function HomeScreen(props: HomeScreenProps) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const langs = useMemo(() => getAvailableLanguages(), []);
+
+  // ── Phase 3 v5: pulse-stat motion gating ───────────────────────────
+  // The lives-saved counter gets an animated halo. Loop is gated by
+  // OS-level reduced-motion preference (same pattern as
+  // V4ClassifyScreen's tile-pulse).
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const pulseRing1 = useRef(new Animated.Value(0)).current;
+  const pulseRing2 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (reducedMotion) return undefined;
+    // Two staggered loops — ring2 starts 1.6 s after ring1 so the
+    // user always sees a ring expanding somewhere mid-cycle.
+    const makeLoop = (v: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(v, {
+            toValue: 1, duration: 3200,
+            easing: Easing.out(Easing.ease), useNativeDriver: true,
+          }),
+          Animated.timing(v, {
+            toValue: 0, duration: 0, useNativeDriver: true,
+          }),
+        ]),
+      );
+    const a = makeLoop(pulseRing1, 0);
+    const b = makeLoop(pulseRing2, 1600);
+    a.start(); b.start();
+    return () => { a.stop(); b.stop(); };
+  }, [reducedMotion, pulseRing1, pulseRing2]);
   const _t = (key: string, fallback?: string): string => {
     const v = t(key);
     return (v && v !== key) ? v : (fallback ?? key);
@@ -439,6 +477,70 @@ export default function HomeScreen(props: HomeScreenProps) {
           onPress={props.onAudio ?? (() => {})}
           testID="home-tile-audio"
         />
+      </View>
+
+      {/* ── §C.0 Pulse stat block ────────────────────────────────
+          Phase 3 v5 (May 2026) — animated halo around the lives-
+          saved counter. Wires to props.badgeLivesSaved (already
+          sourced from getImpactStats() in App.tsx). Two concentric
+          rings expand-and-fade with a 1.6 s offset; motion gated by
+          AccessibilityInfo.isReduceMotionEnabled(). PWA parity:
+          .home-impact.home-impact-pulse. */}
+      <View style={styles.pulseBlock} testID="home-pulse-stat">
+        {/* Ring 1 + Ring 2 — absolute-positioned circles that scale
+            from 0.8 → 1.6 with opacity 0.65 → 0 over 3.2 s. Reduced-
+            motion users get a static inner ring only. */}
+        {!reducedMotion && (
+          <>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.pulseRing,
+                {
+                  transform: [{
+                    scale: pulseRing1.interpolate({
+                      inputRange: [0, 1], outputRange: [0.8, 1.6],
+                    }),
+                  }],
+                  opacity: pulseRing1.interpolate({
+                    inputRange: [0, 1], outputRange: [0.65, 0],
+                  }),
+                },
+              ]}
+            />
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.pulseRing,
+                {
+                  transform: [{
+                    scale: pulseRing2.interpolate({
+                      inputRange: [0, 1], outputRange: [0.8, 1.6],
+                    }),
+                  }],
+                  opacity: pulseRing2.interpolate({
+                    inputRange: [0, 1], outputRange: [0.65, 0],
+                  }),
+                },
+              ]}
+            />
+          </>
+        )}
+        {reducedMotion && (
+          <View style={[styles.pulseRing, styles.pulseRingStatic]} pointerEvents="none" />
+        )}
+
+        <Text style={styles.pulseNum}>
+          {props.badgeLivesSaved && props.badgeLivesSaved > 0
+            ? props.badgeLivesSaved
+            : '—'}
+        </Text>
+        <Text style={styles.pulseLabel}>
+          {_t('home_metric_lives', 'Lives Saved')}
+        </Text>
+        <Text style={styles.pulseCaption}>
+          {_t('home_pulse_label', 'through verified reports')}
+        </Text>
       </View>
 
       {/* ── §C.1 Channels — "Other ways to report" 3×2 grid ────── */}
@@ -701,6 +803,41 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 6, right: 6,
     width: 8, height: 8, borderRadius: 4,
     borderWidth: 1.5, borderColor: Colors.bg,
+  },
+
+  // §C.0 Pulse stat block — Phase 3 v5
+  pulseBlock: {
+    alignItems: 'center', justifyContent: 'center',
+    paddingTop: 18, paddingBottom: 8,
+    marginTop: 10, marginBottom: 6,
+    position: 'relative',
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 140, height: 140,
+    top: '50%', left: '50%',
+    marginTop: -70, marginLeft: -70,
+    borderRadius: 70,
+    borderWidth: 1, borderColor: 'rgba(70, 223, 177, 0.28)',
+    backgroundColor: 'rgba(70, 223, 177, 0.05)',
+  },
+  pulseRingStatic: {
+    opacity: 0.35,   // reduced-motion fallback
+  },
+  pulseNum: {
+    fontSize: 36, fontWeight: '900', color: '#80EE98',
+    lineHeight: 40, letterSpacing: -1,
+  },
+  pulseLabel: {
+    fontSize: 11, fontWeight: '700',
+    color: Colors.text, letterSpacing: 1.2, textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  pulseCaption: {
+    fontSize: 10.5, fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.52)',
+    letterSpacing: 0.2, marginTop: 2,
+    textAlign: 'center',
   },
 
   // §C.1 Channels

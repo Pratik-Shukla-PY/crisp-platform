@@ -63,6 +63,7 @@
   "home_metric_reports": "পাঠানো প্রতিবেদন",
   "home_metric_verified": "যাচাই করা প্রতিবেদন",
   "home_metric_lives": "বাঁচানো জীবন",
+  "home_pulse_label": "যাচাই করা রিপোর্টের মাধ্যমে",
   "building_select_title": "ঐচ্ছিক: সঠিক ভবন বাছুন",
   "building_waiting_gps": "কাছের ভবন লোড করতে GPS-এর জন্য অপেক্ষা করছি…",
   "building_select_hint": "ক্ষতিগ্রস্ত হিসেবে চিহ্নিত করতে ভবনের রূপরেখায় ট্যাপ করুন।",

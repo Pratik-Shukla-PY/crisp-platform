@@ -63,6 +63,7 @@
   "home_metric_reports": "Отправлено отчётов",
   "home_metric_verified": "Проверено отчётов",
   "home_metric_lives": "Спасено жизней",
+  "home_pulse_label": "благодаря проверенным сообщениям",
   "building_select_title": "Необязательно: выберите точное здание",
   "building_waiting_gps": "Ожидаем GPS для загрузки ближайших зданий…",
   "building_select_hint": "Нажмите на контур здания, чтобы отметить его как повреждённое.",
