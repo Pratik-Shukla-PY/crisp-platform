@@ -5,7 +5,14 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v169';
+const CACHE_NAME = 'crisp-v170';
+// v169 → v170 (May 2026 — operator: 'remove "CAPTURE VERIFY SAVE"').
+// Removed the .cta-sub <span> under the primary CTA in index.html
+// + the matching <Text> in the RN companion. The home_cta_sub i18n
+// key + .cta-sub CSS rule stay as orphans so no locale churn / no
+// regression risk for any other surface that resurrects them.
+// VoiceOver / TalkBack still announces the value-prop via the RN
+// accessibilityHint and the PWA aria-* fallbacks.
 // v168 → v169 (May 2026 — bottom-portion refresh v2, operator feedback):
 //   1. CTA helper copy: "Always Working. Everywhere."
 //   2. Live channels show "Live" status in glowing green; both green

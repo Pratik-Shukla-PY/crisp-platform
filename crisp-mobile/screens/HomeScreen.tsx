@@ -420,9 +420,10 @@ export default function HomeScreen(props: HomeScreenProps) {
               {_t('home_cta_primary', 'Report an Incident')}
             </Text>
           </View>
-          <Text style={styles.ctaSub}>
-            {_t('home_cta_sub', 'Capture · Verify · Help')}
-          </Text>
+          {/* v169.1 (May 2026, operator) — "CAPTURE · VERIFY · HELP"
+              visible subtitle removed. accessibilityHint above still
+              announces the value-prop for VoiceOver / TalkBack users.
+              The home_cta_sub i18n key + ctaSub style stay as orphans. */}
         </TouchableOpacity>
 
         {/* §B.4 Reassurance helper — addresses operator ask for an

@@ -725,12 +725,18 @@
                      bumps the cta-label clamp ceiling so it reads as
                      dominant on tall viewports. Existing #btn-start
                      ID + handler unchanged. -->
+                <!-- v169.1 (May 2026, operator) — "CAPTURE · VERIFY ·
+                     HELP" cta-sub removed. The single dominant label
+                     "Report an Incident" + the helper line below
+                     ("Always Working. Everywhere.") together carry
+                     the message. The home_cta_sub i18n key + the
+                     .cta-sub CSS rule stay in place as orphans (no
+                     locale churn; any future surface can resurrect). -->
                 <button class="big-cta big-cta--hero" id="btn-start">
                     <span class="cta-row">
                         <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg></i>
                         <span class="cta-label" data-i18n="home_cta_primary">Report an Incident</span>
                     </span>
-                    <span class="cta-sub" data-i18n="home_cta_sub">Capture · Verify · Help</span>
                 </button>
 
                 <!-- v5 reassurance helper — addresses the operator ask
