@@ -731,5 +731,15 @@
   "v4_cap_tip_impact": "يقرأ المستجيبون الموثوقون كل تقرير. كل تفصيل مهم.",
   "damage_minimal": "طفيف",
   "damage_partial": "متضرر جزئياً",
-  "damage_complete": "مدمر بالكامل"
+  "damage_complete": "مدمر بالكامل",
+  "tier_t1_scout_desc": "مرحباً بك في CRISP — تبدأ تقاريرك من هنا.",
+  "tier_t2_signal_desc": "لقد قدّمت تقريرك الأول.",
+  "tier_t3_changemaker_desc": "تقاريرك أحدثت استجابة فعلية.",
+  "tier_t4_lifekeeper_desc": "تقاريرك ساعدت في إنقاذ الأرواح.",
+  "badge_studio_share_li": "لينكدإن",
+  "badge_studio_share_more": "المزيد",
+  "badge_studio_preview_label": "معاينة",
+  "rewards_stats_reports": "{n} تقارير مقدمة",
+  "rewards_stats_dispatched": "{n} مرسلة إلى المستجيبين",
+  "badge_studio_lock_t1_t2_desc": "استمر في الإبلاغ للوصول إلى مستوى Changemaker ومشاركة شارتك."
 }

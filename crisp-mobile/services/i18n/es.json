@@ -742,5 +742,15 @@
   "v4_cap_tip_impact": "Respondedores verificados leen cada informe. Cada detalle importa.",
   "damage_minimal": "Mínimo",
   "damage_partial": "Dañado parcialmente",
-  "damage_complete": "Totalmente destruido"
+  "damage_complete": "Totalmente destruido",
+  "tier_t1_scout_desc": "Bienvenido a CRISP — tus reportes comienzan aquí.",
+  "tier_t2_signal_desc": "Has enviado tu primer reporte.",
+  "tier_t3_changemaker_desc": "Tus reportes han generado una respuesta real.",
+  "tier_t4_lifekeeper_desc": "Tus reportes han ayudado a salvar vidas.",
+  "badge_studio_share_li": "LinkedIn",
+  "badge_studio_share_more": "Más",
+  "badge_studio_preview_label": "Vista previa",
+  "rewards_stats_reports": "{n} reportes enviados",
+  "rewards_stats_dispatched": "{n} enviados a respondedores",
+  "badge_studio_lock_t1_t2_desc": "Sigue reportando para alcanzar el nivel Changemaker."
 }

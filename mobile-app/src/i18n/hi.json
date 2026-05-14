@@ -733,5 +733,15 @@
   "v4_cap_tip_impact": "सत्यापित प्रत्युत्तरकर्ता हर रिपोर्ट पढ़ते हैं। हर विवरण मायने रखता है।",
   "damage_minimal": "न्यूनतम",
   "damage_partial": "आंशिक रूप से क्षतिग्रस्त",
-  "damage_complete": "पूर्णतः नष्ट"
+  "damage_complete": "पूर्णतः नष्ट",
+  "tier_t1_scout_desc": "CRISP में आपका स्वागत — आपकी रिपोर्ट यहीं से शुरू।",
+  "tier_t2_signal_desc": "आपने अपनी पहली रिपोर्ट जमा कर दी है।",
+  "tier_t3_changemaker_desc": "आपकी रिपोर्ट ने वास्तविक प्रतिक्रिया दिलाई है।",
+  "tier_t4_lifekeeper_desc": "आपकी रिपोर्ट ने जीवन बचाने में मदद की है।",
+  "badge_studio_share_li": "लिंक्डइन",
+  "badge_studio_share_more": "और",
+  "badge_studio_preview_label": "पूर्वावलोकन",
+  "rewards_stats_reports": "{n} रिपोर्ट जमा की",
+  "rewards_stats_dispatched": "{n} राहतकर्ताओं को भेजी",
+  "badge_studio_lock_t1_t2_desc": "Changemaker स्तर तक पहुंचने के लिए रिपोर्ट करते रहें।"
 }

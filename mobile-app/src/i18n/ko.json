@@ -734,5 +734,15 @@
   "v4_cap_tip_impact": "인증된 대응자가 모든 보고서를 읽습니다. 모든 세부사항이 중요합니다.",
   "damage_minimal": "경미",
   "damage_partial": "부분 손상",
-  "damage_complete": "완전 파괴"
+  "damage_complete": "완전 파괴",
+  "tier_t1_scout_desc": "Welcome to CRISP — your reports start here.",
+  "tier_t2_signal_desc": "You've submitted your first report.",
+  "tier_t3_changemaker_desc": "Your reports have triggered real response.",
+  "tier_t4_lifekeeper_desc": "Your reports have helped save lives.",
+  "badge_studio_share_li": "LinkedIn",
+  "badge_studio_share_more": "More",
+  "badge_studio_preview_label": "Preview",
+  "rewards_stats_reports": "{n} reports submitted",
+  "rewards_stats_dispatched": "{n} dispatched to responders",
+  "badge_studio_lock_t1_t2_desc": "Keep reporting to reach Changemaker tier and share your badge."
 }

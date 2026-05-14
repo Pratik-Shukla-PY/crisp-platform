@@ -731,5 +731,15 @@
   "v4_cap_tip_impact": "经核实的救援人员会阅读每份报告。每个细节都很重要。",
   "damage_minimal": "轻微",
   "damage_partial": "部分损坏",
-  "damage_complete": "完全损毁"
+  "damage_complete": "完全损毁",
+  "tier_t1_scout_desc": "欢迎来到 CRISP — 你的报告从这里开始。",
+  "tier_t2_signal_desc": "你已提交首份报告。",
+  "tier_t3_changemaker_desc": "你的报告已触发实际响应。",
+  "tier_t4_lifekeeper_desc": "你的报告帮助挽救了生命。",
+  "badge_studio_share_li": "领英",
+  "badge_studio_share_more": "更多",
+  "badge_studio_preview_label": "预览",
+  "rewards_stats_reports": "已提交 {n} 份报告",
+  "rewards_stats_dispatched": "{n} 份已派发给救援人员",
+  "badge_studio_lock_t1_t2_desc": "继续报告以达到 Changemaker 等级并分享你的徽章。"
 }

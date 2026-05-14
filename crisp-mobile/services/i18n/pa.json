@@ -733,5 +733,15 @@
   "v4_cap_tip_impact": "ਪੁਸ਼ਟੀ ਕੀਤੇ ਜਵਾਬਦੇਹ ਹਰ ਰਿਪੋਰਟ ਪੜ੍ਹਦੇ ਹਨ। ਹਰ ਵੇਰਵਾ ਮਹੱਤਵਪੂਰਨ ਹੈ।",
   "damage_minimal": "ਘੱਟ",
   "damage_partial": "ਅੰਸ਼ਕ ਨੁਕਸਾਨ",
-  "damage_complete": "ਪੂਰੀ ਤਰ੍ਹਾਂ ਨਸ਼ਟ"
+  "damage_complete": "ਪੂਰੀ ਤਰ੍ਹਾਂ ਨਸ਼ਟ",
+  "tier_t1_scout_desc": "Welcome to CRISP — your reports start here.",
+  "tier_t2_signal_desc": "You've submitted your first report.",
+  "tier_t3_changemaker_desc": "Your reports have triggered real response.",
+  "tier_t4_lifekeeper_desc": "Your reports have helped save lives.",
+  "badge_studio_share_li": "LinkedIn",
+  "badge_studio_share_more": "More",
+  "badge_studio_preview_label": "Preview",
+  "rewards_stats_reports": "{n} reports submitted",
+  "rewards_stats_dispatched": "{n} dispatched to responders",
+  "badge_studio_lock_t1_t2_desc": "Keep reporting to reach Changemaker tier and share your badge."
 }

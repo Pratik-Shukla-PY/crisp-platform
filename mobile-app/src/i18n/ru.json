@@ -733,5 +733,15 @@
   "v4_cap_tip_impact": "Проверенные спасатели читают каждый отчёт. Важна каждая деталь.",
   "damage_minimal": "Минимальный",
   "damage_partial": "Частично повреждён",
-  "damage_complete": "Полностью разрушен"
+  "damage_complete": "Полностью разрушен",
+  "tier_t1_scout_desc": "Добро пожаловать в CRISP — ваши отчёты начинаются здесь.",
+  "tier_t2_signal_desc": "Вы отправили свой первый отчёт.",
+  "tier_t3_changemaker_desc": "Ваши отчёты вызвали реальный отклик.",
+  "tier_t4_lifekeeper_desc": "Ваши отчёты помогли спасти жизни.",
+  "badge_studio_share_li": "LinkedIn",
+  "badge_studio_share_more": "Ещё",
+  "badge_studio_preview_label": "Предпросмотр",
+  "rewards_stats_reports": "{n} отчётов отправлено",
+  "rewards_stats_dispatched": "{n} переданы спасателям",
+  "badge_studio_lock_t1_t2_desc": "Продолжайте отчёты, чтобы достичь уровня Changemaker."
 }

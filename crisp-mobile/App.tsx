@@ -122,6 +122,14 @@ import V4ClassifyScreen from './screens/V4ClassifyScreen';
 // service status / pressing needs) + Send button. This is the
 // App Store-submission gate per the v4 roadmap.
 import V4ReviewScreen from './screens/V4ReviewScreen';
+// Phase 6 of RN ↔ PWA parity. RewardsScreen combines the PWA's
+// stage-rewards (4-tier ladder + progress) AND Badge Studio share
+// surface (share-message picker + Share.share() dispatch) into a
+// single RN screen. View-shot pixel-perfect badge composition is
+// deferred to Phase 6.5; v1 relies on the OS Share sheet with a
+// curated text + URL, which covers ~95 % of the share intent
+// without binary bloat.
+import RewardsScreen from './screens/RewardsScreen';
 
 // Phase 3 (Apr 2026): review collapsed from 3 screens to 2 (details + confirm).
 // `review_incident` kept as an alias that redirects to `review_details` so any
@@ -151,7 +159,9 @@ type Screen =
   // components are tracked in crisp-mobile/V4_PARITY_DEFERRED.md.
   // No v4 navigation calls today — the flag check below prevents
   // routing to these stubs.
-  | 'v4_landing' | 'v4_capture' | 'v4_classify' | 'v4_review';
+  | 'v4_landing' | 'v4_capture' | 'v4_classify' | 'v4_review'
+  // Phase 6 — Rewards page + Badge Studio share surface.
+  | 'v4_rewards';
 
 // May 2026 v4 — flag check (default OFF on RN until V4_PARITY_DEFERRED
 // roadmap completes). PWA defaults flag ON; RN companion defaults OFF
@@ -1679,7 +1689,7 @@ export default function App() {
           onSettings={() => setScreen('settings')}
           onPrivacy={() => setScreen('settings') /* TODO Phase 7 — dedicated privacy stage */}
           onAudio={() => { /* TODO Phase 3 — TTS read-aloud */ }}
-          onRewards={() => setScreen('settings') /* TODO Phase 6 — dedicated Rewards screen */}
+          onRewards={() => setScreen('v4_rewards')}
           onQueueTap={async () => {
             const { clearAllQueuedReports } = await import('./services/database');
             const cleared = await clearAllQueuedReports();
@@ -1851,6 +1861,33 @@ export default function App() {
           onEditPhoto={() => setScreen('v4_capture')}
           onEditClassify={() => setScreen('v4_classify')}
           onEditLocation={() => setScreen('v4_capture') /* meta card */}
+        />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+           Phase 6 (May 2026 — RN ↔ PWA parity) — Rewards + Badge Studio.
+           Combined screen: 4-tier ladder + progress hint + share-message
+           picker + Share.share() dispatch. Locked at T1/T2; share unlocks
+           at Changemaker (T3+). Badge level is derived locally from
+           backend impactStats — v6.5 will pull from the /reports/profile
+           endpoint directly per the PWA's home-screen.js pattern.
+      ══════════════════════════════════════════════════════════════════ */}
+      {screen === 'v4_rewards' && (
+        <RewardsScreen
+          badgeLevel={
+            impactStats.totalLives > 0
+              ? 'T4_LIFEKEEPER'
+              : impactStats.resolvedCount > 0
+              ? 'T3_CHANGEMAKER'
+              : (queueCount > 0 || history.length > 0)
+              ? 'T2_SIGNAL'
+              : 'T1_SCOUT'
+          }
+          reportsSubmitted={impactStats.resolvedCount}
+          reportsDispatched={impactStats.resolvedCount}
+          livesSaved={impactStats.totalLives}
+          shareUrl={`https://undp.crisplabs.tech${deviceHash ? `/share?d=${deviceHash}` : ''}`}
+          onBack={() => setScreen('home')}
         />
       )}
 

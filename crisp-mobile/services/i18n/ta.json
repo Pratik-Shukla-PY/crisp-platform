@@ -733,5 +733,15 @@
   "v4_cap_tip_impact": "சரிபார்க்கப்பட்ட பதிலளிப்பாளர்கள் ஒவ்வொரு அறிக்கையையும் படிக்கிறார்கள். ஒவ்வொரு விவரமும் முக்கியம்.",
   "damage_minimal": "குறைந்த",
   "damage_partial": "பகுதி சேதம்",
-  "damage_complete": "முழுமையாக சேதம்"
+  "damage_complete": "முழுமையாக சேதம்",
+  "tier_t1_scout_desc": "Welcome to CRISP — your reports start here.",
+  "tier_t2_signal_desc": "You've submitted your first report.",
+  "tier_t3_changemaker_desc": "Your reports have triggered real response.",
+  "tier_t4_lifekeeper_desc": "Your reports have helped save lives.",
+  "badge_studio_share_li": "LinkedIn",
+  "badge_studio_share_more": "More",
+  "badge_studio_preview_label": "Preview",
+  "rewards_stats_reports": "{n} reports submitted",
+  "rewards_stats_dispatched": "{n} dispatched to responders",
+  "badge_studio_lock_t1_t2_desc": "Keep reporting to reach Changemaker tier and share your badge."
 }
