@@ -78,9 +78,14 @@ describe('HomeScreen — module shape + i18n contract', () => {
     'tier_progress_verified_1',
     'tier_progress_lives_1',
     'tier_progress_top_share',
-    // v5 Phase 3 — pulse stat block
-    'home_metric_lives',
-    'home_pulse_label',
+    // Bottom-portion refresh — pulse block now reads "verified
+    // reports nearby" (static 24 until backend wiring lands).
+    'home_reports_nearby',
+    // Channel status subtitles per the operator screenshot.
+    'live_now',
+    'coming_soon',
+    'low_bandwidth',
+    'voice_reporting',
   ];
 
   it('every required key resolves to a non-empty string in en', () => {
@@ -118,10 +123,18 @@ describe('HomeScreen — module shape + i18n contract', () => {
       expect(v).toContain('offline');
     });
 
-    it('home_pulse_label carries verification language in English', () => {
+    it('home_reports_nearby carries verification/nearby language in English', () => {
       const en = require('../services/i18n/en.json');
-      const v = (en.home_pulse_label || '').toLowerCase();
-      expect(v).toMatch(/verified|reports/);
+      const v = (en.home_reports_nearby || '').toLowerCase();
+      expect(v).toMatch(/verified|reports|nearby/);
+    });
+
+    it('channel-status keys (live_now / low_bandwidth / voice_reporting) all carry non-empty English', () => {
+      const en = require('../services/i18n/en.json');
+      for (const k of ['live_now', 'low_bandwidth', 'voice_reporting']) {
+        expect(typeof en[k]).toBe('string');
+        expect(en[k].length).toBeGreaterThan(0);
+      }
     });
   });
 });

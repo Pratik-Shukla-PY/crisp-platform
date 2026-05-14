@@ -151,20 +151,22 @@ const TIER_META: Record<string, { emoji: string; labelKey: string; color: string
 
 // ── Channel registry ───────────────────────────────────────────────
 // Mirrors the PWA's home-screen.js _renderChannels(). Each tile gets
-// an emoji icon + label key + live flag + deep-link URL.
+// an emoji icon + label key + live flag + deep-link URL + status
+// subtitle key (matches the operator-supplied screenshot).
 const CHANNELS: Array<{
   id: 'telegram' | 'whatsapp' | 'sms' | 'ivr' | 'android' | 'ios';
   emoji: string;
   labelKey: string;
+  statusKey: string;     // i18n key resolved at render time
   live: boolean;
   url?: string;
 }> = [
-  { id: 'telegram', emoji: '✈️',   labelKey: 'channel_telegram',  live: true,  url: 'https://t.me/CrispUNDPbot' },
-  { id: 'whatsapp', emoji: '💬',   labelKey: 'channel_whatsapp',  live: false, url: 'https://wa.me/' },
-  { id: 'sms',      emoji: '📩',   labelKey: 'channel_sms',       live: false, url: 'sms:' },
-  { id: 'ivr',      emoji: '☎️',   labelKey: 'channel_ivr',       live: true,  url: 'tel:' },
-  { id: 'android',  emoji: '🤖',   labelKey: 'channel_android',   live: false, url: 'market://details?id=org.undp.crisp' },
-  { id: 'ios',      emoji: '🍎',   labelKey: 'channel_ios',       live: false, url: 'https://apps.apple.com/' },
+  { id: 'telegram', emoji: '✈️', labelKey: 'channel_telegram', statusKey: 'live_now',        live: true,  url: 'https://t.me/CrispUNDPbot' },
+  { id: 'whatsapp', emoji: '💬', labelKey: 'channel_whatsapp', statusKey: 'coming_soon',     live: false, url: 'https://wa.me/' },
+  { id: 'sms',      emoji: '📩', labelKey: 'channel_sms',      statusKey: 'low_bandwidth',   live: false, url: 'sms:' },
+  { id: 'ivr',      emoji: '☎️', labelKey: 'channel_ivr',      statusKey: 'voice_reporting', live: true,  url: 'tel:' },
+  { id: 'android',  emoji: '🤖', labelKey: 'channel_android',  statusKey: 'coming_soon',     live: false, url: 'market://details?id=org.undp.crisp' },
+  { id: 'ios',      emoji: '🍎', labelKey: 'channel_ios',      statusKey: 'coming_soon',     live: false, url: 'https://apps.apple.com/' },
 ];
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -530,16 +532,13 @@ export default function HomeScreen(props: HomeScreenProps) {
           <View style={[styles.pulseRing, styles.pulseRingStatic]} pointerEvents="none" />
         )}
 
-        <Text style={styles.pulseNum}>
-          {props.badgeLivesSaved && props.badgeLivesSaved > 0
-            ? props.badgeLivesSaved
-            : '—'}
-        </Text>
+        {/* STATIC "24" placeholder per operator: "make it static now
+            we will dvelop it soon". Backend wiring (geo-query against
+            /reports/?near=lat,lng&radius=...) follows in a separate
+            commit. PWA parity: #home-reports-nearby-count. */}
+        <Text style={styles.pulseNum}>24</Text>
         <Text style={styles.pulseLabel}>
-          {_t('home_metric_lives', 'Lives Saved')}
-        </Text>
-        <Text style={styles.pulseCaption}>
-          {_t('home_pulse_label', 'through verified reports')}
+          {_t('home_reports_nearby', 'verified reports nearby')}
         </Text>
       </View>
 
@@ -564,6 +563,11 @@ export default function HomeScreen(props: HomeScreenProps) {
               <Text style={styles.channelIcon}>{c.emoji}</Text>
               <Text style={styles.channelLabel} numberOfLines={1}>
                 {_t(c.labelKey, c.id)}
+              </Text>
+              {/* Status subtitle — "Live now" / "Coming soon" / etc.
+                  Bottom-portion refresh — PWA parity .ct-status. */}
+              <Text style={styles.channelStatus} numberOfLines={1}>
+                {_t(c.statusKey, c.statusKey)}
               </Text>
               {c.live && <View style={styles.channelLiveDot} />}
             </Pressable>
@@ -781,23 +785,24 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5, textTransform: 'uppercase',
   },
 
-  // §B.3 Utility row
+  // §B.3 Utility row — bottom-portion refresh: bigger frosted-glass tiles
   utilityRow: {
-    flexDirection: 'row', alignItems: 'stretch', gap: 6,
+    flexDirection: 'row', alignItems: 'stretch', gap: 8,
     marginTop: 14, width: '100%',
   },
   utilityTile: {
-    flex: 1, minHeight: 60,
-    paddingHorizontal: 4, paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.015)',
-    borderRadius: 12, borderWidth: 1, borderColor: 'transparent',
-    alignItems: 'center', justifyContent: 'center', gap: 4,
+    flex: 1, minHeight: 78,
+    paddingHorizontal: 6, paddingVertical: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 18,
+    borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)',
+    alignItems: 'center', justifyContent: 'center', gap: 6,
     position: 'relative',
   },
-  utilityIcon: { fontSize: 20, lineHeight: 24, color: '#09D1C7' },
+  utilityIcon: { fontSize: 24, lineHeight: 28, color: '#09D1C7' },
   utilityLabel: {
-    color: Colors.textDim, fontSize: 10, fontWeight: '600',
-    textAlign: 'center', lineHeight: 12,
+    color: Colors.text, fontSize: 11, fontWeight: '700',
+    textAlign: 'center', lineHeight: 14,
   },
   utilityStatusDot: {
     position: 'absolute', top: 6, right: 6,
@@ -805,38 +810,46 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.bg,
   },
 
-  // §C.0 Pulse stat block — Phase 3 v5
+  // §C.0 Pulse stat block — Phase 3 v5 + bottom-portion refresh
   pulseBlock: {
     alignItems: 'center', justifyContent: 'center',
-    paddingTop: 18, paddingBottom: 8,
-    marginTop: 10, marginBottom: 6,
+    paddingTop: 28, paddingBottom: 18,
+    marginTop: 14, marginBottom: 10,
     position: 'relative',
+    minHeight: 180,
   },
+  // Bottom-portion refresh — single dominant halo (≈220 px) replacing
+  // the prior dual-ring. Two `pulseRing` instances still render (one
+  // animated, one slower) so the breath effect survives, but both
+  // are now sized to dominate the centre. PWA parity:
+  // .home-impact-reports-nearby .hi-cell-reports-nearby::before/::after.
   pulseRing: {
     position: 'absolute',
-    width: 140, height: 140,
+    width: 220, height: 220,
     top: '50%', left: '50%',
-    marginTop: -70, marginLeft: -70,
-    borderRadius: 70,
-    borderWidth: 1, borderColor: 'rgba(70, 223, 177, 0.28)',
-    backgroundColor: 'rgba(70, 223, 177, 0.05)',
+    marginTop: -110, marginLeft: -110,
+    borderRadius: 110,
+    borderWidth: 1, borderColor: 'rgba(70, 223, 177, 0.32)',
+    backgroundColor: 'rgba(70, 223, 177, 0.08)',
   },
   pulseRingStatic: {
-    opacity: 0.35,   // reduced-motion fallback
+    opacity: 0.45,   // reduced-motion fallback
   },
+  // May 2026 bottom-portion refresh — operator screenshot has a
+  // dominant centre number with subtle teal halo + smaller dim
+  // label below. Mirrors the PWA's .home-impact-reports-nearby
+  // .hi-num-reports-nearby clamp.
   pulseNum: {
-    fontSize: 36, fontWeight: '900', color: '#80EE98',
-    lineHeight: 40, letterSpacing: -1,
+    fontSize: 60, fontWeight: '900', color: '#80EE98',
+    lineHeight: 62, letterSpacing: -2,
+    textShadowColor: 'rgba(128, 238, 152, 0.32)',
+    textShadowRadius: 22,
+    textShadowOffset: { width: 0, height: 0 },
   },
   pulseLabel: {
-    fontSize: 11, fontWeight: '700',
-    color: Colors.text, letterSpacing: 1.2, textTransform: 'uppercase',
-    marginTop: 2,
-  },
-  pulseCaption: {
-    fontSize: 10.5, fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.52)',
-    letterSpacing: 0.2, marginTop: 2,
+    fontSize: 13, fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.62)',
+    letterSpacing: 0.1, marginTop: 4,
     textAlign: 'center',
   },
 
@@ -848,31 +861,42 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.42)',
     textAlign: 'center', marginBottom: 6,
   },
+  // Bottom-portion refresh — bigger tiles matching the operator
+  // screenshot's premium proportions; 3-col grid via width: 31% + gap.
   channelsGrid: {
     flexDirection: 'row', flexWrap: 'wrap',
-    gap: 6,
+    gap: 10,
   },
   channelTile: {
-    width: '32%',                     // ~3 columns with 6px gap on 350px content
-    minHeight: 50, padding: 6, borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+    width: '31%',
+    minHeight: 92, padding: 12, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
     alignItems: 'center', justifyContent: 'center', gap: 4,
     position: 'relative',
   },
   channelTileLive: {
-    backgroundColor: 'rgba(70, 223, 177, 0.04)',
-    borderColor: 'rgba(70, 223, 177, 0.32)',
+    backgroundColor: 'rgba(70, 223, 177, 0.08)',
+    borderColor: 'rgba(70, 223, 177, 0.36)',
   },
-  channelIcon: { fontSize: 17, lineHeight: 20 },
+  channelIcon: { fontSize: 26, lineHeight: 30 },
   channelLabel: {
-    fontSize: 10, fontWeight: '600',
+    fontSize: 14, fontWeight: '800',
     color: Colors.text, textAlign: 'center',
+    letterSpacing: -0.1,
+  },
+  channelStatus: {
+    fontSize: 11, fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.48)',
+    textAlign: 'center', marginTop: 2,
   },
   channelLiveDot: {
-    position: 'absolute', top: 6, right: 6,
-    width: 6, height: 6, borderRadius: 3,
+    position: 'absolute', top: 10, right: 10,
+    width: 10, height: 10, borderRadius: 5,
     backgroundColor: '#80EE98',
+    shadowColor: '#80EE98',
+    shadowOpacity: 0.7, shadowRadius: 6, shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
   },
 
   // §C.2 Queue badge (kept for parity)

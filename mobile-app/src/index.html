@@ -831,19 +831,20 @@
                  The empty state stays "—" until an analyst sets
                  lives_impacted via the dashboard's analyst-only
                  input (shipped in the same commit). -->
-            <!-- v5 Phase 3 (May 2026) — pulse stat block. Animated
-                 ring halos around the lives-saved counter so the
-                 "Lives Saved" metric feels alive and humanitarian-grade
-                 rather than a flat number. Wires to the SAME
-                 #home-lives-count element + updateHomeImpactMetrics()
-                 painter — pulse is pure decoration over real data. The
-                 .home-impact-pulse modifier opts into the animation;
-                 prefers-reduced-motion users get a static halo only. -->
-            <div class="home-impact home-impact-single home-impact-pulse" id="home-impact">
-                <div class="hi-cell hi-cell-lives">
-                    <div class="hi-num hi-num-lives" id="home-lives-count">—</div>
-                    <div class="hi-label" data-i18n="home_metric_lives">Lives Saved</div>
-                    <div class="hi-caption" data-i18n="home_pulse_label">through verified reports</div>
+            <!-- v5 Phase 3 + bottom-portion refresh (May 2026) — pulse
+                 stat block repurposed for "verified reports nearby".
+                 STATIC count of 24 for now; backend wiring (geo-query
+                 against /reports/?near=lat,lng&radius=...) follows in
+                 a separate commit. updateHomeImpactMetrics() in app.js
+                 looks for #home-lives-count and gracefully no-ops here
+                 (badge ladder still gets its data via /reports/profile
+                 — only the visible card is repurposed). .home-impact-
+                 reports-nearby modifier opts into the single-halo v5
+                 styling. -->
+            <div class="home-impact home-impact-single home-impact-pulse home-impact-reports-nearby" id="home-impact">
+                <div class="hi-cell hi-cell-reports-nearby">
+                    <div class="hi-num hi-num-reports-nearby" id="home-reports-nearby-count">24</div>
+                    <div class="hi-label" data-i18n="home_reports_nearby">verified reports nearby</div>
                 </div>
             </div>
 

@@ -223,6 +223,16 @@
         const safeLabel = String(label).replace(/"/g, '&quot;');
         const safeColor = colorVar || '--accent';
         const dataAction = (opts && opts.dataAction) || '';
+        // May 2026 (bottom-portion refresh) — each tile now renders a
+        // small status subtitle ("Live now" / "Coming soon" / "Low
+        // bandwidth" / "Voice reporting") below the label, matching
+        // the operator-supplied screenshot. The status string is
+        // already i18n-resolved by the caller (_renderChannels()
+        // passes the t() output).
+        const statusText = (opts && opts.status) || '';
+        const statusMarkup = statusText
+            ? `<span class="ct-status">${String(statusText).replace(/"/g, '&quot;')}</span>`
+            : '';
         if (!href && !dataAction) {
             // Non-working tile — grey border, grey icon, button (not
             // anchor), tap → toast.
@@ -233,15 +243,11 @@
                         aria-disabled="true">
                     <span class="ct-icon" aria-hidden="true">${icon}</span>
                     <span class="ct-label">${label}</span>
+                    ${statusMarkup}
                 </button>
             `;
         }
         if (dataAction) {
-            // live tile rendered as a <button> with a
-            // data-action attribute. The click handler dispatches to
-            // _openTelegram() (or whichever action), so this tile has
-            // no href and never lets the browser perform default
-            // navigation. Keeps the same is-live styling + live pip.
             return `
                 <button type="button" class="home-channel-tile is-live"
                         style="--c: var(${safeColor});"
@@ -250,6 +256,7 @@
                         aria-label="${safeLabel}">
                     <span class="ct-icon" aria-hidden="true">${icon}</span>
                     <span class="ct-label">${label}</span>
+                    ${statusMarkup}
                     <span class="ct-dot" aria-hidden="true" title="Available"></span>
                 </button>
             `;
@@ -268,6 +275,7 @@
                aria-label="${safeLabel}">
                 <span class="ct-icon" aria-hidden="true">${icon}</span>
                 <span class="ct-label">${label}</span>
+                ${statusMarkup}
                 <span class="ct-dot" aria-hidden="true" title="Available"></span>
             </a>
         `;
@@ -285,35 +293,53 @@
             // the PWA device-hash as a /start token). The bot handle
             // still controls whether the tile is live: an empty
             // CHANNELS.telegram_bot keeps it disabled / coming-soon.
+            // May 2026 — channel status subtitles per the operator-
+            // supplied screenshot. Telegram + IVR show "Live now" /
+            // "Voice reporting"; SMS shows "Low bandwidth"; offline
+            // channels (WhatsApp / Android / iOS) show "Coming soon"
+            // via the existing `coming_soon` key. Local i18n resolver
+            // (tt is also defined per-fn elsewhere in this file).
+            const _tt = (typeof window.t === 'function') ? window.t : (k, f) => f || k;
+            const _stLive   = _tt('live_now',        'Live now');
+            const _stSoon   = _tt('coming_soon',     'Coming soon');
+            const _stLowBw  = _tt('low_bandwidth',   'Low bandwidth');
+            const _stVoice  = _tt('voice_reporting', 'Voice reporting');
+
             const tgHandle = CHANNELS.telegram_bot;
             const tgTile = tgHandle
                 ? _buildChannelTile('<i class="fa-brands fa-telegram"></i>',
                                     'Telegram',
                                     '', 'telegram', '--brand-telegram',
-                                    { dataAction: 'telegram-deeplink' })
+                                    { dataAction: 'telegram-deeplink', status: _stLive })
                 : _buildChannelTile('<i class="fa-brands fa-telegram"></i>',
                                     'Telegram', '', 'telegram',
-                                    '--brand-telegram');
+                                    '--brand-telegram',
+                                    { status: _stSoon });
             const html = [
                 tgTile,
                 _buildChannelTile('<i class="fa-brands fa-whatsapp"></i>',
                                   'WhatsApp',
                                   _whatsappLink(CHANNELS.whatsapp_phone, 'CRISP report'), 'whatsapp',
-                                  '--brand-whatsapp'),
+                                  '--brand-whatsapp',
+                                  { status: CHANNELS.whatsapp_phone ? _stLive : _stSoon }),
                 _buildChannelTile('<i class="fa-solid fa-message"></i>',
                                   'SMS',
                                   _smsLink(CHANNELS.sms_phone, 'CRISP help'), 'sms',
-                                  '--brand-sms'),
+                                  '--brand-sms',
+                                  { status: _stLowBw }),
                 _buildChannelTile('<i class="fa-solid fa-phone-volume"></i>',
                                   'IVR',
                                   _telLink(CHANNELS.ivr_phone), 'ivr',
-                                  '--brand-ivr'),
+                                  '--brand-ivr',
+                                  { status: _stVoice }),
                 _buildChannelTile('<i class="fa-brands fa-android"></i>',
                                   'Android', CHANNELS.android_app_url, 'android',
-                                  '--good'),
+                                  '--good',
+                                  { status: CHANNELS.android_app_url ? _stLive : _stSoon }),
                 _buildChannelTile('<i class="fa-brands fa-apple"></i>',
                                   'iOS', CHANNELS.ios_app_url, 'ios',
-                                  '--brand-ios'),
+                                  '--brand-ios',
+                                  { status: CHANNELS.ios_app_url ? _stLive : _stSoon }),
             ].join('');
             channelsEl.innerHTML = html;
             // Section ALWAYS visible (Phase-17 contract change).

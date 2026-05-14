@@ -10069,6 +10069,248 @@ body.tier-t4 .home-impact {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   HOME v5 — Bottom-portion refresh (May 2026, operator-supplied screenshot)
+
+   Operator: "For the Bottom portion, keep our icons and colour theme
+   but design like this alignment, position structure and add reports
+   nearby, make it static now we will dvelop it soon."
+
+   Adopts the screenshot's bottom-half PROPORTIONS while keeping the
+   CRISP icons (Lucide-style SVG, not emoji) + mint/teal palette
+   (--accent #09D1C7 / --blue #46DFB1 / --green #80EE98). Specifically:
+
+   ① pulse stat block — much bigger number (~clamp 52→68px), ONE
+     larger halo (vs the dual-ring Phase 3 style) so the "24" reads
+     as the dominant visual mid-page. Label "verified reports nearby"
+     replaces "Lives Saved" (badge ladder still uses the underlying
+     data via /reports/profile — see app.js:updateHomeImpactMetrics
+     comment).
+   ② action tiles — bumped frosted-glass treatment + slightly larger
+     padding for the screenshot's premium feel
+   ③ channels — bigger tiles + bolder labels + status subtitle line
+
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── ① Pulse stat block — single big halo ─────────────────────────── */
+
+/* The .home-impact-reports-nearby modifier overrides the Phase 3
+   dual-ring pulse with a single, larger, more dramatic halo that
+   matches the screenshot. The dual-ring rules above still apply to
+   any older .home-impact-pulse caller that hasn't migrated. */
+.home-stage .home-impact.home-impact-reports-nearby {
+    padding: 20px 0 12px;
+    overflow: visible;
+}
+.home-stage .home-impact.home-impact-reports-nearby .hi-cell-reports-nearby {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 24px 36px;
+    isolation: isolate;
+}
+/* Single large radial halo — replaces the dual-ring ::before/::after.
+   Static (non-animated) base + an animated outer ring for the breath. */
+.home-stage .home-impact.home-impact-reports-nearby .hi-cell-reports-nearby::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 220px;
+    height: 220px;
+    margin-top: -110px;
+    margin-left: -110px;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at center,
+            rgba(70, 223, 177, 0.20) 0%,
+            rgba(9, 209, 199, 0.12) 35%,
+            transparent 72%);
+    pointer-events: none;
+    z-index: -1;
+}
+.home-stage .home-impact.home-impact-reports-nearby .hi-cell-reports-nearby::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 200px;
+    height: 200px;
+    margin-top: -100px;
+    margin-left: -100px;
+    border-radius: 50%;
+    border: 1px solid rgba(70, 223, 177, 0.32);
+    pointer-events: none;
+    z-index: -1;
+    animation: crisp-home-pulse-ring 3.8s ease-out infinite;
+}
+
+/* Big number — matches the screenshot's dominant centre stat. */
+.home-stage .home-impact.home-impact-reports-nearby .hi-num-reports-nearby {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-size: clamp(2.8rem, 11vw, 4.2rem);
+    line-height: 1;
+    font-weight: 800;
+    color: #80EE98;
+    letter-spacing: -0.04em;
+    margin: 0;
+    /* Subtle text-glow to lift it off the dark bg. */
+    text-shadow: 0 0 22px rgba(128, 238, 152, 0.32);
+}
+
+/* Smaller, dim label below — "verified reports nearby" matches the
+   screenshot's quieter sub-label below the dominant number. */
+.home-stage .home-impact.home-impact-reports-nearby .hi-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.62);
+    letter-spacing: 0.01em;
+    text-transform: none;
+    margin-top: 4px;
+    text-align: center;
+}
+@media (min-height: 740px) {
+    .home-stage .home-impact.home-impact-reports-nearby .hi-label {
+        font-size: 14px;
+    }
+}
+
+/* Reduced-motion — kill the outer ring animation only; the static
+   inner halo radial-gradient stays so the number still reads as
+   elevated, but without motion. */
+@media (prefers-reduced-motion: reduce) {
+    .home-stage .home-impact.home-impact-reports-nearby .hi-cell-reports-nearby::after {
+        animation: none !important;
+        transform: scale(1) !important;
+        opacity: 0.45;
+    }
+}
+
+/* ── ② Action tiles — bumped frosted-glass treatment ──────────────── */
+
+/* The screenshot's action tiles have a more substantial frosted-glass
+   look. We bump the bg alpha + border-radius + padding without
+   changing the 5-col layout (preserves the existing
+   redistribute-when-Download-hidden flex behaviour). */
+.home-stage .home-action-tiles.home-action-tiles--utility {
+    gap: 8px;
+}
+.home-stage .home-action-tile {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.home-stage .home-action-tile:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(70, 223, 177, 0.24);
+    transform: translateY(-2px);
+}
+.home-stage .home-action-tile .hat-icon {
+    /* Make icons read at a more premium scale matching the
+       screenshot's bigger tiles. */
+    width: 26px;
+    height: 26px;
+}
+.home-stage .home-action-tile .hat-icon > svg {
+    width: 26px;
+    height: 26px;
+}
+.home-stage .home-action-tile .hat-label {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0;
+}
+@media (min-height: 740px) {
+    .home-stage .home-action-tile {
+        min-height: 82px;
+        padding: 14px 8px 12px;
+    }
+    .home-stage .home-action-tile .hat-icon,
+    .home-stage .home-action-tile .hat-icon > svg {
+        width: 28px;
+        height: 28px;
+    }
+    .home-stage .home-action-tile .hat-label { font-size: 12.5px; }
+}
+
+/* ── ③ Channels grid — bigger tiles + status subtitle ─────────────── */
+
+/* Bump channel tile size + give the optional .ct-status subtitle
+   its own typography. home-screen.js _renderChannels() already
+   builds a .ct-status node when the channel registry has a
+   `status` field; we just style it here. Channels without a
+   subtitle still render fine. */
+.home-stage .home-channels.home-channels-grid {
+    gap: 10px;
+}
+.home-stage .home-channel-tile {
+    min-height: 88px;
+    padding: 12px 8px 14px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    gap: 4px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.home-stage .home-channel-tile .ct-icon {
+    font-size: 26px;
+    line-height: 1;
+}
+.home-stage .home-channel-tile .ct-label {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: -0.005em;
+    margin-top: 4px;
+}
+.home-stage .home-channel-tile .ct-status {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.48);
+    letter-spacing: 0.005em;
+    margin-top: 2px;
+    text-align: center;
+}
+/* Live tiles — mint glow border + green status pip top-right.
+   home-screen.js adds .is-live to working channels; we elevate
+   that state here to match the screenshot's Telegram + IVR look. */
+.home-stage .home-channel-tile.is-live {
+    background: linear-gradient(180deg, rgba(70, 223, 177, 0.10) 0%, rgba(255, 255, 255, 0.03) 100%);
+    border-color: rgba(70, 223, 177, 0.36);
+}
+.home-stage .home-channel-tile.is-live::after {
+    content: '';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #80EE98;
+    box-shadow: 0 0 8px rgba(128, 238, 152, 0.6);
+}
+.home-stage .home-channel-tile {
+    position: relative;
+}
+
+/* Compact phones — keep the bump but cap min-height so the page
+   stays fit-to-viewport. */
+@media (max-height: 700px) {
+    .home-stage .home-channel-tile {
+        min-height: 72px;
+        padding: 8px 6px 10px;
+    }
+    .home-stage .home-channel-tile .ct-icon { font-size: 22px; }
+    .home-stage .home-channel-tile .ct-label { font-size: 12.5px; }
+    .home-stage .home-channel-tile .ct-status { font-size: 10px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    HOME v5 — Phase 3: pulse stat block (real data, motion-gated)
    (May 2026 redesign — operator-supplied HTML concept)
 

@@ -5,7 +5,17 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v167';
+const CACHE_NAME = 'crisp-v168';
+// v167 → v168 (May 2026 — home bottom-portion refresh per operator
+// screenshot: "verified reports nearby" pulse (static 24 for now),
+// bigger frosted-glass action tiles, bigger channel tiles with
+// status subtitle line ("Live now" / "Coming soon" / "Low bandwidth"
+// / "Voice reporting"). Touches index.html (.home-impact-reports-
+// nearby block), home-screen.js (_buildChannelTile + _renderChannels
+// status param), styles.css (bottom-portion refresh rules), 22
+// i18n files (+ home_reports_nearby + live_now + low_bandwidth +
+// voice_reporting). Bump required so returning users evict the v167
+// pulse-block snapshot. Specs: e2e/tests/pwa/68-home-v5-layout.spec.ts.
 // v166 → v167 (May 2026 — home v5 redesign: hero card grouping,
 // deeper navy radial bg + cyan glow, pulse stat block for the
 // lives-saved counter, reassurance helper under the CTA. Touches

@@ -98,40 +98,61 @@ test.describe('PWA — home v5 layout invariants', () => {
 
     // ── Phase 3 — pulse stat block ────────────────────────────────
 
-    test('@smoke .home-impact carries the .home-impact-pulse modifier', async ({ page }) => {
+    test('@smoke .home-impact carries the .home-impact-reports-nearby modifier', async ({ page }) => {
+        // Bottom-portion refresh (May 2026) — pulse block repurposed
+        // for "verified reports nearby". The .home-impact-pulse
+        // base class still travels alongside for shared decoration.
         const card = page.locator('#home-impact');
+        await expect(card).toHaveClass(/home-impact-reports-nearby/);
         await expect(card).toHaveClass(/home-impact-pulse/);
     });
 
-    test('.hi-caption is rendered and bound to home_pulse_label', async ({ page }) => {
-        const caption = page.locator('#home-impact .hi-caption');
-        await expect(caption).toBeVisible();
-        const txt = (await caption.textContent() || '').trim();
-        expect(txt.length).toBeGreaterThan(0);
-        // English baseline — "through verified reports". Any
-        // sub-string match keeps the test resilient to copy tweaks.
-        expect(txt.toLowerCase()).toMatch(/verified|reports/);
-    });
+    test('reports-nearby count tile renders a static 24 + i18n-bound label', async ({ page }) => {
+        // The pulse block now shows a static "24" (backend wiring is
+        // a separate commit per operator: "make it static now we
+        // will dvelop it soon"). Label binds to home_reports_nearby.
+        const count = page.locator('#home-reports-nearby-count');
+        await expect(count).toBeVisible();
+        const countText = (await count.textContent() || '').trim();
+        expect(countText).toBe('24');
 
-    test('lives count tile is still present + i18n-bound', async ({ page }) => {
-        // Phase 3 only added decoration; the original counter element
-        // + label remain so the data flow is unchanged.
-        await expect(page.locator('#home-lives-count')).toBeVisible();
         const label = page.locator('#home-impact .hi-label');
         await expect(label).toBeVisible();
         const labelText = (await label.textContent() || '').toLowerCase();
-        expect(labelText).toMatch(/lives|life|saved/);
+        expect(labelText).toMatch(/verified|reports|nearby/);
+    });
+
+    test('pulse number renders at the v5 dominant scale (≥ 40px)', async ({ page }) => {
+        // The bottom-portion refresh bumps the pulse font-size clamp
+        // ceiling to 4.2rem (~67px) so it dominates the centre of the
+        // bottom half. Compact phones clamp down to 2.8rem (~45px).
+        // Any value ≥ 40 px is accepted across viewports.
+        const fontPx = await page.locator('#home-reports-nearby-count').evaluate((el) =>
+            parseFloat(getComputedStyle(el as HTMLElement).fontSize),
+        );
+        expect(fontPx).toBeGreaterThanOrEqual(40);
+    });
+
+    test('channels render with a status subtitle (Live now / Coming soon / etc.)', async ({ page }) => {
+        // The screenshot shows a small status line on every tile.
+        // Pin that home-screen.js's _renderChannels() now emits
+        // .ct-status nodes per tile.
+        const statuses = page.locator('#home-channels .ct-status');
+        await expect(statuses.first()).toBeVisible();
+        const count = await statuses.count();
+        expect(count, 'every channel tile should carry a status subtitle').toBeGreaterThanOrEqual(6);
     });
 
     test('reduced-motion users get a static halo (no animation)', async ({ page, context }) => {
-        // Emulate prefers-reduced-motion: reduce. The :before ring
-        // continues to render but with animation-name: none.
+        // Emulate prefers-reduced-motion: reduce. The outer ring's
+        // animation is disabled; the inner halo stays as a static
+        // radial-gradient.
         await context.emulateMedia({ reducedMotion: 'reduce' });
         await page.reload();
         await page.waitForLoadState('networkidle');
 
-        const animName = await page.locator('#home-impact .hi-cell-lives').evaluate((el) =>
-            getComputedStyle(el as HTMLElement, '::before').animationName,
+        const animName = await page.locator('#home-impact .hi-cell-reports-nearby').evaluate((el) =>
+            getComputedStyle(el as HTMLElement, '::after').animationName,
         );
         // Either "none" or the CSS keyword empty string indicates
         // the animation is gated.
