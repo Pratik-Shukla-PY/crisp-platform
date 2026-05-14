@@ -5,7 +5,50 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v174';
+const CACHE_NAME = 'crisp-v177';
+// v176 → v177 (May 2026 — lang pill v6.2 + footer v3, operator
+// feedback round):
+//   1. Lang pill `top: 16 → 22 px` so it sits vertically centered
+//      with the CRISP brand row below (logo + wordmark). Halo
+//      alpha 0.45 → 0.55 + spread 2 → 3 px so the cyan glow reads
+//      as clearly as the reference screenshot. LED dot 12 → 13 px;
+//      online halo alphas 0.95/0.65/0.40 → 1.00/0.78/0.52.
+//   2. Footer v3: links explicitly un-bold (font-weight: 400),
+//      space between "Open source" and device-ID pill restored
+//      (nav: flex 1 1 → 0 1 so space-between actually places the
+//      gap there), copy + info icon buttons UN-HIDDEN inside the
+//      pill (operator: "bring that back"). Buttons sized 22 px in
+//      this surface (vs the default 24 px) so the whole row stays
+//      single-line on a 430 px viewport.
+//   3. Narrow-phone media query (≤ 430 px) scales down the pill
+//      icons + text accordingly so nothing wraps.
+// v175 → v176 (May 2026 — nearby.js local-dev API-base fix).
+// Operator reported the "Verified Reports Nearby" module didn't
+// render on local dev. Root cause: nearby.js used relative
+// `/api/v1` for the endpoint, which on a PWA dev-server bind
+// (typically :8080) hits `localhost:8080/api/v1/reports/nearby`
+// → 404 (backend lives on :8000). Mirror the host-aware base
+// resolution app.js uses (window.API_BASE → host-based fallback
+// for `localhost`/`127.0.0.1` → :8000; otherwise window.origin).
+// Also adds console.log/warn instrumentation so the silent-fail
+// path surfaces in DevTools next time. STATIC_ASSETS unchanged.
+// v174 → v175 (May 2026 — home footer v2 visibility pass).
+// Operator screenshot: the bottom-portion footer was visually too
+// faint vs the reference image. Three changes:
+//   1. Links bumped 10.5 → 13 px and brighter slate (alpha 0.45 →
+//      0.75); separators switched · → • and bumped to match.
+//   2. Device-ID pill: copy + info icon buttons HIDDEN in this
+//      surface (kept in DOM for back-compat / lang-pill identity
+//      bar parity); the pill becomes the copy affordance via a new
+//      whole-badge tap handler in home-screen.js _wireDevidBadge.
+//      Pill padding 5/14 → 8/18, text 11 px → 12.5 px / 700 / white,
+//      letter-spacing 0.06 → 0.10 em.
+//   3. Auto-show tooltip suppressed in footer-row context (CSS
+//      display:none) — the lang-pill identity disclosure already
+//      surfaces this on first run.
+// nowrap row layout — pill no longer collides on mobile-portrait
+// because the icon buttons are gone. RN companion mirrored.
+// Spec: e2e/tests/pwa/86-footer-redesign.spec.ts.
 // v173 → v174 (May 2026 — "Verified Reports Nearby" Phase 2):
 //   1. Bottom-sheet detail modal (#nearby-sheet) — slides up on row
 //      tap, dismissed via backdrop/✕/Escape. Soft pre-fill of

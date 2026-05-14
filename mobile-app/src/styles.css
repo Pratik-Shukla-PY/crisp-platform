@@ -156,39 +156,33 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
    .lps-code) — only visuals change so existing specs / RTL rules /
    install-prompt offset (right: 158px from the pill) all stay valid. */
 .lang-switcher {
-    /* May 2026 (alignment-rhythm pass) — right: 16 → 20 so the
-       pill aligns with the home-stage's 20 px horizontal gutter.
-       Previously it stuck out 4-6 px further right than the brand
-       row beneath it, breaking the visual grid. */
-    /* v6.1 pass — right: 20 → 24 so the cyan glow has 4 px of
-       breathing room before the .mobile-screen overflow:hidden
-       clips it. Without this the right-side halo was lost. */
-    position: absolute; top: 16px; right: 24px; z-index: 100;
+    /* v6.2 (May 2026, operator) — `top: 16 → 22` so the pill is
+       vertically centered with the CRISP brand row below
+       (logo is 40 px tall starting at `home-center` padding-top
+       ~16-26 px → logo center sits at ~36-46 px. With the pill
+       at ~36 px tall, top:22 puts pill center at ~40 — close
+       enough to logo center across every viewport-height step
+       without per-breakpoint media-query overrides). */
+    position: absolute; top: 22px; right: 24px; z-index: 100;
     display: flex;
     flex-wrap: nowrap;            /* force single-line pill */
     align-items: center;
     gap: 8px;                     /* dot ↔ flag/code breathing room */
     background: linear-gradient(180deg, #1b2a44 0%, #0e1828 100%);
-    /* v6.1 — full capsule. The reference screenshot shows fully
-       rounded ends regardless of content height; 999 px makes the
-       pill stay capsule-shaped for any future taller content. */
     border-radius: 999px;
     padding: 7px 14px;
-    border: 1px solid rgba(255,255,255,0.08);
-    /* v6.1 cyan ambient halo cranked up — alpha 0.18 → 0.45 and
-       spread bumped 0 → 2 px so the glow is actually visible against
-       the navy app background. The reference screenshot's halo is
-       clearly readable from across the viewport; the previous values
-       were perceptually invisible against `var(--bg)`. */
+    border: 1px solid rgba(255,255,255,0.10);
+    /* v6.2 — operator screenshot shows a noticeably brighter cyan
+       halo than v6.1 was rendering. Alpha 0.45 → 0.55, spread
+       2 px → 3 px so the glow reads as the LED's "live" signal
+       even on bright OLED displays under daylight. */
     box-shadow:
-        0 0 28px 2px rgba(9, 209, 199, 0.45),
+        0 0 32px 3px rgba(9, 209, 199, 0.55),
         0 6px 18px rgba(0, 0, 0, 0.45),
-        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.16),
         inset 0 -1px 0 rgba(0, 0, 0, 0.35);
-    /* HOTFIX : pill is now guaranteed compact — JS writes
-       `🇬🇧 EN` / `🇮🇳 KN` (2-letter ISO codes, not native-script names),
-       so the pill never exceeds ~140 px regardless of locale. No more
-       wrap-to-two-lines overlap with the flow-progress bar's Send step. */
+    /* Pill stays compact — JS writes `🇬🇧 EN` (2-letter ISO codes),
+       so the pill never exceeds ~140 px regardless of locale. */
     max-width: 140px;
     white-space: nowrap;
 }
@@ -2739,27 +2733,28 @@ details.mr-date-group[open] .mr-date-group-chevron {
    reading is unmistakable on the navy capsule. */
 .lang-switcher { display: flex; align-items: center; gap: 8px; }
 .connectivity-dot {
-    width: 12px; height: 12px; border-radius: 50%;
+    /* v6.2 (May 2026, operator) — LED bumped 12 → 13 px to match the
+       reference screenshot's prominent "lit LED" weight. */
+    width: 13px; height: 13px; border-radius: 50%;
     flex-shrink: 0;
     transition: background-color 0.2s, box-shadow 0.2s;
 }
-/* v6.1 — LED halo cranked up so the dot reads as a live indicator
-   on the navy capsule. Three layered shadows: a tight bright inner
-   ring, a medium glow, and a wide diffuse halo (matches the
-   reference screenshot's "lit LED" look). */
+/* v6.2 — halo brightened across all three layers so the dot reads
+   clearly on OLED displays under daylight. Inner ring alpha 0.95 → 1.0,
+   middle 0.65 → 0.78, diffuse 0.40 → 0.52. */
 .connectivity-dot.connectivity-online {
     background: radial-gradient(circle at 35% 35%, #d4f8dd 0%, #80EE98 55%, #4cc774 100%);
     box-shadow:
-        0 0 4px 1px rgba(128, 238, 152, 0.95),
-        0 0 10px 2px rgba(128, 238, 152, 0.65),
-        0 0 22px 6px rgba(128, 238, 152, 0.40);
+        0 0 4px 1px rgba(128, 238, 152, 1.00),
+        0 0 12px 2px rgba(128, 238, 152, 0.78),
+        0 0 24px 6px rgba(128, 238, 152, 0.52);
 }
 .connectivity-dot.connectivity-offline {
     background: radial-gradient(circle at 35% 35%, #fca5a5 0%, #ef4444 55%, #b91c1c 100%);
     box-shadow:
-        0 0 4px 1px rgba(239, 68, 68, 0.95),
-        0 0 10px 2px rgba(239, 68, 68, 0.65),
-        0 0 22px 6px rgba(239, 68, 68, 0.40);
+        0 0 4px 1px rgba(239, 68, 68, 1.00),
+        0 0 12px 2px rgba(239, 68, 68, 0.78),
+        0 0 24px 6px rgba(239, 68, 68, 0.52);
 }
 
 /* "Works offline" reassurance at the bottom of the home stage. Static
@@ -10182,38 +10177,55 @@ body.tier-t4 .home-impact {
     }
 }
 
-/* ── ④ Footer single-row — Privacy · Help · Open Source + devid ───────
+/* ── ④ Footer single-row — Privacy • Help • Open Source + devid ───────
+   v2 pass (May 2026, operator screenshot) — earlier rules nailed the
+   space-between flex layout but:
+     · link font-size was too small (10.5 px → 13 px)
+     · the dot separators (`·`) read as nearly-invisible periods
+     · the pill carried two icon buttons (copy + info) that don't
+       appear in the operator's reference; we hide them in the
+       footer-row context and let the whole pill be the copy
+       affordance instead (see home-screen.js _wireDevidBadge —
+       the badge already gets a tap handler).
+     · the auto-shown tooltip on first render covered the pill;
+       we keep it hidden here (the lang-pill `i` icon stays the
+       authoritative entry point on the home identity bar).
    Wrap .home-utility-footer + .home-devid-footer in a single flex row
    with `justify-content: space-between`. Links on left, device-ID
-   pill on right. Matches the operator's mock layout exactly. */
+   pill on right. Matches the operator's reference layout exactly. */
 .home-stage .home-section-bottom .home-footer-row {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    gap: 10px;
-    padding-top: 14px;
-    margin-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    flex-wrap: wrap;
+    gap: 16px;                    /* v3 — guaranteed gap between nav + pill */
+    padding-top: 16px;
+    margin-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    flex-wrap: nowrap;
 }
-/* When the footer-row wrapper is present, the inner nav loses its
-   own border + margins (the wrapper owns them now). */
+/* v3 (May 2026, operator) — nav uses `flex: 0 1 auto` so it stays
+   at its content width and the wrapper's `justify-content: space-
+   between` puts ALL the spare space between the last link and the
+   pill. Previously `flex: 1 1 auto` made the nav stretch right up to
+   the pill, leaving no breathing gap. */
 .home-stage .home-section-bottom .home-footer-row .home-utility-footer {
     margin: 0;
     padding: 0;
     border-top: 0;
-    gap: 8px;
-    flex-wrap: wrap;
+    gap: 10px;
+    flex-wrap: nowrap;
     justify-content: flex-start;
+    min-width: 0;
+    flex: 0 1 auto;             /* content-width — don't expand */
 }
 .home-stage .home-section-bottom .home-footer-row .home-devid-footer {
     margin: 0;
     padding: 0;
-    /* No more centered column — pill sits inline at the row's end. */
     flex-direction: row;
     align-items: center;
     gap: 0;
+    flex: 0 0 auto;
 }
 /* Hide the version number from the inline footer per the mock
    (still kept as a hidden span for legacy refs). */
@@ -10221,15 +10233,112 @@ body.tier-t4 .home-impact {
 .home-stage .home-section-bottom .home-footer-row .home-utility-footer .home-utility-dot:last-of-type {
     display: none;
 }
-/* Tighten the device-ID pill to match the mock's compact pill. */
+/* v3 — links explicitly un-bold (operator: "Keep the text un bold").
+   Some browsers default <button>'s font-weight to inherit-bold; pin
+   400 so all 3 links (Privacy / Help / Open source) read as the
+   same regular weight. */
+.home-stage .home-section-bottom .home-footer-row .home-utility-link {
+    font-size: 13px;
+    font-weight: 400;
+    color: rgba(203, 213, 225, 0.75);
+    padding: 4px 2px;
+    min-width: auto;
+    white-space: nowrap;
+}
+.home-stage .home-section-bottom .home-footer-row .home-utility-link:hover {
+    color: rgba(241, 245, 249, 0.95);
+}
+.home-stage .home-section-bottom .home-footer-row .home-utility-dot {
+    font-size: 13px;
+    line-height: 1;
+    font-weight: 400;
+    color: rgba(148, 163, 184, 0.55);
+    opacity: 1;
+    user-select: none;
+}
+/* v3 — device-ID pill. Operator: "Earlier there was one copy icon
+   and i icon with the device ID for users. now I see that missing,
+   bring that back." The icons-hidden rule from v2 is GONE; padding
+   shrunk so pill + icons fit in the row at 430 px. */
 .home-stage .home-section-bottom .home-footer-row .home-devid-badge {
-    padding: 5px 10px 5px 14px;
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.10);
+    padding: 4px 6px 4px 14px;   /* tighter on the icon-side */
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.home-stage .home-section-bottom .home-footer-row .home-devid-badge:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.20);
 }
 .home-stage .home-section-bottom .home-footer-row .home-devid-badge .devid-text {
-    font-size: 11px;
-    letter-spacing: 0.06em;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    color: #fff;
+}
+/* v3 — copy + info buttons restored. Tighter than the default 24 px
+   so they don't push the pill width out of the row. */
+.home-stage .home-section-bottom .home-footer-row .home-devid-badge button {
+    display: inline-flex;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    color: rgba(255, 255, 255, 0.55);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+    padding: 0;
+}
+.home-stage .home-section-bottom .home-footer-row .home-devid-badge button:hover {
+    background: rgba(255, 255, 255, 0.10);
+    color: rgba(255, 255, 255, 0.95);
+}
+.home-stage .home-section-bottom .home-footer-row .home-devid-badge button svg {
+    width: 14px; height: 14px;
+}
+/* v2 — keep the first-time tooltip suppressed in this surface. The
+   lang-pill / consent flow already disclose the device-ID concept on
+   first run; this footer pill is a quiet reference, not a discovery
+   moment. */
+.home-stage .home-section-bottom .home-footer-row .home-devid-tip {
+    display: none !important;
+}
+/* Phone-class viewports (≤ 430 px — covers iPhone SE, 14, 14 Pro
+   Max, Pixel 7, Galaxy S22, etc.). Tighten link font + pill padding
+   so links + pill share the row without overflow. The reference
+   screenshot was taken at a wider viewport; we preserve the same
+   visual hierarchy at smaller sizes by scaling proportionally.
+   Block placed AFTER the v2 rules above so source-order beats them
+   when the media query matches. */
+@media (max-width: 430px) {
+    /* v3 — keep ≥ 12 px gap between links + pill on tightest phones. */
+    .home-stage .home-section-bottom .home-footer-row { gap: 12px; }
+    .home-stage .home-section-bottom .home-footer-row .home-utility-footer { gap: 6px; }
+    .home-stage .home-section-bottom .home-footer-row .home-utility-link { font-size: 12px; }
+    .home-stage .home-section-bottom .home-footer-row .home-utility-dot { font-size: 12px; }
+    .home-stage .home-section-bottom .home-footer-row .home-devid-badge {
+        padding: 3px 4px 3px 10px;
+        gap: 2px;
+    }
+    .home-stage .home-section-bottom .home-footer-row .home-devid-badge .devid-text {
+        font-size: 11px;
+        letter-spacing: 0.06em;
+    }
+    .home-stage .home-section-bottom .home-footer-row .home-devid-badge button {
+        width: 20px; height: 20px;
+    }
+    .home-stage .home-section-bottom .home-footer-row .home-devid-badge button svg {
+        width: 12px; height: 12px;
+    }
+    .home-stage .home-section-bottom .home-footer-row .home-devid-badge .devid-text {
+        font-size: 11.5px;
+        letter-spacing: 0.08em;
+    }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
