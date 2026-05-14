@@ -5,7 +5,18 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v177';
+const CACHE_NAME = 'crisp-v178';
+// v177 → v178 (May 2026 — lang pill v6.3 clean glass pass).
+// Operator: "still looks dark BG, I need clean look like I shared."
+// The v6.2 solid navy gradient (#1b2a44 → #0e1828) was rendering
+// near-black on most displays. Switched to a translucent teal-
+// tinted glass: rgba(38,78,112,0.55) → rgba(18,48,78,0.55) with
+// backdrop-filter: blur(14px) saturate(160%) so the home stage's
+// deep-navy bg shows through with a fresh cyan tone. Border edge
+// switched white-alpha → teal-alpha (rgba(94,234,212,0.28)) for
+// the same clean cyan-tinted glass feel as the reference image.
+// `@supports not (backdrop-filter)` fallback bumps alpha to 0.92
+// for older Safari so the look stays consistent.
 // v176 → v177 (May 2026 — lang pill v6.2 + footer v3, operator
 // feedback round):
 //   1. Lang pill `top: 16 → 22 px` so it sits vertically centered

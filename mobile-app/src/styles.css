@@ -156,35 +156,45 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
    .lps-code) — only visuals change so existing specs / RTL rules /
    install-prompt offset (right: 158px from the pill) all stay valid. */
 .lang-switcher {
-    /* v6.2 (May 2026, operator) — `top: 16 → 22` so the pill is
-       vertically centered with the CRISP brand row below
-       (logo is 40 px tall starting at `home-center` padding-top
-       ~16-26 px → logo center sits at ~36-46 px. With the pill
-       at ~36 px tall, top:22 puts pill center at ~40 — close
-       enough to logo center across every viewport-height step
-       without per-breakpoint media-query overrides). */
+    /* v6.3 (May 2026, operator) — clean frosted-glass pill, not the
+       dark-navy gradient. The previous `linear-gradient(180deg,
+       #1b2a44, #0e1828)` was perceptually almost-black on most
+       displays — operator: "still looks dark BG, I need clean look".
+       Switch to a translucent teal-tinted glass: low-alpha cyan
+       interior + backdrop-filter blur + saturate so the home stage's
+       deep-navy bg shows through with a fresh cyan tone. Falls back
+       to a brighter opaque gradient on browsers without backdrop-
+       filter (older Safari). */
     position: absolute; top: 22px; right: 24px; z-index: 100;
     display: flex;
-    flex-wrap: nowrap;            /* force single-line pill */
+    flex-wrap: nowrap;
     align-items: center;
-    gap: 8px;                     /* dot ↔ flag/code breathing room */
-    background: linear-gradient(180deg, #1b2a44 0%, #0e1828 100%);
+    gap: 8px;
+    /* v6.3 — translucent teal glass instead of solid navy. */
+    background: linear-gradient(180deg,
+        rgba(38, 78, 112, 0.55) 0%,
+        rgba(18, 48, 78, 0.55) 100%);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
     border-radius: 999px;
     padding: 7px 14px;
-    border: 1px solid rgba(255,255,255,0.10);
-    /* v6.2 — operator screenshot shows a noticeably brighter cyan
-       halo than v6.1 was rendering. Alpha 0.45 → 0.55, spread
-       2 px → 3 px so the glow reads as the LED's "live" signal
-       even on bright OLED displays under daylight. */
+    /* v6.3 — teal-tinted border edge instead of pure white-alpha. */
+    border: 1px solid rgba(94, 234, 212, 0.28);
     box-shadow:
         0 0 32px 3px rgba(9, 209, 199, 0.55),
-        0 6px 18px rgba(0, 0, 0, 0.45),
-        inset 0 1px 0 rgba(255, 255, 255, 0.16),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.35);
-    /* Pill stays compact — JS writes `🇬🇧 EN` (2-letter ISO codes),
-       so the pill never exceeds ~140 px regardless of locale. */
+        0 6px 18px rgba(0, 0, 0, 0.30),
+        inset 0 1px 0 rgba(255, 255, 255, 0.20),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.20);
     max-width: 140px;
     white-space: nowrap;
+}
+/* Opaque fallback for browsers without backdrop-filter support. */
+@supports not (backdrop-filter: blur(1px)) {
+    .lang-switcher {
+        background: linear-gradient(180deg,
+            rgba(38, 78, 112, 0.92) 0%,
+            rgba(18, 48, 78, 0.92) 100%);
+    }
 }
 .lang-switcher button {
     background: none; border: none;
