@@ -727,6 +727,7 @@
   "action_tile_login": "Giriş",
   "action_tile_audio": "Ses",
   "home_cta_sub": "Kaydet · Doğrula · Yardım",
+  "home_cta_helper": "Çevrimdışı çalışır, bağlantı kurulunca otomatik eşitler.",
   "v4_cap_tips_eyebrow": "Faydalı İpuçları",
   "v4_cap_tip_photo": "Hasarlı, engellenmiş veya güvensiz olanı gösterin",
   "v4_cap_tip_voice": "Yazmak zorsa veya eller meşgulse ses yardımcı olur",

@@ -237,66 +237,85 @@ export default function HomeScreen(props: HomeScreenProps) {
         </TouchableOpacity>
       </View>
 
-      {/* ── §A.2 Lifekeeper inline pill (centered) ──────────────── */}
-      {tier && (
-        <View style={styles.rewardWrap} testID="home-reward-pill">
-          <View style={[
-            styles.rewardPill,
-            { borderColor: 'transparent', backgroundColor: 'rgba(70, 223, 177, 0.10)' },
-          ]}>
-            <Text style={styles.rewardEmoji}>{tier.emoji}</Text>
-            <View style={{ flexDirection: 'column' }}>
-              <Text style={[styles.rewardLabel, { color: tier.color }]}>
-                {_t(tier.labelKey, '')}
-              </Text>
-              {tierStatLine ? (
-                <Text style={styles.rewardStat} numberOfLines={1}>{tierStatLine}</Text>
-              ) : null}
+      {/* ── §B HERO CARD ────────────────────────────────────────────
+          Phase 1 v5 redesign (May 2026) — Lifekeeper pill + consent +
+          primary CTA + offline-reassurance helper grouped into ONE
+          glass card. Matches the PWA's .home-hero-card in
+          mobile-app/src/index.html. Eliminates the "floating
+          disconnected cards" feel and gives the viewport a single
+          visual anchor. */}
+      <View style={styles.heroCard} testID="home-hero-card">
+
+        {/* §B.1 Lifekeeper inline pill (top of card) */}
+        {tier && (
+          <View style={styles.rewardWrap} testID="home-reward-pill">
+            <View style={[
+              styles.rewardPill,
+              { borderColor: 'transparent', backgroundColor: 'rgba(70, 223, 177, 0.10)' },
+            ]}>
+              <Text style={styles.rewardEmoji}>{tier.emoji}</Text>
+              <View style={{ flexDirection: 'column' }}>
+                <Text style={[styles.rewardLabel, { color: tier.color }]}>
+                  {_t(tier.labelKey, '')}
+                </Text>
+                {tierStatLine ? (
+                  <Text style={styles.rewardStat} numberOfLines={1}>{tierStatLine}</Text>
+                ) : null}
+              </View>
             </View>
           </View>
-        </View>
-      )}
+        )}
 
-      {/* ── §B.1 Consent checkbox (inline, not a card) ──────────── */}
-      <Pressable
-        style={styles.consentRow}
-        onPress={props.onConsentToggle}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: props.consentGiven }}
-        testID="home-consent"
-      >
-        <View style={[styles.consentBox, props.consentGiven && styles.consentBoxChecked]}>
-          {props.consentGiven ? <Text style={styles.consentTick}>✓</Text> : null}
-        </View>
-        <Text style={styles.consentText}>
-          {_t('home_consent_v2',
-            'I consent to share my report. Faces are blurred on my phone before upload, and reports are linked only to my anonymous ID.')}
-        </Text>
-      </Pressable>
-
-      {/* ── §B.2 PRIMARY CTA — Report an Incident ──────────────── */}
-      <TouchableOpacity
-        style={[
-          styles.cta,
-          !props.consentGiven && styles.ctaDisabled,
-        ]}
-        onPress={() => { if (props.consentGiven) props.onStartReport(); }}
-        disabled={!props.consentGiven}
-        accessibilityRole="button"
-        accessibilityLabel={_t('home_cta_primary', 'Report an Incident')}
-        accessibilityHint={_t('home_cta_sub', 'Capture · Verify · Help')}
-        testID="home-cta-start"
-      >
-        <View style={styles.ctaRow}>
-          <Text style={styles.ctaPlay}>▶</Text>
-          <Text style={styles.ctaLabel}>
-            {_t('home_cta_primary', 'Report an Incident')}
+        {/* §B.2 Consent checkbox (inline within card) */}
+        <Pressable
+          style={styles.consentRow}
+          onPress={props.onConsentToggle}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: props.consentGiven }}
+          testID="home-consent"
+        >
+          <View style={[styles.consentBox, props.consentGiven && styles.consentBoxChecked]}>
+            {props.consentGiven ? <Text style={styles.consentTick}>✓</Text> : null}
+          </View>
+          <Text style={styles.consentText}>
+            {_t('home_consent_v2',
+              'I consent to share my report. Faces are blurred on my phone before upload, and reports are linked only to my anonymous ID.')}
           </Text>
-        </View>
-        <Text style={styles.ctaSub}>
-          {_t('home_cta_sub', 'Capture · Verify · Help')}
+        </Pressable>
+
+        {/* §B.3 PRIMARY CTA — the anchor */}
+        <TouchableOpacity
+          style={[
+            styles.cta,
+            !props.consentGiven && styles.ctaDisabled,
+          ]}
+          onPress={() => { if (props.consentGiven) props.onStartReport(); }}
+          disabled={!props.consentGiven}
+          accessibilityRole="button"
+          accessibilityLabel={_t('home_cta_primary', 'Report an Incident')}
+          accessibilityHint={_t('home_cta_sub', 'Capture · Verify · Help')}
+          testID="home-cta-start"
+        >
+          <View style={styles.ctaRow}>
+            <Text style={styles.ctaPlay}>▶</Text>
+            <Text style={styles.ctaLabel}>
+              {_t('home_cta_primary', 'Report an Incident')}
+            </Text>
+          </View>
+          <Text style={styles.ctaSub}>
+            {_t('home_cta_sub', 'Capture · Verify · Help')}
+          </Text>
+        </TouchableOpacity>
+
+        {/* §B.4 Reassurance helper — addresses operator ask for an
+            "emotionally reassuring" CTA. Surfaces offline-first
+            promise next to the action so disaster-zone reporters
+            trust their tap. PWA parity: .home-hero-helper. */}
+        <Text style={styles.heroHelper} testID="home-hero-helper">
+          {_t('home_cta_helper',
+            'Works offline and syncs automatically in low connectivity.')}
         </Text>
-      </TouchableOpacity>
+      </View>
 
       {/* ── §B.3 Utility tile row — 5 tiles distribute via flex:1 ─ */}
       <View style={styles.utilityRow} testID="home-utility-row">
@@ -493,10 +512,30 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600',
   },
 
-  // §A.2 Lifekeeper pill
+  // §B Hero card — Phase 1 v5 redesign (May 2026). Groups
+  // Lifekeeper + consent + CTA + helper into one glass block.
+  heroCard: {
+    marginTop: 8,
+    padding: 18,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 12,
+    // RN equivalent of the PWA's box-shadow: 0 12px 36px rgba(0,0,0,0.22)
+    shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 14, shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+    overflow: 'hidden',
+  },
+  heroHelper: {
+    color: 'rgba(255, 255, 255, 0.62)',
+    fontSize: 12, fontWeight: '500',
+    textAlign: 'center', lineHeight: 16,
+  },
+
+  // §A.2 Lifekeeper pill (kept inside the hero card)
   rewardWrap: {
     alignItems: 'center',
-    marginTop: 6, marginBottom: 4,
+    marginTop: 0, marginBottom: 0,
   },
   rewardPill: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -511,13 +550,13 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
 
-  // §B.1 Consent
+  // §B.1 Consent — inside hero card, no top margin (card gap owns spacing)
   consentRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 12, paddingVertical: 10,
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 10, marginTop: 12,
+    borderRadius: 10, marginTop: 0,
   },
   consentBox: {
     width: 18, height: 18, borderRadius: 4,
@@ -532,9 +571,9 @@ const styles = StyleSheet.create({
     flex: 1, color: 'rgba(255,255,255,0.78)', fontSize: 12, lineHeight: 17,
   },
 
-  // §B.2 CTA — the anchor
+  // §B.2 CTA — the anchor (inside hero card, no top margin)
   cta: {
-    marginTop: 14, paddingHorizontal: 24, paddingVertical: 22,
+    marginTop: 0, paddingHorizontal: 24, paddingVertical: 22,
     minHeight: 110, borderRadius: 18,
     backgroundColor: '#09D1C7',
     alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -550,7 +589,10 @@ const styles = StyleSheet.create({
   ctaRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   ctaPlay: { color: '#062b1b', fontSize: 20, fontWeight: '900' },
   ctaLabel: {
-    color: '#062b1b', fontSize: 22, fontWeight: '800', letterSpacing: -0.005,
+    // Phase 1 v5: bumped from 22 to 24 to match the PWA's
+    // clamp(1.2rem, 4.6vw, 1.7rem) — gives the CTA the dominant
+    // visual weight the operator asked for ("make CTA dominant").
+    color: '#062b1b', fontSize: 24, fontWeight: '800', letterSpacing: -0.005,
   },
   ctaSub: {
     color: 'rgba(6, 43, 27, 0.66)',

@@ -10068,3 +10068,107 @@ body.tier-t4 .home-impact {
     }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   HOME v5 — Phase 1: hero card grouping + reassurance helper
+   (May 2026 redesign — operator-supplied HTML concept)
+
+   GOAL: kill the "floating disconnected cards" feel by grouping the
+   identity statement (Lifekeeper pill) + the consent gate + the
+   primary CTA + an offline-reassurance helper into ONE glass-card
+   block. The card sits in the centre of section-hero, flex-grown so
+   it visually anchors the viewport.
+
+   These rules sit at the bottom of the file so they win the cascade
+   over the older block-by-block treatments above. The compound
+   `.home-stage .home-hero-card` scoping keeps every rule sandboxed
+   to the home stage — no bleed into stage-capture / stage-classify /
+   stage-review / etc.
+
+   IMPORTANT: no JS / no handlers / no IDs change. Only DOM grouping
+   + visual treatment. The relocated Lifekeeper pill keeps its
+   #home-reward-hero + #home-badge-chip IDs verbatim so the painter
+   in home-screen.js continues writing into them.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.home-stage .home-hero-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: clamp(10px, 2vh, 16px);
+    padding: clamp(16px, 3vh, 22px) clamp(16px, 4vw, 22px);
+    border-radius: clamp(18px, 4vw, 26px);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.025) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+    position: relative;
+    overflow: hidden;     /* Phase 2 reserves a ::before glow accent that hangs out of bounds */
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Strip per-element margins inside the card so the card's `gap`
+   owns the vertical rhythm. The previous .home-section-hero
+   `justify-content: center` already centres the card vertically; we
+   want the card to be visually unified, not internally spaced. */
+.home-stage .home-hero-card > .home-reward-hero,
+.home-stage .home-hero-card > .home-consent,
+.home-stage .home-hero-card > .big-cta--hero,
+.home-stage .home-hero-card > .home-hero-helper {
+    margin: 0;
+}
+
+/* Re-pin the Lifekeeper pill inside the card. The pill stays
+   centred horizontally; the gap from the card padding handles the
+   top inset. */
+.home-stage .home-hero-card > .home-reward-hero {
+    justify-content: center;
+}
+
+/* CTA bump: v5 lifts the label clamp ceiling (was 1.5rem max → 1.7rem)
+   so the button reads more dominant on tall viewports. Helper text
+   sits IMMEDIATELY below the CTA inside the card. */
+.home-stage .home-hero-card .big-cta.big-cta--hero .cta-label {
+    font-size: clamp(1.2rem, 4.6vw, 1.7rem);
+}
+
+/* Reassurance helper text — addresses the operator ask to make the
+   CTA "emotionally reassuring". Reporter in a disaster zone is more
+   likely to tap when they see "works offline" right next to the
+   button. Subtle so it never competes with the CTA itself. */
+.home-stage .home-hero-helper {
+    margin: 0;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+    line-height: 1.4;
+}
+@media (min-height: 740px) {
+    .home-stage .home-hero-helper { font-size: 12px; }
+}
+@media (min-height: 820px) {
+    .home-stage .home-hero-helper { font-size: 12.5px; }
+}
+
+/* RTL — explicit text-align centre survives `dir="rtl"` on
+   <html> (Arabic, Urdu). The card layout is mirror-safe because
+   it's a flex column with stretch children. */
+[dir="rtl"] .home-stage .home-hero-card {
+    direction: rtl;
+}
+
+/* Channels eyebrow — strengthens the existing letterspaced title
+   styling to match the v5 mock's "OTHER REPORTING CHANNELS"
+   eyebrow. The lede paragraph stays hidden (display:none
+   inherited from the existing rule at line ~5751). */
+.home-stage .home-section-channels .home-section-title {
+    /* Tighter tracking + slightly dimmer for the v5 "section-eyebrow"
+       look. The earlier rule at line ~9803 already letter-spaces
+       and uppercases; this fine-tunes for the v5 hierarchy where
+       channels read as quieter than the hero card. */
+    color: rgba(255, 255, 255, 0.48);
+    letter-spacing: 0.18em;
+    font-size: 10.5px;
+    margin-bottom: 10px;
+}
+

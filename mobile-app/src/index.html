@@ -600,26 +600,15 @@
                      mean a wider JS refactor. -->
                 <div class="home-devid-wrap" id="home-devid-wrap"></div>
 
-                <!-- Reward-hero badge chip — May 2026 (redesign pass).
-                     Demoted from a centred trophy card to an INLINE
-                     PILL via the .home-reward-hero--pill modifier.
-                     Sits inside section-top right under the brand-row
-                     so the visual hierarchy is: HEADER → identity →
-                     CTA (anchor) → utility → channels → footer. The
-                     existing IDs/classes are preserved so the
-                     home-screen.js painter keeps writing into them
-                     without any JS change. -->
-                <div class="home-reward-hero home-reward-hero--pill" id="home-reward-hero">
-                    <div class="home-badge-chip home-badge-chip--hero" id="home-badge-chip" hidden
-                         role="status" aria-live="polite"
-                         aria-label="Reporter level">
-                        <span class="hb-emoji" id="home-badge-emoji" aria-hidden="true">🌱</span>
-                        <span class="hb-stack">
-                            <span class="hb-label" id="home-badge-label">Scout</span>
-                            <span class="hb-progress" id="home-badge-progress">Submit your first report to level up</span>
-                        </span>
-                    </div>
-                </div>
+                <!-- v5 redesign (May 2026) — Lifekeeper pill MOVED to
+                     the new .home-hero-card below so identity +
+                     primary action share a single visual block
+                     instead of floating apart. Same DOM IDs
+                     (#home-reward-hero / #home-badge-chip / #home-
+                     badge-emoji / #home-badge-label / #home-badge-
+                     progress) so home-screen.js painter wiring is
+                     unchanged — only the parent moves. -->
+
 
                 <!-- Logged-in slot — May 2026 (landing-icon cleanup pass)
                      the verbose .account-pill ("✓ {name} ⌄") was REMOVED
@@ -687,33 +676,72 @@
                 </div>
             </div>
 
-            <!-- One-time consent gate. home-screen.js wires a click
-                 capture-phase preempt on btn-start until consent ticks;
-                 once accepted, the row is hidden + persisted in
-                 localStorage['crisp_privacy_consent']. Phase 15 — copy
-                 expanded to cover anonymous-identity + face-blur. -->
-            <div class="home-consent" id="home-consent">
-                <label class="home-consent-row">
-                    <input type="checkbox" id="home-consent-check">
-                    <span data-i18n="home_consent_v2">
-                        I consent to share my report. Faces are blurred on my phone before upload, and reports are linked only to my anonymous ID.
-                    </span>
-                </label>
-            </div>
+            <!-- v5 hero card (May 2026 redesign) — Lifekeeper pill +
+                 consent + primary CTA + offline-reassurance helper
+                 grouped into a single glass-card. Eliminates the
+                 "floating disconnected card" feel and creates one
+                 visual anchor in the viewport. Operator: "Make CTA
+                 dominant and emotionally reassuring + integrate
+                 Lifekeeper into the hero." Lifekeeper pill is MOVED
+                 here from .home-identity above — same DOM IDs so
+                 home-screen.js painter wiring is preserved. -->
+            <div class="home-hero-card" id="home-hero-card">
 
-            <!-- Primary CTA — May 2026 (redesign pass). Promoted to
-                 visual anchor of the page: scaled up via clamp(),
-                 gradient + glow + drop-shadow, and now carries a
-                 SUBTITLE line ("Capture · Verify · Help") that sells
-                 the value-prop and visually balances the larger pad.
-                 Existing #btn-start id and handler unchanged. -->
-            <button class="big-cta big-cta--hero" id="btn-start">
-                <span class="cta-row">
-                    <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg></i>
-                    <span class="cta-label" data-i18n="home_cta_primary">Report an Incident</span>
-                </span>
-                <span class="cta-sub" data-i18n="home_cta_sub">Capture · Verify · Help</span>
-            </button>
+                <!-- Lifekeeper status pill — relocated from
+                     .home-identity. The same #home-reward-hero +
+                     #home-badge-chip + #home-badge-emoji + #home-
+                     badge-label + #home-badge-progress IDs the
+                     home-screen.js painter writes into. -->
+                <div class="home-reward-hero home-reward-hero--pill" id="home-reward-hero">
+                    <div class="home-badge-chip home-badge-chip--hero" id="home-badge-chip" hidden
+                         role="status" aria-live="polite"
+                         aria-label="Reporter level">
+                        <span class="hb-emoji" id="home-badge-emoji" aria-hidden="true">🌱</span>
+                        <span class="hb-stack">
+                            <span class="hb-label" id="home-badge-label">Scout</span>
+                            <span class="hb-progress" id="home-badge-progress">Submit your first report to level up</span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- One-time consent gate. home-screen.js wires a
+                     click capture-phase preempt on btn-start until
+                     consent ticks; once accepted, the row is hidden +
+                     persisted in localStorage['crisp_privacy_consent'].
+                     Phase 15 — copy expanded to cover anonymous-
+                     identity + face-blur. -->
+                <div class="home-consent" id="home-consent">
+                    <label class="home-consent-row">
+                        <input type="checkbox" id="home-consent-check">
+                        <span data-i18n="home_consent_v2">
+                            I consent to share my report. Faces are blurred on my phone before upload, and reports are linked only to my anonymous ID.
+                        </span>
+                    </label>
+                </div>
+
+                <!-- Primary CTA — visual anchor of the page. Scaled
+                     up via clamp(), mint→teal gradient + 18px glow,
+                     SUBTITLE line ("Capture · Verify · Help"). v5
+                     bumps the cta-label clamp ceiling so it reads as
+                     dominant on tall viewports. Existing #btn-start
+                     ID + handler unchanged. -->
+                <button class="big-cta big-cta--hero" id="btn-start">
+                    <span class="cta-row">
+                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg></i>
+                        <span class="cta-label" data-i18n="home_cta_primary">Report an Incident</span>
+                    </span>
+                    <span class="cta-sub" data-i18n="home_cta_sub">Capture · Verify · Help</span>
+                </button>
+
+                <!-- v5 reassurance helper — addresses the operator ask
+                     "make CTA emotionally reassuring". Surfaces the
+                     offline-first promise right where the action is
+                     so reporters in low-connectivity / disaster zones
+                     trust their tap. -->
+                <p class="home-hero-helper" data-i18n="home_cta_helper">
+                    Works offline and syncs automatically in low connectivity.
+                </p>
+            </div>
 
             <!-- Utility row — May 2026 (redesign pass). MOVED out
                  of section-top to sit BELOW the CTA so it doesn't
