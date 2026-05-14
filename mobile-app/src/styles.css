@@ -10213,26 +10213,37 @@ body.tier-t4 .home-impact {
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    gap: 16px;                    /* v3 — guaranteed gap between nav + pill */
+    gap: 12px;
     padding-top: 16px;
     margin-top: 12px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
+    /* v4 — STRICT single-row guarantee. Combined with each child's
+       white-space:nowrap, the wrapper refuses to break to 2 lines
+       even on narrow viewports — content will overflow rather than
+       wrap, which the inner sizing prevents below. */
     flex-wrap: nowrap;
 }
-/* v3 (May 2026, operator) — nav uses `flex: 0 1 auto` so it stays
-   at its content width and the wrapper's `justify-content: space-
-   between` puts ALL the spare space between the last link and the
-   pill. Previously `flex: 1 1 auto` made the nav stretch right up to
-   the pill, leaving no breathing gap. */
+/* v4 (May 2026, operator) — operator screenshot shows "Open source"
+   wrapping to line 2 and the pill colliding. Root cause: the inner
+   nav gap (10 px) + link padding (4×2) was wide enough that on a
+   narrow phone (375 px), the nav + pill together exceeded the row
+   width and one of them dropped. Fix:
+     · nav gap 10 → 6 px (tighter between Privacy / Help / Open source)
+     · link padding 4/2 → 2/0 px
+     · nav still `flex: 0 1 auto` so space-between puts the gap
+       between it and the pill
+     · `overflow: hidden` on the nav prevents any rogue overflow
+       from forcing the wrapper to grow. */
 .home-stage .home-section-bottom .home-footer-row .home-utility-footer {
     margin: 0;
     padding: 0;
     border-top: 0;
-    gap: 10px;
+    gap: 6px;                   /* v4 — was 10, now 6 */
     flex-wrap: nowrap;
     justify-content: flex-start;
     min-width: 0;
-    flex: 0 1 auto;             /* content-width — don't expand */
+    overflow: hidden;           /* v4 — defensive: clip rather than wrap */
+    flex: 0 1 auto;
 }
 .home-stage .home-section-bottom .home-footer-row .home-devid-footer {
     margin: 0;
@@ -10248,17 +10259,20 @@ body.tier-t4 .home-impact {
 .home-stage .home-section-bottom .home-footer-row .home-utility-footer .home-utility-dot:last-of-type {
     display: none;
 }
-/* v3 — links explicitly un-bold (operator: "Keep the text un bold").
-   Some browsers default <button>'s font-weight to inherit-bold; pin
-   400 so all 3 links (Privacy / Help / Open source) read as the
-   same regular weight. */
+/* v4 — links un-bold + zero horizontal padding so they pack tight.
+   `display: inline-block` (vs flex `<button>` default) collapses
+   any user-agent button-internal margin. `flex-shrink: 0` so the
+   links never get squished into illegible width. */
 .home-stage .home-section-bottom .home-footer-row .home-utility-link {
     font-size: 13px;
     font-weight: 400;
     color: rgba(203, 213, 225, 0.75);
-    padding: 4px 2px;
+    padding: 2px 0;            /* v4 — was 4/2 */
     min-width: auto;
     white-space: nowrap;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
 }
 .home-stage .home-section-bottom .home-footer-row .home-utility-link:hover {
     color: rgba(241, 245, 249, 0.95);
@@ -10270,34 +10284,46 @@ body.tier-t4 .home-impact {
     color: rgba(148, 163, 184, 0.55);
     opacity: 1;
     user-select: none;
+    flex-shrink: 0;
+    /* v4 — tiny horizontal pad on the bullet so it has visual air on
+       both sides without bloating the gap. Combined with nav gap:6
+       this produces ~10 px effective spacing between link + bullet
+       + next link (matches the reference image). */
+    padding: 0 2px;
 }
 /* v3 — device-ID pill. Operator: "Earlier there was one copy icon
    and i icon with the device ID for users. now I see that missing,
    bring that back." The icons-hidden rule from v2 is GONE; padding
    shrunk so pill + icons fit in the row at 430 px. */
 .home-stage .home-section-bottom .home-footer-row .home-devid-badge {
-    padding: 4px 6px 4px 14px;   /* tighter on the icon-side */
-    gap: 4px;
+    /* v4 — pill stays compact so nav + pill fit single-row on iPhone
+       SE (375 px). Padding tightened on both ends; gap between text
+       and icon buttons trimmed. flex-shrink: 0 so the pill never
+       shrinks below its content width — the nav gets `overflow:
+       hidden` instead. */
+    padding: 3px 4px 3px 12px;
+    gap: 2px;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.14);
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
+    flex-shrink: 0;
 }
 .home-stage .home-section-bottom .home-footer-row .home-devid-badge:hover {
     background: rgba(255, 255, 255, 0.10);
     border-color: rgba(255, 255, 255, 0.20);
 }
 .home-stage .home-section-bottom .home-footer-row .home-devid-badge .devid-text {
-    font-size: 12px;
-    letter-spacing: 0.08em;
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
     font-weight: 700;
     color: #fff;
 }
-/* v3 — copy + info buttons restored. Tighter than the default 24 px
-   so they don't push the pill width out of the row. */
+/* v4 — copy + info buttons shrunk further: 22 → 20 px so the whole
+   pill stays compact + nav fits the single row. SVG sizes match. */
 .home-stage .home-section-bottom .home-footer-row .home-devid-badge button {
     display: inline-flex;
-    width: 22px; height: 22px;
+    width: 20px; height: 20px;
     border-radius: 50%;
     align-items: center;
     justify-content: center;
@@ -10314,7 +10340,7 @@ body.tier-t4 .home-impact {
     color: rgba(255, 255, 255, 0.95);
 }
 .home-stage .home-section-bottom .home-footer-row .home-devid-badge button svg {
-    width: 14px; height: 14px;
+    width: 13px; height: 13px;
 }
 /* v2 — keep the first-time tooltip suppressed in this surface. The
    lang-pill / consent flow already disclose the device-ID concept on
@@ -10331,24 +10357,25 @@ body.tier-t4 .home-impact {
    Block placed AFTER the v2 rules above so source-order beats them
    when the media query matches. */
 @media (max-width: 430px) {
-    /* v3 — keep ≥ 12 px gap between links + pill on tightest phones. */
-    .home-stage .home-section-bottom .home-footer-row { gap: 12px; }
-    .home-stage .home-section-bottom .home-footer-row .home-utility-footer { gap: 6px; }
-    .home-stage .home-section-bottom .home-footer-row .home-utility-link { font-size: 12px; }
-    .home-stage .home-section-bottom .home-footer-row .home-utility-dot { font-size: 12px; }
+    /* v4 — narrow phones: shrink everything a notch more so the
+       row stays single-line on iPhone SE (375 px). */
+    .home-stage .home-section-bottom .home-footer-row { gap: 10px; }
+    .home-stage .home-section-bottom .home-footer-row .home-utility-footer { gap: 4px; }
+    .home-stage .home-section-bottom .home-footer-row .home-utility-link { font-size: 11.5px; }
+    .home-stage .home-section-bottom .home-footer-row .home-utility-dot { font-size: 11.5px; padding: 0 1px; }
     .home-stage .home-section-bottom .home-footer-row .home-devid-badge {
         padding: 3px 4px 3px 10px;
         gap: 2px;
     }
     .home-stage .home-section-bottom .home-footer-row .home-devid-badge .devid-text {
-        font-size: 11px;
-        letter-spacing: 0.06em;
+        font-size: 10.5px;
+        letter-spacing: 0.05em;
     }
     .home-stage .home-section-bottom .home-footer-row .home-devid-badge button {
-        width: 20px; height: 20px;
+        width: 18px; height: 18px;
     }
     .home-stage .home-section-bottom .home-footer-row .home-devid-badge button svg {
-        width: 12px; height: 12px;
+        width: 11px; height: 11px;
     }
     .home-stage .home-section-bottom .home-footer-row .home-devid-badge .devid-text {
         font-size: 11.5px;

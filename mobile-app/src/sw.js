@@ -5,7 +5,22 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v179';
+const CACHE_NAME = 'crisp-v180';
+// v179 → v180 (May 2026 — footer v4 strict single-row pass).
+// Operator screenshot: "Open source" was wrapping to line 2 and
+// the device-ID pill was colliding with it. Root cause: inner-nav
+// gap (10 px) + link padding (4/2 px) + pill icon size (22 px)
+// summed to a row wider than the viewport on iPhone SE-class phones.
+// Fix:
+//   1. Inner nav gap 10 → 6 px (tighter Privacy/Help/Open source)
+//   2. Link padding 4/2 → 2/0 px
+//   3. Pill text 12 → 11.5 px; letter-spacing 0.08 → 0.06 em
+//   4. Pill icon buttons 22 → 20 px (svg 14 → 13 px)
+//   5. flex-shrink:0 on links, dots, and pill so nothing collapses
+//   6. overflow:hidden on the inner nav as defensive clip-rather-
+//      than-wrap fallback (since flex-wrap:nowrap can still allow
+//      visual wrap under some browser layout edge cases)
+// Narrow-phone (≤ 430 px) media query tightened further to match.
 // v178 → v179 (May 2026 — lang pill v6.4 halo removal).
 // Operator: "the background green glow is also not required here."
 // Dropped the cyan/teal pill halo (`0 0 32px 3px rgba(9,209,199,
