@@ -1656,6 +1656,13 @@ export default function App() {
           badgeLevel={null /* TODO Phase 6 — fetch from /reports/profile */}
           badgeLivesSaved={impactStats.totalLives}
           appVersion="v0.7.44"
+          /* Phase 1 "Verified Reports Nearby" — pass already-cached
+             location from the v4 capture flow. NeverPrompt rule: this
+             never triggers a permission prompt on the home screen.
+             When `location` is null, the NearbyReports module stays
+             hidden until the user completes their first capture. */
+          nearbyLat={location?.lat ?? null}
+          nearbyLng={location?.lng ?? null}
           onStartReport={async () => {
             try {
               const { status } = await Location.getForegroundPermissionsAsync();

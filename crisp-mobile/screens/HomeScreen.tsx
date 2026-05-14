@@ -44,6 +44,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '../constants/colors';
 import { t, getAvailableLanguages } from '../services/i18n';
+import NearbyReports from '../components/NearbyReports';
 
 // ── Deep navy bg gradient (Phase 2 v5 redesign) ────────────────────
 // SVG full-screen rect with radial gradient — RN doesn't support CSS
@@ -212,6 +213,12 @@ export interface HomeScreenProps {
 
   // App version (footer)
   appVersion?: string;
+
+  // "Verified Reports Nearby" — already-cached GPS from the v4
+  // capture flow. NEVER prompted from the home stage. When either
+  // is null, the NearbyReports module stays hidden.
+  nearbyLat?: number | null;
+  nearbyLng?: number | null;
 }
 
 export default function HomeScreen(props: HomeScreenProps) {
@@ -485,66 +492,23 @@ export default function HomeScreen(props: HomeScreenProps) {
         />
       </View>
 
-      {/* ── §C.0 Pulse stat block ────────────────────────────────
-          Phase 3 v5 (May 2026) — animated halo around the lives-
-          saved counter. Wires to props.badgeLivesSaved (already
-          sourced from getImpactStats() in App.tsx). Two concentric
-          rings expand-and-fade with a 1.6 s offset; motion gated by
-          AccessibilityInfo.isReduceMotionEnabled(). PWA parity:
-          .home-impact.home-impact-pulse. */}
-      <View style={styles.pulseBlock} testID="home-pulse-stat">
-        {/* Ring 1 + Ring 2 — absolute-positioned circles that scale
-            from 0.8 → 1.6 with opacity 0.65 → 0 over 3.2 s. Reduced-
-            motion users get a static inner ring only. */}
-        {!reducedMotion && (
-          <>
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.pulseRing,
-                {
-                  transform: [{
-                    scale: pulseRing1.interpolate({
-                      inputRange: [0, 1], outputRange: [0.8, 1.6],
-                    }),
-                  }],
-                  opacity: pulseRing1.interpolate({
-                    inputRange: [0, 1], outputRange: [0.65, 0],
-                  }),
-                },
-              ]}
-            />
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.pulseRing,
-                {
-                  transform: [{
-                    scale: pulseRing2.interpolate({
-                      inputRange: [0, 1], outputRange: [0.8, 1.6],
-                    }),
-                  }],
-                  opacity: pulseRing2.interpolate({
-                    inputRange: [0, 1], outputRange: [0.65, 0],
-                  }),
-                },
-              ]}
-            />
-          </>
-        )}
-        {reducedMotion && (
-          <View style={[styles.pulseRing, styles.pulseRingStatic]} pointerEvents="none" />
-        )}
-
-        {/* STATIC "24" placeholder per operator: "make it static now
-            we will dvelop it soon". Backend wiring (geo-query against
-            /reports/?near=lat,lng&radius=...) follows in a separate
-            commit. PWA parity: #home-reports-nearby-count. */}
-        <Text style={styles.pulseNum}>24</Text>
-        <Text style={styles.pulseLabel}>
-          {_t('home_reports_nearby', 'verified reports nearby')}
-        </Text>
-      </View>
+      {/* ── §C.0 "Verified Reports Nearby" intel module ──────────
+          Phase 1 (May 2026) — replaces the static-24 pulse per the
+          operator-approved design plan. The component itself:
+            ✓ stays hidden when offline + no fresh cache
+            ✓ never prompts for GPS on this screen
+            ✓ shows grouped reports when fresh data available
+            ✓ shows "Last seen X min ago" when serving 5-min cache
+            ✓ shows reassuring "All clear" empty state when fresh
+              data shows zero nearby reports
+          The pulse animation machinery above (reducedMotion +
+          pulseRing1/pulseRing2 refs) is kept in place for Phase 2 —
+          a brief loading halo before the first list paint. */}
+      <NearbyReports
+        lat={props.nearbyLat ?? null}
+        lng={props.nearbyLng ?? null}
+        online={props.isOnline}
+      />
 
       {/* ── §C.1 Channels — "Other ways to report" 3×2 grid ────── */}
       <View style={styles.channelsSection} testID="home-channels">
@@ -693,15 +657,33 @@ const styles = StyleSheet.create({
   brandWordmark: {
     color: Colors.text, fontSize: 17, fontWeight: '800', letterSpacing: 0.5,
   },
+  // Lang pill v6.1 (May 2026, operator screenshot pass 2) — navy
+  // capsule + visible cyan ambient glow + grounding shadow. RN
+  // can't replicate the PWA's linear-gradient on a plain View
+  // without an extra dep, so we use a single navy shade (#152238
+  // sits halfway between the PWA gradient's #1b2a44 / #0e1828
+  // stops) plus a strong cyan shadow for elevation. The first pass
+  // used shadowOpacity 0.30 / radius 12 which was perceptually
+  // invisible against the dark home bg; v6.1 cranks both so the
+  // halo actually reads as a live glow. borderRadius 24 → 999 for
+  // full capsule regardless of content height. PWA parity at the
+  // structural level — same ordering, same green dot, same flag +
+  // code text.
   langPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 10, paddingVertical: 5,
-    backgroundColor: 'rgba(0,0,0,0.30)',
-    borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 7,
+    backgroundColor: '#152238',
+    borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#09D1C7', shadowOpacity: 0.55, shadowRadius: 16, shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
-  connectivityDot: { width: 10, height: 10, borderRadius: 5 },
+  connectivityDot: {
+    width: 12, height: 12, borderRadius: 6,
+    shadowColor: '#80EE98', shadowOpacity: 0.95, shadowRadius: 8, shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+  },
   langPillText: {
-    color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600',
+    color: '#fff', fontSize: 12.5, fontWeight: '700', letterSpacing: 0.4,
   },
 
   // §B Hero card — Phase 1 v5 redesign (May 2026). Groups

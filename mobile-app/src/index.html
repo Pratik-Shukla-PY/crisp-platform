@@ -837,22 +837,32 @@
                  The empty state stays "—" until an analyst sets
                  lives_impacted via the dashboard's analyst-only
                  input (shipped in the same commit). -->
-            <!-- v5 Phase 3 + bottom-portion refresh (May 2026) — pulse
-                 stat block repurposed for "verified reports nearby".
-                 STATIC count of 24 for now; backend wiring (geo-query
-                 against /reports/?near=lat,lng&radius=...) follows in
-                 a separate commit. updateHomeImpactMetrics() in app.js
-                 looks for #home-lives-count and gracefully no-ops here
-                 (badge ladder still gets its data via /reports/profile
-                 — only the visible card is repurposed). .home-impact-
-                 reports-nearby modifier opts into the single-halo v5
-                 styling. -->
-            <div class="home-impact home-impact-single home-impact-pulse home-impact-reports-nearby" id="home-impact">
-                <div class="hi-cell hi-cell-reports-nearby">
-                    <div class="hi-num hi-num-reports-nearby" id="home-reports-nearby-count">24</div>
-                    <div class="hi-label" data-i18n="home_reports_nearby">verified reports nearby</div>
-                </div>
-            </div>
+            <!-- "Verified Reports Nearby" intelligence module — May 2026.
+                 Replaces the static-24 pulse placeholder per the operator-
+                 approved design plan (option #4: REPLACE; pulse becomes
+                 the loading state inside the new module).
+
+                 Behaviour:
+                   · Hidden by default. nearby.js boots → reads cached
+                     GPS (NEVER prompts on home) → fetches /reports/nearby
+                     → renders grouped rows → unhides on first paint.
+                   · Offline + no fresh cache → stays hidden (no broken
+                     placeholder, per operator rule).
+                   · Cache fresh < 5 min while offline → renders with
+                     "Last seen X min ago" caption.
+                   · k-anonymity (min 3 reports per group) + anti-spam
+                     enforced server-side.
+
+                 Wiring: window.NearbyIntel.boot() is called from
+                 home-screen.js on home-stage activation. The empty
+                 container + i18n-bound eyebrow gives us a stable
+                 selector for spec 69. -->
+            <section class="home-nearby-intel" id="home-nearby-intel" aria-labelledby="home-nearby-eyebrow" hidden>
+                <h2 class="home-nearby-eyebrow" id="home-nearby-eyebrow"
+                    data-i18n="nearby_eyebrow">NEARBY REPORTS</h2>
+                <!-- nearby.js renders the rows or empty state into
+                     this container as a child .home-nearby-list. -->
+            </section>
 
             <!-- Bottom: single channels row anchored to bottom
                  via margin-top: auto. Six tiles in one row: Telegram /
@@ -3449,6 +3459,10 @@
      ready; app.js's applyI18n re-walks them on locale activation. -->
 <script src="install-prompt.js?v=1"></script>
 <script src="home-screen.js?v=1"></script>
+<!-- nearby.js — "Verified Reports Nearby" home intel module. Loaded
+     after home-screen.js so window.NearbyIntel is available before
+     home-screen.js's _renderHome() calls it. -->
+<script src="nearby.js?v=1"></script>
 <!-- v3 — voice readout button auto-attached
      to every [data-voice="<i18n-key>"] element. Loaded BEFORE app.js
      so the helper is available during stage-render dispatches. -->

@@ -1424,6 +1424,28 @@
         try {
             document.dispatchEvent(new CustomEvent('crisp-home-rendered'));
         } catch (_) {}
+
+        // "Verified Reports Nearby" intel module — fires AFTER the
+        // main home paint so it doesn't block first-paint. Module is
+        // self-hiding when offline / no cached GPS / API down (see
+        // nearby.js for the behaviour matrix).
+        try {
+            if (window.NearbyIntel && typeof window.NearbyIntel.boot === 'function') {
+                window.NearbyIntel.boot('#home-nearby-intel');
+            }
+        } catch (e) { /* best-effort */ }
+
+        // Re-fetch nearby intel when connectivity returns. The module
+        // itself hides on offline transitions; this listener pulls
+        // fresh data on the online-edge so the user gets up-to-date
+        // info without manually reloading.
+        window.addEventListener('online', () => {
+            try {
+                if (window.NearbyIntel && typeof window.NearbyIntel.boot === 'function') {
+                    window.NearbyIntel.boot('#home-nearby-intel');
+                }
+            } catch (_) { /* ignore */ }
+        });
     }
 
     // Expose for tests + late re-init (locale change re-renders channels

@@ -5,7 +5,44 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v170';
+const CACHE_NAME = 'crisp-v173';
+// v172 → v173 (May 2026 — "Verified Reports Nearby" home intel
+// module Phase 1). Adds /api/v1/reports/nearby endpoint (server-
+// side, shipped in commit f682b11) + a new mobile-app/src/nearby.js
+// client module that boots on home, reads cached GPS (never prompts
+// on home — operator's offline-first rule), fetches grouped nearby
+// reports, renders into the new #home-nearby-intel block, and
+// gracefully hides when offline/cache-stale. New i18n keys (~30)
+// localised across 6 UN langs + hi (other 15 locales en-fallback,
+// Phase 2 sweep). Replaces the static-24 pulse placeholder per the
+// approved design plan option #4. Module is added to STATIC_ASSETS
+// for offline boot of the script (the API call gracefully fails when
+// offline). RN companion lands the same module on HomeScreen.tsx.
+// Specs: e2e/tests/pwa/69-nearby-*.spec.ts.
+// v171 → v172 (May 2026 — lang pill v6.1 visibility pass).
+// Operator screenshot pass 2: v6 (v171) reskinned the pill to navy
+// gradient + cyan glow but the halo alpha was too low (0.18) to be
+// perceptually visible against the dark `var(--bg)` home background,
+// and border-radius 24 + the pill's short content height left the
+// corners reading squarish. v6.1: alpha 0.18 → 0.45 with spread
+// 0 → 2px, radius 24 → 999 (full capsule), padding 5/12 → 7/14,
+// right: 20 → 24 so the cyan halo has breathing room before the
+// `.mobile-screen` overflow:hidden clips it. LED dot bumped 11 →
+// 12 px with a 3-layer halo (bright inner ring + medium + diffuse).
+// RN companion mirrored: shadowOpacity 0.30 → 0.55, radius 12 → 16.
+// Spec: e2e/tests/pwa/85-lang-pill-redesign.spec.ts asserts the
+// new tokens.
+// v170 → v171 (May 2026 — lang pill v6 redesign).
+// Operator screenshot: the top-right language switcher looked flat
+// (rgba(0,0,0,0.3) background, weak green halo). New look: navy
+// gradient capsule + cyan ambient glow + thin top highlight, plus a
+// brighter radial-gradient LED dot with a stronger green halo so the
+// live-indicator reads clearly. Structure unchanged — #connectivity-
+// dot + #btn-lang-current (containing .lps-flag + .lps-code) — only
+// the visual tokens change so the RTL flip, install-prompt offset,
+// and all existing lang-switcher specs (incl. 56-flag-rendering)
+// stay valid. RN companion uses #152238 + cyan shadow to match.
+// Spec: e2e/tests/pwa/85-lang-pill-redesign.spec.ts.
 // v169 → v170 (May 2026 — operator: 'remove "CAPTURE VERIFY SAVE"').
 // Removed the .cta-sub <span> under the primary CTA in index.html
 // + the matching <Text> in the RN companion. The home_cta_sub i18n
@@ -670,6 +707,7 @@ const STATIC_ASSETS = [
     SW_BASE + 'auth.js',
     SW_BASE + 'install-prompt.js',
     SW_BASE + 'home-screen.js',
+    SW_BASE + 'nearby.js',           // "Verified Reports Nearby" home intel module
     SW_BASE + 'voice-readout.js',
     SW_BASE + 'v4-flow.js',
     SW_BASE + 'badge-studio.js',     // reward-system v2 Canvas composer

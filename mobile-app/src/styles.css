@@ -147,39 +147,66 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 
 /* ── Language switcher ──────────────────────────────────────── */
+/* v6 redesign (May 2026, operator screenshot) — pill upgraded from
+   the flat rgba(0,0,0,0.3) chip to a navy gradient capsule with a
+   thin top highlight, soft cyan ambient halo, and grounding bottom
+   shadow. Connectivity-dot LED gets a stronger green halo so it
+   reads as a live indicator at a glance. Structure unchanged:
+   #connectivity-dot + #btn-lang-current (containing .lps-flag +
+   .lps-code) — only visuals change so existing specs / RTL rules /
+   install-prompt offset (right: 158px from the pill) all stay valid. */
 .lang-switcher {
     /* May 2026 (alignment-rhythm pass) — right: 16 → 20 so the
        pill aligns with the home-stage's 20 px horizontal gutter.
        Previously it stuck out 4-6 px further right than the brand
        row beneath it, breaking the visual grid. */
-    position: absolute; top: 16px; right: 20px; z-index: 100;
+    /* v6.1 pass — right: 20 → 24 so the cyan glow has 4 px of
+       breathing room before the .mobile-screen overflow:hidden
+       clips it. Without this the right-side halo was lost. */
+    position: absolute; top: 16px; right: 24px; z-index: 100;
     display: flex;
     flex-wrap: nowrap;            /* force single-line pill */
     align-items: center;
-    gap: 3px;
-    background: rgba(0,0,0,0.3); border-radius: 20px; padding: 4px 6px;
-    border: 1px solid rgba(255,255,255,0.1);
+    gap: 8px;                     /* dot ↔ flag/code breathing room */
+    background: linear-gradient(180deg, #1b2a44 0%, #0e1828 100%);
+    /* v6.1 — full capsule. The reference screenshot shows fully
+       rounded ends regardless of content height; 999 px makes the
+       pill stay capsule-shaped for any future taller content. */
+    border-radius: 999px;
+    padding: 7px 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    /* v6.1 cyan ambient halo cranked up — alpha 0.18 → 0.45 and
+       spread bumped 0 → 2 px so the glow is actually visible against
+       the navy app background. The reference screenshot's halo is
+       clearly readable from across the viewport; the previous values
+       were perceptually invisible against `var(--bg)`. */
+    box-shadow:
+        0 0 28px 2px rgba(9, 209, 199, 0.45),
+        0 6px 18px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.35);
     /* HOTFIX : pill is now guaranteed compact — JS writes
-       `🌐 EN` / `🌐 KN` (2-letter ISO codes, not native-script names),
-       so the pill never exceeds ~120px regardless of locale. No more
+       `🇬🇧 EN` / `🇮🇳 KN` (2-letter ISO codes, not native-script names),
+       so the pill never exceeds ~140 px regardless of locale. No more
        wrap-to-two-lines overlap with the flow-progress bar's Send step. */
     max-width: 140px;
     white-space: nowrap;
 }
 .lang-switcher button {
     background: none; border: none;
-    /* (Lighthouse a11y) — pill itself is dark (rgba(0,0,0,0.3))
-       so light text on it is fine on light-theme. But the audit treats
-       the underlying body color as the comparison point in some cases.
-       Bump to 0.85 white from 0.6 so we clear 4.5:1 on every theme. */
-    color: rgba(255,255,255,0.85);
-    padding: 3px 7px; border-radius: 12px; font-size: 0.7rem;
+    /* v6 redesign — pure white reads cleaner against the navy
+       gradient than the previous 85% opacity. Contrast comfortably
+       clears AA on both light and dark themes. */
+    color: #fff;
+    padding: 0; border-radius: 12px; font-size: 0.78rem;
     font-weight: 600; cursor: pointer; transition: 0.2s;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
     /* Now that labels are 2-letter codes a tighter cap is safe and
        guarantees no horizontal sprawl even if a future locale somehow
        gets longer text. */
-    max-width: 64px;
+    max-width: 72px;
     overflow: hidden;
     text-overflow: ellipsis;
     flex: 0 0 auto;
@@ -189,16 +216,21 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     color: #fff;
 }
 .lang-switcher button.active {
-    background: rgba(255,255,255,0.20); color: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,0.3);
+    /* No tinted background on the button itself — the navy pill
+       container already carries the visual weight. The .active class
+       is retained for spec back-compat. */
+    background: transparent;
+    color: #fff;
+    box-shadow: none;
 }
 
 /* flag glyph + locale code inside the lang pill.
    The flag emoji renders slightly larger than the code text for
-   visual weight; the 4 px gap stops them from looking glued. */
+   visual weight; the 6 px gap stops them from looking glued. */
 .lang-switcher .lps-flag {
-    font-size: 0.95rem;
+    font-size: 1rem;
     line-height: 1;
-    margin-right: 4px;
+    margin-right: 6px;
     /* Some platforms render emoji with default OS color which can
        clash with the pill's dark surface; the inherit text-color
        trick doesn't apply (emoji are full-colour), but a subtle
@@ -206,9 +238,10 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     text-shadow: 0 0 1px rgba(0, 0, 0, 0.35);
 }
 .lang-switcher .lps-code {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #fff;
 }
 
 /* ── Progress bar ───────────────────────────────────────────── */
@@ -2701,20 +2734,32 @@ details.mr-date-group[open] .mr-date-group-chevron {
 }
 
 /* 🟢/🔴 connectivity dot inside the lang-switcher pill. Fixed width so
-   it doesn't push the buttons when text length changes. */
-.lang-switcher { display: flex; align-items: center; gap: 6px; }
+   it doesn't push the buttons when text length changes. v6 redesign
+   (May 2026): bigger LED + stronger halo so the live-indicator
+   reading is unmistakable on the navy capsule. */
+.lang-switcher { display: flex; align-items: center; gap: 8px; }
 .connectivity-dot {
-    width: 10px; height: 10px; border-radius: 50%;
+    width: 12px; height: 12px; border-radius: 50%;
     flex-shrink: 0;
     transition: background-color 0.2s, box-shadow 0.2s;
 }
+/* v6.1 — LED halo cranked up so the dot reads as a live indicator
+   on the navy capsule. Three layered shadows: a tight bright inner
+   ring, a medium glow, and a wide diffuse halo (matches the
+   reference screenshot's "lit LED" look). */
 .connectivity-dot.connectivity-online {
-    background: #80EE98;
-    box-shadow: 0 0 6px rgba(128, 238, 152, 0.6);
+    background: radial-gradient(circle at 35% 35%, #d4f8dd 0%, #80EE98 55%, #4cc774 100%);
+    box-shadow:
+        0 0 4px 1px rgba(128, 238, 152, 0.95),
+        0 0 10px 2px rgba(128, 238, 152, 0.65),
+        0 0 22px 6px rgba(128, 238, 152, 0.40);
 }
 .connectivity-dot.connectivity-offline {
-    background: #ef4444;
-    box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+    background: radial-gradient(circle at 35% 35%, #fca5a5 0%, #ef4444 55%, #b91c1c 100%);
+    box-shadow:
+        0 0 4px 1px rgba(239, 68, 68, 0.95),
+        0 0 10px 2px rgba(239, 68, 68, 0.65),
+        0 0 22px 6px rgba(239, 68, 68, 0.40);
 }
 
 /* "Works offline" reassurance at the bottom of the home stage. Static
@@ -10733,3 +10778,240 @@ body { background-color: #10284a; }
     margin-bottom: 10px;
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+   "Verified Reports Nearby" intel module — May 2026
+
+   Replaces the static-24 pulse block (see #home-impact-reports-nearby
+   removed from index.html). Renders 3 collapsed group rows by default
+   with a "View N more" lazy-expand. Hidden by default; nearby.js
+   un-hides only when there's actual data to show.
+
+   UX principles (per operator-approved design plan):
+     · Calm, humanitarian-grade tone — no flashy "feed" animations
+     · Mint/teal accents on the existing deep-navy bg
+     · k-anonymity-aware (groups < 3 reports never reach the client)
+     · No corner pulse — keeps it distinct from the lang-pill green dot
+     · Tappable rows for the Phase 2 bottom-sheet detail modal
+
+   The module lives inside .home-section-bottom (above the channels
+   grid). When hidden via [hidden], flex layout naturally collapses
+   the slot — no dead space. The CSS is scoped to .home-stage so
+   reviewer / admin / capture stages stay unaffected.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.home-stage .home-nearby-intel {
+    /* HIDDEN by default — nearby.js removes the [hidden] attribute only
+       when there's data to show. Backstop the attribute with an
+       attribute selector so a CSS-only environment still gets the
+       hide behaviour. */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    margin-top: 4px;
+    margin-bottom: 8px;
+    padding: 0;
+}
+.home-stage .home-nearby-intel[hidden] {
+    display: none !important;
+}
+
+/* Eyebrow — uppercase letterspaced "NEARBY REPORTS" matching the
+   home-section-eyebrow pattern already used by the channels block. */
+.home-stage .home-nearby-eyebrow {
+    margin: 0 0 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.48);
+    text-align: center;
+}
+
+.home-stage .home-nearby-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    /* Frosted-glass card matching the channels-grid + action-tile
+       treatment. Single container instead of per-row cards so the
+       3-row list reads as ONE block. */
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 18px;
+    overflow: hidden;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+/* Each row — button so it's keyboard-focusable + dispatches a
+   `crisp:nearby-row-click` event for Phase 2 detail-sheet wiring. */
+.home-stage .home-nearby-row {
+    all: unset;            /* drop the default <button> styling */
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    cursor: pointer;
+    color: var(--text, #f1f5f9);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.home-stage .home-nearby-row:last-of-type { border-bottom: 0; }
+.home-stage .home-nearby-row:hover,
+.home-stage .home-nearby-row:focus-visible {
+    background: rgba(70, 223, 177, 0.06);
+}
+.home-stage .home-nearby-row:focus-visible {
+    outline: 2px solid rgba(70, 223, 177, 0.45);
+    outline-offset: -2px;
+}
+
+/* The leading dot — mint teal, static (NOT animated so it doesn't
+   compete with the lang-pill connectivity dot). */
+.home-stage .home-nearby-row-dot {
+    flex: 0 0 auto;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-top: 7px;
+    background: var(--accent, #09D1C7);
+    box-shadow: 0 0 6px rgba(9, 209, 199, 0.4);
+}
+
+.home-stage .home-nearby-row-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.home-stage .home-nearby-row-head {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.005em;
+    color: var(--text, #f1f5f9);
+}
+.home-stage .home-nearby-row-count {
+    color: var(--blue, #46DFB1);
+    font-variant-numeric: tabular-nums;
+}
+.home-stage .home-nearby-row-sep {
+    color: rgba(255, 255, 255, 0.30);
+    font-weight: 400;
+}
+.home-stage .home-nearby-row-summary {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.78);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.home-stage .home-nearby-row-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.88);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.home-stage .home-nearby-row-meta {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.48);
+    letter-spacing: 0.01em;
+}
+.home-stage .home-nearby-row-verified {
+    color: #80EE98;
+    font-weight: 600;
+}
+.home-stage .home-nearby-row-pending {
+    color: #f5d76e;
+    font-weight: 600;
+}
+
+/* "View N more" — sits inside .home-nearby-list at the bottom. */
+.home-stage .home-nearby-view-more {
+    all: unset;
+    cursor: pointer;
+    text-align: center;
+    padding: 10px 14px;
+    color: rgba(70, 223, 177, 0.85);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-top: 1px solid rgba(70, 223, 177, 0.18);
+}
+.home-stage .home-nearby-view-more:hover,
+.home-stage .home-nearby-view-more:focus-visible {
+    color: var(--blue, #46DFB1);
+    background: rgba(70, 223, 177, 0.06);
+}
+
+/* Empty state — "All clear" reassurance copy. */
+.home-stage .home-nearby-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 22px 16px;
+    text-align: center;
+}
+.home-stage .home-nearby-empty-icon {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(128, 238, 152, 0.12);
+    color: #80EE98;
+    font-size: 18px;
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+.home-stage .home-nearby-empty-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text, #f1f5f9);
+}
+.home-stage .home-nearby-empty-body {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.48);
+}
+
+/* "Last seen X min ago" caption — shown when serving stale cache. */
+.home-stage .home-nearby-caption {
+    font-size: 10.5px;
+    font-weight: 500;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.38);
+    letter-spacing: 0.02em;
+    padding: 8px 14px 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* Compact phones — shrink padding so the module fits without pushing
+   the channels grid off-screen on iPhone SE-class viewports. */
+@media (max-height: 700px) {
+    .home-stage .home-nearby-row { padding: 10px 12px; gap: 8px; }
+    .home-stage .home-nearby-row-head { font-size: 12px; }
+    .home-stage .home-nearby-row-summary { font-size: 10.5px; }
+    .home-stage .home-nearby-row-label { font-size: 12px; }
+    .home-stage .home-nearby-row-meta { font-size: 10.5px; }
+    .home-stage .home-nearby-view-more { padding: 8px 12px; font-size: 11.5px; }
+}
+
+/* RTL — flip the row layout so the mint dot anchors the leading
+   edge under `dir="rtl"` (Arabic, Urdu). */
+[dir="rtl"] .home-stage .home-nearby-row {
+    flex-direction: row-reverse;
+}
+[dir="rtl"] .home-stage .home-nearby-row-body {
+    text-align: right;
+}
