@@ -88,7 +88,7 @@ if [ "$FORCE" -eq 0 ] && [ "$(( ${#ADDED[@]} + ${#CHANGED[@]} ))" -gt 0 ]; then
     case "$ans" in [Yy]*) ;; *) echo "aborted."; exit 0 ;; esac
 fi
 
-for locale in "${ADDED[@]}" "${CHANGED[@]}"; do
+for locale in "${ADDED[@]+"${ADDED[@]}"}" "${CHANGED[@]+"${CHANGED[@]}"}"; do
     cp "$PWA_I18N/$locale" "$RN_I18N/$locale"
     echo "  ✓ wrote $locale"
 done

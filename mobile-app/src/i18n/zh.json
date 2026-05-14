@@ -728,5 +728,8 @@
   "v4_cap_tip_photo": "展示损毁、阻塞或不安全的情况",
   "v4_cap_tip_voice": "当难以书写或双手繁忙时，语音很有帮助",
   "v4_cap_tip_text": "几句话能加速救援",
-  "v4_cap_tip_impact": "经核实的救援人员会阅读每份报告。每个细节都很重要。"
+  "v4_cap_tip_impact": "经核实的救援人员会阅读每份报告。每个细节都很重要。",
+  "damage_minimal": "轻微",
+  "damage_partial": "部分损坏",
+  "damage_complete": "完全损毁"
 }

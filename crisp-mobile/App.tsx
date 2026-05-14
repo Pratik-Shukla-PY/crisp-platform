@@ -109,6 +109,13 @@ import HomeScreen from './screens/HomeScreen';
 // UI_V4_ENABLED — flag stays OFF until Phases 4 + 5 (classify +
 // review) land, then it flips per the v4 roadmap.
 import V4CaptureScreen from './screens/V4CaptureScreen';
+// Phase 4 of RN ↔ PWA parity. V4ClassifyScreen mirrors the PWA's
+// #stage-v4-classify — 3 sub-views (damage / infra / crisis) on one
+// screen with tile-tap 200ms auto-progress. Reanimated dep added in
+// Phase 0 is reserved for future polish; v1 uses RN's built-in
+// Animated for the scale pulse so it works under the existing
+// jest mock layer.
+import V4ClassifyScreen from './screens/V4ClassifyScreen';
 
 // Phase 3 (Apr 2026): review collapsed from 3 screens to 2 (details + confirm).
 // `review_incident` kept as an alias that redirects to `review_details` so any
@@ -1741,10 +1748,47 @@ export default function App() {
           onTextChange={setDescription}
           onBack={() => setScreen('home')}
           onContinue={() => {
-            // Phases 4 + 5 will route to v4_classify → v4_review. Until
-            // those land, drop into the existing v3 review_details so the
-            // user can still submit. This keeps the flag-flippable v4
-            // path usable end-to-end without waiting on classify port.
+            // Phase 4 — route to v4_classify when its port has landed
+            // (it has, as of this commit). Phase 5 will reroute the
+            // classify onContinue to 'v4_review'.
+            setScreen('v4_classify');
+          }}
+        />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+           Phase 4 (May 2026 — RN ↔ PWA parity) — v4 classify auto-progress.
+           Three sub-views on one screen: damage → infra → crisis. Tile
+           tap fires a 200 ms Animated.timing pulse then advances the
+           sub-step. OTHER infra tile reveals a text input and waits for
+           blur / Enter to advance. Selection is fully persistent via
+           App.tsx-owned state (damageClass / infraType / crisisType /
+           infraName), so Back navigation preserves prior picks
+           automatically.
+      ══════════════════════════════════════════════════════════════════ */}
+      {screen === 'v4_classify' && (
+        <V4ClassifyScreen
+          damageClass={damageClass}
+          infraType={infraType}
+          crisisType={crisisType}
+          infraName={infraName}
+          onSetDamage={setDamageClass}
+          onSetInfra={(v) => {
+            // Match the PWA behaviour: clear stale infra_name when the
+            // user moves OFF the OTHER tile.
+            if (v !== 'OTHER') {
+              if (infraNameFromOsm) { setInfraNameFromOsm(false); }
+              if (infraName) setInfraName('');
+            }
+            setInfraType(v);
+          }}
+          onSetCrisis={setCrisisType}
+          onSetInfraName={setInfraName}
+          onBack={() => setScreen(UI_V4_ENABLED ? 'v4_capture' : 'home')}
+          onContinue={() => {
+            // Phase 5 will reroute to 'v4_review'. Until then, fall
+            // through to the existing v3 review_details so v4 path is
+            // end-to-end usable.
             setScreen('review_details');
           }}
         />

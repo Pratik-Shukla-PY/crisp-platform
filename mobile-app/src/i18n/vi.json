@@ -731,5 +731,8 @@
   "v4_cap_tip_photo": "Chỉ ra những gì hư hỏng, bị chặn hoặc không an toàn",
   "v4_cap_tip_voice": "Giọng nói hữu ích khi khó viết hoặc tay bận",
   "v4_cap_tip_text": "Vài từ có thể đẩy nhanh sự giúp đỡ",
-  "v4_cap_tip_impact": "Người ứng cứu đã xác minh đọc mọi báo cáo. Mọi chi tiết đều quan trọng."
+  "v4_cap_tip_impact": "Người ứng cứu đã xác minh đọc mọi báo cáo. Mọi chi tiết đều quan trọng.",
+  "damage_minimal": "Tối thiểu",
+  "damage_partial": "Hư hỏng một phần",
+  "damage_complete": "Phá hủy hoàn toàn"
 }

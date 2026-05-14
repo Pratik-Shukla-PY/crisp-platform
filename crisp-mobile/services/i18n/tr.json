@@ -731,5 +731,8 @@
   "v4_cap_tip_photo": "Hasarlı, engellenmiş veya güvensiz olanı gösterin",
   "v4_cap_tip_voice": "Yazmak zorsa veya eller meşgulse ses yardımcı olur",
   "v4_cap_tip_text": "Birkaç kelime yardımı hızlandırabilir",
-  "v4_cap_tip_impact": "Doğrulanmış müdahaleciler her raporu okur. Her ayrıntı önemlidir."
+  "v4_cap_tip_impact": "Doğrulanmış müdahaleciler her raporu okur. Her ayrıntı önemlidir.",
+  "damage_minimal": "Az hasarlı",
+  "damage_partial": "Kısmen hasarlı",
+  "damage_complete": "Tamamen yıkık"
 }

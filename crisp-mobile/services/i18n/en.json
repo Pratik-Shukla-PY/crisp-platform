@@ -693,5 +693,8 @@
   "photo_consent_ok": "OK, choose photo",
   "photo_blur_unavailable": "Face blur unavailable; using the original photo.",
   "success_btn_rewards": "Rewards",
-  "success_btn_home": "Home"
+  "success_btn_home": "Home",
+  "damage_minimal": "Minimal",
+  "damage_partial": "Partly damaged",
+  "damage_complete": "Fully destroyed"
 }

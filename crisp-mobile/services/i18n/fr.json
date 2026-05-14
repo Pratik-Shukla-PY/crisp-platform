@@ -753,5 +753,8 @@
   "v4_cap_tip_photo": "Montrez ce qui est endommagé, bloqué ou dangereux",
   "v4_cap_tip_voice": "La voix aide quand écrire est difficile ou les mains occupées",
   "v4_cap_tip_text": "Quelques mots peuvent accélérer l'aide",
-  "v4_cap_tip_impact": "Des intervenants vérifiés lisent chaque rapport. Chaque détail compte."
+  "v4_cap_tip_impact": "Des intervenants vérifiés lisent chaque rapport. Chaque détail compte.",
+  "damage_minimal": "Minime",
+  "damage_partial": "Partiellement endommagé",
+  "damage_complete": "Totalement détruit"
 }

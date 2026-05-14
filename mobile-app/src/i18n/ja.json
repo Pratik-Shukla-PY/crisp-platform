@@ -730,5 +730,8 @@
   "v4_cap_tip_photo": "損傷、封鎖、危険な箇所を見せてください",
   "v4_cap_tip_voice": "書くのが難しいときや手がふさがっているとき、音声が役立ちます",
   "v4_cap_tip_text": "数語で支援が早まります",
-  "v4_cap_tip_impact": "認証された対応者がすべての報告を読みます。すべての詳細が重要です。"
+  "v4_cap_tip_impact": "認証された対応者がすべての報告を読みます。すべての詳細が重要です。",
+  "damage_minimal": "軽微",
+  "damage_partial": "一部損壊",
+  "damage_complete": "全壊"
 }

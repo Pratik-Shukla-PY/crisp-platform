@@ -739,5 +739,8 @@
   "v4_cap_tip_photo": "Muestra lo dañado, bloqueado o inseguro",
   "v4_cap_tip_voice": "La voz ayuda cuando es difícil escribir o tienes las manos ocupadas",
   "v4_cap_tip_text": "Unas pocas palabras pueden acelerar la ayuda",
-  "v4_cap_tip_impact": "Respondedores verificados leen cada informe. Cada detalle importa."
+  "v4_cap_tip_impact": "Respondedores verificados leen cada informe. Cada detalle importa.",
+  "damage_minimal": "Mínimo",
+  "damage_partial": "Dañado parcialmente",
+  "damage_complete": "Totalmente destruido"
 }
