@@ -59,8 +59,184 @@
          + <script> on first map init. Saves the round-trip even on
          the deferred async path. -->
     <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"></noscript>
-    <!-- Local app stylesheet — required for first paint, kept synchronous. -->
-    <link rel="stylesheet" href="styles.css">
+    <!-- May 2026 (Lighthouse perf Phase 2 — LCP fix) — pre-fix
+         `styles.css` was a 304 KB sync `<link>` blocking the home
+         hero paint for ~6-8 s on Slow-4G. New approach: inline a
+         ~9 KB critical-CSS block below covering everything visible
+         on the home stage above the fold (tokens, body reset, .stage,
+         .home-*, .big-cta, .home-impact, .home-channels-grid,
+         secondary row, footer). The full stylesheet then loads
+         asynchronously via the preload+onload pattern. First paint
+         no longer waits on the 304 KB blob; the deferred stylesheet
+         takes over before the user navigates to any other stage. -->
+    <style id="critical-css">
+        :root {
+            --bg: #213A58; --surface: #1a3552; --surface2: #234060;
+            --accent: #09D1C7; --accent-soft: rgba(9,209,199,0.16);
+            --blue: #46DFB1; --info: #09D1C7; --green: #80EE98; --good: #80EE98;
+            --warn: #eab308; --red: #ef4444; --bad: #ef4444; --pink: #f472b6;
+            --un-blue: #5b9bd5;
+            --text: #f1f5f9; --text-sub: #cbd5e1; --text-dim: #94a3b8; --muted: #94a3b8;
+            --border: rgba(70,223,177,0.08); --border-strong: rgba(70,223,177,0.18);
+            --font: 'Inter','Noto Sans Arabic','Noto Sans SC',sans-serif;
+            --heading: 'Outfit','Noto Sans Arabic','Noto Sans SC',sans-serif;
+            --r-sm: 6px; --r-md: 12px; --r-lg: 20px; --r-pill: 999px; --radius: 20px;
+            --shadow: 0 0 60px rgba(0,0,0,0.6);
+            --shadow-md: 0 8px 24px rgba(0,0,0,0.45);
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; }
+        body {
+            background: radial-gradient(circle at 20% 10%, #2a4d70 0%, #213A58 55%) fixed;
+            color: var(--text); display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; font-family: var(--font); overflow-x: hidden;
+        }
+        #app { position: relative; width: 100%; max-width: 480px; min-height: 100vh; }
+        .stage {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column;
+            padding: 20px 24px 16px;
+            overflow-x: hidden; overflow-y: auto; max-height: 100dvh;
+            opacity: 0; pointer-events: none; transform: translateX(40px);
+            transition: opacity .35s ease, transform .35s ease;
+        }
+        .stage.active { opacity: 1; pointer-events: all; transform: translateX(0); }
+        .stage-header h2 { overflow-wrap: break-word; word-break: normal; }
+        /* Home stage layout */
+        .home-stage { padding: 18px 18px 20px; }
+        .home-center { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+        .home-identity { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+        .home-brand-row { display: flex; align-items: center; gap: 12px; }
+        .home-brand { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+        .home-brand-logo { width: 40px; height: 40px; flex: 0 0 auto;
+            border-radius: 11px; background: linear-gradient(135deg,#09D1C7,#46DFB1);
+            display: flex; align-items: center; justify-content: center; }
+        .home-brand-text { display: flex; flex-direction: column; min-width: 0; }
+        .home-brand-name { font-family: var(--heading); font-weight: 800;
+            font-size: 22px; color: #fff; letter-spacing: 0.5px; line-height: 1; }
+        .home-brand-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+        /* Identity-bar device-ID / account wraps — reserve min-width so swap is in-place. */
+        .home-identity > .home-devid-wrap, .home-identity > .home-account-wrap { min-width: 220px; }
+        .home-devid-wrap { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .home-devid-wrap[hidden], .home-account-wrap[hidden] { display: none; }
+        .home-devid-badge { display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 10px; border-radius: 999px;
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+            font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px;
+            color: #cbd5e1; letter-spacing: 0.04em; }
+        /* Badge chip (Phase 1 reservation rule duplicated here so home shell renders
+           correctly before the async stylesheet attaches). */
+        .home-badge-chip {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 12px; margin-top: 6px; border-radius: 14px;
+            background: rgba(128,238,152,0.12); border: 1px solid rgba(128,238,152,0.32);
+            color: #a5f3b3; font-weight: 700; font-size: 12px; letter-spacing: 0.02em;
+            text-align: left; min-height: 38px; cursor: default;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .home-badge-chip[hidden] {
+            display: inline-flex; visibility: hidden; opacity: 0; min-height: 38px;
+        }
+        .home-badge-chip .hb-emoji { font-size: 18px; line-height: 1; flex: 0 0 auto; }
+        .home-badge-chip .hb-stack { display: inline-flex; flex-direction: column; gap: 1px; line-height: 1.1; }
+        .home-badge-chip .hb-label { font-size: 12px; font-weight: 800; }
+        .home-badge-chip .hb-progress {
+            font-size: 10px; font-weight: 500; color: rgba(255,255,255,0.62);
+            letter-spacing: 0.01em; white-space: normal; max-width: 220px;
+        }
+        /* Primary Report-an-Incident CTA — this is the LCP element. */
+        .big-cta {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            width: 100%; padding: 22px; min-height: 64px;
+            background: var(--accent); color: #0b1018;
+            border: 0; border-radius: 18px;
+            font-family: var(--heading); font-weight: 800; font-size: 1.25rem;
+            box-shadow: 0 12px 28px rgba(9,209,199,0.32);
+            cursor: pointer;
+        }
+        .big-cta > span { white-space: nowrap; }
+        .big-cta i { font-size: 1.4rem; }
+        /* Secondary row (My Reports / Rewards / Login) */
+        .home-secondary-row {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px;
+        }
+        .home-secondary-row #btn-login, .home-secondary-row .tertiary-cta { grid-column: 1 / -1; }
+        .secondary-cta {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 12px 14px; min-height: 44px;
+            background: rgba(255,255,255,0.025); color: var(--text);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .tertiary-cta {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 14px; background: transparent; color: var(--text);
+            border: 1px solid var(--border); border-radius: 10px;
+            font-size: 13px; font-weight: 500; cursor: pointer;
+        }
+        /* Lives Saved single-stat card */
+        .home-impact {
+            display: flex; gap: 12px; padding: 16px;
+            background: rgba(70,223,177,0.05); border: 1px solid rgba(70,223,177,0.18);
+            border-radius: 14px;
+        }
+        .home-impact.home-impact-single { justify-content: center; padding: 20px 16px 18px; }
+        .hi-cell { flex: 1; text-align: center; }
+        .home-impact.home-impact-single .hi-cell { flex: 0 1 auto; padding-top: 4px; }
+        .hi-num, .hi-num-lives {
+            font-size: 34px; font-weight: 900; color: #46DFB1; line-height: 1.05;
+            font-variant-numeric: tabular-nums; min-width: 1.2em; display: inline-block;
+        }
+        .hi-label {
+            font-size: 11px; color: #46DFB1; text-transform: uppercase;
+            letter-spacing: 0.5px; margin-top: 6px;
+        }
+        /* Channels grid (3-col on mobile) */
+        .home-section { margin-top: 8px; }
+        .home-section-channels { margin-top: auto; }
+        .home-section-title { font-size: 11px; text-transform: uppercase;
+            letter-spacing: 0.6px; color: rgba(255,255,255,0.55);
+            font-weight: 700; margin: 8px 4px 6px; }
+        .home-section-lede { font-size: 12px; color: rgba(255,255,255,0.66); margin: 0 4px 10px; line-height: 1.4; }
+        .home-channels-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+        }
+        .home-channel-tile {
+            position: relative; aspect-ratio: 1 / 1;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 6px; padding: 12px 6px;
+            border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.03);
+            font-size: 12px; font-weight: 700;
+        }
+        /* Install / recent / consent slot reservations (Phase 1) */
+        .home-install:empty, .home-install[hidden] { visibility: hidden; pointer-events: none; }
+        .home-install { min-height: 56px; }
+        #home-recent[hidden], #home-recent:empty {
+            visibility: hidden; min-height: 0; pointer-events: none;
+        }
+        /* Footer + utility */
+        .home-utility-footer {
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            margin-top: 12px; padding: 8px 0;
+            font-size: 11px; color: rgba(255,255,255,0.45);
+        }
+        .home-utility-link { background: 0; border: 0; color: inherit; cursor: pointer; padding: 4px 6px; font: inherit; }
+        @media (prefers-reduced-motion: reduce) {
+            .stage { transition: none; }
+        }
+    </style>
+
+    <!-- (Lighthouse perf Phase 2) — full stylesheet now loads
+         asynchronously. preload + onload swap is the standard pattern
+         for non-render-blocking stylesheets that still need to apply
+         once they arrive. The <noscript> fallback covers no-JS clients
+         (rare, but the offline-PWA story benefits from it). The
+         critical-CSS block above ensures the home stage paints
+         correctly before this lands. -->
+    <link rel="preload" href="styles.css" as="style"
+          onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="styles.css"></noscript>
     <!-- May 2026 — apply reward-tier body class BEFORE the stylesheet
          attaches per-tier affects (logo accent ring at T3+, theme tint
          at T4). Reading from sessionStorage cache here avoids a flash
