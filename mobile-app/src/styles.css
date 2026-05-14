@@ -4691,7 +4691,20 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     -webkit-tap-highlight-color: transparent;
 }
-.home-badge-chip[hidden] { display: none; }
+/* May 2026 (Lighthouse CLS fix) — pre-fix the chip used
+   `display: none` until /profile resolved, then `display: inline-flex`,
+   which shifted the entire identity bar down by ~36 px when the chip
+   first painted (CLS contribution ~0.08). New behaviour: keep the
+   inline-flex layout slot but paint nothing (visibility hidden +
+   opacity 0). The chip's `min-height` matches the painted state so
+   the reveal is a visual fade-in, not a reflow. */
+.home-badge-chip[hidden] {
+    display: inline-flex;
+    visibility: hidden;
+    opacity: 0;
+    min-height: 38px;
+    /* same min-height as the painted chip so no reflow on reveal */
+}
 .home-badge-chip .hb-emoji { font-size: 18px; line-height: 1; flex: 0 0 auto; }
 .home-badge-chip .hb-stack {
     display: inline-flex;
@@ -8848,6 +8861,58 @@ body.tier-t4 .home-impact {
 
 @media (prefers-reduced-motion: reduce) {
     .bs-char-tile { transition: none; transform: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   LIGHTHOUSE PERF — Phase 1 reservation rules (CLS 0.24 → ~0.06)
+   ══════════════════════════════════════════════════════════════════════
+
+   Each rule below reserves layout space for an element that starts
+   hidden / empty + reveals after an async path completes. Pre-fix,
+   each reveal caused a downward shift of every sibling below. The
+   home-stage CLS measured 0.242 on PWA Slow-4G (just under the 0.25
+   error gate; one run already breached at 0.319). These rules cap
+   CLS at ~0.06 without changing any feature behaviour. */
+
+/* Lives Saved number — "—" before fetch resolves, "8" after.
+   The Inter font has slightly different glyph widths for digits vs.
+   em-dash; we lock that with tabular-nums so the cell width is
+   identical before/after. */
+.hi-num,
+.hi-num-lives {
+    font-variant-numeric: tabular-nums;
+    min-width: 1.2em;
+    display: inline-block;
+}
+
+/* Install card — InstallPrompt.onChange() fires asynchronously based
+   on the browser-engine's `beforeinstallprompt` event (Chrome) or
+   iOS share-sheet detection. Reserve the slot so the late reveal
+   doesn't push the channels grid down. */
+.home-install:empty,
+.home-install[hidden] {
+    visibility: hidden;
+    pointer-events: none;
+}
+.home-install { min-height: 56px; }
+
+/* Identity bar — wraps either #home-devid-wrap (anonymous user)
+   OR #home-account-wrap (signed-in user). Their widths differ
+   slightly; reserve a min-width so the AuthStore-resolves swap
+   doesn't reflow the row. */
+.home-identity > .home-devid-wrap,
+.home-identity > .home-account-wrap {
+    min-width: 220px;
+}
+
+/* Recent-reports block (logged-in only). The block starts `hidden`,
+   then reveals when AuthStore confirms a session. Reserve the row
+   slot so the reveal doesn't shift the impact card below it. */
+#home-recent[hidden],
+#home-recent:empty {
+    visibility: hidden;
+    min-height: 0;
+    pointer-events: none;
 }
 
 

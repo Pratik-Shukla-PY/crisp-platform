@@ -24,6 +24,20 @@
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="dns-prefetch" href="https://unpkg.com">
 
+    <!-- (Lighthouse perf — May 2026 LCP fix) — preload the two woff2
+         font subsets the home hero needs FIRST: Inter regular (body
+         text + chip labels) + Outfit bold-800 (CRISP wordmark).
+         Without these hints, the browser only discovers them AFTER
+         parsing the deferred font-stylesheet @import below — costing
+         ~400-600 ms on Slow-4G. URLs are pinned to a Google Fonts
+         release (v13/v11) so subresource integrity stays valid; if
+         Google rotates the file path the worst-case is the preload
+         silently misses (no error, just no speedup). -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="https://fonts.gstatic.com/s/outfit/v11/QGYvz_MVcBeNP4NJtEtq.woff2">
+
     <!-- (Lighthouse perf fix) — fonts + FontAwesome + Leaflet
          CSS were render-blocking ~6 seconds. Switched to async loading
          pattern (media=print → onload swap). On-screen text initially
