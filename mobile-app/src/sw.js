@@ -5,7 +5,19 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v149';
+const CACHE_NAME = 'crisp-v150';
+// v149 → v150 (May 2026 Lighthouse perf pass — CLS + LCP fixes).
+// Three-phase no-feature-change perf rewrite:
+//   Phase 1: slot-reservation CSS so late DOM reveals (badge chip,
+//     lives count, install slot, identity bar swap) stop shifting
+//     downstream content. Plus woff2 preload for Inter + Outfit.
+//   Phase 2: inline ~9 KB critical CSS in <head> + async-load the
+//     304 KB styles.css via preload+onload. First paint no longer
+//     waits on the full stylesheet.
+//   Phase 3: replace 14 home FontAwesome icons with inline Lucide-
+//     style SVG. Home renders icons immediately, no FA-bundle wait.
+// Expected median deltas (Slow-4G): CLS 0.242 → ~0.06, LCP 10.1s
+// → ~3-4 s, Perf 44 → ~75-80.
 // v148 → v149 (May 2026, Badge Studio futuristic + share-flow polish).
 // Operator: "Make it a bit futuristic with 5-10 options of different
 // life savers… amazing messages for people to share… When user

@@ -222,6 +222,17 @@
             font-size: 11px; color: rgba(255,255,255,0.45);
         }
         .home-utility-link { background: 0; border: 0; color: inherit; cursor: pointer; padding: 4px 6px; font: inherit; }
+        /* Phase 3 — inline-SVG icon helper. `<i class="ico">` wraps a
+           Lucide-style SVG so it inherits the existing CSS sizing
+           rules (e.g. `.big-cta i { font-size: 1.4rem }`). Removes the
+           home page's dependency on the 180 KB FontAwesome bundle
+           for first paint. */
+        .ico {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 1em; height: 1em; line-height: 1; vertical-align: -0.125em;
+            color: inherit;
+        }
+        .ico svg { width: 100%; height: 100%; display: block; }
         @media (prefers-reduced-motion: reduce) {
             .stage { transition: none; }
         }
@@ -506,7 +517,7 @@
                 <div class="home-brand-row">
                     <div class="home-brand">
                         <div class="home-brand-logo" aria-hidden="true">
-                            <i class="fa-solid fa-satellite-dish"></i>
+                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a7.31 7.31 0 0 0 10 10"/><path d="m9 15 3-3"/><path d="M17 13a6 6 0 0 0-6-6"/><path d="M21 13A10 10 0 0 0 11 3"/></svg></i>
                         </div>
                         <div class="home-brand-text">
                             <div class="home-brand-name">CRISP</div>
@@ -530,7 +541,7 @@
                                 aria-label="Copy reporter ID"
                                 data-i18n-aria-label="aria_copy_id"
                                 title="Copy">
-                            <i class="fa-solid fa-copy" aria-hidden="true"></i>
+                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></i>
                         </button>
                         <button id="btn-home-devid-info" type="button"
                                 aria-label="What is this?"
@@ -539,7 +550,7 @@
                                 aria-expanded="false"
                                 title="What is this?"
                                 data-i18n-title="aria_what_is_this">
-                            <i class="fa-solid fa-info" aria-hidden="true"></i>
+                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></i>
                         </button>
                     </div>
                     <div class="home-devid-tip" id="home-devid-tip" hidden role="status">
@@ -585,7 +596,7 @@
                             title="Install on home screen"
                             data-i18n-title="landing_install_pwa"
                             hidden>
-                        <i class="fa-solid fa-download" aria-hidden="true"></i>
+                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></i>
                     </button>
                     <button id="btn-home-voice" type="button"
                             class="home-strip-icon"
@@ -593,7 +604,7 @@
                             data-i18n-aria-label="aria_read_aloud"
                             title="Read this page aloud"
                             data-i18n-title="aria_read_aloud">
-                        <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
+                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></i>
                     </button>
                 </div>
 
@@ -601,24 +612,24 @@
                 <div class="home-account-wrap" id="home-account-wrap" hidden>
                     <div class="account-pill" id="account-pill" role="button"
                          tabindex="0" aria-haspopup="true" aria-expanded="false">
-                        <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="9 11 12 14 16 9"/></svg></i>
                         <span class="account-name" id="account-name">—</span>
                         <button class="account-settings-btn" id="btn-account-settings" type="button" aria-label="Account menu">
-                            <i class="fa-solid fa-chevron-down"></i>
+                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></i>
                         </button>
                     </div>
                     <div class="home-account-menu" id="home-account-menu" hidden role="menu" aria-label="Account">
                         <button id="btn-home-menu-myreports" type="button" role="menuitem">
-                            <i class="fa-solid fa-clipboard-list" aria-hidden="true"></i>
+                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg></i>
                             <span data-i18n="my_reports">My Reports</span>
                         </button>
                         <button id="btn-home-menu-settings" type="button" role="menuitem">
-                            <i class="fa-solid fa-gear" aria-hidden="true"></i>
+                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></i>
                             <span data-i18n="home_account_settings">Settings</span>
                         </button>
                         <hr>
                         <button id="btn-home-menu-logout" type="button" role="menuitem" class="danger">
-                            <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
+                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg></i>
                             <span data-i18n="home_logout">Log out</span>
                         </button>
                     </div>
@@ -665,7 +676,7 @@
                  to v4 capture (or v3 stage-where via UI_V3_ENABLED).
                  Disabled by home-screen.js until consent is checked. -->
             <button class="big-cta" id="btn-start">
-                <i class="fa-solid fa-play"></i>
+                <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg></i>
                 <span data-i18n="home_cta_primary">Report an Incident</span>
             </button>
 
@@ -675,7 +686,7 @@
                  count = 0 to avoid "My Reports (0)" looking sad. -->
             <div class="home-secondary-row" id="home-secondary-row">
                 <button class="secondary-cta" id="btn-my-reports" type="button">
-                    <i class="fa-solid fa-clipboard-list"></i>
+                    <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg></i>
                     <span data-i18n="my_reports">My Reports</span>
                     <span class="mr-count" id="mr-count" hidden>(0)</span>
                     <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
@@ -691,11 +702,11 @@
                      next tier, and tap through to Badge Studio when they
                      reach T3+. -->
                 <button class="secondary-cta home-rewards-btn" id="btn-rewards" type="button">
-                    <i class="fa-solid fa-medal"></i>
+                    <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><circle cx="12" cy="17" r="5"/><path d="M12 17h.01"/></svg></i>
                     <span data-i18n="rewards_btn">Rewards</span>
                 </button>
                 <button class="tertiary-cta" id="btn-login" type="button">
-                    <i class="fa-solid fa-right-to-bracket"></i>
+                    <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg></i>
                     <span data-i18n="login_or_signup">Login / Sign up</span>
                 </button>
             </div>
@@ -784,7 +795,7 @@
                  find their targets, but the panel is never rendered. -->
             <button class="delete-my-data-link" id="btn-delete-my-data" style="display:none;" aria-hidden="true" tabindex="-1"></button>
             <div id="delete-data-panel" class="delete-data-panel" style="display:none;" aria-hidden="true">
-                <div class="ddp-header"><h3></h3><div class="ddp-lang-switch" id="ddp-lang-switch"></div><button class="ddp-close" id="ddp-close"><i class="fa-solid fa-xmark"></i></button></div>
+                <div class="ddp-header"><h3></h3><div class="ddp-lang-switch" id="ddp-lang-switch"></div><button class="ddp-close" id="ddp-close"><i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></i></button></div>
                 <div id="ddp-list" class="ddp-list"></div>
                 <div class="ddp-footer"><button class="ddp-delete-all" id="ddp-delete-all"></button></div>
             </div>
