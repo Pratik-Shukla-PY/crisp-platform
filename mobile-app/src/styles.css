@@ -11768,18 +11768,33 @@ body { background-color: #10284a; }
    single horizontal block for this stage.
    ═══════════════════════════════════════════════════════════════════════ */
 
+/* v8.3.1 — absolute-positioned at top-left of #stage-success to
+   match the home stage's brand-row position EXACTLY. Home brand is
+   the first child of `.home-center` (max-width:480px, margin:0 auto,
+   padding: 16-26px 20px) → effective top-left is `top: 16-26px,
+   left: 20px` inside the centered 480px column. Inside the .stage
+   (position:absolute; inset:0; padding:20px 24px 16px), the brand
+   sits at the equivalent visual position via top: 20px / left: 24px
+   (the stage's own padding). The lang-pill at top:22 / right:24 sits
+   on the same horizontal row visually. */
 .success-brand {
-    /* Reset button defaults */
     all: unset;
     cursor: pointer;
+    position: absolute;
+    top: 20px;
+    left: 24px;
+    z-index: 5;
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 10px;
-    margin: 0 auto 4px;
-    border-radius: 14px;
+    padding: 4px 6px;
+    border-radius: 12px;
     transition: background 0.18s ease, transform 0.18s ease;
     -webkit-tap-highlight-color: transparent;
+}
+[dir="rtl"] .success-brand {
+    left: auto;
+    right: 24px;
 }
 .success-brand:hover,
 .success-brand:focus-visible {
@@ -11793,8 +11808,9 @@ body { background-color: #10284a; }
     transform: scale(0.985);
 }
 .success-brand .home-brand-logo {
-    width: 36px;
-    height: 36px;
+    /* Match home-brand-logo size + treatment exactly. */
+    width: 40px;
+    height: 40px;
     border-radius: 12px;
     flex-shrink: 0;
     box-shadow: 0 0 18px rgba(9, 209, 199, 0.18);
@@ -11814,4 +11830,12 @@ body { background-color: #10284a; }
     font-weight: 800;
     color: var(--text, #f1f5f9);
     letter-spacing: 0.02em;
+}
+
+/* Push the centered success-stage content down so the heart-wrap
+   doesn't overlap the brand on short viewports (iPhone SE-class
+   568 px tall). Stage padding-top is 20 px; brand height ~40 px +
+   gap = ~60 px clearance needed. */
+#stage-success .stage-center.success-center {
+    padding-top: 48px;
 }

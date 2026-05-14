@@ -5,7 +5,22 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v186';
+const CACHE_NAME = 'crisp-v187';
+// v186 → v187 (May 2026 — success brand position fix, operator):
+//   "Keep the CRISP ILogo and Text position exactly same as the
+//    home page."
+// v186 placed .success-brand inside the centered .success-center
+// flex, which made it horizontally centered + vertically stacked
+// with the rest of the success content. Home brand instead sits at
+// the TOP-LEFT of .home-center (first child + left-aligned because
+// .home-center is align-items:stretch). To match exactly, .success-
+// brand is now `position: absolute; top: 20px; left: 24px;` inside
+// .stage (matches the stage's own padding-top + padding-left so the
+// brand aligns with where natural content would start). Logo size
+// bumped 36 → 40 px to match home-brand-logo exactly. RTL flip
+// included. Padding-top: 48 px added to .success-center to push
+// centered content (heart + thank-you) below the brand on short
+// iPhone-SE-class viewports.
 // v185 → v186 (May 2026 — success-stage CRISP brand, operator):
 //   "On the last page the Crisp Logo and CRISP word is missing,
 //    remove home button and when user clicks on the Crisp Icon
