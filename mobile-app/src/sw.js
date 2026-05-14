@@ -5,7 +5,34 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v156';
+const CACHE_NAME = 'crisp-v157';
+// v156 → v157 (May 2026, reward-hero pass).
+// Operator: "Changes required:
+//   1. Device Id we can move below privacy row.
+//   2. Life Keeper 11 Lives Saved should be center aligned and Big.
+//      thats a reward."
+// Two restructures:
+//   A) Badge chip lifted out of .home-devid-wrap into its own
+//      .home-reward-hero block right below the brand row. New
+//      .home-badge-chip--hero modifier renders it as a centered
+//      trophy card — big emoji on top (44 → 52 px on taller
+//      viewports), tier name 22 → 26 px, "{N} LIVES SAVED" caption
+//      in uppercase. Reads as a reward, not a status pill.
+//   B) Device-ID pill (CRISP-XXXX-XXXX) + tooltip MOVED OUT of the
+//      identity area at the top and placed in a new .home-devid-
+//      footer block beneath the privacy / open-source / help /
+//      version row. Anonymous-ID utility metadata now sits where
+//      utility metadata belongs.
+// Specificity fix: the new hero treatment uses
+//   `.home-badge-chip.home-badge-chip--hero` (2-class compound)
+// so it beats the later single-class layout-tweak at line ~5329
+// that was forcing padding 5px 11px + emoji font 13 px.
+// Verified with Playwright (/tmp/crisp_reward_verify.mjs):
+//   - chip_is_centered_in_stage: true
+//   - devid_below_footer: true
+//   - chip height: 78 → 159 px (room for big emoji + label + caption)
+//   - emoji font-size: 13 → 52 px
+//   - padding: 5/11 → 26/36 px
 // v155 → v156 (May 2026 — operator-supplied new brand mark).
 // Two SVGs replaced across both the PWA and the dashboard:
 //   • favicon.svg — new "ripple" design: dark navy tile (rx=44 in

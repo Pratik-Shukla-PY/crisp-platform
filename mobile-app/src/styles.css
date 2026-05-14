@@ -4835,6 +4835,84 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     white-space: normal;
     max-width: 220px;
 }
+
+/* ── Reward-hero treatment — May 2026 ────────────────────────────
+   Operator: "Life Keeper 11 Lives Saved should be center aligned
+   and Big. thats a reward."
+   When the chip carries the .home-badge-chip--hero modifier (set
+   in index.html on the home stage), it renders as a centered
+   trophy/reward card rather than a small inline pill:
+     • container is a block, vertically centered, takes intrinsic
+       width; the .home-reward-hero wrapper does the horizontal
+       centering with text-align so the chip itself can stay
+       inline-flex sized to its content.
+     • emoji enlarged to 44 px and sits above the tier name.
+     • tier name 22 px / 900 weight, mint colour.
+     • stat caption 13 px UPPERCASE with letter-spacing.
+   Tier-specific gradients + glows (.lvl-t1 / -t2 / -t3 / -t4
+   below) compound on top via the cascade — no new colour rules
+   needed. */
+.home-reward-hero {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 14px 0 6px;
+    width: 100%;
+}
+/* Compound selector (.home-badge-chip.home-badge-chip--hero) bumps
+   the specificity from 1-class to 2-class so this hero treatment
+   beats the later single-class override at the bottom of this file
+   (lines ~5329 set padding 5px 11px + emoji font-size 13px for the
+   compact pill variant). Without the compound, hero font-size and
+   padding silently lost the cascade. */
+.home-badge-chip.home-badge-chip--hero {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    padding: 20px 30px;
+    border-radius: 22px;
+    min-width: 220px;
+    max-width: 360px;
+    font-size: 14px;
+    line-height: 1.2;
+    letter-spacing: normal;
+    min-height: 0;
+}
+.home-badge-chip.home-badge-chip--hero[hidden] {
+    /* keep layout slot to avoid CLS, same pattern as the base rule */
+    min-height: 132px;
+}
+.home-badge-chip.home-badge-chip--hero .hb-emoji {
+    font-size: 44px;
+    line-height: 1;
+    margin-bottom: 2px;
+}
+.home-badge-chip.home-badge-chip--hero .hb-stack {
+    align-items: center;
+    gap: 4px;
+}
+.home-badge-chip.home-badge-chip--hero .hb-label {
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    line-height: 1.05;
+}
+.home-badge-chip.home-badge-chip--hero .hb-progress {
+    font-size: 12.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.78);
+    max-width: 280px;
+}
+@media (min-height: 800px) {
+    .home-badge-chip.home-badge-chip--hero {
+        padding: 26px 36px;
+    }
+    .home-badge-chip.home-badge-chip--hero .hb-emoji { font-size: 52px; }
+    .home-badge-chip.home-badge-chip--hero .hb-label { font-size: 26px; }
+}
 /* Tappable cue at T3+ (Badge Studio unlocked). */
 .home-badge-chip.chip-unlocked { cursor: pointer; }
 .home-badge-chip.chip-unlocked:hover {
@@ -5232,15 +5310,15 @@ body.tier-t4 .home-impact {
    would otherwise override the UA's default `[hidden] {display:none}`,
    leaving the wrap visible even when JS marks it hidden for logged-in
    users. Same for the badge chip living inside it. */
-/* May 2026 (declutter pass v3) — was `align-items: center` which
-   overrode the base-block's flex-start, centering the inline-flex
-   device-ID badge (max-width:220) horizontally inside the 390 px
-   wrap. Measured offset was exactly (390 − 198) / 2 ≈ 96 px from
-   the left — pill drifted right of the brand-row's left edge.
-   Now: align-items: flex-start so both children left-align with
-   the rest of the identity area. */
+/* May 2026 (reward-hero pass) — wrap is now empty by default
+   (device-ID pill moved to .home-devid-footer at the bottom of the
+   stage; badge chip moved to .home-reward-hero just below the
+   brand). Keep the wrap in the DOM as an anchor for the tooltip's
+   outside-click handler in home-screen.js, but collapse it when
+   empty so it doesn't add a gap to the identity area. */
 .home-devid-wrap { gap: 10px; row-gap: 8px; align-items: flex-start; }
 .home-devid-wrap[hidden] { display: none; }
+.home-devid-wrap:empty { display: none; }
 .home-recent[hidden] { display: none; }
 .home-howitworks[hidden] { display: none; }
 .home-hero-sub[hidden] { display: none; }
@@ -5610,6 +5688,32 @@ body.tier-t4 .home-impact {
     .home-utility-footer .home-utility-link,
     .home-utility-footer .home-utility-version,
     .home-utility-footer .home-utility-dot { font-size: 11px; }
+}
+
+/* ── Reporter-ID footer block — May 2026 ──────────────────────────
+   Operator: "Device Id we can move below privacy row."
+   Anonymous reporter ID is utility metadata, not hero content.
+   This wrapper sits below the .home-utility-footer (privacy / open
+   source / help / version) and centres the device-ID pill at the
+   very bottom of the home stage. The pill itself keeps its existing
+   .home-devid-badge styling (compact pill, monospace text, copy +
+   info icons). Tooltip (#home-devid-tip) sits below the pill when
+   triggered. */
+.home-devid-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 8px 0 4px;
+    gap: 4px;
+}
+.home-devid-footer .home-devid-badge {
+    /* Match the wrapper's centering — pill is its own width. */
+    max-width: 240px;
+}
+.home-devid-footer .home-devid-tip {
+    position: relative;
+    margin-top: 4px;
+    max-width: 320px;
 }
 
 /* — Logged-in greeting subtitle, when JS un-hides it. */

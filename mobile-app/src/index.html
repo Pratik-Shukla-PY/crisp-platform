@@ -600,52 +600,34 @@
                          floating absolute top-right via #lang-switcher. -->
                 </div>
 
-                <!-- Anonymous slot — device-ID badge + tooltip + badge chip. -->
-                <div class="home-devid-wrap" id="home-devid-wrap">
-                    <div class="home-devid-badge" id="home-devid-badge"
-                         role="group" aria-labelledby="home-devid-label">
-                        <span id="home-devid-label" class="sr-only" data-i18n="home_devid_label">Your reporter ID</span>
-                        <span class="devid-text" id="home-devid-text">CRISP-····-····</span>
-                        <button id="btn-home-devid-copy" type="button"
-                                aria-label="Copy reporter ID"
-                                data-i18n-aria-label="aria_copy_id"
-                                title="Copy">
-                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></i>
-                        </button>
-                        <button id="btn-home-devid-info" type="button"
-                                aria-label="What is this?"
-                                data-i18n-aria-label="aria_what_is_this"
-                                aria-haspopup="true"
-                                aria-expanded="false"
-                                title="What is this?"
-                                data-i18n-title="aria_what_is_this">
-                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></i>
-                        </button>
-                    </div>
-                    <div class="home-devid-tip" id="home-devid-tip" hidden role="status">
-                        <strong data-i18n="home_devid_tip_title">Save this ID</strong>
-                        <span data-i18n="home_devid_tip_body">Use this to find your reports later, even if you lose the app. Your ID is anonymous — we cannot link it back to you.</span>
-                        <button id="btn-home-devid-tip-dismiss" type="button" data-i18n="home_devid_tip_dismiss">Got it</button>
-                    </div>
-                    <!-- May 2026 — gamification badge chip showing the
-                         user's current tier in the 4-tier identity-
-                         forward ladder:
-                           T1_SCOUT       🌱 Scout
-                           T2_SIGNAL      📣 Signal
-                           T3_CHANGEMAKER ⚡ Changemaker
-                           T4_LIFEKEEPER  🦸 Lifekeeper
-                         The `hb-progress` sub-line tells the user
-                         what action moves them up next.
+                <!-- Anonymous slot — May 2026 (reward-hero pass).
+                     Pre-restructure this wrap held BOTH the device-ID
+                     pill AND the badge chip stacked vertically right
+                     under the brand. Operator: "Device Id we can move
+                     below privacy row. Life Keeper 11 Lives Saved
+                     should be center aligned and Big. thats a reward."
+                     The device-ID pill is now positioned near the
+                     privacy/opensource footer (low-priority, anonymous-
+                     ID utility), and the badge chip is lifted to its
+                     own hero block below the brand (high-priority
+                     reward display). This wrap is kept empty as the
+                     anchor for #home-devid-tip's outside-click dismiss
+                     handler in home-screen.js — removing it would
+                     mean a wider JS refactor. -->
+                <div class="home-devid-wrap" id="home-devid-wrap"></div>
 
-                         May 2026 (second pass) — chip is now
-                         DECORATIVE-ONLY. The previous tap-to-open-
-                         Badge-Studio behavior was confusing
-                         (chip reads as status, but tapping had
-                         functional effect). All level-up + share
-                         actions moved into the dedicated Rewards
-                         page (stage-rewards), reached via
-                         #btn-rewards in the home secondary row. -->
-                    <div class="home-badge-chip" id="home-badge-chip" hidden
+                <!-- Reward-hero badge chip — May 2026.
+                     Lifted out of .home-devid-wrap and given its own
+                     centered, big-format presentation: tier emoji
+                     large at the top, tier name as a heading, stat
+                     caption beneath. Reads as a trophy / reward card
+                     instead of a small status pill. The chip's
+                     existing IDs (home-badge-chip / -emoji / -label
+                     / -progress) are preserved so home-screen.js's
+                     _paintBadgeChip continues to write into them
+                     without any JS change. -->
+                <div class="home-reward-hero" id="home-reward-hero">
+                    <div class="home-badge-chip home-badge-chip--hero" id="home-badge-chip" hidden
                          role="status" aria-live="polite"
                          aria-label="Reporter level">
                         <span class="hb-emoji" id="home-badge-emoji" aria-hidden="true">🌱</span>
@@ -654,15 +636,6 @@
                             <span class="hb-progress" id="home-badge-progress">Submit your first report to level up</span>
                         </span>
                     </div>
-                    <!-- May 2026 (landing-icon cleanup pass) — install + voice
-                         icons MOVED OUT of this wrap into the always-visible
-                         .home-tools-row below. Pre-fix the icons were stuck
-                         inside home-devid-wrap which is hidden when the user
-                         logs in, so a signed-in user lost the ability to
-                         install the PWA or trigger TTS. The tools row now
-                         lives outside both home-devid-wrap and
-                         home-account-wrap so the icons stay reachable in
-                         every auth state. -->
                 </div>
 
                 <!-- Logged-in slot — May 2026 (landing-icon cleanup pass)
@@ -852,6 +825,46 @@
                 <span class="home-utility-dot" aria-hidden="true">·</span>
                 <span class="home-utility-version" id="home-utility-version">v0.7.44</span>
             </nav>
+
+            <!-- Reporter ID block — May 2026 (reward-hero pass).
+                 Operator: "Device Id we can move below privacy row."
+                 Anonymous reporter ID is utility info (find your
+                 reports across devices) — not something that needs
+                 hero placement at the top of the page. Relocated here
+                 just below the privacy/help/version footer where it
+                 reads as quiet metadata rather than primary content.
+                 Same DOM IDs (#home-devid-badge, #home-devid-text,
+                 #btn-home-devid-copy, #btn-home-devid-info,
+                 #home-devid-tip) so the existing wiring in
+                 home-screen.js (_wireDevidBadge + tooltip) keeps
+                 working without any JS change. -->
+            <div class="home-devid-footer" id="home-devid-footer">
+                <div class="home-devid-badge" id="home-devid-badge"
+                     role="group" aria-labelledby="home-devid-label">
+                    <span id="home-devid-label" class="sr-only" data-i18n="home_devid_label">Your reporter ID</span>
+                    <span class="devid-text" id="home-devid-text">CRISP-····-····</span>
+                    <button id="btn-home-devid-copy" type="button"
+                            aria-label="Copy reporter ID"
+                            data-i18n-aria-label="aria_copy_id"
+                            title="Copy">
+                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></i>
+                    </button>
+                    <button id="btn-home-devid-info" type="button"
+                            aria-label="What is this?"
+                            data-i18n-aria-label="aria_what_is_this"
+                            aria-haspopup="true"
+                            aria-expanded="false"
+                            title="What is this?"
+                            data-i18n-title="aria_what_is_this">
+                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></i>
+                    </button>
+                </div>
+                <div class="home-devid-tip" id="home-devid-tip" hidden role="status">
+                    <strong data-i18n="home_devid_tip_title">Save this ID</strong>
+                    <span data-i18n="home_devid_tip_body">Use this to find your reports later, even if you lose the app. Your ID is anonymous — we cannot link it back to you.</span>
+                    <button id="btn-home-devid-tip-dismiss" type="button" data-i18n="home_devid_tip_dismiss">Got it</button>
+                </div>
+            </div>
 
             <!-- Legacy retained DOM — kept hidden so any
                  _buildChannelTile() append target remains valid for
