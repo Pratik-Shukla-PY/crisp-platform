@@ -5,7 +5,19 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v185';
+const CACHE_NAME = 'crisp-v186';
+// v185 → v186 (May 2026 — success-stage CRISP brand, operator):
+//   "On the last page the Crisp Logo and CRISP word is missing,
+//    remove home button and when user clicks on the Crisp Icon
+//    they can go to home."
+// Adds a clickable .success-brand at the top of #stage-success
+// (CRISP ripple SVG + "CRISP" wordmark, same as the home brand
+// row). Click → resetApp() + goToStage('stage-home'). Removes the
+// explicit #btn-success-home from the secondary row and collapses
+// the row's grid from 3-col → 2-col (Track + Rewards). The legacy
+// #btn-success-home click handler in app.js is kept guarded so
+// any cached HTML serving the old markup still navigates home
+// gracefully (back-compat).
 // v184 → v185 (May 2026 — Nearby v8.2 frameless number block).
 // Operator: "Don't make a rectangular Block. the Border and
 // background is not needed around the reports nearby."

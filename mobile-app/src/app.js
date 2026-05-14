@@ -9082,12 +9082,22 @@ function setupSendStage() {
     }
     const successHomeBtn = document.getElementById('btn-success-home');
     if (successHomeBtn) {
-        // Mirror the resetApp() behaviour from #btn-new-report so the
-        // capture state doesn't leak into the next visit, then route
-        // home explicitly (resetApp itself also navigates to stage-home,
-        // so this is idempotent — both calls converge on the same
-        // final state).
+        // Legacy guard — the explicit Home button was removed from
+        // stage-success in May 2026 (operator: home nav lives on the
+        // CRISP brand at the top of the stage). Handler kept for
+        // back-compat in case any older cached HTML still has the
+        // element; gracefully no-ops when the button is absent.
         successHomeBtn.addEventListener('click', () => {
+            try { resetApp(); } catch (_) {}
+            try { goToStage('stage-home'); } catch (_) {}
+        });
+    }
+    // May 2026 (operator) — clickable CRISP brand at the top of
+    // stage-success routes home. Same resetApp + goToStage chain so
+    // the next visit starts on a clean home stage.
+    const successBrandBtn = document.getElementById('btn-success-brand');
+    if (successBrandBtn) {
+        successBrandBtn.addEventListener('click', () => {
             try { resetApp(); } catch (_) {}
             try { goToStage('stage-home'); } catch (_) {}
         });

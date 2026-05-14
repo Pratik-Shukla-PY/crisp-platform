@@ -2743,6 +2743,36 @@
     ══════════════════════════════════════ -->
     <div class="stage" id="stage-success">
         <div class="stage-center success-center">
+            <!-- May 2026 (operator) — CRISP brand at the top of the
+                 success stage. Click → resetApp() + goToStage('stage-
+                 home'). Replaces the explicit "Home" secondary button
+                 below (operator: "remove home button and when user
+                 clicks on the Crisp Icon they can go to home"). Re-
+                 uses the home-brand-logo + home-brand-name classes so
+                 the ripple SVG renders identically to the home stage. -->
+            <button class="success-brand" id="btn-success-brand"
+                    type="button" aria-label="Home"
+                    data-i18n-aria-label="success_btn_home">
+                <span class="home-brand-logo" aria-hidden="true">
+                    <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CRISP">
+                        <defs>
+                            <linearGradient id="crisp-brand-tile-success" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0" stop-color="#22455F"/>
+                                <stop offset="1" stop-color="#163349"/>
+                            </linearGradient>
+                        </defs>
+                        <rect width="256" height="256" rx="44" fill="url(#crisp-brand-tile-success)"/>
+                        <circle cx="128" cy="128" r="106" fill="none" stroke="#5EEAD4" stroke-width="4.5" opacity="0.3"/>
+                        <circle cx="128" cy="128" r="81"  fill="none" stroke="#2DD4BF" stroke-width="5.5" opacity="0.5"/>
+                        <circle cx="128" cy="128" r="56"  fill="none" stroke="#22D3EE" stroke-width="7"   opacity="0.78"/>
+                        <circle cx="128" cy="128" r="31"  fill="none" stroke="#67E8F9" stroke-width="8"/>
+                        <circle cx="128" cy="128" r="13" fill="#67E8F9"/>
+                        <circle cx="184" cy="72" r="9" fill="#FB7185"/>
+                    </svg>
+                </span>
+                <span class="home-brand-name">CRISP</span>
+            </button>
+
             <!-- PR 7: glowing heart replaces the green ✅. The
                  message re-frames submission as "your report can help save
                  lives" — a warmer close-out than the prior bureaucratic
@@ -2798,12 +2828,10 @@
                 <i class="fa-solid fa-plus"></i>
                 <span data-i18n="add_another_report">Add another report</span>
             </button>
-            <!-- May 2026 (reward-system v2 second pass) — secondary 3-col
-                 row replaces the previous single Track button. Gives
-                 the user three clean off-ramps after a submit:
-                 Track → report detail · Rewards → stage-rewards ·
-                 Home → reset + stage-home. Same .home-secondary-row
-                 grid pattern as the home page for consistency. -->
+            <!-- May 2026 (operator) — Home button REMOVED from this
+                 row. Home navigation is now handled by tapping the
+                 CRISP brand at the top of the stage. Row collapses
+                 from 3-col → 2-col (Track + Rewards). -->
             <div class="success-secondary-row home-secondary-row">
                 <button class="secondary-cta" id="btn-track-report" type="button">
                     <i class="fa-solid fa-map-pin"></i>
@@ -2812,10 +2840,6 @@
                 <button class="secondary-cta home-rewards-btn" id="btn-success-rewards" type="button">
                     <i class="fa-solid fa-medal"></i>
                     <span data-i18n="success_btn_rewards">Rewards</span>
-                </button>
-                <button class="secondary-cta" id="btn-success-home" type="button">
-                    <i class="fa-solid fa-house"></i>
-                    <span data-i18n="success_btn_home">Home</span>
                 </button>
             </div>
             <!-- (UI v3 redesign M3) — soft prompt for the optional
