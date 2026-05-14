@@ -748,5 +748,10 @@
   "action_tile_download": "Télécharger",
   "action_tile_login": "Connexion",
   "action_tile_audio": "Audio",
-  "home_cta_sub": "Capturer · Vérifier · Aider"
+  "home_cta_sub": "Capturer · Vérifier · Aider",
+  "v4_cap_tips_eyebrow": "Conseils utiles",
+  "v4_cap_tip_photo": "Montrez ce qui est endommagé, bloqué ou dangereux",
+  "v4_cap_tip_voice": "La voix aide quand écrire est difficile ou les mains occupées",
+  "v4_cap_tip_text": "Quelques mots peuvent accélérer l'aide",
+  "v4_cap_tip_impact": "Des intervenants vérifiés lisent chaque rapport. Chaque détail compte."
 }

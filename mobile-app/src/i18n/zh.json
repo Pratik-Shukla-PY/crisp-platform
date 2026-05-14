@@ -723,5 +723,10 @@
   "action_tile_download": "下载应用",
   "action_tile_login": "登录",
   "action_tile_audio": "音频",
-  "home_cta_sub": "捕获 · 核实 · 援助"
+  "home_cta_sub": "捕获 · 核实 · 援助",
+  "v4_cap_tips_eyebrow": "实用提示",
+  "v4_cap_tip_photo": "展示损毁、阻塞或不安全的情况",
+  "v4_cap_tip_voice": "当难以书写或双手繁忙时，语音很有帮助",
+  "v4_cap_tip_text": "几句话能加速救援",
+  "v4_cap_tip_impact": "经核实的救援人员会阅读每份报告。每个细节都很重要。"
 }

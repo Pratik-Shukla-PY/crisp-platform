@@ -726,5 +726,10 @@
   "action_tile_download": "Tải Ứng Dụng",
   "action_tile_login": "Đăng nhập",
   "action_tile_audio": "Âm thanh",
-  "home_cta_sub": "Ghi · Xác minh · Hỗ trợ"
+  "home_cta_sub": "Ghi · Xác minh · Hỗ trợ",
+  "v4_cap_tips_eyebrow": "Mẹo hữu ích",
+  "v4_cap_tip_photo": "Chỉ ra những gì hư hỏng, bị chặn hoặc không an toàn",
+  "v4_cap_tip_voice": "Giọng nói hữu ích khi khó viết hoặc tay bận",
+  "v4_cap_tip_text": "Vài từ có thể đẩy nhanh sự giúp đỡ",
+  "v4_cap_tip_impact": "Người ứng cứu đã xác minh đọc mọi báo cáo. Mọi chi tiết đều quan trọng."
 }

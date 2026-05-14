@@ -5,7 +5,32 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v163';
+const CACHE_NAME = 'crisp-v164';
+// v163 → v164 (May 2026 — v4 capture-stage smart contextual tips).
+// Operator: "Redesign the layout so the space between Voice/Text
+//  and Continue feels intentional and useful rather than empty.
+//  Add Smart Contextual Guidance — use this space intelligently to
+//  help users submit better reports.
+//  Possible examples:
+//    'Describe what happened'
+//    'Add voice details if roads are blocked or help is needed'
+//    'Your report may help emergency responders act faster'"
+// New aside .v4-cap-tips appended after .v4-cap-sections inside the
+// v4-body. Three icon+text tips + a dashed-separator impact line
+// ("Verified responders read every report"). Each tip carries a
+// data-tip="photo|voice|text" attribute; v4-flow.js's existing
+// _refreshSectionBadges toggles `.tip-done-photo / -voice / -text`
+// classes on #v4-cap-tips when the corresponding capture lands. CSS
+// dims that tip + reveals a green check, providing smart contextual
+// feedback without any new state machinery.
+// 5 new i18n keys (v4_cap_tips_eyebrow / _tip_photo / _tip_voice /
+// _tip_text / _tip_impact) translated across all 22 locales —
+// validator passes 687 keys.
+// Verified at iPhone 14 (390×844):
+//   - tips card height 225 px, sits at y=509-734
+//   - CTA stays anchored at y=781 (46 px gap above CTA — clean)
+//   - page does NOT scroll (scrolls=false)
+//   - all-done state: 3 tips dimmed, 3 green checks shown
 // v162 → v163 (May 2026 — alignment-rhythm pass).
 // Operator: "Currently the layout feels visually disconnected and
 //  asymmetrical:

@@ -726,5 +726,10 @@
   "action_tile_download": "앱 다운로드",
   "action_tile_login": "로그인",
   "action_tile_audio": "오디오",
-  "home_cta_sub": "촬영 · 확인 · 지원"
+  "home_cta_sub": "촬영 · 확인 · 지원",
+  "v4_cap_tips_eyebrow": "유용한 팁",
+  "v4_cap_tip_photo": "손상되거나 막혔거나 안전하지 않은 것을 보여주세요",
+  "v4_cap_tip_voice": "쓰기 어렵거나 손이 바쁠 때 음성이 도움됩니다",
+  "v4_cap_tip_text": "몇 마디로 도움을 빠르게 받을 수 있습니다",
+  "v4_cap_tip_impact": "인증된 대응자가 모든 보고서를 읽습니다. 모든 세부사항이 중요합니다."
 }

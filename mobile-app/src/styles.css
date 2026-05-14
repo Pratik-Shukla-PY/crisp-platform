@@ -9888,3 +9888,139 @@ body.tier-t4 .home-impact {
    if any older spec/JS toggles it back, hide it on home stage. */
 .home-stage .home-tools-row { display: none !important; }
 
+/* ───────────────────────────────────────────────────────────────────
+   May 2026 — v4 capture-stage tips card.
+   Operator: "Redesign the layout so the space between Voice/Text and
+   Continue feels intentional and useful rather than empty. Add
+   Smart Contextual Guidance — use this space intelligently to help
+   users submit better reports."
+   ─────────────────────────────────────────────────────────────────── */
+
+.v4-cap-tips {
+    /* Soft surface that reads as "supportive content" rather than a
+       primary card — calm mint tint, thin border, generous spacing. */
+    margin: 4px 0 0;
+    padding: 16px 18px 14px;
+    background: linear-gradient(180deg,
+        rgba(70, 223, 177, 0.05) 0%,
+        rgba(9, 209, 199, 0.03) 100%);
+    border: 1px solid rgba(70, 223, 177, 0.14);
+    border-radius: 14px;
+    box-sizing: border-box;
+}
+
+.v4-cap-tips-eyebrow {
+    display: block;
+    margin: 0 0 10px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(70, 223, 177, 0.88);
+}
+
+.v4-cap-tips-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.v4-cap-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 12.5px;
+    line-height: 1.4;
+    transition: opacity 0.25s ease, color 0.25s ease;
+}
+.v4-cap-tip-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: rgba(9, 209, 199, 0.12);
+    color: #46DFB1;
+    margin-top: 1px;
+}
+.v4-cap-tip-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.v4-cap-tip-check {
+    /* Hidden by default; revealed via .tip-done-<key> classes added
+       by v4-flow.js when the corresponding capture lands. */
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #46DFB1;
+    color: #0a1f30;
+    opacity: 0;
+    transform: scale(0.6);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    margin-top: 1px;
+}
+
+/* Smart-contextual: when a section is captured, dim its tip + reveal
+   the green check. Classes set on #v4-cap-tips by v4-flow.js. */
+.v4-cap-tips.tip-done-photo .v4-cap-tip[data-tip="photo"],
+.v4-cap-tips.tip-done-voice .v4-cap-tip[data-tip="voice"],
+.v4-cap-tips.tip-done-text  .v4-cap-tip[data-tip="text"] {
+    opacity: 0.55;
+}
+.v4-cap-tips.tip-done-photo .v4-cap-tip[data-tip="photo"] .v4-cap-tip-check,
+.v4-cap-tips.tip-done-voice .v4-cap-tip[data-tip="voice"] .v4-cap-tip-check,
+.v4-cap-tips.tip-done-text  .v4-cap-tip[data-tip="text"]  .v4-cap-tip-check {
+    opacity: 1;
+    transform: scale(1);
+}
+.v4-cap-tips.tip-done-photo .v4-cap-tip[data-tip="photo"] .v4-cap-tip-icon,
+.v4-cap-tips.tip-done-voice .v4-cap-tip[data-tip="voice"] .v4-cap-tip-icon,
+.v4-cap-tips.tip-done-text  .v4-cap-tip[data-tip="text"]  .v4-cap-tip-icon {
+    background: rgba(70, 223, 177, 0.06);
+    color: rgba(70, 223, 177, 0.55);
+}
+
+.v4-cap-tips-impact {
+    margin: 12px 0 0;
+    padding: 10px 0 0;
+    border-top: 1px dashed rgba(70, 223, 177, 0.18);
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: rgba(70, 223, 177, 0.78);
+    font-style: italic;
+    text-align: center;
+}
+
+/* Reduce motion — kill the check-fade animation for users who
+   request it. The check still appears, just instantly. */
+@media (prefers-reduced-motion: reduce) {
+    .v4-cap-tip,
+    .v4-cap-tip-check,
+    .v4-cap-tip-icon { transition: none; }
+}
+
+/* Tighter layout on the shortest viewports so the tips don't push
+   the Continue button off-screen. */
+@media (max-height: 700px) {
+    .v4-cap-tips { padding: 12px 14px 10px; }
+    .v4-cap-tips-eyebrow { margin-bottom: 8px; }
+    .v4-cap-tips-list { gap: 7px; }
+    .v4-cap-tip { font-size: 12px; }
+    .v4-cap-tips-impact {
+        margin-top: 9px;
+        padding-top: 7px;
+        font-size: 11px;
+    }
+}
+

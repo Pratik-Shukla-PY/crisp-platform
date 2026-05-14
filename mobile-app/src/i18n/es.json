@@ -734,5 +734,10 @@
   "action_tile_download": "Descargar",
   "action_tile_login": "Acceder",
   "action_tile_audio": "Audio",
-  "home_cta_sub": "Capturar · Verificar · Ayudar"
+  "home_cta_sub": "Capturar · Verificar · Ayudar",
+  "v4_cap_tips_eyebrow": "Consejos útiles",
+  "v4_cap_tip_photo": "Muestra lo dañado, bloqueado o inseguro",
+  "v4_cap_tip_voice": "La voz ayuda cuando es difícil escribir o tienes las manos ocupadas",
+  "v4_cap_tip_text": "Unas pocas palabras pueden acelerar la ayuda",
+  "v4_cap_tip_impact": "Respondedores verificados leen cada informe. Cada detalle importa."
 }

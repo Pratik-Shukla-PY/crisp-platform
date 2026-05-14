@@ -734,5 +734,10 @@
   "action_tile_download": "Unduh Aplikasi",
   "action_tile_login": "Masuk",
   "action_tile_audio": "Audio",
-  "home_cta_sub": "Rekam · Verifikasi · Bantu"
+  "home_cta_sub": "Rekam · Verifikasi · Bantu",
+  "v4_cap_tips_eyebrow": "Tips Berguna",
+  "v4_cap_tip_photo": "Tunjukkan apa yang rusak, terhalang, atau tidak aman",
+  "v4_cap_tip_voice": "Suara membantu saat sulit menulis atau tangan sibuk",
+  "v4_cap_tip_text": "Beberapa kata dapat mempercepat bantuan",
+  "v4_cap_tip_impact": "Petugas terverifikasi membaca setiap laporan. Setiap detail penting."
 }

@@ -725,5 +725,10 @@
   "action_tile_download": "アプリ取得",
   "action_tile_login": "ログイン",
   "action_tile_audio": "音声",
-  "home_cta_sub": "撮影 · 確認 · 支援"
+  "home_cta_sub": "撮影 · 確認 · 支援",
+  "v4_cap_tips_eyebrow": "役立つヒント",
+  "v4_cap_tip_photo": "損傷、封鎖、危険な箇所を見せてください",
+  "v4_cap_tip_voice": "書くのが難しいときや手がふさがっているとき、音声が役立ちます",
+  "v4_cap_tip_text": "数語で支援が早まります",
+  "v4_cap_tip_impact": "認証された対応者がすべての報告を読みます。すべての詳細が重要です。"
 }

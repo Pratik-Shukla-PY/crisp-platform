@@ -540,6 +540,18 @@
             const textChip = document.getElementById('v4-cap-chip-text');
             if (textChip) textChip.classList.toggle('is-captured', anyText);
             if (textChipStatus) textChipStatus.classList.toggle('is-on', anyText);
+
+            // May 2026 — smart-contextual tips card. Mark each tip as
+            // done when its corresponding capture lands; CSS dims the
+            // tip + reveals a green check. Wired into the same
+            // section-badge refresh so it stays in sync with the
+            // existing chip-status painter.
+            const tips = document.getElementById('v4-cap-tips');
+            if (tips) {
+                tips.classList.toggle('tip-done-photo', photos > 0);
+                tips.classList.toggle('tip-done-voice', audioOk);
+                tips.classList.toggle('tip-done-text',  anyText);
+            }
         }
         // Expose so _renderThumbs + other mutators can call it.
         window.__crispV4RefreshSectionBadges = _refreshSectionBadges;
