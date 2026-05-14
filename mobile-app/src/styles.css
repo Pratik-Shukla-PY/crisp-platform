@@ -4197,19 +4197,29 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     min-width: 0;
     flex-shrink: 1;
 }
+/* May 2026 — wrapper transparent; the inlined SVG carries the
+   dark navy tile + rounded corners + glow (response rings). The
+   previous teal gradient + border on the wrapper double-painted
+   around the SVG's own tile and looked clipped. Outer box-shadow
+   kept (slight cyan halo on hover-states) — the SVG itself is
+   matte. */
 .home-brand-logo {
     width: 40px;
     height: 40px;
     border-radius: 12px;
-    background: linear-gradient(135deg, rgba(9,209,199,0.22), rgba(9,209,199,0.06));
-    border: 1px solid rgba(9, 209, 199, 0.32);
+    background: transparent;
+    border: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: var(--accent, #09D1C7);
-    font-size: 18px;
     box-shadow: 0 0 18px rgba(9, 209, 199, 0.18);
+    overflow: hidden;
+}
+.home-brand-logo > svg {
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 .home-brand-text {
     display: flex;
@@ -5189,15 +5199,16 @@ body.tier-t4 .home-impact {
     padding: 0;
 }
 
-/* Brand block — restrained, doesn't fight with the CTA. */
+/* Brand block — restrained, doesn't fight with the CTA. May 2026 —
+   updated to host the new ripple-tile SVG. Drop the cyan inset
+   ring (the SVG has its own rings, doubling would look noisy);
+   keep the outer drop-shadow as a subtle halo. */
 .home-brand { gap: 12px; }
 .home-brand-logo {
     width: 42px;
     height: 42px;
     border-radius: 12px;
-    box-shadow: 0 0 0 1px rgba(9, 209, 199, 0.20),
-                0 8px 24px rgba(9, 209, 199, 0.18);
-    font-size: 18px;
+    box-shadow: 0 8px 24px rgba(9, 209, 199, 0.18);
 }
 .home-brand-name {
     font-size: 17px;

@@ -211,12 +211,18 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 }
 
 .brand { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+/* May 2026 — brand-icon hosts the inlined ripple-tile SVG. Dropped the
+   old orange→red gradient (clashed with the navy SVG underneath) +
+   subtle box-shadow halo to give the mark a slight glow against the
+   command bar. */
 .brand-icon {
     width: 32px; height: 32px; border-radius: 8px;
-    background: linear-gradient(135deg, #ffae00, #ef4444);
+    background: transparent;
     display: flex; align-items: center; justify-content: center;
-    font-size: 18px; color: #000;
+    overflow: hidden;
+    box-shadow: 0 4px 14px rgba(9, 209, 199, 0.18);
 }
+.brand-icon > svg { width: 100%; height: 100%; display: block; }
 .brand-name { font-family: var(--font-head); font-size: 1rem; font-weight: 800; line-height: 1; }
 .brand-sub { font-size: 9px; color: var(--text-sub); letter-spacing: 0.5px; display: block; margin-top: 1px; }
 .live-badge {

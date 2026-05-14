@@ -5,7 +5,29 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v155';
+const CACHE_NAME = 'crisp-v156';
+// v155 → v156 (May 2026 — operator-supplied new brand mark).
+// Two SVGs replaced across both the PWA and the dashboard:
+//   • favicon.svg — new "ripple" design: dark navy tile (rx=44 in
+//     a 256 viewBox) with 4 concentric response rings (faint outer
+//     → bright inner), cyan epicenter dot, coral responder dot on
+//     the second ring. Cleaner + on-brand vs the prior orange
+//     shield + alert mark.
+//   • crisp-badge-ripple.svg — horizontal lockup (340×110) with the
+//     same tile mark on the left + "CRISP / Crisis Reporter" text
+//     on the right. Staged in /assets for future splash/share-card
+//     placement.
+// Visible swaps in this commit:
+//   - PWA home-stage .home-brand-logo inline SVG (256×256 ripple)
+//   - Dashboard .brand-icon header glyph (was FA satellite-dish)
+//   - Dashboard /login .logo (was FA shield-halved + CRISP text)
+//   - Dashboard /evidence header (was FA satellite-dish)
+// Regenerated assets/icon-192.png + assets/icon-512.png from the
+// new favicon.svg via headless Chromium so PWA installs and Apple
+// touch-icon use the ripple design too. The wifi-arc Lucide icon
+// and the old orange-shield favicon are now gone from the home
+// stage; the FA satellite-dish/shield glyphs are gone from the
+// dashboard header/login/evidence.
 // v154 → v155 (May 2026 — operator: "There is no change on this
 // portion. It still Looks messy bad and not god for UNDP challenge
 // submission" / "Verify, review take snapshot, confirm then then

@@ -39,7 +39,25 @@
     <!-- Top Command Bar -->
     <header class="command-bar glass-panel">
         <div class="brand">
-            <div class="brand-icon"><i class="fa-solid fa-satellite-dish"></i></div>
+            <!-- May 2026 — FA satellite-dish replaced with the new
+                 ripple-tile brand mark for consistency with the PWA. -->
+            <div class="brand-icon" aria-hidden="true">
+                <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CRISP">
+                    <defs>
+                        <linearGradient id="crisp-dash-tile" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0" stop-color="#22455F"/>
+                            <stop offset="1" stop-color="#163349"/>
+                        </linearGradient>
+                    </defs>
+                    <rect width="256" height="256" rx="44" fill="url(#crisp-dash-tile)"/>
+                    <circle cx="128" cy="128" r="106" fill="none" stroke="#5EEAD4" stroke-width="4.5" opacity="0.3"/>
+                    <circle cx="128" cy="128" r="81"  fill="none" stroke="#2DD4BF" stroke-width="5.5" opacity="0.5"/>
+                    <circle cx="128" cy="128" r="56"  fill="none" stroke="#22D3EE" stroke-width="7"   opacity="0.78"/>
+                    <circle cx="128" cy="128" r="31"  fill="none" stroke="#67E8F9" stroke-width="8"/>
+                    <circle cx="128" cy="128" r="13" fill="#67E8F9"/>
+                    <circle cx="184" cy="72" r="9" fill="#FB7185"/>
+                </svg>
+            </div>
             <div class="brand-text">
                 <span class="brand-name">CRISP</span>
                 <span class="brand-sub">UN Crisis Command</span>

@@ -55,6 +55,8 @@
         .ev-logo {
             display: flex; align-items: center; gap: 12px;
         }
+        .ev-logo-mark { width: 40px; height: 40px; border-radius: 10px; box-shadow: 0 6px 18px rgba(9, 209, 199, 0.20); overflow: hidden; flex-shrink: 0; }
+        .ev-logo-mark > svg { width: 100%; height: 100%; display: block; }
         .ev-logo h1 {
             font-size: 22px; font-weight: 900;
             background: linear-gradient(135deg, #7c3aed, #38bdf8);
@@ -313,7 +315,26 @@
     <div class="container">
         <header class="ev-header">
             <div class="ev-logo">
-                <i class="fa-solid fa-satellite-dish" style="font-size:24px;color:#7c3aed;"></i>
+                <!-- May 2026 — FA satellite-dish replaced with the new
+                     ripple-tile brand mark for consistency with the PWA
+                     + login page. -->
+                <div class="ev-logo-mark" aria-hidden="true">
+                    <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CRISP">
+                        <defs>
+                            <linearGradient id="crisp-ev-tile" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0" stop-color="#22455F"/>
+                                <stop offset="1" stop-color="#163349"/>
+                            </linearGradient>
+                        </defs>
+                        <rect width="256" height="256" rx="44" fill="url(#crisp-ev-tile)"/>
+                        <circle cx="128" cy="128" r="106" fill="none" stroke="#5EEAD4" stroke-width="4.5" opacity="0.3"/>
+                        <circle cx="128" cy="128" r="81"  fill="none" stroke="#2DD4BF" stroke-width="5.5" opacity="0.5"/>
+                        <circle cx="128" cy="128" r="56"  fill="none" stroke="#22D3EE" stroke-width="7"   opacity="0.78"/>
+                        <circle cx="128" cy="128" r="31"  fill="none" stroke="#67E8F9" stroke-width="8"/>
+                        <circle cx="128" cy="128" r="13" fill="#67E8F9"/>
+                        <circle cx="184" cy="72" r="9" fill="#FB7185"/>
+                    </svg>
+                </div>
                 <div>
                     <h1>CRISP Verification Evidence</h1>
                     <div class="ev-tag">UN Crisis Response Intelligence Smart Platform</div>
