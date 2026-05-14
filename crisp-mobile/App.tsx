@@ -116,6 +116,12 @@ import V4CaptureScreen from './screens/V4CaptureScreen';
 // Animated for the scale pulse so it works under the existing
 // jest mock layer.
 import V4ClassifyScreen from './screens/V4ClassifyScreen';
+// Phase 5 of RN ↔ PWA parity. V4ReviewScreen mirrors the PWA's
+// #stage-v4-review — Step 3 of 3. Captured strip + summary card +
+// building mount + voice/text drawer + UNDP details (debris /
+// service status / pressing needs) + Send button. This is the
+// App Store-submission gate per the v4 roadmap.
+import V4ReviewScreen from './screens/V4ReviewScreen';
 
 // Phase 3 (Apr 2026): review collapsed from 3 screens to 2 (details + confirm).
 // `review_incident` kept as an alias that redirects to `review_details` so any
@@ -1786,11 +1792,65 @@ export default function App() {
           onSetInfraName={setInfraName}
           onBack={() => setScreen(UI_V4_ENABLED ? 'v4_capture' : 'home')}
           onContinue={() => {
-            // Phase 5 will reroute to 'v4_review'. Until then, fall
-            // through to the existing v3 review_details so v4 path is
-            // end-to-end usable.
-            setScreen('review_details');
+            // Phase 5 landed — route to v4_review.
+            setScreen('v4_review');
           }}
+        />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+           Phase 5 (May 2026 — RN ↔ PWA parity) — v4 review + Send.
+           Step 3 of 3. Captured strip · summary edit rows ·
+           building footprint mount · voice/text drawer · UNDP
+           details drawer (debris Y/N · service status × 3 ·
+           pressing needs multi-select) · Send button.
+           This commit closes the App-Store-submission gate per
+           V4_PARITY_DEFERRED.md — v4 flow is now end-to-end.
+      ══════════════════════════════════════════════════════════════════ */}
+      {screen === 'v4_review' && (
+        <V4ReviewScreen
+          hasPhoto={!!photoUri}
+          hasVoice={!!audioUri}
+          hasText={!!(description && description.trim().length > 0)}
+
+          locationText={locationName || ''}
+          infraType={infraType}
+          crisisType={crisisType}
+          damageClass={damageClass}
+
+          buildingId={buildingId}
+          buildingPickerNode={null /* Phase 5.5 — mount existing
+            BuildingFootprintPicker once we expose its props in a
+            way that integrates cleanly with this screen */}
+
+          audioUri={audioUri}
+          isRecording={isRecording}
+          onToggleRecording={isRecording ? stopRecording : startRecording}
+          descriptionValue={description}
+          onChangeDescription={setDescription}
+
+          debrisClearing={debrisClearing}
+          onSetDebris={setDebrisClearing}
+          electricityStatus={electricityStatus}
+          onSetElectricity={setElectricityStatus}
+          waterStatus={waterStatus}
+          onSetWater={setWaterStatus}
+          healthStatus={healthStatus}
+          onSetHealth={setHealthStatus}
+          pressingNeeds={pressingNeeds}
+          onTogglePressingNeed={(v) => {
+            setPressingNeeds((prev) =>
+              prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]
+            );
+          }}
+
+          isSending={isSending}
+          onSend={submitReport}
+
+          onBack={() => setScreen('v4_classify')}
+          onEditPhoto={() => setScreen('v4_capture')}
+          onEditClassify={() => setScreen('v4_classify')}
+          onEditLocation={() => setScreen('v4_capture') /* meta card */}
         />
       )}
 
