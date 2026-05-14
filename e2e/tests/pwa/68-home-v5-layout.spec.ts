@@ -55,9 +55,11 @@ test.describe('PWA — home v5 layout invariants', () => {
         await expect(helper).toBeVisible();
         const txt = (await helper.textContent() || '').trim();
         expect(txt.length).toBeGreaterThan(0);
-        // English baseline string — alt translations are validated
-        // by node scripts/validate-i18n.mjs not here.
-        expect(txt.toLowerCase()).toContain('offline');
+        // v168.1 — copy changed from "Works offline and syncs..." to
+        // "Always Working. Everywhere." Match on any of the three
+        // expected tokens so the test survives further wording
+        // tweaks per operator iteration.
+        expect(txt.toLowerCase()).toMatch(/always|everywhere|offline/);
     });
 
     test('CTA bigger than v4: clamp-up of cta-label fontSize', async ({ page }) => {

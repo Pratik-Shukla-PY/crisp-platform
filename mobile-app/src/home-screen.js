@@ -248,6 +248,11 @@
             `;
         }
         if (dataAction) {
+            // Operator (May 2026): "remove green dots (2 are there
+            // currently)". Drop the .ct-dot — the "Live" status text
+            // styled in glowing green is now the single liveness
+            // signal. The 2nd dot (CSS ::after on .is-live) is
+            // hidden in the v168.1 rules block in styles.css.
             return `
                 <button type="button" class="home-channel-tile is-live"
                         style="--c: var(${safeColor});"
@@ -257,7 +262,6 @@
                     <span class="ct-icon" aria-hidden="true">${icon}</span>
                     <span class="ct-label">${label}</span>
                     ${statusMarkup}
-                    <span class="ct-dot" aria-hidden="true" title="Available"></span>
                 </button>
             `;
         }
@@ -276,7 +280,6 @@
                 <span class="ct-icon" aria-hidden="true">${icon}</span>
                 <span class="ct-label">${label}</span>
                 ${statusMarkup}
-                <span class="ct-dot" aria-hidden="true" title="Available"></span>
             </a>
         `;
     }
@@ -331,7 +334,7 @@
                                   'IVR',
                                   _telLink(CHANNELS.ivr_phone), 'ivr',
                                   '--brand-ivr',
-                                  { status: _stVoice }),
+                                  { status: _stLive }),   // was _stVoice — operator wants "Live" for both live channels
                 _buildChannelTile('<i class="fa-brands fa-android"></i>',
                                   'Android', CHANNELS.android_app_url, 'android',
                                   '--good',

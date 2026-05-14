@@ -5,7 +5,19 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v168';
+const CACHE_NAME = 'crisp-v169';
+// v168 → v169 (May 2026 — bottom-portion refresh v2, operator feedback):
+//   1. CTA helper copy: "Always Working. Everywhere."
+//   2. Live channels show "Live" status in glowing green; both green
+//      dots removed (.ct-dot pip + .is-live::after)
+//   3. .home-impact-reports-nearby UN-HIDDEN (legacy declutter rule
+//      at line ~5745 hid the whole .home-impact block)
+//   4. Footer single-row: Privacy · Help · Open source LEFT + device-
+//      ID pill RIGHT (matches operator's mock layout)
+// Touches: index.html (footer restructure), home-screen.js (drop .ct-
+// dot from live tiles, IVR uses live_now), styles.css (v168.1 rules
+// block at top of refresh section), 22 i18n files (home_cta_helper +
+// live_now values updated).
 // v167 → v168 (May 2026 — home bottom-portion refresh per operator
 // screenshot: "verified reports nearby" pulse (static 24 for now),
 // bigger frosted-glass action tiles, bigger channel tiles with

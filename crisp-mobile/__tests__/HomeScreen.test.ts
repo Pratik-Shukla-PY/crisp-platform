@@ -117,10 +117,14 @@ describe('HomeScreen — module shape + i18n contract', () => {
 
   // ── v5 redesign — Phase 1 + 3 i18n contract for new keys ─────────
   describe('v5 home redesign — new key contract', () => {
-    it('home_cta_helper carries an offline-related English string', () => {
+    it('home_cta_helper carries the v168.1 reassurance copy in English', () => {
+      // v168.1 operator update — was "Works offline and syncs
+      // automatically in low connectivity." Replaced with
+      // "Always Working. Everywhere." Match on either "always" or
+      // "everywhere" to survive minor copy tweaks.
       const en = require('../services/i18n/en.json');
       const v = (en.home_cta_helper || '').toLowerCase();
-      expect(v).toContain('offline');
+      expect(v).toMatch(/always|everywhere|offline/);
     });
 
     it('home_reports_nearby carries verification/nearby language in English', () => {

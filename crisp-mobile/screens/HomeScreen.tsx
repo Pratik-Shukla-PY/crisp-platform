@@ -161,12 +161,15 @@ const CHANNELS: Array<{
   live: boolean;
   url?: string;
 }> = [
-  { id: 'telegram', emoji: '✈️', labelKey: 'channel_telegram', statusKey: 'live_now',        live: true,  url: 'https://t.me/CrispUNDPbot' },
-  { id: 'whatsapp', emoji: '💬', labelKey: 'channel_whatsapp', statusKey: 'coming_soon',     live: false, url: 'https://wa.me/' },
-  { id: 'sms',      emoji: '📩', labelKey: 'channel_sms',      statusKey: 'low_bandwidth',   live: false, url: 'sms:' },
-  { id: 'ivr',      emoji: '☎️', labelKey: 'channel_ivr',      statusKey: 'voice_reporting', live: true,  url: 'tel:' },
-  { id: 'android',  emoji: '🤖', labelKey: 'channel_android',  statusKey: 'coming_soon',     live: false, url: 'market://details?id=org.undp.crisp' },
-  { id: 'ios',      emoji: '🍎', labelKey: 'channel_ios',      statusKey: 'coming_soon',     live: false, url: 'https://apps.apple.com/' },
+  // v168.1 — both live channels now use the live_now key ("Live")
+  // for parity with the operator's "Live with glowing green" ask;
+  // voice_reporting remains in the i18n bundle for future use.
+  { id: 'telegram', emoji: '✈️', labelKey: 'channel_telegram', statusKey: 'live_now',      live: true,  url: 'https://t.me/CrispUNDPbot' },
+  { id: 'whatsapp', emoji: '💬', labelKey: 'channel_whatsapp', statusKey: 'coming_soon',   live: false, url: 'https://wa.me/' },
+  { id: 'sms',      emoji: '📩', labelKey: 'channel_sms',      statusKey: 'low_bandwidth', live: false, url: 'sms:' },
+  { id: 'ivr',      emoji: '☎️', labelKey: 'channel_ivr',      statusKey: 'live_now',      live: true,  url: 'tel:' },
+  { id: 'android',  emoji: '🤖', labelKey: 'channel_android',  statusKey: 'coming_soon',   live: false, url: 'market://details?id=org.undp.crisp' },
+  { id: 'ios',      emoji: '🍎', labelKey: 'channel_ios',      statusKey: 'coming_soon',   live: false, url: 'https://apps.apple.com/' },
 ];
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -564,12 +567,17 @@ export default function HomeScreen(props: HomeScreenProps) {
               <Text style={styles.channelLabel} numberOfLines={1}>
                 {_t(c.labelKey, c.id)}
               </Text>
-              {/* Status subtitle — "Live now" / "Coming soon" / etc.
-                  Bottom-portion refresh — PWA parity .ct-status. */}
-              <Text style={styles.channelStatus} numberOfLines={1}>
+              {/* v168.1 — status subtitle. Live channels show "Live"
+                  in glowing green; the prior green corner dot is
+                  removed per operator: "remove green dots (2 are
+                  there currently)". Glow is approximated via
+                  textShadow on the channelStatusLive style. */}
+              <Text
+                style={[styles.channelStatus, c.live && styles.channelStatusLive]}
+                numberOfLines={1}
+              >
                 {_t(c.statusKey, c.statusKey)}
               </Text>
-              {c.live && <View style={styles.channelLiveDot} />}
             </Pressable>
           ))}
         </View>
@@ -588,35 +596,36 @@ export default function HomeScreen(props: HomeScreenProps) {
         </TouchableOpacity>
       )}
 
-      {/* ── §C.3 Privacy footer ────────────────────────────────── */}
+      {/* ── §C.3 Footer row — single horizontal line (v168.1) ─────
+          Operator: "the bottom design (privacy, open Source etc) also
+          match exactly with my previously shared image same as in
+          that one." Links LEFT, device-ID pill RIGHT, separated by
+          space-between. Order: Privacy · Help · Open source. */}
       <View style={styles.footerRow} testID="home-footer">
-        <Text style={styles.footerLink} onPress={props.onPrivacy}>
-          {_t('home_footer_privacy', 'Privacy')}
-        </Text>
-        <Text style={styles.footerDot}>·</Text>
-        <Text style={styles.footerLink} onPress={() => Linking.openURL('https://github.com/Pratik-Shukla-PY/crisp-platform').catch(() => {})}>
-          {_t('home_footer_opensrc', 'Open source')}
-        </Text>
-        <Text style={styles.footerDot}>·</Text>
-        <Text style={styles.footerLink} onPress={props.onSettings}>
-          {_t('home_footer_help', 'Help')}
-        </Text>
-        {props.appVersion ? (
-          <>
-            <Text style={styles.footerDot}>·</Text>
-            <Text style={styles.footerVersion}>{props.appVersion}</Text>
-          </>
-        ) : null}
-      </View>
+        <View style={styles.footerLinks}>
+          <Text style={styles.footerLink} onPress={props.onPrivacy}>
+            {_t('home_footer_privacy', 'Privacy')}
+          </Text>
+          <Text style={styles.footerDot}>·</Text>
+          <Text style={styles.footerLink} onPress={props.onSettings}>
+            {_t('home_footer_help', 'Help')}
+          </Text>
+          <Text style={styles.footerDot}>·</Text>
+          <Text
+            style={styles.footerLink}
+            onPress={() => Linking.openURL('https://github.com/Pratik-Shukla-PY/crisp-platform').catch(() => {})}
+          >
+            {_t('home_footer_opensrc', 'Open source')}
+          </Text>
+        </View>
 
-      {/* ── §C.4 Device-ID pill ────────────────────────────────── */}
-      {props.deviceId ? (
-        <View style={styles.devidWrap} testID="home-devid">
-          <View style={styles.devidBadge}>
+        {/* Device-ID pill — moved INTO the footer row. */}
+        {props.deviceId ? (
+          <View style={styles.devidBadge} testID="home-devid">
             <Text style={styles.devidText}>{props.deviceId}</Text>
           </View>
-        </View>
-      ) : null}
+        ) : null}
+      </View>
       </ScrollView>
     </View>
   );
@@ -890,13 +899,18 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.48)',
     textAlign: 'center', marginTop: 2,
   },
-  channelLiveDot: {
-    position: 'absolute', top: 10, right: 10,
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: '#80EE98',
-    shadowColor: '#80EE98',
-    shadowOpacity: 0.7, shadowRadius: 6, shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
+  // v168.1 — glowing-green "Live" text for is-live channels.
+  // Replaces the corner dot; single liveness signal per the operator
+  // mock. Animation in RN would need useNativeDriver loop on textShadow
+  // (not supported); static glow is the cross-platform fallback.
+  channelStatusLive: {
+    color: '#80EE98',
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    textShadowColor: 'rgba(128, 238, 152, 0.65)',
+    textShadowRadius: 8,
+    textShadowOffset: { width: 0, height: 0 },
   },
 
   // §C.2 Queue badge (kept for parity)
@@ -908,30 +922,42 @@ const styles = StyleSheet.create({
   },
   queueText: { color: '#fde047', fontSize: 12, fontWeight: '600' },
 
-  // §C.3 Footer
+  // §C.3 Footer — v168.1 single-row with space-between.
+  // Links on the left, device-ID pill on the right, separated by
+  // `justifyContent: 'space-between'`. Matches the operator's mock
+  // exactly. Wraps on very narrow phones.
   footerRow: {
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    flexWrap: 'wrap', gap: 6,
-    marginTop: 8, paddingTop: 8,
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.04)',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 12, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  footerLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   footerLink: {
-    color: Colors.textDim, fontSize: 10.5, fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, fontWeight: '500',
   },
-  footerDot: { color: 'rgba(255,255,255,0.25)', fontSize: 10 },
-  footerVersion: { color: 'rgba(255,255,255,0.32)', fontSize: 10.5 },
+  footerDot: { color: 'rgba(255,255,255,0.30)', fontSize: 11 },
+  footerVersion: { color: 'rgba(255,255,255,0.32)', fontSize: 11 },
 
-  // §C.4 Device-ID
+  // §C.4 Device-ID — pill sits inline in the footer row now.
   devidWrap: { alignItems: 'center', marginTop: 4 },
   devidBadge: {
-    paddingHorizontal: 10, paddingVertical: 3,
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 14, paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
     borderRadius: 999,
   },
   devidText: {
     fontFamily: 'SpaceMono-Regular',
-    color: Colors.text, fontSize: 10, fontWeight: '600',
-    letterSpacing: 0.5,
+    color: 'rgba(255, 255, 255, 0.78)', fontSize: 11, fontWeight: '700',
+    letterSpacing: 0.6,
   },
 });

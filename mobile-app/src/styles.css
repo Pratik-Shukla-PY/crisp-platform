@@ -10069,6 +10069,125 @@ body.tier-t4 .home-impact {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   HOME v5 — Bottom-portion refresh v2 (May 2026 — operator feedback round)
+
+   Operator follow-up:
+     1. CTA helper text changed → "Always Working. Everywhere." (i18n)
+     2. Live channels: status text "Live" rendered in glowing green;
+        BOTH green dots removed (the .ct-dot pip + the .is-live::after
+        we added in v168)
+     3. "Verified reports nearby" pulse block was hidden by a stale
+        declutter-pass rule (line ~5745) — override needed to show it
+     4. Footer redesign to match the operator screenshot:
+        Privacy · Help · Open Source on LEFT,
+        CRISP-XXXX-XXXX pill on RIGHT, single row.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── ③ Unhide the pulse block ─────────────────────────────────────────
+   The legacy `.home-stage .home-impact { display: none !important; }`
+   from the May 2026 declutter pass (line ~5745) hides the entire
+   impact block. The bottom-portion refresh repurposes the block for
+   "verified reports nearby" — needs to show. Use `display: flex` to
+   match the new flex-column layout we want inside. */
+.home-stage .home-impact.home-impact-reports-nearby {
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ── ② Live-channel pip removal + glowing-green "Live" status ─────────
+   Both green dots removed: the JS-emitted .ct-dot pip AND the CSS
+   ::after we added in v168. The status text alone signals liveness. */
+.home-stage .home-channel-tile.is-live .ct-dot,
+.home-channel-tile .ct-dot {
+    display: none !important;
+}
+.home-stage .home-channel-tile.is-live::after {
+    display: none !important;
+    content: none !important;
+}
+
+/* "Live" status — glowing green text for the .is-live tiles. */
+.home-stage .home-channel-tile.is-live .ct-status {
+    color: #80EE98;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-shadow:
+        0 0 6px rgba(128, 238, 152, 0.7),
+        0 0 14px rgba(128, 238, 152, 0.35);
+    animation: crisp-live-glow 2.6s ease-in-out infinite;
+}
+@keyframes crisp-live-glow {
+    0%, 100% {
+        text-shadow:
+            0 0 6px rgba(128, 238, 152, 0.7),
+            0 0 14px rgba(128, 238, 152, 0.35);
+    }
+    50% {
+        text-shadow:
+            0 0 10px rgba(128, 238, 152, 0.9),
+            0 0 22px rgba(128, 238, 152, 0.55);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .home-stage .home-channel-tile.is-live .ct-status {
+        animation: none !important;
+    }
+}
+
+/* ── ④ Footer single-row — Privacy · Help · Open Source + devid ───────
+   Wrap .home-utility-footer + .home-devid-footer in a single flex row
+   with `justify-content: space-between`. Links on left, device-ID
+   pill on right. Matches the operator's mock layout exactly. */
+.home-stage .home-section-bottom .home-footer-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding-top: 14px;
+    margin-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    flex-wrap: wrap;
+}
+/* When the footer-row wrapper is present, the inner nav loses its
+   own border + margins (the wrapper owns them now). */
+.home-stage .home-section-bottom .home-footer-row .home-utility-footer {
+    margin: 0;
+    padding: 0;
+    border-top: 0;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+}
+.home-stage .home-section-bottom .home-footer-row .home-devid-footer {
+    margin: 0;
+    padding: 0;
+    /* No more centered column — pill sits inline at the row's end. */
+    flex-direction: row;
+    align-items: center;
+    gap: 0;
+}
+/* Hide the version number from the inline footer per the mock
+   (still kept as a hidden span for legacy refs). */
+.home-stage .home-section-bottom .home-footer-row .home-utility-version,
+.home-stage .home-section-bottom .home-footer-row .home-utility-footer .home-utility-dot:last-of-type {
+    display: none;
+}
+/* Tighten the device-ID pill to match the mock's compact pill. */
+.home-stage .home-section-bottom .home-footer-row .home-devid-badge {
+    padding: 5px 10px 5px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.10);
+}
+.home-stage .home-section-bottom .home-footer-row .home-devid-badge .devid-text {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    HOME v5 — Bottom-portion refresh (May 2026, operator-supplied screenshot)
 
    Operator: "For the Bottom portion, keep our icons and colour theme

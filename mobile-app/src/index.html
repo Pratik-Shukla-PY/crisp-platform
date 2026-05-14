@@ -870,59 +870,60 @@
                 </div>
             </div>
 
-            <!-- Offline footer removed (was redundant; the
-                 Privacy page now carries the offline-first promise as
-                 part of "Why CRISP"). The new utility footer below
-                 replaces it. -->
-            <nav class="home-utility-footer" id="home-utility-footer" aria-label="Footer links">
-                <button class="home-utility-link" id="btn-home-privacy" type="button" data-i18n="home_footer_privacy">Privacy</button>
-                <span class="home-utility-dot" aria-hidden="true">·</span>
-                <a class="home-utility-link" id="btn-home-opensrc"
-                   href="https://github.com/Pratik-Shukla-PY/crisp-platform"
-                   target="_blank" rel="noopener" data-i18n="home_footer_opensrc">Open source</a>
-                <span class="home-utility-dot" aria-hidden="true">·</span>
-                <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
-                <span class="home-utility-dot" aria-hidden="true">·</span>
-                <span class="home-utility-version" id="home-utility-version">v0.7.44</span>
-            </nav>
+            <!-- v168.1 (May 2026, operator feedback) — footer rebuilt
+                 as a SINGLE ROW matching the operator's mock layout
+                 exactly: links on the LEFT, device-ID pill on the
+                 RIGHT, separated by `justify-content: space-between`.
+                 Link order changed to Privacy · Help · Open Source.
+                 Version number kept as a hidden span for legacy refs
+                 (any spec / dashboard query that selects #home-
+                 utility-version still resolves). -->
+            <div class="home-footer-row" id="home-footer-row">
+                <nav class="home-utility-footer" id="home-utility-footer" aria-label="Footer links">
+                    <button class="home-utility-link" id="btn-home-privacy" type="button" data-i18n="home_footer_privacy">Privacy</button>
+                    <span class="home-utility-dot" aria-hidden="true">·</span>
+                    <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
+                    <span class="home-utility-dot" aria-hidden="true">·</span>
+                    <a class="home-utility-link" id="btn-home-opensrc"
+                       href="https://github.com/Pratik-Shukla-PY/crisp-platform"
+                       target="_blank" rel="noopener" data-i18n="home_footer_opensrc">Open source</a>
+                    <span class="home-utility-version" id="home-utility-version" hidden>v0.7.44</span>
+                </nav>
 
-            <!-- Reporter ID block — May 2026 (reward-hero pass).
-                 Operator: "Device Id we can move below privacy row."
-                 Anonymous reporter ID is utility info (find your
-                 reports across devices) — not something that needs
-                 hero placement at the top of the page. Relocated here
-                 just below the privacy/help/version footer where it
-                 reads as quiet metadata rather than primary content.
-                 Same DOM IDs (#home-devid-badge, #home-devid-text,
-                 #btn-home-devid-copy, #btn-home-devid-info,
-                 #home-devid-tip) so the existing wiring in
-                 home-screen.js (_wireDevidBadge + tooltip) keeps
-                 working without any JS change. -->
-            <div class="home-devid-footer" id="home-devid-footer">
-                <div class="home-devid-badge" id="home-devid-badge"
-                     role="group" aria-labelledby="home-devid-label">
-                    <span id="home-devid-label" class="sr-only" data-i18n="home_devid_label">Your reporter ID</span>
-                    <span class="devid-text" id="home-devid-text">CRISP-····-····</span>
-                    <button id="btn-home-devid-copy" type="button"
-                            aria-label="Copy reporter ID"
-                            data-i18n-aria-label="aria_copy_id"
-                            title="Copy">
-                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></i>
-                    </button>
-                    <button id="btn-home-devid-info" type="button"
-                            aria-label="What is this?"
-                            data-i18n-aria-label="aria_what_is_this"
-                            aria-haspopup="true"
-                            aria-expanded="false"
-                            title="What is this?"
-                            data-i18n-title="aria_what_is_this">
-                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></i>
-                    </button>
-                </div>
-                <div class="home-devid-tip" id="home-devid-tip" hidden role="status">
-                    <strong data-i18n="home_devid_tip_title">Save this ID</strong>
-                    <span data-i18n="home_devid_tip_body">Use this to find your reports later, even if you lose the app. Your ID is anonymous — we cannot link it back to you.</span>
-                    <button id="btn-home-devid-tip-dismiss" type="button" data-i18n="home_devid_tip_dismiss">Got it</button>
+                <!-- Reporter ID pill — same DOM IDs (#home-devid-badge,
+                     #home-devid-text, #btn-home-devid-copy, #btn-home-
+                     devid-info, #home-devid-tip) so home-screen.js's
+                     _wireDevidBadge + tooltip wiring continues to work
+                     without any JS change. The wrapping
+                     .home-devid-footer keeps its existing class for
+                     style reuse; the v168.1 CSS adapts it to the
+                     inline row context. -->
+                <div class="home-devid-footer" id="home-devid-footer">
+                    <div class="home-devid-badge" id="home-devid-badge"
+                         role="group" aria-labelledby="home-devid-label">
+                        <span id="home-devid-label" class="sr-only" data-i18n="home_devid_label">Your reporter ID</span>
+                        <span class="devid-text" id="home-devid-text">CRISP-····-····</span>
+                        <button id="btn-home-devid-copy" type="button"
+                                aria-label="Copy reporter ID"
+                                data-i18n-aria-label="aria_copy_id"
+                                title="Copy">
+                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></i>
+                        </button>
+                        <button id="btn-home-devid-info" type="button"
+                                aria-label="What is this?"
+                                data-i18n-aria-label="aria_what_is_this"
+                                aria-haspopup="true"
+                                aria-expanded="false"
+                                title="What is this?"
+                                data-i18n-title="aria_what_is_this">
+                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></i>
+                        </button>
+                    </div>
+                    <div class="home-devid-tip" id="home-devid-tip" hidden role="status">
+                        <strong data-i18n="home_devid_tip_title">Save this ID</strong>
+                        <span data-i18n="home_devid_tip_body">Use this to find your reports later, even if you lose the app. Your ID is anonymous — we cannot link it back to you.</span>
+                        <button id="btn-home-devid-tip-dismiss" type="button" data-i18n="home_devid_tip_dismiss">Got it</button>
+                    </div>
                 </div>
             </div>
 
