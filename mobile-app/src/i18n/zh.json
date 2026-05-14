@@ -777,5 +777,14 @@
   "nearby_summary_generic_minimal": "已上报问题",
   "nearby_summary_generic_partial": "已报告损坏",
   "nearby_summary_generic_complete": "严重损坏",
-  "nearby_summary_unknown": "已上报"
+  "nearby_summary_unknown": "已上报",
+  "nearby_sheet_distance_from_you": "距您 {km}",
+  "nearby_sheet_label_reports": "条报告",
+  "nearby_sheet_label_verified": "已核实 ✓",
+  "nearby_sheet_latest_at": "最新:",
+  "nearby_sheet_earliest_at": "最早:",
+  "nearby_sheet_incidents": "事件",
+  "nearby_sheet_severity": "严重程度",
+  "nearby_sheet_add_report_here": "在此提交您的报告",
+  "nearby_sheet_close": "关闭"
 }

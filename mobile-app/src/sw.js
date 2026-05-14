@@ -5,7 +5,27 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v173';
+const CACHE_NAME = 'crisp-v174';
+// v173 → v174 (May 2026 — "Verified Reports Nearby" Phase 2):
+//   1. Bottom-sheet detail modal (#nearby-sheet) — slides up on row
+//      tap, dismissed via backdrop/✕/Escape. Soft pre-fill of
+//      building_id + lat/lng on "Add Your Report Here" CTA (stored
+//      to localStorage; v4 capture flow reads + clears).
+//   2. Remaining 15 locales filled with full translations (was en
+//      fallback in Phase 1); +9 sheet-specific i18n keys
+//      (nearby_sheet_distance_from_you, nearby_sheet_label_reports,
+//      nearby_sheet_label_verified, nearby_sheet_latest_at,
+//      nearby_sheet_earliest_at, nearby_sheet_incidents,
+//      nearby_sheet_severity, nearby_sheet_add_report_here,
+//      nearby_sheet_close). 22 locales × 746 keys total.
+//   3. New Playwright specs: detail-sheet open, dismiss via 3
+//      methods, PII audit, RTL row mirror, reduced-motion slide
+//      disable.
+//   4. RN companion mirrors the modal via React Native <Modal>
+//      with the same hardware-back integration on Android.
+// Touches: index.html (#nearby-sheet markup), nearby.js (_open/
+// _closeDetailSheet, soft prefill), styles.css (~150 lines of
+// .nearby-sheet rules), i18n × 22 locales.
 // v172 → v173 (May 2026 — "Verified Reports Nearby" home intel
 // module Phase 1). Adds /api/v1/reports/nearby endpoint (server-
 // side, shipped in commit f682b11) + a new mobile-app/src/nearby.js

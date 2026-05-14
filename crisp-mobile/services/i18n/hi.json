@@ -779,5 +779,14 @@
   "nearby_summary_generic_minimal": "समस्या दर्ज",
   "nearby_summary_generic_partial": "क्षति दर्ज",
   "nearby_summary_generic_complete": "बड़ी क्षति",
-  "nearby_summary_unknown": "रिपोर्ट दर्ज"
+  "nearby_summary_unknown": "रिपोर्ट दर्ज",
+  "nearby_sheet_distance_from_you": "आपसे {km}",
+  "nearby_sheet_label_reports": "रिपोर्ट",
+  "nearby_sheet_label_verified": "सत्यापित ✓",
+  "nearby_sheet_latest_at": "नवीनतम:",
+  "nearby_sheet_earliest_at": "सबसे पहले:",
+  "nearby_sheet_incidents": "घटनाएं",
+  "nearby_sheet_severity": "गंभीरता",
+  "nearby_sheet_add_report_here": "अपनी रिपोर्ट यहां जोड़ें",
+  "nearby_sheet_close": "बंद करें"
 }

@@ -174,4 +174,92 @@ test.describe('PWA — "Verified Reports Nearby" intel module', () => {
         expect(detail).toBeTruthy();
         expect(typeof detail.groupId).toBe('string');
     });
+
+    // ── Phase 2 — bottom-sheet detail modal ──────────────────────
+
+    test('row tap opens the bottom-sheet detail modal', async ({ page }) => {
+        await bootHome(page, FIXTURE_PAYLOAD);
+        await page.locator('.home-nearby-row').first().click();
+        const sheet = page.locator('#nearby-sheet');
+        await expect(sheet).toBeVisible();
+        // Title binds to the group label
+        const title = await sheet.locator('#nearby-sheet-label').textContent();
+        expect((title || '').toLowerCase()).toContain('green valley');
+        // Count + verified tiles populated
+        expect(await sheet.locator('#nearby-sheet-count').textContent()).toBe('12');
+        expect(await sheet.locator('#nearby-sheet-verified').textContent()).toBe('8');
+        // CTA button present
+        await expect(sheet.locator('#nearby-sheet-cta')).toBeVisible();
+    });
+
+    test('detail sheet dismisses via close button + backdrop + Escape', async ({ page }) => {
+        await bootHome(page, FIXTURE_PAYLOAD);
+        const sheet = page.locator('#nearby-sheet');
+
+        // Open via row, close via ✕
+        await page.locator('.home-nearby-row').first().click();
+        await expect(sheet).toBeVisible();
+        await page.locator('#nearby-sheet-close').click();
+        await page.waitForTimeout(300);    // wait for transition
+        await expect(sheet).toBeHidden();
+
+        // Open again, close via backdrop click
+        await page.locator('.home-nearby-row').first().click();
+        await expect(sheet).toBeVisible();
+        await page.locator('#nearby-sheet-backdrop').click();
+        await page.waitForTimeout(300);
+        await expect(sheet).toBeHidden();
+
+        // Open again, close via Escape
+        await page.locator('.home-nearby-row').first().click();
+        await expect(sheet).toBeVisible();
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+        await expect(sheet).toBeHidden();
+    });
+
+    test('detail sheet body contains no PII tokens', async ({ page }) => {
+        // Privacy invariant — the sheet must not surface device_id /
+        // user_id / description / per-report ids. Project this here
+        // (the backend already does at the schema; this guards the
+        // client never adding back).
+        await bootHome(page, FIXTURE_PAYLOAD);
+        await page.locator('.home-nearby-row').first().click();
+        const sheet = page.locator('#nearby-sheet');
+        await expect(sheet).toBeVisible();
+        const sheetText = (await sheet.textContent() || '').toLowerCase();
+        const FORBIDDEN = ['device_id', 'user_id', 'reporter_badge', 'reviewer_verdict'];
+        for (const tok of FORBIDDEN) {
+            expect(sheetText.includes(tok), `Privacy leak: '${tok}' in sheet`).toBe(false);
+        }
+    });
+
+    test('RTL — module mirrors row layout under dir="rtl"', async ({ page }) => {
+        await bootHome(page, FIXTURE_PAYLOAD);
+        // Force RTL via the html dir attribute (Arabic locales do
+        // this on lang switch; we apply it directly here).
+        await page.evaluate(() => document.documentElement.setAttribute('dir', 'rtl'));
+        const row1 = page.locator('.home-nearby-row').first();
+        await expect(row1).toBeVisible();
+        const flexDir = await row1.evaluate((el) =>
+            getComputedStyle(el as HTMLElement).flexDirection,
+        );
+        expect(flexDir).toBe('row-reverse');
+    });
+
+    test('reduced-motion — sheet slide animation is disabled', async ({ page, context }) => {
+        await context.emulateMedia({ reducedMotion: 'reduce' });
+        await bootHome(page, FIXTURE_PAYLOAD);
+        await page.locator('.home-nearby-row').first().click();
+        const sheet = page.locator('#nearby-sheet');
+        await expect(sheet).toBeVisible();
+        // Card transition-duration should be reduced/none in
+        // reduced-motion mode.
+        const cardTransition = await sheet.locator('.nearby-sheet-card').evaluate((el) =>
+            getComputedStyle(el as HTMLElement).transitionDuration,
+        );
+        // Browser may report "0s" or "none" or "0s, 0s" depending on
+        // engine. Accept any zero-ish form.
+        expect(cardTransition).toMatch(/^0(s|ms)?$|^none$|^0(\.0)?s$/);
+    });
 });

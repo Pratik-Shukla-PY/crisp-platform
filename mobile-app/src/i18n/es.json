@@ -788,5 +788,14 @@
   "nearby_summary_generic_minimal": "Problema reportado",
   "nearby_summary_generic_partial": "Daño reportado",
   "nearby_summary_generic_complete": "Daño grave",
-  "nearby_summary_unknown": "Informe presentado"
+  "nearby_summary_unknown": "Informe presentado",
+  "nearby_sheet_distance_from_you": "{km} de ti",
+  "nearby_sheet_label_reports": "informes",
+  "nearby_sheet_label_verified": "verificado ✓",
+  "nearby_sheet_latest_at": "Último:",
+  "nearby_sheet_earliest_at": "Primero:",
+  "nearby_sheet_incidents": "INCIDENTES",
+  "nearby_sheet_severity": "GRAVEDAD",
+  "nearby_sheet_add_report_here": "Añadir tu informe aquí",
+  "nearby_sheet_close": "Cerrar"
 }

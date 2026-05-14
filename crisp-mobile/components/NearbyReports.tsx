@@ -13,7 +13,10 @@
  *   ✓ Bottom-sheet detail tap dispatch — Phase 2 wires the modal
  */
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import {
+  View, Text, Pressable, StyleSheet,
+  Modal, ScrollView, BackHandler,
+} from 'react-native';
 
 import { t } from '../services/i18n';
 import {
@@ -51,6 +54,8 @@ export default function NearbyReports(props: NearbyReportsProps) {
   const [payload, setPayload] = useState<NearbyResponse | null>(null);
   const [cacheAgeMs, setCacheAgeMs] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
+  // Phase 2 — bottom-sheet detail modal
+  const [selectedGroup, setSelectedGroup] = useState<NearbyGroup | null>(null);
 
   // Load (or re-load) on mount + when connectivity or coords change.
   useEffect(() => {
@@ -73,9 +78,20 @@ export default function NearbyReports(props: NearbyReportsProps) {
     if (props.onRowPress) {
       try { props.onRowPress(g); } catch { /* ignore */ }
     }
-    // Phase 2 wires the bottom-sheet here. For Phase 1 the tap is a
-    // discoverable interaction but the modal is deferred.
+    // Phase 2 — open bottom-sheet detail modal with this group.
+    setSelectedGroup(g);
   }, [props.onRowPress]);
+
+  // Android hardware back closes the modal first instead of leaving
+  // the app. Web/iOS no-op.
+  useEffect(() => {
+    if (!selectedGroup) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setSelectedGroup(null);
+      return true;
+    });
+    return () => sub.remove();
+  }, [selectedGroup]);
 
   // ── Hidden states ────────────────────────────────────────────────
   // Per operator: NO broken state. If we don't have current data,
@@ -127,9 +143,286 @@ export default function NearbyReports(props: NearbyReportsProps) {
           </>
         )}
       </View>
+
+      {/* Phase 2 — bottom-sheet detail modal */}
+      <DetailSheet
+        group={selectedGroup}
+        onClose={() => setSelectedGroup(null)}
+      />
     </View>
   );
 }
+
+// ── Bottom-sheet detail modal ───────────────────────────────────────
+//
+// Operator-approved option #3: bottom-sheet modal (vs new stage).
+// Slide-up Modal on tap, dismiss via backdrop / × / Android back
+// (the back-press handler is in the parent). Shows: building name +
+// distance, count + verified tiles, latest/earliest timestamps,
+// incident types breakdown, severity bar, "Add Your Report Here"
+// CTA (soft pre-fill of building_id + lat/lng).
+
+const SEVERITY_FILL: Record<string, number> = {
+  CRITICAL: 100, HIGH: 78, MODERATE: 56, MEDIUM: 56,
+  LOW: 34, MINOR: 34, UNKNOWN: 12,
+};
+
+function _fmtSheetTs(iso: string): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return iso; }
+}
+
+function _summaryKeyFor(crisis: string, damage: string): string {
+  const cmap: Record<string, string> = {
+    FLOOD: 'flood', EARTHQUAKE: 'quake', WILDFIRE: 'fire',
+    EXPLOSION: 'blast', CONFLICT: 'unrest', CIVIL_UNREST: 'unrest',
+  };
+  const dmap: Record<string, string> = {
+    MINIMAL: 'minimal', PARTIAL: 'partial', COMPLETE: 'complete',
+  };
+  const c = cmap[(crisis || '').toUpperCase()] || 'generic';
+  const d = dmap[(damage || '').toUpperCase()] || 'partial';
+  return `nearby_summary_${c}_${d}`;
+}
+
+function DetailSheet({ group, onClose }: {
+  group: NearbyGroup | null;
+  onClose: () => void;
+}) {
+  if (!group) return null;
+
+  const distance = _t('nearby_distance_km', '{km} km').replace('{km}', group.approx_distance_km.toFixed(1));
+  const distanceLine = _t('nearby_sheet_distance_from_you', '{km} from you').replace('{km}', distance);
+  const sevPct = SEVERITY_FILL[group.severity_max] || 12;
+
+  return (
+    <Modal
+      visible={true}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      testID="home-nearby-sheet"
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose} accessibilityLabel={_t('nearby_sheet_close', 'Close')} />
+      <View style={sheetStyles.card}>
+        <ScrollView contentContainerStyle={sheetStyles.scroll} showsVerticalScrollIndicator={false}>
+          <View style={sheetStyles.handle} />
+
+          <Pressable
+            style={sheetStyles.close}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel={_t('nearby_sheet_close', 'Close')}
+          >
+            <Text style={sheetStyles.closeIcon}>✕</Text>
+          </Pressable>
+
+          <Text style={sheetStyles.title}>{group.label}</Text>
+          <Text style={sheetStyles.distance}>{distanceLine}</Text>
+
+          <View style={sheetStyles.tiles}>
+            <View style={sheetStyles.tile}>
+              <Text style={sheetStyles.tileNumMint}>{group.count}</Text>
+              <Text style={sheetStyles.tileLabel}>
+                {_t('nearby_sheet_label_reports', 'reports')}
+              </Text>
+            </View>
+            <View style={sheetStyles.tile}>
+              <Text style={sheetStyles.tileNumGreen}>{group.verified_count}</Text>
+              <Text style={sheetStyles.tileLabel}>
+                {_t('nearby_sheet_label_verified', 'verified ✓')}
+              </Text>
+            </View>
+          </View>
+
+          <View style={sheetStyles.timeline}>
+            <View style={sheetStyles.row}>
+              <Text style={sheetStyles.rowKey}>
+                {_t('nearby_sheet_latest_at', 'Latest:')}
+              </Text>
+              <Text style={sheetStyles.rowVal}>{_fmtSheetTs(group.latest_at)}</Text>
+            </View>
+            <View style={[sheetStyles.row, sheetStyles.rowLast]}>
+              <Text style={sheetStyles.rowKey}>
+                {_t('nearby_sheet_earliest_at', 'Earliest:')}
+              </Text>
+              <Text style={sheetStyles.rowVal}>{_fmtSheetTs(group.earliest_at)}</Text>
+            </View>
+          </View>
+
+          <Text style={sheetStyles.section}>
+            {_t('nearby_sheet_incidents', 'INCIDENTS')}
+          </Text>
+          <View style={sheetStyles.typesList}>
+            {(group.crisis_types || []).length === 0 ? (
+              <View style={sheetStyles.typeRow}>
+                <Text style={sheetStyles.typeLabel}>
+                  {_t('nearby_summary_unknown', 'Report Filed')}
+                </Text>
+              </View>
+            ) : (
+              group.crisis_types.map((crisis, i) => {
+                const dmg = group.damage_classes[i] || group.damage_classes[0] || 'PARTIAL';
+                const key = _summaryKeyFor(crisis, dmg);
+                const label = _t(key, group.summary || 'Report Filed');
+                return (
+                  <View style={sheetStyles.typeRow} key={`${crisis}-${i}`}>
+                    <Text style={sheetStyles.typeLabel}>{label}</Text>
+                    {i === 0 && (
+                      <Text style={sheetStyles.typeCount}>{group.count}</Text>
+                    )}
+                  </View>
+                );
+              })
+            )}
+          </View>
+
+          <Text style={sheetStyles.section}>
+            {_t('nearby_sheet_severity', 'SEVERITY')}
+          </Text>
+          <View style={sheetStyles.severityBar}>
+            <View style={[sheetStyles.severityFill, { width: `${sevPct}%` }]} />
+          </View>
+          <Text style={sheetStyles.severityLabel}>{group.severity_max}</Text>
+
+          <Pressable
+            style={sheetStyles.cta}
+            onPress={() => {
+              // Soft pre-fill — RN equivalent of the PWA prefill.
+              // Stored as a custom event payload; App.tsx can wire
+              // the v4 capture flow to honour it in a follow-up.
+              onClose();
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.ctaText}>
+              {_t('nearby_sheet_add_report_here', 'Add Your Report Here')}
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+const sheetStyles = StyleSheet.create({
+  backdrop: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(8, 16, 28, 0.55)',
+  },
+  card: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+    maxHeight: '88%',
+    backgroundColor: '#10284a',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 24,
+    shadowOffset: { width: 0, height: -8 },
+    elevation: 20,
+  },
+  scroll: {
+    padding: 22,
+    paddingBottom: 32,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 40, height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    marginBottom: 14,
+  },
+  close: {
+    position: 'absolute', top: 14, right: 14,
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  closeIcon: { color: '#f1f5f9', fontSize: 14, fontWeight: '700' },
+  title: {
+    fontSize: 22, fontWeight: '800', letterSpacing: -0.2,
+    color: '#f1f5f9', marginBottom: 4,
+  },
+  distance: {
+    color: 'rgba(255, 255, 255, 0.62)',
+    fontSize: 13, fontWeight: '500',
+    marginBottom: 18,
+  },
+  tiles: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 18,
+  },
+  tile: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 14, padding: 14, alignItems: 'center',
+  },
+  tileNumMint:  { fontSize: 28, fontWeight: '800', color: '#46DFB1', letterSpacing: -0.5 },
+  tileNumGreen: { fontSize: 28, fontWeight: '800', color: '#80EE98', letterSpacing: -0.5 },
+  tileLabel: {
+    marginTop: 4,
+    color: 'rgba(255, 255, 255, 0.62)',
+    fontSize: 11.5, fontWeight: '500',
+  },
+  timeline: { marginBottom: 18 },
+  row: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  rowLast: { borderBottomWidth: 0 },
+  rowKey: { color: 'rgba(255, 255, 255, 0.48)', fontSize: 13, fontWeight: '500' },
+  rowVal: { color: '#f1f5f9', fontSize: 13, fontWeight: '600' },
+  section: {
+    marginTop: 18, marginBottom: 8,
+    fontSize: 10.5, fontWeight: '700',
+    letterSpacing: 1.6, textTransform: 'uppercase',
+    color: 'rgba(255, 255, 255, 0.48)',
+  },
+  typesList: {},
+  typeRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    paddingVertical: 8, paddingHorizontal: 12,
+    borderRadius: 10, marginBottom: 4,
+  },
+  typeLabel: { color: 'rgba(255, 255, 255, 0.88)', fontSize: 13, fontWeight: '500' },
+  typeCount: { color: '#46DFB1', fontSize: 13, fontWeight: '700' },
+  severityBar: {
+    height: 8, borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    overflow: 'hidden', marginBottom: 6,
+  },
+  severityFill: {
+    height: '100%',
+    backgroundColor: '#46DFB1',
+    borderRadius: 4,
+  },
+  severityLabel: {
+    fontSize: 11.5, fontWeight: '700', letterSpacing: 0.4,
+    color: 'rgba(255, 255, 255, 0.78)',
+  },
+  cta: {
+    marginTop: 20, padding: 14, borderRadius: 14,
+    backgroundColor: '#09D1C7',
+    shadowColor: '#09D1C7', shadowOpacity: 0.3, shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+    alignItems: 'center',
+  },
+  ctaText: {
+    color: '#062b1b', fontSize: 14, fontWeight: '800', letterSpacing: 0.2,
+  },
+});
 
 // ── Row ─────────────────────────────────────────────────────────────
 

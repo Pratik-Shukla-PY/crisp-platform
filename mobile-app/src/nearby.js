@@ -356,10 +356,193 @@
         root.hidden = false;
     }
 
+    // ── Detail sheet (Phase 2) ───────────────────────────────────────
+    //
+    // Listens for `crisp:nearby-row-click` (dispatched in `_buildRow`)
+    // and renders a bottom-sheet modal with the group's full detail.
+    // Dismiss handlers: backdrop tap, Escape key, ✕ button.
+    //
+    // PRIVACY: the event detail carries the SAME projection the API
+    // returned — no extra fetch, no PII. The sheet just re-presents
+    // it.
+
+    const _SEVERITY_FILL = {
+        CRITICAL: 100, HIGH: 78, MODERATE: 56, MEDIUM: 56,
+        LOW: 34, MINOR: 34, UNKNOWN: 12,
+    };
+
+    function _formatSheetTimestamp(iso) {
+        if (!iso) return '';
+        try {
+            const d = new Date(iso);
+            return d.toLocaleString(undefined, {
+                month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+            });
+        } catch { return iso; }
+    }
+
+    function _closeSheet() {
+        const sheet = document.getElementById('nearby-sheet');
+        if (!sheet) return;
+        sheet.classList.remove('is-open');
+        // 240 ms slide-out, then hide
+        setTimeout(() => { sheet.hidden = true; }, 240);
+        document.body.style.overflow = '';
+    }
+
+    function _openDetailSheet(group) {
+        const sheet = document.getElementById('nearby-sheet');
+        if (!sheet || !group) return;
+
+        // Build the title + distance + tiles
+        const titleEl = sheet.querySelector('#nearby-sheet-label');
+        if (titleEl) titleEl.textContent = group.label || '';
+        const distEl = sheet.querySelector('#nearby-sheet-distance');
+        if (distEl) {
+            const kmTxt = _t('nearby_distance_km', '{km} km')
+                .replace('{km}', (group.approx_distance_km ?? 0).toFixed(1));
+            distEl.textContent = _t('nearby_sheet_distance_from_you', '{km} from you')
+                .replace('{km}', kmTxt);
+        }
+        const countEl = sheet.querySelector('#nearby-sheet-count');
+        if (countEl) countEl.textContent = String(group.count ?? 0);
+        const vEl = sheet.querySelector('#nearby-sheet-verified');
+        if (vEl) vEl.textContent = String(group.verified_count ?? 0);
+
+        const latestEl = sheet.querySelector('#nearby-sheet-latest');
+        if (latestEl) latestEl.textContent = _formatSheetTimestamp(group.latest_at);
+        const earliestEl = sheet.querySelector('#nearby-sheet-earliest');
+        if (earliestEl) earliestEl.textContent = _formatSheetTimestamp(group.earliest_at);
+
+        // Incident types breakdown — top crisis_types with counts
+        // from damage_classes. The endpoint returns these as arrays
+        // sorted by frequency; we don't have per-type counts here,
+        // so render as a small list of "Crisis × Damage" combos.
+        const typesEl = sheet.querySelector('#nearby-sheet-types');
+        if (typesEl) {
+            typesEl.innerHTML = '';
+            const crisisList = group.crisis_types || [];
+            const damageList = group.damage_classes || [];
+            const total = group.count || 0;
+            // Use crisis_types as the primary key — show each as a row.
+            if (crisisList.length === 0) {
+                const li = document.createElement('li');
+                li.className = 'nearby-sheet-type-row';
+                li.textContent = _t('nearby_summary_unknown', 'Report Filed');
+                typesEl.appendChild(li);
+            } else {
+                crisisList.forEach((crisis, i) => {
+                    const dmg = damageList[i] || damageList[0] || 'PARTIAL';
+                    const key = `nearby_summary_${_summaryKeyFor(crisis, dmg)}`;
+                    const label = _t(key, group.summary || 'Report Filed');
+                    const li = document.createElement('li');
+                    li.className = 'nearby-sheet-type-row';
+                    // count approx proportional to position; we don't
+                    // have precise per-type counts so show total only
+                    // on the first row to avoid lying.
+                    const countStr = (i === 0) ? ` <span class="nearby-sheet-type-count">${total}</span>` : '';
+                    li.innerHTML = `<span class="nearby-sheet-type-label">${_esc(label)}</span>${countStr}`;
+                    typesEl.appendChild(li);
+                });
+            }
+        }
+
+        // Severity bar
+        const fillEl = sheet.querySelector('#nearby-sheet-severity-fill');
+        const labelEl = sheet.querySelector('#nearby-sheet-severity-label');
+        const sev = group.severity_max || 'UNKNOWN';
+        if (fillEl) fillEl.style.width = `${_SEVERITY_FILL[sev] || 12}%`;
+        if (labelEl) labelEl.textContent = sev;
+
+        // Soft pre-fill for "Add Your Report Here" — operator-approved
+        // option #7: pre-fill only building_id + lat/lng. Store in
+        // localStorage; v4-flow.js reads + clears on stage-v4-capture
+        // entry. (v4-flow.js wiring lands in a separate commit; for
+        // this phase the prefill is set + the user navigates manually.)
+        const ctaEl = sheet.querySelector('#nearby-sheet-cta');
+        if (ctaEl) {
+            ctaEl.onclick = () => {
+                try {
+                    const prefill = {
+                        building_id: group.id && group.id.startsWith('g_building_')
+                            ? group.id.slice('g_building_'.length)
+                            : null,
+                        lat: group.centroid_lat,
+                        lng: group.centroid_lng,
+                        ts: Date.now(),
+                    };
+                    localStorage.setItem('crisp_nearby_prefill', JSON.stringify(prefill));
+                } catch { /* ignore */ }
+                _closeSheet();
+                try {
+                    // Use the existing primary CTA so the consent
+                    // gate still fires + the same handler runs.
+                    const start = document.getElementById('btn-start');
+                    if (start && typeof start.click === 'function') start.click();
+                } catch { /* ignore */ }
+            };
+        }
+
+        // Apply i18n on any data-i18n attribute inside the sheet so
+        // a locale switch since boot is reflected.
+        try { if (typeof window.applyI18n === 'function') window.applyI18n(); } catch (_) {}
+
+        sheet.hidden = false;
+        // Force a reflow so the slide-up animation fires reliably
+        // (browsers batch class additions otherwise).
+        void sheet.offsetWidth;
+        sheet.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+
+        // Focus management — move keyboard focus to the close button
+        // so Escape works + screen reader announces the modal.
+        const close = sheet.querySelector('#nearby-sheet-close');
+        if (close && typeof close.focus === 'function') {
+            try { close.focus(); } catch (_) {}
+        }
+    }
+
+    /** Lookup helper — maps backend CrisisType + DamageClass to the
+     *  i18n key suffix we use in `_SUMMARY_MATRIX` server-side. */
+    function _summaryKeyFor(crisis, damage) {
+        const cmap = {
+            FLOOD: 'flood', EARTHQUAKE: 'quake', WILDFIRE: 'fire',
+            EXPLOSION: 'blast', CONFLICT: 'unrest', CIVIL_UNREST: 'unrest',
+        };
+        const dmap = {
+            MINIMAL: 'minimal', PARTIAL: 'partial', COMPLETE: 'complete',
+        };
+        const c = cmap[(crisis || '').toUpperCase()] || 'generic';
+        const d = dmap[(damage || '').toUpperCase()] || 'partial';
+        return `${c}_${d}`;
+    }
+
+    // Wire dismissal once on script load.
+    document.addEventListener('DOMContentLoaded', () => {
+        const sheet = document.getElementById('nearby-sheet');
+        if (!sheet) return;
+        const close = sheet.querySelector('#nearby-sheet-close');
+        const backdrop = sheet.querySelector('#nearby-sheet-backdrop');
+        if (close) close.addEventListener('click', _closeSheet);
+        if (backdrop) backdrop.addEventListener('click', _closeSheet);
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !sheet.hidden) _closeSheet();
+        });
+    });
+
+    // Listen for the tap event from `_buildRow`.
+    window.addEventListener('crisp:nearby-row-click', (e) => {
+        try { _openDetailSheet(e && e.detail && e.detail.group); }
+        catch (err) { /* never crash the home page from sheet errors */ }
+    });
+
     // ── Public API ───────────────────────────────────────────────────
 
     window.NearbyIntel = {
         boot,
+        openDetailSheet: _openDetailSheet,
+        closeDetailSheet: _closeSheet,
         // Exposed for unit-test injection if needed.
         _round3,
         _humanizeAgo,

@@ -742,5 +742,14 @@
   "nearby_summary_generic_minimal": "Issue Reported",
   "nearby_summary_generic_partial": "Damage Reported",
   "nearby_summary_generic_complete": "Major Damage",
-  "nearby_summary_unknown": "Report Filed"
+  "nearby_summary_unknown": "Report Filed",
+  "nearby_sheet_distance_from_you": "{km} from you",
+  "nearby_sheet_label_reports": "reports",
+  "nearby_sheet_label_verified": "verified ✓",
+  "nearby_sheet_latest_at": "Latest:",
+  "nearby_sheet_earliest_at": "Earliest:",
+  "nearby_sheet_incidents": "INCIDENTS",
+  "nearby_sheet_severity": "SEVERITY",
+  "nearby_sheet_add_report_here": "Add Your Report Here",
+  "nearby_sheet_close": "Close"
 }

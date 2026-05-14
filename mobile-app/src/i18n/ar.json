@@ -777,5 +777,14 @@
   "nearby_summary_generic_minimal": "بلاغ مسجل",
   "nearby_summary_generic_partial": "أضرار مسجلة",
   "nearby_summary_generic_complete": "أضرار كبيرة",
-  "nearby_summary_unknown": "تم تقديم البلاغ"
+  "nearby_summary_unknown": "تم تقديم البلاغ",
+  "nearby_sheet_distance_from_you": "{km} منك",
+  "nearby_sheet_label_reports": "تقارير",
+  "nearby_sheet_label_verified": "موثقة ✓",
+  "nearby_sheet_latest_at": "الأحدث:",
+  "nearby_sheet_earliest_at": "الأقدم:",
+  "nearby_sheet_incidents": "الحوادث",
+  "nearby_sheet_severity": "الخطورة",
+  "nearby_sheet_add_report_here": "أضف بلاغك هنا",
+  "nearby_sheet_close": "إغلاق"
 }

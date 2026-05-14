@@ -802,5 +802,14 @@
   "nearby_summary_generic_minimal": "Problème signalé",
   "nearby_summary_generic_partial": "Dégâts signalés",
   "nearby_summary_generic_complete": "Dégâts majeurs",
-  "nearby_summary_unknown": "Signalement déposé"
+  "nearby_summary_unknown": "Signalement déposé",
+  "nearby_sheet_distance_from_you": "{km} de vous",
+  "nearby_sheet_label_reports": "signalements",
+  "nearby_sheet_label_verified": "vérifié ✓",
+  "nearby_sheet_latest_at": "Dernier :",
+  "nearby_sheet_earliest_at": "Premier :",
+  "nearby_sheet_incidents": "INCIDENTS",
+  "nearby_sheet_severity": "GRAVITÉ",
+  "nearby_sheet_add_report_here": "Ajouter votre signalement ici",
+  "nearby_sheet_close": "Fermer"
 }

@@ -779,5 +779,14 @@
   "nearby_summary_generic_minimal": "Сообщено о проблеме",
   "nearby_summary_generic_partial": "Сообщено о повреждении",
   "nearby_summary_generic_complete": "Серьёзные повреждения",
-  "nearby_summary_unknown": "Подано сообщение"
+  "nearby_summary_unknown": "Подано сообщение",
+  "nearby_sheet_distance_from_you": "{km} от вас",
+  "nearby_sheet_label_reports": "сообщений",
+  "nearby_sheet_label_verified": "проверено ✓",
+  "nearby_sheet_latest_at": "Последнее:",
+  "nearby_sheet_earliest_at": "Первое:",
+  "nearby_sheet_incidents": "ИНЦИДЕНТЫ",
+  "nearby_sheet_severity": "СЕРЬЁЗНОСТЬ",
+  "nearby_sheet_add_report_here": "Добавить ваше сообщение",
+  "nearby_sheet_close": "Закрыть"
 }

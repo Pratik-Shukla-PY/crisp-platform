@@ -11015,3 +11015,251 @@ body { background-color: #10284a; }
 [dir="rtl"] .home-stage .home-nearby-row-body {
     text-align: right;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   "Verified Reports Nearby" detail bottom-sheet — Phase 2 (May 2026)
+
+   Operator-approved option #3: bottom-sheet modal (vs new stage).
+   Faster dismiss, no breadcrumb, doesn't interrupt the reporting
+   flow. Slides up from the bottom on tap, dismissed via backdrop /
+   ✕ / Escape.
+
+   Scope: lives outside .home-stage in the DOM (under stage-home end)
+   so it overlays the WHOLE viewport. CSS is scoped to .nearby-sheet
+   so no bleed.
+
+   A11y: role="dialog" + aria-modal="true" + focus management on
+   open (close button receives focus). Reduced-motion users get an
+   instant fade — no slide animation.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.nearby-sheet {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    pointer-events: none;
+}
+.nearby-sheet[hidden] { display: none !important; }
+
+.nearby-sheet-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(8, 16, 28, 0.55);
+    opacity: 0;
+    transition: opacity 0.24s ease;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+}
+.nearby-sheet.is-open .nearby-sheet-backdrop { opacity: 1; }
+
+.nearby-sheet-card {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    max-height: 88vh;
+    overflow-y: auto;
+    background: linear-gradient(180deg, #1a3552 0%, #10284a 100%);
+    border-top-left-radius: 22px;
+    border-top-right-radius: 22px;
+    padding: 24px 22px 28px;
+    padding-bottom: max(28px, env(safe-area-inset-bottom, 0px));
+    color: var(--text, #f1f5f9);
+    box-shadow: 0 -24px 60px rgba(0, 0, 0, 0.4);
+    pointer-events: auto;
+    transform: translateY(100%);
+    transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.nearby-sheet.is-open .nearby-sheet-card {
+    transform: translateY(0);
+}
+
+/* Reduced motion — fade only, no slide. */
+@media (prefers-reduced-motion: reduce) {
+    .nearby-sheet-card {
+        transition: none !important;
+        transform: translateY(0);
+    }
+    .nearby-sheet-backdrop {
+        transition: none !important;
+    }
+}
+
+.nearby-sheet-handle {
+    width: 40px; height: 4px;
+    margin: -10px auto 14px;
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 2px;
+}
+.nearby-sheet-close {
+    position: absolute;
+    top: 14px; right: 14px;
+    width: 32px; height: 32px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text, #f1f5f9);
+    border: 0;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s ease;
+}
+.nearby-sheet-close:hover,
+.nearby-sheet-close:focus-visible {
+    background: rgba(255, 255, 255, 0.16);
+}
+[dir="rtl"] .nearby-sheet-close { right: auto; left: 14px; }
+
+.nearby-sheet-title {
+    margin: 4px 0 4px;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--text, #f1f5f9);
+}
+.nearby-sheet-distance {
+    margin: 0 0 18px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.nearby-sheet-tiles {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+.nearby-sheet-tile {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 14px;
+    text-align: center;
+}
+.nearby-sheet-tile-num {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-size: 28px;
+    font-weight: 800;
+    color: #46DFB1;
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+.nearby-sheet-tile:nth-child(2) .nearby-sheet-tile-num {
+    color: #80EE98;
+}
+.nearby-sheet-tile-label {
+    margin-top: 4px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 11.5px;
+    font-weight: 500;
+}
+
+.nearby-sheet-timeline {
+    margin-bottom: 18px;
+}
+.nearby-sheet-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 8px 0;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+    font-size: 13px;
+}
+.nearby-sheet-row:last-child { border-bottom: 0; }
+.nearby-sheet-row > span:first-child {
+    color: rgba(255, 255, 255, 0.48);
+    font-weight: 500;
+}
+.nearby-sheet-row > span:last-child {
+    color: var(--text, #f1f5f9);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.nearby-sheet-section {
+    margin: 18px 0 8px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.48);
+}
+
+.nearby-sheet-types {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.nearby-sheet-type-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
+    margin-bottom: 4px;
+    font-size: 13px;
+}
+.nearby-sheet-type-label {
+    color: rgba(255, 255, 255, 0.88);
+    font-weight: 500;
+}
+.nearby-sheet-type-count {
+    color: var(--blue, #46DFB1);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.nearby-sheet-severity {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.nearby-sheet-severity-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.nearby-sheet-severity-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #46DFB1 0%, #80EE98 100%);
+    transition: width 0.36s ease;
+    border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .nearby-sheet-severity-fill { transition: none !important; }
+}
+.nearby-sheet-severity-label {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.nearby-sheet-cta {
+    margin-top: 20px;
+    width: 100%;
+    padding: 14px 20px;
+    border: 0;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #46DFB1 0%, #09D1C7 100%);
+    color: #062b1b;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    box-shadow: 0 8px 22px rgba(9, 209, 199, 0.28);
+    transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+.nearby-sheet-cta:hover,
+.nearby-sheet-cta:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(9, 209, 199, 0.36);
+}
+.nearby-sheet-cta:active { transform: translateY(0); }
