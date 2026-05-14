@@ -4233,6 +4233,14 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* May 2026 (declutter pass v2) — hide the "Crisis Reporter" tagline
+   on the home stage. The brand wordmark + the primary CTA "Report an
+   Incident" already convey what the app is; the tagline added a
+   second-line of text under "CRISP" that competed with the rest of
+   the identity area for vertical real-estate. Stage-name + tagline
+   is a marketing-site pattern, not an in-app pattern (Strava, Notion,
+   Linear, Apple Health all drop their tagline once you're inside). */
+.home-stage .home-brand-sub { display: none; }
 /* Legacy alias — kept so any lingering reference still renders. */
 .home-brandchip { display: none; }
 
@@ -4332,14 +4340,22 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     position: relative;
     flex-shrink: 1;
     min-width: 0;
-    /* flow the device-ID pill + badge chip side-by-side on
-       one row. wrap to two rows on narrow viewports. */
+    /* May 2026 (declutter pass v2) — pre-fix this was a flex-row
+       with wrap, which let the badge chip sit BESIDE the device-ID
+       pill on wide viewports (desktop, tablets in landscape). Two
+       identity claims on the same row read as cluttered + the chip
+       got visually squeezed. Force column-flex so the chip is
+       ALWAYS on its own row below the device-ID pill, regardless
+       of viewport width. */
     display: flex;
-    align-items: center;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
     gap: 8px;
 }
-.home-devid-wrap .home-badge-chip { margin-top: 0; }
+.home-devid-wrap .home-badge-chip {
+    margin-top: 0;
+    align-self: flex-start;
+}
 
 /* Tools icon cluster — May 2026 declutter pass (Strava / Apple Health
    / Linear benchmark). The row sits ABSOLUTE top-right of the home
@@ -5115,8 +5131,16 @@ body.tier-t4 .home-impact {
    showing ≈ 660 px usable height) without scroll. Larger viewports
    get more breathing room via the height media queries below. */
 .home-stage .home-center {
+    /* May 2026 (declutter pass v2) — pre-fix gap was 16/22/28 across
+       the height-media-queries. With the identity area + standalone
+       Lives Saved chip + verbose channels lede all expanded, the
+       large gap left airy dead-space between sections. Now that we
+       trimmed elements (Lives Saved chip hidden, channels lede
+       hidden, brand sub-tagline hidden) the sections sit closer
+       together which reads as a coherent card rather than disjoint
+       blocks. */
     padding: 16px 20px 16px;
-    gap: 16px;
+    gap: 14px;
     align-items: stretch;
     justify-content: flex-start;
     text-align: start;
@@ -5444,6 +5468,23 @@ body.tier-t4 .home-impact {
     flex-shrink: 0;
 }
 .home-stage .home-impact .hi-heart { display: none; }
+
+/* May 2026 (declutter pass v2) — operator: "UI is bad overlapping
+   and unprofessional. Make it 10x better than before."
+   The standalone Lives Saved chip is REDUNDANT with the badge chip
+   above (which carries "{n} lives saved" inline for T4 reporters)
+   and reads as "—" for T1-T3 reporters who haven't saved anyone
+   yet — so it's noise at every tier. Hide unconditionally. The
+   home-screen.js painter still updates the count for any side
+   panel / future surface that wants it; we just don't render the
+   chip on the home stage any more. */
+.home-stage .home-impact { display: none !important; }
+
+/* Verbose channels lede ("Telegram and IVR are live. Other channels
+   launching soon.") removed in the same pass — the green-dot
+   indicator on each live tile already communicates availability
+   without prose, and the section title alone gives enough context. */
+.home-stage .home-section-channels .home-section-lede { display: none; }
 
 /* — Channels section — REMOVE `margin-top: auto`. Let the section flow
    naturally so the home-impact + how-it-works above fill the middle. */

@@ -5,7 +5,37 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v153';
+const CACHE_NAME = 'crisp-v154';
+// v153 → v154 (May 2026, declutter pass v2 — operator: "Further
+// screwed UI and UX. Its getting worse every time" + "UI is bad
+// overlapping and unprofessional. Make it 10x better than before").
+// Real diagnosis from the screenshot:
+//   • Device-ID pill + badge chip on the SAME flex row (wrap=true)
+//     so on wide viewports they sat side-by-side and visually
+//     overlapped. The "overlap" complaint.
+//   • The standalone Lives Saved pill ("8 LIVES SAVED") was
+//     redundant — the badge chip above already carries "8 lives
+//     saved" for T4 reporters, and for T1-T3 the value is "—"
+//     (noise).
+//   • Verbose channels lede ("Telegram and IVR are live. Other
+//     channels launching soon.") repeated what the green-dot
+//     indicators on live tiles already signal.
+//   • "Crisis Reporter" tagline under the wordmark is a marketing-
+//     site pattern; in-app it adds a 2nd line for no information
+//     gain.
+// Five surgical fixes — pure removals + one layout swap:
+//   1) .home-devid-wrap → flex-direction: column → device-ID pill
+//      and badge chip ALWAYS stack vertically; never overlap.
+//   2) Standalone .home-impact "Lives Saved" chip hidden on home
+//      stage (display:none !important). Painter still updates the
+//      count for other surfaces.
+//   3) Channels-section .home-section-lede hidden on home stage.
+//      Green-dot live indicator on each tile communicates the same.
+//   4) .home-brand-sub ("Crisis Reporter" tagline) hidden on home
+//      stage. Brand wordmark + primary CTA convey identity.
+//   5) home-center gap 16 → 14 px; trimmed elements + tighter gap
+//      reads as one coherent card instead of disjoint stacked
+//      blocks.
 // v152 → v153 (May 2026, landing-page declutter pass).
 // Operator: "Cluttered. Make it look professional. Think and plan
 // properly. Benchmark some other companies UI and make best of best
