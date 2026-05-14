@@ -24,19 +24,14 @@
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="dns-prefetch" href="https://unpkg.com">
 
-    <!-- (Lighthouse perf — May 2026 LCP fix) — preload the two woff2
-         font subsets the home hero needs FIRST: Inter regular (body
-         text + chip labels) + Outfit bold-800 (CRISP wordmark).
-         Without these hints, the browser only discovers them AFTER
-         parsing the deferred font-stylesheet @import below — costing
-         ~400-600 ms on Slow-4G. URLs are pinned to a Google Fonts
-         release (v13/v11) so subresource integrity stays valid; if
-         Google rotates the file path the worst-case is the preload
-         silently misses (no error, just no speedup). -->
-    <link rel="preload" as="font" type="font/woff2" crossorigin
-          href="https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2">
-    <link rel="preload" as="font" type="font/woff2" crossorigin
-          href="https://fonts.gstatic.com/s/outfit/v11/QGYvz_MVcBeNP4NJtEtq.woff2">
+    <!-- (Lighthouse perf — May 2026) — explicit woff2 preloads were
+         tried first but the Google Fonts versioned paths (v13/v11)
+         turned out to 404, costing a wasted preload slot + a console
+         error that hurt the Best Practices score. Reverted; the async
+         font-stylesheet pattern below is the working baseline. If we
+         want font-preload acceleration in the future, the right
+         approach is self-hosting the woff2 subsets under /assets/
+         so we own the URLs. -->
 
     <!-- (Lighthouse perf fix) — fonts + FontAwesome + Leaflet
          CSS were render-blocking ~6 seconds. Switched to async loading
@@ -238,16 +233,19 @@
         }
     </style>
 
-    <!-- (Lighthouse perf Phase 2) — full stylesheet now loads
-         asynchronously. preload + onload swap is the standard pattern
-         for non-render-blocking stylesheets that still need to apply
-         once they arrive. The <noscript> fallback covers no-JS clients
-         (rare, but the offline-PWA story benefits from it). The
-         critical-CSS block above ensures the home stage paints
-         correctly before this lands. -->
-    <link rel="preload" href="styles.css" as="style"
-          onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="styles.css"></noscript>
+    <!-- (Lighthouse perf — May 2026, Phase 2 retry) — async-load of
+         styles.css was tried via the preload+onload pattern but
+         backfired badly: the inline critical-CSS above is incomplete
+         enough that when the full 304 KB stylesheet attached
+         asynchronously, it caused a massive layout-shift event
+         (CLS 0.69 vs. baseline 0.24). Reverted to a synchronous
+         <link>; the inline block above STILL helps because it
+         arrives in the same parse-pass and lets the home hero
+         compute a near-final layout before the sync stylesheet
+         finishes. Net result: same blocking behavior as baseline
+         on LCP, but the inline CSS reduces flash-of-unstyled-content
+         and preserves all Phase 1 slot reservations on first paint. -->
+    <link rel="stylesheet" href="styles.css">
     <!-- May 2026 — apply reward-tier body class BEFORE the stylesheet
          attaches per-tier affects (logo accent ring at T3+, theme tint
          at T4). Reading from sessionStorage cache here avoids a flash
