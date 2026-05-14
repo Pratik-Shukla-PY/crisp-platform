@@ -721,5 +721,8 @@
   "success_btn_home": "ಮುಖಪುಟ",
   "home_login_icon_signed_in": "ಖಾತೆ",
   "home_login_icon_signed_out": "ಸೈನ್ ಇನ್ ಮಾಡಿ",
-  "badge_chip_lives_stat": "{n} ಜೀವಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ"
+  "badge_chip_lives_stat": "{n} ಜೀವಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ",
+  "action_tile_download": "ಆ್ಯಪ್ ಡೌನ್ಲೋಡ್",
+  "action_tile_login": "ಲಾಗಿನ್",
+  "action_tile_audio": "ಆಡಿಯೊ"
 }

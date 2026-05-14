@@ -744,5 +744,8 @@
   "success_btn_home": "Accueil",
   "home_login_icon_signed_in": "Compte",
   "home_login_icon_signed_out": "Se connecter",
-  "badge_chip_lives_stat": "{n} vies sauvées"
+  "badge_chip_lives_stat": "{n} vies sauvées",
+  "action_tile_download": "Télécharger",
+  "action_tile_login": "Connexion",
+  "action_tile_audio": "Audio"
 }

@@ -722,5 +722,8 @@
   "success_btn_home": "Trang chủ",
   "home_login_icon_signed_in": "Tài khoản",
   "home_login_icon_signed_out": "Đăng nhập",
-  "badge_chip_lives_stat": "Cứu sống {n} người"
+  "badge_chip_lives_stat": "Cứu sống {n} người",
+  "action_tile_download": "Tải Ứng Dụng",
+  "action_tile_login": "Đăng nhập",
+  "action_tile_audio": "Âm thanh"
 }

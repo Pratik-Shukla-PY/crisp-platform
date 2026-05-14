@@ -721,5 +721,8 @@
   "success_btn_home": "হোম",
   "home_login_icon_signed_in": "অ্যাকাউন্ট",
   "home_login_icon_signed_out": "সাইন ইন করুন",
-  "badge_chip_lives_stat": "{n} জীবন রক্ষা"
+  "badge_chip_lives_stat": "{n} জীবন রক্ষা",
+  "action_tile_download": "অ্যাপ ডাউনলোড",
+  "action_tile_login": "লগইন",
+  "action_tile_audio": "অডিও"
 }

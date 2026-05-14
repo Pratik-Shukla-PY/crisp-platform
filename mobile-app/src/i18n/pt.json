@@ -727,5 +727,8 @@
   "success_btn_home": "Início",
   "home_login_icon_signed_in": "Conta",
   "home_login_icon_signed_out": "Entrar",
-  "badge_chip_lives_stat": "{n} vidas salvas"
+  "badge_chip_lives_stat": "{n} vidas salvas",
+  "action_tile_download": "Baixar App",
+  "action_tile_login": "Entrar",
+  "action_tile_audio": "Áudio"
 }

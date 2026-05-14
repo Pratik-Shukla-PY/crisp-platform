@@ -722,5 +722,8 @@
   "success_btn_home": "Ana sayfa",
   "home_login_icon_signed_in": "Hesap",
   "home_login_icon_signed_out": "Giriş yap",
-  "badge_chip_lives_stat": "{n} hayat kurtarıldı"
+  "badge_chip_lives_stat": "{n} hayat kurtarıldı",
+  "action_tile_download": "Uygulamayı İndir",
+  "action_tile_login": "Giriş",
+  "action_tile_audio": "Ses"
 }

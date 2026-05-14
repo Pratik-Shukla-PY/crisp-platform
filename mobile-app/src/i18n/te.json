@@ -721,5 +721,8 @@
   "success_btn_home": "హోమ్",
   "home_login_icon_signed_in": "ఖాతా",
   "home_login_icon_signed_out": "సైన్ ఇన్ చేయండి",
-  "badge_chip_lives_stat": "{n} ప్రాణాలు రక్షించారు"
+  "badge_chip_lives_stat": "{n} ప్రాణాలు రక్షించారు",
+  "action_tile_download": "యాప్ డౌన్‌లోడ్",
+  "action_tile_login": "లాగిన్",
+  "action_tile_audio": "ఆడియో"
 }

@@ -719,5 +719,8 @@
   "success_btn_home": "الرئيسية",
   "home_login_icon_signed_in": "الحساب",
   "home_login_icon_signed_out": "تسجيل الدخول",
-  "badge_chip_lives_stat": "{n} حياة منقذة"
+  "badge_chip_lives_stat": "{n} حياة منقذة",
+  "action_tile_download": "تنزيل التطبيق",
+  "action_tile_login": "تسجيل الدخول",
+  "action_tile_audio": "الصوت"
 }

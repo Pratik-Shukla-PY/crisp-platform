@@ -721,5 +721,8 @@
   "success_btn_home": "मुख्यपृष्ठ",
   "home_login_icon_signed_in": "खाते",
   "home_login_icon_signed_out": "साइन इन करा",
-  "badge_chip_lives_stat": "{n} जीव वाचवले"
+  "badge_chip_lives_stat": "{n} जीव वाचवले",
+  "action_tile_download": "ॲप डाउनलोड",
+  "action_tile_login": "लॉगिन",
+  "action_tile_audio": "ऑडिओ"
 }

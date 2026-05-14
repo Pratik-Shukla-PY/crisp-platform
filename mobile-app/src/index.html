@@ -520,47 +520,24 @@
              pill rather than left-of-it because the pill is up to
              140 px wide + icons are 120 px wide; combining them on
              one row would overflow narrow phones. -->
-        <div class="home-tools-row" id="home-tools-row" role="group" aria-label="Account and app tools">
-            <button id="btn-home-install-icon" type="button"
-                    class="home-strip-icon"
-                    aria-label="Install on home screen"
-                    data-i18n-aria-label="landing_install_pwa"
-                    title="Install on home screen"
-                    data-i18n-title="landing_install_pwa"
-                    hidden>
-                <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></i>
-            </button>
-            <button id="btn-home-voice" type="button"
-                    class="home-strip-icon"
-                    aria-label="Read this page aloud"
-                    data-i18n-aria-label="aria_read_aloud"
-                    title="Read this page aloud"
-                    data-i18n-title="aria_read_aloud">
-                <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></i>
-            </button>
-            <button id="btn-home-login-icon" type="button"
-                    class="home-strip-icon home-login-icon"
-                    aria-label="Sign in"
-                    data-i18n-aria-label="home_login_icon_signed_out"
-                    title="Sign in"
-                    data-i18n-title="home_login_icon_signed_out"
-                    data-state="anonymous">
-                <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></i>
-                <span class="icon-status-dot dot-offline" id="home-login-dot" aria-hidden="true"></span>
-            </button>
-        </div>
+        <!-- May 2026 (action-tiles pass) — the top-right .home-tools-row
+             cluster (3 small icon buttons: install + voice + login)
+             was REMOVED. Operator: "Expand 'Download App', 'Login', My
+             Reports, Rewards and Audio Speaker add as a row above Life
+             Keeper." Those icons now expand into labelled tiles in
+             #home-action-tiles inside .home-center below. -->
 
         <div class="stage-center home-center">
 
-            <!-- Identity bar with bigger brand block
-                 (logo glyph + wordmark + tagline). The state-adaptive
-                 identity slot on the right still holds the device-ID
-                 badge for anonymous users / account pill for logged-in. -->
+            <!-- Identity bar — May 2026 (action-tiles pass).
+                 Brand row aligns the CRISP logo + wordmark on the
+                 LEFT with the lang pill on the RIGHT — single
+                 horizontal header line, like a navbar. The lang
+                 pill is moved inline (no longer absolute-positioned
+                 over the brand) via the .home-stage-with-inline-lang
+                 body-level class applied below via JS / CSS, so the
+                 baselines align cleanly. -->
             <div class="home-identity">
-                <!-- brand row is now a flex row that includes
-                     the install + voice icons on the right side, with
-                     enough right padding to clear the absolute-positioned
-                     lang pill above (right:16, ~120 px wide). -->
                 <div class="home-brand-row">
                     <div class="home-brand">
                         <!-- May 2026 — brand logo refreshed to the "ripple"
@@ -616,16 +593,68 @@
                      mean a wider JS refactor. -->
                 <div class="home-devid-wrap" id="home-devid-wrap"></div>
 
-                <!-- Reward-hero badge chip — May 2026.
-                     Lifted out of .home-devid-wrap and given its own
-                     centered, big-format presentation: tier emoji
-                     large at the top, tier name as a heading, stat
-                     caption beneath. Reads as a trophy / reward card
-                     instead of a small status pill. The chip's
-                     existing IDs (home-badge-chip / -emoji / -label
-                     / -progress) are preserved so home-screen.js's
-                     _paintBadgeChip continues to write into them
-                     without any JS change. -->
+                <!-- Action tiles row — May 2026 (operator request).
+                     "Expand 'Download App', 'Login', My Reports,
+                     Rewards and Audio Speaker add as a row above
+                     Life Keeper."
+                     Five labelled tiles in a single grid row,
+                     replacing both (a) the small icon cluster that
+                     used to live top-right (install + voice + login)
+                     AND (b) the 2-col secondary row (My Reports +
+                     Rewards) that used to sit below the primary CTA.
+                     Reads as a clear "what can I do here" toolkit
+                     placed right above the reward hero.
+
+                     IDs kept stable so existing wiring continues:
+                       - #btn-home-install-icon   (install prompt)
+                       - #btn-home-login-icon     (login / account)
+                       - #btn-my-reports          (My Reports list)
+                       - #btn-rewards             (Rewards page)
+                       - #btn-home-voice          (TTS read-aloud)
+                     Login tile retains the red/green status dot in
+                     the corner via #home-login-dot. -->
+                <div class="home-action-tiles" id="home-action-tiles" role="group" aria-label="Quick actions">
+                    <button type="button" class="home-action-tile" id="btn-home-install-icon"
+                            aria-label="Install on home screen"
+                            data-i18n-aria-label="landing_install_pwa"
+                            hidden>
+                        <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></span>
+                        <span class="hat-label" data-i18n="action_tile_download">Download App</span>
+                    </button>
+                    <button type="button" class="home-action-tile home-action-tile--login" id="btn-home-login-icon"
+                            aria-label="Sign in"
+                            data-i18n-aria-label="home_login_icon_signed_out"
+                            data-state="anonymous">
+                        <span class="hat-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </span>
+                        <span class="hat-label" data-i18n="action_tile_login">Login</span>
+                        <span class="icon-status-dot dot-offline" id="home-login-dot" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="home-action-tile" id="btn-my-reports">
+                        <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg></span>
+                        <span class="hat-label" data-i18n="my_reports">My Reports</span>
+                        <span class="mr-count" id="mr-count" hidden>(0)</span>
+                        <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
+                    </button>
+                    <button type="button" class="home-action-tile home-action-tile--rewards" id="btn-rewards">
+                        <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><circle cx="12" cy="17" r="5"/><path d="M12 17h.01"/></svg></span>
+                        <span class="hat-label" data-i18n="rewards_btn">Rewards</span>
+                    </button>
+                    <button type="button" class="home-action-tile" id="btn-home-voice"
+                            aria-label="Read this page aloud"
+                            data-i18n-aria-label="aria_read_aloud">
+                        <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span>
+                        <span class="hat-label" data-i18n="action_tile_audio">Audio</span>
+                    </button>
+                </div>
+
+                <!-- Reward-hero badge chip — May 2026 (smaller after
+                     operator: "Reduce the size of the Lifekeeper Icon").
+                     Tier emoji rendered at 28-32 px (was 44-52); tier
+                     name + stat caption keep their hierarchy but the
+                     overall card is more proportional now that the
+                     action-tiles row above carries equal visual weight. -->
                 <div class="home-reward-hero" id="home-reward-hero">
                     <div class="home-badge-chip home-badge-chip--hero" id="home-badge-chip" hidden
                          role="status" aria-live="polite"
@@ -719,40 +748,13 @@
                 <span data-i18n="home_cta_primary">Report an Incident</span>
             </button>
 
-            <!-- Phase 17 + 18 — Secondary actions. Phase 18 — My Reports
-                 button now carries an inline (N) count populated by
-                 home-screen.js _renderMyReportsCount. Hidden when
-                 count = 0 to avoid "My Reports (0)" looking sad. -->
-            <div class="home-secondary-row" id="home-secondary-row">
-                <button class="secondary-cta" id="btn-my-reports" type="button">
-                    <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg></i>
-                    <span data-i18n="my_reports">My Reports</span>
-                    <span class="mr-count" id="mr-count" hidden>(0)</span>
-                    <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
-                </button>
-                <!-- May 2026 (reward-system v2, second pass) — dedicated
-                     Rewards entry button. Pre-fix the home badge chip was
-                     doubling as both a status display AND a tap-to-open-
-                     Badge-Studio button, which confused users (the chip
-                     reads as decorative, but tapping it had functional
-                     effect). The chip is now decorative-only; this
-                     button opens the new stage-rewards page where users
-                     can see the full 4-tier ladder, their progress to the
-                     next tier, and tap through to Badge Studio when they
-                     reach T3+. -->
-                <button class="secondary-cta home-rewards-btn" id="btn-rewards" type="button">
-                    <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><circle cx="12" cy="17" r="5"/><path d="M12 17h.01"/></svg></i>
-                    <span data-i18n="rewards_btn">Rewards</span>
-                </button>
-                <!-- May 2026 (landing-icon cleanup pass) — the full-width
-                     "Login / Sign up" tertiary-cta row was REMOVED. Login
-                     is now an icon in #home-tools-row at the top of the
-                     home stage, with a green/red status dot so the user
-                     can see their auth state at a glance. Removing the
-                     row lets My Reports + Rewards sit as a clean 2-col
-                     grid below the primary CTA — less cognitive load,
-                     fewer text-heavy rows for an uneducated reporter. -->
-            </div>
+            <!-- May 2026 (action-tiles pass) — the 2-col secondary
+                 row (My Reports + Rewards) below the primary CTA was
+                 REMOVED. Both buttons now live in #home-action-tiles
+                 above the reward hero as part of a unified 5-tile
+                 action toolkit. Removing the duplicate keeps the page
+                 cleaner — no two surfaces for the same thing. -->
+            <div class="home-secondary-row home-secondary-row--legacy" id="home-secondary-row" hidden aria-hidden="true"></div>
 
             <!-- Safety hint + How CRISP Works removed per
                  user direction to make the UI cleaner. The original

@@ -721,5 +721,8 @@
   "success_btn_home": "گھر",
   "home_login_icon_signed_in": "اکاؤنٹ",
   "home_login_icon_signed_out": "سائن ان کریں",
-  "badge_chip_lives_stat": "{n} جانیں بچائی گئیں"
+  "badge_chip_lives_stat": "{n} جانیں بچائی گئیں",
+  "action_tile_download": "ایپ ڈاؤن لوڈ",
+  "action_tile_login": "لاگ ان",
+  "action_tile_audio": "آڈیو"
 }

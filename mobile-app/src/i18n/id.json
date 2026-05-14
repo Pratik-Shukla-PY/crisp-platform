@@ -730,5 +730,8 @@
   "success_btn_home": "Beranda",
   "home_login_icon_signed_in": "Akun",
   "home_login_icon_signed_out": "Masuk",
-  "badge_chip_lives_stat": "{n} nyawa diselamatkan"
+  "badge_chip_lives_stat": "{n} nyawa diselamatkan",
+  "action_tile_download": "Unduh Aplikasi",
+  "action_tile_login": "Masuk",
+  "action_tile_audio": "Audio"
 }

@@ -4852,6 +4852,131 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
    Tier-specific gradients + glows (.lvl-t1 / -t2 / -t3 / -t4
    below) compound on top via the cascade — no new colour rules
    needed. */
+/* ── Home action tiles row — May 2026 ───────────────────────────────
+   Operator: "Expand 'Download App', 'Login', My Reports, Rewards and
+   Audio Speaker add as a row above Life Keeper."
+   Five labelled tiles in a single grid row, replacing the small
+   top-right icon cluster (install + voice + login) AND the 2-col
+   secondary row (My Reports + Rewards) that used to sit below the
+   CTA. Reads as a clear toolkit positioned above the reward hero. */
+.home-action-tiles {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    margin: 8px 0 12px;
+}
+.home-action-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 72px;
+    padding: 12px 4px 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--text, #f1f5f9);
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 1.15;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.home-action-tile:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.16);
+}
+.home-action-tile:active { transform: scale(0.985); }
+.home-action-tile[hidden] { display: none; }
+.home-action-tile .hat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    color: var(--accent, #09D1C7);
+}
+.home-action-tile .hat-icon > svg { width: 22px; height: 22px; }
+.home-action-tile .hat-label {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.2;
+    width: 100%;
+    color: var(--text-sub, #cbd5e1);
+    letter-spacing: 0.01em;
+    /* Allow wrap at natural word boundaries; do NOT break mid-word
+       (operator wants the labels readable, not hyphenated). */
+    word-break: normal;
+    overflow-wrap: normal;
+    hyphens: none;
+    white-space: normal;
+    /* Reserve 2 lines of space so single-word labels (Login / Audio /
+       Rewards) don't shift the icon up relative to 2-word labels
+       (Download App / My Reports) — keeps the row visually even. */
+    min-height: 2.4em;
+}
+@media (max-width: 480px) {
+    .home-action-tile { font-size: 10px; min-height: 68px; padding: 10px 4px 8px; }
+    .home-action-tile .hat-icon { width: 20px; height: 20px; }
+    .home-action-tile .hat-icon > svg { width: 20px; height: 20px; }
+}
+@media (min-height: 800px) {
+    .home-action-tile { min-height: 82px; padding: 14px 8px 12px; font-size: 12px; }
+}
+
+/* Login tile — auth-state tint + status dot. Reuses the same red/
+   green palette as the previous .home-login-icon so the visual
+   language is consistent. */
+.home-action-tile--login[data-state="signed-in"] {
+    background: rgba(70, 223, 177, 0.10);
+    border-color: rgba(70, 223, 177, 0.36);
+}
+.home-action-tile--login[data-state="signed-in"] .hat-icon,
+.home-action-tile--login[data-state="signed-in"] .hat-label {
+    color: #80EE98;
+}
+.home-action-tile--login[data-state="anonymous"] {
+    background: rgba(239, 68, 68, 0.04);
+    border-color: rgba(239, 68, 68, 0.22);
+}
+.home-action-tile--login[data-state="anonymous"]:hover {
+    background: rgba(239, 68, 68, 0.10);
+    border-color: rgba(239, 68, 68, 0.40);
+}
+
+/* Rewards tile — subtle mint accent so the reward path is
+   discoverable. */
+.home-action-tile--rewards .hat-icon { color: #80EE98; }
+
+/* Status dot for the login tile (red/green). Top-right corner of the
+   tile, identical to the prior icon-status-dot but slightly bigger
+   so it's visible against a label-bearing tile. */
+.home-action-tile .icon-status-dot {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 2px solid var(--bg, #0b1018);
+    pointer-events: none;
+}
+.home-action-tile .icon-status-dot.dot-online {
+    background: #80EE98;
+    box-shadow: 0 0 6px rgba(128, 238, 152, 0.65);
+}
+.home-action-tile .icon-status-dot.dot-offline {
+    background: #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.65);
+}
+
 .home-reward-hero {
     display: flex;
     justify-content: center;
@@ -4884,7 +5009,12 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     min-height: 132px;
 }
 .home-badge-chip.home-badge-chip--hero .hb-emoji {
-    font-size: 44px;
+    /* May 2026 — operator: "Reduce the size of the Lifekeeper Icon".
+       Was 44 px (52 on tall). Now 28/32 — still hero-prominent but
+       no longer the dominant visual on the page; the new action-
+       tiles row above carries equal weight, and a smaller emoji
+       keeps the card proportional. */
+    font-size: 28px;
     line-height: 1;
     margin-bottom: 2px;
 }
@@ -4908,10 +5038,10 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 @media (min-height: 800px) {
     .home-badge-chip.home-badge-chip--hero {
-        padding: 26px 36px;
+        padding: 24px 32px;
     }
-    .home-badge-chip.home-badge-chip--hero .hb-emoji { font-size: 52px; }
-    .home-badge-chip.home-badge-chip--hero .hb-label { font-size: 26px; }
+    .home-badge-chip.home-badge-chip--hero .hb-emoji { font-size: 32px; }
+    .home-badge-chip.home-badge-chip--hero .hb-label { font-size: 24px; }
 }
 /* Tappable cue at T3+ (Badge Studio unlocked). */
 .home-badge-chip.chip-unlocked { cursor: pointer; }
@@ -5153,17 +5283,21 @@ body.tier-t4 .home-impact {
    the document root is kept as an empty shell (#home-top-actions
    hidden) for back-compat. */
 .home-brand-row {
+    /* May 2026 — brand row aligns the CRISP logo + wordmark with
+       the absolute-positioned lang pill above. Pre-fix the row had
+       min-height: 44 px → content centered ≈ 22 px below the row's
+       top → wordmark sat below the lang pill (lang pill is 32 px
+       tall starting at top:16, so its centre is at y≈32 while the
+       wordmark was at y≈38 — perceptible 6 px misalignment).
+       Now: min-height 32 px to match the lang pill's intrinsic
+       height; content centres at y≈32, sharing the same baseline. */
     display: flex;
     align-items: center;
     gap: 10px;
     width: 100%;
-    /* Leave clearance for the absolute-positioned lang pill above
-       (lives at right:16, real width ≤ 90 px for 2-letter ISO codes).
-       100 px reserved → ~30 px gap between our brand-actions cluster
-       and the pill, comfortably clear. */
-    padding-right: 104px;
+    padding-right: 110px;   /* clearance for the lang pill at right:16, ≤ 90 px wide */
     box-sizing: border-box;
-    min-height: 44px;        /* matches install/voice icon hit area */
+    min-height: 32px;
 }
 [dir="rtl"] .home-brand-row {
     padding-right: 0;
@@ -5221,14 +5355,12 @@ body.tier-t4 .home-impact {
    showing ≈ 660 px usable height) without scroll. Larger viewports
    get more breathing room via the height media queries below. */
 .home-stage .home-center {
-    /* May 2026 (declutter pass v2) — pre-fix gap was 16/22/28 across
-       the height-media-queries. With the identity area + standalone
-       Lives Saved chip + verbose channels lede all expanded, the
-       large gap left airy dead-space between sections. Now that we
-       trimmed elements (Lives Saved chip hidden, channels lede
-       hidden, brand sub-tagline hidden) the sections sit closer
-       together which reads as a coherent card rather than disjoint
-       blocks. */
+    /* May 2026 (action-tiles pass) — top padding pinned to 16 px so
+       the brand row's top edge aligns with the absolute-positioned
+       lang pill at top:16. Larger viewports previously bumped this
+       to 28-32 px which pushed the brand DOWN out of alignment
+       with the lang pill. Keep 16 px top regardless of viewport
+       height for a stable header line. */
     padding: 16px 20px 16px;
     gap: 14px;
     align-items: stretch;
@@ -5246,24 +5378,26 @@ body.tier-t4 .home-impact {
     .home-stage .home-center { padding-left: 16px; padding-right: 16px; }
     .home-brand-row { padding-right: 96px; }
 }
-/* Comfortable on taller viewports (PWA / installed app / phablets):
-   bring back the generous spacing now that we have room. */
+/* May 2026 (action-tiles pass) — top padding pinned to 16 px across
+   all viewport heights so brand row stays aligned with the lang pill
+   (top:16 absolute). Bottom + side padding still scale up. Gap
+   between sections also scales up modestly on taller viewports. */
 @media (min-height: 700px) {
     .home-stage .home-center {
-        padding: 20px 20px 20px;
-        gap: 22px;
+        padding: 16px 20px 20px;
+        gap: 20px;
     }
 }
 @media (min-height: 800px) {
     .home-stage .home-center {
-        padding: 28px 20px 24px;
-        gap: 28px;
+        padding: 16px 20px 24px;
+        gap: 24px;
     }
 }
 @media (min-height: 900px) {
     .home-stage .home-center {
-        padding: 32px 20px 28px;
-        gap: 32px;
+        padding: 16px 20px 28px;
+        gap: 28px;
     }
 }
 
@@ -5277,16 +5411,19 @@ body.tier-t4 .home-impact {
     padding: 0;
 }
 
-/* Brand block — restrained, doesn't fight with the CTA. May 2026 —
-   updated to host the new ripple-tile SVG. Drop the cyan inset
-   ring (the SVG has its own rings, doubling would look noisy);
-   keep the outer drop-shadow as a subtle halo. */
-.home-brand { gap: 12px; }
+/* Brand block — restrained, doesn't fight with the CTA. May 2026
+   (action-tiles pass) — brand logo shrunk 42 → 32 px so its height
+   matches the lang pill's intrinsic 32 px → both top-anchor at
+   y=16 and share the same horizontal centre line. The wordmark
+   ("CRISP") font stays at 17 px so it remains readable; vertical-
+   centring inside the 32 px row keeps both the logo and the
+   wordmark visually aligned with the lang pill on the right. */
+.home-brand { gap: 10px; }
 .home-brand-logo {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(9, 209, 199, 0.18);
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(9, 209, 199, 0.18);
 }
 .home-brand-name {
     font-size: 17px;

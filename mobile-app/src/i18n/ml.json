@@ -1281,5 +1281,8 @@
   "success_btn_home": "ഹോം",
   "home_login_icon_signed_in": "അക്കൗണ്ട്",
   "home_login_icon_signed_out": "സൈൻ ഇൻ ചെയ്യുക",
-  "badge_chip_lives_stat": "{n} ജീവൻ രക്ഷിച്ചു"
+  "badge_chip_lives_stat": "{n} ജീവൻ രക്ഷിച്ചു",
+  "action_tile_download": "ആപ്പ് ഡൗൺലോഡ്",
+  "action_tile_login": "ലോഗിൻ",
+  "action_tile_audio": "ഓഡിയോ"
 }

@@ -5,7 +5,36 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v157';
+const CACHE_NAME = 'crisp-v158';
+// v157 → v158 (May 2026, action-tiles pass).
+// Operator: "1. CRISP logo and CRISP we can Align with Language bar.
+//            2. Reduce the size of the Lifekeeper Icon.
+//            3. Expand 'Download App', 'Login', My Reports, Rewards
+//               and Audio Speaker add as a row above Life Keeper.
+//            4. rest keep aligned and clean."
+// Four targeted changes:
+//   1) brand-row min-height 44 → 32 px, logo 42 → 32 px, home-center
+//      padding-top pinned at 16 across all viewport heights so the
+//      brand block + lang pill share a single horizontal centre
+//      line at y≈32. Measured brand_logo center = lang pill center
+//      = 32 px (delta < 1).
+//   2) Reward-hero emoji 44/52 → 28/32 px (small viewports / tall).
+//      Tier name 22/26 → 22/24. Card stays the centred trophy from
+//      v157 but no longer dominates.
+//   3) New .home-action-tiles row above the reward hero — 5 equal
+//      columns: Download App / Login / My Reports / Rewards /
+//      Audio. Each tile: icon above + 2-line label, login keeps
+//      red/green status dot in the corner. Replaces the small top-
+//      right icon cluster (install + voice + login) AND the 2-col
+//      secondary row (My Reports + Rewards) — one unified toolkit.
+//   4) Labels use new i18n keys (action_tile_download / _login /
+//      _audio) across 22 locales. Validator passes 681 keys.
+// Verified with Playwright (/tmp/crisp_tiles_verify.mjs):
+//   - tile_count: 5, all at top: 70 (same row)
+//   - tiles_above_hero: true (70 < 188)
+//   - legacy_hidden: true (the old secondary row is empty + hidden)
+//   - emoji size: 32 × 32 px (was 52 × 52)
+//   - brand center y = 32, lang pill center y = 32 (aligned)
 // v156 → v157 (May 2026, reward-hero pass).
 // Operator: "Changes required:
 //   1. Device Id we can move below privacy row.

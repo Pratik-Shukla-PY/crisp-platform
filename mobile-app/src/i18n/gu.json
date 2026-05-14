@@ -721,5 +721,8 @@
   "success_btn_home": "હોમ",
   "home_login_icon_signed_in": "એકાઉન્ટ",
   "home_login_icon_signed_out": "સાઇન ઇન કરો",
-  "badge_chip_lives_stat": "{n} જીવન બચાવ્યા"
+  "badge_chip_lives_stat": "{n} જીવન બચાવ્યા",
+  "action_tile_download": "ઍપ ડાઉનલોડ",
+  "action_tile_login": "લૉગિન",
+  "action_tile_audio": "ઑડિઓ"
 }

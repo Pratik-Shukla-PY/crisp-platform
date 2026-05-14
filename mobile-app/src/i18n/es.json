@@ -730,5 +730,8 @@
   "success_btn_home": "Inicio",
   "home_login_icon_signed_in": "Cuenta",
   "home_login_icon_signed_out": "Iniciar sesión",
-  "badge_chip_lives_stat": "{n} vidas salvadas"
+  "badge_chip_lives_stat": "{n} vidas salvadas",
+  "action_tile_download": "Descargar",
+  "action_tile_login": "Acceder",
+  "action_tile_audio": "Audio"
 }

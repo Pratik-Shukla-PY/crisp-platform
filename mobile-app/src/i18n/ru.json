@@ -721,5 +721,8 @@
   "success_btn_home": "Главная",
   "home_login_icon_signed_in": "Аккаунт",
   "home_login_icon_signed_out": "Войти",
-  "badge_chip_lives_stat": "{n} спасённых жизней"
+  "badge_chip_lives_stat": "{n} спасённых жизней",
+  "action_tile_download": "Скачать",
+  "action_tile_login": "Войти",
+  "action_tile_audio": "Звук"
 }

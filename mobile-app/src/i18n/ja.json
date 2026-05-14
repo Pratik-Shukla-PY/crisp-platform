@@ -721,5 +721,8 @@
   "success_btn_home": "ホーム",
   "home_login_icon_signed_in": "アカウント",
   "home_login_icon_signed_out": "サインイン",
-  "badge_chip_lives_stat": "{n} 人の命を救った"
+  "badge_chip_lives_stat": "{n} 人の命を救った",
+  "action_tile_download": "アプリ取得",
+  "action_tile_login": "ログイン",
+  "action_tile_audio": "音声"
 }

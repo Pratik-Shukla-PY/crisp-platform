@@ -721,5 +721,8 @@
   "success_btn_home": "ਹੋਮ",
   "home_login_icon_signed_in": "ਖਾਤਾ",
   "home_login_icon_signed_out": "ਸਾਈਨ ਇਨ ਕਰੋ",
-  "badge_chip_lives_stat": "{n} ਜਾਨਾਂ ਬਚਾਈਆਂ"
+  "badge_chip_lives_stat": "{n} ਜਾਨਾਂ ਬਚਾਈਆਂ",
+  "action_tile_download": "ਐਪ ਡਾਊਨਲੋਡ",
+  "action_tile_login": "ਲੌਗਇਨ",
+  "action_tile_audio": "ਆਡੀਓ"
 }
