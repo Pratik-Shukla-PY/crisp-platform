@@ -98,6 +98,11 @@ import { generateVariants, PhotoVariants, TIER_TO_RESOLUTION } from './services/
 import { swallow as telemetrySwallow } from './services/telemetry';
 // Phase 4 (Apr 2026) — region-gated auto-submit timer.
 import { getEnabledRegions, findActiveRegion, Region } from './services/regionCache';
+// May 2026 — Phase 2 of RN ↔ PWA parity. New HomeScreen mirrors the
+// PWA's redesigned home stage (3-section flex, CTA-anchored,
+// quiet identity pill, channels grid). Replaces the old in-line
+// home block. See V4_PARITY_DEFERRED.md for the staged plan.
+import HomeScreen from './screens/HomeScreen';
 
 // Phase 3 (Apr 2026): review collapsed from 3 screens to 2 (details + confirm).
 // `review_incident` kept as an alias that redirects to `review_details` so any
@@ -116,6 +121,7 @@ import { getEnabledRegions, findActiveRegion, Region } from './services/regionCa
 //   v2 path: home → photo → audio → review_details → review_confirm → success
 type Screen =
   | 'home'
+  | 'legacy_home'                                   // May 2026 — fallback for the pre-redesign home block; kept behind a flag for one-flag rollback
   | 'where' | 'infra' | 'crisis' | 'extras'       // v3 additions
   | 'photo' | 'audio' | 'review_details' | 'review_confirm'
   | 'success' | 'history' | 'report_detail'
@@ -1599,15 +1605,76 @@ export default function App() {
               want to report never see distracting gamification first.
           Parity with PWA `stage-home` at mobile-app/src/index.html. */}
       {screen === 'home' && (
+        // May 2026 — Phase 2 of RN ↔ PWA parity. The new <HomeScreen>
+        // component matches the PWA's redesigned home stage (brand
+        // row + Lifekeeper inline pill + consent + dominant CTA +
+        // 5-tile utility row + 3×2 channels grid + privacy footer +
+        // device-ID pill). The OLD in-line block beneath is kept
+        // BEHIND the `useLegacyHome` flag for a one-flag rollback if
+        // a field-test surfaces a regression. Default flips ON for
+        // the new HomeScreen.
+        <HomeScreen
+          authReady={authReady}
+          authLoggedIn={authLoggedIn}
+          authDisplay={authDisplay}
+          isOnline={isOnline}
+          queueCount={queueCount}
+          lang={lang}
+          onChangeLang={changeLang}
+          consentGiven={!!consentGiven}
+          onConsentToggle={() => setConsentGiven(!consentGiven)}
+          deviceId={deviceHash ? `CRISP-${deviceHash.slice(0, 4).toUpperCase()}-${deviceHash.slice(4, 8).toUpperCase()}` : ''}
+          badgeLevel={null /* TODO Phase 6 — fetch from /reports/profile */}
+          badgeLivesSaved={impactStats.totalLives}
+          appVersion="v0.7.44"
+          onStartReport={async () => {
+            try {
+              const { status } = await Location.getForegroundPermissionsAsync();
+              if (status === 'granted') {
+                const pos = await Location.getCurrentPositionAsync({
+                  accuracy: Location.Accuracy.Balanced,
+                });
+                const regions = await getEnabledRegions();
+                const match = findActiveRegion(
+                  pos.coords.latitude, pos.coords.longitude, regions,
+                );
+                if (match) {
+                  setActiveRegion(match);
+                  console.log(`[AutoSubmit] armed — region="${match.name}"`);
+                }
+              }
+            } catch (e) {
+              console.log('[AutoSubmit] geofence check skipped:', (e as Error)?.message || e);
+            }
+            setScreen(uiV3 ? 'where' : 'photo');
+          }}
+          onMyReports={() => { refreshHistory(); pollStatus(); setScreen('history'); }}
+          onLogin={() => {
+            setLoginStep(1); setLoginCode(''); setLoginError(''); setLoginLinkable(0);
+            setScreen('login');
+          }}
+          onSettings={() => setScreen('settings')}
+          onPrivacy={() => setScreen('settings') /* TODO Phase 7 — dedicated privacy stage */}
+          onAudio={() => { /* TODO Phase 3 — TTS read-aloud */ }}
+          onRewards={() => setScreen('settings') /* TODO Phase 6 — dedicated Rewards screen */}
+          onQueueTap={async () => {
+            const { clearAllQueuedReports } = await import('./services/database');
+            const cleared = await clearAllQueuedReports();
+            updateQueueCount();
+            Alert.alert('Queue Cleared', `${cleared} queued report${cleared !== 1 ? 's' : ''} removed.`);
+          }}
+        />
+      )}
+
+      {/* Legacy home block — hidden behind a flag for one-flag rollback
+          in case the new HomeScreen surfaces a regression in field
+          testing. Default OFF; flip via __crispUseLegacyHome global
+          OR set screen to 'legacy_home' programmatically. */}
+      {screen === ('legacy_home' as Screen) && (
         <ScrollView
           style={{ flex: 1, backgroundColor: Colors.bg }}
-          // R3: allow this outer ScrollView to delegate to nested scroll
-          // containers (history pills, language row). nestedScrollEnabled
-          // keeps the inner WebView / ScrollView gestures alive on Android.
           nestedScrollEnabled
           scrollEventThrottle={16}
-          // R8: responsive padding — 6 % vw capped at 24 px. Keeps 280×480
-          // screens from clipping content against the right edge.
           contentContainerStyle={{ padding: responsivePad(), paddingBottom: 40, alignItems: 'center' }}>
           <Text style={s.emoji}>🆘</Text>
           <Text style={s.title}>{t('welcome_title')}</Text>
