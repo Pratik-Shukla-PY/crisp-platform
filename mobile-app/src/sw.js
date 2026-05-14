@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v166';
+const CACHE_NAME = 'crisp-v167';
+// v166 → v167 (May 2026 — home v5 redesign: hero card grouping,
+// deeper navy radial bg + cyan glow, pulse stat block for the
+// lives-saved counter, reassurance helper under the CTA. Touches
+// index.html (.home-hero-card structural wrap, .home-impact-pulse
+// modifier + .hi-caption), styles.css (v5 rules block), 22 i18n
+// files (+ home_cta_helper + home_pulse_label). Bump required so
+// returning users evict their cached snapshot of pre-v5 home.
+// Specs: e2e/tests/pwa/68-home-v5-layout.spec.ts.
 // v165 → v166 (May 2026 — IndexedDB queue orphan self-heal).
 // Operator (2026-05-13): a submission was interrupted mid-flight and
 // left a `pending-reports` row with stages.meta/text/audio=true but

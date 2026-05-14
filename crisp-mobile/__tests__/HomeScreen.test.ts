@@ -27,6 +27,7 @@ jest.mock('react-native-svg', () => ({
   Circle: () => null,
   Defs: () => null,
   LinearGradient: () => null,
+  RadialGradient: () => null,   // v5 Phase 2 — BgRadial + HeroGlowBlob
   Stop: () => null,
   Path: () => null,
   G: () => null,
@@ -54,6 +55,7 @@ describe('HomeScreen — module shape + i18n contract', () => {
   const REQUIRED_KEYS = [
     'home_cta_primary',
     'home_cta_sub',
+    'home_cta_helper',                  // v5 Phase 1 — reassurance helper
     'home_consent_v2',
     'action_tile_login',
     'home_login_icon_signed_in',
@@ -76,6 +78,9 @@ describe('HomeScreen — module shape + i18n contract', () => {
     'tier_progress_verified_1',
     'tier_progress_lives_1',
     'tier_progress_top_share',
+    // v5 Phase 3 — pulse stat block
+    'home_metric_lives',
+    'home_pulse_label',
   ];
 
   it('every required key resolves to a non-empty string in en', () => {
@@ -103,5 +108,20 @@ describe('HomeScreen — module shape + i18n contract', () => {
   it('en has at least 688 keys (matches PWA canonical pack)', () => {
     const en = require('../services/i18n/en.json');
     expect(Object.keys(en).length).toBeGreaterThanOrEqual(688);
+  });
+
+  // ── v5 redesign — Phase 1 + 3 i18n contract for new keys ─────────
+  describe('v5 home redesign — new key contract', () => {
+    it('home_cta_helper carries an offline-related English string', () => {
+      const en = require('../services/i18n/en.json');
+      const v = (en.home_cta_helper || '').toLowerCase();
+      expect(v).toContain('offline');
+    });
+
+    it('home_pulse_label carries verification language in English', () => {
+      const en = require('../services/i18n/en.json');
+      const v = (en.home_pulse_label || '').toLowerCase();
+      expect(v).toMatch(/verified|reports/);
+    });
   });
 });
