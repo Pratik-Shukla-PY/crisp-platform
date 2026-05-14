@@ -724,5 +724,6 @@
   "badge_chip_lives_stat": "{n} 人の命を救った",
   "action_tile_download": "アプリ取得",
   "action_tile_login": "ログイン",
-  "action_tile_audio": "音声"
+  "action_tile_audio": "音声",
+  "home_cta_sub": "撮影 · 確認 · 支援"
 }

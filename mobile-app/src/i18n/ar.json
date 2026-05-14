@@ -722,5 +722,6 @@
   "badge_chip_lives_stat": "{n} حياة منقذة",
   "action_tile_download": "تنزيل التطبيق",
   "action_tile_login": "تسجيل الدخول",
-  "action_tile_audio": "الصوت"
+  "action_tile_audio": "الصوت",
+  "home_cta_sub": "التقاط · تحقق · مساعدة"
 }

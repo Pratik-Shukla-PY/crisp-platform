@@ -725,5 +725,6 @@
   "badge_chip_lives_stat": "Cứu sống {n} người",
   "action_tile_download": "Tải Ứng Dụng",
   "action_tile_login": "Đăng nhập",
-  "action_tile_audio": "Âm thanh"
+  "action_tile_audio": "Âm thanh",
+  "home_cta_sub": "Ghi · Xác minh · Hỗ trợ"
 }

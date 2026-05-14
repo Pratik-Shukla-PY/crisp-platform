@@ -725,5 +725,6 @@
   "badge_chip_lives_stat": "{n} hayat kurtarıldı",
   "action_tile_download": "Uygulamayı İndir",
   "action_tile_login": "Giriş",
-  "action_tile_audio": "Ses"
+  "action_tile_audio": "Ses",
+  "home_cta_sub": "Kaydet · Doğrula · Yardım"
 }

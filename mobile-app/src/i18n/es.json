@@ -733,5 +733,6 @@
   "badge_chip_lives_stat": "{n} vidas salvadas",
   "action_tile_download": "Descargar",
   "action_tile_login": "Acceder",
-  "action_tile_audio": "Audio"
+  "action_tile_audio": "Audio",
+  "home_cta_sub": "Capturar · Verificar · Ayudar"
 }

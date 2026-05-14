@@ -730,5 +730,6 @@
   "badge_chip_lives_stat": "{n} vidas salvas",
   "action_tile_download": "Baixar App",
   "action_tile_login": "Entrar",
-  "action_tile_audio": "Áudio"
+  "action_tile_audio": "Áudio",
+  "home_cta_sub": "Capturar · Verificar · Ajudar"
 }

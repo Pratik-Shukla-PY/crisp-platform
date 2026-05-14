@@ -733,5 +733,6 @@
   "badge_chip_lives_stat": "{n} nyawa diselamatkan",
   "action_tile_download": "Unduh Aplikasi",
   "action_tile_login": "Masuk",
-  "action_tile_audio": "Audio"
+  "action_tile_audio": "Audio",
+  "home_cta_sub": "Rekam · Verifikasi · Bantu"
 }

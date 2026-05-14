@@ -722,5 +722,6 @@
   "badge_chip_lives_stat": "已挽救 {n} 条生命",
   "action_tile_download": "下载应用",
   "action_tile_login": "登录",
-  "action_tile_audio": "音频"
+  "action_tile_audio": "音频",
+  "home_cta_sub": "捕获 · 核实 · 援助"
 }

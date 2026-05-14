@@ -529,14 +529,21 @@
 
         <div class="stage-center home-center">
 
-            <!-- Identity bar — May 2026 (action-tiles pass).
-                 Brand row aligns the CRISP logo + wordmark on the
-                 LEFT with the lang pill on the RIGHT — single
-                 horizontal header line, like a navbar. The lang
-                 pill is moved inline (no longer absolute-positioned
-                 over the brand) via the .home-stage-with-inline-lang
-                 body-level class applied below via JS / CSS, so the
-                 baselines align cleanly. -->
+            <!-- May 2026 (redesign pass) — home-center reorganised
+                 into 3 semantic sections with a flex layout so the
+                 CTA visually anchors the middle of the viewport:
+
+                   .home-section-top    — brand row + Lifekeeper pill
+                   .home-section-hero   — consent + CTA + utility row
+                   .home-section-bottom — channels + footer + device-ID
+
+                 Top + bottom are `flex: 0 0 auto`; the hero zone is
+                 `flex: 1 1 auto` so it absorbs available height and
+                 keeps the CTA naturally centred between identity and
+                 channels. Replaces the old `margin: auto 0 0` trick
+                 on the footer that left ~80 px of dead space below
+                 the channels on most viewports. -->
+            <section class="home-section-top" aria-label="Identity">
             <div class="home-identity">
                 <div class="home-brand-row">
                     <div class="home-brand">
@@ -593,69 +600,16 @@
                      mean a wider JS refactor. -->
                 <div class="home-devid-wrap" id="home-devid-wrap"></div>
 
-                <!-- Action tiles row — May 2026 (operator request).
-                     "Expand 'Download App', 'Login', My Reports,
-                     Rewards and Audio Speaker add as a row above
-                     Life Keeper."
-                     Five labelled tiles in a single grid row,
-                     replacing both (a) the small icon cluster that
-                     used to live top-right (install + voice + login)
-                     AND (b) the 2-col secondary row (My Reports +
-                     Rewards) that used to sit below the primary CTA.
-                     Reads as a clear "what can I do here" toolkit
-                     placed right above the reward hero.
-
-                     IDs kept stable so existing wiring continues:
-                       - #btn-home-install-icon   (install prompt)
-                       - #btn-home-login-icon     (login / account)
-                       - #btn-my-reports          (My Reports list)
-                       - #btn-rewards             (Rewards page)
-                       - #btn-home-voice          (TTS read-aloud)
-                     Login tile retains the red/green status dot in
-                     the corner via #home-login-dot. -->
-                <div class="home-action-tiles" id="home-action-tiles" role="group" aria-label="Quick actions">
-                    <button type="button" class="home-action-tile" id="btn-home-install-icon"
-                            aria-label="Install on home screen"
-                            data-i18n-aria-label="landing_install_pwa"
-                            hidden>
-                        <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></span>
-                        <span class="hat-label" data-i18n="action_tile_download">Download App</span>
-                    </button>
-                    <button type="button" class="home-action-tile home-action-tile--login" id="btn-home-login-icon"
-                            aria-label="Sign in"
-                            data-i18n-aria-label="home_login_icon_signed_out"
-                            data-state="anonymous">
-                        <span class="hat-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                        </span>
-                        <span class="hat-label" data-i18n="action_tile_login">Login</span>
-                        <span class="icon-status-dot dot-offline" id="home-login-dot" aria-hidden="true"></span>
-                    </button>
-                    <button type="button" class="home-action-tile" id="btn-my-reports">
-                        <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg></span>
-                        <span class="hat-label" data-i18n="my_reports">My Reports</span>
-                        <span class="mr-count" id="mr-count" hidden>(0)</span>
-                        <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
-                    </button>
-                    <button type="button" class="home-action-tile home-action-tile--rewards" id="btn-rewards">
-                        <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><circle cx="12" cy="17" r="5"/><path d="M12 17h.01"/></svg></span>
-                        <span class="hat-label" data-i18n="rewards_btn">Rewards</span>
-                    </button>
-                    <button type="button" class="home-action-tile" id="btn-home-voice"
-                            aria-label="Read this page aloud"
-                            data-i18n-aria-label="aria_read_aloud">
-                        <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span>
-                        <span class="hat-label" data-i18n="action_tile_audio">Audio</span>
-                    </button>
-                </div>
-
-                <!-- Reward-hero badge chip — May 2026 (smaller after
-                     operator: "Reduce the size of the Lifekeeper Icon").
-                     Tier emoji rendered at 28-32 px (was 44-52); tier
-                     name + stat caption keep their hierarchy but the
-                     overall card is more proportional now that the
-                     action-tiles row above carries equal visual weight. -->
-                <div class="home-reward-hero" id="home-reward-hero">
+                <!-- Reward-hero badge chip — May 2026 (redesign pass).
+                     Demoted from a centred trophy card to an INLINE
+                     PILL via the .home-reward-hero--pill modifier.
+                     Sits inside section-top right under the brand-row
+                     so the visual hierarchy is: HEADER → identity →
+                     CTA (anchor) → utility → channels → footer. The
+                     existing IDs/classes are preserved so the
+                     home-screen.js painter keeps writing into them
+                     without any JS change. -->
+                <div class="home-reward-hero home-reward-hero--pill" id="home-reward-hero">
                     <div class="home-badge-chip home-badge-chip--hero" id="home-badge-chip" hidden
                          role="status" aria-live="polite"
                          aria-label="Reporter level">
@@ -709,6 +663,16 @@
                  Incident". Logged-in greeting moves to a small grey
                  supratext above the CTA via JS. -->
             <p class="home-title-sub" id="home-title-sub" hidden data-i18n="home_greeting_sub">Welcome back.</p>
+            </section><!-- /.home-section-top -->
+
+            <!-- The "hero zone" — flex-grow absorbs available
+                 viewport height so the CTA naturally centres between
+                 identity + channels. Consent above the CTA so the
+                 reporter agrees before tapping; utility row (My
+                 Reports / Login / Rewards / Audio / Download)
+                 BELOW the CTA so it doesn't compete for primary
+                 attention. -->
+            <section class="home-section-hero" aria-label="Primary action">
 
             <!-- Recent reports (logged-in only) — last 3 reports as compact
                  cards. Sourced from AuthStore.meReports() with device-hash
@@ -737,24 +701,80 @@
                 </label>
             </div>
 
-            <!-- Primary CTA. Label updated from "Start Reporting"
-                 to "Report an Incident" so the standalone hero title can
-                 be removed. CSS bumps height + font so it visually
-                 anchors the page. Existing handler in app.js routes
-                 to v4 capture (or v3 stage-where via UI_V3_ENABLED).
-                 Disabled by home-screen.js until consent is checked. -->
-            <button class="big-cta" id="btn-start">
-                <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg></i>
-                <span data-i18n="home_cta_primary">Report an Incident</span>
+            <!-- Primary CTA — May 2026 (redesign pass). Promoted to
+                 visual anchor of the page: scaled up via clamp(),
+                 gradient + glow + drop-shadow, and now carries a
+                 SUBTITLE line ("Capture · Verify · Help") that sells
+                 the value-prop and visually balances the larger pad.
+                 Existing #btn-start id and handler unchanged. -->
+            <button class="big-cta big-cta--hero" id="btn-start">
+                <span class="cta-row">
+                    <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg></i>
+                    <span class="cta-label" data-i18n="home_cta_primary">Report an Incident</span>
+                </span>
+                <span class="cta-sub" data-i18n="home_cta_sub">Capture · Verify · Help</span>
             </button>
+
+            <!-- Utility row — May 2026 (redesign pass). MOVED out
+                 of section-top to sit BELOW the CTA so it doesn't
+                 compete with the anchor for attention. Same 5 IDs
+                 (Download / Login / My Reports / Rewards / Audio).
+                 Visually demoted in CSS via .home-section-hero
+                 .home-action-tile to no individual borders, soft
+                 hover surface only. -->
+            <div class="home-action-tiles home-action-tiles--utility" id="home-action-tiles" role="group" aria-label="Quick actions">
+                <button type="button" class="home-action-tile" id="btn-home-install-icon"
+                        aria-label="Install on home screen"
+                        data-i18n-aria-label="landing_install_pwa"
+                        hidden>
+                    <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></span>
+                    <span class="hat-label" data-i18n="action_tile_download">Download App</span>
+                </button>
+                <button type="button" class="home-action-tile home-action-tile--login" id="btn-home-login-icon"
+                        aria-label="Sign in"
+                        data-i18n-aria-label="home_login_icon_signed_out"
+                        data-state="anonymous">
+                    <span class="hat-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    </span>
+                    <span class="hat-label" data-i18n="action_tile_login">Login</span>
+                    <span class="icon-status-dot dot-offline" id="home-login-dot" aria-hidden="true"></span>
+                </button>
+                <button type="button" class="home-action-tile" id="btn-my-reports">
+                    <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg></span>
+                    <span class="hat-label" data-i18n="my_reports">My Reports</span>
+                    <span class="mr-count" id="mr-count" hidden>(0)</span>
+                    <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
+                </button>
+                <button type="button" class="home-action-tile home-action-tile--rewards" id="btn-rewards">
+                    <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><circle cx="12" cy="17" r="5"/><path d="M12 17h.01"/></svg></span>
+                    <span class="hat-label" data-i18n="rewards_btn">Rewards</span>
+                </button>
+                <button type="button" class="home-action-tile" id="btn-home-voice"
+                        aria-label="Read this page aloud"
+                        data-i18n-aria-label="aria_read_aloud">
+                    <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span>
+                    <span class="hat-label" data-i18n="action_tile_audio">Audio</span>
+                </button>
+            </div>
 
             <!-- May 2026 (action-tiles pass) — the 2-col secondary
                  row (My Reports + Rewards) below the primary CTA was
-                 REMOVED. Both buttons now live in #home-action-tiles
-                 above the reward hero as part of a unified 5-tile
-                 action toolkit. Removing the duplicate keeps the page
-                 cleaner — no two surfaces for the same thing. -->
+                 REMOVED. Kept as empty hidden anchor for any legacy
+                 deep-link or spec selector. -->
             <div class="home-secondary-row home-secondary-row--legacy" id="home-secondary-row" hidden aria-hidden="true"></div>
+
+            </section><!-- /.home-section-hero -->
+
+            <!-- Bottom group — channels grid + privacy footer +
+                 device-ID. `flex: 0 0 auto` so it pins to the
+                 viewport floor; the hero zone above absorbs all the
+                 spare height. Replaces the prior `margin: auto 0 0`
+                 trick which left dead space *between* the channels
+                 and the footer; now spacing lives ABOVE the bottom
+                 group (in the hero zone), which is the natural place
+                 for the visual breathing room. -->
+            <section class="home-section-bottom" aria-label="Other channels and meta">
 
             <!-- Safety hint + How CRISP Works removed per
                  user direction to make the UI cleaner. The original
@@ -867,6 +887,8 @@
                     <button id="btn-home-devid-tip-dismiss" type="button" data-i18n="home_devid_tip_dismiss">Got it</button>
                 </div>
             </div>
+
+            </section><!-- /.home-section-bottom -->
 
             <!-- Legacy retained DOM — kept hidden so any
                  _buildChannelTile() append target remains valid for

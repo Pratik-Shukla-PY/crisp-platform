@@ -724,5 +724,6 @@
   "badge_chip_lives_stat": "{n} জীবন রক্ষা",
   "action_tile_download": "অ্যাপ ডাউনলোড",
   "action_tile_login": "লগইন",
-  "action_tile_audio": "অডিও"
+  "action_tile_audio": "অডিও",
+  "home_cta_sub": "ক্যাপচার · যাচাই · সহায়তা"
 }

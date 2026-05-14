@@ -724,5 +724,6 @@
   "badge_chip_lives_stat": "{n} உயிர்கள் காப்பாற்றப்பட்டன",
   "action_tile_download": "ஆப்ஸ் பதிவிறக்கு",
   "action_tile_login": "உள்நுழைய",
-  "action_tile_audio": "ஆடியோ"
+  "action_tile_audio": "ஆடியோ",
+  "home_cta_sub": "பதிவு · சரிபார்ப்பு · உதவி"
 }

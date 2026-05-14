@@ -725,5 +725,6 @@
   "badge_chip_lives_stat": "{n}개의 생명 구함",
   "action_tile_download": "앱 다운로드",
   "action_tile_login": "로그인",
-  "action_tile_audio": "오디오"
+  "action_tile_audio": "오디오",
+  "home_cta_sub": "촬영 · 확인 · 지원"
 }

@@ -724,5 +724,6 @@
   "badge_chip_lives_stat": "{n} जीवन बचाए",
   "action_tile_download": "ऐप डाउनलोड करें",
   "action_tile_login": "लॉगिन",
-  "action_tile_audio": "ऑडियो"
+  "action_tile_audio": "ऑडियो",
+  "home_cta_sub": "कैप्चर · सत्यापित · सहायता"
 }

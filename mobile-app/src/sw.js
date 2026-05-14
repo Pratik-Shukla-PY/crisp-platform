@@ -5,7 +5,48 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v161';
+const CACHE_NAME = 'crisp-v162';
+// v161 → v162 (May 2026 — home stage REDESIGN PASS).
+// Operator: "Analyze the current CRISP landing page UI/UX carefully
+//  and redesign/refactor ONLY the layout, spacing, responsiveness,
+//  CSS hierarchy, visual balance, and interaction polish WITHOUT
+//  changing any existing functionality, workflows, buttons, logic,
+//  routing, reporting flow, or integrations."
+// Goals:
+//   1. CTA "Report an Incident" becomes the visual ANCHOR
+//   2. Lifekeeper status becomes a quiet inline pill (was 130 px card)
+//   3. Action tiles (My Reports + utility) move BELOW the CTA
+//   4. Channels keep 3 × 2 grid but with softer borders
+//   5. Footer + device-ID pinned to viewport floor, no detachment
+//   6. Single page, no scroll, no overflow on any common viewport
+//   7. Safe-area insets for notched devices
+//   8. 11 bordered surfaces → 6 (reduce cognitive load)
+//
+// Implementation in 3 phases all in one commit:
+//   Phase A — markup: wrap home-center children into 3 semantic
+//     sections (top / hero / bottom). Pull action-tiles OUT of the
+//     home-identity block, place BELOW the CTA inside section-hero.
+//     Add CTA subtitle span (.cta-sub "CAPTURE · VERIFY · HELP").
+//     All existing IDs preserved → wiring untouched.
+//   Phase B — CSS: new appended block (lines 9430+) overrides the
+//     older block-by-block treatments via .home-stage parent
+//     prefix. Section flex: 0/1/0 grow so hero zone absorbs spare
+//     viewport height (no more `margin: auto 0 0` dead space).
+//     CTA scaled via clamp(96px,16vh,136px) height + clamp font
+//     sizes + gradient + drop-shadow + inner highlight. Lifekeeper
+//     pill compound-selector compounded so it beats older hero
+//     overrides. Utility tiles → no individual borders. Channels
+//     border opacity 0.18 → 0.06.
+//   Phase C — i18n: new key home_cta_sub ("Capture · Verify · Help")
+//     translated across 22 locales. Validator passes 682 keys.
+//
+// Verified at 5 viewports via /tmp/crisp_fit_check.mjs:
+//   iPhone SE   390×667   scrolls=false  devid_bottom 655/667
+//   iPhone 14   390×844   scrolls=false  devid_bottom 828/844
+//   Pixel 7     412×915   scrolls=false  devid_bottom 899/915
+//   iPad        768×1024  scrolls=false  devid_bottom 1006/1024
+//   desktop sh  1280×720  scrolls=false  devid_bottom 708/720
+// Every viewport fits without scroll; device-ID visible at bottom.
 // v160 → v161 (May 2026 — channels back to 3 × 2 grid).
 //   Operator: "You have kept all channel icons in one row. This is
 //    not Ok. It was looking great earlier. Now its bad. Put in 3

@@ -724,5 +724,6 @@
   "badge_chip_lives_stat": "{n} ప్రాణాలు రక్షించారు",
   "action_tile_download": "యాప్ డౌన్‌లోడ్",
   "action_tile_login": "లాగిన్",
-  "action_tile_audio": "ఆడియో"
+  "action_tile_audio": "ఆడియో",
+  "home_cta_sub": "క్యాప్చర్ · ధృవీకరణ · సహాయం"
 }

@@ -724,5 +724,6 @@
   "badge_chip_lives_stat": "{n} જીવન બચાવ્યા",
   "action_tile_download": "ઍપ ડાઉનલોડ",
   "action_tile_login": "લૉગિન",
-  "action_tile_audio": "ઑડિઓ"
+  "action_tile_audio": "ઑડિઓ",
+  "home_cta_sub": "કેપ્ચર · ચકાસો · મદદ"
 }

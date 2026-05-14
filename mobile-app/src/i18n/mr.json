@@ -724,5 +724,6 @@
   "badge_chip_lives_stat": "{n} जीव वाचवले",
   "action_tile_download": "ॲप डाउनलोड",
   "action_tile_login": "लॉगिन",
-  "action_tile_audio": "ऑडिओ"
+  "action_tile_audio": "ऑडिओ",
+  "home_cta_sub": "कॅप्चर · पडताळणी · मदत"
 }

@@ -724,5 +724,6 @@
   "badge_chip_lives_stat": "{n} спасённых жизней",
   "action_tile_download": "Скачать",
   "action_tile_login": "Войти",
-  "action_tile_audio": "Звук"
+  "action_tile_audio": "Звук",
+  "home_cta_sub": "Снять · Проверить · Помочь"
 }
