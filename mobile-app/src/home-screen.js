@@ -554,23 +554,53 @@
 
         _paintDevidBadge();
 
+        // Shared copy routine — used by both the icon button (when
+        // visible) and the whole-pill tap path below.
+        async function _copyDevidToClipboard() {
+            const txt = (document.getElementById('home-devid-text') || {}).textContent || '';
+            try {
+                await (navigator.clipboard && navigator.clipboard.writeText
+                    ? navigator.clipboard.writeText(txt)
+                    : Promise.reject(new Error('no clipboard')));
+                badge.classList.add('is-copied');
+                setTimeout(() => badge.classList.remove('is-copied'), 1400);
+            } catch (_) {
+                // Fallback: prompt the user to copy manually.
+                try { window.prompt('Copy your reporter ID', txt); } catch {}
+            }
+        }
+
         // Copy → clipboard with brief visual confirmation.
         if (copyBtn) {
-            copyBtn.addEventListener('click', async (e) => {
+            copyBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const txt = (document.getElementById('home-devid-text') || {}).textContent || '';
-                try {
-                    await (navigator.clipboard && navigator.clipboard.writeText
-                        ? navigator.clipboard.writeText(txt)
-                        : Promise.reject(new Error('no clipboard')));
-                    badge.classList.add('is-copied');
-                    setTimeout(() => badge.classList.remove('is-copied'), 1400);
-                } catch (_) {
-                    // Fallback: prompt the user to copy manually.
-                    try { window.prompt('Copy your reporter ID', txt); } catch {}
-                }
+                _copyDevidToClipboard();
             });
         }
+
+        // v2 footer pass (May 2026) — when the badge sits in the
+        // bottom footer-row, the copy + info icon buttons are hidden
+        // by CSS (`.home-footer-row .home-devid-badge button { display:none }`)
+        // to match the operator's reference screenshot. The whole
+        // pill then becomes the copy affordance. We add a tap handler
+        // directly on the badge that no-ops when an inner button
+        // (still in DOM, still clickable on the non-footer identity-
+        // bar surface) handles the event first via stopPropagation.
+        badge.addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;     // icon handlers own the event
+            _copyDevidToClipboard();
+        });
+        // Keyboard / a11y: make the pill itself focusable + Enter/Space
+        // trigger the same copy. tabindex only when no inner button has
+        // focus to avoid double-tabbing the same control.
+        if (!badge.hasAttribute('tabindex')) badge.setAttribute('tabindex', '0');
+        if (!badge.hasAttribute('role')) badge.setAttribute('role', 'button');
+        badge.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            if (e.target.closest('button')) return;
+            e.preventDefault();
+            _copyDevidToClipboard();
+        });
 
         // Info → toggle the tooltip (also dismissed on outside-click).
         function _showTip() {
