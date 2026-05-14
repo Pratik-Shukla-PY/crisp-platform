@@ -5,7 +5,19 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v180';
+const CACHE_NAME = 'crisp-v181';
+// v180 → v181 (May 2026 — lang pill v6.5 clean dot + flag fix).
+// Operator: "with the flag I see a black shadow over the icon" +
+// "the green dot can be clean solid green dot than a glowing thing."
+//
+//   1. `.lang-switcher .lps-flag` — removed text-shadow:0 0 1px
+//      rgba(0,0,0,0.35) that was casting a dark halo around the
+//      SVG flag glyph.
+//   2. `.connectivity-dot` — dropped radial-gradient interior
+//      (was simulating a lit LED) + dropped all 3 box-shadow halo
+//      layers. Now a flat solid #80EE98 disk (red #ef4444 offline).
+//      Size held at 12 px (back from the v6.2 13 px bump — without
+//      the halo, the smaller pure disk is the right visual weight).
 // v179 → v180 (May 2026 — footer v4 strict single-row pass).
 // Operator screenshot: "Open source" was wrapping to line 2 and
 // the device-ID pill was colliding with it. Root cause: inner-nav
