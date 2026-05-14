@@ -4656,19 +4656,22 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 /* Consent row — inline replacement of the old full-screen overlay.
    Auto-hidden by home-screen.js once accepted; persists in localStorage. */
 .home-consent {
+    /* May 2026 (fit-in-viewport pass) — padding 12/14 → 8/12 + size
+       smaller font so the consent + text fits in ~50-60 px instead
+       of 80. Drops a row of vertical space across all viewports. */
     margin-top: 4px;
-    padding: 12px 14px;
+    padding: 8px 12px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
+    border-radius: 10px;
 }
 .home-consent-row {
     display: flex;
     align-items: flex-start;
     gap: 10px;
     cursor: pointer;
-    font-size: 12.5px;
-    line-height: 1.45;
+    font-size: 12px;
+    line-height: 1.35;
 }
 .home-consent-row input[type=checkbox] {
     width: 18px; height: 18px;
@@ -4874,7 +4877,9 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     align-items: stretch;
     gap: 8px;
     width: 100%;
-    margin: 8px 0 12px;
+    /* Tighter margin so the row hugs the brand-row above + leaves
+       just enough breathing room before the reward hero below. */
+    margin: 4px 0 4px;
 }
 .home-action-tile {
     position: relative;
@@ -4994,10 +4999,13 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 
 .home-reward-hero {
+    /* May 2026 (fit-in-viewport pass) — margin 14/6 → 4/2 so the
+       hero sits closer to the action tiles above and the consent
+       below, freeing ~14 px of vertical space. */
     display: flex;
     justify-content: center;
     align-items: center;
-    margin: 14px 0 6px;
+    margin: 4px 0 2px;
     width: 100%;
 }
 /* Compound selector (.home-badge-chip.home-badge-chip--hero) bumps
@@ -5007,16 +5015,20 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
    compact pill variant). Without the compound, hero font-size and
    padding silently lost the cascade. */
 .home-badge-chip.home-badge-chip--hero {
+    /* May 2026 (fit-in-viewport pass) — padding 20/30 → 12/22 so the
+       card is ~85 px tall instead of 119, freeing up 30+ px for the
+       below-the-fold content to fit. Still feels like a centred
+       trophy; the emoji + label + caption hierarchy is preserved. */
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 6px;
-    padding: 20px 30px;
-    border-radius: 22px;
-    min-width: 220px;
-    max-width: 360px;
-    font-size: 14px;
-    line-height: 1.2;
+    gap: 4px;
+    padding: 12px 22px;
+    border-radius: 18px;
+    min-width: 200px;
+    max-width: 320px;
+    font-size: 13px;
+    line-height: 1.15;
     letter-spacing: normal;
     min-height: 0;
 }
@@ -5054,10 +5066,10 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 @media (min-height: 800px) {
     .home-badge-chip.home-badge-chip--hero {
-        padding: 24px 32px;
+        padding: 16px 28px;
     }
-    .home-badge-chip.home-badge-chip--hero .hb-emoji { font-size: 32px; }
-    .home-badge-chip.home-badge-chip--hero .hb-label { font-size: 24px; }
+    .home-badge-chip.home-badge-chip--hero .hb-emoji { font-size: 30px; }
+    .home-badge-chip.home-badge-chip--hero .hb-label { font-size: 22px; }
 }
 /* Tappable cue at T3+ (Badge Studio unlocked). */
 .home-badge-chip.chip-unlocked { cursor: pointer; }
@@ -5371,14 +5383,13 @@ body.tier-t4 .home-impact {
    showing ≈ 660 px usable height) without scroll. Larger viewports
    get more breathing room via the height media queries below. */
 .home-stage .home-center {
-    /* May 2026 (action-tiles pass) — top padding pinned to 16 px so
-       the brand row's top edge aligns with the absolute-positioned
-       lang pill at top:16. Larger viewports previously bumped this
-       to 28-32 px which pushed the brand DOWN out of alignment
-       with the lang pill. Keep 16 px top regardless of viewport
-       height for a stable header line. */
-    padding: 16px 20px 16px;
-    gap: 14px;
+    /* May 2026 (fit-in-viewport pass) — gap 14 → 10 px so the seven
+       direct children stack tighter. Top padding still 16 to match
+       the absolute lang pill at top:16. Combined with the per-section
+       padding compressions above, the home stage now fits in ~720 px
+       of viewport height without scroll on most phones / tablets. */
+    padding: 16px 20px 12px;
+    gap: 10px;
     align-items: stretch;
     justify-content: flex-start;
     text-align: start;
@@ -5394,26 +5405,26 @@ body.tier-t4 .home-impact {
     .home-stage .home-center { padding-left: 16px; padding-right: 16px; }
     .home-brand-row { padding-right: 96px; }
 }
-/* May 2026 (action-tiles pass) — top padding pinned to 16 px across
-   all viewport heights so brand row stays aligned with the lang pill
-   (top:16 absolute). Bottom + side padding still scale up. Gap
-   between sections also scales up modestly on taller viewports. */
+/* May 2026 (fit-in-viewport pass) — gaps trimmed across all height
+   breakpoints (was 20/24/28 → now 12/14/16) so the home stage fits
+   into 100dvh on more devices without scroll. Top padding still
+   pinned at 16 so brand-row aligns with the lang pill. */
 @media (min-height: 700px) {
     .home-stage .home-center {
-        padding: 16px 20px 20px;
-        gap: 20px;
+        padding: 16px 20px 14px;
+        gap: 12px;
     }
 }
 @media (min-height: 800px) {
     .home-stage .home-center {
-        padding: 16px 20px 24px;
-        gap: 24px;
+        padding: 16px 20px 16px;
+        gap: 14px;
     }
 }
 @media (min-height: 900px) {
     .home-stage .home-center {
-        padding: 16px 20px 28px;
-        gap: 28px;
+        padding: 16px 20px 18px;
+        gap: 16px;
     }
 }
 
@@ -5767,55 +5778,70 @@ body.tier-t4 .home-impact {
     .home-stage .home-section-channels .home-section-lede { font-size: 12.5px; margin-bottom: 16px; }
 }
 
-/* — Channels grid — compact baseline so 3 × 2 tiles fit on the
-   shortest viewport. Scales up on taller phones. */
+/* — Channels row — May 2026 (fit-in-viewport pass).
+   Operator: "The entire app should be responsive and load on a
+   single page along the height of the screen without using scroll
+   on all screens, browsers and OSs."
+   Pre-fix this was a 3 × 2 grid where each tile was 78-138 px tall
+   → section took 180-310 px including the title, the single
+   biggest contributor to the home stage overflowing. Now: one
+   horizontal flex row of 6 compact channel chips, each ~46-56 px
+   tall. The full section fits in ~70-100 px. Tiles still show
+   their FA icon + name + green live-dot (icon-only on the
+   narrowest viewports for breathing room). */
 .home-stage .home-channels {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
     margin: 0;
     width: 100%;
 }
 .home-stage .home-channel-tile {
+    flex: 1 1 0;
+    min-width: 0;
     aspect-ratio: auto;
-    min-height: 78px;
-    padding: 12px 6px;
-    border-radius: 12px;
-    gap: 6px;
+    min-height: 46px;
+    padding: 6px 4px;
+    border-radius: 10px;
+    gap: 4px;
 }
-.home-stage .home-channel-tile .ct-icon { font-size: 22px; }
+.home-stage .home-channel-tile .ct-icon { font-size: 16px; }
 .home-stage .home-channel-tile .ct-label {
-    font-size: 11.5px;
+    font-size: 10px;
     font-weight: 600;
     letter-spacing: -0.01em;
-    line-height: 1.2;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
 @media (min-height: 700px) {
-    .home-stage .home-channels { gap: 10px; }
+    .home-stage .home-channels { gap: 8px; }
     .home-stage .home-channel-tile {
-        min-height: 92px;
-        padding: 16px 8px;
-        gap: 8px;
+        min-height: 52px;
+        padding: 8px 4px;
+        gap: 4px;
     }
-    .home-stage .home-channel-tile .ct-icon { font-size: 26px; }
-    .home-stage .home-channel-tile .ct-label { font-size: 12px; }
+    .home-stage .home-channel-tile .ct-icon { font-size: 18px; }
+    .home-stage .home-channel-tile .ct-label { font-size: 10.5px; }
 }
 @media (min-height: 800px) {
-    .home-stage .home-channels { gap: 12px; }
+    .home-stage .home-channels { gap: 10px; }
     .home-stage .home-channel-tile {
-        min-height: 124px;
-        padding: 22px 8px;
-        gap: 12px;
-        border-radius: 14px;
+        min-height: 60px;
+        padding: 10px 6px;
+        gap: 5px;
+        border-radius: 12px;
     }
-    .home-stage .home-channel-tile .ct-icon { font-size: 30px; }
-    .home-stage .home-channel-tile .ct-label { font-size: 13px; }
+    .home-stage .home-channel-tile .ct-icon { font-size: 20px; }
+    .home-stage .home-channel-tile .ct-label { font-size: 11px; }
 }
 @media (min-height: 900px) {
-    .home-stage .home-channels { gap: 14px; }
+    .home-stage .home-channels { gap: 12px; }
     .home-stage .home-channel-tile {
-        min-height: 138px;
-        padding: 26px 8px;
+        min-height: 66px;
+        padding: 12px 6px;
     }
 }
 .home-stage .home-channel-tile.is-disabled { opacity: 0.55; }

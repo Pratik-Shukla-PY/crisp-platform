@@ -5,7 +5,35 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v159';
+const CACHE_NAME = 'crisp-v160';
+// v159 → v160 (May 2026 — operator-reported scroll on home stage).
+//   "The entire app should be responsive and load on a single page
+//    along the height of the screen without using scroll on all
+//    screens, browsers and OSs. Fix in local. Currently the height
+//    is not responsive, it cuts on some screen."
+// Pre-fix content totalled 1145-1407 px across iPhone SE / iPhone
+// 14 / Pixel / iPad / desktop — overflowing every viewport by
+// 300-500 px and forcing scroll.
+// Diagnosed with /tmp/crisp_height_audit.mjs:
+//   biggest contributors → channels section 181-310 px (3×2 grid),
+//   reward hero 119-133, consent 80, home-center gaps 14-28.
+// Compressions:
+//   • channels 3×2 grid → single horizontal flex row of 6 compact
+//     chips, each 46-66 px tall (was 78-138). Section shrinks
+//     181-310 → 63-86 px.
+//   • reward-hero padding 20-26/30-32 → 12-16/22-28; min-width
+//     220 → 200, max-width 360 → 320. Hero shrinks 119-133 → 101-111.
+//   • consent padding 12/14 → 8/12; font 12.5 → 12. 80 → 67.
+//   • action-tiles margin 8/12 → 4/4. reward-hero margin 14/6 → 4/2.
+//   • home-center gap 14/22/28/32 → 10/12/14/16 across breakpoints.
+// Verified via /tmp/crisp_fit_check.mjs at 5 viewports:
+//   iPhone SE 390×667  scrolls=false  devid_bottom=651 of 667
+//   iPhone 14 390×844  scrolls=false  devid_bottom=824 of 844
+//   Pixel 7   412×915  scrolls=false  devid_bottom=893 of 915
+//   iPad      768×1024 scrolls=false  devid_bottom=1002 of 1024
+//   desktop   1280×720 scrolls=false  devid_bottom=702 of 720
+// Every viewport now fits without scroll; device-ID pill remains
+// within the viewport at the bottom.
 // v158 → v159 (May 2026 — operator-reported blank slot in action
 // tiles row).
 //   "When someone downloads the app the download button disappears
