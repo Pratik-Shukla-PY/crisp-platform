@@ -148,7 +148,11 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 
 /* ── Language switcher ──────────────────────────────────────── */
 .lang-switcher {
-    position: absolute; top: 16px; right: 16px; z-index: 100;
+    /* May 2026 (alignment-rhythm pass) — right: 16 → 20 so the
+       pill aligns with the home-stage's 20 px horizontal gutter.
+       Previously it stuck out 4-6 px further right than the brand
+       row beneath it, breaking the visual grid. */
+    position: absolute; top: 16px; right: 20px; z-index: 100;
     display: flex;
     flex-wrap: nowrap;            /* force single-line pill */
     align-items: center;
@@ -9493,18 +9497,21 @@ body.tier-t4 .home-impact {
     gap: 8px;
 }
 
-/* Override the prior height-media-query gap bumps — gap now lives on
-   each section, not on the parent. */
+/* May 2026 (alignment-rhythm pass) — horizontal padding pinned at
+   20 px on every viewport height so the grid never shifts. Only
+   vertical padding + section-hero gap scale up with viewport
+   height. Operator: "Horizontal alignment between elements feels
+   inconsistent." */
 @media (min-height: 740px) {
-    .home-stage .home-center { padding: 18px 22px 14px; gap: 0; }
+    .home-stage .home-center { padding: 18px 20px 14px; gap: 0; }
     .home-stage .home-section-hero { gap: clamp(12px, 2.5vh, 22px); }
 }
 @media (min-height: 820px) {
-    .home-stage .home-center { padding: 22px 22px 16px; }
+    .home-stage .home-center { padding: 22px 20px 16px; }
     .home-stage .home-section-hero { gap: clamp(14px, 3vh, 26px); }
 }
 @media (min-height: 920px) {
-    .home-stage .home-center { padding: 26px 24px 18px; }
+    .home-stage .home-center { padding: 26px 20px 18px; }
 }
 
 /* ── B. Brand row — minimal, aligned to lang pill ────────────────── */
@@ -9523,11 +9530,17 @@ body.tier-t4 .home-impact {
 /* ── C. Lifekeeper status → inline pill (NOT a hero card) ────────── */
 
 .home-stage .home-reward-hero {
-    /* Was a centred 130 px trophy card; now a quiet inline pill row
-       beneath the brand. Single horizontal line: emoji + tier + stat. */
+    /* May 2026 (alignment-rhythm pass) — operator: "Lifekeeper badge
+       appears floating randomly and not aligned with the primary
+       CTA." Was justify-content: flex-start which left-anchored the
+       inline pill to the brand's left edge while the CTA below was
+       centred/full-width — no shared vertical centre axis. Now
+       centred so the brand row + lang pill form the chrome and
+       EVERYTHING ELSE (identity pill, CTA, utility, channels,
+       footer, devid) shares the same horizontal centre line. */
     margin: 4px 0 2px;
     display: flex;
-    justify-content: flex-start;
+    justify-content: center;
     align-items: center;
     width: 100%;
 }

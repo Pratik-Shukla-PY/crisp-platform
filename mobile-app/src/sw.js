@@ -5,7 +5,44 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v162';
+const CACHE_NAME = 'crisp-v163';
+// v162 → v163 (May 2026 — alignment-rhythm pass).
+// Operator: "Currently the layout feels visually disconnected and
+//  asymmetrical:
+//    - The Lifekeeper badge appears floating randomly and not
+//      aligned with the primary CTA.
+//    - The logo/header area and language selector are not aligned
+//      on a common visual grid.
+//    - Horizontal alignment between elements feels inconsistent.
+//    - The CTA width, padding, and visual centering need
+//      refinement.
+//    - Overall composition lacks visual rhythm and professional
+//      balance."
+// Measured the misalignments via /tmp/crisp_align_audit.mjs at 390 px:
+//   BEFORE
+//     lang pill right gap     = 16 (vs stage right gap 22) → off by 6
+//     identity pill left gap  = 22, right gap = 150           → asymmetric, floating left
+//     stage padding-right     = 22 / 24 across height breakpoints → grid shifted by viewport
+// Three fixes:
+//   1. .home-reward-hero { justify-content: flex-start → center }
+//      so the Lifekeeper inline pill sits on the same vertical
+//      centre axis as the CTA below.
+//   2. .lang-switcher { right: 16 → 20 } so its right edge aligns
+//      with the home-stage's 20 px horizontal gutter (was sticking
+//      out 4-6 px further right than everything else).
+//   3. Home-center horizontal padding pinned at 20 px on EVERY
+//      viewport height (dropped the 22 / 24 bumps in the
+//      min-height: 820 / 920 media queries) so the grid never
+//      shifts. Only vertical padding scales with viewport now.
+// Verified after:
+//   brand        left=20  right_gap=130 (left-anchored)
+//   lang         right=20 (was 16) — matches grid right edge ✓
+//   identity_pill left=86 right=86 — perfectly centred ✓
+//   consent/CTA/utility/channels/footer all left=20 right=20
+//   devid        left=99 right=99 — perfectly centred
+// Every full-width element now shares LeftGap = RightGap = 20 px;
+// pills are centred symmetrically; no element drifts off-grid.
+// Still scrolls=false on all 5 measured viewports.
 // v161 → v162 (May 2026 — home stage REDESIGN PASS).
 // Operator: "Analyze the current CRISP landing page UI/UX carefully
 //  and redesign/refactor ONLY the layout, spacing, responsiveness,
