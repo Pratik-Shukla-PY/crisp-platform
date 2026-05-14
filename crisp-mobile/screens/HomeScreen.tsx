@@ -532,17 +532,17 @@ export default function HomeScreen(props: HomeScreenProps) {
               <Text style={styles.channelLabel} numberOfLines={1}>
                 {_t(c.labelKey, c.id)}
               </Text>
-              {/* v168.1 — status subtitle. Live channels show "Live"
-                  in glowing green; the prior green corner dot is
-                  removed per operator: "remove green dots (2 are
-                  there currently)". Glow is approximated via
-                  textShadow on the channelStatusLive style. */}
-              <Text
-                style={[styles.channelStatus, c.live && styles.channelStatusLive]}
-                numberOfLines={1}
-              >
-                {_t(c.statusKey, c.statusKey)}
-              </Text>
+              {/* v7 (May 2026, operator): live channels (Telegram +
+                  IVR) drop the status text entirely and surface a
+                  small solid green dot at top-right of the tile.
+                  Non-live channels keep their status subtitle. */}
+              {c.live ? (
+                <View style={styles.channelLiveDot} pointerEvents="none" />
+              ) : (
+                <Text style={styles.channelStatus} numberOfLines={1}>
+                  {_t(c.statusKey, c.statusKey)}
+                </Text>
+              )}
             </Pressable>
           ))}
         </View>
@@ -571,11 +571,11 @@ export default function HomeScreen(props: HomeScreenProps) {
           <Text style={styles.footerLink} onPress={props.onPrivacy}>
             {_t('home_footer_privacy', 'Privacy')}
           </Text>
-          <Text style={styles.footerDot}>·</Text>
+          <Text style={styles.footerDot}>•</Text>
           <Text style={styles.footerLink} onPress={props.onSettings}>
             {_t('home_footer_help', 'Help')}
           </Text>
-          <Text style={styles.footerDot}>·</Text>
+          <Text style={styles.footerDot}>•</Text>
           <Text
             style={styles.footerLink}
             onPress={() => Linking.openURL('https://github.com/Pratik-Shukla-PY/crisp-platform').catch(() => {})}
@@ -882,18 +882,29 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.48)',
     textAlign: 'center', marginTop: 2,
   },
-  // v168.1 — glowing-green "Live" text for is-live channels.
-  // Replaces the corner dot; single liveness signal per the operator
-  // mock. Animation in RN would need useNativeDriver loop on textShadow
-  // (not supported); static glow is the cross-platform fallback.
+  // v7 (May 2026, operator) — clean solid green dot at top-right of
+  // .is-live channel tiles (Telegram, IVR). Replaces both:
+  //   · the v168.1 glowing-green "Live" text (now hidden via the
+  //     ternary in JSX above), and
+  //   · the v168 dual-dot mess (one pip + one ::after were both
+  //     showing pre-v168.1).
+  // Plain disk, no glow, matches the v6.5 lang-pill dot treatment.
+  channelLiveDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: '#80EE98',
+  },
+  // Kept as an orphan style for now (channelStatusLive) so any future
+  // surface that wants the glowing-text variant can resurrect it.
   channelStatusLive: {
     color: '#80EE98',
     fontWeight: '700',
     letterSpacing: 0.4,
     textTransform: 'uppercase',
-    textShadowColor: 'rgba(128, 238, 152, 0.65)',
-    textShadowRadius: 8,
-    textShadowOffset: { width: 0, height: 0 },
   },
 
   // §C.2 Queue badge (kept for parity)
@@ -905,42 +916,49 @@ const styles = StyleSheet.create({
   },
   queueText: { color: '#fde047', fontSize: 12, fontWeight: '600' },
 
-  // §C.3 Footer — v168.1 single-row with space-between.
-  // Links on the left, device-ID pill on the right, separated by
-  // `justifyContent: 'space-between'`. Matches the operator's mock
-  // exactly. Wraps on very narrow phones.
+  // §C.3 Footer — v2 pass (May 2026, operator screenshot). Single
+  // horizontal row, links left + pill right, separated by space-
+  // between. The earlier values (font 12, dot ·, pill padding 14/6,
+  // text alpha 0.78) read as faint vs the reference; v2 bumps to
+  // visible weights and switches the separator from middle-dot to
+  // bullet, matching the PWA twin. nowrap so the row stays a single
+  // line at standard phone widths.
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 12, paddingTop: 12,
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)',
+    flexWrap: 'nowrap',
+    gap: 12,
+    marginTop: 12, paddingTop: 16,
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
   },
   footerLinks: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
+    gap: 10,
+    flexWrap: 'nowrap',
+    flexShrink: 1,
+    minWidth: 0,
   },
   footerLink: {
-    color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, fontWeight: '500',
+    color: 'rgba(203, 213, 225, 0.75)', fontSize: 13, fontWeight: '500',
   },
-  footerDot: { color: 'rgba(255,255,255,0.30)', fontSize: 11 },
+  footerDot: { color: 'rgba(148, 163, 184, 0.55)', fontSize: 13 },
   footerVersion: { color: 'rgba(255,255,255,0.32)', fontSize: 11 },
 
-  // §C.4 Device-ID — pill sits inline in the footer row now.
+  // §C.4 Device-ID — pill sits inline in the footer row now. v2:
+  // roomier padding, slightly stronger bg + border, bigger / bolder
+  // text to match the reference screenshot's capsule weight.
   devidWrap: { alignItems: 'center', marginTop: 4 },
   devidBadge: {
-    paddingHorizontal: 14, paddingVertical: 6,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+    paddingHorizontal: 18, paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
     borderRadius: 999,
   },
   devidText: {
     fontFamily: 'SpaceMono-Regular',
-    color: 'rgba(255, 255, 255, 0.78)', fontSize: 11, fontWeight: '700',
-    letterSpacing: 0.6,
+    color: '#fff', fontSize: 12.5, fontWeight: '700',
+    letterSpacing: 1.0,
   },
 });

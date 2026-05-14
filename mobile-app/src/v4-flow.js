@@ -1414,27 +1414,94 @@
         const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
         const LOCATING = _t('v4_gps_locating') || 'Locating…';
         const UNAVAILABLE = _t('v4_gps_unavailable') || 'GPS unavailable';
-        // If we already have a locationName from a previous resolve, paint
-        // it immediately while we re-fetch GPS (the user may have moved).
         const current = _getState();
         text.textContent = current.locationName || LOCATING;
+
+        // v7 (May 2026, operator bug) — "GPS shows not available when I
+        // start reporting." Root cause: the error path of the prior
+        // implementation just set "GPS unavailable" with NO fallback,
+        // even though we already cache fresh GPS in localStorage via
+        // nearby.js (`crisp_last_location_v2`) and have an IP-geo
+        // fallback (`window.tryIPGeolocation`) wired in app.js.
+        //
+        // New fallback chain:
+        //   1. navigator.geolocation.getCurrentPosition (fresh, accurate)
+        //   2. localStorage cached GPS (instant, populated by prior runs)
+        //   3. window.tryIPGeolocation() (network-based coarse fallback)
+        //   4. only NOW show "GPS unavailable"
+        //
+        // Cache writeback: every successful fresh fix updates
+        // `crisp_last_location_v2` so the home-stage nearby intel +
+        // any future capture sees the freshest value.
+
+        function _readCachedGps() {
+            const keys = ['crisp_last_location_v2', 'crisp_last_location'];
+            for (const k of keys) {
+                try {
+                    const raw = localStorage.getItem(k);
+                    if (!raw) continue;
+                    const obj = JSON.parse(raw);
+                    const lat = obj.lat ?? obj.latitude;
+                    const lng = obj.lng ?? obj.longitude;
+                    const ts = obj.ts ?? obj.timestamp ?? 0;
+                    // 30-min staleness gate — same as nearby.js.
+                    if (typeof lat === 'number' && typeof lng === 'number'
+                        && Date.now() - ts < 30 * 60 * 1000) {
+                        return { lat, lng, acc: obj.acc || obj.accuracy || 100 };
+                    }
+                } catch (_) {}
+            }
+            return null;
+        }
+
+        function _writeCachedGps(lat, lng, acc) {
+            try {
+                localStorage.setItem('crisp_last_location_v2', JSON.stringify({
+                    lat, lng, acc, ts: Date.now(),
+                }));
+            } catch (_) {}
+        }
+
+        // Apply cached GPS IMMEDIATELY as a fallback so the user sees
+        // a location instantly — fresh fix will overwrite if it lands.
+        const cached = _readCachedGps();
+        if (cached && !current.location) {
+            _setState({ location: cached });
+            _paintV4LocationPills();
+        }
+
+        // After fresh + cache both fail, try IP geo. async.
+        function _tryIpFallback() {
+            const fn = window.tryIPGeolocation;
+            if (typeof fn !== 'function') {
+                text.textContent = current.locationName || UNAVAILABLE;
+                return;
+            }
+            fn().then((coords) => {
+                if (coords && typeof coords.lat === 'number') {
+                    _setState({ location: coords });
+                    _writeCachedGps(coords.lat, coords.lng, coords.acc || 5000);
+                    _paintV4LocationPills();
+                } else if (!cached) {
+                    // No fresh, no cache, no IP — give up.
+                    text.textContent = current.locationName || UNAVAILABLE;
+                }
+            }).catch(() => {
+                if (!cached) text.textContent = current.locationName || UNAVAILABLE;
+            });
+        }
+
         if (!navigator.geolocation) {
-            text.textContent = current.locationName || UNAVAILABLE;
+            // No geo API at all — IP fallback if we don't already have cache.
+            if (!cached) _tryIpFallback();
             return;
         }
+
         navigator.geolocation.getCurrentPosition((pos) => {
             const { latitude, longitude, accuracy } = pos.coords;
-            _setState({
-                location: { lat: latitude, lng: longitude, acc: accuracy },
-            });
-            // Paint coords as immediate feedback; the async geocode below
-            // will replace this with a place name shortly.
+            _setState({ location: { lat: latitude, lng: longitude, acc: accuracy } });
+            _writeCachedGps(latitude, longitude, accuracy);
             _paintV4LocationPills();
-
-            // Trigger reverse-geocode resolve. resolveLocationName is
-            // module-scope in app.js but exposed via the implicit
-            // top-level-function-as-global pattern. Fallback: call
-            // reverseGeocode + write state.locationName ourselves.
             (async () => {
                 try {
                     if (typeof window.resolveLocationName === 'function') {
@@ -1450,9 +1517,21 @@
                 document.dispatchEvent(new CustomEvent('location-resolved'));
             })();
         }, (err) => {
-            console.warn('[v4] GPS failed:', err);
-            text.textContent = current.locationName || 'GPS unavailable';
-        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+            console.warn('[v4] GPS failed:', err && err.code, err && err.message);
+            // Fresh fetch failed. If we already have cached or set, KEEP it
+            // and silently move on — no "unavailable" placeholder.
+            if (cached) return;
+            // No cache → IP fallback.
+            _tryIpFallback();
+        }, {
+            // v7 — maximumAge bumped 60_000 → 300_000 so the browser's
+            // own GPS cache (which may already hold a 4-minute-old fix)
+            // resolves instantly instead of triggering a fresh hardware
+            // poll that may fail on Wi-Fi-only laptops / shaky permission.
+            enableHighAccuracy: true,
+            timeout: 8000,
+            maximumAge: 300000,
+        });
     }
 
     // ── Page 2: classify ──────────────

@@ -11409,3 +11409,93 @@ body { background-color: #10284a; }
     box-shadow: 0 12px 28px rgba(9, 209, 199, 0.36);
 }
 .nearby-sheet-cta:active { transform: translateY(0); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   v7 (May 2026, operator) — channel tile live-state simplification
+   + Nearby Reports count pulse + ripple feedback.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── ① Telegram + IVR (any .is-live channel) ───────────────────────────
+   Operator: "remove Live_Now and just add a small green dot on top right
+   corner of the boxes." We hide the .ct-status text on live tiles + paint
+   a clean solid dot via ::after. Wins the cascade over the v168.1
+   `display:none + content:none` rule that was killing both dots. */
+.home-stage .home-channel-tile.is-live .ct-status {
+    display: none !important;
+}
+.home-stage .home-channel-tile.is-live::after {
+    content: '' !important;
+    display: block !important;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #80EE98;
+    /* No glow / box-shadow — matches the v6.5 "clean solid dot" pattern
+       the operator approved for the lang pill. */
+    box-shadow: none;
+    pointer-events: none;
+    /* Override the v6.5 fix that also set `content: none` for clean glass. */
+    animation: none !important;
+}
+[dir="rtl"] .home-stage .home-channel-tile.is-live::after {
+    right: auto;
+    left: 8px;
+}
+
+/* ── ② Nearby Reports — dynamic count + ripple feedback ───────────────
+   Operator: "Nearby Reports show a dynamic effect number with circular
+   ripples on click." We:
+     · Add a subtle pulse to the count number so it reads as "alive"
+     · Add Material-style ripple feedback on row click (JS in nearby.js
+       creates a circle element at click coords; this keyframes it). */
+
+.home-stage .home-nearby-row-count {
+    animation: nearby-count-pulse 2.6s ease-in-out infinite;
+    display: inline-block;
+    transform-origin: center;
+}
+@keyframes nearby-count-pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+        text-shadow: 0 0 0 transparent;
+    }
+    50% {
+        opacity: 0.92;
+        transform: scale(1.06);
+        text-shadow: 0 0 8px rgba(70, 223, 177, 0.35);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .home-stage .home-nearby-row-count {
+        animation: none !important;
+        transform: scale(1) !important;
+    }
+}
+
+/* Ripple — added/removed by JS on each row click. The row already has
+   `overflow: hidden` so the expanding circle gets clipped to the row's
+   rounded corners. Pure CSS-keyframe; no perf hit when no ripple is
+   mid-flight. */
+.home-stage .home-nearby-ripple {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(70, 223, 177, 0.30);
+    pointer-events: none;
+    transform: scale(0);
+    opacity: 1;
+    animation: nearby-ripple 0.6s ease-out forwards;
+}
+@keyframes nearby-ripple {
+    0%   { transform: scale(0);   opacity: 0.5; }
+    100% { transform: scale(2.5); opacity: 0;   }
+}
+@media (prefers-reduced-motion: reduce) {
+    .home-stage .home-nearby-ripple {
+        animation: none !important;
+        opacity: 0 !important;
+    }
+}

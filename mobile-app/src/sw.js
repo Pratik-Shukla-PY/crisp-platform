@@ -5,7 +5,34 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v181';
+const CACHE_NAME = 'crisp-v182';
+// v181 → v182 (May 2026 — channel tile v7 + nearby ripple + GPS
+// fallback chain).
+//
+//   1. Channel tiles (PWA + RN parity): live tiles (Telegram + IVR)
+//      drop the .ct-status "LIVE_NOW" text entirely; a clean solid
+//      9 px green dot at top-right corner signals liveness instead.
+//      Reverts the v168.1 "hide all dots, show glowing Live text"
+//      pass for ONE clean dot + zero text per operator request.
+//
+//   2. Nearby Reports: count number ("3 reports", "5 reports") gets
+//      a subtle 2.6 s pulse animation (scale 1 → 1.06 + opacity 1
+//      → 0.92 + soft mint text-shadow). Row click now triggers a
+//      Material-style circular ripple that emanates from the click
+//      coords, then the existing bottom-sheet slides up. Both
+//      animations gated by prefers-reduced-motion.
+//
+//   3. GPS fix — v4-flow.js `_refreshGps()` had no fallback chain.
+//      On geolocation error it just showed "GPS unavailable". New
+//      chain: getCurrentPosition (fresh) → localStorage cache
+//      (crisp_last_location_v2, same as nearby.js) → IP geo
+//      (window.tryIPGeolocation) → only then "unavailable". Also:
+//      maximumAge 60s → 5min so browsers return their own cached
+//      fix instantly; cache writeback on every successful fresh fix
+//      so the nearby-intel module also benefits. Operator-reported:
+//      "GPS shows not available when I start reporting from Report
+//      and incident or nearby report route."
+//
 // v180 → v181 (May 2026 — lang pill v6.5 clean dot + flag fix).
 // Operator: "with the flag I see a black shadow over the icon" +
 // "the green dot can be clean solid green dot than a glowing thing."

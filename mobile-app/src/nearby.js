@@ -35,10 +35,28 @@
     'use strict';
 
     // ── Configuration ──────────────────────────────────────────────────
+    //
+    // Resolve the backend base URL. Local dev runs the PWA on :8080 and
+    // the backend on :8000, so a relative `/api/v1` would 404. PROD
+    // serves both behind one origin via nginx, so relative is correct
+    // there. Mirror app.js's resolution: prefer window.API_BASE (set
+    // by app.js after boot), else host-based fallback.
 
-    const API_BASE = (typeof window !== 'undefined' && window.CRISP_API_BASE)
-        || '/api/v1';
-    const ENDPOINT = `${API_BASE}/reports/nearby`;
+    function _resolveBase() {
+        if (typeof window !== 'undefined') {
+            if (window.API_BASE)        return window.API_BASE;
+            if (window.CRISP_API_BASE)  return window.CRISP_API_BASE;
+            try {
+                const host = (window.location.hostname || '').toLowerCase();
+                const isLocalDev = ['localhost', '127.0.0.1', '0.0.0.0'].includes(host);
+                if (isLocalDev) {
+                    return `${window.location.protocol}//${host}:8000/api/v1`;
+                }
+                return `${window.location.origin}/api/v1`;
+            } catch { /* fall through */ }
+        }
+        return '/api/v1';
+    }
 
     const DEFAULT_RADIUS_KM = 5;
     const DEFAULT_LIMIT = 20;
@@ -142,7 +160,16 @@
     }
 
     async function _fetchNearby({ lat, lng, radius_km, limit }) {
-        const url = new URL(ENDPOINT, window.location.origin);
+        // Resolve base at call time, not module-load time — gives
+        // app.js a chance to set window.API_BASE before we reach for it.
+        const base = _resolveBase();
+        const endpoint = `${base}/reports/nearby`;
+        // URL() with absolute base needs a string base; with relative
+        // base needs a window.location.origin base. Handle both.
+        const url = (() => {
+            try { return new URL(endpoint); }
+            catch { return new URL(endpoint, window.location.origin); }
+        })();
         url.searchParams.set('lat', _round3(lat).toString());
         url.searchParams.set('lng', _round3(lng).toString());
         url.searchParams.set('radius_km', String(radius_km));
@@ -155,9 +182,15 @@
                 signal: ctrl.signal,
                 cache: 'no-store',
             });
-            if (!res.ok) return null;
+            if (!res.ok) {
+                console.warn('[NearbyIntel] fetch failed:', res.status, url.toString());
+                return null;
+            }
             return await res.json();
-        } catch { return null; }
+        } catch (e) {
+            console.warn('[NearbyIntel] fetch error:', e && e.message, url.toString());
+            return null;
+        }
         finally { clearTimeout(timer); }
     }
 
@@ -227,10 +260,26 @@
                 </span>
             </span>
         `;
-        // Detail-sheet click is wired in Phase 2; for Phase 1 the row
-        // is keyboard-focusable but a click is a no-op (or could
-        // navigate to the report stage with pre-fill).
-        row.addEventListener('click', () => {
+        // Detail-sheet click + Material-style ripple feedback.
+        // v7 (May 2026, operator) — "circular ripples on click."
+        // The ripple element is a CSS-keyframed circle positioned at
+        // the click coordinates inside the row. Falls back to a no-op
+        // under prefers-reduced-motion (CSS handles that gate).
+        row.addEventListener('click', (e) => {
+            try {
+                const rect = row.getBoundingClientRect();
+                const size = Math.max(rect.width, rect.height) * 1.1;
+                const x = (e.clientX || rect.left + rect.width / 2) - rect.left - size / 2;
+                const y = (e.clientY || rect.top + rect.height / 2) - rect.top - size / 2;
+                const ripple = document.createElement('span');
+                ripple.className = 'home-nearby-ripple';
+                ripple.style.width = `${size}px`;
+                ripple.style.height = `${size}px`;
+                ripple.style.left = `${x}px`;
+                ripple.style.top = `${y}px`;
+                row.appendChild(ripple);
+                setTimeout(() => { try { ripple.remove(); } catch (_) {} }, 650);
+            } catch (_) { /* never block the sheet on ripple errors */ }
             try {
                 window.dispatchEvent(new CustomEvent('crisp:nearby-row-click', {
                     detail: { groupId: group.id, group },
@@ -307,18 +356,21 @@
 
     async function boot(rootSelector) {
         const root = document.querySelector(rootSelector || '#home-nearby-intel');
-        if (!root) return;
+        if (!root) {
+            console.warn('[NearbyIntel] root element not found:', rootSelector);
+            return;
+        }
 
         // Always start HIDDEN. We unhide only when we have data to show.
         root.hidden = true;
 
         const location = _getCachedLocation();
         if (!location) {
-            // No usable location → stay hidden. The module will
-            // appear on the NEXT home visit, after the user has
-            // completed a v4 capture stage (which caches GPS).
+            console.log('[NearbyIntel] no cached GPS in localStorage — module stays hidden. ' +
+                'Run: localStorage.setItem("crisp_last_location_v2", JSON.stringify({lat:12.8456,lng:77.6603,ts:Date.now()}));location.reload();');
             return;
         }
+        console.log('[NearbyIntel] boot with cached GPS:', location);
 
         // Try live fetch first (when online); fall back to cache.
         let payload = null;
