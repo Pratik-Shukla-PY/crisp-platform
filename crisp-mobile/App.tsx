@@ -103,6 +103,12 @@ import { getEnabledRegions, findActiveRegion, Region } from './services/regionCa
 // quiet identity pill, channels grid). Replaces the old in-line
 // home block. See V4_PARITY_DEFERRED.md for the staged plan.
 import HomeScreen from './screens/HomeScreen';
+// Phase 3 of RN ↔ PWA parity. V4CaptureScreen mirrors the PWA's
+// #stage-v4-capture (meta card + photo section + voice/text chips
+// + smart-contextual tips card + Continue). Gated behind
+// UI_V4_ENABLED — flag stays OFF until Phases 4 + 5 (classify +
+// review) land, then it flips per the v4 roadmap.
+import V4CaptureScreen from './screens/V4CaptureScreen';
 
 // Phase 3 (Apr 2026): review collapsed from 3 screens to 2 (details + confirm).
 // `review_incident` kept as an alias that redirects to `review_details` so any
@@ -1646,7 +1652,11 @@ export default function App() {
             } catch (e) {
               console.log('[AutoSubmit] geofence check skipped:', (e as Error)?.message || e);
             }
-            setScreen(uiV3 ? 'where' : 'photo');
+            // May 2026 — Phase 3 route. When UI_V4_ENABLED flips to true
+            // (after Phases 4 + 5 land), CTA routes to the single-page
+            // v4_capture screen. Until then, fall through to the v3 'where'
+            // flow (or legacy 'photo' if v3 is also off).
+            setScreen(UI_V4_ENABLED ? 'v4_capture' : (uiV3 ? 'where' : 'photo'));
           }}
           onMyReports={() => { refreshHistory(); pollStatus(); setScreen('history'); }}
           onLogin={() => {
@@ -1662,6 +1672,80 @@ export default function App() {
             const cleared = await clearAllQueuedReports();
             updateQueueCount();
             Alert.alert('Queue Cleared', `${cleared} queued report${cleared !== 1 ? 's' : ''} removed.`);
+          }}
+        />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+           Phase 3 (May 2026 — RN ↔ PWA parity) — v4 single-page capture.
+           Multi-modal capture screen: photo (camera + gallery) + voice
+           (mic) + text (textarea) + smart-contextual tips card. The
+           Continue button gates on ≥ 1 photo present. Hidden behind
+           UI_V4_ENABLED until Phases 4 + 5 land (classify + review
+           ports). The PWA's #stage-v4-capture is the canonical source
+           of truth for the visual hierarchy + handler contract.
+      ══════════════════════════════════════════════════════════════════ */}
+      {screen === 'v4_capture' && (
+        <V4CaptureScreen
+          locationText={locationName || ''}
+          locationCoords={
+            location && location.lat !== 0
+              ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`
+              : undefined
+          }
+          onRefreshGps={async () => {
+            try {
+              const loc = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.High,
+              });
+              setLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude, acc: loc.coords.accuracy || 0 });
+              const geo = await Location.reverseGeocodeAsync({
+                latitude: loc.coords.latitude, longitude: loc.coords.longitude,
+              });
+              if (geo[0]) {
+                const parts = [geo[0].city, geo[0].region, geo[0].country].filter(Boolean);
+                setLocationName(parts.join(', '));
+              }
+            } catch (e) {
+              console.log('[v4] GPS refresh failed:', (e as Error)?.message || e);
+            }
+          }}
+          onEditLocation={() => { /* TODO Phase 3.5 — inline location editor */ }}
+          timeText={new Date().toLocaleString(undefined, {
+            weekday: 'short', day: '2-digit', month: 'short',
+            hour: '2-digit', minute: '2-digit',
+          })}
+          photoThumbs={[
+            ...(photoUri ? [photoUri] : []),
+            ...extraPhotos.map(p => p.uri),
+          ]}
+          photoMaxCount={MAX_PHOTOS_TOTAL}
+          onOpenCamera={takePhoto}
+          onOpenGallery={pickImage}
+          onRemovePhoto={(i) => {
+            if (i === 0) {
+              setPhotoUri(null);
+              setPhotoBase64(null);
+              setPhotoVariants(null);
+            } else {
+              const next = extraPhotos.slice();
+              next.splice(i - 1, 1);
+              setExtraPhotos(next);
+            }
+          }}
+          hasVoice={!!audioUri}
+          isRecording={isRecording}
+          onToggleVoice={isRecording ? stopRecording : startRecording}
+          onClearVoice={() => setAudioUri(null)}
+          textValue={description}
+          onTextChange={setDescription}
+          onBack={() => setScreen('home')}
+          onContinue={() => {
+            // Phases 4 + 5 will route to v4_classify → v4_review. Until
+            // those land, drop into the existing v3 review_details so the
+            // user can still submit. This keeps the flag-flippable v4
+            // path usable end-to-end without waiting on classify port.
+            setScreen('review_details');
           }}
         />
       )}
