@@ -788,5 +788,8 @@
   "nearby_sheet_incidents": "واقعات",
   "nearby_sheet_severity": "شدت",
   "nearby_sheet_add_report_here": "اپنی رپورٹ یہاں شامل کریں",
-  "nearby_sheet_close": "بند کریں"
+  "nearby_sheet_close": "بند کریں",
+  "nearby_reports_nearby_label": "قریب کی رپورٹس",
+  "nearby_one_area": "1 علاقہ",
+  "nearby_n_areas": "{n} علاقے"
 }

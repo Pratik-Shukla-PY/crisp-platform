@@ -811,5 +811,8 @@
   "nearby_sheet_incidents": "INCIDENTS",
   "nearby_sheet_severity": "GRAVITÉ",
   "nearby_sheet_add_report_here": "Ajouter votre signalement ici",
-  "nearby_sheet_close": "Fermer"
+  "nearby_sheet_close": "Fermer",
+  "nearby_reports_nearby_label": "signalements à proximité",
+  "nearby_one_area": "1 zone",
+  "nearby_n_areas": "{n} zones"
 }

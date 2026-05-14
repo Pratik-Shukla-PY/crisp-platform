@@ -56,6 +56,8 @@ export default function NearbyReports(props: NearbyReportsProps) {
   const [expanded, setExpanded] = useState(false);
   // Phase 2 — bottom-sheet detail modal
   const [selectedGroup, setSelectedGroup] = useState<NearbyGroup | null>(null);
+  // v8 — list sheet (slides up on aggregate number tap)
+  const [listOpen, setListOpen] = useState(false);
 
   // Load (or re-load) on mount + when connectivity or coords change.
   useEffect(() => {
@@ -94,14 +96,11 @@ export default function NearbyReports(props: NearbyReportsProps) {
   }, [selectedGroup]);
 
   // ── Hidden states ────────────────────────────────────────────────
-  // Per operator: NO broken state. If we don't have current data,
-  // render nothing (caller's parent flex handles the collapsed slot).
   if (lat == null || lng == null) return null;
   if (!payload) return null;
 
   const groups = payload.groups || [];
-  const collapsed = expanded ? groups : groups.slice(0, COLLAPSED_ROWS);
-  const remaining = Math.max(0, groups.length - COLLAPSED_ROWS);
+  const totalReports = groups.reduce((s, g) => s + (g.count || 0), 0);
 
   return (
     <View style={styles.root} testID="home-nearby-intel">
@@ -109,47 +108,111 @@ export default function NearbyReports(props: NearbyReportsProps) {
         {_t('nearby_eyebrow', 'NEARBY REPORTS')}
       </Text>
 
-      <View style={styles.list}>
-        {groups.length === 0 ? (
+      {groups.length === 0 ? (
+        <View style={styles.list}>
           <EmptyState />
-        ) : (
-          <>
-            {collapsed.map((g, idx) => (
-              <NearbyRow
-                key={g.id}
-                group={g}
-                isLast={idx === collapsed.length - 1 && remaining === 0}
-                onPress={() => handleRowPress(g)}
-              />
-            ))}
-            {remaining > 0 && !expanded && (
-              <Pressable
-                style={styles.viewMore}
-                onPress={() => setExpanded(true)}
-                accessibilityRole="button"
-                testID="home-nearby-view-more"
-              >
-                <Text style={styles.viewMoreText}>
-                  {_t('nearby_view_more', 'View {n} more').replace('{n}', String(remaining))}
-                </Text>
-              </Pressable>
-            )}
-            {cacheAgeMs != null && (
-              <Text style={styles.caption}>
-                {_t('nearby_last_seen', 'Last seen {n} min ago')
-                  .replace('{n}', String(Math.max(0, Math.round(cacheAgeMs / 60000))))}
-              </Text>
-            )}
-          </>
-        )}
-      </View>
+        </View>
+      ) : (
+        // v8 — single aggregate number block; tap → list modal
+        <Pressable
+          style={styles.numberBlock}
+          onPress={() => setListOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`${totalReports} ${_t('nearby_reports_nearby_label', 'reports nearby')}`}
+          testID="home-nearby-number-block"
+        >
+          <Text style={styles.numberBig}>{totalReports}</Text>
+          <Text style={styles.numberSub}>
+            {_t('nearby_reports_nearby_label', 'reports nearby')}
+          </Text>
+          <Text style={styles.numberGroups}>
+            {groups.length === 1
+              ? _t('nearby_one_area', '1 area')
+              : _t('nearby_n_areas', '{n} areas').replace('{n}', String(groups.length))}
+          </Text>
+        </Pressable>
+      )}
 
-      {/* Phase 2 — bottom-sheet detail modal */}
+      {cacheAgeMs != null && (
+        <Text style={styles.caption}>
+          {_t('nearby_last_seen', 'Last seen {n} min ago')
+            .replace('{n}', String(Math.max(0, Math.round(cacheAgeMs / 60000))))}
+        </Text>
+      )}
+
+      {/* v8 — list bottom-sheet (slides up on tap) */}
+      <ListSheet
+        groups={listOpen ? groups : []}
+        visible={listOpen}
+        onClose={() => setListOpen(false)}
+        onRowPress={(g) => { setListOpen(false); handleRowPress(g); }}
+      />
+
+      {/* Detail bottom-sheet — opens when a row is tapped in the list */}
       <DetailSheet
         group={selectedGroup}
         onClose={() => setSelectedGroup(null)}
       />
     </View>
+  );
+}
+
+// ── v8 List bottom-sheet ────────────────────────────────────────────
+
+function ListSheet({ groups, visible, onClose, onRowPress }: {
+  groups: NearbyGroup[];
+  visible: boolean;
+  onClose: () => void;
+  onRowPress: (g: NearbyGroup) => void;
+}) {
+  // Hardware-back closes the sheet on Android.
+  useEffect(() => {
+    if (!visible) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [visible, onClose]);
+
+  if (!visible) return null;
+
+  return (
+    <Modal
+      visible={true}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      testID="home-nearby-list-sheet"
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose} accessibilityLabel={_t('nearby_sheet_close', 'Close')} />
+      <View style={sheetStyles.card}>
+        <ScrollView contentContainerStyle={sheetStyles.scroll} showsVerticalScrollIndicator={false}>
+          <View style={sheetStyles.handle} />
+          <Pressable
+            style={sheetStyles.close}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel={_t('nearby_sheet_close', 'Close')}
+          >
+            <Text style={sheetStyles.closeIcon}>✕</Text>
+          </Pressable>
+          <Text style={listSheetStyles.title}>
+            {_t('nearby_eyebrow', 'NEARBY REPORTS')}
+          </Text>
+          <View style={listSheetStyles.list}>
+            {groups.map((g, idx) => (
+              <NearbyRow
+                key={g.id}
+                group={g}
+                isLast={idx === groups.length - 1}
+                onPress={() => onRowPress(g)}
+              />
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
   );
 }
 
@@ -424,6 +487,23 @@ const sheetStyles = StyleSheet.create({
   },
 });
 
+// ── v8 List sheet styles ────────────────────────────────────────────
+const listSheetStyles = StyleSheet.create({
+  title: {
+    fontSize: 11, fontWeight: '700',
+    letterSpacing: 1.8, textTransform: 'uppercase',
+    color: 'rgba(255, 255, 255, 0.55)',
+    textAlign: 'center',
+    marginTop: 4, marginBottom: 16,
+  },
+  list: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+});
+
 // ── Row ─────────────────────────────────────────────────────────────
 
 function NearbyRow(props: {
@@ -508,6 +588,37 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.07)',
     borderRadius: 18,
     overflow: 'hidden',
+  },
+
+  // v8 — aggregate number block (front-of-home)
+  numberBlock: {
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingTop: 22, paddingBottom: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.07)',
+    borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    minHeight: 156,
+    overflow: 'hidden',
+  },
+  numberBig: {
+    fontSize: 60, fontWeight: '900', color: '#80EE98',
+    lineHeight: 62, letterSpacing: -2,
+    textShadowColor: 'rgba(128, 238, 152, 0.32)',
+    textShadowRadius: 22,
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  numberSub: {
+    fontSize: 13, fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.62)',
+    letterSpacing: 0.1, marginTop: 4,
+  },
+  numberGroups: {
+    fontSize: 11, fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.42)',
+    letterSpacing: 1.2, textTransform: 'uppercase',
+    marginTop: 6,
   },
 
   // Row

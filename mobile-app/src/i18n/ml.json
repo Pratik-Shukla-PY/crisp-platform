@@ -1348,5 +1348,8 @@
   "nearby_sheet_incidents": "സംഭവങ്ങൾ",
   "nearby_sheet_severity": "തീവ്രത",
   "nearby_sheet_add_report_here": "നിങ്ങളുടെ റിപ്പോർട്ട് ഇവിടെ ചേർക്കുക",
-  "nearby_sheet_close": "അടയ്ക്കുക"
+  "nearby_sheet_close": "അടയ്ക്കുക",
+  "nearby_reports_nearby_label": "സമീപത്തെ റിപ്പോർട്ടുകൾ",
+  "nearby_one_area": "1 പ്രദേശം",
+  "nearby_n_areas": "{n} പ്രദേശങ്ങൾ"
 }

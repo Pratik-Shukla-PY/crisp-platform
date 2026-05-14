@@ -11499,3 +11499,254 @@ body { background-color: #10284a; }
         opacity: 0 !important;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   v8 (May 2026, operator) — Nearby Reports aggregate-number redesign
+
+   Operator: "I asked for a single number with ripple effect thing
+   first like we had earlier and on click show in the banner sliding
+   from bottom what report and on further click the other actions
+   would happen."
+
+   Replaces the inline row list on the home stage with ONE big
+   aggregate number (sum of counts across all groups) that pulses,
+   accepts a click → ripple → opens a bottom-sheet listing the
+   groups. Tapping a group row in that sheet chains to the existing
+   #nearby-sheet detail modal (unchanged) which carries the
+   per-group actions.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Wrapper still sits inside #home-nearby-intel; the section becomes
+   the clickable anchor. We override the v1-7 .home-nearby-list rules
+   for any *-list element by using the new .home-nearby-number-block
+   selector instead. */
+.home-stage .home-nearby-number-block {
+    /* Reset button defaults */
+    all: unset;
+    cursor: pointer;
+    box-sizing: border-box;
+    /* Flex column to center the number + label */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    padding: 22px 16px 18px;
+    position: relative;
+    overflow: hidden;       /* clip the ripple + halo to rounded corners */
+    /* Frosted-glass card matching the channels-grid / action-tile look */
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 22px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.18s ease;
+    -webkit-tap-highlight-color: transparent;
+    min-height: 156px;
+}
+.home-stage .home-nearby-number-block:hover,
+.home-stage .home-nearby-number-block:focus-visible {
+    background: rgba(70, 223, 177, 0.07);
+    border-color: rgba(70, 223, 177, 0.30);
+}
+.home-stage .home-nearby-number-block:focus-visible {
+    outline: 2px solid rgba(70, 223, 177, 0.55);
+    outline-offset: 2px;
+}
+.home-stage .home-nearby-number-block:active {
+    transform: scale(0.985);
+}
+
+/* Pulse halo behind the number — two concentric expanding rings,
+   1.6 s offset so one is always mid-expansion. Same machinery as
+   the v5 Phase 3 lives-saved pulse, restored here for the v8
+   single-number block. */
+.home-stage .home-nearby-number-block .home-nearby-pulse-halo {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 200px;
+    height: 200px;
+    margin-top: -100px;
+    margin-left: -100px;
+    border-radius: 50%;
+    border: 1px solid rgba(70, 223, 177, 0.32);
+    background:
+        radial-gradient(circle at center,
+            rgba(70, 223, 177, 0.10) 0%,
+            rgba(9, 209, 199, 0.05) 35%,
+            transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+    animation: nearby-number-pulse 3.4s ease-out infinite;
+}
+.home-stage .home-nearby-number-block .home-nearby-pulse-halo.is-secondary {
+    animation-delay: 1.7s;
+}
+@keyframes nearby-number-pulse {
+    0%   { transform: scale(0.78); opacity: 0.70; }
+    100% { transform: scale(1.40); opacity: 0;    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .home-stage .home-nearby-number-block .home-nearby-pulse-halo {
+        animation: none !important;
+        transform: scale(1);
+        opacity: 0.35;
+    }
+    .home-stage .home-nearby-number-block .home-nearby-pulse-halo.is-secondary {
+        display: none;
+    }
+}
+
+/* Big number — restored to the v5 dominant scale */
+.home-stage .home-nearby-number {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-size: clamp(2.8rem, 11vw, 4.2rem);
+    line-height: 1;
+    font-weight: 800;
+    color: #80EE98;
+    letter-spacing: -0.04em;
+    text-shadow: 0 0 22px rgba(128, 238, 152, 0.32);
+    position: relative;
+    z-index: 1;
+}
+.home-stage .home-nearby-number-sub {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.62);
+    letter-spacing: 0.01em;
+    margin-top: 4px;
+    position: relative;
+    z-index: 1;
+}
+.home-stage .home-nearby-number-groups {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.42);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 6px;
+    position: relative;
+    z-index: 1;
+}
+@media (min-height: 740px) {
+    .home-stage .home-nearby-number-sub { font-size: 14px; }
+}
+
+/* ── List bottom-sheet (v8) ────────────────────────────────────────
+   Mostly inherits .nearby-sheet (existing detail sheet) styles for
+   the backdrop / card / handle / close button. Override the title +
+   list container so the layout is distinct from the detail. */
+.nearby-list-sheet .nearby-list-sheet-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.55);
+    margin: 8px 0 16px;
+    text-align: center;
+}
+
+.nearby-list-sheet .nearby-list-sheet-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    /* Reuse the home-nearby-list visual treatment so rows look
+       identical to what was rendered inline before v8. */
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+/* The list sheet reuses .home-nearby-row markup. Pull the row styles
+   into the sheet scope so they render the same outside #home-stage. */
+.nearby-list-sheet .home-nearby-row {
+    all: unset;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    color: var(--text, #f1f5f9);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.15s ease;
+    position: relative;
+    overflow: hidden;
+}
+.nearby-list-sheet .home-nearby-row:last-of-type { border-bottom: 0; }
+.nearby-list-sheet .home-nearby-row:hover,
+.nearby-list-sheet .home-nearby-row:focus-visible {
+    background: rgba(70, 223, 177, 0.06);
+}
+.nearby-list-sheet .home-nearby-row-dot {
+    flex: 0 0 auto;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-top: 7px;
+    background: var(--accent, #09D1C7);
+    box-shadow: 0 0 6px rgba(9, 209, 199, 0.4);
+}
+.nearby-list-sheet .home-nearby-row-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.nearby-list-sheet .home-nearby-row-head {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+}
+.nearby-list-sheet .home-nearby-row-count {
+    color: var(--blue, #46DFB1);
+    font-variant-numeric: tabular-nums;
+}
+.nearby-list-sheet .home-nearby-row-sep {
+    color: rgba(255, 255, 255, 0.30);
+    font-weight: 400;
+}
+.nearby-list-sheet .home-nearby-row-summary {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.78);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.nearby-list-sheet .home-nearby-row-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.88);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.nearby-list-sheet .home-nearby-row-meta {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.48);
+    letter-spacing: 0.01em;
+}
+.nearby-list-sheet .home-nearby-row-verified {
+    color: #80EE98;
+    font-weight: 600;
+}
+.nearby-list-sheet .home-nearby-row-pending {
+    color: #f5d76e;
+    font-weight: 600;
+}
+[dir="rtl"] .nearby-list-sheet .home-nearby-row {
+    flex-direction: row-reverse;
+}
+[dir="rtl"] .nearby-list-sheet .home-nearby-row-body {
+    text-align: right;
+}

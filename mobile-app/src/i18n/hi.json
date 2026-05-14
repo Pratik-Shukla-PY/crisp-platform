@@ -788,5 +788,8 @@
   "nearby_sheet_incidents": "घटनाएं",
   "nearby_sheet_severity": "गंभीरता",
   "nearby_sheet_add_report_here": "अपनी रिपोर्ट यहां जोड़ें",
-  "nearby_sheet_close": "बंद करें"
+  "nearby_sheet_close": "बंद करें",
+  "nearby_reports_nearby_label": "पास के रिपोर्ट",
+  "nearby_one_area": "1 क्षेत्र",
+  "nearby_n_areas": "{n} क्षेत्र"
 }

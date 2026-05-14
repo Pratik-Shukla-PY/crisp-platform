@@ -797,5 +797,8 @@
   "nearby_sheet_incidents": "INCIDENTES",
   "nearby_sheet_severity": "GRAVEDAD",
   "nearby_sheet_add_report_here": "Añadir tu informe aquí",
-  "nearby_sheet_close": "Cerrar"
+  "nearby_sheet_close": "Cerrar",
+  "nearby_reports_nearby_label": "informes cercanos",
+  "nearby_one_area": "1 área",
+  "nearby_n_areas": "{n} áreas"
 }

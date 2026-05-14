@@ -788,5 +788,8 @@
   "nearby_sheet_incidents": "ಘಟನೆಗಳು",
   "nearby_sheet_severity": "ತೀವ್ರತೆ",
   "nearby_sheet_add_report_here": "ಇಲ್ಲಿ ನಿಮ್ಮ ವರದಿ ಸೇರಿಸಿ",
-  "nearby_sheet_close": "ಮುಚ್ಚಿ"
+  "nearby_sheet_close": "ಮುಚ್ಚಿ",
+  "nearby_reports_nearby_label": "ಸಮೀಪದ ವರದಿಗಳು",
+  "nearby_one_area": "1 ಪ್ರದೇಶ",
+  "nearby_n_areas": "{n} ಪ್ರದೇಶಗಳು"
 }

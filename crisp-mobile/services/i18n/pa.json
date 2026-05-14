@@ -788,5 +788,8 @@
   "nearby_sheet_incidents": "ਘਟਨਾਵਾਂ",
   "nearby_sheet_severity": "ਗੰਭੀਰਤਾ",
   "nearby_sheet_add_report_here": "ਆਪਣੀ ਰਿਪੋਰਟ ਇੱਥੇ ਜੋੜੋ",
-  "nearby_sheet_close": "ਬੰਦ ਕਰੋ"
+  "nearby_sheet_close": "ਬੰਦ ਕਰੋ",
+  "nearby_reports_nearby_label": "ਨੇੜਲੀਆਂ ਰਿਪੋਰਟਾਂ",
+  "nearby_one_area": "1 ਖੇਤਰ",
+  "nearby_n_areas": "{n} ਖੇਤਰ"
 }

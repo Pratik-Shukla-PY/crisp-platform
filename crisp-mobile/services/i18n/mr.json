@@ -788,5 +788,8 @@
   "nearby_sheet_incidents": "घटना",
   "nearby_sheet_severity": "तीव्रता",
   "nearby_sheet_add_report_here": "तुमचा अहवाल येथे जोडा",
-  "nearby_sheet_close": "बंद करा"
+  "nearby_sheet_close": "बंद करा",
+  "nearby_reports_nearby_label": "जवळचे अहवाल",
+  "nearby_one_area": "1 क्षेत्र",
+  "nearby_n_areas": "{n} क्षेत्रे"
 }

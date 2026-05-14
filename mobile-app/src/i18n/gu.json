@@ -788,5 +788,8 @@
   "nearby_sheet_incidents": "ઘટનાઓ",
   "nearby_sheet_severity": "ગંભીરતા",
   "nearby_sheet_add_report_here": "તમારી રિપોર્ટ અહીં ઉમેરો",
-  "nearby_sheet_close": "બંધ કરો"
+  "nearby_sheet_close": "બંધ કરો",
+  "nearby_reports_nearby_label": "નજીકના રિપોર્ટ",
+  "nearby_one_area": "1 વિસ્તાર",
+  "nearby_n_areas": "{n} વિસ્તારો"
 }

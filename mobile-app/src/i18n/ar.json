@@ -786,5 +786,8 @@
   "nearby_sheet_incidents": "الحوادث",
   "nearby_sheet_severity": "الخطورة",
   "nearby_sheet_add_report_here": "أضف بلاغك هنا",
-  "nearby_sheet_close": "إغلاق"
+  "nearby_sheet_close": "إغلاق",
+  "nearby_reports_nearby_label": "تقارير قريبة",
+  "nearby_one_area": "منطقة واحدة",
+  "nearby_n_areas": "{n} مناطق"
 }

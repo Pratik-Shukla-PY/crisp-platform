@@ -788,5 +788,8 @@
   "nearby_sheet_incidents": "発生事案",
   "nearby_sheet_severity": "深刻度",
   "nearby_sheet_add_report_here": "ここに報告を追加",
-  "nearby_sheet_close": "閉じる"
+  "nearby_sheet_close": "閉じる",
+  "nearby_reports_nearby_label": "近隣の報告",
+  "nearby_one_area": "1 エリア",
+  "nearby_n_areas": "{n} エリア"
 }

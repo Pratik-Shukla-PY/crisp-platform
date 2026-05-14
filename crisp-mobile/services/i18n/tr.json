@@ -789,5 +789,8 @@
   "nearby_sheet_incidents": "OLAYLAR",
   "nearby_sheet_severity": "ŞİDDET",
   "nearby_sheet_add_report_here": "Raporunuzu buraya ekleyin",
-  "nearby_sheet_close": "Kapat"
+  "nearby_sheet_close": "Kapat",
+  "nearby_reports_nearby_label": "yakındaki raporlar",
+  "nearby_one_area": "1 bölge",
+  "nearby_n_areas": "{n} bölge"
 }

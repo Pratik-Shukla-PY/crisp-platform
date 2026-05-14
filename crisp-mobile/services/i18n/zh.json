@@ -786,5 +786,8 @@
   "nearby_sheet_incidents": "事件",
   "nearby_sheet_severity": "严重程度",
   "nearby_sheet_add_report_here": "在此提交您的报告",
-  "nearby_sheet_close": "关闭"
+  "nearby_sheet_close": "关闭",
+  "nearby_reports_nearby_label": "附近报告",
+  "nearby_one_area": "1 个区域",
+  "nearby_n_areas": "{n} 个区域"
 }

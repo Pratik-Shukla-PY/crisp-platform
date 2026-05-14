@@ -788,5 +788,8 @@
   "nearby_sheet_incidents": "சம்பவங்கள்",
   "nearby_sheet_severity": "தீவிரம்",
   "nearby_sheet_add_report_here": "உங்கள் அறிக்கையை இங்கே சேர்க்கவும்",
-  "nearby_sheet_close": "மூடு"
+  "nearby_sheet_close": "மூடு",
+  "nearby_reports_nearby_label": "அருகிலுள்ள அறிக்கைகள்",
+  "nearby_one_area": "1 பகுதி",
+  "nearby_n_areas": "{n} பகுதிகள்"
 }

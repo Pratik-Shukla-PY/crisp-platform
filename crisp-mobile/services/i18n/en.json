@@ -751,5 +751,8 @@
   "nearby_sheet_incidents": "INCIDENTS",
   "nearby_sheet_severity": "SEVERITY",
   "nearby_sheet_add_report_here": "Add Your Report Here",
-  "nearby_sheet_close": "Close"
+  "nearby_sheet_close": "Close",
+  "nearby_reports_nearby_label": "reports nearby",
+  "nearby_one_area": "1 area",
+  "nearby_n_areas": "{n} areas"
 }

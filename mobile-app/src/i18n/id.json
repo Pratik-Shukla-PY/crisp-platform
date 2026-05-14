@@ -797,5 +797,8 @@
   "nearby_sheet_incidents": "INSIDEN",
   "nearby_sheet_severity": "TINGKAT",
   "nearby_sheet_add_report_here": "Tambahkan laporan Anda",
-  "nearby_sheet_close": "Tutup"
+  "nearby_sheet_close": "Tutup",
+  "nearby_reports_nearby_label": "laporan di sekitar",
+  "nearby_one_area": "1 area",
+  "nearby_n_areas": "{n} area"
 }

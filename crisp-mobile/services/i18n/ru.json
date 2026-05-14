@@ -788,5 +788,8 @@
   "nearby_sheet_incidents": "ИНЦИДЕНТЫ",
   "nearby_sheet_severity": "СЕРЬЁЗНОСТЬ",
   "nearby_sheet_add_report_here": "Добавить ваше сообщение",
-  "nearby_sheet_close": "Закрыть"
+  "nearby_sheet_close": "Закрыть",
+  "nearby_reports_nearby_label": "сообщений рядом",
+  "nearby_one_area": "1 район",
+  "nearby_n_areas": "{n} районов"
 }

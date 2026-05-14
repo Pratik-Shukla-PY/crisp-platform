@@ -5,7 +5,31 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v182';
+const CACHE_NAME = 'crisp-v183';
+// v182 → v183 (May 2026 — Nearby Reports v8 redesign: aggregate
+// number block + list sheet).
+//
+// Operator: "I asked for a single number with ripple effect thing
+// first like we had earlier and on click show in the banner sliding
+// from bottom what report and on further click the other actions
+// would happen. I see direct 9 reports now."
+//
+// Front-of-home was rendering an inline list of group rows (3 rows
+// when there were 3 groups). v8 reverts to the original aggregate-
+// number pulse design + adds a new bottom-sheet stack:
+//
+//   front:  one big number (sum of counts) + 2 pulse halos + sub-label
+//   tap:    list bottom-sheet slides up → renders the group rows
+//   tap row: list closes + existing detail sheet opens (per-group
+//           details + actions, unchanged from Phase 2)
+//
+// Touches: index.html (#nearby-list-sheet markup), nearby.js
+// (_buildNumberBlock + _openListSheet + _closeListSheet), styles.css
+// (~250 LOC for the number block + list sheet rules), 22 i18n files
+// (+nearby_reports_nearby_label / +nearby_one_area / +nearby_n_areas).
+// RN companion mirrors on HomeScreen.tsx via the new <ListSheet/>
+// sub-component in NearbyReports.tsx.
+//
 // v181 → v182 (May 2026 — channel tile v7 + nearby ripple + GPS
 // fallback chain).
 //

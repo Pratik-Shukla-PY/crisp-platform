@@ -789,5 +789,8 @@
   "nearby_sheet_incidents": "사건",
   "nearby_sheet_severity": "심각도",
   "nearby_sheet_add_report_here": "여기에 보고서 추가",
-  "nearby_sheet_close": "닫기"
+  "nearby_sheet_close": "닫기",
+  "nearby_reports_nearby_label": "주변 보고",
+  "nearby_one_area": "1개 지역",
+  "nearby_n_areas": "{n}개 지역"
 }

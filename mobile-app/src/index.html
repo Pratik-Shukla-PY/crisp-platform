@@ -897,9 +897,9 @@
             <div class="home-footer-row" id="home-footer-row">
                 <nav class="home-utility-footer" id="home-utility-footer" aria-label="Footer links">
                     <button class="home-utility-link" id="btn-home-privacy" type="button" data-i18n="home_footer_privacy">Privacy</button>
-                    <span class="home-utility-dot" aria-hidden="true">·</span>
+                    <span class="home-utility-dot" aria-hidden="true">•</span>
                     <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
-                    <span class="home-utility-dot" aria-hidden="true">·</span>
+                    <span class="home-utility-dot" aria-hidden="true">•</span>
                     <a class="home-utility-link" id="btn-home-opensrc"
                        href="https://github.com/Pratik-Shukla-PY/crisp-platform"
                        target="_blank" rel="noopener" data-i18n="home_footer_opensrc">Open source</a>
@@ -945,7 +945,29 @@
 
             </section><!-- /.home-section-bottom -->
 
-            <!-- "Verified Reports Nearby" bottom-sheet detail modal — Phase 2
+            <!-- v8 LIST bottom-sheet — slides up on tap of the aggregate
+         number block. Renders the grouped rows; tapping a row
+         chains to the #nearby-sheet DETAIL modal below.
+         Operator: "on click show in the banner sliding from bottom
+         what report and on further click the other actions would
+         happen." -->
+    <div class="nearby-sheet nearby-list-sheet" id="nearby-list-sheet" hidden
+         role="dialog" aria-modal="true" aria-labelledby="nearby-list-sheet-title">
+        <div class="nearby-sheet-backdrop" id="nearby-list-sheet-backdrop"></div>
+        <div class="nearby-sheet-card nearby-list-sheet-card" role="document">
+            <button class="nearby-sheet-close" id="nearby-list-sheet-close"
+                    type="button" aria-label="Close" data-i18n-aria-label="nearby_sheet_close">✕</button>
+            <div class="nearby-sheet-handle" aria-hidden="true"></div>
+            <h3 class="nearby-sheet-title nearby-list-sheet-title"
+                id="nearby-list-sheet-title"
+                data-i18n="nearby_eyebrow">NEARBY REPORTS</h3>
+            <div class="nearby-list-sheet-list" id="nearby-list-sheet-list">
+                <!-- rows injected by nearby.js _openListSheet() -->
+            </div>
+        </div>
+    </div>
+
+    <!-- "Verified Reports Nearby" bottom-sheet detail modal — Phase 2
          (May 2026). Lives outside .home-section-bottom so it can
          overlay the entire viewport without conflicting with the
          home stage's flex sizing. Hidden by default; nearby.js

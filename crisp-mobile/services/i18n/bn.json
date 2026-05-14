@@ -788,5 +788,8 @@
   "nearby_sheet_incidents": "ঘটনাগুলি",
   "nearby_sheet_severity": "তীব্রতা",
   "nearby_sheet_add_report_here": "এখানে আপনার রিপোর্ট যোগ করুন",
-  "nearby_sheet_close": "বন্ধ করুন"
+  "nearby_sheet_close": "বন্ধ করুন",
+  "nearby_reports_nearby_label": "কাছাকাছি রিপোর্ট",
+  "nearby_one_area": "1টি এলাকা",
+  "nearby_n_areas": "{n}টি এলাকা"
 }

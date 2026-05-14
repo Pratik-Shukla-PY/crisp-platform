@@ -788,5 +788,8 @@
   "nearby_sheet_incidents": "సంఘటనలు",
   "nearby_sheet_severity": "తీవ్రత",
   "nearby_sheet_add_report_here": "మీ నివేదికను ఇక్కడ జోడించండి",
-  "nearby_sheet_close": "మూసివేయండి"
+  "nearby_sheet_close": "మూసివేయండి",
+  "nearby_reports_nearby_label": "సమీపంలో నివేదికలు",
+  "nearby_one_area": "1 ప్రాంతం",
+  "nearby_n_areas": "{n} ప్రాంతాలు"
 }

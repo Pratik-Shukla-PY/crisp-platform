@@ -789,5 +789,8 @@
   "nearby_sheet_incidents": "SỰ CỐ",
   "nearby_sheet_severity": "MỨC ĐỘ",
   "nearby_sheet_add_report_here": "Thêm báo cáo của bạn",
-  "nearby_sheet_close": "Đóng"
+  "nearby_sheet_close": "Đóng",
+  "nearby_reports_nearby_label": "báo cáo gần đây",
+  "nearby_one_area": "1 khu vực",
+  "nearby_n_areas": "{n} khu vực"
 }

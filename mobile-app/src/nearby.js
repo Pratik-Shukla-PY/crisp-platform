@@ -300,56 +300,110 @@
         return el;
     }
 
+    // ── Aggregate number block (v8 — May 2026 redesign) ──────────────
+    //
+    // Operator: "a single number with ripple effect thing first like
+    // we had earlier and on click show in the banner sliding from
+    // bottom what report and on further click the other actions
+    // would happen."
+    //
+    // Front-of-home state is now a single AGGREGATE NUMBER (sum of
+    // counts across all groups in the response) with pulse halos.
+    // Tap → bottom-sheet slides up with the grouped rows. Tap a row
+    // in that sheet → existing detail sheet for the group + actions.
+
+    function _buildNumberBlock(payload) {
+        const groups = (payload && payload.groups) || [];
+        const totalReports = groups.reduce((sum, g) => sum + (g.count || 0), 0);
+        const totalGroups = groups.length;
+
+        const block = document.createElement('button');
+        block.type = 'button';
+        block.className = 'home-nearby-number-block';
+        block.id = 'home-nearby-number-block';
+        block.setAttribute(
+            'aria-label',
+            _t('nearby_count_reports', '{n} reports').replace('{n}', String(totalReports))
+            + ' — ' + _t('nearby_eyebrow', 'NEARBY REPORTS')
+        );
+
+        const labelText = _t('nearby_reports_nearby_label', 'reports nearby');
+
+        block.innerHTML = `
+            <span class="home-nearby-pulse-halo" aria-hidden="true"></span>
+            <span class="home-nearby-pulse-halo is-secondary" aria-hidden="true"></span>
+            <span class="home-nearby-number" id="home-nearby-number">${_esc(String(totalReports))}</span>
+            <span class="home-nearby-number-sub">${_esc(labelText)}</span>
+            <span class="home-nearby-number-groups">${_esc(_pluralizeGroups(totalGroups))}</span>
+        `;
+
+        block.addEventListener('click', (e) => {
+            // Ripple at click coords (or block center if keyboard).
+            try {
+                const rect = block.getBoundingClientRect();
+                const size = Math.max(rect.width, rect.height) * 1.2;
+                const x = (e.clientX || rect.left + rect.width / 2) - rect.left - size / 2;
+                const y = (e.clientY || rect.top + rect.height / 2) - rect.top - size / 2;
+                const ripple = document.createElement('span');
+                ripple.className = 'home-nearby-ripple';
+                ripple.style.width = `${size}px`;
+                ripple.style.height = `${size}px`;
+                ripple.style.left = `${x}px`;
+                ripple.style.top = `${y}px`;
+                block.appendChild(ripple);
+                setTimeout(() => { try { ripple.remove(); } catch (_) {} }, 650);
+            } catch (_) {}
+
+            // Open the list bottom-sheet.
+            try {
+                window.dispatchEvent(new CustomEvent('crisp:nearby-open-list', {
+                    detail: { payload },
+                }));
+            } catch (_) {}
+        });
+
+        return block;
+    }
+
+    function _pluralizeGroups(n) {
+        if (n <= 0) return '';
+        if (n === 1) return _t('nearby_one_area', '1 area');
+        return _t('nearby_n_areas', '{n} areas').replace('{n}', String(n));
+    }
+
     // ── Rendering ────────────────────────────────────────────────────
 
     function _renderInto(container, payload, opts) {
-        // Clear previous rows
         container.innerHTML = '';
 
-        const list = document.createElement('div');
-        list.className = 'home-nearby-list';
-        list.id = 'home-nearby-list';
-
         if (!payload || !payload.groups || payload.groups.length === 0) {
-            list.appendChild(_buildEmptyState());
-            container.appendChild(list);
+            const empty = _buildEmptyState();
+            const wrap = document.createElement('div');
+            wrap.className = 'home-nearby-list';
+            wrap.id = 'home-nearby-list';
+            wrap.appendChild(empty);
+            container.appendChild(wrap);
             return;
         }
 
-        const groups = payload.groups;
-        const collapsed = (opts && opts.expanded) ? groups : groups.slice(0, COLLAPSED_ROWS);
-        for (const g of collapsed) {
-            list.appendChild(_buildRow(g));
-        }
+        // v8 — single aggregate number block (not per-group rows).
+        container.appendChild(_buildNumberBlock(payload));
 
-        if (groups.length > COLLAPSED_ROWS && (!opts || !opts.expanded)) {
-            const more = document.createElement('button');
-            more.type = 'button';
-            more.className = 'home-nearby-view-more';
-            more.id = 'home-nearby-view-more';
-            more.textContent = _t('nearby_view_more', 'View {n} more')
-                .replace('{n}', String(groups.length - COLLAPSED_ROWS));
-            more.addEventListener('click', () => {
-                // Inline lazy-expand — no extra fetch needed, the
-                // server already returned the full top-N. Phase 2 may
-                // page beyond N.
-                _renderInto(container, payload, { expanded: true });
-            });
-            list.appendChild(more);
-        }
-
-        // Optional "Last seen X min ago" footer when rendering from
-        // stale cache (offline + cache fresh path).
+        // Optional "Last seen X min ago" caption beneath the block
+        // when the payload came from the IDB cache (offline path).
         if (opts && opts.fromCache && opts.cacheAgeMs != null) {
             const mins = Math.max(0, Math.round(opts.cacheAgeMs / 60000));
             const cap = document.createElement('div');
             cap.className = 'home-nearby-caption';
             cap.textContent = _t('nearby_last_seen', 'Last seen {n} min ago')
                 .replace('{n}', String(mins));
-            list.appendChild(cap);
+            container.appendChild(cap);
         }
 
-        container.appendChild(list);
+        // Cache the latest payload on window for the list sheet to
+        // re-read without re-fetching. Keeps the open-list handler
+        // simple + stateless.
+        try { window.__crispNearbyLastPayload = payload; } catch (_) {}
     }
 
     // ── Boot ─────────────────────────────────────────────────────────
@@ -570,23 +624,92 @@
         return `${c}_${d}`;
     }
 
-    // Wire dismissal once on script load.
-    document.addEventListener('DOMContentLoaded', () => {
-        const sheet = document.getElementById('nearby-sheet');
+    // ── List bottom-sheet (v8 — May 2026) ────────────────────────────
+    //
+    // Slides up on tap of the aggregate number block. Renders all
+    // groups as tappable rows; a row tap dispatches the existing
+    // `crisp:nearby-row-click` event so the detail sheet chain still
+    // works unchanged. The list sheet closes when the detail opens,
+    // and is dismissable via backdrop / ✕ / Escape.
+
+    function _openListSheet(payload) {
+        const sheet = document.getElementById('nearby-list-sheet');
+        if (!sheet || !payload) return;
+        const listEl = sheet.querySelector('#nearby-list-sheet-list');
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        const groups = payload.groups || [];
+        if (groups.length === 0) {
+            listEl.appendChild(_buildEmptyState());
+        } else {
+            groups.forEach((g) => listEl.appendChild(_buildRow(g)));
+        }
+        // Reset title each open (i18n-safe re-render).
+        const titleEl = sheet.querySelector('#nearby-list-sheet-title');
+        if (titleEl) titleEl.textContent = _t('nearby_eyebrow', 'NEARBY REPORTS');
+
+        sheet.hidden = false;
+        void sheet.offsetWidth;
+        sheet.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+        const close = sheet.querySelector('#nearby-list-sheet-close');
+        if (close && typeof close.focus === 'function') {
+            try { close.focus(); } catch (_) {}
+        }
+    }
+
+    function _closeListSheet() {
+        const sheet = document.getElementById('nearby-list-sheet');
         if (!sheet) return;
-        const close = sheet.querySelector('#nearby-sheet-close');
-        const backdrop = sheet.querySelector('#nearby-sheet-backdrop');
-        if (close) close.addEventListener('click', _closeSheet);
-        if (backdrop) backdrop.addEventListener('click', _closeSheet);
+        sheet.classList.remove('is-open');
+        setTimeout(() => { sheet.hidden = true; }, 240);
+        document.body.style.overflow = '';
+    }
+
+    // Wire dismissals on DOM ready.
+    document.addEventListener('DOMContentLoaded', () => {
+        // Detail sheet (existing — unchanged).
+        const detail = document.getElementById('nearby-sheet');
+        if (detail) {
+            const close = detail.querySelector('#nearby-sheet-close');
+            const backdrop = detail.querySelector('#nearby-sheet-backdrop');
+            if (close) close.addEventListener('click', _closeSheet);
+            if (backdrop) backdrop.addEventListener('click', _closeSheet);
+        }
+
+        // List sheet (new).
+        const list = document.getElementById('nearby-list-sheet');
+        if (list) {
+            const close = list.querySelector('#nearby-list-sheet-close');
+            const backdrop = list.querySelector('#nearby-list-sheet-backdrop');
+            if (close) close.addEventListener('click', _closeListSheet);
+            if (backdrop) backdrop.addEventListener('click', _closeListSheet);
+        }
+
+        // Single Escape handler covers both sheets — closes whichever
+        // is currently open.
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !sheet.hidden) _closeSheet();
+            if (e.key !== 'Escape') return;
+            if (detail && !detail.hidden) _closeSheet();
+            else if (list && !list.hidden) _closeListSheet();
         });
     });
 
-    // Listen for the tap event from `_buildRow`.
+    // Tap on the aggregate number block → open list sheet.
+    window.addEventListener('crisp:nearby-open-list', (e) => {
+        try { _openListSheet(e && e.detail && e.detail.payload); }
+        catch (err) { /* swallow */ }
+    });
+
+    // Tap on a row inside the list sheet → close list, open detail.
     window.addEventListener('crisp:nearby-row-click', (e) => {
-        try { _openDetailSheet(e && e.detail && e.detail.group); }
-        catch (err) { /* never crash the home page from sheet errors */ }
+        try {
+            // If the list sheet is open, slide it down first so the
+            // detail sheet animation has a clean stage.
+            const list = document.getElementById('nearby-list-sheet');
+            if (list && !list.hidden) _closeListSheet();
+            _openDetailSheet(e && e.detail && e.detail.group);
+        } catch (err) { /* swallow */ }
     });
 
     // ── Public API ───────────────────────────────────────────────────
@@ -595,6 +718,8 @@
         boot,
         openDetailSheet: _openDetailSheet,
         closeDetailSheet: _closeSheet,
+        openListSheet: _openListSheet,
+        closeListSheet: _closeListSheet,
         // Exposed for unit-test injection if needed.
         _round3,
         _humanizeAgo,
