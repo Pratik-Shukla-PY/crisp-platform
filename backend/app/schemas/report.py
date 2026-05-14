@@ -596,3 +596,53 @@ class ClusterResponse(BaseModel):
     primary_infrastructure_type: Optional[InfraTypeEnum] = None
     
     model_config = ConfigDict(from_attributes=True)
+
+
+# ── "Verified Reports Nearby" — May 2026 ──────────────────────────────
+#
+# Strict privacy-projected schema for the /api/v1/reports/nearby
+# endpoint that drives the PWA + RN home-stage intelligence module.
+#
+# CRITICAL: every field below is on a deliberate allow-list. No
+# `device_id`, `user_id`, free-text `description`, individual report
+# `id`, precise per-report lat/lng, reviewer notes, or sub-minute
+# timestamps may EVER be added without a privacy review. The single-
+# audit-pass guarantee in app/services/nearby_aggregator.py only
+# holds if this schema doesn't widen its surface.
+
+class ReportNearbyGroup(BaseModel):
+    """One aggregate row in the nearby intel response. Each group
+    represents 3+ reports (k-anonymity floor) tagged to either a
+    shared building footprint (`kind=building`) or a crisis-type
+    grid cell (`kind=crisis_cluster`)."""
+    id: str
+    kind: str                        # "building" | "crisis_cluster"
+    label: str                       # building name OR "Near {lat,lng}" fallback
+    summary: str                     # English fallback — "Flooded" / "Bridge Collapsed"
+    summary_key: str                 # i18n key for client-side localization
+    count: int                       # device-deduped report count (≥ 3 per k-anonymity)
+    verified_count: int
+    pending_count: int
+    approx_distance_km: float        # caller → centroid, 2dp
+    centroid_lat: float              # group centroid (mean of bucket), 4dp
+    centroid_lng: float              # group centroid (mean of bucket), 4dp
+    latest_at: datetime              # most-recent report timestamp, minute-truncated
+    earliest_at: datetime            # oldest report timestamp, minute-truncated
+    crisis_types: List[str]          # top-3 most common, sorted by frequency
+    damage_classes: List[str]        # top-3 most common, sorted by frequency
+    severity_max: str                # highest severity in the bucket
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReportNearbyResponse(BaseModel):
+    """Wrapper for the nearby endpoint. `user_location` echoes the
+    caller's rounded coords so the client can validate it's getting
+    the response for the right query (defends against a misaligned
+    cache returning stale data for a different bucket)."""
+    user_location: dict              # {lat: float, lng: float} — echoed
+    radius_km: float
+    as_of: datetime                  # server clock at query time
+    groups: List[ReportNearbyGroup]
+    total_groups: int                # before `limit` truncation
+    total_reports: int               # before grouping

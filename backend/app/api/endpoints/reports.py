@@ -24,6 +24,11 @@ from app.schemas.report import (
     ReportCreate, ReportResponse, ReportMetaCreate, MediaAttach,
     ReportDescriptionUpdate, ThumbnailPayload, MediaChunkPayload,
     VerificationResponse,
+    ReportNearbyResponse, ReportNearbyGroup,
+)
+from app.services.nearby_aggregator import (
+    aggregate_nearby, bbox_for_radius, haversine_km,
+    NearbyReportInput,
 )
 from app.services.ai_service import ai_service
 from app.services.satellite_fetcher import satellite_fetcher
@@ -3498,6 +3503,196 @@ def get_reports(
         )
 
     return reports
+
+
+# ── "Verified Reports Nearby" — Public intel summary ─────────────────────────
+#
+# Public endpoint (no auth) — the response is heavily privacy-projected
+# via ReportNearbyResponse + the aggregator service. No device_id,
+# no user_id, no description, no individual report id, no precise
+# per-report coords. Same trust model as the existing share-token +
+# stable media URL endpoints.
+#
+# Drives the home-stage "Verified Reports Nearby" module on the PWA +
+# RN companion. Reporters get ambient awareness ("12 reports nearby
+# at Green Valley Apartments") without compromising any reporter's
+# anonymity. The module is INVISIBLE when offline / GPS denied — see
+# the offline-behavior matrix in the design plan.
+#
+# UNDP alignment:
+#   • must-have #6 (building footprints) — primary group key
+#   • must-have #7 (PII protection)      — strict allow-list projection
+#   • must-have #9 (anonymity)           — zero reporter identification
+#   • must-have #12 (scale)              — bbox pre-filter + top-N + cache
+
+_NEARBY_CACHE: dict = {}
+_NEARBY_CACHE_TTL_SECONDS = 90
+
+def _nearby_cache_key(lat3: float, lng3: float, radius_km: float,
+                     since_iso: str, group_by: str,
+                     limit: int, max_age_hours: int) -> str:
+    return f"{lat3:.3f}|{lng3:.3f}|{radius_km:.1f}|{since_iso}|{group_by}|{limit}|{max_age_hours}"
+
+
+@router.get("/nearby", response_model=ReportNearbyResponse)
+def get_nearby_reports(
+    request: Request,
+    response: Response,
+    lat: float = Query(..., ge=-90, le=90,
+                       description="Latitude of the user's location. Client SHOULD round to 3dp (~110m) before sending."),
+    lng: float = Query(..., ge=-180, le=180,
+                       description="Longitude of the user's location. Client SHOULD round to 3dp (~110m) before sending."),
+    radius_km: float = Query(5.0, ge=0.1, le=25.0,
+                             description="Search radius in kilometres. Default 5, max 25."),
+    since: Optional[datetime] = Query(None,
+                                      description="ISO 8601 timestamp; delta-sync filter (same shape as /reports/)."),
+    group_by: str = Query("building", pattern="^(building|crisis_type)$",
+                          description="Bucket strategy. 'building' (default) groups by building_id with grid-cell fallback; 'crisis_type' groups by crisis type only."),
+    limit: int = Query(20, ge=1, le=50,
+                       description="Max groups returned. Default 20, max 50."),
+    max_age_hours: int = Query(72, ge=1, le=720,
+                               description="Drop reports older than N hours. Default 72."),
+    db: Session = Depends(get_db),
+):
+    """Aggregate verified + pending reports within `radius_km` of (lat, lng).
+
+    Returns groups (one per building or crisis cluster) with privacy-
+    projected fields only. Suppresses groups with < 3 reports
+    (k-anonymity).
+
+    Performance: bbox pre-filter on the (latitude, longitude) index
+    narrows the candidate set BEFORE the haversine pass. 90-second
+    in-process cache keyed by rounded coords + filter params.
+
+    Privacy guarantees:
+      ✓ No reporter identification (device_id / user_id) in response
+      ✓ No individual report id exposed (groups only)
+      ✓ No free-text description
+      ✓ No precise per-report lat/lng (only group centroid)
+      ✓ Timestamps minute-truncated
+      ✓ Same-device contributions capped at 1 per group (anti-spam)
+      ✓ Status REJECTED / DUPLICATE / FALSE_ALARM excluded
+    """
+    # Cache key uses caller's rounded coords + filter params. 3-decimal
+    # rounding (~110m) clusters nearby callers onto the same cache row.
+    lat_r = round(lat, 3)
+    lng_r = round(lng, 3)
+    since_iso = since.isoformat() if since else ""
+    cache_key = _nearby_cache_key(lat_r, lng_r, radius_km, since_iso, group_by, limit, max_age_hours)
+
+    now_ts = datetime.now(timezone.utc).timestamp()
+    cached = _NEARBY_CACHE.get(cache_key)
+    if cached and (now_ts - cached["ts"] < _NEARBY_CACHE_TTL_SECONDS):
+        # Cache hit — replay headers + serve cached payload.
+        cached_payload = cached["payload"]
+        response.headers["Cache-Control"] = "private, max-age=60"
+        response.headers["X-Cache"] = "HIT"
+        return cached_payload
+
+    # ── DB query ──────────────────────────────────────────────────────
+    # Bbox pre-filter on indexed lat/lng columns. cos(lat) handles
+    # meridian convergence; we widen at high latitudes but the
+    # haversine post-filter still nails the actual radius.
+    lat_min, lat_max, lng_min, lng_max = bbox_for_radius(lat, lng, radius_km)
+
+    # Cut-off for `max_age_hours`. server_created_at index narrows the
+    # scan further.
+    age_cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+
+    # Surface VERIFIED + PENDING only (operator approved INCLUDE
+    # PENDING with a ⏳ badge). Explicitly exclude REJECTED, DUPLICATE,
+    # FALSE_ALARM — these are spam / mis-reports and must not show up.
+    q = (
+        db.query(Report)
+          .join(Location, Location.report_id == Report.id)
+          .filter(Location.latitude.between(lat_min, lat_max))
+          .filter(Location.longitude.between(lng_min, lng_max))
+          .filter(Report.status.in_([
+              ReportStatusEnum.VERIFIED,
+              ReportStatusEnum.PENDING,
+          ]))
+          .filter(Report.deletion_requested_at == None)
+          .filter(Report.server_created_at >= age_cutoff)
+          .options(joinedload(Report.location))
+    )
+
+    if since is not None:
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+        else:
+            since = since.astimezone(timezone.utc)
+        q = q.filter(Report.updated_at > since)
+
+    candidates = q.all()
+
+    # Exact haversine post-filter — drops bbox false-positives.
+    inputs: List[NearbyReportInput] = []
+    for r in candidates:
+        if not r.location:
+            continue
+        d_km = haversine_km(lat, lng, r.location.latitude, r.location.longitude)
+        if d_km > radius_km:
+            continue
+        inputs.append(NearbyReportInput(
+            report_id=r.id,
+            device_id=r.device_id,
+            status=r.status.value if hasattr(r.status, "value") else str(r.status),
+            severity=r.severity.value if hasattr(r.severity, "value") else (str(r.severity) if r.severity else None),
+            crisis_type=r.crisis_type,
+            damage_class=r.damage_classification,
+            building_id=r.building_id,
+            infrastructure_name=r.infrastructure_name,
+            infrastructure_name_from_osm=r.infrastructure_name_from_osm,
+            latitude=r.location.latitude,
+            longitude=r.location.longitude,
+            server_created_at=r.server_created_at or datetime.now(timezone.utc),
+        ))
+
+    # Aggregate → groups (k-anonymity + relevance sort applied inside).
+    groups = aggregate_nearby(
+        reports=inputs,
+        user_lat=lat,
+        user_lng=lng,
+        radius_km=radius_km,
+        group_by=group_by,
+        max_groups=limit,
+    )
+
+    payload = ReportNearbyResponse(
+        user_location={"lat": lat_r, "lng": lng_r},
+        radius_km=radius_km,
+        as_of=datetime.now(timezone.utc),
+        groups=[
+            ReportNearbyGroup(
+                id=g.id, kind=g.kind, label=g.label, summary=g.summary,
+                summary_key=g.summary_key, count=g.count,
+                verified_count=g.verified_count, pending_count=g.pending_count,
+                approx_distance_km=g.approx_distance_km,
+                centroid_lat=g.centroid_lat, centroid_lng=g.centroid_lng,
+                latest_at=g.latest_at, earliest_at=g.earliest_at,
+                crisis_types=g.crisis_types, damage_classes=g.damage_classes,
+                severity_max=g.severity_max,
+            )
+            for g in groups
+        ],
+        total_groups=len(groups),
+        total_reports=len(inputs),
+    )
+
+    # Cache for 90 s. Capped at 1000 entries to bound memory; LRU-ish
+    # eviction at insertion time.
+    if len(_NEARBY_CACHE) >= 1000:
+        # Drop the 100 oldest entries
+        oldest = sorted(_NEARBY_CACHE.items(), key=lambda kv: kv[1]["ts"])[:100]
+        for k, _ in oldest:
+            _NEARBY_CACHE.pop(k, None)
+    _NEARBY_CACHE[cache_key] = {"ts": now_ts, "payload": payload}
+
+    response.headers["Cache-Control"] = "private, max-age=60"
+    response.headers["X-Cache"] = "MISS"
+    response.headers["X-Total-Groups"] = str(payload.total_groups)
+    response.headers["X-Total-Reports"] = str(payload.total_reports)
+    return payload
 
 
 # ── Satellite Truth Verification ─────────────────────────────────────────────

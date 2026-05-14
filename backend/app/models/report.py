@@ -377,6 +377,16 @@ class Location(Base):
 
     report = relationship("Report", back_populates="location")
 
+    # May 2026 (0018) — composite index on (latitude, longitude) so the
+    # /api/v1/reports/nearby bbox pre-filter is an indexed range scan
+    # instead of a full Location table scan. Mirrored in migration
+    # 0018_locations_lat_lng_index so `Base.metadata.create_all()`
+    # (pytest setup) and `alembic upgrade` produce the same physical
+    # index name.
+    __table_args__ = (
+        Index("ix_locations_lat_lng", "latitude", "longitude"),
+    )
+
 class Media(Base):
     __tablename__ = "media"
     id = Column(String(36), primary_key=True, default=gen_uuid)
