@@ -4340,22 +4340,24 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     position: relative;
     flex-shrink: 1;
     min-width: 0;
-    /* May 2026 (declutter pass v2) — pre-fix this was a flex-row
-       with wrap, which let the badge chip sit BESIDE the device-ID
-       pill on wide viewports (desktop, tablets in landscape). Two
-       identity claims on the same row read as cluttered + the chip
-       got visually squeezed. Force column-flex so the chip is
-       ALWAYS on its own row below the device-ID pill, regardless
-       of viewport width. */
+    /* May 2026 (declutter pass v3 — operator: "There is no change on
+       this portion. It still Looks messy bad").
+       Measured the geometry with Playwright: with align-items:
+       stretch the .home-devid-badge child (which has max-width:
+       220px) was rendered CENTERED in the 390 px wide wrap because
+       browsers center max-width-constrained items in the stretched
+       cross-axis. The pill ended up offset 96 px from the wrap's
+       left edge — exactly (390 − 198) / 2. The previous fix tried
+       align-items: stretch + align-self: flex-start on the chip
+       only, but the badge was inheriting `auto` and getting
+       centered. Use flex-start on the container so BOTH children
+       left-align by default. */
     display: flex;
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
     gap: 8px;
 }
-.home-devid-wrap .home-badge-chip {
-    margin-top: 0;
-    align-self: flex-start;
-}
+.home-devid-wrap .home-badge-chip { margin-top: 0; }
 
 /* Tools icon cluster — May 2026 declutter pass (Strava / Apple Health
    / Linear benchmark). The row sits ABSOLUTE top-right of the home
@@ -5219,7 +5221,14 @@ body.tier-t4 .home-impact {
    would otherwise override the UA's default `[hidden] {display:none}`,
    leaving the wrap visible even when JS marks it hidden for logged-in
    users. Same for the badge chip living inside it. */
-.home-devid-wrap { gap: 10px; row-gap: 8px; align-items: center; }
+/* May 2026 (declutter pass v3) — was `align-items: center` which
+   overrode the base-block's flex-start, centering the inline-flex
+   device-ID badge (max-width:220) horizontally inside the 390 px
+   wrap. Measured offset was exactly (390 − 198) / 2 ≈ 96 px from
+   the left — pill drifted right of the brand-row's left edge.
+   Now: align-items: flex-start so both children left-align with
+   the rest of the identity area. */
+.home-devid-wrap { gap: 10px; row-gap: 8px; align-items: flex-start; }
 .home-devid-wrap[hidden] { display: none; }
 .home-recent[hidden] { display: none; }
 .home-howitworks[hidden] { display: none; }

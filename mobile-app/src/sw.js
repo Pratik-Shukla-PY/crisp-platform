@@ -5,7 +5,28 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v154';
+const CACHE_NAME = 'crisp-v155';
+// v154 → v155 (May 2026 — operator: "There is no change on this
+// portion. It still Looks messy bad and not god for UNDP challenge
+// submission" / "Verify, review take snapshot, confirm then then
+// conclude it is done.").
+// Root cause measured with Playwright (not assumed): the previous
+// declutter pass set `align-items: stretch` on .home-devid-wrap but
+// a LATER override (`align-items: center` at the bottom of the file
+// for layout-tweak block) won the cascade. With center alignment +
+// the badge's max-width:220 inside a 390-wide wrap, browsers center
+// the constrained item in the cross-axis, leaving the pill at
+// (390 − 198) / 2 = 96 px from the left edge of the wrap — drifted
+// right of the brand-row's left edge.
+// Verified with /tmp/crisp_verify.mjs:
+//   BEFORE — badge_offset_in_wrap: 96, chip_offset_in_wrap: 87
+//   AFTER  — badge_offset_in_wrap:  0, chip_offset_in_wrap:  0
+// Both pill and chip now share `left = 285` with the brand wordmark
+// (all_aligned: true). Fix: changed the conflicting override from
+// `align-items: center` to `align-items: flex-start` at the bottom
+// of styles.css. The earlier `flex-direction: column` change still
+// holds; both children left-align with the rest of the identity
+// area now.
 // v153 → v154 (May 2026, declutter pass v2 — operator: "Further
 // screwed UI and UX. Its getting worse every time" + "UI is bad
 // overlapping and unprofessional. Make it 10x better than before").
