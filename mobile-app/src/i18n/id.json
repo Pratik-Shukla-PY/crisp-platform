@@ -669,7 +669,7 @@
   "tier_progress_first_report": "Kirim laporan pertama Anda untuk naik level",
   "tier_progress_verified_1": "Dapatkan 1 laporan diverifikasi oleh analis",
   "tier_progress_lives_1": "Bantu menyelamatkan 1 nyawa melalui laporan Anda",
-  "tier_progress_top_share": "Tingkat tertinggi tercapai — ketuk untuk membagikan lencana",
+  "tier_progress_top_share": "Level tertinggi tercapai",
   "celebration_tier_up_t2_signal": "📣 Anda kini Sinyal — laporan pertama Anda telah sampai ke tim.",
   "celebration_tier_up_t3_changemaker": "⚡ Penggerak terbuka! Laporan Anda mengirim bantuan.",
   "celebration_tier_up_t4_lifekeeper": "🦸 Anda seorang Penjaga Nyawa. Ketuk lencana untuk berbagi cerita.",
@@ -729,5 +729,6 @@
   "success_btn_rewards": "Hadiah",
   "success_btn_home": "Beranda",
   "home_login_icon_signed_in": "Akun",
-  "home_login_icon_signed_out": "Masuk"
+  "home_login_icon_signed_out": "Masuk",
+  "badge_chip_lives_stat": "{n} nyawa diselamatkan"
 }

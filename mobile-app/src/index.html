@@ -504,6 +504,47 @@
          home-screen.js (replaces the deleted landing.js).
     -->
     <div class="stage active home-stage" id="stage-home">
+
+        <!-- May 2026 (declutter pass — Strava / Apple Health / Linear
+             benchmark) — tools row LIFTED out of .home-identity and
+             positioned absolute top-right (just under the lang pill at
+             top:16). Pre-fix the icons floated mid-screen with no
+             visual anchor; now they cluster with the other "page
+             chrome" (lang pill) at the top-right corner — industry-
+             standard pattern for app tools/settings. Below the lang
+             pill rather than left-of-it because the pill is up to
+             140 px wide + icons are 120 px wide; combining them on
+             one row would overflow narrow phones. -->
+        <div class="home-tools-row" id="home-tools-row" role="group" aria-label="Account and app tools">
+            <button id="btn-home-install-icon" type="button"
+                    class="home-strip-icon"
+                    aria-label="Install on home screen"
+                    data-i18n-aria-label="landing_install_pwa"
+                    title="Install on home screen"
+                    data-i18n-title="landing_install_pwa"
+                    hidden>
+                <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></i>
+            </button>
+            <button id="btn-home-voice" type="button"
+                    class="home-strip-icon"
+                    aria-label="Read this page aloud"
+                    data-i18n-aria-label="aria_read_aloud"
+                    title="Read this page aloud"
+                    data-i18n-title="aria_read_aloud">
+                <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></i>
+            </button>
+            <button id="btn-home-login-icon" type="button"
+                    class="home-strip-icon home-login-icon"
+                    aria-label="Sign in"
+                    data-i18n-aria-label="home_login_icon_signed_out"
+                    title="Sign in"
+                    data-i18n-title="home_login_icon_signed_out"
+                    data-state="anonymous">
+                <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></i>
+                <span class="icon-status-dot dot-offline" id="home-login-dot" aria-hidden="true"></span>
+            </button>
+        </div>
+
         <div class="stage-center home-center">
 
             <!-- Identity bar with bigger brand block
@@ -595,44 +636,6 @@
                          lives outside both home-devid-wrap and
                          home-account-wrap so the icons stay reachable in
                          every auth state. -->
-                </div>
-
-                <!-- Always-visible icon strip. Three round 44 × 44 buttons
-                     right-anchored: Install (hidden until installable),
-                     Voice (TTS read-aloud), and Login/Account (NEW).
-                     The login icon carries a status dot at top-right:
-                       • GREEN  → user is signed in   (tap → account menu)
-                       • RED    → user is anonymous   (tap → stage-login)
-                     Colour-coded so an uneducated reporter can see at a
-                     glance whether their account is linked. -->
-                <div class="home-tools-row" id="home-tools-row" role="group" aria-label="Account and app tools">
-                    <button id="btn-home-install-icon" type="button"
-                            class="home-strip-icon"
-                            aria-label="Install on home screen"
-                            data-i18n-aria-label="landing_install_pwa"
-                            title="Install on home screen"
-                            data-i18n-title="landing_install_pwa"
-                            hidden>
-                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></i>
-                    </button>
-                    <button id="btn-home-voice" type="button"
-                            class="home-strip-icon"
-                            aria-label="Read this page aloud"
-                            data-i18n-aria-label="aria_read_aloud"
-                            title="Read this page aloud"
-                            data-i18n-title="aria_read_aloud">
-                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></i>
-                    </button>
-                    <button id="btn-home-login-icon" type="button"
-                            class="home-strip-icon home-login-icon"
-                            aria-label="Sign in"
-                            data-i18n-aria-label="home_login_icon_signed_out"
-                            title="Sign in"
-                            data-i18n-title="home_login_icon_signed_out"
-                            data-state="anonymous">
-                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></i>
-                        <span class="icon-status-dot dot-offline" id="home-login-dot" aria-hidden="true"></span>
-                    </button>
                 </div>
 
                 <!-- Logged-in slot — May 2026 (landing-icon cleanup pass)

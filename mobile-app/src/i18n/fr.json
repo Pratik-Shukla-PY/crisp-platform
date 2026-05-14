@@ -683,7 +683,7 @@
   "tier_progress_first_report": "Soumettez votre premier rapport pour passer au niveau supérieur",
   "tier_progress_verified_1": "Faites vérifier 1 rapport par un analyste",
   "tier_progress_lives_1": "Aidez à sauver 1 vie grâce à vos rapports",
-  "tier_progress_top_share": "Niveau supérieur atteint — appuyez pour partager votre badge",
+  "tier_progress_top_share": "Niveau maximum atteint",
   "celebration_tier_up_t2_signal": "📣 Vous êtes un Signal maintenant — votre premier rapport a atteint l'équipe.",
   "celebration_tier_up_t3_changemaker": "⚡ Acteur du changement débloqué ! Votre rapport a envoyé de l'aide.",
   "celebration_tier_up_t4_lifekeeper": "🦸 Vous êtes un Gardien de vies. Appuyez sur le badge pour partager votre histoire.",
@@ -743,5 +743,6 @@
   "success_btn_rewards": "Récompenses",
   "success_btn_home": "Accueil",
   "home_login_icon_signed_in": "Compte",
-  "home_login_icon_signed_out": "Se connecter"
+  "home_login_icon_signed_out": "Se connecter",
+  "badge_chip_lives_stat": "{n} vies sauvées"
 }

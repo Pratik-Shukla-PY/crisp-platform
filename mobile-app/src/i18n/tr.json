@@ -661,7 +661,7 @@
   "tier_progress_first_report": "Seviye atlamak için ilk raporunuzu gönderin",
   "tier_progress_verified_1": "1 raporu analist tarafından doğrulatın",
   "tier_progress_lives_1": "Raporlarınızla 1 hayat kurtarın",
-  "tier_progress_top_share": "En üst seviyeye ulaştın — rozeti paylaşmak için dokun",
+  "tier_progress_top_share": "En üst seviyeye ulaşıldı",
   "celebration_tier_up_t2_signal": "📣 Artık bir Sinyalsiniz — ilk raporunuz ekibe ulaştı.",
   "celebration_tier_up_t3_changemaker": "⚡ Değişim öncüsü kilidi açıldı! Raporunuz yardım gönderdi.",
   "celebration_tier_up_t4_lifekeeper": "🦸 Hayat koruyucusun. Hikâyeni paylaşmak için rozete dokun.",
@@ -721,5 +721,6 @@
   "success_btn_rewards": "Ödüller",
   "success_btn_home": "Ana sayfa",
   "home_login_icon_signed_in": "Hesap",
-  "home_login_icon_signed_out": "Giriş yap"
+  "home_login_icon_signed_out": "Giriş yap",
+  "badge_chip_lives_stat": "{n} hayat kurtarıldı"
 }

@@ -660,7 +660,7 @@
   "tier_progress_first_report": "நிலையை உயர்த்த உங்கள் முதல் அறிக்கையை சமர்ப்பிக்கவும்",
   "tier_progress_verified_1": "பகுப்பாய்வாளர் 1 அறிக்கையை சரிபார்க்கட்டும்",
   "tier_progress_lives_1": "உங்கள் அறிக்கைகள் வழியாக 1 உயிரைக் காப்பாற்ற உதவுங்கள்",
-  "tier_progress_top_share": "உச்ச நிலை அடைந்தது — பேட்ஜை பகிர தட்டவும்",
+  "tier_progress_top_share": "உச்ச நிலையை அடைந்துள்ளீர்கள்",
   "celebration_tier_up_t2_signal": "📣 இப்போது நீங்கள் ஒரு சிக்னல் — உங்கள் முதல் அறிக்கை குழுவை அடைந்தது.",
   "celebration_tier_up_t3_changemaker": "⚡ மாற்றம் கொண்டுவருபவர் திறக்கப்பட்டது! உங்கள் அறிக்கை உதவியை அனுப்பியது.",
   "celebration_tier_up_t4_lifekeeper": "🦸 நீங்கள் ஒரு உயிர் காப்பாளர். கதையை பகிர பேட்ஜை தட்டவும்.",
@@ -720,5 +720,6 @@
   "success_btn_rewards": "வெகுமதிகள்",
   "success_btn_home": "முகப்பு",
   "home_login_icon_signed_in": "கணக்கு",
-  "home_login_icon_signed_out": "உள்நுழைய"
+  "home_login_icon_signed_out": "உள்நுழைய",
+  "badge_chip_lives_stat": "{n} உயிர்கள் காப்பாற்றப்பட்டன"
 }

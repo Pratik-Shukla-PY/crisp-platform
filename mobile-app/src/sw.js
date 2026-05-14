@@ -5,7 +5,39 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v152';
+const CACHE_NAME = 'crisp-v153';
+// v152 → v153 (May 2026, landing-page declutter pass).
+// Operator: "Cluttered. Make it look professional. Think and plan
+// properly. Benchmark some other companies UI and make best of best
+// for least cognitive load and easy to use."
+//
+// Screenshot audit (Strava / Apple Health / Linear benchmark):
+//  • 3 round icons (install + voice + login) floated MID-PAGE between
+//    badge chip and primary CTA — orphan island in dead space.
+//  • Device-ID pill + badge chip stacked as 2 separate identity claims
+//    burning vertical real-estate.
+//  • Badge chip carried verbose "Top tier reached — tap to share your
+//    badge" sub-text that was both noisy AND misleading (chip is
+//    decorative-only — tap does nothing).
+//  • Standalone "8 LIVES SAVED" giant card (34 px font, 18 px padding)
+//    competed with the identity card + primary CTA for attention.
+//
+// Four surgical changes — zero feature removal:
+//  1) tools row LIFTED to position:absolute top:60 right:16, just
+//     under the lang pill — clusters with the other page-chrome icons
+//     at the top-right (Linear / Gmail pattern). Icons shrunk 44 → 36
+//     so the cluster doesn't dominate; tap target stays compliant.
+//  2) Badge chip sub-text for T4 now shows actual stat ({n} lives
+//     saved) instead of the misleading "tap to share" copy.
+//  3) Standalone home-impact "Lives Saved" downsized from a hero card
+//     to a quiet inline chip — number + label baseline-aligned on one
+//     line, no background gradient, thin border, ~5 × less vertical
+//     real-estate. The badge chip already carries the user's stat
+//     for T4; this strip persists for T1-T3 as quiet social proof.
+//  4) Tier-progress i18n key `tier_progress_top_share` shortened to
+//     "Top tier reached" across 22 locales (was "Top tier reached —
+//     tap to share your badge"); new key `badge_chip_lives_stat` added
+//     for the T4 stat template.
 // v151 → v152 (May 2026, operator-requested landing-page icon cleanup).
 // "Clean up the Landing page. These blocks can be icons as suggested.
 // When logged in show green, else red." Three changes ship together:

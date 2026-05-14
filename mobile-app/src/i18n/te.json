@@ -660,7 +660,7 @@
   "tier_progress_first_report": "లెవల్ అప్ చేయడానికి మీ మొదటి నివేదికను సమర్పించండి",
   "tier_progress_verified_1": "విశ్లేషకుడితో 1 నివేదికను ధృవీకరించండి",
   "tier_progress_lives_1": "మీ నివేదికల ద్వారా 1 జీవితాన్ని కాపాడండి",
-  "tier_progress_top_share": "అత్యున్నత స్థాయి చేరుకుంది — బ్యాడ్జ్ షేర్ చేయడానికి ట్యాప్ చేయండి",
+  "tier_progress_top_share": "అత్యున్నత స్థాయి చేరుకున్నారు",
   "celebration_tier_up_t2_signal": "📣 మీరు ఇప్పుడు సిగ్నల్ — మీ మొదటి నివేదిక బృందానికి చేరింది.",
   "celebration_tier_up_t3_changemaker": "⚡ మార్పుదాత అన్‌లాక్! మీ నివేదిక సహాయాన్ని పంపింది.",
   "celebration_tier_up_t4_lifekeeper": "🦸 మీరు జీవరక్షకుడు. మీ కథను షేర్ చేయడానికి బ్యాడ్జ్ ట్యాప్ చేయండి.",
@@ -720,5 +720,6 @@
   "success_btn_rewards": "రివార్డులు",
   "success_btn_home": "హోమ్",
   "home_login_icon_signed_in": "ఖాతా",
-  "home_login_icon_signed_out": "సైన్ ఇన్ చేయండి"
+  "home_login_icon_signed_out": "సైన్ ఇన్ చేయండి",
+  "badge_chip_lives_stat": "{n} ప్రాణాలు రక్షించారు"
 }

@@ -1220,7 +1220,7 @@
   "tier_progress_first_report": "ലെവൽ അപ് ചെയ്യാൻ നിങ്ങളുടെ ആദ്യത്തെ റിപ്പോർട്ട് സമർപ്പിക്കുക",
   "tier_progress_verified_1": "വിശ്ലേഷകൻ 1 റിപ്പോർട്ട് സ്ഥിരീകരിക്കട്ടെ",
   "tier_progress_lives_1": "നിങ്ങളുടെ റിപ്പോർട്ടുകൾ വഴി 1 ജീവൻ രക്ഷിക്കാൻ സഹായിക്കുക",
-  "tier_progress_top_share": "പരമോന്നത നില — ബാഡ്ജ് പങ്കിടാൻ ടാപ് ചെയ്യുക",
+  "tier_progress_top_share": "ഉന്നതശ്രേണി നേടി",
   "celebration_tier_up_t2_signal": "📣 നിങ്ങൾ ഇപ്പോൾ സിഗ്നൽ — നിങ്ങളുടെ ആദ്യത്തെ റിപ്പോർട്ട് ടീമിലെത്തി.",
   "celebration_tier_up_t3_changemaker": "⚡ പരിവർത്തനക്കാരൻ അൺലോക്ക്! നിങ്ങളുടെ റിപ്പോർട്ട് സഹായം അയച്ചു.",
   "celebration_tier_up_t4_lifekeeper": "🦸 നിങ്ങൾ ജീവൻ കാത്തവൻ. കഥ പങ്കിടാൻ ബാഡ്ജ് ടാപ് ചെയ്യുക.",
@@ -1280,5 +1280,6 @@
   "success_btn_rewards": "പുരസ്കാരങ്ങൾ",
   "success_btn_home": "ഹോം",
   "home_login_icon_signed_in": "അക്കൗണ്ട്",
-  "home_login_icon_signed_out": "സൈൻ ഇൻ ചെയ്യുക"
+  "home_login_icon_signed_out": "സൈൻ ഇൻ ചെയ്യുക",
+  "badge_chip_lives_stat": "{n} ജീവൻ രക്ഷിച്ചു"
 }

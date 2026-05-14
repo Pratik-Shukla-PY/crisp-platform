@@ -660,7 +660,7 @@
   "tier_progress_first_report": "લેવલ અપ કરવા તમારી પ્રથમ રિપોર્ટ સબમિટ કરો",
   "tier_progress_verified_1": "એક વિશ્લેષક પાસેથી 1 રિપોર્ટ ચકાસાવો",
   "tier_progress_lives_1": "તમારી રિપોર્ટ દ્વારા 1 જીવ બચાવો",
-  "tier_progress_top_share": "સર્વોચ્ચ સ્તર — બેજ શેર કરવા ટેપ કરો",
+  "tier_progress_top_share": "સર્વોચ્ચ સ્તર પ્રાપ્ત",
   "celebration_tier_up_t2_signal": "📣 તમે હવે સિગ્નલ છો — તમારી પ્રથમ રિપોર્ટ ટીમ સુધી પહોંચી.",
   "celebration_tier_up_t3_changemaker": "⚡ પરિવર્તનકાર અનલોક! તમારી રિપોર્ટે મદદ મોકલી.",
   "celebration_tier_up_t4_lifekeeper": "🦸 તમે જીવનરક્ષક છો. વાર્તા શેર કરવા બેજ ટેપ કરો.",
@@ -720,5 +720,6 @@
   "success_btn_rewards": "પુરસ્કાર",
   "success_btn_home": "હોમ",
   "home_login_icon_signed_in": "એકાઉન્ટ",
-  "home_login_icon_signed_out": "સાઇન ઇન કરો"
+  "home_login_icon_signed_out": "સાઇન ઇન કરો",
+  "badge_chip_lives_stat": "{n} જીવન બચાવ્યા"
 }

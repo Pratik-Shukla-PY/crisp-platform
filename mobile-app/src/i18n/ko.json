@@ -661,7 +661,7 @@
   "tier_progress_first_report": "레벨업하려면 첫 보고서를 제출하세요",
   "tier_progress_verified_1": "분석가가 보고서 1건을 인증하도록 하세요",
   "tier_progress_lives_1": "보고서를 통해 1명의 생명을 구하세요",
-  "tier_progress_top_share": "최상위 등급 도달 — 배지를 공유하려면 탭하세요",
+  "tier_progress_top_share": "최고 등급 달성",
   "celebration_tier_up_t2_signal": "📣 이제 시그널입니다 — 첫 보고서가 팀에 도착했습니다.",
   "celebration_tier_up_t3_changemaker": "⚡ 체인지메이커 잠금 해제! 보고서가 도움을 보냈습니다.",
   "celebration_tier_up_t4_lifekeeper": "🦸 라이프키퍼입니다. 이야기를 공유하려면 배지를 탭하세요.",
@@ -721,5 +721,6 @@
   "success_btn_rewards": "보상",
   "success_btn_home": "홈",
   "home_login_icon_signed_in": "계정",
-  "home_login_icon_signed_out": "로그인"
+  "home_login_icon_signed_out": "로그인",
+  "badge_chip_lives_stat": "{n}개의 생명 구함"
 }

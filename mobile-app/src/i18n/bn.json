@@ -660,7 +660,7 @@
   "tier_progress_first_report": "লেভেল আপ করতে প্রথম প্রতিবেদন জমা দিন",
   "tier_progress_verified_1": "একজন বিশ্লেষকের দ্বারা 1টি প্রতিবেদন যাচাই করান",
   "tier_progress_lives_1": "আপনার প্রতিবেদন দিয়ে 1টি জীবন বাঁচান",
-  "tier_progress_top_share": "সর্বোচ্চ স্তর — ব্যাজ শেয়ার করতে ট্যাপ করুন",
+  "tier_progress_top_share": "সর্বোচ্চ স্তরে পৌঁছেছেন",
   "celebration_tier_up_t2_signal": "📣 আপনি এখন সিগন্যাল — আপনার প্রথম প্রতিবেদন টিমে পৌঁছেছে।",
   "celebration_tier_up_t3_changemaker": "⚡ পরিবর্তনকারী আনলকড! আপনার প্রতিবেদন সাহায্য পাঠিয়েছে।",
   "celebration_tier_up_t4_lifekeeper": "🦸 আপনি একজন জীবনরক্ষাকারী। গল্প শেয়ার করতে ব্যাজে ট্যাপ করুন।",
@@ -720,5 +720,6 @@
   "success_btn_rewards": "পুরস্কার",
   "success_btn_home": "হোম",
   "home_login_icon_signed_in": "অ্যাকাউন্ট",
-  "home_login_icon_signed_out": "সাইন ইন করুন"
+  "home_login_icon_signed_out": "সাইন ইন করুন",
+  "badge_chip_lives_stat": "{n} জীবন রক্ষা"
 }

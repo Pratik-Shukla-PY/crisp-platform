@@ -666,7 +666,7 @@
   "tier_progress_first_report": "Envie seu primeiro relatório para subir de nível",
   "tier_progress_verified_1": "Tenha 1 relatório verificado por um analista",
   "tier_progress_lives_1": "Ajude a salvar 1 vida com seus relatórios",
-  "tier_progress_top_share": "Nível máximo alcançado — toque para compartilhar sua insígnia",
+  "tier_progress_top_share": "Nível máximo alcançado",
   "celebration_tier_up_t2_signal": "📣 Você agora é um Sinal — seu primeiro relatório chegou à equipe.",
   "celebration_tier_up_t3_changemaker": "⚡ Agente de mudança desbloqueado! Seu relatório enviou ajuda.",
   "celebration_tier_up_t4_lifekeeper": "🦸 Você é um Guardião de vidas. Toque na insígnia para compartilhar sua história.",
@@ -726,5 +726,6 @@
   "success_btn_rewards": "Recompensas",
   "success_btn_home": "Início",
   "home_login_icon_signed_in": "Conta",
-  "home_login_icon_signed_out": "Entrar"
+  "home_login_icon_signed_out": "Entrar",
+  "badge_chip_lives_stat": "{n} vidas salvas"
 }

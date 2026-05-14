@@ -661,7 +661,7 @@
   "tier_progress_first_report": "Gửi báo cáo đầu tiên để lên cấp",
   "tier_progress_verified_1": "Có 1 báo cáo được nhà phân tích xác minh",
   "tier_progress_lives_1": "Giúp cứu 1 mạng người qua báo cáo của bạn",
-  "tier_progress_top_share": "Đã đạt cấp cao nhất — chạm để chia sẻ huy hiệu",
+  "tier_progress_top_share": "Đạt cấp cao nhất",
   "celebration_tier_up_t2_signal": "📣 Bạn giờ là Tín hiệu — báo cáo đầu của bạn đã đến đội.",
   "celebration_tier_up_t3_changemaker": "⚡ Mở khóa Người tạo thay đổi! Báo cáo của bạn đã gửi sự giúp đỡ.",
   "celebration_tier_up_t4_lifekeeper": "🦸 Bạn là Người giữ mạng sống. Chạm vào huy hiệu để chia sẻ câu chuyện.",
@@ -721,5 +721,6 @@
   "success_btn_rewards": "Phần thưởng",
   "success_btn_home": "Trang chủ",
   "home_login_icon_signed_in": "Tài khoản",
-  "home_login_icon_signed_out": "Đăng nhập"
+  "home_login_icon_signed_out": "Đăng nhập",
+  "badge_chip_lives_stat": "Cứu sống {n} người"
 }

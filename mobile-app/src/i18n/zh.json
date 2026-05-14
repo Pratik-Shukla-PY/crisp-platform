@@ -658,7 +658,7 @@
   "tier_progress_first_report": "提交首份报告以升级",
   "tier_progress_verified_1": "让 1 份报告通过分析员验证",
   "tier_progress_lives_1": "通过你的报告帮助挽救 1 条生命",
-  "tier_progress_top_share": "已达顶级 — 点击分享你的徽章",
+  "tier_progress_top_share": "已达到最高等级",
   "celebration_tier_up_t2_signal": "📣 你现在是信号员了 — 你的第一份报告已送达团队。",
   "celebration_tier_up_t3_changemaker": "⚡ 解锁改变者!你的报告促成了救援。",
   "celebration_tier_up_t4_lifekeeper": "🦸 你是生命守护者。点击徽章分享你的故事。",
@@ -718,5 +718,6 @@
   "success_btn_rewards": "奖励",
   "success_btn_home": "主页",
   "home_login_icon_signed_in": "账户",
-  "home_login_icon_signed_out": "登录"
+  "home_login_icon_signed_out": "登录",
+  "badge_chip_lives_stat": "已挽救 {n} 条生命"
 }

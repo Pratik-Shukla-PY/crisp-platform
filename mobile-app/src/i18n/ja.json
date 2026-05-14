@@ -660,7 +660,7 @@
   "tier_progress_first_report": "レベルアップには最初のレポートを送信してください",
   "tier_progress_verified_1": "アナリストにレポート1件を認証してもらう",
   "tier_progress_lives_1": "あなたのレポートで1人の命を救おう",
-  "tier_progress_top_share": "最高ティア達成 — タップしてバッジを共有",
+  "tier_progress_top_share": "最高ティアに到達",
   "celebration_tier_up_t2_signal": "📣 あなたはシグナル — 最初のレポートがチームに届きました。",
   "celebration_tier_up_t3_changemaker": "⚡ チェンジメーカー解放! あなたのレポートが助けを送りました。",
   "celebration_tier_up_t4_lifekeeper": "🦸 あなたはライフキーパー。バッジをタップしてストーリーを共有。",
@@ -720,5 +720,6 @@
   "success_btn_rewards": "報酬",
   "success_btn_home": "ホーム",
   "home_login_icon_signed_in": "アカウント",
-  "home_login_icon_signed_out": "サインイン"
+  "home_login_icon_signed_out": "サインイン",
+  "badge_chip_lives_stat": "{n} 人の命を救った"
 }

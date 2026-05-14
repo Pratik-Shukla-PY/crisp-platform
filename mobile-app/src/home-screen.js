@@ -866,16 +866,19 @@
         // `payload` may be either a bare string (legacy cache from
         // v1) or the new v2 object {level, progress, lives, ...}.
         // Normalize both forms.
-        let level, progressKey;
+        let level, progressKey, lives;
         if (typeof payload === 'string') {
             level = _resolveLevel(payload);
             progressKey = null;
+            lives = 0;
         } else if (payload && typeof payload === 'object') {
             level = _resolveLevel(payload.level);
             progressKey = payload.progressLabelKey || null;
+            lives = Number.isFinite(payload.lives) ? payload.lives : 0;
         } else {
             level = 'T1_SCOUT';
             progressKey = 'tier_progress_first_report';
+            lives = 0;
         }
         const chip = document.getElementById('home-badge-chip');
         const emojiEl = document.getElementById('home-badge-emoji');
@@ -885,18 +888,27 @@
         const def = BADGE_LEVELS[level] || BADGE_LEVELS.T1_SCOUT;
         emojiEl.textContent = def.emoji;
         labelEl.textContent = _tString(def.i18nKey) || 'Scout';
-        // Progress sub-line — backend tells us WHICH key to render;
-        // we resolve it locally so EN fallback works without a hydrated
-        // i18n bundle. The sub-line element may be absent on cached
-        // shells without the v145 markup; guard accordingly.
+        // Progress sub-line — May 2026 declutter pass. For T4 the
+        // previous "Top tier reached — tap to share your badge" was
+        // both verbose AND misleading (the chip became decorative-
+        // only when the dedicated Rewards page shipped — tapping does
+        // nothing). T4 now shows the actual impact stat ("8 lives
+        // saved"); other tiers keep their progress hint. The sub-line
+        // element may be absent on cached shells without the v145
+        // markup; guard accordingly.
         if (progEl) {
-            const key = progressKey || (
-                level === 'T1_SCOUT'       ? 'tier_progress_first_report' :
-                level === 'T2_SIGNAL'      ? 'tier_progress_verified_1'   :
-                level === 'T3_CHANGEMAKER' ? 'tier_progress_lives_1'      :
-                                             'tier_progress_top_share'
-            );
-            progEl.textContent = _tString(key);
+            if (level === 'T4_LIFEKEEPER' && Number.isFinite(lives) && lives > 0) {
+                const tmpl = _tString('badge_chip_lives_stat') || '{n} lives saved';
+                progEl.textContent = tmpl.replace('{n}', String(lives));
+            } else {
+                const key = progressKey || (
+                    level === 'T1_SCOUT'       ? 'tier_progress_first_report' :
+                    level === 'T2_SIGNAL'      ? 'tier_progress_verified_1'   :
+                    level === 'T3_CHANGEMAKER' ? 'tier_progress_lives_1'      :
+                                                 'tier_progress_top_share'
+                );
+                progEl.textContent = _tString(key);
+            }
         }
         // Reset level classes then add the active one.
         Object.values(BADGE_LEVELS).forEach((d) => chip.classList.remove(d.cls));

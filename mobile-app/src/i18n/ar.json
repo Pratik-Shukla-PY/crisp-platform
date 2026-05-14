@@ -658,7 +658,7 @@
   "tier_progress_first_report": "أرسل أول تقرير لك للترقية",
   "tier_progress_verified_1": "احصل على التحقق من تقرير واحد بواسطة محلل",
   "tier_progress_lives_1": "ساعد في إنقاذ حياة واحدة من خلال تقاريرك",
-  "tier_progress_top_share": "أعلى مستوى — انقر لمشاركة شارتك",
+  "tier_progress_top_share": "تم الوصول إلى أعلى مستوى",
   "celebration_tier_up_t2_signal": "📣 أنت إشارة الآن — وصل تقريرك الأول إلى الفريق.",
   "celebration_tier_up_t3_changemaker": "⚡ تم فتح صانع التغيير! تقريرك أرسل المساعدة.",
   "celebration_tier_up_t4_lifekeeper": "🦸 أنت حافظ الحياة. انقر على الشارة لمشاركة قصتك.",
@@ -718,5 +718,6 @@
   "success_btn_rewards": "المكافآت",
   "success_btn_home": "الرئيسية",
   "home_login_icon_signed_in": "الحساب",
-  "home_login_icon_signed_out": "تسجيل الدخول"
+  "home_login_icon_signed_out": "تسجيل الدخول",
+  "badge_chip_lives_stat": "{n} حياة منقذة"
 }

@@ -660,7 +660,7 @@
   "tier_progress_first_report": "لیول اپ کے لیے اپنی پہلی رپورٹ جمع کرائیں",
   "tier_progress_verified_1": "تجزیہ کار سے 1 رپورٹ تصدیق کرائیں",
   "tier_progress_lives_1": "اپنی رپورٹس کے ذریعے 1 جان بچائیں",
-  "tier_progress_top_share": "سب سے اوپر کا درجہ — بیج شیئر کرنے کے لیے ٹیپ کریں",
+  "tier_progress_top_share": "سب سے اعلیٰ سطح حاصل",
   "celebration_tier_up_t2_signal": "📣 آپ اب سگنل ہیں — آپ کی پہلی رپورٹ ٹیم تک پہنچ گئی۔",
   "celebration_tier_up_t3_changemaker": "⚡ تبدیلی لانے والا انلاک! آپ کی رپورٹ نے مدد بھیجی۔",
   "celebration_tier_up_t4_lifekeeper": "🦸 آپ حیاتکیپر ہیں۔ کہانی شیئر کرنے کے لیے بیج ٹیپ کریں۔",
@@ -720,5 +720,6 @@
   "success_btn_rewards": "انعامات",
   "success_btn_home": "گھر",
   "home_login_icon_signed_in": "اکاؤنٹ",
-  "home_login_icon_signed_out": "سائن ان کریں"
+  "home_login_icon_signed_out": "سائن ان کریں",
+  "badge_chip_lives_stat": "{n} جانیں بچائی گئیں"
 }

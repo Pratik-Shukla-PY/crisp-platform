@@ -660,7 +660,7 @@
   "tier_progress_first_report": "ಮಟ್ಟ ಏರಲು ನಿಮ್ಮ ಮೊದಲ ವರದಿಯನ್ನು ಸಲ್ಲಿಸಿ",
   "tier_progress_verified_1": "ವಿಶ್ಲೇಷಕರಿಂದ 1 ವರದಿ ಪರಿಶೀಲಿಸಿಕೊಳ್ಳಿ",
   "tier_progress_lives_1": "ನಿಮ್ಮ ವರದಿಗಳ ಮೂಲಕ 1 ಜೀವ ರಕ್ಷಿಸಿ",
-  "tier_progress_top_share": "ಉನ್ನತ ಮಟ್ಟ ತಲುಪಿದೆ — ಬ್ಯಾಡ್ಜ್ ಹಂಚಿಕೊಳ್ಳಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
+  "tier_progress_top_share": "ಅತ್ಯುನ್ನತ ಶ್ರೇಣಿ ತಲುಪಿದೆ",
   "celebration_tier_up_t2_signal": "📣 ನೀವು ಈಗ ಸಿಗ್ನಲ್ — ನಿಮ್ಮ ಮೊದಲ ವರದಿ ತಂಡಕ್ಕೆ ತಲುಪಿತು.",
   "celebration_tier_up_t3_changemaker": "⚡ ಬದಲಾವಣೆಗಾರ ಅನ್‌ಲಾಕ್! ನಿಮ್ಮ ವರದಿ ಸಹಾಯ ಕಳುಹಿಸಿತು.",
   "celebration_tier_up_t4_lifekeeper": "🦸 ನೀವು ಜೀವರಕ್ಷಕ. ಕಥೆ ಹಂಚಿಕೊಳ್ಳಲು ಬ್ಯಾಡ್ಜ್ ಟ್ಯಾಪ್ ಮಾಡಿ.",
@@ -720,5 +720,6 @@
   "success_btn_rewards": "ಪ್ರಶಸ್ತಿಗಳು",
   "success_btn_home": "ಮುಖಪುಟ",
   "home_login_icon_signed_in": "ಖಾತೆ",
-  "home_login_icon_signed_out": "ಸೈನ್ ಇನ್ ಮಾಡಿ"
+  "home_login_icon_signed_out": "ಸೈನ್ ಇನ್ ಮಾಡಿ",
+  "badge_chip_lives_stat": "{n} ಜೀವಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ"
 }

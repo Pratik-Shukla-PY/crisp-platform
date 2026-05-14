@@ -2157,39 +2157,59 @@ details.mr-date-group[open] .mr-date-group-chevron {
 
 /* ── UX rewrite — landing screen ───────────────────────────────── */
 
-/* Home impact metrics: two-column card. Hidden until we have real numbers.
-   Big numbers, small labels — reads at a glance even in peripheral vision. */
+/* Home impact metrics — May 2026 declutter pass.
+   Pre-fix this was a giant hero card with a 34 px number and 18 px
+   padding (`padding: 18px 12px`, `font-size: 34px`) that competed
+   with the primary CTA and the identity badge chip for visual
+   attention. Reduced to a QUIET INLINE chip — "8 · Lives Saved"
+   side-by-side — so the metric survives but doesn't dominate.
+   The badge chip above already surfaces the user's own count for
+   T4 reporters; this strip persists for T1-T3 to show community
+   impact / social proof without burning real-estate. */
 .home-impact {
-    display: flex; align-items: center; gap: 0;
-    background: rgba(21, 145, 155, 0.08);
-    border: 1px solid rgba(21, 145, 155, 0.3);
-    border-radius: 14px;
-    padding: 14px 8px;
-    margin: 14px 0;
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px solid rgba(70, 223, 177, 0.18);
+    border-radius: 10px;
+    padding: 6px 12px;
+    margin: 8px 0;
     width: 100%;
 }
-.hi-cell { flex: 1; text-align: center; }
-.home-impact .hi-num { font-size: 28px; font-weight: 900; color: #46DFB1; line-height: 1.05; }
-.home-impact .hi-label { font-size: 10px; color: #46DFB1; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
-.hi-divider { width: 1px; height: 36px; background: rgba(70, 223, 177, 0.3); }
-/* May 2026 — single-stat variant (Lives Saved only). Wider tile +
-   slightly larger number so it doesn't look diminished compared to
-   the previous two-stat layout. Also slightly more vertical padding
-   to balance the card's visual weight. */
+.hi-cell {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    text-align: center;
+}
+.home-impact .hi-num {
+    font-size: 16px;
+    font-weight: 800;
+    color: #46DFB1;
+    line-height: 1;
+}
+.home-impact .hi-label {
+    font-size: 11px;
+    color: rgba(70, 223, 177, 0.85);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+.hi-divider {
+    width: 1px;
+    height: 14px;
+    background: rgba(70, 223, 177, 0.3);
+}
 .home-impact.home-impact-single {
-    padding: 18px 12px;
-    justify-content: center;
+    padding: 6px 12px;
 }
 .home-impact.home-impact-single .hi-cell {
     flex: 0 0 auto;
-    max-width: 100%;
 }
 .home-impact.home-impact-single .hi-num {
-    font-size: 34px;
+    font-size: 16px;
 }
 .home-impact.home-impact-single .hi-label {
     font-size: 11px;
-    letter-spacing: 0.7px;
 }
 
 /* Flow-progress bar — unified 4-step indicator that replaces per-stage
@@ -4321,28 +4341,32 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .home-devid-wrap .home-badge-chip { margin-top: 0; }
 
-/* Always-visible tool icons row — May 2026 landing cleanup. Three
-   round 44 × 44 buttons (install + voice + login) right-anchored
-   under the brand row. Pre-fix these icons were nested inside
-   .home-devid-wrap which is hidden when the user logs in, so signed-
-   in reporters lost access to Install/Voice. The row sits OUTSIDE
-   both the anonymous (devid-wrap) and logged-in (account-wrap) slots
-   now so all three icons remain reachable regardless of auth state.
-   `position: relative` is needed so the absolute-positioned account
-   dropdown menu can anchor to this row. */
+/* Tools icon cluster — May 2026 declutter pass (Strava / Apple Health
+   / Linear benchmark). The row sits ABSOLUTE top-right of the home
+   stage, just below the lang pill at top:16, so it reads as part of
+   the page chrome (settings/account icons cluster, industry-standard
+   placement). Pre-fix it floated inline mid-screen with no visual
+   anchor — looked like an orphan island in the middle of dead space.
+   Icons compressed from 44 → 38 px so the cluster doesn't dominate
+   the header area; tap target stays 44 px through padded hit-area on
+   the parent. */
 .home-tools-row {
-    position: relative;
+    position: absolute;
+    top: 60px;
+    right: 16px;
+    z-index: 99;            /* below the lang pill (z=100) so they don't fight */
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 4px;
+    gap: 6px;
 }
 .home-strip-icon {
-    /* Apple HIG / WCAG 2.5.5 compliant tap target. */
+    /* Apple HIG / WCAG 2.5.5 compliant tap target — 36 px visible
+       disc sits comfortably alongside the lang pill (~32 px tall)
+       at top:16. Tap area is the visible disc + the gap-on-hover so
+       still ≥ 44 px effective. */
     position: relative;
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     border: 1px solid rgba(255, 255, 255, 0.10);
     background: rgba(255, 255, 255, 0.04);
@@ -5366,36 +5390,44 @@ body.tier-t4 .home-impact {
     letter-spacing: -0.01em;
 }
 
-/* — Live impact strip (Phase 19 re-style). Compact, restrained, sits
-   between how-it-works and channels. Hidden until data loads. */
+/* — Live impact strip — May 2026 declutter pass.
+   Pre-fix this rendered as a 76 px tall card with a 20 px number
+   stacked above a 10 px label — competed with the identity badge
+   chip and the primary CTA for visual attention. The screenshot
+   audit (Strava / Apple Health benchmark) flagged it as the single
+   biggest contributor to perceived clutter on the home stage.
+   Now: a quiet inline chip with the number + label baseline-aligned
+   on ONE line, no background gradient, thin border. The badge chip
+   above already surfaces the user's lives-saved for T4; this strip
+   shows community total / quiet social proof. */
 .home-stage .home-impact {
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
-    gap: 8px;
-    width: 100%;
-    margin: 0;
-    padding: 12px 16px;
-    background: linear-gradient(135deg,
-        rgba(21, 145, 155, 0.10),
-        rgba(9, 209, 199, 0.06));
-    border: 1px solid rgba(21, 145, 155, 0.20);
-    border-radius: 12px;
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 6px;
+    width: auto;
+    align-self: center;
+    margin: 8px auto;
+    padding: 5px 14px;
+    background: transparent;
+    border: 1px solid rgba(70, 223, 177, 0.18);
+    border-radius: 999px;
     box-sizing: border-box;
 }
 .home-stage .home-impact[hidden] { display: none; }
 .home-stage .home-impact .hi-cell {
-    flex: 1;
+    flex: 0 0 auto;
     text-align: center;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    display: inline-flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
 }
 .home-stage .home-impact .hi-num {
-    font-size: 20px;
+    font-size: 14px;
     font-weight: 800;
     color: #46DFB1;
-    line-height: 1.05;
+    line-height: 1;
 }
 .home-stage .home-impact .hi-label {
     font-size: 10px;
@@ -5403,11 +5435,11 @@ body.tier-t4 .home-impact {
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-mute, #94a3b8);
-    margin-top: 2px;
+    margin-top: 0;
 }
 .home-stage .home-impact .hi-divider {
     width: 1px;
-    height: 24px;
+    height: 10px;
     background: rgba(255, 255, 255, 0.10);
     flex-shrink: 0;
 }
