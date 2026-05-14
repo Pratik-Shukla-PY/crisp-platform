@@ -10,7 +10,10 @@
  *   - Never restarts full upload
  *   - Parallel chunks on fast networks, sequential on slow
  */
-import { getPendingReports, updateReportStatus, QueuedReport } from './database';
+import {
+  getPendingReports, getInFlightReports, updateReportStatus, deleteReport,
+  QueuedReport,
+} from './database';
 import { createReportMeta, sendDescription, getApiBase } from './api';
 import * as crypto from 'expo-crypto';
 import {
@@ -20,8 +23,146 @@ import {
 import { swallow as telemetrySwallow } from './telemetry';
 
 const MAX_RETRIES = 10;
+const ORPHAN_AGE_MS = 10 * 60 * 1000;   // 10-min age gate — same as PWA
 let _isSyncing = false;
 let _successStreak = 0;  // Track consecutive successes for upgrade
+
+// ─── Queue self-heal (Phase 7 RN parity port of mobile-app/src/app.js) ──────
+//
+// RN parity port of `_isOrphanQueueRow` + `_selfHealOrphans` from the PWA.
+// Mirrors mobile-app/src/app.js lines ~605-648.
+//
+// On PROD 2026-05-13 a row queued by an interrupted PWA submit landed
+// in IndexedDB with stages.meta/text/audio = true but serverReportId =
+// null AND zero photo / audio / text payload. It could never make
+// forward progress — the row claimed it had attempted upload but had
+// nothing to upload — yet the retry loop kept probing the unreachable
+// server, inflating the "Retrying N reports…" toast and burning the
+// retry budget. PWA fix shipped as commit `49adad9` (v166).
+//
+// RN's SQLite queue can hit the same shape if `syncReport()` is killed
+// between status='syncing' and createReportMeta() returning. Schema
+// mapping PWA IDB → RN SQLite:
+//   stages.meta/text/audio        → status in (pending_sync/syncing/failed)
+//   item.serverId/serverReportId  → row.server_id
+//   item.text                     → row.text_description
+//   item.audioBlob                → row.audio (data-URL or empty)
+//   item.photoVariants            → row.photo_variants  (JSON)
+//   item.extraPhotosVariants      → row.extra_photos_variants  (JSON)
+//   item.photo (legacy)           → row.photo  (data-URL or empty)
+//   item.timestamp                → row.created_at  (epoch ms)
+//
+// 10-min age gate stops the heuristic from racing a genuine in-flight
+// submission whose payload columns haven't fully landed yet.
+
+type VariantSlot = {
+  mediaId?: string;
+  base64?: string;
+  chunkProgress?: number;
+  complete?: boolean;
+  bytes?: number;
+};
+
+function _variantHasBytes(v: VariantSlot | null | undefined): boolean {
+  if (!v) return false;
+  if (v.complete) return true;
+  if ((v.chunkProgress || 0) > 0) return true;
+  if (typeof v.base64 === 'string' && v.base64.length > 0) return true;
+  return false;
+}
+
+/**
+ * Pure predicate — exported for unit testing only. Returns true iff
+ * the row claims to have been queued for sync but has no path to
+ * forward progress: no server id, no text, no audio, no photo bytes,
+ * and it's been sitting that way for > 10 minutes.
+ */
+export function _isOrphanQueueRow(row: QueuedReport | null | undefined): boolean {
+  if (!row || !row.client_report_id) return false;
+
+  // RN equivalent of PWA's `stagesClaimSent` — any non-draft status
+  // means enqueueReport() has fired at least once. Draft rows (status
+  // 'draft') aren't in the queue surface, but guard anyway.
+  const stagesClaimSent =
+    row.status === 'pending_sync' ||
+    row.status === 'syncing' ||
+    row.status === 'failed';
+
+  const noServerId = !row.server_id || row.server_id.length === 0;
+  const noTextPayload = !row.text_description || row.text_description.length === 0;
+  const noAudioPayload = !row.audio || row.audio.length === 0;
+
+  // Variant pipeline: parse + check each tier slot.
+  let mainPhotoEmpty = true;
+  if (row.photo_variants) {
+    try {
+      const pv = JSON.parse(row.photo_variants) as Record<string, VariantSlot>;
+      mainPhotoEmpty = !Object.values(pv).some(_variantHasBytes);
+    } catch { /* corrupt JSON treated as empty */ }
+  }
+
+  let extrasEmpty = true;
+  if (row.extra_photos_variants) {
+    try {
+      const ev = JSON.parse(row.extra_photos_variants) as (Record<string, VariantSlot> | null)[];
+      extrasEmpty = !Array.isArray(ev) ||
+        ev.every(e => !e || !Object.values(e).some(_variantHasBytes));
+    } catch { /* corrupt JSON treated as empty */ }
+  }
+
+  // Legacy pre-variant photo columns.
+  const noLegacyPhoto = !row.photo || row.photo.length === 0;
+  let noLegacyExtras = true;
+  if (row.extra_photos && row.extra_photos.length > 0 && row.extra_photos !== '[]') {
+    try {
+      const arr = JSON.parse(row.extra_photos);
+      noLegacyExtras = !Array.isArray(arr) || arr.length === 0 ||
+        arr.every((e: any) => !e || (typeof e === 'string' && e.length === 0));
+    } catch { /* corrupt — treat as empty so we don't false-protect */ }
+  }
+
+  const noPhotoBytes = mainPhotoEmpty && extrasEmpty && noLegacyPhoto && noLegacyExtras;
+
+  const age = Date.now() - (row.created_at || 0);
+  return stagesClaimSent && noServerId && noTextPayload && noAudioPayload &&
+    noPhotoBytes && age > ORPHAN_AGE_MS;
+}
+
+/**
+ * Sweep orphan rows. Runs BEFORE every `processQueue()` so the retry
+ * loop doesn't pound on rows it can't make progress on. Returns the
+ * count of rows dequeued (mostly for logging / test assertions).
+ */
+export async function selfHealOrphans(): Promise<number> {
+  let rows: QueuedReport[];
+  try {
+    rows = await getInFlightReports();
+  } catch (e) {
+    console.warn('[Queue:self-heal] failed to load rows:', e);
+    return 0;
+  }
+  let healed = 0;
+  for (const row of rows) {
+    if (_isOrphanQueueRow(row)) {
+      const short = row.client_report_id.substring(0, 8);
+      console.warn(
+        `[Queue:self-heal] orphan ${short} (status=${row.status}, ` +
+        `age=${Math.round((Date.now() - row.created_at) / 60000)}m) — ` +
+        'no server_id + no payload. Auto-dequeue.',
+      );
+      try {
+        await deleteReport(row.client_report_id);
+        healed += 1;
+      } catch (e) {
+        console.warn(`[Queue:self-heal] delete failed for ${short}:`, e);
+      }
+    }
+  }
+  if (healed > 0) {
+    console.log(`[Queue:self-heal] dequeued ${healed} orphan row(s)`);
+  }
+  return healed;
+}
 
 export async function processQueue(): Promise<number> {
   if (_isSyncing) return 0;
@@ -29,6 +170,12 @@ export async function processQueue(): Promise<number> {
 
   let synced = 0;
   try {
+    // Phase 7 (May 2026) — sweep orphans BEFORE pulling the queue
+    // snapshot so a stuck zero-payload row from an interrupted
+    // submission doesn't waste a sync tick. Idempotent — the 10-min
+    // age gate inside _isOrphanQueueRow protects in-flight rows.
+    try { await selfHealOrphans(); } catch (e) { telemetrySwallow('selfHealOrphans:boot', e); }
+
     // Detect network before starting
     await detectNetworkTier();
     const tier = getCurrentTier();
