@@ -21,12 +21,35 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // UNDP Appendix-1 dense packs. `as const` would widen Strings to
 // literal-string unions unnecessarily — leave the default `any` import.
+// May 2026 — RN ↔ PWA parity Phase 1 (i18n catch-up): expanded from
+// 6 (UN-official) → 22 locales to match the PWA. Build-time sync
+// from mobile-app/src/i18n/*.json runs via
+// scripts/sync-rn-i18n.sh — every JSON below is a copy of the PWA
+// canonical source, not hand-edited.
 import enJson from './i18n/en.json';
 import frJson from './i18n/fr.json';
 import esJson from './i18n/es.json';
 import arJson from './i18n/ar.json';
 import ruJson from './i18n/ru.json';
 import zhJson from './i18n/zh.json';
+// Tier-2 (UNDP submission set): hi, pt, bn, ja, tr, vi, ko, id, ur
+import hiJson from './i18n/hi.json';
+import ptJson from './i18n/pt.json';
+import bnJson from './i18n/bn.json';
+import jaJson from './i18n/ja.json';
+import trJson from './i18n/tr.json';
+import viJson from './i18n/vi.json';
+import koJson from './i18n/ko.json';
+import idJson from './i18n/id.json';
+import urJson from './i18n/ur.json';
+// Tier-3 (Indian sub-national): kn, ta, te, ml, gu, mr, pa
+import knJson from './i18n/kn.json';
+import taJson from './i18n/ta.json';
+import teJson from './i18n/te.json';
+import mlJson from './i18n/ml.json';
+import guJson from './i18n/gu.json';
+import mrJson from './i18n/mr.json';
+import paJson from './i18n/pa.json';
 
 // PWA-shared supplemental locale packs. See `services/i18nExtras.ts`
 // for inline docs and the canonical merge order. EXTRA_LANG carries a
@@ -38,7 +61,14 @@ import { EXTRA_LANG, UNDP_I18N_EXTRA } from './i18nExtras';
 type Strings = Record<string, string>;
 
 const UNDP_JSON_PACKS: Record<string, any> = {
+  // Tier-1 UN-official
   en: enJson, fr: frJson, es: esJson, ar: arJson, ru: ruJson, zh: zhJson,
+  // Tier-2 UNDP submission set
+  hi: hiJson, pt: ptJson, bn: bnJson, ja: jaJson, tr: trJson,
+  vi: viJson, ko: koJson, id: idJson, ur: urJson,
+  // Tier-3 Indian sub-national
+  kn: knJson, ta: taJson, te: teJson, ml: mlJson, gu: guJson,
+  mr: mrJson, pa: paJson,
 };
 
 /**
