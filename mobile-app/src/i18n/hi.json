@@ -718,5 +718,7 @@
   "photo_consent_ok": "ठीक है, फ़ोटो चुनें",
   "photo_blur_unavailable": "चेहरा धुंधला उपलब्ध नहीं; मूल फ़ोटो का उपयोग।",
   "success_btn_rewards": "पुरस्कार",
-  "success_btn_home": "होम"
+  "success_btn_home": "होम",
+  "home_login_icon_signed_in": "खाता",
+  "home_login_icon_signed_out": "साइन इन करें"
 }

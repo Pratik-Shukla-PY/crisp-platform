@@ -718,5 +718,7 @@
   "photo_consent_ok": "ਠੀਕ ਹੈ, ਫੋਟੋ ਚੁਣੋ",
   "photo_blur_unavailable": "ਚਿਹਰਾ ਧੁੰਦਲਾ ਉਪਲਬਧ ਨਹੀਂ; ਅਸਲ ਫੋਟੋ ਵਰਤੀ ਜਾ ਰਹੀ ਹੈ.",
   "success_btn_rewards": "ਇਨਾਮ",
-  "success_btn_home": "ਹੋਮ"
+  "success_btn_home": "ਹੋਮ",
+  "home_login_icon_signed_in": "ਖਾਤਾ",
+  "home_login_icon_signed_out": "ਸਾਈਨ ਇਨ ਕਰੋ"
 }

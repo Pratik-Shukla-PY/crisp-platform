@@ -719,5 +719,7 @@
   "photo_consent_ok": "OK, chọn ảnh",
   "photo_blur_unavailable": "Làm mờ khuôn mặt không khả dụng; dùng ảnh gốc.",
   "success_btn_rewards": "Phần thưởng",
-  "success_btn_home": "Trang chủ"
+  "success_btn_home": "Trang chủ",
+  "home_login_icon_signed_in": "Tài khoản",
+  "home_login_icon_signed_out": "Đăng nhập"
 }

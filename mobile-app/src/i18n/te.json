@@ -718,5 +718,7 @@
   "photo_consent_ok": "సరే, ఫోటో ఎంచుకోండి",
   "photo_blur_unavailable": "ముఖం బ్లర్ అందుబాటులో లేదు; అసలు ఫోటో ఉపయోగిస్తోంది.",
   "success_btn_rewards": "రివార్డులు",
-  "success_btn_home": "హోమ్"
+  "success_btn_home": "హోమ్",
+  "home_login_icon_signed_in": "ఖాతా",
+  "home_login_icon_signed_out": "సైన్ ఇన్ చేయండి"
 }

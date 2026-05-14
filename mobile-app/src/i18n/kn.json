@@ -718,5 +718,7 @@
   "photo_consent_ok": "ಸರಿ, ಫೋಟೋ ಆಯ್ಕೆಮಾಡಿ",
   "photo_blur_unavailable": "ಮುಖ ಮಸುಕು ಲಭ್ಯವಿಲ್ಲ; ಮೂಲ ಫೋಟೋ ಬಳಸಲಾಗುತ್ತಿದೆ.",
   "success_btn_rewards": "ಪ್ರಶಸ್ತಿಗಳು",
-  "success_btn_home": "ಮುಖಪುಟ"
+  "success_btn_home": "ಮುಖಪುಟ",
+  "home_login_icon_signed_in": "ಖಾತೆ",
+  "home_login_icon_signed_out": "ಸೈನ್ ಇನ್ ಮಾಡಿ"
 }

@@ -1278,5 +1278,7 @@
   "photo_consent_ok": "ശരി, ഫോട്ടോ തിരഞ്ഞെടുക്കുക",
   "photo_blur_unavailable": "മുഖം മങ്ങിക്കൽ ലഭ്യമല്ല; യഥാർത്ഥ ഫോട്ടോ ഉപയോഗിക്കുന്നു.",
   "success_btn_rewards": "പുരസ്കാരങ്ങൾ",
-  "success_btn_home": "ഹോം"
+  "success_btn_home": "ഹോം",
+  "home_login_icon_signed_in": "അക്കൗണ്ട്",
+  "home_login_icon_signed_out": "സൈൻ ഇൻ ചെയ്യുക"
 }

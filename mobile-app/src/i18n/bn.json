@@ -718,5 +718,7 @@
   "photo_consent_ok": "ঠিক আছে, ছবি বেছে নিন",
   "photo_blur_unavailable": "চেহারা ঝাপসা পাওয়া যাচ্ছে না; মূল ছবি ব্যবহৃত হচ্ছে।",
   "success_btn_rewards": "পুরস্কার",
-  "success_btn_home": "হোম"
+  "success_btn_home": "হোম",
+  "home_login_icon_signed_in": "অ্যাকাউন্ট",
+  "home_login_icon_signed_out": "সাইন ইন করুন"
 }

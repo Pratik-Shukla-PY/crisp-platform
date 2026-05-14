@@ -716,5 +716,7 @@
   "photo_consent_ok": "حسنًا، اختر الصورة",
   "photo_blur_unavailable": "طمس الوجه غير متاح؛ استخدام الصورة الأصلية.",
   "success_btn_rewards": "المكافآت",
-  "success_btn_home": "الرئيسية"
+  "success_btn_home": "الرئيسية",
+  "home_login_icon_signed_in": "الحساب",
+  "home_login_icon_signed_out": "تسجيل الدخول"
 }

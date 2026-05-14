@@ -719,5 +719,7 @@
   "photo_consent_ok": "Tamam, fotoğraf seç",
   "photo_blur_unavailable": "Yüz bulanıklaştırma kullanılamıyor; orijinal fotoğraf kullanılıyor.",
   "success_btn_rewards": "Ödüller",
-  "success_btn_home": "Ana sayfa"
+  "success_btn_home": "Ana sayfa",
+  "home_login_icon_signed_in": "Hesap",
+  "home_login_icon_signed_out": "Giriş yap"
 }

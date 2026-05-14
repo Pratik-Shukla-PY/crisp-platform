@@ -151,11 +151,14 @@
         }
         .big-cta > span { white-space: nowrap; }
         .big-cta i { font-size: 1.4rem; }
-        /* Secondary row (My Reports / Rewards / Login) */
+        /* Secondary row — May 2026 landing-icon cleanup. Used to be
+           a 2-col grid (My Reports + Rewards) with a wide full-row
+           Login tucked underneath via `grid-column: 1/-1`. Login is
+           now an icon in #home-tools-row, so the special-case row
+           is removed — clean 2-col grid only. */
         .home-secondary-row {
             display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px;
         }
-        .home-secondary-row #btn-login, .home-secondary-row .tertiary-cta { grid-column: 1 / -1; }
         .secondary-cta {
             display: inline-flex; align-items: center; gap: 8px;
             padding: 12px 14px; min-height: 44px;
@@ -583,10 +586,26 @@
                             <span class="hb-progress" id="home-badge-progress">Submit your first report to level up</span>
                         </span>
                     </div>
-                    <!-- install + voice icons relocated here so
-                         the entire identity strip (device-ID + Newcomer +
-                         install + voice) reads as ONE horizontal grouping
-                         instead of scattered across two rows. -->
+                    <!-- May 2026 (landing-icon cleanup pass) — install + voice
+                         icons MOVED OUT of this wrap into the always-visible
+                         .home-tools-row below. Pre-fix the icons were stuck
+                         inside home-devid-wrap which is hidden when the user
+                         logs in, so a signed-in user lost the ability to
+                         install the PWA or trigger TTS. The tools row now
+                         lives outside both home-devid-wrap and
+                         home-account-wrap so the icons stay reachable in
+                         every auth state. -->
+                </div>
+
+                <!-- Always-visible icon strip. Three round 44 × 44 buttons
+                     right-anchored: Install (hidden until installable),
+                     Voice (TTS read-aloud), and Login/Account (NEW).
+                     The login icon carries a status dot at top-right:
+                       • GREEN  → user is signed in   (tap → account menu)
+                       • RED    → user is anonymous   (tap → stage-login)
+                     Colour-coded so an uneducated reporter can see at a
+                     glance whether their account is linked. -->
+                <div class="home-tools-row" id="home-tools-row" role="group" aria-label="Account and app tools">
                     <button id="btn-home-install-icon" type="button"
                             class="home-strip-icon"
                             aria-label="Install on home screen"
@@ -604,18 +623,37 @@
                             data-i18n-title="aria_read_aloud">
                         <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></i>
                     </button>
+                    <button id="btn-home-login-icon" type="button"
+                            class="home-strip-icon home-login-icon"
+                            aria-label="Sign in"
+                            data-i18n-aria-label="home_login_icon_signed_out"
+                            title="Sign in"
+                            data-i18n-title="home_login_icon_signed_out"
+                            data-state="anonymous">
+                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></i>
+                        <span class="icon-status-dot dot-offline" id="home-login-dot" aria-hidden="true"></span>
+                    </button>
                 </div>
 
-                <!-- Logged-in slot — account pill + dropdown. -->
+                <!-- Logged-in slot — May 2026 (landing-icon cleanup pass)
+                     the verbose .account-pill ("✓ {name} ⌄") was REMOVED
+                     from this slot. The new login icon in #home-tools-row
+                     (green dot = signed in, red dot = anonymous) now
+                     conveys auth state with far less cognitive load — no
+                     need to also render the user's display name as a pill
+                     beside the badge chip. The "Welcome back, {name}."
+                     supratext above the primary CTA still surfaces who
+                     the reporter is signed in as.
+
+                     The dropdown menu below stays — it's anchored to
+                     the login icon via CSS (top: 100% of #home-tools-row,
+                     right: 0) and is shown by clicking the login icon
+                     while logged in. Keeping the wrap as an empty
+                     positional ancestor preserves the existing wire-up
+                     in home-screen.js's _wireAccountMenu without
+                     breaking the dropdown's outside-click dismiss. -->
                 <div class="home-account-wrap" id="home-account-wrap" hidden>
-                    <div class="account-pill" id="account-pill" role="button"
-                         tabindex="0" aria-haspopup="true" aria-expanded="false">
-                        <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="9 11 12 14 16 9"/></svg></i>
-                        <span class="account-name" id="account-name">—</span>
-                        <button class="account-settings-btn" id="btn-account-settings" type="button" aria-label="Account menu">
-                            <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></i>
-                        </button>
-                    </div>
+                    <span class="account-name sr-only" id="account-name">—</span>
                     <div class="home-account-menu" id="home-account-menu" hidden role="menu" aria-label="Account">
                         <button id="btn-home-menu-myreports" type="button" role="menuitem">
                             <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg></i>
@@ -703,10 +741,14 @@
                     <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><circle cx="12" cy="17" r="5"/><path d="M12 17h.01"/></svg></i>
                     <span data-i18n="rewards_btn">Rewards</span>
                 </button>
-                <button class="tertiary-cta" id="btn-login" type="button">
-                    <i class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg></i>
-                    <span data-i18n="login_or_signup">Login / Sign up</span>
-                </button>
+                <!-- May 2026 (landing-icon cleanup pass) — the full-width
+                     "Login / Sign up" tertiary-cta row was REMOVED. Login
+                     is now an icon in #home-tools-row at the top of the
+                     home stage, with a green/red status dot so the user
+                     can see their auth state at a glance. Removing the
+                     row lets My Reports + Rewards sit as a clean 2-col
+                     grid below the primary CTA — less cognitive load,
+                     fewer text-heavy rows for an uneducated reporter. -->
             </div>
 
             <!-- Safety hint + How CRISP Works removed per

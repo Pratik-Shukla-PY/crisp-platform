@@ -718,5 +718,7 @@
   "photo_consent_ok": "OK, выбрать фото",
   "photo_blur_unavailable": "Размытие лица недоступно; используется оригинал.",
   "success_btn_rewards": "Награды",
-  "success_btn_home": "Главная"
+  "success_btn_home": "Главная",
+  "home_login_icon_signed_in": "Аккаунт",
+  "home_login_icon_signed_out": "Войти"
 }

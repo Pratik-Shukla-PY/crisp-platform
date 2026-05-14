@@ -5,7 +5,29 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v151';
+const CACHE_NAME = 'crisp-v152';
+// v151 → v152 (May 2026, operator-requested landing-page icon cleanup).
+// "Clean up the Landing page. These blocks can be icons as suggested.
+// When logged in show green, else red." Three changes ship together:
+//  1) Full-width "Login / Sign up" tertiary-cta row → REMOVED from
+//     the home secondary-row. Login is now a round 44×44 icon in a
+//     new always-visible #home-tools-row (alongside Install + Voice).
+//     A 10-px status dot at the icon's top-right shows auth state
+//     at a glance — GREEN when signed in, RED when anonymous — using
+//     the same palette as the existing .connectivity-dot in the lang
+//     pill (visual consistency for "uneducated reporter" persona).
+//  2) Install + Voice icons LIFTED OUT of #home-devid-wrap into the
+//     new tools row. Pre-fix they were trapped inside the wrap that
+//     hides on login, so signed-in users couldn't access Install/TTS.
+//  3) Redundant .account-pill DOM (display-name + chevron) REMOVED
+//     from the logged-in slot. The login-icon's green dot + the
+//     "Welcome back, {name}." supratext above the CTA already
+//     communicate identity + auth state with less cognitive load.
+//     The dropdown menu (My Reports / Settings / Log out) is anchored
+//     under the login icon now.
+// i18n: 2 new keys (home_login_icon_signed_in / _signed_out) shipped
+// to all 22 locales with real translations for the 6 UN langs + hi
+// and translated equivalents for the remaining 15.
 // v150 → v151 (May 2026, operator-reported photo-consent modal bugs).
 // Two fixes:
 //   1) Modal appeared on every cold app load because its markup

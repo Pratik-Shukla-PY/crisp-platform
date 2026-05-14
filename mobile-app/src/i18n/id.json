@@ -727,5 +727,7 @@
   "photo_consent_ok": "OK, pilih foto",
   "photo_blur_unavailable": "Pemburaman wajah tidak tersedia; menggunakan foto asli.",
   "success_btn_rewards": "Hadiah",
-  "success_btn_home": "Beranda"
+  "success_btn_home": "Beranda",
+  "home_login_icon_signed_in": "Akun",
+  "home_login_icon_signed_out": "Masuk"
 }

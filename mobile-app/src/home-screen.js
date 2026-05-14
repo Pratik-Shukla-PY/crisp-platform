@@ -663,18 +663,26 @@
         const acctWrap = document.getElementById('home-account-wrap');
         const acctName = document.getElementById('account-name');
         const subEl = document.getElementById('home-title-sub');
-        const myReportsBtn = document.getElementById('btn-my-reports');
-        const loginBtn = document.getElementById('btn-login');
         const recentBlock = document.getElementById('home-recent');
-        // hero subtitle also removed. No optional sections
-        // toggle by auth state on the home stage anymore.
+        // May 2026 (landing-icon cleanup pass) — the legacy full-width
+        // #btn-login row + #btn-my-reports hide-on-login dance is GONE.
+        // My Reports + Rewards stay visible in every auth state (the
+        // dropdown menu's My Reports entry is a redundant fast-path
+        // for power users). Auth state is communicated by:
+        //   • #btn-home-login-icon dot colour (red ⇒ anonymous,
+        //     green ⇒ signed in), and
+        //   • the "Welcome back, {name}." home-title-sub line.
+        const loginIcon = document.getElementById('btn-home-login-icon');
+        const loginDot = document.getElementById('home-login-dot');
         if (!devidWrap || !acctWrap) return;
 
         const loggedIn = _isLoggedIn();
+        const tt = (typeof window.t === 'function') ? window.t : (k) => k;
         if (loggedIn) {
             devidWrap.setAttribute('hidden', '');
             acctWrap.removeAttribute('hidden');
-            // Account name from AuthStore.
+            // Account name still gets written to the sr-only span for
+            // screen-readers + dropdown-menu accessors that look it up.
             try {
                 const u = window.AuthStore.getUser && window.AuthStore.getUser();
                 if (u && acctName) {
@@ -683,16 +691,25 @@
             } catch (_) {}
             // supratext above the CTA reads "Welcome back, {name}."
             if (subEl) {
-                const tt = (typeof window.t === 'function') ? window.t : (k) => k;
                 const u = (window.AuthStore && window.AuthStore.getUser && window.AuthStore.getUser()) || {};
                 const name = (u.displayName || '').split(/\s+/)[0] || '';
                 const tmpl = tt('home_greeting_loggedin') || 'Welcome back, {name}.';
                 subEl.textContent = name ? tmpl.replace('{name}', name) : '';
                 if (name) subEl.removeAttribute('hidden'); else subEl.setAttribute('hidden', '');
             }
-            // Hide bottom secondary row buttons (My Reports + Login lives in dropdown).
-            if (myReportsBtn) myReportsBtn.style.display = 'none';
-            if (loginBtn) loginBtn.style.display = 'none';
+            // Recolour the login icon — GREEN dot, mint-tinted pill,
+            // "Account" aria-label so screen-readers announce the
+            // correct intent (tap → open account menu).
+            if (loginIcon) {
+                loginIcon.setAttribute('data-state', 'signed-in');
+                const label = tt('home_login_icon_signed_in') || 'Account';
+                loginIcon.setAttribute('aria-label', label);
+                loginIcon.setAttribute('title', label);
+            }
+            if (loginDot) {
+                loginDot.classList.remove('dot-offline');
+                loginDot.classList.add('dot-online');
+            }
             // Show recent-reports block (will populate async).
             if (recentBlock) recentBlock.removeAttribute('hidden');
             _renderRecentReports();
@@ -700,9 +717,18 @@
             acctWrap.setAttribute('hidden', '');
             devidWrap.removeAttribute('hidden');
             if (subEl) subEl.setAttribute('hidden', '');
-            // Restore bottom secondary row.
-            if (myReportsBtn) myReportsBtn.style.display = '';
-            if (loginBtn) loginBtn.style.display = '';
+            // Recolour the login icon — RED dot, default pill,
+            // "Sign in" aria-label.
+            if (loginIcon) {
+                loginIcon.setAttribute('data-state', 'anonymous');
+                const label = tt('home_login_icon_signed_out') || 'Sign in';
+                loginIcon.setAttribute('aria-label', label);
+                loginIcon.setAttribute('title', label);
+            }
+            if (loginDot) {
+                loginDot.classList.remove('dot-online');
+                loginDot.classList.add('dot-offline');
+            }
             // Hide recent-reports block.
             if (recentBlock) recentBlock.setAttribute('hidden', '');
         }
@@ -710,6 +736,45 @@
         try { _renderBadgeChip(); } catch (_) {}
         try { _renderMyReportsCount(); } catch (_) {}
         try { _wireRewardsNav(); } catch (_) {}
+    }
+
+    // ── Login icon — toggle account menu when signed in, route to
+    //    stage-login when anonymous. Wired once at boot; the
+    //    icon's data-state attribute is the source of truth.
+    function _wireLoginIcon() {
+        const btn = document.getElementById('btn-home-login-icon');
+        if (!btn || btn.__crispLoginWired) return;
+        btn.__crispLoginWired = true;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const signedIn = btn.getAttribute('data-state') === 'signed-in';
+            if (signedIn) {
+                // Toggle the account dropdown menu (same as the old
+                // account-pill click before the cleanup pass).
+                const menu = document.getElementById('home-account-menu');
+                if (!menu) return;
+                const isOpen = !menu.hasAttribute('hidden');
+                if (isOpen) menu.setAttribute('hidden', '');
+                else menu.removeAttribute('hidden');
+                btn.setAttribute('aria-expanded', String(!isOpen));
+            } else {
+                // Route to stage-login. _resetLoginForm + goToStage
+                // are exposed on window by app.js.
+                try {
+                    if (typeof window._resetLoginForm === 'function') {
+                        window._resetLoginForm();
+                    }
+                } catch (_) {}
+                if (typeof window.goToStage === 'function') {
+                    window.goToStage('stage-login');
+                }
+            }
+        });
+        // Outside-click dismisses the menu (already handled by
+        // _wireAccountMenu but the login icon button isn't part of
+        // home-account-wrap, so its click must not trigger the
+        // existing handler's outside-click dismiss — hence the
+        // e.stopPropagation above).
     }
 
     // ── Phase 18 — badge chip + My Reports count + voice + install ────
@@ -1295,6 +1360,7 @@
         // new wirings.
         _wireInstallIcon();
         _wireHomeVoice();
+        _wireLoginIcon();
         _wireUtilityFooter();
         _paintIdentityBar();
         // View-all button in recent-reports → openMyReports

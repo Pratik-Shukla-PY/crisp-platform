@@ -4321,16 +4321,26 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 .home-devid-wrap .home-badge-chip { margin-top: 0; }
 
-/* install + voice icons live inside the identity strip
-   (the same flex row as the device-ID badge + Newcomer chip). They
-   used to live in .home-brand-actions on the brand row, but that
-   layout looked arbitrary. Shrinks them to 36 × 36 (was 44 × 44)
-   so they don't crowd the badge + chip; tap target stays WCAG-
-   compliant via the 8 px padded hit-area (visible disc 28 px,
-   tappable square 44 px when including pad). The brand row now
-   shows only logo + wordmark. */
+/* Always-visible tool icons row — May 2026 landing cleanup. Three
+   round 44 × 44 buttons (install + voice + login) right-anchored
+   under the brand row. Pre-fix these icons were nested inside
+   .home-devid-wrap which is hidden when the user logs in, so signed-
+   in reporters lost access to Install/Voice. The row sits OUTSIDE
+   both the anonymous (devid-wrap) and logged-in (account-wrap) slots
+   now so all three icons remain reachable regardless of auth state.
+   `position: relative` is needed so the absolute-positioned account
+   dropdown menu can anchor to this row. */
+.home-tools-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}
 .home-strip-icon {
     /* Apple HIG / WCAG 2.5.5 compliant tap target. */
+    position: relative;
     width: 44px;
     height: 44px;
     border-radius: 50%;
@@ -4341,17 +4351,9 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
     flex-shrink: 0;
     padding: 0;
-    margin-left: auto;
-}
-/* Only the first .home-strip-icon (typically the install button) gets
-   `margin-left: auto` so the icon pair right-anchors to the end of
-   the identity strip. The voice icon (second sibling) sits flush
-   next to it with the row's gap. */
-.home-strip-icon ~ .home-strip-icon {
-    margin-left: 0;
 }
 .home-strip-icon:hover {
     background: rgba(255, 255, 255, 0.10);
@@ -4371,6 +4373,66 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 @media (prefers-reduced-motion: reduce) {
     .home-strip-icon.is-speaking { animation: none; }
+}
+
+/* Login icon — auth-state visual. Tint the whole pill subtly green
+   when signed in (the dot alone wasn't enough signal during user
+   testing — operator's "uneducated reporter" persona scans for
+   colour first, glyph second). */
+.home-login-icon[data-state="signed-in"] {
+    background: rgba(70, 223, 177, 0.14);
+    border-color: rgba(70, 223, 177, 0.45);
+    color: #80EE98;
+}
+.home-login-icon[data-state="signed-in"]:hover {
+    background: rgba(70, 223, 177, 0.22);
+    color: #a8f0c4;
+}
+.home-login-icon[data-state="anonymous"] {
+    /* Subtle attention-pull so reporters with a long history notice
+       they should link their reports to an account. No animation
+       (would compete with the speaker pulse + lang dot glow). */
+    background: rgba(239, 68, 68, 0.06);
+    border-color: rgba(239, 68, 68, 0.25);
+}
+.home-login-icon[data-state="anonymous"]:hover {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.45);
+}
+
+/* Status dot on the login icon — same green/red palette + glow as
+   the .connectivity-dot in the lang switcher so the visual language
+   is consistent. Positioned absolute top-right of the icon, slightly
+   overflowing the disc to look like a notification badge. */
+.icon-status-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--bg, #0b1018);
+    pointer-events: none;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.icon-status-dot.dot-online {
+    background: #80EE98;
+    box-shadow: 0 0 6px rgba(128, 238, 152, 0.65);
+}
+.icon-status-dot.dot-offline {
+    background: #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.65);
+}
+
+/* Re-anchor the account dropdown so it pops under the login icon
+   (which is now in .home-tools-row, not inside .home-account-wrap).
+   When logged in, the home-account-wrap is shown but only holds the
+   dropdown — we override its absolute positioning relative to the
+   tools row instead. */
+.home-account-wrap .home-account-menu {
+    top: auto;
+    right: 8px;
+    margin-top: -8px;            /* tuck under the login icon */
 }
 
 /* Account pill (existing — repositioned into the identity bar). */
@@ -5867,28 +5929,29 @@ body.tier-t4 .home-impact {
 }
 .home-install-btn i { color: rgb(34, 197, 94); font-size: 16px; }
 
-/* Secondary actions row (My Reports + Login). On stage-home, .secondary-cta
-   and .tertiary-cta inside .home-secondary-row sit side-by-side. The
-   inherited .secondary-cta / .tertiary-cta block-level styling is overridden
-   below so the two buttons share a 2-column grid.
-
-   May 2026 (reward-system v2 second pass) — a third button (#btn-rewards)
-   joined the row. With a plain 3-column grid each tile reads too cramped
-   on narrow phones (~110 px wide). Instead we keep the 2-column grid
-   and let My Reports + Rewards occupy row 1 (equal width, content
-   actions), then force Login to span the full row beneath via
-   `grid-column: 1 / -1`. Result: 2 tidy content tiles up top, 1 wide
-   auth tile underneath — visually distinct grouping that signals
-   "these two are about your reports, this one is about your account". */
+/* Secondary actions row — May 2026 (landing-icon cleanup pass).
+   Pre-pass this row held 3 buttons (My Reports + Rewards + the
+   full-width "Login / Sign up" tertiary-cta tucked underneath).
+   The Login row was loud — competed with the primary "Report an
+   Incident" CTA for attention and added a text-heavy block for
+   an uneducated reporter to parse. It's now an icon in
+   #home-tools-row (top of the stage), green/red dot conveys auth
+   state. This row collapses to a clean 2-col grid of just My
+   Reports + Rewards — both about "your reports", symmetric, fast
+   to scan. The `grid-column: 1/-1` override for #btn-login and
+   .tertiary-cta is removed because no tertiary-cta lives in the
+   row any more. */
 .home-secondary-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     margin-top: 4px;
 }
-.home-secondary-row #btn-login,
-.home-secondary-row .tertiary-cta {
-    grid-column: 1 / -1;   /* full-width row below the 2-col content tiles */
+/* The post-submit success page reuses .home-secondary-row but holds
+   three buttons (Track + Rewards + Home). Override to 3-col so all
+   three sit side-by-side instead of stack-of-2 + orphan. */
+.success-secondary-row.home-secondary-row {
+    grid-template-columns: 1fr 1fr 1fr;
 }
 .home-secondary-row .secondary-cta,
 .home-secondary-row .tertiary-cta {

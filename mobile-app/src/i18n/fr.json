@@ -741,5 +741,7 @@
   "photo_consent_ok": "OK, choisir une photo",
   "photo_blur_unavailable": "Flou de visage indisponible ; photo originale utilisée.",
   "success_btn_rewards": "Récompenses",
-  "success_btn_home": "Accueil"
+  "success_btn_home": "Accueil",
+  "home_login_icon_signed_in": "Compte",
+  "home_login_icon_signed_out": "Se connecter"
 }

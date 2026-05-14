@@ -1164,6 +1164,10 @@ const I18N = {
         // finishes loading (and when the service worker serves a stale
         // JSON cache between v52 → v53 activations).
         login_or_signup: "Login / Sign up",
+        // May 2026 (landing-icon cleanup pass) — round login icon
+        // on the home stage. aria-label / title swap based on auth state.
+        home_login_icon_signed_in: "Account",
+        home_login_icon_signed_out: "Sign in",
         login_title: "Login or Sign up",
         login_sub: "Track your reports across devices",
         login_channel_phone: "Phone",
@@ -8484,8 +8488,20 @@ function setupAuthUI() {
     populateCountryCodes();
 
     // ── C. Landing-button bindings ───────────────────────────────────
+    // May 2026 (landing-icon cleanup pass) — the legacy full-width
+    // #btn-login row was removed; the new round #btn-home-login-icon
+    // (in #home-tools-row) carries the auth-entry behaviour. The
+    // click is wired in home-screen.js (so the data-state attribute
+    // decides between "open dropdown" and "open stage-login"), but
+    // we expose _resetLoginForm on window so the home-screen handler
+    // can reset the login form before navigating to stage-login.
+    window._resetLoginForm = _resetLoginForm;
     const btnLogin = document.getElementById('btn-login');
     if (btnLogin) btnLogin.addEventListener('click', () => {
+        // Defensive — #btn-login was removed from the home stage but
+        // a stray reference elsewhere (e.g. a deep-link button on
+        // stage-history) might still resolve to it. Keep the old
+        // behaviour for any such caller.
         _resetLoginForm();
         goToStage('stage-login');
     });

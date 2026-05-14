@@ -724,5 +724,7 @@
   "photo_consent_ok": "OK, escolher foto",
   "photo_blur_unavailable": "Desfoque facial indisponível; usando foto original.",
   "success_btn_rewards": "Recompensas",
-  "success_btn_home": "Início"
+  "success_btn_home": "Início",
+  "home_login_icon_signed_in": "Conta",
+  "home_login_icon_signed_out": "Entrar"
 }

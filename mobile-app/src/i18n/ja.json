@@ -718,5 +718,7 @@
   "photo_consent_ok": "OK、写真を選ぶ",
   "photo_blur_unavailable": "顔のぼかしは利用できません。元の写真を使用します。",
   "success_btn_rewards": "報酬",
-  "success_btn_home": "ホーム"
+  "success_btn_home": "ホーム",
+  "home_login_icon_signed_in": "アカウント",
+  "home_login_icon_signed_out": "サインイン"
 }

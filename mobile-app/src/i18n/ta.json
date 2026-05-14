@@ -718,5 +718,7 @@
   "photo_consent_ok": "சரி, புகைப்படத்தை தேர்ந்தெடு",
   "photo_blur_unavailable": "முக மங்கல் கிடைக்கவில்லை; அசல் புகைப்படத்தைப் பயன்படுத்துகிறது.",
   "success_btn_rewards": "வெகுமதிகள்",
-  "success_btn_home": "முகப்பு"
+  "success_btn_home": "முகப்பு",
+  "home_login_icon_signed_in": "கணக்கு",
+  "home_login_icon_signed_out": "உள்நுழைய"
 }

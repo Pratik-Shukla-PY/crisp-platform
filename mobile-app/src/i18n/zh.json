@@ -716,5 +716,7 @@
   "photo_consent_ok": "好的,选择照片",
   "photo_blur_unavailable": "面部模糊不可用;使用原始照片。",
   "success_btn_rewards": "奖励",
-  "success_btn_home": "主页"
+  "success_btn_home": "主页",
+  "home_login_icon_signed_in": "账户",
+  "home_login_icon_signed_out": "登录"
 }

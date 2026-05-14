@@ -718,5 +718,7 @@
   "photo_consent_ok": "ٹھیک ہے، تصویر منتخب کریں",
   "photo_blur_unavailable": "چہرہ دھندلا دستیاب نہیں؛ اصل تصویر استعمال ہو رہی ہے۔",
   "success_btn_rewards": "انعامات",
-  "success_btn_home": "گھر"
+  "success_btn_home": "گھر",
+  "home_login_icon_signed_in": "اکاؤنٹ",
+  "home_login_icon_signed_out": "سائن ان کریں"
 }

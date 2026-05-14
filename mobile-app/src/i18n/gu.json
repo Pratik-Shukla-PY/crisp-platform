@@ -718,5 +718,7 @@
   "photo_consent_ok": "ઠીક, ફોટો પસંદ કરો",
   "photo_blur_unavailable": "ચહેરો ઝાંખો ઉપલબ્ધ નથી; મૂળ ફોટોનો ઉપયોગ.",
   "success_btn_rewards": "પુરસ્કાર",
-  "success_btn_home": "હોમ"
+  "success_btn_home": "હોમ",
+  "home_login_icon_signed_in": "એકાઉન્ટ",
+  "home_login_icon_signed_out": "સાઇન ઇન કરો"
 }
