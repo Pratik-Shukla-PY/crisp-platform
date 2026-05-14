@@ -5,7 +5,25 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v183';
+const CACHE_NAME = 'crisp-v184';
+// v183 → v184 (May 2026 — Nearby Reports v8.1 self-bootstrap fix).
+//
+// Operator's console logs after v8 deploy showed NO `[NearbyIntel]`
+// boot lines — meaning the module never initialized. Root cause:
+// script ordering race. `<script src="home-screen.js">` runs
+// BEFORE `<script src="nearby.js">` in document order. home-
+// screen.js's bottom-of-file `init()` call fires synchronously
+// when the script-tag is parsed; at that moment nearby.js hasn't
+// loaded yet, so `window.NearbyIntel` is undefined and the
+// `if (NearbyIntel && ...)` guard silently skips.
+//
+// Fix: nearby.js now self-bootstraps at module load. If readyState
+// is 'loading', it waits for DOMContentLoaded; otherwise it defers
+// one tick (so any sibling scripts currently parsing can finish
+// setting up `window.t` / `window.API_BASE`). home-screen.js's
+// existing call is kept for back-compat — boot() is idempotent
+// (re-rendering the same payload paints the same DOM).
+//
 // v182 → v183 (May 2026 — Nearby Reports v8 redesign: aggregate
 // number block + list sheet).
 //

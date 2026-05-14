@@ -724,4 +724,34 @@
         _round3,
         _humanizeAgo,
     };
+
+    // ── Self-bootstrap (v8.1, May 2026) ──────────────────────────────
+    //
+    // home-screen.js's init() also tries to call boot() for back-
+    // compat, BUT script-tags execute in document order so home-
+    // screen.js's bottom-of-file init() (which fires SYNCHRONOUSLY
+    // when the script tag is parsed) runs BEFORE nearby.js even
+    // starts loading. At that moment `window.NearbyIntel` is
+    // undefined and the `if (NearbyIntel && ...)` guard in
+    // home-screen.js silently skips — module never boots.
+    //
+    // Fix: self-bootstrap here. Independent of home-screen.js
+    // timing. If both paths fire, _renderInto just paints again
+    // with the same payload (idempotent).
+    function _autoBoot() {
+        try {
+            console.log('[NearbyIntel] self-bootstrap');
+            boot('#home-nearby-intel');
+        } catch (e) {
+            console.warn('[NearbyIntel] self-bootstrap failed:', e);
+        }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _autoBoot);
+    } else {
+        // Doc already parsed; defer one tick so any sibling scripts
+        // currently being parsed can finish setting up window globals
+        // (e.g. window.t / window.API_BASE from app.js).
+        setTimeout(_autoBoot, 0);
+    }
 })();
