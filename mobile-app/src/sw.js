@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v190';
+const CACHE_NAME = 'crisp-v191';
+// v190 → v191 (May 2026 — first-time GPS cache mirror, operator):
+//   app.js `_saveLocCtx` now also writes `crisp_last_location_v2`
+//   (the key nearby.js reads) so first-time users see the Nearby
+//   Reports section immediately after granting the home-stage
+//   GPS prompt, not only after their first capture flow. Returning
+//   users need to evict v190 so app.js's new mirror runs on next
+//   home boot — without the bump, iOS Safari paints from the v190
+//   snapshot and the gap reappears for them.
 // v189 → v190 (May 2026 — responsive stabilization, Commit 2):
 //   styles.css changes for Fix-P3 (.stage-center justify-content:
 //   safe center), Fix-P4 (.home-center overflow-y: auto), and

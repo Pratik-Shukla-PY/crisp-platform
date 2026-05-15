@@ -2743,8 +2743,21 @@ const _LOC_CTX_KEY = 'crisp_loc_ctx';
 
 function _saveLocCtx(lat, lng, acc, name, lang, langLabel, speechCode) {
     try {
+        const ts = Date.now();
         localStorage.setItem(_LOC_CTX_KEY, JSON.stringify({
-            lat, lng, acc, name, lang, langLabel, speechCode, ts: Date.now()
+            lat, lng, acc, name, lang, langLabel, speechCode, ts,
+        }));
+        // (May 2026 — operator: "first-time PROD user grants GPS for
+        // language-detect but the Nearby Reports section stays hidden
+        // until they go through capture once") — mirror the cache to
+        // the key nearby.js reads (`crisp_last_location_v2`) so the
+        // home-stage nearby intel appears immediately on the same
+        // home visit, not on the second visit after capture flow.
+        // Shape matches what nearby.js _getCachedLocation() reads
+        // (lat / lng / ts); v4-flow.js's _writeCachedGps writes the
+        // same shape, so both writers stay consistent.
+        localStorage.setItem('crisp_last_location_v2', JSON.stringify({
+            lat, lng, acc, ts,
         }));
     } catch (_) {}
 }
