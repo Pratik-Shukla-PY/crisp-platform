@@ -2155,8 +2155,39 @@ CRITICALITY = {"HOSPITAL": "CRITICAL", "WATER": "CRITICAL", "POWER": "HIGH", "GO
 
 
 @router.post("/{report_id}/ai-assess")
-async def ai_assess_report(report_id: str, payload: dict, user=Depends(require_analyst), db: Session = Depends(get_db)):
-    """Multi-signal intelligence assessment: builds 360° dossier and sends to Claude for analysis."""
+async def ai_assess_report(
+    report_id: str,
+    payload: dict,
+    user=Depends(require_analyst),
+    db: Session = Depends(get_db),
+    force: bool = Query(
+        False,
+        description=(
+            "Bypass the per-report cache and force a fresh Claude call. "
+            "Useful when the report has been re-classified or new media "
+            "has been attached since the cached assessment was computed."
+        ),
+    ),
+):
+    """Multi-signal intelligence assessment: builds 360° dossier and sends to Claude for analysis.
+
+    Phase 3.3 (May 2026) — Idempotent by report id. The endpoint
+    re-uses ``report.ai_assessment`` if it's already populated;
+    repeated dashboard clicks (two analysts hitting "Credibility
+    Check" in parallel, the dashboard's auto-refresh re-rendering
+    on every poll) no longer re-bill Claude.
+
+    Cache miss: a fresh Claude call is made and the result is
+    persisted. The response shape is unchanged from the pre-Phase-
+    3.3 implementation EXCEPT a new ``_cached: bool`` field is
+    added at the top level so the dashboard can surface "cached
+    from <timestamp>" without an extra round-trip.
+
+    Cache bypass: pass ``?force=true`` to ignore the cache. The
+    dashboard's reviewer-workflow "Re-run AI" button should set
+    this flag. Cost is bounded by analyst headcount — only
+    explicit force-clicks re-bill.
+    """
     import httpx
     anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not anthropic_key:
@@ -2165,6 +2196,23 @@ async def ai_assess_report(report_id: str, payload: dict, user=Depends(require_a
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+
+    # ── Cache check (Phase 3.3) ──────────────────────────────────────
+    # Re-use a previously-computed assessment unless `force=true`.
+    # We treat any non-empty dict on `report.ai_assessment` as a hit;
+    # the runtime accepts whatever shape Claude returned (the dashboard
+    # tolerates missing keys gracefully).
+    if not force and isinstance(report.ai_assessment, dict) and report.ai_assessment:
+        cached = dict(report.ai_assessment)
+        cached["_cached"] = True
+        # Stamp the cached-at time if the persisted blob carries one;
+        # otherwise the dashboard infers from the report's
+        # `updated_at`. Idempotent — never overwrites the original.
+        logger.info(
+            "AI assessment served from cache: %s (pass ?force=true to re-run)",
+            report_id,
+        )
+        return cached
 
     # ── Gather intelligence from all sources ──
     desc = (report.description or payload.get("description", "") or "")[:600]
@@ -2355,6 +2403,15 @@ Compute the score breakdown and return JSON as specified."""
                 except:
                     data = {"summary": text[:200], "suggested_action": "Review Needed", "reasoning": text, "confidence_score": 0}
 
+                # Phase 3.3 — stamp the assessment with metadata so
+                # later cache hits can surface "computed at X". The
+                # nested keys are namespaced under `_meta` to stay
+                # clear of any Claude-emitted field names.
+                data["_meta"] = {
+                    "computed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "model": "claude-sonnet-4-20250514",
+                    "release": os.environ.get("CRISP_BUILD_TAG", ""),
+                }
                 # Persist full assessment to DB
                 report.ai_assessment = data
 
@@ -2377,6 +2434,9 @@ Compute the score breakdown and return JSON as specified."""
 
                 db.commit()
                 logger.info(f"AI assessment saved: {report_id} score={data.get('confidence_score','?')} priority={data.get('priority_level','?')}")
+                # Phase 3.3 — `_cached: False` so the dashboard can
+                # show "fresh assessment" vs "cached".
+                data["_cached"] = False
                 return data
             else:
                 logger.error(f"Claude API error ({r.status_code}): {r.text[:200]}")
