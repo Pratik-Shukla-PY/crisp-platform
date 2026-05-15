@@ -5,7 +5,14 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v192';
+const CACHE_NAME = 'crisp-v193';
+// v192 → v193 (May 2026 — UNDP drawer UI restored to rich question-
+// cards inside stage-v4-review, per operator: "we spent time/energy
+// on the stage-undp-details UI; this drawer should match"). The
+// drawer's DOM was rewritten (4 row+select controls → 5 question
+// cards with level-buttons + emoji-needs chips) and v4-flow.js
+// rewired to match. Returning users need to evict v192 so their
+// cached drawer DOM doesn't paint over the new question-cards.
 // v191 → v192 (May 2026 — V3 capture flow REMOVED, operator):
 //   index.html lost the 7 V3 stage <div> blocks (stage-photo,
 //   stage-audio, stage-where, stage-infra, stage-crisis,

@@ -1560,7 +1560,17 @@
             </details>
 
             <!-- More details — EXPANDED BY DEFAULT per UNDP requirement.
-                 Compact layout so it still fits without scroll. -->
+                 May 2026 — operator: "We spent time/energy on the
+                 stage-undp-details UI; this drawer should use the same
+                 question-card layout, not the stripped row+select
+                 fallback." Question-cards reuse the `.undp-q-card`
+                 + `.undp-lvl` / `.undp-pill` / `.undp-yn` / `.undp-need`
+                 styles defined alongside the stage-undp-details DOM,
+                 so visual fidelity matches the dedicated stage exactly.
+                 Wiring is bound by v4-flow.js's _wireUndpDrawer (scoped
+                 to #v4-undp-drawer) and writes to the V4 state shape
+                 (`electricity_status`, `health_status`, `water_status`,
+                 `debris_present`, `pressing_needs`). -->
             <details class="v4-drawer v4-drawer-undp" id="v4-undp-drawer" open>
                 <summary class="v4-drawer-summary">
                     <i class="fa-solid fa-list-check"></i>
@@ -1568,62 +1578,103 @@
                     <i class="fa-solid fa-chevron-down v4-drawer-chevron"></i>
                 </summary>
                 <div class="v4-drawer-body v4-undp-body">
-                    <!-- Debris yes/no -->
-                    <div class="v4-undp-row">
-                        <span class="v4-undp-label" data-i18n="v4_debris">Debris to clear?</span>
-                        <div class="v4-yn">
-                            <button class="v4-yn-btn" data-debris="true" type="button"
-                                    data-i18n="v4_yes">Yes</button>
-                            <button class="v4-yn-btn is-active" data-debris="false" type="button"
-                                    data-i18n="v4_no">No</button>
+
+                    <!-- Q1: Power supply (5-level status) -->
+                    <div class="undp-q-card">
+                        <div class="undp-q-header">
+                            <div class="undp-q-icon undp-q-icon-power" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                            </div>
+                            <div class="undp-q-text">
+                                <div class="undp-q-label" data-i18n="undp_power_label">Power supply</div>
+                                <div class="undp-q-hint" data-i18n="undp_tap_one">Tap one</div>
+                            </div>
+                        </div>
+                        <div class="undp-status-row" data-undp-field="electricity_status">
+                            <button type="button" class="undp-lvl undp-lvl-l1" data-value="OK"><span class="undp-lvl-icon">✓</span><span class="undp-lvl-word" data-i18n="undp_lvl_ok">OK</span></button>
+                            <button type="button" class="undp-lvl undp-lvl-l2" data-value="MINOR"><span class="undp-lvl-icon">!</span><span class="undp-lvl-word" data-i18n="undp_lvl_brief">Brief</span></button>
+                            <button type="button" class="undp-lvl undp-lvl-l3" data-value="MODERATE"><span class="undp-lvl-icon">⚠</span><span class="undp-lvl-word" data-i18n="undp_lvl_partial">Out</span></button>
+                            <button type="button" class="undp-lvl undp-lvl-l4" data-value="SEVERE"><span class="undp-lvl-icon">✕</span><span class="undp-lvl-word" data-i18n="undp_lvl_major">Major</span></button>
+                            <button type="button" class="undp-lvl undp-lvl-l5" data-value="DESTROYED"><span class="undp-lvl-icon">✕</span><span class="undp-lvl-word" data-i18n="undp_lvl_none">None</span></button>
                         </div>
                     </div>
-                    <!-- Service status (compact 3-row toggle group) -->
-                    <div class="v4-undp-row">
-                        <span class="v4-undp-label" data-i18n="v4_electricity">Electricity</span>
-                        <select class="v4-select" id="v4-elec" aria-label="Electricity service status">
-                            <option value="" data-i18n="v4_unknown">Unknown</option>
-                            <option value="WORKING" data-i18n="v4_working">Working</option>
-                            <option value="INTERMITTENT" data-i18n="v4_intermittent">Intermittent</option>
-                            <option value="LOAD_SHEDDING" data-i18n="v4_load_shedding">Load shedding</option>
-                            <option value="BLACKOUT" data-i18n="v4_blackout">Blackout</option>
-                        </select>
-                    </div>
-                    <div class="v4-undp-row">
-                        <span class="v4-undp-label" data-i18n="v4_health">Health services</span>
-                        <select class="v4-select" id="v4-health" aria-label="Health services status">
-                            <option value="" data-i18n="v4_unknown">Unknown</option>
-                            <option value="FULLY_OPERATIONAL" data-i18n="v4_fully_op">Fully operational</option>
-                            <option value="PARTIALLY_OPERATIONAL" data-i18n="v4_partly_op">Partial</option>
-                            <option value="NOT_OPERATIONAL" data-i18n="v4_not_op">Not operational</option>
-                        </select>
-                    </div>
-                    <!-- Pressing needs as wrap-flex chips. -->
-                    <div class="v4-undp-row v4-undp-row-needs">
-                        <span class="v4-undp-label" data-i18n="v4_needs">Pressing needs</span>
-                        <div class="v4-needs" id="v4-needs">
-                            <button class="v4-need-chip" data-need="food" type="button"
-                                    data-i18n="need_food_water">Food / water</button>
-                            <button class="v4-need-chip" data-need="cash" type="button"
-                                    data-i18n="need_cash">Cash</button>
-                            <button class="v4-need-chip" data-need="health" type="button"
-                                    data-i18n="need_health">Healthcare</button>
-                            <button class="v4-need-chip" data-need="shelter" type="button"
-                                    data-i18n="need_shelter">Shelter</button>
-                            <button class="v4-need-chip" data-need="livelihoods" type="button"
-                                    data-i18n="need_livelihoods">Livelihoods</button>
-                            <button class="v4-need-chip" data-need="wash" type="button"
-                                    data-i18n="need_wash">WASH</button>
-                            <button class="v4-need-chip" data-need="basic_services" type="button"
-                                    data-i18n="need_basic_services">Basic services</button>
-                            <button class="v4-need-chip" data-need="protection" type="button"
-                                    data-i18n="need_protection">Protection</button>
-                            <button class="v4-need-chip" data-need="local_support" type="button"
-                                    data-i18n="need_local_support">Local support</button>
-                            <button class="v4-need-chip" data-need="other" type="button"
-                                    data-i18n="need_other">Other</button>
+
+                    <!-- Q2: Water (4-level status) -->
+                    <div class="undp-q-card">
+                        <div class="undp-q-header">
+                            <div class="undp-q-icon undp-q-icon-water" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/></svg>
+                            </div>
+                            <div class="undp-q-text">
+                                <div class="undp-q-label" data-i18n="undp_water_label">Water</div>
+                                <div class="undp-q-hint" data-i18n="undp_tap_one">Tap one</div>
+                            </div>
+                        </div>
+                        <div class="undp-status-row" data-undp-field="water_status">
+                            <button type="button" class="undp-lvl undp-lvl-l1" data-value="OK"><span class="undp-lvl-icon">✓</span><span class="undp-lvl-word" data-i18n="undp_lvl_ok">OK</span></button>
+                            <button type="button" class="undp-lvl undp-lvl-l3" data-value="MODERATE"><span class="undp-lvl-icon">!</span><span class="undp-lvl-word" data-i18n="undp_lvl_low">Low</span></button>
+                            <button type="button" class="undp-lvl undp-lvl-l4" data-value="SEVERE"><span class="undp-lvl-icon">⚠</span><span class="undp-lvl-word" data-i18n="undp_lvl_none">None</span></button>
+                            <button type="button" class="undp-lvl undp-lvl-l5" data-value="DESTROYED"><span class="undp-lvl-icon">✕</span><span class="undp-lvl-word" data-i18n="undp_lvl_unsure">Unsure</span></button>
                         </div>
                     </div>
+
+                    <!-- Q3: Health services (4 pills) -->
+                    <div class="undp-q-card">
+                        <div class="undp-q-header">
+                            <div class="undp-q-icon undp-q-icon-health" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/><path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></svg>
+                            </div>
+                            <div class="undp-q-text">
+                                <div class="undp-q-label" data-i18n="undp_health_label">Health services</div>
+                                <div class="undp-q-hint" data-i18n="undp_health_hint">Hospitals, clinics nearby</div>
+                            </div>
+                        </div>
+                        <div class="undp-pill-row" data-undp-field="health_status">
+                            <button type="button" class="undp-pill undp-pill-good" data-value="OK"><span data-i18n="undp_health_working">Working</span></button>
+                            <button type="button" class="undp-pill undp-pill-warn" data-value="MODERATE"><span data-i18n="undp_health_partial">Partial</span></button>
+                            <button type="button" class="undp-pill undp-pill-bad" data-value="SEVERE"><span data-i18n="undp_health_disrupted">Disrupted</span></button>
+                            <button type="button" class="undp-pill undp-pill-bad" data-value="DESTROYED"><span data-i18n="undp_health_none">None</span></button>
+                        </div>
+                    </div>
+
+                    <!-- Q4: Debris (Y/N) -->
+                    <div class="undp-q-card">
+                        <div class="undp-q-header">
+                            <div class="undp-q-icon undp-q-icon-debris" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>
+                            </div>
+                            <div class="undp-q-text">
+                                <div class="undp-q-label" data-i18n="undp_debris_label">Debris to clear?</div>
+                                <div class="undp-q-hint" data-i18n="undp_debris_hint">Blocking the area</div>
+                            </div>
+                        </div>
+                        <div class="undp-yn-row" data-undp-field="debris_present">
+                            <button type="button" class="undp-yn undp-yn-yes" data-value="true"><span class="undp-yn-icon">✓</span> <span data-i18n="undp_yes">Yes</span></button>
+                            <button type="button" class="undp-yn undp-yn-no" data-value="false"><span class="undp-yn-icon">✕</span> <span data-i18n="undp_no">No</span></button>
+                        </div>
+                    </div>
+
+                    <!-- Q5: Pressing needs (multi-select chips) -->
+                    <div class="undp-q-card">
+                        <div class="undp-q-header">
+                            <div class="undp-q-icon undp-q-icon-needs" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
+                            </div>
+                            <div class="undp-q-text">
+                                <div class="undp-q-label" data-i18n="undp_needs_label">Most pressing needs</div>
+                                <div class="undp-q-hint" data-i18n="undp_needs_hint">Pick any</div>
+                            </div>
+                        </div>
+                        <div class="undp-needs-grid" data-undp-field="pressing_needs">
+                            <button type="button" class="undp-pill undp-need" data-value="food_water">🍞 <span data-i18n="undp_need_food">Food / water</span></button>
+                            <button type="button" class="undp-pill undp-need" data-value="shelter">⛺ <span data-i18n="undp_need_shelter">Shelter</span></button>
+                            <button type="button" class="undp-pill undp-need" data-value="medical">🏥 <span data-i18n="undp_need_medical">Medical</span></button>
+                            <button type="button" class="undp-pill undp-need" data-value="cash">💰 <span data-i18n="undp_need_cash">Cash</span></button>
+                            <button type="button" class="undp-pill undp-need" data-value="protection">🛡 <span data-i18n="undp_need_protection">Protection</span></button>
+                            <button type="button" class="undp-pill undp-need" data-value="services">⚡ <span data-i18n="undp_need_services">Basic services</span></button>
+                        </div>
+                    </div>
+
                 </div>
             </details>
         </div>

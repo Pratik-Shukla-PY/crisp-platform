@@ -2106,39 +2106,78 @@
             });
         }
 
-        // Debris yes/no
-        document.querySelectorAll('.v4-yn-btn').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                btn.parentElement.querySelectorAll('.v4-yn-btn').forEach((b) =>
-                    b.classList.remove('is-active'));
-                btn.classList.add('is-active');
-                _setState({ debris_present: btn.getAttribute('data-debris') === 'true' });
-            });
-        });
+        // ── UNDP details drawer (May 2026 — operator-restored rich UI) ────
+        //
+        // The drawer's inner markup now matches stage-undp-details exactly
+        // (question-cards with `.undp-q-card`, `.undp-lvl` level rows,
+        // `.undp-pill-row` health pills, `.undp-yn-row` yes/no, and
+        // `.undp-needs-grid` multi-select chips). Wiring is scoped to
+        // `#v4-undp-drawer` so it can't accidentally fire on the
+        // standalone stage-undp-details which has its own setup function
+        // (`setupUndpDetailsStage` in app.js). State writes use the V4
+        // field names already in use elsewhere in this file:
+        //   electricity_status / water_status / health_status (string|null)
+        //   debris_present (boolean)
+        //   pressing_needs (string[])
+        const _undpDrawer = document.getElementById('v4-undp-drawer');
 
-        // Service status
-        const elecSel = document.getElementById('v4-elec');
-        const healthSel = document.getElementById('v4-health');
-        if (elecSel) {
-            elecSel.addEventListener('change', () => {
-                _setState({ electricity_status: elecSel.value || null });
+        // Single-select status rows (5-level: Power; 4-level: Water).
+        if (_undpDrawer) {
+            _undpDrawer.querySelectorAll('.undp-status-row').forEach((row) => {
+                const field = row.getAttribute('data-undp-field');
+                if (!field) return;
+                row.querySelectorAll('.undp-lvl').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        row.querySelectorAll('.undp-lvl').forEach((b) =>
+                            b.classList.remove('is-selected'));
+                        btn.classList.add('is-selected');
+                        _setState({ [field]: btn.getAttribute('data-value') || null });
+                    });
+                });
+            });
+
+            // Single-select pill row (Health services).
+            _undpDrawer.querySelectorAll('.undp-pill-row').forEach((row) => {
+                const field = row.getAttribute('data-undp-field');
+                if (!field) return;
+                row.querySelectorAll('.undp-pill').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        row.querySelectorAll('.undp-pill').forEach((b) =>
+                            b.classList.remove('is-selected'));
+                        btn.classList.add('is-selected');
+                        _setState({ [field]: btn.getAttribute('data-value') || null });
+                    });
+                });
+            });
+
+            // Yes/No row (Debris).
+            _undpDrawer.querySelectorAll('.undp-yn-row').forEach((row) => {
+                const field = row.getAttribute('data-undp-field');
+                if (!field) return;
+                row.querySelectorAll('.undp-yn').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        row.querySelectorAll('.undp-yn').forEach((b) =>
+                            b.classList.remove('is-selected'));
+                        btn.classList.add('is-selected');
+                        _setState({ [field]: btn.getAttribute('data-value') === 'true' });
+                    });
+                });
+            });
+
+            // Multi-select chip grid (Pressing needs).
+            _undpDrawer.querySelectorAll('.undp-needs-grid').forEach((grid) => {
+                const field = grid.getAttribute('data-undp-field') || 'pressing_needs';
+                grid.querySelectorAll('.undp-need').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        btn.classList.toggle('is-selected');
+                        const selected = Array.from(
+                            grid.querySelectorAll('.undp-need.is-selected'),
+                        ).map((c) => c.getAttribute('data-value'));
+                        _setState({ [field]: selected });
+                    });
+                });
             });
         }
-        if (healthSel) {
-            healthSel.addEventListener('change', () => {
-                _setState({ health_status: healthSel.value || null });
-            });
-        }
-
-        // Pressing needs (multi-select chips)
-        document.querySelectorAll('.v4-need-chip').forEach((chip) => {
-            chip.addEventListener('click', () => {
-                chip.classList.toggle('is-selected');
-                const all = Array.from(document.querySelectorAll('.v4-need-chip.is-selected'))
-                    .map((c) => c.getAttribute('data-need'));
-                _setState({ pressing_needs: all });
-            });
-        });
 
         // Send
         document.getElementById('btn-v4-send').addEventListener('click', _onSend);
@@ -2457,18 +2496,16 @@
         // Clear v4 description textarea + voice drawer state.
         const textArea = document.getElementById('v4-text-desc');
         if (textArea) textArea.value = '';
-        // Reset pressing-needs chips.
-        document.querySelectorAll('.v4-need-chip.is-selected').forEach((c) =>
-            c.classList.remove('is-selected'));
-        // Reset debris yes/no to default (No).
-        document.querySelectorAll('.v4-yn-btn').forEach((b) => b.classList.remove('is-active'));
-        const noBtn = document.querySelector('.v4-yn-btn[data-debris="false"]');
-        if (noBtn) noBtn.classList.add('is-active');
-        // Reset service-status selects.
-        const elec = document.getElementById('v4-elec');
-        if (elec) elec.value = '';
-        const hlth = document.getElementById('v4-health');
-        if (hlth) hlth.value = '';
+        // Reset UNDP drawer UI to defaults (May 2026 — question-card refresh).
+        // The drawer's controls are now `.undp-q-card` blocks with
+        // `.undp-lvl` / `.undp-pill` / `.undp-yn` / `.undp-need`
+        // children. A single `.is-selected` removal sweep handles every
+        // single- and multi-select control inside the drawer.
+        const _undpDrawerEl = document.getElementById('v4-undp-drawer');
+        if (_undpDrawerEl) {
+            _undpDrawerEl.querySelectorAll('.is-selected').forEach((el) =>
+                el.classList.remove('is-selected'));
+        }
 
         window.__crispGoToStage('stage-v4-capture');
         setTimeout(_refreshGps, 100);
