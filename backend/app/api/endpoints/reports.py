@@ -1091,6 +1091,17 @@ def dispatch_team(report_id: str, user=Depends(require_analyst), db: Session = D
     was_pending = report.status == ReportStatusEnum.PENDING
     report.status = ReportStatusEnum.RESPONDING
     if was_pending:
+        # SessionLocal uses ``autoflush=False`` (see app/db/session.py)
+        # so the in-memory status change above does NOT reach the DB
+        # before ``_mark_report_verified_for_credibility`` runs.
+        # Inside that function ``_recompute_tier`` COUNTS reports by
+        # status via a fresh DB query — without an explicit flush,
+        # the count returns 0 RESPONDING / RESOLVED rows and the
+        # profile falls back to T2_SIGNAL instead of promoting to
+        # T3_CHANGEMAKER. Operator-facing UX of "click Dispatch →
+        # see your tier go up" depends on this flush.
+        # Same fix in resolve_report below.
+        db.flush()
         _mark_report_verified_for_credibility(report, db)
     db.commit()
     db.refresh(report)
@@ -1107,6 +1118,9 @@ def resolve_report(report_id: str, user=Depends(require_analyst), db: Session = 
     was_pending = report.status == ReportStatusEnum.PENDING
     report.status = ReportStatusEnum.RESOLVED
     if was_pending:
+        # See dispatch_team for the autoflush rationale — flush the
+        # status change BEFORE the recompute counts by status.
+        db.flush()
         _mark_report_verified_for_credibility(report, db)
     db.commit()
     db.refresh(report)
@@ -1299,11 +1313,26 @@ def _attach_reporter_tier(db: Session, reports: list) -> None:
 @router.get("/device/{device_hash}", response_model=List[ReportResponse])
 def get_device_reports(device_hash: str, db: Session = Depends(get_db)):
     """List all reports submitted by a specific device (for privacy/deletion UI).
-    Accepts the client-side device_hash (e.g. DEV-XXXXXXXX) and resolves it."""
+    Accepts the client-side device_hash (e.g. DEV-XXXXXXXX) and resolves it.
+
+    Phase 1.6 follow-up (May 2026) — also stamps ``reporter_tier`` on
+    every returned row, same bulk-join as the dashboard list endpoint.
+    The PWA / RN "My Reports" pages render the reporter-tier chip per
+    row; without this attach the chip stayed blank on those surfaces
+    even though the dashboard had it.
+    """
     device_id = _resolve_device_id(device_hash, db)
     if not device_id:
         return []
-    return db.query(Report).filter(Report.device_id == device_id).order_by(Report.server_created_at.desc()).all()
+    reports = (
+        db.query(Report)
+          .options(joinedload(Report.device))
+          .filter(Report.device_id == device_id)
+          .order_by(Report.server_created_at.desc())
+          .all()
+    )
+    _attach_reporter_tier(db, reports)
+    return reports
 
 
 @router.delete("/device/{device_hash}", status_code=status.HTTP_200_OK)

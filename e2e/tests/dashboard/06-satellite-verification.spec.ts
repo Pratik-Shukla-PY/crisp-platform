@@ -108,8 +108,11 @@ test.describe('Satellite verification — UNDP-grade rebuild', () => {
     await expect(page.getByText('SEVERE')).toBeVisible();
     await expect(page.getByText('E2E satellite verification test')).toBeVisible();
 
-    // The "verification has not run yet" state is shown.
-    await expect(page.getByText(/has not run yet/i)).toBeVisible();
+    // The "verification has not run yet" state is shown. Two elements
+    // can match this regex (the headline + a sub-explanation) — use
+    // .first() to silence the strict-mode locator violation while
+    // keeping the assertion semantically the same.
+    await expect(page.getByText(/has not run yet/i).first()).toBeVisible();
   });
 
   test('@smoke evidence.html renders an error for an unknown report id', async ({ page }) => {

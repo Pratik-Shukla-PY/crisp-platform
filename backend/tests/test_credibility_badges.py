@@ -339,9 +339,17 @@ class TestReporterTierOnReportResponse:
     ):
         """A device that has submitted + been dispatched should
         surface as T3_CHANGEMAKER on every report in the listing.
+
+        Test-pollution fix (May 2026): the `client` fixture is
+        session-scoped against `crisp_test`, so a re-run of pytest
+        finds the device_hash + client_report_id already in the DB
+        and the meta-POST hits the idempotency path (no new row,
+        no fresh dispatch credit). Using a uuid suffix per run
+        keeps every invocation clean.
         """
-        # Seed → submit → dispatch → resolve so the device reaches T3.
-        rid = _seed_report(client, "DEVICE-TIER-LIST", "for-listing")
+        import uuid as _uuid
+        device_hash = f"DEVICE-TIER-LIST-{_uuid.uuid4().hex[:8]}"
+        rid = _seed_report(client, device_hash, f"for-listing-{_uuid.uuid4().hex[:8]}")
         client.patch(
             f"/api/v1/reports/{rid}/dispatch",
             headers=auth_header(analyst_token),
@@ -370,15 +378,17 @@ class TestReporterTierOnReportResponse:
         legacy "HERO" as "T4_LIFEKEEPER".
         """
         from app.models.report import ReporterProfile, Device
+        import uuid as _uuid
+        device_hash = f"DEVICE-TIER-LEGACY-{_uuid.uuid4().hex[:8]}"
 
         # Submit a report so a device row exists. The /profile read
         # path normalises legacy badges to T-tiers, so we have to
         # write the legacy value DIRECTLY after submission to bypass
         # the normaliser.
-        _seed_report(client, "DEVICE-TIER-LEGACY", "for-legacy")
+        _seed_report(client, device_hash, f"for-legacy-{_uuid.uuid4().hex[:8]}")
         # Force the row back to a legacy badge_level.
         profile = db.query(ReporterProfile).filter(
-            ReporterProfile.device_hash == "DEVICE-TIER-LEGACY"
+            ReporterProfile.device_hash == device_hash
         ).first()
         assert profile is not None
         profile.badge_level = "HERO"  # legacy v1 value
@@ -392,11 +402,11 @@ class TestReporterTierOnReportResponse:
         rows = res.json()
         # Find the row(s) tied to our device.
         device = db.query(Device).filter(
-            Device.device_hash == "DEVICE-TIER-LEGACY"
+            Device.device_hash == device_hash
         ).first()
         assert device is not None
         ours = [r for r in rows if r.get("device_id") == device.id]
-        assert ours, "expected at least one row for DEVICE-TIER-LEGACY in the listing"
+        assert ours, f"expected at least one row for {device_hash} in the listing"
         for r in ours:
             assert r.get("reporter_tier") is None, (
                 "legacy badge_level (HERO/GUARDIAN/HELPER/NEWCOMER) must NOT "
@@ -420,3 +430,52 @@ class TestReporterTierOnReportResponse:
         # the regression guard for that behavior.
         rows = res.json()
         assert isinstance(rows, list)
+
+    def test_device_reports_endpoint_includes_reporter_tier(
+        self, client, db, analyst_token,
+    ):
+        """Phase 1.6 follow-up (May 2026) — the PWA / RN "My Reports"
+        page reads `GET /api/v1/reports/device/{device_hash}`. Before
+        this fix it returned reports WITHOUT reporter_tier (the
+        dashboard list got it but the per-device feed didn't).
+        """
+        import uuid as _uuid
+        from app.models.report import ReporterProfile
+        # Use a unique device_hash per test run so prior runs don't
+        # leave the device at a pre-dispatched state. The seeded
+        # report's idempotency key (client_report_id) uses the SAME
+        # suffix so the meta endpoint creates a fresh row in this
+        # device's namespace.
+        device_hash = f"DEVICE-TIER-MY-REPORTS-{_uuid.uuid4().hex[:8]}"
+        rid = _seed_report(client, device_hash, f"for-my-reports-{_uuid.uuid4().hex[:8]}")
+        # Dispatch so the device promotes to T3_CHANGEMAKER.
+        dispatch_res = client.patch(
+            f"/api/v1/reports/{rid}/dispatch",
+            headers=auth_header(analyst_token),
+        )
+        assert dispatch_res.status_code == 200, dispatch_res.text
+        # Sanity: dispatch promoted the device's profile to T3 in the
+        # DB. Pin this BEFORE asserting the response so we can
+        # distinguish "promotion logic broke" from "endpoint dropped
+        # the tier on serialization".
+        db.expire_all()
+        prof = db.query(ReporterProfile).filter(
+            ReporterProfile.device_hash == device_hash
+        ).first()
+        assert prof is not None, "ReporterProfile must exist after dispatch"
+        assert prof.badge_level == "T3_CHANGEMAKER", (
+            f"dispatch must promote profile to T3_CHANGEMAKER; "
+            f"got {prof.badge_level!r}"
+        )
+        # The device-reports endpoint is unauthenticated (PWA + RN
+        # call it without a token for the user's own device).
+        res = client.get(f"/api/v1/reports/device/{device_hash}")
+        assert res.status_code == 200, res.text
+        rows = res.json()
+        assert rows, "expected at least one row for the seeded device"
+        # Every row for this device must carry the T3 tier the
+        # dispatch promoted to.
+        tiers = [r.get("reporter_tier") for r in rows]
+        assert "T3_CHANGEMAKER" in tiers, (
+            f"device-reports endpoint dropped reporter_tier; got: {tiers}"
+        )

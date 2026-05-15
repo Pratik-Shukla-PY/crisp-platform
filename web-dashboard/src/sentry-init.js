@@ -73,6 +73,31 @@
         window.Sentry.setTag('viewport',
             window.innerWidth >= 1024 ? 'desktop' : 'tablet');
 
+        // Phase 3.2 mirror (Gap C, May 2026) — triage parity with
+        // the PWA sentry-init: locale / online / network tags +
+        // breadcrumb on every online↔offline flip. Even though
+        // dashboard users are typically on stable office networks,
+        // operator-reported "the dashboard froze when wifi blipped"
+        // bugs benefit from the same context the PWA gets.
+        try {
+            const locale =
+                document.documentElement.getAttribute('lang') ||
+                localStorage.getItem('crisp_lang') ||
+                'unknown';
+            window.Sentry.setTag('locale', locale);
+        } catch (_) { /* ignore */ }
+        try {
+            window.Sentry.setTag(
+                'online',
+                navigator.onLine === false ? 'offline' : 'online',
+            );
+            const conn = navigator.connection || navigator.mozConnection ||
+                         navigator.webkitConnection;
+            if (conn && conn.effectiveType) {
+                window.Sentry.setTag('network', String(conn.effectiveType));
+            }
+        } catch (_) { /* Connection API not available on iOS Safari */ }
+
         // Tag with analyst email if available (no PII risk — analysts
         // are CRISP-internal staff, not field reporters).
         try {
@@ -83,6 +108,21 @@
                 window.Sentry.setUser({ email: userEmail });
             }
         } catch (_) { /* AuthStore not ready or unavailable */ }
+
+        // Phase 3.2 mirror — breadcrumb on every offline↔online flip.
+        for (const evt of ['online', 'offline']) {
+            window.addEventListener(evt, () => {
+                window.Sentry.addBreadcrumb({
+                    category: 'network',
+                    message: `network ${evt}`,
+                    level: 'info',
+                });
+                window.Sentry.setTag(
+                    'online',
+                    evt === 'offline' ? 'offline' : 'online',
+                );
+            });
+        }
 
         console.log('[Sentry] Dashboard init OK · env=' + env + ' · release=' + release);
     } catch (e) {

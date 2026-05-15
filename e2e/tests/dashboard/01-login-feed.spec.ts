@@ -26,14 +26,35 @@ test.describe('Dashboard login + feed', () => {
 
     await page.locator('#login-email').fill(ADMIN.email);
     await page.locator('#login-password').fill(ADMIN.password);
-    // The login page offers OTP (primary) and password (secondary). For E2E
-    // we use the password path — no mailbox access needed. The button isn't
-    // a form submit; it's `onclick=loginWithPassword()` so we match on its
-    // accessible text.
-    await page.getByRole('button', { name: /Login with Password/i }).click();
+    // Apr 2026 lockdown (commit 98d3341): the dashboard added a
+    // mandatory TOTP step after the password form. The Login button
+    // takes the user to a "Enter the 6-digit authenticator code"
+    // gate — there's no completing this flow without a real TOTP
+    // secret the e2e fixture doesn't provision.
+    //
+    // This smoke test originally proved "the login form is wired
+    // end-to-end → index.html lands". With TOTP-mandatory, the
+    // achievable equivalent is: "the form accepts credentials +
+    // advances to the TOTP step". That IS the wiring proof. Don't
+    // assert on the index.html redirect — that path is now gated
+    // by the second factor.
+    await page.getByRole('button', { name: /Login(\s+with\s+Password)?/i }).click();
 
-    // Login success → redirect to index.html.
-    await page.waitForURL(/index\.html|\/$/, { timeout: 20_000 });
+    // Either:
+    //   (a) the dashboard's single-admin TOTP gate appears (the
+    //       current shipping behaviour — Apr 2026 lockdown), OR
+    //   (b) a deploy where TOTP isn't enforced lands the user at
+    //       index.html directly.
+    // Accept either outcome — this is a UI-wiring smoke test, not
+    // a TOTP-bypass test.
+    await Promise.race([
+      page.waitForURL(/index\.html|\/$/, { timeout: 20_000 }),
+      // The TOTP step renders an <input id="login-totp"> alongside an
+      // "Enter the 6-digit authenticator code" prompt. Wait for the
+      // input — that's the deterministic signal that the form
+      // advanced. Either condition resolving counts as a pass.
+      page.locator('#login-totp').waitFor({ state: 'visible', timeout: 20_000 }),
+    ]);
   });
 
   test('@smoke feed renders after login', async ({ page }) => {
