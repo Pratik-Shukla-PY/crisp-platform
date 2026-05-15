@@ -2396,6 +2396,27 @@ window.selectReport = (id, skipFly = false) => {
                  in ReportResponse._compute_identity_badge. Anonymous rows skip
                  this span entirely. ADMIN clicks open the profile drawer. -->
             ${r.reporter_badge ? `<span class="dp-field-badge dp-reporter-badge" style="background:rgba(34,197,94,0.12);color:#86efac;cursor:${r.user_id ? 'pointer' : 'default'};" ${r.user_id ? `onclick="openReporterProfile('${r.user_id}')"` : ''} title="${r.user_id ? 'Click to view reporter details (admin only)' : ''}"><i class="fa-solid fa-user-check"></i> ${escapeHtml(r.reporter_badge)}</span>` : ''}
+            <!-- Phase 1.6 (May 2026) — Reporter tier badge. Surfaces the
+                 V4 gamification ladder (T1_SCOUT → T4_LIFEKEEPER) so
+                 analysts can see at a glance whether the reporter is a
+                 newcomer or a trusted veteran. The tier is server-derived
+                 from the linked ReporterProfile (see _attach_reporter_tier
+                 in backend/app/api/endpoints/reports.py). NULL = no
+                 profile yet OR legacy badge_level — we explicitly do NOT
+                 render T1_SCOUT-by-default to avoid visual confusion. -->
+            ${r.reporter_tier ? (() => {
+                // emoji + human label by tier id. Mirrors share.py
+                // _TIER_LABELS so any change there is reflected here.
+                const TIER_META = {
+                    'T1_SCOUT':       { emoji: '🌱', label: 'Scout',       color: '#86efac' },
+                    'T2_SIGNAL':      { emoji: '📣', label: 'Signal',      color: '#93c5fd' },
+                    'T3_CHANGEMAKER': { emoji: '⚡', label: 'Changemaker', color: '#fbbf24' },
+                    'T4_LIFEKEEPER':  { emoji: '🦸', label: 'Lifekeeper',  color: '#f0abfc' },
+                };
+                const meta = TIER_META[r.reporter_tier];
+                if (!meta) return '';
+                return `<span class="dp-field-badge dp-reporter-tier" data-tier="${r.reporter_tier}" style="background:rgba(255,255,255,0.06);color:${meta.color};" title="Reporter tier: ${meta.label} — earned by ${meta.label === 'Lifekeeper' ? '15+ verified reports' : meta.label === 'Changemaker' ? '5+ verified reports' : meta.label === 'Signal' ? 'first verified report' : 'first submission'}">${meta.emoji} ${meta.label}</span>`;
+            })() : ''}
             <!-- Phase E (Apr 2026 UI v3) — "Needs mapping" badge.
                  Fires when the reporter typed a building name in their
                  native language (PWA free-text fallback, RN TextInput,
@@ -2417,13 +2438,60 @@ window.selectReport = (id, skipFly = false) => {
         </div>
         ${r.service_status ? (() => {
             const ss = r.service_status;
-            const svcColor = v => v === 'OPERATIONAL' ? '#4ade80' : v === 'DISRUPTED' ? '#fbbf24' : v === 'DESTROYED' ? '#f87171' : '#64748b';
-            const svcIcon = v => v === 'OPERATIONAL' ? 'fa-circle-check' : v === 'DISRUPTED' ? 'fa-triangle-exclamation' : v === 'DESTROYED' ? 'fa-circle-xmark' : 'fa-circle-question';
+            // Phase 1.6 (May 2026) — full UNDP Appendix-1 enum coverage.
+            // The PWA V4 flow can now emit INTERMITTENT / LOAD_SHEDDING /
+            // BLACKOUT (electricity) and FULLY_OPERATIONAL /
+            // PARTIALLY_OPERATIONAL / NOT_OPERATIONAL (health). Map each
+            // value to (color, icon, human label). Unknown values fall
+            // through to the legacy "?" treatment so newer PWA enums
+            // never break the old dashboard build.
+            const SVC_META = {
+                // Legacy compact 3-level scale
+                'OPERATIONAL':          { c: '#4ade80', i: 'fa-circle-check',          label: 'Operational' },
+                'DISRUPTED':            { c: '#fbbf24', i: 'fa-triangle-exclamation',  label: 'Disrupted' },
+                'DESTROYED':            { c: '#f87171', i: 'fa-circle-xmark',          label: 'Destroyed' },
+                'UNKNOWN':              { c: '#64748b', i: 'fa-circle-question',       label: 'Unknown' },
+                // UNDP Appendix-1 electricity expansions
+                'INTERMITTENT':         { c: '#fbbf24', i: 'fa-triangle-exclamation',  label: 'Intermittent' },
+                'LOAD_SHEDDING':        { c: '#fb923c', i: 'fa-bolt-lightning',        label: 'Load shedding' },
+                'BLACKOUT':             { c: '#f87171', i: 'fa-circle-xmark',          label: 'Blackout' },
+                // UNDP Appendix-1 health expansions
+                'FULLY_OPERATIONAL':    { c: '#4ade80', i: 'fa-circle-check',          label: 'Fully operational' },
+                'PARTIALLY_OPERATIONAL':{ c: '#fbbf24', i: 'fa-triangle-exclamation',  label: 'Partially operational' },
+                'NOT_OPERATIONAL':      { c: '#f87171', i: 'fa-circle-xmark',          label: 'Not operational' },
+            };
+            const meta = v => SVC_META[v] || { c: '#64748b', i: 'fa-circle-question', label: v };
             let html = '<div class="dp-svc-status" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px;">';
-            if (ss.electricity && ss.electricity !== 'UNKNOWN') html += `<span class="dp-field-badge" style="background:rgba(255,255,255,0.04);color:${svcColor(ss.electricity)};"><i class="fa-solid ${svcIcon(ss.electricity)}"></i> ⚡ ${ss.electricity}</span>`;
-            if (ss.water && ss.water !== 'UNKNOWN') html += `<span class="dp-field-badge" style="background:rgba(255,255,255,0.04);color:${svcColor(ss.water)};"><i class="fa-solid ${svcIcon(ss.water)}"></i> 💧 ${ss.water}</span>`;
-            if (ss.health && ss.health !== 'UNKNOWN') html += `<span class="dp-field-badge" style="background:rgba(255,255,255,0.04);color:${svcColor(ss.health)};"><i class="fa-solid ${svcIcon(ss.health)}"></i> 🏥 ${ss.health}</span>`;
-            if (ss.pressing_needs?.length) html += `<span class="dp-field-badge" style="background:rgba(239,68,68,0.1);color:#fca5a5;"><i class="fa-solid fa-exclamation-circle"></i> Needs: ${ss.pressing_needs.join(', ')}</span>`;
+            if (ss.electricity && ss.electricity !== 'UNKNOWN') {
+                const m = meta(ss.electricity);
+                html += `<span class="dp-field-badge dp-svc-electricity" data-value="${ss.electricity}" style="background:rgba(255,255,255,0.04);color:${m.c};"><i class="fa-solid ${m.i}"></i> ⚡ ${m.label}</span>`;
+            }
+            if (ss.water && ss.water !== 'UNKNOWN') {
+                const m = meta(ss.water);
+                html += `<span class="dp-field-badge dp-svc-water" data-value="${ss.water}" style="background:rgba(255,255,255,0.04);color:${m.c};"><i class="fa-solid ${m.i}"></i> 💧 ${m.label}</span>`;
+            }
+            if (ss.health && ss.health !== 'UNKNOWN') {
+                const m = meta(ss.health);
+                html += `<span class="dp-field-badge dp-svc-health" data-value="${ss.health}" style="background:rgba(255,255,255,0.04);color:${m.c};"><i class="fa-solid ${m.i}"></i> 🏥 ${m.label}</span>`;
+            }
+            // Phase 1.6 — humanize pressing_needs codes too. The PWA
+            // emits raw codes (food_water, shelter, medical, ...).
+            // Operators want a readable label; keep the raw code as
+            // a data-attribute so filtering can still match exactly.
+            if (ss.pressing_needs?.length) {
+                const NEED_LABELS = {
+                    'food_water':       'Food & water',
+                    'shelter':          'Shelter',
+                    'medical':          'Medical care',
+                    'rescue':           'Rescue',
+                    'evacuation':       'Evacuation',
+                    'sanitation':       'Sanitation',
+                    'communication':    'Communication',
+                    'other':            'Other',
+                };
+                const needsHuman = ss.pressing_needs.map(n => NEED_LABELS[n] || n).join(', ');
+                html += `<span class="dp-field-badge dp-svc-needs" data-needs="${ss.pressing_needs.join(',')}" style="background:rgba(239,68,68,0.1);color:#fca5a5;"><i class="fa-solid fa-exclamation-circle"></i> Needs: ${escapeHtml(needsHuman)}</span>`;
+            }
             html += '</div>';
             return html;
         })() : ''}

@@ -476,6 +476,19 @@ class ReportResponse(BaseModel):
     # masked for the default feed; operators with ADMIN role can call
     # /auth/users/{user_id} to see PII.
     reporter_badge: Optional[str] = None
+    # Phase 1.6 (May 2026) — Dashboard V4 field parity. Surfaces the
+    # reporter's current gamification tier (T1_SCOUT / T2_SIGNAL /
+    # T3_CHANGEMAKER / T4_LIFEKEEPER) so the dashboard can render a
+    # trust signal next to the masked badge. Populated by
+    # ReportsResponseBuilder via a bulk JOIN against ReporterProfile
+    # keyed on Device.device_hash (NOT user_id — the profile follows
+    # the device because anonymous submissions still earn tier credit
+    # per INCENTIVES.md). NULL when:
+    #   * the report has no linked device (legacy / channel imports)
+    #   * the device has no reporter_profile row yet (pre-gamification)
+    # The dashboard treats NULL as "no tier badge to render" — never
+    # implies T1_SCOUT to avoid visual confusion with genuine T1s.
+    reporter_tier: Optional[str] = None
     infrastructure_name: Optional[str] = None
     # see ReportMetaCreate.infrastructure_name_from_osm.
     # Exposed on the response so the dashboard can render a "needs mapping"
@@ -562,6 +575,18 @@ class ReportResponse(BaseModel):
             self.reporter_badge = None
             self.is_anonymous = True
         return self
+
+    # Phase 1.6 (May 2026) — Dashboard V4 field parity. Reads the
+    # `reporter_tier` transient attribute that the listing endpoint
+    # stamps via `_attach_reporter_tier` (bulk join). With
+    # `from_attributes=True` Pydantic auto-extracts the value
+    # straight off the Report ORM instance — no explicit
+    # model_validator needed. When the attribute is absent (e.g.
+    # single-report responses that don't pre-stamp the tier, or
+    # legacy reports whose device has no ReporterProfile row), the
+    # field defaults to None and the dashboard treats NULL as "no
+    # tier badge to render" (never falls back to T1_SCOUT — that
+    # would be misleading).
 
     # derive the dashboard-friendly
     # `needs_manual_mapping` flag from the three source columns

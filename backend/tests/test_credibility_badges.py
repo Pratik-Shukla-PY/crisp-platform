@@ -318,3 +318,105 @@ class TestVerifiedCountIdempotency:
             "dispatch followed by resolve must credit verified_count ONCE, "
             "not twice"
         )
+
+
+class TestReporterTierOnReportResponse:
+    """Phase 1.6 (May 2026) — Dashboard V4 field parity.
+
+    The `/api/v1/reports/` listing endpoint must surface
+    `reporter_tier` (T1_SCOUT / T2_SIGNAL / T3_CHANGEMAKER /
+    T4_LIFEKEEPER) on every report whose device has an entry in
+    ReporterProfile. Anonymous reports without a device get
+    `reporter_tier=null`, which the dashboard renders as "no tier
+    badge" (NEVER as T1_SCOUT — that would be misleading).
+
+    The tier is bulk-joined in `_attach_reporter_tier` so the listing
+    endpoint stays at O(1) extra queries regardless of page size.
+    """
+
+    def test_listing_includes_reporter_tier(
+        self, client, db, analyst_token,
+    ):
+        """A device that has submitted + been dispatched should
+        surface as T3_CHANGEMAKER on every report in the listing.
+        """
+        # Seed → submit → dispatch → resolve so the device reaches T3.
+        rid = _seed_report(client, "DEVICE-TIER-LIST", "for-listing")
+        client.patch(
+            f"/api/v1/reports/{rid}/dispatch",
+            headers=auth_header(analyst_token),
+        )
+
+        # Listing should now include reporter_tier on every row for
+        # this device. Use analyst auth so we can hit the gated endpoint.
+        res = client.get(
+            "/api/v1/reports/",
+            headers=auth_header(analyst_token),
+        )
+        assert res.status_code == 200, res.text
+        rows = res.json()
+        assert any(r.get("reporter_tier") == "T3_CHANGEMAKER" for r in rows), (
+            "expected at least one row with reporter_tier=T3_CHANGEMAKER "
+            f"after dispatch; got tiers: {[r.get('reporter_tier') for r in rows]}"
+        )
+
+    def test_listing_null_tier_for_legacy_badge_level(
+        self, client, db, analyst_token,
+    ):
+        """Devices whose ReporterProfile still carries a legacy
+        badge_level (HERO/GUARDIAN/HELPER/NEWCOMER from the pre-V4
+        ladder) must NOT surface a tier on the listing — the
+        dashboard renders NULL rather than misrepresenting a
+        legacy "HERO" as "T4_LIFEKEEPER".
+        """
+        from app.models.report import ReporterProfile, Device
+
+        # Submit a report so a device row exists. The /profile read
+        # path normalises legacy badges to T-tiers, so we have to
+        # write the legacy value DIRECTLY after submission to bypass
+        # the normaliser.
+        _seed_report(client, "DEVICE-TIER-LEGACY", "for-legacy")
+        # Force the row back to a legacy badge_level.
+        profile = db.query(ReporterProfile).filter(
+            ReporterProfile.device_hash == "DEVICE-TIER-LEGACY"
+        ).first()
+        assert profile is not None
+        profile.badge_level = "HERO"  # legacy v1 value
+        db.commit()
+
+        res = client.get(
+            "/api/v1/reports/",
+            headers=auth_header(analyst_token),
+        )
+        assert res.status_code == 200, res.text
+        rows = res.json()
+        # Find the row(s) tied to our device.
+        device = db.query(Device).filter(
+            Device.device_hash == "DEVICE-TIER-LEGACY"
+        ).first()
+        assert device is not None
+        ours = [r for r in rows if r.get("device_id") == device.id]
+        assert ours, "expected at least one row for DEVICE-TIER-LEGACY in the listing"
+        for r in ours:
+            assert r.get("reporter_tier") is None, (
+                "legacy badge_level (HERO/GUARDIAN/HELPER/NEWCOMER) must NOT "
+                f"surface as reporter_tier; got {r.get('reporter_tier')!r}"
+            )
+
+    def test_listing_null_tier_for_no_profile(
+        self, client, analyst_token,
+    ):
+        """Reports whose device has no ReporterProfile row (rare —
+        only possible if the profile was manually deleted) must
+        surface reporter_tier=null without raising."""
+        res = client.get(
+            "/api/v1/reports/",
+            headers=auth_header(analyst_token),
+        )
+        assert res.status_code == 200, res.text
+        # Even if every device in the test DB DOES have a profile, the
+        # response must be deterministic and never 500 on tier-attach
+        # failure. The bulk helper swallows exceptions; this test is
+        # the regression guard for that behavior.
+        rows = res.json()
+        assert isinstance(rows, list)

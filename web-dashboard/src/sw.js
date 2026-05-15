@@ -15,7 +15,7 @@
 // the browser was heuristic-pinning the old CSP. Old SWs auto-replace
 // because skipWaiting() runs in install + nginx now sends Cache-Control:
 // no-cache on sw.js so the new code lands within seconds of deploy.
-const APP_CACHE    = 'crisp-app-v13';  // v13 (May 2026): partial-audio cache-buster fix — _withCacheBust helper now uses `&` when URL already has `?` so presigned S3 URLs don't get mangled (was breaking <audio> playback with NotSupportedError).
+const APP_CACHE    = 'crisp-app-v14';  // v14 (May 2026): Phase 1.6 dashboard V4 field parity — render reporter_tier + UNDP Appendix-1 service-status enum expansions (INTERMITTENT/LOAD_SHEDDING/BLACKOUT/FULLY_OPERATIONAL/PARTIALLY_OPERATIONAL/NOT_OPERATIONAL) + humanized pressing_needs labels. Material app.js change; returning operators need to evict the legacy build.
 const CDN_CACHE    = 'crisp-cdn-v9';
 const API_CACHE    = 'crisp-api-v9';
 const STATIC_CACHE = 'crisp-static-v12';

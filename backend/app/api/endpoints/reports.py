@@ -1232,6 +1232,70 @@ def _resolve_device_id(device_hash: str, db: Session) -> Optional[str]:
     return device_hash if existing else None
 
 
+def _attach_reporter_tier(db: Session, reports: list) -> None:
+    """Phase 1.6 (May 2026) — Dashboard V4 field parity helper.
+
+    Bulk-attaches the reporter's gamification tier (one of T1_SCOUT /
+    T2_SIGNAL / T3_CHANGEMAKER / T4_LIFEKEEPER) onto each Report as a
+    transient ``reporter_tier`` attribute. Pydantic auto-extracts
+    declared schema fields off the ORM instance when
+    ``from_attributes=True`` is set, so the response payload picks up
+    the value with no further wiring.
+
+    Performance: ONE query for the device_hash → badge_level map
+    (keyed by device_hash IN (...)), then in-memory lookup per
+    report. For a 100-report page this is one extra query instead of
+    100, keeping ``/api/v1/reports/`` polling cheap.
+
+    Failure mode: any SQLAlchemy error here silently leaves
+    ``reporter_tier`` unset on every report (the schema field is
+    Optional and the dashboard treats NULL as "no tier badge"). The
+    listing endpoint MUST not 500 just because the tier-join failed.
+    """
+    if not reports:
+        return
+    try:
+        # Collect distinct device_hashes by walking the eager-loaded
+        # Report.device relationship. Reports without a device row
+        # (legacy / channel imports) are silently skipped.
+        from app.models.report import ReporterProfile
+        hashes: set[str] = set()
+        for r in reports:
+            dev = getattr(r, "device", None)
+            if dev is not None and getattr(dev, "device_hash", None):
+                hashes.add(dev.device_hash)
+        if not hashes:
+            return
+        rows = (
+            db.query(ReporterProfile.device_hash, ReporterProfile.badge_level)
+              .filter(ReporterProfile.device_hash.in_(hashes))
+              .all()
+        )
+        tier_map = {h: bl for (h, bl) in rows if bl}
+        # Only stamp tiers that match the V4 gamification taxonomy
+        # (T1_SCOUT / T2_SIGNAL / T3_CHANGEMAKER / T4_LIFEKEEPER).
+        # Legacy badge_level values (HERO/GUARDIAN/HELPER/NEWCOMER)
+        # are skipped so the dashboard doesn't render a stale label
+        # — operators see "no tier badge" until the next dispatch
+        # re-credits the device under the new taxonomy.
+        _V4_TIERS = {"T1_SCOUT", "T2_SIGNAL", "T3_CHANGEMAKER", "T4_LIFEKEEPER"}
+        for r in reports:
+            dev = getattr(r, "device", None)
+            if dev is None:
+                continue
+            tier = tier_map.get(getattr(dev, "device_hash", None))
+            if tier in _V4_TIERS:
+                # Stamp the transient attribute. Pydantic's
+                # `from_attributes=True` config picks this up by
+                # name when serialising ReportResponse — no schema-
+                # side validator needed.
+                r.reporter_tier = tier  # type: ignore[attr-defined]
+    except Exception:
+        logger.exception("Failed to attach reporter_tier to reports list")
+        # Best-effort — leave unset. The dashboard already handles NULL.
+        return
+
+
 @router.get("/device/{device_hash}", response_model=List[ReportResponse])
 def get_device_reports(device_hash: str, db: Session = Depends(get_db)):
     """List all reports submitted by a specific device (for privacy/deletion UI).
@@ -3447,6 +3511,16 @@ def get_reports(
          .limit(safe_limit)
          .all()
     )
+
+    # Phase 1.6 (May 2026) — Dashboard V4 field parity. The
+    # ReportResponse schema carries `reporter_tier` for the masked
+    # reporter badge. Bulk-fetch tier mappings for every device_hash
+    # in this page in ONE query (no N+1), then stash on each Report
+    # as a transient attribute. The model_validator on
+    # `_compute_identity_badge` picks it up — keeps the join logic in
+    # the endpoint where the session is live, and the projection
+    # logic in the schema where the rest of the derived fields live.
+    _attach_reporter_tier(db, reports)
 
     # ETag / If-None-Match.
     # Cheap fingerprint: include each report's id+updated_at AND each
