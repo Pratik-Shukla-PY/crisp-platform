@@ -157,6 +157,34 @@
         window.Sentry.setTag('display_mode', displayMode);
         window.Sentry.setTag('surface', 'pwa');
 
+        // Phase 3.2 (May 2026) — additional tags for triage:
+        //   * `locale` — which UI language was active when the error
+        //     fired. Crucial for RTL-specific bugs (Arabic).
+        //   * `online` — was the user online? (offline-queue bugs
+        //     look very different from live-network bugs.)
+        //   * `network` — Connection API hint (4g / 3g / 2g / slow-2g).
+        //     Disaster-zone bandwidth is the typical CRISP failure
+        //     mode; tagging the connection type lets us filter
+        //     "errors from spotty links" specifically.
+        try {
+            const locale =
+                document.documentElement.getAttribute('lang') ||
+                localStorage.getItem('crisp_lang') ||
+                'unknown';
+            window.Sentry.setTag('locale', locale);
+        } catch (_) { /* ignore */ }
+        try {
+            window.Sentry.setTag(
+                'online',
+                navigator.onLine === false ? 'offline' : 'online',
+            );
+            const conn = navigator.connection || navigator.mozConnection ||
+                         navigator.webkitConnection;
+            if (conn && conn.effectiveType) {
+                window.Sentry.setTag('network', String(conn.effectiveType));
+            }
+        } catch (_) { /* Connection API not available on iOS Safari */ }
+
         // Breadcrumb on every stage transition so error reports include
         // the user's recent navigation history.
         document.addEventListener('stage-entered', (e) => {
@@ -169,6 +197,23 @@
                 level: 'info',
             });
         });
+
+        // Phase 3.2 — breadcrumb on every offline ↔ online flip.
+        // Critical context for diagnosing the offline-queue retry
+        // bugs that hit disaster-zone reporters.
+        for (const evt of ['online', 'offline']) {
+            window.addEventListener(evt, () => {
+                window.Sentry.addBreadcrumb({
+                    category: 'network',
+                    message: `network ${evt}`,
+                    level: 'info',
+                });
+                window.Sentry.setTag(
+                    'online',
+                    evt === 'offline' ? 'offline' : 'online',
+                );
+            });
+        }
 
         console.log('[Sentry] PWA init OK · env=' + env + ' · release=' + release);
     } catch (e) {

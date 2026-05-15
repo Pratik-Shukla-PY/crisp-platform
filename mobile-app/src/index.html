@@ -24,7 +24,11 @@
          key); shipping it in HTML is the documented Sentry-
          browser pattern. -->
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-pwa@v195">
+    <!-- Phase 3.2 (May 2026) — Sentry release tag follows the SW
+         CACHE_NAME so errors are bisectable to the deploy build.
+         Update both together (or run scripts/sync-release-tags.mjs
+         to do it automatically). -->
+    <meta name="crisp-release" content="crisp-pwa@v198">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">

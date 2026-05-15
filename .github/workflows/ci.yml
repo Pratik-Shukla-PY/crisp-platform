@@ -180,11 +180,27 @@ jobs:
         # The script asserts (a) every locale has the same key set as EN,
         # (b) every {n}-style template variable in the EN value is preserved
         # in the translation. Catches translators who drop placeholders.
+        # Phase 3.1 (May 2026): also catches `t('xxx')` / `data-i18n="xxx"`
+        # references in source that have no key in en.json (orphan refs).
         run: |
           if [ -f scripts/validate-i18n.mjs ]; then
             node scripts/validate-i18n.mjs
           else
             echo "scripts/validate-i18n.mjs not found — skipping"
+          fi
+      - name: Check Sentry release tags match SW cache names
+        # Phase 3.2 (May 2026) — bisectable errors. The PWA + dashboard
+        # service workers carry the canonical build version
+        # (CACHE_NAME / APP_CACHE); Sentry's release ID comes from a
+        # `<meta name="crisp-release">` tag in each HTML entrypoint.
+        # A PR that bumps SW but forgets the meta tag tags Sentry
+        # events with the WRONG build — making prod errors hard to
+        # bisect. Fail CI here so the drift is caught at PR review.
+        run: |
+          if [ -f scripts/sync-release-tags.mjs ]; then
+            node scripts/sync-release-tags.mjs --check
+          else
+            echo "scripts/sync-release-tags.mjs not found — skipping"
           fi
 
   python-security:
