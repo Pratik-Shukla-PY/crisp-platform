@@ -141,3 +141,79 @@ class TestSecurityInvariants:
         # The raw `<script>` must be HTML-escaped in the og:image meta.
         assert "<script>" not in res.text
         assert "&lt;script&gt;" in res.text
+
+
+class TestPwaIntegrationContract:
+    """Phase 1.7 (May 2026) — pin the PWA Badge Studio contract.
+
+    The PWA's `_handleLinkedIn` flow (mobile-app/src/badge-studio.js)
+    expects:
+
+      1. POST /api/v1/share/mint with `{tier, lives, reports, img}` →
+         200 with `{token, url}` where `url` starts with
+         "/api/v1/share/" and is round-trippable.
+      2. The returned URL, when prefixed with the API origin, is a
+         valid LinkedIn share-offsite target — i.e. GETting it
+         returns 200 HTML carrying the per-user OG meta.
+      3. The PWA may send `img: null` when the badge is >100 KB —
+         the mint must still succeed and the share page should
+         render with the default brand image instead.
+
+    Regression spec — if any of these break, the PWA's "Share to
+    LinkedIn" CTA either crashes or silently falls back to the
+    generic crisplabs.tech preview, losing the per-user badge
+    showcase.
+    """
+
+    def test_pwa_payload_round_trips_via_linkedin_share_url(self, client):
+        # Step 1: PWA composes a small PNG, base64-encodes it, and
+        # POSTs to /share/mint.
+        tiny_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII="
+        mint_res = client.post("/api/v1/share/mint", json={
+            "tier": "T3_CHANGEMAKER",
+            "lives": 2,
+            "reports": 5,
+            "img": f"data:image/png;base64,{tiny_png_b64}",
+        })
+        assert mint_res.status_code == 200, mint_res.text
+        body = mint_res.json()
+        assert "token" in body and "url" in body
+        assert body["url"].startswith("/api/v1/share/")
+
+        # Step 2: simulate LinkedIn's scraper fetching the share URL.
+        scrape_res = client.get(body["url"])
+        assert scrape_res.status_code == 200
+        html = scrape_res.text
+        # LinkedIn-scrapable OG meta must include the per-user counts.
+        assert "Changemaker" in html
+        assert "5 reports" in html
+        assert "2 lives" in html
+        # Image is embedded as data URL (PWA's primary path).
+        assert tiny_png_b64 in html
+
+    def test_pwa_can_mint_without_image_when_blob_oversize(self, client):
+        # Step 1: PWA composed a >100 KB badge — sends `img: null`.
+        mint_res = client.post("/api/v1/share/mint", json={
+            "tier": "T4_LIFEKEEPER",
+            "lives": 12,
+            "reports": 20,
+            "img": None,
+        })
+        assert mint_res.status_code == 200, mint_res.text
+        body = mint_res.json()
+        scrape_res = client.get(body["url"])
+        assert scrape_res.status_code == 200
+        # The default brand image (no per-user PNG) must be present
+        # as the og:image so LinkedIn still gets *something* to render.
+        assert "og:image" in scrape_res.text
+        # The fallback uses the static brand image URL.
+        assert "crisplabs.tech/static/og-default.png" in scrape_res.text
+
+    def test_mint_endpoint_accepts_all_v4_tiers(self, client):
+        # Each tier in the V4 ladder must mint successfully so the
+        # PWA's _handleLinkedIn never refuses based on the user's
+        # current tier value.
+        for tier in ["T1_SCOUT", "T2_SIGNAL", "T3_CHANGEMAKER", "T4_LIFEKEEPER"]:
+            res = client.post("/api/v1/share/mint", json={"tier": tier})
+            assert res.status_code == 200, f"tier {tier} rejected: {res.text}"
+            assert res.json()["url"].startswith("/api/v1/share/")

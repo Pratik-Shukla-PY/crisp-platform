@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v196';
+const CACHE_NAME = 'crisp-v197';
+// v196 → v197 (May 2026 — Phase 1.7 /share/<token> LinkedIn OG wire-up):
+//   badge-studio.js now POSTs the rendered PNG (≤100 KB) to
+//   /api/v1/share/mint and deep-links LinkedIn to the signed
+//   /api/v1/share/<token> URL so the share preview carries the
+//   user's actual badge as og:image instead of the generic
+//   crisplabs.tech tile. Returning users need to evict v196 so the
+//   share button picks up the new mint flow.
+//
 // v195 → v196 (May 2026 — Sentry observability, audit Phase 1.3/1.4/1.5):
 //   index.html now loads vendor/sentry.min.js + sentry-init.js (with
 //   defer) before the rest of the app bundle, so PWA JS errors during

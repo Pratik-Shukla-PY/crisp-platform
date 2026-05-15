@@ -718,21 +718,68 @@
     }
 
     async function _handleLinkedIn() {
-        // LinkedIn's share dialog doesn't accept image attachments via
-        // URL; we mint a server-rendered share page at
-        // /api/v1/share/<token> with og:image meta and deep-link
-        // LinkedIn to it. The backend route is implemented at
-        // backend/app/api/endpoints/share.py.
+        // LinkedIn's share dialog does NOT accept image attachments via
+        // URL — it only scrapes Open Graph meta from the share URL.
+        // We mint a signed token via POST /api/v1/share/mint and
+        // deep-link LinkedIn at /api/v1/share/<token> so the rendered
+        // page carries the user's badge as og:image.
+        //
+        // Fallback path: if the mint endpoint is unreachable (offline,
+        // backend down, mint returns non-2xx), fall back to the
+        // crisplabs.tech landing page so the share still works — just
+        // with the generic OG preview instead of the per-user badge.
         try {
-            // For now, fall back to the public landing page URL since
-            // the share-token mint round-trip is part of Phase D.6. The
-            // landing page already carries OG meta for the CRISP brand;
-            // LinkedIn will preview that instead of the per-user badge.
-            // When /share/<token> lands, replace this with the signed
-            // URL.
             const blob = await _composeForShare();
+            // Always download the PNG too — LinkedIn's scraper can fail
+            // on data URLs >50 KB and the user may want to attach the
+            // image manually as a backup.
             _downloadBlob(blob, `crisp-${state.tier.toLowerCase()}.png`);
-            const shareUrl = 'https://crisplabs.tech';
+
+            // Convert the PNG blob to a data URL for OG embed. Cap at
+            // ~100 KB (LinkedIn scraper limit + backend mint endpoint
+            // limit) — if larger, send null and let the share page
+            // render with the default brand image.
+            let imgDataUrl = null;
+            if (blob.size <= 100_000) {
+                imgDataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            }
+
+            const apiBase = (typeof window.API_BASE === 'string' && window.API_BASE)
+                ? window.API_BASE
+                : '/api/v1';
+            let shareUrl = 'https://crisplabs.tech';
+            try {
+                const mintRes = await fetch(`${apiBase}/share/mint`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tier: state.tier,
+                        lives: state.lives || 0,
+                        reports: state.reports || 0,
+                        img: imgDataUrl,
+                    }),
+                });
+                if (mintRes.ok) {
+                    const { url: signedPath } = await mintRes.json();
+                    // signedPath is "/api/v1/share/<token>" (relative).
+                    // Build absolute URL off the same host so LinkedIn
+                    // can fetch the OG page. Both dev (localhost:8000)
+                    // and prod (undp.crisplabs.tech) work.
+                    const origin = new URL(apiBase, window.location.href).origin;
+                    shareUrl = `${origin}${signedPath}`;
+                } else {
+                    console.warn('[BadgeStudio] /share/mint returned', mintRes.status,
+                        '— falling back to crisplabs.tech');
+                }
+            } catch (e) {
+                console.warn('[BadgeStudio] /share/mint unreachable, using crisplabs.tech fallback', e);
+            }
+
             const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
             window.open(url, '_blank', 'noopener');
             _toast(_t('badge_studio_linkedin_hint',
