@@ -87,15 +87,24 @@ test.describe('PWA — Badge Studio (open via Rewards page + share dispatch)', (
     test('template tabs switch + canvas repaints', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
         await navigateToBadgeStudio(page);
+        // Phase 2.7 (May 2026) — canvas is DPR-aware. The backing
+        // pixel buffer is (logical × dpr); the test reads the
+        // logical size off `canvas.style.width/height` instead of
+        // `canvas.width/height` so the assertion is independent of
+        // the headless browser's reported devicePixelRatio.
+        const readLogical = (el: any) => ({
+            w: Math.round(parseFloat(el.style.width || '0')) || el.width,
+            h: Math.round(parseFloat(el.style.height || '0')) || el.height,
+        });
         // Initial tab is "ring" → canvas dimensions 1080×1080.
-        let dim = await page.locator('#bs-canvas').evaluate((el: any) => ({ w: el.width, h: el.height }));
+        let dim = await page.locator('#bs-canvas').evaluate(readLogical);
         expect(dim.w).toBe(1080);
         expect(dim.h).toBe(1080);
         // Switch to story → canvas dimensions 1080×1920.
         await page.locator('.bs-tab[data-template="story"]').click();
         // Wait for the re-render.
         await page.waitForTimeout(150);
-        dim = await page.locator('#bs-canvas').evaluate((el: any) => ({ w: el.width, h: el.height }));
+        dim = await page.locator('#bs-canvas').evaluate(readLogical);
         expect(dim.h).toBe(1920);
         // Tab must show as active.
         await expect(page.locator('.bs-tab[data-template="story"]')).toHaveClass(/is-active/);

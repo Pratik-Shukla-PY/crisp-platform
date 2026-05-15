@@ -839,5 +839,8 @@
   "aria_home_badge_chip": "Nivel de reportero — toca para abrir la página de recompensas",
   "bs_share_lives_template": "Ayudé a salvar {n} vidas como {tier} de CRISP.",
   "bs_share_reports_template": "Envié {n} informes como {tier} de CRISP.",
-  "bs_share_fallback": "Soy {tier} de CRISP. Reporta lo que ves."
+  "bs_share_fallback": "Soy {tier} de CRISP. Reporta lo que ves.",
+  "bs_char_locked_toast": "Alcanza {tier} para desbloquear este personaje.",
+  "bs_stats_reports": "informes",
+  "bs_stats_lives_saved": "vidas salvadas"
 }

@@ -828,5 +828,8 @@
   "aria_home_badge_chip": "报告者等级 — 点击打开奖励页面",
   "bs_share_lives_template": "作为 CRISP 的 {tier},参与挽救了 {n} 条生命。",
   "bs_share_reports_template": "作为 CRISP 的 {tier},已提交 {n} 份报告。",
-  "bs_share_fallback": "我是 CRISP 的 {tier}。看到就上报。"
+  "bs_share_fallback": "我是 CRISP 的 {tier}。看到就上报。",
+  "bs_char_locked_toast": "达到 {tier} 即可解锁该角色。",
+  "bs_stats_reports": "份报告",
+  "bs_stats_lives_saved": "挽救生命"
 }

@@ -5,7 +5,16 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v199';
+const CACHE_NAME = 'crisp-v200';
+// v199 → v200 (May 2026 — Phase 2.3/2.4/2.5/2.6 Badge Studio premium):
+//   * Canvas redesign: T4 warm-gold palette + glassmorphism panel +
+//     layered drop-shadows on the tier pill (badge-studio.js).
+//   * Character roster refined to 4 humanitarian responders
+//     (character-pack.js — 4 comic archetypes deleted).
+//   * Tier-gated character picker (locked tiles + auto-pick at open).
+//   * Animated counter roll-up on the studio header stats.
+//   Returning users must evict v199 so they see the redesigned canvas.
+//
 // v198 → v199 (May 2026 — Phase 2.1 shared tier-config extraction):
 //   New `tier-config.js` added to STATIC_ASSETS + loaded from
 //   index.html BEFORE badge-studio.js / home-screen.js. Defines

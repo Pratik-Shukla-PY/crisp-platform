@@ -828,5 +828,8 @@
   "aria_home_badge_chip": "مستوى المبلِّغ — انقر لفتح صفحة المكافآت",
   "bs_share_lives_template": "ساعدت في إنقاذ {n} أرواح بصفتي {tier} في CRISP.",
   "bs_share_reports_template": "قدمت {n} بلاغًا بصفتي {tier} في CRISP.",
-  "bs_share_fallback": "أنا {tier} في CRISP. أبلِغ عمّا تراه."
+  "bs_share_fallback": "أنا {tier} في CRISP. أبلِغ عمّا تراه.",
+  "bs_char_locked_toast": "وصول {tier} لفتح هذه الشخصية.",
+  "bs_stats_reports": "بلاغًا",
+  "bs_stats_lives_saved": "أرواحًا منقذة"
 }

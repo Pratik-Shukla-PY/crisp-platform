@@ -830,5 +830,8 @@
   "aria_home_badge_chip": "Уровень репортёра — нажмите, чтобы открыть страницу наград",
   "bs_share_lives_template": "Помог(ла) спасти {n} жизней в роли {tier} CRISP.",
   "bs_share_reports_template": "Подал(а) {n} отчётов в роли {tier} CRISP.",
-  "bs_share_fallback": "Я — {tier} CRISP. Сообщай о том, что видишь."
+  "bs_share_fallback": "Я — {tier} CRISP. Сообщай о том, что видишь.",
+  "bs_char_locked_toast": "Достигните уровня {tier}, чтобы открыть этого персонажа.",
+  "bs_stats_reports": "отчётов",
+  "bs_stats_lives_saved": "спасённых жизней"
 }

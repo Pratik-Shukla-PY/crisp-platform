@@ -831,5 +831,8 @@
   "aria_home_badge_chip": "Reporter level — tap to open rewards page",
   "bs_share_lives_template": "Helped save {n} lives as a CRISP {tier}.",
   "bs_share_reports_template": "Submitted {n} reports as a CRISP {tier}.",
-  "bs_share_fallback": "I'm a CRISP {tier}. Report what you see."
+  "bs_share_fallback": "I'm a CRISP {tier}. Report what you see.",
+  "bs_char_locked_toast": "Reach {tier} to unlock this character.",
+  "bs_stats_reports": "reports",
+  "bs_stats_lives_saved": "lives saved"
 }

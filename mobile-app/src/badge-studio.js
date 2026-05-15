@@ -81,7 +81,12 @@
         responded: 0,
         // May 2026 — character picker + share-message picker added
         // alongside the futuristic backdrop.
-        selectedCharacter: 'caped_guardian',
+        // Phase 2.4 — Caped Guardian was a comic-archetype slug; the
+        // refined pack only ships responder characters. Default to
+        // the T1-tier responder; the BS open path will upgrade this
+        // via `crispCharacterPack.defaultForTier(state.tier)` once
+        // the user's tier is known.
+        selectedCharacter: 'field_medic',
         usePhotoInsteadOfCharacter: false,
         selectedMessageIdx: -1,         // -1 = "Surprise me" (deterministic random)
         template: 'ring',               // 'ring' | 'wa' | 'story'
@@ -140,13 +145,25 @@
             return;
         }
         if (template === 'wa') {
+            // Phase 2.3 (May 2026) — tier-aware base gradient. T4
+            // gets a warm amber-orange wash; lower tiers keep the
+            // navy/teal "command center" palette. This is the visual
+            // payoff for reaching Lifekeeper — distinguishable at a
+            // glance in a LinkedIn feed.
+            const isT4 = tier === 'T4_LIFEKEEPER';
             const g = ctx.createLinearGradient(0, 0, w, h);
-            g.addColorStop(0, '#213A58');
-            g.addColorStop(1, '#0C6478');
+            if (isT4) {
+                g.addColorStop(0, '#3a2914');  // warm umber
+                g.addColorStop(1, '#1a1408');  // deep brown-black
+            } else {
+                g.addColorStop(0, '#213A58');
+                g.addColorStop(1, '#0C6478');
+            }
             ctx.fillStyle = g;
             ctx.fillRect(0, 0, w, h);
-            // Futuristic backdrop on top of the navy base for WA.
+            // Glassmorphism panel + futuristic backdrop layered on top.
             _paintFuturisticBackdrop(ctx, w, h, tier);
+            _paintGlassmorphismPanel(ctx, w, h, tier);
         } else {
             // story
             const meta = TIER_META[tier] || TIER_META.T4_LIFEKEEPER;
@@ -156,11 +173,95 @@
             ctx.fillStyle = g;
             ctx.fillRect(0, 0, w, h);
             // Soft overlay so foreground text reads cleanly.
-            ctx.fillStyle = 'rgba(12, 30, 45, 0.35)';
+            // T4 gets a warmer overlay tint that complements gold;
+            // others stay with the cool navy wash.
+            ctx.fillStyle = tier === 'T4_LIFEKEEPER'
+                ? 'rgba(40, 22, 8, 0.42)'
+                : 'rgba(12, 30, 45, 0.35)';
             ctx.fillRect(0, 0, w, h);
             // Subtle futuristic backdrop on story too (full bleed).
             _paintFuturisticBackdrop(ctx, w, h, tier);
+            _paintGlassmorphismPanel(ctx, w, h, tier);
         }
+    }
+
+    /**
+     * Phase 2.3 (May 2026) — glassmorphism panel behind the avatar.
+     *
+     * Canvas has no real `backdrop-filter` so we EMULATE the frosted
+     * glass effect with:
+     *   1. Semi-transparent white-ish rounded rect (the "glass")
+     *   2. Faint inner highlight stroke at the top
+     *   3. Outer drop-shadow so the panel lifts off the background
+     *
+     * Centered on the avatar focal point (cy ≈ 0.42h). Sized to
+     * wrap the ring + tier-pill region. For ring template the panel
+     * is suppressed (transparent base, would visibly tint the
+     * profile-photo edge).
+     */
+    function _paintGlassmorphismPanel(ctx, w, h, tier) {
+        const meta = TIER_META[tier] || TIER_META.T4_LIFEKEEPER;
+        const cx = w / 2;
+        const cy = h * 0.50;
+        // Panel slightly wider than the avatar+ring+pill stack.
+        const panelW = Math.min(w * 0.78, 880);
+        const panelH = Math.min(h * 0.62, 1200);
+        const x = cx - panelW / 2;
+        const y = cy - panelH / 2;
+        const radius = 48;
+
+        ctx.save();
+        // Drop shadow (outer).
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.42)';
+        ctx.shadowBlur = 60;
+        ctx.shadowOffsetY = 16;
+        // The "frosted glass" base — translucent off-white tinted with
+        // the tier accent. T4 gets a warmer-gold tint so the pane feels
+        // like brushed bronze instead of cool glass.
+        const isT4 = tier === 'T4_LIFEKEEPER';
+        ctx.fillStyle = isT4
+            ? 'rgba(252, 211, 77, 0.10)'   // warm gold haze
+            : 'rgba(255, 255, 255, 0.07)';
+        _roundedRectPath(ctx, x, y, panelW, panelH, radius);
+        ctx.fill();
+        ctx.restore();
+
+        // Inner top-edge highlight — a single stroke at the upper
+        // border to fake the glassy "glint" you'd get from a real CSS
+        // backdrop-filter + border-top: 1px rgba(white,0.3).
+        ctx.save();
+        ctx.strokeStyle = isT4
+            ? 'rgba(252, 211, 77, 0.35)'
+            : 'rgba(255, 255, 255, 0.18)';
+        ctx.lineWidth = 1.5;
+        _roundedRectPath(ctx, x, y, panelW, panelH, radius);
+        ctx.stroke();
+        ctx.restore();
+
+        // Soft tier-coloured glow inside the panel (radial, subtle).
+        const innerGlow = ctx.createRadialGradient(
+            cx, y + panelH * 0.30, 10,
+            cx, y + panelH * 0.30, panelW * 0.55,
+        );
+        innerGlow.addColorStop(0, `${meta.ringEnd}22`);   // ~13% alpha
+        innerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.save();
+        _roundedRectPath(ctx, x, y, panelW, panelH, radius);
+        ctx.clip();
+        ctx.fillStyle = innerGlow;
+        ctx.fillRect(x, y, panelW, panelH);
+        ctx.restore();
+    }
+
+    function _roundedRectPath(ctx, x, y, w, h, r) {
+        const rr = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.arcTo(x + w, y,     x + w, y + h, rr);
+        ctx.arcTo(x + w, y + h, x,     y + h, rr);
+        ctx.arcTo(x,     y + h, x,     y,     rr);
+        ctx.arcTo(x,     y,     x + w, y,     rr);
+        ctx.closePath();
     }
 
     /**
@@ -365,7 +466,44 @@
         const x = cx - pillW / 2;
         const y = cy;
         const r = pillH / 2;
-        // Pill background.
+        // Phase 2.3 (May 2026) — layered shadows. Two-pass:
+        //   1. Soft ambient shadow underneath (blurry, offset down)
+        //   2. Tier-coloured glow halo (no offset, blurry)
+        // Both passes paint INVISIBLE pill shapes — only the shadows
+        // remain. The actual gradient pill paints on top in pass 3.
+        ctx.save();
+        // Pass 1 — ambient.
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+        ctx.shadowBlur = 36 * scale;
+        ctx.shadowOffsetY = 12 * scale;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0)';   // pill itself invisible
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + pillW, y,         x + pillW, y + pillH, r);
+        ctx.arcTo(x + pillW, y + pillH, x,         y + pillH, r);
+        ctx.arcTo(x,         y + pillH, x,         y,         r);
+        ctx.arcTo(x,         y,         x + pillW, y,         r);
+        ctx.closePath();
+        // Paint into shadow path (use a solid color so the shadow
+        // renders; the pill below overwrites the body).
+        ctx.fillStyle = '#000';
+        ctx.fill();
+        ctx.restore();
+        // Pass 2 — tier glow.
+        ctx.save();
+        ctx.shadowColor = meta.ringEnd;
+        ctx.shadowBlur = 48 * scale;
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + pillW, y,         x + pillW, y + pillH, r);
+        ctx.arcTo(x + pillW, y + pillH, x,         y + pillH, r);
+        ctx.arcTo(x,         y + pillH, x,         y,         r);
+        ctx.arcTo(x,         y,         x + pillW, y,         r);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        // Pass 3 — visible gradient pill body (no shadow).
         const g = ctx.createLinearGradient(x, y, x + pillW, y);
         g.addColorStop(0, meta.ringStart);
         g.addColorStop(1, meta.ringEnd);
@@ -601,7 +739,57 @@
         const statsEl = document.getElementById('bs-tier-stats');
         if (emojiEl) emojiEl.textContent = meta.emoji;
         if (nameEl) nameEl.textContent = _t(`tier_${state.tier.toLowerCase()}_label`, meta.label);
-        if (statsEl) statsEl.textContent = `${state.reports} reports · ${state.lives} lives saved`;
+        if (statsEl) {
+            // Phase 2.5 (May 2026) — counter roll-up. First time we
+            // paint the stats line, animate from 0 to the user's
+            // real (reports, lives) values; subsequent paints just
+            // update the text. The animation runs in ~600 ms with a
+            // soft ease-out, gated by prefers-reduced-motion so
+            // accessibility users see a snap-to-final-value paint.
+            _renderTierStats(statsEl, state.reports, state.lives);
+        }
+    }
+
+    /**
+     * Phase 2.5 (May 2026) — animated counter roll-up.
+     *
+     * Animates two numbers (reports, lives) from 0 to their final
+     * values on the FIRST paint of the badge studio. Skips animation
+     * on subsequent renders (e.g. template switches) because the
+     * numbers haven't changed — re-rolling would feel jittery.
+     *
+     * Gated by `prefers-reduced-motion: reduce` per WCAG 2.1 §2.3.3
+     * — vestibular-motion-sensitive users get the final value
+     * instantly without the count-up.
+     */
+    let _statsRolledUp = false;
+    function _renderTierStats(el, finalReports, finalLives) {
+        const reportsLabel = _t('bs_stats_reports', 'reports');
+        const livesLabel = _t('bs_stats_lives_saved', 'lives saved');
+        const formatLine = (r, l) => `${r} ${reportsLabel} · ${l} ${livesLabel}`;
+
+        const prefersReducedMotion = (typeof window !== 'undefined'
+            && window.matchMedia
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+        if (_statsRolledUp || prefersReducedMotion) {
+            el.textContent = formatLine(finalReports, finalLives);
+            return;
+        }
+        _statsRolledUp = true;
+
+        const duration = 700;
+        const start = performance.now();
+        const ease = (t) => 1 - Math.pow(1 - t, 3);  // cubic-out
+        function tick(now) {
+            const t = Math.min(1, (now - start) / duration);
+            const e = ease(t);
+            const r = Math.round(finalReports * e);
+            const l = Math.round(finalLives * e);
+            el.textContent = formatLine(r, l);
+            if (t < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
     }
 
     // ── Photo upload + face-blur pipeline ────────────────────────────
@@ -917,18 +1105,46 @@
         const grid = document.getElementById('bs-char-grid');
         if (!grid || !window.crispCharacterPack) return;
         const chars = window.crispCharacterPack.list();
+        // Phase 2.6 (May 2026) — tier-gated character picker. A tile
+        // is "locked" if the user's current tier hasn't unlocked it
+        // yet; clicking it does nothing except show a tooltip. The
+        // default selectedCharacter at first-open is the user's
+        // current-tier responder.
+        const cp = window.crispCharacterPack;
+        // Auto-promote selection on first paint: if the persisted
+        // selection is locked for the user's tier, switch to the
+        // best available one.
+        if (cp.isUnlockedAt && !cp.isUnlockedAt(state.selectedCharacter, state.tier)) {
+            state.selectedCharacter = cp.defaultForTier(state.tier);
+        }
         grid.innerHTML = '';
         chars.forEach((c) => {
+            const unlocked = cp.isUnlockedAt
+                ? cp.isUnlockedAt(c.slug, state.tier)
+                : true;
             const tile = document.createElement('button');
             tile.type = 'button';
-            tile.className = 'bs-char-tile';
+            tile.className = 'bs-char-tile' + (unlocked ? '' : ' is-locked');
             tile.setAttribute('role', 'radio');
             tile.setAttribute('data-slug', c.slug);
-            tile.setAttribute('aria-label', c.label_en);
-            tile.setAttribute('title', c.label_en);
+            const ariaLabel = unlocked
+                ? c.label_en
+                : `${c.label_en} — locked, reach ${(window.CRISP_TIERS_BY_ID?.[c.unlocks_at]?.label || c.unlocks_at)} to unlock`;
+            tile.setAttribute('aria-label', ariaLabel);
+            tile.setAttribute('title', ariaLabel);
+            if (!unlocked) tile.setAttribute('aria-disabled', 'true');
             const previewColor = c.gradient ? c.gradient[1] : '#46DFB1';
             tile.innerHTML = window.crispCharacterPack.previewHtml(c.slug, previewColor);
-            tile.addEventListener('click', () => _selectCharacter(c.slug));
+            tile.addEventListener('click', () => {
+                if (!unlocked) {
+                    const tierLabel = (window.CRISP_TIERS_BY_ID?.[c.unlocks_at]?.label) || c.unlocks_at;
+                    _toast(_t('bs_char_locked_toast',
+                        `Reach ${tierLabel} to unlock this character.`)
+                        .replace('{tier}', tierLabel), 'info');
+                    return;
+                }
+                _selectCharacter(c.slug);
+            });
             grid.appendChild(tile);
         });
         _highlightCharacter(state.selectedCharacter);

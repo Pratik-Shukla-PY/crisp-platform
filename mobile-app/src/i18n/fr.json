@@ -853,5 +853,8 @@
   "aria_home_badge_chip": "Niveau de rapporteur — appuyez pour ouvrir la page des récompenses",
   "bs_share_lives_template": "J'ai contribué à sauver {n} vies en tant que {tier} CRISP.",
   "bs_share_reports_template": "J'ai soumis {n} rapports en tant que {tier} CRISP.",
-  "bs_share_fallback": "Je suis {tier} CRISP. Signalez ce que vous voyez."
+  "bs_share_fallback": "Je suis {tier} CRISP. Signalez ce que vous voyez.",
+  "bs_char_locked_toast": "Atteignez {tier} pour débloquer ce personnage.",
+  "bs_stats_reports": "rapports",
+  "bs_stats_lives_saved": "vies sauvées"
 }
