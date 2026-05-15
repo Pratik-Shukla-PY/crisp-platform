@@ -789,5 +789,9 @@
   "nearby_sheet_close": "إغلاق",
   "nearby_reports_nearby_label": "تقارير قريبة",
   "nearby_one_area": "منطقة واحدة",
-  "nearby_n_areas": "{n} مناطق"
+  "nearby_n_areas": "{n} مناطق",
+  "v4_undp_trigger": "معلومات إضافية",
+  "v4_undp_trigger_sub": "تساعد فرق الاستجابة على تحديد الأولويات · اختياري",
+  "v4_undp_trigger_time": "اختياري",
+  "v4_undp_trigger_aria": "فتح تفاصيل UNDP الاختيارية"
 }

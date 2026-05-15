@@ -791,5 +791,9 @@
   "nearby_sheet_close": "ਬੰਦ ਕਰੋ",
   "nearby_reports_nearby_label": "ਨੇੜਲੀਆਂ ਰਿਪੋਰਟਾਂ",
   "nearby_one_area": "1 ਖੇਤਰ",
-  "nearby_n_areas": "{n} ਖੇਤਰ"
+  "nearby_n_areas": "{n} ਖੇਤਰ",
+  "v4_undp_trigger": "Additional info",
+  "v4_undp_trigger_sub": "Helps responders prioritise rescue · optional",
+  "v4_undp_trigger_time": "Optional",
+  "v4_undp_trigger_aria": "Open optional UNDP details"
 }

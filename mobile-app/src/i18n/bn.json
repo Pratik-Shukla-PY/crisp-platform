@@ -791,5 +791,9 @@
   "nearby_sheet_close": "বন্ধ করুন",
   "nearby_reports_nearby_label": "কাছাকাছি রিপোর্ট",
   "nearby_one_area": "1টি এলাকা",
-  "nearby_n_areas": "{n}টি এলাকা"
+  "nearby_n_areas": "{n}টি এলাকা",
+  "v4_undp_trigger": "Additional info",
+  "v4_undp_trigger_sub": "Helps responders prioritise rescue · optional",
+  "v4_undp_trigger_time": "Optional",
+  "v4_undp_trigger_aria": "Open optional UNDP details"
 }

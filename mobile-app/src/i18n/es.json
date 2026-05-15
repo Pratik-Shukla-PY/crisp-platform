@@ -800,5 +800,9 @@
   "nearby_sheet_close": "Cerrar",
   "nearby_reports_nearby_label": "informes cercanos",
   "nearby_one_area": "1 área",
-  "nearby_n_areas": "{n} áreas"
+  "nearby_n_areas": "{n} áreas",
+  "v4_undp_trigger": "Información adicional",
+  "v4_undp_trigger_sub": "Ayuda a los socorristas a priorizar · opcional",
+  "v4_undp_trigger_time": "Opcional",
+  "v4_undp_trigger_aria": "Abrir detalles UNDP opcionales"
 }

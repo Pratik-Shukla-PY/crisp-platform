@@ -791,5 +791,9 @@
   "nearby_sheet_close": "Закрыть",
   "nearby_reports_nearby_label": "сообщений рядом",
   "nearby_one_area": "1 район",
-  "nearby_n_areas": "{n} районов"
+  "nearby_n_areas": "{n} районов",
+  "v4_undp_trigger": "Дополнительная информация",
+  "v4_undp_trigger_sub": "Помогает спасателям расставить приоритеты · по желанию",
+  "v4_undp_trigger_time": "По желанию",
+  "v4_undp_trigger_aria": "Открыть необязательные детали ПРООН"
 }

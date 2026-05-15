@@ -791,5 +791,9 @@
   "nearby_sheet_close": "ಮುಚ್ಚಿ",
   "nearby_reports_nearby_label": "ಸಮೀಪದ ವರದಿಗಳು",
   "nearby_one_area": "1 ಪ್ರದೇಶ",
-  "nearby_n_areas": "{n} ಪ್ರದೇಶಗಳು"
+  "nearby_n_areas": "{n} ಪ್ರದೇಶಗಳು",
+  "v4_undp_trigger": "Additional info",
+  "v4_undp_trigger_sub": "Helps responders prioritise rescue · optional",
+  "v4_undp_trigger_time": "Optional",
+  "v4_undp_trigger_aria": "Open optional UNDP details"
 }

@@ -791,5 +791,9 @@
   "nearby_sheet_close": "बंद करा",
   "nearby_reports_nearby_label": "जवळचे अहवाल",
   "nearby_one_area": "1 क्षेत्र",
-  "nearby_n_areas": "{n} क्षेत्रे"
+  "nearby_n_areas": "{n} क्षेत्रे",
+  "v4_undp_trigger": "Additional info",
+  "v4_undp_trigger_sub": "Helps responders prioritise rescue · optional",
+  "v4_undp_trigger_time": "Optional",
+  "v4_undp_trigger_aria": "Open optional UNDP details"
 }

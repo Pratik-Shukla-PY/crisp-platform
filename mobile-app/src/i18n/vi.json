@@ -792,5 +792,9 @@
   "nearby_sheet_close": "Đóng",
   "nearby_reports_nearby_label": "báo cáo gần đây",
   "nearby_one_area": "1 khu vực",
-  "nearby_n_areas": "{n} khu vực"
+  "nearby_n_areas": "{n} khu vực",
+  "v4_undp_trigger": "Additional info",
+  "v4_undp_trigger_sub": "Helps responders prioritise rescue · optional",
+  "v4_undp_trigger_time": "Optional",
+  "v4_undp_trigger_aria": "Open optional UNDP details"
 }

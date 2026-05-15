@@ -1559,26 +1559,58 @@
                 </div>
             </details>
 
-            <!-- More details — EXPANDED BY DEFAULT per UNDP requirement.
-                 May 2026 — operator: "We spent time/energy on the
-                 stage-undp-details UI; this drawer should use the same
-                 question-card layout, not the stripped row+select
-                 fallback." Question-cards reuse the `.undp-q-card`
-                 + `.undp-lvl` / `.undp-pill` / `.undp-yn` / `.undp-need`
-                 styles defined alongside the stage-undp-details DOM,
-                 so visual fidelity matches the dedicated stage exactly.
-                 Wiring is bound by v4-flow.js's _wireUndpDrawer (scoped
-                 to #v4-undp-drawer) and writes to the V4 state shape
-                 (`electricity_status`, `health_status`, `water_status`,
-                 `debris_present`, `pressing_needs`). -->
-            <details class="v4-drawer v4-drawer-undp" id="v4-undp-drawer" open>
-                <summary class="v4-drawer-summary">
-                    <i class="fa-solid fa-list-check"></i>
-                    <span data-i18n="v4_undp_modules">UNDP details</span>
-                    <i class="fa-solid fa-chevron-down v4-drawer-chevron"></i>
-                </summary>
-                <div class="v4-drawer-body v4-undp-body">
+            <!-- May 2026 (operator-mandated) — the inline <details>
+                 UNDP drawer was replaced by a trigger button + a half-
+                 screen bottom-sheet so stage-v4-review's primary
+                 "Send to UNDP" CTA stays above the fold and the
+                 reporter chooses when to dive into the optional
+                 questions. Sheet markup lives at end-of-stage so
+                 it can render above .v4-footer via position:fixed
+                 + z-index without being trapped by the v4-review
+                 padding. -->
+            <button type="button" class="v4-undp-trigger undp-details-cta"
+                    id="btn-v4-open-undp"
+                    aria-haspopup="dialog"
+                    aria-controls="v4-undp-sheet"
+                    data-i18n-aria-label="v4_undp_trigger_aria">
+                <i class="fa-solid fa-list-check"></i>
+                <span class="undp-details-cta-body">
+                    <span class="undp-details-cta-label"
+                          data-i18n="v4_undp_trigger">Additional info</span>
+                    <span class="undp-details-cta-sub"
+                          data-i18n="v4_undp_trigger_sub">Helps responders prioritise rescue · optional</span>
+                </span>
+                <span class="undp-details-cta-time"
+                      data-i18n="v4_undp_trigger_time">Optional</span>
+            </button>
+        </div>
 
+        <footer class="v4-footer">
+            <button class="v4-primary v4-send-btn is-ready" id="btn-v4-send" type="button">
+                <i class="fa-solid fa-paper-plane"></i>
+                <span data-i18n="v4_send">Send to UNDP</span>
+            </button>
+        </footer>
+
+        <!-- May 2026 — UNDP details bottom-sheet. Opens via
+             #btn-v4-open-undp. position:fixed + z-index:240 so it
+             sits above .v4-footer. Question-cards inside have the
+             same data-undp-field attributes as the prior <details>
+             drawer; v4-flow.js's _initReviewStage wiring is rescoped
+             to query inside #v4-undp-sheet .v4-undp-sheet-body. -->
+        <div class="v4-undp-sheet" id="v4-undp-sheet" hidden role="dialog"
+             aria-modal="true" aria-labelledby="v4-undp-sheet-title">
+            <div class="v4-undp-sheet-backdrop" id="v4-undp-sheet-backdrop"></div>
+            <div class="v4-undp-sheet-card">
+                <div class="v4-undp-sheet-handle" aria-hidden="true"></div>
+                <header class="v4-undp-sheet-head">
+                    <h2 id="v4-undp-sheet-title" data-i18n="v4_undp_modules">UNDP details</h2>
+                    <button class="v4-undp-sheet-close" id="btn-v4-undp-close"
+                            type="button"
+                            aria-label="Close"
+                            data-i18n-aria-label="aria_close">✕</button>
+                </header>
+                <div class="v4-undp-sheet-body">
                     <!-- Q1: Power supply (5-level status) -->
                     <div class="undp-q-card">
                         <div class="undp-q-header">
@@ -1674,17 +1706,9 @@
                             <button type="button" class="undp-pill undp-need" data-value="services">⚡ <span data-i18n="undp_need_services">Basic services</span></button>
                         </div>
                     </div>
-
                 </div>
-            </details>
+            </div>
         </div>
-
-        <footer class="v4-footer">
-            <button class="v4-primary v4-send-btn is-ready" id="btn-v4-send" type="button">
-                <i class="fa-solid fa-paper-plane"></i>
-                <span data-i18n="v4_send">Send to UNDP</span>
-            </button>
-        </footer>
     </div>
 
     <!-- ══════════════════════════════════════

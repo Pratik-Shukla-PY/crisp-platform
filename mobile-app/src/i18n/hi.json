@@ -791,5 +791,9 @@
   "nearby_sheet_close": "बंद करें",
   "nearby_reports_nearby_label": "पास के रिपोर्ट",
   "nearby_one_area": "1 क्षेत्र",
-  "nearby_n_areas": "{n} क्षेत्र"
+  "nearby_n_areas": "{n} क्षेत्र",
+  "v4_undp_trigger": "अतिरिक्त जानकारी",
+  "v4_undp_trigger_sub": "बचाव दलों को प्राथमिकता तय करने में मदद · वैकल्पिक",
+  "v4_undp_trigger_time": "वैकल्पिक",
+  "v4_undp_trigger_aria": "वैकल्पिक UNDP विवरण खोलें"
 }

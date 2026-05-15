@@ -789,5 +789,9 @@
   "nearby_sheet_close": "关闭",
   "nearby_reports_nearby_label": "附近报告",
   "nearby_one_area": "1 个区域",
-  "nearby_n_areas": "{n} 个区域"
+  "nearby_n_areas": "{n} 个区域",
+  "v4_undp_trigger": "更多信息",
+  "v4_undp_trigger_sub": "帮助救援团队确定优先顺序 · 可选",
+  "v4_undp_trigger_time": "可选",
+  "v4_undp_trigger_aria": "打开可选的 UNDP 详情"
 }

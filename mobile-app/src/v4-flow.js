@@ -2106,24 +2106,91 @@
             });
         }
 
-        // ── UNDP details drawer (May 2026 — operator-restored rich UI) ────
+        // ── UNDP details bottom-sheet (May 2026 — operator-restored UX) ───
         //
-        // The drawer's inner markup now matches stage-undp-details exactly
-        // (question-cards with `.undp-q-card`, `.undp-lvl` level rows,
-        // `.undp-pill-row` health pills, `.undp-yn-row` yes/no, and
-        // `.undp-needs-grid` multi-select chips). Wiring is scoped to
-        // `#v4-undp-drawer` so it can't accidentally fire on the
-        // standalone stage-undp-details which has its own setup function
-        // (`setupUndpDetailsStage` in app.js). State writes use the V4
-        // field names already in use elsewhere in this file:
+        // The inline <details> drawer was replaced by a trigger button +
+        // half-screen bottom-sheet. Trigger lives at `#btn-v4-open-undp`;
+        // sheet body lives at `#v4-undp-sheet .v4-undp-sheet-body` and
+        // contains the same 5 .undp-q-card question-cards as before.
+        // Wiring is scoped to the sheet body so it doesn't collide with
+        // the standalone stage-undp-details (which has its own setup).
+        //
+        // State writes use the V4 field names already in use:
         //   electricity_status / water_status / health_status (string|null)
         //   debris_present (boolean)
         //   pressing_needs (string[])
-        const _undpDrawer = document.getElementById('v4-undp-drawer');
+        const _undpSheet     = document.getElementById('v4-undp-sheet');
+        const _undpSheetBody = _undpSheet
+            ? _undpSheet.querySelector('.v4-undp-sheet-body') : null;
+        const _undpTrigger   = document.getElementById('btn-v4-open-undp');
+        const _undpBackdrop  = document.getElementById('v4-undp-sheet-backdrop');
+        const _undpCloseBtn  = document.getElementById('btn-v4-undp-close');
+
+        // Trigger-badge live-count helper. Reads V4 state and swaps the
+        // `.undp-details-cta-time` pill text between "Optional" → "1/5"
+        // → … → "5/5". Called after every state-mutating tap inside the
+        // sheet AND on stage entry (in case state was pre-filled).
+        function _refreshTriggerBadge() {
+            if (!_undpTrigger) return;
+            const s = _getState();
+            const filled = [
+                !!s.electricity_status,
+                !!s.water_status,
+                !!s.health_status,
+                s.debris_present !== null && s.debris_present !== undefined,
+                Array.isArray(s.pressing_needs) && s.pressing_needs.length > 0,
+            ].filter(Boolean).length;
+            const badge = _undpTrigger.querySelector('.undp-details-cta-time');
+            if (!badge) return;
+            if (filled === 0) {
+                // Defer to i18n for the default state — t() returns the
+                // active locale's "Optional" translation or the EN
+                // fallback if the key isn't resolved yet.
+                try {
+                    const fn = window.t || ((k) => k);
+                    const v = fn('v4_undp_trigger_time');
+                    badge.textContent = (v && v !== 'v4_undp_trigger_time') ? v : 'Optional';
+                } catch { badge.textContent = 'Optional'; }
+            } else {
+                badge.textContent = `${filled}/5`;
+            }
+        }
+        // Expose so app.js setLanguage() can call after i18n re-application.
+        window.__crispV4RefreshUndpBadge = _refreshTriggerBadge;
+
+        // Sheet open / close — pure DOM, no state change.
+        function _openUndpSheet() {
+            if (!_undpSheet) return;
+            _undpSheet.hidden = false;
+            document.body.style.overflow = 'hidden';
+            // Force a frame so the slide-up transition runs from
+            // translateY(100%) → translateY(0) rather than skipping
+            // straight to the final state.
+            requestAnimationFrame(() => _undpSheet.classList.add('is-open'));
+        }
+        function _closeUndpSheet() {
+            if (!_undpSheet) return;
+            _undpSheet.classList.remove('is-open');
+            document.body.style.overflow = '';
+            // Match the CSS transition (0.28 s) before flipping `hidden`
+            // so the slide-down animation completes.
+            setTimeout(() => { _undpSheet.hidden = true; }, 320);
+        }
+
+        if (_undpTrigger)  _undpTrigger.addEventListener('click',  _openUndpSheet);
+        if (_undpCloseBtn) _undpCloseBtn.addEventListener('click', _closeUndpSheet);
+        if (_undpBackdrop) _undpBackdrop.addEventListener('click', _closeUndpSheet);
+        // Escape key support — accessibility parity with .nearby-sheet.
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (_undpSheet && _undpSheet.classList.contains('is-open')) {
+                _closeUndpSheet();
+            }
+        });
 
         // Single-select status rows (5-level: Power; 4-level: Water).
-        if (_undpDrawer) {
-            _undpDrawer.querySelectorAll('.undp-status-row').forEach((row) => {
+        if (_undpSheetBody) {
+            _undpSheetBody.querySelectorAll('.undp-status-row').forEach((row) => {
                 const field = row.getAttribute('data-undp-field');
                 if (!field) return;
                 row.querySelectorAll('.undp-lvl').forEach((btn) => {
@@ -2132,12 +2199,13 @@
                             b.classList.remove('is-selected'));
                         btn.classList.add('is-selected');
                         _setState({ [field]: btn.getAttribute('data-value') || null });
+                        _refreshTriggerBadge();
                     });
                 });
             });
 
             // Single-select pill row (Health services).
-            _undpDrawer.querySelectorAll('.undp-pill-row').forEach((row) => {
+            _undpSheetBody.querySelectorAll('.undp-pill-row').forEach((row) => {
                 const field = row.getAttribute('data-undp-field');
                 if (!field) return;
                 row.querySelectorAll('.undp-pill').forEach((btn) => {
@@ -2146,12 +2214,13 @@
                             b.classList.remove('is-selected'));
                         btn.classList.add('is-selected');
                         _setState({ [field]: btn.getAttribute('data-value') || null });
+                        _refreshTriggerBadge();
                     });
                 });
             });
 
             // Yes/No row (Debris).
-            _undpDrawer.querySelectorAll('.undp-yn-row').forEach((row) => {
+            _undpSheetBody.querySelectorAll('.undp-yn-row').forEach((row) => {
                 const field = row.getAttribute('data-undp-field');
                 if (!field) return;
                 row.querySelectorAll('.undp-yn').forEach((btn) => {
@@ -2160,12 +2229,13 @@
                             b.classList.remove('is-selected'));
                         btn.classList.add('is-selected');
                         _setState({ [field]: btn.getAttribute('data-value') === 'true' });
+                        _refreshTriggerBadge();
                     });
                 });
             });
 
             // Multi-select chip grid (Pressing needs).
-            _undpDrawer.querySelectorAll('.undp-needs-grid').forEach((grid) => {
+            _undpSheetBody.querySelectorAll('.undp-needs-grid').forEach((grid) => {
                 const field = grid.getAttribute('data-undp-field') || 'pressing_needs';
                 grid.querySelectorAll('.undp-need').forEach((btn) => {
                     btn.addEventListener('click', () => {
@@ -2174,10 +2244,14 @@
                             grid.querySelectorAll('.undp-need.is-selected'),
                         ).map((c) => c.getAttribute('data-value'));
                         _setState({ [field]: selected });
+                        _refreshTriggerBadge();
                     });
                 });
             });
         }
+
+        // Paint badge once at boot in case `state` is pre-populated.
+        _refreshTriggerBadge();
 
         // Send
         document.getElementById('btn-v4-send').addEventListener('click', _onSend);
@@ -2496,15 +2570,19 @@
         // Clear v4 description textarea + voice drawer state.
         const textArea = document.getElementById('v4-text-desc');
         if (textArea) textArea.value = '';
-        // Reset UNDP drawer UI to defaults (May 2026 — question-card refresh).
-        // The drawer's controls are now `.undp-q-card` blocks with
-        // `.undp-lvl` / `.undp-pill` / `.undp-yn` / `.undp-need`
-        // children. A single `.is-selected` removal sweep handles every
-        // single- and multi-select control inside the drawer.
-        const _undpDrawerEl = document.getElementById('v4-undp-drawer');
-        if (_undpDrawerEl) {
-            _undpDrawerEl.querySelectorAll('.is-selected').forEach((el) =>
+        // Reset UNDP sheet UI to defaults (May 2026 — bottom-sheet refresh).
+        // The sheet's controls are `.undp-q-card` blocks with `.undp-lvl`
+        // / `.undp-pill` / `.undp-yn` / `.undp-need` children. A single
+        // `.is-selected` removal sweep handles every single- and
+        // multi-select control inside the sheet. Also resets the
+        // trigger-button badge back to "Optional".
+        const _undpSheetEl = document.getElementById('v4-undp-sheet');
+        if (_undpSheetEl) {
+            _undpSheetEl.querySelectorAll('.is-selected').forEach((el) =>
                 el.classList.remove('is-selected'));
+        }
+        if (typeof window.__crispV4RefreshUndpBadge === 'function') {
+            try { window.__crispV4RefreshUndpBadge(); } catch (_) {}
         }
 
         window.__crispGoToStage('stage-v4-capture');

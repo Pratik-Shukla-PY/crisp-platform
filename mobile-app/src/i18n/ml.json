@@ -1351,5 +1351,9 @@
   "nearby_sheet_close": "അടയ്ക്കുക",
   "nearby_reports_nearby_label": "സമീപത്തെ റിപ്പോർട്ടുകൾ",
   "nearby_one_area": "1 പ്രദേശം",
-  "nearby_n_areas": "{n} പ്രദേശങ്ങൾ"
+  "nearby_n_areas": "{n} പ്രദേശങ്ങൾ",
+  "v4_undp_trigger": "Additional info",
+  "v4_undp_trigger_sub": "Helps responders prioritise rescue · optional",
+  "v4_undp_trigger_time": "Optional",
+  "v4_undp_trigger_aria": "Open optional UNDP details"
 }

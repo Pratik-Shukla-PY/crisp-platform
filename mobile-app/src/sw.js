@@ -5,7 +5,16 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v193';
+const CACHE_NAME = 'crisp-v194';
+// v193 → v194 (May 2026 — UNDP drawer → bottom-sheet, operator):
+//   index.html replaced the inline `<details id="v4-undp-drawer" open>`
+//   with a compact trigger button (`#btn-v4-open-undp`) + a new
+//   `#v4-undp-sheet` half-screen bottom-sheet. Sheet contains the 5
+//   question-cards; trigger badge swaps "Optional" ↔ "N/5" live as
+//   the reporter answers. styles.css gains `.v4-undp-sheet*` rules
+//   mirroring `.nearby-sheet`. v4-flow.js's `_initReviewStage` is
+//   rescoped to read from the sheet body. Returning users need to
+//   evict v193 so they don't keep painting the inline-drawer build.
 // v192 → v193 (May 2026 — UNDP drawer UI restored to rich question-
 // cards inside stage-v4-review, per operator: "we spent time/energy
 // on the stage-undp-details UI; this drawer should match"). The

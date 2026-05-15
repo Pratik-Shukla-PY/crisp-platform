@@ -792,5 +792,9 @@
   "nearby_sheet_close": "Kapat",
   "nearby_reports_nearby_label": "yakındaki raporlar",
   "nearby_one_area": "1 bölge",
-  "nearby_n_areas": "{n} bölge"
+  "nearby_n_areas": "{n} bölge",
+  "v4_undp_trigger": "Additional info",
+  "v4_undp_trigger_sub": "Helps responders prioritise rescue · optional",
+  "v4_undp_trigger_time": "Optional",
+  "v4_undp_trigger_aria": "Open optional UNDP details"
 }

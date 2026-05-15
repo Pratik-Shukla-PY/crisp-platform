@@ -814,5 +814,9 @@
   "nearby_sheet_close": "Fermer",
   "nearby_reports_nearby_label": "signalements à proximité",
   "nearby_one_area": "1 zone",
-  "nearby_n_areas": "{n} zones"
+  "nearby_n_areas": "{n} zones",
+  "v4_undp_trigger": "Infos supplémentaires",
+  "v4_undp_trigger_sub": "Aide les secours à prioriser · facultatif",
+  "v4_undp_trigger_time": "Facultatif",
+  "v4_undp_trigger_aria": "Ouvrir les détails UNDP facultatifs"
 }
