@@ -49,7 +49,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           # v2 qualifier (May 2026) — see deploy.yml for the rationale.

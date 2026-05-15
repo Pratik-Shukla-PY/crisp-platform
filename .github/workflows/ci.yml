@@ -227,14 +227,44 @@ jobs:
           # the latest snapshot. Without this it'd miss secrets that
           # have already been removed from HEAD but live in older blobs.
           fetch-depth: 0
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+      # May 2026 (Sprint 4 — Node 20 deprecation cleanup) — replaced
+      # gitleaks/gitleaks-action@v2 (last released Apr 2025, still on
+      # Node 20, no v3 in flight) with a direct call to the gitleaks
+      # Go binary. Two reasons:
+      #   1. Node 20 is being deprecated by GitHub Actions mid-2026;
+      #      pinning a wrapper that's stuck there is technical debt.
+      #   2. The Go binary is more reproducible — explicit version pin
+      #      + sha256 verification at install time, no Node runtime.
+      # Functional parity: same `gitleaks detect` invocation the action
+      # wraps under the hood. We lose the action's "@author notify"
+      # feature, which we weren't depending on for blocking behaviour.
+      - name: Install gitleaks (pinned 8.21.2)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Free for public repos; for private, the action recommends a
-          # GITLEAKS_LICENSE secret. Skipping that here means scans run
-          # in best-effort mode on private repos — fine for our scale.
-          GITLEAKS_NOTIFY_USER_LIST: "@${{ github.actor }}"
+          GITLEAKS_VERSION: 8.21.2
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o /tmp/gitleaks-checksums.txt \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          expected=$(grep "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" /tmp/gitleaks-checksums.txt | awk '{print $1}')
+          actual=$(sha256sum /tmp/gitleaks.tgz | awk '{print $1}')
+          if [ "$expected" != "$actual" ]; then
+            echo "FATAL: gitleaks sha256 mismatch"
+            echo "  expected: $expected"
+            echo "  actual:   $actual"
+            exit 1
+          fi
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Scan for secrets in tracked history
+        # `detect` walks the full git history (fetch-depth: 0 above).
+        # `--redact` strips actual secret values from log output so a
+        # false positive doesn't leak the secret it found.
+        # `--no-banner` keeps CI logs clean.
+        # `--exit-code 1` makes findings hard-fail the job.
+        run: gitleaks detect --redact --no-banner --exit-code 1
 
   shellcheck:
     name: Shellcheck (deploy + ops scripts)

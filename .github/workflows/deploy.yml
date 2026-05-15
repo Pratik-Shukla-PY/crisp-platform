@@ -266,7 +266,7 @@ jobs:
       # gets flushed on the next run — saves ~250 MB of cache storage.
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-v3-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
