@@ -26,12 +26,16 @@ window.__crispUiV2 = UI_V2_ENABLED;
 //
 // The full 8-stage visual reorder is gated behind this same flag so a
 // rollback is one localStorage flip away: `localStorage.setItem('crisp_ui_v3','off')`.
-// May 2026 — V3 capture flow REMOVED (operator-mandated single-flow
-// consolidation). The flag is retained as a constant `false` so the
-// dozens of `if (UI_V3_ENABLED)` branches in this file short-circuit
-// without each needing to be deleted. JIT will eliminate the dead
-// branches at parse time. A follow-up pass can delete the branches
-// for code-cleanliness, but the surface stays correct meanwhile.
+// May 2026 — V3 navigation chain (stage-where → infra → crisis →
+// extras → photo → audio → review) is locked off. The V3 stage DOMs
+// remain in index.html because V4 inherits helper functions from
+// them (e.g. setupPhotoStage's `_ingestFileAsPhoto` updates
+// `#photo-preview` / `#btn-photo-next` element state — V4's photo
+// pipeline calls into that chain via `window.__crispIngestFile`),
+// but the V3 user-facing navigation never engages. JIT eliminates
+// the dead `if (UI_V3_ENABLED) { ... }` branches at parse time. A
+// follow-up pass can refactor V4 to not piggyback on V3 helpers,
+// after which the V3 DOMs can be deleted too.
 const UI_V3_ENABLED = false;
 window.__crispUiV3 = UI_V3_ENABLED;
 
@@ -3015,13 +3019,14 @@ let _lastRenderedReport = null;
 // previous v4 stage when the user navigates between them. Without
 // this, transitions between v4 stages left the prior one .active
 // and the absolute-positioned stages stacked on top of each other.
-// May 2026 — V3 stage IDs (stage-photo / stage-audio / stage-review)
-// removed from the active navigation chain. The DOM blocks were
-// deleted from index.html; keeping their IDs in STAGES would let
-// `goToStage('stage-photo')` (a few stale callsites still call it
-// from dead V3 branches) silently activate a non-existent node and
-// strand the user on a blank screen.
-const STAGES = ['stage-home', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail', 'stage-login', 'stage-settings', 'stage-privacy', 'stage-v4-capture', 'stage-v4-classify', 'stage-v4-review', 'stage-undp-details'];
+// May 2026 — `stage-review` (V3 paginated review) deleted from
+// index.html; V4 uses `stage-v4-review`. Other V3 stage IDs remain
+// because their DOM still exists (V4 inherits helpers from them).
+// They are unreachable via navigation because UI_V3_ENABLED is false
+// + the V4-only escape hatch is locked, so `goToStage('stage-photo')`
+// from any surviving dead branch is a visual no-op (the stage may
+// flicker .active on but no user-action can reach it).
+const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail', 'stage-login', 'stage-settings', 'stage-privacy', 'stage-v4-capture', 'stage-v4-classify', 'stage-v4-review', 'stage-undp-details'];
 
 // ── — 8-stage capture flow ───────────────────────
 // When `UI_V3_ENABLED` is on, the capture flow is re-ordered:
@@ -9070,8 +9075,9 @@ function setupSendStage() {
     const _bs = document.getElementById('btn-send');
     if (_bs) _bs.addEventListener('click', submitReport);
     const _bsb = document.getElementById('btn-send-back');
-    // May 2026 — V3 `stage-review` removed; the back button on
-    // stage-send now returns to the V4 review stage.
+    // May 2026 — `stage-review` DOM deleted (V3 paginated review was
+    // the operator-requested cleanup; V4 has stage-v4-review). Back
+    // from stage-send routes to the V4 review stage instead.
     if (_bsb) _bsb.addEventListener('click', () => goToStage('stage-v4-review'));
     document.getElementById('btn-new-report').addEventListener('click', resetApp);
 
@@ -12043,22 +12049,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         try { migrateV3Blocks(); } catch (e) { console.warn('[v3] block migration failed:', e); }
     }
     // 1. Setup stage modules first
-    //
-    // May 2026 — V3 stages (stage-photo / stage-audio / stage-review) were
-    // removed from index.html when the V4 capture flow was made the only
-    // flow. Their setup* functions reach for `document.getElementById(...)`
-    // and bind listeners; without the DOM they throw and abort the rest of
-    // boot (including i18n application — caught the regression via the
-    // PROD console log "Cannot read properties of null (reading
-    // 'addEventListener') at setupPhotoStage (app.js:5212)").
-    //
-    // Guard each V3 setup call so a missing stage is a no-op, not a fatal.
-    // The functions themselves remain on the file for future cleanup; the
-    // call sites are the only thing executing during DOMContentLoaded.
-    if (document.getElementById('stage-photo')) setupPhotoStage();
+    setupPhotoStage();
     setupCameraModal();
     setupImageViewer();
-    if (document.getElementById('stage-audio')) setupAudioStage();
+    setupAudioStage();
+    // May 2026 — stage-review DOM deleted (V3 paginated review). The
+    // setup fn touches #btn-review-back / #btn-review-next /
+    // #btn-review-submit which no longer exist; calling it would throw
+    // and abort the rest of boot (i18n etc.). Guard so a missing DOM
+    // is a clean no-op. The other V3 stages (stage-photo / audio /
+    // where / infra / crisis / extras) remain in the DOM because V4
+    // inherits helper functions from them — those setups still run.
     if (document.getElementById('stage-review')) setupReviewStage();
     setupSendStage();
     // wire the free-text building-name fallback.

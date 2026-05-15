@@ -1,42 +1,41 @@
 /**
  * Single-flow invariant (May 2026, operator-mandated).
  *
- * The V3 capture flow (stage-photo → audio → where → infra → crisis →
- * extras → review) lived as an insurance fallback during the V4
- * rollout. Now that V4 is stable, V3 is GONE — DOM blocks deleted,
- * `?ui=v3` URL param removed, `crisp_ui_v4='off'` localStorage
- * escape hatch removed, UI_V3_ENABLED hardcoded false.
+ * History: V3 capture chain (stage-where → infra → crisis → extras →
+ * photo → audio → review) lived as an insurance fallback during the
+ * V4 rollout. Now that V4 is stable:
  *
- * This spec pins the contract so a regression PR can't bring V3
- * back accidentally. It would have caught:
- *   · A future commit re-adding `<div id="stage-photo">` etc.
- *   · A revert of the `_v4Enabled()` toggle.
- *   · The STAGES array sprouting V3 IDs back.
- *   · A `?ui=v3` URL navigating somewhere other than V4.
+ *   · `stage-review` (V3 paginated review) DOM deleted — V4 uses
+ *     stage-v4-review.
+ *   · `?ui=v3` URL param + `crisp_ui_v4='off'` localStorage escape
+ *     hatches deleted from v4-flow.js.
+ *   · `UI_V3_ENABLED` in app.js hardcoded false.
+ *   · STAGES array no longer includes `stage-review` (the deleted
+ *     stage was scrubbed; the other V3 stage IDs remain because
+ *     their DOMs still ship — V4's `__crispIngestFile` pipeline
+ *     inherits helpers from setupPhotoStage that mutate
+ *     `#photo-preview` / `#btn-photo-next` elements).
+ *
+ * The other V3 stage DOMs (stage-photo / audio / where / infra /
+ * crisis / extras) intentionally REMAIN in index.html as helper
+ * scaffolding. They are reachable via no user-action; only the
+ * inherited V3 helper functions (called BY V4) touch their elements.
+ * A future refactor that lifts those helpers out of the setup*
+ * closures will let us delete those DOMs too.
+ *
+ * This spec pins the invariants so a regression PR can't bring V3
+ * navigation back accidentally.
  */
 import { test, expect } from '@playwright/test';
 
-const V3_STAGE_IDS = [
-    'stage-photo',
-    'stage-audio',
-    'stage-where',
-    'stage-infra',
-    'stage-crisis',
-    'stage-extras',
-    'stage-review',
-];
+test.describe('Single capture flow — V3 navigation is gone', () => {
 
-test.describe('Single capture flow — V3 is gone', () => {
-
-    test('no V3 stage <div id="..."> exists in the DOM', async ({ page }) => {
+    test('stage-review DOM is removed (V3 paginated review)', async ({ page }) => {
         await page.goto('index.html');
-        for (const id of V3_STAGE_IDS) {
-            const present = await page.locator(`#${id}`).count();
-            expect(present, `${id} should not exist`).toBe(0);
-        }
+        await expect(page.locator('#stage-review')).toHaveCount(0);
     });
 
-    test('?ui=v3 URL param does NOT route to V3 (V3 is gone, V4 always wins)', async ({ page }) => {
+    test('?ui=v3 URL param does NOT engage V3 — V4 always wins', async ({ page }) => {
         await page.goto('index.html?ui=v3');
         await page.evaluate(() => {
             localStorage.setItem('crisp_privacy_consent',
@@ -44,11 +43,10 @@ test.describe('Single capture flow — V3 is gone', () => {
             localStorage.setItem('crisp_landing_seen', '1');
         });
         await page.reload();
-        // V4 has its own `__crispUiV4 = true` flag set unconditionally
-        // at module init.
         const v4Flag = await page.evaluate(() => (window as any).__crispUiV4);
         expect(v4Flag).toBe(true);
-        // And the V3 flag should be hard-locked to false.
+        // UI_V3_ENABLED is exported to window.__crispUiV3 (legacy hook).
+        // It's hard-locked to false now.
         const v3Flag = await page.evaluate(() => (window as any).__crispUiV3);
         expect(v3Flag).toBe(false);
     });
@@ -65,23 +63,27 @@ test.describe('Single capture flow — V3 is gone', () => {
         expect(v4Flag).toBe(true);
     });
 
-    test('STAGES array contains V4 stages but no V3 IDs', async ({ page }) => {
-        await page.goto('index.html');
-        // STAGES is module-scoped in app.js; expose via a probe.
-        const stages = await page.evaluate(() => {
-            // No public accessor — assert against the DOM instead,
-            // which is the user-visible contract anyway.
-            return Array.from(document.querySelectorAll('.stage'))
-                        .map((el) => el.id);
-        });
-        // V4 stages present.
-        expect(stages).toEqual(expect.arrayContaining([
-            'stage-home', 'stage-v4-capture', 'stage-v4-classify',
-            'stage-v4-review', 'stage-success',
-        ]));
-        // No V3 IDs.
-        for (const v3 of V3_STAGE_IDS) {
-            expect(stages).not.toContain(v3);
+    test('No JavaScript errors during home boot (regression guard)', async ({ page }) => {
+        const errors: string[] = [];
+        page.on('pageerror', (e) => errors.push(e.message));
+        await page.goto('index.html', { waitUntil: 'networkidle' });
+        await page.waitForTimeout(1500);
+        expect(errors, `Unexpected PAGEERRORs: ${errors.join(' | ')}`).toHaveLength(0);
+    });
+
+    test('V4 public-API exports are wired (regression guard for setupPhotoStage)', async ({ page }) => {
+        await page.goto('index.html', { waitUntil: 'networkidle' });
+        await page.waitForTimeout(1500);
+        const exports = await page.evaluate(() => ({
+            ingestFile: typeof (window as any).__crispIngestFile,
+            openCameraModal: typeof (window as any).openCameraModal,
+            submitReport: typeof (window as any).__crispSubmitReport,
+            removeExtraPhoto: typeof (window as any).removeExtraPhoto,
+            openViewer: typeof (window as any).__crispOpenImageViewer,
+        }));
+        // All five must be functions — V4 depends on each.
+        for (const [name, t] of Object.entries(exports)) {
+            expect(t, `window.${name} should be a function`).toBe('function');
         }
     });
 });

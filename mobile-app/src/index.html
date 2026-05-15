@@ -1639,7 +1639,93 @@
     <!-- ══════════════════════════════════════
          STAGE 1 — CAPTURE IMAGE
     ══════════════════════════════════════ -->
-    <!-- stage-photo removed May 2026 — V3 capture flow consolidated into V4 (stage-v4-capture/classify/review). -->
+    <div class="stage" id="stage-photo">
+        <div class="stage-header">
+            <!-- step-dots replaced by the global #flow-progress bar above. -->
+            <h2 data-i18n="s1_title">Take a Photo</h2>
+            <p data-i18n="s1_sub">Show us what happened</p>
+        </div>
+
+        <!-- PII Warning Banner -->
+        <div class="pii-warning-banner">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span data-i18n="pii_warning">Avoid capturing faces or personal documents. Faces will be auto-blurred for privacy.</span>
+        </div>
+
+        <!-- Image preview area -->
+        <div class="photo-preview-box" id="photo-preview-box" style="position:relative;">
+            <div class="photo-placeholder" id="photo-placeholder">
+                <i class="fa-regular fa-image"></i>
+                <span data-i18n="no_photo">No photo yet</span>
+            </div>
+            <img id="photo-preview" src="" alt="" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:20px;">
+        </div>
+
+        <!-- Extra photos strip (for multiple photos).
+             Phase B4 (Apr 2026 UI v3, Apr 23 spec-align) — the Camera/Gallery
+             two-button row collapsed back to a single "Add more" button that
+             triggers the OS native file-picker sheet. On iOS Safari + Android
+             Chrome this opens the native chooser ("Take Photo / Photo Library
+             / Files"), which the user already knows from every other app.
+             Single button → one target → lower cognitive load at a crisis
+             moment. The hidden `#file-extra-browse` input has `multiple` +
+             no `capture` attr so the OS surfaces ALL three options.
+             The legacy `#btn-add-camera` / `#btn-add-gallery` / `#btn-add-more-photo`
+             IDs are retained as hidden sentinels so pre-v3 JS paths + e2e
+             tests that synthesise a click still find a DOM node. -->
+        <div class="extra-photos-strip" id="extra-photos-strip" style="display:none;">
+            <div class="extra-photos-scroll" id="extra-photos-scroll"></div>
+            <button class="add-photo-btn add-photo-native" id="btn-add-more" type="button" title="Add another photo" data-i18n-title="aria_add_photo" aria-label="Add another photo" data-i18n-aria-label="aria_add_photo">
+                <i class="fa-solid fa-plus"></i>
+                <span class="add-photo-label" data-i18n="add_more">Add</span>
+            </button>
+            <span class="extra-photos-cap-chip" id="extra-photos-cap-chip" aria-hidden="true"></span>
+            <!-- Hidden legacy sentinels — id-only so JS paths that still
+                 reference them don't crash. None are clickable. -->
+            <button class="add-photo-btn" id="btn-add-camera" style="display:none;" aria-hidden="true" tabindex="-1"></button>
+            <button class="add-photo-btn" id="btn-add-gallery" style="display:none;" aria-hidden="true" tabindex="-1"></button>
+            <button class="add-photo-btn" id="btn-add-more-photo" style="display:none;" aria-hidden="true" tabindex="-1"></button>
+        </div>
+
+        <!-- Camera / Browse buttons -->
+        <div class="dual-btns">
+            <button class="choice-btn camera-btn" id="btn-open-camera">
+                <i class="fa-solid fa-camera"></i>
+                <span data-i18n="use_camera">Camera</span>
+            </button>
+            <button class="choice-btn browse-btn" id="btn-browse-photo">
+                <i class="fa-solid fa-folder-open"></i>
+                <span data-i18n="browse">Browse</span>
+            </button>
+        </div>
+
+        <!-- Phase 2: photo is now MANDATORY. Skip link removed; helper text
+             shows until a photo is captured/uploaded; Next stays disabled. -->
+        <p class="helper-text" id="photo-helper" data-i18n="photo_required">Please capture or upload an image to continue</p>
+
+        <button class="nav-btn next-btn" id="btn-photo-next" disabled>
+            <span data-i18n="next">Next</span> <i class="fa-solid fa-arrow-right"></i>
+        </button>
+
+        <!-- Hidden inputs -->
+        <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none">
+        <!-- PR 5: multi-select on browse. File picker returns an
+             array; iterate it and push each through the same compress+blur
+             pipeline used for single photos. First file lands in the primary
+             slot (if empty); rest go to extraPhotos. -->
+        <input type="file" id="file-browse" accept="image/*" multiple style="display:none">
+        <!-- Legacy single-input (pre-`#btn-add-more-photo` path).
+             Retained so any offline-queued code path referencing `file-extra`
+             still finds the element. -->
+        <input type="file" id="file-extra" accept="image/*" style="display:none">
+        <!-- explicit Camera vs Gallery inputs for
+             the extras strip. The camera input carries capture="environment"
+             so mobile browsers open the rear camera directly (no chooser
+             sheet). The browse input drops capture + has multiple so the
+             user can pick several from their library in one step. -->
+        <input type="file" id="file-extra-camera" accept="image/*" capture="environment" style="display:none">
+        <input type="file" id="file-extra-browse" accept="image/*" multiple style="display:none">
+    </div>
 
     <!-- Camera modal overlay.
          PR 5 (Apr 2026) — multi-snap: the stream stays alive across snaps.
@@ -1675,7 +1761,62 @@
     <!-- ══════════════════════════════════════
          STAGE 2 — RECORD AUDIO + LIVE TRANSCRIPT
     ══════════════════════════════════════ -->
-    <!-- stage-audio removed May 2026 — V3 capture flow consolidated into V4 (stage-v4-capture/classify/review). -->
+    <div class="stage" id="stage-audio">
+        <div class="stage-header">
+            <!-- step-dots replaced by the global #flow-progress bar. -->
+            <!-- UX rewrite: title + bullet helper + worked example,
+                 designed for low-literacy / crisis users. See the plan at
+                 /Users/pks/.claude/plans/swirling-forging-raccoon.md. -->
+            <h2 data-i18n="s2_title">Tell us what happened</h2>
+            <p class="audio-prompt" data-i18n="s2_sub">Speak or type:</p>
+            <ul class="audio-helper">
+                <li data-i18n="audio_bullet_1">What is damaged? (house, road, people…)</li>
+                <li data-i18n="audio_bullet_2">How bad is it? (small / big / destroyed)</li>
+                <li data-i18n="audio_bullet_3">Is anyone hurt or in danger?</li>
+            </ul>
+            <p class="audio-example" data-i18n="audio_example">Example: Road is broken and water is flooding houses. 2 people are injured.</p>
+        </div>
+
+        <!-- Big mic button -->
+        <div class="mic-wrapper" id="mic-wrapper">
+            <button class="mic-btn" id="btn-mic" type="button" aria-label="Tap to record voice">
+                <i class="fa-solid fa-microphone" id="mic-icon"></i>
+            </button>
+            <p class="mic-label" id="mic-label" data-i18n="tap_mic">Tap and speak clearly</p>
+            <p class="mic-lang-hint" data-i18n="audio_mic_lang">You can speak in your language</p>
+            <!-- Timer -->
+            <div class="rec-timer" id="rec-timer" style="display:none;">
+                <span class="rec-dot"></span>
+                <span id="timer-text">00:00</span>
+            </div>
+        </div>
+
+        <!-- UX rewrite: dropped the `.transcript-label-row` chip —
+             it was rendering the literal key "TYPE_TEXT" because that key
+             was missing from every locale (t() falls back to the key when
+             no translation exists). Textarea with a worked-example
+             placeholder is self-explanatory without the label. -->
+        <div class="transcript-box" id="transcript-box">
+            <textarea id="live-transcript" class="edit-transcript-area edit-textarea live-transcript-area"
+                      data-i18n-placeholder="audio_placeholder"
+                      placeholder="Example: House collapsed, one person trapped"
+                      data-i18n-placeholder="placeholder_describe_example"></textarea>
+        </div>
+
+        <!-- PR 4: "Type instead" skip link removed. Mic + textarea
+             coexist today, so the toggle only added cognitive load without
+             hiding anything. Typed descriptions still work — user just taps
+             the textarea and goes straight to Continue. -->
+
+        <!-- UI v3 description-textarea slot. `migrateV3Blocks` moves the
+             #edit-text block here from stage-review so stage 7 becomes the
+             full "audio + text" step. Empty when v3 off. -->
+        <div class="v3-slot" id="v3-slot-audio-text"></div>
+
+        <button class="nav-btn next-btn" id="btn-audio-next">
+            <span data-i18n="next">Continue</span> <i class="fa-solid fa-arrow-right"></i>
+        </button>
+    </div>
 
     <!-- ══════════════════════════════════════
          STAGE 3 — REVIEW / EDIT TEXT
@@ -1977,15 +2118,119 @@
         </div>
     </div>
 
-    <!-- stage-where removed May 2026 — V3 capture flow consolidated into V4 (stage-v4-capture/classify/review). -->
+    <div class="stage v3-stage" id="stage-where">
+        <div class="stage-header">
+            <h2 data-i18n="stage2_title">Where and how bad?</h2>
+        </div>
+        <!-- auto Date + Time panel. Rendered
+             client-side from `new Date()` at stage entry; zero network
+             dependency and zero waiting period. The `auto-meta` block
+             sits ABOVE the v3-slot so the reporter sees their device's
+             timestamp + GPS status at a glance before picking damage.
+             The backend receives this via `client_created_at` in the
+             meta POST (already wired). -->
+        <div class="auto-meta" id="v3-auto-meta" aria-live="polite">
+            <div class="auto-meta-row">
+                <i class="fa-solid fa-clock"></i>
+                <div class="auto-meta-text">
+                    <span class="auto-meta-label" data-i18n="auto_time_label">Time (auto)</span>
+                    <span class="auto-meta-value" id="v3-auto-time">—</span>
+                </div>
+            </div>
+            <div class="auto-meta-row">
+                <i class="fa-solid fa-location-dot"></i>
+                <div class="auto-meta-text">
+                    <span class="auto-meta-label" data-i18n="auto_loc_label">Location (auto)</span>
+                    <span class="auto-meta-value" id="v3-auto-loc" data-i18n="loc_status">Detecting...</span>
+                </div>
+            </div>
+        </div>
+        <!-- M9 — landmark fallback. Hidden by default; shown by
+             _renderLandmarkFallback() when GPS errors out AND no IP-fallback
+             succeeded AND no manual location. Six quick landmark chips
+             pre-fill the existing place-search input below; the user fills
+             in specifics. UNDP nice-to-have #4 — let citizens submit a
+             usable location even when GPS is denied or unavailable. -->
+        <div class="landmark-fallback" id="v3-landmark-fallback" style="display:none;" aria-live="polite">
+            <div class="landmark-fb-head">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <div class="landmark-fb-text">
+                    <strong data-i18n="landmark_warn_title">GPS unavailable</strong>
+                    <span data-i18n="landmark_warn_lede">Describe a nearby landmark</span>
+                </div>
+            </div>
+            <div class="landmark-fb-chips">
+                <button type="button" class="landmark-fb-chip" data-landmark="hospital">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">🏥</span>
+                    <span data-i18n="landmark_chip_hospital">Hospital</span>
+                </button>
+                <button type="button" class="landmark-fb-chip" data-landmark="school">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">🏫</span>
+                    <span data-i18n="landmark_chip_school">School</span>
+                </button>
+                <button type="button" class="landmark-fb-chip" data-landmark="market">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">🏪</span>
+                    <span data-i18n="landmark_chip_market">Market / shop</span>
+                </button>
+                <button type="button" class="landmark-fb-chip" data-landmark="main_road">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">🛣</span>
+                    <span data-i18n="landmark_chip_road">Main road</span>
+                </button>
+                <button type="button" class="landmark-fb-chip" data-landmark="religious">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">🕌</span>
+                    <span data-i18n="landmark_chip_religious">Religious site</span>
+                </button>
+                <button type="button" class="landmark-fb-chip" data-landmark="other">
+                    <span class="landmark-fb-chip-emoji" aria-hidden="true">📍</span>
+                    <span data-i18n="landmark_chip_other">Other landmark</span>
+                </button>
+            </div>
+        </div>
+        <div class="v3-slot" id="v3-slot-where"></div>
+        <div class="review-nav-row v3-nav-row">
+            <button class="nav-btn back-btn v3-back" id="btn-where-back"><i class="fa-solid fa-arrow-left"></i> <span data-i18n="back">Back</span></button>
+            <button class="nav-btn next-btn highlight v3-next" id="btn-where-next"><span data-i18n="next">Continue</span> <i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+    </div>
 
-    <!-- stage-infra removed May 2026 — V3 capture flow consolidated into V4 (stage-v4-capture/classify/review). -->
+    <div class="stage v3-stage" id="stage-infra">
+        <div class="stage-header">
+            <h2 data-i18n="stage3_title">What was hit?</h2>
+        </div>
+        <div class="v3-slot" id="v3-slot-infra"></div>
+        <div class="review-nav-row v3-nav-row">
+            <button class="nav-btn back-btn v3-back" id="btn-infra-back"><i class="fa-solid fa-arrow-left"></i> <span data-i18n="back">Back</span></button>
+            <button class="nav-btn next-btn highlight v3-next" id="btn-infra-next"><span data-i18n="next">Continue</span> <i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+    </div>
 
-    <!-- stage-crisis removed May 2026 — V3 capture flow consolidated into V4 (stage-v4-capture/classify/review). -->
+    <div class="stage v3-stage" id="stage-crisis">
+        <div class="stage-header">
+            <h2 data-i18n="stage4_title">What caused it?</h2>
+        </div>
+        <div class="v3-slot" id="v3-slot-crisis"></div>
+        <div class="review-nav-row v3-nav-row">
+            <button class="nav-btn back-btn v3-back" id="btn-crisis-back"><i class="fa-solid fa-arrow-left"></i> <span data-i18n="back">Back</span></button>
+            <button class="nav-btn next-btn highlight v3-next" id="btn-crisis-next"><span data-i18n="next">Continue</span> <i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+    </div>
 
-    <!-- stage-extras removed May 2026 — V3 capture flow consolidated into V4 (stage-v4-capture/classify/review). -->
+    <div class="stage v3-stage" id="stage-extras">
+        <div class="stage-header">
+            <h2 data-i18n="stage5_title">Service + needs</h2>
+        </div>
+        <div class="v3-slot" id="v3-slot-extras"></div>
+        <!-- W6 applicable-modules render target. fetchApplicableModules(crisis)
+             populates state.applicableModules; renderW6Modules() paints the
+             list into this slot when the stage is entered. -->
+        <div id="v3-w6-modules-slot"></div>
+        <div class="review-nav-row v3-nav-row">
+            <button class="nav-btn back-btn v3-back" id="btn-extras-back"><i class="fa-solid fa-arrow-left"></i> <span data-i18n="back">Back</span></button>
+            <button class="nav-btn next-btn highlight v3-next" id="btn-extras-next"><span data-i18n="next">Continue</span> <i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+    </div>
 
-    <!-- stage-review removed May 2026 — V3 capture flow consolidated into V4 (stage-v4-capture/classify/review). -->
+    <!-- stage-review (V3 paginated review) removed May 2026 — V4 uses stage-v4-review. -->
 
     <!-- ══════════════════════════════════════
          STAGE 4 — SEND CONFIRMATION
