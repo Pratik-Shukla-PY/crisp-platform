@@ -5,7 +5,18 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v197';
+const CACHE_NAME = 'crisp-v198';
+// v197 → v198 (May 2026 — Phase 2.4 WCAG 2.1 AA polish):
+//   index.html + styles.css touched to fix axe-flagged a11y issues:
+//   * #connectivity-dot + #rd-timeline gained role="img"/"list" so
+//     their aria-label survives validation.
+//   * `.v4-meta-loc-coords` / `.v4-substep-label` swapped from the
+//     too-dim `--text-mute` (#64748b, 2.21:1 on navy) to
+//     `--text-sub` (#cbd5e1, ~8.5:1 — passes WCAG AA easily).
+//   * `.v4-desc-empty-sub` alpha bumped 0.55 → 0.78 to clear the
+//     4.5:1 floor on the V4 review card background.
+//   Returning users need to evict v197 so they pick up the new CSS.
+//
 // v196 → v197 (May 2026 — Phase 1.7 /share/<token> LinkedIn OG wire-up):
 //   badge-studio.js now POSTs the rendered PNG (≤100 KB) to
 //   /api/v1/share/mint and deep-links LinkedIn to the signed

@@ -85,23 +85,21 @@ test.describe('Accessibility — axe-core full ruleset (WCAG 2.1 A/AA)', () => {
                     }
                 }
             }
-            // ── Bootstrap: ALL impacts soft-asserted ────────────────────
-            // The codebase has known critical / serious gaps (missing
-            // aria-checked on radio buttons, missing button-name on
-            // mic, missing select-name on service-status selects).
-            // Tracking — see docs/LIGHTHOUSE_QA.md "ratcheting" section.
-            // RATCHET PLAN — after fixes land, replace `.soft` with
-            // hard `expect()` and lower the bound.
+            // Phase 2.4 ratchet (May 2026): home + V4 capture / classify /
+            // review stages cleared every WCAG 2.1 A/AA violation. The
+            // bounds below are HARD (no `.soft`). If a future change
+            // re-introduces a critical/serious finding, the test fails
+            // the merge — operator must fix it BEFORE landing.
             const critical = violations.filter((v) => v.impact === 'critical');
             const serious  = violations.filter((v) => v.impact === 'serious');
-            expect.soft(
+            expect(
                 critical.length,
                 `Critical a11y on ${url.name}: ${critical.map((v) => v.id).join(', ')}`,
-            ).toBeLessThanOrEqual(5);
-            expect.soft(
+            ).toBe(0);
+            expect(
                 serious.length,
                 `Serious a11y on ${url.name}: ${serious.map((v) => v.id).join(', ')}`,
-            ).toBeLessThanOrEqual(15);
+            ).toBe(0);
         });
     }
 });

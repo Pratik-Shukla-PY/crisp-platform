@@ -321,7 +321,13 @@
          are retained hidden in the DOM purely for Playwright back-compat
          (existing specs click them with { force: true }). -->
     <div class="lang-switcher" id="lang-switcher" title="Tap to change language" data-i18n-title="aria_tap_change_language">
-        <span class="connectivity-dot connectivity-online" id="connectivity-dot" aria-label="Online" title="Online" data-i18n-aria-label="aria_online_status" data-i18n-title="aria_online_status"></span>
+        <!-- Phase 2.4 (May 2026) — a11y fix. The connectivity dot is a
+             pure visual indicator (CSS-coloured circle); axe-core flags
+             `aria-label` as "prohibited" on a default-role span. Adding
+             `role="img"` makes the aria-label meaningful AND treats the
+             dot as a status image for screen readers. Mirror change for
+             the duplicate dot in the lang-switcher rail below. -->
+        <span class="connectivity-dot connectivity-online" id="connectivity-dot" role="img" aria-label="Online" title="Online" data-i18n-aria-label="aria_online_status" data-i18n-title="aria_online_status"></span>
         <button id="btn-lang-local" data-lang="en" style="display:none;" title="Tap to switch to local language">🌐 ...</button>
         <button id="btn-lang-en" class="active" data-lang="en" style="display:none;" title="Tap to switch to English">🌐 EN</button>
         <button id="btn-lang-change" style="display:none;" title="Change language">🌐</button>
@@ -3050,7 +3056,12 @@
              M5 (May 2026): the most-recent-completed step now gets a
              pulsing dot via .rd-tl-current — gives the user a clear
              "we're here right now" anchor in the report's lifecycle. -->
-        <div class="rd-timeline" id="rd-timeline" aria-label="Report lifecycle">
+        <!-- Phase 2.4 (May 2026) — a11y: a plain <div> can't carry
+             aria-label (the implicit role is `generic`, which axe
+             flags as prohibited). `role="list"` matches the actual
+             semantics (a sequential lifecycle of steps); the
+             child rendering JS already produces list-shaped DOM. -->
+        <div class="rd-timeline" id="rd-timeline" role="list" aria-label="Report lifecycle">
             <!-- Injected by JS to keep i18n + state in one place. -->
         </div>
 
