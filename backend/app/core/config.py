@@ -66,6 +66,23 @@ class Settings(BaseSettings):
     # abuse / problematic traffic. Use a real on-call address.
     VAPID_CONTACT_EMAIL: str = ""
 
+    # ── Redis (Phase 1.8 — distributed rate-limit) ──────────────────────
+    # Optional. When set, the rate-limit module switches from the
+    # in-memory `_rate_limits` dict (which is per-worker — so under N
+    # uvicorn workers an attacker gets Nx the effective rate) to an
+    # atomic Redis INCR + EXPIRE counter shared across every worker
+    # and every backend instance.
+    #
+    # Empty value → in-memory fallback (dev + tests + first-deploy).
+    # Format: ``redis://[user:pass@]host:port[/db]``
+    #
+    # Failure mode: if REDIS_URL is set but the server is unreachable,
+    # we log the failure ONCE and fall back to the in-memory counter
+    # for that request. We never hard-fail a real user request just
+    # because Redis is down — UNDP must-have #12 (scale targets)
+    # gets degraded availability instead of an outage.
+    REDIS_URL: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

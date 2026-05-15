@@ -18,6 +18,15 @@ services:
       # follow-up). Reduce back to 60 once refresh-tokens are implemented
       # client-side.
       ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
+      # May 2026 (Phase 1.8) — distributed rate-limit. See docker-
+      # compose.yml comment. Empty value or missing redis service
+      # falls back to in-memory per-worker counters — accepted on
+      # single-worker deploys but degrades the rate-limit guarantee
+      # under multi-worker.
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
     volumes:
       - uploads:/app/backend/uploads
     restart: unless-stopped
@@ -27,6 +36,23 @@ services:
       timeout: 5s
       retries: 3
       start_period: 60s
+
+  # ── Redis (Phase 1.8 — distributed rate-limit) ──────────────
+  # Holds the atomic INCR + EXPIRE counters that gate the meta /
+  # chunk / classify endpoints. See backend/app/services/rate_limit.py
+  # for the algorithm + failure-mode notes. No persistence: counter
+  # state is short-lived (TTL ≤ 60s) and a restart just resets the
+  # current minute's window naturally.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   frontend:
     image: nginx:alpine

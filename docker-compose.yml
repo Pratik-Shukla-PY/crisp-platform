@@ -10,10 +10,19 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://crisp:crisp@db:5432/crisp
+      # Phase 1.8 — distributed rate-limit (audit critical-finding #4).
+      # In-memory counters were per-WORKER, which meant a coordinated
+      # attacker effectively got Nx the nominal rate under multi-worker
+      # uvicorn deploys. Pointing at the redis service routes all
+      # workers through a single atomic INCR + EXPIRE counter. Empty
+      # value falls back to in-memory (dev / single-worker safe).
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - uploads:/app/backend/uploads
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 
@@ -42,6 +51,24 @@ services:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U crisp"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Redis (Phase 1.8 — distributed rate-limit) ──────────────
+  # Holds the atomic INCR + EXPIRE counters that gate the meta /
+  # chunk / classify endpoints. Single instance is fine — we're
+  # only storing short-lived counters (TTL ≤ 60s), the volume of
+  # data is tiny (one int per active bucket), and the failure
+  # mode is graceful (falls back to per-worker in-memory). No
+  # persistence is configured (--save ""): a Redis restart only
+  # costs the current minute's counters, which reset naturally.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5

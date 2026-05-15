@@ -140,16 +140,22 @@ def verify_admin_key(request: Request):
 
 
 # ── Security: Rate Limiter ───────────────────────────────────────────────────
-_rate_limits = defaultdict(list)
-
-def check_rate_limit(key: str, max_requests: int = 30, window: int = 60) -> bool:
-    """In-memory rate limiter. Returns False if limit exceeded."""
-    now = time.time()
-    _rate_limits[key] = [t for t in _rate_limits[key] if now - t < window]
-    if len(_rate_limits[key]) >= max_requests:
-        return False
-    _rate_limits[key].append(now)
-    return True
+# Phase 1.8 (May 2026) — distributed rate-limit. When ``REDIS_URL`` is
+# set, the counter is backed by atomic Redis INCR + EXPIRE so every
+# uvicorn worker / backend instance shares the same view. When unset
+# (dev, CI, first-deploy), the in-memory dict in
+# ``app.services.rate_limit._inmemory_buckets`` is the fallback — same
+# semantics as the pre-Phase-1.8 module-local ``_rate_limits``.
+#
+# ``_rate_limits`` here is kept as a LIVE ALIAS for the service-module
+# bucket so legacy tests that call ``_rate_limits.clear()`` to reset
+# state between cases (e.g. tests/test_probe.py) continue to work
+# without touching the test file. New code should call
+# ``app.services.rate_limit._reset_for_test()`` instead.
+from app.services.rate_limit import (  # noqa: E402
+    check_rate_limit,
+    _inmemory_buckets as _rate_limits,
+)
 
 
 # ── Security: Path sanitization ──────────────────────────────────────────────
