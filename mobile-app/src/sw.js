@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v194';
+const CACHE_NAME = 'crisp-v195';
+// v194 → v195 (May 2026 — V4 review-page rethink, operator):
+//   stage-v4-review's captured-strip + summary card + voice-drawer
+//   trio was replaced by 4 purpose-built content cards (Photo /
+//   Description / Location / Classification). Description card has
+//   filled-vs-empty state (preview snippet vs "+ Add" CTA) so voice
+//   and text are no longer asked twice. Section header anchors the
+//   eye. Better icons distinguish infra (🏢) vs hazard (🌀). Bump
+//   forces returning users to evict the cluttered prior build.
 // v193 → v194 (May 2026 — UNDP drawer → bottom-sheet, operator):
 //   index.html replaced the inline `<details id="v4-undp-drawer" open>`
 //   with a compact trigger button (`#btn-v4-open-undp`) + a new

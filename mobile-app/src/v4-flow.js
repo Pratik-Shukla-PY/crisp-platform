@@ -2025,40 +2025,35 @@
             }
         });
 
-        // Q10 — captured-strip click handlers. Photo chip → bounce back to
-        // capture page. Voice / Text chips → open the drawer + scroll to
-        // the relevant control + focus it (so the keyboard pops up for text
-        // and the mic-button gets the keyboard tab anchor for voice).
-        const stripPhoto = document.getElementById('v4-captured-photo');
-        const stripVoice = document.getElementById('v4-captured-voice');
-        const stripText = document.getElementById('v4-captured-text');
-        const _openVoiceDrawerAnd = (focusFn) => {
+        // May 2026 — V4 review-card click handlers (operator rethink).
+        // The captured-strip + summary card + voice-drawer trio was
+        // replaced by 4 single-purpose content cards. Each card is its
+        // own button or has its own edit button — wire each here.
+
+        // Card 1 (Photo) — tap → return to capture stage.
+        const photoCard = document.getElementById('v4-edit-photo');
+        if (photoCard) {
+            photoCard.addEventListener('click', () => {
+                window.__crispGoToStage('stage-v4-capture');
+            });
+        }
+
+        // Card 2 (Description) — both the "Edit" pill in the filled-state
+        // preview AND the empty-state "+ Add voice or text" CTA open the
+        // same inline `<details id="v4-voice-drawer">` drawer. We toggle
+        // `open` and focus the textarea so the user can start typing
+        // immediately (mic button needs an explicit tap so we don't
+        // surprise users with a permission prompt).
+        const _openDescDrawer = () => {
             const drawer = document.getElementById('v4-voice-drawer');
             if (drawer && !drawer.open) drawer.open = true;
             setTimeout(() => {
                 if (drawer) drawer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                if (typeof focusFn === 'function') focusFn();
+                document.getElementById('v4-text-desc')?.focus();
             }, 80);
         };
-        if (stripPhoto) {
-            stripPhoto.addEventListener('click', () => {
-                window.__crispGoToStage('stage-v4-capture');
-            });
-        }
-        if (stripVoice) {
-            stripVoice.addEventListener('click', () => {
-                _openVoiceDrawerAnd(() => {
-                    document.getElementById('btn-v4-mic')?.focus();
-                });
-            });
-        }
-        if (stripText) {
-            stripText.addEventListener('click', () => {
-                _openVoiceDrawerAnd(() => {
-                    document.getElementById('v4-text-desc')?.focus();
-                });
-            });
-        }
+        document.getElementById('btn-v4-desc-edit')?.addEventListener('click', _openDescDrawer);
+        document.getElementById('v4-desc-empty')?.addEventListener('click', _openDescDrawer);
         // Tap classification rows → jump back to Page 2 with focus on that row.
         document.getElementById('v4-edit-infra').addEventListener('click', () => {
             window.__crispGoToStage('stage-v4-classify');
@@ -2293,6 +2288,24 @@
                 }
             }
         }
+        // Update photo-card count + meta line (May 2026 review rethink).
+        // Shows "1 photo" / "N photos" + a privacy reassurance line.
+        const photoCount = document.getElementById('v4-photo-count');
+        if (photoCount) {
+            const n = photos.length;
+            const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
+            if (n === 0) {
+                photoCount.textContent = tt('v4_card_photo_empty', 'No photo captured');
+            } else if (n === 1) {
+                photoCount.textContent = tt('v4_card_photo_added', 'Photo captured');
+            } else {
+                photoCount.textContent = `${n} ` + tt('v4_card_photo_plural', 'photos');
+            }
+        }
+
+        // Description card — paint filled vs empty state from state.*
+        // (operator review rethink, May 2026).
+        try { _refreshDescriptionCard(); } catch (_) {}
     }
 
     // ── V4 voice recorder ────────────────────────
@@ -2417,53 +2430,101 @@
     // Reads state.photoDataUrl + state.audioBlob + state.description and
     // toggles the .is-captured class on each chip with a localized state
     // label ("Captured", "1.2s", "12 chars", or "Not added"). Called
-    // every time stage-v4-review is entered, after recording stops, and
-    // on each keystroke in the textarea.
-    function _refreshCapturedStrip() {
-        const strip = document.getElementById('v4-captured-strip');
-        if (!strip) return;
+    // Description-card refresher (May 2026 review rethink).
+    // Replaces the prior "captured-strip" rendering. Reads state and
+    // either:
+    //   (a) shows the FILLED-state preview (voice transcript snippet +
+    //       text snippet + Edit button), OR
+    //   (b) shows the EMPTY-state "+ Add voice or text" CTA.
+    //
+    // Called: on stage-v4-review entry, after voice recording stops,
+    // and on every keystroke in the textarea (matches the prior
+    // _refreshCapturedStrip cadence). Kept the old function name as
+    // an alias so existing callsites don't break during the migration.
+    function _refreshDescriptionCard() {
+        const previewEl = document.getElementById('v4-desc-preview');
+        const emptyEl = document.getElementById('v4-desc-empty');
+        if (!previewEl || !emptyEl) return;
+
         const st = window.state || {};
         const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
-        // Photo — captured if state.photoDataUrl OR thumbs strip has any
-        // primary thumb attached. The thumbs strip mirrors photoDataUrl
-        // already, so checking the primary is sufficient.
-        const photoChip = document.getElementById('v4-captured-photo');
-        const photoState = !!(st.photoDataUrl);
-        if (photoChip) {
-            photoChip.classList.toggle('is-captured', photoState);
-            const stateEl = photoChip.querySelector('.v4-captured-state');
-            if (stateEl) stateEl.textContent = photoState
-                ? tt('v4_cap_added', 'Added')
-                : tt('v4_cap_none', 'Not added');
-        }
-        // Voice — captured if state.audioBlob has size or transcript exists
-        // (the latter covers Web-Speech-only fallback where MediaRecorder
-        // failed but text came through).
-        const voiceChip = document.getElementById('v4-captured-voice');
+
+        // Voice captured signal — matches the prior logic.
         const audioBlobOk = !!(st.audioBlob && st.audioBlob.size && st.audioBlob.size > 0);
-        const transcriptOk = !!(st.transcript && st.transcript.trim() && st.transcript.length > 4);
-        const voiceState = audioBlobOk || transcriptOk;
-        if (voiceChip) {
-            voiceChip.classList.toggle('is-captured', voiceState);
-            const stateEl = voiceChip.querySelector('.v4-captured-state');
-            if (stateEl) stateEl.textContent = voiceState
-                ? tt('v4_cap_added', 'Added')
-                : tt('v4_cap_none', 'Not added');
-        }
-        // Text — captured if state.description has non-whitespace content.
-        // We treat transcript === description as text too (since the
-        // textarea now mirrors transcript live).
-        const textChip = document.getElementById('v4-captured-text');
+        const transcript = (st.transcript || '').trim();
+        const transcriptOk = transcript.length > 4;
+        const voicePresent = audioBlobOk || transcriptOk;
+
+        // Text captured signal.
         const textVal = (st.description || '').trim();
-        const textState = textVal.length > 0;
-        if (textChip) {
-            textChip.classList.toggle('is-captured', textState);
-            const stateEl = textChip.querySelector('.v4-captured-state');
-            if (stateEl) stateEl.textContent = textState
-                ? tt('v4_cap_added', 'Added')
-                : tt('v4_cap_none', 'Not added');
+        const textPresent = textVal.length > 0;
+
+        // Decide which state to render.
+        const anyContent = voicePresent || textPresent;
+        previewEl.hidden = !anyContent;
+        emptyEl.hidden = anyContent;
+
+        if (anyContent) {
+            // Voice row — show transcript snippet (truncated) or a
+            // "voice recorded" badge when audio exists but transcript
+            // didn't transcribe.
+            const voiceSnippet = document.getElementById('v4-desc-voice-snippet');
+            const voiceRow = document.getElementById('v4-desc-voice-row');
+            if (voiceSnippet && voiceRow) {
+                if (voicePresent) {
+                    voiceRow.removeAttribute('data-empty');
+                    if (transcriptOk) {
+                        // Truncate to ~60 chars + ellipsis for card height
+                        // sanity. Full transcript still lives on state.
+                        voiceSnippet.textContent = transcript.length > 60
+                            ? transcript.slice(0, 60).trim() + '…'
+                            : transcript;
+                    } else {
+                        voiceSnippet.textContent = tt('v4_desc_voice_recorded',
+                            'Voice recorded');
+                    }
+                } else {
+                    voiceRow.setAttribute('data-empty', 'true');
+                    voiceSnippet.textContent = tt('v4_desc_voice_empty',
+                        'No voice recorded');
+                }
+            }
+            // Text row — show typed description snippet OR a placeholder
+            // when only voice was captured.
+            const textSnippet = document.getElementById('v4-desc-text-snippet');
+            const textRow = document.getElementById('v4-desc-text-row');
+            if (textSnippet && textRow) {
+                if (textPresent) {
+                    textRow.removeAttribute('data-empty');
+                    // Avoid showing the same snippet twice when textarea
+                    // mirrors transcript (current Web-Speech behaviour).
+                    const sameAsVoice = transcriptOk && textVal === transcript;
+                    if (sameAsVoice) {
+                        textRow.setAttribute('data-empty', 'true');
+                        textSnippet.textContent = tt('v4_desc_text_mirrors_voice',
+                            'Same as voice transcript');
+                    } else {
+                        textSnippet.textContent = textVal.length > 60
+                            ? textVal.slice(0, 60).trim() + '…'
+                            : textVal;
+                    }
+                } else {
+                    textRow.setAttribute('data-empty', 'true');
+                    textSnippet.textContent = tt('v4_desc_text_empty',
+                        'No text added');
+                }
+            }
         }
     }
+
+    // Legacy alias so older callsites that still reference the prior
+    // function name continue to work during the migration. Both names
+    // call the same renderer.
+    function _refreshCapturedStrip() { return _refreshDescriptionCard(); }
+    // Expose for app.js setLanguage() (refresh after locale swap) and
+    // for spec-90 to assert filled-vs-empty state without a full stage
+    // re-entry.
+    window.__crispV4RefreshDesc = _refreshDescriptionCard;
 
     // ── Send ────────────────────────────────────────────────────────────
     async function _onSend() {

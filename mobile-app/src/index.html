@@ -1472,92 +1472,154 @@
         </header>
 
         <div class="v4-body">
-            <!-- Q10 — multi-modal "captured" strip. Three
-                 chips show what the user has already provided across
-                 photo / voice / text. Green when captured, grey when
-                 not — UNDP rubric Q3 wants additive capture, this
-                 makes the additive nature explicit. Tapping photo
-                 returns to capture; tapping voice/text scrolls to the
-                 v4-voice-drawer (and force-opens it if collapsed). -->
-            <div class="v4-captured-strip" id="v4-captured-strip" aria-live="polite">
-                <button class="v4-captured-chip" id="v4-captured-photo" type="button" data-cap-mod="photo">
-                    <span class="v4-captured-icon" aria-hidden="true">📷</span>
-                    <span class="v4-captured-label" data-i18n="v4_cap_photo">Photo</span>
-                    <span class="v4-captured-state" data-i18n="v4_cap_none">Not added</span>
-                </button>
-                <button class="v4-captured-chip" id="v4-captured-voice" type="button" data-cap-mod="voice">
-                    <span class="v4-captured-icon" aria-hidden="true">🎤</span>
-                    <span class="v4-captured-label" data-i18n="v4_cap_voice">Voice</span>
-                    <span class="v4-captured-state" data-i18n="v4_cap_none">Not added</span>
-                </button>
-                <button class="v4-captured-chip" id="v4-captured-text" type="button" data-cap-mod="text">
-                    <span class="v4-captured-icon" aria-hidden="true">✍️</span>
-                    <span class="v4-captured-label" data-i18n="v4_cap_text">Text</span>
-                    <span class="v4-captured-state" data-i18n="v4_cap_none">Not added</span>
-                </button>
+            <!-- May 2026 — Operator-mandated review rethink. The earlier
+                 captured-strip + summary card + voice-drawer trio asked
+                 for voice/text TWICE (captured-strip said "Added" while
+                 the drawer below it said "Add voice or text"). 4 focused
+                 content cards replace that. Each card has ONE job.
+                 Section header anchors the eye. Tap any card → opens
+                 the appropriate edit surface (sheet / drawer / stage). -->
+
+            <!-- Section header -->
+            <div class="v4-review-title-section">
+                <h3 data-i18n="v4_review_title">Review your report</h3>
+                <p data-i18n="v4_review_subtitle">Tap any card to edit</p>
             </div>
 
-            <!-- Summary card — photo thumb + 4 selection rows. Each row
-                 tap-edits in place via a sheet that reopens that
-                 question's chip/carousel UI. -->
-            <div class="v4-summary">
-                <div class="v4-summary-thumb" id="v4-summary-thumb" aria-label="Photo placeholder">
+            <!-- Card 1 — Photo -->
+            <button class="v4-review-card v4-review-card-photo" id="v4-edit-photo" type="button">
+                <div class="v4-review-card-thumb" id="v4-summary-thumb" aria-label="Photo placeholder">
                     <i class="fa-solid fa-camera"></i>
                 </div>
-                <div class="v4-summary-rows">
-                    <button class="v4-summary-row" id="v4-edit-location" type="button">
-                        <i class="fa-solid fa-location-dot"></i>
-                        <span class="v4-row-text" id="v4-row-location-text"
-                              data-i18n="v4_locating">Locating…</span>
-                        <i class="fa-solid fa-pen v4-row-pen"></i>
-                    </button>
-                    <button class="v4-summary-row" id="v4-edit-infra" type="button">
-                        <i class="fa-solid fa-house"></i>
-                        <span class="v4-row-text" id="v4-row-infra-text">—</span>
-                        <i class="fa-solid fa-pen v4-row-pen"></i>
-                    </button>
-                    <button class="v4-summary-row" id="v4-edit-crisis" type="button">
-                        <i class="fa-solid fa-house-crack"></i>
-                        <span class="v4-row-text" id="v4-row-crisis-text">—</span>
-                        <i class="fa-solid fa-pen v4-row-pen"></i>
-                    </button>
-                    <button class="v4-summary-row" id="v4-edit-damage" type="button">
-                        <i class="fa-solid fa-triangle-exclamation"></i>
-                        <span class="v4-row-text" id="v4-row-damage-text">—</span>
-                        <i class="fa-solid fa-pen v4-row-pen"></i>
+                <div class="v4-review-card-body">
+                    <div class="v4-review-card-title">
+                        <i class="fa-solid fa-camera-retro"></i>
+                        <span id="v4-photo-count" data-i18n="v4_card_photo_added">Photo captured</span>
+                    </div>
+                    <div class="v4-review-card-meta" id="v4-photo-meta">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span data-i18n="v4_card_photo_blur">Face blurred for privacy</span>
+                    </div>
+                </div>
+                <span class="v4-review-card-edit">
+                    <span data-i18n="v4_card_photo_retake">Retake</span>
+                    <i class="fa-solid fa-chevron-right"></i>
+                </span>
+            </button>
+
+            <!-- Card 2 — Description (voice + text combined).
+                 Toggles between PREVIEW (when content exists) and
+                 EMPTY-STATE CTA (when both transcript + description are
+                 empty). The drawer with the mic + textarea sits BELOW
+                 the preview/empty area and stays collapsed by default;
+                 the Edit / Add CTA flips its `open` attribute. -->
+            <div class="v4-review-card v4-review-card-description" id="v4-desc-card">
+                <!-- Filled state — shown when state.transcript OR state.description has content -->
+                <div class="v4-desc-preview" id="v4-desc-preview" hidden>
+                    <div class="v4-desc-row" id="v4-desc-voice-row">
+                        <i class="fa-solid fa-microphone"></i>
+                        <span class="v4-desc-snippet" id="v4-desc-voice-snippet"
+                              data-i18n="v4_desc_voice_empty">No voice recorded</span>
+                    </div>
+                    <div class="v4-desc-row" id="v4-desc-text-row">
+                        <i class="fa-solid fa-pen-clip"></i>
+                        <span class="v4-desc-snippet" id="v4-desc-text-snippet"
+                              data-i18n="v4_desc_text_empty">No text added</span>
+                    </div>
+                    <button class="v4-review-card-edit v4-desc-edit-toggle" id="btn-v4-desc-edit" type="button">
+                        <span data-i18n="v4_card_desc_edit">Edit voice / text</span>
+                        <i class="fa-solid fa-chevron-down"></i>
                     </button>
                 </div>
+                <!-- Empty state — shown when both transcript + description are blank -->
+                <button class="v4-desc-empty" id="v4-desc-empty" type="button">
+                    <i class="fa-solid fa-plus-circle"></i>
+                    <span class="v4-desc-empty-text">
+                        <span class="v4-desc-empty-title" data-i18n="v4_card_add_desc">Add voice or text</span>
+                        <span class="v4-desc-empty-sub" data-i18n="v4_card_add_desc_sub">Optional — helps responders understand the scene</span>
+                    </span>
+                </button>
+                <!-- Drawer — same mic + textarea as before, just relocated
+                     inside this card. Both the preview Edit button and
+                     the empty-state Add button toggle this drawer's
+                     `open` attribute via v4-flow.js. -->
+                <details class="v4-drawer v4-drawer-desc" id="v4-voice-drawer">
+                    <summary class="v4-drawer-summary" hidden></summary>
+                    <div class="v4-drawer-body" id="v4-voice-body">
+                        <button class="v4-mic-btn" id="btn-v4-mic" type="button">
+                            <i class="fa-solid fa-microphone"></i>
+                            <span data-i18n="v4_record">Record voice</span>
+                        </button>
+                        <textarea id="v4-text-desc" class="v4-text-desc" rows="3"
+                                  data-i18n-placeholder="placeholder_short_description"
+                                  placeholder="…or type a short description"></textarea>
+                    </div>
+                </details>
             </div>
 
-            <!-- UNDP must-have #6: building footprint
-                 selector. v4 originally only had the location row; the
-                 building picker (Leaflet + OSM polygons) was unreachable.
-                 We mount the existing #building-select-box here on first
-                 entry to stage-v4-review (see v4-flow.js _initReviewStage).
-                 Empty until that move runs — keeps the HTML clean. -->
+            <!-- Card 3 — Location (address + tap to refine).
+                 The OSM building-footprint picker (#v4-building-mount)
+                 sits inside this card. It stays empty until v4-flow.js's
+                 _initReviewStage re-parents #building-select-box into
+                 it on stage entry. -->
+            <button class="v4-review-card v4-review-card-location" id="v4-edit-location" type="button">
+                <div class="v4-review-card-icon-pill v4-icon-pill-location">
+                    <i class="fa-solid fa-location-dot"></i>
+                </div>
+                <div class="v4-review-card-body">
+                    <div class="v4-review-card-title">
+                        <span data-i18n="v4_card_location">Location</span>
+                    </div>
+                    <div class="v4-review-card-meta" id="v4-row-location-text"
+                         data-i18n="v4_locating">Locating…</div>
+                </div>
+                <span class="v4-review-card-edit">
+                    <span data-i18n="v4_card_loc_refine">Refine</span>
+                    <i class="fa-solid fa-chevron-right"></i>
+                </span>
+            </button>
+
+            <!-- UNDP must-have #6 — building-footprint picker mount.
+                 Sits between Location and Classification so the OSM
+                 polygon list (when shown) is visually linked to the
+                 location card above it. -->
             <div id="v4-building-mount" class="v4-building-mount"></div>
 
-            <!-- Voice / text description — collapsed by default. Tapping
-                 expands a drawer with the existing mic + textarea (uses
-                 the v3 stage-audio's MediaRecorder + Web Speech API
-                 helpers). -->
-            <details class="v4-drawer" id="v4-voice-drawer">
-                <summary class="v4-drawer-summary">
-                    <i class="fa-solid fa-microphone"></i>
-                    <span data-i18n="v4_add_voice_text">Add voice or text (optional)</span>
-                    <i class="fa-solid fa-chevron-down v4-drawer-chevron"></i>
-                </summary>
-                <div class="v4-drawer-body" id="v4-voice-body">
-                    <button class="v4-mic-btn" id="btn-v4-mic" type="button">
-                        <i class="fa-solid fa-microphone"></i>
-                        <span data-i18n="v4_record">Record voice</span>
-                    </button>
-                    <textarea id="v4-text-desc" class="v4-text-desc" rows="2"
-                              data-i18n-placeholder="v4_or_type"
-                              placeholder="…or type a short description"
-                              data-i18n-placeholder="placeholder_short_description"></textarea>
-                </div>
-            </details>
+            <!-- Card 4 — Classification (3 inline chips: type / hazard /
+                 damage). Each chip is its own tappable button that
+                 re-opens that question's edit surface. -->
+            <div class="v4-review-card v4-review-card-classification">
+                <button class="v4-classify-chip" id="v4-edit-infra" type="button">
+                    <div class="v4-classify-chip-label">
+                        <i class="fa-solid fa-building"></i>
+                        <span data-i18n="v4_card_infra_label">Type</span>
+                    </div>
+                    <div class="v4-classify-chip-value">
+                        <span id="v4-row-infra-text">—</span>
+                        <i class="fa-solid fa-pen v4-row-pen"></i>
+                    </div>
+                </button>
+                <button class="v4-classify-chip" id="v4-edit-crisis" type="button">
+                    <div class="v4-classify-chip-label">
+                        <i class="fa-solid fa-tornado"></i>
+                        <span data-i18n="v4_card_crisis_label">Hazard</span>
+                    </div>
+                    <div class="v4-classify-chip-value">
+                        <span id="v4-row-crisis-text">—</span>
+                        <i class="fa-solid fa-pen v4-row-pen"></i>
+                    </div>
+                </button>
+                <button class="v4-classify-chip" id="v4-edit-damage" type="button">
+                    <div class="v4-classify-chip-label">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span data-i18n="v4_card_damage_label">Damage</span>
+                    </div>
+                    <div class="v4-classify-chip-value">
+                        <span id="v4-row-damage-text">—</span>
+                        <i class="fa-solid fa-pen v4-row-pen"></i>
+                    </div>
+                </button>
+            </div>
 
             <!-- May 2026 (operator-mandated) — the inline <details>
                  UNDP drawer was replaced by a trigger button + a half-
