@@ -1598,89 +1598,14 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .nav-btn.danger:hover { background: rgba(239,68,68,0.08); }
 
-/* ── — 8-stage capture flow ──────────────────
-   Four new stages (where / infra / crisis / extras) live as `.v3-stage`
-   containers. Each has a v3-slot (filled at runtime by migrateV3Blocks)
-   + a standard .review-nav-row with Back/Continue buttons.
-
-   v3 stages inherit .stage layout (flex column, padding, scroll) so the
-   chip grids already styled by .review-block / .category-grid render
-   correctly in their new home. */
-.v3-stage { /* uses .stage rules directly — kept as a class hook for CSS overrides */ }
-.v3-stage .stage-header { padding-top: 50px; }
-.v3-stage .v3-slot { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
-.v3-stage .v3-slot .review-block:first-child { margin-top: 10px; }
-.v3-stage .review-nav-row.v3-nav-row {
-    display: flex;
-    gap: 8px;
-    padding: 12px 16px 16px;
-    background: var(--bg);
-    border-top: 1px solid var(--border);
-    position: sticky;
-    bottom: 0;
-    z-index: 5;
-}
-.v3-stage .review-nav-row .back-btn { flex: 0 0 auto; padding: 12px 16px; }
-.v3-stage .review-nav-row .next-btn { flex: 1; padding: 14px 18px; font-weight: 700; }
-
-/* v3 damage block: always visible on stage-where (migrateV3Blocks force-
-   displays it). Override inline style that still lurks on the element. */
-.v3-stage #infra-severity { display: block !important; }
-
-/* v3: hide the legacy standalone description textarea. The live-transcript
-   textarea on stage-audio doubles as the description source when v3 is on
-   (see setupAudioStage → _collectServiceStatusFromDom). Keeps stage-review
-   clean + free of a second competing input. */
-body[data-ui-v3] .v2-only-description { display: none !important; }
-
-/* v3 auto-meta panel on stage-where — client-side date/time + reverse-
-   geocoded location. Visually a two-row compact card so the reporter
-   sees exactly what's being auto-captured for the submission. No
-   waiting / no spinners: missing values fall back to a localized
-   "Detecting..." placeholder. */
-.v3-stage .auto-meta {
-    margin: 10px 16px 0;
-    padding: 10px 12px;
-    background: rgba(21, 145, 155, 0.06);
-    border: 1px solid rgba(21, 145, 155, 0.22);
-    border-radius: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-.v3-stage .auto-meta-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.v3-stage .auto-meta-row > i {
-    color: var(--accent);
-    font-size: 14px;
-    width: 18px;
-    text-align: center;
-}
-.v3-stage .auto-meta-text {
-    display: flex;
-    flex-direction: column;
-    line-height: 1.25;
-    flex: 1;
-    min-width: 0;
-}
-.v3-stage .auto-meta-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--muted);
-    font-weight: 600;
-}
-.v3-stage .auto-meta-value {
-    font-size: 13px;
-    color: var(--text);
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
+/* May 2026 — `.v3-stage` CSS removed alongside the V3 capture-flow
+   DOM consolidation. The 8-stage V3 flow (stage-where / stage-infra /
+   stage-crisis / stage-extras + stage-photo / stage-audio /
+   stage-review) was deleted from index.html; these rules are
+   guaranteed to never match. Selectors that survived elsewhere in
+   this file (e.g. `.landmark-fallback`, shared `.review-nav-row`
+   base rules above) are intentionally retained — they're reused by
+   the V4 flow's inline landmark fallback + voice-drawer chrome. */
 
 /* M9 — landmark fallback when GPS fails on stage-where.
    Yellow warning band with 6 quick chips ("Hospital", "School", etc.)

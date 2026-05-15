@@ -584,37 +584,20 @@
         document.addEventListener('review-page-changed', (e) => {
             if ((e && e.detail && e.detail.page) === 3) _tryInitMap();
         });
-        // Trigger 2: stage-entered fires on every stage switch, which
-        // catches the case where the user lands directly on review via
-        // the submit-then-edit flow.
+        // Trigger 2: stage-entered fires on every stage switch.
+        // V4 review uses #v4-building-mount as the container; the box
+        // is moved there by v4-flow.js's _initReviewStage on first
+        // entry. _tryInitMap queries #building-select-box by id
+        // (location-agnostic in DOM), so the same call path works
+        // wherever the box has been re-parented.
+        //
+        // May 2026 — `stage-crisis` + `stage-review` listeners removed
+        // alongside the V3 capture-flow consolidation. The DOM blocks
+        // are gone; the events never fire.
         document.addEventListener('stage-entered', (e) => {
             if (!e) return;
-            // the building-select box now lives
-            // inside stage-crisis (moved there by migrateV3Blocks in app.js).
-            // Init the map the moment the reporter lands there so the
-            // Leaflet overlay is ready WHILE they're picking a crisis type.
-            if (e.detail === 'stage-crisis') {
-                setTimeout(() => { _tryInitMap(); }, 0);
-                return;
-            }
-            // v4 review uses #v4-building-mount as the new container; the
-            // box is moved there by v4-flow.js's _initReviewStage on first
-            // entry. Same _tryInitMap path works because it queries
-            // #building-select-box by id (location-agnostic in DOM).
             if (e.detail === 'stage-v4-review') {
                 setTimeout(() => { _tryInitMap(); }, 0);
-                return;
-            }
-            if (e.detail === 'stage-review') {
-                // Defer one tick so showReviewPage() has already applied
-                // the data-v2-page filter before we inspect the DOM.
-                setTimeout(() => {
-                    const root = document.getElementById('stage-review');
-                    const p = root && root.getAttribute('data-review-page');
-                    // On legacy v1, page 2 is the confirm card (no map);
-                    // on v2, page 3 is where we want to init. Match both.
-                    if (p === '3' || p === '2') _tryInitMap();
-                }, 0);
             }
         });
         // Trigger 3: GPS-ready (the capture flow dispatches this when

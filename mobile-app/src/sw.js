@@ -5,7 +5,18 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v191';
+const CACHE_NAME = 'crisp-v192';
+// v191 → v192 (May 2026 — V3 capture flow REMOVED, operator):
+//   index.html lost the 7 V3 stage <div> blocks (stage-photo,
+//   stage-audio, stage-where, stage-infra, stage-crisis,
+//   stage-extras, stage-review — 700+ lines deleted). v4-flow.js's
+//   `?ui=v3` / `crisp_ui_v4='off'` escape hatch is gone. app.js's
+//   UI_V3_ENABLED is hardcoded false; STAGES array no longer
+//   references V3 IDs. Returning users need to evict v191 so they
+//   don't keep painting from the dual-flow snapshot — otherwise a
+//   stale localStorage `crisp_ui_v4=off` would route their cached
+//   index.html into a now-missing stage and strand them on a blank
+//   screen. Bump forces fresh fetch.
 // v190 → v191 (May 2026 — first-time GPS cache mirror, operator):
 //   app.js `_saveLocCtx` now also writes `crisp_last_location_v2`
 //   (the key nearby.js reads) so first-time users see the Nearby

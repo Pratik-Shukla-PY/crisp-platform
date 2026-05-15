@@ -59,44 +59,27 @@
         _schedule();
     }
 
-    // ── Feature flag ────────────────────────────────────────────────────
-    // re-enabled default ON after the 9-bug fix sweep.
-    // Bugs covered + verified by tests in 30-v4-bug-fixes.spec.ts:
-    //   1. Landing-page fluctuation (landing-pending CSS gate)
-    //   2. Desktop webcam (route to openCameraModal on getUserMedia presence)
-    //   3. Android back button (history.pushState wraps every goToStage,
-    //      v4 stages already in STAGES array)
-    //   4. Voice-only path (CrispV4 owns startRecording/stopRecording with
-    //      MediaRecorder + Web Speech mirrored to v4 mic + textarea)
-    //   5. Building tagging (move #building-select-box into v4 review on
-    //      stage entry; BuildingSelect listens for stage-v4-review)
-    //   6. Image upload chain (delegate _handlePhoto to v3's
-    //      __crispIngestFile so state.photoDataUrl + photoVariants land)
-    //   7. State reset on goToCapture (call _clearCaptureState +
-    //      explicit v4Photos / thumb / chip resets)
-    //   8. Location pill (prefer state.locationName; trigger
-    //      resolveLocationName / reverseGeocode after GPS)
-    //   9. Offline queue (CrispV4._onSend → __crispSubmitReport → enqueueReport)
+    // ── V4 is the ONLY capture flow (May 2026, operator-mandated) ──────
     //
-    // Escape hatches: ?ui=v3 forces v3, localStorage['crisp_ui_v4']='off'
-    // forces v3 globally for the device.
-    function _v4Enabled() {
-        try {
-            const url = new URL(window.location.href);
-            const param = url.searchParams.get('ui');
-            if (param === 'v3') return false;
-            if (param === 'v4') return true;
-            const ls = localStorage.getItem('crisp_ui_v4');
-            if (ls === 'on') return true;
-            if (ls === 'off') return false;
-            return true;  // default ON (re-enabled after 9-bug fix sweep)
-        } catch { return true; }
-    }
-
-    if (!_v4Enabled()) {
-        console.log('[v4] disabled — falling back to v3 flow');
-        return;
-    }
+    // Prior to this commit a `?ui=v3` URL param + `crisp_ui_v4='off'`
+    // localStorage escape hatch let users / dev land in the legacy V3
+    // capture chain (`stage-photo` → `stage-audio` → `stage-where` →
+    // `stage-infra` → `stage-crisis` → `stage-extras` → `stage-review`).
+    // The hatch was insurance during the V4 rollout (see the 9-bug fix
+    // sweep covered by tests in 30-v4-bug-fixes.spec.ts) and is no
+    // longer needed: V4 has been the default for weeks without rollback.
+    //
+    // The toggle has been deleted so:
+    //   1. UNDP judges + first-time users cannot accidentally land in V3
+    //      via a stale URL or another browser's localStorage.
+    //   2. The repo presents ONE capture flow — easier to audit, easier
+    //      to maintain, smaller attack surface, no dead branches in JS.
+    //
+    // V4 still calls into V3 HELPER FUNCTIONS (state object,
+    // `__crispIngestFile`, `openCameraModal`, `__crispSubmitReport`,
+    // `enqueueReport`, BuildingSelect listener for stage-v4-review) —
+    // those remain in app.js and are deliberately preserved. Only the
+    // V3 STAGES (UI) and the toggle code are gone.
     window.__crispUiV4 = true;
 
     // ── Chip-grid component (replaces v3 carousel) ─────────────────────
