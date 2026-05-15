@@ -1076,7 +1076,15 @@ def dispatch_team(report_id: str, user=Depends(require_analyst), db: Session = D
     April 2026: the first time a report leaves PENDING for a verified
     status (RESPONDING / RESOLVED) we bump the reporter's
     ``verified_count`` so quality-based credibility (see §3.8 of
-    docs/INCENTIVES.md) reflects the accepted report."""
+    docs/INCENTIVES.md) reflects the accepted report.
+
+    The endpoint-level ``was_pending`` guard catches the common case
+    (status transition from PENDING). For the parallel-request race
+    (two analysts both dispatch + resolve at the same instant), the
+    real idempotency gate is inside
+    ``_mark_report_verified_for_credibility`` — it uses
+    ``SELECT … FOR UPDATE`` + a ``first_verified_at`` timestamp check
+    to serialize. See May 2026 audit C-2 fix."""
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -4112,6 +4120,19 @@ def _recompute_tier(profile, db: Session) -> None:
       * T2 SIGNAL       — ≥1 report submitted (any status)
       * T1 SCOUT        — default
 
+    INCENTIVES.md compliance note (re-verified May 2026 audit):
+    T2_SIGNAL fires on the FIRST submission as a one-time
+    participation acknowledgement. This is INTENTIONAL and DOES
+    honor the "no volume-based repeat reward" rule:
+      · 1 submission  → T2 (one-time bump)
+      · 50 submissions → still T2 (no further reward from raw volume)
+      · 1 verified    → T3 (analyst action required)
+      · 1 life saved  → T4 (downstream impact required)
+    The fraud-prevention guarantee — that flooding reports does NOT
+    advance the tier beyond T2 — is upheld. The home-stage HERO STAT
+    visible to the reporter is ``verified_count``, not submitted
+    count, so volume is not surfaced as a goal-shaped number.
+
     Backwards compat: the ``profile.badge_level`` column still carries
     the chosen tier as a string; the new identifiers are
     ``T1_SCOUT``/``T2_SIGNAL``/``T3_CHANGEMAKER``/``T4_LIFEKEEPER``.
@@ -4177,17 +4198,49 @@ def _recompute_badge_from_verified(profile) -> None:  # pragma: no cover
 def _mark_report_verified_for_credibility(report, db: Session) -> None:
     """Called when a report transitions to VERIFIED / RESPONDING / RESOLVED.
 
-    Idempotent via the ``ReviewerVerdictEnum`` check downstream — we bump
-    ``verified_count`` at most once per report by gating on the
-    transition that takes it out of PENDING for the first time.
+    Idempotent on TWO levels (May 2026 gamification audit fix):
+
+    1. ``report.first_verified_at`` short-circuit — once this column
+       is non-NULL, this function returns immediately. The endpoint-
+       level ``was_pending`` guard catches the common case (status
+       transition), but is NOT safe under parallel dispatch + resolve
+       requests where both transactions see ``status == PENDING``
+       before either commits.
+    2. ``SELECT … FOR UPDATE`` row lock on the report — serializes
+       concurrent calls inside Postgres. The second transaction
+       blocks until the first commits, then sees
+       ``first_verified_at`` already set and bails.
+
+    Net effect: ``verified_count`` is bumped at most ONCE per report,
+    even when called twice from racing parallel endpoints. The audit
+    finding C-2 (CRITICAL — `verified_count` non-idempotent under
+    race) is resolved by this gate.
 
     May 2026 — also calls ``_recompute_tier`` so T3 CHANGEMAKER promotion
     fires immediately on first dispatch / resolve (without waiting for
     the next submit).
     """
-    from app.models.report import Device, ReporterProfile
+    from app.models.report import Report, Device, ReporterProfile
     if not report or not report.device_id:
         return
+
+    # ── Idempotency gate (audit C-2 fix) ────────────────────────────
+    # Re-load the report under a row lock and re-check the stamp.
+    # If another transaction already credited this report, bail.
+    locked = (
+        db.query(Report)
+          .filter(Report.id == report.id)
+          .with_for_update()
+          .first()
+    )
+    if locked is None or locked.first_verified_at is not None:
+        return
+    locked.first_verified_at = datetime.now(timezone.utc)
+    # Mirror onto the in-memory instance the caller holds so any
+    # downstream serialization sees the freshly-set timestamp without
+    # needing a session.refresh().
+    report.first_verified_at = locked.first_verified_at
+
     device = db.query(Device).filter(Device.id == report.device_id).first()
     if not device or not device.device_hash:
         return

@@ -208,3 +208,113 @@ class TestTierStaleStateAutoCorrects:
         body = res.json()
         assert body["badge_level"] == "T2_SIGNAL", \
             "stale stored tier must self-correct on read"
+
+
+class TestVerifiedCountIdempotency:
+    """May 2026 audit fix C-2 — `_mark_report_verified_for_credibility`
+    must be idempotent. Calling it twice on the same report (parallel
+    dispatch + resolve race) must bump `verified_count` exactly once.
+
+    The guard is two-layered:
+      1. ``Report.first_verified_at`` stamp — set on first call, used
+         to short-circuit all subsequent calls.
+      2. ``SELECT … FOR UPDATE`` row lock — serializes the check-and-
+         set across concurrent transactions in Postgres.
+
+    These tests pin the contract at the function-call level. A true
+    parallel-transaction test would require multiprocessing + real
+    Postgres locking semantics; that lives in the integration suite.
+    """
+
+    def test_double_call_does_not_double_bump(self, client, db, analyst_token):
+        """Calling the credit function twice on the same report (which
+        the parallel-dispatch race would cause) must increment
+        verified_count exactly once."""
+        from app.api.endpoints.reports import (
+            _mark_report_verified_for_credibility,
+        )
+        from app.models.report import Report, ReporterProfile
+
+        rid = _seed_report(client, "DEVICE-IDEMP-DOUBLE", "for-double")
+        # Dispatch once via the endpoint — this fires the credit function.
+        client.patch(
+            f"/api/v1/reports/{rid}/dispatch",
+            headers=auth_header(analyst_token),
+        )
+
+        profile = db.query(ReporterProfile).filter(
+            ReporterProfile.device_hash == "DEVICE-IDEMP-DOUBLE"
+        ).first()
+        count_after_dispatch = profile.verified_count
+        assert count_after_dispatch == 1, "first dispatch must bump count"
+
+        # Now invoke the credit function DIRECTLY a second time — this
+        # simulates the parallel-race window where two transactions
+        # both see was_pending=True.
+        report = db.query(Report).filter(Report.id == rid).first()
+        _mark_report_verified_for_credibility(report, db)
+        db.commit()
+
+        db.refresh(profile)
+        assert profile.verified_count == 1, (
+            "second call on already-credited report must NOT re-bump count"
+        )
+
+    def test_first_verified_at_is_stamped_on_credit(self, client, db, analyst_token):
+        """The idempotency stamp must be set on the FIRST credit and
+        persist across reads."""
+        from app.models.report import Report
+
+        rid = _seed_report(client, "DEVICE-IDEMP-STAMP", "for-stamp")
+        # Before dispatch — stamp is null.
+        report = db.query(Report).filter(Report.id == rid).first()
+        assert report.first_verified_at is None, "fresh report has no stamp"
+
+        # Dispatch → stamp should be set.
+        client.patch(
+            f"/api/v1/reports/{rid}/dispatch",
+            headers=auth_header(analyst_token),
+        )
+        db.refresh(report)
+        assert report.first_verified_at is not None, (
+            "first dispatch must stamp first_verified_at"
+        )
+        stamped_at = report.first_verified_at
+
+        # Resolve after dispatch — stamp is already set, so the
+        # credit function should short-circuit without re-stamping.
+        client.patch(
+            f"/api/v1/reports/{rid}/resolve",
+            headers=auth_header(analyst_token),
+        )
+        db.refresh(report)
+        assert report.first_verified_at == stamped_at, (
+            "subsequent resolve must not overwrite the stamp"
+        )
+
+    def test_dispatch_then_resolve_credits_exactly_once(
+        self, client, db, analyst_token,
+    ):
+        """End-to-end via the actual endpoints: dispatch → resolve on
+        the same report. Endpoint-level `was_pending` guard catches
+        this case; combined with the new idempotency stamp, total
+        bump should be 1."""
+        from app.models.report import ReporterProfile
+
+        rid = _seed_report(client, "DEVICE-IDEMP-ENDPOINT", "for-endpoint")
+        client.patch(
+            f"/api/v1/reports/{rid}/dispatch",
+            headers=auth_header(analyst_token),
+        )
+        client.patch(
+            f"/api/v1/reports/{rid}/resolve",
+            headers=auth_header(analyst_token),
+        )
+
+        profile = db.query(ReporterProfile).filter(
+            ReporterProfile.device_hash == "DEVICE-IDEMP-ENDPOINT"
+        ).first()
+        assert profile.verified_count == 1, (
+            "dispatch followed by resolve must credit verified_count ONCE, "
+            "not twice"
+        )

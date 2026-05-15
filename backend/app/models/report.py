@@ -269,6 +269,12 @@ class Report(Base):
     deletion_requested_at = Column(DateTime(timezone=True), nullable=True)
     deletion_grace_minutes = Column(Integer, nullable=True, default=1440)  # 24h default, 30min for mobile
     lives_impacted = Column(Integer, nullable=True)  # How many lives saved/impacted by this report
+    # May 2026 — idempotency stamp for the tier-credit bump
+    # (`_mark_report_verified_for_credibility`). Set on the FIRST
+    # transition out of PENDING; the bump function short-circuits
+    # on subsequent calls so parallel dispatch/resolve requests
+    # never double-credit a single report. See migration 0019.
+    first_verified_at = Column(DateTime(timezone=True), nullable=True, index=True)
     # UNDP required fields
     damage_classification = Column(String(20), nullable=True)   # MINIMAL / PARTIAL / COMPLETE  (legacy NO_DAMAGE accepted + normalised)
     crisis_type = Column(String(30), nullable=True)             # EARTHQUAKE / FLOOD / TSUNAMI / EXPLOSION / etc.
