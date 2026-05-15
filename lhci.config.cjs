@@ -70,6 +70,18 @@ module.exports = {
             // `assertions` OR `assertMatrix`, not both, so PWA pages
             // carry the default set and the dashboard block overrides
             // what differs (no PWA category, relaxed perf gate).
+            //
+            // Phase 3.4 (May 2026) — ratchet a11y floors up to ≥ 0.90.
+            // Phase 2.4 cleared every axe-core WCAG 2.1 A/AA violation
+            // on every critical PWA stage (zero criticals + zero
+            // seriouses; the e2e/40-axe-a11y spec hard-asserts toBe(0)).
+            // Lighthouse's a11y audit is a strict subset of axe-core,
+            // so the post-Phase-2.4 score lands ≥ 0.95 in practice.
+            // The 0.90 floor leaves a 5-point cushion for transient
+            // run-to-run noise while still failing CI on a real
+            // regression. UNDP rubric weights a11y heavily;
+            // hard-error on the floor (no .warn) so any drop blocks
+            // the merge.
             assertMatrix: [
                 {
                     // PWA pages — current floor thresholds. Ratchet up
@@ -77,7 +89,8 @@ module.exports = {
                     matchingUrlPattern: '.*/mobile-app/src/.*',
                     assertions: {
                         'categories:performance':    ['error', { minScore: 0.45 }],
-                        'categories:accessibility':  ['error', { minScore: 0.70 }],
+                        // Phase 3.4 ratchet: 0.70 → 0.90 (post Phase 2.4).
+                        'categories:accessibility':  ['error', { minScore: 0.90 }],
                         'categories:best-practices': ['error', { minScore: 0.85 }],
                         'categories:pwa':            ['error', { minScore: 0.80 }],
                         'categories:seo':            ['warn',  { minScore: 0.80 }],
@@ -92,7 +105,8 @@ module.exports = {
                     matchingUrlPattern: '.*/web-dashboard/src/.*',
                     assertions: {
                         'categories:performance':    ['error', { minScore: 0.55 }],
-                        'categories:accessibility':  ['error', { minScore: 0.85 }],
+                        // Phase 3.4 ratchet: 0.85 → 0.90.
+                        'categories:accessibility':  ['error', { minScore: 0.90 }],
                         'categories:best-practices': ['error', { minScore: 0.85 }],
                         'categories:seo':            ['warn',  { minScore: 0.65 }],
                         // Dashboard isn't a PWA — explicitly disable.
