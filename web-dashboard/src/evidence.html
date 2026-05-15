@@ -17,8 +17,13 @@
          pattern: anyone with the report_id (a UUID) can view. -->
     <meta name="description" content="CRISP verification evidence — citizen photo cross-checked with multi-source satellite imagery using AWS Sentinel-2, Microsoft Planetary Computer, ESA Copernicus, and Mapbox.">
     <meta name="robots" content="noindex">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <!-- May 2026 (LCP perf fix) — self-hosted Outfit + JetBrains Mono +
+         Font Awesome. Public evidence page is a top-of-funnel demo
+         surface for the UNDP judges — every CDN round-trip is one
+         more chance to flap. See web-dashboard/src/fonts/fonts.css. -->
+    <link rel="preload" as="font" type="font/woff2" href="fonts/outfit-900.woff2" crossorigin>
+    <link rel="stylesheet" href="fonts/fontawesome/all.min.css">
+    <link rel="stylesheet" href="fonts/fonts.css">
     <style>
         :root {
             --bg: #080c14;

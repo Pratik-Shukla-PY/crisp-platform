@@ -14,16 +14,22 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="../../mobile-app/src/assets/icon-192.png">
     <link rel="manifest" href="manifest.json">
-    <!-- Apr 2026 — Noto Sans Arabic + Noto Sans SC added so analyst view
-         renders Arabic / CJK report text in proper glyphs (was falling
-         through to whatever system font the analyst's OS picked, which
-         varied wildly across Mac/Windows/Linux). Browser font cascade
-         is per-glyph; Latin text still picks Inter / Outfit / JetBrains. -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+Arabic:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- May 2026 — Outfit + JetBrains Mono self-hosted from
+         fonts/fonts.css (latin subset). Inter + Noto Sans Arabic /
+         Noto Sans SC stay on Google Fonts because (a) Inter / Noto
+         self-host work is queued for Sprint 2b, and (b) Noto Sans
+         SC is CJK so the gfonts unicode-range splitting buys real
+         bandwidth savings vs naïve self-hosting.
+         Apr 2026 note: Noto fonts ensure analyst view renders
+         Arabic / CJK report glyphs consistently across OS. Browser
+         font cascade is per-glyph; Latin text still picks
+         Inter / Outfit / JetBrains. -->
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <link rel="stylesheet" href="fonts/fontawesome/all.min.css">
     <!-- PhotoSwipe v5 — MIT, vanilla JS, ~37 KB gzipped. Gives the multi-photo
          lightbox swipe / pinch-zoom / keyboard nav out of the box. CDN pattern
          matches the existing Leaflet / Turf approach (no bundler — package.json

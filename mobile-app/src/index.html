@@ -3518,8 +3518,8 @@
      footprint selector only renders on stage-v4-review (after photo
      + classify). building-select.js::_ensureLeaflet() injects the
      <script> + <link> tags on first map init.  -->
-<script src="building-select.js?v=7"></script>
-<script src="places.js?v=3"></script>
+<script defer src="building-select.js?v=7"></script>
+<script defer src="places.js?v=3"></script>
 <!-- (Lighthouse perf fix) — TF.js + BlazeFace are LAZY-LOADED.
      They were eagerly downloaded (~360 KB tfjs + ~70 KB blazeface) at
      boot even though only the photo-capture flow uses them. Most users
@@ -3527,16 +3527,16 @@
      button instead) — no point paying a 4-sec download tax for them.
      pii-blur.js's `ensureModel()` now dynamically injects the script
      tags on first call. -->
-<script src="pii-blur.js?v=3"></script>
+<script defer src="pii-blur.js?v=3"></script>
 <!-- Progressive-upload Phase 1. Exposes window.BlurHash —
      compact ~28-char DCT encoding consumed by image-variants.js at
      capture time and sent in the meta POST. Loaded ahead of
      image-variants.js so the encoder is available when the pipeline
      runs. No external dependency; fully vendored. -->
-<script src="blurhash.js?v=1"></script>
+<script defer src="blurhash.js?v=1"></script>
 <!-- Guaranteed-delivery image variants: depends on pii-blur.js for per-tier
      blur, so must load AFTER it and BEFORE app.js. Exposes window.ImageVariants. -->
-<script src="image-variants.js?v=3"></script>
+<script defer src="image-variants.js?v=3"></script>
 <!-- UI v2 — shared SVG icon pack. Loaded as a module so app.js can
      pick up `window.CrispIconPack` / `window.crispIconFor(key)` on first
      paint of stage-review. Stays lightweight (~6 KB) and is precached by
@@ -3545,24 +3545,24 @@
 <!-- Phase 1. Loads BEFORE app.js
      so the AuthStore singleton is available when the DOMContentLoaded
      boot hook calls AuthStore.init(). -->
-<script src="auth.js?v=1"></script>
+<script defer src="auth.js?v=1"></script>
 <!-- install-prompt.js MUST load BEFORE home-screen.js so
      `window.InstallPrompt.onChange()` is callable when home-screen wires
      its install button. home-screen.js owns the merged always-on home
      surface (channels + install + consent + secondary actions). It
      loads BEFORE app.js so the channel buttons paint on first DOM
      ready; app.js's applyI18n re-walks them on locale activation. -->
-<script src="install-prompt.js?v=1"></script>
-<script src="home-screen.js?v=1"></script>
+<script defer src="install-prompt.js?v=1"></script>
+<script defer src="home-screen.js?v=1"></script>
 <!-- nearby.js — "Verified Reports Nearby" home intel module. Loaded
      after home-screen.js so window.NearbyIntel is available before
      home-screen.js's _renderHome() calls it. -->
-<script src="nearby.js?v=1"></script>
+<script defer src="nearby.js?v=1"></script>
 <!-- v3 — voice readout button auto-attached
      to every [data-voice="<i18n-key>"] element. Loaded BEFORE app.js
      so the helper is available during stage-render dispatches. -->
-<script src="voice-readout.js?v=1"></script>
-<script src="app.js?v=1030"></script>
+<script defer src="voice-readout.js?v=1"></script>
+<script defer src="app.js?v=1030"></script>
 <!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
      applyI18n etc. Internally it _whenReady-polls until those are set. -->
 <!-- May 2026 (photo-consent pass) — modal shown ONCE per device when
@@ -3601,15 +3601,15 @@
         </div>
     </div>
 </div>
-<script src="v4-flow.js?v=4"></script>
+<script defer src="v4-flow.js?v=4"></script>
 <!-- May 2026 reward-system v2 (futuristic pass) — 8 hero caricature
      SVGs. Loaded BEFORE badge-studio.js so the composer can read
      `window.crispCharacterPack` synchronously on first paint. -->
-<script src="character-pack.js?v=1"></script>
+<script defer src="character-pack.js?v=1"></script>
 <!-- May 2026 reward-system v2 — Badge Studio Canvas composer + share
      dispatch. Loaded last because it depends on window.t (app.js i18n),
      window.applyPiiBlur (pii-blur.js BlazeFace), window.goToStage, and
      window.crispCharacterPack (loaded just above). -->
-<script src="badge-studio.js?v=2"></script>
+<script defer src="badge-studio.js?v=2"></script>
 </body>
 </html>

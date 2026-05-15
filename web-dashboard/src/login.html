@@ -10,8 +10,14 @@
          pages downloaded both versions (~150 KB wasted FA payload).
          Added meta description + robots for SEO score. -->
     <meta name="description" content="CRISP login — secure access to the QRT Operations Dashboard for crisis-response analysts. UNDP × CRISP.">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <!-- May 2026 (LCP perf fix) — self-hosted Outfit + JetBrains Mono +
+         Font Awesome. Eliminates two third-party CDN round-trips +
+         lets us preload the critical Outfit-900 woff2 used by the
+         gradient <h1> (the LCP element). Subsetted to latin-only —
+         see web-dashboard/src/fonts/fonts.css. -->
+    <link rel="preload" as="font" type="font/woff2" href="fonts/outfit-900.woff2" crossorigin>
+    <link rel="stylesheet" href="fonts/fontawesome/all.min.css">
+    <link rel="stylesheet" href="fonts/fonts.css">
     <style>
         :root { --bg: #080c14; --surface: #111827; --border: rgba(255,255,255,0.08); --accent: #7c3aed; --text: #f1f5f9; --dim: #64748b; }
         * { box-sizing: border-box; margin: 0; padding: 0; }

@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v187';
+const CACHE_NAME = 'crisp-v188';
+// v187 → v188 (May 2026 — Sprint 2 perf fix):
+//   mobile-app/src/index.html now `defer`s 14 non-critical scripts
+//   (auth.js, install-prompt.js, home-screen.js, app.js, etc.) so the
+//   initial paint isn't blocked by JS parse. Plus blocked-resource
+//   fonts moved to local on the dashboard side (no PWA impact, but
+//   the index.html change alone needs a cache eviction so returning
+//   users actually get the new <script defer> ordering and don't keep
+//   serving the old render-blocking version forever.
 // v186 → v187 (May 2026 — success brand position fix, operator):
 //   "Keep the CRISP ILogo and Text position exactly same as the
 //    home page."
