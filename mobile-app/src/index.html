@@ -17,6 +17,14 @@
          submit button under the keyboard. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <title>CRISP | Report Incident</title>
+    <!-- Sentry configuration (May 2026 — PWA observability).
+         The DSN content is empty in source so Sentry stays inert
+         by default. Deploy pipeline patches `content` with the
+         real DSN. DSN is a public-safe identifier (write-only
+         key); shipping it in HTML is the documented Sentry-
+         browser pattern. -->
+    <meta name="crisp-sentry-dsn" content="">
+    <meta name="crisp-release" content="crisp-pwa@v195">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -3209,6 +3217,14 @@
      footprint selector only renders on stage-v4-review (after photo
      + classify). building-select.js::_ensureLeaflet() injects the
      <script> + <link> tags on first map init.  -->
+<!-- Sentry observability — May 2026 audit fix. Loaded FIRST (before
+     other modules) so JS errors during boot are captured. The SDK
+     bundle is vendored locally (vendor/sentry.min.js); init wrapper
+     reads DSN from the `<meta name="crisp-sentry-dsn">` tag above
+     and stays inert if the DSN is empty. See sentry-init.js for
+     the privacy-stripping `beforeSend` filter. -->
+<script defer src="vendor/sentry.min.js?v=8.30.0"></script>
+<script defer src="sentry-init.js?v=1"></script>
 <script defer src="building-select.js?v=7"></script>
 <script defer src="places.js?v=3"></script>
 <!-- (Lighthouse perf fix) — TF.js + BlazeFace are LAZY-LOADED.

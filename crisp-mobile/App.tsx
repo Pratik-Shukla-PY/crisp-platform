@@ -13,12 +13,80 @@ import {
   InteractionManager, Dimensions, BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Sentry from '@sentry/react-native';
 import { Colors } from './constants/colors';
 import { t, setLanguage, detectLanguage, getAvailableLanguages, bootstrapLanguage, applyTextDirection } from './services/i18n';
 import ConsentOverlay from './components/ConsentOverlay';
 import BuildingFootprintPicker from './components/BuildingFootprintPicker';
 import IconTile from './components/IconTile';
 import { reviewReducer, type Page as ReviewPage } from './components/reviewReducer';
+
+// ── Sentry init (May 2026 audit fix — RN observability) ──────────────
+//
+// CRISP product-readiness audit flagged "no Sentry on RN" as a
+// CRITICAL ops gap. Without crash + error reporting, field-testing
+// failures only surface if a user manually reports them.
+//
+// DSN is sourced from `EXPO_PUBLIC_SENTRY_DSN` (an Expo public env
+// var — visible to the bundle, which is OK because the DSN is a
+// write-only key by design). Empty/missing → Sentry stays inert
+// (e.g. local dev without a configured DSN).
+//
+// Privacy posture matches the PWA's `sentry-init.js`:
+//   · `beforeSend` strips any user-content keys from the payload
+//     (description, transcript, lat/lng, tokens).
+//   · UNDP §2.9 says faces blur on-device; we extend the same
+//     caution to error-context metadata.
+const _SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN || '';
+const _SENTRY_RELEASE = process.env.EXPO_PUBLIC_SENTRY_RELEASE || 'crisp-rn@v195';
+if (_SENTRY_DSN) {
+  try {
+    Sentry.init({
+      dsn: _SENTRY_DSN,
+      release: _SENTRY_RELEASE,
+      environment: __DEV__ ? 'dev' : 'prod',
+      tracesSampleRate: 0.05,                  // low — disaster zones, sparse bandwidth
+      enableAutoSessionTracking: true,
+      enableNativeCrashHandling: true,
+      beforeSend: (event) => {
+        try {
+          const stripKeys = [
+            'description', 'transcript', 'audio',
+            'photoDataUrl', 'photoVariants',
+            'building_free_text',
+            'lat', 'lng', 'latitude', 'longitude',
+            'phone', 'email', 'access_token', 'refresh_token',
+          ];
+          if (event.extra) {
+            for (const k of stripKeys) {
+              if (k in event.extra) delete (event.extra as Record<string, unknown>)[k];
+            }
+          }
+          if (event.contexts && (event.contexts as Record<string, unknown>).state) {
+            const state = (event.contexts as Record<string, Record<string, unknown>>).state;
+            for (const k of stripKeys) {
+              if (k in state) state[k] = '[stripped]';
+            }
+          }
+        } catch (_) { /* never let filter break Sentry */ }
+        return event;
+      },
+      // Skip noise that's not actionable.
+      ignoreErrors: [
+        /Non-Error promise rejection captured/,
+        /Network request failed/,                  // offline state — handled by upload queue
+      ],
+    });
+    Sentry.setTag('surface', 'rn');
+    Sentry.setTag('platform_os', Platform.OS);
+    Sentry.setTag('platform_version', String(Platform.Version));
+    // eslint-disable-next-line no-console
+    console.log('[Sentry] RN init OK · release=' + _SENTRY_RELEASE);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[Sentry] RN init failed:', e);
+  }
+}
 
 /**
  * Apr 2026 UI v2 rollout flag.

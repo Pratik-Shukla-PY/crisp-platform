@@ -5,7 +5,14 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v195';
+const CACHE_NAME = 'crisp-v196';
+// v195 → v196 (May 2026 — Sentry observability, audit Phase 1.3/1.4/1.5):
+//   index.html now loads vendor/sentry.min.js + sentry-init.js (with
+//   defer) before the rest of the app bundle, so PWA JS errors during
+//   boot land in our Sentry project instead of console-only. DSN is
+//   plumbed via a `<meta name="crisp-sentry-dsn">` tag (empty by
+//   default; deploy pipeline patches with the real DSN). Returning
+//   users need to evict v195 so they pick up the new script tags.
 // v194 → v195 (May 2026 — V4 review-page rethink, operator):
 //   stage-v4-review's captured-strip + summary card + voice-drawer
 //   trio was replaced by 4 purpose-built content cards (Photo /
@@ -997,6 +1004,8 @@ const STATIC_ASSETS = [
     SW_BASE + 'v4-flow.js',
     SW_BASE + 'badge-studio.js',     // reward-system v2 Canvas composer
     SW_BASE + 'character-pack.js',   // reward-system v2 second pass — 8 hero SVGs
+    SW_BASE + 'sentry-init.js',      // May 2026 — Sentry boot wrapper
+    SW_BASE + 'vendor/sentry.min.js', // May 2026 — vendored Sentry browser SDK (~70KB)
     // vendor/blazeface/model.json + .bin are NOT precached. They're
     // loaded on demand by pii-blur.js::ensureModel on first photo
     // capture and runtime-cached by the fetch handler below.

@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CRISP — Verification Evidence</title>
+    <meta name="crisp-sentry-dsn" content="">
+    <meta name="crisp-release" content="crisp-dashboard@v195">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <!-- Phase C.2 (May 2026, UNDP-grade satellite-verification rebuild) —
          Public, auth-free shareable evidence page. Loaded via
@@ -360,6 +362,9 @@
             <p style="margin-top:6px;">This page is read-only and shareable. The full dashboard requires authentication.</p>
         </footer>
     </div>
+    <!-- Sentry observability — May 2026 audit fix. -->
+    <script src="vendor/sentry.min.js?v=8.30.0"></script>
+    <script src="sentry-init.js?v=1"></script>
     <script src="evidence.js"></script>
 </body>
 </html>

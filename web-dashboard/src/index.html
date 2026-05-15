@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CRISP | UN Crisis Control Panel</title>
+    <!-- Sentry observability (May 2026 audit fix). DSN content
+         empty in source; deploy pipeline patches with the real DSN
+         (public-safe write-only key). -->
+    <meta name="crisp-sentry-dsn" content="">
+    <meta name="crisp-release" content="crisp-dashboard@v195">
     <meta name="description" content="United Nations Crisis Response Intelligence System — hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
     <!-- May 2026 — favicon. SVG works in modern browsers (Chrome 80+,
@@ -380,6 +385,10 @@
      `window.BlurHash` is ready when the first `renderFeed()` / `selectReport()`
      runs. Same vendored file as the PWA; see src/blurhash.js header. -->
 <script src="blurhash.js?v=1"></script>
+<!-- Sentry — vendored bundle + init. Loaded first so dashboard JS
+     errors during boot land in Sentry instead of console-only. -->
+<script src="vendor/sentry.min.js?v=8.30.0"></script>
+<script src="sentry-init.js?v=1"></script>
 <script src="app.js?v=762"></script>
 <script src="predictions.js?v=110"></script>
 
