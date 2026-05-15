@@ -219,18 +219,36 @@ test.describe('Production — PWA', () => {
     // Critical DOM elements must exist (display:none is OK — we only check
     // they're in the DOM tree, not their visibility, since some are stage-
     // gated and only show after navigation).
+    //
+    // May 2026 — V3→V4 consolidation (commit 8556979) collapsed the
+    // 7-step V3 flow into 3 V4 stages. V3 stages #stage-photo /
+    // -audio / -where / -infra / -crisis / -extras are retained as
+    // hidden fallback DOM for backwards-compat (commit 4671205); but
+    // #stage-review was deliberately deleted, and #building-select-box
+    // / #building-map-placeholder no longer exist as top-level
+    // elements (the V4 picker is inline in #stage-v4-classify, mounted
+    // into #v4-building-mount on demand).
+    //
+    // Assert BOTH the surviving V3 fallbacks AND the new V4 stages so
+    // the test catches "code shipped but V4 stage missing" AND
+    // "fallback DOM accidentally deleted".
     const requiredElements = [
       '#sync-badge',                     // offline queue indicator
       '#sync-badge-text',                // its text content
-      '#building-select-box',            // building footprint selector
-      '#building-map-placeholder',       // building map's "waiting for GPS" placeholder
-      '#stage-where',                    // capture flow: where (location)
-      '#stage-infra',                    // capture flow: infrastructure type
-      '#stage-crisis',                   // capture flow: crisis type
-      '#stage-extras',                   // capture flow: damage / debris / service
-      '#stage-photo',                    // capture flow: photo capture
-      '#stage-audio',                    // capture flow: voice description
-      '#stage-review',                   // capture flow: confirm + submit
+      // V4 stages — the canonical capture flow as of commit 8556979.
+      '#stage-v4-capture',               // V4: photo + voice + text on one screen
+      '#stage-v4-classify',              // V4: infra / hazard / damage / building
+      '#stage-v4-review',                // V4: confirm + submit (replaces V3 #stage-review)
+      '#v4-building-mount',              // V4: where building-select picker mounts inline
+      // V3 fallback DOM — retained per commit 4671205 so re-toggle of
+      // the V3 flow still works. These IDs MUST stay in the tree even
+      // though V4 is the active flow.
+      '#stage-where',                    // V3 fallback: where (location)
+      '#stage-infra',                    // V3 fallback: infrastructure type
+      '#stage-crisis',                   // V3 fallback: crisis type
+      '#stage-extras',                   // V3 fallback: damage / debris / service
+      '#stage-photo',                    // V3 fallback: photo capture
+      '#stage-audio',                    // V3 fallback: voice description
       '#lang-switcher',                  // language picker
     ];
     const missing = await page.evaluate((selectors) => {
