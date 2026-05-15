@@ -5,7 +5,16 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v188';
+const CACHE_NAME = 'crisp-v189';
+// v188 → v189 (May 2026 — responsive stabilization, Commit 1):
+//   index.html viewport meta now ships viewport-fit=cover +
+//   interactive-widget=resizes-content, and styles.css gains the
+//   dvh-fallback chain on three height-bounded selectors plus
+//   flex-shrink:0 on bottom CTAs and overflow-x:clip on .stage.
+//   Returning users need to evict the old index.html + styles.css
+//   so the new viewport meta + height calcs take effect on first
+//   re-launch — otherwise iOS Safari keeps painting from the v188
+//   snapshot and the safe-area-inset env() values stay 0.
 // v187 → v188 (May 2026 — Sprint 2 perf fix):
 //   mobile-app/src/index.html now `defer`s 14 non-critical scripts
 //   (auth.js, install-prompt.js, home-screen.js, app.js, etc.) so the

@@ -5,8 +5,17 @@
     <!-- `maximum-scale=1.0, user-scalable=no` REMOVED.
          WCAG 1.4.4 (Resize text) and the UNDP a11y brief require that
          low-vision users be able to pinch-zoom. The v4 layout is
-         responsive and survives zoom-in without breaking. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+         responsive and survives zoom-in without breaking.
+
+         (May 2026 — responsive stabilization, Fix-P1) — added
+         `viewport-fit=cover` so env(safe-area-inset-*) activates on
+         notched iPhones (12+, Dynamic Island) and pinned bottom CTAs
+         clear the home indicator. `interactive-widget=resizes-content`
+         (Chrome 108+, ignored by Safari) makes the soft keyboard
+         resize the visual viewport so 100dvh / .stage-footer recalc
+         and the OTP / inline-text-input cases stop hiding the
+         submit button under the keyboard. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <title>CRISP | Report Incident</title>
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">

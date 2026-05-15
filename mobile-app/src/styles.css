@@ -306,7 +306,14 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     position: absolute; inset: 0;
     display: flex; flex-direction: column;
     padding: 20px 24px 16px;
+    /* (May 2026 — Fix-P7) `overflow-x: clip` instead of `hidden` so
+       descendant `position: fixed` elements (install prompt, language
+       pill) escape the stage clipping box. `hidden` was creating a
+       new containing block for fixed children, trapping them inside
+       the stage and clipping under RTL. Falls back to `hidden` on
+       browsers older than Safari 16 / Chrome 90. */
     overflow-x: hidden;
+    overflow-x: clip;
     overflow-y: auto;
     /* Force the height ceiling to the dynamic viewport so headers/
        footers within a stage can pin to true viewport edges. */
@@ -405,6 +412,11 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     display: flex; align-items: center; justify-content: center; gap: 12px;
     box-shadow: 0 12px 30px rgba(9,209,199,0.35);
     transition: transform 0.15s, box-shadow 0.15s; margin-top: 8px;
+    /* (May 2026 — Fix-P5) — flex parents (`.stage`, `.stage-center`)
+       can shrink children below their natural size on short viewports.
+       Pin the CTA's height so it never compresses; if content above
+       can't fit, the stage scrolls instead of squashing the button. */
+    flex-shrink: 0;
 }
 .big-cta:active { transform: scale(0.97); box-shadow: 0 6px 16px rgba(9,209,199,0.2); }
 .big-cta i { font-size: 1.4rem; }
@@ -3334,9 +3346,13 @@ details.mr-date-group[open] .mr-date-group-chevron {
 }
 
 /* Make the picker overlay scrollable when the expanded 14-locale grid
-   overflows a short viewport. */
+   overflows a short viewport.
+   (May 2026 — Fix-P2) — `dvh` is the modern dynamic-viewport unit that
+   recalculates as iOS Safari's address bar shows/hides. `vh` retained
+   as a fallback for browsers older than Safari 15.4 / Chrome 108. */
 .lang-picker-sheet {
-    max-height: 90vh;
+    max-height: 90vh;   /* fallback */
+    max-height: 90dvh;
     overflow-y: auto;
 }
 
@@ -3511,7 +3527,10 @@ details.mr-date-group[open] .mr-date-group-chevron {
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .image-viewer-img {
     max-width: 96vw;
+    /* (May 2026 — Fix-P2) dvh fallback chain so on iOS the image stays
+       within the visible viewport even when the address bar collapses. */
     max-height: 80vh;
+    max-height: 80dvh;
     object-fit: contain;
     border-radius: 8px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
@@ -5605,10 +5624,13 @@ body.tier-t4 .home-impact {
 .home-hero-sub { display: none; }
 
 /* — Secondary row (My Reports + Login). Compact baseline; grows
-   slightly on taller viewports. */
+   slightly on taller viewports.
+   (May 2026 — Fix-P5) — pin in the parent flex column so the row
+   doesn't compress below its 44 px tap-target floor on iPhone SE. */
 .home-secondary-row {
     margin-top: 0;
     gap: 10px;
+    flex-shrink: 0;
 }
 .home-secondary-row .secondary-cta,
 .home-secondary-row .tertiary-cta {
@@ -6637,6 +6659,9 @@ body.tier-t4 .home-impact {
 
 .v4-footer {
     padding-top: 4px;
+    /* (May 2026 — Fix-P5) — pin footer height so the Next/Continue
+       button never compresses on short viewports (iPhone SE, S9+). */
+    flex-shrink: 0;
 }
 
 .v4-primary {
@@ -8894,6 +8919,8 @@ body.tier-t4 .home-impact {
     grid-template-columns: 1fr 1fr;
     gap: 10px;
     margin-bottom: 12px;
+    /* (May 2026 — Fix-P5) — pin in the parent flex column. */
+    flex-shrink: 0;
 }
 .bs-btn {
     display: inline-flex;
@@ -11208,7 +11235,11 @@ body { background-color: #10284a; }
     position: relative;
     width: 100%;
     max-width: 520px;
+    /* (May 2026 — Fix-P2) dvh fallback chain — fixes last-row clipping
+       on iPhone SE / Galaxy S9+ where 88vh > visible height after
+       iOS Safari's address bar accounts. */
     max-height: 88vh;
+    max-height: 88dvh;
     overflow-y: auto;
     background: linear-gradient(180deg, #1a3552 0%, #10284a 100%);
     border-top-left-radius: 22px;
