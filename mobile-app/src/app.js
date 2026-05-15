@@ -7680,8 +7680,8 @@ async function submitReport() {
         showUploadSuccess();
         setTimeout(() => goToStage('stage-success'), 1200);
 
-        // Fetch gamification badge (non-blocking)
-        fetchBadge(deviceHash);
+        // Phase 2.2 — V2 fetchBadge() removed; the V4 home-screen
+        // chip (#home-badge-chip) refreshes itself on next paint.
 
         // UNDP reporter feedback channel. After the user has
         // just submitted (high-motivation moment), ask once for
@@ -11507,61 +11507,24 @@ function maybeShowUndpDetailsPrompt() {
     promptSub.style.display = showPrompt ? 'block' : 'none';
 }
 
-// ── Gamification Badge Fetch ─────────────────────────────────────────────────
+// ── Phase 2.2 (May 2026) — `fetchBadge` removed ─────────────────────────────
 //
-// (UI v3 redesign Q5) — fixed the "Newcomer · 16 reports submitted ·
-// Next: Helper (3 reports)" copy bug. Two real bugs:
-//   1. Progress bar used `report_count` but badge_level is computed by
-//      backend from `verified_count` — so a user with 16 raw / 2 verified
-//      saw "Newcomer" with a 100%+-full bar (533% rendered as capped 100%).
-//   2. "Next: Helper (3 reports)" showed the THRESHOLD (3) not the
-//      remaining gap to next tier.
-// Fix: progress + count both use verified_count (the same number that
-// drives the level). "Next" shows REMAINING gap, not absolute threshold.
-async function fetchBadge(deviceHash) {
-    // Skip cleanly when offline — no console noise mid-flow.
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-    try {
-        // HAR-driven dedupe — fetchBadge runs on every home-screen
-        // paint + on every status-since refresh. _singleFlightFetch
-        // collapses concurrent + repeat calls within 10 s.
-        const res = await _singleFlightFetch(`${API_BASE}/reports/profile/${deviceHash}`);
-        if (!res.ok) return;
-        const p = await res.json();
-        const badges = { NEWCOMER: '🌱', HELPER: '🤝', GUARDIAN: '🛡', HERO: '🦸' };
-        const tiers = [
-            { level: 'NEWCOMER', need: 0, next: 'Helper', nextNeed: 3 },
-            { level: 'HELPER', need: 3, next: 'Guardian', nextNeed: 10 },
-            { level: 'GUARDIAN', need: 10, next: 'Hero', nextNeed: 25 },
-            { level: 'HERO', need: 25, next: null, nextNeed: 25 },
-        ];
-        const tier = tiers.find(t => t.level === p.badge_level) || tiers[0];
-        // Use verified_count (the number that drives badge promotion) for
-        // both the progress bar and the displayed count. Falls back to
-        // report_count if the backend hasn't populated verified_count yet
-        // (legacy rows pre-Apr-2026 migration).
-        const verifiedCount = Number.isFinite(p.verified_count) ? p.verified_count
-                            : (Number.isFinite(p.report_count) ? p.report_count : 0);
-        const remaining = tier.next ? Math.max(0, tier.nextNeed - verifiedCount) : 0;
-        const pct = tier.next
-            ? Math.min(100, Math.round(((verifiedCount - tier.need) / (tier.nextNeed - tier.need)) * 100))
-            : 100;
-
-        const card = document.getElementById('badge-card');
-        if (card) {
-            document.getElementById('badge-icon').textContent = badges[p.badge_level] || '🌱';
-            document.getElementById('badge-level').textContent = p.badge_level.charAt(0) + p.badge_level.slice(1).toLowerCase();
-            document.getElementById('badge-count').textContent = `${verifiedCount} verified report${verifiedCount !== 1 ? 's' : ''}`;
-            document.getElementById('badge-bar-fill').style.width = pct + '%';
-            document.getElementById('badge-next').textContent = tier.next
-                ? (remaining > 0
-                    ? `${remaining} more to ${tier.next}`
-                    : `Promoting to ${tier.next} soon…`)
-                : 'Max level reached!';
-            card.style.display = 'flex';
-        }
-    } catch (_) {}
-}
+// The legacy success-page #badge-card surfaced the V2 NEWCOMER / HELPER
+// / GUARDIAN / HERO ladder with its own emoji + progress wiring. The
+// home-screen V4 chip (`#home-badge-chip`, see home-screen.js
+// `_renderBadgeChip`) replaced this — same /reports/profile fetch,
+// uses canonical T1_SCOUT…T4_LIFEKEEPER ids from `window.CRISP_TIERS`,
+// shares the sessionStorage cache used by the Rewards page.
+//
+// Keeping two surfaces in sync was the source of UI v3 redesign bug Q5
+// ("Newcomer · 16 reports · Next: Helper (3)"). Phase 2.2 deletes the
+// V2 surface entirely:
+//   * `fetchBadge()` (was here)            — deleted, no longer called
+//   * `fetchBadge(deviceHash)` call-site   — deleted at line ~7684
+//   * `#badge-card` DOM in index.html      — deleted
+//   * `.badge-card` CSS rules              — deleted
+// Tier-up toasts on submit are still fired by the V4 home-screen path
+// (see the TIER_ORDER block in the success path of submitReport).
 
 // ── Toast Notification ────────────────────────────────────────────────────────
 function showToast(message, duration = 3000) {

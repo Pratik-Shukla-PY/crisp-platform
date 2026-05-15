@@ -2397,25 +2397,20 @@ window.selectReport = (id, skipFly = false) => {
                  this span entirely. ADMIN clicks open the profile drawer. -->
             ${r.reporter_badge ? `<span class="dp-field-badge dp-reporter-badge" style="background:rgba(34,197,94,0.12);color:#86efac;cursor:${r.user_id ? 'pointer' : 'default'};" ${r.user_id ? `onclick="openReporterProfile('${r.user_id}')"` : ''} title="${r.user_id ? 'Click to view reporter details (admin only)' : ''}"><i class="fa-solid fa-user-check"></i> ${escapeHtml(r.reporter_badge)}</span>` : ''}
             <!-- Phase 1.6 (May 2026) — Reporter tier badge. Surfaces the
-                 V4 gamification ladder (T1_SCOUT → T4_LIFEKEEPER) so
+                 V4 gamification ladder (T1_SCOUT to T4_LIFEKEEPER) so
                  analysts can see at a glance whether the reporter is a
                  newcomer or a trusted veteran. The tier is server-derived
                  from the linked ReporterProfile (see _attach_reporter_tier
                  in backend/app/api/endpoints/reports.py). NULL = no
                  profile yet OR legacy badge_level — we explicitly do NOT
-                 render T1_SCOUT-by-default to avoid visual confusion. -->
+                 render T1_SCOUT-by-default to avoid visual confusion.
+                 Phase 2.1 — reads metadata from the shared canonical
+                 config at window.CRISP_TIERS_BY_ID (sourced from
+                 shared/tier-config.json). -->
             ${r.reporter_tier ? (() => {
-                // emoji + human label by tier id. Mirrors share.py
-                // _TIER_LABELS so any change there is reflected here.
-                const TIER_META = {
-                    'T1_SCOUT':       { emoji: '🌱', label: 'Scout',       color: '#86efac' },
-                    'T2_SIGNAL':      { emoji: '📣', label: 'Signal',      color: '#93c5fd' },
-                    'T3_CHANGEMAKER': { emoji: '⚡', label: 'Changemaker', color: '#fbbf24' },
-                    'T4_LIFEKEEPER':  { emoji: '🦸', label: 'Lifekeeper',  color: '#f0abfc' },
-                };
-                const meta = TIER_META[r.reporter_tier];
+                const meta = (window.CRISP_TIERS_BY_ID || {})[r.reporter_tier];
                 if (!meta) return '';
-                return `<span class="dp-field-badge dp-reporter-tier" data-tier="${r.reporter_tier}" style="background:rgba(255,255,255,0.06);color:${meta.color};" title="Reporter tier: ${meta.label} — earned by ${meta.label === 'Lifekeeper' ? '15+ verified reports' : meta.label === 'Changemaker' ? '5+ verified reports' : meta.label === 'Signal' ? 'first verified report' : 'first submission'}">${meta.emoji} ${meta.label}</span>`;
+                return `<span class="dp-field-badge dp-reporter-tier" data-tier="${r.reporter_tier}" style="background:rgba(255,255,255,0.06);color:${meta.color};" title="Reporter tier: ${meta.label} — ${meta.criterion}">${meta.emoji} ${meta.label}</span>`;
             })() : ''}
             <!-- Phase E (Apr 2026 UI v3) — "Needs mapping" badge.
                  Fires when the reporter typed a building name in their

@@ -28,7 +28,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v198">
+    <meta name="crisp-release" content="crisp-pwa@v199">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -720,15 +720,22 @@
                      badge-label + #home-badge-progress IDs the
                      home-screen.js painter writes into. -->
                 <div class="home-reward-hero home-reward-hero--pill" id="home-reward-hero">
-                    <div class="home-badge-chip home-badge-chip--hero" id="home-badge-chip" hidden
-                         role="status" aria-live="polite"
-                         aria-label="Reporter level">
+                    <!-- Phase 2.8 (May 2026) — promoted from a passive
+                         <div role="status"> to a real <button> so the
+                         chip is tappable + keyboard-focusable. Click /
+                         Enter navigates to stage-rewards (the dedicated
+                         ladder + Badge Studio entry page). home-screen.js
+                         wires the click handler in _renderBadgeChip. -->
+                    <button class="home-badge-chip home-badge-chip--hero" id="home-badge-chip" hidden
+                            type="button"
+                            aria-label="Reporter level — tap to open rewards page"
+                            data-i18n-aria-label="aria_home_badge_chip">
                         <span class="hb-emoji" id="home-badge-emoji" aria-hidden="true">🌱</span>
                         <span class="hb-stack">
                             <span class="hb-label" id="home-badge-label">Scout</span>
                             <span class="hb-progress" id="home-badge-progress">Submit your first report to level up</span>
                         </span>
-                    </div>
+                    </button>
                 </div>
 
                 <!-- One-time consent gate. home-screen.js wires a
@@ -2520,18 +2527,11 @@
                 <span data-i18n="report_id">Report ID:</span>
                 <strong id="report-id-text">—</strong>
             </div>
-            <!-- Gamification badge -->
-            <div class="badge-card" id="badge-card" style="display:none;">
-                <div class="badge-icon" id="badge-icon">🌱</div>
-                <div class="badge-info">
-                    <strong id="badge-level">Newcomer</strong>
-                    <span id="badge-count">1 report submitted</span>
-                </div>
-                <div class="badge-bar-wrap">
-                    <div class="badge-bar"><div class="badge-bar-fill" id="badge-bar-fill" style="width:33%"></div></div>
-                    <small id="badge-next">Next: Helper (3 reports)</small>
-                </div>
-            </div>
+            <!-- Phase 2.2 (May 2026) — V2 gamification badge-card removed.
+                 The V4 home-screen chip (#home-badge-chip) is now the
+                 single tier-display surface; the tier-up celebration
+                 (toast) fires from app.js's submit-success path. -->
+
             <!-- Primary CTA — start a new report (resets state, returns to photo). -->
             <button class="big-cta" id="btn-new-report">
                 <i class="fa-solid fa-plus"></i>
@@ -3240,6 +3240,11 @@
      the privacy-stripping `beforeSend` filter. -->
 <script defer src="vendor/sentry.min.js?v=8.30.0"></script>
 <script defer src="sentry-init.js?v=1"></script>
+<!-- Phase 2.1 (May 2026) — canonical reward-ladder metadata.
+     Generated from shared/tier-config.json via scripts/sync-tier-config.mjs.
+     Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
+     home-screen.js + badge-studio.js so they read the same source. -->
+<script defer src="tier-config.js?v=1"></script>
 <script defer src="building-select.js?v=7"></script>
 <script defer src="places.js?v=3"></script>
 <!-- (Lighthouse perf fix) — TF.js + BlazeFace are LAZY-LOADED.

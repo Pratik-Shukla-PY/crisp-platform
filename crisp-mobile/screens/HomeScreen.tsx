@@ -133,22 +133,31 @@ function CrispRippleLogo({ size = 32 }: { size?: number }) {
   );
 }
 
-// ── Tier ladder — RN copy of mobile-app/src/home-screen.js BADGE_LEVELS ─
-// Maps the backend's badge_level string → emoji + colour. T1-T4 are
-// the May-2026 reward-system-v2 tier ids; the legacy NEWCOMER/HELPER/
-// GUARDIAN/HERO ids stay supported for back-compat with older /profile
-// responses.
-const TIER_META: Record<string, { emoji: string; labelKey: string; color: string }> = {
-  T1_SCOUT:       { emoji: '🌱', labelKey: 'tier_t1_scout_label',       color: '#a5f3b3' },
-  T2_SIGNAL:      { emoji: '📣', labelKey: 'tier_t2_signal_label',      color: '#46DFB1' },
-  T3_CHANGEMAKER: { emoji: '⚡', labelKey: 'tier_t3_changemaker_label', color: '#46DFB1' },
-  T4_LIFEKEEPER:  { emoji: '🦸', labelKey: 'tier_t4_lifekeeper_label',  color: '#80EE98' },
-  // Legacy fallbacks
-  NEWCOMER:    { emoji: '🌱', labelKey: 'tier_t1_scout_label',       color: '#a5f3b3' },
-  HELPER:      { emoji: '📣', labelKey: 'tier_t2_signal_label',      color: '#46DFB1' },
-  GUARDIAN:    { emoji: '⚡', labelKey: 'tier_t3_changemaker_label', color: '#46DFB1' },
-  HERO:        { emoji: '🦸', labelKey: 'tier_t4_lifekeeper_label',  color: '#80EE98' },
-};
+// ── Tier ladder — Phase 2.1 (May 2026), sourced from shared canonical config.
+// `crisp-mobile/shared/tier-config.ts` is auto-generated from
+// `shared/tier-config.json`; see scripts/sync-tier-config.mjs.
+import {
+  TIERS_BY_ID as SHARED_TIERS_BY_ID,
+  LEGACY_TIER_ALIASES,
+  type TierId,
+} from '../shared/tier-config';
+
+const TIER_META: Record<string, { emoji: string; labelKey: string; color: string }> = (() => {
+  const out: Record<string, { emoji: string; labelKey: string; color: string }> = {};
+  for (const t of Object.values(SHARED_TIERS_BY_ID)) {
+    out[t.id] = { emoji: t.emoji, labelKey: t.i18n_key, color: t.color };
+  }
+  // Re-project legacy aliases onto the same shape so backend rows
+  // mid-rollout that still carry a legacy badge_level render with
+  // the V4-equivalent emoji + colour.
+  for (const [legacy, v4] of Object.entries(LEGACY_TIER_ALIASES)) {
+    const m = SHARED_TIERS_BY_ID[v4 as TierId];
+    if (m) {
+      out[legacy] = { emoji: m.emoji, labelKey: m.i18n_key, color: m.color };
+    }
+  }
+  return out;
+})();
 
 // ── Channel registry ───────────────────────────────────────────────
 // Mirrors the PWA's home-screen.js _renderChannels(). Each tile gets

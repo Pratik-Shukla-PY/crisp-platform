@@ -5,7 +5,14 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v198';
+const CACHE_NAME = 'crisp-v199';
+// v198 → v199 (May 2026 — Phase 2.1 shared tier-config extraction):
+//   New `tier-config.js` added to STATIC_ASSETS + loaded from
+//   index.html BEFORE badge-studio.js / home-screen.js. Defines
+//   window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES} from the canonical
+//   shared/tier-config.json. Returning users must evict v198 so
+//   the new script tag + STATIC_ASSETS entry land.
+//
 // v197 → v198 (May 2026 — Phase 2.4 WCAG 2.1 AA polish):
 //   index.html + styles.css touched to fix axe-flagged a11y issues:
 //   * #connectivity-dot + #rd-timeline gained role="img"/"list" so
@@ -1023,6 +1030,7 @@ const STATIC_ASSETS = [
     SW_BASE + 'v4-flow.js',
     SW_BASE + 'badge-studio.js',     // reward-system v2 Canvas composer
     SW_BASE + 'character-pack.js',   // reward-system v2 second pass — 8 hero SVGs
+    SW_BASE + 'tier-config.js',      // Phase 2.1 — canonical V4 tier metadata (generated from shared/tier-config.json)
     SW_BASE + 'sentry-init.js',      // May 2026 — Sentry boot wrapper
     SW_BASE + 'vendor/sentry.min.js', // May 2026 — vendored Sentry browser SDK (~70KB)
     // vendor/blazeface/model.json + .bin are NOT precached. They're

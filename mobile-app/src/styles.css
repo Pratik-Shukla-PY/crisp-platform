@@ -1019,23 +1019,10 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .success-id-box strong { font-family: monospace; font-size: 1.2rem; color: var(--text); letter-spacing: 2px; }
 
-/* ── Gamification Badge Card ──────────────────────────────────── */
-.badge-card {
-    display: flex; flex-direction: column; align-items: center; gap: 8px;
-    background: linear-gradient(135deg, rgba(21,145,155,0.12), rgba(21,145,155,0.08));
-    border: 1px solid rgba(21,145,155,0.3); border-radius: 16px;
-    padding: 16px 20px; width: 100%; max-width: 300px;
-    animation: badge-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.3s both;
-}
-@keyframes badge-pop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-.badge-icon { font-size: 2.5rem; }
-.badge-info { text-align: center; }
-.badge-info strong { display: block; color: #46DFB1; font-size: 1.1rem; font-family: var(--heading); }
-.badge-info span { font-size: 0.78rem; color: var(--muted); }
-.badge-bar-wrap { width: 100%; }
-.badge-bar { width: 100%; height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
-.badge-bar-fill { height: 100%; background: linear-gradient(90deg, #15919B, #46DFB1); border-radius: 3px; transition: width 0.5s; }
-.badge-bar-wrap small { font-size: 0.7rem; color: var(--muted); display: block; margin-top: 4px; text-align: center; }
+/* ── Phase 2.2 (May 2026) — legacy .badge-card / .badge-icon /
+   .badge-info / .badge-bar* rules deleted alongside the success-
+   page DOM that consumed them. V4 #home-badge-chip is the single
+   tier-display surface now. */
 
 /* ── Location Verification ───────────────────────────────────── */
 .location-verify-box {
@@ -4889,9 +4876,27 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     font-weight: 700;
     letter-spacing: 0.02em;
     text-align: left;
-    cursor: default;
+    /* Phase 2.8 (May 2026) — chip is now a <button> that opens the
+       Rewards page. `cursor: pointer` + touch feedback signal the
+       interaction. The default <button> font/appearance is reset so
+       the visual matches the legacy chip. */
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    font-family: inherit;
+    font-size: inherit;
     transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     -webkit-tap-highlight-color: transparent;
+}
+.home-badge-chip:hover:not([hidden]),
+.home-badge-chip:focus-visible:not([hidden]) {
+    transform: translateY(-1px);
+    border-color: rgba(128, 238, 152, 0.55);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+    outline: none;
+}
+.home-badge-chip:active:not([hidden]) {
+    transform: translateY(0);
 }
 /* May 2026 (Lighthouse CLS fix) — pre-fix the chip used
    `display: none` until /profile resolved, then `display: inline-flex`,

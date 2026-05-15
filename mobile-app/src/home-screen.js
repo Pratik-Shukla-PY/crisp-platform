@@ -983,6 +983,21 @@
     async function _renderBadgeChip() {
         const chip = document.getElementById('home-badge-chip');
         if (!chip) return;
+        // Phase 2.8 (May 2026) — chip is now a <button>; wire a one-
+        // time click handler that navigates to the dedicated Rewards
+        // page (#stage-rewards). The dataset flag prevents duplicate
+        // listeners across re-renders (the chip can re-paint several
+        // times per page load — every status-since refresh).
+        if (!chip.dataset.navBound) {
+            chip.dataset.navBound = '1';
+            chip.addEventListener('click', () => {
+                try {
+                    if (typeof window.goToStage === 'function') {
+                        window.goToStage('stage-rewards');
+                    }
+                } catch (_) { /* no-op if goToStage isn't ready yet */ }
+            });
+        }
         // Optimistic paint from cache (legacy v1 cache also accepted —
         // _paintBadgeChip normalizes both shapes).
         const cached = _readBadgeCache();
@@ -1034,8 +1049,17 @@
     // Badge Studio entry CTA. Reads sessionStorage `crisp_home_badge_v2`
     // (warm cache from _renderBadgeChip) for instant paint, then
     // re-fetches /profile in the background to refresh.
-    const TIER_ORDER = ['T1_SCOUT', 'T2_SIGNAL', 'T3_CHANGEMAKER', 'T4_LIFEKEEPER'];
-    const TIER_EMOJI = { T1_SCOUT: '🌱', T2_SIGNAL: '📣', T3_CHANGEMAKER: '⚡', T4_LIFEKEEPER: '🦸' };
+    //
+    // Phase 2.1 (May 2026) — tier metadata sourced from the shared
+    // canonical config exposed at `window.CRISP_TIERS{,BY_ID}`. The
+    // hard-coded fallback is the SAME data, kept in source so this
+    // file still works if the script tag for tier-config.js doesn't
+    // load (e.g. legacy SW cache before the v198 update arrives).
+    const _SHARED_TIERS = (typeof window !== 'undefined' && Array.isArray(window.CRISP_TIERS)) ? window.CRISP_TIERS : null;
+    const TIER_ORDER = _SHARED_TIERS ? _SHARED_TIERS.map((t) => t.id) : ['T1_SCOUT', 'T2_SIGNAL', 'T3_CHANGEMAKER', 'T4_LIFEKEEPER'];
+    const TIER_EMOJI = _SHARED_TIERS
+        ? Object.fromEntries(_SHARED_TIERS.map((t) => [t.id, t.emoji]))
+        : { T1_SCOUT: '🌱', T2_SIGNAL: '📣', T3_CHANGEMAKER: '⚡', T4_LIFEKEEPER: '🦸' };
     const TIER_UNLOCKED = new Set(['T3_CHANGEMAKER', 'T4_LIFEKEEPER']);
 
     function _resolveLevelFromAny(raw) {

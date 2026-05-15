@@ -824,5 +824,9 @@
   "delete_all_server_confirm": "这将永久删除您从此服务器提交的所有报告和媒体。此操作无法撤销。",
   "delete_all_success_count": "已删除 {n} 份报告。所有本地数据已清除。",
   "confirm_yes": "是",
-  "confirm_no": "取消"
+  "confirm_no": "取消",
+  "aria_home_badge_chip": "报告者等级 — 点击打开奖励页面",
+  "bs_share_lives_template": "作为 CRISP 的 {tier},参与挽救了 {n} 条生命。",
+  "bs_share_reports_template": "作为 CRISP 的 {tier},已提交 {n} 份报告。",
+  "bs_share_fallback": "我是 CRISP 的 {tier}。看到就上报。"
 }

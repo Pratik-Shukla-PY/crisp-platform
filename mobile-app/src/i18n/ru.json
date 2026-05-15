@@ -826,5 +826,9 @@
   "delete_all_server_confirm": "Это окончательно удалит ВСЕ ваши отправленные отчёты и медиа с сервера. Действие необратимо.",
   "delete_all_success_count": "Удалено отчётов: {n}. Все локальные данные стёрты.",
   "confirm_yes": "Да",
-  "confirm_no": "Отмена"
+  "confirm_no": "Отмена",
+  "aria_home_badge_chip": "Уровень репортёра — нажмите, чтобы открыть страницу наград",
+  "bs_share_lives_template": "Помог(ла) спасти {n} жизней в роли {tier} CRISP.",
+  "bs_share_reports_template": "Подал(а) {n} отчётов в роли {tier} CRISP.",
+  "bs_share_fallback": "Я — {tier} CRISP. Сообщай о том, что видишь."
 }

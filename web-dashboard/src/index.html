@@ -8,7 +8,7 @@
          empty in source; deploy pipeline patches with the real DSN
          (public-safe write-only key). -->
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v14">
+    <meta name="crisp-release" content="crisp-dashboard@v15">
     <meta name="description" content="United Nations Crisis Response Intelligence System — hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
     <!-- May 2026 — favicon. SVG works in modern browsers (Chrome 80+,
@@ -389,6 +389,11 @@
      errors during boot land in Sentry instead of console-only. -->
 <script src="vendor/sentry.min.js?v=8.30.0"></script>
 <script src="sentry-init.js?v=1"></script>
+<!-- Phase 2.1 (May 2026) — canonical reward-ladder metadata.
+     Generated from shared/tier-config.json via scripts/sync-tier-config.mjs.
+     Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
+     app.js so the reporter_tier-badge renderer can read it synchronously. -->
+<script src="tier-config.js?v=1"></script>
 <script src="app.js?v=762"></script>
 <script src="predictions.js?v=110"></script>
 

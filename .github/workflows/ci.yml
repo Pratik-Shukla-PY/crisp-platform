@@ -202,6 +202,19 @@ jobs:
           else
             echo "scripts/sync-release-tags.mjs not found — skipping"
           fi
+      - name: Check tier-config sync (PWA / dashboard / RN / shared)
+        # Phase 2.1 (May 2026) — single source of truth for the V4
+        # reward ladder. `shared/tier-config.json` is canonical; the
+        # PWA + dashboard read auto-generated `tier-config.js`, RN
+        # reads `crisp-mobile/shared/tier-config.ts`. A PR that
+        # edits the JSON but forgets to re-run the generator drifts
+        # the consumers — fail here so it's caught at PR review.
+        run: |
+          if [ -f scripts/sync-tier-config.mjs ]; then
+            node scripts/sync-tier-config.mjs --check
+          else
+            echo "scripts/sync-tier-config.mjs not found — skipping"
+          fi
 
   python-security:
     name: Python dep vulnerability scan (pip-audit)

@@ -42,13 +42,35 @@
 (function () {
     'use strict';
 
-    // ── Tier metadata (mirror of home-screen.js BADGE_LEVELS) ──
-    const TIER_META = {
-        T1_SCOUT:       { emoji: '🌱', label: 'Scout',       ringStart: '#80EE98', ringEnd: '#46DFB1' },
-        T2_SIGNAL:      { emoji: '📣', label: 'Signal',      ringStart: '#46DFB1', ringEnd: '#09D1C7' },
-        T3_CHANGEMAKER: { emoji: '⚡', label: 'Changemaker', ringStart: '#09D1C7', ringEnd: '#15919B' },
-        T4_LIFEKEEPER:  { emoji: '🦸', label: 'Lifekeeper',  ringStart: '#46DFB1', ringEnd: '#80EE98' },
-    };
+    // ── Tier metadata ──
+    //
+    // Phase 2.1 (May 2026) — source of truth is `shared/tier-config.json`,
+    // exposed at `window.CRISP_TIERS_BY_ID` by `tier-config.js`
+    // (loaded before this script in `index.html`). We build a flat
+    // {emoji, label, ringStart, ringEnd} shape because the canvas
+    // code reads `meta.ringStart` / `meta.ringEnd` in a dozen
+    // places; mapping `ring_gradient` to these flat aliases avoids
+    // touching every call-site.
+    //
+    // Hard-coded fallback kept for the rare case where tier-config.js
+    // failed to load (e.g. an SW serving the page from a v196 cache
+    // before the v198 update arrived). Keeps the studio renderable.
+    const _SHARED_TIERS = (typeof window !== 'undefined' && window.CRISP_TIERS_BY_ID) || null;
+    const TIER_META = _SHARED_TIERS
+        ? Object.fromEntries(
+            Object.entries(_SHARED_TIERS).map(([id, t]) => [id, {
+                emoji: t.emoji,
+                label: t.label,
+                ringStart: t.ring_gradient.start,
+                ringEnd:   t.ring_gradient.end,
+            }]),
+        )
+        : {
+            T1_SCOUT:       { emoji: '🌱', label: 'Scout',       ringStart: '#80EE98', ringEnd: '#46DFB1' },
+            T2_SIGNAL:      { emoji: '📣', label: 'Signal',      ringStart: '#46DFB1', ringEnd: '#09D1C7' },
+            T3_CHANGEMAKER: { emoji: '⚡', label: 'Changemaker', ringStart: '#09D1C7', ringEnd: '#15919B' },
+            T4_LIFEKEEPER:  { emoji: '🦸', label: 'Lifekeeper',  ringStart: '#fcd34d', ringEnd: '#f59e0b' },
+        };
     const TIERS_UNLOCKED = new Set(['T3_CHANGEMAKER', 'T4_LIFEKEEPER']);
 
     // ── State held in module scope (single-stage component) ──
@@ -455,11 +477,48 @@
         lines.forEach((ln, i) => ctx.fillText(ln, cx, yStart + i * lineHeight));
     }
 
+    // Phase 2.7 (May 2026) — DPR-aware canvas. On a Retina / OLED phone
+    // (devicePixelRatio = 2 or 3), the badge studio's 1080-backed canvas
+    // ends up downscaled by the OS share pipeline AND by the user's
+    // device when re-displayed → blurry edges on rings + text. Painting
+    // at backing-size × DPR fixes that. We cap DPR at 2 because (a) 3×
+    // exports balloon file size 9× without a corresponding visual
+    // improvement on most share targets, and (b) the LinkedIn OG embed
+    // cap is 100 KB — a 3× export blows that budget.
+    const _dpr = () => Math.min(
+        (typeof window !== 'undefined' && window.devicePixelRatio) || 1,
+        2,
+    );
+
+    /**
+     * Resize ``canvas`` to ``(w*dpr, h*dpr)`` pixels and apply a
+     * ``ctx.scale(dpr, dpr)`` so existing drawing code can keep
+     * using logical w/h coords. Returns the 2D context.
+     *
+     * The visible preview canvas also sets ``canvas.style.{width,height}``
+     * so CSS sizing (`.badge-studio-canvas { max-width: 320px }`) keeps
+     * working — without this, doubling the backing buffer would also
+     * double the displayed size and overflow the wrapper.
+     */
+    function _setupDprCanvas(canvas, w, h, isPreview) {
+        const dpr = _dpr();
+        canvas.width  = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        if (isPreview) {
+            // Keep displayed size at the logical (CSS-pixel) value so
+            // the layout doesn't shift.
+            canvas.style.width  = w + 'px';
+            canvas.style.height = h + 'px';
+        }
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return ctx;
+    }
+
     async function _composeBadgeImage(template, userBitmap, tier, stats, opts) {
         const { w, h } = _dimensions(template);
         const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
+        const ctx = _setupDprCanvas(canvas, w, h, /* isPreview */ false);
         if (!ctx) throw new Error('Canvas 2D context unavailable');
         opts = opts || {};
         const usePhoto = opts.usePhoto !== false && !!userBitmap;
@@ -506,13 +565,15 @@
         const canvas = document.getElementById('bs-canvas');
         if (!canvas) return;
         const { w, h } = _dimensions(state.template);
-        // Display size — scale down to fit the viewport while preserving
-        // the underlying pixel buffer. The exported PNG always uses the
-        // full 1080×1080 / 1080×1920 buffer (toBlob reads from canvas.toBlob
-        // separately in _composeBadgeImage; here we just paint for the preview).
-        canvas.width = w; canvas.height = h;
-        // CSS sizing is set in styles.css via `.badge-studio-canvas`.
-        const ctx = canvas.getContext('2d');
+        // Phase 2.7 (May 2026) — DPR-aware. The preview canvas now
+        // backs at (w × DPR, h × DPR) so rings + text stay crisp on
+        // Retina / OLED devices. ``canvas.style.width/.height`` is
+        // pinned to (w, h) logical pixels so the existing CSS rule
+        // (`max-width: 320px`) keeps shrinking the displayed size to
+        // fit. The exported PNG uses the same DPR via
+        // ``_composeBadgeImage``.
+        const ctx = _setupDprCanvas(canvas, w, h, /* isPreview */ true);
+        if (!ctx) return;
         _paintBackground(ctx, state.template, state.tier);
         const usePhoto = state.usePhotoInsteadOfCharacter && !!state.userPhotoBlob;
         if (state.template !== 'story') {
@@ -606,9 +667,40 @@
     function _shareText() {
         const meta = TIER_META[state.tier] || TIER_META.T4_LIFEKEEPER;
         const tierLabel = _t(`tier_${state.tier.toLowerCase()}_label`, meta.label);
-        // Static text fallback so non-Web-Share share targets (WhatsApp
-        // deep-link, etc.) still carry the same brand message.
-        return `${meta.emoji} I'm a CRISP ${tierLabel}. Report what you see → https://crisplabs.tech`;
+        // Phase 2.9 (May 2026) — personalize off the user's real counts.
+        // Pre-Phase-2.9 the text was always the same "I'm a CRISP X. Report
+        // what you see → crisplabs.tech" regardless of impact; now we lead
+        // with the most-affecting number the user has earned.
+        //
+        // Priority order (highest-impact first):
+        //   1. lives > 0  → "X lives helped" — strongest social pull
+        //   2. reports > 0 + reports verified → reported "X verified reports"
+        //   3. reports > 0 (any status) → "X reports submitted"
+        //   4. fallback → static "Report what you see"
+        //
+        // The "X lives" wording uses the singular/plural helper so
+        // "1 life" / "2 lives" reads naturally; i18n template uses
+        // {n} so translators can swap grammatical number.
+        const lives    = Number.isFinite(state.lives)    ? state.lives    : 0;
+        const reports  = Number.isFinite(state.reports)  ? state.reports  : 0;
+        let impact;
+        if (lives > 0) {
+            const tpl = _t('bs_share_lives_template',
+                lives === 1
+                    ? `Helped save 1 life as a CRISP ${tierLabel}.`
+                    : `Helped save ${lives} lives as a CRISP ${tierLabel}.`);
+            impact = tpl.replace('{n}', String(lives)).replace('{tier}', tierLabel);
+        } else if (reports > 0) {
+            const tpl = _t('bs_share_reports_template',
+                reports === 1
+                    ? `Submitted 1 report as a CRISP ${tierLabel}.`
+                    : `Submitted ${reports} reports as a CRISP ${tierLabel}.`);
+            impact = tpl.replace('{n}', String(reports)).replace('{tier}', tierLabel);
+        } else {
+            impact = _t('bs_share_fallback', `I'm a CRISP ${tierLabel}. Report what you see.`)
+                .replace('{tier}', tierLabel);
+        }
+        return `${meta.emoji} ${impact} → https://crisplabs.tech`;
     }
 
     async function _composeForShare() {

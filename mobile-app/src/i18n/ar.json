@@ -824,5 +824,9 @@
   "delete_all_server_confirm": "سيؤدي هذا إلى حذف جميع التقارير والوسائط المرسلة من الخادم نهائيًا. لا يمكن التراجع.",
   "delete_all_success_count": "تم حذف {n} تقرير. تم مسح جميع البيانات المحلية.",
   "confirm_yes": "نعم",
-  "confirm_no": "إلغاء"
+  "confirm_no": "إلغاء",
+  "aria_home_badge_chip": "مستوى المبلِّغ — انقر لفتح صفحة المكافآت",
+  "bs_share_lives_template": "ساعدت في إنقاذ {n} أرواح بصفتي {tier} في CRISP.",
+  "bs_share_reports_template": "قدمت {n} بلاغًا بصفتي {tier} في CRISP.",
+  "bs_share_fallback": "أنا {tier} في CRISP. أبلِغ عمّا تراه."
 }

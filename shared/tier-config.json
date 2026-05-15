@@ -1,0 +1,69 @@
+{
+  "$schema_version": "1.0",
+  "$comment": [
+    "Canonical reward-ladder definition for the CRISP gamification system.",
+    "",
+    "Five surfaces consume this file (see scripts/sync-tier-config.mjs):",
+    "  • PWA   → mobile-app/src/badge-studio.js + home-screen.js",
+    "  • Web   → web-dashboard/src/app.js (reporter_tier badge renderer)",
+    "  • RN    → crisp-mobile/screens/HomeScreen.tsx",
+    "  • API   → backend/app/api/endpoints/share.py (OG meta for LinkedIn)",
+    "  • Server-side promotion logic lives in backend/app/api/endpoints/reports.py::_recompute_tier; it does NOT read this file (promotion thresholds are code, not metadata).",
+    "",
+    "If you change emoji / label / color, run `node scripts/sync-tier-config.mjs` to regenerate platform-native copies (`shared/tier-config.{js,ts}`) and verify with `node scripts/sync-tier-config.mjs --check` in CI.",
+    "",
+    "INCENTIVES.md no-volume-repeat rule (UNDP §3.8):",
+    "  T2_SIGNAL is the one-time participation badge. Submitting 50 reports does NOT push you past T2; only an analyst action (dispatch/resolve → T3) or a downstream impact event (lives_saved ≥ 1 → T4) advances the tier."
+  ],
+  "tiers": [
+    {
+      "id": "T1_SCOUT",
+      "order": 1,
+      "emoji": "🌱",
+      "label": "Scout",
+      "i18n_key": "tier_t1_scout_label",
+      "color": "#86efac",
+      "ring_gradient": { "start": "#80EE98", "end": "#46DFB1" },
+      "criterion": "Default — no submissions yet"
+    },
+    {
+      "id": "T2_SIGNAL",
+      "order": 2,
+      "emoji": "📣",
+      "label": "Signal",
+      "i18n_key": "tier_t2_signal_label",
+      "color": "#93c5fd",
+      "ring_gradient": { "start": "#46DFB1", "end": "#09D1C7" },
+      "criterion": "≥1 report submitted (any status) — one-time participation badge"
+    },
+    {
+      "id": "T3_CHANGEMAKER",
+      "order": 3,
+      "emoji": "⚡",
+      "label": "Changemaker",
+      "i18n_key": "tier_t3_changemaker_label",
+      "color": "#fbbf24",
+      "ring_gradient": { "start": "#09D1C7", "end": "#15919B" },
+      "criterion": "≥1 report dispatched (RESPONDING or RESOLVED) — analyst action required"
+    },
+    {
+      "id": "T4_LIFEKEEPER",
+      "order": 4,
+      "emoji": "🦸",
+      "label": "Lifekeeper",
+      "i18n_key": "tier_t4_lifekeeper_label",
+      "color": "#f0abfc",
+      "ring_gradient": { "start": "#fcd34d", "end": "#f59e0b" },
+      "criterion": "sum(lives_impacted) ≥ 1 across the device's reports — downstream impact required"
+    }
+  ],
+  "legacy_aliases": {
+    "$comment": "Pre-V4 badge_level values mapped to the V4 ladder. Used by clients that fetch /profile from a backend mid-rollout where the device row still carries the legacy value. NEVER surfaces as the dashboard's reporter_tier (the Phase 1.6 join filters to V4 ids only — see _attach_reporter_tier).",
+    "NEWCOMER": "T1_SCOUT",
+    "HELPER": "T2_SIGNAL",
+    "CONTRIBUTOR": "T3_CHANGEMAKER",
+    "TRUSTED": "T4_LIFEKEEPER",
+    "GUARDIAN": "T3_CHANGEMAKER",
+    "HERO": "T4_LIFEKEEPER"
+  }
+}

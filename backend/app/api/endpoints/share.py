@@ -102,12 +102,23 @@ def _verify_share_token(token: str) -> Optional[dict]:
 
 
 # ── Share-page rendering ────────────────────────────────────────────────
+#
+# Phase 2.1 (May 2026) — emoji + label come from the shared canonical
+# tier config at `shared/tier-config.json` via
+# `app.services.tier_config`. Keep `_TIER_LABELS` as a thin local
+# alias used by the existing validation paths so we don't churn every
+# call-site at once; future PRs can swap call-sites to call
+# `tier_config.label_emoji_pair` directly.
+from app.services import tier_config as _tier_config  # noqa: E402
+
+
+def _v4_tier_ids() -> set[str]:
+    return {t["id"] for t in _tier_config.all_tiers()}
+
 
 _TIER_LABELS = {
-    "T1_SCOUT":        ("🌱", "Scout"),
-    "T2_SIGNAL":       ("📣", "Signal"),
-    "T3_CHANGEMAKER":  ("⚡", "Changemaker"),
-    "T4_LIFEKEEPER":   ("🦸", "Lifekeeper"),
+    t["id"]: (t["emoji"], t["label"])
+    for t in _tier_config.all_tiers()
 }
 
 

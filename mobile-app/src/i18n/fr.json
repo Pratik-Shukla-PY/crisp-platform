@@ -849,5 +849,9 @@
   "delete_all_server_confirm": "Ceci supprimera DÉFINITIVEMENT tous les rapports et médias envoyés depuis ce serveur. Irréversible.",
   "delete_all_success_count": "{n} rapport(s) supprimé(s). Toutes les données locales effacées.",
   "confirm_yes": "Oui",
-  "confirm_no": "Annuler"
+  "confirm_no": "Annuler",
+  "aria_home_badge_chip": "Niveau de rapporteur — appuyez pour ouvrir la page des récompenses",
+  "bs_share_lives_template": "J'ai contribué à sauver {n} vies en tant que {tier} CRISP.",
+  "bs_share_reports_template": "J'ai soumis {n} rapports en tant que {tier} CRISP.",
+  "bs_share_fallback": "Je suis {tier} CRISP. Signalez ce que vous voyez."
 }

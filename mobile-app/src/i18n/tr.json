@@ -827,5 +827,9 @@
   "delete_all_server_confirm": "This will permanently delete ALL your submitted reports and media from the server. This cannot be undone.",
   "delete_all_success_count": "{n} report(s) deleted. All local data cleared.",
   "confirm_yes": "Yes",
-  "confirm_no": "Cancel"
+  "confirm_no": "Cancel",
+  "aria_home_badge_chip": "Reporter level — tap to open rewards page",
+  "bs_share_lives_template": "Helped save {n} lives as a CRISP {tier}.",
+  "bs_share_reports_template": "Submitted {n} reports as a CRISP {tier}.",
+  "bs_share_fallback": "I'm a CRISP {tier}. Report what you see."
 }

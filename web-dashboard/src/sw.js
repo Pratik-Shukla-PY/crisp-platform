@@ -15,7 +15,7 @@
 // the browser was heuristic-pinning the old CSP. Old SWs auto-replace
 // because skipWaiting() runs in install + nginx now sends Cache-Control:
 // no-cache on sw.js so the new code lands within seconds of deploy.
-const APP_CACHE    = 'crisp-app-v14';  // v14 (May 2026): Phase 1.6 dashboard V4 field parity — render reporter_tier + UNDP Appendix-1 service-status enum expansions (INTERMITTENT/LOAD_SHEDDING/BLACKOUT/FULLY_OPERATIONAL/PARTIALLY_OPERATIONAL/NOT_OPERATIONAL) + humanized pressing_needs labels. Material app.js change; returning operators need to evict the legacy build.
+const APP_CACHE    = 'crisp-app-v15';  // v15 (May 2026): Phase 2.1 shared tier-config — reporter_tier renderer reads from window.CRISP_TIERS_BY_ID (loaded from tier-config.js before app.js). Removes the 12-line inline TIER_META block. Returning operators must evict v14 so the new <script> tag lands.
 const CDN_CACHE    = 'crisp-cdn-v9';
 const API_CACHE    = 'crisp-api-v9';
 const STATIC_CACHE = 'crisp-static-v12';

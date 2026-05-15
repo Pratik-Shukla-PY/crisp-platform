@@ -835,5 +835,9 @@
   "delete_all_server_confirm": "Esto eliminará DEFINITIVAMENTE todos los informes y medios enviados del servidor. No se puede deshacer.",
   "delete_all_success_count": "{n} informe(s) eliminado(s). Todos los datos locales borrados.",
   "confirm_yes": "Sí",
-  "confirm_no": "Cancelar"
+  "confirm_no": "Cancelar",
+  "aria_home_badge_chip": "Nivel de reportero — toca para abrir la página de recompensas",
+  "bs_share_lives_template": "Ayudé a salvar {n} vidas como {tier} de CRISP.",
+  "bs_share_reports_template": "Envié {n} informes como {tier} de CRISP.",
+  "bs_share_fallback": "Soy {tier} de CRISP. Reporta lo que ves."
 }
