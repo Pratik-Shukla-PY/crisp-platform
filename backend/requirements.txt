@@ -75,6 +75,14 @@ pywebpush>=2.0.0
 # transitive dep. moto used in tests to mock S3 without real AWS calls.
 boto3>=1.34.0
 
+# PDF text-extraction for export-content tests (Phase 2.1, May 2026).
+# Used only in `tests/test_api_exports.py::test_pdf_dossier_renders_v4_fields`
+# to decode ReportLab-Flate-compressed content streams. Not used at
+# runtime — production code only depends on reportlab for PDF
+# generation. Pinning at the loose `>=5.0` band keeps us on the
+# current major (5.x is the AGPL-fork-fixed mainline).
+pypdf>=5.0
+
 # Distributed rate-limit (May 2026 — Phase 1.8, audit critical-finding
 # #4: in-memory counters are per-WORKER, so under N uvicorn workers an
 # attacker effectively gets Nx the nominal rate). When REDIS_URL is set,

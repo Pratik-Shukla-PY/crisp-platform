@@ -56,7 +56,19 @@ def _report_to_row(r):
     truth scores, not just raw report data. Pulled from the related
     SatelliteVerification row (one-to-one on report_id). When no
     verification has run, the columns are blank rather than absent so
-    CSV/GeoJSON consumers can rely on a stable schema."""
+    CSV/GeoJSON consumers can rely on a stable schema.
+
+    Phase 2.1 (May 2026, audit follow-up) — flatten V4 fields. The
+    UNDP analyst doing data-driven needs assessment in Excel /
+    QGIS / R cares about flat columns, not a JSON blob. We unpack
+    ``service_status`` into ``electricity_status`` / ``water_status``
+    / ``health_status`` columns, ``pressing_needs`` into a
+    semicolon-joined string, and add the gamification ``reporter_tier``
+    (joined from ReporterProfile via Device.device_hash). Stable
+    schema across formats so a downstream analyst can use the
+    same field names whether they pulled CSV, GeoJSON, Shapefile,
+    KML, or PDF.
+    """
     from app.core.taxonomy import normalise_damage, categorise_crisis
     loc = r.location
     damage = normalise_damage(r.damage_classification) or (r.damage_classification or "")
@@ -64,6 +76,51 @@ def _report_to_row(r):
     # Verification fields — pulled from the SatelliteVerification row
     # if present. Single-row 1:1 relationship via Report.verification.
     v = getattr(r, "verification", None)
+
+    # ── V4 service-status unpack ──────────────────────────────────────
+    # The Report.service_status JSON carries {electricity, water,
+    # health, pressing_needs}. Older rows may carry a subset; we
+    # default missing scalars to "" and missing lists to [] so the
+    # column shape stays stable for downstream consumers.
+    ss = r.service_status if isinstance(r.service_status, dict) else {}
+    electricity_status = str(ss.get("electricity", "") or "")
+    water_status       = str(ss.get("water", "")       or "")
+    health_status      = str(ss.get("health", "")      or "")
+    pressing_needs_raw = ss.get("pressing_needs", []) or []
+    # Semicolons not commas — CSV-safe AND aligns with the GIS
+    # convention for multi-valued attribute fields.
+    pressing_needs_csv = ";".join(
+        [str(x) for x in pressing_needs_raw if x] if isinstance(pressing_needs_raw, list) else []
+    )
+
+    # ── V4 reporter_tier ──────────────────────────────────────────────
+    # Joined from ReporterProfile via the device's device_hash. We do
+    # this on a per-row basis to keep the export endpoints simple
+    # (the dashboard listing endpoint uses a bulk JOIN; exports
+    # stream so the per-row cost is fine for the typical ≤10k-row
+    # download). Errors are silenced — a tier-join failure must
+    # never corrupt a bulk export.
+    reporter_tier = ""
+    try:
+        # Importing lazily so the model module isn't loaded unless an
+        # export is actually requested.
+        from app.models.report import Device, ReporterProfile
+        from app.db.session import SessionLocal  # noqa: F401  (used implicitly via r._sa_instance_state.session)
+        sess = getattr(r, "_sa_instance_state", None)
+        sess = sess.session if sess is not None else None
+        if sess is not None and r.device_id:
+            dev = sess.query(Device).filter(Device.id == r.device_id).first()
+            if dev and dev.device_hash:
+                prof = sess.query(ReporterProfile).filter(
+                    ReporterProfile.device_hash == dev.device_hash
+                ).first()
+                if prof and prof.badge_level in (
+                    "T1_SCOUT", "T2_SIGNAL", "T3_CHANGEMAKER", "T4_LIFEKEEPER",
+                ):
+                    reporter_tier = prof.badge_level
+    except Exception:
+        logger.exception("reporter_tier join failed for report %s", getattr(r, "id", "<unknown>"))
+
     return {
         "id": r.id,
         "client_report_id": r.client_report_id or "",
@@ -78,7 +135,16 @@ def _report_to_row(r):
         "crisis_category": crisis_cat,
         "description": (r.description or "").replace("\n", " ").replace(",", ";"),
         "debris_clearing_needed": str(r.debris_clearing_needed) if r.debris_clearing_needed is not None else "",
+        # Keep `service_status` as the legacy JSON blob for any
+        # downstream pipeline that already parses it; the flat
+        # columns below are the new canonical surface.
         "service_status": json.dumps(r.service_status) if r.service_status else "",
+        # Phase 2.1 — V4 flat columns (UNDP analyst-friendly).
+        "electricity_status": electricity_status,
+        "water_status":       water_status,
+        "health_status":      health_status,
+        "pressing_needs":     pressing_needs_csv,
+        "reporter_tier":      reporter_tier,
         "building_id": r.building_id or "",
         "latitude": str(loc.latitude) if loc else "",
         "longitude": str(loc.longitude) if loc else "",
@@ -115,6 +181,12 @@ def export_csv(
         "infrastructure_type", "infrastructure_sub_type", "infrastructure_name",
         "damage_classification", "crisis_type", "crisis_category",
         "description", "debris_clearing_needed", "service_status",
+        # Phase 2.1 (May 2026) — UNDP analyst-friendly flat V4
+        # columns. ``service_status`` JSON above is kept for legacy
+        # consumers; these split it into one column per signal so
+        # spreadsheets / QGIS / R can filter / pivot directly.
+        "electricity_status", "water_status", "health_status",
+        "pressing_needs", "reporter_tier",
         "building_id", "latitude", "longitude", "location_name",
         "lives_impacted", "timestamp",
         # .1 — satellite verification columns. UNDP
@@ -205,6 +277,18 @@ def export_shapefile(
     w.field("BUILDING", "C", 40)
     w.field("DESCRIPT", "C", 254)
     w.field("TIMESTAMP", "C", 30)
+    # Phase 2.1 (May 2026) — V4 columns. Shapefile DBF caps column
+    # names at 10 chars + values per type-spec; ESRI-style abbrevs:
+    #   ELEC_STAT   → service_status.electricity
+    #   WATER_STAT  → service_status.water
+    #   HEALTH_ST   → service_status.health
+    #   NEEDS       → service_status.pressing_needs (semicolon-joined)
+    #   REPRT_TIER  → reporter's gamification tier
+    w.field("ELEC_STAT", "C", 25)
+    w.field("WATER_STAT", "C", 25)
+    w.field("HEALTH_ST", "C", 25)
+    w.field("NEEDS", "C", 200)
+    w.field("REPRT_TIER", "C", 20)
 
     for r in reports:
         loc = r.location
@@ -217,7 +301,12 @@ def export_shapefile(
             row["severity"][:20], row["infrastructure_type"][:20],
             row["infrastructure_name"][:255], row["damage_classification"][:20],
             row["crisis_type"][:20], row["debris_clearing_needed"][:10],
-            row["building_id"][:40], row["description"][:254], row["timestamp"][:30]
+            row["building_id"][:40], row["description"][:254], row["timestamp"][:30],
+            # V4 columns — slice to the DBF column width so the
+            # shapefile writer never silently truncates mid-write.
+            row["electricity_status"][:25], row["water_status"][:25],
+            row["health_status"][:25], row["pressing_needs"][:200],
+            row["reporter_tier"][:20],
         )
 
     w.close()
@@ -338,6 +427,15 @@ def export_pdf(
             ["Building / Structure",   row["infrastructure_name"]],
             ["Damage Classification",  row["damage_classification"]],
             ["Debris Clearing",        row["debris_clearing_needed"]],
+            # Phase 2.1 — V4 fields on the analyst-facing PDF.
+            # Empty values are kept in the table for layout
+            # consistency across reports (analyst can tell at a
+            # glance which signals the reporter answered).
+            ["Power Status",           row["electricity_status"]],
+            ["Water Status",           row["water_status"]],
+            ["Health Status",          row["health_status"]],
+            ["Pressing Needs",         row["pressing_needs"]],
+            ["Reporter Tier",          row["reporter_tier"]],
             ["Location (lat, lng)",    f"{row['latitude']}, {row['longitude']}"],
             ["Location Name",          row["location_name"]],
             ["Lives Impacted",         row["lives_impacted"]],
@@ -413,10 +511,42 @@ def export_kml(
             continue
         row = _report_to_row(r)
         name = f"{row['infrastructure_type']} — {row['severity']}"
-        desc = f"Crisis: {row['crisis_type']}\nDamage: {row['damage_classification']}\nDescription: {row['description']}\nTime: {row['timestamp']}"
+        # Phase 2.1 (May 2026) — surface V4 service-status + reporter
+        # tier in the KML description so a humanitarian analyst
+        # clicking the pushpin in Google Earth sees the same signals
+        # they get from the CSV / dashboard. Empty values are
+        # rendered as "—" so the structure is obvious even when the
+        # reporter didn't answer a particular question.
+        def _or_dash(v):
+            return v if v else "—"
+        desc_parts = [
+            f"Crisis: {row['crisis_type']}",
+            f"Damage: {row['damage_classification']}",
+            f"Power:  {_or_dash(row['electricity_status'])}",
+            f"Water:  {_or_dash(row['water_status'])}",
+            f"Health: {_or_dash(row['health_status'])}",
+            f"Needs:  {_or_dash(row['pressing_needs'])}",
+            f"Reporter tier: {_or_dash(row['reporter_tier'])}",
+            f"Description: {row['description']}",
+            f"Time:   {row['timestamp']}",
+        ]
+        desc = "\n".join(desc_parts)
 
         pnt = kml.newpoint(name=name, description=desc)
         pnt.coords = [(loc.longitude, loc.latitude)]
+        # KML "extended data" lets Google Earth + QGIS surface
+        # individual fields as queryable attributes instead of just
+        # rendering them in the description blob. Same field names
+        # as CSV for cross-format consistency.
+        for k in (
+            "electricity_status", "water_status", "health_status",
+            "pressing_needs", "reporter_tier", "damage_classification",
+            "crisis_type", "crisis_category", "infrastructure_type",
+        ):
+            try:
+                pnt.extendeddata.newdata(name=k, value=row.get(k, "") or "")
+            except Exception:
+                pass
         color = damage_colors.get(row["damage_classification"], simplekml.Color.white)
         pnt.style.iconstyle.color = color
 
