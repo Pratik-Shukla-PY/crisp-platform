@@ -428,3 +428,202 @@ class TestStatusChangeTriggersPush:
         assert res.status_code == 200, res.text
         db.refresh(rep)
         assert rep.status == ReportStatusEnum.RESPONDING
+
+
+# ── Phase 2.3 (May 2026) — retry + dead-letter pruning ──────────────────────
+
+class TestPushRetryAndDeadLetter:
+    """Pin the new retry-on-transient + dead-letter prune behaviour.
+
+    The pre-Phase-2.3 service was fire-and-forget: a single 5xx
+    bumped failure_count and left the row alone forever. Operator
+    feedback said the report→response feedback loop felt unreliable
+    when push providers hiccup. Phase 2.3 adds:
+
+      1. Bounded retry inside the executor task (1s/2s/4s backoff,
+         3 retries max). Sleeps happen on the executor thread, never
+         the API request path.
+      2. Dead-letter prune: subscriptions whose failure_count crosses
+         ``PUSH_DEAD_LETTER_THRESHOLD`` are auto-deleted so we don't
+         retry forever on endpoints that won't return 410.
+
+    Tests use monkeypatched ``_send_one`` + zero-sleep ``time.sleep``
+    so the runtime stays sub-second.
+    """
+
+    def _vapid_on(self, monkeypatch):
+        from app.services import push as push_service
+        monkeypatch.setattr(push_service.settings, "VAPID_PUBLIC_KEY", "FAKE_PUB")
+        monkeypatch.setattr(push_service.settings, "VAPID_PRIVATE_KEY", "FAKE_PRIV")
+        monkeypatch.setattr(push_service.settings, "VAPID_CONTACT_EMAIL", "ops@test")
+        return push_service
+
+    def _seed_sub(self, db, *, sid: str, hash_: str, failure_count: int = 0):
+        from app.models.report import PushSubscription
+        sub = PushSubscription(
+            id=sid,
+            device_hash=hash_,
+            endpoint=f"https://fcm.googleapis.com/wp/test/{sid}",
+            p256dh_key="x" * 8,
+            auth_key="y" * 8,
+            failure_count=failure_count,
+        )
+        db.add(sub)
+        db.commit()
+        return sub
+
+    def test_transient_503_retries_then_succeeds_on_second_attempt(
+        self, db, monkeypatch,
+    ):
+        """First attempt returns 503, second returns 201. Should
+        end with success: failure_count=0, last_pushed_at set."""
+        push_service = self._vapid_on(monkeypatch)
+        self._seed_sub(db, sid="push-sub-retry-ok", hash_="DEV-RETRY-OK")
+
+        # Skip the actual sleeps so the test runs fast.
+        monkeypatch.setattr("time.sleep", lambda _s: None)
+
+        attempts = []
+        def fake_send(*a, **kw):
+            attempts.append(1)
+            return 503 if len(attempts) == 1 else 201
+        monkeypatch.setattr(push_service, "_send_one", fake_send)
+
+        push_service._deliver_one("push-sub-retry-ok", {"title": "x", "body": "y"})
+        # We should have called _send_one twice — the retry succeeded.
+        assert len(attempts) == 2
+
+        from app.models.report import PushSubscription
+        row = db.query(PushSubscription).filter(
+            PushSubscription.id == "push-sub-retry-ok"
+        ).first()
+        assert row is not None, "successful row must NOT be pruned"
+        assert row.failure_count == 0, "success must reset failure_count"
+        assert row.last_pushed_at is not None
+
+    def test_transient_503_all_attempts_exhausted_bumps_failure_count(
+        self, db, monkeypatch,
+    ):
+        """All 1+3 attempts return 503 → end state: failure_count
+        bumped by 1, row not pruned (yet)."""
+        push_service = self._vapid_on(monkeypatch)
+        self._seed_sub(db, sid="push-sub-retry-fail", hash_="DEV-RETRY-FAIL")
+
+        monkeypatch.setattr("time.sleep", lambda _s: None)
+        call_count = [0]
+        def fake_send(*a, **kw):
+            call_count[0] += 1
+            return 503
+        monkeypatch.setattr(push_service, "_send_one", fake_send)
+
+        push_service._deliver_one("push-sub-retry-fail", {"title": "x", "body": "y"})
+
+        # 1 initial attempt + 3 retries = 4 calls.
+        expected = 1 + len(push_service.PUSH_RETRY_BACKOFF_S)
+        assert call_count[0] == expected, (
+            f"expected {expected} attempts (1 initial + {len(push_service.PUSH_RETRY_BACKOFF_S)} retries); "
+            f"got {call_count[0]}"
+        )
+
+        from app.models.report import PushSubscription
+        row = db.query(PushSubscription).filter(
+            PushSubscription.id == "push-sub-retry-fail"
+        ).first()
+        assert row is not None, "row must survive transient failure"
+        assert row.failure_count == 1, "ONE failure event per delivery, not one per attempt"
+        assert row.last_failure_at is not None
+
+    def test_404_skips_retry_and_deletes_immediately(self, db, monkeypatch):
+        """404 GONE is a HARD failure — no retry, immediate prune."""
+        push_service = self._vapid_on(monkeypatch)
+        self._seed_sub(db, sid="push-sub-404", hash_="DEV-404")
+
+        attempts = []
+        def fake_send(*a, **kw):
+            attempts.append(1)
+            return 404
+        monkeypatch.setattr(push_service, "_send_one", fake_send)
+
+        push_service._deliver_one("push-sub-404", {"title": "x", "body": "y"})
+
+        assert len(attempts) == 1, "404 must NOT trigger retry"
+        from app.models.report import PushSubscription
+        assert db.query(PushSubscription).filter(
+            PushSubscription.id == "push-sub-404"
+        ).first() is None, "404 must trigger immediate prune"
+
+    def test_401_skips_retry_but_does_not_prune(self, db, monkeypatch):
+        """401 is auth-failure — operator should investigate. No
+        retry (would just fail with the same error) but DON'T prune
+        (rotating the VAPID key fixes it without losing the sub)."""
+        push_service = self._vapid_on(monkeypatch)
+        self._seed_sub(db, sid="push-sub-401", hash_="DEV-401")
+
+        attempts = []
+        def fake_send(*a, **kw):
+            attempts.append(1)
+            return 401
+        monkeypatch.setattr(push_service, "_send_one", fake_send)
+
+        push_service._deliver_one("push-sub-401", {"title": "x", "body": "y"})
+
+        assert len(attempts) == 1
+        from app.models.report import PushSubscription
+        row = db.query(PushSubscription).filter(
+            PushSubscription.id == "push-sub-401"
+        ).first()
+        assert row is not None, "auth failures must keep the sub for VAPID-rotation recovery"
+        assert row.failure_count == 1
+
+    def test_dead_letter_prunes_after_threshold(self, db, monkeypatch):
+        """Subscription with failure_count already at threshold-1
+        gets pruned on the next transient failure."""
+        push_service = self._vapid_on(monkeypatch)
+        threshold = push_service.PUSH_DEAD_LETTER_THRESHOLD
+        # Seed with failure_count one below threshold so the next
+        # failure pushes it over.
+        self._seed_sub(
+            db,
+            sid="push-sub-deadletter",
+            hash_="DEV-DL",
+            failure_count=threshold - 1,
+        )
+        monkeypatch.setattr("time.sleep", lambda _s: None)
+        monkeypatch.setattr(push_service, "_send_one", lambda *a, **kw: 503)
+
+        push_service._deliver_one("push-sub-deadletter", {"title": "x", "body": "y"})
+
+        from app.models.report import PushSubscription
+        # Dead-lettered: row pruned because failure_count crossed the
+        # threshold.
+        assert db.query(PushSubscription).filter(
+            PushSubscription.id == "push-sub-deadletter"
+        ).first() is None, (
+            f"subscription must be auto-pruned when failure_count "
+            f"crosses threshold={threshold}"
+        )
+
+    def test_success_resets_failure_count(self, db, monkeypatch):
+        """A 200 after past failures must reset failure_count to 0
+        so a brief outage doesn't push a long-suffering sub over
+        the dead-letter threshold."""
+        push_service = self._vapid_on(monkeypatch)
+        self._seed_sub(
+            db,
+            sid="push-sub-recover",
+            hash_="DEV-RECOVER",
+            failure_count=5,
+        )
+        monkeypatch.setattr(push_service, "_send_one", lambda *a, **kw: 201)
+
+        push_service._deliver_one("push-sub-recover", {"title": "x", "body": "y"})
+
+        from app.models.report import PushSubscription
+        row = db.query(PushSubscription).filter(
+            PushSubscription.id == "push-sub-recover"
+        ).first()
+        assert row is not None
+        assert row.failure_count == 0, (
+            "success must reset failure_count so a recovered sub "
+            "isn't pruned by the next transient hiccup"
+        )

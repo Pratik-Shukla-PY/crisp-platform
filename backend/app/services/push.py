@@ -15,18 +15,25 @@ AFTER its own DB commit. We:
      workflow.
 
 Failure handling:
-  * 200 / 201 / 202 → success; bump last_pushed_at.
-  * 404 / 410 → endpoint is dead; delete the row.
-  * 429 → rate-limited; bump failure_count, leave row alone, the
-    next status change will retry.
-  * 5xx → transient provider issue; same as 429.
+  * 200 / 201 / 202 → success; bump last_pushed_at + reset
+    failure_count to zero.
+  * 404 / 410 → endpoint is dead; delete the row immediately.
+  * 429 / 5xx → transient provider issue. Phase 2.3 (May 2026):
+    in-task bounded retry with exponential backoff (3 attempts
+    spaced 1s / 2s / 4s) before giving up + bumping failure_count.
+    Subscriptions whose failure_count exceeds
+    `PUSH_DEAD_LETTER_THRESHOLD` get pruned (auto-delete) so we
+    don't keep retrying forever against an endpoint that's silently
+    dead (some providers stop returning 410 after their own GC
+    window).
   * 401 / 403 → VAPID key mismatch or expired claim. Operator
     needs to look at the logs — could be a key rotation gone wrong.
+    Not retried (would just fail again with the same auth error).
 
-We never attempt to retry within a single status change. Push is
-fire-and-forget; the next event will retry naturally if it fires
-within a reasonable window. This keeps the service stateless and
-the executor pool small (no in-memory queue to drain on shutdown).
+The in-task retry was added in Phase 2.3 (May 2026) after operator
+feedback that the report→response feedback loop felt unreliable
+when push providers hiccup. Retries are still cheap — they happen
+on the executor thread, NEVER on the API request path.
 
 If VAPID is not configured (any of public-key / private-key /
 contact-email is empty) the entry point short-circuits with a
@@ -54,6 +61,22 @@ logger = logging.getLogger(__name__)
 _push_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="webpush")
 
 _warned_vapid_missing = False
+
+# Phase 2.3 (May 2026) — bounded retry + dead-letter knobs.
+#
+# Retry policy is exponential: 1s / 2s / 4s = 7s total worst case
+# per delivery. Bounded to keep the executor pool from filling with
+# slow retries during a provider-wide hiccup. Three attempts is
+# enough to ride out the typical "429 cooling-down" or "transient
+# 503" pattern without holding workers hostage.
+PUSH_RETRY_BACKOFF_S = [1, 2, 4]
+# Subscriptions whose failure_count crosses this threshold get
+# auto-pruned. Some providers stop returning 410 GONE after their
+# own GC window — without this prune, we'd retry forever on dead
+# endpoints. Tuned at 10 (≈ a fortnight of daily-fail status
+# changes) so a brief provider outage doesn't accidentally prune a
+# healthy subscription.
+PUSH_DEAD_LETTER_THRESHOLD = 10
 
 
 def _vapid_configured() -> bool:
@@ -120,6 +143,12 @@ def _deliver_one(
 ) -> None:
     """Run inside the executor pool. Owns its own DB session.
 
+    Phase 2.3 (May 2026) — bounded retry + dead-letter pruning.
+    Transient failures (429 / 5xx) now retry up to len(PUSH_RETRY_BACKOFF_S)
+    times with exponential backoff before giving up. Auth failures
+    (401 / 403) skip retry — they'd just fail again with the same
+    error.
+
     Any exception here is logged but not propagated — the executor
     swallows it anyway, and we don't want a malformed subscription
     to abort sibling deliveries.
@@ -129,14 +158,48 @@ def _deliver_one(
         sub = db.query(PushSubscription).filter(PushSubscription.id == sub_id).first()
         if sub is None:
             return  # Race: subscription deleted between fan-out and delivery.
-        try:
-            status_code = _send_one(
-                sub.endpoint, sub.p256dh_key, sub.auth_key, payload,
-            )
-        except Exception:
-            logger.exception("[push] unexpected error sending to %s", sub_id)
-            return
 
+        # ── Bounded retry loop ───────────────────────────────────
+        # Attempt once + retry on transient. We track the last
+        # status so the post-loop branching has a deterministic
+        # value even if every attempt raises.
+        status_code = 599
+        attempts = 1 + len(PUSH_RETRY_BACKOFF_S)
+        import time as _time
+        for attempt_idx in range(attempts):
+            try:
+                status_code = _send_one(
+                    sub.endpoint, sub.p256dh_key, sub.auth_key, payload,
+                )
+            except Exception:
+                logger.exception(
+                    "[push] unexpected error sending to %s (attempt %d/%d)",
+                    sub_id, attempt_idx + 1, attempts,
+                )
+                status_code = 599
+
+            # Success → break out, no more attempts needed.
+            if 200 <= status_code < 300:
+                break
+
+            # Hard failures — break and let the post-loop handler
+            # delete / log.
+            if status_code in (404, 410, 401, 403):
+                break
+
+            # Transient — sleep + retry. If this was the LAST
+            # attempt, fall through to the failure-bump branch.
+            if attempt_idx < len(PUSH_RETRY_BACKOFF_S):
+                backoff = PUSH_RETRY_BACKOFF_S[attempt_idx]
+                logger.info(
+                    "[push] transient (status=%s) for sub %s — retrying in %ds "
+                    "(attempt %d/%d)",
+                    status_code, sub_id, backoff,
+                    attempt_idx + 1, attempts,
+                )
+                _time.sleep(backoff)
+
+        # ── Post-loop status handling ────────────────────────────
         if 200 <= status_code < 300:
             sub.last_pushed_at = datetime.utcnow()
             sub.failure_count = 0
@@ -152,10 +215,14 @@ def _deliver_one(
             db.commit()
             return
 
-        # Transient (429, 5xx) or auth (401/403). Mark failure, leave the row.
+        # Transient (429, 5xx) — every retry exhausted — OR auth
+        # (401/403, which skips retry). Bump failure + log.
         sub.last_failure_at = datetime.utcnow()
         sub.failure_count = (sub.failure_count or 0) + 1
+        new_fc = sub.failure_count
+        endpoint_for_log = sub.endpoint  # capture before potential delete
         db.commit()
+
         if status_code in (401, 403):
             logger.error(
                 "[push] AUTH FAILURE (status=%s) for sub %s — VAPID key may be wrong "
@@ -164,9 +231,39 @@ def _deliver_one(
             )
         else:
             logger.warning(
-                "[push] transient failure (status=%s) for sub %s; failure_count=%d",
-                status_code, sub_id, sub.failure_count,
+                "[push] transient failure (status=%s) for sub %s after %d attempt(s); "
+                "failure_count=%d",
+                status_code, sub_id, attempts, new_fc,
             )
+
+        # ── Dead-letter pruning ─────────────────────────────────
+        # If we've failed N times in a row on the same endpoint,
+        # auto-delete the subscription. Some push providers stop
+        # returning 410 for endpoints they've internally GC'd —
+        # without this threshold we'd retry forever. Operator sees
+        # the dead-letter log line so they know which subscription
+        # got pruned + why.
+        if new_fc >= PUSH_DEAD_LETTER_THRESHOLD:
+            try:
+                # Re-fetch the sub in case the commit above invalidated
+                # the in-memory copy.
+                stale = db.query(PushSubscription).filter(
+                    PushSubscription.id == sub_id
+                ).first()
+                if stale is not None:
+                    db.delete(stale)
+                    db.commit()
+                    logger.warning(
+                        "[push] DEAD-LETTER pruning sub %s (endpoint=%s, "
+                        "failure_count=%d ≥ threshold=%d) — last status=%s",
+                        sub_id, endpoint_for_log[:60] + "…",
+                        new_fc, PUSH_DEAD_LETTER_THRESHOLD, status_code,
+                    )
+            except Exception:
+                logger.exception(
+                    "[push] dead-letter prune failed for sub %s", sub_id,
+                )
+                db.rollback()
     finally:
         db.close()
 
