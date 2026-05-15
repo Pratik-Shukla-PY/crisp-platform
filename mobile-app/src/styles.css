@@ -335,7 +335,19 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .stage-center {
     display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
+    align-items: center;
+    /* (May 2026 — Fix-P3) `safe center` is the CSS-canonical fix for
+       the "centered content overflows past both edges" trap. When the
+       column's content fits inside the parent, behaves exactly like
+       `center` — content is vertically centered. When the content is
+       TALLER than the parent (iPhone SE / Galaxy S9+ on stages with
+       lots of content), the spec falls back to `flex-start` so the
+       overflowing tail stays inside the scroll area instead of being
+       pushed below the visible viewport (where the user can't see the
+       scroll affordance). Supported in Safari 11+, Chrome 93+,
+       Firefox 63+ — older browsers see the previous behaviour
+       (graceful degradation). */
+    justify-content: safe center;
     min-height: 100%; text-align: center; gap: 20px;
 }
 .stage-header {
@@ -9546,11 +9558,17 @@ body.tier-t4 .home-impact {
 .home-stage .home-center {
     display: flex;
     flex-direction: column;
-    height: 100dvh;
+    /* Use min-height (not height) so the column can grow when content
+       exceeds the viewport on very short phones. height: 100dvh +
+       overflow: hidden was silently clipping channel tiles on
+       iPhone 5S / older Galaxy (<600 dp tall). */
     min-height: 100dvh;
     padding: 16px 20px 12px;
     gap: 0;                          /* sections own their own margins */
-    overflow: hidden;
+    /* (May 2026 — Fix-P4) — graceful scroll on short viewports
+       instead of silent clip. Tall viewports (≥740 dp) never see
+       a scrollbar; the flex layout below sizes content to fit. */
+    overflow-y: auto;
     box-sizing: border-box;
 }
 
@@ -11869,4 +11887,71 @@ body { background-color: #10284a; }
    gap = ~60 px clearance needed. */
 #stage-success .stage-center.success-center {
     padding-top: 48px;
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   May 2026 — Responsive stabilization, Fix-P6 sticky-footer pattern.
+
+   On stages whose total content height exceeds short viewports
+   (iPhone SE 375×667 ≈ 640 px usable, Galaxy S9+ 360×740 ≈ 700 px),
+   the bottom CTAs were technically reachable via scroll but
+   invisible-by-default — users didn't realize there was content
+   below the fold. The audit's user-facing reproduction was:
+
+      stage-success: tap-tap-tap to submit a report → land on
+      success page → see heart + thank-you + impact strip + report
+      ID + badge → NO visible CTA because the "Add another report"
+      button + secondary row had scrolled past the bottom edge.
+
+   `position: sticky; bottom: <n>` is the CSS-canonical fix:
+     - On tall viewports where the stage doesn't internally scroll,
+       sticky is a no-op (the element renders at its natural
+       position). Zero visual change for the majority of users.
+     - On short viewports where .stage's overflow-y: auto engages,
+       the element pins to the bottom of the visible scroll area
+       and stays reachable without scrolling.
+
+   Browser support: Safari 13+ (2019), Chrome 56+ (2017), Firefox
+   59+ (2018) — universal across our target matrix.
+
+   Stages instrumented:
+   #stage-success — .big-cta + .success-secondary-row stack
+   #stage-badge-studio — .badge-studio-actions
+   ─────────────────────────────────────────────────────────────────── */
+
+#stage-success .big-cta {
+    position: sticky;
+    /* Pin ABOVE the secondary row. secondary-row min-height: 44 +
+       sticky padding-top 8 + sticky padding-bottom (safe-area or 8)
+       = ~60 px. Add the safe-area inset on top of that. */
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    z-index: 2;
+}
+
+#stage-success .success-secondary-row {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    /* Opaque background so scrolled content doesn't render through. */
+    background: var(--bg);
+    padding-block: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+#stage-badge-studio .badge-studio-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: var(--bg);
+    padding-block: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+/* Belt-and-braces for stages where the parent flex layout could
+   compress the primary CTA + secondary row when sticky engages.
+   `min-height: 0` lets the flex column shrink the centered content
+   while the sticky footer pins to the bottom edge. Specific to the
+   success stage; doesn't affect other usages of `.stage-center`. */
+#stage-success .stage-center.success-center {
+    min-height: 0;
 }

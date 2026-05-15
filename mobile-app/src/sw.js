@@ -5,7 +5,13 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v189';
+const CACHE_NAME = 'crisp-v190';
+// v189 → v190 (May 2026 — responsive stabilization, Commit 2):
+//   styles.css changes for Fix-P3 (.stage-center justify-content:
+//   safe center), Fix-P4 (.home-center overflow-y: auto), and
+//   Fix-P6 (sticky-footer on stage-success + stage-badge-studio).
+//   Bump so returning users see the new layout immediately instead
+//   of holding the v189 snapshot where bottom CTAs still clip.
 // v188 → v189 (May 2026 — responsive stabilization, Commit 1):
 //   index.html viewport meta now ships viewport-fit=cover +
 //   interactive-widget=resizes-content, and styles.css gains the
