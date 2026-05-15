@@ -303,6 +303,13 @@ export default function HomeScreen(props: HomeScreenProps) {
   // an eyebrow on the shortest phones (iPhone SE) so the page still
   // fits in 100dvh without scroll.
   const isShortViewport = width < 380;
+  // (May 2026 — Fix-R4) — also compress the primary CTA's minHeight on
+  // short viewports (iPhone SE: 568 dp tall; Galaxy S9+: ≈640 dp). The
+  // original 110 dp ate 19 % of the viewport on iPhone SE, pushing the
+  // utility tile row below the home indicator. 88 dp keeps the WCAG
+  // 44 dp tap target comfortably (2× margin) while restoring space.
+  const isShortHeightViewport = height < 700;
+  const ctaMinHeight = isShortHeightViewport ? 88 : 110;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#10284a' }}>
@@ -317,7 +324,13 @@ export default function HomeScreen(props: HomeScreenProps) {
           paddingTop: Math.max(16, insets.top),
           paddingBottom: Math.max(12, insets.bottom),
           paddingHorizontal: 20,
-          minHeight: '100%',
+          // (May 2026 — Fix-R1) flexGrow: 1 is the canonical RN
+          // pattern for "content container fills the ScrollView's
+          // visible area when content is shorter". `minHeight: '100%'`
+          // (string percentage) is silently ignored by RN's flex
+          // layout engine — was producing inconsistent heights on
+          // notched phones (iPhone 12 vs 13 mini vs Pixel 6).
+          flexGrow: 1,
         }}
         // Single-page no-scroll is the goal; ScrollView is here only as a
         // safety net for content overflow on very small landscape phones.
@@ -412,6 +425,7 @@ export default function HomeScreen(props: HomeScreenProps) {
         <TouchableOpacity
           style={[
             styles.cta,
+            { minHeight: ctaMinHeight },        // Fix-R4 — responsive
             !props.consentGiven && styles.ctaDisabled,
           ]}
           onPress={() => { if (props.consentGiven) props.onStartReport(); }}

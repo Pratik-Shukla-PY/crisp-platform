@@ -50,6 +50,8 @@ import {
   StyleSheet,
   Animated,
   AccessibilityInfo,
+  KeyboardAvoidingView,
+  Platform,
   type ViewStyle,
 } from 'react-native';
 import Svg, { Path, Circle as SvgCircle, Line as SvgLine, Polygon } from 'react-native-svg';
@@ -232,6 +234,13 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
                   : 'v4_substep_what_caused';
 
   return (
+    // (May 2026 — Fix-R3) — KAV so the soft keyboard doesn't cover
+    // the "Other" infrastructure free-text input (line ~435) when
+    // the user taps it on the infra sub-step.
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: Colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
     <View style={[styles.stage, { backgroundColor: Colors.bg }]}>
       {/* §A Header */}
       <View style={[styles.header, { paddingTop: Math.max(8, insets.top) }]}>
@@ -330,6 +339,7 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
       {/* §E — No Continue button. The PWA hides it on classify too —
           auto-progress carries the user through. Back-button only. */}
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

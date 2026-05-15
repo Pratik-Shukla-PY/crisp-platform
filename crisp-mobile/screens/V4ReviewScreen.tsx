@@ -36,6 +36,8 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Svg, { Path, Circle as SvgCircle, Polyline } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -147,7 +149,20 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
   const [voiceDrawerOpen, setVoiceDrawerOpen] = useState(false);
   const [undpDrawerOpen, setUndpDrawerOpen] = useState(true);
 
+  // (May 2026 — Fix-R2) — measure footer height at runtime so the
+  // ScrollView's bottom padding adapts to the actual rendered Send
+  // button (previously hard-coded +88, broken under accessibility
+  // font scaling on iOS / Android).
+  const [footerHeight, setFooterHeight] = useState(88);
+
   return (
+    // (May 2026 — Fix-R3) — KAV so the soft keyboard doesn't cover
+    // the Voice/Text drawer's inline TextInput (line ~285) or the
+    // Send button below it.
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: Colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
     <View style={[styles.stage, { backgroundColor: Colors.bg }]}>
       {/* §A Header */}
       <View style={[styles.header, { paddingTop: Math.max(8, insets.top) }]}>
@@ -179,8 +194,10 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingHorizontal: 20,
-          paddingBottom: Math.max(12, insets.bottom) + 88, // room for send btn
+          // (Fix-R2) — runtime-measured footer height.
+          paddingBottom: Math.max(12, insets.bottom) + footerHeight,
         }}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* §B Captured strip */}
@@ -379,6 +396,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
 
       {/* §G Footer Send button */}
       <View
+        onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
         style={[
           styles.footer,
           { paddingBottom: Math.max(12, insets.bottom) },
@@ -410,6 +428,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
         </TouchableOpacity>
       </View>
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

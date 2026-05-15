@@ -1590,7 +1590,16 @@ export default function App() {
          top inset itself). On devices with a gesture-area / bottom
          notch (most Android 12+) this prevents overflow of the CTA row. */}
     <SafeAreaView style={s.container} edges={['left','right','bottom']}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
+      {/* (May 2026 — Fix-R5) — explicit translucent={false} so older
+          Android (API 21-23) doesn't render content under the status
+          bar despite the SafeAreaView edges config. backgroundColor
+          must be set alongside for the opaque-bar path; barStyle
+          stays light-content for our dark theme. */}
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor={Colors.bg}
+        translucent={false}
+      />
 
       {/* Phase 4 (Apr 2026) — Auto-submit timer banner, visible only during
            the capture flow (photo / audio / review / confirm) when the user's

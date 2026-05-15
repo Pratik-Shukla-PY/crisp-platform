@@ -50,6 +50,8 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
   useWindowDimensions,
   type ViewStyle,
 } from 'react-native';
@@ -106,6 +108,13 @@ export default function V4CaptureScreen(props: V4CaptureScreenProps) {
   const photoCount = props.photoThumbs.length;
   const canContinue = photoCount > 0;
 
+  // (May 2026 — Fix-R2) — measure footer height at runtime so the
+  // ScrollView's bottom padding adapts to the actual rendered footer.
+  // The previous `+ 76` was a baked-in assumption that broke under
+  // accessibility font scaling (iOS Dynamic Type Large, Android 1.3×+)
+  // when the Continue button's text wrapped and the footer grew.
+  const [footerHeight, setFooterHeight] = React.useState(76);
+
   // §E inline-panel toggles. Voice + Text each have a compact chip;
   // tapping toggles their inline drawer open. Only one open at a time
   // (matches PWA radio-style behaviour).
@@ -122,6 +131,18 @@ export default function V4CaptureScreen(props: V4CaptureScreenProps) {
   }), [photoCount, props.hasVoice, props.textValue]);
 
   return (
+    // (May 2026 — Fix-R3) — KeyboardAvoidingView wraps the screen so
+    // the soft keyboard doesn't occlude the inline text-input panel
+    // (line ~411) or the absolute-positioned Continue footer below.
+    // iOS uses `padding` behavior (the only mode that actually pushes
+    // content above the keyboard). Android relies on the windowSoftInput
+    // mode set in AndroidManifest.xml (Expo SDK 54 defaults to
+    // `adjustResize`), so behavior=undefined is the right RN idiom.
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: Colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
     <View style={[styles.stage, { backgroundColor: Colors.bg }]}>
       {/* ── §A Header — back + 3-step progress ────────────────── */}
       <View style={[styles.header, { paddingTop: Math.max(8, insets.top) }]}>
@@ -153,8 +174,12 @@ export default function V4CaptureScreen(props: V4CaptureScreenProps) {
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingHorizontal: 20,
-          paddingBottom: Math.max(12, insets.bottom) + 76, // room for footer
+          // (Fix-R2) — runtime-measured footer height so font scaling
+          // / RTL line-height changes don't push content under the
+          // Continue button.
+          paddingBottom: Math.max(12, insets.bottom) + footerHeight,
         }}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* ── §B Meta card — location + timestamp ─────────────── */}
@@ -457,6 +482,7 @@ export default function V4CaptureScreen(props: V4CaptureScreenProps) {
 
       {/* ── §G Footer Continue ─────────────────────────────── */}
       <View
+        onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
         style={[
           styles.footer,
           { paddingBottom: Math.max(12, insets.bottom) },
@@ -491,6 +517,7 @@ export default function V4CaptureScreen(props: V4CaptureScreenProps) {
         </TouchableOpacity>
       </View>
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
