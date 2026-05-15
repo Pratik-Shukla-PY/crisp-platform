@@ -1368,15 +1368,41 @@ function createIncidentCard(r) {
     // mistake the SMALL/MEDIUM previews for the final-quality file.
     // Counts groups for which LARGE is missing or incomplete; shows
     // worst-case completion_pct for context.
+    //
+    // May 2026 — companion change to mobile-app PWA reconciler fix.
+    // The PWA gives up retrying deferred Originals after 14 days
+    // (see _hasDeferredVariantsPending in mobile-app/src/app.js).
+    // So for reports older than that horizon, a missing HIGH row
+    // means the Original is PERMANENTLY ABANDONED — not "still
+    // uploading". Stop chipping those; the chip read as misleading
+    // when 53-hour-old reports still showed "Originals pending"
+    // and the device had long since stopped retrying.
+    const _ORIG_DEFERRED_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
+    const _reportAgeMs = r.server_created_at
+        ? Date.now() - new Date(r.server_created_at).getTime()
+        : 0;
     const _imgRows = (r.media || []).filter(m => m.type === 'IMAGE');
     const _groups = groupPhotos(_imgRows);
     let origPendingCount = 0;
     let origMinPct = 100;
     for (const g of _groups) {
         const hi = g.members.find(m => m.resolution_tier === 'HIGH');
-        if (!hi || hi.assembly_status !== 'complete') {
+        if (!hi) {
+            // No HIGH row at all. Two sub-cases:
+            //   * Report is RECENT (< 14d) → upload still pending; chip.
+            //   * Report is OLD (≥ 14d) → device gave up; don't chip.
+            if (_reportAgeMs < _ORIG_DEFERRED_TIMEOUT_MS) {
+                origPendingCount += 1;
+                if (origMinPct > 0) origMinPct = 0;
+            }
+            continue;
+        }
+        if (hi.assembly_status !== 'complete') {
+            // Mid-assembly — always show the chip regardless of age
+            // (a partial-assembly with received chunks IS recoverable
+            // server-side on next backend restart's recovery sweep).
             origPendingCount += 1;
-            const pct = hi ? Math.round(hi.completion_pct || 0) : 0;
+            const pct = Math.round(hi.completion_pct || 0);
             if (pct < origMinPct) origMinPct = pct;
         }
     }
@@ -1515,14 +1541,25 @@ function updateCommandStats() {
     // Phase C.2 — Originals-pending count. Show the pill only when > 0
     // so the command bar doesn't grow a permanent "0 ORIG PENDING" chip
     // (which would mislead operators into thinking it's broken).
+    //
+    // May 2026 — 14-day deferral horizon (matches the PWA's
+    // _hasDeferredVariantsPending timeout + the per-card chip
+    // logic above). Reports older than that with no HIGH row are
+    // permanently abandoned — count them as "no Original" not
+    // "pending" so the pill drops to zero once the backlog ages out.
+    const _ORIG_DEFERRED_TIMEOUT_MS_STAT = 14 * 24 * 60 * 60 * 1000;
     let origPending = 0;
     for (const r of reports) {
         const imgs = (r.media || []).filter(m => m.type === 'IMAGE');
         if (imgs.length === 0) continue;
+        const ageMs = r.server_created_at
+            ? Date.now() - new Date(r.server_created_at).getTime()
+            : 0;
         const grps = groupPhotos(imgs);
         if (grps.some(g => {
             const hi = g.members.find(m => m.resolution_tier === 'HIGH');
-            return !hi || hi.assembly_status !== 'complete';
+            if (!hi) return ageMs < _ORIG_DEFERRED_TIMEOUT_MS_STAT;
+            return hi.assembly_status !== 'complete';
         })) {
             origPending += 1;
         }
@@ -2512,9 +2549,21 @@ window.selectReport = (id, skipFly = false) => {
                 const labelText = photoGroups.length === 1
                     ? 'Photo 1 of 1'
                     : `${photoGroups.length} Photos`;
+                // May 2026 — match the qrt-card chip's 14-day deferral
+                // window. A report older than 14d with no HIGH row means
+                // the PWA gave up retrying; stop labelling it as "still
+                // uploading." Mid-assembly partials always chip (server-
+                // side recovery can still finish them).
+                const _ORIG_DEFERRED_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
+                const _detailAgeMs = r.server_created_at
+                    ? Date.now() - new Date(r.server_created_at).getTime()
+                    : 0;
                 const origPending = photoGroups.filter(g => {
                     const large = g.members.find(m => m.resolution_tier === 'HIGH');
-                    return !large || large.assembly_status !== 'complete';
+                    if (!large) {
+                        return _detailAgeMs < _ORIG_DEFERRED_TIMEOUT_MS;
+                    }
+                    return large.assembly_status !== 'complete';
                 }).length;
                 const pendingChip = origPending > 0
                     ? `<span class="dp-gallery-pending-chip" title="Original (LARGE) tier hasn't finished assembling for ${origPending} ${origPending === 1 ? 'photo' : 'photos'} — the Original will appear here once the reporter's device finishes uploading."><i class="fa-solid fa-cloud-arrow-up fa-pulse"></i> ${origPending} ${origPending === 1 ? 'original' : 'originals'} pending</span>`

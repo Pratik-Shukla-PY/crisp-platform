@@ -750,8 +750,19 @@ async function updateSyncBadge() {
         // Single source of truth fix: pill = reports + details. Tap
         // drains both (see syncQueueManual below).
         const items = await getAllQueued();
+        // BUGFIX May 2026 — items with `_submissionLanded=true` are the
+        // "deferred-Originals-still-retrying" state added by the
+        // reconciler (see _hasDeferredVariantsPending). The user-facing
+        // submission journey is already complete on those rows (SMALL
+        // landed, dashboard sees the report). They live in IDB only so
+        // the variant retry loop keeps trying to ship MEDIUM/LARGE in
+        // the background. We MUST not count them in the sync-badge —
+        // otherwise the pill shows "1 queued" forever, which is the
+        // exact UX complaint that prompted the original
+        // dequeue-on-SMALL-landed change.
+        const visibleItems = items.filter(i => i && i._submissionLanded !== true);
         const detailsCount = _queuedDetailsCount();
-        const total = items.length + detailsCount;
+        const total = visibleItems.length + detailsCount;
 
         if (total === 0) {
             badge.style.display = 'none';
@@ -759,8 +770,8 @@ async function updateSyncBadge() {
         }
 
         badge.style.display = 'flex';
-        const syncing = items.filter(i => i.status === 'syncing').length;
-        const failed = items.filter(i => i.status === 'failed').length;
+        const syncing = visibleItems.filter(i => i.status === 'syncing').length;
+        const failed = visibleItems.filter(i => i.status === 'failed').length;
 
         // BUGFIX May 2026 (operator-reported, "1 queued never leaves")
         // — compute a stage-based progress % across the queue so the
@@ -772,14 +783,14 @@ async function updateSyncBadge() {
         // when queue isn't empty (100% would imply nothing left, which
         // is the hidden-pill case above).
         let pct = 0;
-        if (items.length > 0) {
+        if (visibleItems.length > 0) {
             let totalStages = 0;
-            for (const it of items) {
+            for (const it of visibleItems) {
                 const st = it.stages || {};
                 totalStages += (st.meta ? 1 : 0) + (st.text ? 1 : 0)
                             + (st.photo ? 1 : 0) + (st.audio ? 1 : 0);
             }
-            const denom = items.length * 4;
+            const denom = visibleItems.length * 4;
             pct = Math.min(99, Math.round((totalStages / denom) * 100));
         }
         // Details-queue items don't carry stage progress — they're
@@ -799,7 +810,7 @@ async function updateSyncBadge() {
             // Append the % only when there's report-queue progress to
             // show. Pure-details-queue case (pct=0, no reports) just
             // says "N queued" without a misleading "0%".
-            text.textContent = items.length > 0
+            text.textContent = visibleItems.length > 0
                 ? `${total} ${t('sync_queued')} · ${pct}%`
                 : `${total} ${t('sync_queued')}`;
         }
@@ -9334,17 +9345,68 @@ async function _reconcileQueueAgainstServer() {
                 );
                 continue;
             }
-            // SMALL is up for every photo — dequeue the local row. The
-            // dashboard already shows the report; missing MEDIUM/LARGE are
-            // a quality regression, not a correctness one. Better than
-            // leaving the user staring at "QUEUED 75%" forever.
+            // SMALL is up for every photo. The report is dashboard-visible
+            // so the user-facing submission journey is complete.
+            //
+            // BUGFIX May 2026 (operator audit) — pre-fix this branch
+            // dequeued the IDB row right here, which silently abandoned
+            // any MEDIUM/LARGE variants that were marked
+            // `deferred=true` (waiting for a bandwidth-tier upgrade).
+            // Production audit found ~44 % of photo groups had only
+            // SMALL+MEDIUM on the backend; the Originals were generated
+            // locally, deferred on a SLOW link, and never retried
+            // because the IDB row was already gone.
+            //
+            // New behaviour:
+            //   1. If the local item has at least one variant with
+            //      `deferred=true && complete=false`, mark the item
+            //      `_submissionLanded=true` + `_deferredSince=<ts>`,
+            //      persist, and CONTINUE (no dequeue). The retry loop
+            //      keeps firing on every drain pass; once the device
+            //      sees a faster network tier the deferred variants
+            //      transmit and a future reconcile pass dequeues
+            //      cleanly via the all-complete branch below.
+            //   2. The sync-badge filter (see updateSyncBadge) ignores
+            //      items where `_submissionLanded=true` so the user
+            //      doesn't see "1 queued" forever — addresses the
+            //      original "QUEUED 75% stuck" UX complaint.
+            //   3. If `_deferredSince` is > 14 days old, give up and
+            //      dequeue. The Original is permanently lost on this
+            //      device (the dataUrl in IDB has likely been evicted
+            //      anyway). Backend cleanup job — separate change —
+            //      flips the dashboard chip to "no Original" so
+            //      operators stop expecting one.
+            const _DEFERRED_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;  // 14 days
+            const hasDeferredPending = _hasDeferredVariantsPending(item);
             if (photoCount > 0) {
-                console.log(
-                    `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
-                    `SMALL of all ${photoCount} photo(s) landed; backend ` +
-                    `media rows ${haveAll}/${expected} — dequeue (higher ` +
-                    `tiers were deferred or dropped).`,
-                );
+                if (hasDeferredPending) {
+                    const sinceTs = item._deferredSince || Date.now();
+                    const age = Date.now() - sinceTs;
+                    if (age < _DEFERRED_TIMEOUT_MS) {
+                        item._submissionLanded = true;
+                        item._deferredSince = sinceTs;
+                        try { await enqueueReport(item); } catch (_) {}
+                        console.log(
+                            `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
+                            `SMALL of ${photoCount} photo(s) landed; deferred ` +
+                            `MEDIUM/LARGE still pending — keep queued for ` +
+                            `background retry (age=${Math.round(age / 3600000)}h).`,
+                        );
+                        continue;
+                    }
+                    console.warn(
+                        `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
+                        `deferred variants exceeded 14-day timeout (age=` +
+                        `${Math.round(age / 86400000)}d) — giving up, ` +
+                        `dequeuing. Originals permanently lost on this device.`,
+                    );
+                } else {
+                    console.log(
+                        `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
+                        `SMALL of all ${photoCount} photo(s) landed; no ` +
+                        `deferred variants pending — dequeue.`,
+                    );
+                }
             } else {
                 console.log(
                     `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
@@ -9361,6 +9423,41 @@ async function _reconcileQueueAgainstServer() {
         }
     }
     updateSyncBadge();
+}
+
+/**
+ * Returns true if the queue item has at least one variant where
+ * `deferred=true && complete=false` — i.e. the upload pipeline is
+ * still trying to ship a higher-tier image but is gated on a network
+ * upgrade. Used by the reconciler to keep such items alive past the
+ * "SMALL landed on backend" dequeue gate.
+ *
+ * Walks both `item.photoVariants` (main photo, has tier keys
+ * `small`/`medium`/`large` as object properties) and
+ * `item.extraPhotosVariants` (array of similar objects per extra
+ * photo). Safe against missing / malformed shapes.
+ */
+function _hasDeferredVariantsPending(item) {
+    const tierKeys = ['small', 'medium', 'large'];
+    const _check = (variants) => {
+        if (!variants || typeof variants !== 'object') return false;
+        for (const k of tierKeys) {
+            const v = variants[k];
+            if (v && typeof v === 'object'
+                && v.deferred === true
+                && v.complete !== true) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (_check(item.photoVariants)) return true;
+    if (Array.isArray(item.extraPhotosVariants)) {
+        for (const ev of item.extraPhotosVariants) {
+            if (_check(ev)) return true;
+        }
+    }
+    return false;
 }
 
 function _deviceHashForHistory() {

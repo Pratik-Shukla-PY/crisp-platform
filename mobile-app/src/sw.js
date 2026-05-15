@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v200';
+const CACHE_NAME = 'crisp-v201';
+// v200 → v201 (May 2026 — deferred-Originals queue fix):
+//   Reconciler no longer dequeues IDB rows while variants are
+//   still in `deferred=true && complete=false` state. New
+//   `_submissionLanded` flag + 14-day timeout. Sync-badge
+//   filters those out so user sees an accurate "queued"
+//   count. Closes a real production gap where 44 % of PWA
+//   photo groups had no HIGH-tier Original ever uploaded.
+//
 // v199 → v200 (May 2026 — Phase 2.3/2.4/2.5/2.6 Badge Studio premium):
 //   * Canvas redesign: T4 warm-gold palette + glassmorphism panel +
 //     layered drop-shadows on the tier pill (badge-studio.js).
