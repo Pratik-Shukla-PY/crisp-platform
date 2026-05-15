@@ -56,7 +56,7 @@ jobs:
     if: github.event.pull_request.draft != true
     steps:
       - name: Checkout repo (full history for git-worktree publish)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # The publish script uses git worktree against the
           # lighthouse-history branch. Shallow clone breaks that.
@@ -67,7 +67,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 
@@ -176,7 +176,7 @@ jobs:
         # workflow), the artifacts let an operator download the raw
         # reports from the workflow run page. 30-day retention.
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: lighthouse-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
@@ -195,11 +195,11 @@ jobs:
     timeout-minutes: 15
     if: github.event.pull_request.draft != true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -290,7 +290,7 @@ jobs:
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: qa-extended-report-${{ github.event.pull_request.head.sha || github.sha }}
           path: |

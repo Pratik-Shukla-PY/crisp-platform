@@ -39,8 +39,15 @@ for arg in "$@"; do
     esac
 done
 
-echo "PWA  → $PWA_I18N ($(ls "$PWA_I18N"/*.json 2>/dev/null | wc -l | tr -d ' ') locales, $(jq -r 'keys | length' "$PWA_I18N/en.json") keys)"
-echo "RN   → $RN_I18N ($(ls "$RN_I18N"/*.json 2>/dev/null | wc -l | tr -d ' ') locales, $(jq -r 'keys | length' "$RN_I18N/en.json") keys)"
+# May 2026 — SC2012 fix: `ls` output isn't safe to parse when filenames
+# contain spaces / newlines / special chars. `find` is the deterministic
+# replacement; -mindepth 1 -maxdepth 1 emulates a flat directory listing,
+# -type f matches only regular files, -name "*.json" filters to locales.
+# Piping to `wc -l` of `-print` (newline-terminated) is safe for our
+# repo's filenames (no spaces/newlines), but the migration is the
+# permanent shell-hygiene fix per the no-suppression policy.
+echo "PWA  → $PWA_I18N ($(find "$PWA_I18N" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | wc -l | tr -d ' ') locales, $(jq -r 'keys | length' "$PWA_I18N/en.json") keys)"
+echo "RN   → $RN_I18N ($(find "$RN_I18N" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | wc -l | tr -d ' ') locales, $(jq -r 'keys | length' "$RN_I18N/en.json") keys)"
 echo
 
 ADDED=()

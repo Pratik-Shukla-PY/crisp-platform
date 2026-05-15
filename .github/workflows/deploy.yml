@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify CI passed on this commit
         # We rely on GitHub's branch protection to enforce this, but
         # double-check at deploy time too. Skipped when manually
@@ -127,7 +127,7 @@ jobs:
 
     steps:
       - name: Checkout (just for the deploy.sh path)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Resolve deploy branch
         id: branch
@@ -251,8 +251,8 @@ jobs:
     # (The auto-deploy on push to main IS the case we want to gate.)
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.branch == 'main')
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -314,7 +314,7 @@ jobs:
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: prod-smoke-report
           path: e2e/playwright-report-prod/
@@ -337,12 +337,12 @@ jobs:
       needs.prod-smoke.result == 'success' &&
       (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.branch == 'main'))
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Need full history for the publish script's git-worktree against
           # the lighthouse-history branch.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - name: Install LHCI + Chrome
@@ -372,7 +372,7 @@ jobs:
         run: node scripts/lighthouse-publish.mjs
       - name: Upload PROD Lighthouse artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: lighthouse-prod-${{ github.sha }}
           path: |
@@ -406,6 +406,14 @@ jobs:
       url: https://undp.crisplabs.tech/web-dashboard/src/
 
     steps:
+      # Bug fix (May 2026, operator-reported) — post-rollback smoke
+      # step below declares `working-directory: e2e` but the runner
+      # had no repo checkout, so the step errored with "No such file
+      # or directory" before npm could even start. Adding checkout
+      # as the FIRST step makes the repo available for the smoke
+      # step + any future step that needs workflow files / config.
+      - uses: actions/checkout@v5
+
       - name: Configure SSH
         env:
           SSH_KEY: ${{ secrets.EC2_DEPLOY_KEY }}
