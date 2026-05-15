@@ -1,14 +1,23 @@
 /**
- * PR 7 (Apr 2026) — Success screen + Track button regression guards.
+ * Success screen + Track button regression guards (originally PR 7,
+ * Apr 2026; trimmed May 2026).
  *
- *   · The success stage shows a glowing heart (not ✅), new copy, and the
- *     report ID pill.
- *   · Two actions are present: primary [+ Add another report] + secondary
- *     [Track your report].
- *   · Navigating to stage-success via the testability hook is enough to
- *     assert the DOM structure (no real submission needed).
- *   · Track button with no just-submitted report shows a toast and does
- *     NOT navigate (defensive — prevents "Report not found" leaking).
+ * The original spec had a "@smoke success stage shows heart + new copy
+ * + both CTAs" test that asserted the V3-era markup: `.success-heart`
+ * with a hardcoded ❤️, `<p data-i18n="sent_sub">` containing /save lives/i,
+ * `#btn-new-report` containing "Add another report", `#btn-track-report`
+ * containing "Track your report". The Apr 2026 → May 2026 success-stage
+ * redesign (heart + ripple + CRISP brand at top-left, secondary CTAs in
+ * a sticky-footer row) reshaped all of those selectors. The new
+ * responsive spec 87 + the resetApp + track navigation tests below
+ * cover the same surface.
+ *
+ * What stays:
+ *   · The defensive "Track button without a submitted report is a
+ *     no-op" guard — prevents "Report not found" leaking.
+ *   · resetApp via #btn-new-report — verifies the success → home
+ *     reset flow doesn't strand the user on success stage.
+ *   · Track button + synthesised report → report-detail navigation.
  */
 import { test, expect } from '@playwright/test';
 
@@ -30,27 +39,6 @@ async function openHomeInEnglish(page) {
 
 test.describe('PWA success screen (PR 7)', () => {
   test.beforeEach(async ({ page }) => { await openHomeInEnglish(page); });
-
-  test('@smoke success stage shows heart + new copy + both CTAs', async ({ page }) => {
-    await page.evaluate(() => (window as any).__crispGoToStage && (window as any).__crispGoToStage('stage-success'));
-    await expect(page.locator('#stage-success.active')).toBeVisible();
-
-    // Heart element replaces the old ✅ icon.
-    await expect(page.locator('.success-heart')).toBeVisible();
-    await expect(page.locator('.success-heart')).toContainText('❤️');
-    // Old success-icon must be gone.
-    await expect(page.locator('#stage-success .success-icon')).toHaveCount(0);
-
-    // PR 7 warmed copy.
-    await expect(page.locator('#stage-success h2')).toContainText(/Thank you/i);
-    await expect(page.locator('#stage-success p[data-i18n="sent_sub"]')).toContainText(/save lives/i);
-
-    // Two CTAs.
-    await expect(page.locator('#btn-new-report')).toBeVisible();
-    await expect(page.locator('#btn-new-report')).toContainText(/Add another report/i);
-    await expect(page.locator('#btn-track-report')).toBeVisible();
-    await expect(page.locator('#btn-track-report')).toContainText(/Track your report/i);
-  });
 
   test('Track button with no submitted report is a no-op (toast only)', async ({ page }) => {
     await page.evaluate(() => (window as any).__crispGoToStage && (window as any).__crispGoToStage('stage-success'));
