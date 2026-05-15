@@ -2713,7 +2713,10 @@ window.dpSwitchView = (reportId, view, btn) => {
     // Reset to single view aspect ratio
     container.closest('.dp-evidence-card').querySelector('.dp-img-view .dp-img')?.style?.removeProperty?.('aspect-ratio');
     if (view === 'photo' && img?.url) {
-        container.innerHTML = `<div class="dp-img" onclick="openGallery('${r.id}', 0)"><img src="${getMediaUrl(img.url)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>`;
+        // May 2026 — main report photo uses `object-fit:contain` so a
+        // portrait phone capture isn't stretched into the .dp-img's
+        // 4:3 box. Letterbox bars use the parent's #0f1520 background.
+        container.innerHTML = `<div class="dp-img" onclick="openGallery('${r.id}', 0)"><img src="${getMediaUrl(img.url)}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;"></div>`;
     } else if (view === 'sat') {
         // Apr 2026 — multi-provider fan-out: render every successful
         // satellite source side-by-side (AWS Sentinel-2 / Microsoft
@@ -2841,8 +2844,11 @@ window.dpShowGalleryImage = (reportId, groupIdx, thumbEl) => {
     // <div class="dp-img"> block. The old innerHTML= wipe lost the shield chip
     // on every thumbnail click.
     const imgWrap = container.querySelector('.dp-img');
+    // May 2026 — `object-fit:contain` matches the .dp-img .img-full-layer
+    // rule so swapping between cached/live image and gallery navigation
+    // keeps the same letterbox treatment.
     const newImgHtml = `<div class="dp-img" data-group-id="${grp.groupId}" data-current-tier="${pick.tier}" onclick="openGallery('${reportId}', ${groupIdx})">
-        <img src="${pick.src}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">
+        <img src="${pick.src}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">
         <span class="dp-tier-chip dp-tier-${pick.tier.toLowerCase()}">${tierLabel}</span>
     </div>`;
     if (imgWrap) {

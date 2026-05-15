@@ -1117,7 +1117,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .dp-gallery-strip::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:2px; }
 /* 72×72 (was 52×52) — at 52 the 2nd/3rd thumbs were easy to miss. */
 .dp-gallery-thumb { width:72px; height:72px; border-radius:8px; overflow:hidden; cursor:pointer; border:2px solid transparent; flex-shrink:0; position:relative; transition:all .15s; }
-.dp-gallery-thumb img { width:100%; height:100%; object-fit:cover; }
+/* May 2026 — preserve aspect ratio on gallery thumbs.
+   Pre-fix used `object-fit:cover` which cropped portrait phone
+   photos to a 72×72 square. Operator-reported as "thumbs distort
+   the image — heads are cut off." `contain` letterboxes inside
+   the square against the dark `.dp-gallery-thumb` background so
+   the operator sees the full frame. */
+.dp-gallery-thumb img { width:100%; height:100%; object-fit:contain; }
+.dp-gallery-thumb { background:#0f1520; }
 .dp-gallery-thumb:hover { border-color:rgba(255,255,255,0.4); transform: scale(1.02); }
 .dp-gallery-thumb.active { border-color:var(--cyan); box-shadow:0 0 10px rgba(56,189,248,0.4); }
 .dp-gallery-pct { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); color:#f59e0b; font-size:9px; font-weight:700; text-align:center; padding:1px; }
@@ -1172,8 +1179,15 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .dp-images { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px; }
 .dp-images-single { grid-template-columns:1fr; }
 .dp-img { position:relative; border-radius:8px; overflow:hidden; background:#0f1520; aspect-ratio:4/3; cursor:pointer; }
+/* May 2026 — preserve aspect ratio on the main detail preview.
+   `.img-thumb-bg` is the BLURRED placeholder behind the real image
+   (cover is correct — the blur masks any crop). `.img-full-layer`
+   is the sharp final image — must use `contain` so a portrait
+   phone photo isn't stretched horizontally into the 4:3 box.
+   Letterbox bars use the parent's #0f1520 background so they
+   read as intentional framing, not as a rendering bug. */
 .dp-img .img-thumb-bg { width:100%; height:100%; object-fit:cover; max-height:none; }
-.dp-img .img-full-layer { border-radius:8px; }
+.dp-img .img-full-layer { width:100%; height:100%; object-fit:contain; border-radius:8px; }
 .dp-img-uploading { cursor:default; }
 .dp-img-placeholder { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border:1px dashed rgba(255,255,255,0.08); }
 .dp-img .img-progress-overlay { padding:8px 8px 6px; }
