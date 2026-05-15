@@ -1,0 +1,16 @@
+{
+  "name": "crisp-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CRISP — Crisis Response Intelligence Smart Platform. Root package.json exists only to install husky git-hooks (May 2026, Sprint 3 institutional safeguards). Runtime code lives in mobile-app/, crisp-mobile/, web-dashboard/, backend/, e2e/.",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "Apache-2.0"
+}

@@ -86,24 +86,41 @@ jobs:
             sudo apt-get install -y -qq google-chrome-stable
           )
 
-      - name: Run Lighthouse CI collect (3 URLs × 3 runs = 9 audits)
-        # `lhci collect` reads lhci.config.cjs, spins up a static server
-        # at staticDistDir (the repo root), audits each URL the
-        # configured number of times, and writes lhr-*.json/.html to
-        # .lighthouseci/. Median is picked downstream by our publish
-        # script — LHCI's own assert step uses isRepresentativeRun.
-        run: lhci collect --config=./lhci.config.cjs
+      - name: Pick LHCI config (smoke on PR, full on push-to-main)
+        # May 2026 (Sprint 3) — split the Lighthouse cadence so PRs
+        # get fast feedback (1 URL × 1 run, warn-only) and the
+        # main-branch push owns the hard floor (2 URLs × 3 runs).
+        # Rationale: single-run Lighthouse routinely drifts 5-8 points
+        # between identical samples; hard-failing PRs on that noise
+        # generated more false positives than signal. The full audit
+        # on main is the source-of-truth threshold check.
+        id: lhci_config
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "config=./lhci.config.smoke.cjs" >> "$GITHUB_OUTPUT"
+            echo "mode=smoke (1 URL × 1 run, warn-only)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "config=./lhci.config.cjs" >> "$GITHUB_OUTPUT"
+            echo "mode=full (2 URLs × 3 runs, hard gate)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Run Lighthouse CI collect
+        # `lhci collect` reads the config selected above, spins up a
+        # static server at staticDistDir (the repo root), audits each
+        # URL the configured number of times, and writes lhr-*.json/.html
+        # to .lighthouseci/. Smoke = 1 audit; full = 6 audits (2×3).
+        run: lhci collect --config=${{ steps.lhci_config.outputs.config }}
 
       - name: Lighthouse CI assert (LHCI's own threshold check)
-        # First-pass deterministic gate — uses the assertions in
-        # lhci.config.cjs. This is the source-of-truth threshold check;
-        # the PR-comment script's evaluation duplicates the logic for
-        # the human-friendly message + regression delta vs baseline.
-        # Continue on error so we still run publish + comment + final
-        # exit-code logic below.
+        # First-pass deterministic gate. On PRs (smoke config), this
+        # is warn-only and the step's continue-on-error keeps the
+        # workflow green; the PR comment surfaces any regressions
+        # but doesn't block. On push-to-main (full config), the
+        # assertions are `error`-level and the script's exit logic
+        # below converts that into a hard CI failure.
         id: lhci_assert
         continue-on-error: true
-        run: lhci assert --config=./lhci.config.cjs
+        run: lhci assert --config=${{ steps.lhci_config.outputs.config }}
 
       - name: Publish reports to lighthouse-history branch
         # Always runs (even on assert failure) so the failed run's

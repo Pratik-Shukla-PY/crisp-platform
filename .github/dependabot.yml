@@ -94,13 +94,19 @@ updates:
 
   # ── GitHub Actions versions ─────────────────────────────────────────
   # Pinning action versions to a SHA + getting Dependabot bumps is the
-  # supply-chain-safe pattern. Currently we use @v4-style tags; this
-  # ecosystem will surface advisories on those.
+  # supply-chain-safe pattern. Currently we use @v4 / @v5-style tags;
+  # this ecosystem will surface advisories on those.
+  #
+  # May 2026 (Sprint 3) — DAILY (not weekly) by operator directive.
+  # Rationale: action-version drift was the proximate cause of the
+  # Node 20 deprecation warning at deploy time. Weekly leaves up to
+  # a 6-day blast radius between an action shipping a security fix
+  # and us seeing the PR. Action ecosystems are small and stable
+  # enough that daily PR volume is bounded (typically 0–1 a day).
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "daily"
       time: "06:00"
       timezone: "Asia/Kolkata"
     open-pull-requests-limit: 5

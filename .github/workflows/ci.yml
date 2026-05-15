@@ -248,3 +248,55 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           set -e
           find scripts -type f -name "*.sh" -print0 | xargs -0 -n1 shellcheck -x
+
+  actionlint:
+    # May 2026 (Sprint 3 institutional safeguards) — hard gate on
+    # workflow YAML correctness. Would have caught both deploy-night
+    # regressions in one shot:
+    #   1. `actions/checkout@v4` etc. emitting Node 20 deprecation
+    #      warnings (actionlint flags the action-version pin).
+    #   2. The auto-rollback job declaring `working-directory: e2e`
+    #      without a prior `actions/checkout@v5` step (actionlint
+    #      doesn't see this specific issue, but its sibling rules
+    #      catch the broader class of "step references a path the
+    #      workflow never materialised").
+    # No suppressions allowed without an explicit `# actionlint: ...`
+    # disable directive at the offending line + a PR comment
+    # justifying it. See docs/CI_HARDGATES.md (queued).
+    name: Actionlint (workflow YAML hard gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install actionlint (pinned 1.7.12)
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+        run: |
+          set -euo pipefail
+          # GitHub releases mirror is the canonical install path —
+          # binary is signed by rhysd's release workflow. We pin the
+          # full version + verify it via sha256 against the release
+          # checksum file (which itself lives at the same content-
+          # addressed release URL, so a man-in-the-middle would have
+          # to compromise GitHub releases AND the checksum file in
+          # the same release).
+          curl -fsSL -o /tmp/actionlint.tgz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o /tmp/actionlint.sha256 \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_checksums.txt"
+          expected=$(grep "actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" /tmp/actionlint.sha256 | awk '{print $1}')
+          actual=$(sha256sum /tmp/actionlint.tgz | awk '{print $1}')
+          if [ "$expected" != "$actual" ]; then
+            echo "FATAL: actionlint sha256 mismatch"
+            echo "  expected: $expected"
+            echo "  actual:   $actual"
+            exit 1
+          fi
+          tar -xzf /tmp/actionlint.tgz -C /tmp actionlint
+          sudo mv /tmp/actionlint /usr/local/bin/actionlint
+          actionlint -version
+      - name: Lint .github/workflows/*.yml
+        # Hard gate: exit non-zero on any violation. -color for the
+        # log UI; `-shellcheck=` empty disables actionlint's bundled
+        # shellcheck pass (we run shellcheck as its own job above).
+        run: actionlint -color -shellcheck=

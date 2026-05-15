@@ -1,0 +1,64 @@
+#!/usr/bin/env sh
+# CRISP pre-commit hook (May 2026, Sprint 3).
+#
+# Catches the four classes of bug that hit us in the May deploy night
+# BEFORE they leave the developer's laptop. Each check exits non-zero
+# on failure — no soft warnings, no bypass without explicit
+# `--no-verify` (which we discourage; see CLAUDE.md).
+#
+# Order matters: lockfile drift first (cheapest, blocks `npm ci`),
+# then shellcheck (sub-second), then node --check (sub-second), then
+# actionlint (requires a local install — falls through to a warn
+# if missing; CI catches it as a hard gate anyway).
+
+set -e
+
+# ── 1. Lockfile drift (mobile-app / crisp-mobile / e2e) ──────────────
+# If package.json changed but package-lock.json didn't, `npm ci` will
+# crash later with "missing from lock file". This is the exact bug
+# that caused the RN typecheck job to fail in the May deploy.
+for pkg in mobile-app crisp-mobile e2e; do
+    if git diff --cached --name-only | grep -q "^${pkg}/package\.json$" && \
+       ! git diff --cached --name-only | grep -q "^${pkg}/package-lock\.json$"; then
+        echo "✗ ${pkg}/package.json was staged but ${pkg}/package-lock.json wasn't."
+        echo "  Run: cd ${pkg} && npm install"
+        echo "  Then: git add ${pkg}/package-lock.json && git commit --amend --no-edit"
+        exit 1
+    fi
+done
+
+# ── 2. shellcheck on touched .sh ─────────────────────────────────────
+sh_staged=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.sh$' || true)
+if [ -n "$sh_staged" ]; then
+    if command -v shellcheck >/dev/null 2>&1; then
+        # -x for `source` recursion. Errors on SC2012-class bugs.
+        # shellcheck disable=SC2086
+        echo "$sh_staged" | xargs -n1 shellcheck -x
+    else
+        echo "  (shellcheck not installed locally; CI will catch shell issues)"
+    fi
+fi
+
+# ── 3. node --check on touched .js / .cjs / .mjs ─────────────────────
+js_staged=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|cjs|mjs)$' | grep -v 'node_modules/' || true)
+if [ -n "$js_staged" ]; then
+    if command -v node >/dev/null 2>&1; then
+        # shellcheck disable=SC2086
+        echo "$js_staged" | xargs -n1 node --check
+    else
+        echo "  (node not installed locally; CI will catch JS syntax errors)"
+    fi
+fi
+
+# ── 4. actionlint on touched workflow YAML ──────────────────────────
+wf_staged=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^\.github/workflows/.*\.ya?ml$' || true)
+if [ -n "$wf_staged" ]; then
+    if command -v actionlint >/dev/null 2>&1; then
+        actionlint -color -shellcheck=
+    else
+        echo "  (actionlint not installed locally; CI hard-gate will catch workflow issues)"
+        echo "  Install: brew install actionlint  (or see https://github.com/rhysd/actionlint)"
+    fi
+fi
+
+echo "✓ pre-commit checks passed"
