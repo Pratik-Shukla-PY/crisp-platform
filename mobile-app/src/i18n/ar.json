@@ -812,5 +812,17 @@
   "v4_desc_voice_empty": "لا يوجد تسجيل صوتي",
   "v4_desc_voice_recorded": "تم التسجيل الصوتي",
   "v4_desc_text_empty": "لم يتم إضافة نص",
-  "v4_desc_text_mirrors_voice": "مطابق للنص الصوتي"
+  "v4_desc_text_mirrors_voice": "مطابق للنص الصوتي",
+  "fp_audio": "صوت",
+  "fp_what": "ماذا",
+  "mic_permission_alert": "يرجى السماح بالوصول إلى الميكروفون لتسجيل الصوت.",
+  "camera_blocked_toast": "الوصول إلى الكاميرا محظور — يتم استخدام منتقي الملفات بدلاً من ذلك.",
+  "camera_unavailable_toast": "الكاميرا غير متاحة — يتم استخدام منتقي الملفات بدلاً من ذلك.",
+  "delete_requested_alert": "سيتم حذف بياناتك نهائيًا خلال 24 ساعة.",
+  "delete_server_unreachable": "تعذر الوصول إلى الخادم.",
+  "delete_undo_failed": "تعذر التراجع عن الحذف.",
+  "delete_all_server_confirm": "سيؤدي هذا إلى حذف جميع التقارير والوسائط المرسلة من الخادم نهائيًا. لا يمكن التراجع.",
+  "delete_all_success_count": "تم حذف {n} تقرير. تم مسح جميع البيانات المحلية.",
+  "confirm_yes": "نعم",
+  "confirm_no": "إلغاء"
 }

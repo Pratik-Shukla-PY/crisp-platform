@@ -823,5 +823,17 @@
   "v4_desc_voice_empty": "No voice recorded",
   "v4_desc_voice_recorded": "Voice recorded",
   "v4_desc_text_empty": "No text added",
-  "v4_desc_text_mirrors_voice": "Same as voice transcript"
+  "v4_desc_text_mirrors_voice": "Same as voice transcript",
+  "fp_audio": "Audio",
+  "fp_what": "What",
+  "mic_permission_alert": "Please allow microphone access to record audio.",
+  "camera_blocked_toast": "Camera access blocked — using file picker instead. Allow camera in browser settings for live capture.",
+  "camera_unavailable_toast": "Camera unavailable — using file picker instead.",
+  "delete_requested_alert": "Your data will be permanently deleted within 24 hours.",
+  "delete_server_unreachable": "Could not reach server.",
+  "delete_undo_failed": "Could not undo deletion.",
+  "delete_all_server_confirm": "This will permanently delete ALL your submitted reports and media from the server. This cannot be undone.",
+  "delete_all_success_count": "{n} report(s) deleted. All local data cleared.",
+  "confirm_yes": "Yes",
+  "confirm_no": "Cancel"
 }

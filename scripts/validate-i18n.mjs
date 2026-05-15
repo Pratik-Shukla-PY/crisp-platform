@@ -115,6 +115,86 @@ for (const f of files) {
     if (!tvFail) ok(`${locale}: template variables ({n}, etc.) preserved in every key`);
 }
 
+// ── Orphan-reference detector (Phase 3.1, May 2026) ──────────────────────
+//
+// Catch the bug class where the code calls ``t('xxx')`` or sets
+// ``data-i18n="xxx"`` but the key is NOT present in en.json. The
+// runtime fallback returns the key literal (or hits the inline
+// EXTRA_LANG pack at app.js ≈ line 1170, which only covers en/fr/es/
+// ar/ru/zh) so non-EN locales silently render English. Failing CI
+// here makes the gap visible at PR time instead of after deploy.
+
+import { readFileSync } from "node:fs";
+import { join as pjoin } from "node:path";
+
+async function walk(dir, exts) {
+    const found = [];
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const e of entries) {
+        const full = pjoin(dir, e.name);
+        if (e.isDirectory()) {
+            // Skip caches + node_modules + the vendored Sentry build.
+            if (["node_modules", "vendor", "dist", ".git"].includes(e.name)) continue;
+            found.push(...(await walk(full, exts)));
+        } else if (exts.some((x) => e.name.endsWith(x))) {
+            found.push(full);
+        }
+    }
+    return found;
+}
+
+const SOURCE_DIRS = [
+    join(__dirname, "..", "mobile-app", "src"),
+];
+const sourceFiles = (await Promise.all(
+    SOURCE_DIRS.map((d) => walk(d, [".html", ".js"]))
+)).flat();
+
+const references = new Set();
+const I18N_REFS = [
+    // data-i18n="key"  / data-i18n-aria-label="key" / data-i18n-title="key" / data-i18n-placeholder="key"
+    /data-i18n(?:-[a-z-]+)?=["']([a-zA-Z0-9_]+)["']/g,
+    // t("key")  / _t("key")  /  t('key')   — JS-only
+    /\bt\(["']([a-zA-Z0-9_]+)["']/g,
+    /\b_t\(["']([a-zA-Z0-9_]+)["']/g,
+];
+for (const f of sourceFiles) {
+    let content;
+    try { content = readFileSync(f, "utf8"); } catch { continue; }
+    for (const re of I18N_REFS) {
+        for (const m of content.matchAll(re)) {
+            references.add(m[1]);
+        }
+    }
+}
+
+// `__meta__` is the reserved metadata block on each locale JSON; it
+// shows up in source as a literal string in comments + defensive
+// guards, never as a real i18n key. Treat it as an always-allowed
+// orphan so the validator doesn't false-positive on those mentions.
+const RESERVED_NON_KEY_REFS = new Set(["__meta__"]);
+const orphans = [...references].filter(
+    (k) => !enKeys.has(k) && !RESERVED_NON_KEY_REFS.has(k),
+);
+if (orphans.length > 0) {
+    fail(
+        `${orphans.length} i18n key(s) referenced in source but missing from en.json:`,
+    );
+    orphans.slice(0, 25).forEach((k) => console.error(`    - ${k}`));
+    if (orphans.length > 25) {
+        console.error(`    ... and ${orphans.length - 25} more`);
+    }
+    console.error(
+        `${YELLOW}    fix: add these keys to mobile-app/src/i18n/en.json, then ` +
+        `re-run validate-i18n + the locale sync script.${RESET}`,
+    );
+} else {
+    ok(
+        `no orphan i18n references (${references.size} references in source, ` +
+        `all resolve to en.json)`,
+    );
+}
+
 console.log("");
 if (problems) {
     console.error(`${RED}FAIL${RESET} — ${problems} validation problem(s).`);

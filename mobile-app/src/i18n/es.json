@@ -823,5 +823,17 @@
   "v4_desc_voice_empty": "Sin grabación de voz",
   "v4_desc_voice_recorded": "Voz grabada",
   "v4_desc_text_empty": "Sin texto añadido",
-  "v4_desc_text_mirrors_voice": "Igual que la transcripción de voz"
+  "v4_desc_text_mirrors_voice": "Igual que la transcripción de voz",
+  "fp_audio": "Audio",
+  "fp_what": "Qué",
+  "mic_permission_alert": "Permita el acceso al micrófono para grabar audio.",
+  "camera_blocked_toast": "Acceso a la cámara bloqueado — usando selector de archivos.",
+  "camera_unavailable_toast": "Cámara no disponible — usando selector de archivos.",
+  "delete_requested_alert": "Sus datos se eliminarán permanentemente en 24 horas.",
+  "delete_server_unreachable": "No se pudo conectar al servidor.",
+  "delete_undo_failed": "No se pudo deshacer la eliminación.",
+  "delete_all_server_confirm": "Esto eliminará DEFINITIVAMENTE todos los informes y medios enviados del servidor. No se puede deshacer.",
+  "delete_all_success_count": "{n} informe(s) eliminado(s). Todos los datos locales borrados.",
+  "confirm_yes": "Sí",
+  "confirm_no": "Cancelar"
 }

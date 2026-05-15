@@ -814,5 +814,17 @@
   "v4_desc_voice_empty": "Голос не записан",
   "v4_desc_voice_recorded": "Голос записан",
   "v4_desc_text_empty": "Текст не добавлен",
-  "v4_desc_text_mirrors_voice": "То же, что и голосовая запись"
+  "v4_desc_text_mirrors_voice": "То же, что и голосовая запись",
+  "fp_audio": "Аудио",
+  "fp_what": "Что",
+  "mic_permission_alert": "Разрешите доступ к микрофону для записи звука.",
+  "camera_blocked_toast": "Доступ к камере заблокирован — используется выбор файла.",
+  "camera_unavailable_toast": "Камера недоступна — используется выбор файла.",
+  "delete_requested_alert": "Ваши данные будут окончательно удалены в течение 24 часов.",
+  "delete_server_unreachable": "Не удалось подключиться к серверу.",
+  "delete_undo_failed": "Не удалось отменить удаление.",
+  "delete_all_server_confirm": "Это окончательно удалит ВСЕ ваши отправленные отчёты и медиа с сервера. Действие необратимо.",
+  "delete_all_success_count": "Удалено отчётов: {n}. Все локальные данные стёрты.",
+  "confirm_yes": "Да",
+  "confirm_no": "Отмена"
 }

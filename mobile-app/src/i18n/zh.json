@@ -812,5 +812,17 @@
   "v4_desc_voice_empty": "未录制语音",
   "v4_desc_voice_recorded": "已录制语音",
   "v4_desc_text_empty": "未添加文字",
-  "v4_desc_text_mirrors_voice": "与语音转录相同"
+  "v4_desc_text_mirrors_voice": "与语音转录相同",
+  "fp_audio": "音频",
+  "fp_what": "什么",
+  "mic_permission_alert": "请允许使用麦克风以录制音频。",
+  "camera_blocked_toast": "摄像头访问被阻止 — 改用文件选择器。",
+  "camera_unavailable_toast": "摄像头不可用 — 改用文件选择器。",
+  "delete_requested_alert": "您的数据将在 24 小时内永久删除。",
+  "delete_server_unreachable": "无法连接到服务器。",
+  "delete_undo_failed": "无法撤销删除。",
+  "delete_all_server_confirm": "这将永久删除您从此服务器提交的所有报告和媒体。此操作无法撤销。",
+  "delete_all_success_count": "已删除 {n} 份报告。所有本地数据已清除。",
+  "confirm_yes": "是",
+  "confirm_no": "取消"
 }
