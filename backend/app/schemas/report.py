@@ -697,3 +697,4 @@ class ReportNearbyResponse(BaseModel):
     total_resolved_recent: int = 0   # NEW (Phase 1) — count of recently_resolved_groups
     total_reports: int               # all reports inside bbox+radius+age (active + resolved-recent)
     citizen_t1_visibility: bool = True  # NEW (Phase 1) — echoed deployment flag (docs §14)
+    density_mode: str = "normal"     # NEW (Phase 4) — "normal" or "disaster" (docs §3.8)

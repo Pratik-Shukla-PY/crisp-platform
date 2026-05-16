@@ -5,7 +5,28 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v207';
+const CACHE_NAME = 'crisp-v208';
+// v207 → v208 (May 2026 — Nearby Reports Phase 4, see
+// docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 4):
+//   Backend-only delta. New response shape gains `density_mode`
+//   ('normal' | 'disaster') + X-Crisp-Density-Mode response
+//   header. /api/v1/config exposes operator-configurable density
+//   bucket thresholds + push frequency caps.
+//
+//   New backend surface:
+//     • Disaster-mode auto-promotion (groups > 50 OR reports > 200
+//       inside the radius → area-level mega-zones with kind=
+//       'disaster_zone'; frontend renders as heat-map).
+//     • Appeal framework — POST/GET /api/v1/admin/appeals/*.
+//       CRISP-hosted; webhook integration scaffolded for Phase 5.
+//     • Push-policy helper — hybrid HIGH/LOW grading rules from
+//       docs §8.1 codified in a single helper for dashboard +
+//       Web Push delivery layer to consume.
+//
+//   Frontend response-shape additions are tier-aware already
+//   (existing renderer falls through for unknown `density_mode`).
+//   Cache bumped so admins on the installed PWA pick up the new
+//   /admin/appeals/* + /admin/observability/* surface promptly.
 // v206 → v207 (May 2026 — Nearby Reports Phase 3, see
 // docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 3):
 //   Trust + offline polish + smart prefill. Highlights:

@@ -28,7 +28,8 @@ from app.schemas.report import (
     ReportNearbyResponse, ReportNearbyGroup,
 )
 from app.services.nearby_aggregator import (
-    aggregate_nearby, bbox_for_radius, haversine_km,
+    aggregate_nearby, aggregate_disaster_zones, is_disaster_density,
+    bbox_for_radius, haversine_km,
     RESOLVED_RECENT_RETENTION_HOURS,
     NearbyReportInput,
 )
@@ -3908,6 +3909,29 @@ def get_nearby_reports(
         max_groups=limit,
     )
 
+    # Phase 4 (May 2026, docs §3.8) — disaster-mode promotion. If the
+    # initial cascade returned > CRISP_DISASTER_MODE_GROUPS groups OR
+    # > CRISP_DISASTER_MODE_REPORTS raw reports inside the radius,
+    # re-aggregate into area-level mega-zones for the heat-map render.
+    # Set the X-Crisp-Density-Mode response header so the dashboard
+    # knows to switch its map render mode without parsing every
+    # group.
+    disaster_mode = is_disaster_density(
+        group_count=len(groups), report_count=len(inputs),
+        groups_threshold=settings.CRISP_DISASTER_MODE_GROUPS,
+        reports_threshold=settings.CRISP_DISASTER_MODE_REPORTS,
+    )
+    if disaster_mode:
+        groups = aggregate_disaster_zones(
+            reports=inputs,
+            user_lat=lat,
+            user_lng=lng,
+            max_zones=min(limit, 20),
+        )
+        response.headers["X-Crisp-Density-Mode"] = "disaster"
+    else:
+        response.headers["X-Crisp-Density-Mode"] = "normal"
+
     # Phase 1 (May 2026, docs §3.2 + §3.6 + §14) — split aggregator
     # output into ACTIVE vs RECENTLY-RESOLVED, and gate T1 (weak)
     # groups behind the deployment flag for anonymous (citizen)
@@ -3965,6 +3989,7 @@ def get_nearby_reports(
         total_resolved_recent=len(resolved_recent_groups),
         total_reports=len(inputs),
         citizen_t1_visibility=settings.CRISP_CITIZEN_T1_VISIBILITY,
+        density_mode=("disaster" if disaster_mode else "normal"),
     )
 
     # Phase 2 (May 2026, docs §3.7) — lifecycle transition detection.

@@ -99,6 +99,31 @@ class Settings(BaseSettings):
     # boot-time client setup.
     CRISP_CITIZEN_T1_VISIBILITY: bool = True
 
+    # ── Nearby — disaster-mode + density (Phase 4, May 2026) ─────────
+    # See docs/NEARBY_REPORTS_PIPELINE.md §3.8 + §14.
+    # When a single /reports/nearby query would return more than
+    # CRISP_DISASTER_MODE_GROUPS aggregate groups OR more than
+    # CRISP_DISASTER_MODE_REPORTS raw reports inside the radius, the
+    # endpoint switches to disaster mode: auto-promote bucketing to
+    # area level + return at most 20 mega-zones + X-Crisp-Density-
+    # Mode: disaster response header. Frontend renders a heat-map
+    # overlay instead of pin clusters.
+    # Defaults err on the SAFE side; deployments in disaster-prone
+    # regions may lower these.
+    CRISP_DISASTER_MODE_GROUPS: int = 50
+    CRISP_DISASTER_MODE_REPORTS: int = 200
+
+    # Map render-mode thresholds (docs §3.8). Different deployments /
+    # countries need different sensitivities. Format is JSON; default
+    # encodes {"pins": 10, "clusters": 50}. Phase 4 surfaces these
+    # via /api/v1/config so the dashboard reads them once at boot.
+    CRISP_DENSITY_BUCKETS_PINS: int = 10
+    CRISP_DENSITY_BUCKETS_CLUSTERS: int = 50
+
+    # Push-notification policy (Phase 4, docs §8). Frequency cap per
+    # user — protects against alarm fatigue.
+    CRISP_PUSH_FREQUENCY_CAP_PER_USER_PER_HOUR: int = 1
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

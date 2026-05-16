@@ -865,3 +865,61 @@ class NearbyGroupEvent(Base):
               "group_id", "occurred_at"),
         Index("ix_nearby_group_events_occurred_at", "occurred_at"),
     )
+
+
+class Appeal(Base):
+    """CRISP-hosted moderation appeal (Phase 4, docs §6.4 + §7.5).
+
+    Opened when a device's spam_score / spam_signals cause its
+    contributions to be suppressed. Admins decide: reinstated
+    (zero spam_score) / upheld (keep suppression) / banned
+    (permanent — requires 2-admin co-sign per docs §7.5).
+
+    UNDP and other deployment partners integrate via outbound
+    webhooks emitted on status changes — they DON'T own the
+    underlying tables. Framework stays reusable across deployments.
+    """
+    __tablename__ = "appeals"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    device_id = Column(String(36),
+                       ForeignKey("devices.id", ondelete="CASCADE"),
+                       nullable=True)
+    user_id = Column(String(36), nullable=True)
+    # 'open' | 'under_review' | 'reinstated' | 'upheld' | 'banned'
+    status = Column(String(20), nullable=False, default="open",
+                    server_default="open")
+    claim_text = Column(Text, nullable=True)
+    original_signals = Column(JSON, default=list, nullable=False)
+    original_spam_score = Column(Float, nullable=True)
+    opened_at = Column(DateTime(timezone=True),
+                       server_default=func.now(), nullable=False)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+    decided_by_admin_id = Column(String(36), nullable=True)
+    decision_notes = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_appeals_device_id", "device_id"),
+        Index("ix_appeals_status_opened", "status", "opened_at"),
+    )
+
+
+class AppealEvent(Base):
+    """Append-only event log per Appeal."""
+    __tablename__ = "appeal_events"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    appeal_id = Column(String(36),
+                       ForeignKey("appeals.id", ondelete="CASCADE"),
+                       nullable=False)
+    # 'opened' | 'comment' | 'status_change' | 'webhook_sent'
+    event_kind = Column(String(24), nullable=False)
+    actor_admin_id = Column(String(36), nullable=True)
+    payload = Column(JSON, default=dict, nullable=False)
+    occurred_at = Column(DateTime(timezone=True),
+                         server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_appeal_events_appeal_id_occurred",
+              "appeal_id", "occurred_at"),
+    )

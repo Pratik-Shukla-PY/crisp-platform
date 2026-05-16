@@ -514,6 +514,74 @@ def _is_acute(timestamps: List[datetime], *, now: Optional[datetime] = None) -> 
 #: in the acute window. Phase-2 default — Phase 3 may tune.
 ACUTE_HIGH_TRUSTED_FLOOR = 3
 
+#: Disaster-mode detection (Phase 4, docs §3.8). When a single query
+#: would return MORE THAN this many groups OR raw reports inside the
+#: radius, the endpoint switches to disaster mode (auto-promote area
+#: bucketing + mega-zones + heat-map render hint). Both thresholds
+#: are independently sufficient — either trip flips the mode.
+#: Defaults overridable via env (CRISP_DISASTER_MODE_GROUPS /
+#: CRISP_DISASTER_MODE_REPORTS).
+DISASTER_MODE_GROUPS_DEFAULT = 50
+DISASTER_MODE_REPORTS_DEFAULT = 200
+
+
+def is_disaster_density(
+    *, group_count: int, report_count: int,
+    groups_threshold: int = DISASTER_MODE_GROUPS_DEFAULT,
+    reports_threshold: int = DISASTER_MODE_REPORTS_DEFAULT,
+) -> bool:
+    """True when the density warrants disaster-mode treatment."""
+    return group_count > groups_threshold or report_count > reports_threshold
+
+
+def aggregate_disaster_zones(
+    reports: List[NearbyReportInput],
+    user_lat: float,
+    user_lng: float,
+    *,
+    max_zones: int = 20,
+) -> List[NearbyGroup]:
+    """Phase 4 (docs §3.8) — alternate aggregation for high-density
+    scenarios. Groups EVERY report by area-level geohash (precision 6,
+    ~600m) regardless of building_id; returns up to `max_zones`
+    mega-zones with kind='disaster_zone'. The map renders these as
+    a heat-map overlay (no individual pin click-through).
+
+    Privacy invariants still hold — the same projection in
+    `_summarize_bucket` (centroid only, minute-truncated timestamps,
+    per-device cap) applies. Disaster mode just changes the SHAPE
+    of the buckets, not their privacy treatment.
+    """
+    if not reports:
+        return []
+    now = datetime.now(timezone.utc)
+    buckets: dict[str, List[NearbyReportInput]] = defaultdict(list)
+    for r in reports:
+        # Area-level geohash + crisis_type so flood vs riot at the
+        # same area stay separate zones.
+        gh = _geohash_encode(r.latitude, r.longitude, GEOHASH_PRECISION_AREA)
+        buckets[f"area_{gh}_{r.crisis_type or 'OTHER'}"].append(r)
+
+    groups: List[NearbyGroup] = []
+    for key, bucket in buckets.items():
+        gid = f"g_disaster_{key}"
+        g = _summarize_bucket(bucket, 'disaster_zone',
+                              user_lat, user_lng, gid, now=now)
+        if g.count > 0:
+            groups.append(g)
+
+    # Sort by relevance + acute / burst boosts (same key as the
+    # normal cascade).
+    def _sort_key(g: NearbyGroup) -> float:
+        score = _relevance_score(g, now, radius_km=25)
+        if g.is_acute:
+            score += 10.0
+        if g.is_burst:
+            score += 1.0
+        return -score
+    groups.sort(key=_sort_key)
+    return groups[:max_zones]
+
 
 def _grade_acute(bucket: List[NearbyReportInput], *, now: datetime) -> str:
     """Grade an acute event as 'high' or 'low' (docs §3.5 + §8.1).
