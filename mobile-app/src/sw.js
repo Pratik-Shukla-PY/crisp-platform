@@ -5,8 +5,32 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v201';
-// v200 → v201 (May 2026 — deferred-Originals queue fix):
+const CACHE_NAME = 'crisp-v203';
+// v201 → v203 (May 2026 — Lighthouse PROD CLS fix, v2):
+//   The v202 attempt (commit 169ca28) was auto-rolled-back when
+//   PROD measured CLS=0.42 against the 0.25 floor — my fixes were
+//   validated against fast un-throttled localhost which misses the
+//   biggest contributors that only surface under Slow-4G + 4× CPU
+//   (the LH-mobile audit profile).
+//   Re-investigated with a new throttled probe matching LH-mobile;
+//   reproduced PROD CLS at 0.37 locally and identified:
+//     1. `.home-channels-grid` is empty in HTML and home-screen.js
+//        _renderChannels() populates 6 tiles at t≈7.8 s under
+//        throttle, expanding section-bottom 0 → 201 px. Single
+//        biggest CLS contributor (~0.23 of the 0.37 measured).
+//        Fix: `min-height: 198 px` reserves the slot pre-paint.
+//     2. `.home-action-tile[hidden] { display:none }` collapses
+//        the install-icon slot until beforeinstallprompt fires.
+//        Reveal at t≈12.9 s reflowed the action-tiles row.
+//        Fix: `visibility:hidden + opacity:0` keeps the slot in
+//        layout flow; reveal becomes a same-slot opacity swap.
+//   Throttled probe after fixes: 0.133 (47 % below 0.25 floor with
+//   meaningful PROD-amplification headroom).
+//   v202 fixes (chip width + nearby-intel + consent pre-paint) were
+//   reverted via commit 11c77fb — they were correct but addressed
+//   the wrong-priority shifts. They can be re-attempted later as
+//   a separate batch if PROD CLS budget is tight.
+//   v200 → v201 was the deferred-Originals queue retention fix.
 //   Reconciler no longer dequeues IDB rows while variants are
 //   still in `deferred=true && complete=false` state. New
 //   `_submissionLanded` flag + 14-day timeout. Sync-badge

@@ -5003,7 +5003,24 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     border-color: rgba(255, 255, 255, 0.16);
 }
 .home-action-tile:active { transform: scale(0.985); }
-.home-action-tile[hidden] { display: none; }
+/* May 2026 (Lighthouse PROD CLS fix) — `[hidden]` on the install
+   icon resolves at t≈12.9 s under Slow-4G+4×CPU (the LH-mobile
+   profile) when install-prompt.js detects beforeinstallprompt and
+   un-hides the icon. The `display:none → inline-flex` flip
+   reflowed the entire .home-action-tiles row, dragged the hero-card
+   slot up 13 px, and contributed ~0.05 to PROD CLS (combined back-
+   and-forth at t=12.9 and t=13.3 ≈ 0.105).
+   New behaviour: reserve the layout slot for hidden tiles via
+   visibility:hidden + opacity:0. The reveal becomes a same-slot
+   opacity transition with zero layout shift.
+   Compound .home-action-tiles--utility rule (line 9907) follows
+   the same pattern. */
+.home-action-tile[hidden] {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    /* No `display: none` — the slot must stay in the layout flow. */
+}
 .home-action-tile .hat-icon {
     display: inline-flex;
     align-items: center;
@@ -5346,6 +5363,19 @@ body.tier-t4 .home-impact {
     gap: 8px;
     margin-left: 0;
     margin-right: 0;
+    /* May 2026 (Lighthouse PROD CLS fix, second attempt) — the grid
+       starts empty in HTML and home-screen.js _renderChannels() populates
+       6 tiles AFTER defer-scripts load. On Slow-4G + 4× CPU (LH-mobile
+       audit profile) this lands at t≈7.8 s and expands section-bottom
+       by ~200 px, dragging the entire above-fold layout upward — the
+       single biggest CLS contributor (~0.23 of the 0.42 PROD score on
+       commit 169ca28). Reserving the slot via min-height pins the
+       section's bottom-anchored layout from first paint; the tile
+       population becomes a content swap inside an already-sized
+       container with zero layout shift.
+       198 px = (95 px tile × 2 rows) + 8 px gap, measured on the 412 px
+       Moto G Power viewport the Lighthouse mobile profile uses. */
+    min-height: 198px;
 }
 /* Phase-17 .home-channels-six rule kept as a fallback alias
    for the rare operator config that overrides into a 6-across row. */
@@ -9891,7 +9921,15 @@ body.tier-t4 .home-impact {
     color: var(--text, #f1f5f9);
 }
 .home-stage .home-action-tiles--utility .home-action-tile:active { transform: scale(0.985); }
-.home-stage .home-action-tiles--utility .home-action-tile[hidden] { display: none; }
+/* CLS fix — see base rule at line ~5006 for full rationale.
+   This compound selector beats the base rule by specificity, so the
+   visibility:hidden swap MUST be repeated here for the .home-stage
+   .--utility row (the live home-page row). */
+.home-stage .home-action-tiles--utility .home-action-tile[hidden] {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
 .home-stage .home-action-tiles--utility .home-action-tile .hat-icon {
     width: 20px;
     height: 20px;
