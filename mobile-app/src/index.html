@@ -299,27 +299,6 @@
               }
           } catch (_) {}
       })();
-      /* May 2026 (Lighthouse CLS fix, second pass) — read the
-         crisp_privacy_consent localStorage flag pre-paint and stamp
-         <html data-consent-accepted="1"> if the returning user has
-         already consented. CSS then knows to never paint #home-consent
-         on this load, eliminating the t≈190 ms display:none collapse
-         that contributed ~0.21 to PROD CLS (well above the 0.25 floor
-         once amplified by Lighthouse's throttled measurement).
-         The runtime _wireConsent() handler in home-screen.js stays —
-         it still runs for first-time visitors who don't carry the
-         flag, and it remains the source of truth for setting the flag
-         after the user ticks the box. */
-      (function () {
-          try {
-              var raw = localStorage.getItem('crisp_privacy_consent');
-              if (!raw) return;
-              var v = JSON.parse(raw);
-              if (v && v.accepted === true) {
-                  document.documentElement.dataset.consentAccepted = '1';
-              }
-          } catch (_) {}
-      })();
     </script>
 </head>
 <body>

@@ -5,27 +5,14 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v202';
-// v201 → v202 (May 2026 — Lighthouse CLS audit fix):
-//   Three stacked CLS reductions on stage-home so the PROD
-//   Lighthouse audit clears the 0.25 floor (was 0.298, kept
-//   auto-rolling back every deploy):
-//     1. `.home-nearby-intel[hidden]` reserves its 96 px layout
-//        slot during probing (`visibility:hidden + min-height`
-//        instead of `display:none`). `.is-no-data` only collapses
-//        the slot when nearby.js confirms no data after fetch.
-//     2. `.home-badge-chip.home-badge-chip--hero` is now
-//        pinned to `width: 320px; min-height: 132px` (was
-//        `min-width:200px; max-width:320px; min-height:0`). The
-//        compound selector was overriding the base rule's min-
-//        width, letting the chip oscillate 289-301 px on text
-//        change.
-//     3. New `<html data-consent-accepted="1">` flag stamped
-//        pre-paint by an inline <head> script reading
-//        localStorage. CSS rule hides `#home-consent` entirely
-//        for returning users — no more `display:none` collapse
-//        in _wireConsent() at t≈190 ms.
-//   v200 → v201 was the deferred-Originals queue retention fix.
+const CACHE_NAME = 'crisp-v201';
+// v200 → v201 (May 2026 — deferred-Originals queue fix):
+//   Reconciler no longer dequeues IDB rows while variants are
+//   still in `deferred=true && complete=false` state. New
+//   `_submissionLanded` flag + 14-day timeout. Sync-badge
+//   filters those out so user sees an accurate "queued"
+//   count. Closes a real production gap where 44 % of PWA
+//   photo groups had no HIGH-tier Original ever uploaded.
 //
 // v199 → v200 (May 2026 — Phase 2.3/2.4/2.5/2.6 Badge Studio premium):
 //   * Canvas redesign: T4 warm-gold palette + glassmorphism panel +
