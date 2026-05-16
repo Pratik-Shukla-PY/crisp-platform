@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share, config, observability, appeals
+from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share, config, observability, appeals, devices
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -50,3 +50,9 @@ api_router.include_router(observability.router,
 api_router.include_router(appeals.router,
                           prefix="/admin/appeals",
                           tags=["appeals"])
+# Phase 5.1 (Nearby Pipeline §6.2) — auth-free device telemetry capture
+# for real emulator fingerprinting. The Phase-5 scaffold detector
+# falls back to its UA-substring check when no telemetry is posted.
+api_router.include_router(devices.router,
+                          prefix="/devices",
+                          tags=["devices"])

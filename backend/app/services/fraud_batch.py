@@ -83,24 +83,127 @@ SIGNAL_WEIGHTS.update(_PHASE5_SIGNAL_WEIGHTS)
 # list of BatchSignal constants that fired. Add new detectors here;
 # the worker auto-iterates all DETECTORS for each device.
 
+# ── Emulator fingerprinting (Phase 5.1 — real telemetry, docs §6.2) ──
+#
+# The Phase 5 scaffold only matched substrings in `device.platform`.
+# Trivially defeated. The real implementation reads
+# `device.telemetry_summary` (populated by the PWA / RN client via
+# POST /api/v1/devices/telemetry) and applies a small ruleset.
+#
+# Each rule contributes to a score; the signal fires when score ≥ 1.0.
+# We do NOT collapse this to a single boolean because we want admins
+# to see which signals contributed (logged via spam_signals[]).
+
+# Well-known software / emulator WebGL renderer fragments. These are
+# never seen on real iOS / Android devices in the wild — real mobile
+# GPUs are Adreno / Mali / Apple / PowerVR.
+_SOFTWARE_RENDERER_NEEDLES: tuple[str, ...] = (
+    "swiftshader",   # Chromium fallback (BlueStacks default)
+    "angle",         # Android Studio emulator (ANGLE / D3D11)
+    "llvmpipe",      # Linux software renderer
+    "lavapipe",      # Vulkan software renderer
+    "mesa offscreen",
+    "swrast",        # X11 software rasteriser
+)
+
+# Default emulator config: UTC timezone + en-US locale is the AOSP
+# emulator default and lavapipe's. Real devices in their target
+# deployment regions rarely match this exact pair.
+_DEFAULT_EMU_TIMEZONE = "UTC"
+_DEFAULT_EMU_LOCALE_PREFIXES: tuple[str, ...] = ("en-us", "en_us")
+
+
 def _detect_emulator_farm(
     db: Session, device: Device,
     recent_reports: Sequence[Report],
 ) -> List[str]:
-    """Phase 5 scaffold heuristic: device platform suggests known
-    emulator (BlueStacks, Android-Emulator, Genymotion) AND no
-    realistic device telemetry signals were ever recorded.
+    """Phase 5.1 real implementation (docs §6.2). Reads the device's
+    captured telemetry_summary and scores emulator likelihood. Falls
+    back to the cheap UA-substring check when no telemetry has been
+    captured yet — devices that predate the capture roll-out still
+    get flagged on obvious patterns.
 
-    Real implementation (separate followup) wires this to the v4
-    device-info-collector signals (accelerometer activity, battery
-    level history, etc.) once those land. For now we surface only
-    the cheap UA-substring check so the scaffold is testable.
+    Scoring rules (any combination summing ≥ 1.0 → fires):
+
+      1.0  platform / UA substring matches known emulator string
+      1.0  WebGL renderer is a software renderer (SwiftShader/ANGLE/...)
+      0.6  no accelerometer activity AND device claims mobile OS
+      0.4  no battery API support
+      0.4  timezone="UTC" AND locale starts with "en-US"
+      0.4  exact emulator screen presets (411×823 dpr=2.625 is the
+           Pixel-2 Android Studio default; 375×667 dpr=2.0 is iOS
+           Simulator's iPhone 8 default)
+
+    Public count still floors at distinct-device count (per §10) — this
+    detector only feeds the device's spam_score / spam_signals; it does
+    NOT change how the report appears to citizens. Citizens see the
+    same group regardless of whether a contributing device fingerprints
+    as an emulator.
     """
-    if not device or not device.platform:
+    if not device:
         return []
+
+    score = 0.0
+    # Rule 1: UA / platform substring (preserved from the Phase 5 scaffold).
     plat = (device.platform or "").lower()
     if any(needle in plat for needle in ("emulator", "bluestacks",
                                          "genymotion", "simulator")):
+        score += 1.0
+
+    telem = device.telemetry_summary or {}
+    if isinstance(telem, dict) and telem:
+        # Rule 2: software WebGL renderer.
+        renderer = (telem.get("webgl_renderer") or "").lower()
+        if renderer and any(n in renderer for n in _SOFTWARE_RENDERER_NEEDLES):
+            score += 1.0
+
+        # Rule 3: no accelerometer activity on a device claiming to be
+        # mobile. Static accelerometer is normal in absolute terms (the
+        # phone sitting on a desk reports ~9.8 on Z), so the PWA only
+        # sets accel_active=true when it sees the values CHANGE between
+        # samples — the kind of variance you only get when a real device
+        # is being handled.
+        accel_active = telem.get("accel_active")
+        platform_ua = (telem.get("platform_ua") or "").lower()
+        claims_mobile = any(
+            needle in platform_ua
+            for needle in ("iphone", "ipad", "android", "mobile")
+        )
+        if claims_mobile and accel_active is False:
+            score += 0.6
+
+        # Rule 4: battery API completely absent on a claimed mobile UA.
+        battery_present = telem.get("battery_present")
+        if claims_mobile and battery_present is False:
+            score += 0.4
+
+        # Rule 5: default emulator timezone + locale combo.
+        tz = (telem.get("timezone") or "")
+        loc = (telem.get("locale") or "").lower()
+        if (tz == _DEFAULT_EMU_TIMEZONE
+                and any(loc.startswith(p) for p in _DEFAULT_EMU_LOCALE_PREFIXES)):
+            score += 0.4
+
+        # Rule 6: exact emulator screen presets.
+        w, h = telem.get("screen_w"), telem.get("screen_h")
+        dpr = telem.get("screen_dpr")
+        try:
+            w_int = int(w) if w is not None else None
+            h_int = int(h) if h is not None else None
+            dpr_f = float(dpr) if dpr is not None else None
+        except (TypeError, ValueError):
+            w_int = h_int = dpr_f = None
+        emu_screens = {
+            (411, 823, 2.625),   # Pixel 2 AVD default
+            (411, 731, 2.625),   # Pixel 2 landscape
+            (375, 667, 2.0),     # iPhone 8 simulator default
+            (414, 736, 3.0),     # iPhone 8 Plus simulator
+            (360, 640, 2.0),     # AOSP emulator default
+        }
+        if (w_int, h_int, dpr_f) in emu_screens:
+            score += 0.4
+
+    if score >= 1.0:
         return [BatchSignal.EMULATOR_FARM]
     return []
 

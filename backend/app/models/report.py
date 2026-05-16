@@ -234,6 +234,15 @@ class Device(Base):
     reports_count = Column(Integer, default=0, nullable=False, server_default="0")
     spam_signals = Column(JSON, default=list, nullable=False)
 
+    # Phase 5.1 (May 2026, docs §6.2) — device telemetry summary for
+    # real emulator fingerprinting. Posted by PWA / RN on app boot via
+    # POST /api/v1/devices/telemetry. Nullable — devices that predate
+    # the capture (or refuse it for any reason) get a NULL summary and
+    # only the cheap UA-substring check applies. Stored as a SUMMARY
+    # only (no raw sensor streams) so this is not PII / fingerprinting
+    # data the user could be re-identified from.
+    telemetry_summary = Column(JSON, nullable=True)
+
     reports = relationship("Report", back_populates="device")
     sync_logs = relationship("SyncLog", back_populates="device")
 
