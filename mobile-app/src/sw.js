@@ -5,7 +5,25 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v211';
+const CACHE_NAME = 'crisp-v212';
+// v211 → v212 (May 2026 — Phase 5.1 NO-SCROLL pass, channels redesign):
+//   Operator-reported: the home stage must fit on iPhone SE
+//   (375 × 667) with ZERO vertical scroll. The 2 × 3 square-tile
+//   channels grid (~210 px tall) was the worst offender. Replaced
+//   with:
+//     · A single-row 6-icon strip (~44 px tall) above the Privacy
+//       footer. Active channels (Telegram, IVR) carry a green
+//       status dot; upcoming channels (WhatsApp, SMS, Android,
+//       iOS) render grey. NO labels on the strip — pure visual.
+//     · A bottom-sheet picker that opens on strip tap (mirrors the
+//       .nearby-sheet pattern + animation). Sheet contains the
+//       full 6 channel cards with icon + name + status text +
+//       tap-to-launch. Lazy-painted on first open.
+//   Plus: NO-SCROLL invariant codified in CLAUDE.md so future
+//   contributors don't re-introduce the regression. Verified
+//   end-to-end via e2e/_home_matrix_probe.mjs which now asserts
+//   body.scrollHeight ≤ window.innerHeight on every device.
+//
 // v210 → v211 (May 2026 — Phase 5.1 follow-up: home-tile collapse fix):
 //   Operator-reported. Once the Phase-1 nearby module populated with
 //   reports, `.home-section-bottom` grew by ~217 px (eyebrow + 156 px

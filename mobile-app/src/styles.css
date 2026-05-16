@@ -5379,16 +5379,19 @@ body.tier-t4 .home-impact {
     /* May 2026 (Lighthouse PROD CLS fix, second attempt) — the grid
        starts empty in HTML and home-screen.js _renderChannels() populates
        6 tiles AFTER defer-scripts load. On Slow-4G + 4× CPU (LH-mobile
-       audit profile) this lands at t≈7.8 s and expands section-bottom
-       by ~200 px, dragging the entire above-fold layout upward — the
-       single biggest CLS contributor (~0.23 of the 0.42 PROD score on
-       commit 169ca28). Reserving the slot via min-height pins the
-       section's bottom-anchored layout from first paint; the tile
-       population becomes a content swap inside an already-sized
+       audit profile) this lands at t≈7.8 s and expands section-bottom,
+       dragging the above-fold layout upward — the single biggest CLS
+       contributor on commit 169ca28. Reserving the slot via min-height
+       pins the section's bottom-anchored layout from first paint; the
+       tile population becomes a content swap inside an already-sized
        container with zero layout shift.
-       198 px = (95 px tile × 2 rows) + 8 px gap, measured on the 412 px
-       Moto G Power viewport the Lighthouse mobile profile uses. */
-    min-height: 198px;
+
+       May 2026 (Phase 5.1 channels redesign) — bumped DOWN from 198 px
+       to 110 px to match the new compact horizontal pill tiles
+       (~52 px × 2 rows + 6 px gap). The same CLS guarantee holds at
+       the smaller footprint; the only difference is the reserved
+       slot is now ~half what it was. */
+    min-height: 110px;
 }
 /* Phase-17 .home-channels-six rule kept as a fallback alias
    for the rare operator config that overrides into a 6-across row. */
@@ -5409,10 +5412,14 @@ body.tier-t4 .home-impact {
 .home-channel-tile.is-disabled .ct-label {
     color: var(--text-mute, #64748b);
 }
-/* 3×2 grid tiles can be a bit taller since rows are 2 not 1 — keep
-   aspect-ratio 1:1 so the grid is a clean visual block. */
+/* Legacy v1-7 3 × 2 grid square-card rule.
+   SUPERSEDED by the compact-pill redesign in section G (Channels) at
+   ~line 10004. The .home-stage scope there pins aspect-ratio: auto
+   and flex-direction: row, beating these per CSS specificity rules.
+   Block kept (instead of deleted) so anything outside .home-stage
+   that uses .home-channels-grid (e.g. a future onboarding deck or
+   admin debug surface) still renders sanely. */
 .home-channels-grid .home-channel-tile {
-    aspect-ratio: 1 / 1;
     padding: 10px 4px;
 }
 .home-channels-grid .home-channel-tile .ct-icon { font-size: 22px; }
@@ -5912,67 +5919,15 @@ body.tier-t4 .home-impact {
     .home-stage .home-section-channels .home-section-lede { font-size: 12.5px; margin-bottom: 16px; }
 }
 
-/* — Channels grid — May 2026 (fit-in-viewport pass v2).
-   Operator: "You have kept all channel icons in one row. This is
-   not Ok. It was looking great earlier. Now its bad. Put in 3 rows
-   adjust box sizes accordingly."
-   Reverting to the 3-column × 2-row grid the operator previously
-   liked (3 tiles per row, 2 rows of channels), but with COMPACT
-   tile sizing so the section fits in ~120-160 px (vs the original
-   180-310 px) and the whole home stage stays inside 100dvh. Each
-   tile renders icon + label + green live-dot for live channels;
-   "Coming soon" tiles get a muted grey treatment via .is-disabled. */
-.home-stage .home-channels {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 5px;
-    margin: 0;
-    width: 100%;
-}
-.home-stage .home-channel-tile {
-    aspect-ratio: auto;
-    min-height: 46px;
-    padding: 4px 4px;
-    border-radius: 10px;
-    gap: 3px;
-}
-.home-stage .home-channel-tile .ct-icon { font-size: 17px; }
-.home-stage .home-channel-tile .ct-label {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    line-height: 1.1;
-}
-@media (min-height: 700px) {
-    .home-stage .home-channels { gap: 8px; }
-    .home-stage .home-channel-tile {
-        min-height: 58px;
-        padding: 8px 6px;
-        gap: 5px;
-    }
-    .home-stage .home-channel-tile .ct-icon { font-size: 20px; }
-    .home-stage .home-channel-tile .ct-label { font-size: 11px; }
-}
-@media (min-height: 800px) {
-    .home-stage .home-channels { gap: 10px; }
-    .home-stage .home-channel-tile {
-        min-height: 66px;
-        padding: 10px 6px;
-        gap: 6px;
-        border-radius: 12px;
-    }
-    .home-stage .home-channel-tile .ct-icon { font-size: 22px; }
-    .home-stage .home-channel-tile .ct-label { font-size: 11.5px; }
-}
-@media (min-height: 900px) {
-    .home-stage .home-channels { gap: 12px; }
-    .home-stage .home-channel-tile {
-        min-height: 74px;
-        padding: 12px 6px;
-    }
-}
-.home-stage .home-channel-tile.is-disabled { opacity: 0.55; }
-.home-stage .home-channel-tile.is-live { box-shadow: none; }
+/* — Channels grid — DEAD CSS, kept-but-inert May 2026 (Phase 5.1
+   NO-SCROLL pass). The 2 × 3 grid was operator-replaced with a
+   single-row icon strip (~44 px) + bottom sheet — see section G at
+   ~line 10011 for the active rules. The .home-channel-tile +
+   .home-channels selectors no longer match any home-stage markup
+   so these rules are inert; left in place rather than deleted so a
+   future surface (admin debug, onboarding deck) that reuses the
+   markup still renders sanely. */
+.home-stage .home-channels { display: none; }
 
 /* — Utility footer — calmer separator, tighter. Phase 20:
    `margin-top: auto` pushes the footer to the very bottom of the
@@ -10001,12 +9956,19 @@ body.tier-t4 .home-impact {
     border-width: 1.5px;
 }
 
-/* ── G. Channels — softer borders, keep 3 × 2 grid ───────────────── */
+/* ── G. Channels — compact icon strip + bottom sheet (Phase 5.1) ─────
+   Operator: "Show just 6 icons above the Privacy line. NO scroll on
+   iPhone SE. Tap opens 6 from bottom like nearby reports."
+   Replaces the prior 2 × 3 square-tile grid (~210 px tall) with a
+   single horizontal icon row (~44 px tall) so the home stage fits
+   inside iPhone SE (375 × 667) without vertical scroll. Full channel
+   cards (icon + name + status) move into a bottom sheet that opens
+   on strip tap, mirroring the .nearby-sheet pattern. */
 
 .home-stage .home-section-channels { margin: 0; padding: 0; }
 .home-stage .home-section-channels .home-section-title {
-    margin: 0 0 6px;
-    font-size: 10px;
+    margin: 0 0 4px;
+    font-size: 9.5px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: rgba(255, 255, 255, 0.42);
@@ -10015,45 +9977,190 @@ body.tier-t4 .home-impact {
 }
 .home-stage .home-section-channels .home-section-lede { display: none; }
 
-.home-stage .home-channels {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+/* The strip itself — a single clickable surface that opens the
+   bottom sheet. 6 .hcs-icon spans evenly distributed. ~44 px tall
+   meets the WCAG 2.5.5 tap-target floor. */
+.home-stage .home-channels-strip {
+    /* Strip is a <button>; defeat default button chrome. */
+    all: unset;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
     width: 100%;
-    margin: 0;
+    padding: 6px 10px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    min-height: 44px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background 0.15s ease, border-color 0.15s ease,
+                transform 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
 }
-.home-stage .home-channel-tile {
-    min-height: 50px;
-    padding: 6px 6px;
-    border-radius: 12px;
-    gap: 4px;
-    /* Softer border opacity (was 0.18 → 0.06) so 6 tiles don't shout */
-    border-color: rgba(255, 255, 255, 0.06) !important;
-    background-color: rgba(255, 255, 255, 0.02) !important;
-    box-shadow: none !important;
+.home-stage .home-channels-strip:hover {
+    background: rgba(255, 255, 255, 0.045);
+    border-color: rgba(255, 255, 255, 0.14);
 }
-.home-stage .home-channel-tile.is-live {
-    border-color: rgba(70, 223, 177, 0.32) !important;
-    background-color: rgba(70, 223, 177, 0.04) !important;
+.home-stage .home-channels-strip:focus-visible {
+    outline: 2px solid rgba(70, 223, 177, 0.45);
+    outline-offset: 2px;
+    background: rgba(255, 255, 255, 0.045);
 }
-.home-stage .home-channel-tile .ct-icon { font-size: 17px; }
-.home-stage .home-channel-tile .ct-label {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0;
-    line-height: 1.1;
+.home-stage .home-channels-strip:active { transform: scale(0.985); }
+/* CLS reservation — the strip starts empty until home-screen.js
+   _renderChannelsStrip() fires (defer-script timing). Without
+   min-height the first paint would shift when the icons land. */
+.home-stage .home-channels-strip:empty { min-height: 44px; }
+
+/* Each icon — 18 px glyph centred in a 32 × 32 inline-flex cell. The
+   cell is what the eye reads as the channel surface; the parent
+   strip is the actual tap target. */
+.home-stage .hcs-icon {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    line-height: 1;
+    flex: 0 0 auto;
 }
+.home-stage .hcs-icon i { line-height: 1; }
+/* Active channels — brand colour + small live-pip top-right. The
+   --c CSS variable is set inline by _renderChannelsStrip(). */
+.home-stage .hcs-icon--live {
+    color: var(--c, var(--accent, #09D1C7));
+}
+.home-stage .hcs-icon--live::after {
+    content: '';
+    position: absolute;
+    top: 2px; right: 2px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #80EE98;
+    box-shadow: 0 0 5px rgba(128, 238, 152, 0.75);
+}
+/* Upcoming channels — muted grey, no dot. The opacity is on the
+   icon glyph only so the surrounding strip background stays
+   constant + the icons read as a balanced row. */
+.home-stage .hcs-icon--soon {
+    color: rgba(255, 255, 255, 0.34);
+}
+
+/* Slightly more headroom on tall viewports — the icons can grow
+   without re-bloating the strip. */
 @media (min-height: 740px) {
-    .home-stage .home-channels { gap: 8px; }
-    .home-stage .home-channel-tile { min-height: 58px; padding: 8px 6px; }
-    .home-stage .home-channel-tile .ct-icon { font-size: 19px; }
-    .home-stage .home-channel-tile .ct-label { font-size: 10.5px; }
+    .home-stage .home-channels-strip { min-height: 48px; padding: 8px 12px; }
+    .home-stage .hcs-icon { width: 36px; height: 36px; font-size: 20px; }
 }
 @media (min-height: 820px) {
-    .home-stage .home-channels { gap: 10px; }
-    .home-stage .home-channel-tile { min-height: 64px; padding: 10px 6px; }
-    .home-stage .home-channel-tile .ct-icon { font-size: 21px; }
-    .home-stage .home-channel-tile .ct-label { font-size: 11px; }
+    .home-stage .home-channels-strip { min-height: 52px; padding: 10px 14px; }
+    .home-stage .hcs-icon { width: 40px; height: 40px; font-size: 22px; }
+}
+/* PWA desktop / tablet — cap the strip width so the icons don't
+   spread to the page edges on a 1024+ container. */
+@media (min-width: 720px) {
+    .home-stage .home-channels-strip {
+        max-width: 480px;
+        margin-inline: auto;
+    }
+}
+
+/* ── Channels bottom sheet — Phase 5.1, mirrors .nearby-sheet ──────
+   The .channels-sheet container piggybacks on the existing
+   .nearby-sheet positioning + .is-open animation + backdrop. Only
+   the inner row presentation differs (larger horizontal cards with
+   label + status text). */
+
+.channels-sheet-lede {
+    margin: 4px 0 16px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12.5px;
+    line-height: 1.4;
+}
+.channels-sheet-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 4px 8px;
+}
+/* Each row inside the sheet — wider horizontal card, 56 px tall,
+   icon LEFT, label + status stacked RIGHT, brand colour accent on
+   active channels. */
+.channels-sheet-row {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    min-height: 56px;
+    box-sizing: border-box;
+    transition: background 0.15s ease, border-color 0.15s ease,
+                transform 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.channels-sheet-row:hover,
+.channels-sheet-row:focus-visible {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.14);
+}
+.channels-sheet-row:focus-visible {
+    outline: 2px solid rgba(70, 223, 177, 0.45);
+    outline-offset: 2px;
+}
+.channels-sheet-row:active { transform: scale(0.99); }
+.channels-sheet-row.is-live {
+    border-color: rgba(70, 223, 177, 0.32);
+    background: rgba(70, 223, 177, 0.045);
+}
+.channels-sheet-row.is-live .csr-icon { color: var(--c, var(--accent, #09D1C7)); }
+.channels-sheet-row.is-disabled { opacity: 0.55; }
+.csr-icon {
+    flex: 0 0 auto;
+    width: 32px; height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    line-height: 1;
+}
+.csr-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.csr-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.2;
+    margin-bottom: 2px;
+}
+.csr-status {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 1.2;
+}
+.channels-sheet-row.is-live .csr-status { color: rgba(70, 223, 177, 0.85); }
+.csr-arrow {
+    flex: 0 0 auto;
+    color: rgba(255, 255, 255, 0.30);
+    font-size: 13px;
+    margin-left: 2px;
+}
+[dir="rtl"] .channels-sheet-row { gap: 14px; }
+[dir="rtl"] .csr-arrow {
+    transform: scaleX(-1);
+    margin-left: 0;
+    margin-right: 2px;
 }
 
 /* ── H. Footer + device-ID consolidated ──────────────────────────── */
@@ -11904,39 +12011,48 @@ body { background-color: #10284a; }
 @media (max-height: 700px) {
     .home-stage .home-nearby-intel {
         margin-top: 2px;
-        margin-bottom: 4px;
-        gap: 4px;
+        margin-bottom: 2px;
+        gap: 2px;
     }
     .home-stage .home-nearby-eyebrow {
         font-size: 9.5px;
         margin-bottom: 2px;
     }
     .home-stage .home-nearby-number-block {
-        min-height: 110px;
-        padding: 12px 12px 10px;
+        /* Phase 5.1 NO-SCROLL pass: 110 → 88 so iPhone SE's footer
+           (Privacy + CRISP-ID) sits inside the 667 px viewport. */
+        min-height: 88px;
+        padding: 8px 12px 6px;
     }
     .home-stage .home-nearby-number {
-        /* Cap the dominant scale on short viewports so the block can
-           come down to 110 px without the number overflowing it. */
-        font-size: clamp(2.2rem, 9vw, 3rem);
+        font-size: clamp(2rem, 8vw, 2.6rem);
     }
     .home-stage .home-nearby-number-block .home-nearby-pulse-halo {
-        /* Shrink the 200 px halo to fit the compacter block. */
-        width: 150px; height: 150px;
-        margin-top: -75px; margin-left: -75px;
+        width: 130px; height: 130px;
+        margin-top: -65px; margin-left: -65px;
     }
     .home-stage .home-nearby-tier-pill {
-        margin-top: 3px;
+        margin-top: 2px;
         padding: 2px 8px;
         font-size: 9.5px;
     }
     .home-stage .home-nearby-resolved-subtotal {
-        margin-top: 4px;
-        padding: 4px 12px;
+        margin-top: 2px;
+        padding: 2px 12px;
         font-size: 11px;
     }
     .home-stage .home-nearby-resolved-count {
-        font-size: 16px;
+        font-size: 15px;
+    }
+    /* Footer compaction so the Privacy / Help / Open source / CRISP-ID
+       row sits inside the 667 px viewport. Trim the top separator
+       padding + margin (was 16 + 12 = 28 px) to 6 + 4 = 10 px. */
+    .home-stage .home-section-bottom .home-footer-row {
+        padding-top: 6px;
+        margin-top: 4px;
+    }
+    .home-stage .home-section-bottom .home-footer-row .home-utility-link {
+        font-size: 11.5px;
     }
 }
 

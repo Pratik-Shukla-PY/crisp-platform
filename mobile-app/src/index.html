@@ -898,26 +898,29 @@
                      this container as a child .home-nearby-list. -->
             </section>
 
-            <!-- Bottom: single channels row anchored to bottom
-                 via margin-top: auto. Six tiles in one row: Telegram /
-                 WhatsApp / SMS / IVR / Android / iOS. Working channels
-                 render with a green border + brand-coloured icon + small
-                 green live-pip. Non-working channels render with a grey
-                 border + grey icon (no pip). Tapping a non-working tile
-                 surfaces a brief toast "Coming soon" instead of doing
-                 nothing silently. home-screen.js builds each tile via
-                 _buildChannelTile(); Q1 hide-when-empty contract reverted
-                 — every channel always renders so users see the full
-                 picture. -->
-            <!-- Channel section. Layout reverts to a 3×2
-                 grid (was 6×1 in Phase 17) so labels fit cleanly without
-                 ellipsis and the row reads as a "panel" not a strip. -->
+            <!-- Channels section — May 2026 (Phase 5.1, operator-
+                 requested NO-SCROLL pass). The 2 × 3 square-tile grid
+                 (~210 px tall) was the worst offender keeping the home
+                 stage from fitting inside iPhone SE without scroll.
+                 Replaced with a single-row 6-icon strip (~50 px tall)
+                 that opens a bottom sheet on tap, mirroring the
+                 nearby-list-sheet pattern. The bottom sheet (added
+                 after the regions panel further down) carries the full
+                 channel cards (icon + name + status + tap-to-launch).
+                 home-screen.js _renderChannelsStrip + _renderChannelsSheet
+                 paint both surfaces from a single channel-config list. -->
             <div class="home-section home-section-channels" id="home-section-channels">
                 <h2 class="home-section-title" data-i18n="home_channels_title">Other ways to report</h2>
-                <p class="home-section-lede" data-i18n="home_channels_lede">Pick what you trust most. Tap any to send.</p>
-                <div class="home-channels home-channels-grid" id="home-channels">
-                    <!-- Populated by home-screen.js _renderChannels() -->
-                </div>
+                <button type="button"
+                        class="home-channels-strip"
+                        id="home-channels-strip"
+                        aria-label="Other ways to report — tap to see all channels"
+                        data-i18n-aria-label="aria_channels_strip">
+                    <!-- 6 .hcs-icon spans injected by home-screen.js
+                         _renderChannelsStrip(). Active channels carry
+                         .hcs-icon--live + a green status dot; upcoming
+                         channels carry .hcs-icon--soon (muted grey). -->
+                </button>
             </div>
 
             <!-- v168.1 (May 2026, operator feedback) — footer rebuilt
@@ -997,6 +1000,31 @@
                 data-i18n="nearby_eyebrow">NEARBY REPORTS</h3>
             <div class="nearby-list-sheet-list" id="nearby-list-sheet-list">
                 <!-- rows injected by nearby.js _openListSheet() -->
+            </div>
+        </div>
+    </div>
+
+    <!-- All-channels bottom sheet — Phase 5.1 (May 2026, NO-SCROLL
+         pass). Opens when the home-channels-strip is tapped.
+         Mirrors the .nearby-sheet markup so visuals + slide
+         animation + a11y come for free; only the inner row
+         presentation differs. Populated lazily on first open by
+         home-screen.js _renderChannelsSheet(). -->
+    <div class="nearby-sheet channels-sheet" id="channels-sheet" hidden
+         role="dialog" aria-modal="true" aria-labelledby="channels-sheet-title">
+        <div class="nearby-sheet-backdrop" id="channels-sheet-backdrop"></div>
+        <div class="nearby-sheet-card channels-sheet-card" role="document">
+            <button class="nearby-sheet-close" id="channels-sheet-close"
+                    type="button" aria-label="Close" data-i18n-aria-label="nearby_sheet_close">✕</button>
+            <div class="nearby-sheet-handle" aria-hidden="true"></div>
+            <h3 class="nearby-sheet-title channels-sheet-title"
+                id="channels-sheet-title"
+                data-i18n="home_channels_title">Other ways to report</h3>
+            <p class="channels-sheet-lede" data-i18n="home_channels_lede">
+                Pick what you trust most. Tap any to send.
+            </p>
+            <div class="channels-sheet-list" id="channels-sheet-list">
+                <!-- rows injected by home-screen.js _renderChannelsSheet() -->
             </div>
         </div>
     </div>

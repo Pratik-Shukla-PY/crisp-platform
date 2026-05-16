@@ -203,159 +203,278 @@
         } catch {}
     }
 
-    // ── Channel tile HTML builder ───────────────────────────────────────
-    // every channel always renders. Working
-    // channels (href set) get a green border + brand-coloured icon + a
-    // small green "live" pip. Non-working channels (empty href) get a
-    // grey border + grey icon + cursor:not-allowed. Tapping a non-
-    // working tile fires a brief "Coming soon" toast.
+    // ── Channels: icon strip + bottom sheet ─────────────────────────────
     //
-    // The Q1 hide-when-empty contract is REVERTED here per
-    // explicit product direction — users want to see the full picture
-    // of which channels exist, not just the ones currently configured.
-    //
-    // opts:
-    //   { dataAction: 'telegram-deeplink' } renders a <button> tile
-    //   (no href) so the click handler in _wireChannelTelemetry can
-    //   intercept and run the native-scheme → store fallback chain
-    //   instead of relying on the anchor's default navigation.
-    function _buildChannelTile(icon, label, href, key, colorVar, opts) {
-        const safeLabel = String(label).replace(/"/g, '&quot;');
-        const safeColor = colorVar || '--accent';
-        const dataAction = (opts && opts.dataAction) || '';
-        // May 2026 (bottom-portion refresh) — each tile now renders a
-        // small status subtitle ("Live now" / "Coming soon" / "Low
-        // bandwidth" / "Voice reporting") below the label, matching
-        // the operator-supplied screenshot. The status string is
-        // already i18n-resolved by the caller (_renderChannels()
-        // passes the t() output).
-        const statusText = (opts && opts.status) || '';
-        const statusMarkup = statusText
-            ? `<span class="ct-status">${String(statusText).replace(/"/g, '&quot;')}</span>`
-            : '';
-        if (!href && !dataAction) {
-            // Non-working tile — grey border, grey icon, button (not
-            // anchor), tap → toast.
+    // Phase 5.1 (May 2026, operator-requested NO-SCROLL pass). The old
+    // 2 × 3 square-tile grid (~210 px tall) was replaced with a single
+    // horizontal icon strip (~44 px tall) that opens a bottom sheet on
+    // tap. The strip is the only surface visible on the home stage; the
+    // sheet contains the full channel cards (icon + label + status text
+    // + tap-to-launch) and is lazily painted on first open. See
+    // docs/NEARBY_REPORTS_PIPELINE.md sibling sheet pattern + CLAUDE.md
+    // "NO vertical scroll on home stage" invariant.
+
+    /**
+     * Single source of truth for the 6 channel definitions. Both the
+     * strip (icon-only) and the bottom-sheet (full cards) consume this
+     * list so adding a new channel only requires one edit.
+     */
+    function _buildChannelsList() {
+        const _tt = (typeof window.t === 'function') ? window.t : (k, f) => f || k;
+        const stLive  = _tt('live_now',        'Live now');
+        const stSoon  = _tt('coming_soon',     'Coming soon');
+        const stLowBw = _tt('low_bandwidth',   'Low bandwidth');
+        return [
+            {
+                key: 'telegram', label: 'Telegram',
+                icon: 'fa-brands fa-telegram', color: '--brand-telegram',
+                live: !!CHANNELS.telegram_bot,
+                href: '',
+                // Telegram uses a JS deep-link handler instead of a
+                // raw anchor — see _wireChannelsSheetTelemetry.
+                dataAction: CHANNELS.telegram_bot ? 'telegram-deeplink' : '',
+                status: CHANNELS.telegram_bot ? stLive : stSoon,
+            },
+            {
+                key: 'whatsapp', label: 'WhatsApp',
+                icon: 'fa-brands fa-whatsapp', color: '--brand-whatsapp',
+                live: !!CHANNELS.whatsapp_phone,
+                href: _whatsappLink(CHANNELS.whatsapp_phone, 'CRISP report'),
+                status: CHANNELS.whatsapp_phone ? stLive : stSoon,
+            },
+            {
+                key: 'sms', label: 'SMS',
+                icon: 'fa-solid fa-message', color: '--brand-sms',
+                live: !!CHANNELS.sms_phone,
+                href: _smsLink(CHANNELS.sms_phone, 'CRISP help'),
+                status: stLowBw,
+            },
+            {
+                key: 'ivr', label: 'IVR',
+                icon: 'fa-solid fa-phone-volume', color: '--brand-ivr',
+                live: !!CHANNELS.ivr_phone,
+                href: _telLink(CHANNELS.ivr_phone),
+                // Operator (May 2026): "Live" reads cleaner than
+                // "Voice reporting" alongside Telegram's "Live now".
+                status: CHANNELS.ivr_phone ? stLive : stSoon,
+            },
+            {
+                key: 'android', label: 'Android',
+                icon: 'fa-brands fa-android', color: '--good',
+                live: !!CHANNELS.android_app_url,
+                href: CHANNELS.android_app_url || '',
+                status: CHANNELS.android_app_url ? stLive : stSoon,
+            },
+            {
+                key: 'ios', label: 'iOS',
+                icon: 'fa-brands fa-apple', color: '--brand-ios',
+                live: !!CHANNELS.ios_app_url,
+                href: CHANNELS.ios_app_url || '',
+                status: CHANNELS.ios_app_url ? stLive : stSoon,
+            },
+        ];
+    }
+
+    /**
+     * Paint the home-stage strip — 6 icon spans, no labels, status
+     * dots only on active channels. The whole strip is one click
+     * target that opens the bottom sheet (operator decision: a single
+     * predictable target is easier than per-icon launches).
+     */
+    function _renderChannelsStrip() {
+        const strip = document.getElementById('home-channels-strip');
+        if (!strip) return;
+        const items = _buildChannelsList();
+        strip.innerHTML = items.map((i) => {
+            const stateClass = i.live ? 'hcs-icon--live' : 'hcs-icon--soon';
+            const colorStyle = i.color ? ` style="--c: var(${i.color});"` : '';
+            return `<span class="hcs-icon ${stateClass} hcs-icon--${i.key}"${colorStyle} aria-hidden="true"><i class="${i.icon}"></i></span>`;
+        }).join('');
+        // Bind once — re-rendering the strip shouldn't multiply listeners.
+        strip.onclick = (e) => {
+            e.preventDefault();
+            _openChannelsSheet();
+        };
+        // Make sure the section is visible (legacy contract).
+        const section = strip.closest('.home-section');
+        if (section) section.style.display = '';
+    }
+
+    /**
+     * Build a single row inside the bottom sheet. Mirrors the
+     * _buildChannelTile contract (data-channel + data-action + href +
+     * is-live/is-disabled state) so the click delegation in
+     * _wireChannelsSheetTelemetry works without per-key special cases.
+     */
+    function _buildSheetRow(o) {
+        const safeLabel  = String(o.label).replace(/"/g, '&quot;');
+        const safeStatus = String(o.status || '').replace(/"/g, '&quot;');
+        const safeKey    = String(o.key).replace(/"/g, '&quot;');
+        const safeColor  = o.color || '--accent';
+        const stateClass = o.live ? 'is-live' : 'is-disabled';
+        const body = `
+            <span class="csr-icon" aria-hidden="true"><i class="${o.icon}"></i></span>
+            <span class="csr-text">
+                <span class="csr-label">${safeLabel}</span>
+                <span class="csr-status">${safeStatus}</span>
+            </span>
+            <span class="csr-arrow" aria-hidden="true">›</span>`;
+        if (o.dataAction) {
             return `
-                <button type="button" class="home-channel-tile is-disabled"
-                        data-channel="${key}"
-                        aria-label="${safeLabel} — coming soon"
-                        aria-disabled="true">
-                    <span class="ct-icon" aria-hidden="true">${icon}</span>
-                    <span class="ct-label">${label}</span>
-                    ${statusMarkup}
-                </button>
+                <button type="button" class="channels-sheet-row ${stateClass}"
+                        style="--c: var(${safeColor});"
+                        data-channel="${safeKey}"
+                        data-action="${o.dataAction}"
+                        aria-label="${safeLabel}">${body}</button>
             `;
         }
-        if (dataAction) {
-            // Operator (May 2026): "remove green dots (2 are there
-            // currently)". Drop the .ct-dot — the "Live" status text
-            // styled in glowing green is now the single liveness
-            // signal. The 2nd dot (CSS ::after on .is-live) is
-            // hidden in the v168.1 rules block in styles.css.
+        if (!o.href || !o.live) {
             return `
-                <button type="button" class="home-channel-tile is-live"
-                        style="--c: var(${safeColor});"
-                        data-channel="${key}"
-                        data-action="${dataAction}"
-                        aria-label="${safeLabel}">
-                    <span class="ct-icon" aria-hidden="true">${icon}</span>
-                    <span class="ct-label">${label}</span>
-                    ${statusMarkup}
-                </button>
+                <button type="button" class="channels-sheet-row ${stateClass}"
+                        data-channel="${safeKey}"
+                        aria-label="${safeLabel} — ${safeStatus}"
+                        aria-disabled="${o.live ? 'false' : 'true'}">${body}</button>
             `;
         }
         const targetAttr = (
-            href.startsWith('tel:') || href.startsWith('sms:') || href.startsWith('exp:')
+            o.href.startsWith('tel:') || o.href.startsWith('sms:') || o.href.startsWith('exp:')
                 ? ''
                 : 'target="_blank" rel="noopener"'
         );
-        const safeHref = String(href).replace(/"/g, '&quot;');
+        const safeHref = String(o.href).replace(/"/g, '&quot;');
         return `
-            <a class="home-channel-tile is-live"
+            <a class="channels-sheet-row ${stateClass}"
                style="--c: var(${safeColor});"
                href="${safeHref}" ${targetAttr}
-               data-channel="${key}"
-               aria-label="${safeLabel}">
-                <span class="ct-icon" aria-hidden="true">${icon}</span>
-                <span class="ct-label">${label}</span>
-                ${statusMarkup}
-            </a>
+               data-channel="${safeKey}"
+               aria-label="${safeLabel}">${body}</a>
         `;
     }
 
-    function _renderChannels() {
-        const channelsEl = document.getElementById('home-channels');
-        if (channelsEl) {
-            // Single 6-tile row, all channels always shown.
-            // Order matches the proposal screenshot: Telegram, WhatsApp,
-            // SMS, IVR, Android, iOS (left to right).
-            // Telegram tile renders as a <button> with
-            // data-action="telegram-deeplink" so the click handler can
-            // run the native-scheme → store-fallback chain (carrying
-            // the PWA device-hash as a /start token). The bot handle
-            // still controls whether the tile is live: an empty
-            // CHANNELS.telegram_bot keeps it disabled / coming-soon.
-            // May 2026 — channel status subtitles per the operator-
-            // supplied screenshot. Telegram + IVR show "Live now" /
-            // "Voice reporting"; SMS shows "Low bandwidth"; offline
-            // channels (WhatsApp / Android / iOS) show "Coming soon"
-            // via the existing `coming_soon` key. Local i18n resolver
-            // (tt is also defined per-fn elsewhere in this file).
-            const _tt = (typeof window.t === 'function') ? window.t : (k, f) => f || k;
-            const _stLive   = _tt('live_now',        'Live now');
-            const _stSoon   = _tt('coming_soon',     'Coming soon');
-            const _stLowBw  = _tt('low_bandwidth',   'Low bandwidth');
-            const _stVoice  = _tt('voice_reporting', 'Voice reporting');
+    /**
+     * Paint the channels bottom sheet. Called lazily on first open
+     * so the home-stage critical path doesn't pay for sheet markup.
+     */
+    function _renderChannelsSheet() {
+        const list = document.getElementById('channels-sheet-list');
+        if (!list) return;
+        list.innerHTML = _buildChannelsList().map(_buildSheetRow).join('');
+    }
 
-            const tgHandle = CHANNELS.telegram_bot;
-            const tgTile = tgHandle
-                ? _buildChannelTile('<i class="fa-brands fa-telegram"></i>',
-                                    'Telegram',
-                                    '', 'telegram', '--brand-telegram',
-                                    { dataAction: 'telegram-deeplink', status: _stLive })
-                : _buildChannelTile('<i class="fa-brands fa-telegram"></i>',
-                                    'Telegram', '', 'telegram',
-                                    '--brand-telegram',
-                                    { status: _stSoon });
-            const html = [
-                tgTile,
-                _buildChannelTile('<i class="fa-brands fa-whatsapp"></i>',
-                                  'WhatsApp',
-                                  _whatsappLink(CHANNELS.whatsapp_phone, 'CRISP report'), 'whatsapp',
-                                  '--brand-whatsapp',
-                                  { status: CHANNELS.whatsapp_phone ? _stLive : _stSoon }),
-                _buildChannelTile('<i class="fa-solid fa-message"></i>',
-                                  'SMS',
-                                  _smsLink(CHANNELS.sms_phone, 'CRISP help'), 'sms',
-                                  '--brand-sms',
-                                  { status: _stLowBw }),
-                _buildChannelTile('<i class="fa-solid fa-phone-volume"></i>',
-                                  'IVR',
-                                  _telLink(CHANNELS.ivr_phone), 'ivr',
-                                  '--brand-ivr',
-                                  { status: _stLive }),   // was _stVoice — operator wants "Live" for both live channels
-                _buildChannelTile('<i class="fa-brands fa-android"></i>',
-                                  'Android', CHANNELS.android_app_url, 'android',
-                                  '--good',
-                                  { status: CHANNELS.android_app_url ? _stLive : _stSoon }),
-                _buildChannelTile('<i class="fa-brands fa-apple"></i>',
-                                  'iOS', CHANNELS.ios_app_url, 'ios',
-                                  '--brand-ios',
-                                  { status: CHANNELS.ios_app_url ? _stLive : _stSoon }),
-            ].join('');
-            channelsEl.innerHTML = html;
-            // Section ALWAYS visible (Phase-17 contract change).
-            const channelsSection = channelsEl.closest('.home-section');
-            if (channelsSection) channelsSection.style.display = '';
+    function _openChannelsSheet() {
+        const sheet = document.getElementById('channels-sheet');
+        if (!sheet) return;
+        if (!sheet.dataset.populated) {
+            _renderChannelsSheet();
+            _wireChannelsSheetTelemetry();
+            sheet.dataset.populated = '1';
         }
-        // #home-apps is now hidden in the markup; we
-        // intentionally don't render into it. Kept as a no-op so any
-        // operator override that still references it doesn't blow up.
+        sheet.hidden = false;
+        // requestAnimationFrame so the [hidden] removal lands before
+        // .is-open kicks the translateY transition — otherwise the
+        // browser collapses the change to a single paint with no
+        // animation. Same trick as the nearby sheet.
+        requestAnimationFrame(() => sheet.classList.add('is-open'));
+        const closeBtn = document.getElementById('channels-sheet-close');
+        if (closeBtn) setTimeout(() => { try { closeBtn.focus(); } catch (_) {} }, 60);
+    }
+
+    function _closeChannelsSheet() {
+        const sheet = document.getElementById('channels-sheet');
+        if (!sheet) return;
+        sheet.classList.remove('is-open');
+        // 240 ms matches the .nearby-sheet exit transition; hide
+        // AFTER the animation ends so the user sees it slide away
+        // rather than blink-disappear.
+        setTimeout(() => { sheet.hidden = true; }, 240);
+        const strip = document.getElementById('home-channels-strip');
+        if (strip) { try { strip.focus(); } catch (_) {} }
+    }
+
+    function _wireChannelsSheet() {
+        const sheet = document.getElementById('channels-sheet');
+        if (!sheet) return;
+        const backdrop = document.getElementById('channels-sheet-backdrop');
+        const closeBtn = document.getElementById('channels-sheet-close');
+        if (backdrop && !backdrop.dataset.wired) {
+            backdrop.addEventListener('click', _closeChannelsSheet);
+            backdrop.dataset.wired = '1';
+        }
+        if (closeBtn && !closeBtn.dataset.wired) {
+            closeBtn.addEventListener('click', _closeChannelsSheet);
+            closeBtn.dataset.wired = '1';
+        }
+        // Esc closes from anywhere on the page.
+        if (!document.body.dataset.channelsEscWired) {
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && sheet.classList.contains('is-open')) {
+                    _closeChannelsSheet();
+                }
+            });
+            document.body.dataset.channelsEscWired = '1';
+        }
+    }
+
+    /**
+     * Click-delegation for the rows inside the bottom sheet. Same
+     * routing rules as the pre-Phase-5.1 _wireChannelTelemetry but
+     * targets the new .channels-sheet-row markup. Disabled channels
+     * surface a "coming soon" toast; Telegram routes through the
+     * deep-link handler; everything else uses native anchor / button
+     * navigation. The sheet auto-closes after a successful tap so
+     * the next return-to-home doesn't have a stale open overlay.
+     */
+    function _wireChannelsSheetTelemetry() {
+        document.querySelectorAll('#channels-sheet-list [data-channel]')
+            .forEach((el) => {
+                if (el.dataset.wired) return;
+                el.dataset.wired = '1';
+                el.addEventListener('click', (e) => {
+                    const key = el.getAttribute('data-channel');
+                    if (el.classList.contains('is-disabled')) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const labelEl = el.querySelector('.csr-label');
+                        const label = labelEl ? labelEl.textContent.trim() : key;
+                        _showComingSoonToast(label);
+                        return;
+                    }
+                    const action = el.getAttribute('data-action');
+                    if (action === 'telegram-deeplink') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        try {
+                            _openTelegram(CHANNELS.telegram_bot);
+                        } catch (err) {
+                            console.warn('[home] telegram deep-link failed:', err);
+                            const fallback = _telegramLink(CHANNELS.telegram_bot);
+                            if (fallback) window.open(fallback, '_blank', 'noopener');
+                        }
+                        setTimeout(() => _closeChannelsSheet(), 80);
+                        return;
+                    }
+                    // Native anchor / button click handles navigation;
+                    // close the sheet on the next tick so the user
+                    // returns to a clean home stage.
+                    setTimeout(() => _closeChannelsSheet(), 30);
+                    console.log(`[home] channel tap: ${key}`);
+                });
+            });
+    }
+
+    /**
+     * Back-compat wrapper. The original entry point at app boot
+     * called `_renderChannels()`; we keep that name working so any
+     * external override doesn't break. The new behaviour: paint the
+     * strip + wire the sheet (sheet contents painted lazily on
+     * first open inside _openChannelsSheet).
+     */
+    function _renderChannels() {
+        _renderChannelsStrip();
+        _wireChannelsSheet();
+        // #home-apps is the legacy 2nd-row container; remains hidden.
         const appsEl = document.getElementById('home-apps');
-        if (appsEl) {
-            appsEl.innerHTML = '';
-        }
+        if (appsEl) appsEl.innerHTML = '';
     }
 
     // brief in-place toast for "coming soon" channel taps.
@@ -472,6 +591,14 @@
     // accidental anchor default; stopPropagation isolates the click
     // from the form / consent listeners.
     function _wireChannelTelemetry() {
+        // Phase 5.1 (May 2026, NO-SCROLL pass) — the home-stage strip
+        // is a single click target that opens the bottom sheet, so
+        // there's no per-channel data-channel handler to attach
+        // there. The per-channel routing now lives in
+        // _wireChannelsSheetTelemetry (called lazily on first sheet
+        // open). The selector below is kept for the LEGACY
+        // #home-channels / #home-apps containers in case some
+        // operator-deployed surface still uses them.
         document.querySelectorAll('#home-channels [data-channel], #home-apps [data-channel]')
             .forEach((el) => {
                 el.addEventListener('click', (e) => {
