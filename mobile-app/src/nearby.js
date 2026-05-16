@@ -416,12 +416,21 @@
         }
 
         // Always start HIDDEN. We unhide only when we have data to show.
+        // May 2026 CLS fix — the `[hidden]` CSS no longer uses
+        // display:none. It uses visibility:hidden + reserved
+        // min-height so the eventual reveal is a fade-in, not a
+        // layout shift. When we KNOW there's no data (no GPS / no
+        // payload), we add `.is-no-data` to collapse the slot;
+        // that's the only branch that pays the layout cost, and
+        // it pays it once at boot.
         root.hidden = true;
+        root.classList.remove('is-no-data');
 
         const location = _getCachedLocation();
         if (!location) {
             console.log('[NearbyIntel] no cached GPS in localStorage — module stays hidden. ' +
                 'Run: localStorage.setItem("crisp_last_location_v2", JSON.stringify({lat:12.8456,lng:77.6603,ts:Date.now()}));location.reload();');
+            root.classList.add('is-no-data');
             return;
         }
         console.log('[NearbyIntel] boot with cached GPS:', location);
@@ -455,6 +464,7 @@
         // Hard rule per operator: if we don't have CURRENT data, hide.
         // No broken states, no "loading" forever, no error placeholders.
         if (!payload) {
+            root.classList.add('is-no-data');
             return;
         }
 

@@ -4737,6 +4737,16 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 10px;
 }
+/* May 2026 (Lighthouse CLS fix, second pass) — when the inline
+   <head> script sees a returning-user consent flag in localStorage
+   it stamps <html data-consent-accepted="1">. We hide the consent
+   row pre-paint so the t≈190 ms display:none collapse in
+   home-screen.js's _wireConsent() no longer happens (no DOM, no
+   reflow, no layout-shift entry). Tied 1:1 to the inline script in
+   index.html ≈line 305 — touching one without the other is a bug. */
+html[data-consent-accepted="1"] .home-consent {
+    display: none !important;
+}
 .home-consent-row {
     display: flex;
     align-items: flex-start;
@@ -4876,6 +4886,18 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     font-weight: 700;
     letter-spacing: 0.02em;
     text-align: left;
+    /* May 2026 CLS fix — when the chip's inner text changes (cache
+       value → /profile fetch result, or i18n hydrate of the
+       progress sub-label), the chip's intrinsic width shifts and
+       drags the row's flex-justified siblings. Setting a min-width
+       pins the chip so the text variation no longer reflows the
+       row. Min-height matches the [hidden]-state reservation
+       (38 px) so any pre-render → painted transition is shift-free.
+       Picked 300 px after measuring the four tier label variants
+       across en/fr/es/ar/ru/zh; the longest label fits well within
+       this width. */
+    min-width: 300px;
+    min-height: 38px;
     /* Phase 2.8 (May 2026) — chip is now a <button> that opens the
        Rewards page. `cursor: pointer` + touch feedback signal the
        interaction. The default <button> font/appearance is reset so
@@ -5115,15 +5137,31 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     gap: 4px;
     padding: 12px 22px;
     border-radius: 18px;
-    min-width: 200px;
+    /* May 2026 CLS fix — was `min-width:200px; max-width:320px`, which
+       let the chip oscillate between ~289 and ~301 px as the inner
+       text changed (cache hit → /profile fetch → i18n hydration of
+       the progress sub-label). Each oscillation shifted the centred
+       parent's stacking layout and showed up as a layout-shift entry
+       in the Lighthouse PROD audit (CLS 0.298 vs 0.25 floor). Pinning
+       width to a single 320 px value removes the width oscillation
+       entirely — the chip now reflows ONLY when the hidden→painted
+       reveal happens, which is already a fade (no layout shift).
+       Compound selector overrides the base `.home-badge-chip` rule
+       at line 4866 because hero is 2-class vs 1-class specificity. */
+    width: 320px;
     max-width: 320px;
     font-size: 13px;
     line-height: 1.15;
     letter-spacing: normal;
-    min-height: 0;
+    /* Phase-2 (tier-label sublabel) lengthened the chip vertically.
+       Match the [hidden] rule's 132 px so the layout slot is identical
+       in hidden + painted state — the reveal is a pure opacity
+       transition, no height collapse. */
+    min-height: 132px;
 }
 .home-badge-chip.home-badge-chip--hero[hidden] {
-    /* keep layout slot to avoid CLS, same pattern as the base rule */
+    /* keep layout slot to avoid CLS, same pattern as the base rule.
+       Matches the painted-state min-height immediately above. */
     min-height: 132px;
 }
 .home-badge-chip.home-badge-chip--hero .hb-emoji {
@@ -11051,7 +11089,40 @@ body { background-color: #10284a; }
     margin-bottom: 8px;
     padding: 0;
 }
+/* May 2026 — CLS regression fix. Pre-fix this rule was
+   `display: none !important`; when nearby.js resolved and
+   removed [hidden], the element snapped from 0 to ~100 px
+   height in one frame, pushing every section below it down.
+   Lighthouse PROD audit measured CLS 0.30 (floor 0.25) and
+   auto-rollback kept firing on every deploy.
+
+   New behaviour: while [hidden] is set, the element STILL
+   occupies its layout slot (visibility:hidden + reserved
+   min-height) so the eventual reveal is a visual fade-in,
+   NOT a reflow. The operator-rule "no broken placeholder
+   if there's no data" is honoured by the .is-no-data class
+   below — nearby.js sets it when GPS is missing OR the
+   payload is empty, and that class collapses the slot
+   via display:none. That single shift on the no-data
+   branch is acceptable: it fires once at boot, never again
+   during the session.
+
+   The 96 px figure matches the typical rendered height:
+   eyebrow (~22 px) + 1-3 row block (~70-130 px) + gap. A
+   slight under-reservation on multi-row payloads is fine
+   — the shift is then small expansion, not large pop-in. */
 .home-stage .home-nearby-intel[hidden] {
+    display: flex !important;
+    visibility: hidden;
+    opacity: 0;
+    min-height: 96px;
+    pointer-events: none;
+}
+.home-stage .home-nearby-intel.is-no-data {
+    /* No GPS / no nearby payload — operator rule: no broken
+       placeholder. Collapse the reserved slot. Final state for
+       this session; the slot won't reappear, so the one-time
+       collapse shift is benign. */
     display: none !important;
 }
 
