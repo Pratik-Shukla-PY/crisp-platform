@@ -5508,6 +5508,381 @@ function _loadCachedReports() {
     } catch (_) { return false; }
 }
 
+// ── Phase 5.1 (May 2026) — Admin Moderation overlay ──────────────────────────
+// Backed by /api/v1/admin/observability/nearby/* + /api/v1/admin/appeals/*.
+// Auth is JWT-based (require_admin → role ∈ {ADMIN, SUPER_ADMIN}); the
+// global fetch wrapper at line ~33 adds Authorization automatically.
+// Docs/NEARBY_REPORTS_PIPELINE.md §7 (admin workflows) + §17 (deferred
+// follow-ups).
+//
+// Three subviews on the same overlay:
+//   triage   → list of currently-acute clusters (HIGH first, then LOW)
+//   appeals  → open + recent device-suspension appeals; decide inline
+//   timeline → drill-down into a single group's lifecycle event history
+
+let _modCurrentView = 'triage';        // 'triage' | 'appeals' | 'timeline'
+let _modAcuteHigh = [];
+let _modAcuteLow = [];
+let _modAppealsCache = [];
+let _modAppealsStatusFilter = 'open';  // 'open' | 'all'
+let _modTimelineGroupId = null;
+let _modLastBadgeRefreshAt = 0;
+
+/** Reveal the Moderation button only to admins. */
+function _maybeShowModerationButton() {
+    const u = _crispUser;
+    const role = (u && u.role) || '';
+    const btn = document.getElementById('btn-moderation');
+    if (btn && (role === 'ADMIN' || role === 'SUPER_ADMIN')) {
+        btn.style.display = 'inline-flex';
+    }
+}
+window._maybeShowModerationButton = _maybeShowModerationButton;
+
+window.showModerationPanel = async function () {
+    const panel = document.getElementById('moderation-panel');
+    if (!panel) return;
+    panel.style.display = 'flex';
+    // Default to triage on open. Force a refresh on every open so the
+    // operator always sees current state (the periodic badge refresh
+    // touches the cache but not the rendered DOM).
+    await setModTab('triage');
+};
+
+window.closeModerationPanel = function () {
+    const panel = document.getElementById('moderation-panel');
+    if (panel) panel.style.display = 'none';
+};
+
+window.setModTab = async function (tab) {
+    _modCurrentView = tab;
+    document.querySelectorAll('.mod-tab').forEach(el => {
+        el.classList.toggle('active', el.dataset.modTab === tab);
+    });
+    const body = document.getElementById('moderation-panel-body');
+    if (!body) return;
+    body.innerHTML = '<div class="mod-empty"><i class="fa-solid fa-spinner fa-spin mod-empty-icon" style="color:var(--info);"></i><div class="mod-empty-title">Loading…</div></div>';
+    if (tab === 'triage') {
+        await _modRenderTriage(body);
+    } else if (tab === 'appeals') {
+        await _modRenderAppeals(body);
+    }
+};
+
+/**
+ * Fetch + cache both lists (acute clusters, open appeals) and update
+ * the tab badges + headline badge. Called on panel open + every
+ * 90 seconds while the operator's tab is active.
+ */
+async function _refreshModerationCounts() {
+    if (!_crispUser) return;
+    const role = _crispUser.role || '';
+    if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') return;
+    _modLastBadgeRefreshAt = Date.now();
+    try {
+        const [acuteRes, appealsRes] = await Promise.all([
+            fetch(`${BACKEND_HOST}/api/v1/admin/observability/nearby/acute`),
+            fetch(`${BACKEND_HOST}/api/v1/admin/appeals?status=open&limit=100`),
+        ]);
+        if (acuteRes.ok) {
+            const data = await acuteRes.json();
+            _modAcuteHigh = data.high_confidence || [];
+            _modAcuteLow  = data.low_confidence  || [];
+        }
+        if (appealsRes.ok) {
+            _modAppealsCache = await appealsRes.json();
+            if (!Array.isArray(_modAppealsCache)) _modAppealsCache = [];
+        }
+    } catch (_) { /* badges stay stale; non-blocking */ }
+    const acuteTotal = _modAcuteHigh.length + _modAcuteLow.length;
+    const appealsTotal = _modAppealsCache.length;
+    const tBadge = document.getElementById('mod-tab-badge-triage');
+    const aBadge = document.getElementById('mod-tab-badge-appeals');
+    const totalBadge = document.getElementById('moderation-badge');
+    if (tBadge) tBadge.textContent = String(acuteTotal);
+    if (aBadge) aBadge.textContent = String(appealsTotal);
+    const total = acuteTotal + appealsTotal;
+    if (totalBadge) {
+        totalBadge.textContent = String(total);
+        totalBadge.style.display = total > 0 ? 'inline-block' : 'none';
+    }
+}
+window._refreshModerationCounts = _refreshModerationCounts;
+
+function _modEscape(s) {
+    if (s == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+}
+
+/** Escape a value for safe interpolation into an HTML on*-handler that
+ *  embeds it as a JS single-quoted string literal — i.e. need to defeat
+ *  both HTML AND JS-string injection vectors. IDs come from the server
+ *  (UUIDs / building refs / geohashes) so the risk is theoretical, but
+ *  the cost is zero. */
+function _modAttrJs(s) {
+    if (s == null) return '';
+    return String(s)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function _modCardForCluster(e, grade) {
+    const when = e.latest_at ? timeAgo(e.latest_at) : '';
+    const types = (e.crisis_types || []).slice(0, 2).join(', ') || '—';
+    const lat = (typeof e.centroid_lat === 'number') ? e.centroid_lat.toFixed(3) : '—';
+    const lng = (typeof e.centroid_lng === 'number') ? e.centroid_lng.toFixed(3) : '—';
+    const meta = [];
+    if (e.kind)  meta.push(`kind=${e.kind}`);
+    if (e.tier)  meta.push(`tier=${e.tier}`);
+    if (typeof e.count === 'number') meta.push(`n=${e.count}`);
+    if (e.severity_max) meta.push(`sev=${e.severity_max}`);
+    const escId = _modEscape(e.id || '');
+    const jsId = _modAttrJs(e.id || '');
+    const label = _modEscape(e.label || '');
+    return `<div class="mod-triage-card grade-${grade}">
+        <div class="mod-tc-header">
+            <span class="mod-tc-grade ${grade}">${grade}</span>
+            <span class="mod-tc-id" title="${escId}">${escId || '—'}</span>
+            <span class="mod-tc-when">${when}</span>
+        </div>
+        <div class="mod-tc-body">
+            ${label ? `<strong>${label}</strong> · ` : ''}${_modEscape(types)}
+            <div style="color:var(--text-dim);font-size:12px;margin-top:2px;">
+                centroid ${lat}, ${lng}
+            </div>
+        </div>
+        <div class="mod-tc-meta">${meta.map(_modEscape).join(' · ')}</div>
+        <div class="mod-tc-actions">
+            <button class="mod-ac-btn timeline" onclick="_modShowTimeline('${jsId}')">
+                <i class="fa-solid fa-clock-rotate-left"></i> Cluster history
+            </button>
+        </div>
+    </div>`;
+}
+
+async function _modRenderTriage(body) {
+    // Fetch fresh + render. Calls _refreshModerationCounts to make sure
+    // the cache + badges are aligned with what we're about to display.
+    await _refreshModerationCounts();
+    const total = _modAcuteHigh.length + _modAcuteLow.length;
+    if (total === 0) {
+        body.innerHTML = `<div class="mod-empty">
+            <i class="fa-solid fa-circle-check mod-empty-icon"></i>
+            <div class="mod-empty-title">No acute clusters</div>
+            <div class="mod-empty-sub">
+                A cluster becomes acute when ≥ 5 reports land within 15 min.<br>
+                HIGH-confidence acute events trigger SW push to admins;<br>
+                LOW-confidence appear here for triage only.
+            </div>
+        </div>`;
+        return;
+    }
+    const sections = [];
+    if (_modAcuteHigh.length) {
+        sections.push(`<div style="font-size:11px;color:#fca5a5;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin:4px 0 6px;">
+            <i class="fa-solid fa-bolt"></i> High confidence (${_modAcuteHigh.length})
+        </div>`);
+        sections.push(_modAcuteHigh.map(e => _modCardForCluster(e, 'high')).join(''));
+    }
+    if (_modAcuteLow.length) {
+        sections.push(`<div style="font-size:11px;color:#fbbf24;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin:12px 0 6px;">
+            <i class="fa-solid fa-circle-info"></i> Low confidence (${_modAcuteLow.length})
+        </div>`);
+        sections.push(_modAcuteLow.map(e => _modCardForCluster(e, 'low')).join(''));
+    }
+    body.innerHTML = sections.join('');
+}
+
+function _modAppealCard(a) {
+    const status = (a.status || 'open').toLowerCase();
+    const decided = status !== 'open' && status !== 'under_review';
+    const when = a.opened_at ? timeAgo(a.opened_at) : '';
+    const signals = (a.original_signals || []).join(', ') || 'none';
+    const claim = a.claim_text ? _modEscape(a.claim_text)
+                               : '<em style="color:var(--text-dim);">no claim text supplied</em>';
+    const dev = a.device_id ? `device ${a.device_id.slice(0, 12)}…`
+                            : (a.user_id ? `user ${a.user_id.slice(0, 12)}…` : 'unknown');
+    const score = (typeof a.original_spam_score === 'number')
+        ? a.original_spam_score.toFixed(2) : '—';
+    const jsId = _modAttrJs(a.id || '');
+    const actions = decided ? `
+        <div style="font-size:11px;color:var(--text-dim);margin-top:8px;font-family:var(--font-mono);">
+            decided ${a.decided_at ? timeAgo(a.decided_at) : ''}
+            ${a.decision_notes ? ` · ${_modEscape(a.decision_notes)}` : ''}
+        </div>` : `
+        <div class="mod-ac-actions">
+            <button class="mod-ac-btn reinstate" onclick="_modDecideAppeal('${jsId}','reinstated')" title="Clear the device's spam_score + signals">
+                <i class="fa-solid fa-check"></i> Reinstate
+            </button>
+            <button class="mod-ac-btn uphold" onclick="_modDecideAppeal('${jsId}','upheld')" title="Keep the suspension; device stays flagged">
+                <i class="fa-solid fa-pause"></i> Uphold
+            </button>
+            <button class="mod-ac-btn ban" onclick="_modDecideAppeal('${jsId}','banned')" title="Permanent ban — requires note">
+                <i class="fa-solid fa-ban"></i> Ban
+            </button>
+        </div>`;
+    return `<div class="mod-appeal-card ${decided ? 'decided' : ''}">
+        <div class="mod-ac-header">
+            <span class="mod-ac-status ${status}">${status}</span>
+            <span class="mod-tc-id">${_modEscape(dev)}</span>
+            <span class="mod-tc-when">${when}</span>
+        </div>
+        <div class="mod-tc-body">${claim}</div>
+        <div class="mod-tc-meta">
+            signals: ${_modEscape(signals)} · score ${score}
+        </div>
+        ${actions}
+    </div>`;
+}
+
+async function _modRenderAppeals(body) {
+    await _refreshModerationCounts();
+    const appeals = _modAppealsCache;
+    if (!appeals.length) {
+        body.innerHTML = `<div class="mod-empty">
+            <i class="fa-solid fa-circle-check mod-empty-icon"></i>
+            <div class="mod-empty-title">No open appeals</div>
+            <div class="mod-empty-sub">
+                Devices contesting suspension via Phase 4's appeal framework<br>
+                appear here. Reinstate clears spam_score; uphold keeps it.
+            </div>
+        </div>`;
+        return;
+    }
+    body.innerHTML = appeals.map(_modAppealCard).join('');
+}
+
+/**
+ * Decide an appeal. 'banned' requires an explanatory note (per docs
+ * §7.5, banning should be a deliberate decision with rationale).
+ */
+window._modDecideAppeal = async function (appealId, decision) {
+    if (!appealId || !decision) return;
+    let notes = null;
+    if (decision === 'banned') {
+        notes = prompt(
+            'Permanent ban — please document the rationale.\n' +
+            'This is logged in the appeal audit trail.'
+        );
+        if (notes === null) return;   // cancel
+        if (!notes.trim()) {
+            alert('Ban rationale is required.');
+            return;
+        }
+    } else if (decision === 'upheld') {
+        // Optional note for uphold; reinstate doesn't need one.
+        notes = prompt('Optional note (e.g. "device confirmed as emulator"). Leave blank to skip.');
+        if (notes === null) return;   // cancel
+        notes = notes.trim() || null;
+    }
+    const payload = { decision };
+    if (notes) payload.notes = notes;
+    try {
+        const res = await fetch(`${BACKEND_HOST}/api/v1/admin/appeals/${encodeURIComponent(appealId)}/decide`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+            const txt = await res.text().catch(() => '');
+            alert(`Decision failed (${res.status}). ${txt}`);
+            return;
+        }
+        if (typeof showToast === 'function') {
+            showToast(`Appeal ${decision}`, decision === 'reinstated' ? 'success' : 'info');
+        }
+        await setModTab('appeals');   // refresh list
+    } catch (err) {
+        alert(`Decision failed: ${err.message}`);
+    }
+};
+
+/** Open the cluster-history timeline subview for a group_id. */
+window._modShowTimeline = async function (groupId) {
+    if (!groupId) return;
+    _modCurrentView = 'timeline';
+    _modTimelineGroupId = groupId;
+    const body = document.getElementById('moderation-panel-body');
+    if (!body) return;
+    body.innerHTML = `
+        <div class="mod-back-row">
+            <button class="mod-back-btn" onclick="setModTab('triage')">
+                <i class="fa-solid fa-arrow-left"></i> Back to triage
+            </button>
+            <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono);">
+                ${_modEscape(groupId)}
+            </span>
+        </div>
+        <div style="padding:12px;" id="mod-timeline-body">
+            <div class="mod-empty">
+                <i class="fa-solid fa-spinner fa-spin mod-empty-icon" style="color:var(--info);"></i>
+                <div class="mod-empty-title">Loading timeline…</div>
+            </div>
+        </div>`;
+    try {
+        const res = await fetch(
+            `${BACKEND_HOST}/api/v1/admin/observability/nearby/events?group_id=${encodeURIComponent(groupId)}&limit=100`
+        );
+        const inner = document.getElementById('mod-timeline-body');
+        if (!inner) return;
+        if (!res.ok) {
+            inner.innerHTML = `<div class="mod-empty"><i class="fa-solid fa-triangle-exclamation mod-empty-icon" style="color:#ef4444;"></i><div class="mod-empty-title">Timeline unavailable (${res.status})</div></div>`;
+            return;
+        }
+        const data = await res.json();
+        const events = data.events || [];
+        if (!events.length) {
+            inner.innerHTML = `<div class="mod-empty">
+                <i class="fa-solid fa-clock-rotate-left mod-empty-icon" style="color:var(--text-dim);"></i>
+                <div class="mod-empty-title">No lifecycle events yet</div>
+                <div class="mod-empty-sub">
+                    Events appear once the cluster sees a tier change,<br>
+                    acute trigger, or status transition.
+                </div>
+            </div>`;
+            return;
+        }
+        inner.innerHTML = events.map(ev => {
+            const kind = (ev.event_kind || 'event');
+            const when = ev.occurred_at ? timeAgo(ev.occurred_at) : '';
+            const details = [];
+            if (ev.from_tier && ev.to_tier) details.push(`tier ${ev.from_tier} → ${ev.to_tier}`);
+            if (ev.from_count != null && ev.to_count != null) details.push(`count ${ev.from_count} → ${ev.to_count}`);
+            const payloadStr = (ev.payload && Object.keys(ev.payload).length)
+                ? JSON.stringify(ev.payload, null, 0)
+                : '';
+            return `<div class="mod-tl-ev kind-${_modEscape(kind)}">
+                <div>
+                    <span class="mod-tl-kind">${_modEscape(kind)}</span>
+                    <span class="mod-tl-when">${when}</span>
+                </div>
+                ${details.length ? `<div class="mod-tl-detail">${details.map(_modEscape).join(' · ')}</div>` : ''}
+                ${payloadStr ? `<div class="mod-tl-payload">${_modEscape(payloadStr)}</div>` : ''}
+            </div>`;
+        }).join('');
+    } catch (err) {
+        const inner = document.getElementById('mod-timeline-body');
+        if (inner) {
+            inner.innerHTML = `<div class="mod-empty"><i class="fa-solid fa-triangle-exclamation mod-empty-icon" style="color:#ef4444;"></i><div class="mod-empty-title">${_modEscape(err.message)}</div></div>`;
+        }
+    }
+};
+
+// Background refresh of badge counts. Slow enough not to spam the
+// backend; fast enough that the operator's headline badge updates
+// within ~1.5 min of a real change. Skipped silently for non-admins.
+setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (Date.now() - _modLastBadgeRefreshAt < 60000) return;
+    _refreshModerationCounts();
+}, 90 * 1000);
+
+
 // ── Init ─────────────────────────────────────────────────────────────────────
 // ── Auth: Logout + User Menu ─────────────────────────────────────────────────
 window.crispLogout = async () => {
@@ -5527,6 +5902,14 @@ function _initUserMenu() {
     if (roleEl) roleEl.textContent = u.role || 'VIEWER';
     // Phase 4: reveal Regions button only to admins.
     if (typeof _maybeShowRegionsButton === 'function') _maybeShowRegionsButton();
+    // Phase 5.1 (May 2026): reveal Moderation button + kick the first
+    // badge fetch so the headline count is correct within a few seconds
+    // of page load, not on the next 90 s tick.
+    if (typeof _maybeShowModerationButton === 'function') _maybeShowModerationButton();
+    if (typeof _refreshModerationCounts === 'function') {
+        // Non-blocking; ignore failures.
+        setTimeout(() => _refreshModerationCounts(), 800);
+    }
 }
 
 // ── Token auto-refresh (5 min before expiry) ─────────────────────────────────

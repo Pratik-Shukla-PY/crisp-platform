@@ -15,7 +15,7 @@
 // the browser was heuristic-pinning the old CSP. Old SWs auto-replace
 // because skipWaiting() runs in install + nginx now sends Cache-Control:
 // no-cache on sw.js so the new code lands within seconds of deploy.
-const APP_CACHE    = 'crisp-app-v16';  // v16 (May 2026): originals-pending chip drops on reports > 14d (matches PWA's deferred-variant timeout). Plus the dashboard image stretch fix (.dp-img .img-full-layer → object-fit:contain). Returning operators must evict v15 so the new logic lands.
+const APP_CACHE    = 'crisp-app-v17';  // v17 (May 2026): Phase 5.1 Admin Moderation overlay — triage queue (acute clusters from /admin/observability/nearby/acute) + appeal review (open/decide via /admin/appeals/*) + cluster-history timeline drill-down. New panel HTML + tab styles + ~280 LOC JS module. Returning operators must evict v16 so the moderation button + panel land.
 const CDN_CACHE    = 'crisp-cdn-v9';
 const API_CACHE    = 'crisp-api-v9';
 const STATIC_CACHE = 'crisp-static-v12';

@@ -124,6 +124,16 @@
                 <i class="fa-solid fa-location-crosshairs"></i> Regions
             </button>
 
+            <!-- Phase 5.1 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §7+§17) —
+                 Admin Moderation overlay: nearby triage queue + appeal review.
+                 Backed by /api/v1/admin/observability/nearby/* and
+                 /api/v1/admin/appeals/*. Visibility is gated to ADMIN /
+                 SUPER_ADMIN via _maybeShowModerationButton() in app.js. -->
+            <button class="icon-btn" id="btn-moderation" onclick="showModerationPanel()" style="display:none;" title="Nearby triage + appeal review">
+                <i class="fa-solid fa-shield-halved"></i> Moderation
+                <span class="moderation-badge" id="moderation-badge" style="display:none;">0</span>
+            </button>
+
             <!-- Live Incident Notifications -->
             <div class="notif-area" id="notif-area">
                 <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()" title="New incident alerts">
@@ -247,6 +257,30 @@
         <div class="del-panel-footer" id="regions-panel-footer">
             <button class="btn btn-primary" onclick="openRegionForm()"><i class="fa-solid fa-plus"></i> Add region</button>
         </div>
+    </div>
+
+    <!-- Phase 5.1 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §7+§17) —
+         Moderation overlay. Two-tab layout: Triage (acute clusters)
+         + Appeals (open device-suspension appeals). Same width / pos as
+         the regions panel; reuses .deletions-panel scaffold so we share
+         scroll + close-button styling. The triage subview can swap the
+         body into a "Cluster history" timeline view via a back arrow. -->
+    <div id="moderation-panel" class="moderation-panel deletions-panel" style="display:none;">
+        <div class="del-panel-header">
+            <h3 id="moderation-panel-title"><i class="fa-solid fa-shield-halved"></i> Moderation</h3>
+            <button class="close-btn" onclick="closeModerationPanel()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="mod-tabs" id="mod-tabs">
+            <button class="mod-tab active" data-mod-tab="triage" onclick="setModTab('triage')">
+                <i class="fa-solid fa-bolt"></i> Triage
+                <span class="mod-tab-badge" id="mod-tab-badge-triage">0</span>
+            </button>
+            <button class="mod-tab" data-mod-tab="appeals" onclick="setModTab('appeals')">
+                <i class="fa-solid fa-gavel"></i> Appeals
+                <span class="mod-tab-badge" id="mod-tab-badge-appeals">0</span>
+            </button>
+        </div>
+        <div class="del-panel-body" id="moderation-panel-body"></div>
     </div>
 
     <!-- Region create/edit modal. Small inline form; radius in kilometres. -->

@@ -329,6 +329,117 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .del-item.del-expired { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.08); }
 .del-item-info { min-width: 0; }
 
+/* ── Phase 5.1 (May 2026) — Moderation overlay (admin triage + appeals).
+   Reuses the .deletions-panel scaffold (positioning + shadow + close
+   button); adds a tabs strip and two card families (.mod-triage-card,
+   .mod-appeal-card). Slightly wider than the deletions panel because
+   appeal claim text wants horizontal room. Docs §7 + §17. */
+.moderation-panel { width: 460px; }
+.moderation-badge { background: var(--accent); color: #0f172a;
+    font-size: 11px; font-weight: 800; padding: 1px 7px;
+    border-radius: 10px; margin-left: 4px; min-width: 16px;
+    text-align: center; display: inline-block; }
+
+.mod-tabs { display: flex; padding: 8px 12px 0; gap: 4px;
+    border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.mod-tab { background: transparent; color: var(--text-sub);
+    padding: 8px 14px; border: 0; border-bottom: 2px solid transparent;
+    cursor: pointer; font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: inherit; }
+.mod-tab:hover { color: var(--text); }
+.mod-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.mod-tab-badge { background: rgba(255,255,255,0.08); color: var(--text);
+    font-size: 11px; padding: 1px 6px; border-radius: 10px;
+    min-width: 18px; text-align: center; }
+.mod-tab.active .mod-tab-badge { background: var(--accent); color: #0f172a; }
+
+.mod-back-row { display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0; }
+.mod-back-btn { background: transparent; border: 1px solid var(--border);
+    color: var(--text-sub); padding: 4px 10px; border-radius: 6px;
+    font-size: 12px; cursor: pointer; display: inline-flex;
+    align-items: center; gap: 6px; }
+.mod-back-btn:hover { color: var(--text); border-color: var(--border-hi); }
+
+.mod-empty { text-align: center; padding: 36px 12px; color: var(--text-dim); }
+.mod-empty .mod-empty-icon { font-size: 26px; color: var(--resolved); }
+.mod-empty .mod-empty-title { margin-top: 10px; color: var(--text-sub);
+    font-size: 13px; font-weight: 600; }
+.mod-empty .mod-empty-sub { margin-top: 4px; font-size: 12px;
+    color: var(--text-dim); }
+
+/* Triage cards (acute clusters) */
+.mod-triage-card { padding: 12px; border-radius: 10px;
+    background: rgba(255,174,0,0.04); border: 1px solid rgba(255,174,0,0.15); }
+.mod-triage-card.grade-high { background: rgba(239,68,68,0.06);
+    border-color: rgba(239,68,68,0.22); }
+.mod-tc-header { display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px; flex-wrap: wrap; }
+.mod-tc-grade { font-size: 10px; padding: 2px 8px; border-radius: 6px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.mod-tc-grade.high { background: rgba(239,68,68,0.18); color: #fca5a5; }
+.mod-tc-grade.low  { background: rgba(255,174,0,0.18); color: #fbbf24; }
+.mod-tc-id { font-family: var(--font-mono); font-size: 12px;
+    color: var(--text-sub); flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mod-tc-when { font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
+.mod-tc-body { font-size: 13px; color: var(--text); line-height: 1.5; }
+.mod-tc-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;
+    font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); }
+.mod-tc-actions { display: flex; gap: 6px; margin-top: 10px; }
+.mod-tc-actions .mod-ac-btn { flex: 1; }
+
+/* Appeal cards */
+.mod-appeal-card { padding: 12px; border-radius: 10px;
+    background: rgba(167,139,250,0.04); border: 1px solid rgba(167,139,250,0.15); }
+.mod-appeal-card.decided { opacity: 0.65; }
+.mod-ac-header { display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px; flex-wrap: wrap; }
+.mod-ac-status { font-size: 10px; padding: 2px 8px; border-radius: 6px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.mod-ac-status.open          { background: rgba(56,189,248,0.18); color: #7dd3fc; }
+.mod-ac-status.under_review  { background: rgba(56,189,248,0.18); color: #7dd3fc; }
+.mod-ac-status.reinstated    { background: rgba(34,197,94,0.18); color: #86efac; }
+.mod-ac-status.upheld        { background: rgba(255,174,0,0.18); color: #fbbf24; }
+.mod-ac-status.banned        { background: rgba(239,68,68,0.18); color: #fca5a5; }
+.mod-ac-actions { display: flex; gap: 6px; margin-top: 10px; }
+.mod-ac-btn { flex: 1; padding: 6px 10px; border-radius: 6px;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    border: 1px solid transparent; font-family: inherit;
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.mod-ac-btn:hover { filter: brightness(1.15); }
+.mod-ac-btn.reinstate { background: rgba(34,197,94,0.10); color: #86efac;
+    border-color: rgba(34,197,94,0.3); }
+.mod-ac-btn.uphold    { background: rgba(255,174,0,0.10); color: #fbbf24;
+    border-color: rgba(255,174,0,0.3); }
+.mod-ac-btn.ban       { background: rgba(239,68,68,0.10); color: #fca5a5;
+    border-color: rgba(239,68,68,0.3); }
+.mod-ac-btn.timeline  { background: rgba(56,189,248,0.10); color: #7dd3fc;
+    border-color: rgba(56,189,248,0.3); }
+
+/* Cluster-history timeline subview */
+.mod-tl-ev { padding: 10px 12px; border-left: 3px solid var(--info);
+    background: rgba(255,255,255,0.025); border-radius: 0 6px 6px 0;
+    margin: 8px 0; }
+.mod-tl-ev.kind-promote     { border-left-color: #22c55e; }
+.mod-tl-ev.kind-downgrade   { border-left-color: #f97316; }
+.mod-tl-ev.kind-acute_on    { border-left-color: #ef4444; }
+.mod-tl-ev.kind-acute_off   { border-left-color: var(--text-dim); }
+.mod-tl-ev.kind-fading      { border-left-color: #ffae00; }
+.mod-tl-ev.kind-resolved    { border-left-color: var(--resolved); }
+.mod-tl-ev.kind-created     { border-left-color: var(--info); }
+.mod-tl-ev.kind-removed     { border-left-color: var(--text-dim); }
+.mod-tl-kind { font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--accent); }
+.mod-tl-when { font-size: 11px; color: var(--text-dim); margin-left: 8px; }
+.mod-tl-detail { font-size: 12px; color: var(--text-sub); margin-top: 4px;
+    font-family: var(--font-mono); }
+.mod-tl-payload { margin-top: 4px; font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-dim); white-space: pre-wrap; word-break: break-word; }
+
 /* ══ FEED PANEL (left sidebar) ═════════════════════════════ */
 .feed-panel {
     position: absolute;
