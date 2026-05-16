@@ -5258,6 +5258,18 @@ Object.defineProperty(window, '__crispTimeFilterHours', {
 });
 window.__crispFetchReports = () => fetchReports();
 
+// May 2026 (operator-reported, post-iPhone-14 audit) — the listing
+// endpoint's server-side `limit: int = 100` default was silently
+// truncating the dashboard's view at 100 reports. Top-bar TOTAL pill
+// reflected the truncated count, not the true `X-Total-Count`. Pass
+// an explicit `?limit=DASHBOARD_PAGE_LIMIT` on every fetch so the
+// dashboard sees the full set. 10 000 is the practical render ceiling
+// for this dashboard's leaflet + DOM layout (beyond that the map +
+// feed degrade regardless of any pagination story); the rare deploy
+// that exceeds it logs a console warn so we know proper pagination
+// is needed before it becomes a real ops issue.
+const DASHBOARD_PAGE_LIMIT = 10000;
+
 async function fetchReports() {
     try {
         const baseUrl = API.endsWith('/') ? API : API + '/';
@@ -5266,9 +5278,13 @@ async function fetchReports() {
         // for a full refresh — that's how deletions get reflected.
         const wantFullRefresh = !_lastServerTime
             || _pollsSinceFullRefresh >= _FULL_REFRESH_EVERY_N_POLLS;
+        // Always pin a generous limit so the backend's default of 100
+        // doesn't quietly truncate. `&` vs `?` depends on whether
+        // `?since=` is already present.
+        const limitParam = `limit=${DASHBOARD_PAGE_LIMIT}`;
         const listUrl = wantFullRefresh
-            ? baseUrl
-            : baseUrl + '?since=' + encodeURIComponent(_lastServerTime);
+            ? baseUrl + '?' + limitParam
+            : baseUrl + '?since=' + encodeURIComponent(_lastServerTime) + '&' + limitParam;
         // Phase 4: echo back the previous ETag so the server can return
         // 304 if nothing changed. Skip on full-refresh polls so we always
         // get a fresh body to validate the local state against the server
@@ -5308,6 +5324,15 @@ async function fetchReports() {
 
         const data = await res.json();
         console.log('[CRISP] Loaded', data.length, wantFullRefresh ? 'reports (full)' : 'delta updates');
+
+        // Scale-out signal — if the backend says there are more rows
+        // than the page-limit we asked for, log a warning so we know
+        // proper pagination is needed BEFORE the truncation becomes an
+        // ops issue. Idempotent; no-op when caught early.
+        const xTotalCount = parseInt(res.headers.get('X-Total-Count') || '0', 10);
+        if (xTotalCount > DASHBOARD_PAGE_LIMIT && wantFullRefresh) {
+            console.warn(`[CRISP] Dashboard truncation imminent: X-Total-Count=${xTotalCount} exceeds DASHBOARD_PAGE_LIMIT=${DASHBOARD_PAGE_LIMIT}. Proper pagination needed.`);
+        }
 
         try {
             // Phase 3: cache the FULL list (after merge) — the delta poll
