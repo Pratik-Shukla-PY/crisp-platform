@@ -262,10 +262,13 @@ class NearbyReportInput:
     Keeping it as a dataclass (not a SQLAlchemy row) keeps the
     aggregator decoupled from the ORM and trivially testable.
 
-    Phase 2 (May 2026) added `user_id` — used as the Phase-2 trust
-    proxy for HIGH/LOW acute grading (account-linked users are
-    treated as "trusted"). Phase 3 will replace this with the full
-    device trust-score (see docs §6.1 + §3.5)."""
+    Phase 2 added `user_id` — initial trust proxy for HIGH/LOW
+    acute grading.
+    Phase 3 added `trust_weight` — pre-computed device-level
+    contribution weight (docs §6.1). The endpoint resolves it via
+    `fraud_detector.device_trust_weight()` then bumps by user role
+    (verified responder = 3.0; account-linked civilian = 1.5).
+    Default 1.0 = "new device, no role" — backwards-compatible."""
     report_id: str
     device_id: Optional[str]
     status: str
@@ -279,6 +282,7 @@ class NearbyReportInput:
     longitude: float
     server_created_at: datetime
     user_id: Optional[str] = None                # Phase 2 — trust proxy
+    trust_weight: float = 1.0                    # Phase 3 — device trust
 
 
 @dataclass
@@ -561,6 +565,27 @@ def _summarize_bucket(
         status is RESOLVED and latest activity is within retention
     """
     now = now or datetime.now(timezone.utc)
+
+    # Phase 3 (May 2026, docs §6.1 + §6.3) — drop reports from
+    # suspicious devices (trust_weight == 0.0) entirely before any
+    # other math. The report stays in the DB; it just doesn't
+    # contribute to this group's count, sort score, or tier
+    # classification. This is the "hard" mitigation tier — when
+    # an abuse signal fires, the device's reports stop influencing
+    # the public response until an admin clears the spam_score.
+    bucket = [r for r in bucket if r.trust_weight > 0.0]
+    if not bucket:
+        # Whole bucket was suspicious; return a stub group at zero
+        # count. The caller's k-anonymity floor will drop it.
+        return NearbyGroup(
+            id=group_id, kind=kind, label="", summary="",
+            summary_key=_SUMMARY_UNKNOWN[0],
+            count=0, verified_count=0, pending_count=0,
+            approx_distance_km=0.0, centroid_lat=0.0, centroid_lng=0.0,
+            latest_at=_truncate_to_minute(now),
+            earliest_at=_truncate_to_minute(now),
+            crisis_types=[], damage_classes=[], severity_max='UNKNOWN',
+        )
 
     # Per-device cap: bucket reports by device, take min(actual, cap)
     by_device: dict[Optional[str], int] = defaultdict(int)

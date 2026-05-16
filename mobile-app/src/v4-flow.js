@@ -187,7 +187,78 @@
     const V4_MAX_PHOTOS = 5;
 
     // ── Page 1: capture ─────────────────────────────────────────────────
+    /**
+     * Phase 3 (May 2026 — docs §4.4) — consume any
+     * `crisp_prefill_v1` envelope written by nearby.js when the user
+     * tapped a nearby group. Pre-populates building_id / location /
+     * crisis_type into the capture-flow state, and surfaces the
+     * cluster's `severity_max` as a SUGGESTED severity (user can
+     * always tap to override). Cleared after consumption so a
+     * subsequent direct-capture entry doesn't get stale prefill.
+     *
+     * Safe to call repeatedly — the sessionStorage key is the
+     * one-shot signal that prefill is intended.
+     */
+    function _consumePrefillEnvelope() {
+        let env = null;
+        try {
+            const raw = sessionStorage.getItem('crisp_prefill_v1');
+            if (!raw) return;
+            env = JSON.parse(raw);
+            sessionStorage.removeItem('crisp_prefill_v1');
+        } catch (e) {
+            console.warn('[v4-flow] prefill parse failed:', e);
+            try { sessionStorage.removeItem('crisp_prefill_v1'); } catch (_) {}
+            return;
+        }
+        if (!env || env.v !== 1) return;
+        try {
+            const s = window.state || {};
+            // Lat/lng — group centroid, NOT a specific reporter's
+            // coords. Privacy-safe.
+            if (typeof env.centroid_lat === 'number' && typeof env.centroid_lng === 'number') {
+                s.location = s.location || {};
+                s.location.lat = env.centroid_lat;
+                s.location.lng = env.centroid_lng;
+                s.location.acc = 0;
+                s.location.is_prefilled_from_nearby = true;
+            }
+            // Building id — public OSM ref, no PII.
+            if (env.building_id) {
+                s.building_id = env.building_id;
+                s.building_id_from_nearby = true;
+            }
+            // Crisis type SUGGESTION — populated as a default
+            // selection, NOT silently locked. The capture stage
+            // surfaces it under the "Suggested" tag.
+            if (env.crisis_type && !s.crisis_type) {
+                s.crisis_type = env.crisis_type;
+                s.crisis_type_suggested = true;
+            }
+            // Severity SUGGESTION — Phase-3 operator decision:
+            // SUGGEST, do NOT overwrite. Mark the field so the
+            // capture UI can render the "Suggested" pill.
+            if (env.suggested_severity) {
+                s.suggested_severity = env.suggested_severity;
+                s.suggested_severity_from_nearby = true;
+            }
+            // Audit breadcrumb so the submit payload carries the
+            // origin (helps analyse tap-to-prefill conversion rate
+            // in §13's observability).
+            s.prefill_origin_group_id = env.from_group_id || null;
+            window.state = s;
+            try { document.dispatchEvent(new CustomEvent('crisp:prefill-applied', { detail: env })); } catch (_) {}
+        } catch (e) {
+            console.warn('[v4-flow] prefill apply failed:', e);
+        }
+    }
+
     function _initCaptureStage() {
+        // Phase 3 — consume prefill BEFORE any other init so the
+        // capture stage paints with the suggested values from the
+        // first frame.
+        _consumePrefillEnvelope();
+
         const cameraInput = document.getElementById('v4-file-camera');
         const browseInput = document.getElementById('v4-file-browse');
         const heroBtn = document.getElementById('btn-v4-camera');

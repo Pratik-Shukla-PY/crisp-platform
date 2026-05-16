@@ -221,7 +221,19 @@ class Device(Base):
     device_hash = Column(String(255), unique=True, nullable=False)
     platform = Column(String(50))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
+    # Phase 3 (May 2026, docs §6.1 + §6.2) — trust-score signals.
+    # spam_score: accumulator (synchronous bumps from hot abuse
+    # signals + Phase-5 async batch worker). 0.0 = clean.
+    # reports_count: total reports seen — cached integer maintained
+    # synchronously on every report insert.
+    # spam_signals: jsonb array of detected signal-type strings
+    # ("gps_spoof" / "impossible_movement" / "rate_burst" / ...);
+    # used by the dashboard's Phase-4 triage UI.
+    spam_score = Column(Float, default=0.0, nullable=False, server_default="0.0")
+    reports_count = Column(Integer, default=0, nullable=False, server_default="0")
+    spam_signals = Column(JSON, default=list, nullable=False)
+
     reports = relationship("Report", back_populates="device")
     sync_logs = relationship("SyncLog", back_populates="device")
 

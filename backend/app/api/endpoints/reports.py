@@ -33,6 +33,7 @@ from app.services.nearby_aggregator import (
     NearbyReportInput,
 )
 from app.services.nearby_lifecycle import detect_and_persist as _nearby_detect_and_persist
+from app.services.fraud_detector import device_trust_weight as _device_trust_weight
 from app.services.ai_service import ai_service
 from app.services.satellite_fetcher import satellite_fetcher
 from app.services.truth_scorer import truth_scorer
@@ -1886,6 +1887,24 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     _auto_assign_building_id(db_report, db)
     # Update reporter gamification profile
     _update_reporter_profile(meta_in.device_hash, db)
+
+    # Phase 3 (May 2026, docs §6.1 + §6.2) — sync trust-score updates.
+    # Run BEFORE the final commit so the device's spam_score change
+    # lands in the same txn as the report. Both helpers are best-
+    # effort + swallow their own errors — they can never block a
+    # legitimate user submission.
+    from app.services import fraud_detector as _fraud
+    _fraud.increment_reports_count(db, db_report.device_id)
+    if meta_in.location and (
+        meta_in.location.latitude or meta_in.location.longitude
+    ):
+        _fraud.evaluate_submission(
+            db,
+            device_id=db_report.device_id,
+            lat=meta_in.location.latitude,
+            lng=meta_in.location.longitude,
+            ts=db_report.server_created_at,
+        )
 
     db.commit()
     logger.info(f"Report meta created: {db_report.id} (expecting {meta_in.expected_media} media)")
@@ -3827,6 +3846,18 @@ def get_nearby_reports(
 
     candidates = q.all()
 
+    # Phase 3 (May 2026, docs §6.1) — pre-fetch trust info for every
+    # candidate device in ONE query so we don't N+1 inside the loop.
+    candidate_device_ids = {r.device_id for r in candidates if r.device_id}
+    devices_by_id: dict = {}
+    if candidate_device_ids:
+        device_rows = (
+            db.query(Device)
+              .filter(Device.id.in_(candidate_device_ids))
+              .all()
+        )
+        devices_by_id = {d.id: d for d in device_rows}
+
     # Exact haversine post-filter — drops bbox false-positives.
     inputs: List[NearbyReportInput] = []
     for r in candidates:
@@ -3835,6 +3866,17 @@ def get_nearby_reports(
         d_km = haversine_km(lat, lng, r.location.latitude, r.location.longitude)
         if d_km > radius_km:
             continue
+        # Phase 3 trust resolution: device-level weight first, then
+        # bump by user-role (verified responder = 3.0; account-linked
+        # civilian = 1.5). The aggregator drops suspicious (0.0)
+        # contributions entirely; non-suspicious all contribute to
+        # the public count floor (k-anonymity invariant).
+        dev_obj = devices_by_id.get(r.device_id)
+        weight = _device_trust_weight(dev_obj)
+        if weight > 0.0 and getattr(r, "user_id", None):
+            # Account-linked civilian; admin role-bump would land
+            # here in a future commit (Phase 5).
+            weight = max(weight, 1.5)
         inputs.append(NearbyReportInput(
             report_id=r.id,
             device_id=r.device_id,
@@ -3848,10 +3890,12 @@ def get_nearby_reports(
             latitude=r.location.latitude,
             longitude=r.location.longitude,
             server_created_at=r.server_created_at or datetime.now(timezone.utc),
-            # Phase 2 (docs §3.5 + §8.1) — account-linked reports get
-            # used as a trust proxy for HIGH/LOW acute grading.
-            # Phase 3 will replace with the full device trust-score.
+            # Phase 2 (docs §3.5 + §8.1) — account-linked reports
+            # used as the initial trust proxy for HIGH/LOW acute
+            # grading.
             user_id=getattr(r, "user_id", None),
+            # Phase 3 (docs §6.1) — pre-resolved device trust weight.
+            trust_weight=weight,
         ))
 
     # Aggregate → groups (k-anonymity + relevance sort applied inside).

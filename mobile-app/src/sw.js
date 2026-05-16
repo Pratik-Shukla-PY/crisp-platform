@@ -5,7 +5,30 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v206';
+const CACHE_NAME = 'crisp-v207';
+// v206 → v207 (May 2026 — Nearby Reports Phase 3, see
+// docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 3):
+//   Trust + offline polish + smart prefill. Highlights:
+//     • IDB store bumped to `crisp_nearby_cache_v2` for the new
+//       response shape (recently_resolved_groups + tier + burst +
+//       acute fields). Old v1 caches evict on next activate.
+//     • Per-tier online + offline TTL replaces the single CACHE_TTL_MS.
+//       T3 verified — 5 min online / 24 h offline.
+//       T2 emerging — 3 min / 6 h.
+//       T1 weak     — 2 min / 30 min (hide after offline TTL).
+//     • Smart-prefill flow: tap on a nearby group writes
+//       `sessionStorage['crisp_prefill_v1']` with building_id +
+//       centroid + suggested crisis/severity; v4-flow.js consumes
+//       it on stage-v4-capture entry — user only adds photo/audio.
+//     • SUGGESTED severity (not overwritten) per operator decision.
+//   Backend trust-weight wiring is invisible to the SW but lands
+//   in the same release window:
+//     • New devices.spam_score / reports_count / spam_signals
+//       columns (migration 0021_device_trust_columns).
+//     • fraud_detector.evaluate_submission runs inline on each
+//       POST /reports/meta — 3 hot signals (GPS spoof, impossible
+//       movement, rate burst). Suspicious-device contributions
+//       drop to 0 in aggregate_nearby.
 // v205 → v206 (May 2026 — Nearby Reports Phase 2, see
 // docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 2):
 //   Backend-only delta — the response shape gains the 'block' and

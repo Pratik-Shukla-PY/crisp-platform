@@ -61,10 +61,55 @@
     const DEFAULT_RADIUS_KM = 5;
     const DEFAULT_LIMIT = 20;
     const COLLAPSED_ROWS = 3;             // rows shown before "View N more"
-    const CACHE_TTL_MS = 5 * 60 * 1000;   // 5 minutes
+
+    // Phase 3 (May 2026, docs §5.2-5.3) — per-tier TTL replaces the
+    // single CACHE_TTL_MS. Online TTL = "how long the cache stays
+    // authoritative before we re-fetch". Offline TTL = "how long
+    // we still RENDER the cache when network is gone". Weak-tier
+    // values are shorter because single-witness signals decay
+    // fastest in informational value.
+    const ONLINE_CACHE_TTL = {
+        verified:  5 * 60 * 1000,        // 5 min
+        emerging:  3 * 60 * 1000,        // 3 min
+        weak:      2 * 60 * 1000,        // 2 min
+        disaster:  1 * 60 * 1000,        // 1 min
+    };
+    const OFFLINE_CACHE_TTL = {
+        verified: 24 * 60 * 60 * 1000,   // 24 h
+        emerging:  6 * 60 * 60 * 1000,   //  6 h
+        weak:     30 * 60 * 1000,        // 30 min (hide after)
+        disaster:  1 * 60 * 60 * 1000,   //  1 h
+    };
+    // Legacy single value — kept for code paths that don't yet
+    // discriminate by tier. Defaults to the verified tier's online
+    // TTL.
+    const CACHE_TTL_MS = ONLINE_CACHE_TTL.verified;
     const STALE_LOCATION_TTL_MS = 30 * 60 * 1000;  // 30 minutes
-    const IDB_NAME = 'crisp_nearby_cache_v1';
+
+    // IDB schema bumped to v2 for Phase 3 — the payload now carries
+    // additional fields (recently_resolved_groups, tier, is_burst,
+    // is_acute, acute_grade, crisis_ttl_hours, etc.). Versioned
+    // store name forces old caches to evict on next activate.
+    const IDB_NAME = 'crisp_nearby_cache_v2';
     const IDB_KEY = 'latest';
+    // Legacy IDB store from v1 (Phase 0). Pruned on first v2 read
+    // so localStorage / IDB doesn't accumulate dead schemas.
+    const IDB_LEGACY_NAMES = ['crisp_nearby_cache_v1'];
+
+    /** Highest-tier hint for the whole payload — drives which
+     *  ONLINE_CACHE_TTL / OFFLINE_CACHE_TTL value applies. */
+    function _payloadDominantTier(payload) {
+        const groups = (payload && payload.groups) || [];
+        if (!groups.length) return 'weak';
+        let best = 'weak';
+        let bestRank = 1;
+        const rank = { weak: 1, emerging: 2, verified: 3 };
+        for (const g of groups) {
+            const r = rank[g.tier] || 0;
+            if (r > bestRank) { bestRank = r; best = g.tier; }
+        }
+        return best;
+    }
 
     // ── i18n helper — proxies to window.t if present, falls back to en
     function _t(key, fallback) {
@@ -280,6 +325,11 @@
                 row.appendChild(ripple);
                 setTimeout(() => { try { ripple.remove(); } catch (_) {} }, 650);
             } catch (_) { /* never block the sheet on ripple errors */ }
+            // Phase 3 (May 2026 — docs §4.4) — write the prefill
+            // envelope BEFORE dispatching, so any consumer that
+            // wants to route to /stage-v4-capture finds the state
+            // already in sessionStorage.
+            _writePrefillFromGroup(group);
             try {
                 window.dispatchEvent(new CustomEvent('crisp:nearby-row-click', {
                     detail: { groupId: group.id, group },
@@ -317,6 +367,43 @@
     // counts across all groups in the response) with pulse halos.
     // Tap → bottom-sheet slides up with the grouped rows. Tap a row
     // in that sheet → existing detail sheet for the group + actions.
+
+    /**
+     * Phase 3 (May 2026, docs §4.4) — smart reporting prefill flow.
+     * When the user taps a nearby group, hand the v4-flow.js capture
+     * stage a `crisp_prefill_v1` envelope (sessionStorage) with the
+     * cluster's building / location / crisis context. The capture
+     * stage consumes it once and clears it; the user only needs to
+     * add photo / audio / text + (optionally) override the suggested
+     * severity. Cuts cognitive load in humanitarian emergencies.
+     *
+     * Privacy: prefilled coords are the GROUP CENTROID (not any
+     * individual reporter's coords); building_id is a public OSM
+     * reference. No PII leakage — see docs §10.
+     */
+    function _writePrefillFromGroup(group) {
+        if (!group) return;
+        try {
+            const payload = {
+                v: 1,
+                building_id: group.kind === 'building' ? group.id.replace(/^g_building_/, '') : null,
+                centroid_lat: group.centroid_lat,
+                centroid_lng: group.centroid_lng,
+                // T1 weak: crisis_types is the coarse category; T2/T3
+                // expose the full enum. Surface whatever the server gave.
+                crisis_type: (group.crisis_types && group.crisis_types[0]) || null,
+                // "Suggested" severity — visually marked in capture as
+                // 'tap to change'; never silently overwrites the user's
+                // own assessment.
+                suggested_severity: group.severity_max || null,
+                from_group_id: group.id,
+                ts: Date.now(),
+            };
+            sessionStorage.setItem('crisp_prefill_v1', JSON.stringify(payload));
+        } catch (e) {
+            console.warn('[NearbyIntel] prefill write failed:', e);
+        }
+    }
 
     // ── Tier helpers (Phase 1, May 2026 — docs §3.2 + §4.1) ──────────
     // Three tiers: 'weak' (single-witness, < 30min), 'emerging' (2+
