@@ -402,6 +402,15 @@ class Location(Base):
     geocoding_source = Column(String(32), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # Phase 5.1 (May 2026, docs §9.4) — H3 hexagonal cell index for
+    # the optional CRISP_NEARBY_H3_MODE aggregator path. Resolution 9
+    # (~175 m hex edge length, ~110k m² area) is the docs-recommended
+    # default for 500k+-reports-per-crisis scale. Nullable: NULL means
+    # the row predates the H3 backfill or the helper failed silently.
+    # The /nearby query falls back to ST_DWithin / bbox when h3_idx is
+    # absent for any candidate row.
+    h3_idx = Column(String(16), nullable=True)
+
     report = relationship("Report", back_populates="location")
 
     # May 2026 (0018) — composite index on (latitude, longitude) so the
@@ -410,8 +419,10 @@ class Location(Base):
     # 0018_locations_lat_lng_index so `Base.metadata.create_all()`
     # (pytest setup) and `alembic upgrade` produce the same physical
     # index name.
+    # 0025 added ix_locations_h3_idx for the H3-mode aggregator path.
     __table_args__ = (
         Index("ix_locations_lat_lng", "latitude", "longitude"),
+        Index("ix_locations_h3_idx", "h3_idx"),
     )
 
 class Media(Base):
@@ -734,6 +745,34 @@ def _apply_taxonomy(_mapper, _conn, target: "Report") -> None:  # type: ignore[n
 
 event.listen(Report, "before_insert", _apply_taxonomy)
 event.listen(Report, "before_update", _apply_taxonomy)
+
+
+# ── Phase 5.1 (May 2026, docs §9.4) — H3 cell auto-population ────────
+# When a Location row is inserted or its lat/lng changes, derive the H3
+# cell index. Single listener covers all three Location-create sites in
+# reports.py + any future sites — no per-site wiring required.
+#
+# Best-effort: import + computation failures are silently swallowed so
+# a missing h3 wheel or NaN coords can never block a real submission.
+def _populate_h3_idx(mapper, connection, target: "Location") -> None:  # type: ignore[name-defined]
+    """Always recompute the cell on insert + on every update.
+    Recompute is microsecond-cheap; the alternative ("skip if set")
+    would leave stale h3_idx values after a lat/lng correction."""
+    try:
+        lat = getattr(target, "latitude", None)
+        lng = getattr(target, "longitude", None)
+        if lat is None or lng is None:
+            return
+        # Lazy import to avoid a hard dep at model-load time.
+        from app.services.h3_helper import compute_cell
+        target.h3_idx = compute_cell(float(lat), float(lng))
+    except Exception:
+        # Don't ever break the insert/update path for an H3 hiccup.
+        pass
+
+
+event.listen(Location, "before_insert", _populate_h3_idx)
+event.listen(Location, "before_update", _populate_h3_idx)
 
 
 # ── P3.1 — Media file cleanup on DB delete ────────────────────────────────────

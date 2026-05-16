@@ -3837,11 +3837,17 @@ def get_nearby_reports(
         return cached_payload
 
     # ── DB query ──────────────────────────────────────────────────────
-    # Phase 5.1 (docs §9.3) — when the PostGIS `locations.geom` column
-    # is populated (migration 0023 + the per-row INSERT/UPDATE trigger),
-    # use exact ST_DWithin metric filtering with the GiST index doing
-    # the heavy lifting. Otherwise fall back to bbox + Python haversine.
-    use_postgis = _has_populated_geom_column(db)
+    # Three possible query paths, in priority order:
+    #   1. H3 cell-set       (docs §9.4) — when CRISP_NEARBY_H3_MODE=1
+    #      AND the python h3 wheel is installed. Uses
+    #      WHERE locations.h3_idx IN (centre + k-ring). Backfilled NULLs
+    #      remain on the slower paths via the OR'd predicate below.
+    #   2. PostGIS ST_DWithin (docs §9.3) — when `locations.geom` is
+    #      populated. Exact metric distance with the GiST index.
+    #   3. bbox + Python haversine — the original Phase 0 fallback.
+    from app.services import h3_helper as _h3h
+    use_h3 = _h3h.is_h3_mode_enabled()
+    use_postgis = (not use_h3) and _has_populated_geom_column(db)
 
     # Bbox pre-filter on indexed lat/lng columns. cos(lat) handles
     # meridian convergence; we widen at high latitudes but the
@@ -3874,7 +3880,33 @@ def get_nearby_reports(
         db.query(Report)
           .join(Location, Location.report_id == Report.id)
     )
-    if use_postgis:
+    if use_h3:
+        # H3 cell-set filter (docs §9.4). The caller's centre cell + a
+        # k-ring covering the requested radius is the candidate set.
+        # Backfilled-NULL h3_idx rows would otherwise vanish — guard
+        # with `OR h3_idx IS NULL AND <bbox>` so partial backfills
+        # don't regress recall. Once backfill completes the NULL branch
+        # is dead and the planner skips it.
+        cells = _h3h.cells_within_radius(lat, lng, radius_km)
+        if cells:
+            q = q.filter(
+                or_(
+                    Location.h3_idx.in_(cells),
+                    and_(
+                        Location.h3_idx == None,    # noqa: E711
+                        Location.latitude.between(lat_min, lat_max),
+                        Location.longitude.between(lng_min, lng_max),
+                    ),
+                )
+            )
+        else:
+            # Empty cell set (radius too large OR h3 hiccup) → fall
+            # back to bbox so we never starve the response.
+            q = (
+                q.filter(Location.latitude.between(lat_min, lat_max))
+                 .filter(Location.longitude.between(lng_min, lng_max))
+            )
+    elif use_postgis:
         # Exact metric radius via PostGIS. ST_DWithin on a geography
         # type does the distance math in metres on the WGS84 ellipsoid
         # and uses the GiST index `ix_locations_geom_gist` (migration
@@ -3943,16 +3975,25 @@ def get_nearby_reports(
         devices_by_id = {d.id: d for d in device_rows}
 
     # Exact haversine post-filter — drops bbox false-positives.
-    # Phase 5.1 (docs §9.3): when ST_DWithin did the radius filtering
-    # in SQL, the post-filter is redundant but cheap. Keep the
-    # location-presence guard since SQLAlchemy may still produce a
-    # candidate row with a NULL Location join target if the DB has
-    # drift; skip the haversine recompute in the PostGIS path.
+    # Phase 5.1 (docs §9.3 + §9.4): when ST_DWithin OR H3 did the
+    # radius filtering at the SQL layer, the post-filter is redundant
+    # but cheap. Keep the location-presence guard since SQLAlchemy may
+    # still produce a candidate row with a NULL Location join target
+    # if the DB has drift.
+    sql_filtered = use_postgis or use_h3
     inputs: List[NearbyReportInput] = []
     for r in candidates:
         if not r.location:
             continue
-        if not use_postgis:
+        if not sql_filtered:
+            d_km = haversine_km(lat, lng, r.location.latitude, r.location.longitude)
+            if d_km > radius_km:
+                continue
+        elif use_h3:
+            # H3 k-ring is an over-approximation of the circle (hex
+            # cells aren't aligned to the radius edge). Re-filter
+            # candidates against the exact radius with haversine so
+            # the response stays radius-accurate.
             d_km = haversine_km(lat, lng, r.location.latitude, r.location.longitude)
             if d_km > radius_km:
                 continue

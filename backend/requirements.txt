@@ -92,3 +92,12 @@ pypdf>=5.0
 # UNDP must-have #12 (500k reports per crisis) hinges on this being
 # correct under multi-worker deploys.
 redis>=5.0.0
+
+# Uber's H3 hexagonal hierarchical spatial index (Apache-2.0). May 2026
+# Phase 5.1 — docs/NEARBY_REPORTS_PIPELINE.md §9.4. Used by the optional
+# CRISP_NEARBY_H3_MODE path on the /nearby query: hex-cell containment
+# replaces the bbox + haversine pre-filter for 500k+-reports-per-crisis
+# scale (UNDP must-have #12). Helper module gracefully degrades when the
+# wheel can't be installed on the target arch — the env flag stays off
+# by default, and import failure is a no-op rather than a crash.
+h3>=4.0.0

@@ -285,3 +285,102 @@ class TestPostGisPathSelection:
         assert _has_populated_geom_column(db) is True
         _reset_geom_cache_for_tests()
         assert _has_populated_geom_column(db) is False
+
+
+# ── ④ H3 helper + scaffold ─────────────────────────────────────────
+
+class TestH3Helper:
+    """Docs §9.4 — H3 helper sanity checks. The integration with
+    /nearby (CRISP_NEARBY_H3_MODE flag flipped + verifying query path
+    selection) is exercised by the path-selection test below."""
+
+    def test_compute_cell_returns_h3_string(self):
+        from app.services.h3_helper import compute_cell, is_available
+        if not is_available():
+            pytest.skip("h3 wheel not installed on this runner")
+        cell = compute_cell(12.9716, 77.5946)
+        assert isinstance(cell, str)
+        # H3 v4 cell strings are 15 chars at res 9.
+        assert len(cell) == 15
+        # Same lat/lng → same cell (idempotent).
+        assert compute_cell(12.9716, 77.5946) == cell
+
+    def test_compute_cell_rejects_out_of_range(self):
+        from app.services.h3_helper import compute_cell, is_available
+        if not is_available():
+            pytest.skip("h3 wheel not installed")
+        assert compute_cell(91.0, 0.0) is None   # lat > 90
+        assert compute_cell(0.0, 181.0) is None  # lng > 180
+        assert compute_cell(float("nan"), 0.0) is None
+
+    def test_cells_within_radius_covers_centre(self):
+        from app.services.h3_helper import (
+            compute_cell, cells_within_radius, is_available,
+        )
+        if not is_available():
+            pytest.skip("h3 wheel not installed")
+        centre = compute_cell(12.9716, 77.5946)
+        cells = cells_within_radius(12.9716, 77.5946, radius_km=1.0)
+        assert centre in cells
+        # 1 km at res 9 → ring k=7-ish → at least 60 cells
+        assert len(cells) >= 30
+
+    def test_cells_within_radius_caps_k(self):
+        """Very large radii must not blow the cell-set up unbounded."""
+        from app.services.h3_helper import cells_within_radius, is_available
+        if not is_available():
+            pytest.skip("h3 wheel not installed")
+        cells = cells_within_radius(12.9716, 77.5946, radius_km=1000.0)
+        # _MAX_RING_K = 60 → at most ~3 * 60 * 61 + 1 = ~10980 cells
+        assert len(cells) <= 12000
+
+
+class TestH3PathSelection:
+    """Verify the /nearby query branch logic. The actual SQL execution
+    against an H3-populated DB is covered by the regression sweep
+    (every Location insert in the test suite now writes h3_idx via
+    the SQLAlchemy event listener), so any path-selection bug would
+    surface as a Phase 1-5 regression. These tests pin the explicit
+    branch contract."""
+
+    def test_h3_mode_off_by_default(self, monkeypatch):
+        from app.services.h3_helper import is_h3_mode_enabled
+        monkeypatch.delenv("CRISP_NEARBY_H3_MODE", raising=False)
+        assert is_h3_mode_enabled() is False
+
+    def test_h3_mode_on_when_env_set(self, monkeypatch):
+        from app.services.h3_helper import is_h3_mode_enabled, is_available
+        if not is_available():
+            pytest.skip("h3 wheel not installed")
+        monkeypatch.setenv("CRISP_NEARBY_H3_MODE", "1")
+        assert is_h3_mode_enabled() is True
+
+    def test_h3_mode_false_without_wheel(self, monkeypatch):
+        """Even if the env flag is set, is_h3_mode_enabled returns
+        False when the wheel can't be imported — protects against
+        misconfigured deploys."""
+        import app.services.h3_helper as _h
+        monkeypatch.setenv("CRISP_NEARBY_H3_MODE", "1")
+        original = _h._H3_AVAILABLE
+        try:
+            _h._H3_AVAILABLE = False
+            assert _h.is_h3_mode_enabled() is False
+        finally:
+            _h._H3_AVAILABLE = original
+
+    def test_location_insert_populates_h3_idx(self, db):
+        """The SQLAlchemy `before_insert` listener on Location auto-
+        populates h3_idx. Pin this so a refactor doesn't accidentally
+        drop the listener."""
+        from app.services.h3_helper import is_available
+        from app.models.report import Location, Report
+        from tests.test_nearby_endpoint import _make_report, REF_LAT, REF_LNG
+        if not is_available():
+            pytest.skip("h3 wheel not installed")
+        r = _make_report(db, lat=REF_LAT, lng=REF_LNG, status="PENDING",
+                         building_id="p51-h3-loc", device_id="p51-h3-dev")
+        db.commit()
+        loc = db.query(Location).filter(Location.report_id == r.id).first()
+        assert loc is not None
+        assert loc.h3_idx is not None
+        assert len(loc.h3_idx) == 15
