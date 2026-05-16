@@ -54,7 +54,14 @@ def _make_tmp_db() -> tuple[str, str]:
     dbname = f"crisp_mig_{uuid.uuid4().hex[:10]}"
     admin = create_engine(_admin_url(), isolation_level="AUTOCOMMIT")
     try:
-        with admin.connect() as conn:
+        # SA 2.x quirk: the engine-level isolation_level does NOT
+        # always propagate cleanly through the `with engine.connect()
+        # as conn:` context manager (an implicit transaction may
+        # still wrap DDL on some psycopg2 builds, depending on pool
+        # state). Re-affirm AUTOCOMMIT at the connection level so
+        # CREATE / DROP DATABASE never lands inside a transaction
+        # block. See tests/test_migrations.py CI flake from May 2026.
+        with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
             conn.execute(text(f'CREATE DATABASE "{dbname}"'))
     finally:
         admin.dispose()
@@ -65,7 +72,21 @@ def _make_tmp_db() -> tuple[str, str]:
 def _drop_tmp_db(dbname: str) -> None:
     admin = create_engine(_admin_url(), isolation_level="AUTOCOMMIT")
     try:
-        with admin.connect() as conn:
+        with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            # Terminate any lingering backends connected to the
+            # throwaway DB. Without this, a test that opened an
+            # engine + forgot to dispose() leaves a connection
+            # alive, and DROP DATABASE blocks with
+            # `psycopg2.errors.ObjectInUse`. The pg_terminate_backend
+            # call is a no-op when there are no such connections.
+            conn.execute(
+                text(
+                    "SELECT pg_terminate_backend(pid) "
+                    "FROM pg_stat_activity "
+                    "WHERE datname = :dn AND pid <> pg_backend_pid()"
+                ),
+                {"dn": dbname},
+            )
             conn.execute(text(f'DROP DATABASE IF EXISTS "{dbname}"'))
     finally:
         admin.dispose()

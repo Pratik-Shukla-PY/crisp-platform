@@ -436,7 +436,15 @@ class VerificationResponse(BaseModel):
 class ReportResponse(BaseModel):
     id: str
     client_report_id: Optional[str] = None
-    device_id: str
+    # device_id is Optional[str] because the Report table's FK to
+    # devices has ON DELETE SET NULL — a GDPR / right-to-erasure
+    # device-purge sets all that device's prior reports' device_id
+    # to NULL while preserving the reports for crisis analytics.
+    # Declaring this as required-str caused FastAPI to ResponseValidation-
+    # error on legacy / purged rows whenever the test DB (or PROD)
+    # had such a row in the listing window. May 2026 (Phase 5.1
+    # follow-up — CI red on commit 877df9d through adb9b9f).
+    device_id: Optional[str] = None
     source: SourceEnum
     status: ReportStatusEnum
     sync_status: SyncStatusEnum

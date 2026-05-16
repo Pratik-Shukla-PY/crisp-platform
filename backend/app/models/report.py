@@ -1,7 +1,7 @@
 import os
 import uuid
 import logging
-from sqlalchemy import Column, String, Float, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text, LargeBinary, UniqueConstraint, CheckConstraint, Index, event
+from sqlalchemy import Column, String, Float, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text, LargeBinary, UniqueConstraint, CheckConstraint, Index, event, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -232,7 +232,17 @@ class Device(Base):
     # used by the dashboard's Phase-4 triage UI.
     spam_score = Column(Float, default=0.0, nullable=False, server_default="0.0")
     reports_count = Column(Integer, default=0, nullable=False, server_default="0")
-    spam_signals = Column(JSON, default=list, nullable=False)
+    # `server_default` matches migration 0021_device_trust_columns so a
+    # `Base.metadata.create_all()` (used by the migration test
+    # fixtures) emits the same NOT-NULL column with a default the DB
+    # itself enforces — raw INSERTs that omit `spam_signals` get the
+    # empty-array default instead of a NotNullViolation. Without this,
+    # the model-driven `create_all` diverges from the alembic-driven
+    # `upgrade head` and any test that bypasses the SA ORM trips up.
+    spam_signals = Column(
+        JSON, default=list, nullable=False,
+        server_default=text("'[]'::jsonb"),
+    )
 
     # Phase 5.1 (May 2026, docs §6.2) — device telemetry summary for
     # real emulator fingerprinting. Posted by PWA / RN on app boot via
