@@ -9672,7 +9672,17 @@ body.tier-t4 .home-impact {
     flex-direction: column;
     justify-content: center;
     gap: clamp(10px, 2vh, 18px);
-    min-height: 0;                   /* allow shrink below content */
+    /* May 2026 (Phase 5.1 follow-up — operator-reported "Top tile
+       collapsed"). The prior `min-height: 0` was too permissive:
+       once Phase 1's nearby module added ~217px to section-bottom,
+       this section could shrink to ~42px on iPhone SE / Galaxy S22,
+       clipping the entire hero card (which has `overflow: hidden`
+       for the glow accent). Pinning to `min-height: auto` keeps the
+       section at its content size; section-bottom now overflows to
+       below-the-fold scroll on short viewports instead of crushing
+       the CTA. Defensive `flex-shrink: 0` on the hero card below
+       belts the suspenders. */
+    min-height: auto;
     padding: 8px 0;
 }
 .home-stage .home-section-bottom {
@@ -10998,6 +11008,14 @@ body { background-color: #10284a; }
     position: relative;
     overflow: hidden;     /* Phase 2 reserves a ::before glow accent that hangs out of bounds */
     -webkit-tap-highlight-color: transparent;
+    /* May 2026 (Phase 5.1 follow-up) — refuse to shrink below the
+       card's natural content height even if the parent flex section
+       is squeezed. Belt-and-suspenders with the section-hero
+       `min-height: auto` above. Without this the CTA (the
+       primary action of the entire app) would clip to a flat slab
+       on viewport-heights ≤ 780 px once nearby reports populate
+       section-bottom. */
+    flex-shrink: 0;
 }
 
 /* Strip per-element margins inside the card so the card's `gap`
@@ -11868,6 +11886,57 @@ body { background-color: #10284a; }
     }
     .home-stage .home-nearby-number-block .home-nearby-pulse-halo.is-secondary {
         display: none;
+    }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   May 2026 (Phase 5.1 follow-up — operator-reported "Top tile
+   collapsed"). On short viewports (iPhone SE 667, Galaxy S22 780,
+   Galaxy A52 in some orientations) the nearby module's full
+   presentation (eyebrow + 156 px number block + tier pill + resolved
+   subtotal) added ~217 px to section-bottom, pushing the hero card
+   off-screen. The hero-card fix above prevents the squeeze, but on
+   compact viewports we should still try to keep everything visible
+   without scroll. Below ~700 px viewport height, drop the number
+   block's min-height + tighten the surrounding rhythm so the whole
+   bottom group fits in ~150 px instead of ~217 px.
+   ────────────────────────────────────────────────────────────────────── */
+@media (max-height: 700px) {
+    .home-stage .home-nearby-intel {
+        margin-top: 2px;
+        margin-bottom: 4px;
+        gap: 4px;
+    }
+    .home-stage .home-nearby-eyebrow {
+        font-size: 9.5px;
+        margin-bottom: 2px;
+    }
+    .home-stage .home-nearby-number-block {
+        min-height: 110px;
+        padding: 12px 12px 10px;
+    }
+    .home-stage .home-nearby-number {
+        /* Cap the dominant scale on short viewports so the block can
+           come down to 110 px without the number overflowing it. */
+        font-size: clamp(2.2rem, 9vw, 3rem);
+    }
+    .home-stage .home-nearby-number-block .home-nearby-pulse-halo {
+        /* Shrink the 200 px halo to fit the compacter block. */
+        width: 150px; height: 150px;
+        margin-top: -75px; margin-left: -75px;
+    }
+    .home-stage .home-nearby-tier-pill {
+        margin-top: 3px;
+        padding: 2px 8px;
+        font-size: 9.5px;
+    }
+    .home-stage .home-nearby-resolved-subtotal {
+        margin-top: 4px;
+        padding: 4px 12px;
+        font-size: 11px;
+    }
+    .home-stage .home-nearby-resolved-count {
+        font-size: 16px;
     }
 }
 

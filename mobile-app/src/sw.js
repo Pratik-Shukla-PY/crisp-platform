@@ -5,7 +5,33 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v210';
+const CACHE_NAME = 'crisp-v211';
+// v210 → v211 (May 2026 — Phase 5.1 follow-up: home-tile collapse fix):
+//   Operator-reported. Once the Phase-1 nearby module populated with
+//   reports, `.home-section-bottom` grew by ~217 px (eyebrow + 156 px
+//   number block + tier pill + Recently-Resolved subtotal). Combined
+//   with the channels grid + footer (~330 px), the bottom group hit
+//   ~540 px — squeezing `.home-section-hero` to ~42 px on iPhone SE
+//   and ~73 px on Galaxy S22. The hero card has `overflow: hidden`
+//   for its glow accent, so the CTA was clipped to a flat slab on
+//   iPhone 14 and disappeared entirely on shorter viewports.
+//
+//   Fix (styles.css only):
+//     · `.home-section-hero { min-height: auto }` — was `0`. Lets
+//       the section keep its content size; the channels overflow to
+//       below-fold on very short viewports instead of crushing the
+//       CTA.
+//     · `.home-hero-card { flex-shrink: 0 }` — defensive. The card
+//       refuses to shrink below its natural content height even if
+//       the parent flex section is squeezed.
+//     · `@media (max-height: 700px)` compaction of the nearby
+//       module: number-block min-height 156 → 110, halo 200 → 150,
+//       tier pill + resolved subtotal tightened. Saves ~70 px on
+//       short viewports so the whole stage fits without scroll.
+//
+//   Verified on iPhone SE / Galaxy S22 / iPhone 14 / Pixel 7 /
+//   Galaxy A52 via e2e/_home_matrix_probe.mjs.
+//
 // v209 → v210 (May 2026 — Nearby Reports Phase 5.1, deferred follow-ups,
 // see docs/NEARBY_REPORTS_PIPELINE.md §17):
 //   FIRST PWA-visible delta of the Phase 5.1 series. Adds
