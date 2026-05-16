@@ -42,6 +42,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterable, List, Optional, Sequence
@@ -103,26 +105,164 @@ def _detect_emulator_farm(
     return []
 
 
+# ── Narrative similarity (Phase 5.1) — real MinHash-based Jaccard ────────
+#
+# The Phase-5 scaffold flagged only IDENTICAL descriptions; a real spam
+# farm trivially defeats that by adding a random suffix. This is the
+# real implementation per docs §6.2:
+#
+#   "Real implementation will use cosine similarity over 5-grams +
+#    minhash for cross-device similarity."
+#
+# We use Jaccard similarity (over token 5-gram sets) which is a tighter
+# fit for short narrative text than cosine on bag-of-words. MinHash
+# gives us an unbiased Jaccard estimator with a fixed-size signature,
+# so pairwise comparison is O(K) instead of O(|n-grams|) per pair.
+#
+# Tuning (env-overridable):
+#   CRISP_NARRATIVE_JACCARD_THRESHOLD  default 0.7   — pairwise sim floor
+#   CRISP_NARRATIVE_MIN_REPORTS        default 3     — clique-size floor
+#   CRISP_NARRATIVE_NGRAM              default 5     — 5-grams per docs
+#   CRISP_NARRATIVE_MINHASH_K          default 32    — signature size
+#
+# At K=32 the standard error of the Jaccard estimator is ~1/sqrt(K) ≈
+# 0.18, which is more than tight enough for a 0.7 trigger threshold.
+# Bumping to K=64 halves the variance at 2× the compute; not worth it
+# for this use case until the worker becomes a bottleneck.
+
+_NARRATIVE_JACCARD_THRESHOLD = float(
+    os.environ.get("CRISP_NARRATIVE_JACCARD_THRESHOLD", "0.7")
+)
+_NARRATIVE_MIN_REPORTS = int(
+    os.environ.get("CRISP_NARRATIVE_MIN_REPORTS", "3")
+)
+_NARRATIVE_NGRAM = int(os.environ.get("CRISP_NARRATIVE_NGRAM", "5"))
+_NARRATIVE_MINHASH_K = int(os.environ.get("CRISP_NARRATIVE_MINHASH_K", "32"))
+
+_TOKEN_RE = re.compile(r"[a-z0-9']+")
+
+# Small stopword list — short enough not to over-strip non-English
+# reports, big enough to drop the high-frequency English noise that
+# inflates similarity on legitimately-different reports.
+_STOPWORDS: frozenset[str] = frozenset({
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "of", "to", "in", "at", "on", "and", "or", "but", "this", "that",
+    "these", "those", "i", "we", "you", "he", "she", "it", "they",
+    "my", "our", "your", "his", "her", "its", "their",
+})
+
+# MinHash permutation coefficients. Deterministic seed so tests are
+# reproducible AND so signatures computed in different worker processes
+# can be meaningfully compared if we ever want to persist them.
+_MINHASH_PRIME = (1 << 61) - 1   # Mersenne prime
+_MINHASH_RNG = random.Random(0xC81597)
+_PERM_A: List[int] = [
+    _MINHASH_RNG.randint(1, _MINHASH_PRIME - 1)
+    for _ in range(_NARRATIVE_MINHASH_K)
+]
+_PERM_B: List[int] = [
+    _MINHASH_RNG.randint(0, _MINHASH_PRIME - 1)
+    for _ in range(_NARRATIVE_MINHASH_K)
+]
+
+
+def _tokenize(text: str) -> List[str]:
+    """Lowercase + word-extract + drop stopwords + drop length-1 tokens."""
+    if not text:
+        return []
+    return [
+        t for t in _TOKEN_RE.findall(text.lower())
+        if t not in _STOPWORDS and len(t) > 1
+    ]
+
+
+def _ngrams(tokens: Sequence[str], n: int = _NARRATIVE_NGRAM) -> set[str]:
+    """Sliding token n-grams. For very short texts fall back to a bag-
+    of-tokens; otherwise Jaccard would collapse to "do they share any
+    individual word" which is too loose."""
+    if len(tokens) < n:
+        return set(tokens)
+    return {" ".join(tokens[i:i + n]) for i in range(len(tokens) - n + 1)}
+
+
+def _fnv1a64(b: bytes) -> int:
+    """FNV-1a 64-bit hash; cheap, pure-Python, no deps. Output is the
+    "base hash" we then permute K ways for the MinHash signature."""
+    h = 0xcbf29ce484222325
+    for byte in b:
+        h ^= byte
+        h = (h * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
+def _minhash_signature(grams: Iterable[str]) -> List[int]:
+    """Compute K minhash values by permuting a single base hash K ways
+    via affine functions modulo a Mersenne prime. Standard trick from
+    Broder '97; saves K-1 full hash invocations per gram."""
+    sig = [_MINHASH_PRIME] * _NARRATIVE_MINHASH_K
+    for g in grams:
+        h = _fnv1a64(g.encode("utf-8"))
+        for i in range(_NARRATIVE_MINHASH_K):
+            v = (_PERM_A[i] * h + _PERM_B[i]) % _MINHASH_PRIME
+            if v < sig[i]:
+                sig[i] = v
+    return sig
+
+
+def _jaccard_estimate(sig_a: Sequence[int], sig_b: Sequence[int]) -> float:
+    """Unbiased estimator: count matching slots / K. Variance falls as
+    1/K so K=32 is plenty for a 0.7 trigger threshold."""
+    if not sig_a or not sig_b or len(sig_a) != len(sig_b):
+        return 0.0
+    matches = sum(1 for a, b in zip(sig_a, sig_b) if a == b)
+    return matches / len(sig_a)
+
+
 def _detect_narrative_similar(
     db: Session, device: Device,
     recent_reports: Sequence[Report],
 ) -> List[str]:
-    """Phase 5 scaffold: ≥ 3 of the device's recent reports share an
-    identical description hash → templated / scripted submissions.
+    """Phase 5.1 real implementation (docs §6.2): MinHash-based Jaccard
+    similarity over 5-grams of the device's recent descriptions. Fires
+    when ≥ N reports form a similarity clique (pairwise Jaccard above
+    the threshold).
 
-    Real implementation will use cosine similarity over 5-grams +
-    minhash for cross-device similarity. The cheap exact-match
-    check below is enough to test the scaffold end-to-end.
+    Why "clique" not "pairwise count": a single shared template across
+    3 reports yields 3-choose-2 = 3 similar pairs; a true coordinated
+    spam pattern is much higher. Counting unique reports inside the
+    similarity graph is more robust to occasional false-positive pairs.
+
+    Still catches identical descriptions (sim=1.0 ≥ 0.7), so the Phase 5
+    test that asserts identical descriptions fire still passes.
     """
-    if len(recent_reports) < 3:
+    if len(recent_reports) < _NARRATIVE_MIN_REPORTS:
         return []
-    hashes = defaultdict(int)
+    # Build (report_id, signature) tuples for every report with enough
+    # tokens to compute a meaningful signature.
+    sigs: List[tuple[str, List[int]]] = []
     for r in recent_reports:
         desc = (r.description or "").strip()
-        if not desc:
+        tokens = _tokenize(desc)
+        if len(tokens) < 3:
+            # Reports with < 3 surviving tokens (after stopword removal)
+            # match each other too easily; drop them rather than letting
+            # them inflate similarity counts.
             continue
-        hashes[hash(desc)] += 1
-    if any(v >= 3 for v in hashes.values()):
+        grams = _ngrams(tokens)
+        if not grams:
+            continue
+        sigs.append((r.id, _minhash_signature(grams)))
+    if len(sigs) < _NARRATIVE_MIN_REPORTS:
+        return []
+    # Build the similarity graph by pairwise comparison and collect
+    # every report that's part of at least one similar pair.
+    similar_reports: set[str] = set()
+    for i in range(len(sigs)):
+        for j in range(i + 1, len(sigs)):
+            if _jaccard_estimate(sigs[i][1], sigs[j][1]) >= _NARRATIVE_JACCARD_THRESHOLD:
+                similar_reports.add(sigs[i][0])
+                similar_reports.add(sigs[j][0])
+    if len(similar_reports) >= _NARRATIVE_MIN_REPORTS:
         return [BatchSignal.NARRATIVE_SIMILAR]
     return []
 

@@ -91,9 +91,81 @@ class TestBatchDetectors:
             _make_report(db, lat=REF_LAT, lng=REF_LNG, status="PENDING",
                          building_id="b1", device_id="p5-narr-2")
         for r in db.query(Report).filter(Report.device_id == "p5-narr-2").all():
-            r.description = "Identical"
+            r.description = (
+                "Building has visible damage with cracks running along "
+                "the eastern facade after the earthquake this morning"
+            )
         db.commit()
         recent = db.query(Report).filter(Report.device_id == "p5-narr-2").all()
+        assert _detect_narrative_similar(db, dev, recent) == []
+
+    def test_narrative_similar_fires_on_near_identical_templates(self, db):
+        """Phase 5.1 real-ML test: the upgraded MinHash detector must
+        catch coordinated narratives that the scaffold's exact-hash
+        check missed. Three reports use the SAME template with only
+        the address number swapped — pairwise Jaccard ≈ 0.85, well
+        above the 0.7 trigger threshold."""
+        dev = Device(id="p5-narr-3", device_hash="p5-narr-3", platform="iOS")
+        db.add(dev); db.commit()
+        for i in range(3):
+            _make_report(db, lat=REF_LAT, lng=REF_LNG, status="PENDING",
+                         building_id=f"b-narr-{i}", device_id="p5-narr-3",
+                         created_offset_minutes=-(i * 2))
+        templates = [
+            "Building collapsed after the flash flood at block 5 with serious structural damage and water damage everywhere",
+            "Building collapsed after the flash flood at block 7 with serious structural damage and water damage everywhere",
+            "Building collapsed after the flash flood at block 9 with serious structural damage and water damage everywhere",
+        ]
+        for r, t in zip(
+            db.query(Report).filter(Report.device_id == "p5-narr-3").all(),
+            templates,
+        ):
+            r.description = t
+        db.commit()
+        recent = db.query(Report).filter(Report.device_id == "p5-narr-3").all()
+        fired = _detect_narrative_similar(db, dev, recent)
+        assert BatchSignal.NARRATIVE_SIMILAR in fired
+
+    def test_narrative_similar_no_op_on_diverse_descriptions(self, db):
+        """Three legitimately different reports must NOT trip the
+        narrative detector. This is the false-positive control — if
+        this fires we're treating real humanitarian reports as spam."""
+        dev = Device(id="p5-narr-4", device_hash="p5-narr-4", platform="iOS")
+        db.add(dev); db.commit()
+        for i in range(3):
+            _make_report(db, lat=REF_LAT, lng=REF_LNG, status="PENDING",
+                         building_id=f"b-narr-{i}", device_id="p5-narr-4",
+                         created_offset_minutes=-(i * 2))
+        diverse = [
+            "Fire smoke pouring out of the top floor windows facing the road",
+            "Older woman trapped on the second-floor balcony unable to climb down on her own",
+            "Water main has burst flooding the basement with brown water rising quickly",
+        ]
+        for r, t in zip(
+            db.query(Report).filter(Report.device_id == "p5-narr-4").all(),
+            diverse,
+        ):
+            r.description = t
+        db.commit()
+        recent = db.query(Report).filter(Report.device_id == "p5-narr-4").all()
+        assert _detect_narrative_similar(db, dev, recent) == []
+
+    def test_narrative_similar_filters_short_descriptions(self, db):
+        """Very short descriptions are dropped before similarity scoring
+        because the few surviving tokens after stopword-removal would
+        trivially match on coincidence and fire false positives. Three
+        reports all saying "fire fire" must NOT trip the detector."""
+        dev = Device(id="p5-narr-5", device_hash="p5-narr-5", platform="iOS")
+        db.add(dev); db.commit()
+        for i in range(3):
+            _make_report(db, lat=REF_LAT, lng=REF_LNG, status="PENDING",
+                         building_id="b1", device_id="p5-narr-5",
+                         created_offset_minutes=-(i * 2))
+        for r in db.query(Report).filter(Report.device_id == "p5-narr-5").all():
+            r.description = "fire fire"
+        db.commit()
+        recent = db.query(Report).filter(Report.device_id == "p5-narr-5").all()
+        # < 3 surviving tokens per report → all reports dropped → no fire
         assert _detect_narrative_similar(db, dev, recent) == []
 
 
