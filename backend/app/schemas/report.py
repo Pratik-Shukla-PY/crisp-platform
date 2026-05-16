@@ -636,26 +636,41 @@ class ClusterResponse(BaseModel):
 # holds if this schema doesn't widen its surface.
 
 class ReportNearbyGroup(BaseModel):
-    """One aggregate row in the nearby intel response. Each group
-    represents 3+ reports (k-anonymity floor) tagged to either a
-    shared building footprint (`kind=building`) or a crisis-type
-    grid cell (`kind=crisis_cluster`)."""
+    """One aggregate row in the nearby intel response. Each group is
+    tagged to either a shared building footprint (`kind=building`),
+    a crisis-type grid cell (`kind=crisis_cluster`), or — Phase 1
+    (May 2026) — a recently-resolved cluster (`kind=resolved_recent`)
+    surfaced for the "Recently Resolved" subtotal.
+
+    Phase 1 added: `tier`, `is_burst`, `is_acute`, `acute_grade`,
+    `crisis_ttl_hours`, `coarse_crisis_category`, `responding_count`,
+    `resolved_count`. See docs/NEARBY_REPORTS_PIPELINE.md §3.2, §3.5,
+    §3.6, §10."""
     id: str
-    kind: str                        # "building" | "crisis_cluster"
+    kind: str                        # "building" | "crisis_cluster" | "resolved_recent"
     label: str                       # building name OR "Near {lat,lng}" fallback
     summary: str                     # English fallback — "Flooded" / "Bridge Collapsed"
     summary_key: str                 # i18n key for client-side localization
-    count: int                       # device-deduped report count (≥ 3 per k-anonymity)
+    count: int                       # device-deduped report count
     verified_count: int
     pending_count: int
+    responding_count: int = 0        # NEW (Phase 1) — RESPONDING reports surfaced
+    resolved_count: int = 0          # NEW (Phase 1) — RESOLVED reports within 24-h retention
     approx_distance_km: float        # caller → centroid, 2dp
     centroid_lat: float              # group centroid (mean of bucket), 4dp
     centroid_lng: float              # group centroid (mean of bucket), 4dp
     latest_at: datetime              # most-recent report timestamp, minute-truncated
     earliest_at: datetime            # oldest report timestamp, minute-truncated
-    crisis_types: List[str]          # top-3 most common, sorted by frequency
+    crisis_types: List[str]          # top-3 most common, sorted by frequency. For tier='weak' this is COLLAPSED to [coarse_crisis_category] for privacy (docs §10).
     damage_classes: List[str]        # top-3 most common, sorted by frequency
     severity_max: str                # highest severity in the bucket
+    # ── Phase 1 additions ─────────────────────────────────────────────
+    tier: str = 'verified'                 # 'weak' | 'emerging' | 'verified' (docs §3.2)
+    is_burst: bool = False                 # ≥ T3 reports inside BURST_WINDOW_MIN (docs §3.5)
+    is_acute: bool = False                 # ≥ ACUTE_REPORTS_THRESHOLD inside ACUTE_WINDOW_MIN
+    acute_grade: Optional[str] = None      # 'high' | 'low' | None (Phase 2 trust-grades it)
+    crisis_ttl_hours: int = 24             # CRISIS_RULES[crisis].t3_max_hours — UI lifetime hint
+    coarse_crisis_category: str = 'OTHER'  # 'FLOOD'|'FIRE'|'INFRASTRUCTURE'|'OTHER' — T1 privacy
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -664,10 +679,21 @@ class ReportNearbyResponse(BaseModel):
     """Wrapper for the nearby endpoint. `user_location` echoes the
     caller's rounded coords so the client can validate it's getting
     the response for the right query (defends against a misaligned
-    cache returning stale data for a different bucket)."""
+    cache returning stale data for a different bucket).
+
+    Phase 1 (May 2026) added `recently_resolved_groups` —
+    RESOLVED clusters within RESOLVED_RECENT_RETENTION_HOURS are
+    returned SEPARATELY from `groups` so the client renders them in a
+    standalone "Recently Resolved" subtotal line instead of inflating
+    the active-incident count (docs §3.6, §4.1). The
+    `citizen_t1_visibility` field echoes the deployment-config so the
+    client can suppress T1 rendering when this flag is `false`."""
     user_location: dict              # {lat: float, lng: float} — echoed
     radius_km: float
     as_of: datetime                  # server clock at query time
-    groups: List[ReportNearbyGroup]
-    total_groups: int                # before `limit` truncation
-    total_reports: int               # before grouping
+    groups: List[ReportNearbyGroup]                          # ACTIVE clusters (T1/T2/T3)
+    recently_resolved_groups: List[ReportNearbyGroup] = []   # NEW (Phase 1) — kind='resolved_recent'
+    total_groups: int                # active groups before `limit` truncation
+    total_resolved_recent: int = 0   # NEW (Phase 1) — count of recently_resolved_groups
+    total_reports: int               # all reports inside bbox+radius+age (active + resolved-recent)
+    citizen_t1_visibility: bool = True  # NEW (Phase 1) — echoed deployment flag (docs §14)

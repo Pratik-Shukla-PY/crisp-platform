@@ -318,29 +318,61 @@
     // Tap → bottom-sheet slides up with the grouped rows. Tap a row
     // in that sheet → existing detail sheet for the group + actions.
 
+    // ── Tier helpers (Phase 1, May 2026 — docs §3.2 + §4.1) ──────────
+    // Three tiers: 'weak' (single-witness, < 30min), 'emerging' (2+
+    // devices OR stale single), 'verified' (3+ devices). Highest
+    // tier present in the response drives the block's visual.
+    const _TIER_RANK = { weak: 1, emerging: 2, verified: 3 };
+    function _highestTier(groups) {
+        let best = null;
+        let bestRank = 0;
+        for (const g of groups) {
+            const r = _TIER_RANK[g.tier] || 0;
+            if (r > bestRank) { bestRank = r; best = g.tier; }
+        }
+        return best;   // null when groups list is empty
+    }
+
     function _buildNumberBlock(payload) {
         const groups = (payload && payload.groups) || [];
         const totalReports = groups.reduce((sum, g) => sum + (g.count || 0), 0);
         const totalGroups = groups.length;
+        // Phase 1 — tier-driven visual treatment
+        const dominantTier = _highestTier(groups) || 'weak';
+        const isAcute = groups.some((g) => g.is_acute);
 
         const block = document.createElement('button');
         block.type = 'button';
-        block.className = 'home-nearby-number-block';
+        block.className = 'home-nearby-number-block is-tier-' + dominantTier
+            + (isAcute ? ' is-acute' : '');
         block.id = 'home-nearby-number-block';
+
+        // Per-tier ARIA label so screen readers read the confidence
+        // calibration alongside the count.
+        const tierLabelKey =
+            dominantTier === 'verified' ? 'nearby_tier_verified_label' :
+            dominantTier === 'emerging' ? 'nearby_tier_emerging_label' :
+                                          'nearby_tier_weak_label';
+        const tierLabel = _t(tierLabelKey,
+            dominantTier === 'verified' ? 'Verified Nearby Incident' :
+            dominantTier === 'emerging' ? 'Emerging Reports' :
+                                          'Weak Signal');
         block.setAttribute(
             'aria-label',
-            _t('nearby_count_reports', '{n} reports').replace('{n}', String(totalReports))
-            + ' — ' + _t('nearby_eyebrow', 'NEARBY REPORTS')
+            tierLabel + ' — '
+            + _t('nearby_count_reports', '{n} reports').replace('{n}', String(totalReports))
         );
 
-        const labelText = _t('nearby_reports_nearby_label', 'reports nearby');
+        const subLabelText = _t('nearby_reports_nearby_label', 'reports nearby');
 
         block.innerHTML = `
             <span class="home-nearby-pulse-halo" aria-hidden="true"></span>
             <span class="home-nearby-pulse-halo is-secondary" aria-hidden="true"></span>
             <span class="home-nearby-number" id="home-nearby-number">${_esc(String(totalReports))}</span>
-            <span class="home-nearby-number-sub">${_esc(labelText)}</span>
+            <span class="home-nearby-number-sub">${_esc(subLabelText)}</span>
             <span class="home-nearby-number-groups">${_esc(_pluralizeGroups(totalGroups))}</span>
+            <span class="home-nearby-tier-pill home-nearby-tier-pill--${dominantTier}"
+                  aria-hidden="true">${_esc(tierLabel)}</span>
         `;
 
         block.addEventListener('click', (e) => {
@@ -379,6 +411,29 @@
 
     // ── Rendering ────────────────────────────────────────────────────
 
+    /**
+     * Phase 1 (May 2026 — docs §3.6, §4.1) — render the
+     * "Recently Resolved: N" subtotal line ALWAYS-SEPARATE from
+     * the active count. Returns an element or null when nothing to
+     * render.
+     */
+    function _buildResolvedSubtotal(payload) {
+        const resolved = (payload && payload.recently_resolved_groups) || [];
+        if (!resolved.length) return null;
+        const totalResolved = resolved.reduce(
+            (sum, g) => sum + (g.resolved_count || g.count || 0),
+            0
+        );
+        const el = document.createElement('div');
+        el.className = 'home-nearby-resolved-subtotal';
+        el.innerHTML = `
+            <span class="home-nearby-resolved-label">${_esc(_t('nearby_recently_resolved_label', 'Recently Resolved'))}</span>
+            <span class="home-nearby-resolved-count">${_esc(String(totalResolved))}</span>
+            <span class="home-nearby-resolved-sub">${_esc(_t('nearby_recently_resolved_sub', '{n} resolved in the last 24 hours').replace('{n}', String(totalResolved)))}</span>
+        `;
+        return el;
+    }
+
     function _renderInto(container, payload, opts) {
         container.innerHTML = '';
 
@@ -392,11 +447,23 @@
             // see styles.css) is applied to `.home-nearby-empty-body`
             // and renders cleanly without any container chrome.
             container.appendChild(_buildEmptyState());
+            // Even when there are no ACTIVE groups, the Recently
+            // Resolved subtotal may still apply (a cluster resolved
+            // in the past 24h — closure feedback).
+            const resolvedEl = _buildResolvedSubtotal(payload);
+            if (resolvedEl) container.appendChild(resolvedEl);
             return;
         }
 
         // v8 — single aggregate number block (not per-group rows).
         container.appendChild(_buildNumberBlock(payload));
+
+        // Phase 1 (May 2026 — docs §3.6, §4.1) — separate
+        // "Recently Resolved: N" subtotal line below the active block.
+        // Operator-stated: never fold into the big number; honest
+        // closure feedback.
+        const resolvedEl = _buildResolvedSubtotal(payload);
+        if (resolvedEl) container.appendChild(resolvedEl);
 
         // Optional "Last seen X min ago" caption beneath the block
         // when the payload came from the IDB cache (offline path).

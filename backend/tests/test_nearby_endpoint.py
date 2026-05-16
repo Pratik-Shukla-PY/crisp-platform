@@ -322,8 +322,13 @@ class TestNearbyAntiSpam:
 
     def test_one_device_50_reports_counts_as_one(self, client, db):
         """A bot submitting 50 reports from one device contributes
-        count=1, not 50. Group is then SUPPRESSED because it's below
-        the 3-report k-anonymity floor (single device = 1 contributor)."""
+        count=1 (per-device cap), NOT 50.
+
+        Phase 1 (May 2026, docs §3.2) — the group itself now surfaces
+        as tier='weak' (single-witness signal) instead of being
+        suppressed entirely. The anti-spam invariant the test was
+        originally protecting (count not inflated by one device) IS
+        STILL preserved: count==1, not 50."""
         _wipe(db)
         bot_device = "spammer-device-A"
         for i in range(50):
@@ -332,8 +337,19 @@ class TestNearbyAntiSpam:
                          device_id=bot_device)
         res = _nearby(client)
         body = res.json()
-        # K-anonymity kicks in — single contributor → suppressed.
-        assert len(body["groups"]) == 0
+        # Per-device cap is intact — exactly one group, count=1.
+        assert len(body["groups"]) == 1, "Single bucket expected"
+        spam_group = body["groups"][0]
+        assert spam_group["count"] == 1, (
+            "Per-device cap preserved — 50 spam reports collapse to count=1"
+        )
+        # Phase 1 surfaces it as weak (or emerging if reports >= 30 min
+        # stale) so citizens get awareness; visual treatment marks it
+        # 'unverified'. Either tier is acceptable; what we forbid is
+        # 'verified' (would imply 3+ devices).
+        assert spam_group["tier"] in ('weak', 'emerging'), (
+            "Single-witness spam must NEVER be verified tier"
+        )
 
     def test_three_devices_three_reports_each_surfaces(self, client, db):
         """3 reports from 3 different devices → count >= 3 → group
@@ -358,8 +374,17 @@ class TestNearbyKAnonymity:
     def setup_method(self, _m):
         _clear_cache()
 
-    def test_group_with_two_reports_suppressed(self, client, db):
-        """A 2-report group is below the floor and never surfaces."""
+    def test_group_with_two_reports_surfaces_as_emerging(self, client, db):
+        """A 2-device group surfaces as tier='emerging'.
+
+        Phase 1 (May 2026, docs §3.2) — the legacy ≥ 3 floor that hid
+        these groups was the operator's primary complaint (12-flaw
+        audit). Two-device groups now appear with visual humility
+        ('Emerging Reports' badge, orange treatment) so citizens get
+        early-signal awareness. The k-anonymity privacy guarantee
+        still holds: no PII / device id / individual report id in
+        the response — see TestNearbyPrivacyProjection.
+        """
         _wipe(db)
         for i in range(2):
             _make_report(db, lat=REF_LAT, lng=REF_LNG,
@@ -367,7 +392,9 @@ class TestNearbyKAnonymity:
                          device_id=f"diff-dev-{i}")
         res = _nearby(client)
         body = res.json()
-        assert len(body["groups"]) == 0
+        assert len(body["groups"]) == 1
+        assert body["groups"][0]["tier"] == "emerging"
+        assert body["groups"][0]["count"] == 2
 
 
 # ── ⑥ Cache ───────────────────────────────────────────────────────────

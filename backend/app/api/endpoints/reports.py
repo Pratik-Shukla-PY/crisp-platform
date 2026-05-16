@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, func as sa_func
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.report import (
     Device, Report, Location, Media, MediaChunk, AIAnalysis,
@@ -28,6 +29,7 @@ from app.schemas.report import (
 )
 from app.services.nearby_aggregator import (
     aggregate_nearby, bbox_for_radius, haversine_km,
+    RESOLVED_RECENT_RETENTION_HOURS,
     NearbyReportInput,
 )
 from app.services.ai_service import ai_service
@@ -3770,18 +3772,46 @@ def get_nearby_reports(
     # scan further.
     age_cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
 
-    # Surface VERIFIED + PENDING only (operator approved INCLUDE
-    # PENDING with a ⏳ badge). Explicitly exclude REJECTED, DUPLICATE,
-    # FALSE_ALARM — these are spam / mis-reports and must not show up.
+    # Phase 1 (May 2026, docs §3.6) — status whitelist EXPANDED:
+    #   • VERIFIED, PENDING  — active reports needing attention (kept)
+    #   • RESPONDING         — responders active; gives citizens
+    #                          transparency that help is en route
+    #   • RESOLVED           — KEPT only if within RESOLVED_RECENT
+    #                          retention window (additional SQL clause
+    #                          below); aggregator re-tags these as
+    #                          kind='resolved_recent' and the endpoint
+    #                          surfaces them in a SEPARATE
+    #                          `recently_resolved_groups` list so the
+    #                          UI shows "Recently Resolved: N" as a
+    #                          subtotal (does NOT inflate active count).
+    # Explicitly EXCLUDED: REJECTED, DUPLICATE, FALSE_ALARM
+    # (spam / mis-reports — privacy + abuse-suppression invariant).
+    resolved_cutoff = datetime.now(timezone.utc) - timedelta(
+        hours=RESOLVED_RECENT_RETENTION_HOURS
+    )
     q = (
         db.query(Report)
           .join(Location, Location.report_id == Report.id)
           .filter(Location.latitude.between(lat_min, lat_max))
           .filter(Location.longitude.between(lng_min, lng_max))
-          .filter(Report.status.in_([
-              ReportStatusEnum.VERIFIED,
-              ReportStatusEnum.PENDING,
-          ]))
+          .filter(
+              # ACTIVE statuses or RESOLVED within retention only.
+              # Without the explicit RESOLVED age clamp, very-old
+              # RESOLVED reports (months old) would still enter the
+              # aggregator and surface under their default `kind`
+              # (building / crisis_cluster) instead of being dropped.
+              or_(
+                  Report.status.in_([
+                      ReportStatusEnum.VERIFIED,
+                      ReportStatusEnum.PENDING,
+                      ReportStatusEnum.RESPONDING,
+                  ]),
+                  and_(
+                      Report.status == ReportStatusEnum.RESOLVED,
+                      Report.server_created_at >= resolved_cutoff,
+                  ),
+              )
+          )
           .filter(Report.deletion_requested_at == None)
           .filter(Report.server_created_at >= age_cutoff)
           .options(joinedload(Report.location))
@@ -3829,25 +3859,63 @@ def get_nearby_reports(
         max_groups=limit,
     )
 
+    # Phase 1 (May 2026, docs §3.2 + §3.6 + §14) — split aggregator
+    # output into ACTIVE vs RECENTLY-RESOLVED, and gate T1 (weak)
+    # groups behind the deployment flag for anonymous (citizen)
+    # callers. Admins always see T1.
+    #
+    # Authentication detection: any caller carrying a valid JWT is
+    # treated as a non-citizen for visibility purposes. This is
+    # intentionally permissive — any authenticated user gets richer
+    # data; the deployment-flag suppression only protects the
+    # anonymous / first-time citizen path.
+    is_anonymous_caller = "authorization" not in {
+        k.lower() for k in request.headers.keys()
+    }
+    suppress_t1 = (
+        is_anonymous_caller
+        and not settings.CRISP_CITIZEN_T1_VISIBILITY
+    )
+
+    def _to_schema(g) -> ReportNearbyGroup:
+        return ReportNearbyGroup(
+            id=g.id, kind=g.kind, label=g.label, summary=g.summary,
+            summary_key=g.summary_key, count=g.count,
+            verified_count=g.verified_count, pending_count=g.pending_count,
+            responding_count=g.responding_count, resolved_count=g.resolved_count,
+            approx_distance_km=g.approx_distance_km,
+            centroid_lat=g.centroid_lat, centroid_lng=g.centroid_lng,
+            latest_at=g.latest_at, earliest_at=g.earliest_at,
+            crisis_types=g.crisis_types, damage_classes=g.damage_classes,
+            severity_max=g.severity_max,
+            tier=g.tier,
+            is_burst=g.is_burst,
+            is_acute=g.is_acute,
+            acute_grade=g.acute_grade,
+            crisis_ttl_hours=g.crisis_ttl_hours,
+            coarse_crisis_category=g.coarse_crisis_category,
+        )
+
+    active_groups = []
+    resolved_recent_groups = []
+    for g in groups:
+        if suppress_t1 and g.tier == 'weak':
+            continue
+        if g.kind == 'resolved_recent':
+            resolved_recent_groups.append(_to_schema(g))
+        else:
+            active_groups.append(_to_schema(g))
+
     payload = ReportNearbyResponse(
         user_location={"lat": lat_r, "lng": lng_r},
         radius_km=radius_km,
         as_of=datetime.now(timezone.utc),
-        groups=[
-            ReportNearbyGroup(
-                id=g.id, kind=g.kind, label=g.label, summary=g.summary,
-                summary_key=g.summary_key, count=g.count,
-                verified_count=g.verified_count, pending_count=g.pending_count,
-                approx_distance_km=g.approx_distance_km,
-                centroid_lat=g.centroid_lat, centroid_lng=g.centroid_lng,
-                latest_at=g.latest_at, earliest_at=g.earliest_at,
-                crisis_types=g.crisis_types, damage_classes=g.damage_classes,
-                severity_max=g.severity_max,
-            )
-            for g in groups
-        ],
-        total_groups=len(groups),
+        groups=active_groups,
+        recently_resolved_groups=resolved_recent_groups,
+        total_groups=len(active_groups),
+        total_resolved_recent=len(resolved_recent_groups),
         total_reports=len(inputs),
+        citizen_t1_visibility=settings.CRISP_CITIZEN_T1_VISIBILITY,
     )
 
     # Cache for 90 s. Capped at 1000 entries to bound memory; LRU-ish

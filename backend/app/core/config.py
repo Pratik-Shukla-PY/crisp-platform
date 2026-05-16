@@ -83,6 +83,22 @@ class Settings(BaseSettings):
     # gets degraded availability instead of an outage.
     REDIS_URL: str = ""
 
+    # ── Nearby Reports — citizen T1 visibility (Phase 1, May 2026) ──────
+    # See docs/NEARBY_REPORTS_PIPELINE.md §3.2 + §14.
+    # When `true` (default) citizens see Tier-1 ("Weak Signal") groups
+    # in the nearby module with explicit "Unverified" visual treatment.
+    # When `false`, T1 groups are suppressed from the citizen-facing
+    # response — useful for sensitive regions (active conflict, rumour-
+    # sensitive markets) where single-witness signals could cause panic
+    # or be weaponised as misinformation. Admins ALWAYS see T1
+    # regardless of this flag (they need the raw view for triage).
+    #
+    # The flag is echoed in the `/api/v1/reports/nearby` response so
+    # the PWA frontend can render accordingly without needing a
+    # separate config fetch. Also exposed via `/api/v1/config` for
+    # boot-time client setup.
+    CRISP_CITIZEN_T1_VISIBILITY: bool = True
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

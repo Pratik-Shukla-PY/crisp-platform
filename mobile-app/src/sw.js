@@ -5,8 +5,48 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v204';
-// v203 → v204 (May 2026 — iPhone 14 mobile UI fixes + nearby UX):
+const CACHE_NAME = 'crisp-v205';
+// v204 → v205 (May 2026 — Nearby Reports Phase 1, see
+// docs/NEARBY_REPORTS_PIPELINE.md §15):
+//   First implementation slice of the operator-approved redesign of
+//   the nearby pipeline. Changes shipped:
+//     • RESPONDING reports now SURFACE in the nearby module (was
+//       excluded pre-Phase-1) with a 'responders active' status
+//       count exposed on every group — transparency win.
+//     • RESOLVED reports within 24h of close surface in a NEW
+//       `recently_resolved_groups` channel rendered as a separate
+//       "Recently Resolved: N" subtotal line. NEVER folded into the
+//       active big number — honest closure feedback per operator.
+//     • Confidence tiers (weak / emerging / verified) replace the
+//       binary k-anonymity-≥-3 hide. Single-witness reports now
+//       surface as 'weak' with explicit "Unverified" visual humility;
+//       2-device groups as 'emerging' (orange treatment); 3+ as
+//       'verified' (existing teal halo). Citizens get early-signal
+//       awareness while privacy invariants stay intact.
+//     • Crisis-type adaptive TTL per tier (CRISIS_RULES dict in
+//       backend) — FLOOD_FLASH expires fast, EARTHQUAKE persists.
+//       Client surfaces `crisis_ttl_hours` per group.
+//     • Coarse crisis category (FLOOD/FIRE/INFRASTRUCTURE/OTHER)
+//       collapsed for weak-tier groups so a single-reporter's
+//       specific crisis_type can't be triangulated.
+//     • Temporal burst detection (`is_burst`) for groups with ≥ 3
+//       reports in 1 h; `is_acute` for ≥ 5 in 15 min (Phase 2 will
+//       grade HIGH/LOW for push notification routing).
+//     • Per-tier visual treatment in nearby.js: weak (small grey
+//       halo + muted number + "Weak Signal" pill), emerging (orange
+//       halo + "Emerging Reports" pill), verified (existing teal
+//       + "Verified Nearby Incident" pill). Recently-Resolved
+//       subtotal renders below the active number block.
+//     • Deployment-config flag `CRISP_CITIZEN_T1_VISIBILITY` (env)
+//       lets sensitive-region deployments suppress weak-tier groups
+//       from anonymous citizen responses; admins always see them.
+//       Flag echoed in the response + exposed via new
+//       `/api/v1/config/` endpoint for boot-time client discovery.
+//     • 10 new i18n keys across 6 UN locales (en/ar/zh/es/fr/ru)
+//       for tier labels + "Recently Resolved" subtitle.
+//   Phase 2-5 are queued per the doc's §15 roadmap (clustering &
+//   lifecycle → trust + offline → high-density + appeals → batch
+//   fraud + geospatial scaling).
 //   Three operator-reported issues from a real iPhone 14 PWA:
 //     1. The CLS-fix CSS rule (visibility:hidden + opacity:0 on
 //        `.home-action-tile[hidden]`) reserved a slot for the install

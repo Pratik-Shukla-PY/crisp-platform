@@ -11716,6 +11716,119 @@ body { background-color: #10284a; }
     transform: scale(0.985);
 }
 
+/* ── Phase 1 (May 2026, docs §3.2 + §4.1) — confidence-tier visuals ──
+   Three modifier classes on `.home-nearby-number-block` driven by
+   the dominant tier present in the response. Each tier carries its
+   own halo colour + a small tier-label pill so citizens read the
+   confidence calibration before they read the count.
+   The defaults below preserve the current visual for the verified
+   tier (operator's existing UX); weak + emerging get progressively
+   softer treatments to match "we're not sure yet" honesty.       */
+
+.home-stage .home-nearby-number-block.is-tier-weak {
+    /* Weak signal — minimal halo intensity, slightly muted number */
+    opacity: 0.85;
+}
+.home-stage .home-nearby-number-block.is-tier-weak .home-nearby-pulse-halo {
+    border-color: rgba(160, 160, 160, 0.28);
+    background: radial-gradient(circle at center,
+        rgba(160, 160, 160, 0.06) 0%,
+        transparent 70%);
+}
+.home-stage .home-nearby-number-block.is-tier-weak .home-nearby-number {
+    color: rgba(255, 255, 255, 0.72);
+}
+
+.home-stage .home-nearby-number-block.is-tier-emerging .home-nearby-pulse-halo {
+    /* Emerging — amber/orange halo so it reads as "active but
+       unconfirmed". Brighter than weak, softer than verified. */
+    border-color: rgba(245, 158, 11, 0.42);
+    background: radial-gradient(circle at center,
+        rgba(245, 158, 11, 0.12) 0%,
+        transparent 70%);
+}
+
+.home-stage .home-nearby-number-block.is-tier-verified .home-nearby-pulse-halo {
+    /* Verified — keep the existing teal/green halo (the current
+       behaviour pre-Phase-1). Restated explicitly so future tweaks
+       to the base rule don't accidentally desaturate this tier. */
+    border-color: rgba(70, 223, 177, 0.32);
+    background: radial-gradient(circle at center,
+        rgba(70, 223, 177, 0.10) 0%,
+        transparent 70%);
+}
+
+/* Acute spike — overlay a brighter red pulse regardless of tier.
+   Phase 2 will grade this into HIGH vs LOW confidence (docs §3.5);
+   Phase 1 surfaces the boolean as a uniform "surge" treatment. */
+.home-stage .home-nearby-number-block.is-acute .home-nearby-pulse-halo {
+    border-color: rgba(239, 68, 68, 0.55);
+    box-shadow: 0 0 24px rgba(239, 68, 68, 0.32);
+}
+
+/* Tier label pill — small chip beneath the count. Calm + factual,
+   never alarming, per docs §4.2. */
+.home-stage .home-nearby-tier-pill {
+    margin-top: 6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.home-stage .home-nearby-tier-pill--weak {
+    background: rgba(160, 160, 160, 0.16);
+    border: 1px solid rgba(160, 160, 160, 0.32);
+    color: rgba(255, 255, 255, 0.68);
+}
+.home-stage .home-nearby-tier-pill--emerging {
+    background: rgba(245, 158, 11, 0.16);
+    border: 1px solid rgba(245, 158, 11, 0.40);
+    color: #fbbf24;
+}
+.home-stage .home-nearby-tier-pill--verified {
+    background: rgba(70, 223, 177, 0.16);
+    border: 1px solid rgba(70, 223, 177, 0.40);
+    color: #5eead4;
+}
+
+/* Recently Resolved subtotal — sits BELOW the active number block.
+   Honest closure feedback that does NOT inflate the active count
+   (docs §3.6 — operator decision: never fold into the big number). */
+.home-stage .home-nearby-resolved-subtotal {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 8px 16px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.56);
+    font-size: 12px;
+    font-weight: 500;
+}
+.home-stage .home-nearby-resolved-label {
+    font-weight: 700;
+    font-size: 10.5px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.42);
+}
+.home-stage .home-nearby-resolved-count {
+    font-size: 18px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.74);
+}
+.home-stage .home-nearby-resolved-sub {
+    display: none;   /* desktop only; mobile shows label + count only */
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.40);
+}
+@media (min-width: 600px) {
+    .home-stage .home-nearby-resolved-sub { display: inline; }
+}
+
 /* Pulse halo behind the number — two concentric expanding rings,
    1.6 s offset so one is always mid-expansion. Same machinery as
    the v5 Phase 3 lives-saved pulse, restored here for the v8

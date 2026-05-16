@@ -40,20 +40,31 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
 
 # ── Tunable constants ──────────────────────────────────────────────────
 
-#: k-anonymity threshold — groups smaller than this are suppressed
-#: entirely so a single reporter's location can't be inferred from a
-#: group of size 1 or 2. Operator-approved default.
-MIN_GROUP_REPORTS = 3
+#: T3 (Verified) tier floor — groups need ≥ this many UNIQUE devices to
+#: render as a "Verified Nearby Incident". Was MIN_GROUP_REPORTS pre-Phase-1
+#: (May 2026) — the old single-floor model dropped all single-witness
+#: signals. New tiered model (see docs/NEARBY_REPORTS_PIPELINE.md §3.2):
+#: T1 = 1 device, T2 = 2 devices OR ≥ 30 min stale, T3 = ≥ 3 devices.
+T3_VERIFIED_FLOOR = 3
+T2_EMERGING_FLOOR = 2
+T1_WEAK_STALE_MIN = 30                # T2 promotion: T1 + ≥ this many minutes old
+
+#: Legacy alias — some external callers still pass `min_group_size`.
+#: Now defaults to T1_WEAK (= 1) so the aggregator surfaces every tier
+#: by default; the endpoint slices by tier afterwards based on caller
+#: identity (citizen vs admin vs deployment T1-visibility flag).
+MIN_GROUP_REPORTS = 1
 
 #: Anti-spam cap — a single device's contribution to a group's `count`
 #: is capped here, regardless of how many duplicates they submit. A
 #: bot submitting 50 reports from the same device shows up as 1.
+#: Phase 3 will replace this with trust-weighted contribution.
 PER_DEVICE_CONTRIBUTION_CAP = 1
 
 #: Fallback grid cell size (degrees) for reports without `building_id`.
@@ -61,6 +72,98 @@ PER_DEVICE_CONTRIBUTION_CAP = 1
 #: cluster doesn't span an entire neighbourhood, large enough that
 #: scattered street-level reports still aggregate.
 FALLBACK_CELL_SIZE_DEG = 0.002
+
+#: Temporal burst window — ≥ T3_VERIFIED_FLOOR reports inside this many
+#: minutes flips `is_burst=true`. Phase 2 introduces full HIGH/LOW
+#: grading; Phase 1 uses a simple count-in-window check.
+BURST_WINDOW_MIN = 60
+
+#: Acute spike window — ≥ ACUTE_REPORTS_THRESHOLD inside this many
+#: minutes flips `is_acute=true`. Drives the §8 notification policy.
+ACUTE_WINDOW_MIN = 15
+ACUTE_REPORTS_THRESHOLD = 5
+
+#: RESOLVED-recent retention — a group whose `latest_at` is within this
+#: many hours AND whose top status is RESOLVED stays in the response
+#: but with `kind="resolved_recent"` so the client renders it in the
+#: separate "Recently Resolved" subtotal line, NOT folded into the
+#: active count.
+RESOLVED_RECENT_RETENTION_HOURS = 24
+
+
+# ── Crisis-type adaptive rules (docs §3.3) ────────────────────────────
+#
+# Single source of truth for TTL (per tier) + preferred clustering
+# bucket per crisis_type. Used by the aggregator AND by the endpoint
+# (the endpoint's `max_age_hours` query param overrides as a ceiling
+# for backward compat; otherwise the rule's T3 max age caps recency).
+#
+# Tier TTLs: a report older than `T{n}_max_hours` cannot count toward
+# tier n. So a 25-h-old FLOOD-flash report can still keep a group at
+# T2 (T2 cap 24 h means it falls out — bumped to expire) but a 6 h
+# WILDFIRE report counts for T1 only (T1 cap 6h).
+
+@dataclass
+class CrisisRule:
+    t1_max_hours: int        # max age for a report to count toward T1
+    t2_max_hours: int        # max age for T2
+    t3_max_hours: int        # max age for T3 (and overall ceiling)
+    preferred_bucket: str    # 'building' | 'block' | 'area' — Phase 2 honours this
+
+
+CRISIS_RULES: dict[str, CrisisRule] = {
+    'FLOOD':              CrisisRule(t1_max_hours=24, t2_max_hours=72,   t3_max_hours=24 * 7,    preferred_bucket='area'),
+    'FLOOD_FLASH':        CrisisRule(t1_max_hours=6,  t2_max_hours=24,   t3_max_hours=72,        preferred_bucket='area'),
+    'FLOOD_RIVER':        CrisisRule(t1_max_hours=24, t2_max_hours=72,   t3_max_hours=24 * 7,    preferred_bucket='area'),
+    'EARTHQUAKE':         CrisisRule(t1_max_hours=24, t2_max_hours=24 * 7, t3_max_hours=24 * 14,  preferred_bucket='building'),
+    'WILDFIRE':           CrisisRule(t1_max_hours=6,  t2_max_hours=48,   t3_max_hours=24 * 7,    preferred_bucket='area'),
+    'LANDSLIDE':          CrisisRule(t1_max_hours=24, t2_max_hours=24 * 7, t3_max_hours=24 * 30,  preferred_bucket='area'),
+    'BUILDING_COLLAPSE':  CrisisRule(t1_max_hours=24, t2_max_hours=24 * 7, t3_max_hours=24 * 30,  preferred_bucket='building'),
+    'CIVIL_UNREST':       CrisisRule(t1_max_hours=2,  t2_max_hours=12,   t3_max_hours=48,        preferred_bucket='block'),
+    'CHEMICAL_INCIDENT':  CrisisRule(t1_max_hours=6,  t2_max_hours=48,   t3_max_hours=24 * 7,    preferred_bucket='area'),
+    'EXPLOSION':          CrisisRule(t1_max_hours=6,  t2_max_hours=48,   t3_max_hours=24 * 14,   preferred_bucket='block'),
+    'CONFLICT':           CrisisRule(t1_max_hours=6,  t2_max_hours=48,   t3_max_hours=24 * 30,   preferred_bucket='block'),
+}
+
+DEFAULT_CRISIS_RULE = CrisisRule(
+    t1_max_hours=24, t2_max_hours=72, t3_max_hours=24 * 14, preferred_bucket='building',
+)
+
+
+def crisis_rule_for(crisis_type: Optional[str]) -> CrisisRule:
+    """Return the CrisisRule for the given crisis_type, falling back to
+    DEFAULT_CRISIS_RULE for unknown / None inputs."""
+    if not crisis_type:
+        return DEFAULT_CRISIS_RULE
+    return CRISIS_RULES.get(str(crisis_type).upper(), DEFAULT_CRISIS_RULE)
+
+
+# ── Coarse crisis category — T1 privacy (docs §3.2 + §10) ──────────────
+#
+# T1 (Weak Signal) groups expose ONLY a coarse 4-bucket category, NOT
+# the full crisis_type enum. This prevents triangulation of a single
+# reporter via their specific crisis_type. T2 and T3 surface the full
+# enum.
+
+_COARSE_CRISIS_MAP: dict[str, str] = {
+    'FLOOD':              'FLOOD',
+    'FLOOD_FLASH':        'FLOOD',
+    'FLOOD_RIVER':        'FLOOD',
+    'WILDFIRE':           'FIRE',
+    'EXPLOSION':          'FIRE',
+    'CHEMICAL_INCIDENT':  'FIRE',
+    'EARTHQUAKE':         'INFRASTRUCTURE',
+    'BUILDING_COLLAPSE':  'INFRASTRUCTURE',
+    'LANDSLIDE':          'INFRASTRUCTURE',
+}
+
+
+def coarse_category_for(crisis_type: Optional[str]) -> str:
+    """Collapse a crisis_type to one of FLOOD / FIRE / INFRASTRUCTURE /
+    OTHER. Used for T1 privacy projection."""
+    if not crisis_type:
+        return 'OTHER'
+    return _COARSE_CRISIS_MAP.get(str(crisis_type).upper(), 'OTHER')
 
 #: Default sort weights — relevance = w_count*log(count) + w_recency + w_proximity
 RELEVANCE_W_COUNT = 0.4
@@ -160,9 +263,17 @@ class NearbyReportInput:
 @dataclass
 class NearbyGroup:
     """Output shape — strict projection. EVERY field listed here is
-    cleared for the public response; no other Report column leaks."""
+    cleared for the public response; no other Report column leaks.
+
+    Phase 1 (May 2026) added: `tier`, `is_burst`, `is_acute`,
+    `acute_grade`, `crisis_ttl_hours`, `coarse_crisis_category`,
+    `responding_count`, `resolved_count`. The `kind` field gained
+    `"resolved_recent"` as a valid value for groups whose top status is
+    RESOLVED and last activity is within RESOLVED_RECENT_RETENTION_HOURS.
+    See docs/NEARBY_REPORTS_PIPELINE.md §3.2 + §3.6.
+    """
     id: str
-    kind: str               # "building" | "crisis_cluster"
+    kind: str                                 # "building" | "crisis_cluster" | "resolved_recent"
     label: str
     summary: str
     summary_key: str
@@ -177,6 +288,15 @@ class NearbyGroup:
     crisis_types: List[str]
     damage_classes: List[str]
     severity_max: str
+    # Phase 1 additions (defaults so existing tests/call sites stay green)
+    tier: str = 'verified'                    # 'weak' | 'emerging' | 'verified'
+    is_burst: bool = False                    # ≥ T3_VERIFIED_FLOOR reports in BURST_WINDOW_MIN
+    is_acute: bool = False                    # ≥ ACUTE_REPORTS_THRESHOLD in ACUTE_WINDOW_MIN
+    acute_grade: Optional[str] = None         # 'high' | 'low' | None (Phase 2 grades trust-weighted)
+    crisis_ttl_hours: int = 24                # rule-driven; mirrors CRISIS_RULES[crisis].t3_max_hours
+    coarse_crisis_category: str = 'OTHER'     # 'FLOOD'|'FIRE'|'INFRASTRUCTURE'|'OTHER' — for T1 privacy
+    responding_count: int = 0                 # status RESPONDING surfaced (Phase 1)
+    resolved_count: int = 0                   # status RESOLVED in the RESOLVED-24h retention window
 
 
 # ── Public helpers ────────────────────────────────────────────────────
@@ -291,21 +411,88 @@ def _truncate_to_minute(dt: datetime) -> datetime:
     return dt.replace(second=0, microsecond=0)
 
 
+def _classify_tier(
+    *,
+    n_devices: int,
+    minutes_since_earliest: float,
+    has_verified_responder: bool = False,
+) -> str:
+    """Return the tier label ('weak' | 'emerging' | 'verified') for a
+    bucket given its unique-device count, age, and whether any of its
+    reports came from a verified-responder device.
+
+    Phase 1 rules (docs §3.2):
+      • T1 (weak)     — 1 unique device, < T1_WEAK_STALE_MIN minutes old
+      • T2 (emerging) — 2 unique devices, OR 1 device + ≥ T1_WEAK_STALE_MIN
+                         min stale, OR ≥ 1 verified responder
+      • T3 (verified) — ≥ T3_VERIFIED_FLOOR (= 3) unique devices
+
+    `has_verified_responder` is the Phase-3 hook — for now it's always
+    False (no trust scoring yet), but the signature accepts it so the
+    Phase-3 schema migration doesn't reshape this function.
+    """
+    if n_devices >= T3_VERIFIED_FLOOR:
+        return 'verified'
+    if n_devices >= T2_EMERGING_FLOOR or has_verified_responder:
+        return 'emerging'
+    if n_devices == 1 and minutes_since_earliest >= T1_WEAK_STALE_MIN:
+        return 'emerging'
+    return 'weak'
+
+
+def _is_burst(timestamps: List[datetime], window_min: int = BURST_WINDOW_MIN,
+              threshold: int = T3_VERIFIED_FLOOR) -> bool:
+    """≥ `threshold` reports within `window_min` minutes → burst.
+    Simple sliding-window check; O(n log n) on small bucket sizes."""
+    if len(timestamps) < threshold:
+        return False
+    sorted_ts = sorted(timestamps)
+    window_delta = timedelta(minutes=window_min)
+    for i in range(len(sorted_ts) - threshold + 1):
+        if sorted_ts[i + threshold - 1] - sorted_ts[i] <= window_delta:
+            return True
+    return False
+
+
+def _is_acute(timestamps: List[datetime]) -> bool:
+    """≥ ACUTE_REPORTS_THRESHOLD reports within ACUTE_WINDOW_MIN
+    minutes. Phase 2 introduces HIGH/LOW grading from trust signals."""
+    return _is_burst(
+        timestamps,
+        window_min=ACUTE_WINDOW_MIN,
+        threshold=ACUTE_REPORTS_THRESHOLD,
+    )
+
+
 def _summarize_bucket(
     bucket: List[NearbyReportInput],
     kind: str,
     user_lat: float,
     user_lng: float,
     group_id: str,
+    *,
+    now: Optional[datetime] = None,
 ) -> NearbyGroup:
     """Reduce a list of reports to a single group projection.
 
     Applies the per-device contribution cap to `count` so 50 spam
     submissions from one bot don't inflate group size. `verified_count`
-    + `pending_count` are computed on the FULL bucket since they're
-    aggregate counts (the cap only protects against device-volume
-    distortion of the headline number).
+    + `pending_count` + `responding_count` + `resolved_count` are
+    computed on the FULL bucket since they're aggregate counts (the cap
+    only protects against device-volume distortion of the headline
+    number).
+
+    Phase 1 (May 2026) additions:
+      • tier classification via `_classify_tier` (docs §3.2)
+      • is_burst / is_acute temporal flags (docs §3.5)
+      • crisis_ttl_hours from CRISIS_RULES (docs §3.3)
+      • coarse_crisis_category for T1 privacy (docs §3.2 + §10)
+      • responding_count, resolved_count (docs §3.6)
+      • `kind` may upgrade to 'resolved_recent' if the bucket's top
+        status is RESOLVED and latest activity is within retention
     """
+    now = now or datetime.now(timezone.utc)
+
     # Per-device cap: bucket reports by device, take min(actual, cap)
     by_device: dict[Optional[str], int] = defaultdict(int)
     for r in bucket:
@@ -319,10 +506,11 @@ def _summarize_bucket(
     n_devices = len([d for d in by_device if d])
     count = max(capped_count, n_devices, 1)
 
-    # Aggregate counts split by reviewer/status — these are SAFE because
-    # they're sums, not per-report breakdowns.
+    # Aggregate counts split by status — sums, not per-report breakdowns.
     verified = sum(1 for r in bucket if r.status == 'VERIFIED')
     pending = sum(1 for r in bucket if r.status == 'PENDING')
+    responding = sum(1 for r in bucket if r.status == 'RESPONDING')
+    resolved = sum(1 for r in bucket if r.status == 'RESOLVED')
 
     # Centroid = arithmetic mean of (lat, lng) — privacy-safe because
     # the mean of N reports doesn't reveal any individual location.
@@ -341,8 +529,45 @@ def _summarize_bucket(
     label = _label_for(bucket, kind, centroid_lat, centroid_lng)
 
     timestamps = [r.server_created_at for r in bucket if r.server_created_at]
-    latest = _truncate_to_minute(max(timestamps)) if timestamps else _truncate_to_minute(datetime.now(timezone.utc))
+    latest = _truncate_to_minute(max(timestamps)) if timestamps else _truncate_to_minute(now)
     earliest = _truncate_to_minute(min(timestamps)) if timestamps else latest
+
+    # Tier classification — minutes since earliest report drives the
+    # "1-device + stale → T2" rule.
+    earliest_for_tier = min(timestamps) if timestamps else now
+    minutes_since_earliest = max(0.0, (now - earliest_for_tier).total_seconds() / 60.0)
+    tier = _classify_tier(
+        n_devices=n_devices,
+        minutes_since_earliest=minutes_since_earliest,
+        has_verified_responder=False,        # Phase 3 wires this up
+    )
+
+    # Temporal-cluster flags.
+    burst = _is_burst(timestamps) if timestamps else False
+    acute = _is_acute(timestamps) if timestamps else False
+    # Phase 2 will set acute_grade based on trust-weighted device mix;
+    # Phase 1 leaves it at None to signal "ungraded yet".
+    acute_grade: Optional[str] = None
+    if acute:
+        acute_grade = 'low'   # Phase-1 default; Phase 2 grades HIGH/LOW
+
+    # Crisis-rule lookup for TTL hint to the client.
+    rule = crisis_rule_for(top_crisis)
+    ttl_hours = rule.t3_max_hours
+
+    # Coarse crisis category — used by the endpoint to redact crisis_types
+    # for T1 groups before serialization (docs §10).
+    coarse = coarse_category_for(top_crisis)
+
+    # RESOLVED-recent re-tagging — if the bucket's dominant status is
+    # RESOLVED and the latest activity is within retention, flip `kind`
+    # so the client renders it in the separate "Recently Resolved"
+    # subtotal line (docs §3.6 + §4.1) instead of contributing to
+    # active counts.
+    if resolved > (verified + pending + responding):
+        age_hours = (now - latest).total_seconds() / 3600.0
+        if age_hours <= RESOLVED_RECENT_RETENTION_HOURS:
+            kind = 'resolved_recent'
 
     return NearbyGroup(
         id=group_id,
@@ -361,6 +586,14 @@ def _summarize_bucket(
         crisis_types=crisis_types,
         damage_classes=damage_classes,
         severity_max=_max_severity([r.severity for r in bucket]),
+        tier=tier,
+        is_burst=burst,
+        is_acute=acute,
+        acute_grade=acute_grade,
+        crisis_ttl_hours=ttl_hours,
+        coarse_crisis_category=coarse,
+        responding_count=responding,
+        resolved_count=resolved,
     )
 
 
@@ -415,17 +648,27 @@ def aggregate_nearby(
     *,
     min_group_size: int = MIN_GROUP_REPORTS,
 ) -> List[NearbyGroup]:
-    """Bucket → suppress small groups (k-anonymity) → summarize →
-    sort by relevance → top-N. Pure function; no DB, no side effects.
+    """Bucket → classify tier → summarize → sort by relevance → top-N.
+
+    Phase 1 (May 2026) — was "suppress small groups (k-anonymity)";
+    now surfaces every bucket and tags each with a tier so the
+    endpoint can slice by caller identity (citizen vs admin vs
+    deployment-T1-visibility flag). The privacy floor still holds:
+    T1 groups expose ONLY coarse crisis category (no full enum), no
+    PII, only group centroids. See docs §3.2 + §10.
 
     Caller is responsible for:
-      - Filtering by status (exclude REJECTED / DUPLICATE / FALSE_ALARM)
-      - Filtering by max_age_hours
+      - Filtering by status (caller-driven; aggregator now accepts
+        VERIFIED / PENDING / RESPONDING / RESOLVED-within-retention)
+      - Filtering by max_age_hours (overall ceiling)
       - Pre-filtering to the bbox (so the input list is already small)
       - Computing the actual haversine distance to drop reports
         outside the exact `radius_km`
+      - Slicing the returned list by tier per caller's visibility
+        (e.g., citizen + CRISP_CITIZEN_T1_VISIBILITY=false → drop
+        tier='weak')
 
-    This function ONLY groups + projects.
+    This function ONLY groups + projects + classifies tier.
     """
     if not reports:
         return []
@@ -435,15 +678,20 @@ def aggregate_nearby(
     for r in reports:
         buckets[_bucket_key_for(r, group_by)].append(r)
 
-    # 2. Pre-filter — drop buckets that COULDN'T possibly meet the
-    # k-anonymity threshold even before device-cap is applied.
-    # Cheaper than running the full summarization on doomed buckets.
+    # 2. Pre-filter — drop buckets that fall below the (now lowered)
+    # min_group_size. Default is 1 (T1 floor), so this is a no-op
+    # for the default call. Callers can pass min_group_size=3 to
+    # restore the legacy "verified-only" behaviour.
     pre_filtered = [b for b in buckets.values() if len(b) >= min_group_size]
 
-    # 3. Summarize each surviving bucket
+    # 3. Summarize each surviving bucket — tier classification happens
+    # inside `_summarize_bucket`.
+    now = datetime.now(timezone.utc)
     groups = []
     for bucket in pre_filtered:
-        # Pick `kind` based on whether the bucket has a real building_id
+        # Pick `kind` based on whether the bucket has a real building_id.
+        # `_summarize_bucket` may upgrade `kind` to 'resolved_recent' if
+        # the bucket's dominant status is RESOLVED within retention.
         first = bucket[0]
         if group_by == 'crisis_type':
             kind = 'crisis_cluster'
@@ -454,18 +702,23 @@ def aggregate_nearby(
         else:
             kind = 'crisis_cluster'
             gid = f"g_cluster_{_bucket_key_for(first, group_by)}"
-        groups.append(_summarize_bucket(bucket, kind, user_lat, user_lng, gid))
+        groups.append(_summarize_bucket(bucket, kind, user_lat, user_lng, gid, now=now))
 
-    # 4. POST-summarization k-anonymity — drop groups whose effective
-    # `count` (after per-device cap) is below the floor. This catches
-    # the spam-bot case where 50 reports from 1 device pass step (2)
-    # but collapse to count=1 after the cap, exposing a single
-    # reporter's location. Doing it here (not at step 2) means a
-    # legitimate group with 3 reports from 3 different devices
-    # survives, while 50 reports from 1 device suppresses.
-    groups = [g for g in groups if g.count >= min_group_size]
+    # 4. Per-tier privacy projection — T1 (weak) groups have their
+    # `crisis_types` collapsed to `[coarse_crisis_category]` so the
+    # full enum can't leak from a single-reporter group (docs §10).
+    # T2/T3 surface the full enum.
+    for g in groups:
+        if g.tier == 'weak':
+            g.crisis_types = [g.coarse_crisis_category]
 
-    # 5. Relevance sort → top-N
-    now = datetime.now(timezone.utc)
-    groups.sort(key=lambda g: -_relevance_score(g, now, radius_km))
+    # 5. Relevance sort → top-N. Burst + acute groups bubble up.
+    def _sort_key(g: NearbyGroup) -> float:
+        score = _relevance_score(g, now, radius_km)
+        if g.is_acute:
+            score += 10.0       # always above non-acute
+        if g.is_burst:
+            score += 1.0
+        return -score
+    groups.sort(key=_sort_key)
     return groups[:max_groups]
