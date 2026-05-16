@@ -647,7 +647,7 @@ class ReportNearbyGroup(BaseModel):
     `resolved_count`. See docs/NEARBY_REPORTS_PIPELINE.md §3.2, §3.5,
     §3.6, §10."""
     id: str
-    kind: str                        # "building" | "crisis_cluster" | "resolved_recent"
+    kind: str                        # "building" | "block" | "area" | "crisis_cluster" | "resolved_recent"
     label: str                       # building name OR "Near {lat,lng}" fallback
     summary: str                     # English fallback — "Flooded" / "Bridge Collapsed"
     summary_key: str                 # i18n key for client-side localization

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share, config
+from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share, config, observability
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -40,3 +40,8 @@ api_router.include_router(share.router, prefix="", tags=["share"])
 # Public deployment-config endpoint — small, cacheable, no auth.
 # See backend/app/api/endpoints/config.py for what's exposed.
 api_router.include_router(config.router, prefix="/config", tags=["config"])
+# Admin observability for the Nearby Reports pipeline (Phase 2+).
+# require_admin guard inside each endpoint. Phase 4 will add more.
+api_router.include_router(observability.router,
+                          prefix="/admin/observability",
+                          tags=["observability"])

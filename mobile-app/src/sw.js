@@ -5,7 +5,23 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v205';
+const CACHE_NAME = 'crisp-v206';
+// v205 → v206 (May 2026 — Nearby Reports Phase 2, see
+// docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 2):
+//   Backend-only delta — the response shape gains the 'block' and
+//   'area' kinds (was only 'building'/'crisis_cluster'/'resolved_
+//   recent'). The PWA renders any new kind transparently. Cache
+//   bumped because:
+//     • The /admin/observability/nearby/* endpoints are NEW (Phase 2
+//       admin observability surface; not consumed by the citizen
+//       PWA but the new route map should be evicted from SW caches
+//       for installed-PWA admins who login via the dashboard).
+//     • Acute grading shifted to a now-anchored window (was
+//       cluster-internal — fixed a misfire on stale clusters whose
+//       reports were tightly packed but ancient).
+//     • Decay-weighted sort changes ranking; users may see a
+//       different order even with the same data, so a fresh fetch
+//       on next boot is the right behaviour.
 // v204 → v205 (May 2026 — Nearby Reports Phase 1, see
 // docs/NEARBY_REPORTS_PIPELINE.md §15):
 //   First implementation slice of the operator-approved redesign of

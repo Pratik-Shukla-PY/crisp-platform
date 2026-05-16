@@ -71,7 +71,22 @@ PER_DEVICE_CONTRIBUTION_CAP = 1
 #: 0.002° ≈ 220m at the equator — small enough that a "Road Damage"
 #: cluster doesn't span an entire neighbourhood, large enough that
 #: scattered street-level reports still aggregate.
+#: KEPT for backwards-compat with v0 code paths; Phase 2 (May 2026)
+#: replaces this with geohash-based bucketing for both block + area
+#: cluster levels — see `_geohash_encode` + `_bucket_key_for` below.
 FALLBACK_CELL_SIZE_DEG = 0.002
+
+#: Geohash precision for the block-level cluster (Phase 2 — docs §3.4).
+#: precision 7 ≈ 152 m × 152 m cells. Matches the ~100 m "adjacent
+#: buildings" intent of the doc's block tier.
+GEOHASH_PRECISION_BLOCK = 7
+
+#: Geohash precision for the area-level cluster.
+#: precision 6 ≈ 1.2 km × 0.6 km cells. The doc targets ~500 m for
+#: an "OSM neighborhood" area; precision 6 is the nearest fit and
+#: errs slightly larger (preferable to bias toward fewer-broader
+#: clusters during disasters).
+GEOHASH_PRECISION_AREA = 6
 
 #: Temporal burst window — ≥ T3_VERIFIED_FLOOR reports inside this many
 #: minutes flips `is_burst=true`. Phase 2 introduces full HIGH/LOW
@@ -245,7 +260,12 @@ _SEVERITY_RANK = {
 class NearbyReportInput:
     """Input shape from the endpoint — flat tuple of columns we need.
     Keeping it as a dataclass (not a SQLAlchemy row) keeps the
-    aggregator decoupled from the ORM and trivially testable."""
+    aggregator decoupled from the ORM and trivially testable.
+
+    Phase 2 (May 2026) added `user_id` — used as the Phase-2 trust
+    proxy for HIGH/LOW acute grading (account-linked users are
+    treated as "trusted"). Phase 3 will replace this with the full
+    device trust-score (see docs §6.1 + §3.5)."""
     report_id: str
     device_id: Optional[str]
     status: str
@@ -258,6 +278,7 @@ class NearbyReportInput:
     latitude: float
     longitude: float
     server_created_at: datetime
+    user_id: Optional[str] = None                # Phase 2 — trust proxy
 
 
 @dataclass
@@ -441,27 +462,75 @@ def _classify_tier(
 
 
 def _is_burst(timestamps: List[datetime], window_min: int = BURST_WINDOW_MIN,
-              threshold: int = T3_VERIFIED_FLOOR) -> bool:
-    """≥ `threshold` reports within `window_min` minutes → burst.
-    Simple sliding-window check; O(n log n) on small bucket sizes."""
+              threshold: int = T3_VERIFIED_FLOOR,
+              *, now: Optional[datetime] = None) -> bool:
+    """≥ `threshold` reports within the LAST `window_min` minutes from
+    `now` → burst. The window is anchored to NOW (not to the cluster's
+    own timeline) so a stale cluster whose reports happened to all
+    arrive within 15 min of EACH OTHER 48 h ago does NOT light up as
+    a current burst.
+
+    Phase 2 (May 2026, docs §3.5) — pre-fix this was a sliding-window
+    check inside the cluster's own timestamps, which caused old clusters
+    with tightly-clustered (but ancient) reports to misfire as "acute".
+
+    O(n) — single pass counting how many timestamps fall inside the
+    `now - window_min`..`now` interval.
+    """
     if len(timestamps) < threshold:
         return False
-    sorted_ts = sorted(timestamps)
-    window_delta = timedelta(minutes=window_min)
-    for i in range(len(sorted_ts) - threshold + 1):
-        if sorted_ts[i + threshold - 1] - sorted_ts[i] <= window_delta:
-            return True
+    now = now or datetime.now(timezone.utc)
+    # Normalise to UTC to dodge naive/aware comparisons.
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    cutoff = now - timedelta(minutes=window_min)
+    in_window = 0
+    for t in timestamps:
+        if t and t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        if t and t >= cutoff and t <= now:
+            in_window += 1
+            if in_window >= threshold:
+                return True
     return False
 
 
-def _is_acute(timestamps: List[datetime]) -> bool:
-    """≥ ACUTE_REPORTS_THRESHOLD reports within ACUTE_WINDOW_MIN
-    minutes. Phase 2 introduces HIGH/LOW grading from trust signals."""
+def _is_acute(timestamps: List[datetime], *, now: Optional[datetime] = None) -> bool:
+    """≥ ACUTE_REPORTS_THRESHOLD reports in the LAST ACUTE_WINDOW_MIN
+    minutes. Same now-anchored semantics as `_is_burst`."""
     return _is_burst(
         timestamps,
         window_min=ACUTE_WINDOW_MIN,
         threshold=ACUTE_REPORTS_THRESHOLD,
+        now=now,
     )
+
+
+#: HIGH-confidence acute requires ≥ this many trusted-device reports
+#: in the acute window. Phase-2 default — Phase 3 may tune.
+ACUTE_HIGH_TRUSTED_FLOOR = 3
+
+
+def _grade_acute(bucket: List[NearbyReportInput], *, now: datetime) -> str:
+    """Grade an acute event as 'high' or 'low' (docs §3.5 + §8.1).
+
+    Phase 2 trust signal: account-linked reports (user_id IS NOT NULL)
+    count as "trusted". HIGH grade fires when ≥ ACUTE_HIGH_TRUSTED_FLOOR
+    trusted reports fall inside the acute window (last
+    ACUTE_WINDOW_MIN minutes).
+
+    Phase 3 will replace this with the full trust-score signal:
+      • verified-responder devices (role ∈ {RESPONDER, ADMIN})
+      • account-linked + ≥ 5 prior clean reports
+      • device.spam_score == 0 + ≥ 1 verified historical report
+    """
+    cutoff = now - timedelta(minutes=ACUTE_WINDOW_MIN)
+    trusted_in_window = sum(
+        1
+        for r in bucket
+        if r.server_created_at and r.server_created_at >= cutoff and r.user_id
+    )
+    return 'high' if trusted_in_window >= ACUTE_HIGH_TRUSTED_FLOOR else 'low'
 
 
 def _summarize_bucket(
@@ -542,14 +611,20 @@ def _summarize_bucket(
         has_verified_responder=False,        # Phase 3 wires this up
     )
 
-    # Temporal-cluster flags.
-    burst = _is_burst(timestamps) if timestamps else False
-    acute = _is_acute(timestamps) if timestamps else False
-    # Phase 2 will set acute_grade based on trust-weighted device mix;
-    # Phase 1 leaves it at None to signal "ungraded yet".
+    # Temporal-cluster flags — now-anchored windows.
+    burst = _is_burst(timestamps, now=now) if timestamps else False
+    acute = _is_acute(timestamps, now=now) if timestamps else False
+    # Phase 2 (May 2026, docs §3.5 + §8.1) — HIGH vs LOW confidence
+    # grading for is_acute. HIGH-confidence acute drives SW push;
+    # LOW-confidence is in-app badge only.
+    # Phase 2 trust proxy: count reports in the acute window from
+    # account-linked users (user_id is not null). ≥ 3 trusted →
+    # HIGH; otherwise LOW.
+    # Phase 3 will replace this with the full device trust-score
+    # (devices.spam_score + verified-responder role).
     acute_grade: Optional[str] = None
     if acute:
-        acute_grade = 'low'   # Phase-1 default; Phase 2 grades HIGH/LOW
+        acute_grade = _grade_acute(bucket, now=now)
 
     # Crisis-rule lookup for TTL hint to the client.
     rule = crisis_rule_for(top_crisis)
@@ -597,45 +672,264 @@ def _summarize_bucket(
     )
 
 
-def _bucket_key_for(report: NearbyReportInput, group_by: str) -> str:
-    """Compute the bucket key for a report under the chosen group_by
-    strategy.
+# ── Geohash (Phase 2, May 2026 — docs §3.4) ────────────────────────────
+#
+# Pure-Python geohash implementation — vendored here rather than
+# pulling in `python-geohash` (yet another transitive dependency
+# for a 30-line algorithm). Same spec as
+# https://en.wikipedia.org/wiki/Geohash — deterministic + identical
+# output to any conforming implementation.
+#
+# At our target precisions (6 + 7) the cell sizes are ~600 m and
+# ~150 m respectively — small enough to drive meaningful
+# block / area clustering, large enough that GPS jitter doesn't
+# bounce nearby reports into different buckets.
 
-    'building' (default):
-      - building_id when present → most precise grouping (OSM-tagged)
-      - else 0.002° grid cell × crisis_type → "near same street, same
-        type" fallback
+_GEOHASH_ALPHABET = '0123456789bcdefghjkmnpqrstuvwxyz'
 
-    'crisis_type':
-      - crisis_type only — coarser, broader buckets
+
+def _geohash_encode(lat: float, lng: float, precision: int) -> str:
+    """Encode (lat, lng) to a geohash string of the given precision.
+    Standard base-32 spec; precision 6 ≈ 600 m, precision 7 ≈ 150 m."""
+    lat_range = [-90.0, 90.0]
+    lng_range = [-180.0, 180.0]
+    geohash = []
+    bits = [16, 8, 4, 2, 1]
+    bit = 0
+    ch = 0
+    even = True
+    while len(geohash) < precision:
+        if even:
+            mid = (lng_range[0] + lng_range[1]) / 2
+            if lng > mid:
+                ch |= bits[bit]
+                lng_range[0] = mid
+            else:
+                lng_range[1] = mid
+        else:
+            mid = (lat_range[0] + lat_range[1]) / 2
+            if lat > mid:
+                ch |= bits[bit]
+                lat_range[0] = mid
+            else:
+                lat_range[1] = mid
+        even = not even
+        if bit < 4:
+            bit += 1
+        else:
+            geohash.append(_GEOHASH_ALPHABET[ch])
+            bit = 0
+            ch = 0
+    return ''.join(geohash)
+
+
+def _bucket_key_for(report: NearbyReportInput, group_by: str,
+                    level: str = 'building') -> str:
+    """Compute the bucket key for a report at the requested cluster
+    level. Phase 2 (May 2026, docs §3.4) — adds 'block' + 'area'
+    fallbacks via geohash.
+
+    `group_by` values:
+      - 'building' — the legacy + default per-bucket strategy. Tries
+                     building_id first, falls through to whatever
+                     `level` specifies.
+      - 'crisis_type' — coarser, crisis-type-only buckets.
+
+    `level` values (only honoured when `group_by='building'`):
+      - 'building' — building_id; falls back to block geohash when
+                     building_id is null.
+      - 'block'    — geohash precision 7 (~150 m) × crisis_type.
+                     Use when no building bucket meets the tier
+                     threshold (escalation).
+      - 'area'     — geohash precision 6 (~600 m) × crisis_type.
+                     Use when block also fails to cluster.
+
+    The multi-pass cascade in `aggregate_nearby()` calls this with
+    progressively coarser `level`s.
     """
     if group_by == 'crisis_type':
         return f"crisis_{report.crisis_type or 'OTHER'}"
 
     # default: 'building'
-    if report.building_id:
+    if level == 'building' and report.building_id:
         return f"building_{report.building_id}"
-    # Fallback: grid cell × crisis_type
-    lat_cell = math.floor(report.latitude / FALLBACK_CELL_SIZE_DEG) * FALLBACK_CELL_SIZE_DEG
-    lng_cell = math.floor(report.longitude / FALLBACK_CELL_SIZE_DEG) * FALLBACK_CELL_SIZE_DEG
-    return f"cell_{lat_cell:.4f}_{lng_cell:.4f}_{report.crisis_type or 'OTHER'}"
+
+    crisis_suffix = report.crisis_type or 'OTHER'
+    if level == 'building' or level == 'block':
+        # block-level cluster — geohash 7 × crisis_type
+        gh = _geohash_encode(report.latitude, report.longitude, GEOHASH_PRECISION_BLOCK)
+        return f"block_{gh}_{crisis_suffix}"
+
+    # area-level cluster — geohash 6 × crisis_type
+    gh = _geohash_encode(report.latitude, report.longitude, GEOHASH_PRECISION_AREA)
+    return f"area_{gh}_{crisis_suffix}"
 
 
 def _relevance_score(group: NearbyGroup, now: datetime, max_radius_km: float) -> float:
     """Higher = more relevant. Combines:
       - count (log-scaled so 100 reports doesn't 100× outrank 10)
-      - recency (decay over hours since latest_at)
+      - decayed recency (Phase 2 — exp decay per crisis-rule half-life)
       - proximity (closer = better, normalised to caller's radius)
+
+    Phase 2 (May 2026, docs §3.5) replaced the simple `1/hours_ago`
+    recency score with `exp(-age_hours / half_life)`. Half-life is
+    crisis-type-adaptive: `CRISIS_RULES[crisis].t2_max_hours / 2`.
+    This means a burst-of-3-in-1-h now outranks a slow-drip-of-5-
+    over-2-days, even though the slow drip has a higher raw count.
+
+    The integer `count` field is unchanged (still distinct-device
+    capped); only the SORT score uses the weighted view.
     """
     count_score = math.log(group.count + 1)
     hours_ago = max(0.01, (now - group.latest_at).total_seconds() / 3600)
-    recency_score = 1.0 / hours_ago   # 1.0 at 1h, 0.1 at 10h, ...
+
+    # Crisis-rule-driven half-life. Falls back to default rule for
+    # buckets where top crisis_type is unknown.
+    top_crisis = group.crisis_types[0] if group.crisis_types else None
+    half_life_h = max(1.0, crisis_rule_for(top_crisis).t2_max_hours / 2.0)
+    recency_score = math.exp(-hours_ago / half_life_h)
+
     proximity_score = max(0.0, 1.0 - (group.approx_distance_km / max(0.1, max_radius_km)))
     return (
         RELEVANCE_W_COUNT * count_score
         + RELEVANCE_W_RECENCY * recency_score
         + RELEVANCE_W_PROXIMITY * proximity_score
     )
+
+
+def _multi_pass_cluster(
+    *,
+    reports: List[NearbyReportInput],
+    user_lat: float,
+    user_lng: float,
+    min_group_size: int,
+    now: datetime,
+) -> List[NearbyGroup]:
+    """Phase 2 (May 2026, docs §3.4) — three-level spatial cascade.
+
+    Strategy:
+      Pass 1 — bucket every report by `_bucket_key_for(level='building')`.
+                Buckets with ≥ T3_VERIFIED_FLOOR unique devices become
+                'building' clusters (tightest). Their reports are
+                CLAIMED — removed from the residual pool.
+
+      Pass 2 — re-bucket the residual reports by 'block' (geohash 7 ×
+                crisis_type). Buckets with ≥ T2_EMERGING_FLOOR unique
+                devices become 'block' clusters. Their reports are
+                CLAIMED.
+
+      Pass 3 — re-bucket whatever remains by 'area' (geohash 6 ×
+                crisis_type). Any bucket meeting `min_group_size`
+                becomes an 'area' cluster.
+
+      Cleanup — any STILL-residual reports become single-report
+                'building' clusters at their original building_id
+                (or area-fallback if no building_id). This preserves
+                the T1 weak-signal surfacing for the unmatched tail.
+
+    Reports never appear in more than one cluster — the cascade
+    consumes them in order. This avoids double-counting under
+    cross-tier overlap (a building inside a block inside an area).
+
+    Returns a flat list of NearbyGroups across all three levels;
+    tier classification (weak/emerging/verified) still happens
+    inside _summarize_bucket and is independent of cluster level.
+    """
+    residual = list(reports)
+
+    def _claim(buckets: dict, threshold_devices: int, kind: str,
+               level: str) -> List[NearbyGroup]:
+        """Drain buckets that hit the threshold; return their groups.
+
+        Identity-preservation: when ALL reports in a bucket share a
+        single `building_id` — even at block/area levels — we keep
+        the group_id + kind as `g_building_<bid>` / `kind='building'`.
+        This matters for the smart-prefill flow (Phase 3): tap on a
+        building-derived cluster should still suggest THAT building.
+        Falls back to the level-specific id only when reports span
+        multiple buildings or have no building_id at all.
+        """
+        claimed_groups: List[NearbyGroup] = []
+        for key, bucket in list(buckets.items()):
+            unique_devs = len({r.device_id for r in bucket if r.device_id})
+            if unique_devs >= threshold_devices and len(bucket) >= min_group_size:
+                # Bucket survives this pass — promote to a group.
+                bucket_building_ids = {r.building_id for r in bucket if r.building_id}
+                # Identity-preservation: when ALL reports share a
+                # single building_id, render as building-level
+                # regardless of which pass claimed it. Otherwise the
+                # kind is driven by the actual bucket key prefix
+                # (`building_` → 'building', `block_` → 'block',
+                # `area_` → 'area') so a level='building' pass that
+                # had to fall through to block-keys (because no
+                # building_id) still ends up labelled correctly.
+                if len(bucket_building_ids) == 1:
+                    only_bid = next(iter(bucket_building_ids))
+                    gid = f"g_building_{only_bid}"
+                    effective_kind = 'building'
+                else:
+                    # Derive kind from the bucket-key prefix.
+                    if key.startswith('building_'):
+                        effective_kind = 'building'
+                    elif key.startswith('block_'):
+                        effective_kind = 'block'
+                    elif key.startswith('area_'):
+                        effective_kind = 'area'
+                    else:
+                        effective_kind = kind   # fallback
+                    gid = f"g_{effective_kind}_{key}"
+                claimed_groups.append(
+                    _summarize_bucket(bucket, effective_kind, user_lat, user_lng, gid, now=now)
+                )
+                # Mark this bucket as claimed — remove its reports
+                # from `residual`.
+                claimed_ids = {r.report_id for r in bucket}
+                residual[:] = [r for r in residual if r.report_id not in claimed_ids]
+        return claimed_groups
+
+    groups: List[NearbyGroup] = []
+
+    # Pass 1 — building level (threshold = T3 floor; only firmly-
+    # clustered buildings claim at this tightest level).
+    buckets_b: dict[str, List[NearbyReportInput]] = defaultdict(list)
+    for r in residual:
+        buckets_b[_bucket_key_for(r, 'building', level='building')].append(r)
+    groups.extend(_claim(buckets_b, threshold_devices=T3_VERIFIED_FLOOR,
+                         kind='building', level='building'))
+
+    # Pass 2 — block level (threshold = T2 floor).
+    if residual:
+        buckets_blk: dict[str, List[NearbyReportInput]] = defaultdict(list)
+        for r in residual:
+            buckets_blk[_bucket_key_for(r, 'building', level='block')].append(r)
+        groups.extend(_claim(buckets_blk, threshold_devices=T2_EMERGING_FLOOR,
+                             kind='block', level='block'))
+
+    # Pass 3 — area level (threshold = 1 by default — surfaces single
+    # weak signals over a wider geohash). Caller can pass
+    # min_group_size > 1 to suppress this tail.
+    if residual:
+        buckets_area: dict[str, List[NearbyReportInput]] = defaultdict(list)
+        for r in residual:
+            buckets_area[_bucket_key_for(r, 'building', level='area')].append(r)
+        # Each remaining bucket meets min_group_size by definition
+        # (already filtered above if min_group_size > 1).
+        for key, bucket in buckets_area.items():
+            if len(bucket) < min_group_size:
+                continue
+            first = bucket[0]
+            # Preserve building_id when present even at area level
+            # so the smart-prefill flow (Phase 3) can still suggest
+            # a specific building when one report had it.
+            if first.building_id:
+                gid = f"g_building_{first.building_id}"
+                kind = 'building'
+            else:
+                gid = f"g_area_{key}"
+                kind = 'area'
+            groups.append(_summarize_bucket(bucket, kind, user_lat, user_lng, gid, now=now))
+
+    return groups
 
 
 def aggregate_nearby(
@@ -673,36 +967,40 @@ def aggregate_nearby(
     if not reports:
         return []
 
-    # 1. Bucket
-    buckets: dict[str, List[NearbyReportInput]] = defaultdict(list)
-    for r in reports:
-        buckets[_bucket_key_for(r, group_by)].append(r)
+    # Phase 2 (May 2026, docs §3.4) — multi-pass spatial cascade.
+    # Try the tightest bucket level first (building); reports that
+    # don't form a strong-enough bucket at that level escalate to
+    # block (geohash 7 ≈ 150 m); reports still unclustered escalate
+    # to area (geohash 6 ≈ 600 m). This way:
+    #   • dense building damage surfaces at building level (precise)
+    #   • spread flood/riot/wildfire surfaces at block/area level
+    #     (which is what citizens need to see — the whole zone, not
+    #     fragmented per-building bits)
+    # The `group_by='crisis_type'` path stays single-level (no cascade)
+    # — that's an explicit caller override.
 
-    # 2. Pre-filter — drop buckets that fall below the (now lowered)
-    # min_group_size. Default is 1 (T1 floor), so this is a no-op
-    # for the default call. Callers can pass min_group_size=3 to
-    # restore the legacy "verified-only" behaviour.
-    pre_filtered = [b for b in buckets.values() if len(b) >= min_group_size]
-
-    # 3. Summarize each surviving bucket — tier classification happens
-    # inside `_summarize_bucket`.
     now = datetime.now(timezone.utc)
-    groups = []
-    for bucket in pre_filtered:
-        # Pick `kind` based on whether the bucket has a real building_id.
-        # `_summarize_bucket` may upgrade `kind` to 'resolved_recent' if
-        # the bucket's dominant status is RESOLVED within retention.
-        first = bucket[0]
-        if group_by == 'crisis_type':
-            kind = 'crisis_cluster'
+
+    if group_by == 'crisis_type':
+        # Single-pass crisis-type bucketing (caller override path).
+        buckets: dict[str, List[NearbyReportInput]] = defaultdict(list)
+        for r in reports:
+            buckets[_bucket_key_for(r, group_by)].append(r)
+        pre_filtered = [b for b in buckets.values() if len(b) >= min_group_size]
+        groups = []
+        for bucket in pre_filtered:
+            first = bucket[0]
             gid = f"g_crisis_{first.crisis_type or 'OTHER'}"
-        elif first.building_id:
-            kind = 'building'
-            gid = f"g_building_{first.building_id}"
-        else:
-            kind = 'crisis_cluster'
-            gid = f"g_cluster_{_bucket_key_for(first, group_by)}"
-        groups.append(_summarize_bucket(bucket, kind, user_lat, user_lng, gid, now=now))
+            groups.append(_summarize_bucket(bucket, 'crisis_cluster', user_lat, user_lng, gid, now=now))
+    else:
+        # Phase 2 multi-pass cascade — group_by='building' path.
+        groups = _multi_pass_cluster(
+            reports=reports,
+            user_lat=user_lat,
+            user_lng=user_lng,
+            min_group_size=min_group_size,
+            now=now,
+        )
 
     # 4. Per-tier privacy projection — T1 (weak) groups have their
     # `crisis_types` collapsed to `[coarse_crisis_category]` so the

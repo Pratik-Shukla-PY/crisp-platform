@@ -811,3 +811,45 @@ class PushSubscription(Base):
             name="push_sub_has_identity",
         ),
     )
+
+
+class NearbyGroupEvent(Base):
+    """Nearby Reports Pipeline — lifecycle audit trail.
+
+    Phase 2 (May 2026, docs §3.7 + §13). One row per transition for a
+    nearby aggregation group: promote / downgrade / merge / split /
+    resolve / fading. Group ids are SYNTHETIC (g_building_<bid> /
+    g_block_<gh>_<crisis> / g_area_<gh>_<crisis>) so there is no FK —
+    groups are ephemeral aggregations, not DB rows. The synthetic id
+    is stable across polls as long as the membership doesn't change,
+    which is exactly what the transition detector needs.
+
+    Indexed for two access patterns:
+      ① "all events for group X newest-first" — composite
+         (group_id, occurred_at DESC), used by the public
+         "Cluster history" timeline.
+      ② "all events in the last N minutes" — single column
+         occurred_at, used by §13's observability metrics
+         (cluster lifetime histogram, promotion-rate counter).
+    """
+    __tablename__ = "nearby_group_events"
+
+    id = Column(String(36), primary_key=True)
+    group_id = Column(String(128), nullable=False)
+    # Bounded vocabulary; the aggregator emits one of these constants.
+    # See app/services/nearby_lifecycle.py:GroupEventKind.
+    event_kind = Column(String(32), nullable=False)
+    from_tier = Column(String(16), nullable=True)
+    to_tier = Column(String(16), nullable=True)
+    from_count = Column(Integer, nullable=True)
+    to_count = Column(Integer, nullable=True)
+    # JSONB for ad-hoc diff data — kept jsonb so we can query inside
+    # later (e.g. "groups whose acute_grade flipped HIGH→LOW").
+    payload = Column(JSON, default=dict, nullable=False)
+    occurred_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_nearby_group_events_group_id_occurred_at",
+              "group_id", "occurred_at"),
+        Index("ix_nearby_group_events_occurred_at", "occurred_at"),
+    )

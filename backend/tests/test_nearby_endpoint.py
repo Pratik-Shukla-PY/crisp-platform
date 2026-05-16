@@ -211,8 +211,15 @@ class TestNearbyGrouping:
         assert group["label"] == "Green Valley Apartments"
         assert group["count"] == 3
 
-    def test_missing_building_id_falls_back_to_cell_cluster(self, client, db):
-        """Reports without building_id cluster by grid cell × crisis."""
+    def test_missing_building_id_falls_back_to_block_cluster(self, client, db):
+        """Reports without building_id cluster by geohash × crisis.
+
+        Phase 2 (May 2026, docs §3.4) — was 'crisis_cluster' via the
+        ad-hoc 0.002° grid cell; now uses the multi-pass cascade
+        (building → block → area). With no building_id, reports drop
+        through Pass 1 and claim at Pass 2 as a `block` cluster
+        (geohash precision 7 × crisis_type).
+        """
         _wipe(db)
         for i in range(3):
             _make_report(db, lat=REF_LAT, lng=REF_LNG,
@@ -222,7 +229,10 @@ class TestNearbyGrouping:
         res = _nearby(client)
         body = res.json()
         assert len(body["groups"]) == 1
-        assert body["groups"][0]["kind"] == "crisis_cluster"
+        # Phase 2 — block (or area in extreme-coarse cases) instead
+        # of the legacy 'crisis_cluster'.
+        assert body["groups"][0]["kind"] in ("block", "area"), \
+            f"unbuildinged reports should cluster at block/area level, got {body['groups'][0]['kind']!r}"
 
     def test_groups_sorted_by_relevance(self, client, db):
         """When two groups exist, the one with more reports + closer +

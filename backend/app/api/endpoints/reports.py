@@ -32,6 +32,7 @@ from app.services.nearby_aggregator import (
     RESOLVED_RECENT_RETENTION_HOURS,
     NearbyReportInput,
 )
+from app.services.nearby_lifecycle import detect_and_persist as _nearby_detect_and_persist
 from app.services.ai_service import ai_service
 from app.services.satellite_fetcher import satellite_fetcher
 from app.services.truth_scorer import truth_scorer
@@ -3847,6 +3848,10 @@ def get_nearby_reports(
             latitude=r.location.latitude,
             longitude=r.location.longitude,
             server_created_at=r.server_created_at or datetime.now(timezone.utc),
+            # Phase 2 (docs §3.5 + §8.1) — account-linked reports get
+            # used as a trust proxy for HIGH/LOW acute grading.
+            # Phase 3 will replace with the full device trust-score.
+            user_id=getattr(r, "user_id", None),
         ))
 
     # Aggregate → groups (k-anonymity + relevance sort applied inside).
@@ -3918,14 +3923,39 @@ def get_nearby_reports(
         citizen_t1_visibility=settings.CRISP_CITIZEN_T1_VISIBILITY,
     )
 
+    # Phase 2 (May 2026, docs §3.7) — lifecycle transition detection.
+    # Diff the fresh aggregation against the prior cached aggregation
+    # for this cache_key and emit one nearby_group_events row per
+    # transition (promote / downgrade / acute_on / fading / created /
+    # removed / resolved). Best-effort; errors logged, swallowed —
+    # a DB write can NEVER poison the user-facing response.
+    prior_entry = _NEARBY_CACHE.get(cache_key)
+    prior_groups = prior_entry.get("raw_groups", []) if prior_entry else []
+    if prior_groups:
+        try:
+            _nearby_detect_and_persist(
+                db, prior_groups=prior_groups, current_groups=groups,
+            )
+        except Exception:                          # pragma: no cover
+            # Belt-and-suspenders — the service already swallows DB
+            # errors, but a missing module / import bug should never
+            # take down /nearby. Endpoint stays the priority.
+            pass
+
     # Cache for 90 s. Capped at 1000 entries to bound memory; LRU-ish
     # eviction at insertion time.
+    # Cache stores BOTH the serialized payload (for fast re-serve)
+    # AND the raw aggregator groups (for next poll's lifecycle diff).
     if len(_NEARBY_CACHE) >= 1000:
         # Drop the 100 oldest entries
         oldest = sorted(_NEARBY_CACHE.items(), key=lambda kv: kv[1]["ts"])[:100]
         for k, _ in oldest:
             _NEARBY_CACHE.pop(k, None)
-    _NEARBY_CACHE[cache_key] = {"ts": now_ts, "payload": payload}
+    _NEARBY_CACHE[cache_key] = {
+        "ts": now_ts,
+        "payload": payload,
+        "raw_groups": groups,
+    }
 
     response.headers["Cache-Control"] = "private, max-age=60"
     response.headers["X-Cache"] = "MISS"
