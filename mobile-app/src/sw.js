@@ -5,8 +5,45 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v203';
-// v201 → v203 (May 2026 — Lighthouse PROD CLS fix, v2):
+const CACHE_NAME = 'crisp-v204';
+// v203 → v204 (May 2026 — iPhone 14 mobile UI fixes + nearby UX):
+//   Three operator-reported issues from a real iPhone 14 PWA:
+//     1. The CLS-fix CSS rule (visibility:hidden + opacity:0 on
+//        `.home-action-tile[hidden]`) reserved a slot for the install
+//        icon even when the PWA is already INSTALLED (standalone
+//        mode). On installed iPhone PWAs, _wireInstallIcon correctly
+//        hides the icon, but the slot reservation left a visible
+//        blank gap in the 5-tile row. Fix: when standalone, apply
+//        inline `display: none` so the slot truly collapses and the
+//        remaining 4 tiles fill the row uniformly.
+//     2. Status bar (time / Wi-Fi / battery) overlapped the CRISP
+//        brand logo + language pill on iPhone 14 because the home
+//        stage didn't honour `env(safe-area-inset-top)` despite the
+//        viewport meta opting in via `viewport-fit=cover`. Fix:
+//        `.home-stage` gains `padding-top: env(safe-area-inset-top)`
+//        and `#lang-switcher` offsets its `top` by the same.
+//     3. The "Nearby reports" module stayed silently hidden in three
+//        cases — (a) no GPS cached, (b) GPS cached but fetch failed,
+//        (c) GPS cached + fetch returned 0 groups. Confusing UX
+//        because the operator couldn't tell whether the system was
+//        working or broken. Fix is two-part:
+//          • app.js: IP-geolocation fallback paths now mirror coords
+//            to `crisp_last_location_v2` UNCONDITIONALLY (pre-fix
+//            only the language-matching branches did this; visitors
+//            in unmapped regions silently lost their coords). New
+//            `_saveLocCtx` also dispatches `crisp:location-cached`.
+//          • nearby.js: listens for that event and re-runs `boot()`,
+//            handling the async race between IP-geo + nearby init.
+//            Render-on-failure: when we have coords but the fetch
+//            fails or returns no groups, render the empty state
+//            instead of silent-hiding — the module is always
+//            visible (and honest) when coords are known. Empty-
+//            state copy simplified: was "✓ All clear in your area /
+//            No verified reports nearby"; now just "No nearby
+//            reports" (no checkmark, no editorialising — a
+//            checkmark next to a failed fetch was misleading).
+//   v201 → v203 was the Lighthouse PROD CLS fix v2 (channels-grid +
+//   install-icon slot reservation).
 //   The v202 attempt (commit 169ca28) was auto-rolled-back when
 //   PROD measured CLS=0.42 against the 0.25 floor — my fixes were
 //   validated against fast un-throttled localhost which misses the

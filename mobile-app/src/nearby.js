@@ -290,12 +290,18 @@
     }
 
     function _buildEmptyState() {
+        // May 2026 (operator preference, post-iPhone-14 audit) — was
+        // a two-line layout with a ✓ icon + "All clear in your area"
+        // title. The ✓ implied "success" which felt wrong when no
+        // backend was available — the user reads "✓ All clear" and
+        // assumes the system says their area is safe when actually
+        // it just couldn't reach the service. New empty state is a
+        // single plain line that's honest about its scope:
+        // "No nearby reports" — no checkmark, no editorialising.
         const el = document.createElement('div');
         el.className = 'home-nearby-empty';
         el.innerHTML = `
-            <span class="home-nearby-empty-icon" aria-hidden="true">✓</span>
-            <span class="home-nearby-empty-title">${_esc(_t('nearby_all_clear', 'All clear in your area'))}</span>
-            <span class="home-nearby-empty-body">${_esc(_t('nearby_no_reports', 'No verified reports nearby'))}</span>
+            <span class="home-nearby-empty-body">${_esc(_t('nearby_no_reports', 'No nearby reports'))}</span>
         `;
         return el;
     }
@@ -377,12 +383,15 @@
         container.innerHTML = '';
 
         if (!payload || !payload.groups || payload.groups.length === 0) {
-            const empty = _buildEmptyState();
-            const wrap = document.createElement('div');
-            wrap.className = 'home-nearby-list';
-            wrap.id = 'home-nearby-list';
-            wrap.appendChild(empty);
-            container.appendChild(wrap);
+            // May 2026 (operator preference) — append the empty state
+            // DIRECTLY to the section, not wrapped in `.home-nearby-list`.
+            // That wrapper carries the frosted-glass card treatment
+            // intended for grouped data rows; on the empty path the
+            // operator wants plain inline text with no tile/box. The
+            // empty-state styling itself (italic + bold + light yellow,
+            // see styles.css) is applied to `.home-nearby-empty-body`
+            // and renders cleanly without any container chrome.
+            container.appendChild(_buildEmptyState());
             return;
         }
 
@@ -420,8 +429,15 @@
 
         const location = _getCachedLocation();
         if (!location) {
-            console.log('[NearbyIntel] no cached GPS in localStorage — module stays hidden. ' +
-                'Run: localStorage.setItem("crisp_last_location_v2", JSON.stringify({lat:12.8456,lng:77.6603,ts:Date.now()}));location.reload();');
+            // May 2026 — silent-hide is intentional. App-wide IP geo +
+            // GPS-success paths in app.js write to `crisp_last_location_v2`
+            // via `_saveLocCtx`, dispatching a `crisp:location-cached`
+            // event when they do. The boot listener at the bottom of
+            // this module re-runs `boot()` on that event, so the module
+            // appears automatically once location resolves — no user tap,
+            // no permission prompt of our own. Until then, the slot
+            // stays hidden (no cognitive load).
+            console.log('[NearbyIntel] no cached GPS yet — waiting for crisp:location-cached event.');
             return;
         }
         console.log('[NearbyIntel] boot with cached GPS:', location);
@@ -452,11 +468,22 @@
             }
         }
 
-        // Hard rule per operator: if we don't have CURRENT data, hide.
-        // No broken states, no "loading" forever, no error placeholders.
-        if (!payload) {
-            return;
-        }
+        // May 2026 (operator preference, post-iPhone-14 audit) — when we
+        // have coords but the fetch failed (offline, no backend, 5xx,
+        // CORS), render the empty state and unhide ANYWAY. The earlier
+        // "silently hide on fetch failure" rule was confusing the
+        // operator on local-dev + flapping-API days: the module
+        // mysteriously vanished and they couldn't tell whether the
+        // backend was empty or broken. New behaviour:
+        //   • Coords + payload with groups   → number + ripple + sheet
+        //   • Coords + payload with 0 groups → empty-state message
+        //   • Coords + payload null (fail)   → empty-state message
+        //   • No coords at all               → stay hidden (no module)
+        // The single ambiguity — "empty actually means broken" — is
+        // acceptable trade for consistent presence; a brief console
+        // warn fires above in `_fetchNearby` so debugging on PROD
+        // still has a signal.
+        if (!payload) payload = { groups: [] };
 
         _renderInto(root, payload, { fromCache, cacheAgeMs });
         root.hidden = false;
@@ -754,4 +781,15 @@
         // (e.g. window.t / window.API_BASE from app.js).
         setTimeout(_autoBoot, 0);
     }
+
+    // May 2026 (operator-reported) — module was staying hidden on the
+    // first home visit because IP-geolocation (in app.js) was still in
+    // flight when _autoBoot ran. After app.js's _saveLocCtx writes
+    // `crisp_last_location_v2`, it dispatches `crisp:location-cached`.
+    // Re-boot on that event so the module appears the moment location
+    // is available — no user tap, no permission prompt of our own.
+    document.addEventListener('crisp:location-cached', () => {
+        console.log('[NearbyIntel] crisp:location-cached received — re-booting.');
+        _autoBoot();
+    });
 })();

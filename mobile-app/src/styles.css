@@ -165,7 +165,11 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
        deep-navy bg shows through with a fresh cyan tone. Falls back
        to a brighter opaque gradient on browsers without backdrop-
        filter (older Safari). */
-    position: absolute; top: 22px; right: 24px; z-index: 100;
+    /* May 2026 (operator-reported on iPhone 14) — was `top: 22px` which
+       sat behind the Dynamic Island. Now offset by the safe-area-inset-top
+       so the pill clears the notch on iPhone (~47-59 px down) and stays
+       at 22px on Android / non-notched devices. */
+    position: absolute; top: calc(22px + env(safe-area-inset-top, 0)); right: 24px; z-index: 100;
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
@@ -4219,6 +4223,15 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
    exceeds height (small phones in 6-locale RTL stretch to ~700px). */
 .home-stage {
     min-height: 100dvh;
+    /* May 2026 (operator-reported on iPhone 14) — `viewport-fit=cover` in
+       the meta tag opts the page in to painting under the Dynamic Island
+       / notch, but without a top inset the brand row / lang pill collide
+       with the system status bar (time / Wi-Fi / battery). Adding
+       `env(safe-area-inset-top, 0)` pushes the home stage's content
+       down by the notch height on iPhone (~47-59 px on iPhone 14) and
+       resolves to 0 on Android / non-notched iOS / desktop, where it's
+       a no-op. */
+    padding-top: env(safe-area-inset-top, 0);
     padding-bottom: env(safe-area-inset-bottom, 0);
 }
 .home-center {
@@ -11256,9 +11269,18 @@ body { background-color: #10284a; }
     color: var(--text, #f1f5f9);
 }
 .home-stage .home-nearby-empty-body {
-    font-size: 12px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.48);
+    /* May 2026 (operator preference) — was 12px / 500 / dim-white. The
+       operator's screenshot showed the message in a frosted card that
+       looked like a stray empty tile. New treatment is plain inline:
+       no tile, no box (we removed the .home-nearby-list wrapper for
+       the empty path in nearby.js _renderInto). Italic + bold + light
+       yellow so the message reads as a soft notice — "we checked, here
+       is what we found" — rather than a chrome element. Light-yellow
+       picked from the existing palette via --warn-soft fallback. */
+    font-size: 13px;
+    font-style: italic;
+    font-weight: 700;
+    color: #fde68a;
 }
 
 /* "Last seen X min ago" caption — shown when serving stale cache. */

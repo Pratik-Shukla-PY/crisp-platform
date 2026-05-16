@@ -2773,6 +2773,17 @@ function _saveLocCtx(lat, lng, acc, name, lang, langLabel, speechCode) {
         localStorage.setItem('crisp_last_location_v2', JSON.stringify({
             lat, lng, acc, ts,
         }));
+        // May 2026 (operator-reported, post-iPhone-14 audit) — nearby.js
+        // module's first paint of `boot()` runs BEFORE IP-geolocation
+        // resolves on a fresh visitor (the lang-picker IP-geo cascade
+        // is async). Dispatch this event after every cache write so
+        // any subscriber — nearby.js today, future modules tomorrow —
+        // can react without polling localStorage on a timer. Zero user
+        // permission prompts beyond what the lang picker already
+        // triggers.
+        document.dispatchEvent(new CustomEvent('crisp:location-cached', {
+            detail: { lat, lng, acc, ts },
+        }));
     } catch (_) {}
 }
 
@@ -4729,6 +4740,9 @@ function detectAndSetupLanguage() {
             if (ipLoc) {
                 state.location = ipLoc;
                 state.deviceLocation = { lat: ipLoc.lat, lng: ipLoc.lng };
+                // Mirror unconditionally — see post-iPhone-14 audit note
+                // on the GPS-error-handler branch ≈line 4914.
+                _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName || null, null, null, null);
                 const regionStr = (ipLoc.region || '').toLowerCase();
                 for (const entry of REGION_LANG_MAP) {
                     if (entry.match.some(k => regionStr.includes(k))) {
@@ -4767,6 +4781,9 @@ function detectAndSetupLanguage() {
                 if (ipLoc && !state.location) {
                     state.location = ipLoc;
                     state.deviceLocation = { lat: ipLoc.lat, lng: ipLoc.lng };
+                    // Mirror unconditionally — see post-iPhone-14 audit
+                    // note on the GPS-error-handler branch ≈line 4914.
+                    _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName || null, null, null, null);
                 }
                 if (!state.lang || state.lang === 'en') activateLang('en');
             });
@@ -4907,6 +4924,20 @@ function detectAndSetupLanguage() {
                     lat: ipLoc.lat, lng: ipLoc.lng, acc: 5000, ts: Date.now(), is_ip_based: true
                 }));
             } catch (_) {}
+            // May 2026 (operator-reported, post-iPhone-14 audit) — pre-fix
+            // the IP-geo coords were ONLY mirrored to the nearby.js cache
+            // key `crisp_last_location_v2` inside the language-matching
+            // branches below. A visitor in a region/country whose
+            // language we don't ship would resolve IP coords but never
+            // get them written to the nearby cache — the Nearby Reports
+            // module stayed silently hidden forever. Write the cache
+            // (and dispatch the crisp:location-cached event via
+            // _saveLocCtx) UNCONDITIONALLY here, before any language
+            // detection branches; the language matchers below may
+            // overwrite the same key with a richer payload but the
+            // event dispatch is idempotent and nearby.js's re-boot is
+            // a no-op when payload hasn't changed.
+            _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName || null, null, null, null);
             resolveLocationName();
             const regionStr = (ipLoc.region || '').toLowerCase();
             for (const entry of REGION_LANG_MAP) {

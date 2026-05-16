@@ -1237,10 +1237,26 @@
             // If we're already standalone (installed), hide the icon.
             const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
                 || window.navigator.standalone === true;
-            if (standalone) { btn.setAttribute('hidden', ''); return; }
+            if (standalone) {
+                // May 2026 (operator-reported on iPhone 14 installed PWA) —
+                // the CLS-fix CSS rule at styles.css:9924 turns the bare
+                // `[hidden]` attribute into `visibility:hidden + opacity:0`
+                // so the slot is reserved for the install-pending case
+                // (Chrome/Edge mid-session reveal of beforeinstallprompt).
+                // For the already-installed PWA case, the slot must FULLY
+                // collapse so the remaining 4 tiles fill the row uniformly.
+                // Inline `display: none` beats the CSS rule's
+                // visibility-only treatment and lets the flex children
+                // re-divide the row.
+                btn.setAttribute('hidden', '');
+                btn.style.display = 'none';
+                return;
+            }
             // Otherwise show — InstallPrompt.show() figures out the right
-            // path (Chrome native vs iOS sheet) at click time.
+            // path (Chrome native vs iOS sheet) at click time. Clear the
+            // inline display:none in case we transitioned out of standalone.
             btn.removeAttribute('hidden');
+            btn.style.display = '';
         }
         refresh();
         if (window.matchMedia) {
