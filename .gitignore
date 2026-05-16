@@ -64,6 +64,17 @@ backend/uploads_test/
 
 # Local developer notes (untracked working files; not part of the product)
 CLAUDE.md
+# AI-internal design references — kept on disk for the operator + future
+# Claude sessions, NEVER deployed. Anything we generate as scratch
+# planning, walkthroughs, or runbooks during AI-assisted development
+# belongs here, not on origin. Add new entries to this block.
+docs/NEARBY_REPORTS_PIPELINE.md
+docs/nearby-pipeline-workflow.html
+
+# Dev probes + seed scripts (underscore-prefixed; not picked up by the
+# playwright spec runner or any deploy step).
+e2e/_*.mjs
+backend/scripts/seed_nearby_dummy.py
 
 # IDE
 .vscode/
