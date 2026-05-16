@@ -5,7 +5,29 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v208';
+const CACHE_NAME = 'crisp-v209';
+// v208 → v209 (May 2026 — Nearby Reports Phase 5, see
+// docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 5):
+//   Backend-only delta — no PWA-visible contract change. Cache
+//   bumped so installed admin PWAs evict any /api/v1/admin
+//   route metadata from the SW cache once Phase 5's appeal
+//   webhook + observability surface lights up.
+//
+//   New backend surface:
+//     • Async fraud-batch worker (fraud_batch.py): emulator-farm,
+//       narrative-similarity, cross-device-ring detectors. Idempotent
+//       sweep on a 15-minute scheduler interval.
+//     • Outbound webhooks on appeal decisions — CRISP_APPEAL_WEBHOOK_
+//       URLS env (comma-separated). UNDP / partners integrate
+//       without coupling to internal schema.
+//     • PostGIS migration scaffold (0023_postgis_geospatial) —
+//       degrades gracefully when extension unavailable; Phase 5.1
+//       will flip aggregator to ST_DWithin once geom column lands
+//       on cooperating clusters.
+//
+//   Documents the operator-mandated 5-phase roadmap CLOSURE — all
+//   phases per docs/NEARBY_REPORTS_PIPELINE.md §15 are now committed
+//   locally. Operator deploy approval pending.
 // v207 → v208 (May 2026 — Nearby Reports Phase 4, see
 // docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 4):
 //   Backend-only delta. New response shape gains `density_mode`

@@ -221,6 +221,29 @@ def decide_appeal(
           actor_admin_id=getattr(admin_user, "id", None),
           payload={"from": prior_status, "to": body.decision,
                    "notes": body.notes or ""})
+
+    # Phase 5 (docs §6.4) — outbound webhook to deployment partners.
+    # CRISP hosts the framework; UNDP / partners integrate via these
+    # webhooks. Best-effort delivery — failure does not block the
+    # decision. The `webhook_sent` event is also logged so admins
+    # can see what was dispatched.
+    try:
+        from app.services.fraud_batch import emit_webhook
+        emit_webhook({
+            "type": "appeal.decided",
+            "appeal_id": appeal.id,
+            "device_id": appeal.device_id,
+            "from_status": prior_status,
+            "to_status": body.decision,
+            "actor_admin_id": getattr(admin_user, "id", None),
+            "decided_at": datetime.now(timezone.utc).isoformat(),
+        })
+        _emit(db, appeal.id, event_kind="webhook_sent",
+              payload={"to_status": body.decision})
+    except Exception:                              # pragma: no cover
+        # Webhook delivery failures must NEVER fail the decision API.
+        pass
+
     db.commit()
     db.refresh(appeal)
     return appeal
