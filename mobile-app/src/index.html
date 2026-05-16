@@ -3289,6 +3289,11 @@
      to every [data-voice="<i18n-key>"] element. Loaded BEFORE app.js
      so the helper is available during stage-render dispatches. -->
 <script defer src="voice-readout.js?v=1"></script>
+<!-- Phase 5.1 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §6.2) —
+     Device-telemetry capture for backend emulator-fingerprint detector
+     (commit 79ffc56). Self-contained IIFE; throttled to once per 24 h.
+     Loaded with defer so it runs after app.js wires up the device_id. -->
+<script defer src="device-telemetry.js?v=1"></script>
 <script defer src="app.js?v=1030"></script>
 <!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
      applyI18n etc. Internally it _whenReady-polls until those are set. -->

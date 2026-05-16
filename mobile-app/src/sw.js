@@ -5,7 +5,21 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v209';
+const CACHE_NAME = 'crisp-v210';
+// v209 → v210 (May 2026 — Nearby Reports Phase 5.1, deferred follow-ups,
+// see docs/NEARBY_REPORTS_PIPELINE.md §17):
+//   FIRST PWA-visible delta of the Phase 5.1 series. Adds
+//   `device-telemetry.js` to STATIC_ASSETS — a small standalone IIFE
+//   that runs ~1.2 s after DOMContentLoaded and POSTs a sanitised
+//   device-behaviour summary to /api/v1/devices/telemetry (backend
+//   commit 79ffc56). Throttled to once per 24 h via localStorage.
+//
+//   The summary feeds the upgraded emulator-farm detector — replaces
+//   the Phase-5 UA-substring scaffold with WebGL renderer / sensor
+//   activity / battery API / locale-tz scoring. No raw sensor streams
+//   captured (UNDP must-have #7); accel_active is a single 1-bit
+//   variance-derived flag.
+//
 // v208 → v209 (May 2026 — Nearby Reports Phase 5, see
 // docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 5):
 //   Backend-only delta — no PWA-visible contract change. Cache
@@ -1227,6 +1241,7 @@ const STATIC_ASSETS = [
     SW_BASE + 'home-screen.js',
     SW_BASE + 'nearby.js',           // "Verified Reports Nearby" home intel module
     SW_BASE + 'voice-readout.js',
+    SW_BASE + 'device-telemetry.js', // Phase 5.1 — POSTs sanitised summary to /api/v1/devices/telemetry once / day
     SW_BASE + 'v4-flow.js',
     SW_BASE + 'badge-studio.js',     // reward-system v2 Canvas composer
     SW_BASE + 'character-pack.js',   // reward-system v2 second pass — 8 hero SVGs
