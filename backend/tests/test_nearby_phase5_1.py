@@ -244,3 +244,44 @@ class TestEmulatorDetector:
         dev = self._mk_device(db, "no-data",
                               platform="iOS 17.2 iPhone 14")
         assert _detect_emulator_farm(db, dev, []) == []
+
+
+# ── ③ ST_DWithin aggregator path-selection ─────────────────────────
+
+class TestPostGisPathSelection:
+    """Docs §9.3 — when locations.geom is populated, the /nearby query
+    switches from bbox + Python-haversine to ST_DWithin on the geography
+    column. These tests cover the detection logic + the no-PostGIS
+    fallback. The actual ST_DWithin SQL is exercised by Phase 5.2
+    integration tests on a PostGIS-enabled CI runner (gated)."""
+
+    def test_geom_detector_false_without_postgis(self, db):
+        """On a Postgres cluster without PostGIS the migration logs
+        + skips creating the geom column. The detector must return
+        False so the endpoint stays on the bbox + haversine path —
+        Phase 5's graceful-degradation contract."""
+        from app.api.endpoints.reports import (
+            _has_populated_geom_column, _reset_geom_cache_for_tests,
+        )
+        _reset_geom_cache_for_tests()
+        # On the Homebrew dev cluster PostGIS isn't installed → no geom
+        # column exists. Detector caches False and returns False.
+        assert _has_populated_geom_column(db) is False
+        # Idempotency: a second call returns the same cached value
+        # without re-querying.
+        assert _has_populated_geom_column(db) is False
+        _reset_geom_cache_for_tests()
+
+    def test_geom_detector_caches_result(self, db):
+        """The detector's result is cached process-wide; flipping
+        the cache to True via the test hook must change the next
+        return value without touching the schema."""
+        from app.api.endpoints.reports import (
+            _has_populated_geom_column, _reset_geom_cache_for_tests,
+        )
+        import app.api.endpoints.reports as _rmod
+        _reset_geom_cache_for_tests()
+        _rmod._POSTGIS_GEOM_AVAILABLE = True
+        assert _has_populated_geom_column(db) is True
+        _reset_geom_cache_for_tests()
+        assert _has_populated_geom_column(db) is False

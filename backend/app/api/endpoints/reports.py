@@ -11,7 +11,7 @@ from typing import List, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, and_, func as sa_func
+from sqlalchemy import or_, and_, func as sa_func, text
 
 from app.core.config import settings
 from app.db.session import get_db
@@ -3722,6 +3722,59 @@ def get_reports(
 _NEARBY_CACHE: dict = {}
 _NEARBY_CACHE_TTL_SECONDS = 90
 
+# Phase 5.1 (docs/NEARBY_REPORTS_PIPELINE.md §9.3) — runtime detection of
+# the locations.geom PostGIS column added by migration 0023. When the
+# column exists AND has populated rows, the /nearby query uses
+# ST_DWithin(geom, ST_MakePoint(lng, lat)::geography, radius_m) — exact
+# metric filtering with the GiST index doing the heavy lifting, and the
+# Python haversine post-filter pass becomes redundant.
+#
+# Cached process-wide because the schema doesn't change at runtime. The
+# tri-state (None = not yet checked, True / False = cached) avoids
+# re-running the check on every request.
+#
+# In dev / CI without PostGIS the cached value stays False and the
+# existing bbox + haversine path runs — Phase 5's graceful-degradation
+# contract preserved.
+_POSTGIS_GEOM_AVAILABLE: Optional[bool] = None
+
+
+def _has_populated_geom_column(db: Session) -> bool:
+    """Return True iff `locations.geom` exists AND at least one row is
+    populated. Cached per-process; safe to call on the hot path.
+
+    Two checks so a half-applied migration (column created but no rows
+    yet populated by the trigger / backfill) doesn't break the query:
+    we only flip to ST_DWithin when the column is genuinely usable."""
+    global _POSTGIS_GEOM_AVAILABLE
+    if _POSTGIS_GEOM_AVAILABLE is not None:
+        return _POSTGIS_GEOM_AVAILABLE
+    try:
+        col = db.execute(text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'locations' AND column_name = 'geom'"
+        )).first()
+        if col is None:
+            _POSTGIS_GEOM_AVAILABLE = False
+            return False
+        # Column exists; check at least one row is populated.
+        row = db.execute(text(
+            "SELECT 1 FROM locations WHERE geom IS NOT NULL LIMIT 1"
+        )).first()
+        _POSTGIS_GEOM_AVAILABLE = row is not None
+    except Exception:
+        # ANY query failure → fall back to bbox path. Don't punish the
+        # user because of a transient catalog hiccup.
+        _POSTGIS_GEOM_AVAILABLE = False
+    return _POSTGIS_GEOM_AVAILABLE
+
+
+def _reset_geom_cache_for_tests() -> None:
+    """Test-only hook so the suite can force a re-detect after schema
+    changes. NOT exported by the API; called only from test fixtures."""
+    global _POSTGIS_GEOM_AVAILABLE
+    _POSTGIS_GEOM_AVAILABLE = None
+
 def _nearby_cache_key(lat3: float, lng3: float, radius_km: float,
                      since_iso: str, group_by: str,
                      limit: int, max_age_hours: int) -> str:
@@ -3784,9 +3837,16 @@ def get_nearby_reports(
         return cached_payload
 
     # ── DB query ──────────────────────────────────────────────────────
+    # Phase 5.1 (docs §9.3) — when the PostGIS `locations.geom` column
+    # is populated (migration 0023 + the per-row INSERT/UPDATE trigger),
+    # use exact ST_DWithin metric filtering with the GiST index doing
+    # the heavy lifting. Otherwise fall back to bbox + Python haversine.
+    use_postgis = _has_populated_geom_column(db)
+
     # Bbox pre-filter on indexed lat/lng columns. cos(lat) handles
     # meridian convergence; we widen at high latitudes but the
     # haversine post-filter still nails the actual radius.
+    # (Computed unconditionally — cheap, used by the fallback path.)
     lat_min, lat_max, lng_min, lng_max = bbox_for_radius(lat, lng, radius_km)
 
     # Cut-off for `max_age_hours`. server_created_at index narrows the
@@ -3813,9 +3873,32 @@ def get_nearby_reports(
     q = (
         db.query(Report)
           .join(Location, Location.report_id == Report.id)
-          .filter(Location.latitude.between(lat_min, lat_max))
-          .filter(Location.longitude.between(lng_min, lng_max))
-          .filter(
+    )
+    if use_postgis:
+        # Exact metric radius via PostGIS. ST_DWithin on a geography
+        # type does the distance math in metres on the WGS84 ellipsoid
+        # and uses the GiST index `ix_locations_geom_gist` (migration
+        # 0023). No Python haversine post-filter needed.
+        q = q.filter(text(
+            "ST_DWithin("
+            "  locations.geom, "
+            "  ST_SetSRID(ST_MakePoint(:nearby_lng, :nearby_lat), 4326)::geography, "
+            "  :nearby_radius_m"
+            ")"
+        ).bindparams(
+            nearby_lng=lng,
+            nearby_lat=lat,
+            nearby_radius_m=radius_km * 1000.0,
+        ))
+    else:
+        # Fallback bbox pre-filter — used when PostGIS extension is
+        # unavailable or the geom column hasn't been populated yet.
+        q = (
+            q.filter(Location.latitude.between(lat_min, lat_max))
+             .filter(Location.longitude.between(lng_min, lng_max))
+        )
+    q = (
+        q.filter(
               # ACTIVE statuses or RESOLVED within retention only.
               # Without the explicit RESOLVED age clamp, very-old
               # RESOLVED reports (months old) would still enter the
@@ -3860,13 +3943,19 @@ def get_nearby_reports(
         devices_by_id = {d.id: d for d in device_rows}
 
     # Exact haversine post-filter — drops bbox false-positives.
+    # Phase 5.1 (docs §9.3): when ST_DWithin did the radius filtering
+    # in SQL, the post-filter is redundant but cheap. Keep the
+    # location-presence guard since SQLAlchemy may still produce a
+    # candidate row with a NULL Location join target if the DB has
+    # drift; skip the haversine recompute in the PostGIS path.
     inputs: List[NearbyReportInput] = []
     for r in candidates:
         if not r.location:
             continue
-        d_km = haversine_km(lat, lng, r.location.latitude, r.location.longitude)
-        if d_km > radius_km:
-            continue
+        if not use_postgis:
+            d_km = haversine_km(lat, lng, r.location.latitude, r.location.longitude)
+            if d_km > radius_km:
+                continue
         # Phase 3 trust resolution: device-level weight first, then
         # bump by user-role (verified responder = 3.0; account-linked
         # civilian = 1.5). The aggregator drops suspicious (0.0)
