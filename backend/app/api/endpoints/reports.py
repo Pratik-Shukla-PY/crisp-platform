@@ -3836,6 +3836,18 @@ def get_nearby_reports(
         response.headers["X-Cache"] = "HIT"
         return cached_payload
 
+    # Phase 5.1 (docs §9.5) — hot-region snapshot lookup BEFORE the
+    # live aggregator. When CRISP_NEARBY_HOT_REGIONS=1 + caller is
+    # inside a configured + fresh region, return the precomputed
+    # payload directly. Stale or missing snapshots fall through to
+    # the live aggregator below; the next refresh writes a fresh row.
+    from app.services import hot_regions as _hot
+    snapshot = _hot.lookup_fresh_snapshot(lat, lng, db)
+    if snapshot is not None:
+        response.headers["Cache-Control"] = "private, max-age=60"
+        response.headers["X-Cache"] = "HOT-REGION"
+        return snapshot
+
     # ── DB query ──────────────────────────────────────────────────────
     # Three possible query paths, in priority order:
     #   1. H3 cell-set       (docs §9.4) — when CRISP_NEARBY_H3_MODE=1
@@ -4161,6 +4173,38 @@ def get_nearby_reports(
     response.headers["X-Total-Groups"] = str(payload.total_groups)
     response.headers["X-Total-Reports"] = str(payload.total_reports)
     return payload
+
+
+# Phase 5.1 (docs §9.5) — entry point used by the hot-region refresh
+# admin endpoint. Calls the live /nearby endpoint function with a
+# synthetic Request/Response so all the same logic runs (DB query,
+# aggregation, lifecycle persist, cache write) and returns the result
+# as a JSON-serializable dict for storage in nearby_hot_regions.
+# Late-binds to avoid the bidirectional-import cycle with
+# api/endpoints/hot_regions.py.
+def _aggregate_nearby_for_region(
+    db: Session, *, lat: float, lng: float, radius_km: float,
+) -> dict:
+    from starlette.requests import Request as _Request
+    from starlette.responses import Response as _Response
+    # Minimal ASGI scope — get_nearby_reports only touches
+    # request.headers, so an empty headers list satisfies the contract
+    # AND keeps the caller in the anonymous-citizen branch (so the
+    # snapshot is what citizens would see, which is the intent).
+    scope = {"type": "http", "headers": [], "method": "GET", "path": "/api/v1/reports/nearby"}
+    fake_request = _Request(scope=scope)
+    fake_response = _Response()
+    payload = get_nearby_reports(
+        request=fake_request,
+        response=fake_response,
+        lat=lat, lng=lng, radius_km=radius_km,
+        since=None, group_by="building", limit=20, max_age_hours=72,
+        db=db,
+    )
+    # Pydantic v2: model_dump(mode="json") yields a dict whose values
+    # are all JSON-native (datetimes → ISO strings, etc.), which is
+    # exactly what nearby_hot_regions.snapshot_json wants.
+    return payload.model_dump(mode="json")
 
 
 # ── Satellite Truth Verification ─────────────────────────────────────────────

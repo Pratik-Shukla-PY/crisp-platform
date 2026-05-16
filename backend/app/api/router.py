@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share, config, observability, appeals, devices
+from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share, config, observability, appeals, devices, hot_regions
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -56,3 +56,10 @@ api_router.include_router(appeals.router,
 api_router.include_router(devices.router,
                           prefix="/devices",
                           tags=["devices"])
+# Phase 5.1 (Nearby Pipeline §9.5) — admin CRUD + refresh for
+# materialised per-region /nearby snapshots. Read consumption is gated
+# by CRISP_NEARBY_HOT_REGIONS=1; CRUD endpoints stay usable regardless
+# so operators can seed regions before flipping the flag.
+api_router.include_router(hot_regions.router,
+                          prefix="/admin/nearby/hot-regions",
+                          tags=["hot-regions"])

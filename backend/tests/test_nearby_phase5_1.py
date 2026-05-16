@@ -384,3 +384,153 @@ class TestH3PathSelection:
         assert loc is not None
         assert loc.h3_idx is not None
         assert len(loc.h3_idx) == 15
+
+
+# ── ⑤ Hot-region snapshots (materialised /nearby pre-cache) ───────
+
+class TestHotRegionSnapshots:
+    """Docs §9.5 — per-region pre-aggregated snapshots. Read-path is
+    gated by CRISP_NEARBY_HOT_REGIONS; admin CRUD endpoints work
+    regardless so operators can seed regions before flipping the
+    flag."""
+
+    def _cleanup(self, db):
+        from app.models.report import NearbyHotRegion
+        db.query(NearbyHotRegion).filter(
+            NearbyHotRegion.name.like("p51-hr-%")
+        ).delete()
+        db.commit()
+
+    def test_find_containing_region_returns_smallest(self, db):
+        """When two regions both contain the caller, return the
+        smaller one (most-specific match wins)."""
+        from app.models.report import NearbyHotRegion
+        from app.services.hot_regions import find_containing_region
+        self._cleanup(db)
+        outer = NearbyHotRegion(
+            name="p51-hr-outer", centre_lat=12.97, centre_lng=77.59,
+            radius_km=20.0, refresh_interval_min=15, is_enabled=True,
+        )
+        inner = NearbyHotRegion(
+            name="p51-hr-inner", centre_lat=12.97, centre_lng=77.59,
+            radius_km=2.0, refresh_interval_min=15, is_enabled=True,
+        )
+        db.add_all([outer, inner]); db.commit()
+        # Caller inside both → smaller wins.
+        match = find_containing_region(12.97, 77.59, db)
+        assert match is not None and match.name == "p51-hr-inner"
+        self._cleanup(db)
+
+    def test_find_containing_region_respects_disabled(self, db):
+        """A disabled region must never match even when geometry fits."""
+        from app.models.report import NearbyHotRegion
+        from app.services.hot_regions import find_containing_region
+        self._cleanup(db)
+        r = NearbyHotRegion(
+            name="p51-hr-off", centre_lat=12.97, centre_lng=77.59,
+            radius_km=5.0, refresh_interval_min=15, is_enabled=False,
+        )
+        db.add(r); db.commit()
+        assert find_containing_region(12.97, 77.59, db) is None
+        self._cleanup(db)
+
+    def test_find_containing_region_returns_none_outside(self, db):
+        """No matching region → None, never the closest-but-outside."""
+        from app.models.report import NearbyHotRegion
+        from app.services.hot_regions import find_containing_region
+        self._cleanup(db)
+        r = NearbyHotRegion(
+            name="p51-hr-far", centre_lat=12.97, centre_lng=77.59,
+            radius_km=1.0, refresh_interval_min=15, is_enabled=True,
+        )
+        db.add(r); db.commit()
+        # 100 km away → no match
+        assert find_containing_region(13.97, 78.59, db) is None
+        self._cleanup(db)
+
+    def test_is_snapshot_fresh_age_logic(self, db):
+        """Refreshed-at < interval → fresh; refreshed-at > interval →
+        stale; None → never fresh."""
+        from datetime import datetime, timezone, timedelta
+        from app.models.report import NearbyHotRegion
+        from app.services.hot_regions import is_snapshot_fresh
+        self._cleanup(db)
+        # No snapshot ever stored
+        r = NearbyHotRegion(
+            name="p51-hr-fresh", centre_lat=12.97, centre_lng=77.59,
+            radius_km=5.0, refresh_interval_min=15, is_enabled=True,
+        )
+        assert is_snapshot_fresh(r) is False
+        # Fresh: just-stored snapshot
+        r.snapshot_json = {"groups": []}
+        r.refreshed_at = datetime.now(timezone.utc)
+        assert is_snapshot_fresh(r) is True
+        # Stale: refreshed long ago
+        r.refreshed_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+        assert is_snapshot_fresh(r) is False
+        self._cleanup(db)
+
+    def test_lookup_fresh_snapshot_respects_env_flag(self, db, monkeypatch):
+        """The read path is OFF by default — even a perfectly fresh
+        snapshot must NOT be returned without CRISP_NEARBY_HOT_REGIONS=1."""
+        from datetime import datetime, timezone
+        from app.models.report import NearbyHotRegion
+        from app.services.hot_regions import lookup_fresh_snapshot
+        self._cleanup(db)
+        r = NearbyHotRegion(
+            name="p51-hr-flag", centre_lat=12.97, centre_lng=77.59,
+            radius_km=5.0, refresh_interval_min=15, is_enabled=True,
+            snapshot_json={"sentinel": "flag-off"},
+            refreshed_at=datetime.now(timezone.utc),
+        )
+        db.add(r); db.commit()
+        monkeypatch.delenv("CRISP_NEARBY_HOT_REGIONS", raising=False)
+        assert lookup_fresh_snapshot(12.97, 77.59, db) is None
+        monkeypatch.setenv("CRISP_NEARBY_HOT_REGIONS", "1")
+        snap = lookup_fresh_snapshot(12.97, 77.59, db)
+        assert snap is not None and snap.get("sentinel") == "flag-off"
+        self._cleanup(db)
+
+    def test_admin_crud_creates_lists_patches_deletes(self, db):
+        """Smoke-test the full CRUD surface."""
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.models.report import NearbyHotRegion
+        self._cleanup(db)
+        c = TestClient(app)
+        # Use the e2e-admin login pattern. Skip if not seeded.
+        res = c.post("/api/v1/auth/login", json={
+            "email": "e2e-admin@crisp-e2e-tests.org",
+            "password": "E2eAdmin!2026",
+        })
+        if res.status_code != 200:
+            pytest.skip("e2e-admin not seeded in this test DB")
+        token = res.json()["access_token"]
+        hdrs = {"Authorization": f"Bearer {token}"}
+
+        # Create
+        create = c.post("/api/v1/admin/nearby/hot-regions",
+                        headers=hdrs, json={
+            "name": "p51-hr-crud",
+            "centre_lat": 12.97, "centre_lng": 77.59,
+            "radius_km": 5.0, "refresh_interval_min": 15,
+        })
+        assert create.status_code == 201, create.text
+        # List includes the new region
+        listed = c.get("/api/v1/admin/nearby/hot-regions", headers=hdrs)
+        names = [r["name"] for r in listed.json()]
+        assert "p51-hr-crud" in names
+        # Patch radius
+        patched = c.patch("/api/v1/admin/nearby/hot-regions/p51-hr-crud",
+                          headers=hdrs, json={"radius_km": 10.0})
+        assert patched.status_code == 200
+        assert patched.json()["radius_km"] == 10.0
+        # Delete
+        deleted = c.delete("/api/v1/admin/nearby/hot-regions/p51-hr-crud",
+                           headers=hdrs)
+        assert deleted.status_code == 204
+        # Re-list — gone
+        listed = c.get("/api/v1/admin/nearby/hot-regions", headers=hdrs)
+        names = [r["name"] for r in listed.json()]
+        assert "p51-hr-crud" not in names
+        self._cleanup(db)

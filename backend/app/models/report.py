@@ -775,6 +775,43 @@ event.listen(Location, "before_insert", _populate_h3_idx)
 event.listen(Location, "before_update", _populate_h3_idx)
 
 
+# ── Phase 5.1 (May 2026, docs §9.5) — Materialised hot-region snapshots ─
+# Per-region pre-aggregated /nearby responses for 1 M+-report regions
+# under active disaster. The aggregator runs once per region per refresh
+# interval; every /nearby poll that falls inside an enabled region
+# returns the cached snapshot instead of re-aggregating live.
+#
+# Not a PostgreSQL materialised view — a regular table with a JSONB
+# blob keyed by region. Lighter than MV + survives multi-worker /
+# multi-instance / process-restart without rebuild drama.
+
+class NearbyHotRegion(Base):
+    __tablename__ = "nearby_hot_regions"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    # Unique human-readable name (e.g. "bangalore-central", "delhi-ncr").
+    # The admin endpoint uses this as the path component.
+    name = Column(String(64), unique=True, nullable=False)
+    # Region centre + radius. /nearby callers whose coords fall within
+    # `radius_km` of the centre get the snapshot.
+    centre_lat = Column(Float, nullable=False)
+    centre_lng = Column(Float, nullable=False)
+    radius_km = Column(Float, nullable=False, default=5.0)
+    # Snapshot lifetime. The scheduled refresh task should run at
+    # least this often (default 15 min, per docs §9.5).
+    refresh_interval_min = Column(Integer, nullable=False, default=15,
+                                  server_default="15")
+    # The most recent precomputed /nearby response, exactly as the
+    # endpoint would return it (active groups + recently_resolved +
+    # density mode + …).
+    snapshot_json = Column(JSON, nullable=True)
+    refreshed_at = Column(DateTime(timezone=True), nullable=True)
+    # Soft toggle so the operator can disable a region without
+    # deleting its row + losing the configured centre / radius.
+    is_enabled = Column(Boolean, nullable=False, default=True,
+                        server_default="true")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 # ── P3.1 — Media file cleanup on DB delete ────────────────────────────────────
 # When a Media row is deleted (either directly or via cascade from a Report
 # hard-delete), remove the corresponding disk files in `uploads/`. Without
