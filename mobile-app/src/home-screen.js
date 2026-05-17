@@ -1403,29 +1403,17 @@
         const btn = document.getElementById('btn-home-install-icon');
         if (!btn) return;
         function refresh() {
-            // If we're already standalone (installed), hide the icon.
-            const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
-                || window.navigator.standalone === true;
-            if (standalone) {
-                // May 2026 (operator-reported on iPhone 14 installed PWA) —
-                // the CLS-fix CSS rule at styles.css:9924 turns the bare
-                // `[hidden]` attribute into `visibility:hidden + opacity:0`
-                // so the slot is reserved for the install-pending case
-                // (Chrome/Edge mid-session reveal of beforeinstallprompt).
-                // For the already-installed PWA case, the slot must FULLY
-                // collapse so the remaining 4 tiles fill the row uniformly.
-                // Inline `display: none` beats the CSS rule's
-                // visibility-only treatment and lets the flex children
-                // re-divide the row.
-                btn.setAttribute('hidden', '');
-                btn.style.display = 'none';
-                return;
-            }
-            // Otherwise show — InstallPrompt.show() figures out the right
-            // path (Chrome native vs iOS sheet) at click time. Clear the
-            // inline display:none in case we transitioned out of standalone.
-            btn.removeAttribute('hidden');
-            btn.style.display = '';
+            // May 2026 (home redesign v6, ask #3) — the install
+            // affordance was moved out of the action-tiles row into
+            // the new yellow "+ Add to Homescreen" chip below the
+            // footer (see _wireAddToHomescreenChip). The legacy tile
+            // shell is kept in the DOM for any Playwright spec that
+            // still selects #btn-home-install-icon, but it must stay
+            // permanently hidden — both inline display:none AND the
+            // [hidden] attribute so the CSS visibility-only treatment
+            // can't resurrect it.
+            btn.setAttribute('hidden', '');
+            btn.style.display = 'none';
         }
         refresh();
         if (window.matchMedia) {
