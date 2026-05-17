@@ -4168,6 +4168,17 @@ function detectAndSetupLanguage() {
         const dir = RTL_LANGS.has(String(code || '').toLowerCase()) ? 'rtl' : 'ltr';
         if (html.dir !== dir) html.dir = dir;
         html.lang = code || 'en';
+        // May 2026 (perf Sprint B.1) — lazily fetch the Noto Sans
+        // Arabic / CJK CSS the first time the user picks (or
+        // auto-detects) a non-Latin locale. Latin-script sessions
+        // never pay the ~50-100 KB cost. The injector lives in the
+        // inline <script> at the top of index.html and is idempotent
+        // (no-op if the link tag is already in the DOM).
+        try {
+            if (typeof window.__crispEnsureLocaleFont === 'function') {
+                window.__crispEnsureLocaleFont(code);
+            }
+        } catch (_) { /* font CSS injection failure is non-blocking */ }
     }
 
     // v4 (post-prod fix) — guard against locales we don't ship

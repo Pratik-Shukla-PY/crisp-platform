@@ -105,14 +105,54 @@
          font-best-practices guidance). NO new woff2 preload because
          Google's gstatic URLs are content-hashed; if they rotate the
          hash our preload becomes a wasted fetch. The CSS preload
-         alone gives most of the benefit safely. -->
+         alone gives most of the benefit safely.
+
+         May 2026 (perf Sprint B.1) — Noto Sans Arabic + Noto Sans SC
+         DROPPED from the static Google Fonts query so the ~85% of
+         users on Latin-script locales (en/es/fr/pt/ru/id/tr/vi/…)
+         never fetch them. The inline <script> below detects the
+         saved locale (`crisp_lang_manual` localStorage) — if it's
+         ar/ur (RTL) or zh/ja/ko (CJK), it dynamically appends a
+         <link rel="stylesheet"> to fetch the right Noto family. The
+         app.js activateLang flow calls window.__crispEnsureLocaleFont
+         when the user changes language at runtime so a fresh
+         English session that switches to Arabic gets Noto on demand.
+         Savings: ~50-100 KB of Google CSS + woff2 for the majority. -->
+    <script>
+        (function () {
+            try {
+                var lang = (localStorage.getItem('crisp_lang_manual') ||
+                            (navigator.language || 'en').slice(0, 2)).toLowerCase();
+                window.__crispEnsureLocaleFont = function (code) {
+                    var c = String(code || '').toLowerCase().slice(0, 2);
+                    var url = null;
+                    var key = null;
+                    if (c === 'ar' || c === 'ur') {
+                        url = 'https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600&display=swap';
+                        key = 'crisp-noto-ar';
+                    } else if (c === 'zh' || c === 'ja' || c === 'ko') {
+                        url = 'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;600&display=swap';
+                        key = 'crisp-noto-cjk';
+                    }
+                    if (!url || document.getElementById(key)) return;
+                    var link = document.createElement('link');
+                    link.id = key;
+                    link.rel = 'stylesheet';
+                    link.crossOrigin = 'anonymous';
+                    link.href = url;
+                    document.head.appendChild(link);
+                };
+                window.__crispEnsureLocaleFont(lang);
+            } catch (e) { /* localStorage blocked → fall back to system fonts */ }
+        })();
+    </script>
     <link rel="preload"
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600&family=Noto+Sans+SC:wght@400;600&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap"
           as="style" crossorigin>
     <link rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600&family=Noto+Sans+SC:wght@400;600&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap"
           media="print" onload="this.media='all'">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600&family=Noto+Sans+SC:wght@400;600&display=swap"></noscript>
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap"></noscript>
     <link rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
           media="print" onload="this.media='all'">
