@@ -756,6 +756,23 @@
                             <span class="hb-label" id="home-badge-label">Scout</span>
                             <span class="hb-progress" id="home-badge-progress">Submit your first report to level up</span>
                         </span>
+                        <!-- May 2026 (home redesign v6, ask #4) — inline
+                             trophy affordance after the Lifekeeper text.
+                             Purely visual; the whole chip is the click
+                             target (already wired by _wireRewardsNav in
+                             home-screen.js to navigate to stage-rewards),
+                             so no separate handler. Operator decision:
+                             icon AFTER the text reads as a
+                             tap-for-detail affordance. -->
+                        <span class="hb-trophy" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
+                                 stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/>
+                                <circle cx="12" cy="17" r="5"/>
+                                <path d="M12 17h.01"/>
+                            </svg>
+                        </span>
                     </button>
                 </div>
 
@@ -835,10 +852,14 @@
                     <span class="mr-count" id="mr-count" hidden>(0)</span>
                     <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
                 </button>
-                <button type="button" class="home-action-tile home-action-tile--rewards" id="btn-rewards">
-                    <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><circle cx="12" cy="17" r="5"/><path d="M12 17h.01"/></svg></span>
-                    <span class="hat-label" data-i18n="rewards_btn">Rewards</span>
-                </button>
+                <!-- May 2026 (home redesign v6, ask #4) — the Rewards
+                     action tile that lived here has been removed. The
+                     trophy now sits inline inside the Lifekeeper pill
+                     (#home-badge-chip → .hb-trophy span). The pill
+                     itself is already a <button> wired to navigate to
+                     stage-rewards via _wireRewardsNav in
+                     home-screen.js, so the rewards entry point is
+                     preserved — just relocated. -->
                 <!-- May 2026 (home redesign v6, ask #5) — the Audio
                      action tile that used to sit here has been moved
                      into #lang-switcher (top-right) so it lives in the

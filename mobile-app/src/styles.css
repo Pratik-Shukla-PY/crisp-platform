@@ -9787,6 +9787,26 @@ body.tier-t4 .home-impact {
     gap: 8px;
     min-width: 0;
 }
+/* May 2026 (home redesign v6, ask #4) — inline trophy affordance at
+   the right edge of the Lifekeeper pill. Replaces the removed
+   #btn-rewards action tile. Same colour family as the rest of the
+   pill so it reads as a unified component. The whole pill is the
+   click target (already wired to navigate to stage-rewards). */
+.home-stage .home-badge-chip.home-badge-chip--hero .hb-trophy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 22px; height: 22px;
+    margin-left: 4px;
+    color: #80EE98;        /* matches the v5 rewards-tile accent */
+    opacity: 0.85;
+}
+.home-stage .home-badge-chip.home-badge-chip--hero:hover .hb-trophy,
+.home-stage .home-badge-chip.home-badge-chip--hero:focus-visible .hb-trophy {
+    opacity: 1;
+    color: #ffae00;        /* yellow on hover — taps a tap-for-detail cue */
+}
 .home-stage .home-badge-chip.home-badge-chip--hero .hb-label {
     font-size: 13px;
     font-weight: 800;
