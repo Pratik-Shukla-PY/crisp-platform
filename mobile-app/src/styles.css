@@ -205,6 +205,51 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
             rgba(18, 48, 78, 0.92) 100%);
     }
 }
+
+/* ── Audio glyph inside the lang-switcher (Home v6, ask #5) ──────────
+   The Audio action tile was moved from the home-stage action-tiles row
+   into this top utility cluster so it lives next to the language pill.
+   Same id (#btn-home-voice) so home-screen.js _wireHomeVoice() picks
+   it up without a re-wire. Subtle teal glyph; brighter mint + soft
+   glow on .is-speaking (the existing class the voice handler toggles
+   during speechSynthesis playback). */
+.lang-switcher .lang-audio-btn {
+    all: unset;
+    cursor: pointer;
+    width: 28px; height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--accent, #09D1C7);
+    flex: 0 0 auto;
+    transition: background 0.15s ease, color 0.15s ease,
+                box-shadow 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.lang-switcher .lang-audio-btn:hover,
+.lang-switcher .lang-audio-btn:focus-visible {
+    background: rgba(9, 209, 199, 0.14);
+    color: #46DFB1;
+}
+.lang-switcher .lang-audio-btn:focus-visible {
+    outline: 2px solid rgba(70, 223, 177, 0.45);
+    outline-offset: 2px;
+}
+.lang-switcher .lang-audio-btn.is-speaking {
+    color: #46DFB1;
+    background: rgba(70, 223, 177, 0.12);
+    box-shadow: 0 0 14px rgba(9, 209, 199, 0.45);
+    animation: lang-audio-pulse 1.6s ease-in-out infinite;
+}
+@keyframes lang-audio-pulse {
+    0%, 100% { box-shadow: 0 0 12px rgba(9, 209, 199, 0.40); }
+    50%      { box-shadow: 0 0 22px rgba(9, 209, 199, 0.70); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lang-switcher .lang-audio-btn.is-speaking { animation: none; }
+}
+
 .lang-switcher button {
     background: none; border: none;
     /* v6 redesign — pure white reads cleaner against the navy

@@ -325,6 +325,27 @@
          are retained hidden in the DOM purely for Playwright back-compat
          (existing specs click them with { force: true }). -->
     <div class="lang-switcher" id="lang-switcher" title="Tap to change language" data-i18n-title="aria_tap_change_language">
+        <!-- May 2026 (home redesign v6, ask #5) — audio glyph relocated
+             from the action-tiles row into the top utility cluster so
+             it sits next to the language pill. The id #btn-home-voice
+             is preserved verbatim so home-screen.js _wireHomeVoice()
+             continues to wire it without change. The glyph reads
+             aloud the current home stage in the active language via
+             window.speechSynthesis. -->
+        <button type="button" class="lang-audio-btn" id="btn-home-voice"
+                aria-label="Read this page aloud"
+                data-i18n-aria-label="aria_read_aloud"
+                title="Read this page aloud"
+                data-i18n-title="aria_read_aloud">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
+                 stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            </svg>
+        </button>
         <!-- Phase 2.4 (May 2026) — a11y fix. The connectivity dot is a
              pure visual indicator (CSS-coloured circle); axe-core flags
              `aria-label` as "prohibited" on a default-role span. Adding
@@ -818,12 +839,12 @@
                     <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><circle cx="12" cy="17" r="5"/><path d="M12 17h.01"/></svg></span>
                     <span class="hat-label" data-i18n="rewards_btn">Rewards</span>
                 </button>
-                <button type="button" class="home-action-tile" id="btn-home-voice"
-                        aria-label="Read this page aloud"
-                        data-i18n-aria-label="aria_read_aloud">
-                    <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span>
-                    <span class="hat-label" data-i18n="action_tile_audio">Audio</span>
-                </button>
+                <!-- May 2026 (home redesign v6, ask #5) — the Audio
+                     action tile that used to sit here has been moved
+                     into #lang-switcher (top-right) so it lives in the
+                     top utility cluster alongside the language pill.
+                     The new tile still uses id=btn-home-voice so
+                     home-screen.js _wireHomeVoice() keeps working. -->
             </div>
 
             <!-- May 2026 (action-tiles pass) — the 2-col secondary
