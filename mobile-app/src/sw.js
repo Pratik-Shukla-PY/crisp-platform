@@ -5,7 +5,30 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v212';
+const CACHE_NAME = 'crisp-v213';
+// v212 → v213 (May 2026 — Home redesign v6, 7-ask batch):
+//   1. Safe-area inset on .stage base class — fixes installed-PWA
+//      header overlap with iPhone notch / Dynamic Island / Android
+//      status bar.
+//   2. Audio button moved from action-tiles row into #lang-switcher
+//      (top-right), id #btn-home-voice preserved.
+//   3. Trophy icon inline on Lifekeeper pill; standalone Rewards
+//      action tile deleted.
+//   4. Login + My Reports promoted to bigger glass buttons directly
+//      below the CTA; My Reports count always visible (even 0).
+//   5. Hero-card chrome (gradient + border + shadow + ::before glow)
+//      neutralised for an open, flatter layout.
+//   6. New "+ Add to Homescreen" yellow-on-brown chip pinned below
+//      the Privacy / CRISP-ID footer row; hidden when already in
+//      installed-PWA mode.
+//   7. "Tap the orange button" → "Tap the green button below" copy
+//      retired in en.json + the hardcoded JS fallback, plus the
+//      "home_channel_coming_soon" string that referenced
+//      "the orange button above". All 22 locales backfilled via
+//      scripts/build-locale-skeletons.mjs.
+//   Returning users evict v212 on next activate to pick up all of
+//   the above. No backend changes.
+//
 // v211 → v212 (May 2026 — Phase 5.1 NO-SCROLL pass, channels redesign):
 //   Operator-reported: the home stage must fit on iPhone SE
 //   (375 × 667) with ZERO vertical scroll. The 2 × 3 square-tile

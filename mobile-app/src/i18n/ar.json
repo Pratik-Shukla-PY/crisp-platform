@@ -7,14 +7,16 @@
     "tier": 1,
     "translation_status": "partial",
     "translation_source": "mixed (native + en-placeholder)",
-    "en_key_count": 801,
+    "en_key_count": 803,
     "translated_key_count": 799,
-    "gap_key_count": 2,
-    "coverage_percent": 99.8,
-    "generated_at": "2026-05-16T19:16:01.320Z",
+    "gap_key_count": 4,
+    "coverage_percent": 99.5,
+    "generated_at": "2026-05-17T05:35:28.787Z",
     "gap_keys": [
       "summary_none",
-      "aria_channels_strip"
+      "add_to_homescreen",
+      "aria_channels_strip",
+      "aria_add_to_homescreen"
     ]
   },
   "consent_title": "خصوصيتك مهمة",
@@ -381,6 +383,7 @@
   "landing_other_channels": "أو أبلغ عبر:",
   "landing_get_app": "احصل على التطبيق:",
   "landing_install_pwa": "ثبّت على الشاشة الرئيسية",
+  "add_to_homescreen": "+ Add to Homescreen",
   "landing_consent": "أوافق على مشاركة بياناتي مع فرق الاستجابة.",
   "landing_offline_hint": "يعمل دون اتصال · مفتوح المصدر · متوافق UNDP",
   "infra_residential": "سكني",
@@ -564,6 +567,7 @@
   "aria_back": "رجوع",
   "aria_close": "إغلاق",
   "aria_channels_strip": "Other ways to report — tap to see all channels",
+  "aria_add_to_homescreen": "Add CRISP to your home screen",
   "aria_close_camera": "إغلاق الكاميرا",
   "aria_add_photo": "إضافة صورة أخرى",
   "aria_image_viewer": "عارض الصور",

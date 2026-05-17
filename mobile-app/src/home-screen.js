@@ -1459,7 +1459,7 @@
             const parts = [
                 'CRISP',
                 tt('home_cta_primary', 'Report an Incident'),
-                tt('home_voice_hint', 'Tap the orange button to start. Or use Telegram, WhatsApp, SMS, or a phone call.'),
+                tt('home_voice_hint', 'Tap the green button below to start. Or use Telegram, WhatsApp, SMS, or a phone call.'),
             ];
             const text = parts.join('. ');
             try {
