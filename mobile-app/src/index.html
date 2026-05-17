@@ -61,11 +61,21 @@
          loaded. font-display:swap inside the font CSS prevents FOIT.
          Apr 2026 note: Noto Sans Arabic + Noto Sans SC stay together;
          the browser only fetches the per-glyph subsets it actually
-         needs (Latin-only renders → only Inter+Outfit hit network). -->
+         needs (Latin-only renders → only Inter+Outfit hit network).
+
+         May 2026 (perf Sprint A.1) — weight audit. Trimmed Inter
+         weights 300 (UNUSED across styles.css/index.html; would have
+         fallen back to 400 anyway). Trimmed Noto Sans Arabic + Noto
+         Sans SC weight 700 (UNUSED — Arabic / CJK headings use 600
+         only). Saves ~25 KB of CSS + ~30 KB of woff2 downloads per
+         cold load for the long tail of locales whose readers see
+         these fonts. Inter / Outfit weight coverage is otherwise
+         identical so no visible typographic change. Locale-conditional
+         loading of the Noto families lands in Sprint B.2. -->
     <link rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600&family=Noto+Sans+SC:wght@400;600&display=swap"
           media="print" onload="this.media='all'">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap"></noscript>
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600&family=Noto+Sans+SC:wght@400;600&display=swap"></noscript>
     <link rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
           media="print" onload="this.media='all'">
