@@ -71,7 +71,24 @@
          cold load for the long tail of locales whose readers see
          these fonts. Inter / Outfit weight coverage is otherwise
          identical so no visible typographic change. Locale-conditional
-         loading of the Noto families lands in Sprint B.2. -->
+         loading of the Noto families lands in Sprint B.2.
+
+         May 2026 (perf Sprint A.3) — high-priority CSS preload. The
+         `media="print" onload="this.media='all'"` trick correctly
+         keeps the font CSS off the render-blocking path BUT the
+         browser fetches it at LOW priority (print stylesheet). The
+         <link rel="preload" as="style" ...> above bumps the same URL
+         to HIGH priority, kicking the fetch in parallel with HTML
+         parse. Net effect: the @font-face declarations land ~400-
+         800 ms earlier on slow networks → Inter swaps in before LCP
+         instead of after. Standard pattern (matches web.dev's
+         font-best-practices guidance). NO new woff2 preload because
+         Google's gstatic URLs are content-hashed; if they rotate the
+         hash our preload becomes a wasted fetch. The CSS preload
+         alone gives most of the benefit safely. -->
+    <link rel="preload"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600&family=Noto+Sans+SC:wght@400;600&display=swap"
+          as="style" crossorigin>
     <link rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&family=Noto+Sans+Arabic:wght@400;600&family=Noto+Sans+SC:wght@400;600&display=swap"
           media="print" onload="this.media='all'">
