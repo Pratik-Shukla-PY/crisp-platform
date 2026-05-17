@@ -11205,6 +11205,109 @@ body { background-color: #10284a; }
     flex-shrink: 0;
 }
 
+/* ── Home v6 (May 2026, ask #6) — Login + My Reports big buttons ─────
+   The Sign-in and My Reports tiles were promoted from the 5-tile
+   action row into a 2-column grid of bigger, more discoverable glass
+   buttons directly below the CTA. Operator-decision: secondary glass
+   style (translucent background + mint accent border) keeps the
+   primary CTA visually dominant. ~52 px tall × 2 columns reads as
+   "important but supporting". */
+.home-stage .home-primary-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 6px;
+    width: 100%;
+}
+.home-stage .home-primary-btn {
+    /* Drop the default <button> chrome so the class controls
+       everything (matches the existing pattern from .home-channels-strip
+       and .home-nearby-number-block). */
+    all: unset;
+    cursor: pointer;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(70, 223, 177, 0.22);
+    color: var(--text, #f1f5f9);
+    font-family: var(--font, 'Inter', sans-serif);
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 52px;
+    position: relative;
+    transition: background 0.15s ease, border-color 0.15s ease,
+                transform 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.home-stage .home-primary-btn:hover {
+    background: rgba(70, 223, 177, 0.08);
+    border-color: rgba(70, 223, 177, 0.40);
+}
+.home-stage .home-primary-btn:focus-visible {
+    outline: 2px solid rgba(70, 223, 177, 0.55);
+    outline-offset: 2px;
+}
+.home-stage .home-primary-btn:active { transform: scale(0.985); }
+.home-stage .home-primary-btn .hpb-icon {
+    color: var(--accent, #09D1C7);
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+.home-stage .home-primary-btn .hpb-icon svg { width: 18px; height: 18px; }
+.home-stage .home-primary-btn .hpb-label {
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* My Reports count chip — always visible (operator: "show default
+   number"). Mint-green chip echoes the borders + the live channel dot
+   so the count reads as a status indicator. */
+.home-stage .home-primary-btn .mr-count {
+    margin-left: 4px;
+    padding: 1px 9px;
+    border-radius: 999px;
+    background: rgba(9, 209, 199, 0.18);
+    color: #46DFB1;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.5;
+    flex: 0 0 auto;
+}
+/* Signed-in tile state — slightly more emphatic border + brighter
+   online dot. Wired by home-screen.js _updateAuthState via
+   data-state="signed-in". */
+.home-stage .home-primary-btn--login[data-state="signed-in"] {
+    border-color: rgba(70, 223, 177, 0.55);
+    background: rgba(70, 223, 177, 0.06);
+}
+.home-stage .home-primary-btn--login[data-state="signed-in"] .icon-status-dot.dot-online {
+    background: #46DFB1;
+    box-shadow: 0 0 5px rgba(70, 223, 177, 0.7);
+}
+.home-stage .home-primary-btn--login .icon-status-dot {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+}
+.home-stage .home-primary-btn--login .icon-status-dot.dot-offline {
+    background: rgba(239, 68, 68, 0.7);
+}
+/* Tighten on short viewports so the row doesn't push the channels
+   strip into scroll territory. */
+@media (max-height: 700px) {
+    .home-stage .home-primary-row { gap: 8px; margin-top: 4px; }
+    .home-stage .home-primary-btn { min-height: 46px; padding: 10px 12px; font-size: 12.5px; }
+    .home-stage .home-primary-btn .hpb-icon svg { width: 16px; height: 16px; }
+}
+
 /* Strip per-element margins inside the card so the card's `gap`
    owns the vertical rhythm. The previous .home-section-hero
    `justify-content: center` already centres the card vertically; we

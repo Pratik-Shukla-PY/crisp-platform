@@ -1347,12 +1347,15 @@
                 count = window._submittedCache.length;
             }
         } catch (_) {}
-        if (count > 0) {
-            span.textContent = `(${count})`;
-            span.removeAttribute('hidden');
-        } else {
-            span.setAttribute('hidden', '');
-        }
+        // May 2026 (home redesign v6, ask #6): operator wants the
+        // count visible by default — "show the default number of
+        // reports submitted ... to make reporting history more visible".
+        // The chip used to hide when count===0; now it always paints
+        // the raw number (no parentheses — the chip's mint pill chrome
+        // is enough framing). Painter is idempotent so re-renders on
+        // every submission flip the count without flicker.
+        span.textContent = String(count);
+        span.removeAttribute('hidden');
     }
 
     // PWA install icon — always visible until `display-mode: standalone`

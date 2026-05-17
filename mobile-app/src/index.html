@@ -819,15 +819,66 @@
                 <p class="home-hero-helper" data-i18n="home_cta_helper">
                     Works offline and syncs automatically in low connectivity.
                 </p>
+
+                <!-- May 2026 (home redesign v6, ask #6) — Sign-in and
+                     My Reports promoted from the small action-tiles row
+                     into bigger glass buttons directly under the
+                     Report-an-Incident CTA. Operator-decision:
+                     secondary glass style so the primary CTA stays
+                     visually dominant. Both IDs preserved verbatim
+                     so home-screen.js _updateAuthState (login state
+                     swap) and _renderMyReportsCount (count painter)
+                     keep working unchanged. The count chip now shows
+                     "0" by default instead of hiding (ask #6 sub-ask). -->
+                <div class="home-primary-row" id="home-primary-row" role="group" aria-label="Sign in or view your reports">
+                    <button type="button" class="home-primary-btn home-primary-btn--login"
+                            id="btn-home-login-icon" data-state="anonymous"
+                            aria-label="Sign in"
+                            data-i18n-aria-label="home_login_icon_signed_out">
+                        <span class="hpb-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                                 stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </span>
+                        <span class="hpb-label" data-i18n="action_tile_login">Sign in</span>
+                        <span class="icon-status-dot dot-offline" id="home-login-dot" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="home-primary-btn home-primary-btn--myreports"
+                            id="btn-my-reports"
+                            aria-label="My Reports">
+                        <span class="hpb-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                                 stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                                <path d="M9 12h6M9 16h4"/>
+                            </svg>
+                        </span>
+                        <span class="hpb-label" data-i18n="my_reports">My Reports</span>
+                        <!-- v6 ask #6: count is ALWAYS rendered (operator:
+                             "show the default number of reports submitted
+                             ... to make reporting history more visible").
+                             Painter writes the number; default 0 stays
+                             visible until first submission. -->
+                        <span class="mr-count" id="mr-count">0</span>
+                        <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
+                    </button>
+                </div>
             </div>
 
-            <!-- Utility row — May 2026 (redesign pass). MOVED out
-                 of section-top to sit BELOW the CTA so it doesn't
-                 compete with the anchor for attention. Same 5 IDs
-                 (Download / Login / My Reports / Rewards / Audio).
-                 Visually demoted in CSS via .home-section-hero
-                 .home-action-tile to no individual borders, soft
-                 hover surface only. -->
+            <!-- Utility row — May 2026 (home redesign v6 cleanup).
+                 Pre-v6 this carried Download / Login / My Reports /
+                 Rewards / Audio as 5 small tiles. After v6 only the
+                 Download (Install on Home Screen) action tile remains
+                 as a hidden shell — the dedicated "Add to Homescreen"
+                 yellow chip below the footer (#btn-home-add2hs in a
+                 later commit) is the primary install affordance.
+                 The shell is kept so any operator override / Playwright
+                 spec that targets #btn-home-install-icon still resolves. -->
             <div class="home-action-tiles home-action-tiles--utility" id="home-action-tiles" role="group" aria-label="Quick actions">
                 <button type="button" class="home-action-tile" id="btn-home-install-icon"
                         aria-label="Install on home screen"
@@ -836,36 +887,6 @@
                     <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></span>
                     <span class="hat-label" data-i18n="action_tile_download">Download App</span>
                 </button>
-                <button type="button" class="home-action-tile home-action-tile--login" id="btn-home-login-icon"
-                        aria-label="Sign in"
-                        data-i18n-aria-label="home_login_icon_signed_out"
-                        data-state="anonymous">
-                    <span class="hat-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    </span>
-                    <span class="hat-label" data-i18n="action_tile_login">Login</span>
-                    <span class="icon-status-dot dot-offline" id="home-login-dot" aria-hidden="true"></span>
-                </button>
-                <button type="button" class="home-action-tile" id="btn-my-reports">
-                    <span class="hat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg></span>
-                    <span class="hat-label" data-i18n="my_reports">My Reports</span>
-                    <span class="mr-count" id="mr-count" hidden>(0)</span>
-                    <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
-                </button>
-                <!-- May 2026 (home redesign v6, ask #4) — the Rewards
-                     action tile that lived here has been removed. The
-                     trophy now sits inline inside the Lifekeeper pill
-                     (#home-badge-chip → .hb-trophy span). The pill
-                     itself is already a <button> wired to navigate to
-                     stage-rewards via _wireRewardsNav in
-                     home-screen.js, so the rewards entry point is
-                     preserved — just relocated. -->
-                <!-- May 2026 (home redesign v6, ask #5) — the Audio
-                     action tile that used to sit here has been moved
-                     into #lang-switcher (top-right) so it lives in the
-                     top utility cluster alongside the language pill.
-                     The new tile still uses id=btn-home-voice so
-                     home-screen.js _wireHomeVoice() keeps working. -->
             </div>
 
             <!-- May 2026 (action-tiles pass) — the 2-col secondary
