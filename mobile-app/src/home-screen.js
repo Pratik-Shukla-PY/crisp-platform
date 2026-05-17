@@ -219,6 +219,46 @@
      * strip (icon-only) and the bottom-sheet (full cards) consume this
      * list so adding a new channel only requires one edit.
      */
+    // Inline SVG icons for the 6 channels.
+    // May 2026 (perf Sprint B.2) — these used to render as FontAwesome
+    // `<i class="fa-brands fa-...">` glyphs, requiring the ~117 KB
+    // fa-brands.woff2 file to be fetched on cold-load just for the
+    // channels strip. Inlining these 6 SVGs eliminates that fetch
+    // (and the fa-solid fetch for IVR + SMS) from the home critical
+    // path. Each icon is ~300-500 bytes inline → ~3 KB total vs the
+    // 142 KB FontAwesome cost.
+    //
+    // Paths borrowed from open-source icon sets (Simple Icons for
+    // brand marks, Lucide for the generic shapes) so attribution is
+    // intact via the cdnjs FontAwesome stylesheet already loaded for
+    // V4 capture stages.
+    const _CHANNEL_SVGS = {
+        // Telegram — Simple Icons paper-plane outline, filled.
+        telegram: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+                  '<path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/>' +
+                  '</svg>',
+        // WhatsApp — Simple Icons phone in speech-bubble.
+        whatsapp: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+                  '<path d="M17.472 14.382c-.297-.149-1.758-.867-2.030-.967-.272-.099-.470-.149-.669.150-.197.297-.767.966-.940 1.164-.173.199-.347.223-.644.075-.297-.150-1.255-.463-2.39-1.475-.883-.788-1.480-1.761-1.653-2.059-.173-.297-.018-.458.130-.606.134-.133.297-.347.446-.520.149-.174.198-.298.298-.497.099-.198.050-.371-.025-.520-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.500-.669-.510-.173-.008-.371-.010-.570-.010-.198 0-.520.074-.792.371-.272.297-1.040 1.016-1.040 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.200 5.077 4.487.710.306 1.263.489 1.694.625.712.227 1.360.195 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.570-.347zM12.000 21.785h-.005c-1.937-.001-3.852-.520-5.523-1.502l-.396-.235-4.110 1.078 1.097-4.005-.258-.411c-1.080-1.717-1.650-3.703-1.650-5.749 0-5.946 4.842-10.788 10.792-10.788 2.881.001 5.589 1.124 7.624 3.16 2.034 2.039 3.155 4.749 3.153 7.633-.003 5.946-4.844 10.789-10.785 10.789zm9.180-19.973c-2.452-2.452-5.715-3.802-9.182-3.804-7.143 0-12.954 5.811-12.957 12.953-.001 2.283.596 4.51 1.731 6.474l-1.840 6.715 6.870-1.802c1.892 1.031 4.022 1.576 6.190 1.577h.005c7.142 0 12.953-5.811 12.956-12.954.002-3.466-1.349-6.726-3.802-9.179z"/>' +
+                  '</svg>',
+        // SMS — Lucide message-square.
+        sms: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+             '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' +
+             '</svg>',
+        // IVR / phone — Lucide phone (slightly stylised handset).
+        ivr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+             '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' +
+             '</svg>',
+        // Android — Simple Icons android robot head.
+        android: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+                 '<path d="M17.523 15.341c-.5523 0-1-.4477-1-1s.4477-1 1-1 1 .4477 1 1-.4477 1-1 1m-11.046 0c-.5523 0-1-.4477-1-1s.4477-1 1-1 1 .4477 1 1-.4477 1-1 1m11.405-6.027 1.997-3.46a.416.416 0 0 0-.152-.568.416.416 0 0 0-.568.152l-2.022 3.503A12.572 12.572 0 0 0 12 7.5c-1.886 0-3.679.353-5.137 1.041L4.842 5.038a.416.416 0 0 0-.568-.152.416.416 0 0 0-.152.568l1.997 3.46C2.7 11.115.527 14.158.072 17.62h23.856c-.455-3.462-2.628-6.505-6.046-8.306z"/>' +
+                 '</svg>',
+        // iOS / Apple — Simple Icons apple silhouette.
+        ios: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+             '<path d="M17.05 20.28c-.98.95-2.05.88-3.08.43-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.44C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>' +
+             '</svg>',
+    };
+
     function _buildChannelsList() {
         const _tt = (typeof window.t === 'function') ? window.t : (k, f) => f || k;
         const stLive  = _tt('live_now',        'Live now');
@@ -227,7 +267,7 @@
         return [
             {
                 key: 'telegram', label: 'Telegram',
-                icon: 'fa-brands fa-telegram', color: '--brand-telegram',
+                iconSvg: _CHANNEL_SVGS.telegram, color: '--brand-telegram',
                 live: !!CHANNELS.telegram_bot,
                 href: '',
                 // Telegram uses a JS deep-link handler instead of a
@@ -237,21 +277,21 @@
             },
             {
                 key: 'whatsapp', label: 'WhatsApp',
-                icon: 'fa-brands fa-whatsapp', color: '--brand-whatsapp',
+                iconSvg: _CHANNEL_SVGS.whatsapp, color: '--brand-whatsapp',
                 live: !!CHANNELS.whatsapp_phone,
                 href: _whatsappLink(CHANNELS.whatsapp_phone, 'CRISP report'),
                 status: CHANNELS.whatsapp_phone ? stLive : stSoon,
             },
             {
                 key: 'sms', label: 'SMS',
-                icon: 'fa-solid fa-message', color: '--brand-sms',
+                iconSvg: _CHANNEL_SVGS.sms, color: '--brand-sms',
                 live: !!CHANNELS.sms_phone,
                 href: _smsLink(CHANNELS.sms_phone, 'CRISP help'),
                 status: stLowBw,
             },
             {
                 key: 'ivr', label: 'IVR',
-                icon: 'fa-solid fa-phone-volume', color: '--brand-ivr',
+                iconSvg: _CHANNEL_SVGS.ivr, color: '--brand-ivr',
                 live: !!CHANNELS.ivr_phone,
                 href: _telLink(CHANNELS.ivr_phone),
                 // Operator (May 2026): "Live" reads cleaner than
@@ -260,14 +300,14 @@
             },
             {
                 key: 'android', label: 'Android',
-                icon: 'fa-brands fa-android', color: '--good',
+                iconSvg: _CHANNEL_SVGS.android, color: '--good',
                 live: !!CHANNELS.android_app_url,
                 href: CHANNELS.android_app_url || '',
                 status: CHANNELS.android_app_url ? stLive : stSoon,
             },
             {
                 key: 'ios', label: 'iOS',
-                icon: 'fa-brands fa-apple', color: '--brand-ios',
+                iconSvg: _CHANNEL_SVGS.ios, color: '--brand-ios',
                 live: !!CHANNELS.ios_app_url,
                 href: CHANNELS.ios_app_url || '',
                 status: CHANNELS.ios_app_url ? stLive : stSoon,
@@ -288,7 +328,7 @@
         strip.innerHTML = items.map((i) => {
             const stateClass = i.live ? 'hcs-icon--live' : 'hcs-icon--soon';
             const colorStyle = i.color ? ` style="--c: var(${i.color});"` : '';
-            return `<span class="hcs-icon ${stateClass} hcs-icon--${i.key}"${colorStyle} aria-hidden="true"><i class="${i.icon}"></i></span>`;
+            return `<span class="hcs-icon ${stateClass} hcs-icon--${i.key}"${colorStyle} aria-hidden="true">${i.iconSvg}</span>`;
         }).join('');
         // Bind once — re-rendering the strip shouldn't multiply listeners.
         strip.onclick = (e) => {
@@ -313,7 +353,7 @@
         const safeColor  = o.color || '--accent';
         const stateClass = o.live ? 'is-live' : 'is-disabled';
         const body = `
-            <span class="csr-icon" aria-hidden="true"><i class="${o.icon}"></i></span>
+            <span class="csr-icon" aria-hidden="true">${o.iconSvg}</span>
             <span class="csr-text">
                 <span class="csr-label">${safeLabel}</span>
                 <span class="csr-status">${safeStatus}</span>

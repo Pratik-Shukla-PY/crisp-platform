@@ -3301,6 +3301,26 @@ window.__crispInactivityStatus = () => inactivityManager.status();
 window.__crispInactivityTryArm = (opts) => inactivityManager.tryArm(opts || { bustCache: true });
 
 function goToStage(id) {
+    // May 2026 (perf Sprint B.2) — lazy-load FontAwesome on first
+    // non-home stage navigation. The home stage uses inline SVG for
+    // all icons (audio glyph, channels strip, login/MyReports, trophy)
+    // and never needs FontAwesome. Every other stage (V4 capture,
+    // review, photo, audio, send, history, rewards, badge-studio,
+    // admin overlays) DOES use FA `<i class="fa-solid fa-...">`
+    // markup. Deferring the CSS link until the user actually
+    // navigates away from home saves ~300 KB of webfont fetches
+    // from the cold-load critical path (155 KB fa-solid + 117 KB
+    // fa-brands + 25 KB fa-regular + 18 KB CSS).
+    if (id !== 'stage-home' && !window.__crispFaLoaded) {
+        window.__crispFaLoaded = true;
+        try {
+            const fa = document.createElement('link');
+            fa.rel = 'stylesheet';
+            fa.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css';
+            document.head.appendChild(fa);
+        } catch (_) { /* network blocked — icons render as Unicode boxes; acceptable */ }
+    }
+
     // UI v3 introduces 4 new stage ids (where/infra/crisis/extras) not
     // present in STAGES. De-activate BOTH the legacy and v3 lists so a
     // transition between chains doesn't leave an orphan ".active" behind.

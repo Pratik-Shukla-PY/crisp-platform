@@ -153,9 +153,19 @@
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap"
           media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap"></noscript>
-    <link rel="stylesheet"
-          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
-          media="print" onload="this.media='all'">
+    <!-- May 2026 (perf Sprint B.2) — FontAwesome CSS is LAZY-LOADED
+         on first navigation away from stage-home. The home stage now
+         uses inline SVG for every icon (channel strip, audio glyph,
+         login / MyReports buttons, trophy on the Lifekeeper pill).
+         FA CSS injection lives inside goToStage(id) in app.js: when
+         id !== 'stage-home' and window.__crispFaLoaded is unset, a
+         new <link rel="stylesheet"> is appended to <head> and the
+         flag flips so subsequent navigations don't re-inject. Saves
+         ~315 KB of cold-load critical-path fetches (155 KB
+         fa-solid-900.woff2 + 117 KB fa-brands-400.woff2 + 25 KB
+         fa-regular-400.woff2 + 18 KB css/all.min.css).
+         <noscript> fallback below still pulls FA for users with JS
+         disabled so the static fa-* glyphs render in the markup. -->
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"></noscript>
     <!-- — Leaflet CSS REMOVED from <head> entirely.
          building-select.js::_ensureLeaflet() injects both the <link>

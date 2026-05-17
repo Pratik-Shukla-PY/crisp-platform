@@ -10107,7 +10107,13 @@ body.tier-t4 .home-impact {
     line-height: 1;
     flex: 0 0 auto;
 }
-.home-stage .hcs-icon i { line-height: 1; }
+/* Inline SVG icons (Sprint B.2 May 2026) — size the SVG via parent.
+   The FA `<i>` rule is kept as a fallback for any remaining brand
+   font usage (V4 capture stages); the SVG rule wins specificity
+   here for the home-stage strip / sheet. */
+.home-stage .hcs-icon i  { line-height: 1; }
+.home-stage .hcs-icon svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.home-stage .channels-sheet-row .csr-icon svg { width: 22px; height: 22px; }
 /* Active channels — brand colour + small live-pip top-right. The
    --c CSS variable is set inline by _renderChannelsStrip(). */
 .home-stage .hcs-icon--live {
@@ -10134,10 +10140,12 @@ body.tier-t4 .home-impact {
 @media (min-height: 740px) {
     .home-stage .home-channels-strip { min-height: 48px; padding: 8px 12px; }
     .home-stage .hcs-icon { width: 36px; height: 36px; font-size: 20px; }
+    .home-stage .hcs-icon svg { width: 20px; height: 20px; }
 }
 @media (min-height: 820px) {
     .home-stage .home-channels-strip { min-height: 52px; padding: 10px 14px; }
     .home-stage .hcs-icon { width: 40px; height: 40px; font-size: 22px; }
+    .home-stage .hcs-icon svg { width: 22px; height: 22px; }
 }
 /* PWA desktop / tablet — cap the strip width so the icons don't
    spread to the page edges on a 1024+ container. */
