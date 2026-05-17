@@ -44,6 +44,26 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="dns-prefetch" href="https://unpkg.com">
+    <!-- May 2026 (perf Sprint A.4) — warm the connection to the IP-
+         geo fallback origin used by app.js when GPS is unavailable
+         (typical first-visit user on a desktop / privacy-strict
+         browser). Fires within ~2 s of home load to seed
+         crisp_last_location_v2 so the nearby module can boot.
+         Cross-origin always → preconnect saves the TCP + TLS
+         handshake (~300-500 ms on 3G). The fallback chain
+         `freeipapi.com` is hit only when ipapi.co is unreachable;
+         we DNS-prefetch instead of preconnect to keep the slot
+         budget lean. -->
+    <link rel="preconnect" href="https://ipapi.co" crossorigin>
+    <link rel="dns-prefetch" href="https://freeipapi.com">
+    <!-- May 2026 (perf Sprint A.4) — warm the backend API origin.
+         In PROD this is the page origin (same connection as the HTML
+         fetch — preconnect is a no-op, harmless). In dev the PWA is
+         served on :8080 and the API on :8000 (or a remote IP); the
+         preconnect kicks the TCP+TLS handshake to that origin while
+         the HTML parses. Saves ~150-400 ms on first /api/v1/config
+         + /api/v1/reports/nearby calls. -->
+    <link rel="preconnect" href="https://undp.crisplabs.tech" crossorigin>
 
     <!-- (Lighthouse perf — May 2026) — explicit woff2 preloads were
          tried first but the Google Fonts versioned paths (v13/v11)
