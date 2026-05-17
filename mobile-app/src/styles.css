@@ -309,7 +309,22 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .stage {
     position: absolute; inset: 0;
     display: flex; flex-direction: column;
-    padding: 20px 24px 16px;
+    /* May 2026 (installed-PWA fix) — every non-home stage (capture,
+       photo, review, send, audio, where, infra, crisis, extras)
+       inherits this padding. The previous flat `20px 24px 16px`
+       did NOT reserve room for the iPhone notch / Dynamic Island /
+       Android status bar in standalone (installed-PWA) mode, so
+       the stage header overlapped the system status area. Browser
+       mode is unaffected — `env(safe-area-inset-*)` resolves to 0
+       there, restoring the original 20/16 padding.
+
+       `.home-stage` has its own more-specific safe-area handling at
+       styles.css:4234; this rule is the catch-all for every OTHER
+       stage. Viewport meta `viewport-fit=cover` (index.html:11) is
+       what makes the env() values resolve to non-zero on notched
+       devices. */
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 24px
+             calc(16px + env(safe-area-inset-bottom, 0px));
     /* (May 2026 — Fix-P7) `overflow-x: clip` instead of `hidden` so
        descendant `position: fixed` elements (install prompt, language
        pill) escape the stage clipping box. `hidden` was creating a
