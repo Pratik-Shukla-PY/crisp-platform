@@ -3356,9 +3356,17 @@
      bundle is vendored locally (vendor/sentry.min.js); init wrapper
      reads DSN from the `<meta name="crisp-sentry-dsn">` tag above
      and stays inert if the DSN is empty. See sentry-init.js for
-     the privacy-stripping `beforeSend` filter. -->
-<script defer src="vendor/sentry.min.js?v=8.30.0"></script>
-<script defer src="sentry-init.js?v=1"></script>
+     the privacy-stripping `beforeSend` filter.
+
+     May 2026 (perf Sprint A.2) — `vendor/sentry.min.js` is NO
+     LONGER eagerly loaded. sentry-init.js now waits for
+     requestIdleCallback (2.5 s timeout fallback) then dynamically
+     injects the SDK <script> + calls Sentry.init. Saves 25 KB
+     from the critical-render network bill + ~80 ms TBT. Cost: any
+     JS error fired in the first ~2 seconds of the session isn't
+     captured — acceptable since most actionable errors fire after
+     user interaction. -->
+<script defer src="sentry-init.js?v=2"></script>
 <!-- Phase 2.1 (May 2026) — canonical reward-ladder metadata.
      Generated from shared/tier-config.json via scripts/sync-tier-config.mjs.
      Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE

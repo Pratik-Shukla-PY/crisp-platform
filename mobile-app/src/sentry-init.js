@@ -36,10 +36,7 @@
 (function () {
     'use strict';
 
-    if (typeof window === 'undefined' || typeof window.Sentry === 'undefined') {
-        // SDK didn't load (404, CSP block, ad-blocker). No-op cleanly.
-        return;
-    }
+    if (typeof window === 'undefined') return;
 
     const metaTag = document.querySelector('meta[name="crisp-sentry-dsn"]');
     const dsn = metaTag ? (metaTag.getAttribute('content') || '').trim() : '';
@@ -47,9 +44,54 @@
         // No DSN configured (dev environment, or operator hasn't patched
         // the meta tag yet). Stay inert; don't init Sentry. This is
         // intentional — we don't want to fire events at a placeholder
-        // endpoint.
+        // endpoint AND don't want to fetch the SDK at all when it'd
+        // be a no-op.
         return;
     }
+
+    // May 2026 (perf Sprint A.2) — defer the entire Sentry SDK to
+    // browser idle so it never blocks first paint, first input, or
+    // the home-stage critical path. Previously the SDK loaded
+    // synchronously via `<script defer src="vendor/sentry.min.js">`
+    // in the head and Sentry.init ran inside this IIFE — adding
+    // ~80 ms TBT and ~25 KB to the critical-render network bill.
+    //
+    // New flow:
+    //   1. The static <script defer src="vendor/sentry.min.js"> tag
+    //      has been removed from index.html.
+    //   2. This script runs on idle (requestIdleCallback with a
+    //      2-second setTimeout fallback for Safari < 17).
+    //   3. We inject the SDK <script> dynamically, then init Sentry
+    //      after the SDK's onload fires.
+    //
+    // Cost of delay: errors fired in the first ~2 seconds aren't
+    // captured. Acceptable — most JS errors surface after user
+    // interaction, which is well past idle.
+    function _idle(cb) {
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(cb, { timeout: 2500 });
+        } else {
+            setTimeout(cb, 2000);
+        }
+    }
+
+    _idle(function loadSentryWhenIdle() {
+        // Already loaded? (e.g. dev with the SDK in head). Init directly.
+        if (typeof window.Sentry !== 'undefined') {
+            _initSentry();
+            return;
+        }
+        // Dynamically inject the vendored SDK.
+        const s = document.createElement('script');
+        s.src = 'vendor/sentry.min.js?v=8.30.0';
+        s.async = true;
+        s.onload = _initSentry;
+        s.onerror = function () { /* ad-blocker / network — silent no-op */ };
+        document.head.appendChild(s);
+    });
+
+    function _initSentry() {
+        if (typeof window.Sentry === 'undefined') return;
 
     // Resolve a release tag for deduping events per build. The PWA's
     // service worker carries its own version (`CACHE_NAME = 'crisp-v195'`
@@ -219,4 +261,5 @@
     } catch (e) {
         console.warn('[Sentry] PWA init failed:', e);
     }
+    }   // end _initSentry
 })();
