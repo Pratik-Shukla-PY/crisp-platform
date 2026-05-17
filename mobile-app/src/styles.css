@@ -10768,9 +10768,11 @@ body.tier-t4 .home-impact {
     box-shadow: 0 3px 10px rgba(255, 174, 0, 0.32);
 }
 .home-stage .home-add2hs-btn[hidden] { display: none !important; }
-/* On compact viewports (iPhone SE bucket) shrink slightly so the
-   chip + footer row + nearby/channels still fit no-scroll. */
-@media (max-height: 700px) {
+/* On compact viewports shrink slightly so the chip + footer row
+   + nearby/channels still fit no-scroll. Widened from 700 → 800
+   (May 2026 hotfix) so Galaxy S22 (780) also enters compact mode;
+   iPhone 14 (844) stays roomy. */
+@media (max-height: 800px) {
     .home-stage .home-add2hs-btn {
         margin-top: 4px;
         padding: 5px 14px;
@@ -11009,8 +11011,9 @@ body.tier-t4 .home-impact {
 }
 
 /* Compact phones — keep the bump but cap min-height so the page
-   stays fit-to-viewport. */
-@media (max-height: 700px) {
+   stays fit-to-viewport. Widened from 700 → 800 (May 2026 v6 hotfix)
+   so Galaxy S22 (780) gets the compact treatment too. */
+@media (max-height: 800px) {
     .home-stage .home-channel-tile {
         min-height: 72px;
         padding: 8px 6px 10px;
@@ -11380,8 +11383,9 @@ body { background-color: #10284a; }
     background: rgba(239, 68, 68, 0.7);
 }
 /* Tighten on short viewports so the row doesn't push the channels
-   strip into scroll territory. */
-@media (max-height: 700px) {
+   strip into scroll territory. Widened from 700 → 800 (May 2026 v6
+   hotfix) so Galaxy S22 (780) gets the compact row too. */
+@media (max-height: 800px) {
     .home-stage .home-primary-row { gap: 8px; margin-top: 4px; }
     .home-stage .home-primary-btn { min-height: 46px; padding: 10px 12px; font-size: 12.5px; }
     .home-stage .home-primary-btn .hpb-icon svg { width: 16px; height: 16px; }
@@ -11682,8 +11686,10 @@ body { background-color: #10284a; }
 }
 
 /* Compact phones — shrink padding so the module fits without pushing
-   the channels grid off-screen on iPhone SE-class viewports. */
-@media (max-height: 700px) {
+   the channels grid off-screen on iPhone SE-class viewports.
+   Widened from 700 → 800 (May 2026 v6 hotfix) so Galaxy S22 (780)
+   gets the compact row too. */
+@media (max-height: 800px) {
     .home-stage .home-nearby-row { padding: 10px 12px; gap: 8px; }
     .home-stage .home-nearby-row-head { font-size: 12px; }
     .home-stage .home-nearby-row-summary { font-size: 10.5px; }
@@ -12269,8 +12275,11 @@ body { background-color: #10284a; }
    without scroll. Below ~700 px viewport height, drop the number
    block's min-height + tighten the surrounding rhythm so the whole
    bottom group fits in ~150 px instead of ~217 px.
-   ────────────────────────────────────────────────────────────────────── */
-@media (max-height: 700px) {
+   Widened from max-height: 700 → 800 (May 2026 v6 hotfix) so
+   Galaxy S22 (780) also gets the compact nearby + footer treatment
+   and the new yellow Add-to-Homescreen chip fits inside the
+   viewport. iPhone 14 (844) stays roomy. */
+@media (max-height: 800px) {
     .home-stage .home-nearby-intel {
         margin-top: 2px;
         margin-bottom: 2px;
