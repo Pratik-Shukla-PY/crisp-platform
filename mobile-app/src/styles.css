@@ -11124,15 +11124,21 @@ body { background-color: #10284a; }
    older browsers we fall back to a slightly higher opacity so the
    card still reads as a card (just without the frosted halo).
    `@supports (backdrop-filter)` is the gate. */
+/* May 2026 (home redesign v6, ask #7) — backdrop-filter +
+   linear-gradient fallback were tied to the now-removed glass-card
+   chrome (see the .home-hero-card override further down at ~line
+   11185 which neutralises the card visuals). Both blocks here are
+   neutered so the older + newer browser paths both render a
+   transparent flex column. */
 @supports (backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px)) {
     .home-stage .home-hero-card {
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
     }
 }
 @supports not ((backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px))) {
     .home-stage .home-hero-card {
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.035) 100%);
+        background: transparent;
     }
 }
 
@@ -11183,26 +11189,39 @@ body { background-color: #10284a; }
    ═══════════════════════════════════════════════════════════════════════ */
 
 .home-stage .home-hero-card {
+    /* May 2026 (home redesign v6, ask #7) — operator: "Remove the
+       large box/card container behind 'Report an Incident'. The page
+       should feel more open and seamless instead of stacking multiple
+       heavy cards."
+       The wrapping <div class="home-hero-card"> stays in the DOM so
+       any selector / spec / RTL rule keeps resolving — but the chrome
+       (gradient + border + shadow + ::before glow + padding) is gone.
+       Children render directly on the section-hero background as a
+       transparent flex column. The CTA still can't be crushed
+       (flex-shrink:0 preserved). */
     display: flex;
     flex-direction: column;
     align-items: stretch;
     gap: clamp(10px, 2vh, 16px);
-    padding: clamp(16px, 3vh, 22px) clamp(16px, 4vw, 22px);
-    border-radius: clamp(18px, 4vw, 26px);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.025) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
     position: relative;
-    overflow: hidden;     /* Phase 2 reserves a ::before glow accent that hangs out of bounds */
+    overflow: visible;
     -webkit-tap-highlight-color: transparent;
-    /* May 2026 (Phase 5.1 follow-up) — refuse to shrink below the
-       card's natural content height even if the parent flex section
-       is squeezed. Belt-and-suspenders with the section-hero
-       `min-height: auto` above. Without this the CTA (the
-       primary action of the entire app) would clip to a flat slab
-       on viewport-heights ≤ 780 px once nearby reports populate
-       section-bottom. */
     flex-shrink: 0;
+}
+/* Drop the cyan glow bloom (no more card edge to anchor it against). */
+.home-stage .home-hero-card::before { display: none; }
+/* Backdrop-filter on the (now-transparent) card is a no-op but
+   removing it is cheaper than the no-op cost. */
+@supports (backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px)) {
+    .home-stage .home-hero-card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
 }
 
 /* ── Home v6 (May 2026, ask #6) — Login + My Reports big buttons ─────
