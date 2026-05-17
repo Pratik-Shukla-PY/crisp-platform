@@ -10718,6 +10718,66 @@ body.tier-t4 .home-impact {
     }
 }
 
+/* ── Home v6 (May 2026, ask #3) — "Add to Homescreen" yellow chip ────
+   Operator: "small highlighted CTA button below the Privacy/Help/
+   Open-Source row. Yellow background. Brown/dark text. Compact
+   premium styling."
+   Lives inside .home-section-bottom AFTER the footer row, visible
+   ONLY when the user has not yet installed the PWA. The
+   home-screen.js _wireAddToHomescreenChip wires it to the existing
+   window.InstallPrompt module (Android beforeinstallprompt → native
+   prompt; iOS Safari → "How to install" sheet). Hidden via the
+   `hidden` HTML attribute the moment display-mode flips to
+   `standalone`. */
+.home-stage .home-add2hs-btn {
+    /* Strip default <button> chrome so the class owns every visual. */
+    all: unset;
+    cursor: pointer;
+    box-sizing: border-box;
+    align-self: center;
+    margin: 6px auto 0;
+    padding: 7px 16px;
+    border-radius: 999px;
+    background: #ffae00;             /* CRISP accent yellow */
+    color: #3a2700;                  /* warm brown — AAA contrast on #ffae00 */
+    font-family: var(--font, 'Inter', sans-serif);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+    box-shadow: 0 4px 14px rgba(255, 174, 0, 0.32);
+    transition: transform 0.12s ease, box-shadow 0.15s ease,
+                background 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+    max-width: calc(100% - 24px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.home-stage .home-add2hs-btn:hover {
+    transform: translateY(-1px);
+    background: #ffbc1f;
+    box-shadow: 0 6px 18px rgba(255, 174, 0, 0.42);
+}
+.home-stage .home-add2hs-btn:focus-visible {
+    outline: 2px solid rgba(58, 39, 0, 0.55);
+    outline-offset: 2px;
+}
+.home-stage .home-add2hs-btn:active {
+    transform: scale(0.985);
+    box-shadow: 0 3px 10px rgba(255, 174, 0, 0.32);
+}
+.home-stage .home-add2hs-btn[hidden] { display: none !important; }
+/* On compact viewports (iPhone SE bucket) shrink slightly so the
+   chip + footer row + nearby/channels still fit no-scroll. */
+@media (max-height: 700px) {
+    .home-stage .home-add2hs-btn {
+        margin-top: 4px;
+        padding: 5px 14px;
+        font-size: 11.5px;
+    }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    HOME v5 — Bottom-portion refresh (May 2026, operator-supplied screenshot)
 

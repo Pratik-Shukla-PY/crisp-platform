@@ -579,6 +579,45 @@
         });
     }
 
+    /**
+     * Wire the v6 "Add to Homescreen" yellow chip (#btn-home-add2hs)
+     * pinned below the Privacy / CRISP-ID footer row.
+     *
+     * Visibility rule (operator-decision May 2026, ask #3):
+     *   hidden EXCEPT when window.InstallPrompt reports `canInstall &&
+     *   platform !== 'standalone'`. The chip disappears the moment the
+     *   user installs (display-mode flips to standalone OR the
+     *   `appinstalled` event fires) so returning installed-PWA users
+     *   never see a stale "Add to Homescreen" CTA.
+     *
+     * Click → window.InstallPrompt.show() — Android fires the native
+     * `beforeinstallprompt`-cached prompt; iOS Safari opens the
+     * "How to install on iPhone" sheet from the existing module.
+     */
+    function _wireAddToHomescreenChip() {
+        if (!window.InstallPrompt) return;
+        const chip = document.getElementById('btn-home-add2hs');
+        if (!chip) return;
+        if (chip.__crispAdd2hsWired) return;
+        chip.__crispAdd2hsWired = true;
+
+        window.InstallPrompt.onChange(({ canInstall, platform }) => {
+            // Hidden in installed-PWA mode AND when no install prompt
+            // is available (e.g. desktop Chrome that already added it).
+            const visible = !!canInstall && platform !== 'standalone';
+            if (visible) chip.removeAttribute('hidden');
+            else chip.setAttribute('hidden', '');
+        });
+
+        chip.addEventListener('click', async () => {
+            try { await window.InstallPrompt.show(); }
+            catch (e) { console.warn('[home] add-to-hs prompt failed:', e); }
+        });
+    }
+    // Expose for the boot sequence (called from the same DOMContentLoaded
+    // initialiser that runs the other _wire* fns).
+    window._wireAddToHomescreenChip = _wireAddToHomescreenChip;
+
     // ── Channel telemetry + disabled-tile toast ────────────────────────
     // non-working (`.is-disabled`) tiles surface a brief
     // "Coming soon" toast on click. Working tiles just log a telemetry
@@ -1604,6 +1643,10 @@
         _wireLoginIcon();
         _wireUtilityFooter();
         _paintIdentityBar();
+        // v6 (May 2026, ask #3) — Add-to-Homescreen yellow chip below
+        // the footer. Wires the InstallPrompt module to the new
+        // #btn-home-add2hs chip; idempotent if init runs twice.
+        try { _wireAddToHomescreenChip(); } catch (_) {}
         // View-all button in recent-reports → openMyReports
         const viewAll = document.getElementById('btn-home-recent-viewall');
         if (viewAll) viewAll.addEventListener('click', () => {

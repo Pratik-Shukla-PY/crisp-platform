@@ -1043,6 +1043,24 @@
                 </div>
             </div>
 
+            <!-- May 2026 (home redesign v6, ask #3) — compact "Add to
+                 Homescreen" CTA pinned BELOW the Privacy / CRISP-ID
+                 footer row. Replaces the prior "Download App" action
+                 tile (deleted). Yellow background + brown text for
+                 AAA contrast; hidden entirely when the user is
+                 already in installed-PWA mode (display-mode: standalone)
+                 OR when `beforeinstallprompt` isn't available
+                 (operator-decision: keep the footer clean for the 80%
+                 returning users who already installed).
+                 Wired in home-screen.js _wireAddToHomescreenChip()
+                 against the existing window.InstallPrompt module. -->
+            <button type="button" class="home-add2hs-btn"
+                    id="btn-home-add2hs"
+                    aria-label="Add CRISP to your home screen"
+                    data-i18n-aria-label="aria_add_to_homescreen"
+                    data-i18n="add_to_homescreen"
+                    hidden>+ Add to Homescreen</button>
+
             </section><!-- /.home-section-bottom -->
 
             <!-- v8 LIST bottom-sheet — slides up on tap of the aggregate
