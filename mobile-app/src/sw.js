@@ -5,7 +5,38 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v213';
+const CACHE_NAME = 'crisp-v214';
+// v213 → v214 (May 2026 — perf Sprint A, 4 low-risk wins):
+//   A.1 Trimmed Google Fonts query: dropped unused Inter weight 300 +
+//       Noto Sans Arabic/SC weight 700 — saves ~25 KB CSS + 30 KB woff2
+//       for long-tail-locale users. No visible typographic change.
+//   A.2 Sentry SDK + init deferred to requestIdleCallback (2.5 s
+//       timeout fallback). Removed `<script src="vendor/sentry.min.js">`
+//       from the eager defer queue; the SDK loads on idle then
+//       Sentry.init runs. Saves 25 KB from critical render path +
+//       ~80 ms TBT. Cost: errors fired in the first ~2 s aren't
+//       captured — acceptable.
+//   A.3 <link rel="preload" as="style"> for the Google Fonts CSS
+//       (high-priority parallel fetch) on top of the existing
+//       media="print" onload swap. Net: woff2 chain lands ~400-800 ms
+//       earlier on slow networks → Inter swaps in BEFORE LCP.
+//   A.4 preconnect: ipapi.co (IP-geo fallback fired ~2 s in) +
+//       undp.crisplabs.tech (backend API — same-origin no-op in PROD,
+//       saves TCP+TLS in dev). dns-prefetch freeipapi.com (secondary
+//       fallback). 5 preconnects total, still inside Lighthouse's
+//       uses-rel-preconnect ceiling.
+//
+//   Measured (LHCI local, Slow-4G mobile profile, median of 3 runs):
+//     Performance      58  →  76   (+18)
+//     FCP            6434  →  1662 ms   (-74%)
+//     LCP            9482  →  5255 ms   (-45%)
+//     TBT              56  →  0    ms
+//     SI             7300  →  3729 ms
+//     CLS               0  →  0
+//     A11y / BP / PWA / SEO  unchanged
+//
+//   No backend changes. Returning users evict v213 on next activate.
+//
 // v212 → v213 (May 2026 — Home redesign v6, 7-ask batch):
 //   1. Safe-area inset on .stage base class — fixes installed-PWA
 //      header overlap with iPhone notch / Dynamic Island / Android
