@@ -505,6 +505,73 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     font-style: normal;
 }
 
+/* ══ Phase F.7 — Dashboard i18n: language picker + RTL safety ══ */
+.dash-lang-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.dash-lang-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: rgba(15, 23, 42, 0.97);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.50);
+    z-index: 90;
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+}
+.dash-lang-opt {
+    appearance: none;
+    background: transparent;
+    color: #cbd5e1;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 6px 10px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 1px 0;
+}
+.dash-lang-opt:hover {
+    background: rgba(148, 163, 184, 0.14);
+    border-color: rgba(148, 163, 184, 0.30);
+    color: var(--text);
+}
+.dash-lang-opt.active {
+    background: rgba(167, 139, 250, 0.16);
+    color: #c4b5fd;
+    border-color: rgba(167, 139, 250, 0.45);
+}
+
+/* RTL: flip the dropdown anchor and the language menu attachment so
+   the menu opens from the operator's reading direction. The map +
+   Leaflet controls retain LTR (they have their own coord system). */
+html[dir="rtl"] .dash-lang-menu { right: auto; left: 0; }
+html[dir="rtl"] .bulk-action-bar { direction: rtl; }
+html[dir="rtl"] .cmd-filter-row { direction: rtl; }
+html[dir="rtl"] .ac-list-row-clickable .ac-list-rank { margin-left: 0; margin-right: 0; }
+html[dir="rtl"] .bc-rf-input { text-align: right; }
+
+/* Force `dir="auto"` on user-content surfaces so an Arabic free-text
+   description renders right-to-left even when the surrounding chrome
+   is LTR — without us having to add the attribute to every span. */
+.dp-summary-text,
+.bc-r-line1 .bc-r-dmg,
+.bc-r-line1 .bc-r-crisis,
+.bc-r-line2 .bc-r-source,
+.bc-where-text,
+.bc-note-body,
+.qrt-where-text,
+.qrt-infra-name {
+    unicode-bidi: plaintext;   /* CSS equivalent of dir=auto on textContent */
+}
+
 /* Glass utility ─────────────────────────────────────────── */
 .glass-panel {
     background: var(--panel);

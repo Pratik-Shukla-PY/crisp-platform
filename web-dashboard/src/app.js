@@ -14,6 +14,152 @@ function escapeHtml(str) {
 // ── Auth Gate ────────────────────────────────────────────────────────────────
 const _crispToken = localStorage.getItem('crisp_token');
 const _crispUser = (() => { try { return JSON.parse(localStorage.getItem('crisp_user')); } catch { return null; } })();
+
+// ══════════════════════════════════════════════════════════════════════
+// Phase F.7 (May 2026) — Dashboard i18n bootstrap (UNDP must-have #2)
+// ══════════════════════════════════════════════════════════════════════
+// Six UN languages: English (default), Spanish, French, Russian,
+// Chinese (Simplified), Arabic. Locale chosen from localStorage,
+// falling back to navigator.language, falling back to 'en'.
+//
+// applyI18n() walks every `[data-i18n]` attribute on the document
+// and writes the matching string. Title/aria/placeholder variants
+// covered via `data-i18n-title`, `data-i18n-aria-label`,
+// `data-i18n-placeholder`. Reporter-supplied content (descriptions,
+// transcripts, location names) stays in its source language — i18n
+// only touches operator-facing chrome.
+//
+// RTL: Arabic flips the document direction via `dir="rtl"` on
+// <html>. The Leaflet map continues to render LTR (it has its own
+// coordinate system); only the surrounding chrome flips.
+const I18N_SUPPORTED = ['en', 'es', 'fr', 'ru', 'zh', 'ar'];
+const I18N_NATIVE = {
+    en: 'English', es: 'Español', fr: 'Français',
+    ru: 'Русский', zh: '简体中文', ar: 'العربية',
+};
+const I18N_LS_KEY = 'crisp_dashboard_lang';
+let _i18nDict = {};
+let _i18nLang = 'en';
+
+function _pickInitialLocale() {
+    try {
+        const stored = localStorage.getItem(I18N_LS_KEY);
+        if (stored && I18N_SUPPORTED.includes(stored)) return stored;
+    } catch (_) { /* ignore */ }
+    const nav = (navigator.language || 'en').toLowerCase();
+    // Map e.g. "es-MX" → "es", "zh-Hans" → "zh"
+    for (const code of I18N_SUPPORTED) {
+        if (nav.startsWith(code)) return code;
+    }
+    return 'en';
+}
+
+async function _loadI18nDict(lang) {
+    // Always include 'en' so the loaded dict can fall back on missing
+    // keys without a separate fetch.
+    try {
+        const [primary, base] = await Promise.all([
+            lang === 'en' ? null : fetch(`./i18n/${lang}.json`).then(r => r.ok ? r.json() : null),
+            fetch('./i18n/en.json').then(r => r.ok ? r.json() : null),
+        ]);
+        // Merge: english first as floor, target language overrides.
+        _i18nDict = { ...(base || {}), ...(primary || {}) };
+    } catch (e) {
+        console.warn('[i18n] dict load failed', lang, e);
+        _i18nDict = {};
+    }
+}
+
+window.t = function (key, fallback) {
+    return (_i18nDict && _i18nDict[key]) || fallback || key;
+};
+
+function applyI18n() {
+    const root = document;
+    root.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        const val = _i18nDict[key];
+        if (val) el.textContent = val;
+    });
+    root.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        const val = _i18nDict[key];
+        if (val) el.setAttribute('title', val);
+    });
+    root.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+        const key = el.getAttribute('data-i18n-aria-label');
+        const val = _i18nDict[key];
+        if (val) el.setAttribute('aria-label', val);
+    });
+    root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        const val = _i18nDict[key];
+        if (val) el.setAttribute('placeholder', val);
+    });
+}
+
+async function setDashboardLanguage(lang) {
+    if (!I18N_SUPPORTED.includes(lang)) return;
+    _i18nLang = lang;
+    try { localStorage.setItem(I18N_LS_KEY, lang); } catch (_) {}
+    await _loadI18nDict(lang);
+    // Apply RTL on <html> for Arabic.
+    document.documentElement.setAttribute(
+        'dir',
+        (_i18nDict._meta && _i18nDict._meta.dir) || (lang === 'ar' ? 'rtl' : 'ltr')
+    );
+    document.documentElement.setAttribute('lang', lang);
+    applyI18n();
+    // Update language pill label.
+    const pill = document.getElementById('dash-lang-pill-label');
+    if (pill) pill.textContent = I18N_NATIVE[lang] || lang;
+}
+
+window.toggleDashboardLanguageMenu = function () {
+    const menu = document.getElementById('dash-lang-menu');
+    if (!menu) return;
+    if (menu.style.display !== 'none') { menu.style.display = 'none'; return; }
+    menu.style.display = 'block';
+    // Populate every time so the active state stays accurate.
+    menu.innerHTML = I18N_SUPPORTED.map(code => `
+        <button class="dash-lang-opt ${code === _i18nLang ? 'active' : ''}"
+                onclick="setDashboardLanguage('${code}'); document.getElementById('dash-lang-menu').style.display='none';"
+                lang="${code}">
+            ${I18N_NATIVE[code]}
+        </button>
+    `).join('');
+    setTimeout(() => {
+        const closer = (ev) => {
+            const wrap = document.getElementById('dash-lang-wrap');
+            if (!wrap || !wrap.contains(ev.target)) {
+                menu.style.display = 'none';
+                document.removeEventListener('click', closer);
+            }
+        };
+        document.addEventListener('click', closer);
+    }, 60);
+};
+
+// Fire the initial load. Awaited inside an IIFE so the rest of the
+// app can keep loading; applyI18n runs as soon as the dict resolves.
+(async () => {
+    _i18nLang = _pickInitialLocale();
+    await _loadI18nDict(_i18nLang);
+    document.documentElement.setAttribute(
+        'dir',
+        (_i18nDict._meta && _i18nDict._meta.dir) || (_i18nLang === 'ar' ? 'rtl' : 'ltr')
+    );
+    document.documentElement.setAttribute('lang', _i18nLang);
+    // Wait for DOMContentLoaded if we're early in the script lifecycle,
+    // otherwise apply immediately.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', applyI18n, { once: true });
+    } else {
+        applyI18n();
+    }
+    const pill = document.getElementById('dash-lang-pill-label');
+    if (pill) pill.textContent = I18N_NATIVE[_i18nLang] || _i18nLang;
+})();
 if (!_crispToken && !window.location.pathname.includes('login')) {
     window.location.href = 'login.html';
 }

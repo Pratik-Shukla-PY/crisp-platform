@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+<!-- Phase F.7 — lang attribute is set dynamically by applyI18n() from
+     the operator's localStorage preference / navigator.language. The
+     `lang="en"` here is just the cold-load fallback. -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -171,8 +174,22 @@
             <button class="icon-btn" id="btn-bulk-select"
                     onclick="toggleBulkSelectMode()"
                     title="Toggle bulk-select mode">
-                <i class="fa-solid fa-list-check"></i> Select
+                <i class="fa-solid fa-list-check"></i> <span data-i18n="btn_select">Select</span>
             </button>
+
+            <!-- Phase F.7 (May 2026) — Dashboard language picker.
+                 6 UN languages. Locale persisted in localStorage.
+                 Arabic flips the document to dir=rtl. -->
+            <div class="dash-lang-wrap" id="dash-lang-wrap" style="position:relative;display:inline-flex;">
+                <button class="icon-btn dash-lang-toggle"
+                        onclick="toggleDashboardLanguageMenu()"
+                        data-i18n-title="language_label" title="Language">
+                    <i class="fa-solid fa-language"></i>
+                    <span id="dash-lang-pill-label">English</span>
+                    <i class="fa-solid fa-caret-down" style="font-size:8px;opacity:0.7;"></i>
+                </button>
+                <div class="dash-lang-menu" id="dash-lang-menu" style="display:none;"></div>
+            </div>
 
             <div class="export-dropdown">
                 <button class="icon-btn" onclick="this.parentElement.classList.toggle('open')"><i class="fa-solid fa-download"></i> Export <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.5;"></i></button>
@@ -220,41 +237,41 @@
          filter combo to colleagues. See toggleChipFilter() / _passesChipFilters()
          / _restoreChipFiltersFromStorage() in app.js. -->
     <div class="cmd-filter-row" id="cmd-filter-row" role="group" aria-label="Additional filters">
-        <span class="cmd-filter-label"><i class="fa-solid fa-filter"></i> Filters</span>
+        <span class="cmd-filter-label"><i class="fa-solid fa-filter"></i> <span data-i18n="filter_label">Filters</span></span>
         <button class="cmd-filter-chip" data-chip="debris"
                 onclick="toggleChipFilter('debris')"
                 title="Reports flagged as needing debris clearing">
-            <i class="fa-solid fa-broom"></i><span>Debris clearing</span>
+            <i class="fa-solid fa-broom"></i><span data-i18n="chip_debris">Debris clearing</span>
         </button>
         <button class="cmd-filter-chip" data-chip="dmg-complete"
                 onclick="toggleChipFilter('dmg-complete')"
                 title="Damage classification: COMPLETE">
-            <i class="fa-solid fa-building-circle-xmark"></i><span>Complete</span>
+            <i class="fa-solid fa-building-circle-xmark"></i><span data-i18n="chip_dmg_complete">Complete</span>
         </button>
         <button class="cmd-filter-chip" data-chip="dmg-partial"
                 onclick="toggleChipFilter('dmg-partial')"
                 title="Damage classification: PARTIAL">
-            <i class="fa-solid fa-building-shield"></i><span>Partial</span>
+            <i class="fa-solid fa-building-shield"></i><span data-i18n="chip_dmg_partial">Partial</span>
         </button>
         <button class="cmd-filter-chip" data-chip="has-media"
                 onclick="toggleChipFilter('has-media')"
                 title="Reports with at least one photo or audio file">
-            <i class="fa-solid fa-image"></i><span>Has media</span>
+            <i class="fa-solid fa-image"></i><span data-i18n="chip_has_media">Has media</span>
         </button>
         <button class="cmd-filter-chip" data-chip="verified"
                 onclick="toggleChipFilter('verified')"
                 title="AI-verified (truth score &ge; 60)">
-            <i class="fa-solid fa-satellite"></i><span>Verified</span>
+            <i class="fa-solid fa-satellite"></i><span data-i18n="chip_verified">Verified</span>
         </button>
         <button class="cmd-filter-chip" data-chip="building"
                 onclick="toggleChipFilter('building')"
                 title="Building-tagged (linked to an OSM building footprint)">
-            <i class="fa-solid fa-building"></i><span>Building-tagged</span>
+            <i class="fa-solid fa-building"></i><span data-i18n="chip_building_tagged">Building-tagged</span>
         </button>
         <button class="cmd-filter-chip-clear" id="cmd-filter-chip-clear"
                 onclick="clearAllChipFilters()" title="Clear all filter chips"
                 style="display:none;">
-            <i class="fa-solid fa-xmark"></i> Clear filters
+            <i class="fa-solid fa-xmark"></i> <span data-i18n="chip_clear_all">Clear filters</span>
         </button>
 
         <!-- Phase G.6 (May 2026) — Saved view presets. localStorage-
@@ -560,21 +577,21 @@
 <div id="bulk-action-bar" class="bulk-action-bar" style="display:none;">
     <div class="bulk-action-left">
         <span class="bulk-action-icon"><i class="fa-solid fa-list-check"></i></span>
-        <strong id="bulk-count">0</strong> selected
+        <strong id="bulk-count">0</strong> <span data-i18n="bulk_selected">selected</span>
         <span class="bulk-progress" id="bulk-progress"></span>
     </div>
     <div class="bulk-action-buttons">
         <button class="bulk-btn bulk-btn-verify" onclick="bulkVerifySelected()">
-            <i class="fa-solid fa-satellite"></i> Verify
+            <i class="fa-solid fa-satellite"></i> <span data-i18n="bulk_verify">Verify</span>
         </button>
         <button class="bulk-btn bulk-btn-accept" onclick="bulkAcceptSelected()">
-            <i class="fa-solid fa-circle-check"></i> Accept
+            <i class="fa-solid fa-circle-check"></i> <span data-i18n="bulk_accept">Accept</span>
         </button>
         <button class="bulk-btn bulk-btn-dispatch" onclick="bulkDispatchSelected()">
-            <i class="fa-solid fa-hands-helping"></i> Dispatch
+            <i class="fa-solid fa-hands-helping"></i> <span data-i18n="bulk_dispatch">Dispatch</span>
         </button>
         <button class="bulk-btn bulk-btn-reject" onclick="bulkRejectSelected()">
-            <i class="fa-solid fa-ban"></i> Reject
+            <i class="fa-solid fa-ban"></i> <span data-i18n="bulk_reject">Reject</span>
         </button>
         <button class="bulk-btn bulk-btn-clear" onclick="clearBulkSelection()" title="Clear selection">
             <i class="fa-solid fa-xmark"></i>
