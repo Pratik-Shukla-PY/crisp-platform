@@ -1433,17 +1433,26 @@ function createIncidentCard(r) {
                 <i class="fa-regular fa-clock"></i>
                 ${timeAgo(r.server_created_at)}
             </div>
+            <!-- Phase F.1.c (May 2026) — de-stuffed media presence row.
+                 Previously each icon also carried an inline percent
+                 text (di-pct span) when the upload was mid-progress.
+                 Across a 50-card feed scan that was ~50×3 = ~150
+                 little percentage chips fighting for attention; most
+                 of the time the operator only needs the binary "did
+                 the data arrive?" answer (green icon = yes, amber =
+                 in-progress, grey = absent). Percentages still render
+                 in the detail panel where there is room; the hover
+                 tooltip on each icon also carries the exact percent
+                 so it is never far from reach. -->
             <div class="qrt-data-progress">
                 <span class="qrt-di ${locDone ? 'di-done' : 'di-off'}" title="Location: ${locDone ? 'Received' : 'Missing'}">
                     <i class="fa-solid fa-location-dot"></i>
                 </span>
                 <span class="qrt-di ${imgDone ? 'di-done' : hasImg ? 'di-partial' : 'di-off'}" title="Image: ${imgDone ? 'Complete' : hasImg ? Math.round(imgPct) + '%' : 'Not received'}">
                     <i class="fa-solid fa-camera"></i>
-                    ${hasImg && !imgDone ? `<span class="di-pct">${Math.round(imgPct)}%</span>` : ''}
                 </span>
                 <span class="qrt-di ${audioDone ? 'di-done' : hasAudio ? 'di-partial' : 'di-off'}" title="Audio: ${audioDone ? 'Complete' : hasAudio ? Math.round(audioPct) + '%' : 'Not received'}">
                     <i class="fa-solid fa-microphone"></i>
-                    ${hasAudio && !audioDone ? `<span class="di-pct">${Math.round(audioPct)}%</span>` : ''}
                 </span>
                 ${v ? `<span class="qrt-ai-badge" title="Verified: ${v.total_score}/100 — ${(v.verdict || '').replace(/_/g,' ')}" style="color:${v.total_score >= 60 ? '#22c55e' : v.total_score >= 40 ? '#eab308' : '#ef4444'};">
                     <i class="fa-solid fa-brain"></i> ${v.total_score}
