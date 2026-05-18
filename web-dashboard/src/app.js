@@ -3079,35 +3079,41 @@ function _renderReviewerActions(r) {
     // requests return 403. We don't hide the input client-side; we
     // rely on the server's gate. (Hiding would require a role check
     // we don't reliably have on every dashboard surface.)
+    // Phase F.1.d (May 2026) — Lives Helped input moved to the
+    // reviewer top row so it's discoverable without scrolling. The
+    // hint text below the input is dropped from the sticky strip
+    // (operator's onboarding tooltip surfaces the same info on
+    // hover); the strip stays compact enough to pin to the top of
+    // the detail-panel scroll container.
     const livesCurrent = Number.isFinite(r.lives_impacted) ? r.lives_impacted : 0;
-    const livesInputHtml = `
-        <div class="dp-reviewer-lives">
-            <label class="dp-reviewer-lives-label" for="dp-lives-input-${r.id}">
-                <i class="fa-solid fa-heart-pulse"></i> Lives helped
-            </label>
-            <div class="dp-reviewer-lives-row">
-                <input type="number" min="0" max="100000" step="1"
-                       class="dp-reviewer-lives-input"
-                       id="dp-lives-input-${r.id}"
-                       value="${livesCurrent}"
-                       data-original="${livesCurrent}"
-                       aria-label="Lives helped by this report" />
-                <button type="button" class="dp-reviewer-btn dp-reviewer-lives-save"
-                        onclick="setLivesImpacted('${r.id}')"
-                        title="Save the lives-helped count">
-                    <i class="fa-solid fa-floppy-disk"></i> Save
-                </button>
-            </div>
-            <div class="dp-reviewer-lives-hint">
-                Reporter's home shows this number under "Lives Saved" once set.
-            </div>
+    const livesInlineHtml = `
+        <div class="dp-reviewer-lives-inline" title="Reporter's home shows this number under 'Lives Saved' once set.">
+            <i class="fa-solid fa-heart-pulse dp-reviewer-lives-icon" aria-hidden="true"></i>
+            <input type="number" min="0" max="100000" step="1"
+                   class="dp-reviewer-lives-input"
+                   id="dp-lives-input-${r.id}"
+                   value="${livesCurrent}"
+                   data-original="${livesCurrent}"
+                   aria-label="Lives helped by this report" />
+            <button type="button" class="dp-reviewer-btn dp-reviewer-lives-save"
+                    onclick="setLivesImpacted('${r.id}')"
+                    title="Save the lives-helped count">
+                <i class="fa-solid fa-floppy-disk"></i>
+            </button>
         </div>`;
 
-    return `<div class="dp-reviewer">
+    // Phase F.1.d (May 2026) — sticky reviewer-actions strip. The
+    // `.dp-reviewer.is-sticky` class enables `position: sticky;
+    // top: 0;` so Accept / Reject / Dispatched / Arrived / Lives
+    // remain visible while operators scroll through media + the
+    // timeline + the AI assessment below. Was previously buried
+    // mid-scroll — the audit's top-friction complaint.
+    return `<div class="dp-reviewer is-sticky">
         <div class="dp-reviewer-top">
             <span class="dp-reviewer-chip dp-reviewer-${verdictClass}">${verdictLabel}</span>
             ${reviewedAgo ? `<span class="dp-reviewer-meta">${reviewedAgo}</span>` : ''}
             ${responseStr ? `<span class="dp-reviewer-meta dp-reviewer-response">${responseStr}</span>` : ''}
+            ${livesInlineHtml}
         </div>
         ${dispatched || arrived ? `<div class="dp-reviewer-times">
             ${dispatched ? `<span><i class="fa-solid fa-truck-medical"></i> ${dispatched}</span>` : ''}
@@ -3126,7 +3132,6 @@ function _renderReviewerActions(r) {
                     onclick="stampResponderTime('${r.id}','arrived')"
                     ${r.help_arrived_at ? 'disabled' : ''}><i class="fa-solid fa-map-pin"></i> Arrived</button>
         </div>
-        ${livesInputHtml}
     </div>`;
 }
 

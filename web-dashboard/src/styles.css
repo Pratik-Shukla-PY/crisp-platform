@@ -2536,6 +2536,76 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 }
 
 /* ──────────────────────────────────────────────────────────────────
+   Phase F.1.d (May 2026) — sticky reviewer-actions strip.
+
+   The detail panel stacks 10+ sections. The reviewer-actions block
+   (Accept / Reject / Dispatched / Arrived + Lives Helped) was
+   buried mid-scroll, so operators had to scroll back UP to dispatch
+   after viewing media or the satellite verdict. `is-sticky` makes
+   the strip stick to the top of the detail panel's scroll
+   container, always visible.
+
+   Lives Helped moved inline into the reviewer-top row (alongside
+   the verdict chip) so the most-frequent analyst input is one click
+   away regardless of scroll. The old block-level `.dp-reviewer-lives`
+   styles remain in styles.css as harmless dead CSS — no markup
+   matches them after this commit. A later prune phase can remove.
+   ────────────────────────────────────────────────────────────────── */
+.dp-reviewer.is-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    margin-top: 0;     /* override the default 8px margin-top so the
+                           strip sits flush with the panel header */
+}
+
+.dp-reviewer-lives-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    padding: 2px 4px 2px 8px;
+    border-radius: 999px;
+    background: rgba(70, 223, 177, 0.08);
+    border: 1px solid rgba(70, 223, 177, 0.22);
+}
+.dp-reviewer-lives-inline .dp-reviewer-lives-icon {
+    color: #46DFB1;
+    font-size: 11px;
+}
+.dp-reviewer-lives-inline .dp-reviewer-lives-input {
+    width: 56px;
+    padding: 2px 6px;
+    border: 0;
+    background: transparent;
+    color: #f1f5f9;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: right;
+    font-feature-settings: "tnum";
+    -moz-appearance: textfield;
+}
+.dp-reviewer-lives-inline .dp-reviewer-lives-input::-webkit-outer-spin-button,
+.dp-reviewer-lives-inline .dp-reviewer-lives-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.dp-reviewer-lives-inline .dp-reviewer-lives-input:focus {
+    outline: 0;
+    background: rgba(70, 223, 177, 0.12);
+    border-radius: 4px;
+}
+.dp-reviewer-lives-inline .dp-reviewer-lives-save {
+    padding: 2px 8px;
+    font-size: 11px;
+    line-height: 1;
+}
+
+/* ──────────────────────────────────────────────────────────────────
    Phase F.1.b (May 2026) — header chip consolidation.
 
    Five separate stat-pills (CRITICAL / PENDING / HELPED / CLOSED /
