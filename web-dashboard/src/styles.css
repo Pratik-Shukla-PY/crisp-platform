@@ -2679,6 +2679,135 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 .notif-flash-hint { font-size: 10px; color: #475569; }
 @keyframes flash-text { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
 
+/* ══ Phase J.4 (May 2026) — Notification card-stack ══════════════
+   Replaces clobber-and-replace flash with honest stacking. Center-
+   screen per operator preference. Cards reuse the .notif-flash
+   visual styling (familiar look) but live inside a stack container
+   that lets multiple cards visibly fan beneath the current one. */
+
+.notif-stack {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10001;
+    width: 380px;
+    pointer-events: none;
+    display: none;
+    /* prefers-reduced-motion respected via individual transitions
+       on cards; container itself doesn't animate. */
+}
+.notif-stack.has-cards { display: block; }
+.notif-stack.fly-away {
+    transform: translate(calc(50vw - 60px), calc(-50vh + 40px)) scale(0.05);
+    opacity: 0;
+    transition: all 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.notif-stack-card {
+    position: absolute;
+    top: 0; left: 0;
+    width: 380px;
+    background: rgba(10,14,26,0.97);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 2px solid rgba(34,197,94,0.6);
+    border-radius: 20px;
+    padding: 28px 32px;
+    cursor: pointer;
+    text-align: center;
+    pointer-events: auto;
+    box-shadow:
+        0 0 30px rgba(34,197,94,0.3),
+        0 0 60px rgba(34,197,94,0.15),
+        0 0 100px rgba(34,197,94,0.08),
+        0 20px 60px rgba(0,0,0,0.5);
+    animation: flash-in 0.32s ease-out, neon-border-pulse 1.8s ease-in-out infinite;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.28s ease;
+    transform-origin: 50% 60%;
+}
+/* The TOP card sits at z-index above the others; subsequent cards
+   are pushed down by their inline `transform: translateY` style. */
+.notif-stack-card:nth-child(1) { z-index: 3; }
+.notif-stack-card:nth-child(2) { z-index: 2; }
+.notif-stack-card:nth-child(3) { z-index: 1; }
+
+/* Upgrade chip — amber arrow showing the card was updated rather
+   than a brand-new event. Solves the operator's "same report's
+   media evolved should not pulse twice" requirement. */
+.notif-upgrade-chip {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.40);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+.notif-upgrade-chip i { font-size: 9px; }
+.notif-stack-card.is-upgraded {
+    animation: flash-in 0.32s ease-out;  /* no border-pulse for upgrades */
+}
+
+/* Burst banner — replaces per-card spawn when arrival rate >5 in 5s. */
+.notif-burst-banner {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10002;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(239, 68, 68, 0.92));
+    color: #fff7ed;
+    border: 1px solid rgba(245, 158, 11, 0.55);
+    border-radius: 999px;
+    padding: 8px 20px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 8px 28px rgba(245, 158, 11, 0.40);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    animation: flash-in 0.35s ease-out;
+}
+.notif-burst-banner strong {
+    font-size: 16px;
+    font-weight: 800;
+    font-feature-settings: "tnum";
+}
+.notif-burst-hint {
+    opacity: 0.78;
+    font-weight: 600;
+    margin-left: 6px;
+}
+.notif-burst-banner i { font-size: 13px; }
+
+/* Burst mode: tone down animation thrashing on the surrounding
+   chrome so the surface doesn't feel panicked under 50+ DOM mutations.
+   Sets a body class; individual rules opt in. */
+body.burst-mode .notif-bell.has-new {
+    animation: none;
+}
+body.burst-mode .neon-pulse,
+body.burst-mode .notif-glow {
+    animation: none !important;
+}
+
+/* Respect reduced-motion preference — no fanned-deck transform. */
+@media (prefers-reduced-motion: reduce) {
+    .notif-stack-card { transition: none; }
+    .notif-stack-card[style*="rotate"] { transform: translateY(8px) scale(0.98) !important; }
+    .notif-stack-card { animation-duration: 0.01ms; }
+    @keyframes neon-border-pulse { 0%, 100% { border-color: rgba(34,197,94,0.6); } }
+}
+
 /* ══ TOAST NOTIFICATIONS ═══════════════════════════════════ */
 .toast-container {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);

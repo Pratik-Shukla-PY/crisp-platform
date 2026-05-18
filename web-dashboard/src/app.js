@@ -719,59 +719,261 @@ function showToast(msg, type = 'info') {
 
 // ── Live Incident Notification System ────────────────────────────────────────
 
+// ══════════════════════════════════════════════════════════════════════
+// Phase J.4 (May 2026) — Notification card-stack + burst-mode banner
+// ══════════════════════════════════════════════════════════════════════
+// Replaces the clobber-and-replace flash with an honest card stack
+// (center-screen per operator preference). New cards push the
+// previous ones into a fanned-deck visual. Burst threshold (operator
+// confirmed: 5 in 5 s) coalesces extreme arrival rates into a single
+// "+N incoming" banner so the surface stays calm even under disaster
+// traffic. Dedup keys: report.id, client_report_id, and a
+// building+crisis 60 s coalesce.
+
+const _STACK_MAX_VISIBLE = 3;       // max cards in the visible stack
+const _STACK_AUTODISMISS_SOLO_MS = 6000;  // single card lifespan
+const _STACK_QUIET_MS = 12000;      // stack collapse after this long idle
+const _BURST_THRESHOLD = 5;         // operator-confirmed: 5 in 5 s
+const _BURST_WINDOW_MS = 5000;
+const _COALESCE_WINDOW_MS = 60000;  // same building+crisis = update
+let _notificationStack = [];        // [{ id, clientId, buildingId, crisisType, severity, type, location, source, srcIcon, srcBrand, sevColor, addedAt }]
+let _burstArrivals = [];            // timestamps of recent arrivals (in burst window)
+let _burstBannerActive = false;
+let _stackQuietTimer = null;
+
+function _inBurstMode() {
+    const now = Date.now();
+    _burstArrivals = _burstArrivals.filter(t => (now - t) < _BURST_WINDOW_MS);
+    return _burstArrivals.length >= _BURST_THRESHOLD;
+}
+
 function _addNotification(r) {
     const locName = r.location?.user_location_name || r.location?.device_location_name || 'Unknown location';
     const srcIcons = {APP:'fa-mobile-screen-button',ANDROID:'fa-robot',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'};
     const srcBrand = ['WHATSAPP','TELEGRAM'].includes(r.source) ? 'fa-brands' : 'fa-solid';
     const sevColor = SEV_COLORS[r.severity] || '#64748b';
+    const now = Date.now();
 
     const notif = {
         id: r.id,
+        clientId: r.client_report_id || null,
+        buildingId: r.building_id || null,
+        crisisType: r.crisis_type || null,
         type: (r.infrastructure_type || 'OTHER').replace(/_/g, ' '),
         severity: r.severity || 'UNKNOWN',
         location: locName,
         source: r.source || 'APP',
         srcIcon: srcIcons[r.source] || 'fa-mobile-screen-button',
         srcBrand,
+        sevColor,
         timestamp: r.server_created_at,
+        addedAt: now,
+        coalescedCount: 1,
     };
 
+    // Bell-panel state — unchanged. Always tracks the full unseen list
+    // (LIFO, cap at _MAX_NOTIFS). The card-stack is a SEPARATE state
+    // (short-lived visual surface) that derives from the same stream
+    // but with dedup + coalesce + burst rules applied.
     _unseenReports.unshift(notif);
     if (_unseenReports.length > _MAX_NOTIFS) _unseenReports.pop();
-
     _renderNotifications();
 
-    // Show flash notification below bell — visible for 5 seconds then flies into bell
-    _showFlashNotification(notif, sevColor);
+    // ── Dedup: same report.id already in stack → upgrade in place ──
+    const existing = _notificationStack.find(n => n.id === notif.id);
+    if (existing) {
+        existing.severity = notif.severity;
+        existing.type = notif.type;
+        existing.location = notif.location;
+        existing.sevColor = notif.sevColor;
+        existing._upgraded = true;
+        existing._upgradeReason = 'updated';
+        _renderNotificationStack();
+        return;
+    }
+
+    // ── Secondary dedup: same client_report_id (offline-queue
+    // reconciliation case where the server assigned a different id) ──
+    if (notif.clientId) {
+        const byClient = _notificationStack.find(n => n.clientId === notif.clientId);
+        if (byClient) {
+            // Adopt the new server id but keep the existing card.
+            byClient.id = notif.id;
+            byClient.severity = notif.severity;
+            byClient._upgraded = true;
+            byClient._upgradeReason = 'reconciled';
+            _renderNotificationStack();
+            return;
+        }
+    }
+
+    // ── Tertiary coalesce: same building_id + crisis_type within 60 s
+    // → update existing card's count instead of spawning a second ──
+    if (notif.buildingId && notif.crisisType) {
+        const sib = _notificationStack.find(n =>
+            n.buildingId === notif.buildingId &&
+            n.crisisType === notif.crisisType &&
+            (now - n.addedAt) < _COALESCE_WINDOW_MS
+        );
+        if (sib) {
+            sib.coalescedCount = (sib.coalescedCount || 1) + 1;
+            sib._upgraded = true;
+            sib._upgradeReason = `coalesced ×${sib.coalescedCount}`;
+            _renderNotificationStack();
+            return;
+        }
+    }
+
+    // Track arrival for burst detection.
+    _burstArrivals.push(now);
+
+    // ── Burst-mode gate ──
+    if (_inBurstMode()) {
+        _showBurstBanner();
+        // Suppress per-card spawn; the bell badge already updated above.
+        return;
+    } else if (_burstBannerActive) {
+        // Just exited burst — clear the banner.
+        _hideBurstBanner();
+    }
+
+    // ── Standard path: prepend to stack ──
+    _notificationStack.unshift(notif);
+    // Cap visible cards; older ones drop out (still visible via bell).
+    if (_notificationStack.length > _STACK_MAX_VISIBLE) {
+        _notificationStack = _notificationStack.slice(0, _STACK_MAX_VISIBLE);
+    }
+    _renderNotificationStack();
+
+    // Schedule auto-dismiss for solo notifications. With ≥2 cards we
+    // hold the stack visible until the operator engages OR the quiet
+    // timer fires (12s of no new arrivals).
+    if (_notificationStack.length === 1) {
+        notif._dismissTimer = setTimeout(() => {
+            _notificationStack = _notificationStack.filter(n => n !== notif);
+            _renderNotificationStack();
+        }, _STACK_AUTODISMISS_SOLO_MS);
+    } else {
+        // Multi-card: arm/reset the quiet timer.
+        if (_stackQuietTimer) clearTimeout(_stackQuietTimer);
+        _stackQuietTimer = setTimeout(() => {
+            // Fly the whole stack to the bell with the existing flyaway pattern.
+            const stackEl = document.getElementById('notif-stack');
+            if (stackEl) {
+                stackEl.classList.add('fly-away');
+                setTimeout(() => {
+                    _notificationStack = [];
+                    _renderNotificationStack();
+                }, 700);
+            } else {
+                _notificationStack = [];
+                _renderNotificationStack();
+            }
+        }, _STACK_QUIET_MS);
+    }
 }
 
-function _showFlashNotification(n, sevColor) {
-    // Remove any existing flash
-    document.querySelectorAll('.notif-flash').forEach(el => el.remove());
+// Render the visible card stack. Center-screen (per operator
+// confirmation) — replaces clobber-and-replace with honest stacking.
+function _renderNotificationStack() {
+    // Ensure stack container exists.
+    let stack = document.getElementById('notif-stack');
+    if (!stack) {
+        stack = document.createElement('div');
+        stack.id = 'notif-stack';
+        stack.className = 'notif-stack';
+        document.body.appendChild(stack);
+    }
+    if (!_notificationStack.length) {
+        stack.innerHTML = '';
+        stack.classList.remove('has-cards', 'fly-away');
+        return;
+    }
+    stack.classList.remove('fly-away');
+    stack.classList.add('has-cards');
+    stack.innerHTML = _notificationStack.map((n, i) => {
+        const srcLabel = {APP:'Mobile App',ANDROID:'Android',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[n.source] || n.source;
+        // Stagger transforms: first (top) card flat; subsequent
+        // cards offset+scaled+tilted to read as a fanned deck.
+        const stackStyle = i === 0
+            ? ''
+            : i === 1
+                ? 'transform:translateY(10px) scale(0.96);opacity:0.78;'
+                : 'transform:translateY(20px) scale(0.92) rotate(-1.5deg);opacity:0.6;';
+        return `
+            <div class="notif-stack-card ${n._upgraded ? 'is-upgraded' : ''}"
+                 data-id="${escapeHtml(n.id)}"
+                 style="${stackStyle}"
+                 onclick="_dismissStackCard('${n.id}')">
+                ${n._upgraded ? `<div class="notif-upgrade-chip" title="${escapeHtml(n._upgradeReason || 'updated')}">
+                    <i class="fa-solid fa-arrow-up"></i> ${escapeHtml(n._upgradeReason || 'updated')}
+                </div>` : ''}
+                <div class="notif-flash-icon" style="color:${n.sevColor};">🚨</div>
+                <div class="notif-flash-title">${n.coalescedCount > 1 ? `${n.coalescedCount}× reports — same building` : 'NEW INCIDENT REPORTED'}</div>
+                <div class="notif-flash-detail">
+                    <span class="notif-sev" style="background:${n.sevColor}25;color:${n.sevColor};font-size:13px;padding:4px 10px;">${n.severity}</span>
+                    <span style="font-size:16px;font-weight:700;color:#e2e8f0;">${escapeHtml(n.type)}</span>
+                </div>
+                <div class="notif-flash-loc"><i class="fa-solid fa-location-dot" style="color:${n.sevColor};"></i> ${escapeHtml(n.location)}</div>
+                <div class="notif-flash-source"><i class="${n.srcBrand} ${n.srcIcon}"></i> via ${escapeHtml(srcLabel)}</div>
+                <div class="notif-flash-hint">Click to view${_notificationStack.length === 1 ? ' &middot; Auto-dismiss in 6s' : ''}</div>
+            </div>
+        `;
+    }).join('');
+}
 
-    const srcLabel = {APP:'Mobile App',ANDROID:'Android',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[n.source] || n.source;
+window._dismissStackCard = (id) => {
+    const card = _notificationStack.find(n => n.id === id);
+    if (card && card._dismissTimer) clearTimeout(card._dismissTimer);
+    _notificationStack = _notificationStack.filter(n => n.id !== id);
+    if (_stackQuietTimer) { clearTimeout(_stackQuietTimer); _stackQuietTimer = null; }
+    _renderNotificationStack();
+    dismissNotif(id);
+};
 
-    const flash = document.createElement('div');
-    flash.className = 'notif-flash';
-    flash.onclick = () => { flash.remove(); dismissNotif(n.id); };
-    flash.innerHTML = `
-        <div class="notif-flash-icon">🚨</div>
-        <div class="notif-flash-title">NEW INCIDENT REPORTED</div>
-        <div class="notif-flash-detail">
-            <span class="notif-sev" style="background:${sevColor}25;color:${sevColor};font-size:13px;padding:4px 10px;">${n.severity}</span>
-            <span style="font-size:16px;font-weight:700;color:#e2e8f0;">${n.type}</span>
-        </div>
-        <div class="notif-flash-loc"><i class="fa-solid fa-location-dot" style="color:${sevColor};"></i> ${escapeHtml(n.location)}</div>
-        <div class="notif-flash-source"><i class="${n.srcBrand} ${n.srcIcon}"></i> via ${srcLabel}</div>
-        <div class="notif-flash-hint">Click to view &middot; Auto-dismiss in 5s</div>
+// Burst banner — pinned center-top when 5+ arrive in 5 s.
+function _showBurstBanner() {
+    _burstBannerActive = true;
+    document.body.classList.add('burst-mode');
+    let banner = document.getElementById('notif-burst-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'notif-burst-banner';
+        banner.className = 'notif-burst-banner';
+        banner.onclick = () => {
+            _hideBurstBanner();
+            toggleNotifPanel();
+        };
+        document.body.appendChild(banner);
+    }
+    const total = _unseenReports.length;
+    banner.innerHTML = `
+        <i class="fa-solid fa-bolt"></i>
+        <strong>${total}</strong> incidents reporting
+        <span class="notif-burst-hint">tap to triage</span>
     `;
-    document.body.appendChild(flash);
+    // Reset auto-clear timer; banner stays as long as arrivals keep coming.
+    if (banner._clearTimer) clearTimeout(banner._clearTimer);
+    banner._clearTimer = setTimeout(() => _hideBurstBanner(), 8000);
+}
 
-    // After 5 seconds: shrink and fly to top-right bell
-    setTimeout(() => {
-        flash.classList.add('fly-away');
-        setTimeout(() => flash.remove(), 800);
-    }, 5000);
+function _hideBurstBanner() {
+    _burstBannerActive = false;
+    document.body.classList.remove('burst-mode');
+    const banner = document.getElementById('notif-burst-banner');
+    if (banner) {
+        if (banner._clearTimer) clearTimeout(banner._clearTimer);
+        banner.remove();
+    }
+}
+
+// Back-compat: legacy code paths that called _showFlashNotification
+// now route through the new stack renderer. The old per-card centred
+// flash element is no longer used.
+function _showFlashNotification(n /* , sevColor */) {
+    // No-op: notifications are now driven by _renderNotificationStack
+    // via _addNotification. Kept as a stable entry point so any
+    // out-of-tree caller that imported it doesn't ReferenceError.
 }
 
 function _renderNotifications() {
