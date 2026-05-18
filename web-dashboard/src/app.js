@@ -1959,10 +1959,10 @@ function showIncidentPreview(r, event) {
             </div>` : ''}
         </div>` : ''}
         <div class="fp-body">
-            ${hoverAiSummary ? `<div class="fp-text" style="border-left:2px solid #3b82f6;padding-left:6px;"><i class="fa-solid fa-robot" style="font-size:10px;color:#3b82f6;margin-right:3px;"></i>${hoverAiSummary.substring(0, 140)}${hoverAiSummary.length > 140 ? '...' : ''}</div>` : ''}
-            ${hoverUserText && (!hoverAiSummary || hoverUserText !== hoverAiSummary) ? `<div class="fp-text" style="font-size:11px;color:#94a3b8;margin-top:3px;"><i class="fa-solid fa-user" style="font-size:9px;margin-right:3px;"></i>${hoverUserText.substring(0, 100)}${hoverUserText.length > 100 ? '...' : ''}</div>` : ''}
+            ${hoverAiSummary ? `<div class="fp-text" style="border-left:2px solid #3b82f6;padding-left:6px;"><i class="fa-solid fa-robot" style="font-size:10px;color:#3b82f6;margin-right:3px;"></i>${escapeHtml(hoverAiSummary.substring(0, 140))}${hoverAiSummary.length > 140 ? '...' : ''}</div>` : ''}
+            ${hoverUserText && (!hoverAiSummary || hoverUserText !== hoverAiSummary) ? `<div class="fp-text" style="font-size:11px;color:#94a3b8;margin-top:3px;"><i class="fa-solid fa-user" style="font-size:9px;margin-right:3px;"></i>${escapeHtml(hoverUserText.substring(0, 100))}${hoverUserText.length > 100 ? '...' : ''}</div>` : ''}
             ${!hoverAiSummary && !hoverUserText ? '' : ''}
-            <div class="fp-loc-row"><i class="fa-solid fa-location-dot" style="color:${sevColor};"></i> ${locName}</div>
+            <div class="fp-loc-row"><i class="fa-solid fa-location-dot" style="color:${sevColor};"></i> ${escapeHtml(locName)}</div>
             ${audioUrl ? `<button class="fp-play-btn" onclick="event.stopPropagation();playPreviewAudio('${audioUrl}',this)"><i class="fa-solid fa-play"></i> Play Audio</button>` : ''}
             ${v ? `<div class="fp-verify-row">
                 <span class="fp-verify-score" style="color:${gc};">${v.total_score}</span>
@@ -3686,17 +3686,17 @@ window.exportPDF = (id) => {
       <div class="row"><span class="k">Status</span><span class="v">${r.status}</span></div>
       <div class="row"><span class="k">Source</span><span class="v">${srcLabel}</span></div>
       <div class="row"><span class="k">Reported</span><span class="v">${ts}</span></div>
-      ${ci?.phone ? `<div class="row"><span class="k">Caller</span><span class="v">${ci.phone}</span></div>` : ''}
+      ${ci?.phone ? `<div class="row"><span class="k">Caller</span><span class="v">${escapeHtml(ci.phone)}</span></div>` : ''}
     </div>
 
     <div class="section"><div class="section-title">Location</div>
-      <div class="row"><span class="k">Name</span><span class="v">${locName}</span></div>
+      <div class="row"><span class="k">Name</span><span class="v">${escapeHtml(locName)}</span></div>
       ${loc ? `<div class="row"><span class="k">Coordinates</span><span class="v">${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}</span></div>` : ''}
-      ${ci?.network_location ? `<div class="row"><span class="k">Telecom Circle</span><span class="v">${ci.network_location}</span></div>` : ''}
+      ${ci?.network_location ? `<div class="row"><span class="k">Telecom Circle</span><span class="v">${escapeHtml(ci.network_location)}</span></div>` : ''}
     </div>
 
     <div class="section"><div class="section-title">Description</div>
-      <div class="desc">${r.description || ai?.transcription || 'No description available.'}</div>
+      <div class="desc">${escapeHtml(r.description || ai?.transcription || 'No description available.')}</div>
     </div>
 
     ${hasAnyImage ? `
@@ -4288,7 +4288,7 @@ function initMap() {
 
         const locName = children[0]?._crispReport?.location?.user_location_name || children[0]?._crispReport?.location?.device_location_name || '';
         cluster.bindPopup(`<div style="min-width:190px;max-width:260px;">
-            <div style="font-size:13px;font-weight:800;color:#ffae00;margin-bottom:6px;">${children.length} Incidents${locName ? ' — ' + locName : ''}</div>
+            <div style="font-size:13px;font-weight:800;color:#ffae00;margin-bottom:6px;">${children.length} Incidents${locName ? ' — ' + escapeHtml(locName) : ''}</div>
             ${rows}
             <div style="font-size:10px;color:#64748b;text-align:center;margin-top:6px;"><i class="fa-solid fa-hand-pointer"></i> Click to expand</div>
         </div>`, { className: 'cluster-popup', closeButton: false, autoPan: false }).openPopup();
