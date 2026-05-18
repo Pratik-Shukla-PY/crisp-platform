@@ -165,6 +165,40 @@ const CRISIS_LABELS = {
 // future enum addition doesn't break the render.
 const infraLabel  = (v) => INFRA_LABELS[v]  || (v ? String(v).replace(/_/g, ' ') : '');
 const crisisLabel = (v) => CRISIS_LABELS[v] || (v ? String(v).replace(/_/g, ' ') : '');
+
+// Phase F.3.b (May 2026, pivoted from the original source-enum plan
+// after the F.3.c audit revealed the operator-perceived "everything
+// is Transport & Communication" problem was driven by legacy ROAD
+// chip data getting normalised to TRANSPORT_COMMUNICATION via the
+// backend's _apply_taxonomy hook — 89 of 120 reports). The richer
+// signal is the `infrastructure_sub_type` column (ROAD / HOSPITAL /
+// POWER / WATER / SCHOOL / HOUSE / TELECOM) which was already being
+// captured server-side but never surfaced in the dashboard.
+//
+// `infraDisplayLabel(infraType, subType)` returns either the UNDP
+// super-type label alone (when subType is empty / null) or
+// "Super-type · Sub-type" (e.g. "Roads & bridges · Road",
+// "Schools & hospitals · Hospital") so operators can tell at a
+// glance whether a TRANSPORT_COMMUNICATION row is a road, telecom
+// tower, or generic non-specific transport incident.
+const INFRA_SUB_LABELS = {
+    ROAD:     'Road',
+    HOSPITAL: 'Hospital',
+    HOUSE:    'House',
+    POWER:    'Power grid',
+    WATER:    'Water',
+    SCHOOL:   'School',
+    TELECOM:  'Telecom',
+};
+const infraDisplayLabel = (infraType, subType) => {
+    const base = infraLabel(infraType);
+    if (!subType) return base;
+    const sub = INFRA_SUB_LABELS[subType] || String(subType).replace(/_/g, ' ');
+    // Avoid doubling when sub-type IS the super-type alias (e.g.
+    // infraType=ROAD AND subType=ROAD → just "Roads & bridges").
+    if (String(subType).toUpperCase() === String(infraType).toUpperCase()) return base;
+    return `${base} · ${sub}`;
+};
 const SEV_COLORS = { CRITICAL: '#ef4444', SEVERE: '#f97316', MODERATE: '#eab308', MINOR: '#22c55e', UNKNOWN: '#64748b' };
 
 // ── QRT Queue State ───────────────────────────────────────────────────────────
@@ -1417,7 +1451,7 @@ function createIncidentCard(r) {
         <div class="qrt-card-body">
             <div class="qrt-what">
                 <div class="qrt-infra-icon"><i class="fa-solid ${icon}"></i></div>
-                <span class="qrt-infra-name">${infra.replace(/_/g, ' ')}</span>
+                <span class="qrt-infra-name" title="${infraDisplayLabel(infra, r.infrastructure_sub_type)}">${infraDisplayLabel(infra, r.infrastructure_sub_type)}</span>
                 <span class="qrt-sev-badge qrt-sev-${sev}">${sev}</span>
                 <span class="qrt-source-badge qrt-src-${(r.source || 'APP').toLowerCase()}" title="Source: ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i>',ANDROID:'<i class="fa-solid fa-robot"></i>',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i>',TELEGRAM:'<i class="fa-brands fa-telegram"></i>',SMS:'<i class="fa-solid fa-comment-sms"></i>',IVR:'<i class="fa-solid fa-phone"></i>'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i>'}</span>
             </div>
@@ -1956,7 +1990,7 @@ function showIncidentPreview(r, event) {
             <div class="fp-header-info">
                 <div class="fp-title-row">
                     <i class="fa-solid ${INFRA_ICONS[r.infrastructure_type] || 'fa-triangle-exclamation'}" style="color:${sevColor};"></i>
-                    <span class="fp-type">${infraLabel(r.infrastructure_type)}</span>
+                    <span class="fp-type">${infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)}</span>
                     <span class="fp-sev-badge" style="background:${sevColor}20;color:${sevColor};">${r.severity}</span>
                     <span class="fp-status-badge fp-st-${r.status}">${r.status === 'RESPONDING' || r.status === 'RESOLVED' ? 'HELPED' : r.status === 'FALSE_ALARM' ? 'FALSE' : r.status}</span>
                 </div>
@@ -2342,7 +2376,7 @@ window.selectReport = (id, skipFly = false) => {
     // Header: type + severity + status + confidence + time
     document.getElementById('detail-title').innerHTML = `
         <i class="fa-solid ${infraIcon}" style="color:${sevColor};"></i>
-        ${infraLabel(r.infrastructure_type)}
+        ${infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)}
         <span class="detail-sev-badge detail-sev-${r.severity}">${r.severity}</span>
         <span class="status-badge status-${r.status}">${r.status}</span>
         <span class="dp-source-badge dp-src-${(r.source || 'APP').toLowerCase()}" title="Reported via ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i> App',ANDROID:'<i class="fa-solid fa-robot"></i> Android',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i> WhatsApp',TELEGRAM:'<i class="fa-brands fa-telegram"></i> Telegram',SMS:'<i class="fa-solid fa-comment-sms"></i> SMS',IVR:'<i class="fa-solid fa-phone"></i> Call'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i> App'}</span>
@@ -2988,7 +3022,7 @@ window.dpOpenCompare = (r) => {
 
     overlay.innerHTML = `
         <div class="dp-compare-header">
-            <div class="dp-compare-title"><i class="fa-solid fa-columns"></i> Image Comparison — ${infraLabel(r.infrastructure_type)} · ${r.severity}</div>
+            <div class="dp-compare-title"><i class="fa-solid fa-columns"></i> Image Comparison — ${infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)} · ${r.severity}</div>
             <div class="dp-compare-overall">Overall: <strong style="color:${gc(total)};">${total}/100</strong></div>
             <button class="dp-compare-close" onclick="document.getElementById('dp-compare-overlay').style.display='none'"><i class="fa-solid fa-xmark"></i></button>
         </div>
@@ -3705,10 +3739,10 @@ window.exportPDF = (id) => {
       <button class="btn-print" onclick="window.print();">Print</button>
     </div>
 
-    <div class="hdr"><div><h1>CRISP Incident Report</h1><span class="rid">ID: ${r.id}</span></div><div style="text-align:right;"><div style="font-size:13px;font-weight:700;">${infraLabel(r.infrastructure_type)}</div><span class="badge sev-${r.severity}">${r.severity}</span><span class="badge" style="background:#f1f5f9;border:1px solid #cbd5e1;">${r.status}</span></div></div>
+    <div class="hdr"><div><h1>CRISP Incident Report</h1><span class="rid">ID: ${r.id}</span></div><div style="text-align:right;"><div style="font-size:13px;font-weight:700;">${infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)}</div><span class="badge sev-${r.severity}">${r.severity}</span><span class="badge" style="background:#f1f5f9;border:1px solid #cbd5e1;">${r.status}</span></div></div>
 
     <div class="section"><div class="section-title">Incident Overview</div>
-      <div class="row"><span class="k">Type</span><span class="v">${infraLabel(r.infrastructure_type)}</span></div>
+      <div class="row"><span class="k">Type</span><span class="v">${infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)}</span></div>
       <div class="row"><span class="k">Severity</span><span class="v">${r.severity}</span></div>
       <div class="row"><span class="k">Status</span><span class="v">${r.status}</span></div>
       <div class="row"><span class="k">Source</span><span class="v">${srcLabel}</span></div>
