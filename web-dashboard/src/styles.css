@@ -2536,6 +2536,92 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 }
 
 /* ──────────────────────────────────────────────────────────────────
+   Phase G.1 (May 2026) — Stacking multi-filter chip row.
+
+   Sits below the command bar, above the rest of the dashboard body.
+   Each chip toggles its own filter; multiple chips AND together
+   (with OR within the damage dimension). Active chips get a tinted
+   background + a thin accent border. The "Clear filters" pill on
+   the right appears only when at least one chip is active.
+
+   Visual style is intentionally less prominent than the command-bar
+   status segment so the eye still treats CRITICAL / PENDING etc. as
+   the primary filter dimension and the chips as a refinement layer.
+   ────────────────────────────────────────────────────────────────── */
+.cmd-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: rgba(15, 23, 42, 0.55);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+    scrollbar-width: thin;
+}
+.cmd-filter-row::-webkit-scrollbar { height: 4px; }
+.cmd-filter-row::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.20);
+    border-radius: 2px;
+}
+.cmd-filter-label {
+    color: #64748b;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-right: 4px;
+    flex: 0 0 auto;
+}
+.cmd-filter-chip {
+    appearance: none;
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    color: #cbd5e1;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+.cmd-filter-chip i { font-size: 11px; opacity: 0.85; }
+.cmd-filter-chip:hover {
+    border-color: rgba(148, 163, 184, 0.40);
+    background: rgba(148, 163, 184, 0.06);
+    color: #f1f5f9;
+}
+.cmd-filter-chip.active {
+    border-color: rgba(70, 223, 177, 0.55);
+    background: rgba(70, 223, 177, 0.14);
+    color: #46DFB1;
+}
+.cmd-filter-chip.active i { opacity: 1; }
+.cmd-filter-chip[data-chip="debris"].active        { border-color: rgba(245, 158, 11, 0.55); background: rgba(245, 158, 11, 0.14); color: #fbbf24; }
+.cmd-filter-chip[data-chip="dmg-complete"].active  { border-color: rgba(239, 68, 68, 0.55); background: rgba(239, 68, 68, 0.14); color: #f87171; }
+.cmd-filter-chip[data-chip="dmg-partial"].active   { border-color: rgba(249, 115, 22, 0.55); background: rgba(249, 115, 22, 0.14); color: #fb923c; }
+.cmd-filter-chip[data-chip="verified"].active      { border-color: rgba(34, 197, 94, 0.55); background: rgba(34, 197, 94, 0.14); color: #4ade80; }
+.cmd-filter-chip-clear {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-left: auto;
+    flex: 0 0 auto;
+}
+.cmd-filter-chip-clear:hover { color: #f87171; background: rgba(239, 68, 68, 0.08); }
+
+/* ──────────────────────────────────────────────────────────────────
    Phase F.2.a (May 2026) — per-incident timeline.
 
    Collapsed <details> in the detail panel. Each row has a coloured

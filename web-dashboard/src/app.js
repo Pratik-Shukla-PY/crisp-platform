@@ -1175,6 +1175,13 @@ function renderTriageQueue(el) {
     }
     // 'all' or null = no additional filter
 
+    // Phase G.1 (May 2026) — apply stacking chip filters on top of the
+    // time + status pill chain. AND between active chips (with damage
+    // dimension treated as OR-within). Set is empty → no-op.
+    if (_activeChipFilters.size) {
+        reports = reports.filter(_passesChipFilters);
+    }
+
     // Three buckets by action status
     const needs      = reports.filter(r => r.status === 'PENDING' || r.status === 'VERIFIED');
     const dispatched = reports.filter(r => r.status === 'RESPONDING');
@@ -1540,6 +1547,11 @@ function renderTreeFeed(el) {
             return haystack.includes(treeSearchTerm);
         });
     }
+    // Phase G.1 — apply stacking chip filters in tree mode too, so the
+    // operator's chip selection persists across view-mode switches.
+    if (_activeChipFilters.size) {
+        filtered = filtered.filter(_passesChipFilters);
+    }
     el.innerHTML = '';
     const frag = document.createDocumentFragment();
     const tree = buildControlPanelTree(filtered);
@@ -1660,6 +1672,133 @@ window.filterByPill = function (type) {
     }
     renderFeed();
 };
+
+// Phase G.1 (May 2026) — Stacking multi-filter chips.
+//
+// State: `_activeChipFilters` is a Set<string> of chip ids. Empty set
+// means no chip filter is active. Multiple chips stack with AND
+// semantics between chip dimensions and OR semantics within the
+// damage dimension (so dmg-complete + dmg-partial both selected
+// matches reports with either damage class — not zero rows).
+//
+// Persistence: localStorage (cross-session) + URL hash (deep-linkable
+// to a colleague). URL hash takes precedence on page load so a deep-
+// linked URL beats whatever the operator had stashed locally.
+//
+// Render pipeline: `_passesChipFilters(r)` predicate is applied after
+// the existing time + status pill filters in both `renderTriageQueue`
+// (queue mode) and `renderTreeFeed` (tree mode). Filter chips are
+// VIEW-MODE-INDEPENDENT — selecting "Debris clearing" filters the
+// same set of reports in either mode.
+const CHIP_FILTERS_LS_KEY = 'crisp_dashboard_chip_filters_v1';
+let _activeChipFilters = new Set();
+
+function _restoreChipFiltersFromStorage() {
+    try {
+        // URL hash takes precedence so deep-links work even after a
+        // cross-session localStorage stash.
+        const hash = window.location.hash || '';
+        const m = hash.match(/(?:^#|;)chips=([^;]+)/);
+        if (m) {
+            for (const id of m[1].split(',')) {
+                if (id) _activeChipFilters.add(id);
+            }
+            // Mirror to localStorage so a subsequent tab without the
+            // hash still sees the same filter set.
+            localStorage.setItem(CHIP_FILTERS_LS_KEY, JSON.stringify([..._activeChipFilters]));
+            return;
+        }
+        const raw = localStorage.getItem(CHIP_FILTERS_LS_KEY);
+        if (raw) {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+                for (const id of arr) _activeChipFilters.add(id);
+            }
+        }
+    } catch (_) {
+        // Defensive — bad JSON, no localStorage, etc. → start empty.
+    }
+}
+
+function _persistChipFilters() {
+    try {
+        localStorage.setItem(CHIP_FILTERS_LS_KEY, JSON.stringify([..._activeChipFilters]));
+    } catch (_) { /* quota / private-browsing → silent */ }
+    // Update URL hash without triggering a navigation.
+    try {
+        const arr = [..._activeChipFilters];
+        // Strip any existing chips= segment, preserve other hash params.
+        const otherHash = (window.location.hash || '').replace(/(?:^#|;)chips=[^;]*/, '');
+        const cleanHash = otherHash.replace(/^#/, '').replace(/^;/, '');
+        const newHash = arr.length
+            ? `#chips=${arr.join(',')}${cleanHash ? ';' + cleanHash : ''}`
+            : (cleanHash ? `#${cleanHash}` : '');
+        // Only update if it changed (avoid stacking history entries).
+        if (window.location.hash !== newHash) {
+            const url = window.location.pathname + window.location.search + newHash;
+            history.replaceState(null, '', url);
+        }
+    } catch (_) { /* IE-style errors → ignore */ }
+}
+
+function _paintChipFilterUI() {
+    document.querySelectorAll('.cmd-filter-chip').forEach(btn => {
+        const id = btn.dataset.chip;
+        btn.classList.toggle('active', _activeChipFilters.has(id));
+    });
+    const clearBtn = document.getElementById('cmd-filter-chip-clear');
+    if (clearBtn) {
+        clearBtn.style.display = _activeChipFilters.size > 0 ? '' : 'none';
+    }
+}
+
+window.toggleChipFilter = function (chipId) {
+    if (!chipId) return;
+    if (_activeChipFilters.has(chipId)) {
+        _activeChipFilters.delete(chipId);
+    } else {
+        _activeChipFilters.add(chipId);
+    }
+    _persistChipFilters();
+    _paintChipFilterUI();
+    renderFeed();
+};
+
+window.clearAllChipFilters = function () {
+    if (_activeChipFilters.size === 0) return;
+    _activeChipFilters.clear();
+    _persistChipFilters();
+    _paintChipFilterUI();
+    renderFeed();
+};
+
+// Filter predicate. Applied AFTER time + status pill filters. AND
+// between dimensions, OR within the damage dimension (so a report
+// matching ANY of the selected damage chips passes that dimension).
+function _passesChipFilters(r) {
+    if (!_activeChipFilters.size) return true;
+    if (_activeChipFilters.has('debris')) {
+        if (!r.debris_clearing_needed) return false;
+    }
+    // Damage chips: OR within dimension.
+    const dmgChipsOn = [];
+    if (_activeChipFilters.has('dmg-complete')) dmgChipsOn.push('COMPLETE');
+    if (_activeChipFilters.has('dmg-partial')) dmgChipsOn.push('PARTIAL');
+    if (dmgChipsOn.length) {
+        if (!dmgChipsOn.includes(r.damage_classification)) return false;
+    }
+    if (_activeChipFilters.has('has-media')) {
+        if (!(r.media && r.media.length > 0)) return false;
+    }
+    if (_activeChipFilters.has('verified')) {
+        const v = r.verification;
+        if (!v || (v.total_score || 0) < 60) return false;
+    }
+    if (_activeChipFilters.has('building')) {
+        if (!r.building_id) return false;
+    }
+    return true;
+}
 
 window.toggleAnalytics = function () {
     const panel = document.getElementById('analytics-panel');
@@ -6211,6 +6350,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!d.contains(e.target)) d.classList.remove('open');
         });
     });
+    // Phase G.1 (May 2026) — restore stacking chip filters from URL
+    // hash or localStorage and paint the chip UI. Must run BEFORE the
+    // first feed render so the active set is honoured on cold load
+    // (deep-linked URLs land showing the right filter combo).
+    _restoreChipFiltersFromStorage();
+    _paintChipFilterUI();
     initMap();
     await loadWorldData();
 

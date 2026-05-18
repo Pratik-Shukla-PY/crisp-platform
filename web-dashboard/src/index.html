@@ -201,6 +201,54 @@
         </div>
     </header>
 
+    <!-- Phase G.1 (May 2026) — Stacking multi-filter chips.
+         Sits just below the command bar so the existing status segment +
+         time dropdown stay the primary filters; chips stack on top of them
+         with AND semantics. Each chip toggles its own state; multiple
+         active chips multiply (AND between chips, OR within the damage
+         dimension so COMPLETE-or-PARTIAL is a valid combo). State persists
+         to localStorage AND to the URL hash so operators can deep-link a
+         filter combo to colleagues. See toggleChipFilter() / _passesChipFilters()
+         / _restoreChipFiltersFromStorage() in app.js. -->
+    <div class="cmd-filter-row" id="cmd-filter-row" role="group" aria-label="Additional filters">
+        <span class="cmd-filter-label"><i class="fa-solid fa-filter"></i> Filters</span>
+        <button class="cmd-filter-chip" data-chip="debris"
+                onclick="toggleChipFilter('debris')"
+                title="Reports flagged as needing debris clearing">
+            <i class="fa-solid fa-broom"></i><span>Debris clearing</span>
+        </button>
+        <button class="cmd-filter-chip" data-chip="dmg-complete"
+                onclick="toggleChipFilter('dmg-complete')"
+                title="Damage classification: COMPLETE">
+            <i class="fa-solid fa-building-circle-xmark"></i><span>Complete</span>
+        </button>
+        <button class="cmd-filter-chip" data-chip="dmg-partial"
+                onclick="toggleChipFilter('dmg-partial')"
+                title="Damage classification: PARTIAL">
+            <i class="fa-solid fa-building-shield"></i><span>Partial</span>
+        </button>
+        <button class="cmd-filter-chip" data-chip="has-media"
+                onclick="toggleChipFilter('has-media')"
+                title="Reports with at least one photo or audio file">
+            <i class="fa-solid fa-image"></i><span>Has media</span>
+        </button>
+        <button class="cmd-filter-chip" data-chip="verified"
+                onclick="toggleChipFilter('verified')"
+                title="AI-verified (truth score &ge; 60)">
+            <i class="fa-solid fa-satellite"></i><span>Verified</span>
+        </button>
+        <button class="cmd-filter-chip" data-chip="building"
+                onclick="toggleChipFilter('building')"
+                title="Building-tagged (linked to an OSM building footprint)">
+            <i class="fa-solid fa-building"></i><span>Building-tagged</span>
+        </button>
+        <button class="cmd-filter-chip-clear" id="cmd-filter-chip-clear"
+                onclick="clearAllChipFilters()" title="Clear all filter chips"
+                style="display:none;">
+            <i class="fa-solid fa-xmark"></i> Clear filters
+        </button>
+    </div>
+
     <!-- Analytics Full-Page Panel (Plecto-style command center dashboard) -->
     <div id="analytics-panel" class="analytics-panel" style="display:none;">
         <div class="analytics-scroll">
