@@ -4931,18 +4931,110 @@ const _STATE_ACTION_ICON = {
 };
 
 function _renderBuildingStateActions(b) {
+    // Phase J.3 (May 2026) — State dropdown replaces 1-5 stacked
+    // state buttons. Same data driver (_BUILDING_STATE_TRANSITIONS);
+    // only the visual surface collapses. Reduces Building Console
+    // header from 8 always-visible action buttons to 2.
     const targets = _BUILDING_STATE_TRANSITIONS[b.state] || [];
     if (targets.length === 0) {
         return `<span class="bc-action-placeholder">No transitions available from ${b.state}</span>`;
     }
-    return targets.map(to => `
-        <button class="bc-state-btn bc-state-btn-${to}"
-                onclick="_changeBuildingState('${b.id}', '${to}')"
-                title="${escapeHtml(_STATE_ACTION_LABEL[to] || to)}">
-            <i class="fa-solid ${_STATE_ACTION_ICON[to] || 'fa-arrow-right'}"></i>
-            <span>${escapeHtml(_STATE_ACTION_LABEL[to] || to)}</span>
-        </button>
-    `).join('');
+    return `
+        <div class="bc-state-dropdown" id="bc-state-dropdown-${escapeHtml(b.id)}">
+            <button class="bc-state-trigger"
+                    onclick="event.stopPropagation();this.parentElement.classList.toggle('open')"
+                    title="Change building state">
+                <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                <span>Change state</span>
+                <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.6;margin-left:4px;"></i>
+            </button>
+            <div class="bc-state-menu">
+                ${targets.map(to => `
+                    <button class="bc-state-menu-item bc-state-menu-item-${to}"
+                            onclick="_changeBuildingState('${b.id}', '${to}');this.closest('.bc-state-dropdown').classList.remove('open')">
+                        <i class="fa-solid ${_STATE_ACTION_ICON[to] || 'fa-arrow-right'}"></i>
+                        <div class="bc-state-menu-text">
+                            <span class="bc-state-menu-title">${escapeHtml(_STATE_ACTION_LABEL[to] || to)}</span>
+                            <span class="bc-state-menu-sub">${escapeHtml(_STATE_ACTION_SUB[to] || '')}</span>
+                        </div>
+                    </button>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// Friendly subtitles for the state-menu items so the operator
+// understands what each transition means without reading docs.
+const _STATE_ACTION_SUB = {
+    ACTIVE:      'Re-open for tracking',
+    MONITORED:   'Watch without dispatching',
+    RESPONDING:  'Responder en route or on-site',
+    ESCALATED:   'Raise priority above scoring',
+    RESOLVED:    'All reports handled',
+    ARCHIVED:    'Move out of active queue',
+    FALSE_ALARM: 'Mark as misinformation',
+};
+
+// Phase J.3 (May 2026) — Reason-prompt modal (replaces native prompt()).
+// Resolves with the entered text (string), an empty string if the
+// operator submitted blank, or `false` if they cancelled.
+function _promptReasonModal({ title, hint, toState }) {
+    return new Promise((resolve) => {
+        // Build the modal element. Remove any existing reason modal
+        // so multiple rapid state-change clicks don't stack overlays.
+        document.querySelectorAll('.bc-reason-modal-overlay').forEach(el => el.remove());
+
+        const overlay = document.createElement('div');
+        overlay.className = 'bc-reason-modal-overlay';
+        const accent = (toState === 'ESCALATED') ? '#f87171' : '#94a3b8';
+        const icon = (toState === 'ESCALATED') ? 'fa-fire-flame-curved' : 'fa-ban';
+
+        overlay.innerHTML = `
+            <div class="bc-reason-modal" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
+                <div class="bc-reason-modal-head">
+                    <i class="fa-solid ${icon}" style="color:${accent};"></i>
+                    <h3>${escapeHtml(title)}</h3>
+                </div>
+                <p class="bc-reason-modal-hint">${escapeHtml(hint)}</p>
+                <textarea class="bc-reason-modal-input"
+                          placeholder="Optional reason / notes…"
+                          rows="3" maxlength="500" autofocus></textarea>
+                <div class="bc-reason-modal-actions">
+                    <button class="bc-reason-modal-cancel">Cancel</button>
+                    <button class="bc-reason-modal-submit"
+                            style="background:${accent}22;color:${accent};border-color:${accent}66;">
+                        ${escapeHtml(title)}
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        const ta = overlay.querySelector('.bc-reason-modal-input');
+        const cancelBtn = overlay.querySelector('.bc-reason-modal-cancel');
+        const submitBtn = overlay.querySelector('.bc-reason-modal-submit');
+        setTimeout(() => ta && ta.focus(), 30);
+
+        const close = (result) => {
+            document.removeEventListener('keydown', keyHandler);
+            overlay.classList.add('is-closing');
+            setTimeout(() => overlay.remove(), 180);
+            resolve(result);
+        };
+        const keyHandler = (ev) => {
+            if (ev.key === 'Escape') close(false);
+            if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+                close((ta.value || '').trim());
+            }
+        };
+        document.addEventListener('keydown', keyHandler);
+        cancelBtn.addEventListener('click', () => close(false));
+        submitBtn.addEventListener('click', () => close((ta.value || '').trim()));
+        overlay.addEventListener('click', (ev) => {
+            if (ev.target === overlay) close(false);  // click backdrop = cancel
+        });
+    });
 }
 
 // Auth header builder — mirrors the pattern used by other authenticated
@@ -4957,13 +5049,20 @@ function _authHeaders() {
 }
 
 window._changeBuildingState = async (buildingId, toState) => {
-    // Optional reason via prompt() for ESCALATED + FALSE_ALARM (the
-    // two "weight-bearing" transitions). For the others, ship without
-    // a prompt to keep the click cost low.
+    // Phase J.3 (May 2026) — Reason modal replaces the ugly native
+    // prompt() for ESCALATED + FALSE_ALARM transitions. Native
+    // prompt() reads as "enterprise" against the calmer J.2 / J.3
+    // surface; the modal matches the dashboard's design language.
+    // For non-weight-bearing transitions (Monitored, Re-open, etc.)
+    // we still skip the reason — those are one-click actions.
     let reason = null;
     if (toState === 'ESCALATED' || toState === 'FALSE_ALARM') {
-        reason = prompt(`Reason for marking this building as ${toState}? (optional)`);
-        if (reason === null) return; // operator cancelled
+        const action = toState === 'ESCALATED' ? 'Escalate' : 'Mark as false alarm';
+        const hint = toState === 'ESCALATED'
+            ? 'Why does this building need elevated priority? (optional but useful for the audit trail)'
+            : 'Why are you marking this as misinformation? (optional but useful for the audit trail)';
+        reason = await _promptReasonModal({ title: action, hint, toState });
+        if (reason === false) return;  // operator cancelled
     }
     try {
         // Pick the convenience endpoint where one exists, otherwise
