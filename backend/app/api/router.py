@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share, config, observability, appeals, devices, hot_regions
+from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share, config, observability, appeals, devices, hot_regions, buildings
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -63,3 +63,11 @@ api_router.include_router(devices.router,
 api_router.include_router(hot_regions.router,
                           prefix="/admin/nearby/hot-regions",
                           tags=["hot-regions"])
+# Phase H.1.c (May 2026) — Building Intelligence & Response Coordination.
+# First-class building entity (alembic 0028 + Building model + scoring
+# hook in app/models/report.py). Read endpoints under /buildings/* serve
+# the Building Intelligence Console; state-transition / monitor /
+# responder / note / dossier / AI-summary endpoints land in H.2-H.6.
+api_router.include_router(buildings.router,
+                          prefix="/buildings",
+                          tags=["buildings"])
