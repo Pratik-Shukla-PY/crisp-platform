@@ -910,7 +910,11 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
 .command-bar {
     position: absolute;
     top: 10px; left: 10px; right: 10px;
-    z-index: 10;
+    /* z-index 30 keeps command-bar ABOVE the feed-panel (z-index 10)
+       so the J.1 user-chip dropdown and Tools dropdown can overlay
+       the feed without the feed-panel's later-in-DOM position
+       intercepting clicks. */
+    z-index: 30;
     padding: 8px 16px;
     display: flex;
     align-items: center;
