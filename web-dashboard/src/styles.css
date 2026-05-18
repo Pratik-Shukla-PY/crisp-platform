@@ -184,6 +184,46 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .ac-list-name { flex:1; color:var(--text); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ac-list-count { font-family:var(--font-mono); font-weight:700; color:var(--info); }
 
+/* Phase G.4 — drill-down hover states for clickable analytics rows */
+.ac-subtitle {
+    font-size: 9px;
+    color: var(--text-dim);
+    font-weight: 500;
+    letter-spacing: 0.4px;
+    text-transform: none;
+    margin-left: 6px;
+    opacity: 0.85;
+}
+.ac-list-row-clickable {
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 4px;
+    transition: background 0.12s ease;
+}
+.ac-list-row-clickable:hover {
+    background: rgba(167, 139, 250, 0.10);
+}
+.ac-list-row-clickable:hover .ac-list-name { color: #c4b5fd; }
+.ac-bars-clickable .ac-bar-row-clickable {
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background 0.12s ease;
+}
+.ac-bars-clickable .ac-bar-row-clickable:hover {
+    background: rgba(56, 189, 248, 0.08);
+}
+.ac-metrics-clickable .ac-metric-clickable {
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    transition: background 0.12s ease;
+}
+.ac-metrics-clickable .ac-metric-clickable:hover {
+    background: rgba(251, 191, 36, 0.12);
+}
+.analytics-grid-drill { margin-top: 8px; }
+
 /* Glass utility ─────────────────────────────────────────── */
 .glass-panel {
     background: var(--panel);

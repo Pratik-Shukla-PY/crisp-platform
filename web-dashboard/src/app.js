@@ -1566,11 +1566,20 @@ function renderTreeFeed(el) {
 }
 
 /** Get the time-filtered report set (shared by stats, analytics, and map) */
+// Phase G.4 — Single-crisis drill-down filter. Layers on top of the
+// G.1 chip filter set without colliding with the existing chip ids.
+// Set by clicking a crisis-type bar in the analytics panel; cleared
+// by clicking the same bar again or by clearing all chip filters.
+let _crisisDrillFilter = null;
+
 function _getFilteredReports() {
     let reports = allReports;
     if (timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
         reports = reports.filter(r => new Date(ensureUTC(r.server_created_at)).getTime() > cutoff);
+    }
+    if (_crisisDrillFilter != null) {
+        reports = reports.filter(r => (r.crisis_type || 'UNKNOWN') === _crisisDrillFilter);
     }
     return reports;
 }
@@ -1765,8 +1774,10 @@ window.toggleChipFilter = function (chipId) {
 };
 
 window.clearAllChipFilters = function () {
-    if (_activeChipFilters.size === 0) return;
+    const hadCrisis = (typeof _crisisDrillFilter !== 'undefined' && _crisisDrillFilter != null);
+    if (_activeChipFilters.size === 0 && !hadCrisis) return;
     _activeChipFilters.clear();
+    if (hadCrisis) { _crisisDrillFilter = null; }
     _persistChipFilters();
     _paintChipFilterUI();
     renderFeed();
@@ -2056,8 +2067,145 @@ function _renderAnalytics() {
         <div class="ac-metric"><span class="ac-metric-val" style="color:#38bdf8;">${withTranscript}</span><span class="ac-metric-label">Transcribed</span></div>
         <div class="ac-metric"><span class="ac-metric-val" style="color:#94a3b8;">${withDescription}</span><span class="ac-metric-label">Have Text</span></div>
     `;
+
+    // ── Phase G.4 — Drill-down breakdowns ──────────────────────────
+    // 8. Top buildings (by report count). Click → openBuildingConsole.
+    const buildingCounts = {};
+    const buildingLabels = {};
+    reports.forEach(r => {
+        const bid = r.building_id;
+        if (!bid) return;
+        buildingCounts[bid] = (buildingCounts[bid] || 0) + 1;
+        // Pick a label — first non-empty per id wins.
+        if (!buildingLabels[bid]) {
+            buildingLabels[bid] =
+                r.location?.user_location_name
+                || r.location?.device_location_name
+                || (bid.startsWith('osm:way:') ? `OSM way ${bid.slice(8)}` : `Cluster ${bid.slice(0, 8)}`);
+        }
+    });
+    const topBuildings = Object.entries(buildingCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
+    const bdEl = document.getElementById('building-distribution');
+    if (bdEl) bdEl.innerHTML = topBuildings.length
+        ? topBuildings.map(([bid, count], i) => `
+            <div class="ac-list-row ac-list-row-clickable"
+                 onclick="closeAnalyticsPanel && closeAnalyticsPanel(); openBuildingConsole('${bid}');"
+                 title="Open Building Intelligence Console for this building">
+                <span class="ac-list-rank">${i + 1}</span>
+                <span class="ac-list-name">${escapeHtml(buildingLabels[bid] || bid)}</span>
+                <span class="ac-list-count">${count}</span>
+            </div>`).join('')
+        : '<div style="color:var(--text-dim);font-size:12px;">No reports tagged to a building yet</div>';
+
+    // 9. Debris-clearing breakdown. Click → toggle the G.1 debris chip
+    //    and close analytics so the operator lands back in the triage feed.
+    const debrisNeeded = reports.filter(r => r.debris_clearing_needed === true).length;
+    const debrisNotNeeded = reports.filter(r => r.debris_clearing_needed === false).length;
+    const debrisUnknown = reports.filter(r => r.debris_clearing_needed == null).length;
+    const debrisEl = document.getElementById('debris-breakdown');
+    if (debrisEl) debrisEl.innerHTML = `
+        <div class="ac-metric ac-metric-clickable"
+             onclick="closeAnalyticsPanel && closeAnalyticsPanel(); _ensureChipFilter('debris', true);"
+             title="Filter feed: only reports flagged as needing debris clearing">
+            <span class="ac-metric-val" style="color:#fbbf24;">${debrisNeeded}</span>
+            <span class="ac-metric-label">Needed</span>
+        </div>
+        <div class="ac-metric"
+             title="Reporters explicitly answered No">
+            <span class="ac-metric-val" style="color:#94a3b8;">${debrisNotNeeded}</span>
+            <span class="ac-metric-label">Not Needed</span>
+        </div>
+        <div class="ac-metric"
+             title="No debris answer on the original report">
+            <span class="ac-metric-val" style="color:#64748b;">${debrisUnknown}</span>
+            <span class="ac-metric-label">Unknown</span>
+        </div>
+    `;
+
+    // 10. Crisis-type distribution. Click → in-memory crisis filter
+    //     applied as a one-off chip-like filter that survives until cleared.
+    const crisisCounts = {};
+    reports.forEach(r => {
+        const ct = r.crisis_type || 'UNKNOWN';
+        crisisCounts[ct] = (crisisCounts[ct] || 0) + 1;
+    });
+    const crisisSorted = Object.entries(crisisCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const maxCrisis = Math.max(...crisisSorted.map(e => e[1]), 1);
+    const crisisColor = (k) => ({
+        EARTHQUAKE: '#f97316', FLOOD: '#3b82f6', TSUNAMI: '#06b6d4',
+        HURRICANE: '#8b5cf6', WILDFIRE: '#ef4444', EXPLOSION: '#dc2626',
+        CHEMICAL: '#22c55e', CONFLICT: '#a16207', CIVIL_UNREST: '#fbbf24',
+        UNKNOWN: '#64748b',
+    })[k] || '#94a3b8';
+    const cdEl = document.getElementById('crisis-distribution');
+    if (cdEl) cdEl.innerHTML = crisisSorted.length
+        ? crisisSorted.map(([k, v]) => `
+            <div class="ac-bar-row ac-bar-row-clickable"
+                 onclick="closeAnalyticsPanel && closeAnalyticsPanel(); _setCrisisDrillFilter('${k}');"
+                 title="Filter feed by crisis type: ${escapeHtml(k.replace(/_/g, ' '))}">
+                <span class="ac-bar-label">${escapeHtml(crisisLabel(k) || k.replace(/_/g, ' '))}</span>
+                <div class="ac-bar-track">
+                    <div class="ac-bar-fill" style="width:${(v / maxCrisis) * 100}%;background:${crisisColor(k)};"></div>
+                </div>
+                <span class="ac-bar-val">${v}</span>
+            </div>`).join('')
+        : '<div style="color:var(--text-dim);font-size:12px;">No crisis-type data</div>';
+
   } catch (e) { console.warn('[CRISP] Analytics render error:', e); }
 }
+
+// ── Phase G.4 helpers ──────────────────────────────────────────────────
+// Chip filter setters used by analytics drill-down clicks.
+window._ensureChipFilter = function (chipId, shouldBeOn) {
+    if (!chipId) return;
+    const isOn = _activeChipFilters.has(chipId);
+    if (shouldBeOn && !isOn) {
+        toggleChipFilter(chipId);
+    } else if (!shouldBeOn && isOn) {
+        toggleChipFilter(chipId);
+    } else {
+        // Already in the desired state — just nudge a re-render in case
+        // the operator clicked from analytics with no actual chip change.
+        renderFeed();
+    }
+    showToast(shouldBeOn ? `Filter applied: ${chipId}` : `Filter cleared: ${chipId}`, 'success');
+};
+
+// Phase G.4 — Single-crisis drill-down filter declared above; this is
+// just a comment marker for the next reader.
+
+window._setCrisisDrillFilter = function (crisis) {
+    if (_crisisDrillFilter === crisis) {
+        // Same bar clicked twice → clear it.
+        _crisisDrillFilter = null;
+        showToast(`Crisis filter cleared`, 'success');
+    } else {
+        _crisisDrillFilter = crisis;
+        showToast(`Filter: crisis=${crisis.replace(/_/g, ' ')}`, 'success');
+    }
+    renderFeed();
+};
+
+// Crisis drill-down predicate — applied INSIDE _getFilteredReports
+// below via `_passesCrisisDrill`. Kept here next to the state so the
+// filter is one logical unit.
+window._passesCrisisDrill = function (r) {
+    if (_crisisDrillFilter == null) return true;
+    return (r.crisis_type || 'UNKNOWN') === _crisisDrillFilter;
+};
+
+// Phase G.4 — graceful close for analytics panel (no-op if already
+// closed). The existing toggle is `_renderAnalytics`-gated by panel
+// visibility; we provide an explicit closer so drill-down clicks
+// don't have to know about the implementation.
+window.closeAnalyticsPanel = function () {
+    const panel = document.getElementById('analytics-panel');
+    if (panel) panel.style.display = 'none';
+    const btn = document.getElementById('btn-analytics');
+    if (btn) btn.classList.remove('active');
+};
 
 // ── Incident Preview (Hover Tooltip) ─────────────────────────────────────────
 function showIncidentPreview(r, event) {
