@@ -1,7 +1,7 @@
 import os
 import uuid
 import logging
-from sqlalchemy import Column, String, Float, Boolean, Integer, DateTime, ForeignKey, Enum, JSON, Text, LargeBinary, UniqueConstraint, CheckConstraint, Index, event, text
+from sqlalchemy import Column, String, Float, Boolean, Integer, BigInteger, DateTime, ForeignKey, Enum, JSON, Text, LargeBinary, UniqueConstraint, CheckConstraint, Index, event, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -214,6 +214,35 @@ class ClusterStatusEnum(str, enum.Enum):
     ACTIVE = "ACTIVE"
     RESOLVED = "RESOLVED"
     FALSE_ALARM = "FALSE_ALARM"
+
+
+# Phase H.1.b (May 2026) — Building Intelligence operational states.
+#
+# 7-state machine (allowed transitions documented in the plan):
+#   ACTIVE  → MONITORED → RESPONDING → RESOLVED
+#   ACTIVE  → ESCALATED (operator-raised priority)
+#   ACTIVE  → FALSE_ALARM (operator-declared misinformation)
+#   * any → ARCHIVED (auto after 30d no activity OR all reports purged)
+#
+# Stored as String(20) on the Building row (NOT a Postgres enum) so
+# adding new states later doesn't require an ALTER TYPE migration.
+# Application-layer validation in the H.2 state-transition endpoint.
+class BuildingStateEnum(str, enum.Enum):
+    ACTIVE      = "ACTIVE"
+    MONITORED   = "MONITORED"
+    RESPONDING  = "RESPONDING"
+    ESCALATED   = "ESCALATED"
+    RESOLVED    = "RESOLVED"
+    ARCHIVED    = "ARCHIVED"
+    FALSE_ALARM = "FALSE_ALARM"
+
+
+# Phase H.1.b — building-id provenance (mirrors migration 0028's enum).
+class BuildingIdSourceEnum(str, enum.Enum):
+    OSM       = "OSM"        # PWA reporter tapped an OSM footprint
+    PROXIMITY = "PROXIMITY"  # Backend proximity-clustered fallback
+    MANUAL    = "MANUAL"      # Operator-created via dashboard
+
 
 class Device(Base):
     __tablename__ = "devices"
@@ -827,6 +856,424 @@ def _apply_building_versioning(_mapper, connection, target: "Report") -> None:  
 
 
 event.listen(Report, "before_insert", _apply_building_versioning)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase H.1.b (May 2026) — Building intelligence entity + lifecycle hook.
+#
+# Companion to F.5.c's building_version_ordinal / _is_latest columns
+# (those live on Report). This block elevates the building itself to
+# a first-class entity with cached roll-ups, an operational state, and
+# 5 intelligence scores. See migration 0028 for the schema; see the
+# Phase H plan in /Users/pks/.claude/plans/swirling-forging-raccoon.md
+# for the design rationale.
+#
+# Two write paths land here:
+#
+#   1. `_apply_building_link` — after_insert / after_update hook on
+#      Report. Ensures a Building row exists for the report's
+#      building_id, then re-derives the cached roll-ups + scores from
+#      the full partition. Defensive — never raises.
+#
+#   2. `_compute_building_scores` — pure-Python score helpers exported
+#      so the initial-sweep script + the H.1.c list endpoint can call
+#      them directly without re-running the hook.
+#
+# Performance: the hook fires on every Report INSERT/UPDATE. The
+# work per fire is bounded by the partition size (~ few rows per
+# building); on a 500k-report DB with 50k buildings that's typically
+# <50 rows per fire, well under 10 ms.
+# ──────────────────────────────────────────────────────────────────────
+class Building(Base):
+    """First-class building entity (Phase H.1).
+
+    Master table for the Building Intelligence & Response Coordination
+    system. One row per distinct building_id seen across the Reports
+    table. Cached roll-up columns + 5 intelligence scores avoid the
+    O(reports) recompute on every dashboard render.
+
+    Created + backfilled by alembic 0028; maintained on every Report
+    write by `_apply_building_link`. Score formulas are documented in
+    `_compute_building_scores` below.
+    """
+    __tablename__ = "buildings"
+
+    id = Column(String(64), primary_key=True)
+    id_source = Column(
+        Enum(BuildingIdSourceEnum, name="building_id_source",
+             create_type=False),  # type managed by migration 0028
+        nullable=False,
+        default=BuildingIdSourceEnum.OSM,
+    )
+
+    # OSM-derived metadata
+    osm_way_id = Column(BigInteger, nullable=True, index=True)
+    osm_node_id = Column(BigInteger, nullable=True)
+    osm_name = Column(String(200), nullable=True)
+    osm_building_type = Column(String(40), nullable=True)
+    osm_addr_full = Column(String(400), nullable=True)
+
+    # Footprint cache (PostGIS column added by migration 0028 when
+    # available; not exposed as a column attribute here — endpoints
+    # query via raw SQL for PostGIS-specific operations).
+    footprint_geojson = Column(JSON, nullable=True)
+    centroid_lat = Column(Float, nullable=True)
+    centroid_lng = Column(Float, nullable=True)
+
+    # Operational state. Stored as plain String(20) so we can add new
+    # states later without an ALTER TYPE migration; validation lives
+    # in the H.2 state-transition endpoint.
+    state = Column(String(20), nullable=False, default="ACTIVE",
+                   server_default="ACTIVE", index=True)
+
+    # Cached 5-score intelligence model. NULL until the hook fires
+    # at least once for this building. Dashboard renders "—" when NULL.
+    severity_score = Column(Float, nullable=True, index=True)
+    confidence_score = Column(Float, nullable=True)
+    activity_score = Column(Float, nullable=True)
+    escalation_risk = Column(Float, nullable=True)
+    humanitarian_priority = Column(Float, nullable=True, index=True)
+
+    # Roll-ups (canonical "what's the situation" counters).
+    report_count = Column(Integer, nullable=False, default=0,
+                          server_default="0")
+    verified_report_count = Column(Integer, nullable=False, default=0,
+                                   server_default="0")
+    responding_report_count = Column(Integer, nullable=False, default=0,
+                                     server_default="0")
+    resolved_report_count = Column(Integer, nullable=False, default=0,
+                                   server_default="0")
+    severity_max = Column(String(20), nullable=True)
+    damage_class_max = Column(String(20), nullable=True)
+    crisis_types_top3 = Column(JSON, nullable=True)
+    debris_clearing_needed_count = Column(Integer, nullable=False, default=0,
+                                          server_default="0")
+    estimated_people_affected = Column(Integer, nullable=True)
+
+    # Lifecycle timestamps
+    first_report_at = Column(DateTime(timezone=True), nullable=True)
+    latest_report_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    state_changed_at = Column(DateTime(timezone=True), nullable=True)
+    state_changed_by_user_id = Column(String(36), nullable=True)
+
+    # AI summary cache (populated by H.6)
+    ai_summary = Column(JSON, nullable=True)
+    ai_summary_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Soft archive (set when all constituent reports are deleted in grace)
+    archived_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationship back to constituent reports — many reports per
+    # building. Use lazy="dynamic" so we can filter/count without
+    # pulling the whole partition into memory.
+    reports = relationship(
+        "Report", primaryjoin="Report.building_id == Building.id",
+        foreign_keys="Report.building_id", lazy="dynamic",
+        viewonly=True,  # Report-side authoritative; Building is the
+                         # cache. Avoids double-writing on session.commit.
+    )
+
+
+# ─── Severity / damage ranking — same as the dashboard's mental model ──
+_SEVERITY_RANK = {
+    "CRITICAL": 5, "SEVERE": 4, "MODERATE": 3, "MINOR": 2, "UNKNOWN": 1,
+}
+_DAMAGE_RANK = {
+    "COMPLETE": 3, "PARTIAL": 2, "MINIMAL": 1, "NO_DAMAGE": 0,
+}
+
+
+def _compute_building_scores(connection, building_id: str) -> dict:
+    """Compute the 5 intelligence scores for a building from current
+    reports + verifications. Returns a dict suitable for an UPDATE
+    SET clause. Pure SQL aggregation where possible; falls back to
+    Python for the time-decayed activity_score.
+
+    Score formulas (see plan H — Intelligence scoring model):
+
+      severity_score (0-100) =
+          (max_severity_rank / 5) × 60
+        + (verified_count / report_count) × 20
+        + (max_damage_rank / 3) × 20
+
+      confidence_score (0-100) =
+          AVG(satellite_verification.total_score) × 0.5  (when any)
+        + (verified_count / report_count) × 30
+        + min(distinct_sources, 5) × 4
+
+      activity_score (0-100) =
+          Σ over reports of exp(-Δhours / 48) × 12   (capped at 100)
+
+      escalation_risk (0-100) =
+          (reports_last_60min ≥ 3 ? 30 : 0)         # burst signal
+        + (reports_last_15min ≥ 5 ? 50 : 0)         # acute signal
+        + (severity_max in CRITICAL/SEVERE ? 20 : 0) # severity bump
+        capped at 100
+
+      humanitarian_priority (0-100, weighted) =
+          0.40 × severity_score
+        + 0.25 × confidence_score
+        + 0.20 × escalation_risk
+        + 0.10 × min(estimated_people_affected/100, 100)
+        + 0.05 × activity_score
+    """
+    from sqlalchemy import text
+    import math
+    from datetime import datetime, timezone as _tz
+
+    # Step 1 — pull the cheap aggregates in one SQL pass.
+    rows = connection.execute(text("""
+        SELECT
+            COUNT(*)                                                AS rep_count,
+            SUM(CASE WHEN reviewer_verdict = 'ACCEPTED' THEN 1 ELSE 0 END) AS verified,
+            COUNT(DISTINCT source)                                  AS sources,
+            COUNT(*) FILTER (WHERE server_created_at > NOW() - INTERVAL '60 minutes') AS r60m,
+            COUNT(*) FILTER (WHERE server_created_at > NOW() - INTERVAL '15 minutes') AS r15m,
+            MAX(CASE severity
+                WHEN 'CRITICAL' THEN 5 WHEN 'SEVERE'   THEN 4
+                WHEN 'MODERATE' THEN 3 WHEN 'MINOR'    THEN 2
+                WHEN 'UNKNOWN'  THEN 1 ELSE 0 END)                  AS sev_rank,
+            MAX(CASE damage_classification
+                WHEN 'COMPLETE' THEN 3 WHEN 'PARTIAL' THEN 2
+                WHEN 'MINIMAL'  THEN 1 ELSE 0 END)                  AS dmg_rank
+        FROM reports
+        WHERE building_id = :bid AND deletion_requested_at IS NULL
+    """), {"bid": building_id}).first()
+
+    rep_count = (rows[0] or 0) if rows else 0
+    if rep_count == 0:
+        # No constituent reports → no scores. Don't write zeros (they
+        # would falsely look like "this building has been measured at
+        # 0"); leave NULL.
+        return {}
+
+    verified = rows[1] or 0
+    sources = rows[2] or 0
+    r60m = rows[3] or 0
+    r15m = rows[4] or 0
+    sev_rank = rows[5] or 0
+    dmg_rank = rows[6] or 0
+
+    # Step 2 — satellite verification mean (separate query because the
+    # JOIN to satellite_verifications adds noise on the main aggregate).
+    # Postgres `AVG()` returns Decimal; force to float here to avoid
+    # mixing types in the score arithmetic below (Decimal × float =
+    # TypeError in Python).
+    sat_mean_raw = connection.execute(text("""
+        SELECT AVG(sv.total_score)
+        FROM satellite_verifications sv
+        JOIN reports r ON r.id = sv.report_id
+        WHERE r.building_id = :bid
+          AND r.deletion_requested_at IS NULL
+          AND sv.total_score IS NOT NULL
+    """), {"bid": building_id}).scalar()
+    sat_mean = float(sat_mean_raw) if sat_mean_raw is not None else 0.0
+
+    verified_ratio = verified / rep_count if rep_count > 0 else 0.0
+
+    # severity_score
+    severity_score = min(100.0,
+        (sev_rank / 5.0) * 60.0
+        + verified_ratio * 20.0
+        + (dmg_rank / 3.0) * 20.0
+    )
+
+    # confidence_score
+    confidence_score = min(100.0,
+        sat_mean * 0.5
+        + verified_ratio * 30.0
+        + min(sources, 5) * 4.0
+    )
+
+    # activity_score — exponential decay. Pull report timestamps
+    # (count is bounded by partition size; typically <50 rows).
+    # `EXTRACT(EPOCH ...)/3600.0` returns Decimal in Postgres → cast
+    # to float at the boundary for the math.exp call.
+    ts_rows = connection.execute(text("""
+        SELECT EXTRACT(EPOCH FROM (NOW() - server_created_at)) / 3600.0
+        FROM reports
+        WHERE building_id = :bid AND deletion_requested_at IS NULL
+    """), {"bid": building_id}).all()
+    activity_score = min(100.0,
+        sum(
+            math.exp(-max(float(h) if h is not None else 0.0, 0.0) / 48.0)
+            for (h,) in ts_rows
+        ) * 12.0
+    )
+
+    # escalation_risk
+    escalation_risk = min(100.0,
+        (30 if r60m >= 3 else 0)
+        + (50 if r15m >= 5 else 0)
+        + (20 if sev_rank >= 4 else 0)
+    )
+
+    # humanitarian_priority (weighted)
+    humanitarian_priority = min(100.0,
+        0.40 * severity_score
+        + 0.25 * confidence_score
+        + 0.20 * escalation_risk
+        + 0.05 * activity_score
+        # 0.10 × estimated_people_affected term defaults to 0 here —
+        # population estimate isn't on Report today; H.6 AI summary
+        # will populate it.
+    )
+
+    return {
+        "severity_score": round(severity_score, 1),
+        "confidence_score": round(confidence_score, 1),
+        "activity_score": round(activity_score, 1),
+        "escalation_risk": round(escalation_risk, 1),
+        "humanitarian_priority": round(humanitarian_priority, 1),
+    }
+
+
+def _refresh_building_rollups(connection, building_id: str) -> None:
+    """Single-query UPDATE that re-derives ALL cached roll-up columns
+    on the buildings row from current reports. Cheap (one SQL round-
+    trip). Score columns NOT touched here — `_compute_building_scores`
+    is called separately + writes them in a second UPDATE.
+    """
+    from sqlalchemy import text
+    connection.execute(text("""
+        UPDATE buildings b
+        SET
+            report_count            = sub.rep_count,
+            verified_report_count   = sub.verified,
+            responding_report_count = sub.responding,
+            resolved_report_count   = sub.resolved,
+            severity_max            = sub.sev_max,
+            damage_class_max        = sub.dmg_max,
+            crisis_types_top3       = sub.crisis_top3,
+            debris_clearing_needed_count = sub.debris,
+            first_report_at         = sub.first_at,
+            latest_report_at        = sub.latest_at
+        FROM (
+            SELECT
+                COUNT(*) AS rep_count,
+                SUM(CASE WHEN reviewer_verdict = 'ACCEPTED' THEN 1 ELSE 0 END) AS verified,
+                SUM(CASE WHEN status = 'RESPONDING' THEN 1 ELSE 0 END) AS responding,
+                SUM(CASE WHEN status IN ('RESOLVED','FALSE_ALARM') THEN 1 ELSE 0 END) AS resolved,
+                (SELECT severity FROM reports
+                  WHERE building_id = :bid AND deletion_requested_at IS NULL
+                  ORDER BY CASE severity
+                      WHEN 'CRITICAL' THEN 5 WHEN 'SEVERE' THEN 4
+                      WHEN 'MODERATE' THEN 3 WHEN 'MINOR' THEN 2
+                      WHEN 'UNKNOWN' THEN 1 ELSE 0 END DESC
+                  LIMIT 1) AS sev_max,
+                (SELECT damage_classification FROM reports
+                  WHERE building_id = :bid AND deletion_requested_at IS NULL
+                    AND damage_classification IS NOT NULL
+                  ORDER BY CASE damage_classification
+                      WHEN 'COMPLETE' THEN 3 WHEN 'PARTIAL' THEN 2
+                      WHEN 'MINIMAL' THEN 1 ELSE 0 END DESC
+                  LIMIT 1) AS dmg_max,
+                (SELECT COALESCE(jsonb_agg(crisis_type ORDER BY n DESC), '[]'::jsonb)
+                 FROM (
+                    SELECT crisis_type, COUNT(*) AS n
+                    FROM reports
+                    WHERE building_id = :bid AND deletion_requested_at IS NULL
+                      AND crisis_type IS NOT NULL
+                    GROUP BY crisis_type
+                    ORDER BY n DESC
+                    LIMIT 3
+                 ) ct) AS crisis_top3,
+                SUM(CASE WHEN debris_clearing_needed THEN 1 ELSE 0 END) AS debris,
+                MIN(server_created_at) AS first_at,
+                MAX(server_created_at) AS latest_at
+            FROM reports
+            WHERE building_id = :bid AND deletion_requested_at IS NULL
+        ) sub
+        WHERE b.id = :bid
+    """), {"bid": building_id})
+
+
+def _ensure_building_exists(connection, building_id: str) -> None:
+    """Insert a minimal Building row if `building_id` isn't already in
+    the buildings table. Mirrors the migration 0028 backfill heuristic
+    for id_source + osm_way_id derivation.
+    """
+    from sqlalchemy import text
+    exists = connection.execute(
+        text("SELECT 1 FROM buildings WHERE id = :bid"),
+        {"bid": building_id},
+    ).first()
+    if exists:
+        return
+    # Determine id_source + osm_way_id by inspecting the id string.
+    # OSM ids are `osm:way:<int>` or `osm:node:<int>`; anything else
+    # is treated as a proximity-clustered UUID.
+    if building_id.startswith("osm:way:"):
+        id_source = "OSM"
+        try:
+            osm_way_id = int(building_id.split(":", 2)[2])
+        except (ValueError, IndexError):
+            osm_way_id = None
+    elif building_id.startswith("osm:node:"):
+        id_source = "OSM"
+        osm_way_id = None  # node id lands in osm_node_id, not osm_way_id
+    else:
+        id_source = "PROXIMITY"
+        osm_way_id = None
+    connection.execute(text("""
+        INSERT INTO buildings (id, id_source, osm_way_id, state)
+        VALUES (:bid, :src, :owid, 'ACTIVE')
+        ON CONFLICT (id) DO NOTHING
+    """), {"bid": building_id, "src": id_source, "owid": osm_way_id})
+
+
+def _apply_building_link(_mapper, connection, target: "Report") -> None:  # type: ignore[name-defined]
+    """SQLAlchemy `after_insert` / `after_update` hook on Report.
+
+    Keeps the buildings table's cached roll-ups + scores current
+    after every Report write. Defensive — never re-raises. The
+    Report write is already committed (after_insert/update), so a
+    failure here just leaves the building cache slightly stale; a
+    subsequent write or the hourly background sweep restamps it.
+    """
+    try:
+        bid = getattr(target, "building_id", None)
+        if not bid:
+            return
+        _ensure_building_exists(connection, bid)
+        _refresh_building_rollups(connection, bid)
+        # Compute scores in Python (uses time-decay math). Apply via a
+        # second UPDATE so the SQL roll-up + Python score writes are
+        # atomic per Building row.
+        scores = _compute_building_scores(connection, bid)
+        if scores:
+            from sqlalchemy import text
+            connection.execute(text("""
+                UPDATE buildings SET
+                    severity_score = :sev,
+                    confidence_score = :conf,
+                    activity_score = :act,
+                    escalation_risk = :esc,
+                    humanitarian_priority = :prio
+                WHERE id = :bid
+            """), {
+                "bid": bid,
+                "sev": scores["severity_score"],
+                "conf": scores["confidence_score"],
+                "act": scores["activity_score"],
+                "esc": scores["escalation_risk"],
+                "prio": scores["humanitarian_priority"],
+            })
+    except Exception as e:
+        # Never propagate — the Report write succeeded and the
+        # Building cache will catch up on the next write or sweep.
+        import logging
+        logging.warning(
+            "[_apply_building_link] failed for building_id=%s: %s",
+            getattr(target, "building_id", None), e,
+        )
+
+
+# Register on both insert + update. Update fires when the Report's
+# severity / status / damage / debris_clearing_needed changes, so the
+# rolled-up severity_max etc. stay current.
+event.listen(Report, "after_insert", _apply_building_link)
+event.listen(Report, "after_update", _apply_building_link)
 
 
 # ── Phase 5.1 (May 2026, docs §9.4) — H3 cell auto-population ────────
