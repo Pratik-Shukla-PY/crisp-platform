@@ -3399,6 +3399,7 @@ function _renderBuildingConsole(b) {
                 </div>
                 <div class="bc-actions">
                     ${_renderBuildingMonitorToggle(b)}
+                    ${_renderBuildingExportMenu(b)}
                     ${_renderBuildingStateActions(b)}
                 </div>
             </div>
@@ -3540,11 +3541,10 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
-            <!-- Footer placeholders for H.5-H.6 surfaces -->
+            <!-- Footer placeholder for H.6 -->
             <div class="bc-section bc-deferred">
                 <div class="bc-section-title"><i class="fa-regular fa-rectangle-list"></i> Coming next</div>
                 <ul class="bc-deferred-list">
-                    <li>H.5 — Consolidated dossier export (PDF + GeoJSON)</li>
                     <li>H.6 — AI building summary (Claude-generated brief + recommendations)</li>
                 </ul>
             </div>
@@ -3781,6 +3781,93 @@ window._refreshBuildingTimeline = async (buildingId) => {
 // lifecycle: ASSIGNED → DISPATCHED → ARRIVED → CLEARED. Operators
 // advance the lifecycle from the console. Separately, any operator
 // can put a building on their personal watch list (MonitorResponse).
+
+function _renderBuildingExportMenu(b) {
+    // A compact dropdown — Export → PDF / GeoJSON. The endpoints
+    // are analyst-gated; auth headers can't be set on a plain <a
+    // download>, so we fetch as blob + trigger a virtual anchor click.
+    return `
+        <div class="bc-export-wrap" style="position:relative;display:inline-flex;">
+            <button class="bc-export-btn"
+                    onclick="_toggleBuildingExportMenu('${b.id}')"
+                    title="Export dossier">
+                <i class="fa-solid fa-file-export"></i>
+                <span>Export</span>
+                <i class="fa-solid fa-caret-down" style="font-size:8px;opacity:0.7;"></i>
+            </button>
+            <div class="bc-export-menu" id="bc-export-menu-${escapeHtml(b.id)}" style="display:none;">
+                <button class="bc-export-menu-item"
+                        onclick="_downloadBuildingDossier('${b.id}', 'pdf')">
+                    <i class="fa-regular fa-file-pdf"></i> PDF dossier
+                </button>
+                <button class="bc-export-menu-item"
+                        onclick="_downloadBuildingDossier('${b.id}', 'geojson')">
+                    <i class="fa-solid fa-map"></i> GeoJSON
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+window._toggleBuildingExportMenu = (buildingId) => {
+    const el = document.getElementById(`bc-export-menu-${buildingId}`);
+    if (!el) return;
+    const open = el.style.display !== 'none';
+    // Hide any other open menus first.
+    document.querySelectorAll('.bc-export-menu').forEach(m => { m.style.display = 'none'; });
+    el.style.display = open ? 'none' : 'block';
+    if (!open) {
+        // Click-outside-to-close.
+        setTimeout(() => {
+            const closer = (ev) => {
+                if (!el.contains(ev.target)) {
+                    el.style.display = 'none';
+                    document.removeEventListener('click', closer);
+                }
+            };
+            document.addEventListener('click', closer);
+        }, 50);
+    }
+};
+
+window._downloadBuildingDossier = async (buildingId, fmt) => {
+    const menu = document.getElementById(`bc-export-menu-${buildingId}`);
+    if (menu) menu.style.display = 'none';
+    const path = fmt === 'pdf' ? 'dossier.pdf' : 'dossier.geojson';
+    showToast(`Generating ${fmt.toUpperCase()} dossier…`, 'info');
+    try {
+        const res = await fetch(
+            `${API}/buildings/${encodeURIComponent(buildingId)}/${path}`,
+            { headers: _authHeaders() }
+        );
+        if (res.status === 401 || res.status === 403) {
+            showToast('Analyst role required.', 'error');
+            return;
+        }
+        if (!res.ok) {
+            const err = await res.text();
+            showToast(`Export failed: ${err.slice(0, 80)}`, 'error');
+            return;
+        }
+        // Filename: extract from Content-Disposition; fall back to a default.
+        const disp = res.headers.get('content-disposition') || '';
+        let fname = `building-${buildingId.replace(/[:\/]/g, '_')}.${fmt === 'pdf' ? 'pdf' : 'geojson'}`;
+        const m = disp.match(/filename="?([^";]+)"?/);
+        if (m) fname = m[1];
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast(`${fmt.toUpperCase()} dossier downloaded`, 'success');
+    } catch (e) {
+        showToast(`Network error: ${e.message}`, 'error');
+    }
+};
 
 function _renderBuildingMonitorToggle(b) {
     // Am I currently watching this building? `monitors` is the list of

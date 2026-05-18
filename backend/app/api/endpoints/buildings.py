@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy import desc, or_, text
 from sqlalchemy.orm import Session
 
@@ -783,6 +784,91 @@ def delete_note(
     rows = _load_notes_for_building(db, building_id, viewer=user, limit=50)
     found = next((r for r in rows if r.id == note_id), None)
     return found or NoteResponse.model_validate(note)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase H.5 — Consolidated dossier export (PDF + GeoJSON)
+# ──────────────────────────────────────────────────────────────────────
+@router.get("/{building_id}/dossier.pdf")
+def export_dossier_pdf(
+    building_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Generate + stream a single-building PDF dossier.
+
+    Combines intelligence scores + responder roster + operator notes +
+    constituent reports + event timeline into one print-friendly
+    artefact. Heavy-but-bounded — typical building (≤50 reports) is
+    ~30 KB; a hot building (200+ reports) caps at ~250 KB.
+
+    Analyst-gated. PDF generation runs synchronously (reportlab is
+    in-process, no worker pool needed).
+    """
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+
+    # Lazy-import so a missing reportlab wheel doesn't crash boot
+    # (the dossier service handles its own lazy imports inside).
+    from app.services.building_dossier import build_dossier_pdf
+    pdf_bytes = build_dossier_pdf(db, b)
+
+    # Filename: building-{short-id}-dossier-{date}.pdf — short-id
+    # keeps URLs readable for OSM-typed ids; for UUID-typed ids we use
+    # the first 8 chars.
+    short = b.id.replace("osm:way:", "osm").replace(":", "_")
+    if len(short) > 24:
+        short = short[:24]
+    fname = f"building-{short}-dossier-{datetime.now(timezone.utc).date()}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{fname}"',
+            # Allow the dashboard to fetch + offer-as-download without
+            # the browser preview pane intercepting the click.
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get("/{building_id}/dossier.geojson")
+def export_dossier_geojson(
+    building_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Generate + stream a single-building GeoJSON FeatureCollection.
+
+    Each constituent report becomes a Feature with the building's
+    intelligence scores + lifecycle baked into properties so the
+    document round-trips into QGIS / ArcGIS without information
+    loss for downstream humanitarian-ops reporting.
+    """
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+
+    from app.services.building_dossier import build_dossier_geojson
+    fc = build_dossier_geojson(db, b)
+
+    short = b.id.replace("osm:way:", "osm").replace(":", "_")
+    if len(short) > 24:
+        short = short[:24]
+    fname = f"building-{short}-{datetime.now(timezone.utc).date()}.geojson"
+    # JSONResponse's class-level media_type = application/json wins over
+    # constructor arg; use a bare Response so application/geo+json
+    # actually lands on the wire (matches the .geojson file extension +
+    # behaves correctly in GIS tooling sniffing for the MIME type).
+    return Response(
+        content=json.dumps(fc),
+        media_type="application/geo+json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{fname}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
