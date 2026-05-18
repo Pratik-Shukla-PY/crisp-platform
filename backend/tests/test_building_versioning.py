@@ -58,9 +58,16 @@ class TestBuildingHistoryVersioning:
         assert body["reports"][0]["building_is_latest"] is True
 
     def test_multiple_reports_latest_first(self, client, db):
-        """Three reports → latest-first ordering, ordinals 1/2/3, only the
-        first is_latest. Back-dated via raw SQL so the order is
-        deterministic in CI even when all three land in the same second."""
+        """Three reports → latest-first ordering, only the LATEST row is
+        is_latest=true. Back-dated via raw SQL so the order is
+        deterministic in CI even when all three land in the same second.
+
+        Per F.5.c (May 2026) the ordinal convention is "1 = OLDEST" — the
+        max ordinal is the latest report. The endpoint sorts the response
+        newest-first so the ordinals appear in DESCENDING order in the
+        body. is_latest = true exactly on the row with the max ordinal.
+        See backend/app/api/endpoints/reports.py:4882 for the canonical
+        comment block."""
         bid = f"osm:way:{uuid.uuid4().hex[:12]}"
         old   = _submit(client, "DEV-W4-OLD",   bid)
         mid   = _submit(client, "DEV-W4-MID",   bid)
@@ -74,7 +81,12 @@ class TestBuildingHistoryVersioning:
         assert body["latest_id"] == new["id"]
         ordered_ids = [row["id"] for row in body["reports"]]
         assert ordered_ids == [new["id"], mid["id"], old["id"]]
-        assert [row["building_version_ordinal"] for row in body["reports"]] == [1, 2, 3]
+        # Ordinals are stamped at insert time by _apply_building_versioning
+        # (OLD inserted first → 1, MID → 2, NEW → 3). Response is sorted
+        # newest-first, so ordinals appear DESC.
+        assert [row["building_version_ordinal"] for row in body["reports"]] == [3, 2, 1]
+        # The newest (highest-ordinal) row is the only is_latest=true; the
+        # hook flipped the older rows to false on each subsequent insert.
         assert [row["building_is_latest"] for row in body["reports"]] == [True, False, False]
 
     def test_soft_deleted_rows_are_excluded(self, client, admin_token, db):

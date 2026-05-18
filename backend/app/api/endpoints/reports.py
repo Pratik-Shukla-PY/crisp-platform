@@ -4894,11 +4894,23 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
     total = len(serialised)
     # latest_id is the row WHERE building_is_latest = true (canonical).
     # Fallback to the first (newest-first sorted) row if no row carries
-    # the flag — should only happen on backfill-pending databases.
-    latest_id = next(
-        (row["id"] for row in serialised if row.get("building_is_latest")),
-        serialised[0]["id"] if serialised else None,
-    )
+    # the flag — happens when the row that originally carried the flag
+    # was soft-deleted (the hook flipped its sibling to false at insert
+    # time, but it doesn't re-stamp on delete). Surface the fallback
+    # honestly: also FLIP the response's first-row is_latest to true
+    # so dashboards reading either `latest_id` OR `reports[0].is_latest`
+    # see a consistent answer.
+    has_canonical_latest = any(row.get("building_is_latest") for row in serialised)
+    if has_canonical_latest:
+        latest_id = next(row["id"] for row in serialised if row.get("building_is_latest"))
+    elif serialised:
+        latest_id = serialised[0]["id"]
+        # Honest fallback: the newest undeleted row is the de-facto
+        # latest. Mark it as such in the response without mutating
+        # the canonical DB column.
+        serialised[0]["building_is_latest"] = True
+    else:
+        latest_id = None
     return {
         "building_id": building_id,
         "total": total,

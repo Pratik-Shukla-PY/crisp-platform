@@ -201,10 +201,35 @@ def test_0005_adds_pii_blur_status_column_and_backfills():
         eng = create_engine(url)
         Base.metadata.create_all(bind=eng)
 
-        # Drop the column + the index to simulate the pre-0005 schema.
+        # Drop the columns / tables / indexes added by every migration
+        # AFTER the stamp point (0004_bin). Without this list,
+        # Base.metadata.create_all has already created the post-0004
+        # shape, then `alembic upgrade head` fails with DuplicateColumn /
+        # DuplicateTable when it tries to add them again.
+        # Order matters: drop tables with FKs FIRST (children), then
+        # parents. Update this list when a new migration adds schema.
         with eng.begin() as conn:
+            # 0005 — pii_blur_status (the column under test).
             conn.execute(text("DROP INDEX IF EXISTS ix_media_pii_blur_status"))
             conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS pii_blur_status"))
+            # 0027 — F.5.c building versioning columns on reports.
+            conn.execute(text("DROP INDEX IF EXISTS ix_reports_building_id_is_latest"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS building_version_ordinal"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS building_is_latest"))
+            # 0028-0031 — Phase H building entity + 4 satellite tables.
+            # Drop CASCADE to wipe FKs; the migration recreates them.
+            conn.execute(text("DROP TABLE IF EXISTS building_notes CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS building_responders CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS building_monitors CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS building_events CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS buildings CASCADE"))
+            # Drop ENUMs created by 0028 / 0029 / 0031 — sa.Enum will
+            # auto-create at table-create time, but the existing type
+            # blocks that.
+            conn.execute(text("DROP TYPE IF EXISTS building_state CASCADE"))
+            conn.execute(text("DROP TYPE IF EXISTS building_id_source CASCADE"))
+            conn.execute(text("DROP TYPE IF EXISTS building_event_actor_kind CASCADE"))
+            conn.execute(text("DROP TYPE IF EXISTS building_note_visibility CASCADE"))
 
             # Seed rows: one with client_blur_applied=TRUE (should
             # backfill to 'not_needed'), one with FALSE (stays NULL).
@@ -287,10 +312,28 @@ def test_legacy_db_is_upgraded_without_data_loss():
         Base.metadata.create_all(bind=eng)
 
         with eng.begin() as conn:
-            # Drop post-April-2026 columns so the legacy simulation is authentic.
+            # Drop post-baseline columns / tables / types so the legacy
+            # simulation is authentic. Without this, Base.metadata
+            # already created the head-shape and the subsequent alembic
+            # upgrade fails with DuplicateColumn / DuplicateTable when
+            # individual migrations try to add them.
             conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS crisis_category"))
             conn.execute(text("DROP INDEX IF EXISTS ix_reports_infrastructure_sub_type"))
             conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS infrastructure_sub_type"))
+            # 0027 — F.5.c building versioning columns.
+            conn.execute(text("DROP INDEX IF EXISTS ix_reports_building_id_is_latest"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS building_version_ordinal"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS building_is_latest"))
+            # 0028-0031 — Phase H building entity + 4 satellite tables.
+            conn.execute(text("DROP TABLE IF EXISTS building_notes CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS building_responders CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS building_monitors CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS building_events CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS buildings CASCADE"))
+            conn.execute(text("DROP TYPE IF EXISTS building_state CASCADE"))
+            conn.execute(text("DROP TYPE IF EXISTS building_id_source CASCADE"))
+            conn.execute(text("DROP TYPE IF EXISTS building_event_actor_kind CASCADE"))
+            conn.execute(text("DROP TYPE IF EXISTS building_note_visibility CASCADE"))
 
             conn.execute(text(
                 "INSERT INTO reports "
