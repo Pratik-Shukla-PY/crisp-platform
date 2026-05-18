@@ -5804,8 +5804,168 @@ function initMap() {
         attribution: '&copy; OpenStreetMap', maxZoom: 19, noWrap: true,
     });
     darkTiles.addTo(map);
-    L.control.layers({ "Dark": darkTiles, "Satellite": satelliteTiles, "Street": streetTiles }, null, { position: 'topright' }).addTo(map);
+
+    // ── Phase H.8 — All-buildings priority-coloured overlay ────────
+    // A togglable data layer (NOT a base map swap) that paints every
+    // tracked Building as a polygon (when footprint cached) or a
+    // circle at the centroid (when not). Colour scale follows the
+    // humanitarian_priority score 0-100.
+    //
+    // Composable with whichever base tile the operator picked. Click
+    // a building → opens the Intelligence Console. The layer fetches
+    // on toggle-on, caches the response for the session, and
+    // re-renders on subsequent toggles without a network round-trip.
+    const buildingsPriorityLayer = L.layerGroup();
+    let _allBuildingsCache = null;
+    let _allBuildingsLoading = false;
+
+    function _priorityColor(score) {
+        if (score == null) return '#64748b';
+        if (score >= 80) return '#ef4444';   // red — extreme
+        if (score >= 60) return '#f97316';   // orange — high
+        if (score >= 40) return '#eab308';   // yellow — moderate
+        if (score >= 20) return '#22c55e';   // green — low
+        return '#94a3b8';                    // grey — ~negligible
+    }
+
+    function _renderAllBuildingsLayer(buildings) {
+        buildingsPriorityLayer.clearLayers();
+        for (const b of buildings) {
+            const color = _priorityColor(b.humanitarian_priority);
+            const stateColor = ({
+                ACTIVE:      color,
+                MONITORED:   '#46DFB1',
+                RESPONDING:  '#a78bfa',
+                ESCALATED:   '#ef4444',
+                RESOLVED:    '#22c55e',
+                ARCHIVED:    '#64748b',
+                FALSE_ALARM: '#64748b',
+            })[b.state] || color;
+            // Footprint geometry if cached; otherwise a centroid circle.
+            let layer = null;
+            const fg = b.footprint_geojson;
+            if (fg && fg.geometry && fg.geometry.type === 'Polygon') {
+                layer = L.geoJSON(fg, {
+                    style: {
+                        color: stateColor,
+                        weight: 2,
+                        fillColor: color,
+                        fillOpacity: Math.min(0.55, 0.20 + (b.humanitarian_priority || 0) / 250),
+                    },
+                });
+            } else if (b.centroid_lat != null && b.centroid_lng != null) {
+                layer = L.circleMarker([b.centroid_lat, b.centroid_lng], {
+                    radius: Math.max(5, Math.min(16, 5 + (b.humanitarian_priority || 0) / 8)),
+                    color: stateColor,
+                    weight: 1.5,
+                    fillColor: color,
+                    fillOpacity: Math.min(0.7, 0.30 + (b.humanitarian_priority || 0) / 200),
+                });
+            } else {
+                continue;
+            }
+            const popup = `
+                <div style="font-size:12px;line-height:1.5;min-width:200px;">
+                    <div style="font-weight:700;color:#f1f5f9;margin-bottom:4px;">
+                        ${escapeHtml(b.osm_name || b.id)}
+                    </div>
+                    <div style="color:#cbd5e1;">
+                        <strong style="color:${stateColor};">${escapeHtml(b.state)}</strong> ·
+                        ${b.report_count || 0} reports ·
+                        Priority <strong>${b.humanitarian_priority != null ? b.humanitarian_priority.toFixed(0) : '—'}</strong>
+                    </div>
+                    <div style="color:#94a3b8;font-size:11px;margin-top:3px;">
+                        Sev ${b.severity_score != null ? b.severity_score.toFixed(0) : '—'} ·
+                        Conf ${b.confidence_score != null ? b.confidence_score.toFixed(0) : '—'} ·
+                        Escal ${b.escalation_risk != null ? b.escalation_risk.toFixed(0) : '—'}
+                    </div>
+                    <button onclick="openBuildingConsole('${b.id}')"
+                        style="margin-top:6px;padding:4px 10px;background:rgba(167,139,250,0.18);
+                               color:#c4b5fd;border:1px solid rgba(167,139,250,0.45);
+                               border-radius:4px;cursor:pointer;font-size:11px;font-weight:700;">
+                        Open console
+                    </button>
+                </div>
+            `;
+            layer.bindPopup(popup);
+            layer.on('click', () => {
+                if (typeof window.openBuildingConsole === 'function') {
+                    window.openBuildingConsole(b.id);
+                }
+            });
+            buildingsPriorityLayer.addLayer(layer);
+        }
+    }
+
+    async function _fetchAllBuildingsForMap() {
+        if (_allBuildingsCache) return _allBuildingsCache;
+        if (_allBuildingsLoading) return null;
+        _allBuildingsLoading = true;
+        try {
+            // Sort by humanitarian_priority so the highest-impact buildings
+            // render last (Leaflet draws in insertion order; this paints
+            // hot buildings on top of cold ones).
+            const res = await fetch(
+                `${API}/buildings?limit=500&order_by=humanitarian_priority&order_dir=asc`,
+                { headers: _authHeaders() }
+            );
+            if (!res.ok) {
+                showToast(`Building layer failed: HTTP ${res.status}`, 'error');
+                return null;
+            }
+            const data = await res.json();
+            _allBuildingsCache = data.items || [];
+            return _allBuildingsCache;
+        } catch (e) {
+            showToast(`Network error loading buildings layer: ${e.message}`, 'error');
+            return null;
+        } finally {
+            _allBuildingsLoading = false;
+        }
+    }
+
+    // Wire the overlay's add / remove events to lazy-fetch + render.
+    buildingsPriorityLayer.on('add', async () => {
+        const items = await _fetchAllBuildingsForMap();
+        if (items && items.length) {
+            _renderAllBuildingsLayer(items);
+            showToast(`Showing ${items.length} buildings by priority`, 'info');
+        } else if (items !== null) {
+            showToast('No buildings to display yet', 'info');
+        }
+    });
+
+    L.control.layers(
+        { "Dark": darkTiles, "Satellite": satelliteTiles, "Street": streetTiles },
+        // Overlays — the user can toggle buildings on top of any base map.
+        { "Buildings (priority)": buildingsPriorityLayer },
+        { position: 'topright' }
+    ).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // Compact map legend showing the priority-color scale. Appears
+    // bottom-left, fades to 70% opacity when not hovered.
+    const priorityLegend = L.control({ position: 'bottomleft' });
+    priorityLegend.onAdd = function () {
+        const div = L.DomUtil.create('div', 'map-priority-legend');
+        div.innerHTML = `
+            <div class="map-priority-title">
+                <i class="fa-solid fa-bullseye"></i> Humanitarian priority
+            </div>
+            <div class="map-priority-scale">
+                <span style="background:#ef4444;"></span>≥80
+                <span style="background:#f97316;"></span>60-79
+                <span style="background:#eab308;"></span>40-59
+                <span style="background:#22c55e;"></span>20-39
+                <span style="background:#94a3b8;"></span>&lt;20
+            </div>
+            <div class="map-priority-hint">
+                Toggle <em>Buildings (priority)</em> overlay to view
+            </div>
+        `;
+        return div;
+    };
+    priorityLegend.addTo(map);
 
     // Building footprints layer — loads from Overpass API at zoom >= 15.
     //
