@@ -2474,6 +2474,16 @@ window.selectReport = (id, skipFly = false) => {
             </div>
         </div>
 
+        <!-- Phase F.2.a (May 2026) — Per-incident timeline. Surfaces the
+             lifecycle audit data the backend already records (status
+             transitions, media additions, satellite verdict, deletion
+             grace) so operators have a clear chronological picture
+             without leaving the detail panel. Collapsed by default to
+             keep the panel compact on first open; click "Timeline" to
+             expand. Pure dashboard-side render from the data the LIST
+             endpoint already returns — no backend changes. -->
+        ${_renderIncidentTimeline(r)}
+
         <!-- ② Urgency alerts -->
         ${urgencyHtml}
 
@@ -3081,6 +3091,167 @@ function _fmtReviewAgo(iso) {
     if (!Number.isFinite(t)) return '';
     const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
     return _fmtDuration(secs) + ' ago';
+}
+
+// Phase F.2.a (May 2026) — Per-incident timeline renderer.
+//
+// Surfaces the lifecycle audit data the backend already records on
+// the Report + related rows. NO new endpoint required — every event
+// type below is sourced from a column already present in the LIST
+// response.
+//
+// Event types rendered (ordered chronologically):
+//   - Report received        ← server_created_at + .source
+//   - Captured offline (F.8) ← client_created_at, only when delta>5min
+//                              (placeholder for the F.8 commit; today
+//                              just renders if the field happens to
+//                              come through; harmless if absent)
+//   - Photo / Audio added    ← media[i].created_at (per media row)
+//   - Upload complete        ← media[i].updated_at when
+//                              .assembly_status === 'complete'
+//   - Analyst {verdict}      ← reviewed_at + reviewer_verdict
+//   - Responder dispatched   ← help_dispatched_at
+//   - Responder on-site      ← help_arrived_at
+//   - AI verified            ← verification.scored_at + .verdict
+//   - Deletion requested     ← deletion_requested_at + .grace_minutes
+//
+// Empty-state ("no events") is treated as "report just landed";
+// the timeline still renders with the "Report received" row so the
+// section is never blank.
+function _renderIncidentTimeline(r) {
+    const events = [];
+
+    // Report received (always present unless server_created_at is null
+    // — shouldn't happen but defensive).
+    if (r.server_created_at) {
+        events.push({
+            ts: r.server_created_at,
+            icon: 'fa-flag-checkered',
+            color: '#94a3b8',
+            label: `Report received via ${r.source || 'APP'}`,
+        });
+    }
+
+    // Captured offline (F.8 surface). When client_created_at is set
+    // AND meaningfully earlier than server_created_at, the report was
+    // buffered in the PWA's offline queue. Threshold matches F.8.a's
+    // 5-minute floor (anything tighter is clock skew, not offline).
+    if (r.client_created_at && r.server_created_at) {
+        const clientMs = new Date(r.client_created_at).getTime();
+        const serverMs = new Date(r.server_created_at).getTime();
+        if (clientMs > 0 && (serverMs - clientMs) > 5 * 60 * 1000) {
+            events.push({
+                ts: r.client_created_at,
+                icon: 'fa-cloud-arrow-up',
+                color: '#f59e0b',
+                label: 'Captured offline (queued by PWA)',
+            });
+        }
+    }
+
+    // Media added (one row per media; order by .created_at).
+    for (const m of (r.media || [])) {
+        if (!m.created_at) continue;
+        const isImage = m.type === 'IMAGE';
+        events.push({
+            ts: m.created_at,
+            icon: isImage ? 'fa-camera' : 'fa-microphone',
+            color: '#64748b',
+            label: `${isImage ? 'Photo' : 'Audio'} added${m.resolution_tier ? ' (' + m.resolution_tier + ')' : ''}`,
+        });
+        // Upload complete (only when assembly flipped to complete and
+        // the updated_at moved past the created_at — otherwise it's
+        // the same instant, redundant row).
+        if (m.assembly_status === 'complete' && m.updated_at && m.updated_at !== m.created_at) {
+            events.push({
+                ts: m.updated_at,
+                icon: 'fa-check-double',
+                color: '#22c55e',
+                label: `${isImage ? 'Photo' : 'Audio'} upload complete`,
+            });
+        }
+    }
+
+    // Analyst review (verdict + timestamp).
+    if (r.reviewed_at && r.reviewer_verdict) {
+        const verdictLower = String(r.reviewer_verdict).toLowerCase();
+        events.push({
+            ts: r.reviewed_at,
+            icon: verdictLower === 'accepted' ? 'fa-circle-check' : 'fa-circle-xmark',
+            color:  verdictLower === 'accepted' ? '#22c55e' : '#ef4444',
+            label: `Analyst ${verdictLower}`,
+        });
+    }
+
+    // Dispatched / arrived (responder lifecycle).
+    if (r.help_dispatched_at) {
+        events.push({
+            ts: r.help_dispatched_at,
+            icon: 'fa-truck-medical',
+            color: '#a78bfa',
+            label: 'Responder dispatched',
+        });
+    }
+    if (r.help_arrived_at) {
+        events.push({
+            ts: r.help_arrived_at,
+            icon: 'fa-map-pin',
+            color: '#22c55e',
+            label: 'Responder on-site',
+        });
+    }
+
+    // AI / satellite verification.
+    if (r.verification && r.verification.scored_at) {
+        const v = r.verification;
+        const verdictTxt = String(v.verdict || '').replace(/_/g, ' ');
+        events.push({
+            ts: v.scored_at,
+            icon: 'fa-satellite',
+            color: v.total_score >= 60 ? '#22c55e' : v.total_score >= 40 ? '#eab308' : '#ef4444',
+            label: `AI verified: ${verdictTxt} (${v.total_score}/100)`,
+        });
+    }
+
+    // Deletion grace.
+    if (r.deletion_requested_at) {
+        const graceMin = r.deletion_grace_minutes || 1440;
+        events.push({
+            ts: r.deletion_requested_at,
+            icon: 'fa-trash-clock',
+            color: '#ef4444',
+            label: `Deletion requested (${graceMin}m grace)`,
+        });
+    }
+
+    // Sort chronologically.
+    events.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+
+    if (events.length === 0) {
+        // Shouldn't normally happen — server_created_at is always set.
+        // Render an explicit empty state rather than nothing so the
+        // section's presence is consistent.
+        return `<details class="dp-timeline">
+            <summary><i class="fa-solid fa-timeline"></i> Timeline (no events)</summary>
+        </details>`;
+    }
+
+    const rows = events.map(e => `
+        <li class="dp-timeline-row">
+            <span class="dp-timeline-dot" style="color:${e.color};border-color:${e.color}88;">
+                <i class="fa-solid ${e.icon}"></i>
+            </span>
+            <div class="dp-timeline-body">
+                <div class="dp-timeline-label">${escapeHtml(e.label)}</div>
+                <div class="dp-timeline-ts">${escapeHtml(new Date(e.ts).toLocaleString())} · ${timeAgo(e.ts)}</div>
+            </div>
+        </li>
+    `).join('');
+
+    return `<details class="dp-timeline">
+        <summary><i class="fa-solid fa-timeline"></i> Timeline <span class="dp-timeline-count">${events.length}</span></summary>
+        <ul class="dp-timeline-list">${rows}</ul>
+    </details>`;
 }
 
 function _renderReviewerActions(r) {

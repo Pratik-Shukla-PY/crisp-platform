@@ -2536,6 +2536,105 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 }
 
 /* ──────────────────────────────────────────────────────────────────
+   Phase F.2.a (May 2026) — per-incident timeline.
+
+   Collapsed <details> in the detail panel. Each row has a coloured
+   dot icon + label + abs/rel timestamp. The dot border-colour
+   matches the event-type colour (green = success, red = critical /
+   deletion, amber = offline / mid-verify, purple = dispatch, grey =
+   neutral). The list draws a thin vertical guide-line through the
+   dots so chronology reads as a "track" visually.
+   ────────────────────────────────────────────────────────────────── */
+.dp-timeline {
+    margin: 10px 0 8px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 8px;
+}
+.dp-timeline > summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #cbd5e1;
+    user-select: none;
+}
+.dp-timeline > summary::-webkit-details-marker { display: none; }
+.dp-timeline > summary::after {
+    content: "▾";
+    margin-left: auto;
+    font-size: 10px;
+    opacity: 0.5;
+    transition: transform 0.15s;
+}
+.dp-timeline[open] > summary::after { transform: rotate(180deg); }
+.dp-timeline-count {
+    margin-left: 4px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.16);
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 700;
+}
+.dp-timeline-list {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0 0 0 4px;
+    position: relative;
+}
+/* Guide line through the dots */
+.dp-timeline-list::before {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: 8px;
+    bottom: 8px;
+    width: 1px;
+    background: rgba(148, 163, 184, 0.18);
+    z-index: 0;
+}
+.dp-timeline-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
+    position: relative;
+    z-index: 1;
+}
+.dp-timeline-dot {
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #0b1320;
+    border: 1.5px solid;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    margin-top: 1px;
+}
+.dp-timeline-body { flex: 1 1 auto; min-width: 0; }
+.dp-timeline-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e2e8f0;
+    line-height: 1.4;
+}
+.dp-timeline-ts {
+    font-size: 10.5px;
+    color: #94a3b8;
+    margin-top: 2px;
+    font-feature-settings: "tnum";
+}
+
+/* ──────────────────────────────────────────────────────────────────
    Phase F.1.d (May 2026) — sticky reviewer-actions strip.
 
    The detail panel stacks 10+ sections. The reviewer-actions block
