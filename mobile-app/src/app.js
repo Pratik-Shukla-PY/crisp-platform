@@ -5566,6 +5566,15 @@ async function _attachCameraOverlay(stream) {
     if (focusBtn) focusBtn.onclick = _recenterFocus;
     if (lockBtn)  lockBtn.onclick  = _toggleRotationLock;
 
+    // Tap-to-focus on the live preview. The reticle animates at the
+    // click point; where the underlying MediaStreamTrack exposes
+    // `pointsOfInterest` (Android Chrome 89+, Edge), we also apply a
+    // single-shot focus at the normalized (x, y) so the camera physically
+    // re-hunts focus. iOS Safari doesn't expose pointsOfInterest — the
+    // reticle is visual feedback only there.
+    const streamEl = document.getElementById('camera-stream');
+    if (streamEl) streamEl.onclick = _tapToFocus;
+
     // Compass wiring. iOS Safari 13+ requires an explicit user-gesture
     // permission grant via DeviceOrientationEvent.requestPermission;
     // the very tap that opened the camera satisfies that gesture
@@ -5719,11 +5728,51 @@ function _toggleRotationLock() {
     }
 }
 
+// Tap-to-focus on the live preview. Two effects:
+//   1. Visual: animate the reticle at the click point so the user sees
+//      where the focus target landed.
+//   2. Functional (where supported): apply a single-shot focus at the
+//      normalised (x, y) of the clicked point via `pointsOfInterest`.
+//      Android Chrome 89+ and Edge expose this; iOS Safari does not —
+//      iOS users get the reticle animation as visual feedback only.
+//
+// The (x, y) normalisation: getBoundingClientRect of the <video> gives
+// the on-screen bounds; we divide the click offset by width/height so
+// the constraint value is in [0, 1] independent of the preview's actual
+// pixel size. The browser maps that back onto the sensor's native
+// resolution when applying the constraint.
+function _tapToFocus(evt) {
+    const reticle = document.getElementById('cm-focus-reticle');
+    if (reticle) _animateReticle(reticle, evt.clientX, evt.clientY);
+    const track = _cmOverlayState && _cmOverlayState.mediaTrack;
+    if (!track) return;
+    const caps = (track.getCapabilities ? track.getCapabilities() : null) || {};
+    if (!caps.pointsOfInterest) return;
+    try {
+        const stream = document.getElementById('camera-stream');
+        const r = stream.getBoundingClientRect();
+        const nx = (evt.clientX - r.left) / r.width;
+        const ny = (evt.clientY - r.top)  / r.height;
+        // Clamp to [0, 1] so an edge tap doesn't ship an out-of-range
+        // value to a fastidious browser implementation.
+        const cx = Math.max(0, Math.min(1, nx));
+        const cy = Math.max(0, Math.min(1, ny));
+        track.applyConstraints({
+            advanced: [{
+                pointsOfInterest: [{ x: cx, y: cy }],
+                focusMode: 'single-shot',
+            }],
+        });
+    } catch (e) {
+        console.warn('[camera] tap-to-focus constraint apply failed:', e);
+    }
+}
+
 // Reticle animation helper — re-triggers the CSS @keyframes by toggling
 // `animation: none` and reading offsetHeight (forced layout) before
 // restoring the animation. Without the reflow read, the keyframe doesn't
 // re-fire on a second tap at the same position. Used by _recenterFocus
-// in this commit and by tap-to-focus in a later commit.
+// and _tapToFocus.
 function _animateReticle(reticle, x, y) {
     reticle.style.left = x + 'px';
     reticle.style.top  = y + 'px';
