@@ -3668,6 +3668,17 @@
      image-variants.js so the encoder is available when the pipeline
      runs. No external dependency; fully vendored. -->
 <script defer src="blurhash.js?v=1"></script>
+<!-- Sprint D (May 2026) — minimal EXIF GPS inserter for JPEGs. Embeds
+     the same lat/lng/accuracy/heading we already persist on the backend
+     Location row directly into the JPEG bytes RIGHT BEFORE the chunked
+     upload, so an external verifier (UNDP reviewer, satellite truth-
+     scorer, GIS analyst) can `exiftool <file>.jpg` and confirm the
+     geotag without trusting our JSON. Writes ONLY the GPS IFD — never
+     0th / ExifIFD / MakerNotes / UserComment / Artist — to keep the
+     PII surface strictly tight. ~10 KB, vanilla JS, no deps. Loads
+     defer so it doesn't block first paint; uploadChunksBinary awaits
+     the embed inline before slicing. -->
+<script defer src="exif-gps.js?v=1"></script>
 <!-- Guaranteed-delivery image variants: depends on pii-blur.js for per-tier
      blur, so must load AFTER it and BEFORE app.js. Exposes window.ImageVariants. -->
 <script defer src="image-variants.js?v=3"></script>

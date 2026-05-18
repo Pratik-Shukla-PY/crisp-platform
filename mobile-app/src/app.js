@@ -5783,6 +5783,41 @@ function _animateReticle(reticle, x, y) {
     reticle.style.animation = '';
 }
 
+// Embed GPS EXIF into a JPEG blob before it enters the chunked-upload
+// pipeline. Reads the same `crisp_last_location_v2` cache the V4 stage
+// + camera-modal status bar read from, so the embedded coords match
+// what the user sees on-screen during capture + what we already ship
+// in the JSON payload. Compass heading (when granted on iOS / available
+// on Android) is mirrored onto `window._cmLastHeading` by the camera
+// modal's deviceorientation handler — read it here for the optional
+// GPSImgDirection EXIF field.
+//
+// Safety: no-op on any failure path (missing CrispExifGps module, no
+// GPS state, malformed JPEG, etc.). The JSON payload still carries the
+// geotag, so a no-op here means "no enhancement" rather than broken
+// upload. Strict GPS-IFD-only — see exif-gps.js for the field list.
+async function _embedGpsExif(jpegBlob) {
+    if (!jpegBlob || typeof window === 'undefined' ||
+        !window.CrispExifGps || typeof window.CrispExifGps.embed !== 'function') {
+        return jpegBlob;
+    }
+    let loc = null;
+    try {
+        const raw = localStorage.getItem('crisp_last_location_v2');
+        if (raw) loc = JSON.parse(raw);
+    } catch (_) { /* fall through with loc === null */ }
+    if (!loc || typeof loc.lat !== 'number' || typeof loc.lng !== 'number') {
+        return jpegBlob;
+    }
+    return await window.CrispExifGps.embed(jpegBlob, {
+        lat: loc.lat,
+        lng: loc.lng,
+        accuracyMeters: (loc.acc != null ? Number(loc.acc) : Number(loc.accuracy)),
+        heading: (typeof window._cmLastHeading === 'number'
+                  ? window._cmLastHeading : undefined),
+    });
+}
+
 // PR 5: camera modal now supports multi-snap. Each tap of the
 // shutter captures a frame WITHOUT tearing down the stream so the user can
 // keep shooting. First snap → primary photo; subsequent → state.extraPhotos
@@ -7711,6 +7746,22 @@ async function uploadChunksBinary(reportId, mediaId, blob, {
     clientBlurApplied = false, startSeq = 0,
     onProgress = null,
 } = {}) {
+    // Sprint D (May 2026) — embed GPS EXIF into the JPEG bytes BEFORE
+    // chunking, so an external `exiftool` reader sees the same coords
+    // we already persist on the backend Location row. Only applies to
+    // IMAGE chunks; AUDIO / other types fall through untouched.
+    // _embedGpsExif is a no-op if exif-gps.js failed to load or no GPS
+    // state is available (additive, never destructive). On a successful
+    // embed the blob bytes are replaced; the chunk loop below works on
+    // the new (slightly larger) bytes transparently.
+    if (type === 'IMAGE') {
+        try {
+            blob = await _embedGpsExif(blob);
+        } catch (e) {
+            console.warn('[upload] EXIF embed failed, shipping original:', e);
+        }
+    }
+
     detectPWANetworkTier();
     const netConfig = getPWAAdaptiveConfig();
     const chunkSize = netConfig.chunkSize;
