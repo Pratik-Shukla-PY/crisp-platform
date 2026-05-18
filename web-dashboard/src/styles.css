@@ -2534,3 +2534,28 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     color: #94a3b8;
     line-height: 1.4;
 }
+
+/* ──────────────────────────────────────────────────────────────────
+   Phase F.1.a (May 2026) — dark-theme map label contrast boost.
+
+   The `dark_only_labels` CARTO tiles render city / district names as
+   semi-transparent white pixels. On the base `dark_nolabels` raster
+   (which has more visual variation than the prior `dark_all`), the
+   labels need a brightness + opacity bump so they pop at zoom 11-14
+   — exactly the operator's triage zoom level inside a city.
+
+   We target the labels-only tile layer via the Leaflet pane it sits
+   in (overlayPane). Brightness 1.4 + saturate 0 keeps the labels
+   strictly white-on-dark, no colour cast. `mix-blend-mode: screen`
+   compounds opacity over the base for dramatically clearer text at
+   the cost of a faint halo around dense label clusters (acceptable
+   trade-off — operators can read the text now).
+
+   Building footprints (purple-tinted polygon overlays at zoom ≥ 15)
+   also live in overlayPane but they're vector SVG paths, not tiles
+   — `.leaflet-tile` only matches the raster labels.
+   ────────────────────────────────────────────────────────────────── */
+.leaflet-overlay-pane .leaflet-tile {
+    filter: brightness(1.4) saturate(0);
+    mix-blend-mode: screen;
+}

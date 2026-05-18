@@ -4179,9 +4179,51 @@ function initMap() {
         maxBounds: [[-85, -180], [85, 180]],
         maxBoundsViscosity: 1.0,
     }).setView([20, 0], 2);
-    const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19, noWrap: true,
-    });
+    // Phase F.1.a (May 2026) — dark-mode tile fix.
+    //
+    // The previous single-layer `dark_all` style baked place labels into
+    // the tile at low contrast, making city / district / region names
+    // illegible at zoom 11-14 (exactly the operator's triage zoom level
+    // inside a city). CARTO publishes the labels and the base map as
+    // separate tilesets: `dark_nolabels` + `dark_only_labels`. We layer
+    // them so we can boost the label-only layer's CSS opacity / filter
+    // independently of the base, AND the labels render ABOVE everything
+    // (markers, building footprints, heat) — which keeps city names
+    // legible even when a cluster marker would otherwise overlap them.
+    //
+    // Fallback: if the labels layer fails to load (transient CARTO
+    // outage), the base `dark_nolabels` stays usable on its own — same
+    // imagery as `dark_all` minus the place names. Better than no map.
+    //
+    // CSP: `*.basemaps.cartocdn.com` is already whitelisted in
+    // nginx.conf:88; both `dark_nolabels` and `dark_only_labels` are
+    // served from the same host so no CSP update needed.
+    const darkBaseTiles = L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+        {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 19,
+            noWrap: true,
+        }
+    );
+    const darkLabelTiles = L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+        {
+            attribution: '',           // attribution already on the base layer
+            maxZoom: 19,
+            noWrap: true,
+            pane: 'overlayPane',       // sits above the base + below markers/popups
+            // No `opacity` here — the .leaflet-tile-pane rule in
+            // styles.css handles the contrast boost so we can tune it
+            // without re-deploying app.js.
+        }
+    );
+    // Compose into a single LayerGroup so the layer-switcher in the
+    // top-right control treats "Dark" as one selectable option (UX:
+    // operators don't need to know there are two tile sources behind
+    // the dark theme).
+    const darkTiles = L.layerGroup([darkBaseTiles, darkLabelTiles]);
+
     const satelliteTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: '&copy; Esri World Imagery', maxZoom: 19, noWrap: true,
     });
