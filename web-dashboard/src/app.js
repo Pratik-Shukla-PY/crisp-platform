@@ -3203,9 +3203,341 @@ window.closeDetail = () => {
     // it defaults back to the best-complete variant.
     if (selectedId) _tierOverride.delete(selectedId);
     selectedId = null;
+    // Phase H.1.d — also clear any active Building Console state so
+    // the next selectReport call doesn't paint over a stale console.
+    if (typeof _selectedBuildingId !== 'undefined' && _selectedBuildingId) {
+        _closeBuildingConsole({ skipFeedRender: true });
+    }
     document.getElementById('detail-panel').style.display = 'none';
     renderFeed();
 };
+
+// ══════════════════════════════════════════════════════════════════════
+// Phase H.1.d (May 2026) — Building Intelligence Console.
+//
+// When a building is selected (URL hash, map polygon click, or the
+// detail panel's "Building history" link), the right-side detail
+// panel becomes the Building Console — a humanitarian-ops-grade
+// surface that aggregates the building's reports + intelligence
+// scores + crisis breakdown + responder status + satellite roll-up
+// into one visual entity.
+//
+// The console fetches GET /api/v1/buildings/{id} (Phase H.1.c) and
+// renders 6 sections in this commit:
+//
+//   1. Sticky header — name, state pill, scores summary, close
+//   2. 5-score intelligence grid (severity / confidence / activity /
+//      escalation_risk / humanitarian_priority)
+//   3. Crisis-type breakdown + damage distribution + debris chip
+//   4. Versioned report stack (latest-first)
+//   5. Satellite verification roll-up
+//   6. Footer with placeholders for H.2-H.6 surfaces (state actions,
+//      responder panel, notes, AI summary, dossier export — wired in
+//      subsequent commits without restructuring the console layout).
+//
+// State machine: a single `_selectedBuildingId` variable + URL hash
+// listener keep the console in sync across reloads, deep links, and
+// inter-operator URL sharing.
+// ══════════════════════════════════════════════════════════════════════
+let _selectedBuildingId = null;
+let _buildingConsoleCache = {};  // id → BuildingDetail JSON, cached for the session
+
+async function _fetchBuildingDetail(buildingId) {
+    if (_buildingConsoleCache[buildingId]) {
+        return _buildingConsoleCache[buildingId];
+    }
+    const res = await fetch(`${API}/buildings/${encodeURIComponent(buildingId)}`);
+    if (!res.ok) {
+        showToast(`Building ${buildingId.slice(0, 20)} not found`, 'error');
+        return null;
+    }
+    const detail = await res.json();
+    _buildingConsoleCache[buildingId] = detail;
+    return detail;
+}
+
+function _updateBuildingUrlHash(buildingId) {
+    // Compose with the Phase G.1 chip-filter hash. Preserve existing
+    // `chips=...` segment and add/replace the `building=...` segment.
+    try {
+        const hash = (window.location.hash || '').replace(/^#/, '');
+        const parts = hash.split(';').filter(p => p && !p.startsWith('building='));
+        if (buildingId) parts.unshift(`building=${encodeURIComponent(buildingId)}`);
+        const newHash = parts.length ? `#${parts.join(';')}` : '';
+        if (window.location.hash !== newHash) {
+            history.replaceState(null, '', window.location.pathname + window.location.search + newHash);
+        }
+    } catch (_) { /* defensive */ }
+}
+
+window.openBuildingConsole = async (buildingId) => {
+    if (!buildingId) return;
+    selectedId = null;  // close any open report-detail
+    _tierOverride.clear();
+    _selectedBuildingId = buildingId;
+    _updateBuildingUrlHash(buildingId);
+
+    const panel = document.getElementById('detail-panel');
+    panel.style.display = 'flex';
+    panel.classList.add('detail-panel--building');
+
+    // Show a loading placeholder while the fetch lands.
+    document.getElementById('detail-title').textContent = 'Loading building…';
+    document.getElementById('detail-body').innerHTML =
+        '<div class="bc-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>';
+
+    const b = await _fetchBuildingDetail(buildingId);
+    if (!b) {
+        _closeBuildingConsole();
+        return;
+    }
+
+    // Map: highlight the selected building's polygon + fly to its
+    // centroid. Both bounded by map readiness — silent no-op if the
+    // map isn't initialised yet.
+    try {
+        if (window.map && typeof window.map.flyTo === 'function' &&
+            typeof b.centroid_lat === 'number' && typeof b.centroid_lng === 'number') {
+            window.map.flyTo([b.centroid_lat, b.centroid_lng], 17, { duration: 0.6 });
+        }
+        if (typeof window._highlightBuildingPolygon === 'function') {
+            window._highlightBuildingPolygon(buildingId);
+        }
+    } catch (_) {}
+
+    _renderBuildingConsole(b);
+};
+
+function _closeBuildingConsole(opts) {
+    opts = opts || {};
+    _selectedBuildingId = null;
+    _updateBuildingUrlHash(null);
+    const panel = document.getElementById('detail-panel');
+    panel.classList.remove('detail-panel--building');
+    try {
+        if (typeof window._highlightBuildingPolygon === 'function') {
+            window._highlightBuildingPolygon(null);  // clear highlight
+        }
+    } catch (_) {}
+    if (!opts.skipFeedRender) {
+        panel.style.display = 'none';
+        renderFeed();
+    }
+}
+window.closeBuildingConsole = _closeBuildingConsole;
+
+function _renderBuildingConsole(b) {
+    // Helper formatters
+    const scoreColor = (v) => {
+        if (v == null) return '#64748b';
+        if (v >= 80) return '#ef4444';
+        if (v >= 60) return '#f97316';
+        if (v >= 40) return '#eab308';
+        if (v >= 20) return '#22c55e';
+        return '#94a3b8';
+    };
+    const scoreVal = (v) => (v == null ? '—' : v.toFixed(0));
+    const sevColor = SEV_COLORS[b.severity_max] || '#64748b';
+    const stateColors = {
+        ACTIVE:      { bg: 'rgba(148, 163, 184, 0.18)', fg: '#cbd5e1' },
+        MONITORED:   { bg: 'rgba(70, 223, 177, 0.18)', fg: '#46DFB1' },
+        RESPONDING:  { bg: 'rgba(167, 139, 250, 0.18)', fg: '#a78bfa' },
+        ESCALATED:   { bg: 'rgba(239, 68, 68, 0.18)', fg: '#f87171' },
+        RESOLVED:    { bg: 'rgba(34, 197, 94, 0.18)', fg: '#4ade80' },
+        ARCHIVED:    { bg: 'rgba(100, 116, 139, 0.18)', fg: '#94a3b8' },
+        FALSE_ALARM: { bg: 'rgba(100, 116, 139, 0.18)', fg: '#94a3b8' },
+    };
+    const stateCol = stateColors[b.state] || stateColors.ACTIVE;
+    const displayName =
+        b.osm_name
+        || (b.osm_addr_full || '').trim()
+        || (b.osm_way_id ? `OSM way ${b.osm_way_id}` : null)
+        || (b.id_source === 'PROXIMITY' ? `Proximity cluster ${b.id.slice(0, 8)}` : b.id);
+    document.getElementById('detail-title').innerHTML =
+        `<i class="fa-solid fa-building" style="margin-right:6px;color:${sevColor};"></i>` +
+        escapeHtml(displayName);
+
+    // Crisis-type chips + damage distribution
+    const crisisChips = (b.crisis_types_top3 || [])
+        .map(ct => `<span class="bc-crisis-chip">${escapeHtml(crisisLabel(ct))}</span>`)
+        .join('');
+    const totalReports = b.report_count || 0;
+    const dmgDistribution = (() => {
+        // Compute from nested reports to avoid extra round-trips.
+        const counts = { COMPLETE: 0, PARTIAL: 0, MINIMAL: 0, UNKNOWN: 0 };
+        for (const r of (b.reports || [])) {
+            const d = r.damage_classification || 'UNKNOWN';
+            counts[d] = (counts[d] || 0) + 1;
+        }
+        return counts;
+    })();
+    const dmgPct = (n) => (totalReports ? Math.round((n / totalReports) * 100) : 0);
+
+    // Build the console HTML.
+    document.getElementById('detail-body').innerHTML = `
+        <div class="bc">
+            <!-- Sticky strip — state pill + key counts + (placeholder) action buttons -->
+            <div class="bc-header">
+                <div class="bc-header-row">
+                    <span class="bc-state" style="background:${stateCol.bg};color:${stateCol.fg};">
+                        ${escapeHtml(b.state)}
+                    </span>
+                    <span class="bc-count-chip" title="Total constituent reports">
+                        <i class="fa-solid fa-flag"></i> ${totalReports}
+                    </span>
+                    <span class="bc-count-chip" title="Reports verified by an analyst">
+                        <i class="fa-solid fa-circle-check"></i> ${b.verified_report_count || 0}
+                    </span>
+                    <span class="bc-count-chip" title="Reports with responder dispatched">
+                        <i class="fa-solid fa-truck-medical"></i> ${b.responding_report_count || 0}
+                    </span>
+                    ${b.debris_clearing_needed_count
+                        ? `<span class="bc-count-chip bc-count-chip-warn" title="Reports flagged as needing debris clearing">
+                               <i class="fa-solid fa-broom"></i> ${b.debris_clearing_needed_count} debris
+                           </span>`
+                        : ''}
+                </div>
+                <div class="bc-actions">
+                    <!-- H.2 will land Monitor / Escalate / Mark resolved buttons here -->
+                    <!-- H.5 will land Export Dossier button here -->
+                    <span class="bc-action-placeholder" title="Operator actions land in Phase H.2-H.5">
+                        <i class="fa-regular fa-clock"></i> Actions: H.2+ (state machine, responder, notes, dossier)
+                    </span>
+                </div>
+            </div>
+
+            <!-- 5-score intelligence grid -->
+            <div class="bc-scores">
+                ${[
+                    ['Severity',  b.severity_score,        'fa-triangle-exclamation'],
+                    ['Confidence',b.confidence_score,      'fa-shield-check'],
+                    ['Activity',  b.activity_score,        'fa-chart-line'],
+                    ['Escalation',b.escalation_risk,       'fa-fire-flame-curved'],
+                    ['Priority',  b.humanitarian_priority, 'fa-bullseye'],
+                ].map(([label, v, icon]) => `
+                    <div class="bc-score">
+                        <div class="bc-score-label"><i class="fa-solid ${icon}"></i> ${label}</div>
+                        <div class="bc-score-value" style="color:${scoreColor(v)};">${scoreVal(v)}</div>
+                    </div>
+                `).join('')}
+            </div>
+
+            <!-- Crisis breakdown + damage distribution -->
+            <div class="bc-section">
+                <div class="bc-section-title"><i class="fa-solid fa-layer-group"></i> Situation summary</div>
+                ${crisisChips
+                    ? `<div class="bc-crisis-row">${crisisChips}</div>`
+                    : '<div class="bc-empty">No crisis-type tagging yet</div>'}
+                <div class="bc-damage-row">
+                    <span class="bc-damage-cell bc-damage-COMPLETE">
+                        <strong>${dmgDistribution.COMPLETE}</strong> complete (${dmgPct(dmgDistribution.COMPLETE)}%)
+                    </span>
+                    <span class="bc-damage-cell bc-damage-PARTIAL">
+                        <strong>${dmgDistribution.PARTIAL}</strong> partial (${dmgPct(dmgDistribution.PARTIAL)}%)
+                    </span>
+                    <span class="bc-damage-cell bc-damage-MINIMAL">
+                        <strong>${dmgDistribution.MINIMAL}</strong> minimal (${dmgPct(dmgDistribution.MINIMAL)}%)
+                    </span>
+                </div>
+            </div>
+
+            <!-- Satellite verification roll-up -->
+            <div class="bc-section">
+                <div class="bc-section-title"><i class="fa-solid fa-satellite"></i> Satellite verification</div>
+                ${b.satellite_summary && b.satellite_summary.count > 0
+                    ? `<div class="bc-sat-row">
+                           <span class="bc-sat-score" style="color:${scoreColor(b.satellite_summary.mean_total_score)};">
+                               ${(b.satellite_summary.mean_total_score || 0).toFixed(1)}/100
+                           </span>
+                           <span class="bc-sat-meta">mean across ${b.satellite_summary.count} report${b.satellite_summary.count === 1 ? '' : 's'}</span>
+                           <span class="bc-sat-meta">· Latest: ${escapeHtml((b.satellite_summary.latest_verdict || '').replace(/_/g, ' '))}</span>
+                       </div>`
+                    : '<div class="bc-empty">No satellite verdicts on this building yet. Run Verify on individual reports below.</div>'}
+            </div>
+
+            <!-- Versioned report stack -->
+            <div class="bc-section">
+                <div class="bc-section-title">
+                    <i class="fa-solid fa-list"></i> Reports
+                    <span class="bc-section-count">${(b.reports || []).length}</span>
+                </div>
+                <div class="bc-reports">
+                    ${(b.reports || []).map(r => {
+                        const sev = r.severity || 'UNKNOWN';
+                        const damage = r.damage_classification || '';
+                        const crisis = r.crisis_type ? crisisLabel(r.crisis_type) : '';
+                        const verdictBadge = r.reviewer_verdict === 'ACCEPTED'
+                            ? '<span class="bc-r-verdict bc-r-verdict-accepted">✓</span>'
+                            : r.reviewer_verdict === 'REJECTED'
+                                ? '<span class="bc-r-verdict bc-r-verdict-rejected">✕</span>'
+                                : '';
+                        return `<div class="bc-report" onclick="window.selectReport('${r.id}', true)">
+                            <span class="bc-r-strip" style="background:${SEV_COLORS[sev]};"></span>
+                            <div class="bc-r-body">
+                                <div class="bc-r-line1">
+                                    <span class="bc-r-sev bc-r-sev-${sev}">${sev}</span>
+                                    ${damage ? `<span class="bc-r-dmg">${escapeHtml(damage.replace(/_/g, ' '))}</span>` : ''}
+                                    ${crisis ? `<span class="bc-r-crisis">${escapeHtml(crisis)}</span>` : ''}
+                                    ${verdictBadge}
+                                </div>
+                                <div class="bc-r-line2">
+                                    <span class="bc-r-source"><i class="fa-solid fa-${({APP:'mobile-screen-button',TELEGRAM:'comments',WHATSAPP:'comment-dots',SMS:'comment-sms',IVR:'phone'})[r.source] || 'mobile-screen-button'}"></i> ${escapeHtml(r.source || 'APP')}</span>
+                                    <span class="bc-r-time">${timeAgo(r.server_created_at)}</span>
+                                    ${r.help_dispatched_at ? '<span class="bc-r-resp"><i class="fa-solid fa-truck-medical"></i> dispatched</span>' : ''}
+                                    ${r.help_arrived_at ? '<span class="bc-r-resp"><i class="fa-solid fa-map-pin"></i> on-site</span>' : ''}
+                                </div>
+                            </div>
+                        </div>`;
+                    }).join('') || '<div class="bc-empty">No constituent reports</div>'}
+                </div>
+            </div>
+
+            <!-- Footer placeholders for H.2-H.6 surfaces -->
+            <div class="bc-section bc-deferred">
+                <div class="bc-section-title"><i class="fa-regular fa-rectangle-list"></i> Coming next</div>
+                <ul class="bc-deferred-list">
+                    <li>H.2 — State transitions (Monitor / Escalate / False alarm / Mark resolved)</li>
+                    <li>H.3 — Responder assignment + dispatched/arrived lifecycle</li>
+                    <li>H.4 — Operator notes thread</li>
+                    <li>H.5 — Consolidated dossier export (PDF + GeoJSON)</li>
+                    <li>H.6 — AI building summary (Claude-generated brief + recommendations)</li>
+                </ul>
+            </div>
+        </div>
+    `;
+    // Clear the bottom action dock (the building console manages its own
+    // actions inside .bc-header / .bc-actions).
+    const dock = document.getElementById('dp-action-dock');
+    if (dock) dock.innerHTML = '';
+}
+
+// URL hash listener: on cold load + on hashchange, if `#building=<id>`
+// is set, open the console for that building. Composes with the
+// Phase G.1 chip filters in the same hash.
+function _initBuildingHashListener() {
+    const _readHashBuilding = () => {
+        const hash = (window.location.hash || '').replace(/^#/, '');
+        for (const seg of hash.split(';')) {
+            const m = seg.match(/^building=(.+)$/);
+            if (m) return decodeURIComponent(m[1]);
+        }
+        return null;
+    };
+    const _apply = () => {
+        const hb = _readHashBuilding();
+        if (hb && hb !== _selectedBuildingId) {
+            window.openBuildingConsole(hb);
+        } else if (!hb && _selectedBuildingId) {
+            _closeBuildingConsole();
+        }
+    };
+    window.addEventListener('hashchange', _apply);
+    // Cold-load: defer the first read until allReports has loaded so
+    // the per-report context (used by the console's nested rendering)
+    // is available. _loadReports calls renderFeed at the end; we hook
+    // into the polling loop instead.
+    setTimeout(_apply, 800);
+}
 
 // ── Phase 5 (Apr 2026) — Reviewer actions block ─────────────────────────────
 // Renders a compact row showing the current verdict + two action buttons
@@ -4171,30 +4503,38 @@ window.openReporterProfile = async (userId) => {
     }
 };
 
+// Phase H.1.d/e (May 2026) — filterByBuilding now ROUTES to the
+// Building Intelligence Console instead of just opening map popups.
+// The old per-marker popup behaviour was a navigator, not a filter;
+// the console is the operator-facing surface that aggregates the
+// building's reports + scores + crisis breakdown + responder status.
+//
+// Backward compatibility: the version-index cache is still populated
+// from /api/v1/reports/building/{id} so the existing
+// `dp-version-ribbon` renderer in the report-detail panel keeps
+// showing "V N of M · Latest" without any further changes.
 window.filterByBuilding = async (buildingId) => {
     try {
         const res = await fetch(`${API}/building/${buildingId}`);
-        if (!res.ok) { showToast('Could not load building history', 'error'); return; }
-        const body = await res.json();
-        const reports = Array.isArray(body) ? body : (body.reports || []);
-        const total = Array.isArray(body) ? reports.length : (body.total || reports.length);
-        if (reports.length <= 1) { showToast('Only 1 report for this building', 'info'); return; }
-        showToast(`Building has ${total} reports (v${total} → v1, latest first)`, 'success');
-        // Highlight all building reports on map
-        reports.forEach(rep => { const marker = clusterGroup.getLayers().find(m => m._crispReport?.id === rep.id); if (marker) marker.openPopup(); });
-        // Cache the version index so the detail panel renderer can look
-        // up a report's ordinal without another fetch. Keyed by report-id.
-        if (!window._buildingVersionIndex) window._buildingVersionIndex = {};
-        reports.forEach(rep => {
-            window._buildingVersionIndex[rep.id] = {
-                ordinal: rep.building_version_ordinal,
-                total: total,
-                is_latest: !!rep.building_is_latest,
-                building_id: buildingId,
-            };
-        });
-        return body;
-    } catch (e) { showToast('Building history error', 'error'); }
+        if (res.ok) {
+            const body = await res.json();
+            const reports = Array.isArray(body) ? body : (body.reports || []);
+            const total = Array.isArray(body) ? reports.length : (body.total || reports.length);
+            if (!window._buildingVersionIndex) window._buildingVersionIndex = {};
+            reports.forEach(rep => {
+                window._buildingVersionIndex[rep.id] = {
+                    ordinal: rep.building_version_ordinal,
+                    total: total,
+                    is_latest: !!rep.building_is_latest,
+                    building_id: buildingId,
+                };
+            });
+        }
+    } catch (_) { /* version cache best-effort */ }
+    // Open the H.1.d Building Intelligence Console.
+    if (typeof window.openBuildingConsole === 'function') {
+        return window.openBuildingConsole(buildingId);
+    }
 };
 
 /**
@@ -4605,12 +4945,38 @@ function initMap() {
     L.control.layers({ "Dark": darkTiles, "Satellite": satelliteTiles, "Street": streetTiles }, null, { position: 'topright' }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Building footprints layer — loads from Overpass API at zoom >= 15
+    // Building footprints layer — loads from Overpass API at zoom >= 15.
+    //
+    // Phase H.1.e (May 2026) — polygons now:
+    //   * click → openBuildingConsole(osm:way:<id>)
+    //   * highlight when the operator's currently-selected building
+    //     matches (via window._highlightBuildingPolygon set by the
+    //     building-console workflow)
+    //   * the existing hover tooltip with OSM name is preserved
     let _buildingLayer = null;
     let _buildingCache = {};
     let _buildingDebounce = null;
+    // Phase H.1.e — map of `osm:way:<id>` → Leaflet layer so we can
+    // re-style the selected polygon when the operator opens the console.
+    const _buildingPolyById = new Map();
+
+    function _styleForBuilding(id, isSelected) {
+        return isSelected
+            ? { color: '#fbbf24', weight: 3, fillColor: '#fbbf24', fillOpacity: 0.32 }
+            : { color: '#7c3aed', weight: 1, fillColor: '#7c3aed', fillOpacity: 0.15 };
+    }
+
+    window._highlightBuildingPolygon = function (selectedId) {
+        // Re-style every known polygon. selectedId may be null (no
+        // selection) or `osm:way:<n>`.
+        for (const [bid, layer] of _buildingPolyById.entries()) {
+            const isSel = !!selectedId && bid === selectedId;
+            try { layer.setStyle(_styleForBuilding(bid, isSel)); } catch (_) {}
+        }
+    };
+
     function loadBuildingFootprints() {
-        if (map.getZoom() < 15) { if (_buildingLayer) { map.removeLayer(_buildingLayer); _buildingLayer = null; } return; }
+        if (map.getZoom() < 15) { if (_buildingLayer) { map.removeLayer(_buildingLayer); _buildingLayer = null; _buildingPolyById.clear(); } return; }
         const b = map.getBounds();
         const key = `${b.getSouth().toFixed(3)},${b.getWest().toFixed(3)},${b.getNorth().toFixed(3)},${b.getEast().toFixed(3)}`;
         if (_buildingCache[key]) return;
@@ -4623,12 +4989,39 @@ function initMap() {
                 const features = (data.elements || []).filter(e => e.geometry).map(e => ({
                     type: 'Feature',
                     geometry: { type: 'Polygon', coordinates: [e.geometry.map(p => [p.lon, p.lat])] },
-                    properties: { name: e.tags?.name || '', type: e.tags?.building || 'yes' },
+                    // Carry the OSM id so we can compose `osm:way:<id>`
+                    // building_id at click time (matches the PWA's
+                    // building-select.js id format).
+                    properties: { name: e.tags?.name || '', type: e.tags?.building || 'yes', osm_id: e.id },
                 }));
                 if (_buildingLayer) map.removeLayer(_buildingLayer);
+                _buildingPolyById.clear();
                 _buildingLayer = L.geoJSON({ type: 'FeatureCollection', features }, {
-                    style: { color: '#7c3aed', weight: 1, fillColor: '#7c3aed', fillOpacity: 0.15 },
-                    onEachFeature: (f, layer) => { if (f.properties.name) layer.bindTooltip(f.properties.name, { sticky: true }); },
+                    style: (f) => _styleForBuilding(
+                        `osm:way:${f.properties.osm_id}`,
+                        (typeof _selectedBuildingId !== 'undefined') &&
+                            _selectedBuildingId === `osm:way:${f.properties.osm_id}`
+                    ),
+                    onEachFeature: (f, layer) => {
+                        const bid = `osm:way:${f.properties.osm_id}`;
+                        _buildingPolyById.set(bid, layer);
+                        if (f.properties.name) {
+                            layer.bindTooltip(f.properties.name, { sticky: true });
+                        }
+                        // Phase H.1.e — polygon click opens the Building
+                        // Intelligence Console. We open even for buildings
+                        // that don't yet have a Reports row — the console
+                        // handles 404 by showing a toast + closing.
+                        layer.on('click', (ev) => {
+                            // Prevent the click from bubbling to the map
+                            // (which has its own click handler that
+                            // dismisses popups).
+                            L.DomEvent.stopPropagation(ev);
+                            if (typeof window.openBuildingConsole === 'function') {
+                                window.openBuildingConsole(bid);
+                            }
+                        });
+                    },
                 }).addTo(map);
             })
             .catch(() => {});
@@ -6356,6 +6749,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // (deep-linked URLs land showing the right filter combo).
     _restoreChipFiltersFromStorage();
     _paintChipFilterUI();
+    // Phase H.1.d (May 2026) — install the URL-hash listener so a
+    // deep-linked `#building=osm:way:123` opens the Building
+    // Intelligence Console on cold load.
+    _initBuildingHashListener();
     initMap();
     await loadWorldData();
 
