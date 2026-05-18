@@ -5406,7 +5406,19 @@ def get_media_duplicates(
 
 
 def _auto_assign_building_id(report: Report, db: Session):
-    """Auto-link reports within 30m of each other to the same building_id."""
+    """Auto-link reports within 30m of each other to the same building_id.
+
+    Phase H.1 (May 2026) added `fk_reports_building_id` from
+    `reports.building_id` → `buildings.id`. The `_apply_building_link`
+    `after_insert` hook in app/models/report.py inserts the parent
+    `buildings` row, but that hook fires AFTER the report INSERT — the
+    FK is checked during the INSERT itself, so it fails when a freshly
+    generated building_id has no matching parent row.
+
+    Fix: when this function generates a NEW building_id (the proximity-
+    cluster path), pre-insert the minimal `buildings` row so the FK
+    is satisfied at insert time. Idempotent via ON CONFLICT.
+    """
     if not report.location or report.building_id:
         return
     lat, lng = report.location.latitude, report.location.longitude
@@ -5430,11 +5442,25 @@ def _auto_assign_building_id(report: Report, db: Session):
     for n in nearby:
         if n.location and haversine(lat, lng, n.location.latitude, n.location.longitude) <= 30:
             if n.building_id:
+                # Nearby already has a building_id; reuse it. The parent
+                # `buildings` row was already created when the nearby
+                # report was inserted.
                 report.building_id = n.building_id
                 return
             else:
                 import uuid
+                from sqlalchemy import text as _text
                 bid = str(uuid.uuid4())
+                # Pre-create the parent `buildings` row so the FK on the
+                # subsequent reports INSERT is satisfied. Use raw SQL
+                # bound through the session's connection so we play
+                # nicely with autoflush + the existing transaction.
+                db.execute(_text("""
+                    INSERT INTO buildings (id, id_source, state)
+                    VALUES (:bid, 'PROXIMITY', 'ACTIVE')
+                    ON CONFLICT (id) DO NOTHING
+                """), {"bid": bid})
+                db.flush()
                 report.building_id = bid
                 n.building_id = bid
                 return
