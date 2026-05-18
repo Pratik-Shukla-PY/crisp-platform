@@ -875,6 +875,25 @@ async def refresh_ai_summary(
 # ──────────────────────────────────────────────────────────────────────
 # Phase H.5 — Consolidated dossier export (PDF + GeoJSON)
 # ──────────────────────────────────────────────────────────────────────
+def _log_dossier_export(db: Session, user, building_id: str, fmt: str, byte_size: int):
+    """Append a DOSSIER_EXPORTED BuildingEvent so the operator timeline
+    shows who exported what and when. Bounded payload."""
+    db.add(BuildingEvent(
+        building_id=building_id,
+        event_kind="DOSSIER_EXPORTED",
+        actor_user_id=user.id if hasattr(user, "id") else None,
+        actor_kind="OPERATOR",
+        payload={"format": fmt, "size_bytes": int(byte_size)},
+    ))
+    db.commit()
+
+
+def _short_building_id(building_id: str) -> str:
+    """Canonical short identifier for filenames (URL-safe)."""
+    short = building_id.replace("osm:way:", "osm").replace(":", "_")
+    return short[:24] if len(short) > 24 else short
+
+
 @router.get("/{building_id}/dossier.pdf")
 def export_dossier_pdf(
     building_id: str,
@@ -889,31 +908,23 @@ def export_dossier_pdf(
     ~30 KB; a hot building (200+ reports) caps at ~250 KB.
 
     Analyst-gated. PDF generation runs synchronously (reportlab is
-    in-process, no worker pool needed).
+    in-process, no worker pool needed). Emits DOSSIER_EXPORTED
+    BuildingEvent so the lifecycle stepper picks up the export.
     """
     b = db.query(Building).filter(Building.id == building_id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Building not found")
 
-    # Lazy-import so a missing reportlab wheel doesn't crash boot
-    # (the dossier service handles its own lazy imports inside).
     from app.services.building_dossier import build_dossier_pdf
     pdf_bytes = build_dossier_pdf(db, b)
+    _log_dossier_export(db, user, building_id, "PDF", len(pdf_bytes))
 
-    # Filename: building-{short-id}-dossier-{date}.pdf — short-id
-    # keeps URLs readable for OSM-typed ids; for UUID-typed ids we use
-    # the first 8 chars.
-    short = b.id.replace("osm:way:", "osm").replace(":", "_")
-    if len(short) > 24:
-        short = short[:24]
-    fname = f"building-{short}-dossier-{datetime.now(timezone.utc).date()}.pdf"
+    fname = f"building-{_short_building_id(b.id)}-dossier-{datetime.now(timezone.utc).date()}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="{fname}"',
-            # Allow the dashboard to fetch + offer-as-download without
-            # the browser preview pane intercepting the click.
             "X-Content-Type-Options": "nosniff",
         },
     )
@@ -938,18 +949,48 @@ def export_dossier_geojson(
 
     from app.services.building_dossier import build_dossier_geojson
     fc = build_dossier_geojson(db, b)
+    body = json.dumps(fc)
+    _log_dossier_export(db, user, building_id, "GeoJSON", len(body))
 
-    short = b.id.replace("osm:way:", "osm").replace(":", "_")
-    if len(short) > 24:
-        short = short[:24]
-    fname = f"building-{short}-{datetime.now(timezone.utc).date()}.geojson"
+    fname = f"building-{_short_building_id(b.id)}-{datetime.now(timezone.utc).date()}.geojson"
     # JSONResponse's class-level media_type = application/json wins over
     # constructor arg; use a bare Response so application/geo+json
     # actually lands on the wire (matches the .geojson file extension +
     # behaves correctly in GIS tooling sniffing for the MIME type).
     return Response(
-        content=json.dumps(fc),
+        content=body,
         media_type="application/geo+json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{fname}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get("/{building_id}/dossier.csv")
+def export_dossier_csv(
+    building_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Generate + stream a single-building CSV.
+
+    First row carries the building roll-up; subsequent rows are one
+    per constituent Report. Designed for direct import into Excel /
+    Sheets / pandas. Emits DOSSIER_EXPORTED BuildingEvent.
+    """
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+
+    from app.services.building_dossier import build_dossier_csv
+    csv_text = build_dossier_csv(db, b)
+    _log_dossier_export(db, user, building_id, "CSV", len(csv_text))
+
+    fname = f"building-{_short_building_id(b.id)}-{datetime.now(timezone.utc).date()}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="{fname}"',
             "X-Content-Type-Options": "nosniff",

@@ -3087,11 +3087,193 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
 }
 .bc-action-placeholder {
     font-size: 10.5px;
     color: #94a3b8;
     font-style: italic;
+}
+
+/* ── Phase H.5+ — Header subtitle (city + coords + OSM hint) ── */
+.bc-header-titles { margin-bottom: 6px; }
+.bc-subtitle {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: 11.5px;
+    color: #cbd5e1;
+    align-items: center;
+}
+.bc-sub-city {
+    color: #f1f5f9;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.bc-sub-city i { font-size: 10px; color: #fbbf24; }
+.bc-sub-coords {
+    color: #94a3b8;
+    font-family: var(--font-mono, monospace);
+    font-size: 10.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-feature-settings: "tnum";
+}
+.bc-sub-coords i { font-size: 9px; opacity: 0.7; }
+.bc-sub-osm {
+    color: #64748b;
+    font-size: 10px;
+    font-family: var(--font-mono, monospace);
+    background: rgba(148, 163, 184, 0.08);
+    padding: 1px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+}
+
+/* ── Phase H.5+ — Direct export buttons (CSV · GeoJSON · PDF) ── */
+.bc-export-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+.bc-export-direct {
+    appearance: none;
+    background: rgba(56, 189, 248, 0.10);
+    color: #7dd3fc;
+    border: 1px solid rgba(56, 189, 248, 0.32);
+    padding: 4px 11px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+.bc-export-direct:hover {
+    background: rgba(56, 189, 248, 0.20);
+    border-color: rgba(56, 189, 248, 0.65);
+}
+.bc-export-direct i { font-size: 10px; }
+.bc-export-csv {
+    color: #4ade80;
+    border-color: rgba(34, 197, 94, 0.32);
+    background: rgba(34, 197, 94, 0.08);
+}
+.bc-export-csv:hover {
+    background: rgba(34, 197, 94, 0.18);
+    border-color: rgba(34, 197, 94, 0.65);
+}
+.bc-export-geojson {
+    color: #c4b5fd;
+    border-color: rgba(167, 139, 250, 0.32);
+    background: rgba(167, 139, 250, 0.08);
+}
+.bc-export-geojson:hover {
+    background: rgba(167, 139, 250, 0.18);
+    border-color: rgba(167, 139, 250, 0.65);
+}
+.bc-export-pdf {
+    color: #fb923c;
+    border-color: rgba(249, 115, 22, 0.32);
+    background: rgba(249, 115, 22, 0.08);
+}
+.bc-export-pdf:hover {
+    background: rgba(249, 115, 22, 0.18);
+    border-color: rgba(249, 115, 22, 0.65);
+}
+
+/* ── Phase H.5+ — Horizontal lifecycle stepper ──────────────── */
+.bc-lifecycle {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    background: rgba(15, 23, 42, 0.45);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 10px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    /* Prevent the stepper from causing overall page-scroll on
+       narrow containers — the inner strip scrolls horizontally. */
+    scrollbar-width: thin;
+}
+.bc-lifecycle::-webkit-scrollbar { height: 5px; }
+.bc-lifecycle::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.20);
+    border-radius: 3px;
+}
+.bc-life-strip {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    min-width: max-content;
+}
+.bc-life-node {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px 6px 6px;
+    border-radius: 8px;
+    background: rgba(148, 163, 184, 0.05);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    min-width: 130px;
+    flex-shrink: 0;
+}
+.bc-life-node-terminal {
+    border-color: rgba(34, 197, 94, 0.40);
+    background: rgba(34, 197, 94, 0.08);
+}
+.bc-life-node-progress .bc-life-icon {
+    animation: bcLifePulse 1.6s ease-in-out infinite;
+}
+@keyframes bcLifePulse {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.08); }
+}
+.bc-life-icon {
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1.5px solid;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+.bc-life-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.bc-life-title {
+    font-size: 11.5px;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: 0.02em;
+}
+.bc-life-sub {
+    font-size: 10px;
+    color: #94a3b8;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+}
+.bc-life-when {
+    font-size: 9.5px;
+    color: #64748b;
+    font-feature-settings: "tnum";
+    margin-top: 1px;
+}
+.bc-life-arrow {
+    display: inline-flex;
+    align-items: center;
+    color: #475569;
+    flex-shrink: 0;
+    font-size: 12px;
+    padding: 0 2px;
 }
 
 /* ── 5-score intelligence grid ─────────────────────────────── */

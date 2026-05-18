@@ -4216,6 +4216,82 @@ function _closeBuildingConsole(opts) {
 }
 window.closeBuildingConsole = _closeBuildingConsole;
 
+// ──────────────────────────────────────────────────────────────────────
+// Phase H.5+ (May 2026) — Console header info derivation
+// ──────────────────────────────────────────────────────────────────────
+// Operator feedback: "OSM way 1243242 is unreadable as a building name."
+// Instead, the header should carry:
+//   - A human-readable building name (osm_name → most-common
+//     infrastructure_name from reports → "Untitled building")
+//   - The city / locality (parsed from constituent reports' location
+//     names — the last comma-separated segment is usually the city
+//     or region)
+//   - The geographic coordinates (centroid)
+//   - A small OSM-id hint at the bottom so the operator can still
+//     correlate with raw OSM data when needed.
+
+function _deriveBuildingHeaderInfo(b) {
+    const reports = b.reports || [];
+    // Find a useful infrastructure name from constituent reports —
+    // first non-empty wins ("Holy Cross Hospital", "Powai Bridge", …).
+    let inferredName = null;
+    for (const r of reports) {
+        if (r.infrastructure_name && r.infrastructure_name.trim()) {
+            inferredName = r.infrastructure_name.trim();
+            break;
+        }
+    }
+    const name =
+        (b.osm_name && b.osm_name.trim())
+        || inferredName
+        || (b.osm_addr_full && b.osm_addr_full.trim())
+        || 'Untitled building';
+
+    // City / locality — count location-name segments + pick the most
+    // common one. The LAST segment of a comma-separated location name
+    // is usually the city / state / country; we pick the most-distinctive
+    // (i.e., the most common segment that isn't trivially short).
+    const cityCounts = new Map();
+    for (const r of reports) {
+        const raw =
+            (r.location && (r.location.user_location_name || r.location.device_location_name))
+            || '';
+        if (!raw) continue;
+        const parts = raw.split(',').map(s => s.trim()).filter(s => s.length >= 3);
+        // Take the LAST 1-2 parts (city, country) as the candidate
+        // string; deduplicate same-string occurrences across reports.
+        const candidate = parts.length >= 2
+            ? `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`
+            : parts[parts.length - 1] || '';
+        if (candidate) {
+            cityCounts.set(candidate, (cityCounts.get(candidate) || 0) + 1);
+        }
+    }
+    let city = null;
+    if (cityCounts.size) {
+        const sorted = [...cityCounts.entries()].sort((a, b) => b[1] - a[1]);
+        city = sorted[0][0];
+    }
+
+    // Coords — 4-decimal precision is plenty for an operator console
+    // (matches ~11 m). Centroid is the building's authoritative point.
+    const coords = (b.centroid_lat != null && b.centroid_lng != null)
+        ? `${b.centroid_lat.toFixed(4)}, ${b.centroid_lng.toFixed(4)}`
+        : null;
+
+    // Small OSM hint at the bottom of the subtitle row so the operator
+    // can still correlate with OSM tools (but it's NOT the primary
+    // surface).
+    let osmHint = null;
+    if (b.osm_way_id) {
+        osmHint = `OSM way ${b.osm_way_id}`;
+    } else if (b.id_source === 'PROXIMITY') {
+        osmHint = `Proximity cluster ${b.id.slice(0, 8)}`;
+    }
+
+    return { name, city, coords, osmHint };
+}
+
 function _renderBuildingConsole(b) {
     // Helper formatters
     const scoreColor = (v) => {
@@ -4238,14 +4314,16 @@ function _renderBuildingConsole(b) {
         FALSE_ALARM: { bg: 'rgba(100, 116, 139, 0.18)', fg: '#94a3b8' },
     };
     const stateCol = stateColors[b.state] || stateColors.ACTIVE;
-    const displayName =
-        b.osm_name
-        || (b.osm_addr_full || '').trim()
-        || (b.osm_way_id ? `OSM way ${b.osm_way_id}` : null)
-        || (b.id_source === 'PROXIMITY' ? `Proximity cluster ${b.id.slice(0, 8)}` : b.id);
+
+    // Phase H.5+ (May 2026) — Header redesign per operator feedback:
+    // "OSM way 1243242" is unreadable. Promote a human-friendly name
+    // (osm_name → infrastructure_name from reports → "Untitled building"
+    // with the OSM id as a small subtitle). Derive city/locality from
+    // constituent report location names.
+    const _bcInfo = _deriveBuildingHeaderInfo(b);
     document.getElementById('detail-title').innerHTML =
         `<i class="fa-solid fa-building" style="margin-right:6px;color:${sevColor};"></i>` +
-        escapeHtml(displayName);
+        escapeHtml(_bcInfo.name);
 
     // Crisis-type chips + damage distribution
     const crisisChips = (b.crisis_types_top3 || [])
@@ -4266,8 +4344,20 @@ function _renderBuildingConsole(b) {
     // Build the console HTML.
     document.getElementById('detail-body').innerHTML = `
         <div class="bc">
-            <!-- Sticky strip — state pill + key counts + (placeholder) action buttons -->
+            <!-- Top bar: Name · City · Location (coords) + explicit
+                 export buttons (CSV · GeoJSON · PDF) + monitor +
+                 state-machine actions. Matches operator request from
+                 May 2026: "instead of 'OSM way N' as the name, show
+                 Building name, City, Location on the Top Bar with
+                 Export CSV, GeoJSON, PDF Report." -->
             <div class="bc-header">
+                <div class="bc-header-titles">
+                    <div class="bc-subtitle">
+                        ${_bcInfo.city ? `<span class="bc-sub-city"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(_bcInfo.city)}</span>` : ''}
+                        ${_bcInfo.coords ? `<span class="bc-sub-coords" title="Centroid"><i class="fa-regular fa-compass"></i> ${escapeHtml(_bcInfo.coords)}</span>` : ''}
+                        ${_bcInfo.osmHint ? `<span class="bc-sub-osm" title="OpenStreetMap source identifier">${escapeHtml(_bcInfo.osmHint)}</span>` : ''}
+                    </div>
+                </div>
                 <div class="bc-header-row">
                     <span class="bc-state" style="background:${stateCol.bg};color:${stateCol.fg};">
                         ${escapeHtml(b.state)}
@@ -4287,11 +4377,35 @@ function _renderBuildingConsole(b) {
                            </span>`
                         : ''}
                 </div>
+                <div class="bc-export-row">
+                    <button class="bc-export-direct bc-export-csv"
+                            onclick="_downloadBuildingDossier('${b.id}', 'csv')"
+                            title="Export building + reports as CSV">
+                        <i class="fa-solid fa-file-csv"></i> CSV
+                    </button>
+                    <button class="bc-export-direct bc-export-geojson"
+                            onclick="_downloadBuildingDossier('${b.id}', 'geojson')"
+                            title="Export as GeoJSON (QGIS / ArcGIS compatible)">
+                        <i class="fa-solid fa-map"></i> GeoJSON
+                    </button>
+                    <button class="bc-export-direct bc-export-pdf"
+                            onclick="_downloadBuildingDossier('${b.id}', 'pdf')"
+                            title="Export PDF report (full dossier)">
+                        <i class="fa-regular fa-file-pdf"></i> PDF Report
+                    </button>
+                </div>
                 <div class="bc-actions">
                     ${_renderBuildingMonitorToggle(b)}
-                    ${_renderBuildingExportMenu(b)}
                     ${_renderBuildingStateActions(b)}
                 </div>
+            </div>
+
+            <!-- Horizontal lifecycle stepper — Report 1 → Report 2 →
+                 AI summary → CSV exported → Building safe (N lives saved).
+                 Async-loaded so the stepper paints once the timeline
+                 fetch resolves. -->
+            <div class="bc-lifecycle" id="bc-lifecycle-${escapeHtml(b.id)}">
+                <div class="bc-empty">Loading lifecycle…</div>
             </div>
 
             <!-- Phase H.6 — AI building summary -->
@@ -4607,19 +4721,28 @@ window._changeBuildingState = async (buildingId, toState) => {
 
 window._refreshBuildingTimeline = async (buildingId) => {
     const el = document.getElementById(`bc-timeline-${buildingId}`);
-    if (!el) return;
+    const lifeEl = document.getElementById(`bc-lifecycle-${buildingId}`);
+    if (!el && !lifeEl) return;
     try {
         const res = await fetch(
             `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/timeline?limit=50`,
             { headers: _authHeaders() }
         );
         if (!res.ok) {
-            el.innerHTML = '<div class="bc-empty">Could not load timeline.</div>';
+            if (el) el.innerHTML = '<div class="bc-empty">Could not load timeline.</div>';
+            if (lifeEl) lifeEl.innerHTML = '';
             return;
         }
         const events = await res.json();
+        // Always render the horizontal lifecycle stepper, even when
+        // the vertical timeline below is empty — the stepper has
+        // useful nodes from the building roll-up even with 0 events.
+        if (lifeEl) {
+            const detail = _buildingConsoleCache[buildingId] || null;
+            lifeEl.innerHTML = _renderBuildingLifecycleStepper(events, detail);
+        }
         if (!events.length) {
-            el.innerHTML = '<div class="bc-empty">No events yet for this building.</div>';
+            if (el) el.innerHTML = '<div class="bc-empty">No events yet for this building.</div>';
             return;
         }
         el.innerHTML = events.map(e => {
@@ -4643,6 +4766,9 @@ window._refreshBuildingTimeline = async (buildingId) => {
                 body = 'Operator note edited';
             } else if (kind === 'NOTE_DELETED') {
                 body = 'Operator note deleted';
+            } else if (kind === 'DOSSIER_EXPORTED') {
+                const fmt = payload.format || 'file';
+                body = `Dossier exported (${escapeHtml(fmt)})`;
             }
             const iconByKind = {
                 STATE_CHANGED:        'fa-arrow-right-arrow-left',
@@ -4659,7 +4785,9 @@ window._refreshBuildingTimeline = async (buildingId) => {
                 RESPONDER_ASSIGNED:   'fa-user-plus',
                 RESPONDER_DISPATCHED: 'fa-truck-medical',
                 RESPONDER_ARRIVED:    'fa-map-pin',
+                RESPONDER_CLEARED:    'fa-circle-check',
                 ARCHIVED:             'fa-box-archive',
+                DOSSIER_EXPORTED:     'fa-file-export',
             };
             const icon = iconByKind[kind] || 'fa-circle';
             return `<div class="bc-tl-row">
@@ -4671,9 +4799,196 @@ window._refreshBuildingTimeline = async (buildingId) => {
             </div>`;
         }).join('');
     } catch (e) {
-        el.innerHTML = `<div class="bc-empty">Error: ${escapeHtml(e.message)}</div>`;
+        if (el) el.innerHTML = `<div class="bc-empty">Error: ${escapeHtml(e.message)}</div>`;
+        const lifeEl2 = document.getElementById(`bc-lifecycle-${buildingId}`);
+        if (lifeEl2) lifeEl2.innerHTML = '';
     }
 };
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase H.5+ (May 2026) — Horizontal lifecycle stepper
+// ──────────────────────────────────────────────────────────────────────
+// Operator feedback: "Below the top bar we should have a timeline
+// view with 1st report → 2nd report → 3 reports → AI summary
+// generated → Report downloaded (CSV) → Building Safe, X Lives saved."
+//
+// This is a CONDENSED visual stepper that picks the operationally
+// significant milestones from the full BuildingEvent log (which
+// stays available below as the vertical timeline). The full audit
+// trail is below; this is the at-a-glance lifecycle.
+
+function _renderBuildingLifecycleStepper(events, detail) {
+    // Events come newest-first from the API; reverse for chronological
+    // left-to-right rendering.
+    const chrono = (events || []).slice().reverse();
+
+    // Pick the milestone nodes from the event stream. Cap at 4 reports
+    // so the stepper stays visually parseable; collapse the rest into a
+    // single "+N reports" badge.
+    const reportEvents = chrono.filter(e => e.event_kind === 'REPORT_LINKED');
+    const reportNodes = reportEvents.slice(0, 4).map((e, idx) => ({
+        kind: 'REPORT',
+        icon: 'fa-flag',
+        title: `Report ${idx + 1}`,
+        subtitle: (e.payload && e.payload.report_id)
+            ? String(e.payload.report_id).slice(0, 8)
+            : '',
+        at: e.occurred_at,
+        color: '#fbbf24',
+    }));
+    const moreReports = Math.max(0, reportEvents.length - 4);
+    const aiEvent = chrono.find(e => e.event_kind === 'AI_SUMMARY_GENERATED');
+    const escEvent = chrono.find(e => e.event_kind === 'ESCALATED');
+    const respAssigned = chrono.find(e => e.event_kind === 'RESPONDER_ASSIGNED');
+    const respArrived = chrono.find(e => e.event_kind === 'RESPONDER_ARRIVED');
+    const exportEvents = chrono.filter(e => e.event_kind === 'DOSSIER_EXPORTED');
+    const lastExport = exportEvents[exportEvents.length - 1];
+
+    // Terminal state — derived from detail.state + lives saved roll-up.
+    const state = detail ? detail.state : null;
+    const reports = (detail && detail.reports) || [];
+    const livesSaved = reports
+        .filter(r => r.status === 'RESOLVED')
+        .reduce((sum, r) => sum + (Number(r.lives_impacted) || 0), 0);
+    const allResolved =
+        state === 'RESOLVED'
+        || ((detail && detail.report_count > 0 && detail.resolved_report_count === detail.report_count));
+
+    // Assemble the node list in operationally-meaningful order:
+    //   reports → escalation/AI/responder → exports → terminal state
+    const nodes = [];
+    for (const n of reportNodes) nodes.push(n);
+    if (moreReports > 0) {
+        nodes.push({
+            kind: 'MORE',
+            icon: 'fa-ellipsis',
+            title: `+${moreReports} reports`,
+            subtitle: 'additional',
+            at: null,
+            color: '#94a3b8',
+        });
+    }
+    if (escEvent) {
+        nodes.push({
+            kind: 'ESCALATED',
+            icon: 'fa-fire-flame-curved',
+            title: 'Escalated',
+            subtitle: (escEvent.payload && escEvent.payload.reason) || '',
+            at: escEvent.occurred_at,
+            color: '#f87171',
+        });
+    }
+    if (aiEvent) {
+        nodes.push({
+            kind: 'AI',
+            icon: 'fa-robot',
+            title: 'AI summary',
+            subtitle: 'generated',
+            at: aiEvent.occurred_at,
+            color: '#c4b5fd',
+        });
+    }
+    if (respAssigned) {
+        nodes.push({
+            kind: 'RESPONDER',
+            icon: 'fa-user-plus',
+            title: 'Responder',
+            subtitle: 'assigned',
+            at: respAssigned.occurred_at,
+            color: '#a78bfa',
+        });
+    }
+    if (respArrived) {
+        nodes.push({
+            kind: 'ON_SITE',
+            icon: 'fa-map-pin',
+            title: 'On-site',
+            subtitle: 'team arrived',
+            at: respArrived.occurred_at,
+            color: '#38bdf8',
+        });
+    }
+    if (lastExport) {
+        const fmt = (lastExport.payload && lastExport.payload.format) || 'file';
+        nodes.push({
+            kind: 'EXPORT',
+            icon: 'fa-file-export',
+            title: `Exported (${fmt})`,
+            subtitle: exportEvents.length > 1 ? `+${exportEvents.length - 1} prior` : '',
+            at: lastExport.occurred_at,
+            color: '#7dd3fc',
+        });
+    }
+    // Terminal state node — always last.
+    if (allResolved) {
+        nodes.push({
+            kind: 'RESOLVED',
+            icon: 'fa-shield-heart',
+            title: 'Building safe',
+            subtitle: livesSaved ? `${livesSaved} ${livesSaved === 1 ? 'life' : 'lives'} saved` : 'resolved',
+            at: null,
+            color: '#4ade80',
+            terminal: true,
+        });
+    } else if (state === 'FALSE_ALARM') {
+        nodes.push({
+            kind: 'FALSE_ALARM',
+            icon: 'fa-ban',
+            title: 'False alarm',
+            subtitle: 'misinformation',
+            at: null,
+            color: '#94a3b8',
+            terminal: true,
+        });
+    } else if (state === 'ARCHIVED') {
+        nodes.push({
+            kind: 'ARCHIVED',
+            icon: 'fa-box-archive',
+            title: 'Archived',
+            subtitle: '',
+            at: null,
+            color: '#64748b',
+            terminal: true,
+        });
+    } else {
+        // Active situation — show the current state as the trailing node.
+        nodes.push({
+            kind: 'STATE',
+            icon: 'fa-circle',
+            title: state || 'Active',
+            subtitle: 'current state',
+            at: null,
+            color: '#fbbf24',
+            terminal: false,
+            inProgress: true,
+        });
+    }
+
+    if (!nodes.length) {
+        return '<div class="bc-empty">Lifecycle will appear here as events accumulate.</div>';
+    }
+
+    return `
+        <div class="bc-life-strip">
+            ${nodes.map((n, i) => `
+                <div class="bc-life-node ${n.terminal ? 'bc-life-node-terminal' : ''} ${n.inProgress ? 'bc-life-node-progress' : ''}"
+                     title="${n.at ? new Date(n.at).toLocaleString() : ''}">
+                    <div class="bc-life-icon" style="border-color:${n.color}55;background:${n.color}1a;color:${n.color};">
+                        <i class="fa-solid ${n.icon}"></i>
+                    </div>
+                    <div class="bc-life-text">
+                        <div class="bc-life-title" style="color:${n.color};">${escapeHtml(n.title)}</div>
+                        ${n.subtitle ? `<div class="bc-life-sub">${escapeHtml(n.subtitle)}</div>` : ''}
+                        ${n.at ? `<div class="bc-life-when">${timeAgo(n.at)}</div>` : ''}
+                    </div>
+                </div>
+                ${i < nodes.length - 1 ? `<div class="bc-life-arrow" aria-hidden="true">
+                    <i class="fa-solid fa-arrow-right"></i>
+                </div>` : ''}
+            `).join('')}
+        </div>
+    `;
+}
 
 // ──────────────────────────────────────────────────────────────────────
 // Phase H.3 — Responder coordination + watch list (dashboard surface)
@@ -4843,12 +5158,16 @@ function _renderBuildingExportMenu(b) {
             </button>
             <div class="bc-export-menu" id="bc-export-menu-${escapeHtml(b.id)}" style="display:none;">
                 <button class="bc-export-menu-item"
-                        onclick="_downloadBuildingDossier('${b.id}', 'pdf')">
-                    <i class="fa-regular fa-file-pdf"></i> PDF dossier
+                        onclick="_downloadBuildingDossier('${b.id}', 'csv')">
+                    <i class="fa-solid fa-file-csv"></i> CSV
                 </button>
                 <button class="bc-export-menu-item"
                         onclick="_downloadBuildingDossier('${b.id}', 'geojson')">
                     <i class="fa-solid fa-map"></i> GeoJSON
+                </button>
+                <button class="bc-export-menu-item"
+                        onclick="_downloadBuildingDossier('${b.id}', 'pdf')">
+                    <i class="fa-regular fa-file-pdf"></i> PDF dossier
                 </button>
             </div>
         </div>
@@ -4879,7 +5198,11 @@ window._toggleBuildingExportMenu = (buildingId) => {
 window._downloadBuildingDossier = async (buildingId, fmt) => {
     const menu = document.getElementById(`bc-export-menu-${buildingId}`);
     if (menu) menu.style.display = 'none';
-    const path = fmt === 'pdf' ? 'dossier.pdf' : 'dossier.geojson';
+    const path = fmt === 'pdf'
+        ? 'dossier.pdf'
+        : fmt === 'csv'
+            ? 'dossier.csv'
+            : 'dossier.geojson';
     showToast(`Generating ${fmt.toUpperCase()} dossier…`, 'info');
     try {
         const res = await fetch(

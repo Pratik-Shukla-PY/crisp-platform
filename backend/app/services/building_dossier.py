@@ -1,10 +1,13 @@
 """Building dossier generators — Phase H.5.
 
-Produces two operator-facing artefacts from a Building's joined view of
-reports + intelligence scores + responders + notes + event timeline:
+Produces three operator-facing artefacts from a Building's joined view
+of reports + intelligence scores + responders + notes + event timeline:
 
-  build_dossier_pdf(...)   bytes  application/pdf
-  build_dossier_geojson(...) dict GeoJSON FeatureCollection
+  build_dossier_pdf(...)     bytes  application/pdf
+  build_dossier_geojson(...) dict   GeoJSON FeatureCollection
+  build_dossier_csv(...)     str    text/csv — one row per Report,
+                                    flat columns suitable for Excel /
+                                    Sheets / pandas direct import
 
 The PDF is intended for printing / hand-off to field teams — single-
 page header followed by the report stack (one table per report). The
@@ -430,6 +433,143 @@ def build_dossier_geojson(db: Session, b: Building) -> dict:
         },
         "features": features,
     }
+
+
+# ─── CSV generator ────────────────────────────────────────────────────
+def build_dossier_csv(db: Session, b: Building) -> str:
+    """Render a building's constituent reports as a flat CSV.
+
+    First row = a "building" meta line with the roll-up scores +
+    intelligence so the document is self-describing. Subsequent
+    rows = one per constituent Report with the full taxonomy +
+    timestamps + reviewer state.
+
+    Headers match the existing CSV exports' style (UNDP Appendix-1
+    column names) so downstream pipelines that already consume
+    `/exports/csv` can read building CSV with no schema delta.
+    """
+    import csv
+    from io import StringIO
+    from app.models.report import Location
+
+    buf = StringIO()
+    w = csv.writer(buf)
+
+    # Building-level meta row (one row, prefixed BUILDING).
+    w.writerow([
+        "kind", "building_id", "id_source", "osm_name", "osm_addr_full",
+        "state", "report_count", "verified_report_count",
+        "responding_report_count", "resolved_report_count",
+        "debris_clearing_needed_count",
+        "severity_max", "damage_class_max",
+        "severity_score", "confidence_score", "activity_score",
+        "escalation_risk", "humanitarian_priority",
+        "first_report_at", "latest_report_at",
+        "centroid_lat", "centroid_lng",
+        "crisis_types_top3", "exported_at",
+    ])
+    w.writerow([
+        "BUILDING", b.id, b.id_source or "", b.osm_name or "",
+        b.osm_addr_full or "", b.state or "",
+        b.report_count or 0, b.verified_report_count or 0,
+        b.responding_report_count or 0, b.resolved_report_count or 0,
+        b.debris_clearing_needed_count or 0,
+        b.severity_max or "", b.damage_class_max or "",
+        f"{b.severity_score:.1f}" if b.severity_score is not None else "",
+        f"{b.confidence_score:.1f}" if b.confidence_score is not None else "",
+        f"{b.activity_score:.1f}" if b.activity_score is not None else "",
+        f"{b.escalation_risk:.1f}" if b.escalation_risk is not None else "",
+        f"{b.humanitarian_priority:.1f}" if b.humanitarian_priority is not None else "",
+        b.first_report_at.isoformat() if b.first_report_at else "",
+        b.latest_report_at.isoformat() if b.latest_report_at else "",
+        b.centroid_lat or "", b.centroid_lng or "",
+        "|".join(b.crisis_types_top3 or []),
+        datetime.now(timezone.utc).isoformat(),
+    ])
+
+    # Blank separator row.
+    w.writerow([])
+
+    # Report-level header.
+    w.writerow([
+        "kind", "report_id", "source", "status", "severity",
+        "crisis_type", "damage_classification",
+        "infrastructure_type", "infrastructure_sub_type",
+        "infrastructure_name", "debris_clearing_needed",
+        "reviewer_verdict", "action_taken",
+        "server_created_at", "client_created_at",
+        "help_dispatched_at", "help_arrived_at",
+        "building_version_ordinal", "building_is_latest",
+        "lives_impacted", "latitude", "longitude",
+        "location_name", "description",
+    ])
+
+    # Fetch constituent reports + locations in one go.
+    rows = (
+        db.query(Report, Location)
+        .outerjoin(Location, Location.report_id == Report.id)
+        .filter(
+            Report.building_id == b.id,
+            Report.deletion_requested_at.is_(None),
+        )
+        .order_by(desc(Report.server_created_at))
+        .all()
+    )
+
+    # Strip the "EnumName." prefix off str(EnumValue) so the CSV reads
+    # "APP" rather than "SourceEnum.APP" — friendlier for analysts
+    # opening the file in Excel / pandas.
+    def _enum_str(v):
+        if v is None:
+            return ""
+        # SQLAlchemy Enum returns a Python enum instance; .value or
+        # .name both give clean strings. Fall back to str() with a
+        # final cleanup pass for any direct String(...) columns.
+        if hasattr(v, "value"):
+            return str(v.value)
+        s = str(v)
+        if "." in s and s.split(".")[0].endswith("Enum"):
+            return s.split(".", 1)[1]
+        return s
+
+    for r, loc in rows:
+        lat = (loc.latitude if loc else None) or b.centroid_lat or ""
+        lng = (loc.longitude if loc else None) or b.centroid_lng or ""
+        loc_name = (
+            (loc.user_location_name if loc else None)
+            or (loc.device_location_name if loc else None)
+            or ""
+        )
+        # Squash newlines in description so the CSV stays single-row.
+        # NOTE: variable name MUST NOT be `desc` — that shadows
+        # `sqlalchemy.desc` for the entire function scope and makes
+        # the earlier `.order_by(desc(...))` UnboundLocalError.
+        descr = (r.description or "").replace("\n", " ").replace("\r", " ")[:1000]
+        w.writerow([
+            "REPORT", r.id,
+            _enum_str(r.source),
+            _enum_str(r.status),
+            _enum_str(r.severity),
+            _enum_str(r.crisis_type),
+            _enum_str(r.damage_classification),
+            _enum_str(r.infrastructure_type),
+            _enum_str(r.infrastructure_sub_type),
+            r.infrastructure_name or "",
+            "yes" if r.debris_clearing_needed else
+            ("no" if r.debris_clearing_needed is False else ""),
+            _enum_str(r.reviewer_verdict),
+            (r.action_taken or "")[:200],
+            r.server_created_at.isoformat() if r.server_created_at else "",
+            r.client_created_at.isoformat() if r.client_created_at else "",
+            r.help_dispatched_at.isoformat() if r.help_dispatched_at else "",
+            r.help_arrived_at.isoformat() if r.help_arrived_at else "",
+            r.building_version_ordinal or "",
+            "yes" if r.building_is_latest else "no",
+            r.lives_impacted or "",
+            lat, lng, loc_name, descr,
+        ])
+
+    return buf.getvalue()
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────

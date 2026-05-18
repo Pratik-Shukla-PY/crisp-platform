@@ -15,7 +15,7 @@
 // the browser was heuristic-pinning the old CSP. Old SWs auto-replace
 // because skipWaiting() runs in install + nginx now sends Cache-Control:
 // no-cache on sw.js so the new code lands within seconds of deploy.
-const APP_CACHE    = 'crisp-app-v18';  // v18 (May 2026): Phase F + G + H batch — Building Intelligence Console (state machine, responder + monitor coordination, operator notes, PDF/GeoJSON dossier, AI summary with trend chips + structured responder badges, related-buildings carousel, priority-coloured map overlay), bulk multi-select with batch-verify SSE, analytics drill-down, saved view presets, per-report admin-action ribbon, 6-language i18n bootstrap with RTL safety, offline-sync transparency, full-report max-modal. CRITICAL: also evicts v17 to pick up the /api/v1/buildings prefix fix (498afa5) — old cached app.js was hitting the wrong /api/v1/reports/buildings path and 404'ing every Phase H action.
+const APP_CACHE    = 'crisp-app-v19';  // v18 (May 2026): Phase F + G + H batch — Building Intelligence Console (state machine, responder + monitor coordination, operator notes, PDF/GeoJSON dossier, AI summary with trend chips + structured responder badges, related-buildings carousel, priority-coloured map overlay), bulk multi-select with batch-verify SSE, analytics drill-down, saved view presets, per-report admin-action ribbon, 6-language i18n bootstrap with RTL safety, offline-sync transparency, full-report max-modal. CRITICAL: also evicts v17 to pick up the /api/v1/buildings prefix fix (498afa5) — old cached app.js was hitting the wrong /api/v1/reports/buildings path and 404'ing every Phase H action.
 const CDN_CACHE    = 'crisp-cdn-v9';
 const API_CACHE    = 'crisp-api-v9';
 const STATIC_CACHE = 'crisp-static-v12';
