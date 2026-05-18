@@ -28,7 +28,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v218">
+    <meta name="crisp-release" content="crisp-pwa@v223">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -2200,7 +2200,7 @@
         <div class="cm-status-bar" id="cm-status-bar" role="group"
              aria-label="Capture metadata">
             <span class="cm-status-coords" id="cm-status-coords"
-                  data-state="locating">Locating&hellip;</span>
+                  data-state="locating" data-i18n="camera_locating">Locating&hellip;</span>
             <span class="cm-status-acc" id="cm-status-acc"></span>
             <span class="cm-status-heading" id="cm-status-heading" hidden></span>
         </div>
@@ -2211,18 +2211,20 @@
         <div class="cm-toolbar" id="cm-toolbar" role="toolbar"
              aria-label="Camera controls">
             <button class="cm-tb-btn cm-tb-back" id="btn-cm-back"
-                    type="button" aria-label="Back">
+                    type="button" aria-label="Back"
+                    data-i18n-aria-label="aria_back">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
                      stroke="currentColor" stroke-width="2.4"
                      stroke-linecap="round" stroke-linejoin="round"
                      aria-hidden="true">
                     <polyline points="15 18 9 12 15 6"/>
                 </svg>
-                <span class="cm-tb-back-label">BACK</span>
+                <span class="cm-tb-back-label" data-i18n="camera_back">BACK</span>
             </button>
             <button class="cm-tb-btn cm-tb-flash" id="btn-cm-flash"
                     type="button" data-flash-mode="auto"
-                    aria-label="Flash mode">
+                    aria-label="Flash mode"
+                    data-i18n-aria-label="aria_camera_flash">
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
                      stroke="currentColor" stroke-width="2"
                      stroke-linecap="round" stroke-linejoin="round"
@@ -2233,7 +2235,8 @@
                 </svg>
             </button>
             <button class="cm-tb-btn cm-tb-focus" id="btn-cm-focus"
-                    type="button" aria-label="Re-center camera focus">
+                    type="button" aria-label="Re-center camera focus"
+                    data-i18n-aria-label="aria_camera_center_focus">
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
                      stroke="currentColor" stroke-width="1.8"
                      stroke-linecap="round" stroke-linejoin="round"
@@ -2248,7 +2251,8 @@
             </button>
             <button class="cm-tb-btn cm-tb-lock" id="btn-cm-lock"
                     type="button" data-locked="false"
-                    aria-label="Lock screen orientation">
+                    aria-label="Lock screen orientation"
+                    data-i18n-aria-label="aria_camera_rotation_lock">
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
                      stroke="currentColor" stroke-width="2"
                      stroke-linecap="round" stroke-linejoin="round"
@@ -2295,7 +2299,8 @@
                 </svg>
             </button>
             <button class="cm-ctrl cm-ctrl-shutter" id="btn-cam-snap"
-                    type="button" aria-label="Take photo">
+                    type="button" aria-label="Take photo"
+                    data-i18n-aria-label="aria_take_photo">
                 <svg viewBox="0 0 64 64" width="64" height="64"
                      aria-hidden="true">
                     <!-- Hexagonal aperture: outer white ring + inner
