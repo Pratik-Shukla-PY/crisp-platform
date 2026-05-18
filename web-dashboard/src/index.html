@@ -77,10 +77,58 @@
                 <span class="brand-sub">UN Crisis Command</span>
             </div>
             <div class="live-badge" id="cache-freshness-badge"><span class="live-dot"></span>LIVE</div>
-            <div class="user-menu" id="user-menu">
-                <span class="user-role-badge" id="user-role-badge"></span>
-                <span class="user-name" id="user-name-display"></span>
-                <button class="user-logout-btn" onclick="crispLogout()" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+
+            <!-- Phase J.1 (May 2026) — User chip is now a dropdown
+                 menu host. Click → reveals admin-only items
+                 (Moderation, Pending Deletions, Auto-Submit Regions)
+                 plus the logout action. Previously these admin
+                 surfaces lived as top-level header buttons; J.1
+                 collapsed them here to lower the top-bar density
+                 from 12 simultaneous CTAs to 5. The visibility
+                 helpers (_maybeShowModerationButton, etc.) still
+                 toggle the inner buttons by stable id so no JS
+                 wiring needed to change. -->
+            <div class="user-menu" id="user-menu" style="position:relative;">
+                <button class="user-menu-trigger"
+                        onclick="_toggleUserMenu()"
+                        title="Account &amp; admin tools">
+                    <span class="user-role-badge" id="user-role-badge"></span>
+                    <span class="user-name" id="user-name-display"></span>
+                    <span class="user-menu-dot" id="user-menu-dot" style="display:none;" title="Admin items need attention"></span>
+                    <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.65;margin-left:4px;"></i>
+                </button>
+                <div class="user-menu-dropdown" id="user-menu-dropdown" style="display:none;">
+                    <!-- Phase 5.1 — Admin Moderation overlay. Visibility
+                         gated to ADMIN/SUPER_ADMIN by
+                         _maybeShowModerationButton(). The badge counter is
+                         a coloured dot to the right of the label. -->
+                    <button class="user-menu-item" id="btn-moderation"
+                            onclick="showModerationPanel();_toggleUserMenu(false);"
+                            style="display:none;">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span>Moderation</span>
+                        <span class="moderation-badge user-menu-badge" id="moderation-badge" style="display:none;">0</span>
+                    </button>
+                    <button class="user-menu-item" id="btn-pending-deletions"
+                            onclick="showPendingDeletions();_toggleUserMenu(false);"
+                            style="display:none;">
+                        <i class="fa-solid fa-trash-clock"></i>
+                        <span>Pending Deletions</span>
+                        <span class="user-menu-badge" id="deletion-count-badge">0</span>
+                    </button>
+                    <button class="user-menu-item" id="btn-auto-regions"
+                            onclick="showRegionsPanel();_toggleUserMenu(false);"
+                            style="display:none;">
+                        <i class="fa-solid fa-location-crosshairs"></i>
+                        <span>Auto-Submit Regions</span>
+                    </button>
+                    <div class="user-menu-divider" id="user-menu-admin-divider" style="display:none;"></div>
+                    <button class="user-menu-item user-menu-logout"
+                            onclick="crispLogout()">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                        <span data-i18n="logout">Log out</span>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -127,12 +175,10 @@
                  actually have an Original-pending media row. -->
             <div class="stat-pill originals_pending clickable-pill" id="stat-originals-pending" onclick="filterByPill('originals_pending')" title="Reports whose Original-quality (LARGE) image is still uploading" style="display:none !important;" aria-hidden="true"><span id="count-originals-pending">0</span><label>ORIG PENDING</label></div>
             <div class="stat-pill avg-response" id="stat-avg-response" title="Average wait time of pending incidents"><span id="count-avg-response">—</span><label>AVG WAIT</label></div>
-            <button class="stat-pill analytics-toggle" onclick="toggleAnalytics()" title="Analytics Dashboard">
-                <i class="fa-solid fa-chart-bar"></i><label>ANALYTICS</label>
-            </button>
-            <button class="stat-pill predictions-toggle" onclick="togglePredictions()" title="Predictive Intelligence">
-                <i class="fa-solid fa-bolt"></i><label>PREDICT</label>
-            </button>
+            <!-- Phase J.1 (May 2026) — ANALYTICS + PREDICT pills moved
+                 into the Tools dropdown below to reduce header density.
+                 Each still toggles a full-page overlay via the existing
+                 toggleAnalytics() / togglePredictions() handlers. -->
         </div>
 
         <div class="command-actions">
@@ -155,58 +201,91 @@
                 </div>
             </div>
 
-            <!-- Phase 5.1 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §7+§17) —
-                 Admin Moderation overlay: nearby triage queue + appeal review.
-                 Backed by /api/v1/admin/observability/nearby/* and
-                 /api/v1/admin/appeals/*. Visibility is gated to ADMIN /
-                 SUPER_ADMIN via _maybeShowModerationButton() in app.js.
-                 F.1.b promotes Moderation to the LEFT of Export — it's
-                 the most-used admin action under stress and shouldn't
-                 sit behind less-frequent dropdowns. -->
-            <button class="icon-btn" id="btn-moderation" onclick="showModerationPanel()" style="display:none;" title="Nearby triage + appeal review">
-                <i class="fa-solid fa-shield-halved"></i> Moderation
-                <span class="moderation-badge" id="moderation-badge" style="display:none;">0</span>
-            </button>
-
-            <!-- Phase G.5 (May 2026) — Bulk-select mode toggle. Reveals
-                 a checkbox on every visible card; selecting cards opens
-                 the bulk-action bar at the bottom of the viewport. -->
-            <button class="icon-btn" id="btn-bulk-select"
-                    onclick="toggleBulkSelectMode()"
-                    title="Toggle bulk-select mode">
-                <i class="fa-solid fa-list-check"></i> <span data-i18n="btn_select">Select</span>
-            </button>
-
-            <!-- Phase F.7 (May 2026) — Dashboard language picker.
-                 6 UN languages. Locale persisted in localStorage.
-                 Arabic flips the document to dir=rtl. -->
-            <div class="dash-lang-wrap" id="dash-lang-wrap" style="position:relative;display:inline-flex;">
-                <button class="icon-btn dash-lang-toggle"
-                        onclick="toggleDashboardLanguageMenu()"
-                        data-i18n-title="language_label" title="Language">
-                    <i class="fa-solid fa-language"></i>
-                    <span id="dash-lang-pill-label">English</span>
-                    <i class="fa-solid fa-caret-down" style="font-size:8px;opacity:0.7;"></i>
+            <!-- Phase J.1 (May 2026) — Tools dropdown.
+                 Collapses ANALYTICS + PREDICT + Export + Bulk-Select +
+                 Language from 5 standalone header buttons into a single
+                 dropdown. Each handler is unchanged; we just re-parented
+                 the buttons. The Language picker keeps its own nested
+                 dropdown for the 6-locale list (so the existing
+                 setDashboardLanguage flow stays exactly the same).
+                 Moderation / Pending Deletions / Auto-Regions moved
+                 into the user-menu dropdown (admin-only, in the brand
+                 row above). -->
+            <div class="export-dropdown tools-menu" id="cmd-tools-dropdown">
+                <button class="icon-btn"
+                        onclick="this.parentElement.classList.toggle('open')"
+                        title="Tools">
+                    <i class="fa-solid fa-toolbox"></i>
+                    <span data-i18n="btn_tools">Tools</span>
+                    <span class="tools-active-dot" id="cmd-tools-active-dot" style="display:none;" title="A panel is currently open"></span>
+                    <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.5;"></i>
                 </button>
-                <div class="dash-lang-menu" id="dash-lang-menu" style="display:none;"></div>
-            </div>
+                <div class="export-menu tools-menu-body">
+                    <!-- View toggles -->
+                    <div class="tools-menu-section-label" data-i18n="tools_section_views">View</div>
+                    <button class="tools-menu-item" id="tools-item-analytics"
+                            onclick="toggleAnalytics();this.closest('.export-dropdown').classList.remove('open')">
+                        <i class="fa-solid fa-chart-bar"></i>
+                        <span data-i18n="btn_analytics">Analytics</span>
+                    </button>
+                    <button class="tools-menu-item" id="tools-item-predict"
+                            onclick="togglePredictions();this.closest('.export-dropdown').classList.remove('open')">
+                        <i class="fa-solid fa-bolt"></i>
+                        <span data-i18n="btn_predict">Predict 24h</span>
+                    </button>
 
-            <div class="export-dropdown">
-                <button class="icon-btn" onclick="this.parentElement.classList.toggle('open')"><i class="fa-solid fa-download"></i> Export <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.5;"></i></button>
-                <div class="export-menu">
-                    <button onclick="exportData('csv');this.closest('.export-dropdown').classList.remove('open')"><i class="fa-solid fa-file-csv"></i> CSV</button>
-                    <button onclick="exportData('geojson');this.closest('.export-dropdown').classList.remove('open')"><i class="fa-solid fa-globe"></i> GeoJSON</button>
-                    <button onclick="exportData('shapefile');this.closest('.export-dropdown').classList.remove('open')"><i class="fa-solid fa-map"></i> Shapefile</button>
-                    <button onclick="exportData('kml');this.closest('.export-dropdown').classList.remove('open')"><i class="fa-solid fa-earth-americas"></i> KML</button>
+                    <div class="tools-menu-divider"></div>
+                    <!-- Data -->
+                    <div class="tools-menu-section-label" data-i18n="tools_section_data">Data</div>
+                    <button class="tools-menu-item" id="tools-item-bulk-select"
+                            onclick="toggleBulkSelectMode();this.closest('.export-dropdown').classList.remove('open')">
+                        <i class="fa-solid fa-list-check"></i>
+                        <span data-i18n="btn_select">Bulk select</span>
+                    </button>
+                    <!-- Phase G.6 (May 2026) — Saved views inside Tools -->
+                    <button class="tools-menu-item" id="tools-item-views"
+                            onclick="toggleSavedViewsMenu();this.closest('.export-dropdown').classList.remove('open')">
+                        <i class="fa-regular fa-bookmark"></i>
+                        <span data-i18n="btn_views">Saved views</span>
+                    </button>
+
+                    <!-- Export submenu — keep CSV/GeoJSON/Shapefile/KML
+                         under one chevron-flagged label so the menu
+                         depth stays single-level for casual use but
+                         the full list is one click away. -->
+                    <div class="tools-menu-submenu">
+                        <button class="tools-menu-item tools-menu-submenu-trigger"
+                                onclick="event.stopPropagation(); this.closest('.tools-menu-submenu').classList.toggle('open')">
+                            <i class="fa-solid fa-download"></i>
+                            <span data-i18n="btn_export">Export…</span>
+                            <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.5;margin-left:auto;"></i>
+                        </button>
+                        <div class="tools-menu-submenu-body">
+                            <button class="tools-menu-item tools-menu-subitem" onclick="exportData('csv');this.closest('.export-dropdown').classList.remove('open');this.closest('.tools-menu-submenu').classList.remove('open')"><i class="fa-solid fa-file-csv"></i> CSV</button>
+                            <button class="tools-menu-item tools-menu-subitem" onclick="exportData('geojson');this.closest('.export-dropdown').classList.remove('open');this.closest('.tools-menu-submenu').classList.remove('open')"><i class="fa-solid fa-globe"></i> GeoJSON</button>
+                            <button class="tools-menu-item tools-menu-subitem" onclick="exportData('shapefile');this.closest('.export-dropdown').classList.remove('open');this.closest('.tools-menu-submenu').classList.remove('open')"><i class="fa-solid fa-map"></i> Shapefile</button>
+                            <button class="tools-menu-item tools-menu-subitem" onclick="exportData('kml');this.closest('.export-dropdown').classList.remove('open');this.closest('.tools-menu-submenu').classList.remove('open')"><i class="fa-solid fa-earth-americas"></i> KML</button>
+                        </div>
+                    </div>
+
+                    <div class="tools-menu-divider"></div>
+                    <!-- Display — language picker nested. Existing
+                         toggleDashboardLanguageMenu opens the original
+                         dash-lang-menu container (still in the DOM,
+                         still i18n-driven). We just move the trigger. -->
+                    <div class="tools-menu-section-label" data-i18n="tools_section_display">Display</div>
+                    <div class="dash-lang-wrap" id="dash-lang-wrap" style="position:relative;">
+                        <button class="tools-menu-item dash-lang-toggle"
+                                onclick="event.stopPropagation();toggleDashboardLanguageMenu()"
+                                data-i18n-title="language_label" title="Language">
+                            <i class="fa-solid fa-language"></i>
+                            <span data-i18n="language_label">Language</span>
+                            <span id="dash-lang-pill-label" style="margin-left:auto;color:#94a3b8;font-size:11px;">English</span>
+                        </button>
+                        <div class="dash-lang-menu" id="dash-lang-menu" style="display:none;"></div>
+                    </div>
                 </div>
             </div>
-            <button class="icon-btn deletion-btn" id="btn-pending-deletions" onclick="showPendingDeletions()" style="display:none;" title="View pending deletion requests">
-                <i class="fa-solid fa-trash-clock"></i> <span id="deletion-count-badge">0</span>
-            </button>
-            <!-- Phase 4 (Apr 2026) — Auto-submit regions (admin only). -->
-            <button class="icon-btn" id="btn-auto-regions" onclick="showRegionsPanel()" style="display:none;" title="Configure auto-submit regions">
-                <i class="fa-solid fa-location-crosshairs"></i> Regions
-            </button>
 
             <!-- Live Incident Notifications -->
             <div class="notif-area" id="notif-area">
@@ -628,7 +707,7 @@
      Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
      app.js so the reporter_tier-badge renderer can read it synchronously. -->
 <script src="tier-config.js?v=1"></script>
-<script src="app.js?v=764"></script>
+<script src="app.js?v=765"></script>
 <script src="predictions.js?v=110"></script>
 
 <!-- Offline status banner -->

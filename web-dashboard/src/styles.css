@@ -653,6 +653,159 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
 .user-logout-btn { background:none; border:1px solid rgba(239,68,68,0.2); color:#f87171; border-radius:5px; padding:3px 6px; cursor:pointer; font-size:11px; transition:all .15s; }
 .user-logout-btn:hover { background:rgba(239,68,68,0.1); }
 
+/* ── Phase J.1 (May 2026) — User chip dropdown + Tools menu ─── */
+.user-menu-trigger {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 7px;
+    padding: 4px 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+.user-menu-trigger:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.16);
+}
+.user-menu-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.55);
+    display: inline-block;
+}
+.user-menu-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 90;
+    min-width: 240px;
+    background: rgba(15, 23, 42, 0.97);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 5px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.50);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+.user-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    appearance: none;
+    background: transparent;
+    color: #cbd5e1;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 7px 10px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+.user-menu-item:hover {
+    background: rgba(148, 163, 184, 0.12);
+    border-color: rgba(148, 163, 184, 0.25);
+    color: var(--text);
+}
+.user-menu-item i { width: 14px; text-align: center; color: #94a3b8; }
+.user-menu-item:hover i { color: #c4b5fd; }
+.user-menu-badge {
+    margin-left: auto;
+    background: rgba(239, 68, 68, 0.18);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    font-feature-settings: "tnum";
+}
+.user-menu-logout {
+    color: #f87171;
+}
+.user-menu-logout i { color: #f87171; }
+.user-menu-logout:hover {
+    background: rgba(239, 68, 68, 0.10);
+    border-color: rgba(239, 68, 68, 0.30);
+    color: #f87171;
+}
+.user-menu-divider {
+    height: 1px;
+    background: rgba(148, 163, 184, 0.18);
+    margin: 4px 6px;
+}
+
+/* Tools dropdown — reuses .export-dropdown open/close behaviour. */
+.tools-menu .tools-menu-body {
+    min-width: 240px;
+    padding: 6px;
+}
+.tools-active-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #34d399;
+    box-shadow: 0 0 6px rgba(52, 211, 153, 0.55);
+    display: inline-block;
+    margin-left: 4px;
+}
+.tools-menu-section-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    padding: 6px 10px 3px 10px;
+}
+.tools-menu-divider {
+    height: 1px;
+    background: rgba(148, 163, 184, 0.18);
+    margin: 4px 6px;
+}
+.tools-menu-item {
+    display: flex !important;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    appearance: none;
+    background: transparent;
+    color: #cbd5e1;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 7px 10px !important;
+    text-align: left;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+.tools-menu-item:hover {
+    background: rgba(124, 58, 237, 0.14);
+    border-color: rgba(124, 58, 237, 0.30);
+    color: var(--text);
+}
+.tools-menu-item i { width: 14px; text-align: center; color: #94a3b8; }
+.tools-menu-item:hover i { color: #a78bfa; }
+.tools-menu-submenu { position: relative; }
+.tools-menu-submenu-body {
+    display: none;
+    margin-left: 18px;
+    padding-left: 4px;
+    border-left: 1px dashed rgba(148, 163, 184, 0.18);
+    margin-top: 2px;
+}
+.tools-menu-submenu.open .tools-menu-submenu-body { display: block; }
+.tools-menu-subitem { font-size: 11.5px; font-weight: 500; }
+/* Override the legacy .export-menu button styling that would otherwise
+   force compact spacing on items inside .tools-menu-body. */
+.tools-menu-body button { width: 100%; }
+
 @keyframes pulse-dot {
     0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.8); }
     70%  { box-shadow: 0 0 0 7px rgba(239,68,68,0); }

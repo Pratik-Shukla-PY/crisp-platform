@@ -9084,6 +9084,100 @@ function _initUserMenu() {
         // Non-blocking; ignore failures.
         setTimeout(() => _refreshModerationCounts(), 800);
     }
+    // Phase J.1 — admin-divider visibility + dot indicator. The
+    // divider only appears when at least one admin item is shown;
+    // the dot fires when any admin item has a non-zero badge so the
+    // operator's eye is drawn to the chip without us having to keep
+    // 3 separate badges in the top bar.
+    setTimeout(_refreshUserMenuAdminState, 1200);
+    setInterval(_refreshUserMenuAdminState, 30 * 1000);
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase J.1 (May 2026) — Header consolidation helpers
+// ──────────────────────────────────────────────────────────────────────
+// The user-chip dropdown holds admin actions. _refreshUserMenuAdminState
+// keeps the divider + the red-dot indicator in sync with the existing
+// per-button visibility/badge helpers (_maybeShowModerationButton,
+// _checkPendingDeletions, _maybeShowRegionsButton). Runs on init + every
+// 30 s; cheap DOM-only.
+
+function _refreshUserMenuAdminState() {
+    const ids = ['btn-moderation', 'btn-pending-deletions', 'btn-auto-regions'];
+    const visible = ids.map(id => {
+        const el = document.getElementById(id);
+        return el && el.style.display !== 'none';
+    });
+    const anyVisible = visible.some(Boolean);
+    const divider = document.getElementById('user-menu-admin-divider');
+    if (divider) divider.style.display = anyVisible ? 'block' : 'none';
+
+    // Aggregate badge totals across the admin items.
+    let totalCount = 0;
+    const mod = document.getElementById('moderation-badge');
+    if (mod && mod.style.display !== 'none') {
+        totalCount += parseInt(mod.textContent || '0', 10) || 0;
+    }
+    const del = document.getElementById('deletion-count-badge');
+    if (del) {
+        // deletion-count-badge is always present; only counts when >0.
+        const n = parseInt(del.textContent || '0', 10) || 0;
+        totalCount += n;
+    }
+    const dot = document.getElementById('user-menu-dot');
+    if (dot) {
+        dot.style.display = totalCount > 0 ? 'inline-block' : 'none';
+        dot.title = totalCount > 0
+            ? `${totalCount} admin item${totalCount === 1 ? '' : 's'} need attention`
+            : '';
+    }
+}
+
+window._toggleUserMenu = function (forceState) {
+    const dd = document.getElementById('user-menu-dropdown');
+    if (!dd) return;
+    const wantOpen = (forceState === true)
+        ? true
+        : (forceState === false ? false : (dd.style.display === 'none'));
+    dd.style.display = wantOpen ? 'block' : 'none';
+    if (wantOpen) {
+        // Refresh visibility right before opening so a freshly-granted
+        // admin role surfaces immediately.
+        _refreshUserMenuAdminState();
+        setTimeout(() => {
+            const closer = (ev) => {
+                const host = document.getElementById('user-menu');
+                if (!host || !host.contains(ev.target)) {
+                    dd.style.display = 'none';
+                    document.removeEventListener('click', closer);
+                }
+            };
+            document.addEventListener('click', closer);
+        }, 60);
+    }
+};
+
+// Tools-active-dot indicator: fires whenever the Analytics or
+// Predict overlay is currently open. Hooks into the existing
+// toggleAnalytics / togglePredictions visibility states via a
+// MutationObserver on the two panel elements.
+function _initToolsActiveDot() {
+    const dot = document.getElementById('cmd-tools-active-dot');
+    if (!dot) return;
+    const targets = [
+        document.getElementById('analytics-panel'),
+        document.getElementById('predictions-panel'),
+    ].filter(Boolean);
+    if (!targets.length) return;
+    const recompute = () => {
+        const anyOpen = targets.some(t => t && t.style.display && t.style.display !== 'none');
+        dot.style.display = anyOpen ? 'inline-block' : 'none';
+    };
+    recompute();
+    const mo = new MutationObserver(recompute);
+    for (const t of targets) {
+        mo.observe(t, { attributes: true, attributeFilter: ['style'] });
+    }
 }
 
 // ── Token auto-refresh (5 min before expiry) ─────────────────────────────────
@@ -9105,6 +9199,10 @@ setInterval(_autoRefreshToken, 25 * 60 * 1000); // Refresh every 25 min
 
 document.addEventListener('DOMContentLoaded', async () => {
     _initUserMenu();
+    // Phase J.1 — wire the Tools-menu active dot to the Analytics +
+    // Predict panel visibility so the operator sees a small marker
+    // when one of those overlays is currently open.
+    _initToolsActiveDot();
     // Close dropdowns on outside click
     document.addEventListener('click', (e) => {
         document.querySelectorAll('.export-dropdown.open, .sort-dropdown.open').forEach(d => {
