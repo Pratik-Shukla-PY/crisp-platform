@@ -9,7 +9,7 @@ import httpx
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, func as sa_func, text
 
@@ -5376,3 +5376,135 @@ def _auto_assign_building_id(report: Report, db: Session):
                 report.building_id = bid
                 n.building_id = bid
                 return
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Phase G.5 (May 2026) — Bulk multi-select operations
+# ══════════════════════════════════════════════════════════════════════
+# The single-report verify endpoint above is heavy (10-25 s per call:
+# satellite fetch + Claude vision). Operators reviewing 10+ pending
+# reports at once want to fire all the verifications + watch progress
+# without spawning 10 parallel browser fetches that would either
+# saturate Anthropic's rate limit or hang on a slow Sentinel response.
+#
+# This endpoint fans out the existing `verify_report` handler with a
+# small concurrency cap and streams progress events back to the
+# dashboard as Server-Sent Events. Idempotent per report-id —
+# `verify_report` already handles re-runs gracefully (overwrites the
+# previous SatelliteVerification row).
+#
+# Auth: require_analyst (same gate as the single-report verifier).
+# Concurrency cap: 3 in-flight. Larger fan-out is bandwidth-limited
+# by Anthropic and provides no operator-perceived benefit.
+
+from pydantic import BaseModel as _BatchBaseModel  # noqa: E402
+
+
+class BatchVerifyRequest(_BatchBaseModel):
+    report_ids: List[str]
+
+
+@router.post("/batch-verify")
+async def batch_verify(
+    body: BatchVerifyRequest,
+    user=Depends(require_analyst),
+    db: Session = Depends(get_db),
+):
+    """Fan out verify_report over up to 100 report ids, streaming
+    progress as Server-Sent Events.
+
+    Wire format (one event per line, SSE-standard):
+      event: progress
+      data: {"done": 3, "total": 10, "report_id": "...", "status": "ok"}
+
+      event: done
+      data: {"summary": {...}, "failures": [...]}
+
+    The dashboard subscribes via EventSource (read-only); progress
+    events drive a toast / progress bar; on done the operator gets a
+    summary tally.
+    """
+    ids = [str(i) for i in (body.report_ids or []) if isinstance(i, str)]
+    # Hard cap — bigger batches should run in a background worker
+    # queue (out of scope this phase, see roadmap F.10).
+    if len(ids) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch too large: {len(ids)} > 100. Split into smaller batches.",
+        )
+    if not ids:
+        raise HTTPException(status_code=400, detail="report_ids cannot be empty")
+
+    # De-dupe + preserve order.
+    seen = set()
+    deduped: List[str] = []
+    for rid in ids:
+        if rid not in seen:
+            seen.add(rid)
+            deduped.append(rid)
+
+    sem = asyncio.Semaphore(3)
+
+    async def _run_one(rid: str) -> dict:
+        async with sem:
+            try:
+                # Each verify_report call manages its own db session
+                # internally via Depends — we replicate that here by
+                # calling it with a fresh Session per task so the
+                # nested transactions don't fight each other.
+                from app.db.session import SessionLocal
+                inner_db = SessionLocal()
+                try:
+                    # Synchronous shim — verify_report is async + takes a
+                    # Depends-injected db; call its core path directly.
+                    await verify_report(report_id=rid, db=inner_db)
+                    return {"report_id": rid, "status": "ok"}
+                finally:
+                    inner_db.close()
+            except HTTPException as e:
+                return {"report_id": rid, "status": "error",
+                        "code": e.status_code, "detail": str(e.detail)[:200]}
+            except Exception as e:
+                return {"report_id": rid, "status": "error",
+                        "code": 500, "detail": f"{type(e).__name__}: {str(e)[:160]}"}
+
+    async def event_stream():
+        # Send an opening comment so EventSource's onopen fires
+        # promptly even if Sentinel takes a few seconds for the
+        # first call.
+        yield ": batch-verify stream opening\n\n"
+        yield f"event: start\ndata: {json.dumps({'total': len(deduped)})}\n\n"
+        done = 0
+        failures: List[dict] = []
+        tasks = [asyncio.create_task(_run_one(rid)) for rid in deduped]
+        for fut in asyncio.as_completed(tasks):
+            res = await fut
+            done += 1
+            payload = {
+                "done": done,
+                "total": len(deduped),
+                "report_id": res.get("report_id"),
+                "status": res.get("status"),
+            }
+            if res.get("status") != "ok":
+                payload["code"] = res.get("code")
+                payload["detail"] = res.get("detail")
+                failures.append(res)
+            yield f"event: progress\ndata: {json.dumps(payload)}\n\n"
+        # Final tally.
+        summary = {
+            "total": len(deduped),
+            "succeeded": done - len(failures),
+            "failed": len(failures),
+        }
+        yield f"event: done\ndata: {json.dumps({'summary': summary, 'failures': failures})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable nginx response buffering
+            "Connection": "keep-alive",
+        },
+    )

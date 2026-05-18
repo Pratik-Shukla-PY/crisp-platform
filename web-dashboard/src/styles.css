@@ -224,6 +224,105 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 }
 .analytics-grid-drill { margin-top: 8px; }
 
+/* ── Phase G.5 — Bulk multi-select + batch verify ───────────── */
+.qrt-bulk-check {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 16px;
+    height: 16px;
+    accent-color: #a78bfa;
+    cursor: pointer;
+    z-index: 4;
+}
+.qrt-card.bulk-checked {
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.55) inset;
+}
+#btn-bulk-select.active {
+    background: rgba(167, 139, 250, 0.16);
+    color: #c4b5fd;
+    border-color: rgba(167, 139, 250, 0.45);
+}
+.bulk-action-bar {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 18px;
+    z-index: 80;
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid rgba(167, 139, 250, 0.40);
+    border-radius: 12px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    max-width: 95vw;
+    flex-wrap: wrap;
+}
+.bulk-action-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: #cbd5e1;
+    font-size: 13px;
+}
+.bulk-action-left strong {
+    color: #c4b5fd;
+    font-size: 16px;
+    font-weight: 800;
+    font-feature-settings: "tnum";
+}
+.bulk-action-icon { color: #c4b5fd; font-size: 14px; }
+.bulk-progress {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-left: 8px;
+    font-feature-settings: "tnum";
+}
+.bulk-action-buttons {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.bulk-btn {
+    appearance: none;
+    background: rgba(148, 163, 184, 0.10);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.bulk-btn:hover {
+    background: rgba(148, 163, 184, 0.20);
+    border-color: rgba(148, 163, 184, 0.45);
+}
+.bulk-btn i { font-size: 11px; opacity: 0.9; }
+.bulk-btn-verify { color: #7dd3fc; border-color: rgba(56, 189, 248, 0.40); background: rgba(56, 189, 248, 0.10); }
+.bulk-btn-verify:hover { background: rgba(56, 189, 248, 0.22); border-color: rgba(56, 189, 248, 0.65); }
+.bulk-btn-accept { color: #4ade80; border-color: rgba(34, 197, 94, 0.40); background: rgba(34, 197, 94, 0.10); }
+.bulk-btn-accept:hover { background: rgba(34, 197, 94, 0.20); border-color: rgba(34, 197, 94, 0.65); }
+.bulk-btn-dispatch { color: #c4b5fd; border-color: rgba(167, 139, 250, 0.40); background: rgba(167, 139, 250, 0.10); }
+.bulk-btn-dispatch:hover { background: rgba(167, 139, 250, 0.22); border-color: rgba(167, 139, 250, 0.65); }
+.bulk-btn-reject { color: #f87171; border-color: rgba(239, 68, 68, 0.40); background: rgba(239, 68, 68, 0.10); }
+.bulk-btn-reject:hover { background: rgba(239, 68, 68, 0.20); border-color: rgba(239, 68, 68, 0.65); }
+.bulk-btn-clear {
+    color: #94a3b8;
+    padding: 6px 10px;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    justify-content: center;
+}
+
 /* Glass utility ─────────────────────────────────────────── */
 .glass-panel {
     background: var(--panel);

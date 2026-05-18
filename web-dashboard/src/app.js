@@ -204,6 +204,13 @@ const SEV_COLORS = { CRITICAL: '#ef4444', SEVERE: '#f97316', MODERATE: '#eab308'
 // ── QRT Queue State ───────────────────────────────────────────────────────────
 let viewMode = 'queue'; // 'queue' = triage cards | 'tree' = strategic hierarchy
 let cardSortMode = 'priority'; // priority | newest | oldest | severity | type | has_media | confidence | crisis | damage | source
+
+// Phase G.5 (May 2026) — Bulk multi-select state.
+// `_bulkSelectMode` toggles the checkbox UI; `_bulkSelectedIds` is
+// the Set of currently-selected report ids. Both reset on view-mode
+// switch + on closeBulkSelection().
+let _bulkSelectMode = false;
+let _bulkSelectedIds = new Set();
 let sectionState = { needs: true, dispatched: false, resolved: false };
 // Priority sort: severity first, then infrastructure criticality, then recency
 const SEV_PRIORITY = { CRITICAL: 4, SEVERE: 3, MODERATE: 2, MINOR: 1, UNKNOWN: 0 };
@@ -1346,8 +1353,14 @@ function createQueueSection(key, label, incidents, cssClass) {
 
 function createIncidentCard(r) {
     const card = document.createElement('div');
-    card.className = `qrt-card ${selectedId === r.id ? 'selected' : ''}`;
-    card.onclick    = () => selectReport(r.id);
+    const isSelected = (typeof _bulkSelectedIds !== 'undefined') && _bulkSelectedIds.has(r.id);
+    card.className = `qrt-card ${selectedId === r.id ? 'selected' : ''} ${isSelected ? 'bulk-checked' : ''}`;
+    card.onclick    = (ev) => {
+        // Phase G.5 — checkbox click is opt-in; clicking elsewhere on
+        // the card still opens the detail panel via the existing path.
+        if (ev.target && ev.target.classList && ev.target.classList.contains('qrt-bulk-check')) return;
+        selectReport(r.id);
+    };
     card.onmouseenter = (e) => showIncidentPreview(r, e);
     card.onmouseleave = hideIncidentPreview;
 
@@ -1453,7 +1466,18 @@ function createIncidentCard(r) {
            </span>`
         : '';
 
+    // Phase G.5 — bulk-select checkbox at top-left. Visible only when
+    // multi-select mode is enabled (operator toggled the toolbar
+    // button); otherwise stays out of the way.
+    const bulkChk = (typeof _bulkSelectMode !== 'undefined' && _bulkSelectMode)
+        ? `<input type="checkbox" class="qrt-bulk-check"
+                  ${isSelected ? 'checked' : ''}
+                  onclick="event.stopPropagation(); _toggleBulkSelectId('${r.id}', this.checked);"
+                  title="Select for bulk action" />`
+        : '';
+
     card.innerHTML = `
+        ${bulkChk}
         <div class="qrt-sev-strip strip-${sev}"></div>
         <div class="qrt-card-body">
             <div class="qrt-what">
@@ -2205,6 +2229,196 @@ window.closeAnalyticsPanel = function () {
     if (panel) panel.style.display = 'none';
     const btn = document.getElementById('btn-analytics');
     if (btn) btn.classList.remove('active');
+};
+
+// ══════════════════════════════════════════════════════════════════════
+// Phase G.5 (May 2026) — Bulk multi-select + batch verify
+// ══════════════════════════════════════════════════════════════════════
+// Operator toggles "Select" mode → each visible card grows a
+// checkbox. Selected ids accumulate in `_bulkSelectedIds`. A floating
+// bottom-of-viewport bar appears whenever the selection is non-empty
+// with 4 actions: Verify (SSE batch endpoint) / Accept / Dispatch /
+// Reject. Accept / Dispatch / Reject loop the existing per-report
+// endpoints client-side with a small concurrency cap so each action
+// stays atomic in AuthAuditLog.
+
+window.toggleBulkSelectMode = function () {
+    _bulkSelectMode = !_bulkSelectMode;
+    if (!_bulkSelectMode) _bulkSelectedIds.clear();
+    _paintBulkSelectUI();
+    renderFeed();
+};
+
+window._toggleBulkSelectId = function (id, checked) {
+    if (checked) {
+        _bulkSelectedIds.add(id);
+    } else {
+        _bulkSelectedIds.delete(id);
+    }
+    _paintBulkSelectUI();
+};
+
+window.clearBulkSelection = function () {
+    _bulkSelectedIds.clear();
+    _paintBulkSelectUI();
+    renderFeed();
+};
+
+function _paintBulkSelectUI() {
+    const bar = document.getElementById('bulk-action-bar');
+    const count = _bulkSelectedIds.size;
+    const toggleBtn = document.getElementById('btn-bulk-select');
+    if (toggleBtn) {
+        toggleBtn.classList.toggle('active', _bulkSelectMode);
+        toggleBtn.title = _bulkSelectMode ? 'Leave bulk-select mode' : 'Enable bulk-select mode';
+    }
+    if (!bar) return;
+    if (!_bulkSelectMode || count === 0) {
+        bar.style.display = 'none';
+        return;
+    }
+    bar.style.display = '';
+    const countEl = document.getElementById('bulk-count');
+    if (countEl) countEl.textContent = String(count);
+}
+
+// SSE batch verify — opens an EventSource against the batch-verify
+// stream and surfaces progress via toast. Since EventSource doesn't
+// allow custom headers (no Authorization), we instead use fetch
+// with stream:true semantics and manually parse SSE events.
+window.bulkVerifySelected = async function () {
+    if (_bulkSelectedIds.size === 0) return;
+    if (_bulkSelectedIds.size > 100) {
+        showToast(`Batch too large (${_bulkSelectedIds.size}). Cap is 100.`, 'error');
+        return;
+    }
+    const ids = [..._bulkSelectedIds];
+    const progressEl = document.getElementById('bulk-progress');
+    if (progressEl) progressEl.textContent = `0 / ${ids.length}`;
+    showToast(`Verifying ${ids.length} reports…`, 'info');
+
+    try {
+        const res = await fetch(`${API}/batch-verify`, {
+            method: 'POST',
+            headers: _authHeaders(),
+            body: JSON.stringify({ report_ids: ids }),
+        });
+        if (res.status === 401 || res.status === 403) {
+            showToast('Analyst role required.', 'error');
+            return;
+        }
+        if (!res.ok) {
+            const err = await res.text();
+            showToast(`Batch verify failed: ${err.slice(0, 80)}`, 'error');
+            return;
+        }
+        // Read the SSE stream chunk-by-chunk.
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let done = 0;
+        let failed = 0;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const { value, done: streamDone } = await reader.read();
+            if (streamDone) break;
+            buf += decoder.decode(value, { stream: true });
+            // SSE frames are separated by double newline.
+            const frames = buf.split('\n\n');
+            buf = frames.pop() || '';
+            for (const frame of frames) {
+                if (!frame.trim() || frame.startsWith(':')) continue;
+                // Each frame is "event: <name>\ndata: <json>"
+                let evName = 'message';
+                let data = null;
+                for (const line of frame.split('\n')) {
+                    if (line.startsWith('event:')) evName = line.slice(6).trim();
+                    else if (line.startsWith('data:')) {
+                        try { data = JSON.parse(line.slice(5).trim()); } catch (_) {}
+                    }
+                }
+                if (!data) continue;
+                if (evName === 'progress') {
+                    done = data.done || done;
+                    if (data.status !== 'ok') failed += 1;
+                    if (progressEl) progressEl.textContent = `${done} / ${data.total}${failed ? ` (${failed} failed)` : ''}`;
+                } else if (evName === 'done') {
+                    const s = data.summary || {};
+                    showToast(
+                        `Batch verify: ${s.succeeded || 0} succeeded, ${s.failed || 0} failed`,
+                        (s.failed || 0) === 0 ? 'success' : 'error',
+                    );
+                }
+            }
+        }
+        // Refresh the in-memory reports to pick up the new
+        // verification rows.
+        _loadReports && _loadReports();
+    } catch (e) {
+        showToast(`Network error: ${e.message}`, 'error');
+    }
+};
+
+// Bulk-loop helper for actions that don't have a batch endpoint
+// (Accept / Dispatch / Reject). Concurrency cap = 3 client-side.
+async function _bulkLoop(actionName, perReportFn) {
+    if (_bulkSelectedIds.size === 0) return;
+    const ids = [..._bulkSelectedIds];
+    const progressEl = document.getElementById('bulk-progress');
+    let done = 0;
+    let failed = 0;
+    showToast(`${actionName}: 0 / ${ids.length}…`, 'info');
+    if (progressEl) progressEl.textContent = `0 / ${ids.length}`;
+
+    // 3-in-flight pool.
+    const POOL = 3;
+    let i = 0;
+    async function worker() {
+        while (i < ids.length) {
+            const my = i++;
+            try {
+                await perReportFn(ids[my]);
+            } catch (e) {
+                failed += 1;
+            }
+            done += 1;
+            if (progressEl) progressEl.textContent = `${done} / ${ids.length}${failed ? ` (${failed} failed)` : ''}`;
+        }
+    }
+    await Promise.all(Array.from({ length: POOL }, () => worker()));
+    showToast(
+        `${actionName}: ${done - failed} succeeded${failed ? `, ${failed} failed` : ''}`,
+        failed === 0 ? 'success' : 'error',
+    );
+    _loadReports && _loadReports();
+}
+
+window.bulkAcceptSelected = () => _bulkLoop('Accept', async (id) => {
+    const res = await fetch(`${API}/${encodeURIComponent(id)}/review`, {
+        method: 'POST',
+        headers: _authHeaders(),
+        body: JSON.stringify({ verdict: 'ACCEPTED' }),
+    });
+    if (!res.ok) throw new Error('review failed');
+});
+
+window.bulkDispatchSelected = () => _bulkLoop('Dispatch', async (id) => {
+    const res = await fetch(`${API}/${encodeURIComponent(id)}/dispatch`, {
+        method: 'POST',
+        headers: _authHeaders(),
+    });
+    if (!res.ok) throw new Error('dispatch failed');
+});
+
+window.bulkRejectSelected = () => {
+    if (!confirm(`Reject ${_bulkSelectedIds.size} reports as false alarms? This cannot be undone in bulk.`)) return;
+    return _bulkLoop('Reject', async (id) => {
+        const res = await fetch(`${API}/${encodeURIComponent(id)}/false-alarm`, {
+            method: 'POST',
+            headers: _authHeaders(),
+        });
+        if (!res.ok) throw new Error('reject failed');
+    });
 };
 
 // ── Incident Preview (Hover Tooltip) ─────────────────────────────────────────
