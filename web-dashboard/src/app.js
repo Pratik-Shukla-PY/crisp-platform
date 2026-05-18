@@ -3297,7 +3297,44 @@ window.selectReport = (id, skipFly = false) => {
     const aaSummary = cachedAA?.summary ?? '';
     const aaDetails = cachedAA?.details ?? '';
 
+    // Phase J.2 (May 2026) — one-sentence operator headline.
+    // Operators want to know "what happened / where / severity /
+    // open status" without scanning chips. Derived from existing
+    // fields; zero backend change.
+    const _headline = (() => {
+        const infraLbl = infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type) || 'Incident';
+        const sevLbl = r.severity || 'UNKNOWN';
+        const locShort = (() => {
+            const raw =
+                (r.location && (r.location.user_location_name || r.location.device_location_name))
+                || '';
+            if (!raw) return '';
+            // Last 1-2 comma segments — most-specific then city.
+            const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+            if (parts.length >= 2) return `${parts[0]}, ${parts[parts.length - 1]}`;
+            return parts[0] || '';
+        })();
+        const waitChunk = waitMin > 0 && (r.status === 'PENDING' || r.status === 'VERIFIED')
+            ? ` · waiting ${waitMin >= 60 ? Math.floor(waitMin/60) + 'h ' + (waitMin%60) + 'm' : waitMin + 'm'}`
+            : '';
+        const respChunk =
+            r.status === 'RESOLVED' ? ' · resolved'
+            : r.status === 'RESPONDING' ? ' · responder on the way'
+            : r.status === 'FALSE_ALARM' ? ' · false alarm'
+            : '';
+        return `${infraLbl}${locShort ? ' at ' + locShort : ''} — ${sevLbl}${waitChunk || respChunk}.`;
+    })();
+
     document.getElementById('detail-body').innerHTML = `
+        <!-- Phase J.2 — operator headline + 6-section restructure.
+             Headline gives the analyst the at-a-glance answer to
+             "what / where / severity / what's the open status?"
+             without needing to scan the chip row. Sections that
+             follow use the existing rendering blocks wrapped in
+             <details> elements with the first two open by default
+             (Incident Summary + Response Actions) per operator
+             confirmation. -->
+        <div class="dp-headline" title="${escapeHtml(_headline)}">${escapeHtml(_headline)}</div>
         <!-- ① TOP: Credibility Check result OR "Credibility Check" button -->
         <div class="dp-action-bar">
             <div class="dp-top-row">
@@ -3331,13 +3368,36 @@ window.selectReport = (id, skipFly = false) => {
                  analysts see the verdict + response-time context before
                  deciding to send help. -->
             ${_renderReviewerActions(r)}
+            <!-- Phase J.2 (May 2026) — primary CTA + overflow.
+                 Send Help is the always-visible primary action.
+                 False Alarm now lives inside the Verdict dropdown
+                 above. Delete moves into the overflow menu so the
+                 always-visible button cluster reads as a calm
+                 action surface, not a noisy command palette. -->
             <div class="dp-action-buttons">
                 ${r.status === 'PENDING' || r.status === 'VERIFIED'
                     ? `<button class="dp-act-main dp-act-dispatch" onclick="patchReport('${r.id}','dispatch')"><i class="fa-solid fa-hands-helping"></i> Send Help</button>`
                     : `<span class="dp-act-status"><i class="fa-solid fa-circle-check"></i> Help Sent</span>`}
-                ${r.status !== 'FALSE_ALARM'
-                    ? `<button class="dp-act-main dp-act-false" onclick="patchReport('${r.id}','false-alarm')"><i class="fa-solid fa-ban"></i> False</button>` : ''}
-                <button class="dp-act-main dp-act-del" onclick="if(confirm('Delete this report?'))deleteReport('${r.id}')"><i class="fa-solid fa-trash-can"></i></button>
+                <div class="dp-overflow-wrap" id="dp-overflow-${r.id}" style="position:relative;display:inline-flex;">
+                    <button class="dp-overflow-btn"
+                            onclick="event.stopPropagation();this.parentElement.classList.toggle('open')"
+                            title="More actions">
+                        <i class="fa-solid fa-ellipsis"></i>
+                    </button>
+                    <div class="dp-overflow-menu">
+                        <button onclick="exportPDF('${r.id}');this.closest('.dp-overflow-wrap').classList.remove('open')">
+                            <i class="fa-regular fa-file-pdf"></i> Export PDF
+                        </button>
+                        ${r.status !== 'FALSE_ALARM'
+                            ? `<button onclick="patchReport('${r.id}','false-alarm');this.closest('.dp-overflow-wrap').classList.remove('open')">
+                                  <i class="fa-solid fa-ban"></i> Mark false alarm
+                              </button>` : ''}
+                        <button class="dp-overflow-danger"
+                                onclick="if(confirm('Delete this report?'))deleteReport('${r.id}');this.closest('.dp-overflow-wrap').classList.remove('open')">
+                            <i class="fa-solid fa-trash-can"></i> Delete report
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -3349,15 +3409,38 @@ window.selectReport = (id, skipFly = false) => {
              keep the panel compact on first open; click "Timeline" to
              expand. Pure dashboard-side render from the data the LIST
              endpoint already returns — no backend changes. -->
-        <!-- Phase F.2.b (May 2026) — Per-report admin-action ribbon.
-             Compact strip above the timeline listing the most recent
-             REPORT_* AuthAuditLog entries for this report so operators
-             see "who did what when" without leaving the panel. The
-             body is async-loaded; the placeholder paints first. -->
-        <div class="dp-audit-ribbon" id="dp-audit-ribbon-${r.id}" data-report-id="${r.id}">
-            <div class="dp-audit-loading"><i class="fa-regular fa-clock"></i> Loading admin actions…</div>
-        </div>
-        ${_renderIncidentTimeline(r)}
+        <!-- Phase J.2 (May 2026) — collapsible Activity Log section.
+             Wraps F.2.b's audit ribbon into a default-collapsed
+             card so admin actions are one click away but don't add
+             to the always-visible CTA inventory. Hidden entirely
+             when the ribbon has no entries (set by
+             _fetchReportAuditTrail). -->
+        <details class="dp-section dp-section-activity" id="dp-section-activity-${r.id}">
+            <summary class="dp-section-header">
+                <i class="fa-solid fa-user-shield"></i>
+                <span data-i18n="detail_admin_actions">Activity Log</span>
+                <i class="fa-solid fa-chevron-down dp-section-caret"></i>
+            </summary>
+            <div class="dp-section-body">
+                <div class="dp-audit-ribbon" id="dp-audit-ribbon-${r.id}" data-report-id="${r.id}">
+                    <div class="dp-audit-loading"><i class="fa-regular fa-clock"></i> Loading admin actions…</div>
+                </div>
+            </div>
+        </details>
+
+        <!-- Phase J.2 — collapsible Timeline section. Was always-visible
+             before; now collapsed by default so the panel reads calmer.
+             Click summary to expand. -->
+        <details class="dp-section dp-section-timeline">
+            <summary class="dp-section-header">
+                <i class="fa-solid fa-timeline"></i>
+                <span data-i18n="detail_timeline">Timeline</span>
+                <i class="fa-solid fa-chevron-down dp-section-caret"></i>
+            </summary>
+            <div class="dp-section-body">
+                ${_renderIncidentTimeline(r)}
+            </div>
+        </details>
 
         <!-- ② Urgency alerts -->
         ${urgencyHtml}
@@ -3967,14 +4050,19 @@ window.closeDetail = () => {
 async function _fetchReportAuditTrail(reportId) {
     const target = document.getElementById(`dp-audit-ribbon-${reportId}`);
     if (!target) return;
+    // Phase J.2 — parent section is the wrapping <details> card. We
+    // hide the whole section (via .is-empty) rather than just the
+    // inner ribbon when there are no events, so the operator's panel
+    // doesn't carry a useless "Activity Log" empty header.
+    const sectionEl = document.getElementById(`dp-section-activity-${reportId}`);
     try {
         const res = await fetch(
             `${API}/${encodeURIComponent(reportId)}/audit?limit=8`,
             { headers: _authHeaders() }
         );
         if (!res.ok) {
-            // Quietly hide on 401 / 404 — non-fatal.
             target.style.display = 'none';
+            if (sectionEl) sectionEl.classList.add('is-empty');
             return;
         }
         const data = await res.json();
@@ -3984,8 +4072,10 @@ async function _fetchReportAuditTrail(reportId) {
         const items = data.items || [];
         if (!items.length) {
             target.style.display = 'none';
+            if (sectionEl) sectionEl.classList.add('is-empty');
             return;
         }
+        if (sectionEl) sectionEl.classList.remove('is-empty');
         const iconForAction = {
             REPORT_DISPATCH:    'fa-truck-medical',
             REPORT_RESOLVE:     'fa-check',
@@ -5986,12 +6076,59 @@ function _renderReviewerActions(r) {
             </button>
         </div>`;
 
-    // Phase F.1.d (May 2026) — sticky reviewer-actions strip. The
-    // `.dp-reviewer.is-sticky` class enables `position: sticky;
-    // top: 0;` so Accept / Reject / Dispatched / Arrived / Lives
-    // remain visible while operators scroll through media + the
-    // timeline + the AI assessment below. Was previously buried
-    // mid-scroll — the audit's top-friction complaint.
+    // Phase J.2 (May 2026) — Verdict dropdown replaces the Accept /
+    // Reject / Dispatched / Arrived 4-button row. The dropdown
+    // collapses three verdicts (Accept · Reject · False alarm) into
+    // a single decision surface; once the verdict is set, the
+    // dropdown shows the active verdict and the operator can change
+    // it via the same control. Dispatched / Arrived stay as small
+    // timestamp pills below — they're response-progress events,
+    // not verdict actions.
+    //
+    // Operator confirmation (May 2026 working session): "Single
+    // Verdict dropdown + Send Help CTA" was chosen as the maximum
+    // simplification path. False Alarm now lives in this dropdown
+    // (was previously a top-level button alongside Send Help).
+    const verdictDropdownLabel = verdict === 'ACCEPTED' ? 'Accepted'
+        : verdict === 'REJECTED' ? 'Rejected'
+        : (r.status === 'FALSE_ALARM' ? 'False alarm'
+            : 'Set verdict ▾');
+    const verdictTriggerClass = verdict === 'ACCEPTED'
+        ? 'dp-verdict-trigger dp-verdict-trigger-accepted'
+        : verdict === 'REJECTED'
+            ? 'dp-verdict-trigger dp-verdict-trigger-rejected'
+            : (r.status === 'FALSE_ALARM'
+                ? 'dp-verdict-trigger dp-verdict-trigger-false'
+                : 'dp-verdict-trigger dp-verdict-trigger-pending');
+
+    // Phase J.2 — response-progress chips. When the timestamp isn't
+    // set, the chip is clickable ("Mark dispatched"); when set it's
+    // a read-only timestamp pill ("Dispatched 12 min ago").
+    const dispatchedChip = r.help_dispatched_at
+        ? `<span class="dp-resp-chip dp-resp-chip-done"
+                  title="Dispatched ${_fmtReviewAgo(r.help_dispatched_at)}">
+              <i class="fa-solid fa-truck-medical"></i>
+              <span>Dispatched · ${_fmtReviewAgo(r.help_dispatched_at)}</span>
+           </span>`
+        : `<button class="dp-resp-chip dp-resp-chip-action"
+                   onclick="stampResponderTime('${r.id}','dispatched')"
+                   title="Mark dispatched">
+              <i class="fa-solid fa-truck-medical"></i>
+              <span>Mark dispatched</span>
+           </button>`;
+    const arrivedChip = r.help_arrived_at
+        ? `<span class="dp-resp-chip dp-resp-chip-done"
+                  title="Arrived ${_fmtReviewAgo(r.help_arrived_at)}">
+              <i class="fa-solid fa-map-pin"></i>
+              <span>On-site · ${_fmtReviewAgo(r.help_arrived_at)}</span>
+           </span>`
+        : `<button class="dp-resp-chip dp-resp-chip-action"
+                   ${r.help_dispatched_at ? '' : 'disabled title="Mark dispatched first"'}
+                   onclick="stampResponderTime('${r.id}','arrived')">
+              <i class="fa-solid fa-map-pin"></i>
+              <span>Mark on-site</span>
+           </button>`;
+
     return `<div class="dp-reviewer is-sticky">
         <div class="dp-reviewer-top">
             <span class="dp-reviewer-chip dp-reviewer-${verdictClass}">${verdictLabel}</span>
@@ -5999,22 +6136,50 @@ function _renderReviewerActions(r) {
             ${responseStr ? `<span class="dp-reviewer-meta dp-reviewer-response">${responseStr}</span>` : ''}
             ${livesInlineHtml}
         </div>
-        ${dispatched || arrived ? `<div class="dp-reviewer-times">
-            ${dispatched ? `<span><i class="fa-solid fa-truck-medical"></i> ${dispatched}</span>` : ''}
-            ${arrived ? `<span><i class="fa-solid fa-map-pin"></i> ${arrived}</span>` : ''}
-        </div>` : ''}
         ${actionTxt}
-        <div class="dp-reviewer-btns">
-            <button class="dp-reviewer-btn dp-reviewer-accept ${verdict === 'ACCEPTED' ? 'active' : ''}"
-                    onclick="setReviewVerdict('${r.id}','ACCEPTED')" title="Mark accepted"><i class="fa-solid fa-check"></i> Accept</button>
-            <button class="dp-reviewer-btn dp-reviewer-reject ${verdict === 'REJECTED' ? 'active' : ''}"
-                    onclick="openRejectModal('${r.id}')" title="Mark rejected"><i class="fa-solid fa-xmark"></i> Reject</button>
-            <button class="dp-reviewer-btn"
-                    onclick="stampResponderTime('${r.id}','dispatched')"
-                    ${r.help_dispatched_at ? 'disabled' : ''}><i class="fa-solid fa-truck-medical"></i> Dispatched</button>
-            <button class="dp-reviewer-btn"
-                    onclick="stampResponderTime('${r.id}','arrived')"
-                    ${r.help_arrived_at ? 'disabled' : ''}><i class="fa-solid fa-map-pin"></i> Arrived</button>
+        <div class="dp-verdict-row">
+            <div class="dp-verdict-dropdown" id="dp-verdict-dropdown-${r.id}">
+                <button class="${verdictTriggerClass}"
+                        onclick="event.stopPropagation();this.parentElement.classList.toggle('open')">
+                    <i class="fa-solid ${
+                        verdict === 'ACCEPTED' ? 'fa-circle-check'
+                        : verdict === 'REJECTED' ? 'fa-circle-xmark'
+                        : (r.status === 'FALSE_ALARM' ? 'fa-ban' : 'fa-gavel')
+                    }"></i>
+                    <span>${verdictDropdownLabel}</span>
+                    <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.6;margin-left:4px;"></i>
+                </button>
+                <div class="dp-verdict-menu">
+                    <button class="dp-verdict-item dp-verdict-item-accept ${verdict === 'ACCEPTED' ? 'active' : ''}"
+                            onclick="setReviewVerdict('${r.id}','ACCEPTED');this.closest('.dp-verdict-dropdown').classList.remove('open')">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <div class="dp-verdict-item-text">
+                            <span class="dp-verdict-item-title">Accept</span>
+                            <span class="dp-verdict-item-sub">Confirmed real incident</span>
+                        </div>
+                    </button>
+                    <button class="dp-verdict-item dp-verdict-item-reject ${verdict === 'REJECTED' ? 'active' : ''}"
+                            onclick="openRejectModal('${r.id}');this.closest('.dp-verdict-dropdown').classList.remove('open')">
+                        <i class="fa-solid fa-circle-xmark"></i>
+                        <div class="dp-verdict-item-text">
+                            <span class="dp-verdict-item-title">Reject</span>
+                            <span class="dp-verdict-item-sub">Reason required</span>
+                        </div>
+                    </button>
+                    <button class="dp-verdict-item dp-verdict-item-false ${r.status === 'FALSE_ALARM' ? 'active' : ''}"
+                            onclick="patchReport('${r.id}','false-alarm');this.closest('.dp-verdict-dropdown').classList.remove('open')">
+                        <i class="fa-solid fa-ban"></i>
+                        <div class="dp-verdict-item-text">
+                            <span class="dp-verdict-item-title">False alarm</span>
+                            <span class="dp-verdict-item-sub">Marks misinformation</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+            <div class="dp-response-chips">
+                ${dispatchedChip}
+                ${arrivedChip}
+            </div>
         </div>
     </div>`;
 }

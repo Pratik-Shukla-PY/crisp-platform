@@ -505,6 +505,273 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     font-style: normal;
 }
 
+/* ══ Phase J.2 (May 2026) — Detail panel simplification ════════ */
+
+/* One-sentence operator headline at the very top of the panel.
+   Replaces the operator's mental scan of chips / fields with a
+   single readable line. */
+.dp-headline {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: #f1f5f9;
+    padding: 8px 12px;
+    margin: -4px -12px 8px -12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(148, 163, 184, 0.04);
+    letter-spacing: 0.01em;
+}
+
+/* Verdict dropdown — replaces the 4-button Accept/Reject/Disp/Arr row. */
+.dp-verdict-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(148, 163, 184, 0.14);
+}
+.dp-verdict-dropdown { position: relative; display: inline-flex; }
+.dp-verdict-trigger {
+    appearance: none;
+    border: 1px solid;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.12s ease;
+}
+.dp-verdict-trigger-pending {
+    background: rgba(124, 58, 237, 0.10);
+    color: #c4b5fd;
+    border-color: rgba(124, 58, 237, 0.40);
+}
+.dp-verdict-trigger-pending:hover {
+    background: rgba(124, 58, 237, 0.20);
+    border-color: rgba(124, 58, 237, 0.65);
+}
+.dp-verdict-trigger-accepted {
+    background: rgba(34, 197, 94, 0.14);
+    color: #4ade80;
+    border-color: rgba(34, 197, 94, 0.50);
+}
+.dp-verdict-trigger-rejected {
+    background: rgba(239, 68, 68, 0.14);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.50);
+}
+.dp-verdict-trigger-false {
+    background: rgba(148, 163, 184, 0.14);
+    color: #94a3b8;
+    border-color: rgba(148, 163, 184, 0.40);
+}
+.dp-verdict-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 30;
+    min-width: 240px;
+    background: rgba(15, 23, 42, 0.98);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 5px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
+}
+.dp-verdict-dropdown.open .dp-verdict-menu { display: block; }
+.dp-verdict-item {
+    appearance: none;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 7px 9px;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    color: #cbd5e1;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+.dp-verdict-item:hover {
+    background: rgba(148, 163, 184, 0.10);
+    border-color: rgba(148, 163, 184, 0.20);
+}
+.dp-verdict-item.active {
+    background: rgba(148, 163, 184, 0.14);
+    border-color: rgba(148, 163, 184, 0.35);
+}
+.dp-verdict-item-accept i { color: #4ade80; }
+.dp-verdict-item-reject i { color: #f87171; }
+.dp-verdict-item-false i { color: #94a3b8; }
+.dp-verdict-item-text { display: flex; flex-direction: column; gap: 1px; }
+.dp-verdict-item-title { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.dp-verdict-item-sub { font-size: 10.5px; color: var(--text-dim); }
+
+/* Response-progress chips — Dispatched / Arrived. Clickable when
+   not yet stamped; passive timestamp display when stamped. */
+.dp-response-chips {
+    display: inline-flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.dp-resp-chip {
+    appearance: none;
+    background: transparent;
+    border: 1px solid;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.12s ease;
+}
+.dp-resp-chip i { font-size: 10px; opacity: 0.85; }
+.dp-resp-chip-action {
+    color: #cbd5e1;
+    border-color: rgba(148, 163, 184, 0.30);
+}
+.dp-resp-chip-action:hover {
+    background: rgba(148, 163, 184, 0.14);
+    border-color: rgba(148, 163, 184, 0.55);
+}
+.dp-resp-chip-action[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.dp-resp-chip-done {
+    color: #a78bfa;
+    border-color: rgba(167, 139, 250, 0.35);
+    background: rgba(167, 139, 250, 0.08);
+    cursor: default;
+}
+
+/* Overflow `⋯` menu — collapses False Alarm / Delete out of the
+   always-visible action row. */
+.dp-overflow-btn {
+    appearance: none;
+    background: rgba(148, 163, 184, 0.10);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    margin-left: 6px;
+}
+.dp-overflow-btn:hover {
+    background: rgba(148, 163, 184, 0.18);
+    border-color: rgba(148, 163, 184, 0.50);
+}
+.dp-overflow-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 30;
+    min-width: 200px;
+    background: rgba(15, 23, 42, 0.98);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
+}
+.dp-overflow-wrap.open .dp-overflow-menu { display: block; }
+.dp-overflow-menu button {
+    appearance: none;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    width: 100%;
+    padding: 7px 10px;
+    text-align: left;
+    cursor: pointer;
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+.dp-overflow-menu button:hover {
+    background: rgba(148, 163, 184, 0.12);
+    border-color: rgba(148, 163, 184, 0.25);
+    color: var(--text);
+}
+.dp-overflow-menu button i { width: 14px; text-align: center; color: #94a3b8; }
+.dp-overflow-menu .dp-overflow-danger { color: #f87171; }
+.dp-overflow-menu .dp-overflow-danger:hover {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.30);
+    color: #f87171;
+}
+.dp-overflow-menu .dp-overflow-danger i { color: #f87171; }
+
+/* Collapsible <details> sections — Timeline + Activity Log + future
+   sections. Visually consistent calm-card style. */
+.dp-section {
+    background: rgba(15, 23, 42, 0.40);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 8px;
+    margin: 8px 0;
+    overflow: hidden;
+}
+.dp-section[open] {
+    background: rgba(15, 23, 42, 0.55);
+    border-color: rgba(148, 163, 184, 0.22);
+}
+.dp-section-header {
+    list-style: none;
+    cursor: pointer;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #cbd5e1;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    user-select: none;
+}
+.dp-section-header::-webkit-details-marker { display: none; }
+.dp-section-header:hover { color: var(--text); }
+.dp-section-header i:first-child { color: #c4b5fd; font-size: 11px; }
+.dp-section-caret {
+    margin-left: auto;
+    font-size: 10px;
+    color: #64748b;
+    transition: transform 0.18s ease;
+}
+.dp-section[open] .dp-section-caret { transform: rotate(180deg); }
+.dp-section-body {
+    padding: 4px 10px 10px 10px;
+    border-top: 1px solid rgba(148, 163, 184, 0.10);
+}
+/* Hide the Activity Log section entirely when the audit ribbon
+   came back empty (set by _fetchReportAuditTrail). */
+.dp-section-activity.is-empty { display: none; }
+/* The wrapping <details> consumes the ribbon's own background,
+   so neutralise the inner ribbon's box-styling when nested. */
+.dp-section-body .dp-audit-ribbon {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    margin: 0;
+}
+
 /* ══ Phase F.7 — Dashboard i18n: language picker + RTL safety ══ */
 .dash-lang-toggle {
     display: inline-flex;
