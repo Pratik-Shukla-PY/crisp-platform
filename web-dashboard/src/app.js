@@ -4415,6 +4415,17 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
+            <!-- Phase H.10 — Related buildings (spatial proximity) -->
+            <div class="bc-section bc-section-related">
+                <div class="bc-section-title">
+                    <i class="fa-solid fa-link-slash"></i> Related buildings
+                    <span class="bc-section-count" id="bc-related-count-${escapeHtml(b.id)}">—</span>
+                </div>
+                <div class="bc-related" id="bc-related-${escapeHtml(b.id)}">
+                    <div class="bc-empty">Loading nearby buildings…</div>
+                </div>
+            </div>
+
             <!-- Phase H.2 — Building event timeline -->
             <div class="bc-section">
                 <div class="bc-section-title">
@@ -4436,6 +4447,10 @@ function _renderBuildingConsole(b) {
     // initial console paint so the user sees scores + reports
     // immediately, even while the timeline still loads).
     setTimeout(() => _refreshBuildingTimeline(b.id), 50);
+    // Phase H.10 — fetch related buildings similarly. Independent
+    // of the timeline fetch; either can fail without blocking the
+    // other.
+    setTimeout(() => _refreshRelatedBuildings(b.id), 80);
     // Clear the bottom action dock (the building console manages its own
     // actions inside .bc-header / .bc-actions).
     const dock = document.getElementById('dp-action-dock');
@@ -5076,6 +5091,77 @@ window._advanceResponder = async (buildingId, responderId, action) => {
         if (detail) _renderBuildingConsole(detail);
     } catch (e) {
         showToast(`Network error: ${e.message}`, 'error');
+    }
+};
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase H.10 — Related buildings carousel (dashboard surface)
+// ──────────────────────────────────────────────────────────────────────
+window._refreshRelatedBuildings = async (buildingId) => {
+    const el = document.getElementById(`bc-related-${buildingId}`);
+    const countEl = document.getElementById(`bc-related-count-${buildingId}`);
+    if (!el) return;
+    try {
+        const res = await fetch(
+            `${API}/buildings/${encodeURIComponent(buildingId)}/related?radius_m=600&limit=8`,
+            { headers: _authHeaders() }
+        );
+        if (!res.ok) {
+            el.innerHTML = '<div class="bc-empty">Could not load nearby buildings.</div>';
+            if (countEl) countEl.textContent = '—';
+            return;
+        }
+        const data = await res.json();
+        const items = data.items || [];
+        if (countEl) countEl.textContent = String(items.length);
+        if (!items.length) {
+            el.innerHTML = '<div class="bc-empty">No nearby buildings within 600 m.</div>';
+            return;
+        }
+        const priorityColor = (v) => {
+            if (v == null) return '#64748b';
+            if (v >= 80) return '#ef4444';
+            if (v >= 60) return '#f97316';
+            if (v >= 40) return '#eab308';
+            if (v >= 20) return '#22c55e';
+            return '#94a3b8';
+        };
+        el.innerHTML = items.map(b => {
+            const distance = b.distance_m < 1000
+                ? `${b.distance_m} m`
+                : `${(b.distance_m / 1000).toFixed(1)} km`;
+            const stateColor = ({
+                ACTIVE:      '#94a3b8',
+                MONITORED:   '#46DFB1',
+                RESPONDING:  '#a78bfa',
+                ESCALATED:   '#f87171',
+                RESOLVED:    '#4ade80',
+                ARCHIVED:    '#64748b',
+                FALSE_ALARM: '#94a3b8',
+            })[b.state] || '#94a3b8';
+            const name =
+                b.osm_name
+                || (b.osm_addr_full || '').trim()
+                || (b.osm_way_id ? `OSM ${b.osm_way_id}` : null)
+                || (b.id_source === 'PROXIMITY' ? `Cluster ${b.id.slice(0, 8)}` : b.id);
+            return `<div class="bc-related-card" onclick="openBuildingConsole('${b.id}')">
+                <div class="bc-related-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+                <div class="bc-related-meta">
+                    <span class="bc-related-state" style="color:${stateColor};">${escapeHtml(b.state || 'ACTIVE')}</span>
+                    <span class="bc-related-distance">${distance}</span>
+                </div>
+                <div class="bc-related-stats">
+                    <span class="bc-related-stat">
+                        <i class="fa-solid fa-flag"></i> ${b.report_count || 0}
+                    </span>
+                    <span class="bc-related-stat" style="color:${priorityColor(b.humanitarian_priority)};">
+                        <i class="fa-solid fa-bullseye"></i> ${b.humanitarian_priority != null ? b.humanitarian_priority.toFixed(0) : '—'}
+                    </span>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        el.innerHTML = `<div class="bc-empty">Error: ${escapeHtml(e.message)}</div>`;
     }
 };
 

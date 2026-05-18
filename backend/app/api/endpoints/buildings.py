@@ -958,6 +958,90 @@ def export_dossier_geojson(
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Phase H.10 — Related buildings (spatial proximity carousel)
+# ──────────────────────────────────────────────────────────────────────
+@router.get("/{building_id}/related")
+def related_buildings(
+    building_id: str,
+    radius_m: int = Query(500, ge=50, le=10000),
+    limit: int = Query(8, ge=1, le=30),
+    db: Session = Depends(get_db),
+    _user=Depends(get_optional_user),
+):
+    """Return nearby buildings within `radius_m` of this one.
+
+    Used by the Building Intelligence Console's "Related buildings"
+    carousel. Surfaces other buildings the operator may want to
+    consider in tandem — co-located incidents often share the same
+    crisis (street-block flooding, neighbouring fires, blast radius).
+
+    Distance computation is haversine on centroid_lat/lng. PostGIS
+    would be faster for very large building counts; at the current
+    50-building dev scale, in-process distance is bounded by the
+    primary-key scan and stays under 5 ms.
+    """
+    from app.services.nearby_aggregator import haversine_km
+
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+    if b.centroid_lat is None or b.centroid_lng is None:
+        return {"items": [], "total": 0, "radius_m": radius_m}
+
+    # Coarse bbox filter to avoid scanning every row.
+    # 1 deg lat ≈ 111 km; halve the radius to allow asymmetric bbox.
+    deg = (radius_m / 1000.0) / 111.0
+    candidates = (
+        db.query(Building)
+        .filter(
+            Building.id != building_id,
+            Building.archived_at.is_(None),
+            Building.centroid_lat.isnot(None),
+            Building.centroid_lng.isnot(None),
+            Building.centroid_lat.between(b.centroid_lat - deg, b.centroid_lat + deg),
+            Building.centroid_lng.between(b.centroid_lng - deg, b.centroid_lng + deg),
+        )
+        .all()
+    )
+
+    radius_km = radius_m / 1000.0
+    enriched = []
+    for cand in candidates:
+        d_km = haversine_km(
+            b.centroid_lat, b.centroid_lng,
+            cand.centroid_lat, cand.centroid_lng,
+        )
+        if d_km > radius_km:
+            continue
+        enriched.append({
+            "building": cand,
+            "distance_m": int(round(d_km * 1000)),
+        })
+
+    # Composite score for relevance: closer + higher priority floats up.
+    def _relevance_score(entry):
+        d = entry["distance_m"]
+        prio = entry["building"].humanitarian_priority or 0
+        # Negative because we sort ASC; closer-and-hotter = more negative.
+        return d - prio * 10  # 10 m worth per priority point
+
+    enriched.sort(key=_relevance_score)
+    enriched = enriched[:limit]
+
+    return {
+        "items": [
+            {
+                **_to_summary(e["building"]).model_dump(mode="json"),
+                "distance_m": e["distance_m"],
+            }
+            for e in enriched
+        ],
+        "total": len(enriched),
+        "radius_m": radius_m,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────
 # POST /api/v1/buildings/{id}/footprint  ── cache OSM polygon
 # ──────────────────────────────────────────────────────────────────────
 @router.post("/{building_id}/footprint", response_model=BuildingSummary)

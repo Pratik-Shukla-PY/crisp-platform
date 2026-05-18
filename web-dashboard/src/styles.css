@@ -3562,6 +3562,63 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 }
 .bc-ai-resp-badge i { font-size: 9.5px; }
 
+/* ── Phase H.10 — Related buildings carousel ────────────────── */
+.bc-related {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+}
+.bc-related-card {
+    background: rgba(148, 163, 184, 0.06);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+.bc-related-card:hover {
+    background: rgba(167, 139, 250, 0.10);
+    border-color: rgba(167, 139, 250, 0.40);
+}
+.bc-related-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: #f1f5f9;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bc-related-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10.5px;
+}
+.bc-related-state {
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.bc-related-distance {
+    color: #94a3b8;
+    font-feature-settings: "tnum";
+}
+.bc-related-stats {
+    display: flex;
+    gap: 8px;
+    font-size: 10.5px;
+    color: #cbd5e1;
+    font-feature-settings: "tnum";
+}
+.bc-related-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+.bc-related-stat i { font-size: 9px; opacity: 0.85; }
+
 /* ── Phase H.8 — Priority-coloured buildings map legend ────── */
 .map-priority-legend {
     background: rgba(15, 23, 42, 0.78);
