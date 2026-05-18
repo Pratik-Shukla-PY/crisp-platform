@@ -256,6 +256,21 @@
                 style="display:none;">
             <i class="fa-solid fa-xmark"></i> Clear filters
         </button>
+
+        <!-- Phase G.6 (May 2026) — Saved view presets. localStorage-
+             only (no backend); presets capture the current filter
+             chip set, status pill, time filter, view mode, and sort
+             mode under an operator-chosen name. -->
+        <div class="cmd-views-wrap" id="cmd-views-wrap">
+            <button class="cmd-filter-chip cmd-views-toggle"
+                    id="cmd-views-toggle"
+                    onclick="toggleSavedViewsMenu()"
+                    title="Saved views — capture and recall filter sets">
+                <i class="fa-regular fa-bookmark"></i><span>Views</span>
+                <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.6;margin-left:2px;"></i>
+            </button>
+            <div class="cmd-views-menu" id="cmd-views-menu" style="display:none;"></div>
+        </div>
     </div>
 
     <!-- Analytics Full-Page Panel (Plecto-style command center dashboard) -->

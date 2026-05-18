@@ -1807,6 +1807,184 @@ window.clearAllChipFilters = function () {
     renderFeed();
 };
 
+// ══════════════════════════════════════════════════════════════════════
+// Phase G.6 (May 2026) — Saved view presets
+// ══════════════════════════════════════════════════════════════════════
+// Operator captures the current viewing state ({chips, status pill,
+// time filter, view mode, sort mode}) under a chosen name. Stored
+// in localStorage — single-device for now; a backend `UserView`
+// table can layer on later when multi-device sharing becomes real.
+//
+// State shape (serialised as JSON):
+//   {
+//     name: string,
+//     chips: string[],         // _activeChipFilters as array
+//     statusPill: string|null, // _activePillFilter
+//     timeHours: number,       // timeFilterHours
+//     viewMode: string,        // viewMode
+//     sortMode: string,        // cardSortMode
+//     crisis: string|null,     // _crisisDrillFilter
+//     createdAt: ISO 8601,
+//   }
+const SAVED_VIEWS_LS_KEY = 'crisp_dashboard_views_v1';
+
+function _loadSavedViews() {
+    try {
+        const raw = localStorage.getItem(SAVED_VIEWS_LS_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : [];
+    } catch (_) { return []; }
+}
+
+function _persistSavedViews(views) {
+    try { localStorage.setItem(SAVED_VIEWS_LS_KEY, JSON.stringify(views)); }
+    catch (_) { showToast('localStorage quota — cannot save', 'error'); }
+}
+
+function _captureCurrentView() {
+    return {
+        chips: [..._activeChipFilters],
+        statusPill: (typeof _activePillFilter !== 'undefined') ? _activePillFilter : null,
+        timeHours: timeFilterHours,
+        viewMode,
+        sortMode: cardSortMode,
+        crisis: (typeof _crisisDrillFilter !== 'undefined') ? _crisisDrillFilter : null,
+    };
+}
+
+function _applyView(v) {
+    if (!v) return;
+    _activeChipFilters.clear();
+    for (const id of (v.chips || [])) _activeChipFilters.add(id);
+    if (typeof _activePillFilter !== 'undefined') {
+        // Reach into the global state directly — the existing pill-
+        // setter wraps a renderFeed which is wasted work here.
+        _activePillFilter = v.statusPill || null;
+    }
+    timeFilterHours = (typeof v.timeHours === 'number') ? v.timeHours : 0;
+    if (v.viewMode && (v.viewMode === 'queue' || v.viewMode === 'tree')) {
+        viewMode = v.viewMode;
+    }
+    if (v.sortMode) cardSortMode = v.sortMode;
+    if (typeof v.crisis !== 'undefined') _crisisDrillFilter = v.crisis || null;
+    _persistChipFilters();
+    _paintChipFilterUI();
+    renderFeed();
+}
+
+window.toggleSavedViewsMenu = function () {
+    const menu = document.getElementById('cmd-views-menu');
+    if (!menu) return;
+    if (menu.style.display !== 'none') { menu.style.display = 'none'; return; }
+    _renderSavedViewsMenu();
+    menu.style.display = 'block';
+    // Click outside to close.
+    setTimeout(() => {
+        const closer = (ev) => {
+            const wrap = document.getElementById('cmd-views-wrap');
+            if (!wrap || !wrap.contains(ev.target)) {
+                menu.style.display = 'none';
+                document.removeEventListener('click', closer);
+            }
+        };
+        document.addEventListener('click', closer);
+    }, 60);
+};
+
+function _renderSavedViewsMenu() {
+    const menu = document.getElementById('cmd-views-menu');
+    if (!menu) return;
+    const views = _loadSavedViews();
+    // Capture current state as the "Save current view" CTA.
+    const cur = _captureCurrentView();
+    const curBits = [];
+    if (cur.chips.length) curBits.push(`${cur.chips.length} chip${cur.chips.length === 1 ? '' : 's'}`);
+    if (cur.statusPill) curBits.push(cur.statusPill);
+    if (cur.timeHours > 0) curBits.push(`${cur.timeHours}h`);
+    if (cur.crisis) curBits.push(cur.crisis);
+    if (cur.viewMode && cur.viewMode !== 'queue') curBits.push(cur.viewMode);
+
+    menu.innerHTML = `
+        <div class="cmd-views-section">
+            <button class="cmd-views-save-btn" onclick="_promptSaveView()">
+                <i class="fa-solid fa-plus"></i> Save current view…
+            </button>
+            <div class="cmd-views-current">
+                ${curBits.length
+                    ? `Current state: ${curBits.map(b => `<span class="cmd-views-curchip">${escapeHtml(b)}</span>`).join(' ')}`
+                    : 'No active filters'}
+            </div>
+        </div>
+        ${views.length ? `
+            <div class="cmd-views-section">
+                <div class="cmd-views-heading">Saved views</div>
+                ${views.map((v, i) => `
+                    <div class="cmd-views-row">
+                        <button class="cmd-views-apply"
+                                onclick="_applySavedViewByIndex(${i})"
+                                title="Apply this view">
+                            <i class="fa-regular fa-bookmark"></i>
+                            <span>${escapeHtml(v.name || `View ${i+1}`)}</span>
+                        </button>
+                        <button class="cmd-views-del"
+                                onclick="_deleteSavedViewByIndex(${i})"
+                                title="Delete this view">
+                            <i class="fa-regular fa-trash-can"></i>
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        ` : `<div class="cmd-views-empty">No saved views yet. Use "Save current view…" above to capture the current filters.</div>`}
+    `;
+}
+
+window._promptSaveView = function () {
+    const name = prompt('Name this view:', '');
+    if (name == null) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+        showToast('View name is required', 'error');
+        return;
+    }
+    const view = {
+        name: trimmed.slice(0, 80),
+        ..._captureCurrentView(),
+        createdAt: new Date().toISOString(),
+    };
+    const all = _loadSavedViews();
+    // Replace if a same-named view already exists.
+    const existingIdx = all.findIndex(v => v.name === view.name);
+    if (existingIdx >= 0) {
+        all[existingIdx] = view;
+    } else {
+        all.push(view);
+    }
+    _persistSavedViews(all);
+    _renderSavedViewsMenu();
+    showToast(`View saved: ${view.name}`, 'success');
+};
+
+window._applySavedViewByIndex = function (i) {
+    const all = _loadSavedViews();
+    if (!all[i]) return;
+    _applyView(all[i]);
+    showToast(`Applied: ${all[i].name}`, 'success');
+    const menu = document.getElementById('cmd-views-menu');
+    if (menu) menu.style.display = 'none';
+};
+
+window._deleteSavedViewByIndex = function (i) {
+    const all = _loadSavedViews();
+    if (!all[i]) return;
+    if (!confirm(`Delete saved view "${all[i].name}"?`)) return;
+    const name = all[i].name;
+    all.splice(i, 1);
+    _persistSavedViews(all);
+    _renderSavedViewsMenu();
+    showToast(`Deleted view: ${name}`, 'success');
+};
+
 // Filter predicate. Applied AFTER time + status pill filters. AND
 // between dimensions, OR within the damage dimension (so a report
 // matching ANY of the selected damage chips passes that dimension).
