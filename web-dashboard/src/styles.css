@@ -2536,6 +2536,109 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 }
 
 /* ──────────────────────────────────────────────────────────────────
+   Phase F.1.b (May 2026) — header chip consolidation.
+
+   Five separate stat-pills (CRITICAL / PENDING / HELPED / CLOSED /
+   TOTAL) collapse into one segmented control. Each segment is a
+   button carrying its own status colour as a subtle left-edge
+   accent + a count-bubble + a label. The active filter gets a
+   solid background tint matching its status colour. Counts use
+   tabular figures so the bar width doesn't jitter as numbers
+   change.
+
+   IDs match the previous pills (#stat-critical, #count-critical
+   etc.) so updateCommandStats + filterByPill bindings keep working.
+   ────────────────────────────────────────────────────────────────── */
+.cmd-status-seg {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 0;
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 10px;
+    padding: 2px;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2) inset;
+}
+.cmd-status-seg-item {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: #cbd5e1;
+    cursor: pointer;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 12px;
+    min-width: 58px;
+    border-radius: 7px;
+    transition: background 0.12s ease, color 0.12s ease;
+    font-feature-settings: "tnum";
+}
+.cmd-status-seg-item:hover {
+    background: rgba(148, 163, 184, 0.08);
+    color: #f1f5f9;
+}
+.cmd-status-seg-item.active {
+    background: rgba(148, 163, 184, 0.16);
+    color: #f1f5f9;
+}
+.cmd-status-seg-count {
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.01em;
+}
+.cmd-status-seg-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #94a3b8;
+}
+/* Status-specific accents — each segment's count colour matches the
+   prior stat-pill so operators don't have to relearn the colour
+   meaning (red = critical, amber = pending, green = helped, etc.). */
+.cmd-status-seg-item--critical .cmd-status-seg-count { color: #ef4444; }
+.cmd-status-seg-item--pending  .cmd-status-seg-count { color: #f59e0b; }
+.cmd-status-seg-item--responding .cmd-status-seg-count { color: #46DFB1; }
+.cmd-status-seg-item--resolved .cmd-status-seg-count { color: #64748b; }
+.cmd-status-seg-item--total    .cmd-status-seg-count { color: #c4b5fd; }
+.cmd-status-seg-item.active.cmd-status-seg-item--critical   { background: rgba(239, 68, 68, 0.16); }
+.cmd-status-seg-item.active.cmd-status-seg-item--pending    { background: rgba(245, 158, 11, 0.18); }
+.cmd-status-seg-item.active.cmd-status-seg-item--responding { background: rgba(70, 223, 177, 0.16); }
+.cmd-status-seg-item.active.cmd-status-seg-item--resolved   { background: rgba(100, 116, 139, 0.20); }
+.cmd-status-seg-item.active.cmd-status-seg-item--total      { background: rgba(196, 181, 253, 0.16); }
+/* CRITICAL pulse — only when there ARE critical incidents (mirrors
+   the prior .stat-pill.critical pulse behaviour). Driven by the
+   `active-pulse` class set by updateCommandStats when count > 0
+   AND PENDING > 0. */
+.cmd-status-seg-item--critical.active-pulse .cmd-status-seg-count {
+    animation: cmd-pulse 1.4s ease-in-out infinite;
+}
+@keyframes cmd-pulse {
+    50% { opacity: 0.55; }
+}
+
+/* Time-filter dropdown trigger — share the .export-dropdown
+   open/close + .export-menu styles by reusing the class on the
+   wrapper. The label inside the trigger reflects the current
+   selection. */
+.time-filter-dropdown .icon-btn {
+    gap: 6px;
+}
+.time-filter-dropdown .icon-btn .fa-clock {
+    color: #c4b5fd;
+}
+#time-filter-current-label {
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    min-width: 26px;
+    text-align: left;
+}
+
+/* ──────────────────────────────────────────────────────────────────
    Phase F.1.a (May 2026) — dark-theme map label contrast boost.
 
    The `dark_only_labels` CARTO tiles render city / district names as

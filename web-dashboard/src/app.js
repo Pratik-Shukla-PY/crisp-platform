@@ -1578,29 +1578,42 @@ function updateCommandStats() {
         _set('count-avg-response', '✓');
     }
 
-    // Pulse critical pill when there are critical incidents pending
+    // Pulse critical when there are critical incidents pending.
+    // Phase F.1.b renamed the class from `pulse-attention` (legacy
+    // .stat-pill) to `active-pulse` to match the new segmented
+    // control's CSS keyframe. The element id (#stat-critical) is
+    // preserved across both versions.
     const critEl = document.getElementById('stat-critical');
-    if (critEl) critEl.classList.toggle('pulse-attention', critical > 0 && pending > 0);
+    if (critEl) critEl.classList.toggle('active-pulse', critical > 0 && pending > 0);
 
     // Update analytics if panel is open
     if (document.getElementById('analytics-panel')?.style.display !== 'none') _renderAnalytics();
 }
 
-// ── Clickable pill filter: click a stat pill to filter the feed ──
+// ── Status-filter selection: click a segmented-control item to filter the feed ──
+//
+// Phase F.1.b — the five separate .stat-pill elements were replaced by
+// one segmented control (.cmd-status-seg with .cmd-status-seg-item
+// children). Selection lookup is now by id (#stat-critical etc.) which
+// is stable across the redesign; the active class moved from
+// `.pill-active` on `.clickable-pill` to plain `.active` on
+// `.cmd-status-seg-item`.
 let _activePillFilter = null;
 
 window.filterByPill = function (type) {
-    // Toggle: click same pill again to clear filter
+    // Toggle: click same segment again to clear the filter
     if (_activePillFilter === type) {
         _activePillFilter = null;
     } else {
         _activePillFilter = type;
     }
-    // Highlight active pill
-    document.querySelectorAll('.clickable-pill').forEach(p => p.classList.remove('pill-active'));
+    // Clear active state on every segment
+    document.querySelectorAll('.cmd-status-seg-item').forEach(p => p.classList.remove('active'));
     if (_activePillFilter) {
-        const activeEl = document.querySelector(`.stat-pill.${_activePillFilter === 'all' ? 'total' : _activePillFilter}`);
-        if (activeEl) activeEl.classList.add('pill-active');
+        // Map filter type → element id (the 'all' filter maps to #stat-total)
+        const targetId = _activePillFilter === 'all' ? 'stat-total' : `stat-${_activePillFilter}`;
+        const activeEl = document.getElementById(targetId);
+        if (activeEl) activeEl.classList.add('active');
     }
     renderFeed();
 };
