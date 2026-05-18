@@ -4826,14 +4826,29 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
         Report.deletion_requested_at.is_(None)
     ).order_by(Report.server_created_at.desc()).all()
 
-    # Serialise via Pydantic first, then splice the ordinal fields
-    # onto the dicts so JSON emission doesn't require model extension.
+    # Phase F.5.c (May 2026) — building_version_ordinal +
+    # building_is_latest are now canonical columns on the Report
+    # row (alembic 0027 + the _apply_building_versioning hook in
+    # app/models/report.py). Convention: ordinal 1 = OLDEST, max =
+    # LATEST (chronological ascending). is_latest = true exactly on
+    # the row with the maximum ordinal in the partition.
+    #
+    # Previous implementation OVERWROTE these from the in-flight
+    # sort order (newest-first → ordinal 1). That conflicted with
+    # the canonical DB state. The endpoint now respects whatever
+    # the DB says — Pydantic serialisation picks up the columns
+    # directly from the row. The response is still sorted newest-
+    # first for dashboard display convenience, but the ordinal
+    # values flow from the source of truth.
     serialised = [ReportResponse.model_validate(r).model_dump(mode="json") for r in reports]
     total = len(serialised)
-    latest_id = serialised[0]["id"] if serialised else None
-    for idx, row in enumerate(serialised):
-        row["building_version_ordinal"] = idx + 1
-        row["building_is_latest"] = (idx == 0)
+    # latest_id is the row WHERE building_is_latest = true (canonical).
+    # Fallback to the first (newest-first sorted) row if no row carries
+    # the flag — should only happen on backfill-pending databases.
+    latest_id = next(
+        (row["id"] for row in serialised if row.get("building_is_latest")),
+        serialised[0]["id"] if serialised else None,
+    )
     return {
         "building_id": building_id,
         "total": total,

@@ -516,6 +516,15 @@ class ReportResponse(BaseModel):
     debris_clearing_needed: Optional[bool] = None
     service_status: Optional[Any] = None
     building_id: Optional[str] = None
+    # Phase F.5.c (May 2026) — UNDP must-have #8 building versioning.
+    # Populated by the `_apply_building_versioning` SQLAlchemy hook in
+    # app/models/report.py on insert. Ordinal is 1-indexed (1 = first
+    # report on this building); is_latest is true on exactly one row
+    # per building_id partition. Both null/false for rows without a
+    # building_id. Dashboard reads these to render the "Version N of M
+    # · Latest" chip in the detail panel.
+    building_version_ordinal: Optional[int] = None
+    building_is_latest: Optional[bool] = None
     # Blurhash placeholder — see ReportMetaCreate.blurhash for design. The
     # dashboard renders this via the blurhash-decode path while waiting for
     # the first SMALL variant to arrive. Nullable because legacy reports

@@ -330,6 +330,17 @@ class Report(Base):
     debris_clearing_needed = Column(Boolean, nullable=True)     # Does this location need debris clearing?
     service_status = Column(JSON, nullable=True)                # {"electricity":"DISRUPTED","water":"OPERATIONAL",...}
     building_id = Column(String(36), nullable=True, index=True) # Links multiple reports about same structure
+    # UNDP must-have #8 (Phase F.5.c, May 2026) — building versioning.
+    # Reports about the same building stack up; ordinal counts entries in
+    # chronological order (1-indexed, NULL for rows without a building_id),
+    # building_is_latest flags the most-recent row in each partition.
+    # Backfilled by migration 0027 over historical data. Maintained on
+    # insert/update by the `_apply_building_versioning` SQLAlchemy hook
+    # below. The dashboard renders a "Version N of M · Latest" chip from
+    # these two fields. See migration 0027_building_versioning + audit
+    # plan /Users/pks/.claude/plans/swirling-forging-raccoon.md F.5.c.
+    building_version_ordinal = Column(Integer, nullable=True)
+    building_is_latest = Column(Boolean, default=False, nullable=False, server_default="false")
     # Progressive-upload placeholder. Compact blurhash
     # of the main photo — decoded on the dashboard to render a fuzzy colour
     # impression the instant the meta POST lands, BEFORE any media chunk
@@ -371,6 +382,10 @@ class Report(Base):
         Index("ix_reports_device_id",             "device_id"),
         Index("ix_reports_reviewer_verdict",      "reviewer_verdict"),
         Index("ix_reports_deletion_requested_at", "deletion_requested_at"),
+        # F.5.c (May 2026) — UNDP must-have #8. Frequent dashboard query
+        # "give me the latest version of this building" benefits from
+        # this composite. See migration 0027_building_versioning.
+        Index("ix_reports_building_latest",        "building_id", "building_is_latest"),
         Index("ix_reports_status_created",        "status",      "server_created_at"),
         Index("ix_reports_building_created",      "building_id", "server_created_at"),
         Index("ix_reports_device_created",        "device_id",   "server_created_at"),
@@ -755,6 +770,63 @@ def _apply_taxonomy(_mapper, _conn, target: "Report") -> None:  # type: ignore[n
 
 event.listen(Report, "before_insert", _apply_taxonomy)
 event.listen(Report, "before_update", _apply_taxonomy)
+
+
+# Phase F.5.c (May 2026) — UNDP must-have #8 building versioning hook.
+#
+# Fires on INSERT only. For a row with a non-NULL building_id:
+#   1. Find the count of existing reports for that building_id.
+#   2. Assign `building_version_ordinal = count + 1` (1-indexed).
+#   3. Set `building_is_latest = True` on this new row.
+#   4. Flip every prior row in the same partition to
+#      `building_is_latest = False` (single UPDATE statement;
+#      the partial index `ix_reports_building_latest` is built for
+#      exactly this query shape).
+#
+# We deliberately DON'T re-run this on UPDATE — once an ordinal is
+# stamped it stays put across edits. If a report's building_id is
+# CHANGED post-insert (rare; analyst-driven via a re-link action),
+# the dashboard's "Version 3 of 7" chip becomes stale until the next
+# new report on either building shifts the partition. Tolerable;
+# fully-consistent ordinals across cross-building moves would need a
+# trigger on UPDATE too, which complicates the rollback path.
+#
+# Defensive: never fail an INSERT because of this hook. If the
+# partition query throws (e.g. the connection drops mid-write), the
+# new row simply lands with ordinal=NULL + is_latest=False — the
+# next successful insert restamps the partition.
+def _apply_building_versioning(_mapper, connection, target: "Report") -> None:  # type: ignore[name-defined]
+    try:
+        if not getattr(target, "building_id", None):
+            return
+        from sqlalchemy import text as _text
+        # Step 1: count existing rows in this building's partition.
+        result = connection.execute(
+            _text("SELECT COUNT(*) FROM reports WHERE building_id = :bid"),
+            {"bid": target.building_id},
+        )
+        existing = result.scalar() or 0
+        # Step 2: assign ordinal + mark latest.
+        target.building_version_ordinal = existing + 1
+        target.building_is_latest = True
+        # Step 3: flip prior latest rows in the same partition to false.
+        # No-op when this is the first report on the building (existing=0).
+        if existing > 0:
+            connection.execute(
+                _text(
+                    "UPDATE reports SET building_is_latest = false "
+                    "WHERE building_id = :bid AND building_is_latest = true"
+                ),
+                {"bid": target.building_id},
+            )
+    except Exception:
+        # Never fail the write — defensive default leaves ordinal=NULL,
+        # is_latest=False which is the same shape as a row without a
+        # building_id. Subsequent inserts will restamp the partition.
+        pass
+
+
+event.listen(Report, "before_insert", _apply_building_versioning)
 
 
 # ── Phase 5.1 (May 2026, docs §9.4) — H3 cell auto-population ────────
