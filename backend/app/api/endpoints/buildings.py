@@ -787,6 +787,92 @@ def delete_note(
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Phase H.6 — AI building summary (Claude-Haiku)
+# ──────────────────────────────────────────────────────────────────────
+# Rate-limit: a building can refresh its AI summary at most once every
+# 5 minutes. Earlier calls return 429 with retry-after telling the
+# dashboard when the cooldown ends. Background-fresh calls bypass the
+# cooldown by passing ?force=true (admin-only).
+_AI_SUMMARY_COOLDOWN_SECONDS = 5 * 60
+
+
+@router.post("/{building_id}/ai-summary", response_model=AISummaryPayload)
+async def refresh_ai_summary(
+    building_id: str,
+    force: bool = Query(False, description="Bypass cooldown (admin-only)"),
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Generate (or refresh) the building's AI summary.
+
+    Lazy: only fires when an operator clicks "Refresh AI" in the
+    console, or when something material has changed (the endpoint can
+    be wired into the scoring hook later). Result lands on
+    `Building.ai_summary` so the next detail GET returns it without a
+    fresh Claude round-trip.
+
+    Rate-limited per building (5-min cooldown). Admins can bypass via
+    `?force=true`. Emits AI_SUMMARY_GENERATED on success.
+    """
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+
+    is_admin = getattr(user, "role", "") in (
+        "ADMIN", "SUPER_ADMIN", "admin", "super_admin"
+    )
+    if force and not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins can bypass the AI summary cooldown",
+        )
+
+    # Cooldown check (skipped on force).
+    if not force and b.ai_summary_at is not None:
+        elapsed = (datetime.now(timezone.utc) - b.ai_summary_at).total_seconds()
+        remaining = _AI_SUMMARY_COOLDOWN_SECONDS - elapsed
+        if remaining > 0:
+            raise HTTPException(
+                status_code=429,
+                detail=f"AI summary cooled down; retry in {int(remaining)}s",
+                headers={"Retry-After": str(int(remaining))},
+            )
+
+    # Defer the import so the buildings module loads even when the
+    # anthropic SDK isn't installed in a slimmer test environment.
+    from app.services.building_ai_summary import (
+        SummaryUnavailable,
+        generate_building_summary,
+        is_configured as ai_is_configured,
+    )
+
+    if not ai_is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="AI summary unavailable: ANTHROPIC_API_KEY not configured",
+        )
+
+    try:
+        payload = await generate_building_summary(db, b)
+    except SummaryUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"AI summary unavailable: {e}")
+
+    # Persist + emit event.
+    b.ai_summary = payload
+    b.ai_summary_at = datetime.now(timezone.utc)
+    db.add(BuildingEvent(
+        building_id=building_id,
+        event_kind="AI_SUMMARY_GENERATED",
+        actor_user_id=user.id if hasattr(user, "id") else None,
+        actor_kind="AI",
+        payload={"model": payload.get("model"), "forced": bool(force)},
+    ))
+    db.commit()
+
+    return AISummaryPayload(**payload)
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Phase H.5 — Consolidated dossier export (PDF + GeoJSON)
 # ──────────────────────────────────────────────────────────────────────
 @router.get("/{building_id}/dossier.pdf")

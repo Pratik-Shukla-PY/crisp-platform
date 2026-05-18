@@ -2959,6 +2959,103 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 }
 .bc-export-menu-item i { font-size: 11px; opacity: 0.8; }
 
+/* ── Phase H.6 — AI building summary card ────────────────── */
+.bc-ai-card {
+    background: linear-gradient(180deg, rgba(167, 139, 250, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
+    border: 1px solid rgba(167, 139, 250, 0.25);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.bc-ai-card-empty { opacity: 0.85; }
+.bc-ai-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.bc-ai-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #c4b5fd;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.bc-ai-title i { font-size: 11px; }
+.bc-ai-meta {
+    font-size: 10.5px;
+    color: #94a3b8;
+    font-feature-settings: "tnum";
+}
+.bc-ai-refresh-btn {
+    margin-left: auto;
+    appearance: none;
+    background: rgba(167, 139, 250, 0.14);
+    color: #c4b5fd;
+    border: 1px solid rgba(167, 139, 250, 0.40);
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.bc-ai-refresh-btn:hover {
+    background: rgba(167, 139, 250, 0.26);
+    border-color: rgba(167, 139, 250, 0.65);
+}
+.bc-ai-refresh-btn i { font-size: 10px; }
+.bc-ai-empty-body {
+    font-size: 12px;
+    color: #94a3b8;
+    line-height: 1.45;
+}
+.bc-ai-empty-body em { color: #c4b5fd; font-style: normal; font-weight: 700; }
+.bc-ai-summary {
+    font-size: 12.5px;
+    color: #f1f5f9;
+    line-height: 1.55;
+    padding: 4px 0;
+}
+.bc-ai-section { display: flex; flex-direction: column; gap: 4px; }
+.bc-ai-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #cbd5e1;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    letter-spacing: 0.02em;
+}
+.bc-ai-section-title i { font-size: 10px; }
+.bc-ai-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 11.5px;
+    color: #cbd5e1;
+    line-height: 1.55;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.bc-ai-section-warn .bc-ai-section-title { color: #fbbf24; }
+.bc-ai-section-warn .bc-ai-section-title i { color: #fbbf24; }
+.bc-ai-section-rec .bc-ai-section-title { color: #7dd3fc; }
+.bc-ai-section-rec .bc-ai-section-title i { color: #7dd3fc; }
+.bc-ai-rec {
+    font-size: 11.5px;
+    color: #cbd5e1;
+    line-height: 1.55;
+    padding-left: 4px;
+    border-left: 2px solid rgba(56, 189, 248, 0.30);
+}
+
 .bc-section-responders .bc-section-title { gap: 6px; }
 .bc-responder-add-btn {
     appearance: none;

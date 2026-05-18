@@ -3404,6 +3404,9 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
+            <!-- Phase H.6 — AI building summary -->
+            ${_renderBuildingAiCard(b)}
+
             <!-- 5-score intelligence grid -->
             <div class="bc-scores">
                 ${[
@@ -3541,13 +3544,6 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
-            <!-- Footer placeholder for H.6 -->
-            <div class="bc-section bc-deferred">
-                <div class="bc-section-title"><i class="fa-regular fa-rectangle-list"></i> Coming next</div>
-                <ul class="bc-deferred-list">
-                    <li>H.6 — AI building summary (Claude-generated brief + recommendations)</li>
-                </ul>
-            </div>
         </div>
     `;
     // Phase H.2 — fetch the timeline async (decoupled from the
@@ -3781,6 +3777,104 @@ window._refreshBuildingTimeline = async (buildingId) => {
 // lifecycle: ASSIGNED → DISPATCHED → ARRIVED → CLEARED. Operators
 // advance the lifecycle from the console. Separately, any operator
 // can put a building on their personal watch list (MonitorResponse).
+
+function _renderBuildingAiCard(b) {
+    const ai = b.ai_summary;
+    const generatedAt = b.ai_summary_at;
+    // Empty state (no cached summary yet).
+    if (!ai || !ai.summary) {
+        return `
+            <div class="bc-ai-card bc-ai-card-empty">
+                <div class="bc-ai-head">
+                    <span class="bc-ai-title"><i class="fa-solid fa-robot"></i> AI building summary</span>
+                    <button class="bc-ai-refresh-btn"
+                            onclick="_refreshBuildingAiSummary('${b.id}')"
+                            title="Generate an AI brief">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>Generate</span>
+                    </button>
+                </div>
+                <div class="bc-ai-empty-body">
+                    No AI brief yet. Click <em>Generate</em> for a Claude-Haiku synthesis of
+                    constituent reports, responder activity, and operator notes.
+                </div>
+            </div>
+        `;
+    }
+
+    const findings = (ai.key_findings || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
+    const conflicts = (ai.conflicting_signals || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
+    return `
+        <div class="bc-ai-card">
+            <div class="bc-ai-head">
+                <span class="bc-ai-title"><i class="fa-solid fa-robot"></i> AI building summary</span>
+                <span class="bc-ai-meta">
+                    ${escapeHtml(ai.model || 'model')} · ${generatedAt ? timeAgo(generatedAt) : ''}
+                </span>
+                <button class="bc-ai-refresh-btn"
+                        onclick="_refreshBuildingAiSummary('${b.id}')"
+                        title="Refresh AI summary (rate-limited to 5 min per building)">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                    <span>Refresh</span>
+                </button>
+            </div>
+            <div class="bc-ai-summary">${escapeHtml(ai.summary)}</div>
+            ${findings ? `
+                <div class="bc-ai-section">
+                    <div class="bc-ai-section-title">Key findings</div>
+                    <ul class="bc-ai-list">${findings}</ul>
+                </div>
+            ` : ''}
+            ${conflicts ? `
+                <div class="bc-ai-section bc-ai-section-warn">
+                    <div class="bc-ai-section-title"><i class="fa-solid fa-triangle-exclamation"></i> Conflicting signals</div>
+                    <ul class="bc-ai-list">${conflicts}</ul>
+                </div>
+            ` : ''}
+            ${ai.responder_recommendation ? `
+                <div class="bc-ai-section bc-ai-section-rec">
+                    <div class="bc-ai-section-title"><i class="fa-solid fa-truck-medical"></i> Responder recommendation</div>
+                    <div class="bc-ai-rec">${escapeHtml(ai.responder_recommendation)}</div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+window._refreshBuildingAiSummary = async (buildingId) => {
+    showToast('Generating AI summary… (up to 25 s)', 'info');
+    try {
+        const res = await fetch(
+            `${API}/buildings/${encodeURIComponent(buildingId)}/ai-summary`,
+            { method: 'POST', headers: _authHeaders() }
+        );
+        if (res.status === 401 || res.status === 403) {
+            showToast('Analyst role required.', 'error');
+            return;
+        }
+        if (res.status === 429) {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.detail || 'Cooldown active. Try again in a few minutes.', 'error');
+            return;
+        }
+        if (res.status === 503) {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.detail || 'AI summary service unavailable.', 'error');
+            return;
+        }
+        if (!res.ok) {
+            const err = await res.text();
+            showToast(`Generate failed: ${err.slice(0, 80)}`, 'error');
+            return;
+        }
+        showToast('AI summary ready', 'success');
+        delete _buildingConsoleCache[buildingId];
+        const detail = await _fetchBuildingDetail(buildingId);
+        if (detail) _renderBuildingConsole(detail);
+    } catch (e) {
+        showToast(`Network error: ${e.message}`, 'error');
+    }
+};
 
 function _renderBuildingExportMenu(b) {
     // A compact dropdown — Export → PDF / GeoJSON. The endpoints
