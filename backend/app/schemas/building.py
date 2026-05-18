@@ -135,6 +135,11 @@ class BuildingDetail(BuildingSummary):
     responders: List["ResponderResponse"] = Field(default_factory=list)
     monitors: List["MonitorResponse"] = Field(default_factory=list)
 
+    # Phase H.4 — operator notes (newest-first, pinned first). Includes
+    # active + soft-deleted (the latter render as tombstones). Capped
+    # at 50 entries in the endpoint to keep the detail payload bounded.
+    notes: List["NoteResponse"] = Field(default_factory=list)
+
 
 class SatelliteRollup(BaseModel):
     """Aggregated satellite verification across a building's reports."""
@@ -234,6 +239,51 @@ class MonitorResponse(BaseModel):
     started_at: datetime
     cleared_at: Optional[datetime] = None
     note: Optional[str] = None
+
+
+# ─── Phase H.4 — Operator notes thread ─────────────────────────────
+class NoteResponse(BaseModel):
+    """Single operator note. `author_email` + `author_name` are
+    denormalised at read time so the dashboard doesn't have to follow
+    a user lookup per row. `is_deleted` is true when the note was
+    soft-deleted; the dashboard renders a tombstone rather than
+    surfacing the body."""
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    building_id: str
+    author_user_id: Optional[str] = None
+    author_email: Optional[str] = None
+    author_name: Optional[str] = None
+    body: str
+    visibility: str = "ALL_OPERATORS"
+    pinned: bool = False
+    created_at: datetime
+    edited_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
+
+
+class NoteCreate(BaseModel):
+    """POST body for adding a new note."""
+    body: str = Field(..., min_length=1, max_length=4000)
+    visibility: Optional[str] = Field(
+        "ALL_OPERATORS",
+        pattern="^(ALL_OPERATORS|ADMIN_ONLY)$",
+    )
+    pinned: bool = False
+
+
+class NoteUpdate(BaseModel):
+    """PATCH body for editing a note.
+
+    All fields optional — only what's provided gets touched. Empty
+    body is rejected (use DELETE to soft-delete instead).
+    """
+    body: Optional[str] = Field(None, min_length=1, max_length=4000)
+    visibility: Optional[str] = Field(
+        None,
+        pattern="^(ALL_OPERATORS|ADMIN_ONLY)$",
+    )
+    pinned: Optional[bool] = None
 
 
 # ─── POST body for footprint caching ───────────────────────────────

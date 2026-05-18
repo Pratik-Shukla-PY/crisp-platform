@@ -1432,6 +1432,54 @@ class BuildingMonitor(Base):
     note = Column(Text, nullable=True)
 
 
+# ── Phase H.4 — Operator notes thread ──────────────────────────────────
+class BuildingNote(Base):
+    """Free-text operator note on a Building.
+
+    Notes are the long-form context channel that BuildingEvent (audit
+    log) + Building.ai_summary (machine brief) deliberately don't try
+    to be. Pinnable, edit + soft-delete, visibility ENUM gates
+    ADMIN_ONLY notes from non-admin operators.
+    """
+    __tablename__ = "building_notes"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    building_id = Column(
+        String(64),
+        ForeignKey("buildings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # author_user_id is nullable so deleting a user doesn't cascade-
+    # delete their historical notes (ON DELETE SET NULL on the FK).
+    author_user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    body = Column(Text, nullable=False)
+    # Visibility is a Postgres ENUM created by the alembic migration.
+    # We bind to the existing type rather than have SQLAlchemy try to
+    # create it again at table-create time.
+    visibility = Column(
+        Enum(
+            "ALL_OPERATORS", "ADMIN_ONLY",
+            name="building_note_visibility",
+            create_type=False,
+        ),
+        nullable=False,
+        default="ALL_OPERATORS",
+    )
+    pinned = Column(Boolean, nullable=False, default=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    edited_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+
+
 # ── Phase 5.1 (May 2026, docs §9.4) — H3 cell auto-population ────────
 # When a Location row is inserted or its lat/lng changes, derive the H3
 # cell index. Single listener covers all three Location-create sites in

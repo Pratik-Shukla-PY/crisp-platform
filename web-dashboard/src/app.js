@@ -3507,6 +3507,24 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
+            <!-- Phase H.4 — Operator notes thread -->
+            <div class="bc-section bc-section-notes">
+                <div class="bc-section-title">
+                    <i class="fa-regular fa-note-sticky"></i> Operator notes
+                    <span class="bc-section-count">${((b.notes || []).filter(n => !n.deleted_at)).length}</span>
+                    <button class="bc-note-add-btn"
+                            onclick="_openNoteForm('${b.id}')"
+                            title="Add a note">
+                        <i class="fa-solid fa-plus"></i> Add
+                    </button>
+                </div>
+                <div id="bc-note-form-${escapeHtml(b.id)}"
+                     class="bc-note-form" style="display:none;"></div>
+                <div class="bc-notes" id="bc-notes-${escapeHtml(b.id)}">
+                    ${_renderNoteList(b)}
+                </div>
+            </div>
+
             <!-- Phase H.2 — Building event timeline -->
             <div class="bc-section">
                 <div class="bc-section-title">
@@ -3522,11 +3540,10 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
-            <!-- Footer placeholders for H.4-H.6 surfaces -->
+            <!-- Footer placeholders for H.5-H.6 surfaces -->
             <div class="bc-section bc-deferred">
                 <div class="bc-section-title"><i class="fa-regular fa-rectangle-list"></i> Coming next</div>
                 <ul class="bc-deferred-list">
-                    <li>H.4 — Operator notes thread</li>
                     <li>H.5 — Consolidated dossier export (PDF + GeoJSON)</li>
                     <li>H.6 — AI building summary (Claude-generated brief + recommendations)</li>
                 </ul>
@@ -3718,6 +3735,13 @@ window._refreshBuildingTimeline = async (buildingId) => {
                 body = `Marked as misinformation${payload.reason ? ' — <em>' + escapeHtml(payload.reason) + '</em>' : ''}`;
             } else if (kind === 'REPORT_LINKED') {
                 body = `Report linked${payload.report_id ? ' (' + escapeHtml(String(payload.report_id).slice(0, 8)) + ')' : ''}`;
+            } else if (kind === 'NOTE_ADDED') {
+                body = 'Operator note added' + (payload.pinned ? ' (pinned)' : '');
+                if (payload.preview) body += ` — <em>${escapeHtml(payload.preview)}…</em>`;
+            } else if (kind === 'NOTE_EDITED') {
+                body = 'Operator note edited';
+            } else if (kind === 'NOTE_DELETED') {
+                body = 'Operator note deleted';
             }
             const iconByKind = {
                 STATE_CHANGED:        'fa-arrow-right-arrow-left',
@@ -3727,6 +3751,8 @@ window._refreshBuildingTimeline = async (buildingId) => {
                 MONITOR_STARTED:      'fa-binoculars',
                 MONITOR_CLEARED:      'fa-eye-slash',
                 NOTE_ADDED:           'fa-note-sticky',
+                NOTE_EDITED:          'fa-pen',
+                NOTE_DELETED:         'fa-trash-can',
                 AI_SUMMARY_GENERATED: 'fa-robot',
                 SATELLITE_VERIFIED:   'fa-satellite',
                 RESPONDER_ASSIGNED:   'fa-user-plus',
@@ -3931,6 +3957,234 @@ window._advanceResponder = async (buildingId, responderId, action) => {
                     : action === 'arrived'    ? 'On-site'
                     : 'Cleared';
         showToast(`Responder → ${label}`, 'success');
+        delete _buildingConsoleCache[buildingId];
+        const detail = await _fetchBuildingDetail(buildingId);
+        if (detail) _renderBuildingConsole(detail);
+    } catch (e) {
+        showToast(`Network error: ${e.message}`, 'error');
+    }
+};
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase H.4 — Operator notes thread (dashboard surface)
+// ──────────────────────────────────────────────────────────────────────
+// Notes are the long-form context channel that BuildingEvent and
+// ai_summary don't try to be — free text, pinnable, edit + soft-delete.
+// Console section renders newest-first, pinned-first; soft-deleted
+// notes render as tombstones.
+
+function _renderNoteList(b) {
+    const notes = b.notes || [];
+    if (!notes.length) {
+        return '<div class="bc-empty">No operator notes yet. Capture situational context here for the next shift.</div>';
+    }
+    const myId = _crispUser && _crispUser.id;
+    const myRole = (_crispUser && _crispUser.role) || '';
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'admin', 'super_admin'].includes(myRole);
+
+    return notes.map(n => {
+        if (n.deleted_at) {
+            return `<div class="bc-note bc-note-deleted">
+                <div class="bc-note-body bc-note-tombstone">
+                    <i class="fa-regular fa-trash-can"></i>
+                    Note deleted ${timeAgo(n.deleted_at)}
+                    ${n.author_email ? `· by ${escapeHtml(n.author_email)}` : ''}
+                </div>
+            </div>`;
+        }
+        const canEdit = isAdmin || (myId && n.author_user_id === myId);
+        const canPin  = true; // any analyst can pin / unpin
+        const author = n.author_name || n.author_email || 'Unknown';
+        const isPinned = !!n.pinned;
+        const isAdminOnly = n.visibility === 'ADMIN_ONLY';
+        return `<div class="bc-note ${isPinned ? 'bc-note-pinned' : ''}">
+            <div class="bc-note-header">
+                <span class="bc-note-author"><i class="fa-solid fa-user"></i> ${escapeHtml(author)}</span>
+                <span class="bc-note-time">${timeAgo(n.created_at)}${n.edited_at ? ' · edited' : ''}</span>
+                ${isPinned ? '<span class="bc-note-flag bc-note-flag-pinned"><i class="fa-solid fa-thumbtack"></i> pinned</span>' : ''}
+                ${isAdminOnly ? '<span class="bc-note-flag bc-note-flag-admin"><i class="fa-solid fa-lock"></i> admin-only</span>' : ''}
+                <div class="bc-note-actions">
+                    ${canPin ? `<button class="bc-note-btn" title="${isPinned ? 'Unpin' : 'Pin'}"
+                                       onclick="_pinNote('${b.id}', '${n.id}', ${!isPinned})">
+                        <i class="fa-solid fa-thumbtack"></i>
+                    </button>` : ''}
+                    ${canEdit ? `<button class="bc-note-btn" title="Edit"
+                                       onclick="_editNote('${b.id}', '${n.id}')">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>` : ''}
+                    ${canEdit ? `<button class="bc-note-btn bc-note-btn-delete" title="Delete"
+                                       onclick="_deleteNote('${b.id}', '${n.id}')">
+                        <i class="fa-regular fa-trash-can"></i>
+                    </button>` : ''}
+                </div>
+            </div>
+            <div class="bc-note-body" id="bc-note-body-${n.id}">${escapeHtml(n.body)}</div>
+        </div>`;
+    }).join('');
+}
+
+window._openNoteForm = (buildingId) => {
+    const id = `bc-note-form-${buildingId}`;
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    // Admin-only visibility option is only shown to admins.
+    const myRole = (_crispUser && _crispUser.role) || '';
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'admin', 'super_admin'].includes(myRole);
+    el.innerHTML = `
+        <textarea class="bc-note-textarea"
+                  id="bc-nf-body-${buildingId}"
+                  placeholder="Share context for the next shift: what you saw, who you spoke to, what to watch for…"
+                  rows="3" maxlength="4000" autofocus></textarea>
+        <div class="bc-nf-controls">
+            <label class="bc-nf-check">
+                <input type="checkbox" id="bc-nf-pin-${buildingId}" />
+                <span><i class="fa-solid fa-thumbtack"></i> Pin to top</span>
+            </label>
+            ${isAdmin ? `<label class="bc-nf-check">
+                <input type="checkbox" id="bc-nf-admin-${buildingId}" />
+                <span><i class="fa-solid fa-lock"></i> Admin-only</span>
+            </label>` : ''}
+            <div class="bc-nf-spacer"></div>
+            <button class="bc-nf-submit"
+                    onclick="_submitNote('${buildingId}')">
+                <i class="fa-solid fa-paper-plane"></i> Post note
+            </button>
+            <button class="bc-nf-cancel"
+                    onclick="document.getElementById('bc-note-form-${buildingId}').style.display='none';">
+                Cancel
+            </button>
+        </div>
+    `;
+    document.getElementById(`bc-nf-body-${buildingId}`).focus();
+};
+
+window._submitNote = async (buildingId) => {
+    const $ = (k) => document.getElementById(`bc-nf-${k}-${buildingId}`);
+    const text = ($('body').value || '').trim();
+    if (!text) {
+        showToast('Note cannot be empty', 'error');
+        $('body').focus();
+        return;
+    }
+    const body = {
+        body: text,
+        visibility: $('admin') && $('admin').checked ? 'ADMIN_ONLY' : 'ALL_OPERATORS',
+        pinned: $('pin') ? !!$('pin').checked : false,
+    };
+    try {
+        const res = await fetch(
+            `${API}/buildings/${encodeURIComponent(buildingId)}/notes`,
+            { method: 'POST', headers: _authHeaders(), body: JSON.stringify(body) }
+        );
+        if (res.status === 401 || res.status === 403) {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.detail || 'Analyst role required.', 'error');
+            return;
+        }
+        if (!res.ok) {
+            const err = await res.text();
+            showToast(`Note failed: ${err.slice(0, 80)}`, 'error');
+            return;
+        }
+        showToast('Note posted', 'success');
+        delete _buildingConsoleCache[buildingId];
+        const detail = await _fetchBuildingDetail(buildingId);
+        if (detail) _renderBuildingConsole(detail);
+    } catch (e) {
+        showToast(`Network error: ${e.message}`, 'error');
+    }
+};
+
+window._editNote = async (buildingId, noteId) => {
+    // Inline edit — replace the rendered body div with a textarea +
+    // Save / Cancel. Single-row mutation; no full re-render until
+    // the patch completes.
+    const bodyEl = document.getElementById(`bc-note-body-${noteId}`);
+    if (!bodyEl) return;
+    const current = bodyEl.textContent || '';
+    bodyEl.innerHTML = `
+        <textarea class="bc-note-textarea"
+                  id="bc-ne-body-${noteId}"
+                  rows="3" maxlength="4000">${escapeHtml(current)}</textarea>
+        <div class="bc-nf-controls">
+            <div class="bc-nf-spacer"></div>
+            <button class="bc-nf-submit" onclick="_submitNoteEdit('${buildingId}','${noteId}')">
+                <i class="fa-solid fa-check"></i> Save
+            </button>
+            <button class="bc-nf-cancel" onclick="_cancelNoteEdit('${buildingId}','${noteId}', this)">
+                Cancel
+            </button>
+        </div>
+    `;
+    document.getElementById(`bc-ne-body-${noteId}`).focus();
+};
+
+window._cancelNoteEdit = async (buildingId) => {
+    // Easiest path: re-render the console from cache so the original
+    // body comes back.
+    const detail = _buildingConsoleCache[buildingId]
+        || await _fetchBuildingDetail(buildingId);
+    if (detail) _renderBuildingConsole(detail);
+};
+
+window._submitNoteEdit = async (buildingId, noteId) => {
+    const ta = document.getElementById(`bc-ne-body-${noteId}`);
+    const text = ((ta && ta.value) || '').trim();
+    if (!text) { showToast('Body cannot be empty (use Delete to remove)', 'error'); return; }
+    try {
+        const res = await fetch(
+            `${API}/buildings/${encodeURIComponent(buildingId)}/notes/${encodeURIComponent(noteId)}`,
+            { method: 'PATCH', headers: _authHeaders(), body: JSON.stringify({ body: text }) }
+        );
+        if (!res.ok) {
+            const err = await res.text();
+            showToast(`Edit failed: ${err.slice(0, 80)}`, 'error');
+            return;
+        }
+        showToast('Note updated', 'success');
+        delete _buildingConsoleCache[buildingId];
+        const detail = await _fetchBuildingDetail(buildingId);
+        if (detail) _renderBuildingConsole(detail);
+    } catch (e) {
+        showToast(`Network error: ${e.message}`, 'error');
+    }
+};
+
+window._pinNote = async (buildingId, noteId, pinned) => {
+    try {
+        const res = await fetch(
+            `${API}/buildings/${encodeURIComponent(buildingId)}/notes/${encodeURIComponent(noteId)}`,
+            { method: 'PATCH', headers: _authHeaders(), body: JSON.stringify({ pinned }) }
+        );
+        if (!res.ok) {
+            const err = await res.text();
+            showToast(`Pin toggle failed: ${err.slice(0, 80)}`, 'error');
+            return;
+        }
+        showToast(pinned ? 'Note pinned' : 'Note unpinned', 'success');
+        delete _buildingConsoleCache[buildingId];
+        const detail = await _fetchBuildingDetail(buildingId);
+        if (detail) _renderBuildingConsole(detail);
+    } catch (e) {
+        showToast(`Network error: ${e.message}`, 'error');
+    }
+};
+
+window._deleteNote = async (buildingId, noteId) => {
+    if (!confirm('Delete this note? The tombstone remains in the audit log.')) return;
+    try {
+        const res = await fetch(
+            `${API}/buildings/${encodeURIComponent(buildingId)}/notes/${encodeURIComponent(noteId)}`,
+            { method: 'DELETE', headers: _authHeaders() }
+        );
+        if (!res.ok) {
+            const err = await res.text();
+            showToast(`Delete failed: ${err.slice(0, 80)}`, 'error');
+            return;
+        }
+        showToast('Note deleted', 'success');
         delete _buildingConsoleCache[buildingId];
         const detail = await _fetchBuildingDetail(buildingId);
         if (detail) _renderBuildingConsole(detail);

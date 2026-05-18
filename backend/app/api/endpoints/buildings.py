@@ -23,12 +23,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import desc, or_, text
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_optional_user, require_analyst
+from app.core.deps import get_optional_user, require_admin, require_analyst
 from app.db.session import get_db
+from app.models.auth import User
 from app.models.report import (
     Building,
     BuildingEvent,
     BuildingMonitor,
+    BuildingNote,
     BuildingResponder,
     Report,
     SatelliteVerification,
@@ -42,6 +44,9 @@ from app.schemas.building import (
     BuildingSummary,
     FootprintUpdate,
     MonitorResponse,
+    NoteCreate,
+    NoteResponse,
+    NoteUpdate,
     ResponderCreate,
     ResponderResponse,
     ResponderUpdate,
@@ -228,7 +233,11 @@ def list_buildings(
 # GET /api/v1/buildings/{id}  ── full intelligence
 # ──────────────────────────────────────────────────────────────────────
 @router.get("/{building_id}", response_model=BuildingDetail)
-def get_building(building_id: str, db: Session = Depends(get_db)):
+def get_building(
+    building_id: str,
+    db: Session = Depends(get_db),
+    _user=Depends(get_optional_user),
+):
     """Full Building Intelligence Console payload.
 
     Returns the BuildingSummary plus nested constituent reports
@@ -308,6 +317,9 @@ def get_building(building_id: str, db: Session = Depends(get_db)):
         .all()
     )
 
+    # Phase H.4 — notes (newest-first, pinned first, capped at 50).
+    note_payloads = _load_notes_for_building(db, building_id, viewer=_user, limit=50)
+
     return BuildingDetail(
         **summary.model_dump(),
         reports=report_responses,
@@ -316,7 +328,58 @@ def get_building(building_id: str, db: Session = Depends(get_db)):
         satellite_summary=sat_rollup,
         responders=[ResponderResponse.model_validate(r) for r in responders],
         monitors=[MonitorResponse.model_validate(m) for m in monitors],
+        notes=note_payloads,
     )
+
+
+def _load_notes_for_building(
+    db: Session,
+    building_id: str,
+    viewer: Optional[User],
+    limit: int = 50,
+) -> List[NoteResponse]:
+    """Project notes for a building into NoteResponse rows.
+
+    - Pinned first, then newest-first within each group
+    - Soft-deleted notes appear as tombstones (body blanked, deleted_at set)
+    - ADMIN_ONLY notes are filtered out for non-admin viewers
+    - author_email / author_name denormalised at read time so the
+      dashboard can render attribution without a follow-up lookup
+    """
+    is_admin = bool(
+        viewer
+        and getattr(viewer, "role", "")
+        in ("ADMIN", "SUPER_ADMIN", "admin", "super_admin")
+    )
+    q = (
+        db.query(BuildingNote, User.email, User.full_name)
+        .outerjoin(User, User.id == BuildingNote.author_user_id)
+        .filter(BuildingNote.building_id == building_id)
+    )
+    if not is_admin:
+        q = q.filter(BuildingNote.visibility != "ADMIN_ONLY")
+    rows = (
+        q.order_by(desc(BuildingNote.pinned), desc(BuildingNote.created_at))
+        .limit(limit)
+        .all()
+    )
+    out: List[NoteResponse] = []
+    for note, email, full_name in rows:
+        out.append(NoteResponse(
+            id=note.id,
+            building_id=note.building_id,
+            author_user_id=note.author_user_id,
+            author_email=email,
+            author_name=full_name,
+            # Tombstone: don't surface the body for soft-deleted notes.
+            body="" if note.deleted_at else note.body,
+            visibility=str(note.visibility),
+            pinned=bool(note.pinned),
+            created_at=note.created_at,
+            edited_at=note.edited_at,
+            deleted_at=note.deleted_at,
+        ))
+    return out
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -527,6 +590,199 @@ def clear_monitor(
     ))
     db.commit()
     return Response(status_code=204)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase H.4 — Operator notes thread
+# ──────────────────────────────────────────────────────────────────────
+@router.post("/{building_id}/notes", response_model=NoteResponse)
+def add_note(
+    building_id: str,
+    body: NoteCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Add a new operator note to a building.
+
+    Notes are the long-form context channel that BuildingEvent (audit
+    log) + Building.ai_summary (machine brief) deliberately don't try
+    to be — free text, pinnable, edit + soft-delete.
+
+    Emits a NOTE_ADDED BuildingEvent for the timeline. ADMIN_ONLY
+    visibility requires the caller to be an admin (gate enforced
+    here rather than client-side).
+    """
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+
+    # ADMIN_ONLY visibility is admin-gated.
+    is_admin = getattr(user, "role", "") in (
+        "ADMIN", "SUPER_ADMIN", "admin", "super_admin"
+    )
+    if body.visibility == "ADMIN_ONLY" and not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="ADMIN_ONLY notes require admin role",
+        )
+
+    note = BuildingNote(
+        building_id=building_id,
+        author_user_id=user.id if hasattr(user, "id") else None,
+        body=body.body.strip(),
+        visibility=body.visibility or "ALL_OPERATORS",
+        pinned=bool(body.pinned),
+    )
+    db.add(note)
+    db.add(BuildingEvent(
+        building_id=building_id,
+        event_kind="NOTE_ADDED",
+        actor_user_id=user.id if hasattr(user, "id") else None,
+        actor_kind="OPERATOR",
+        # Don't ship the full body to the timeline — it can be 4 KB.
+        # A 80-char snippet + the note id is enough context for the
+        # timeline reader to click through if they want the full text.
+        payload={
+            "note_id": note.id,
+            "preview": body.body.strip()[:80],
+            "pinned": bool(body.pinned),
+            "visibility": body.visibility or "ALL_OPERATORS",
+        },
+    ))
+    db.commit()
+    db.refresh(note)
+    # Project through the same helper to include author email/name.
+    rows = _load_notes_for_building(db, building_id, viewer=user, limit=1)
+    return rows[0] if rows else NoteResponse.model_validate(note)
+
+
+@router.patch("/{building_id}/notes/{note_id}", response_model=NoteResponse)
+def edit_note(
+    building_id: str,
+    note_id: str,
+    body: NoteUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Edit an existing note.
+
+    Editing rules:
+      - The author can edit body / visibility / pinned.
+      - Admins can edit any note (incl. pin / unpin / change visibility).
+      - Other analysts can pin / unpin but not edit body or visibility.
+    """
+    note = (
+        db.query(BuildingNote)
+        .filter(
+            BuildingNote.id == note_id,
+            BuildingNote.building_id == building_id,
+        )
+        .first()
+    )
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    if note.deleted_at:
+        raise HTTPException(status_code=409, detail="Note is deleted")
+
+    is_admin = getattr(user, "role", "") in (
+        "ADMIN", "SUPER_ADMIN", "admin", "super_admin"
+    )
+    is_author = note.author_user_id == getattr(user, "id", None)
+    body_or_vis_change = (body.body is not None) or (body.visibility is not None)
+    if body_or_vis_change and not (is_admin or is_author):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the author or an admin can edit a note's content",
+        )
+
+    edited = False
+    if body.body is not None and body.body.strip() != note.body:
+        note.body = body.body.strip()
+        edited = True
+    if body.visibility is not None and body.visibility != note.visibility:
+        # ADMIN_ONLY visibility is admin-gated even on edit.
+        if body.visibility == "ADMIN_ONLY" and not is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="ADMIN_ONLY visibility requires admin role",
+            )
+        note.visibility = body.visibility
+        edited = True
+    if body.pinned is not None and bool(body.pinned) != bool(note.pinned):
+        note.pinned = bool(body.pinned)
+        edited = True
+
+    if edited:
+        note.edited_at = datetime.now(timezone.utc)
+        db.add(BuildingEvent(
+            building_id=building_id,
+            event_kind="NOTE_EDITED",
+            actor_user_id=user.id if hasattr(user, "id") else None,
+            actor_kind="OPERATOR",
+            payload={"note_id": note_id},
+        ))
+        db.commit()
+        db.refresh(note)
+
+    rows = _load_notes_for_building(db, building_id, viewer=user, limit=50)
+    found = next((r for r in rows if r.id == note_id), None)
+    return found or NoteResponse.model_validate(note)
+
+
+@router.delete("/{building_id}/notes/{note_id}", response_model=NoteResponse)
+def delete_note(
+    building_id: str,
+    note_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Soft-delete a note.
+
+    Sets deleted_at + emits a NOTE_DELETED BuildingEvent. The row stays
+    in the DB (tombstone) so the timeline retains the audit reference.
+    Returns the tombstone NoteResponse (body blanked).
+
+    Author OR admin only.
+    """
+    note = (
+        db.query(BuildingNote)
+        .filter(
+            BuildingNote.id == note_id,
+            BuildingNote.building_id == building_id,
+        )
+        .first()
+    )
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    if note.deleted_at:
+        # Idempotent — already deleted; project the existing tombstone.
+        rows = _load_notes_for_building(db, building_id, viewer=user, limit=50)
+        found = next((r for r in rows if r.id == note_id), None)
+        return found or NoteResponse.model_validate(note)
+
+    is_admin = getattr(user, "role", "") in (
+        "ADMIN", "SUPER_ADMIN", "admin", "super_admin"
+    )
+    is_author = note.author_user_id == getattr(user, "id", None)
+    if not (is_admin or is_author):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the author or an admin can delete a note",
+        )
+
+    note.deleted_at = datetime.now(timezone.utc)
+    db.add(BuildingEvent(
+        building_id=building_id,
+        event_kind="NOTE_DELETED",
+        actor_user_id=user.id if hasattr(user, "id") else None,
+        actor_kind="OPERATOR",
+        payload={"note_id": note_id},
+    ))
+    db.commit()
+    db.refresh(note)
+    rows = _load_notes_for_building(db, building_id, viewer=user, limit=50)
+    found = next((r for r in rows if r.id == note_id), None)
+    return found or NoteResponse.model_validate(note)
 
 
 # ──────────────────────────────────────────────────────────────────────

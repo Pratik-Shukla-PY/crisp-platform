@@ -3094,6 +3094,205 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     border-color: rgba(34, 197, 94, 0.55);
 }
 
+/* ── Phase H.4 — Operator notes thread ───────────────────────── */
+.bc-section-notes .bc-section-title { gap: 6px; }
+.bc-note-add-btn {
+    appearance: none;
+    background: rgba(56, 189, 248, 0.12);
+    color: #7dd3fc;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    padding: 3px 9px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.bc-note-add-btn:hover {
+    background: rgba(56, 189, 248, 0.22);
+    border-color: rgba(56, 189, 248, 0.60);
+}
+.bc-note-add-btn i { font-size: 9px; }
+
+.bc-note-form {
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.20);
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 8px;
+}
+.bc-note-textarea {
+    width: 100%;
+    background: rgba(15, 23, 42, 0.65);
+    color: #f1f5f9;
+    border: 1px solid rgba(148, 163, 184, 0.20);
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 12px;
+    font-family: inherit;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 60px;
+    box-sizing: border-box;
+}
+.bc-note-textarea:focus {
+    outline: none;
+    border-color: rgba(56, 189, 248, 0.65);
+    background: rgba(15, 23, 42, 0.85);
+}
+.bc-nf-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+}
+.bc-nf-spacer { flex: 1; }
+.bc-nf-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #94a3b8;
+    cursor: pointer;
+    user-select: none;
+}
+.bc-nf-check input { margin: 0; cursor: pointer; }
+.bc-nf-check i { font-size: 10px; }
+.bc-nf-submit, .bc-nf-cancel {
+    appearance: none;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.bc-nf-submit {
+    background: rgba(56, 189, 248, 0.18);
+    color: #7dd3fc;
+    border-color: rgba(56, 189, 248, 0.45);
+}
+.bc-nf-submit:hover {
+    background: rgba(56, 189, 248, 0.28);
+    border-color: rgba(56, 189, 248, 0.70);
+}
+.bc-nf-cancel {
+    background: transparent;
+    color: #94a3b8;
+    border-color: rgba(148, 163, 184, 0.30);
+}
+.bc-nf-cancel:hover {
+    color: #cbd5e1;
+    border-color: rgba(148, 163, 184, 0.50);
+}
+
+.bc-notes { display: flex; flex-direction: column; gap: 6px; }
+.bc-note {
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(148, 163, 184, 0.04);
+    border: 1px solid rgba(148, 163, 184, 0.10);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.bc-note-pinned {
+    background: rgba(245, 158, 11, 0.07);
+    border-color: rgba(245, 158, 11, 0.30);
+}
+.bc-note-deleted {
+    opacity: 0.6;
+    background: transparent;
+    border-style: dashed;
+}
+.bc-note-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.bc-note-author {
+    font-size: 11.5px;
+    color: #f1f5f9;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.bc-note-author i { font-size: 9px; opacity: 0.7; }
+.bc-note-time {
+    font-size: 10.5px;
+    color: #94a3b8;
+    font-feature-settings: "tnum";
+}
+.bc-note-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+}
+.bc-note-flag i { font-size: 9px; }
+.bc-note-flag-pinned {
+    color: #facc15;
+    background: rgba(234, 179, 8, 0.16);
+}
+.bc-note-flag-admin {
+    color: #f472b6;
+    background: rgba(244, 114, 182, 0.16);
+}
+.bc-note-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+}
+.bc-note-btn {
+    appearance: none;
+    background: rgba(148, 163, 184, 0.10);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.20);
+    border-radius: 4px;
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9.5px;
+}
+.bc-note-btn:hover {
+    background: rgba(148, 163, 184, 0.18);
+    border-color: rgba(148, 163, 184, 0.45);
+}
+.bc-note-btn-delete {
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.25);
+}
+.bc-note-btn-delete:hover {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.55);
+}
+.bc-note-body {
+    font-size: 12px;
+    color: #cbd5e1;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.bc-note-tombstone {
+    color: #94a3b8;
+    font-style: italic;
+    font-size: 11px;
+}
+
 /* ──────────────────────────────────────────────────────────────────
    Phase G.1 (May 2026) — Stacking multi-filter chip row.
 
