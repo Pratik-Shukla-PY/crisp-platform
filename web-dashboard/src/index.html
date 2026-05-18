@@ -489,6 +489,15 @@
         <div class="detail-header">
             <button class="close-btn" onclick="closeDetail()"><i class="fa-solid fa-xmark"></i></button>
             <h3 id="detail-title">Incident Detail</h3>
+            <!-- Phase G.3 — Full-report max-modal toggle. Expands the detail
+                 panel to cover the feed + map for a distraction-free
+                 reading + printing experience. -->
+            <button class="dp-fullscreen-btn"
+                    id="dp-fullscreen-btn"
+                    onclick="toggleFullReportModal()"
+                    title="Maximise / restore full report">
+                <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
+            </button>
         </div>
         <div class="detail-body" id="detail-body"></div>
         <div class="dp-action-dock" id="dp-action-dock"></div>

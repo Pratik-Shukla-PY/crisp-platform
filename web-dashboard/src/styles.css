@@ -916,10 +916,68 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     transition: 0.2s;
 }
 .close-btn:hover { background: rgba(255,255,255,0.14); color: var(--text); }
+.dp-fullscreen-btn {
+    width: 28px; height: 28px; border-radius: 7px; margin-top: 2px;
+    background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+    color: var(--text-sub); cursor: pointer; font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    transition: 0.2s;
+    margin-left: auto;
+}
+.dp-fullscreen-btn:hover { background: rgba(255,255,255,0.14); color: var(--text); }
 .detail-body { flex: 1; overflow-y: auto; padding: 12px; }
 .detail-body::-webkit-scrollbar { width: 4px; }
 .detail-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 .detail-header h3 { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
+
+/* ══ Phase G.3 — Full-report max-modal ════════════════════════
+   Toggled by adding `dp-fullscreen` to <body>. The detail panel
+   grows to a near-fullscreen modal (centred, with breathing room
+   to keep the operator's eye on the report rather than the chrome).
+   A semi-opaque scrim sits behind it so the feed / map aren't
+   visually pulling focus while the operator reads. */
+body.dp-fullscreen::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.65);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    z-index: 50;
+    pointer-events: none;
+}
+body.dp-fullscreen .detail-panel {
+    position: fixed;
+    top: 5vh;
+    left: 5vw;
+    right: 5vw;
+    bottom: 5vh;
+    width: auto;
+    z-index: 60;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+    border-radius: 14px;
+}
+body.dp-fullscreen .detail-body {
+    padding: 18px 28px;
+    /* Big breathing layout — let the section cards stretch to a
+       reasonable reading-width column and centre on the page. */
+    max-width: 920px;
+    margin: 0 auto;
+    width: 100%;
+}
+/* Headline text + scores grid feel sparse in the wider container; a
+   modest typographic bump keeps the rhythm. */
+body.dp-fullscreen .detail-header h3 { font-size: 16px; }
+body.dp-fullscreen .bc-score-value { font-size: 22px; }
+body.dp-fullscreen .bc-summary-text,
+body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
+@media (max-width: 768px) {
+    body.dp-fullscreen .detail-panel {
+        top: 2vh; left: 2vw; right: 2vw; bottom: 2vh;
+        border-radius: 10px;
+    }
+    body.dp-fullscreen .detail-body { padding: 12px 14px; }
+}
 
 /* ── Decision-First Detail Panel v3 ────────────────────────── */
 

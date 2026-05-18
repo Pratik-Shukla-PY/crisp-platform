@@ -3208,9 +3208,71 @@ window.closeDetail = () => {
     if (typeof _selectedBuildingId !== 'undefined' && _selectedBuildingId) {
         _closeBuildingConsole({ skipFeedRender: true });
     }
+    // Phase G.3 — drop the full-report max-modal class on close so the
+    // next time the panel opens it starts in its docked size.
+    document.body.classList.remove('dp-fullscreen');
     document.getElementById('detail-panel').style.display = 'none';
     renderFeed();
 };
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase G.3 (May 2026) — Full-report max-modal
+// ──────────────────────────────────────────────────────────────────────
+// The detail panel by default docks on the right (~380 px wide). For
+// a distraction-free reading / printing pass an operator can max it
+// to cover the feed + map. Implementation is purely CSS-driven —
+// the `body.dp-fullscreen` class swells the detail panel and dims
+// the rest. No content re-render needed.
+
+window.toggleFullReportModal = () => {
+    const expanding = !document.body.classList.contains('dp-fullscreen');
+    document.body.classList.toggle('dp-fullscreen', expanding);
+    // Swap the icon to telegraph the next action.
+    const btn = document.getElementById('dp-fullscreen-btn');
+    if (btn) {
+        const icon = btn.querySelector('i');
+        if (icon) {
+            icon.className = expanding
+                ? 'fa-solid fa-down-left-and-up-right-to-center'
+                : 'fa-solid fa-up-right-and-down-left-from-center';
+        }
+        btn.title = expanding ? 'Restore docked panel' : 'Maximise / restore full report';
+    }
+    if (expanding) {
+        // Push a history entry so the browser back-button collapses the
+        // modal rather than navigating away. The popstate handler below
+        // toggles back to docked mode.
+        try { history.pushState({ crispFullReport: true }, '', '#full-report'); } catch (_) {}
+        // ESC to dismiss.
+        document.addEventListener('keydown', _crispFullReportKeyHandler);
+    } else {
+        document.removeEventListener('keydown', _crispFullReportKeyHandler);
+        // If we got here via the close button, restore the hash.
+        if ((window.location.hash || '').includes('full-report')) {
+            try { history.back(); } catch (_) {}
+        }
+    }
+};
+
+function _crispFullReportKeyHandler(ev) {
+    if (ev.key === 'Escape' && document.body.classList.contains('dp-fullscreen')) {
+        toggleFullReportModal();
+    }
+}
+
+window.addEventListener('popstate', (ev) => {
+    // Collapse on back-button if the modal is up.
+    if (document.body.classList.contains('dp-fullscreen')) {
+        document.body.classList.remove('dp-fullscreen');
+        document.removeEventListener('keydown', _crispFullReportKeyHandler);
+        const btn = document.getElementById('dp-fullscreen-btn');
+        if (btn) {
+            const icon = btn.querySelector('i');
+            if (icon) icon.className = 'fa-solid fa-up-right-and-down-left-from-center';
+            btn.title = 'Maximise / restore full report';
+        }
+    }
+});
 
 // ══════════════════════════════════════════════════════════════════════
 // Phase H.1.d (May 2026) — Building Intelligence Console.
