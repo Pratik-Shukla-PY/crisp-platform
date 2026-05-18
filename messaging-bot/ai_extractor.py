@@ -93,37 +93,68 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
     from messaging_bot.sms.geocoder import geocode_text
 
     location_name = extracted.get("location_name", "")
-    infra_type = extracted.get("infrastructure_type", "OTHER")
+
+    # Phase F.3.a (May 2026, audit Finding E.1) — chat-channel
+    # AI-extraction infrastructure_type was previously defaulting to
+    # "OTHER" whenever Claude couldn't confidently categorise. Since
+    # SMS / Telegram / WhatsApp / IVR submissions all run through this
+    # extractor and chat-text is inherently ambiguous (a flood report
+    # might or might not mention which infrastructure is affected),
+    # the OTHER fallback was getting written to ~most chat-channel
+    # rows. The dashboard then surfaced those rows under "OTHER" /
+    # "Transport & Communication" (after the backend's _apply_taxonomy
+    # legacy-chip migration), even though the reporter never selected
+    # a category — breaking multi-channel parity (UNDP must-have #1).
+    #
+    # New behaviour: only include `infrastructure_type` in the PATCH
+    # payload when Claude returned a confident value AND it validates.
+    # If Claude was uncertain or returned an invalid value, OMIT the
+    # field entirely from the payload so the backend keeps whatever
+    # was already there (or its column default). The dashboard will
+    # then distinguish "user selected OTHER" from "no signal yet" via
+    # the F.3.b infrastructure_type_source enum (next commit).
+    #
+    # Same logic applies to crisis_type — both fields now stay NULL
+    # in the AI extraction path when Claude is uncertain rather than
+    # being silently coerced to OTHER.
+    infra_type_raw = extracted.get("infrastructure_type")
     severity = extracted.get("severity", "MODERATE")
     summary = extracted.get("summary", "")
     user_said = extracted.get("user_said", "")
 
-    # Validate infrastructure type
+    # Validate infrastructure type — None if Claude was uncertain OR
+    # returned an unknown enum. Legacy chips (ROAD / HOSPITAL / ...)
+    # are still accepted here; the backend's _apply_taxonomy hook
+    # normalises them to the current UNDP taxonomy on insert.
     valid_types = ["WATER", "ROAD", "HOSPITAL", "HOUSE", "POWER", "SCHOOL", "TELECOM", "GOVERNMENT", "OTHER"]
-    if infra_type not in valid_types:
-        infra_type = "OTHER"
+    infra_type = infra_type_raw if infra_type_raw in valid_types else None
 
     valid_sev = ["SEVERE", "MODERATE", "MINOR"]
     if severity not in valid_sev:
         severity = "MODERATE"
 
-    crisis_type = extracted.get("crisis_type", "OTHER")
+    crisis_type_raw = extracted.get("crisis_type")
     valid_crisis = ["EARTHQUAKE", "FLOOD", "CONFLICT", "HURRICANE", "CYCLONE", "WILDFIRE", "LANDSLIDE", "PANDEMIC", "OTHER"]
-    if crisis_type not in valid_crisis:
-        crisis_type = "OTHER"
+    crisis_type = crisis_type_raw if crisis_type_raw in valid_crisis else None
 
     damage_class = extracted.get("damage_classification", "")
     valid_damage = ["NO_DAMAGE", "PARTIAL", "COMPLETE"]
     if damage_class not in valid_damage:
         damage_class = ""
 
-    # Update classification — keep raw transcription in description for audit trail
+    # Update classification — keep raw transcription in description for
+    # audit trail. infrastructure_type + crisis_type are now conditionally
+    # included ONLY when Claude returned a confident value (the previous
+    # default-to-OTHER behaviour caused the "everything is Transport &
+    # Communication" dashboard bug reported by operators).
     update_payload = {
-        "infrastructure_type": infra_type,
         "severity": severity,
-        "crisis_type": crisis_type,
         "damage_classification": damage_class if damage_class else None,
     }
+    if infra_type is not None:
+        update_payload["infrastructure_type"] = infra_type
+    if crisis_type is not None:
+        update_payload["crisis_type"] = crisis_type
     # Use the clean user_said as description (what user actually meant)
     if user_said:
         update_payload["description"] = user_said
