@@ -28,6 +28,8 @@ from app.db.session import get_db
 from app.models.report import (
     Building,
     BuildingEvent,
+    BuildingMonitor,
+    BuildingResponder,
     Report,
     SatelliteVerification,
     is_valid_building_state_transition,
@@ -39,6 +41,10 @@ from app.schemas.building import (
     BuildingListResponse,
     BuildingSummary,
     FootprintUpdate,
+    MonitorResponse,
+    ResponderCreate,
+    ResponderResponse,
+    ResponderUpdate,
     SatelliteRollup,
     StateTransitionRequest,
 )
@@ -282,13 +288,245 @@ def get_building(building_id: str, db: Session = Depends(get_db)):
             # the whole detail call. H.6 will refresh.
             ai_payload = None
 
+    # Phase H.3 — active responders + monitors (cleared_at IS NULL).
+    responders = (
+        db.query(BuildingResponder)
+        .filter(
+            BuildingResponder.building_id == building_id,
+            BuildingResponder.cleared_at.is_(None),
+        )
+        .order_by(desc(BuildingResponder.assigned_at))
+        .all()
+    )
+    monitors = (
+        db.query(BuildingMonitor)
+        .filter(
+            BuildingMonitor.building_id == building_id,
+            BuildingMonitor.cleared_at.is_(None),
+        )
+        .order_by(desc(BuildingMonitor.started_at))
+        .all()
+    )
+
     return BuildingDetail(
         **summary.model_dump(),
         reports=report_responses,
         footprint_geojson=b.footprint_geojson,
         ai_summary=ai_payload,
         satellite_summary=sat_rollup,
+        responders=[ResponderResponse.model_validate(r) for r in responders],
+        monitors=[MonitorResponse.model_validate(m) for m in monitors],
     )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase H.3 — Responder coordination + watch list endpoints
+# ──────────────────────────────────────────────────────────────────────
+@router.post("/{building_id}/responders", response_model=ResponderResponse)
+def assign_responder(
+    building_id: str,
+    body: ResponderCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Assign a new responder to a building.
+
+    Creates a BuildingResponder row + emits a RESPONDER_ASSIGNED
+    BuildingEvent so the timeline reflects the action. If the building
+    is in ACTIVE state it transitions to RESPONDING automatically.
+    """
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+
+    r = BuildingResponder(
+        building_id=building_id,
+        assigned_by_user_id=user.id if hasattr(user, "id") else None,
+        responder_name=body.responder_name,
+        responder_org=body.responder_org,
+        responder_contact=body.responder_contact,
+        eta_minutes=body.eta_minutes,
+        notes=body.notes,
+    )
+    db.add(r)
+    db.add(BuildingEvent(
+        building_id=building_id,
+        event_kind="RESPONDER_ASSIGNED",
+        actor_user_id=user.id if hasattr(user, "id") else None,
+        actor_kind="OPERATOR",
+        payload={
+            "responder_name": body.responder_name,
+            "responder_org": body.responder_org,
+            "eta_minutes": body.eta_minutes,
+        },
+    ))
+    # If the building was ACTIVE / MONITORED, escalate to RESPONDING
+    # since at least one responder is now assigned.
+    if b.state in ("ACTIVE", "MONITORED"):
+        b.state = "RESPONDING"
+        b.state_changed_at = datetime.now(timezone.utc)
+        b.state_changed_by_user_id = user.id if hasattr(user, "id") else None
+        db.add(BuildingEvent(
+            building_id=building_id,
+            event_kind="STATE_CHANGED",
+            actor_user_id=user.id if hasattr(user, "id") else None,
+            actor_kind="SYSTEM",
+            payload={
+                "from_state": "ACTIVE" if b.state == "RESPONDING" else b.state,
+                "to_state": "RESPONDING",
+                "reason": "auto-transition on responder assignment",
+            },
+        ))
+    db.commit()
+    db.refresh(r)
+    return ResponderResponse.model_validate(r)
+
+
+@router.patch("/{building_id}/responders/{responder_id}", response_model=ResponderResponse)
+def update_responder(
+    building_id: str,
+    responder_id: str,
+    body: ResponderUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Advance a responder's lifecycle.
+
+    `action=dispatched` → set dispatched_at + emit RESPONDER_DISPATCHED.
+    `action=arrived`    → set arrived_at + emit RESPONDER_ARRIVED.
+    `action=cleared`    → set cleared_at + emit RESPONDER_CLEARED.
+    eta_minutes and notes are free-text patches (no event emitted).
+    """
+    r = (
+        db.query(BuildingResponder)
+        .filter(
+            BuildingResponder.id == responder_id,
+            BuildingResponder.building_id == building_id,
+        )
+        .first()
+    )
+    if not r:
+        raise HTTPException(status_code=404, detail="Responder not found")
+
+    now = datetime.now(timezone.utc)
+    if body.action == "dispatched":
+        if r.dispatched_at:
+            raise HTTPException(status_code=409,
+                                detail="Responder already marked dispatched")
+        r.dispatched_at = now
+        db.add(BuildingEvent(
+            building_id=building_id,
+            event_kind="RESPONDER_DISPATCHED",
+            actor_user_id=user.id if hasattr(user, "id") else None,
+            actor_kind="OPERATOR",
+            payload={"responder_id": responder_id, "responder_name": r.responder_name},
+        ))
+    elif body.action == "arrived":
+        if r.arrived_at:
+            raise HTTPException(status_code=409,
+                                detail="Responder already marked arrived")
+        r.arrived_at = now
+        db.add(BuildingEvent(
+            building_id=building_id,
+            event_kind="RESPONDER_ARRIVED",
+            actor_user_id=user.id if hasattr(user, "id") else None,
+            actor_kind="OPERATOR",
+            payload={"responder_id": responder_id, "responder_name": r.responder_name},
+        ))
+    elif body.action == "cleared":
+        if r.cleared_at:
+            raise HTTPException(status_code=409,
+                                detail="Responder already cleared")
+        r.cleared_at = now
+        db.add(BuildingEvent(
+            building_id=building_id,
+            event_kind="RESPONDER_CLEARED",
+            actor_user_id=user.id if hasattr(user, "id") else None,
+            actor_kind="OPERATOR",
+            payload={"responder_id": responder_id, "responder_name": r.responder_name},
+        ))
+    # Free-text patches.
+    if body.eta_minutes is not None:
+        r.eta_minutes = body.eta_minutes
+    if body.notes is not None:
+        r.notes = body.notes
+
+    db.commit()
+    db.refresh(r)
+    return ResponderResponse.model_validate(r)
+
+
+@router.post("/{building_id}/monitor", response_model=MonitorResponse)
+def start_monitor(
+    building_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Add the current user to the building's watch list.
+
+    Idempotent — returns the existing active watch if one exists.
+    Emits a MONITOR_STARTED BuildingEvent on first watch.
+    """
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+
+    # Check for existing active watch (partial unique index prevents
+    # duplicates, but we want a friendly idempotent response).
+    existing = (
+        db.query(BuildingMonitor)
+        .filter(
+            BuildingMonitor.building_id == building_id,
+            BuildingMonitor.user_id == user.id,
+            BuildingMonitor.cleared_at.is_(None),
+        )
+        .first()
+    )
+    if existing:
+        return MonitorResponse.model_validate(existing)
+
+    m = BuildingMonitor(building_id=building_id, user_id=user.id)
+    db.add(m)
+    db.add(BuildingEvent(
+        building_id=building_id,
+        event_kind="MONITOR_STARTED",
+        actor_user_id=user.id,
+        actor_kind="OPERATOR",
+        payload={"user_id": user.id},
+    ))
+    db.commit()
+    db.refresh(m)
+    return MonitorResponse.model_validate(m)
+
+
+@router.delete("/{building_id}/monitor", status_code=204)
+def clear_monitor(
+    building_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Stop watching the building (clears the current user's active watch)."""
+    m = (
+        db.query(BuildingMonitor)
+        .filter(
+            BuildingMonitor.building_id == building_id,
+            BuildingMonitor.user_id == user.id,
+            BuildingMonitor.cleared_at.is_(None),
+        )
+        .first()
+    )
+    if not m:
+        return Response(status_code=204)
+    m.cleared_at = datetime.now(timezone.utc)
+    db.add(BuildingEvent(
+        building_id=building_id,
+        event_kind="MONITOR_CLEARED",
+        actor_user_id=user.id,
+        actor_kind="OPERATOR",
+        payload={"user_id": user.id},
+    ))
+    db.commit()
+    return Response(status_code=204)
 
 
 # ──────────────────────────────────────────────────────────────────────

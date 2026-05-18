@@ -131,6 +131,10 @@ class BuildingDetail(BuildingSummary):
     # Mean + count for the score; max verdict label by severity rank.
     satellite_summary: Optional["SatelliteRollup"] = None
 
+    # Phase H.3 — active responders + monitors. cleared_at IS NULL.
+    responders: List["ResponderResponse"] = Field(default_factory=list)
+    monitors: List["MonitorResponse"] = Field(default_factory=list)
+
 
 class SatelliteRollup(BaseModel):
     """Aggregated satellite verification across a building's reports."""
@@ -138,10 +142,6 @@ class SatelliteRollup(BaseModel):
     count: int = 0
     latest_verdict: Optional[str] = None
     latest_scored_at: Optional[datetime] = None
-
-
-# Allow forward references in BuildingDetail.satellite_summary.
-BuildingDetail.model_rebuild()
 
 
 # ─── List response envelope ────────────────────────────────────────
@@ -181,6 +181,61 @@ class BuildingEventResponse(BaseModel):
     occurred_at: datetime
 
 
+# ─── Phase H.3 — responder coordination + watch list ───────────────
+class ResponderResponse(BaseModel):
+    """Single responder assignment for the console panel."""
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    building_id: str
+    assigned_by_user_id: Optional[str] = None
+    responder_name: str
+    responder_org: Optional[str] = None
+    responder_contact: Optional[str] = None
+    assigned_at: datetime
+    dispatched_at: Optional[datetime] = None
+    arrived_at: Optional[datetime] = None
+    cleared_at: Optional[datetime] = None
+    eta_minutes: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class ResponderCreate(BaseModel):
+    """POST body for assigning a new responder."""
+    responder_name: str = Field(..., max_length=200)
+    responder_org: Optional[str] = Field(None, max_length=200)
+    responder_contact: Optional[str] = Field(None, max_length=200)
+    eta_minutes: Optional[int] = Field(None, ge=0, le=10080)
+    notes: Optional[str] = None
+
+
+class ResponderUpdate(BaseModel):
+    """PATCH body for updating responder lifecycle.
+
+    `action` is one of dispatched / arrived / cleared — the endpoint
+    sets the corresponding timestamp + emits the matching
+    BuildingEvent kind. Free-form patches to other fields go via the
+    other optional keys.
+    """
+    action: Optional[str] = Field(
+        None,
+        pattern="^(dispatched|arrived|cleared)$",
+        description="One of: dispatched | arrived | cleared",
+    )
+    eta_minutes: Optional[int] = Field(None, ge=0, le=10080)
+    notes: Optional[str] = None
+
+
+class MonitorResponse(BaseModel):
+    """Operator watch-list entry."""
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    building_id: str
+    user_id: str
+    started_at: datetime
+    cleared_at: Optional[datetime] = None
+    note: Optional[str] = None
+
+
 # ─── POST body for footprint caching ───────────────────────────────
 class FootprintUpdate(BaseModel):
     """Body for POST /buildings/{id}/footprint.
@@ -198,3 +253,10 @@ class FootprintUpdate(BaseModel):
     osm_name: Optional[str] = None
     osm_building_type: Optional[str] = None
     osm_addr_full: Optional[str] = None
+
+
+# ─── Forward-ref resolution ─────────────────────────────────────────
+# BuildingDetail references SatelliteRollup + ResponderResponse +
+# MonitorResponse via forward strings. Now that all three are defined
+# we rebuild the model so Pydantic can resolve the annotations.
+BuildingDetail.model_rebuild()

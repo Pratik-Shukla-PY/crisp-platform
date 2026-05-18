@@ -1358,6 +1358,80 @@ def is_valid_building_state_transition(from_state: str, to_state: str) -> bool:
     return to_state in allowed
 
 
+# Phase H.3 (May 2026) — responder coordination + operator watch list.
+#
+# `building_responders` — one row per responder assigned to the
+# building. Lifecycle: assigned → dispatched → arrived → cleared.
+# Surfaces in the Building Intelligence Console's Responders panel.
+class BuildingResponder(Base):
+    """Responder assigned to a building.
+
+    Created when an operator clicks "Assign responder" in the console.
+    The lifecycle timestamps progress as the field situation evolves;
+    `cleared_at` set means the responder has finished and the row no
+    longer counts toward the building's "active responder count".
+    """
+    __tablename__ = "building_responders"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    building_id = Column(
+        String(64),
+        ForeignKey("buildings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assigned_by_user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    responder_name = Column(String(200), nullable=False)
+    responder_org = Column(String(200), nullable=True)
+    responder_contact = Column(String(200), nullable=True)
+    assigned_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    dispatched_at = Column(DateTime(timezone=True), nullable=True)
+    arrived_at = Column(DateTime(timezone=True), nullable=True)
+    cleared_at = Column(DateTime(timezone=True), nullable=True)
+    eta_minutes = Column(Integer, nullable=True)
+    notes = Column(Text, nullable=True)
+
+
+# Phase H.3 — per-operator building watch list.
+#
+# Each operator can "watch" a building to get prioritised in their
+# personal queue + (future) push notifications on score changes.
+# `cleared_at` IS NULL → active watch; partial unique index in the
+# migration enforces "max one active watch per (building, user)".
+class BuildingMonitor(Base):
+    """Per-operator watch list entry."""
+    __tablename__ = "building_monitors"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    building_id = Column(
+        String(64),
+        ForeignKey("buildings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    started_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    cleared_at = Column(DateTime(timezone=True), nullable=True)
+    note = Column(Text, nullable=True)
+
+
 # ── Phase 5.1 (May 2026, docs §9.4) — H3 cell auto-population ────────
 # When a Location row is inserted or its lat/lng changes, derive the H3
 # cell index. Single listener covers all three Location-create sites in

@@ -3398,6 +3398,7 @@ function _renderBuildingConsole(b) {
                         : ''}
                 </div>
                 <div class="bc-actions">
+                    ${_renderBuildingMonitorToggle(b)}
                     ${_renderBuildingStateActions(b)}
                 </div>
             </div>
@@ -3488,6 +3489,24 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
+            <!-- Phase H.3 — Responder coordination -->
+            <div class="bc-section bc-section-responders">
+                <div class="bc-section-title">
+                    <i class="fa-solid fa-truck-medical"></i> Responders
+                    <span class="bc-section-count">${(b.responders || []).length}</span>
+                    <button class="bc-responder-add-btn"
+                            onclick="_openResponderAssignForm('${b.id}')"
+                            title="Assign a responder to this building">
+                        <i class="fa-solid fa-plus"></i> Assign
+                    </button>
+                </div>
+                <div id="bc-responder-form-${escapeHtml(b.id)}"
+                     class="bc-responder-form" style="display:none;"></div>
+                <div class="bc-responders">
+                    ${_renderResponderList(b)}
+                </div>
+            </div>
+
             <!-- Phase H.2 — Building event timeline -->
             <div class="bc-section">
                 <div class="bc-section-title">
@@ -3503,11 +3522,10 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
-            <!-- Footer placeholders for H.3-H.6 surfaces -->
+            <!-- Footer placeholders for H.4-H.6 surfaces -->
             <div class="bc-section bc-deferred">
                 <div class="bc-section-title"><i class="fa-regular fa-rectangle-list"></i> Coming next</div>
                 <ul class="bc-deferred-list">
-                    <li>H.3 — Responder assignment + dispatched/arrived lifecycle</li>
                     <li>H.4 — Operator notes thread</li>
                     <li>H.5 — Consolidated dossier export (PDF + GeoJSON)</li>
                     <li>H.6 — AI building summary (Claude-generated brief + recommendations)</li>
@@ -3727,6 +3745,224 @@ window._refreshBuildingTimeline = async (buildingId) => {
         }).join('');
     } catch (e) {
         el.innerHTML = `<div class="bc-empty">Error: ${escapeHtml(e.message)}</div>`;
+    }
+};
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase H.3 — Responder coordination + watch list (dashboard surface)
+// ──────────────────────────────────────────────────────────────────────
+// Each Building can have N responders (BuildingResponder rows) with a
+// lifecycle: ASSIGNED → DISPATCHED → ARRIVED → CLEARED. Operators
+// advance the lifecycle from the console. Separately, any operator
+// can put a building on their personal watch list (MonitorResponse).
+
+function _renderBuildingMonitorToggle(b) {
+    // Am I currently watching this building? `monitors` is the list of
+    // ACTIVE watches (cleared_at IS NULL). We look up by user id.
+    const myId = _crispUser && _crispUser.id;
+    const watching = !!(myId && (b.monitors || []).some(m => m.user_id === myId));
+    const label = watching ? 'Watching' : 'Watch';
+    const icon = watching ? 'fa-eye' : 'fa-eye-slash';
+    const cls = watching
+        ? 'bc-monitor-btn bc-monitor-btn-active'
+        : 'bc-monitor-btn';
+    return `
+        <button class="${cls}"
+                onclick="_toggleBuildingMonitor('${b.id}', ${watching ? 'true' : 'false'})"
+                title="${watching ? 'Stop watching this building' : 'Add this building to your watch list'}">
+            <i class="fa-solid ${icon}"></i>
+            <span>${label}</span>
+        </button>
+    `;
+}
+
+function _renderResponderList(b) {
+    const responders = b.responders || [];
+    if (!responders.length) {
+        return '<div class="bc-empty">No responders assigned yet. Click "Assign" to dispatch a team.</div>';
+    }
+    return responders.map(r => {
+        // Lifecycle phase (visual badge).
+        const phase = r.cleared_at      ? 'CLEARED'
+                    : r.arrived_at      ? 'ON_SITE'
+                    : r.dispatched_at   ? 'DISPATCHED'
+                    : 'ASSIGNED';
+        // Which lifecycle advances are still available?
+        const canDispatch = !r.dispatched_at && !r.cleared_at;
+        const canArrive   = !!r.dispatched_at && !r.arrived_at && !r.cleared_at;
+        const canClear    = !r.cleared_at;
+        // ETA chip only meaningful before arrival.
+        const etaChip = (r.eta_minutes != null && !r.arrived_at && !r.cleared_at)
+            ? `<span class="bc-r-eta"><i class="fa-regular fa-clock"></i> ETA ${r.eta_minutes}m</span>`
+            : '';
+        return `<div class="bc-responder">
+            <span class="bc-r-phase bc-r-phase-${phase}">${phase.replace('_', '-')}</span>
+            <div class="bc-responder-body">
+                <div class="bc-responder-line1">
+                    <strong>${escapeHtml(r.responder_name || 'Responder')}</strong>
+                    ${r.responder_org ? `<span class="bc-r-org">${escapeHtml(r.responder_org)}</span>` : ''}
+                    ${r.responder_contact ? `<span class="bc-r-contact"><i class="fa-solid fa-phone"></i> ${escapeHtml(r.responder_contact)}</span>` : ''}
+                    ${etaChip}
+                </div>
+                <div class="bc-responder-line2">
+                    <span class="bc-r-time">Assigned ${timeAgo(r.assigned_at)}</span>
+                    ${r.dispatched_at ? `<span class="bc-r-time">Dispatched ${timeAgo(r.dispatched_at)}</span>` : ''}
+                    ${r.arrived_at ? `<span class="bc-r-time">On-site ${timeAgo(r.arrived_at)}</span>` : ''}
+                    ${r.cleared_at ? `<span class="bc-r-time">Cleared ${timeAgo(r.cleared_at)}</span>` : ''}
+                    ${r.notes ? `<span class="bc-r-notes" title="${escapeHtml(r.notes)}"><i class="fa-regular fa-note-sticky"></i> note</span>` : ''}
+                </div>
+            </div>
+            <div class="bc-responder-actions">
+                ${canDispatch ? `<button class="bc-resp-btn"
+                        onclick="_advanceResponder('${b.id}', '${r.id}', 'dispatched')"
+                        title="Mark dispatched"><i class="fa-solid fa-truck"></i></button>` : ''}
+                ${canArrive ? `<button class="bc-resp-btn"
+                        onclick="_advanceResponder('${b.id}', '${r.id}', 'arrived')"
+                        title="Mark on-site"><i class="fa-solid fa-map-pin"></i></button>` : ''}
+                ${canClear ? `<button class="bc-resp-btn bc-resp-btn-clear"
+                        onclick="_advanceResponder('${b.id}', '${r.id}', 'cleared')"
+                        title="Mark cleared / stand down"><i class="fa-solid fa-circle-check"></i></button>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+window._openResponderAssignForm = (buildingId) => {
+    // Reveal an inline form anchored under the section title. Stays
+    // anchored in the console so the operator never loses building
+    // context. Submits to POST /buildings/{id}/responders.
+    const id = `bc-responder-form-${buildingId}`;
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    el.innerHTML = `
+        <div class="bc-rf-row">
+            <input class="bc-rf-input" id="bc-rf-name-${buildingId}"
+                   type="text" placeholder="Responder / team name"
+                   maxlength="200" autocomplete="off" autofocus />
+        </div>
+        <div class="bc-rf-row bc-rf-grid">
+            <input class="bc-rf-input" id="bc-rf-org-${buildingId}"
+                   type="text" placeholder="Organisation (optional)" maxlength="200" />
+            <input class="bc-rf-input" id="bc-rf-contact-${buildingId}"
+                   type="text" placeholder="Contact (phone / radio)" maxlength="200" />
+        </div>
+        <div class="bc-rf-row bc-rf-grid">
+            <input class="bc-rf-input" id="bc-rf-eta-${buildingId}"
+                   type="number" placeholder="ETA (minutes)" min="0" max="10080" />
+            <input class="bc-rf-input" id="bc-rf-notes-${buildingId}"
+                   type="text" placeholder="Notes (optional)" maxlength="200" />
+        </div>
+        <div class="bc-rf-row bc-rf-actions">
+            <button class="bc-rf-submit"
+                    onclick="_submitResponderAssign('${buildingId}')">
+                <i class="fa-solid fa-paper-plane"></i> Assign
+            </button>
+            <button class="bc-rf-cancel"
+                    onclick="document.getElementById('bc-responder-form-${buildingId}').style.display='none';">
+                Cancel
+            </button>
+        </div>
+    `;
+};
+
+window._submitResponderAssign = async (buildingId) => {
+    const $ = (k) => document.getElementById(`bc-rf-${k}-${buildingId}`);
+    const name = ($('name').value || '').trim();
+    if (!name) {
+        showToast('Responder name is required', 'error');
+        $('name').focus();
+        return;
+    }
+    const body = {
+        responder_name: name,
+        responder_org: ($('org').value || '').trim() || null,
+        responder_contact: ($('contact').value || '').trim() || null,
+        eta_minutes: $('eta').value ? Number($('eta').value) : null,
+        notes: ($('notes').value || '').trim() || null,
+    };
+    try {
+        const res = await fetch(
+            `${API}/buildings/${encodeURIComponent(buildingId)}/responders`,
+            { method: 'POST', headers: _authHeaders(), body: JSON.stringify(body) }
+        );
+        if (res.status === 401 || res.status === 403) {
+            showToast('Analyst role required to assign responders.', 'error');
+            return;
+        }
+        if (!res.ok) {
+            const err = await res.text();
+            showToast(`Assignment failed: ${err.slice(0, 80)}`, 'error');
+            return;
+        }
+        showToast(`Responder assigned: ${name}`, 'success');
+        delete _buildingConsoleCache[buildingId];
+        const detail = await _fetchBuildingDetail(buildingId);
+        if (detail) _renderBuildingConsole(detail);
+    } catch (e) {
+        showToast(`Network error: ${e.message}`, 'error');
+    }
+};
+
+window._advanceResponder = async (buildingId, responderId, action) => {
+    // action ∈ {dispatched, arrived, cleared}. Backend enforces order +
+    // emits the BuildingEvent.
+    try {
+        const res = await fetch(
+            `${API}/buildings/${encodeURIComponent(buildingId)}/responders/${encodeURIComponent(responderId)}`,
+            { method: 'PATCH', headers: _authHeaders(), body: JSON.stringify({ action }) }
+        );
+        if (res.status === 401 || res.status === 403) {
+            showToast('Analyst role required.', 'error');
+            return;
+        }
+        if (res.status === 409) {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.detail || `Already ${action}`, 'error');
+            return;
+        }
+        if (!res.ok) {
+            const err = await res.text();
+            showToast(`Update failed: ${err.slice(0, 80)}`, 'error');
+            return;
+        }
+        const label = action === 'dispatched' ? 'Dispatched'
+                    : action === 'arrived'    ? 'On-site'
+                    : 'Cleared';
+        showToast(`Responder → ${label}`, 'success');
+        delete _buildingConsoleCache[buildingId];
+        const detail = await _fetchBuildingDetail(buildingId);
+        if (detail) _renderBuildingConsole(detail);
+    } catch (e) {
+        showToast(`Network error: ${e.message}`, 'error');
+    }
+};
+
+window._toggleBuildingMonitor = async (buildingId, watching) => {
+    // `watching` is the CURRENT state — if true, DELETE the monitor;
+    // otherwise POST a new one.
+    try {
+        const method = watching ? 'DELETE' : 'POST';
+        const res = await fetch(
+            `${API}/buildings/${encodeURIComponent(buildingId)}/monitor`,
+            { method, headers: _authHeaders() }
+        );
+        if (res.status === 401 || res.status === 403) {
+            showToast('Analyst role required to monitor a building.', 'error');
+            return;
+        }
+        if (!res.ok && res.status !== 204) {
+            const err = await res.text();
+            showToast(`Watch toggle failed: ${err.slice(0, 80)}`, 'error');
+            return;
+        }
+        showToast(watching ? 'Stopped watching this building' : 'Added to your watch list', 'success');
+        delete _buildingConsoleCache[buildingId];
+        const detail = await _fetchBuildingDetail(buildingId);
+        if (detail) _renderBuildingConsole(detail);
+    } catch (e) {
+        showToast(`Network error: ${e.message}`, 'error');
     }
 };
 

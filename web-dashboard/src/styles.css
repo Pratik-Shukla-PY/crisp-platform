@@ -2875,6 +2875,225 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     line-height: 1.6;
 }
 
+/* ── Phase H.3 — Responder coordination + monitor toggle ───── */
+.bc-monitor-btn {
+    appearance: none;
+    background: rgba(148, 163, 184, 0.10);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.20);
+    padding: 4px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+.bc-monitor-btn i { font-size: 10px; }
+.bc-monitor-btn:hover {
+    background: rgba(148, 163, 184, 0.18);
+    border-color: rgba(148, 163, 184, 0.40);
+}
+.bc-monitor-btn-active {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.45);
+}
+.bc-monitor-btn-active:hover {
+    background: rgba(56, 189, 248, 0.20);
+    border-color: rgba(56, 189, 248, 0.65);
+}
+
+.bc-section-responders .bc-section-title { gap: 6px; }
+.bc-responder-add-btn {
+    appearance: none;
+    background: rgba(167, 139, 250, 0.12);
+    color: #c4b5fd;
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    padding: 3px 9px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.bc-responder-add-btn:hover {
+    background: rgba(167, 139, 250, 0.22);
+    border-color: rgba(167, 139, 250, 0.60);
+}
+.bc-responder-add-btn i { font-size: 9px; }
+
+.bc-responder-form {
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.20);
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.bc-rf-row { display: flex; gap: 6px; }
+.bc-rf-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.bc-rf-input {
+    flex: 1;
+    min-width: 0;
+    background: rgba(15, 23, 42, 0.65);
+    color: #f1f5f9;
+    border: 1px solid rgba(148, 163, 184, 0.20);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 12px;
+    font-family: inherit;
+}
+.bc-rf-input:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.65);
+    background: rgba(15, 23, 42, 0.85);
+}
+.bc-rf-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.bc-rf-submit, .bc-rf-cancel {
+    appearance: none;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.bc-rf-submit {
+    background: rgba(167, 139, 250, 0.18);
+    color: #c4b5fd;
+    border-color: rgba(167, 139, 250, 0.45);
+}
+.bc-rf-submit:hover {
+    background: rgba(167, 139, 250, 0.28);
+    border-color: rgba(167, 139, 250, 0.70);
+}
+.bc-rf-cancel {
+    background: transparent;
+    color: #94a3b8;
+    border-color: rgba(148, 163, 184, 0.30);
+}
+.bc-rf-cancel:hover {
+    color: #cbd5e1;
+    border-color: rgba(148, 163, 184, 0.50);
+}
+
+.bc-responders {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.bc-responder {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(148, 163, 184, 0.04);
+    border: 1px solid rgba(148, 163, 184, 0.10);
+}
+.bc-r-phase {
+    align-self: flex-start;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    flex: 0 0 auto;
+    height: fit-content;
+}
+.bc-r-phase-ASSIGNED   { color: #facc15; background: rgba(234, 179, 8, 0.18); }
+.bc-r-phase-DISPATCHED { color: #c4b5fd; background: rgba(167, 139, 250, 0.18); }
+.bc-r-phase-ON_SITE    { color: #38bdf8; background: rgba(56, 189, 248, 0.18); }
+.bc-r-phase-CLEARED    { color: #4ade80; background: rgba(34, 197, 94, 0.16); }
+
+.bc-responder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bc-responder-line1 {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    font-size: 12px;
+    color: #f1f5f9;
+}
+.bc-responder-line1 strong { font-weight: 700; }
+.bc-r-org { color: #94a3b8; font-size: 11px; }
+.bc-r-contact {
+    color: #cbd5e1;
+    font-size: 11px;
+    background: rgba(148, 163, 184, 0.10);
+    padding: 1px 6px;
+    border-radius: 4px;
+}
+.bc-r-contact i { font-size: 9px; margin-right: 2px; }
+.bc-r-eta {
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.12);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-feature-settings: "tnum";
+}
+.bc-r-eta i { font-size: 9px; margin-right: 2px; }
+.bc-responder-line2 {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 10.5px;
+    color: #94a3b8;
+    font-feature-settings: "tnum";
+}
+.bc-r-time { white-space: nowrap; }
+.bc-r-notes {
+    color: #cbd5e1;
+    cursor: help;
+}
+.bc-r-notes i { font-size: 10px; margin-right: 2px; }
+
+.bc-responder-actions {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+}
+.bc-resp-btn {
+    appearance: none;
+    background: rgba(148, 163, 184, 0.10);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.20);
+    border-radius: 6px;
+    width: 28px;
+    height: 24px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+}
+.bc-resp-btn:hover {
+    background: rgba(148, 163, 184, 0.18);
+    border-color: rgba(148, 163, 184, 0.40);
+}
+.bc-resp-btn-clear {
+    color: #4ade80;
+    border-color: rgba(34, 197, 94, 0.35);
+    background: rgba(34, 197, 94, 0.08);
+}
+.bc-resp-btn-clear:hover {
+    background: rgba(34, 197, 94, 0.18);
+    border-color: rgba(34, 197, 94, 0.55);
+}
+
 /* ──────────────────────────────────────────────────────────────────
    Phase G.1 (May 2026) — Stacking multi-filter chip row.
 
