@@ -155,6 +155,32 @@ class BuildingListResponse(BaseModel):
     next_cursor: Optional[str] = None
 
 
+# ─── Phase H.2 — state transition + event timeline ─────────────────
+class StateTransitionRequest(BaseModel):
+    """POST body for state-change endpoints.
+
+    `to_state` must be one of BuildingStateEnum's values; transition
+    validity is checked server-side via
+    `is_valid_building_state_transition(from_state, to_state)`. `reason`
+    is a free-text operator note that lands in the BuildingEvent payload
+    + can be surfaced in the timeline.
+    """
+    to_state: str = Field(..., description="Target state (BuildingStateEnum value)")
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class BuildingEventResponse(BaseModel):
+    """Single audit-log entry for the console timeline."""
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    building_id: str
+    event_kind: str
+    actor_user_id: Optional[str] = None
+    actor_kind: str
+    payload: Optional[Any] = None
+    occurred_at: datetime
+
+
 # ─── POST body for footprint caching ───────────────────────────────
 class FootprintUpdate(BaseModel):
     """Body for POST /buildings/{id}/footprint.

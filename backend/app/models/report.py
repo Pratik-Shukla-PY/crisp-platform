@@ -1276,6 +1276,88 @@ event.listen(Report, "after_insert", _apply_building_link)
 event.listen(Report, "after_update", _apply_building_link)
 
 
+# Phase H.2 (May 2026) — Building audit trail.
+#
+# Append-only log of state transitions + operator actions on a
+# Building entity. Created by alembic 0029. Indexed
+# `(building_id, occurred_at)` for the dashboard timeline render.
+#
+# Event kinds (bounded vocabulary; NOT a Postgres enum so we can
+# add new kinds without ALTER TYPE migrations):
+#
+#   STATE_CHANGED       payload: {from_state, to_state, reason?}
+#   REPORT_LINKED       payload: {report_id}
+#   REPORT_UNLINKED     payload: {report_id}
+#   MONITOR_STARTED     payload: {} (actor_user_id is the watcher)
+#   MONITOR_CLEARED     payload: {}
+#   RESPONDER_*         payload: {responder_id, eta_minutes?}
+#   NOTE_ADDED          payload: {note_id, body_prefix}
+#   NOTE_EDITED / NOTE_DELETED
+#   AI_SUMMARY_GENERATED
+#   SATELLITE_VERIFIED  payload: {mean_score, verdict, count}
+#   ESCALATED / DE_ESCALATED / FALSE_ALARM_DECLARED / ARCHIVED
+class BuildingEvent(Base):
+    """Append-only audit log of building lifecycle events.
+
+    Surfaced via the dashboard Building Intelligence Console timeline
+    section (renders newest-first) and the H.2 state-transition
+    endpoints append rows here on every state change.
+    """
+    __tablename__ = "building_events"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    building_id = Column(
+        String(64),
+        ForeignKey("buildings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_kind = Column(String(40), nullable=False, index=True)
+    actor_user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    actor_kind = Column(
+        Enum("OPERATOR", "SYSTEM", "AI",
+             name="building_event_actor_kind",
+             create_type=False),
+        nullable=False,
+        default="OPERATOR",
+    )
+    payload = Column(JSON, nullable=True)
+    occurred_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+
+
+# Allowed BuildingState transitions (state machine). Applied at the
+# H.2 state-transition endpoint level — the database does not enforce
+# this, only the application layer. Operators can always force a
+# transition via SUPER_ADMIN role if the machine gets stuck (escape
+# hatch documented in the endpoint).
+_BUILDING_STATE_TRANSITIONS = {
+    "ACTIVE":       {"MONITORED", "RESPONDING", "ESCALATED", "FALSE_ALARM", "RESOLVED", "ARCHIVED"},
+    "MONITORED":    {"RESPONDING", "ESCALATED", "FALSE_ALARM", "RESOLVED", "ARCHIVED", "ACTIVE"},
+    "RESPONDING":   {"RESOLVED", "ESCALATED", "FALSE_ALARM", "ARCHIVED"},
+    "ESCALATED":    {"RESPONDING", "RESOLVED", "FALSE_ALARM", "ARCHIVED"},
+    "RESOLVED":     {"ACTIVE", "ARCHIVED"},           # can re-open if new reports come in
+    "ARCHIVED":     {"ACTIVE"},                        # rehydrate if new reports land
+    "FALSE_ALARM":  {"ACTIVE", "ARCHIVED"},           # operator changes mind
+}
+
+
+def is_valid_building_state_transition(from_state: str, to_state: str) -> bool:
+    """Return True if `from_state → to_state` is an allowed transition."""
+    if from_state == to_state:
+        return False  # no-op
+    allowed = _BUILDING_STATE_TRANSITIONS.get(from_state, set())
+    return to_state in allowed
+
+
 # ── Phase 5.1 (May 2026, docs §9.4) — H3 cell auto-population ────────
 # When a Location row is inserted or its lat/lng changes, derive the H3
 # cell index. Single listener covers all three Location-create sites in

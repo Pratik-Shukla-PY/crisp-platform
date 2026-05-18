@@ -27,16 +27,20 @@ from app.core.deps import get_optional_user, require_analyst
 from app.db.session import get_db
 from app.models.report import (
     Building,
+    BuildingEvent,
     Report,
     SatelliteVerification,
+    is_valid_building_state_transition,
 )
 from app.schemas.building import (
+    AISummaryPayload,
     BuildingDetail,
+    BuildingEventResponse,
     BuildingListResponse,
     BuildingSummary,
     FootprintUpdate,
-    AISummaryPayload,
     SatelliteRollup,
+    StateTransitionRequest,
 )
 from app.schemas.report import ReportResponse
 
@@ -359,6 +363,202 @@ def cache_footprint(
         # cluster (per migration 0028's conditional). Silent skip.
         pass
 
+    db.commit()
+    db.refresh(b)
+    return _to_summary(b)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase H.2 — state transitions + timeline
+# ──────────────────────────────────────────────────────────────────────
+@router.post("/{building_id}/state", response_model=BuildingSummary)
+def transition_state(
+    building_id: str,
+    body: StateTransitionRequest,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Transition a building to a new operational state.
+
+    Allowed transitions enforced by `is_valid_building_state_transition`
+    (see app/models/report.py). Emits a `STATE_CHANGED` BuildingEvent
+    with from/to states + actor user. Returns the updated summary.
+
+    Operators with sufficient privilege (analyst+) can perform any
+    transition the state machine declares legal. SUPER_ADMIN escape
+    hatch for unusual cases is deferred to Phase H.6+ (not needed in
+    H.2's MVP — the state machine covers the operator-facing cases).
+    """
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+
+    to_state = body.to_state.upper().strip()
+    valid_states = {"ACTIVE", "MONITORED", "RESPONDING", "ESCALATED",
+                    "RESOLVED", "ARCHIVED", "FALSE_ALARM"}
+    if to_state not in valid_states:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown state '{to_state}'. Allowed: {sorted(valid_states)}",
+        )
+
+    from_state = b.state
+    if not is_valid_building_state_transition(from_state, to_state):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Transition {from_state} → {to_state} is not allowed",
+        )
+
+    # Apply the transition. The hook on Report doesn't fire for
+    # Building updates, so we write the BuildingEvent ourselves.
+    now = datetime.now(timezone.utc)
+    b.state = to_state
+    b.state_changed_at = now
+    b.state_changed_by_user_id = user.id if hasattr(user, "id") else None
+    # If transitioning to ARCHIVED, set archived_at; clear when un-archiving.
+    if to_state == "ARCHIVED":
+        b.archived_at = now
+    elif from_state == "ARCHIVED" and to_state != "ARCHIVED":
+        b.archived_at = None
+
+    event = BuildingEvent(
+        building_id=building_id,
+        event_kind="STATE_CHANGED",
+        actor_user_id=user.id if hasattr(user, "id") else None,
+        actor_kind="OPERATOR",
+        payload={
+            "from_state": from_state,
+            "to_state": to_state,
+            "reason": body.reason,
+        },
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(b)
+    return _to_summary(b)
+
+
+@router.post("/{building_id}/escalate", response_model=BuildingSummary)
+def escalate(
+    building_id: str,
+    body: Optional[StateTransitionRequest] = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Convenience endpoint: flip a building to ESCALATED.
+
+    Equivalent to POST /state with to_state='ESCALATED'; the convenience
+    surface lets the dashboard wire a single Escalate button without
+    knowing the state-machine details. Adds an `ESCALATED` event kind
+    alongside the `STATE_CHANGED` event so the timeline reads naturally
+    ("Operator escalated at HH:MM") rather than as a generic state
+    flip.
+    """
+    return _transition_with_event(
+        db, user, building_id,
+        to_state="ESCALATED",
+        event_kind="ESCALATED",
+        reason=(body.reason if body else None),
+    )
+
+
+@router.post("/{building_id}/false-alarm", response_model=BuildingSummary)
+def false_alarm(
+    building_id: str,
+    body: Optional[StateTransitionRequest] = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Mark a building's cluster as misinformation.
+
+    Sets state=FALSE_ALARM + writes a FALSE_ALARM_DECLARED event.
+    Suppresses the building from the public /nearby aggregator
+    surface (the aggregator's tier-filter already excludes
+    FALSE_ALARM via the `state` column on the Building row).
+    """
+    return _transition_with_event(
+        db, user, building_id,
+        to_state="FALSE_ALARM",
+        event_kind="FALSE_ALARM_DECLARED",
+        reason=(body.reason if body else None),
+    )
+
+
+@router.get("/{building_id}/timeline", response_model=List[BuildingEventResponse])
+def get_timeline(
+    building_id: str,
+    db: Session = Depends(get_db),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Newest-first audit-log entries for the building.
+
+    Drives the Building Intelligence Console's timeline section. Paged
+    by simple `?limit=` — operators usually don't page past the first
+    100 entries (older history lives in the dossier export, H.5).
+    """
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+    rows = (
+        db.query(BuildingEvent)
+        .filter(BuildingEvent.building_id == building_id)
+        .order_by(desc(BuildingEvent.occurred_at))
+        .limit(limit)
+        .all()
+    )
+    return [BuildingEventResponse.model_validate(r) for r in rows]
+
+
+def _transition_with_event(
+    db: Session,
+    user,
+    building_id: str,
+    *,
+    to_state: str,
+    event_kind: str,
+    reason: Optional[str],
+) -> BuildingSummary:
+    """Shared helper for the convenience endpoints (escalate /
+    false_alarm). Writes BOTH a STATE_CHANGED event AND the
+    event-kind-specific event so the timeline reads naturally.
+    """
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+    from_state = b.state
+    if from_state == to_state:
+        # Idempotent — no-op + return current summary.
+        return _to_summary(b)
+    if not is_valid_building_state_transition(from_state, to_state):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Transition {from_state} → {to_state} is not allowed",
+        )
+    now = datetime.now(timezone.utc)
+    actor_user_id = user.id if hasattr(user, "id") else None
+    b.state = to_state
+    b.state_changed_at = now
+    b.state_changed_by_user_id = actor_user_id
+    if to_state == "ARCHIVED":
+        b.archived_at = now
+    elif from_state == "ARCHIVED":
+        b.archived_at = None
+
+    # Two events — the canonical STATE_CHANGED + the named event kind.
+    db.add(BuildingEvent(
+        building_id=building_id,
+        event_kind="STATE_CHANGED",
+        actor_user_id=actor_user_id,
+        actor_kind="OPERATOR",
+        payload={"from_state": from_state, "to_state": to_state, "reason": reason},
+    ))
+    db.add(BuildingEvent(
+        building_id=building_id,
+        event_kind=event_kind,
+        actor_user_id=actor_user_id,
+        actor_kind="OPERATOR",
+        payload={"reason": reason} if reason else None,
+    ))
     db.commit()
     db.refresh(b)
     return _to_summary(b)

@@ -3398,11 +3398,7 @@ function _renderBuildingConsole(b) {
                         : ''}
                 </div>
                 <div class="bc-actions">
-                    <!-- H.2 will land Monitor / Escalate / Mark resolved buttons here -->
-                    <!-- H.5 will land Export Dossier button here -->
-                    <span class="bc-action-placeholder" title="Operator actions land in Phase H.2-H.5">
-                        <i class="fa-regular fa-clock"></i> Actions: H.2+ (state machine, responder, notes, dossier)
-                    </span>
+                    ${_renderBuildingStateActions(b)}
                 </div>
             </div>
 
@@ -3492,11 +3488,25 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
-            <!-- Footer placeholders for H.2-H.6 surfaces -->
+            <!-- Phase H.2 — Building event timeline -->
+            <div class="bc-section">
+                <div class="bc-section-title">
+                    <i class="fa-solid fa-timeline"></i> Building timeline
+                    <button class="bc-timeline-refresh"
+                            onclick="_refreshBuildingTimeline('${b.id}')"
+                            title="Refresh timeline">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </div>
+                <div class="bc-timeline" id="bc-timeline-${escapeHtml(b.id)}">
+                    <div class="bc-empty">Loading timeline…</div>
+                </div>
+            </div>
+
+            <!-- Footer placeholders for H.3-H.6 surfaces -->
             <div class="bc-section bc-deferred">
                 <div class="bc-section-title"><i class="fa-regular fa-rectangle-list"></i> Coming next</div>
                 <ul class="bc-deferred-list">
-                    <li>H.2 — State transitions (Monitor / Escalate / False alarm / Mark resolved)</li>
                     <li>H.3 — Responder assignment + dispatched/arrived lifecycle</li>
                     <li>H.4 — Operator notes thread</li>
                     <li>H.5 — Consolidated dossier export (PDF + GeoJSON)</li>
@@ -3505,6 +3515,10 @@ function _renderBuildingConsole(b) {
             </div>
         </div>
     `;
+    // Phase H.2 — fetch the timeline async (decoupled from the
+    // initial console paint so the user sees scores + reports
+    // immediately, even while the timeline still loads).
+    setTimeout(() => _refreshBuildingTimeline(b.id), 50);
     // Clear the bottom action dock (the building console manages its own
     // actions inside .bc-header / .bc-actions).
     const dock = document.getElementById('dp-action-dock');
@@ -3538,6 +3552,183 @@ function _initBuildingHashListener() {
     // into the polling loop instead.
     setTimeout(_apply, 800);
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase H.2 — Building state actions + timeline
+// ──────────────────────────────────────────────────────────────────────
+// Allowed transitions mirror the backend's state machine. UI only
+// shows buttons for legal transitions from the current state.
+const _BUILDING_STATE_TRANSITIONS = {
+    ACTIVE:      ['MONITORED', 'ESCALATED', 'FALSE_ALARM', 'RESOLVED'],
+    MONITORED:   ['RESPONDING', 'ESCALATED', 'FALSE_ALARM', 'RESOLVED', 'ACTIVE'],
+    RESPONDING:  ['RESOLVED', 'ESCALATED', 'FALSE_ALARM'],
+    ESCALATED:   ['RESPONDING', 'RESOLVED', 'FALSE_ALARM'],
+    RESOLVED:    ['ACTIVE', 'ARCHIVED'],
+    ARCHIVED:    ['ACTIVE'],
+    FALSE_ALARM: ['ACTIVE', 'ARCHIVED'],
+};
+
+const _STATE_ACTION_LABEL = {
+    ACTIVE:      'Re-open',
+    MONITORED:   'Monitor',
+    RESPONDING:  'Mark responding',
+    ESCALATED:   'Escalate',
+    RESOLVED:    'Mark resolved',
+    ARCHIVED:    'Archive',
+    FALSE_ALARM: 'False alarm',
+};
+
+const _STATE_ACTION_ICON = {
+    ACTIVE:      'fa-arrow-rotate-left',
+    MONITORED:   'fa-binoculars',
+    RESPONDING:  'fa-truck-medical',
+    ESCALATED:   'fa-fire-flame-curved',
+    RESOLVED:    'fa-check',
+    ARCHIVED:    'fa-box-archive',
+    FALSE_ALARM: 'fa-ban',
+};
+
+function _renderBuildingStateActions(b) {
+    const targets = _BUILDING_STATE_TRANSITIONS[b.state] || [];
+    if (targets.length === 0) {
+        return `<span class="bc-action-placeholder">No transitions available from ${b.state}</span>`;
+    }
+    return targets.map(to => `
+        <button class="bc-state-btn bc-state-btn-${to}"
+                onclick="_changeBuildingState('${b.id}', '${to}')"
+                title="${escapeHtml(_STATE_ACTION_LABEL[to] || to)}">
+            <i class="fa-solid ${_STATE_ACTION_ICON[to] || 'fa-arrow-right'}"></i>
+            <span>${escapeHtml(_STATE_ACTION_LABEL[to] || to)}</span>
+        </button>
+    `).join('');
+}
+
+// Auth header builder — mirrors the pattern used by other authenticated
+// fetches in this file (decoded JWT from localStorage).
+function _authHeaders() {
+    const t = (function () {
+        try { return localStorage.getItem('crisp_token'); }
+        catch (_) { return null; }
+    })();
+    return t ? { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' }
+             : { 'Content-Type': 'application/json' };
+}
+
+window._changeBuildingState = async (buildingId, toState) => {
+    // Optional reason via prompt() for ESCALATED + FALSE_ALARM (the
+    // two "weight-bearing" transitions). For the others, ship without
+    // a prompt to keep the click cost low.
+    let reason = null;
+    if (toState === 'ESCALATED' || toState === 'FALSE_ALARM') {
+        reason = prompt(`Reason for marking this building as ${toState}? (optional)`);
+        if (reason === null) return; // operator cancelled
+    }
+    try {
+        // Pick the convenience endpoint where one exists, otherwise
+        // hit the generic /state endpoint.
+        let url, body;
+        if (toState === 'ESCALATED') {
+            url = `${API}/buildings/${encodeURIComponent(buildingId)}/escalate`;
+            body = { to_state: 'ESCALATED', reason: reason || undefined };
+        } else if (toState === 'FALSE_ALARM') {
+            url = `${API}/buildings/${encodeURIComponent(buildingId)}/false-alarm`;
+            body = { to_state: 'FALSE_ALARM', reason: reason || undefined };
+        } else {
+            url = `${API}/buildings/${encodeURIComponent(buildingId)}/state`;
+            body = { to_state: toState, reason: reason || undefined };
+        }
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: _authHeaders(),
+            body: JSON.stringify(body),
+        });
+        if (res.status === 401 || res.status === 403) {
+            showToast('You need analyst permissions to change a building\'s state.', 'error');
+            return;
+        }
+        if (res.status === 409) {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.detail || 'Transition not allowed', 'error');
+            return;
+        }
+        if (!res.ok) {
+            const err = await res.text();
+            showToast(`State change failed: ${err.slice(0, 80)}`, 'error');
+            return;
+        }
+        showToast(`Building state → ${toState}`, 'success');
+        // Invalidate console cache + re-render. The /state endpoint
+        // returns the updated summary; for the console refresh we
+        // also need the nested reports + satellite + timeline so
+        // we re-fetch the full detail.
+        delete _buildingConsoleCache[buildingId];
+        const detail = await _fetchBuildingDetail(buildingId);
+        if (detail) _renderBuildingConsole(detail);
+    } catch (e) {
+        showToast(`Network error: ${e.message}`, 'error');
+    }
+};
+
+window._refreshBuildingTimeline = async (buildingId) => {
+    const el = document.getElementById(`bc-timeline-${buildingId}`);
+    if (!el) return;
+    try {
+        const res = await fetch(
+            `${API}/buildings/${encodeURIComponent(buildingId)}/timeline?limit=50`,
+            { headers: _authHeaders() }
+        );
+        if (!res.ok) {
+            el.innerHTML = '<div class="bc-empty">Could not load timeline.</div>';
+            return;
+        }
+        const events = await res.json();
+        if (!events.length) {
+            el.innerHTML = '<div class="bc-empty">No events yet for this building.</div>';
+            return;
+        }
+        el.innerHTML = events.map(e => {
+            const kind = e.event_kind || 'UNKNOWN';
+            const payload = e.payload || {};
+            // Friendly label per event kind.
+            let body = kind;
+            if (kind === 'STATE_CHANGED') {
+                body = `State: ${escapeHtml(payload.from_state || '?')} → <strong>${escapeHtml(payload.to_state || '?')}</strong>`;
+                if (payload.reason) body += ` — <em>${escapeHtml(payload.reason)}</em>`;
+            } else if (kind === 'ESCALATED') {
+                body = `Operator escalated${payload.reason ? ' — <em>' + escapeHtml(payload.reason) + '</em>' : ''}`;
+            } else if (kind === 'FALSE_ALARM_DECLARED') {
+                body = `Marked as misinformation${payload.reason ? ' — <em>' + escapeHtml(payload.reason) + '</em>' : ''}`;
+            } else if (kind === 'REPORT_LINKED') {
+                body = `Report linked${payload.report_id ? ' (' + escapeHtml(String(payload.report_id).slice(0, 8)) + ')' : ''}`;
+            }
+            const iconByKind = {
+                STATE_CHANGED:        'fa-arrow-right-arrow-left',
+                ESCALATED:            'fa-fire-flame-curved',
+                FALSE_ALARM_DECLARED: 'fa-ban',
+                REPORT_LINKED:        'fa-link',
+                MONITOR_STARTED:      'fa-binoculars',
+                MONITOR_CLEARED:      'fa-eye-slash',
+                NOTE_ADDED:           'fa-note-sticky',
+                AI_SUMMARY_GENERATED: 'fa-robot',
+                SATELLITE_VERIFIED:   'fa-satellite',
+                RESPONDER_ASSIGNED:   'fa-user-plus',
+                RESPONDER_DISPATCHED: 'fa-truck-medical',
+                RESPONDER_ARRIVED:    'fa-map-pin',
+                ARCHIVED:             'fa-box-archive',
+            };
+            const icon = iconByKind[kind] || 'fa-circle';
+            return `<div class="bc-tl-row">
+                <span class="bc-tl-icon"><i class="fa-solid ${icon}"></i></span>
+                <div class="bc-tl-body">
+                    <div class="bc-tl-line">${body}</div>
+                    <div class="bc-tl-ts">${escapeHtml(new Date(e.occurred_at).toLocaleString())} · ${timeAgo(e.occurred_at)}</div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        el.innerHTML = `<div class="bc-empty">Error: ${escapeHtml(e.message)}</div>`;
+    }
+};
 
 // ── Phase 5 (Apr 2026) — Reviewer actions block ─────────────────────────────
 // Renders a compact row showing the current verdict + two action buttons
