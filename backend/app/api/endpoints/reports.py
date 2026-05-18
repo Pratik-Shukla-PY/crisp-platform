@@ -1061,6 +1061,39 @@ def _push_status_change_safely(report: Report) -> None:
         )
 
 
+def _audit_report_action(
+    db: Session,
+    user,
+    action: str,
+    report_id: str,
+    details: Optional[dict] = None,
+):
+    """Phase F.2.b — Write an AuthAuditLog row for admin actions taken
+    on a report. The dashboard surfaces these as a compact ribbon
+    above the per-incident timeline so operators have an at-a-glance
+    "what happened, by whom, when" view.
+
+    Bounded vocabulary for `action`:
+      REPORT_DISPATCH    — operator dispatched help
+      REPORT_RESOLVE     — operator marked resolved
+      REPORT_FALSE_ALARM — operator marked false alarm
+      REPORT_ACCEPT      — analyst accepted verdict
+      REPORT_REJECT      — analyst rejected verdict
+      REPORT_DELETE      — operator soft-deleted (grace window)
+      REPORT_VERIFY      — analyst kicked off satellite verification
+    """
+    from app.models.auth import AuthAuditLog
+    db.add(AuthAuditLog(
+        user_id=getattr(user, "id", None),
+        user_email=getattr(user, "email", None),
+        action=action,
+        resource_type="report",
+        resource_id=report_id,
+        details=details,
+    ))
+    # No db.commit() here — caller already commits.
+
+
 @router.patch("/{report_id}/false-alarm", response_model=ReportResponse)
 def mark_false_alarm(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
     """Mark a report as a FALSE_ALARM without deleting it."""
@@ -1068,6 +1101,7 @@ def mark_false_alarm(report_id: str, user=Depends(require_analyst), db: Session 
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     report.status = ReportStatusEnum.FALSE_ALARM
+    _audit_report_action(db, user, "REPORT_FALSE_ALARM", report_id)
     db.commit()
     db.refresh(report)
     _push_status_change_safely(report)
@@ -1108,6 +1142,7 @@ def dispatch_team(report_id: str, user=Depends(require_analyst), db: Session = D
         # Same fix in resolve_report below.
         db.flush()
         _mark_report_verified_for_credibility(report, db)
+    _audit_report_action(db, user, "REPORT_DISPATCH", report_id)
     db.commit()
     db.refresh(report)
     _push_status_change_safely(report)
@@ -1127,6 +1162,7 @@ def resolve_report(report_id: str, user=Depends(require_analyst), db: Session = 
         # status change BEFORE the recompute counts by status.
         db.flush()
         _mark_report_verified_for_credibility(report, db)
+    _audit_report_action(db, user, "REPORT_RESOLVE", report_id)
     db.commit()
     db.refresh(report)
     _push_status_change_safely(report)
@@ -1175,6 +1211,13 @@ def set_review_verdict(
             reports_reviewed_total.labels(verdict=verdict).inc()
     except Exception:
         pass
+
+    # Phase F.2.b — audit the analyst verdict for the per-report ribbon.
+    if verdict == "ACCEPTED":
+        _audit_report_action(db, user, "REPORT_ACCEPT", report_id)
+    elif verdict == "REJECTED":
+        _audit_report_action(db, user, "REPORT_REJECT", report_id,
+                             details={"action_taken": (action_taken or "")[:120]})
 
     db.commit()
     db.refresh(report)
@@ -1569,6 +1612,9 @@ def delete_report(report_id: str, user=Depends(require_admin), grace_minutes: in
 
     report.deletion_requested_at = datetime.now(timezone.utc)
     report.deletion_grace_minutes = grace_minutes
+    # Phase F.2.b — audit the soft-delete for the per-report ribbon.
+    _audit_report_action(db, user, "REPORT_DELETE", report_id,
+                         details={"grace_minutes": grace_minutes, "source": deletion_source})
     db.commit()
     grace_label = f"{grace_minutes} minutes" if grace_minutes < 120 else f"{grace_minutes // 60} hours"
     logger.info(f"Soft-delete: report {report_id} ({deletion_source}) — permanent in {grace_label}")
@@ -5376,6 +5422,64 @@ def _auto_assign_building_id(report: Report, db: Session):
                 report.building_id = bid
                 n.building_id = bid
                 return
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Phase F.2.b (May 2026) — Per-report admin-action ribbon
+# ══════════════════════════════════════════════════════════════════════
+@router.get("/{report_id}/audit")
+def get_report_audit_trail(
+    report_id: str,
+    limit: int = Query(8, ge=1, le=50),
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Return the last N AuthAuditLog entries for this report.
+
+    Filtered to the bounded REPORT_* action vocabulary written by
+    `_audit_report_action`. Newest-first; capped at `limit` (default 8
+    so the dashboard ribbon stays compact).
+
+    The response shape is intentionally thin — id / action / user
+    email / timestamp / details. The dashboard joins user_id back
+    against the report's reviewer profile when needed.
+    """
+    from app.models.auth import AuthAuditLog
+
+    REPORT_ACTIONS = (
+        "REPORT_DISPATCH",
+        "REPORT_RESOLVE",
+        "REPORT_FALSE_ALARM",
+        "REPORT_ACCEPT",
+        "REPORT_REJECT",
+        "REPORT_DELETE",
+        "REPORT_VERIFY",
+    )
+    rows = (
+        db.query(AuthAuditLog)
+        .filter(
+            AuthAuditLog.resource_type == "report",
+            AuthAuditLog.resource_id == report_id,
+            AuthAuditLog.action.in_(REPORT_ACTIONS),
+        )
+        .order_by(AuthAuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "action": r.action,
+                "user_id": r.user_id,
+                "user_email": r.user_email,
+                "details": r.details or {},
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ],
+        "total": len(rows),
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════

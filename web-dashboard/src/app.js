@@ -3161,6 +3161,14 @@ window.selectReport = (id, skipFly = false) => {
              keep the panel compact on first open; click "Timeline" to
              expand. Pure dashboard-side render from the data the LIST
              endpoint already returns — no backend changes. -->
+        <!-- Phase F.2.b (May 2026) — Per-report admin-action ribbon.
+             Compact strip above the timeline listing the most recent
+             REPORT_* AuthAuditLog entries for this report so operators
+             see "who did what when" without leaving the panel. The
+             body is async-loaded; the placeholder paints first. -->
+        <div class="dp-audit-ribbon" id="dp-audit-ribbon-${r.id}" data-report-id="${r.id}">
+            <div class="dp-audit-loading"><i class="fa-regular fa-clock"></i> Loading admin actions…</div>
+        </div>
         ${_renderIncidentTimeline(r)}
 
         <!-- ② Urgency alerts -->
@@ -3445,6 +3453,9 @@ window.selectReport = (id, skipFly = false) => {
 
     // ── Action dock hidden — actions now in top bar ──
     document.getElementById('dp-action-dock').innerHTML = '';
+
+    // Phase F.2.b — async-load the admin-action ribbon for this report.
+    _fetchReportAuditTrail(r.id);
 
     // W4 versioning ribbon fill (Apr 2026 UI v2.1). Async because we
     // may need to hit /reports/building/{id} the first time. Guarded
@@ -3754,6 +3765,94 @@ window.closeDetail = () => {
     document.getElementById('detail-panel').style.display = 'none';
     renderFeed();
 };
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase F.2.b (May 2026) — Per-report admin-action ribbon
+// ──────────────────────────────────────────────────────────────────────
+// Async-fetches the last 8 REPORT_* AuthAuditLog entries for the
+// currently-selected report and paints a compact strip above the
+// per-incident timeline. Guarded against the panel closing /
+// switching to a different report mid-fetch — the target element
+// is replaced wholesale by the next selectReport.
+
+async function _fetchReportAuditTrail(reportId) {
+    const target = document.getElementById(`dp-audit-ribbon-${reportId}`);
+    if (!target) return;
+    try {
+        const res = await fetch(
+            `${API}/${encodeURIComponent(reportId)}/audit?limit=8`,
+            { headers: _authHeaders() }
+        );
+        if (!res.ok) {
+            // Quietly hide on 401 / 404 — non-fatal.
+            target.style.display = 'none';
+            return;
+        }
+        const data = await res.json();
+        // If a subsequent selectReport replaced the target, bail.
+        const stillThere = document.getElementById(`dp-audit-ribbon-${reportId}`);
+        if (!stillThere || stillThere !== target) return;
+        const items = data.items || [];
+        if (!items.length) {
+            target.style.display = 'none';
+            return;
+        }
+        const iconForAction = {
+            REPORT_DISPATCH:    'fa-truck-medical',
+            REPORT_RESOLVE:     'fa-check',
+            REPORT_FALSE_ALARM: 'fa-ban',
+            REPORT_ACCEPT:      'fa-circle-check',
+            REPORT_REJECT:      'fa-circle-xmark',
+            REPORT_DELETE:      'fa-trash-can',
+            REPORT_VERIFY:      'fa-satellite',
+        };
+        const labelForAction = {
+            REPORT_DISPATCH:    'Dispatched',
+            REPORT_RESOLVE:     'Resolved',
+            REPORT_FALSE_ALARM: 'False alarm',
+            REPORT_ACCEPT:      'Accepted',
+            REPORT_REJECT:      'Rejected',
+            REPORT_DELETE:      'Deleted',
+            REPORT_VERIFY:      'Verified',
+        };
+        const colorForAction = {
+            REPORT_DISPATCH:    '#a78bfa',
+            REPORT_RESOLVE:     '#4ade80',
+            REPORT_FALSE_ALARM: '#94a3b8',
+            REPORT_ACCEPT:      '#4ade80',
+            REPORT_REJECT:      '#f87171',
+            REPORT_DELETE:      '#f87171',
+            REPORT_VERIFY:      '#7dd3fc',
+        };
+        target.innerHTML = `
+            <div class="dp-audit-head">
+                <i class="fa-solid fa-user-shield"></i> Admin actions
+                <span class="dp-audit-meta">${items.length} recent</span>
+            </div>
+            <ul class="dp-audit-list">
+                ${items.map(e => {
+                    const ic = iconForAction[e.action] || 'fa-circle';
+                    const lb = labelForAction[e.action] || e.action;
+                    const co = colorForAction[e.action] || '#94a3b8';
+                    const who = e.user_email ? escapeHtml(e.user_email.split('@')[0]) : 'system';
+                    const when = e.created_at ? timeAgo(e.created_at) : '';
+                    const reason = (e.details && e.details.action_taken)
+                        ? ` — <em>${escapeHtml(String(e.details.action_taken))}</em>` : '';
+                    return `<li class="dp-audit-row">
+                        <i class="fa-solid ${ic}" style="color:${co};"></i>
+                        <span class="dp-audit-action" style="color:${co};">${lb}</span>
+                        <span class="dp-audit-who">by ${who}</span>
+                        <span class="dp-audit-when">${when}</span>
+                        ${reason}
+                    </li>`;
+                }).join('')}
+            </ul>
+        `;
+    } catch (e) {
+        // Silent — the ribbon is best-effort.
+        target.style.display = 'none';
+    }
+}
 
 // ──────────────────────────────────────────────────────────────────────
 // Phase G.3 (May 2026) — Full-report max-modal
