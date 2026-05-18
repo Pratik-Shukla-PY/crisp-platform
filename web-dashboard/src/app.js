@@ -174,6 +174,10 @@ const BACKEND_HOST = _isLocalDev
     ? `http://${window.location.hostname}:8000`
     : window.location.origin;
 const API = `${BACKEND_HOST}/api/v1/reports`;
+// Phase H (May 2026) — Building endpoints live at /api/v1/buildings,
+// NOT under /api/v1/reports/. Keep a sibling constant so the Phase H
+// fetch sites don't accidentally double-prefix and 404.
+const BUILDINGS_API = `${BACKEND_HOST}/api/v1/buildings`;
 
 // Add Authorization header to all fetch calls + handle 401 → redirect to login
 const _origFetch = window.fetch;
@@ -4132,7 +4136,7 @@ async function _fetchBuildingDetail(buildingId) {
     if (_buildingConsoleCache[buildingId]) {
         return _buildingConsoleCache[buildingId];
     }
-    const res = await fetch(`${API}/buildings/${encodeURIComponent(buildingId)}`);
+    const res = await fetch(`${BUILDINGS_API}/${encodeURIComponent(buildingId)}`);
     if (!res.ok) {
         showToast(`Building ${buildingId.slice(0, 20)} not found`, 'error');
         return null;
@@ -4560,13 +4564,13 @@ window._changeBuildingState = async (buildingId, toState) => {
         // hit the generic /state endpoint.
         let url, body;
         if (toState === 'ESCALATED') {
-            url = `${API}/buildings/${encodeURIComponent(buildingId)}/escalate`;
+            url = `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/escalate`;
             body = { to_state: 'ESCALATED', reason: reason || undefined };
         } else if (toState === 'FALSE_ALARM') {
-            url = `${API}/buildings/${encodeURIComponent(buildingId)}/false-alarm`;
+            url = `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/false-alarm`;
             body = { to_state: 'FALSE_ALARM', reason: reason || undefined };
         } else {
-            url = `${API}/buildings/${encodeURIComponent(buildingId)}/state`;
+            url = `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/state`;
             body = { to_state: toState, reason: reason || undefined };
         }
         const res = await fetch(url, {
@@ -4606,7 +4610,7 @@ window._refreshBuildingTimeline = async (buildingId) => {
     if (!el) return;
     try {
         const res = await fetch(
-            `${API}/buildings/${encodeURIComponent(buildingId)}/timeline?limit=50`,
+            `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/timeline?limit=50`,
             { headers: _authHeaders() }
         );
         if (!res.ok) {
@@ -4793,7 +4797,7 @@ window._refreshBuildingAiSummary = async (buildingId) => {
     showToast('Generating AI summary… (up to 25 s)', 'info');
     try {
         const res = await fetch(
-            `${API}/buildings/${encodeURIComponent(buildingId)}/ai-summary`,
+            `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/ai-summary`,
             { method: 'POST', headers: _authHeaders() }
         );
         if (res.status === 401 || res.status === 403) {
@@ -4879,7 +4883,7 @@ window._downloadBuildingDossier = async (buildingId, fmt) => {
     showToast(`Generating ${fmt.toUpperCase()} dossier…`, 'info');
     try {
         const res = await fetch(
-            `${API}/buildings/${encodeURIComponent(buildingId)}/${path}`,
+            `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/${path}`,
             { headers: _authHeaders() }
         );
         if (res.status === 401 || res.status === 403) {
@@ -5039,7 +5043,7 @@ window._submitResponderAssign = async (buildingId) => {
     };
     try {
         const res = await fetch(
-            `${API}/buildings/${encodeURIComponent(buildingId)}/responders`,
+            `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/responders`,
             { method: 'POST', headers: _authHeaders(), body: JSON.stringify(body) }
         );
         if (res.status === 401 || res.status === 403) {
@@ -5065,7 +5069,7 @@ window._advanceResponder = async (buildingId, responderId, action) => {
     // emits the BuildingEvent.
     try {
         const res = await fetch(
-            `${API}/buildings/${encodeURIComponent(buildingId)}/responders/${encodeURIComponent(responderId)}`,
+            `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/responders/${encodeURIComponent(responderId)}`,
             { method: 'PATCH', headers: _authHeaders(), body: JSON.stringify({ action }) }
         );
         if (res.status === 401 || res.status === 403) {
@@ -5103,7 +5107,7 @@ window._refreshRelatedBuildings = async (buildingId) => {
     if (!el) return;
     try {
         const res = await fetch(
-            `${API}/buildings/${encodeURIComponent(buildingId)}/related?radius_m=600&limit=8`,
+            `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/related?radius_m=600&limit=8`,
             { headers: _authHeaders() }
         );
         if (!res.ok) {
@@ -5275,7 +5279,7 @@ window._submitNote = async (buildingId) => {
     };
     try {
         const res = await fetch(
-            `${API}/buildings/${encodeURIComponent(buildingId)}/notes`,
+            `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/notes`,
             { method: 'POST', headers: _authHeaders(), body: JSON.stringify(body) }
         );
         if (res.status === 401 || res.status === 403) {
@@ -5335,7 +5339,7 @@ window._submitNoteEdit = async (buildingId, noteId) => {
     if (!text) { showToast('Body cannot be empty (use Delete to remove)', 'error'); return; }
     try {
         const res = await fetch(
-            `${API}/buildings/${encodeURIComponent(buildingId)}/notes/${encodeURIComponent(noteId)}`,
+            `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/notes/${encodeURIComponent(noteId)}`,
             { method: 'PATCH', headers: _authHeaders(), body: JSON.stringify({ body: text }) }
         );
         if (!res.ok) {
@@ -5355,7 +5359,7 @@ window._submitNoteEdit = async (buildingId, noteId) => {
 window._pinNote = async (buildingId, noteId, pinned) => {
     try {
         const res = await fetch(
-            `${API}/buildings/${encodeURIComponent(buildingId)}/notes/${encodeURIComponent(noteId)}`,
+            `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/notes/${encodeURIComponent(noteId)}`,
             { method: 'PATCH', headers: _authHeaders(), body: JSON.stringify({ pinned }) }
         );
         if (!res.ok) {
@@ -5376,7 +5380,7 @@ window._deleteNote = async (buildingId, noteId) => {
     if (!confirm('Delete this note? The tombstone remains in the audit log.')) return;
     try {
         const res = await fetch(
-            `${API}/buildings/${encodeURIComponent(buildingId)}/notes/${encodeURIComponent(noteId)}`,
+            `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/notes/${encodeURIComponent(noteId)}`,
             { method: 'DELETE', headers: _authHeaders() }
         );
         if (!res.ok) {
@@ -5399,7 +5403,7 @@ window._toggleBuildingMonitor = async (buildingId, watching) => {
     try {
         const method = watching ? 'DELETE' : 'POST';
         const res = await fetch(
-            `${API}/buildings/${encodeURIComponent(buildingId)}/monitor`,
+            `${BUILDINGS_API}/${encodeURIComponent(buildingId)}/monitor`,
             { method, headers: _authHeaders() }
         );
         if (res.status === 401 || res.status === 403) {
@@ -6925,7 +6929,7 @@ function initMap() {
             // render last (Leaflet draws in insertion order; this paints
             // hot buildings on top of cold ones).
             const res = await fetch(
-                `${API}/buildings?limit=500&order_by=humanitarian_priority&order_dir=asc`,
+                `${BUILDINGS_API}?limit=500&order_by=humanitarian_priority&order_dir=asc`,
                 { headers: _authHeaders() }
             );
             if (!res.ok) {
