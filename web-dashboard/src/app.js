@@ -198,6 +198,11 @@ window.fetch = function(url, opts = {}) {
 };
 const POLL_INTERVAL        = 4000;  // normal polling
 const POLL_INTERVAL_ACTIVE = 1200;  // fast polling while any image is uploading
+// Phase J.6 (May 2026) — decision-mode polling slowdown.
+// When the operator has a report open AND has been interacting
+// recently AND no verdict is set yet, slow polling from 4 s → 8 s
+// so the panel doesn't re-render under their hands mid-decision.
+const POLL_INTERVAL_DECISION = 8000;
 let _pollTimer = null;
 
 // Phase 3 (May 2026, HAR-driven) — incremental delta polling state.
@@ -6639,6 +6644,203 @@ window.setDetailImageTier = (reportId, groupId, tier, btnEl) => {
     }
 };
 
+// ──────────────────────────────────────────────────────────────────────
+// Phase J.5 (May 2026) — Global keyboard shortcuts
+// ──────────────────────────────────────────────────────────────────────
+// `?` opens the shortcuts cheat-sheet modal.
+// `Esc` closes any open modal / dropdown / detail panel.
+// `j` / `k` move focus through the feed.
+// `v` opens the Verdict dropdown on the currently-open report.
+// `s` runs satellite Re-verify on the open report.
+// `b` opens the Building Console for the report's building (if any).
+// All shortcuts no-op when focus is in an input / textarea / select.
+document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault();
+        _openKeyboardShortcutsModal();
+        return;
+    }
+
+    // The remaining shortcuts require an open detail panel.
+    if (!selectedId) return;
+
+    if (e.key === 'v' || e.key === 'V') {
+        const dd = document.getElementById(`dp-verdict-dropdown-${selectedId}`);
+        if (dd) {
+            e.preventDefault();
+            dd.classList.toggle('open');
+        }
+        return;
+    }
+    if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        if (typeof runVerification === 'function') {
+            runVerification(selectedId);
+        }
+        return;
+    }
+    if (e.key === 'b' || e.key === 'B') {
+        const r = allReports.find(x => x.id === selectedId);
+        if (r && r.building_id && typeof openBuildingConsole === 'function') {
+            e.preventDefault();
+            openBuildingConsole(r.building_id);
+        }
+        return;
+    }
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// Phase J.5 — Onboarding tooltips
+// ──────────────────────────────────────────────────────────────────────
+// First few sessions per device, surface a one-line hint over the
+// Verdict dropdown + the Send Help CTA + the Tools menu. Counter
+// stored in localStorage. After 3 sessions we never show them again.
+// Operator can also dismiss any tip with × on the tooltip itself.
+
+const _ONBOARDING_LS_KEY = 'crisp_onboarded_v1';
+const _ONBOARDING_SESSION_THRESHOLD = 3;
+
+function _onboardingSessionCount() {
+    try {
+        const raw = localStorage.getItem(_ONBOARDING_LS_KEY);
+        if (!raw) return 0;
+        const data = JSON.parse(raw);
+        return data.sessions || 0;
+    } catch (_) { return 0; }
+}
+
+function _onboardingTipDismissed(id) {
+    try {
+        const raw = localStorage.getItem(_ONBOARDING_LS_KEY);
+        if (!raw) return false;
+        const data = JSON.parse(raw);
+        return (data.dismissed || []).includes(id);
+    } catch (_) { return false; }
+}
+
+function _onboardingMarkDismissed(id) {
+    try {
+        const raw = localStorage.getItem(_ONBOARDING_LS_KEY);
+        const data = raw ? JSON.parse(raw) : { sessions: 0, dismissed: [] };
+        if (!data.dismissed) data.dismissed = [];
+        if (!data.dismissed.includes(id)) data.dismissed.push(id);
+        localStorage.setItem(_ONBOARDING_LS_KEY, JSON.stringify(data));
+    } catch (_) {}
+}
+
+function _onboardingBumpSession() {
+    try {
+        const raw = localStorage.getItem(_ONBOARDING_LS_KEY);
+        const data = raw ? JSON.parse(raw) : { sessions: 0, dismissed: [] };
+        data.sessions = (data.sessions || 0) + 1;
+        localStorage.setItem(_ONBOARDING_LS_KEY, JSON.stringify(data));
+    } catch (_) {}
+}
+
+// Show a tooltip over the given anchor element. id is used to skip
+// once dismissed; placement is 'below' or 'above'.
+function _showOnboardingTip({ id, anchor, text, placement = 'below' }) {
+    if (!anchor) return;
+    if (_onboardingTipDismissed(id)) return;
+    if (_onboardingSessionCount() > _ONBOARDING_SESSION_THRESHOLD) return;
+
+    // Don't double-attach to the same anchor.
+    if (anchor.dataset && anchor.dataset.onboardingShown === '1') return;
+    anchor.dataset.onboardingShown = '1';
+
+    const tip = document.createElement('div');
+    tip.className = `onboarding-tip onboarding-tip-${placement}`;
+    tip.innerHTML = `
+        <i class="fa-solid fa-circle-info"></i>
+        <span>${escapeHtml(text)}</span>
+        <button class="onboarding-tip-x" aria-label="Dismiss">&times;</button>
+    `;
+
+    const rect = anchor.getBoundingClientRect();
+    tip.style.position = 'fixed';
+    if (placement === 'above') {
+        tip.style.top = `${rect.top - 8}px`;
+        tip.style.left = `${rect.left + rect.width / 2}px`;
+        tip.style.transform = 'translate(-50%, -100%)';
+    } else {
+        tip.style.top = `${rect.bottom + 8}px`;
+        tip.style.left = `${rect.left + rect.width / 2}px`;
+        tip.style.transform = 'translate(-50%, 0)';
+    }
+    tip.style.zIndex = '10300';
+
+    document.body.appendChild(tip);
+    tip.querySelector('.onboarding-tip-x').addEventListener('click', () => {
+        _onboardingMarkDismissed(id);
+        tip.remove();
+    });
+    // Auto-dismiss after 8s.
+    setTimeout(() => { tip.remove(); }, 8000);
+}
+
+// Drive onboarding tips for the surfaces operators most need to find.
+function _kickOnboardingTips() {
+    if (_onboardingSessionCount() > _ONBOARDING_SESSION_THRESHOLD) return;
+    // Tools menu — show 1.5 s after page idles so the operator's eye
+    // is settled. Anchor by the Tools dropdown button.
+    setTimeout(() => {
+        const toolsBtn = document.querySelector('#cmd-tools-dropdown > button');
+        _showOnboardingTip({
+            id: 'tools-intro',
+            anchor: toolsBtn,
+            text: 'Analytics, exports and language are tucked under Tools — fewer buttons, same features.',
+            placement: 'below',
+        });
+    }, 1500);
+}
+
+function _openKeyboardShortcutsModal() {
+    // Bail if one is already open.
+    if (document.getElementById('kbd-shortcuts-modal')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'kbd-shortcuts-modal';
+    overlay.className = 'bc-reason-modal-overlay';   // reuse the J.3 modal overlay styles
+    overlay.innerHTML = `
+        <div class="bc-reason-modal kbd-shortcuts-modal" role="dialog" aria-modal="true">
+            <div class="bc-reason-modal-head">
+                <i class="fa-regular fa-keyboard" style="color:#a78bfa;"></i>
+                <h3>Keyboard shortcuts</h3>
+            </div>
+            <div class="kbd-shortcuts-grid">
+                <kbd>?</kbd><span>Show this cheat-sheet</span>
+                <kbd>Esc</kbd><span>Close panel / dropdown / modal</span>
+                <kbd>←</kbd><kbd>→</kbd><span>Cycle photo resolution (LOW / MED / HIGH)</span>
+                <kbd>v</kbd><span>Open the verdict dropdown</span>
+                <kbd>s</kbd><span>Run satellite verification</span>
+                <kbd>b</kbd><span>Open the building console (if linked)</span>
+                <kbd>Cmd/Ctrl + Enter</kbd><span>Submit a reason modal</span>
+            </div>
+            <div class="bc-reason-modal-actions">
+                <button class="bc-reason-modal-submit"
+                        style="background:rgba(167,139,250,0.18);color:#c4b5fd;border-color:rgba(167,139,250,0.45);"
+                        onclick="document.getElementById('kbd-shortcuts-modal').remove()">
+                    Got it
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (ev) => {
+        if (ev.target === overlay) overlay.remove();
+    });
+    const escHandler = (ev) => {
+        if (ev.key === 'Escape') {
+            overlay.remove();
+            document.removeEventListener('keydown', escHandler);
+        }
+    };
+    document.addEventListener('keydown', escHandler);
+}
+
 // Phase 2: keyboard shortcuts (← / →) to cycle tiers when the detail panel
 // is open and focused. Non-intrusive: falls through if focus is on an input.
 document.addEventListener('keydown', (e) => {
@@ -9100,9 +9302,41 @@ function _activePollAllowed() {
     return (Date.now() - _lastActiveUploadProgressAt) < 60_000;
 }
 
+// Phase J.6 — track recent operator interaction. We treat any click /
+// keydown inside the detail panel as a "still deciding" signal; if
+// nothing has happened in 30 s the panel is just-open-but-idle and
+// normal polling resumes.
+let _lastDetailInteractionAt = 0;
+document.addEventListener('click', (ev) => {
+    if (ev.target && ev.target.closest && ev.target.closest('#detail-panel')) {
+        _lastDetailInteractionAt = Date.now();
+    }
+}, true);
+
+function _decisionModeActive() {
+    if (!selectedId) return false;
+    const panel = document.getElementById('detail-panel');
+    if (!panel || panel.style.display === 'none') return false;
+    if ((Date.now() - _lastDetailInteractionAt) > 30 * 1000) return false;
+    const r = allReports.find(x => x.id === selectedId);
+    if (!r) return false;
+    // Already-decided reports don't need the slow-poll guard.
+    const status = r.status || '';
+    if (['RESOLVED', 'RESPONDING', 'FALSE_ALARM'].includes(status)) return false;
+    return true;
+}
+
 function _reschedulePoller() {
     if (_pollTimer) clearTimeout(_pollTimer);
-    const interval = _activePollAllowed() ? POLL_INTERVAL_ACTIVE : POLL_INTERVAL;
+    let interval;
+    if (_activePollAllowed()) {
+        interval = POLL_INTERVAL_ACTIVE;
+    } else if (_decisionModeActive()) {
+        // J.6 — operator is mid-decision; don't re-render under their hands.
+        interval = POLL_INTERVAL_DECISION;
+    } else {
+        interval = POLL_INTERVAL;
+    }
     _pollTimer = setTimeout(fetchReports, interval);
 }
 
@@ -9669,6 +9903,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Predict panel visibility so the operator sees a small marker
     // when one of those overlays is currently open.
     _initToolsActiveDot();
+    // Phase J.5 — bump session counter + show onboarding tips for
+    // the first 3 sessions per device.
+    _onboardingBumpSession();
+    _kickOnboardingTips();
     // Close dropdowns on outside click
     document.addEventListener('click', (e) => {
         document.querySelectorAll('.export-dropdown.open, .sort-dropdown.open').forEach(d => {

@@ -469,11 +469,42 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     font-weight: 500;
 }
 .dp-audit-loading {
-    font-size: 11px;
-    color: #94a3b8;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
+    /* Phase J.5 — Quieter loading state. Was a spinner-style line
+       that flashed for ~80 ms on every panel open; now a 3-bar
+       skeleton that's invisible for the first 300 ms (most fetches
+       complete inside that window) and gently fades in only on
+       slow networks. */
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 0;
+    opacity: 0;
+    animation: dp-audit-skeleton-in 0.18s ease-out 0.3s forwards;
+}
+.dp-audit-loading::before,
+.dp-audit-loading::after,
+.dp-audit-loading > i {
+    content: "";
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(90deg,
+        rgba(148, 163, 184, 0.10) 0%,
+        rgba(148, 163, 184, 0.22) 50%,
+        rgba(148, 163, 184, 0.10) 100%);
+    background-size: 200% 100%;
+    animation: dp-audit-skeleton-shimmer 1.4s linear infinite;
+}
+.dp-audit-loading > i {
+    /* Hide the FA clock icon; the skeleton lines replace it. */
+    font-size: 0;
+    width: 70%;
+}
+.dp-audit-loading::before { width: 90%; }
+.dp-audit-loading::after { width: 55%; }
+@keyframes dp-audit-skeleton-in { to { opacity: 1; } }
+@keyframes dp-audit-skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
 .dp-audit-list {
     list-style: none;
@@ -4179,6 +4210,109 @@ body.burst-mode .notif-glow {
 }
 .bc-reason-modal-submit:hover {
     filter: brightness(1.15);
+}
+
+/* ── Phase J.5 — Keyboard-shortcuts modal ──────────────────── */
+.kbd-shortcuts-modal { width: min(520px, 94vw); }
+.kbd-shortcuts-grid {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 8px 12px;
+    align-items: center;
+    margin-top: 4px;
+}
+.kbd-shortcuts-grid kbd {
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    font-weight: 700;
+    color: #c4b5fd;
+    background: rgba(167, 139, 250, 0.12);
+    border: 1px solid rgba(167, 139, 250, 0.40);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 2px 8px;
+    text-align: center;
+    min-width: 22px;
+    box-sizing: border-box;
+    justify-self: start;
+}
+.kbd-shortcuts-grid kbd + kbd { margin-left: 2px; }
+.kbd-shortcuts-grid > kbd:nth-child(3n) + kbd {
+    /* Two-key chord rows: pull the second key tight. */
+    margin-left: -4px;
+}
+.kbd-shortcuts-grid span {
+    grid-column: span 1;
+    font-size: 12.5px;
+    color: var(--text-sub);
+}
+/* When a row has only one key (most rows), let the span take cols 2-3. */
+.kbd-shortcuts-grid kbd + span { grid-column: span 2; }
+
+/* ── Phase J.5 — Onboarding tooltips ───────────────────────── */
+.onboarding-tip {
+    background: rgba(15, 23, 42, 0.97);
+    border: 1px solid rgba(167, 139, 250, 0.55);
+    border-radius: 8px;
+    padding: 8px 12px;
+    box-shadow: 0 10px 26px rgba(167, 139, 250, 0.30);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 320px;
+    font-size: 12px;
+    color: #cbd5e1;
+    line-height: 1.4;
+    animation: onboarding-tip-in 0.32s ease-out;
+}
+.onboarding-tip i { color: #c4b5fd; font-size: 13px; flex-shrink: 0; }
+.onboarding-tip span { flex: 1; }
+.onboarding-tip-x {
+    appearance: none;
+    background: transparent;
+    color: #94a3b8;
+    border: 0;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 2px;
+}
+.onboarding-tip-x:hover { color: var(--text); }
+/* Arrow pointer. */
+.onboarding-tip::after {
+    content: "";
+    position: absolute;
+    width: 8px; height: 8px;
+    background: rgba(15, 23, 42, 0.97);
+    border: 1px solid rgba(167, 139, 250, 0.55);
+}
+.onboarding-tip-below::after {
+    top: -5px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    border-right: 0;
+    border-bottom: 0;
+}
+.onboarding-tip-above::after {
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    border-left: 0;
+    border-top: 0;
+}
+@keyframes onboarding-tip-in {
+    from { opacity: 0; transform: translate(-50%, 8px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.onboarding-tip-above {
+    animation: onboarding-tip-in-above 0.32s ease-out;
+}
+@keyframes onboarding-tip-in-above {
+    from { opacity: 0; transform: translate(-50%, calc(-100% + 8px)); }
+    to   { opacity: 1; transform: translate(-50%, -100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .onboarding-tip { animation-duration: 0.01ms; }
 }
 
 /* ── Phase H.2 — Building event timeline ───────────────────── */
