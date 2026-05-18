@@ -153,7 +153,10 @@ test.describe('Dashboard stat-pill + time filter', () => {
         // Visual highlight class — this is what users actually see. If
         // this class rename breaks, the filter still technically works
         // but users don't know which pill is active. Worth pinning.
-        await expect(page.locator('#stat-critical')).toHaveClass(/pill-active/);
+        // Phase F.1.b (May 2026) — `.pill-active` on `.clickable-pill`
+        // became plain `.active` on `.cmd-status-seg-item`. See the
+        // canonical comment block at app.js:2082.
+        await expect(page.locator('#stat-critical')).toHaveClass(/active/);
     });
 
     test('click critical pill twice → toggle clears filter + removes class', async ({ page, request }) => {
@@ -179,17 +182,23 @@ test.describe('Dashboard stat-pill + time filter', () => {
         ).toBeFalsy();
 
         // No pill should carry the active class now.
-        await expect(page.locator('.clickable-pill.pill-active')).toHaveCount(0);
+        // Phase F.1.b (May 2026) — see app.js:2082 comment.
+        await expect(page.locator('.cmd-status-seg-item.active')).toHaveCount(0);
     });
 
     test('time filter 1h button sets timeFilterHours=1 + active class', async ({ page }) => {
-        // The time bar has three buttons — 1h / 24h / All. "All" starts
-        // active per the inline `active` class in index.html.
-        const allBtn = page.locator('.time-btn', { hasText: 'All' });
-        const oneH = page.locator('.time-btn', { hasText: '1h' });
-        await expect(allBtn).toHaveClass(/active/);
+        // Phase F.1.b (May 2026) — time filters collapsed from three
+        // standalone .time-btn buttons into a single dropdown that
+        // shows the currently-selected range as a label on the
+        // trigger button. The click handlers still call
+        // setTimeFilter(N) so the underlying state model is unchanged.
+        const trigger = page.locator('#time-filter-dropdown > button').first();
+        const currentLabel = page.locator('#time-filter-current-label');
+        await expect(currentLabel).toHaveText(/All/);
 
-        await oneH.click();
+        // Open the dropdown, then pick "Last 1 hour".
+        await trigger.click();
+        await page.locator('#time-filter-dropdown .export-menu button', { hasText: /1 hour/i }).first().click();
 
         // Debug hook confirms the state flipped to 1.
         await expect.poll(
@@ -197,8 +206,7 @@ test.describe('Dashboard stat-pill + time filter', () => {
             { timeout: 5_000 },
         ).toBe(1);
 
-        // Active class switched over.
-        await expect(oneH).toHaveClass(/active/);
-        await expect(allBtn).not.toHaveClass(/active/);
+        // Trigger label reflects the new choice.
+        await expect(currentLabel).toHaveText(/1h/);
     });
 });
