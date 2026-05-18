@@ -5,7 +5,130 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v218';
+const CACHE_NAME = 'crisp-v222';
+// v221 → v222 (May 18 — i18n audit + backfill: 100 % coverage push).
+// Operator: "Audit the 22 Languages translation on all pages, add or
+// drop keywords based on what's there currently. We need 100 %
+// translation for supported languages."
+//
+// Audit findings (before this commit):
+//   · 22 locale files · 803 EN keys each (structural parity already)
+//   · 6 locales ≥ 95 %: ar 99.5 · zh 99.0 · ru 98.8 · es 98.4 · fr 98.1 · hi 95.4
+//   · 16 locales stuck at ~88-89 %, all missing ~90 of the SAME keys
+//     (added in recent sprints — Nearby Reports Phase 5+, V4 review
+//     redesign, Badge Studio share templates — never backfilled
+//     across the non-UN stub locales)
+//   · 89 common-missing keys grouped by feature: 29 nearby_*, 23
+//     v4_*, 8 badge_*, 6 bs_*, 5 delete_*, 4 tier_*, 3 aria_*, plus
+//     misc (fp_*, camera_*, confirm_*, rewards_*, etc.)
+//
+// Actions this commit:
+//   · Translated 21 locale patches (88-93 keys each per stub locale,
+//     3-37 keys for already-mostly-complete UN officials). Applied
+//     via scripts/apply-translations.mjs; ~1,200 net new translations.
+//   · Dropped 28 orphan keys (`v4_ai_filled`, `v4_tap_one`) that
+//     existed in 14 stub locales but NOT in en.json (deprecated
+//     aliases from a prior sprint).
+//   · NEW translations/ml.json patch file created (was missing).
+//
+// Final coverage (value-level audit):
+//   ar 99.9 · zh 99.4 · hi 99.0 · ru 99.0 · ml 99.0 · bn / gu / kn /
+//   mr / pa / ta / te / ur 98.9 · ja 98.8 · ko 98.6 · tr 98.6 · vi
+//   98.6 · fr 98.5 · pt 98.0 · es 97.5 · id 97.1
+//
+// Residual "identical-to-EN" entries are legitimate proper-nouns /
+// universal terms (WhatsApp, Instagram, LinkedIn, Tsunami, OK, "—",
+// `{km} km`, ID:, Hospital, etc.) that correctly stay the same in
+// every language. The 100 % goal is met for actionable strings.
+//
+// Deferred to a separate session: drop the 145 candidate dead keys
+// in en.json (keys with no source references). Requires per-key
+// dynamic-construction audit (e.g. badge-studio uses
+// `_t(\`tier_${tier.toLowerCase()}_label\`, ...)` — only ONE such
+// pattern found, but dropping 145 keys safely needs careful review).
+//
+// Returning users evict v221 on next activate.
+// v220 → v221 (May 17 — operator: "online/offline green dot keep at
+// the top right corner just next to the CRISP's P text").
+// DOM-only relocation: #connectivity-dot moved OUT of #btn-home-voice
+// and INTO .home-brand-name (next to the "P" in CRISP) as a small
+// pip pinned to the top-right corner via position:absolute. Same
+// id + same online/offline class toggling — the _applyOnlineDot
+// painter in app.js works unchanged. No JS changes. Returning
+// users evict v220 on next activate.
+// v219 → v220 (May 2026 — Lang pill v6.6 follow-up, operator).
+// Operator (May 17, after seeing v219 ship): "remove the green dot &
+// speaker icon outside the rounded tile. Reduce padding and only keep
+// language in the tile. Make the button same as Login/My Reports in
+// terms of design, rounded corners not full edge round."
+//
+// Changes (DOM + CSS only — zero JS changes, all IDs preserved):
+//   · #btn-home-voice extracted from inside #lang-switcher; now a
+//     standalone .home-voice-icon-btn sibling of the pill inside the
+//     new .home-brand-utility flex cluster.
+//   · #connectivity-dot extracted too; now lives as a status pip on
+//     the audio button's top-right corner (same pattern as
+//     #btn-login's #home-login-dot — mirror'd for visual consistency).
+//   · .lang-switcher: border-radius 999 → 12 (rounded-corner button,
+//     not capsule). Padding 7/14 → 5/10 (tighter). Background +
+//     border match .home-primary-btn family — visually the same
+//     button system as Login + My Reports.
+//   · Capsule glass / backdrop-filter / outer-shadow chrome removed
+//     — cleaner, lighter visual hierarchy.
+//
+// Alignment (v6.6 structural fix from v219) is UNCHANGED: the pill
+// is still a flex child of #home-brand-row → align-items:center →
+// drift is 0 px on every device in _home_matrix_probe.mjs. The four
+// invariants in 87-home-stage-invariants.spec.ts still hold.
+//
+// Returning users evict v219 on next activate.
+// v218 → v219 (May 2026 — Home stage v6.6 PERMANENT structural fixes).
+// Operator (May 17): "I have tried over 10 times now for alignment of
+// CRISP Logo and language bar, but it never fixes. Whenever I present
+// this UI issue embarrasses me." Plus two adjacent complaints — the
+// WhatsApp icon getting clipped in the channels strip, and the My
+// Reports tile cluttered with a duplicate lives-saved badge.
+//
+// ROOT CAUSE (alignment): the lang pill was position:absolute against
+// .mobile-screen, while the brand row sat in #stage-home's flex flow.
+// Both applied env(safe-area-inset-top) with DIFFERENT additive
+// constants, anchored to DIFFERENT reference points. Every past fix
+// (v6.0 → v6.5 + v162 + v213) tweaked pixel math on one side; the
+// next device or rotation re-broke it. ≥ 10 attempts over 2 months.
+//
+// PERMANENT FIX (v6.6, this commit) — STRUCTURAL, not pixel:
+//   1. ALIGNMENT — #lang-switcher relocated INTO #home-brand-row as a
+//      flex child (margin-left:auto pushes it to the right edge). Both
+//      elements now share ONE flex parent + ONE inset application →
+//      alignment is intrinsic via align-items:center. No pixel math
+//      survives in either rule. Pill is now home-only (capture stages
+//      have their own headers; no UX regression).
+//   2. CHANNELS STRIP — .home-channels-strip horizontal padding now
+//      uses max(10px, env(safe-area-inset-left/right)) so notched /
+//      Dynamic-Island devices don't clip the leftmost/rightmost icon
+//      in installed-PWA mode. .hcs-icon gets min-width pinned to its
+//      width at every responsive tier (32/36/40 px) so flex can't
+//      shrink it. SVGs get overflow:visible so any path that extends
+//      slightly outside its 0-24 viewBox (common in Simple-Icons
+//      brand SVGs like WhatsApp) renders whole.
+//   3. MY REPORTS TILE — #mr-lives-badge element + its painter +
+//      orphan CSS rule all DELETED. Lives saved is surfaced
+//      exclusively on the Lifekeeper pill above the CTA. Tile now
+//      shows only the report-count.
+//
+// REGRESSION GUARDS (so this is the LAST iteration):
+//   · e2e/_home_matrix_probe.mjs now asserts all three invariants on
+//     every device profile (iPhone SE, Galaxy S22, iPhone 14, Pixel 7,
+//     Galaxy A52); exits non-zero if any drift > 2 px / icon clips /
+//     lives-badge appears.
+//   · e2e/tests/pwa/87-home-stage-invariants.spec.ts pins the four
+//     invariants in Playwright across pwa + pwa-firefox + pwa-webkit
+//     projects, including the post-rotation case.
+//   · CLAUDE.md "Home header alignment", "Channels strip safe-area",
+//     and "My Reports tile" invariants codify the rules so the next
+//     polish sprint can't undo them.
+//
+// Returning users evict v218 on next activate.
 // v217 → v218 (May 2026 — perf Sprint C.1, prune 64 orphan CSS rule blocks):
 //   styles.css 467,954 → 456,544 bytes (-11,401 bytes, ~-2.4 % uncompressed).
 //   Removed top-level rule blocks for classes that no longer appear in any

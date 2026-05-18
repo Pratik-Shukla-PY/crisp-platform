@@ -155,55 +155,58 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
    #connectivity-dot + #btn-lang-current (containing .lps-flag +
    .lps-code) — only visuals change so existing specs / RTL rules /
    install-prompt offset (right: 158px from the pill) all stay valid. */
-.lang-switcher {
-    /* v6.3 (May 2026, operator) — clean frosted-glass pill, not the
-       dark-navy gradient. The previous `linear-gradient(180deg,
-       #1b2a44, #0e1828)` was perceptually almost-black on most
-       displays — operator: "still looks dark BG, I need clean look".
-       Switch to a translucent teal-tinted glass: low-alpha cyan
-       interior + backdrop-filter blur + saturate so the home stage's
-       deep-navy bg shows through with a fresh cyan tone. Falls back
-       to a brighter opaque gradient on browsers without backdrop-
-       filter (older Safari). */
-    /* May 2026 (operator-reported on iPhone 14) — was `top: 22px` which
-       sat behind the Dynamic Island. Now offset by the safe-area-inset-top
-       so the pill clears the notch on iPhone (~47-59 px down) and stays
-       at 22px on Android / non-notched devices. */
-    position: absolute; top: calc(22px + env(safe-area-inset-top, 0)); right: 24px; z-index: 100;
+/* v6.6 (May 2026) — utility cluster (audio button + lang pill) sits
+   at the right edge of the brand row. Both children align by
+   align-items:center on this flex container; no pixel math. The
+   margin-left:auto pushes the cluster to the row's right edge in
+   LTR; RTL flip below. */
+.home-brand-utility {
+    margin-left: auto;
     display: flex;
-    flex-wrap: nowrap;
     align-items: center;
     gap: 8px;
-    /* v6.3 — translucent teal glass instead of solid navy. */
-    background: linear-gradient(180deg,
-        rgba(38, 78, 112, 0.55) 0%,
-        rgba(18, 48, 78, 0.55) 100%);
-    backdrop-filter: blur(14px) saturate(160%);
-    -webkit-backdrop-filter: blur(14px) saturate(160%);
-    border-radius: 999px;
-    padding: 7px 14px;
-    /* v6.3 — teal-tinted border edge instead of pure white-alpha. */
-    border: 1px solid rgba(94, 234, 212, 0.28);
-    /* v6.4 (May 2026, operator) — cyan/green outer halo REMOVED.
-       Operator: "background green glow is also not required here."
-       The capsule reads cleanly via just the teal-tinted border +
-       translucent glass interior + subtle drop shadow underneath.
-       The LIVE-indicator green dot keeps its own halo (it's the
-       actual liveness signal); only the wider pill-halo is gone. */
-    box-shadow:
-        0 6px 18px rgba(0, 0, 0, 0.30),
-        inset 0 1px 0 rgba(255, 255, 255, 0.20),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.20);
-    max-width: 140px;
-    white-space: nowrap;
+    flex: 0 0 auto;
 }
-/* Opaque fallback for browsers without backdrop-filter support. */
-@supports not (backdrop-filter: blur(1px)) {
-    .lang-switcher {
-        background: linear-gradient(180deg,
-            rgba(38, 78, 112, 0.92) 0%,
-            rgba(18, 48, 78, 0.92) 100%);
-    }
+[dir="rtl"] .home-brand-row .home-brand-utility {
+    margin-left: 0;
+    margin-right: auto;
+}
+
+/* v6.6 — Lang pill (#lang-switcher).
+   Operator (May 17): "remove the green dot & speaker icon outside the
+   rounded tile. Reduce padding and only keep language in the tile.
+   Make the button same as Login/My Reports in terms of design,
+   rounded corners not full edge round."
+   Implementation:
+     · The audio button + connectivity dot are now SIBLINGS of this
+       pill (extracted to .home-voice-icon-btn next door). The pill
+       contains ONLY the flag + locale code.
+     · border-radius 999 → 12 (matches .home-primary-btn radius 14
+       proportionally — pill is smaller so 12 reads as the same shape
+       family without looking circular).
+     · Padding 7/14 → 5/10 (tighter — just enough breathing room for
+       the 18 px flag + 2-char locale code).
+     · Background / border / typography mirror .home-primary-btn so
+       the lang pill visually belongs to the same button family. */
+.lang-switcher {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(70, 223, 177, 0.22);
+    border-radius: 12px;
+    padding: 5px 10px;
+    min-height: 32px;
+    box-shadow: none;
+    max-width: 110px;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.lang-switcher:hover {
+    background: rgba(70, 223, 177, 0.08);
+    border-color: rgba(70, 223, 177, 0.40);
 }
 
 /* ── Audio glyph inside the lang-switcher (Home v6, ask #5) ──────────
@@ -213,32 +216,45 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
    it up without a re-wire. Subtle teal glyph; brighter mint + soft
    glow on .is-speaking (the existing class the voice handler toggles
    during speechSynthesis playback). */
-.lang-switcher .lang-audio-btn {
+/* v6.6 (May 2026) — Standalone audio button (#btn-home-voice).
+   Extracted from inside the lang pill per operator request. Same id
+   so home-screen.js _wireHomeVoice() picks it up without a re-wire.
+   Visually matches the Login / My Reports button family (rounded
+   corners 12 px, glass interior, mint border). Smaller than the
+   primary buttons since it's a pure-icon affordance. The connectivity
+   dot lives inside this button as a status pip in its top-right
+   corner (same pattern as #btn-login's status dot). */
+.home-voice-icon-btn {
     all: unset;
+    position: relative;          /* anchor for the connectivity dot pip */
     cursor: pointer;
-    width: 28px; height: 28px;
+    width: 32px; height: 32px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(70, 223, 177, 0.22);
     color: var(--accent, #09D1C7);
     flex: 0 0 auto;
     transition: background 0.15s ease, color 0.15s ease,
-                box-shadow 0.2s ease;
+                border-color 0.15s ease, box-shadow 0.2s ease;
     -webkit-tap-highlight-color: transparent;
 }
-.lang-switcher .lang-audio-btn:hover,
-.lang-switcher .lang-audio-btn:focus-visible {
-    background: rgba(9, 209, 199, 0.14);
+.home-voice-icon-btn:hover,
+.home-voice-icon-btn:focus-visible {
+    background: rgba(70, 223, 177, 0.08);
+    border-color: rgba(70, 223, 177, 0.40);
     color: #46DFB1;
 }
-.lang-switcher .lang-audio-btn:focus-visible {
+.home-voice-icon-btn:focus-visible {
     outline: 2px solid rgba(70, 223, 177, 0.45);
     outline-offset: 2px;
 }
-.lang-switcher .lang-audio-btn.is-speaking {
+.home-voice-icon-btn.is-speaking {
     color: #46DFB1;
     background: rgba(70, 223, 177, 0.12);
+    border-color: rgba(70, 223, 177, 0.40);
     box-shadow: 0 0 14px rgba(9, 209, 199, 0.45);
     animation: lang-audio-pulse 1.6s ease-in-out infinite;
 }
@@ -247,7 +263,34 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     50%      { box-shadow: 0 0 22px rgba(9, 209, 199, 0.70); }
 }
 @media (prefers-reduced-motion: reduce) {
-    .lang-switcher .lang-audio-btn.is-speaking { animation: none; }
+    .home-voice-icon-btn.is-speaking { animation: none; }
+}
+/* v6.6 (May 17 — operator follow-up) — Connectivity dot is now a
+   small status pip pinned to the top-right corner of the "P" in
+   the CRISP wordmark. Same id (#connectivity-dot) and same online/
+   offline class machinery — only its parent moved.
+   .home-brand-name becomes position:relative so the absolute child
+   resolves against the wordmark's box. Tiny negative right offset
+   so the dot sits flush against the P's right edge with a hint of
+   air above. */
+.home-brand-name { position: relative; display: inline-block; }
+.home-brand-name .connectivity-dot {
+    position: absolute;
+    top: -1px;
+    right: -10px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    pointer-events: none;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.home-brand-name .connectivity-dot.connectivity-online {
+    background: #80EE98;
+    box-shadow: 0 0 6px rgba(128, 238, 152, 0.65);
+}
+.home-brand-name .connectivity-dot.connectivity-offline {
+    background: #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.65);
 }
 
 .lang-switcher button {
@@ -1924,7 +1967,9 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
     transition:background .15s;
 }
 .secondary-cta:hover { background:rgba(21,145,155,0.16); }
-.secondary-cta .my-reports-lives { margin-left:auto; font-size:12px; font-weight:700; color:#80EE98; }
+/* v6.6 — orphan `.secondary-cta .my-reports-lives` rule removed.
+   The badge element it styled was deleted from index.html per the
+   CLAUDE.md "My Reports tile" invariant. */
 
 /* Back button (used on both #stage-history and #stage-report-detail).
    Apr 2026 hotfix: previously absolute-positioned at (16,16) which collided
@@ -5391,25 +5436,33 @@ body.tier-t4 .home-impact {
    the document root is kept as an empty shell (#home-top-actions
    hidden) for back-compat. */
 .home-brand-row {
-    /* May 2026 — brand row aligns the CRISP logo + wordmark with
-       the absolute-positioned lang pill above. Pre-fix the row had
-       min-height: 44 px → content centered ≈ 22 px below the row's
-       top → wordmark sat below the lang pill (lang pill is 32 px
-       tall starting at top:16, so its centre is at y≈32 while the
-       wordmark was at y≈38 — perceptible 6 px misalignment).
-       Now: min-height 32 px to match the lang pill's intrinsic
-       height; content centres at y≈32, sharing the same baseline. */
+    /* v6.6 (May 2026) — PERMANENT alignment fix. The lang-switcher
+       is now a flex child of this row (see index.html). align-items:
+       center puts the logo + wordmark + lang pill on the same
+       baseline structurally; no pixel math required. The pre-v6.6
+       padding-right:110px clearance for the absolute pill is GONE —
+       the pill is now in-flow and takes its own space. */
     display: flex;
     align-items: center;
     gap: 10px;
     width: 100%;
-    padding-right: 110px;   /* clearance for the lang pill at right:16, ≤ 90 px wide */
     box-sizing: border-box;
     min-height: 32px;
+    /* v6.6 — single application of safe-area-inset-top, here on the
+       row that contains both logo AND pill. Both children inherit
+       the offset together; no more coordinate-system mismatch. */
+    padding-top: env(safe-area-inset-top, 0);
 }
 [dir="rtl"] .home-brand-row {
-    padding-right: 0;
-    padding-left: 104px;
+    /* RTL — `margin-left: auto` on the pill becomes margin-right:auto
+       via CSS logical equivalent? No — `margin-left` is physical.
+       The pill stays visually on the right in LTR (start side in
+       RTL). For RTL we explicitly flip with margin-right:auto on
+       the pill via a separate rule below. */
+}
+[dir="rtl"] .home-brand-row .lang-switcher {
+    margin-left: 0;
+    margin-right: auto;
 }
 .home-brand { flex: 1; min-width: 0; }
 [dir="rtl"] .home-brand-actions { margin-left: 0; margin-right: auto; }
@@ -9334,8 +9387,10 @@ body.tier-t4 .home-impact {
 /* ── B. Brand row — minimal, aligned to lang pill ────────────────── */
 
 .home-stage .home-brand-row {
+    /* v6.6 — lang pill is now a flex child of this row, not an
+       absolute sibling. The pre-v6.6 padding-right:110px clearance
+       is removed; the pill claims its own width naturally via flex. */
     min-height: 32px;
-    padding-right: 110px;            /* clearance for lang pill (top:16, right:16) */
     gap: 10px;
 }
 .home-stage .home-identity {
@@ -9674,13 +9729,26 @@ body.tier-t4 .home-impact {
     align-items: center;
     justify-content: space-around;
     width: 100%;
-    padding: 6px 10px;
+    /* v6.6 — safe-area-inset on horizontal padding so the leftmost /
+       rightmost channel icon (WhatsApp was the visible victim) never
+       clips on notched / Dynamic-Island devices in installed-PWA mode
+       where env(safe-area-inset-left/right) is non-zero. Vertical
+       padding stays at 6 px (then 8 / 10 in the height media queries
+       below). See CLAUDE.md "Channels strip safe-area" invariant. */
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-left:  max(10px, env(safe-area-inset-left, 10px));
+    padding-right: max(10px, env(safe-area-inset-right, 10px));
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.025);
     border: 1px solid rgba(255, 255, 255, 0.07);
     min-height: 44px;
     cursor: pointer;
     box-sizing: border-box;
+    /* Defensive — the strip's container rounded corners are decorative,
+       not a clip mask. Icons render in their own padding box; never
+       cropped by the strip. */
+    overflow: visible;
     transition: background 0.15s ease, border-color 0.15s ease,
                 transform 0.1s ease;
     -webkit-tap-highlight-color: transparent;
@@ -9707,6 +9775,11 @@ body.tier-t4 .home-impact {
     position: relative;
     width: 32px;
     height: 32px;
+    /* v6.6 — min-width pinned to the configured width so the icon cell
+       can NEVER shrink and clip the glyph inside (the WhatsApp-clip
+       regression). With `flex: 0 0 auto` AND min-width, the cell holds
+       its design size at every viewport. */
+    min-width: 32px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -9719,7 +9792,12 @@ body.tier-t4 .home-impact {
    font usage (V4 capture stages); the SVG rule wins specificity
    here for the home-stage strip / sheet. */
 .home-stage .hcs-icon i  { line-height: 1; }
-.home-stage .hcs-icon svg { width: 18px; height: 18px; flex: 0 0 auto; }
+/* v6.6 — overflow:visible on the SVG so any path that extends slightly
+   outside its viewBox (common in Simple-Icons brand SVGs like
+   WhatsApp) renders fully instead of being clipped by the SVG element's
+   own bounds. Combined with min-width on .hcs-icon above, this is the
+   structural bullet-proofing against the WhatsApp-clip regression. */
+.home-stage .hcs-icon svg { width: 18px; height: 18px; flex: 0 0 auto; overflow: visible; }
 .home-stage .channels-sheet-row .csr-icon svg { width: 22px; height: 22px; }
 /* Active channels — brand colour + small live-pip top-right. The
    --c CSS variable is set inline by _renderChannelsStrip(). */
@@ -9745,14 +9823,26 @@ body.tier-t4 .home-impact {
 /* Slightly more headroom on tall viewports — the icons can grow
    without re-bloating the strip. */
 @media (min-height: 740px) {
-    .home-stage .home-channels-strip { min-height: 48px; padding: 8px 12px; }
-    .home-stage .hcs-icon { width: 36px; height: 36px; font-size: 20px; }
-    .home-stage .hcs-icon svg { width: 20px; height: 20px; }
+    .home-stage .home-channels-strip {
+        min-height: 48px;
+        padding-top: 8px; padding-bottom: 8px;
+        padding-left:  max(12px, env(safe-area-inset-left, 12px));
+        padding-right: max(12px, env(safe-area-inset-right, 12px));
+    }
+    /* v6.6 — min-width matches width at every responsive tier so icons
+       cannot shrink under flex pressure. */
+    .home-stage .hcs-icon { width: 36px; height: 36px; min-width: 36px; font-size: 20px; }
+    .home-stage .hcs-icon svg { width: 20px; height: 20px; overflow: visible; }
 }
 @media (min-height: 820px) {
-    .home-stage .home-channels-strip { min-height: 52px; padding: 10px 14px; }
-    .home-stage .hcs-icon { width: 40px; height: 40px; font-size: 22px; }
-    .home-stage .hcs-icon svg { width: 22px; height: 22px; }
+    .home-stage .home-channels-strip {
+        min-height: 52px;
+        padding-top: 10px; padding-bottom: 10px;
+        padding-left:  max(14px, env(safe-area-inset-left, 14px));
+        padding-right: max(14px, env(safe-area-inset-right, 14px));
+    }
+    .home-stage .hcs-icon { width: 40px; height: 40px; min-width: 40px; font-size: 22px; }
+    .home-stage .hcs-icon svg { width: 22px; height: 22px; overflow: visible; }
 }
 /* PWA desktop / tablet — cap the strip width so the icons don't
    spread to the page edges on a 1024+ container. */
@@ -12694,3 +12784,140 @@ button.v4-review-card { appearance: none; }
 .v4-summary-thumb,
 .v4-summary-rows,
 .v4-summary-row { display: none !important; }
+
+/* ──────────────────────────────────────────────────────────────────
+   Camera modal overlay (May 2026 redesign) — `.cm-*` namespace.
+
+   Six-layer structure (see #camera-modal in index.html):
+       1. .cm-stream             — full-bleed live preview
+       2. .cm-status-bar         — GPS coords + accuracy + heading
+       3. .cm-toolbar            — back / flash / focus / lock
+       4. .cm-focus-reticle      — animated tap-to-focus marker
+       5. .cam-gallery (legacy)  — captured-thumbnail strip
+       6. .cm-controls           — close / shutter / done
+
+   All overlays use translucent gradients so the live preview stays
+   visible behind them; the safe-area-inset envs keep the status bar
+   clear of the iPhone notch / Dynamic Island. Monospace tabular-figures
+   on the status bar so the accuracy value doesn't jitter as digits
+   change width.
+   ────────────────────────────────────────────────────────────────── */
+.cm-modal       { position: fixed; inset: 0; background: #000; z-index: 200; }
+.cm-stream      { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cm-canvas      { display: none; }
+
+/* Layer 2 — status bar (top, read-only) */
+.cm-status-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: calc(6px + env(safe-area-inset-top, 0)) 14px 6px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.0));
+    color: #ffffff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    font-feature-settings: "tnum";
+    z-index: 3;
+    pointer-events: none;
+}
+.cm-status-coords[data-state="locating"] {
+    opacity: 0.7;
+    animation: cm-pulse 1.4s ease-in-out infinite;
+}
+.cm-status-acc::before     { content: "±"; opacity: 0.7; }
+.cm-status-acc::after      { content: "m"; opacity: 0.7; }
+.cm-status-heading::after  { content: "°"; opacity: 0.7; margin-left: 1px; }
+.cm-status-acc, .cm-status-heading { margin-left: auto; }
+.cm-status-acc + .cm-status-heading { margin-left: 12px; }
+@keyframes cm-pulse        { 50% { opacity: 0.4; } }
+
+/* Layer 3 — top toolbar (back / flash / focus / lock) */
+.cm-toolbar {
+    position: absolute;
+    top: calc(28px + env(safe-area-inset-top, 0));
+    left: 0; right: 0;
+    padding: 4px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 4;
+}
+.cm-tb-btn {
+    background: transparent;
+    border: 0;
+    color: #ffffff;
+    width: 44px; height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
+    padding: 0;
+}
+.cm-tb-back {
+    width: auto;
+    padding: 0 8px;
+    gap: 6px;
+    font-family: var(--font);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+}
+.cm-tb-flash[data-flash-mode="off"] svg { opacity: 0.45; }
+.cm-tb-lock[data-locked="true"]    svg { color: #46DFB1; }
+
+/* Layer 4 — focus reticle (animated on tap-to-focus) */
+.cm-focus-reticle {
+    position: absolute;
+    width: 64px; height: 64px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 5;
+}
+.cm-focus-reticle-box {
+    display: block;
+    width: 100%; height: 100%;
+    border: 2px solid rgba(255, 255, 255, 0.95);
+    border-radius: 4px;
+    animation: cm-focus 0.6s ease-out;
+}
+@keyframes cm-focus {
+    0%   { transform: scale(1.6); opacity: 0; }
+    40%  { transform: scale(1.0); opacity: 1; }
+    100% { transform: scale(0.92); opacity: 0.85; }
+}
+
+/* Layer 6 — bottom controls (close / shutter / done) */
+.cm-controls {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0));
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 10;
+}
+.cm-ctrl {
+    background: rgba(0, 0, 0, 0.45);
+    color: #ffffff;
+    border: 0;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+}
+.cm-ctrl-shutter {
+    width: 76px; height: 76px;
+    background: transparent;
+    padding: 0;
+    transition: transform 0.1s ease;
+}
+.cm-ctrl-shutter:active { transform: scale(0.92); }
+.cm-ctrl-done[disabled] { opacity: 0.4; pointer-events: none; }

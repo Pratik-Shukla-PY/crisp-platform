@@ -21,7 +21,9 @@
       "badge_studio_share_wa",
       "badge_studio_share_insta",
       "badge_studio_share_linkedin"
-    ]
+    ],
+    "last_translation_patch": "2026-05-17T18:19:51.041Z",
+    "last_translation_patch_applied": 3
   },
   "consent_title": "您的隐私很重要",
   "consent_desc": "CRISP 仅收集帮助救援团队更快响应所需的数据：",
@@ -387,7 +389,7 @@
   "landing_other_channels": "或通过以下方式报告:",
   "landing_get_app": "获取应用:",
   "landing_install_pwa": "添加到主屏幕",
-  "add_to_homescreen": "+ Add to Homescreen",
+  "add_to_homescreen": "+ 添加到主屏幕",
   "landing_consent": "我同意与救援人员共享我的报告数据。",
   "landing_offline_hint": "离线 · 开源 · 符合开发署",
   "infra_residential": "住宅",
@@ -570,8 +572,8 @@
   "home_how_step3": "匿名发送",
   "aria_back": "返回",
   "aria_close": "关闭",
-  "aria_channels_strip": "Other ways to report — tap to see all channels",
-  "aria_add_to_homescreen": "Add CRISP to your home screen",
+  "aria_channels_strip": "其他报告方式 — 点击查看所有渠道",
+  "aria_add_to_homescreen": "将 CRISP 添加到主屏幕",
   "aria_close_camera": "关闭相机",
   "aria_add_photo": "添加另一张照片",
   "aria_image_viewer": "图片查看器",

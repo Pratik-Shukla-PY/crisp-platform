@@ -473,50 +473,13 @@
          clicking it opens the full picker. #btn-lang-en and #btn-lang-local
          are retained hidden in the DOM purely for Playwright back-compat
          (existing specs click them with { force: true }). -->
-    <div class="lang-switcher" id="lang-switcher" title="Tap to change language" data-i18n-title="aria_tap_change_language">
-        <!-- May 2026 (home redesign v6, ask #5) — audio glyph relocated
-             from the action-tiles row into the top utility cluster so
-             it sits next to the language pill. The id #btn-home-voice
-             is preserved verbatim so home-screen.js _wireHomeVoice()
-             continues to wire it without change. The glyph reads
-             aloud the current home stage in the active language via
-             window.speechSynthesis. -->
-        <button type="button" class="lang-audio-btn" id="btn-home-voice"
-                aria-label="Read this page aloud"
-                data-i18n-aria-label="aria_read_aloud"
-                title="Read this page aloud"
-                data-i18n-title="aria_read_aloud">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
-                 stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round"
-                 aria-hidden="true">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-            </svg>
-        </button>
-        <!-- Phase 2.4 (May 2026) — a11y fix. The connectivity dot is a
-             pure visual indicator (CSS-coloured circle); axe-core flags
-             `aria-label` as "prohibited" on a default-role span. Adding
-             `role="img"` makes the aria-label meaningful AND treats the
-             dot as a status image for screen readers. Mirror change for
-             the duplicate dot in the lang-switcher rail below. -->
-        <span class="connectivity-dot connectivity-online" id="connectivity-dot" role="img" aria-label="Online" title="Online" data-i18n-aria-label="aria_online_status" data-i18n-title="aria_online_status"></span>
-        <button id="btn-lang-local" data-lang="en" style="display:none;" title="Tap to switch to local language">🌐 ...</button>
-        <button id="btn-lang-en" class="active" data-lang="en" style="display:none;" title="Tap to switch to English">🌐 EN</button>
-        <button id="btn-lang-change" style="display:none;" title="Change language">🌐</button>
-        <!-- Primary visible pill. Text is updated by activateLang() to reflect
-             the active locale code. Tapping opens #lang-picker-overlay with
-             every supported language. -->
-        <button id="btn-lang-current" class="active" title="Tap to change language" data-i18n-title="aria_tap_change_language" aria-label="Tap to change language" data-i18n-aria-label="aria_tap_change_language">🌐 EN</button>
-    </div>
-
-    <!-- install + voice icons MOVED to live inside the home
-         identity bar (see #home-brand-row inside #stage-home) so they
-         no longer collide with the brand text or lang pill. This empty
-         shell is retained for any non-home stage that still expects
-         the global container; home-screen.js relocates the buttons
-         into it on non-home stages. -->
+    <!-- v6.6 (May 2026) — #lang-switcher relocated INTO #home-brand-row
+         as a flex child to permanently fix the recurring CRISP-logo ↔
+         lang-pill alignment regression (≥ 10 failed attempts under
+         prior absolute-positioning approach). Both elements now share
+         one flex parent + one application of `padding-top:
+         env(safe-area-inset-top, 16px)`, so alignment is structural.
+         See CLAUDE.md "Home header alignment" invariant. -->
     <div class="home-top-actions" id="home-top-actions" hidden></div>
 
     <!-- Full-screen image viewer overlay. Opens when the user
@@ -770,15 +733,58 @@
                             </svg>
                         </div>
                         <div class="home-brand-text">
-                            <div class="home-brand-name">CRISP</div>
+                            <!-- v6.6 (May 17, operator) — connectivity dot
+                                 relocated here, pinned to the top-right
+                                 corner of the "P" in CRISP. Same id
+                                 (#connectivity-dot) and online/offline
+                                 class toggling — the painter in app.js
+                                 (_applyOnlineDot) keeps working unchanged. -->
+                            <div class="home-brand-name">CRISP<span class="connectivity-dot connectivity-online" id="connectivity-dot" role="img" aria-label="Online" title="Online" data-i18n-aria-label="aria_online_status" data-i18n-title="aria_online_status"></span></div>
                             <div class="home-brand-sub" data-i18n="home_brand_tagline">Crisis Reporter</div>
                         </div>
                     </div>
-                    <!-- install + voice icons moved OUT of the
-                         brand row and INTO the identity strip below (next
-                         to the device-ID badge + Newcomer chip). Brand row
-                         is now just logo + wordmark; the lang pill keeps
-                         floating absolute top-right via #lang-switcher. -->
+                    <!-- v6.6 (May 2026) — top-right utility cluster is a
+                         flex group inside #home-brand-row. THREE separate
+                         elements (not stacked inside one pill):
+                           (a) #btn-home-voice — standalone audio icon
+                               button with the connectivity dot pinned in
+                               its top-right corner (same pattern as
+                               #btn-login's #home-login-dot status badge).
+                           (b) #connectivity-dot — moved OUT of the lang
+                               pill. Lives as a status pip on the audio
+                               button (positioned absolute by CSS).
+                           (c) #lang-switcher — rounded-corner button (12 px
+                               radius matching Login / My Reports), reduced
+                               padding, contains ONLY the flag + locale
+                               code. No more inner audio glyph or status
+                               dot.
+                         All IDs preserved verbatim so home-screen.js
+                         _wireHomeVoice() + the connectivity-dot painter +
+                         the lang activate logic keep working without a
+                         JS change. See CLAUDE.md "Home header alignment"
+                         invariant. -->
+                    <div class="home-brand-utility">
+                        <button type="button" class="home-voice-icon-btn" id="btn-home-voice"
+                                aria-label="Read this page aloud"
+                                data-i18n-aria-label="aria_read_aloud"
+                                title="Read this page aloud"
+                                data-i18n-title="aria_read_aloud">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
+                                 stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round"
+                                 aria-hidden="true">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                            </svg>
+                        </button>
+                        <div class="lang-switcher" id="lang-switcher" title="Tap to change language" data-i18n-title="aria_tap_change_language">
+                            <button id="btn-lang-local" data-lang="en" style="display:none;" title="Tap to switch to local language">🌐 ...</button>
+                            <button id="btn-lang-en" class="active" data-lang="en" style="display:none;" title="Tap to switch to English">🌐 EN</button>
+                            <button id="btn-lang-change" style="display:none;" title="Change language">🌐</button>
+                            <button id="btn-lang-current" class="active" title="Tap to change language" data-i18n-title="aria_tap_change_language" aria-label="Tap to change language" data-i18n-aria-label="aria_tap_change_language">🌐 EN</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Anonymous slot — May 2026 (reward-hero pass).
@@ -1014,7 +1020,14 @@
                              Painter writes the number; default 0 stays
                              visible until first submission. -->
                         <span class="mr-count" id="mr-count">0</span>
-                        <span class="my-reports-lives" id="mr-lives-badge" style="display:none;"></span>
+                        <!-- v6.6 (May 2026) — `#mr-lives-badge` element
+                             removed entirely. The lives-saved value is
+                             already surfaced on the Lifekeeper pill
+                             above the CTA; re-surfacing it here was
+                             both redundant AND overlapped the label on
+                             smaller viewports. Per CLAUDE.md "My Reports
+                             tile" invariant — only #mr-count appears
+                             here. Do not re-introduce the lives badge. -->
                     </button>
                 </div>
             </div>
@@ -2153,28 +2166,156 @@
          shooting and taps "Done" when finished. First snap becomes the
          primary photo; the rest go into state.extraPhotos.
          Close (X) tears everything down without saving anything mid-session —
-         Done is the confirm path. -->
-    <!-- Hotfix: on desktop Edge/Chrome the previous flex-column
-         layout with `flex:1` on the <video> could push the controls row off
-         the bottom of the viewport — the video's intrinsic aspect ratio beat
-         the flex-basis and there was no z-index to keep the shutter on top.
-         Fix: video fills the modal with `position:absolute; inset:0;
-         object-fit:cover`, and the gallery + controls are absolute overlays
-         pinned to the bottom with z-index:10 so they can't be hidden. -->
-    <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:200;">
-        <video id="camera-stream" autoplay playsinline muted
-               style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover;"></video>
-        <canvas id="camera-canvas" style="display:none;"></canvas>
+         Done is the confirm path.
+
+         May 2026 redesign — six-layer overlay structure so the camera
+         surface shows the user a visible geotag during capture (status bar
+         with live GPS coords + accuracy + compass heading) plus a
+         standard camera-app control set (back / flash / focus / rotation
+         lock). All new overlays sit on top of `.cm-stream` via z-index;
+         the live preview keeps `position:absolute; inset:0; object-fit:
+         cover` so it always fills the modal. IDs from the original
+         markup (`camera-stream`, `camera-canvas`, `cam-gallery`, the
+         three `btn-cam-*` controls) are PRESERVED so existing app.js
+         bindings keep working unchanged.
+
+         Layer order (top → bottom in z-index):
+           10: bottom controls (.cm-controls)
+            5: focus reticle (.cm-focus-reticle, animated on tap)
+            4: top toolbar (.cm-toolbar)
+            3: status bar (.cm-status-bar)
+            0: live preview <video>
+
+         All `.cm-*` styles live in styles.css. -->
+    <div id="camera-modal" class="cm-modal" style="display:none;">
+        <video id="camera-stream" class="cm-stream" autoplay playsinline muted></video>
+        <canvas id="camera-canvas" class="cm-canvas" hidden></canvas>
+
+        <!-- Layer 2: GPS status bar. Read-only (pointer-events:none).
+             Painted by _paintCmStatus in app.js from the existing
+             localStorage['crisp_last_location_v2'] cache. The heading
+             slot is hidden by default and only fills once
+             DeviceOrientationEvent fires (permission may need to be
+             granted on iOS Safari — see _attachCameraOverlay). -->
+        <div class="cm-status-bar" id="cm-status-bar" role="group"
+             aria-label="Capture metadata">
+            <span class="cm-status-coords" id="cm-status-coords"
+                  data-state="locating">Locating&hellip;</span>
+            <span class="cm-status-acc" id="cm-status-acc"></span>
+            <span class="cm-status-heading" id="cm-status-heading" hidden></span>
+        </div>
+
+        <!-- Layer 3: top toolbar. Buttons exist in markup from day 1;
+             their click handlers are wired progressively in app.js
+             (status bar wiring lands first; flash/focus/lock follow). -->
+        <div class="cm-toolbar" id="cm-toolbar" role="toolbar"
+             aria-label="Camera controls">
+            <button class="cm-tb-btn cm-tb-back" id="btn-cm-back"
+                    type="button" aria-label="Back">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2.4"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <polyline points="15 18 9 12 15 6"/>
+                </svg>
+                <span class="cm-tb-back-label">BACK</span>
+            </button>
+            <button class="cm-tb-btn cm-tb-flash" id="btn-cm-flash"
+                    type="button" data-flash-mode="auto"
+                    aria-label="Flash mode">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
+                     stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <!-- Lightning bolt with a small "A" mark for auto-flash default. -->
+                    <polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"
+                             fill="currentColor" stroke="none"/>
+                </svg>
+            </button>
+            <button class="cm-tb-btn cm-tb-focus" id="btn-cm-focus"
+                    type="button" aria-label="Re-center camera focus">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
+                     stroke="currentColor" stroke-width="1.8"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <circle cx="12" cy="12" r="9"/>
+                    <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>
+                    <line x1="12" y1="2"  x2="12" y2="6"/>
+                    <line x1="12" y1="18" x2="12" y2="22"/>
+                    <line x1="2"  y1="12" x2="6"  y2="12"/>
+                    <line x1="18" y1="12" x2="22" y2="12"/>
+                </svg>
+            </button>
+            <button class="cm-tb-btn cm-tb-lock" id="btn-cm-lock"
+                    type="button" data-locked="false"
+                    aria-label="Lock screen orientation">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
+                     stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <!-- Lock body + shackle + curved-arrow accent for rotation. -->
+                    <rect x="5" y="11" width="14" height="9" rx="2"/>
+                    <path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Layer 4: focus reticle. Hidden until the user taps the
+             preview (tap-to-focus) or hits the center-focus toolbar
+             button. CSS keyframes `cm-focus` provide the
+             scale-and-fade animation; JS only repositions
+             top/left and re-triggers the animation. -->
+        <div class="cm-focus-reticle" id="cm-focus-reticle" hidden
+             aria-hidden="true">
+            <span class="cm-focus-reticle-box"></span>
+        </div>
+
         <!-- Mini-gallery: horizontally scrolling strip of already-captured
              thumbnails. Pinned above the controls; hidden until the first snap. -->
         <div id="cam-gallery" class="cam-gallery" style="display:none;">
             <div class="cam-gallery-count" id="cam-gallery-count">0</div>
             <div class="cam-gallery-scroll" id="cam-gallery-scroll"></div>
         </div>
-        <div class="cam-controls">
-            <button id="btn-cam-close" aria-label="Close camera" data-i18n-aria-label="aria_close_camera"><i class="fa-solid fa-xmark"></i></button>
-            <button id="btn-cam-snap" aria-label="Take photo">📸</button>
-            <button id="btn-cam-done" aria-label="Finish" disabled><i class="fa-solid fa-check"></i></button>
+
+        <!-- Layer 6: bottom controls. IDs preserved (btn-cam-close /
+             btn-cam-snap / btn-cam-done) so existing app.js bindings
+             keep working. The shutter is now an inline-SVG hexagonal
+             aperture instead of the 📸 emoji — better cross-platform
+             rendering + matches the reference design. -->
+        <div class="cm-controls" id="cm-controls">
+            <button class="cm-ctrl cm-ctrl-close" id="btn-cam-close"
+                    type="button" aria-label="Close camera"
+                    data-i18n-aria-label="aria_close_camera">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2.4"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                </svg>
+            </button>
+            <button class="cm-ctrl cm-ctrl-shutter" id="btn-cam-snap"
+                    type="button" aria-label="Take photo">
+                <svg viewBox="0 0 64 64" width="64" height="64"
+                     aria-hidden="true">
+                    <!-- Hexagonal aperture: outer white ring + inner
+                         white hexagon, dark center. Matches the
+                         reference camera UI's shutter glyph. -->
+                    <circle cx="32" cy="32" r="30" fill="none"
+                            stroke="white" stroke-width="3"/>
+                    <polygon points="32,12 48,22 48,42 32,52 16,42 16,22"
+                             fill="white"/>
+                </svg>
+            </button>
+            <button class="cm-ctrl cm-ctrl-done" id="btn-cam-done"
+                    type="button" aria-label="Finish" disabled>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2.4"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+            </button>
         </div>
     </div>
 

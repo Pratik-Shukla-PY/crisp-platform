@@ -5465,6 +5465,13 @@ function openCameraModal() {
         .then(stream => {
             state.cameraStream = stream;
             document.getElementById('camera-stream').srcObject = stream;
+            // May 2026 redesign — wire the overlay layers (status bar
+            // with live GPS, toolbar, focus reticle, …). Subsequent
+            // commits extend _attachCameraOverlay with compass /
+            // toolbar bindings / tap-to-focus; this initial pass
+            // only paints the GPS status bar.
+            try { _attachCameraOverlay(stream); }
+            catch (e) { console.warn('[camera] overlay attach failed:', e); }
         })
         .catch((err) => {
             modal.style.display = 'none';
@@ -5481,6 +5488,10 @@ function openCameraModal() {
 // X (cancel) button and the Done (confirm) button — same teardown, different
 // semantics on what's already been stashed in state.
 function _closeCameraModal() {
+    // Tear overlay handlers down BEFORE stopping the stream — _detachCameraOverlay
+    // clears intervals + removes event listeners so we don't leak a setInterval
+    // that keeps polling localStorage after the modal closes.
+    try { _detachCameraOverlay(); } catch (_) { /* idempotent */ }
     if (state.cameraStream) {
         state.cameraStream.getTracks().forEach(t => t.stop());
         state.cameraStream = null;
@@ -5496,6 +5507,82 @@ function _closeCameraModal() {
     if (scroll) scroll.innerHTML = '';
     if (count) count.textContent = '0';
     if (doneBtn) doneBtn.disabled = true;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Camera modal overlay (May 2026 redesign)
+//
+// The new modal layout adds a GPS status bar, top toolbar, focus reticle,
+// and a redesigned shutter on top of the live preview. This file currently
+// wires the GPS status bar; toolbar handlers + tap-to-focus + EXIF embed
+// land in subsequent commits in the same area.
+//
+// _attachCameraOverlay is called from openCameraModal once the stream is
+// live; _detachCameraOverlay is called from _closeCameraModal during
+// teardown. Both are idempotent — calling them outside the lifecycle is
+// a no-op rather than an error.
+// ──────────────────────────────────────────────────────────────────────
+let _cmOverlayState = null;  // { gpsIntervalId, orientHandler, mediaTrack }
+
+function _attachCameraOverlay(_stream) {
+    _cmOverlayState = {
+        gpsIntervalId: null,
+        orientHandler: null,
+        mediaTrack: null,
+    };
+
+    // Live GPS poll — 1 Hz. Reads from the existing
+    // localStorage['crisp_last_location_v2'] cache (written by the
+    // V4 stage's getCurrentPosition handler) so we don't burn extra
+    // battery firing fresh GPS requests; the cache is updated on the
+    // V4 stage's own watchPosition cadence whenever the user is in
+    // the capture flow.
+    const tickGps = () => {
+        const raw = (function () {
+            try { return localStorage.getItem('crisp_last_location_v2'); }
+            catch (_) { return null; }
+        })();
+        if (!raw) return;
+        try {
+            const o = JSON.parse(raw);
+            _paintCmStatus(o.lat, o.lng, (o.acc != null ? o.acc : o.accuracy));
+        } catch (_) { /* malformed cache → ignore until next tick */ }
+    };
+    tickGps();
+    _cmOverlayState.gpsIntervalId = setInterval(tickGps, 1000);
+}
+
+function _detachCameraOverlay() {
+    if (!_cmOverlayState) return;
+    if (_cmOverlayState.gpsIntervalId) {
+        clearInterval(_cmOverlayState.gpsIntervalId);
+    }
+    if (_cmOverlayState.orientHandler) {
+        window.removeEventListener(
+            'deviceorientation', _cmOverlayState.orientHandler, true
+        );
+    }
+    _cmOverlayState = null;
+}
+
+// Paint the GPS status bar's three slots: coords (N/S + E/W + 5dp degrees),
+// accuracy in metres, and (later) compass heading. Called once per second
+// from the GPS-poll interval; safe to call with partial values — undefined
+// slots just keep their previous text.
+function _paintCmStatus(lat, lng, acc) {
+    const coordsEl = document.getElementById('cm-status-coords');
+    const accEl    = document.getElementById('cm-status-acc');
+    if (coordsEl && typeof lat === 'number' && typeof lng === 'number') {
+        coordsEl.removeAttribute('data-state');
+        const ns = lat >= 0 ? 'N' : 'S';
+        const ew = lng >= 0 ? 'E' : 'W';
+        coordsEl.textContent =
+            ns + ' ' + Math.abs(lat).toFixed(5) + '°  ' +
+            ew + ' ' + Math.abs(lng).toFixed(5) + '°';
+    }
+    if (accEl && typeof acc === 'number' && isFinite(acc)) {
+        accEl.textContent = acc.toFixed(1);
+    }
 }
 
 // PR 5: camera modal now supports multi-snap. Each tap of the
@@ -10188,16 +10275,13 @@ async function _renderSubmittedReports() {
         if (livesEl) livesEl.textContent = String(livesTotal);
         impactCard.style.display = 'flex';
     }
-    // Update the home-screen badge.
-    const mrLives = document.getElementById('mr-lives-badge');
-    if (mrLives) {
-        if (livesTotal > 0) {
-            mrLives.textContent = `💚 ${livesTotal} lives`;
-            mrLives.style.display = 'inline-block';
-        } else {
-            mrLives.style.display = 'none';
-        }
-    }
+    // v6.6 (May 2026) — the `#mr-lives-badge` painter that ran here has
+    // been REMOVED. The lives-saved value is surfaced exclusively on the
+    // Lifekeeper pill (#home-badge-chip painter in home-screen.js) — see
+    // CLAUDE.md "My Reports tile" invariant. The element no longer
+    // exists in index.html. The `livesTotal` aggregate is still used by
+    // the #hi-lives painter just above (impact-card surface), which
+    // stays.
     if (!reports.length) {
         _historyEmpty(list, t('empty_submitted'), 'fa-paper-plane');
         const ctrl = document.getElementById('mr-controls');
