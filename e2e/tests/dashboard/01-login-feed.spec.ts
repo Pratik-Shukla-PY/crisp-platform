@@ -107,6 +107,11 @@ test.describe('Dashboard login + feed', () => {
     await page.reload();
 
     // Apr 2026 — region auto-submit admin panel button is role-gated.
+    // Phase J.1 (May 2026) — admin items (Moderation, Pending Deletions,
+    // Auto-Regions) moved into the user-chip dropdown to declutter
+    // the header. Open the dropdown first; the inner button is still
+    // gated by _maybeShowRegionsButton on role.
+    await page.locator('.user-menu-trigger').click();
     await expect(page.locator('#btn-auto-regions')).toBeVisible({ timeout: 10_000 });
   });
 });

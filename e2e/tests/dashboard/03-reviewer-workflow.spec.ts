@@ -93,8 +93,11 @@ test.describe('Reviewer workflow', () => {
     await page.evaluate((id) => (window as any).selectReport(id), reportId);
     await expect(page.locator('#detail-panel')).toBeVisible();
 
-    // Accept.
-    await page.locator('.dp-reviewer-btn.dp-reviewer-accept').click();
+    // Phase J.2 (May 2026) — Accept / Reject / False alarm collapsed
+    // into a single Verdict dropdown. Click the trigger, then pick
+    // Accept from the menu.
+    await page.locator('.dp-verdict-trigger').first().click();
+    await page.locator('.dp-verdict-item-accept').first().click();
     // Chip flips to "Accepted".
     await expect(page.locator('.dp-reviewer-chip.dp-reviewer-accepted')).toContainText(/Accepted/i, { timeout: 10_000 });
 
@@ -115,32 +118,36 @@ test.describe('Reviewer workflow', () => {
     await page.evaluate((id) => (window as any).selectReport(id), reportId);
     await expect(page.locator('#detail-panel')).toBeVisible();
 
-    // Accept first so reviewed_at is set (required for response-time calc).
-    await page.locator('.dp-reviewer-btn.dp-reviewer-accept').click();
+    // Phase J.2 (May 2026) — Accept via the Verdict dropdown so
+    // reviewed_at is set (required for response-time calc).
+    await page.locator('.dp-verdict-trigger').first().click();
+    await page.locator('.dp-verdict-item-accept').first().click();
     await expect(page.locator('.dp-reviewer-chip.dp-reviewer-accepted')).toBeVisible();
 
     // Wait a beat so arrived_at > reviewed_at strictly (>= 1s).
     await page.waitForTimeout(1500);
 
-    // Dispatched — wait for the PATCH response before clicking Arrived so
-    // the backend persists the first timestamp before the second arrives.
-    // Each click triggers stampResponderTime() which fires PATCH
-    // /reports/{id}/timestamps + re-renders the panel on success. Racing
-    // the two clicks drops one of the updates.
+    // Phase J.2 (May 2026) — Dispatched / Arrived replaced with
+    // response-progress chips. `.dp-resp-chip-action` is the
+    // clickable variant (shown while the timestamp is unset);
+    // `.dp-resp-chip-done` is the read-only stamped variant.
+    // Wait for the PATCH response so the second click sees the
+    // re-rendered DOM. Each click triggers stampResponderTime()
+    // which fires PATCH /reports/{id}/timestamps and re-renders.
     await Promise.all([
       page.waitForResponse(
         (res) => res.url().includes('/timestamps') && res.request().method() === 'PATCH' && res.ok(),
       ),
-      page.locator('.dp-reviewer-btn', { hasText: /Dispatched/i }).first().click(),
+      page.locator('.dp-resp-chip-action', { hasText: /Mark dispatched/i }).first().click(),
     ]);
     // Brief pause so the re-rendered panel stabilises; otherwise the
-    // "Arrived" button locator can resolve to a stale (detached) node.
+    // "Mark on-site" locator can resolve to a stale (detached) node.
     await page.waitForTimeout(400);
     await Promise.all([
       page.waitForResponse(
         (res) => res.url().includes('/timestamps') && res.request().method() === 'PATCH' && res.ok(),
       ),
-      page.locator('.dp-reviewer-btn', { hasText: /Arrived/i }).first().click(),
+      page.locator('.dp-resp-chip-action', { hasText: /Mark on-site/i }).first().click(),
     ]);
     // Small settle so the ReportResponse computation has the new timestamp.
     await page.waitForTimeout(300);

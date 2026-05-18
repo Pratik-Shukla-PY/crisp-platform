@@ -52,6 +52,9 @@ test.describe('Regions admin panel', () => {
 
   test('open panel → create region → appears in list → delete', async ({ page }) => {
     // Open the panel.
+    // Phase J.1 (May 2026) — admin items moved into the user-chip
+    // dropdown. Open the dropdown first, then click the Regions item.
+    await page.locator('.user-menu-trigger').click();
     await page.locator('#btn-auto-regions').click();
     await expect(page.locator('#regions-panel')).toBeVisible();
 
@@ -108,6 +111,9 @@ test.describe('Regions admin panel', () => {
     expect(create.ok()).toBeTruthy();
 
     // Open the panel + find the row.
+    // Phase J.1 (May 2026) — admin items moved into the user-chip
+    // dropdown. Open the dropdown first, then click the Regions item.
+    await page.locator('.user-menu-trigger').click();
     await page.locator('#btn-auto-regions').click();
     const row = page.locator('.region-row', { hasText: regionName });
     await expect(row).toBeVisible();
