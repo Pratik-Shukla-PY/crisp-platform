@@ -4085,6 +4085,10 @@ def get_nearby_reports(
             user_id=getattr(r, "user_id", None),
             # Phase 3 (docs §6.1) — pre-resolved device trust weight.
             trust_weight=weight,
+            # Phase F.8.c — honest latest_at for offline-drained
+            # submissions. The aggregator falls back to server time
+            # when this is NULL, so legacy rows stay correct.
+            client_created_at=getattr(r, "client_created_at", None),
         ))
 
     # Aggregate → groups (k-anonymity + relevance sort applied inside).

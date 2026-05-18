@@ -1383,6 +1383,38 @@ function renderTriageQueue(el) {
         needs.length > 0 ? `${needs.length} Need Response` : 'All Clear';
 }
 
+// Phase F.8.b (May 2026) — Offline-sync honest sort key.
+// Returns the report's TRIAGE timestamp — the moment the operator
+// should reason about. For online reports this is identical to
+// server_created_at (received = captured ± seconds). For offline-
+// queued reports that drained N minutes / hours later, this is
+// client_created_at so the report's place in the priority queue
+// matches when the reporter actually witnessed the event.
+//
+// Threshold: when server_created_at - client_created_at > 5 min,
+// trust client_created_at. The 5-min buffer absorbs normal
+// clock-skew + network jitter so we don't flap on every report.
+const _F8_STALE_THRESHOLD_MS = 5 * 60 * 1000;
+
+function _priorityTime(r) {
+    const s = r.server_created_at ? new Date(ensureUTC(r.server_created_at)).getTime() : null;
+    const c = r.client_created_at ? new Date(ensureUTC(r.client_created_at)).getTime() : null;
+    if (s == null) return c;
+    if (c == null) return s;
+    // If server received WAY later than client capture, this is a
+    // drained-offline submission — use client_created_at so priority
+    // sorting honours capture time rather than drain time.
+    if (s - c > _F8_STALE_THRESHOLD_MS) return c;
+    return s;
+}
+
+function _isStaleArrival(r) {
+    const s = r.server_created_at ? new Date(ensureUTC(r.server_created_at)).getTime() : null;
+    const c = r.client_created_at ? new Date(ensureUTC(r.client_created_at)).getTime() : null;
+    if (s == null || c == null) return false;
+    return (s - c) > _F8_STALE_THRESHOLD_MS;
+}
+
 function sortByPriorityDesc(a, b) {
     // 1. Severity (CRITICAL first)
     const ds = (SEV_PRIORITY[b.severity] || 0) - (SEV_PRIORITY[a.severity] || 0);
@@ -1390,8 +1422,10 @@ function sortByPriorityDesc(a, b) {
     // 2. Infrastructure criticality (hospitals, power before roads, houses)
     const dw = (INFRA_WEIGHTS[b.infrastructure_type] || 1) - (INFRA_WEIGHTS[a.infrastructure_type] || 1);
     if (dw !== 0) return dw;
-    // 3. Recency (newest first)
-    return new Date(b.server_created_at) - new Date(a.server_created_at);
+    // 3. Recency (newest-captured first — Phase F.8.b uses
+    //    _priorityTime so drained-offline reports don't pretend to be
+    //    "just now").
+    return _priorityTime(b) - _priorityTime(a);
 }
 
 // ── Sort Functions ───────────────────────────────────────────────────────────
@@ -1642,7 +1676,11 @@ function createIncidentCard(r) {
             </div>
             <div class="qrt-when">
                 <i class="fa-regular fa-clock"></i>
-                ${timeAgo(r.server_created_at)}
+                ${_isStaleArrival(r)
+                    ? `<span class="qrt-stale" title="Captured offline — drained on reconnect">
+                          <i class="fa-solid fa-cloud-arrow-up"></i> Captured ${timeAgo(r.client_created_at)} · Received ${timeAgo(r.server_created_at)}
+                       </span>`
+                    : timeAgo(r.server_created_at)}
             </div>
             <!-- Phase F.1.c (May 2026) — de-stuffed media presence row.
                  Previously each icon also carried an inline percent
@@ -3332,6 +3370,7 @@ window.selectReport = (id, skipFly = false) => {
                  in ReportResponse._compute_identity_badge. Anonymous rows skip
                  this span entirely. ADMIN clicks open the profile drawer. -->
             ${r.reporter_badge ? `<span class="dp-field-badge dp-reporter-badge" style="background:rgba(34,197,94,0.12);color:#86efac;cursor:${r.user_id ? 'pointer' : 'default'};" ${r.user_id ? `onclick="openReporterProfile('${r.user_id}')"` : ''} title="${r.user_id ? 'Click to view reporter details (admin only)' : ''}"><i class="fa-solid fa-user-check"></i> ${escapeHtml(r.reporter_badge)}</span>` : ''}
+            ${_isStaleArrival(r) ? `<span class="dp-field-badge dp-stale-arrival" title="Reporter captured this offline. The report was drained from the device's pending queue on reconnect ${timeAgo(r.server_created_at)}."><i class="fa-solid fa-cloud-arrow-up"></i> Offline-queued · Captured ${timeAgo(r.client_created_at)}</span>` : ''}
             <!-- Phase 1.6 (May 2026) — Reporter tier badge. Surfaces the
                  V4 gamification ladder (T1_SCOUT to T4_LIFEKEEPER) so
                  analysts can see at a glance whether the reporter is a

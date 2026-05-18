@@ -549,6 +549,28 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     border-color: rgba(167, 139, 250, 0.45);
 }
 
+/* ── Phase F.8.a — Offline-queued stale-arrival badge ─────── */
+.qrt-stale {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.10);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 600;
+    cursor: help;
+}
+.qrt-stale i { font-size: 9px; opacity: 0.85; }
+
+.dp-stale-arrival {
+    background: rgba(245, 158, 11, 0.12) !important;
+    color: #fbbf24 !important;
+    cursor: help;
+}
+.dp-stale-arrival i { margin-right: 3px; }
+
 /* RTL: flip the dropdown anchor and the language menu attachment so
    the menu opens from the operator's reading direction. The map +
    Leaflet controls retain LTR (they have their own coord system). */

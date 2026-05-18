@@ -283,6 +283,11 @@ class NearbyReportInput:
     server_created_at: datetime
     user_id: Optional[str] = None                # Phase 2 — trust proxy
     trust_weight: float = 1.0                    # Phase 3 — device trust
+    # Phase F.8.c — client-side capture time. NULL when the row was
+    # written without a `client_created_at` (legacy ingest path). When
+    # present, used as the honest "latest_at" anchor so an offline-
+    # drained report doesn't make a stale cluster look freshly active.
+    client_created_at: Optional[datetime] = None
 
 
 @dataclass
@@ -690,7 +695,18 @@ def _summarize_bucket(
 
     label = _label_for(bucket, kind, centroid_lat, centroid_lng)
 
-    timestamps = [r.server_created_at for r in bucket if r.server_created_at]
+    # Phase F.8.c — honest latest_at + earliest_at.
+    # When a report was captured offline and drained on reconnect,
+    # server_created_at lies about when the cluster was last active —
+    # an offline-queued 4-hour-old report drains with server_created_at
+    # = now, making a stale cluster look freshly active. Use
+    # client_created_at when present (the honest ground-truth capture
+    # time); fall back to server_created_at for the legacy / online
+    # ingest path where the two timestamps are within seconds.
+    def _effective_time(r):
+        return getattr(r, "client_created_at", None) or r.server_created_at
+
+    timestamps = [_effective_time(r) for r in bucket if r.server_created_at]
     latest = _truncate_to_minute(max(timestamps)) if timestamps else _truncate_to_minute(now)
     earliest = _truncate_to_minute(min(timestamps)) if timestamps else latest
 
