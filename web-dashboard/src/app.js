@@ -4690,6 +4690,51 @@ function _renderBuildingAiCard(b) {
 
     const findings = (ai.key_findings || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
     const conflicts = (ai.conflicting_signals || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
+
+    // Phase H.9 — trend chips + responder-type badges.
+    const trends = ai.trends || {};
+    const trendIcon = {
+        RISING:     { icon: 'fa-arrow-trend-up',   color: '#ef4444', label: 'Severity rising' },
+        FALLING:    { icon: 'fa-arrow-trend-down', color: '#4ade80', label: 'Severity falling' },
+        STABLE:     { icon: 'fa-equals',           color: '#94a3b8', label: 'Severity stable' },
+        INCREASING: { icon: 'fa-chart-line',       color: '#f97316', label: 'Activity increasing' },
+        DECREASING: { icon: 'fa-chart-line fa-flip-vertical', color: '#4ade80', label: 'Activity decreasing' },
+    };
+    const sevTrend = trendIcon[trends.severity_trend];
+    const actTrend = trendIcon[trends.activity_trend];
+    const responseStateChip = {
+        NO_RESPONSE: { color: '#f87171', label: 'No response' },
+        ASSESSING:   { color: '#fbbf24', label: 'Assessing' },
+        ON_SITE:     { color: '#a78bfa', label: 'Responding on-site' },
+        CLEARED:     { color: '#4ade80', label: 'Cleared' },
+    }[trends.response_state];
+    const trendChips = [
+        sevTrend && trends.severity_trend !== 'UNKNOWN'
+            ? `<span class="bc-ai-trend" style="color:${sevTrend.color};border-color:${sevTrend.color}55;background:${sevTrend.color}1a;"><i class="fa-solid ${sevTrend.icon}"></i> ${sevTrend.label}</span>` : '',
+        actTrend && trends.activity_trend !== 'UNKNOWN'
+            ? `<span class="bc-ai-trend" style="color:${actTrend.color};border-color:${actTrend.color}55;background:${actTrend.color}1a;"><i class="fa-solid ${actTrend.icon}"></i> ${actTrend.label}</span>` : '',
+        responseStateChip
+            ? `<span class="bc-ai-trend" style="color:${responseStateChip.color};border-color:${responseStateChip.color}55;background:${responseStateChip.color}1a;"><i class="fa-solid fa-circle"></i> ${responseStateChip.label}</span>` : '',
+    ].filter(Boolean).join('');
+
+    const typeBadgeMap = {
+        MEDICAL:       { color: '#ef4444', icon: 'fa-kit-medical',     label: 'Medical' },
+        FIRE:          { color: '#f97316', icon: 'fa-fire',            label: 'Fire' },
+        SEARCH_RESCUE: { color: '#a78bfa', icon: 'fa-person-shelter',  label: 'Search & rescue' },
+        ENGINEERING:   { color: '#7dd3fc', icon: 'fa-helmet-safety',   label: 'Engineering' },
+        POLICE:        { color: '#60a5fa', icon: 'fa-shield-halved',   label: 'Police' },
+        LOGISTICS:     { color: '#facc15', icon: 'fa-truck-fast',      label: 'Logistics' },
+        EVACUATION:    { color: '#fb923c', icon: 'fa-route',           label: 'Evacuation' },
+        ASSESSMENT:    { color: '#94a3b8', icon: 'fa-clipboard-check', label: 'Assessment' },
+        STAND_DOWN:    { color: '#4ade80', icon: 'fa-circle-check',    label: 'Stand down' },
+    };
+    const recTypes = (ai.recommended_responder_types || [])
+        .map(t => typeBadgeMap[t])
+        .filter(Boolean)
+        .map(b => `<span class="bc-ai-resp-badge" style="color:${b.color};border-color:${b.color}66;background:${b.color}1a;">
+            <i class="fa-solid ${b.icon}"></i> ${b.label}
+        </span>`).join('');
+
     return `
         <div class="bc-ai-card">
             <div class="bc-ai-head">
@@ -4704,6 +4749,7 @@ function _renderBuildingAiCard(b) {
                     <span>Refresh</span>
                 </button>
             </div>
+            ${trendChips ? `<div class="bc-ai-trends">${trendChips}</div>` : ''}
             <div class="bc-ai-summary">${escapeHtml(ai.summary)}</div>
             ${findings ? `
                 <div class="bc-ai-section">
@@ -4720,6 +4766,7 @@ function _renderBuildingAiCard(b) {
             ${ai.responder_recommendation ? `
                 <div class="bc-ai-section bc-ai-section-rec">
                     <div class="bc-ai-section-title"><i class="fa-solid fa-truck-medical"></i> Responder recommendation</div>
+                    ${recTypes ? `<div class="bc-ai-resp-badges">${recTypes}</div>` : ''}
                     <div class="bc-ai-rec">${escapeHtml(ai.responder_recommendation)}</div>
                 </div>
             ` : ''}

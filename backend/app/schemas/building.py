@@ -90,6 +90,9 @@ class BuildingSummary(BaseModel):
 
 class AISummaryPayload(BaseModel):
     """Shape of the cached ai_summary JSON blob. Populated by H.6.
+    H.9 extended with `trends` (deterministic server-computed) +
+    `recommended_responder_types` (Claude-classified into a bounded
+    enum-like set so the dashboard can render coloured badges).
 
     Stays in this schema module rather than ai_assessment.py so the
     Building Console can render it independently of any AI-specific
@@ -99,6 +102,9 @@ class AISummaryPayload(BaseModel):
     key_findings: Optional[List[str]] = None
     conflicting_signals: Optional[List[str]] = None
     responder_recommendation: Optional[str] = None
+    # Phase H.9 — deterministic trends + structured recommended types.
+    trends: Optional[dict] = None
+    recommended_responder_types: Optional[List[str]] = None
     model: Optional[str] = None
     generated_at: Optional[datetime] = None
 

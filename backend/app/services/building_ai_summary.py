@@ -29,7 +29,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from sqlalchemy import desc
@@ -58,6 +58,89 @@ class SummaryUnavailable(Exception):
 
 def is_configured() -> bool:
     return bool(os.getenv("ANTHROPIC_API_KEY", "").strip())
+
+
+def compute_trend_signals(b: Building, reports: List[Report]) -> dict:
+    """Phase H.9 — deterministic trend detection BEFORE the Claude call.
+
+    Cheaper than asking Claude to derive trends from noisy data — these
+    are computed from server-side timestamps + score thresholds, and
+    injected into the prompt as ground truth so Claude's analysis is
+    grounded rather than confabulated.
+
+    Returns a dict with three fields:
+      severity_trend  ∈ {RISING, STABLE, FALLING, UNKNOWN}
+      activity_trend  ∈ {INCREASING, STABLE, DECREASING, UNKNOWN}
+      response_state  ∈ {NO_RESPONSE, ASSESSING, ON_SITE, CLEARED}
+    """
+    # Severity trend — compare the latest 5 reports' severity rank
+    # to the 5 reports before them. Need ≥6 reports for a signal.
+    severity_rank = {
+        "CRITICAL": 4, "SEVERE": 3, "MODERATE": 2, "MINOR": 1, "UNKNOWN": 0
+    }
+    severity_trend = "UNKNOWN"
+    if len(reports) >= 6:
+        # reports list is server_created_at DESC newest-first
+        recent_5 = reports[:5]
+        prior_5 = reports[5:10] if len(reports) >= 10 else reports[5:]
+        if prior_5:
+            recent_avg = sum(
+                severity_rank.get(str(r.severity).replace("SeverityEnum.", ""), 0)
+                for r in recent_5
+            ) / len(recent_5)
+            prior_avg = sum(
+                severity_rank.get(str(r.severity).replace("SeverityEnum.", ""), 0)
+                for r in prior_5
+            ) / len(prior_5)
+            delta = recent_avg - prior_avg
+            if delta >= 0.5:
+                severity_trend = "RISING"
+            elif delta <= -0.5:
+                severity_trend = "FALLING"
+            else:
+                severity_trend = "STABLE"
+
+    # Activity trend — compare last-6h report count vs the 6h before that.
+    now = datetime.now(timezone.utc)
+    cutoff_recent = now - timedelta(hours=6)
+    cutoff_prior = now - timedelta(hours=12)
+    activity_trend = "UNKNOWN"
+    recent_n = sum(
+        1 for r in reports
+        if r.server_created_at and r.server_created_at >= cutoff_recent
+    )
+    prior_n = sum(
+        1 for r in reports
+        if r.server_created_at
+        and cutoff_prior <= r.server_created_at < cutoff_recent
+    )
+    if recent_n + prior_n >= 3:
+        if recent_n > prior_n * 1.5:
+            activity_trend = "INCREASING"
+        elif prior_n > recent_n * 1.5:
+            activity_trend = "DECREASING"
+        else:
+            activity_trend = "STABLE"
+    elif recent_n + prior_n > 0:
+        activity_trend = "STABLE"
+
+    # Response state — derived from BuildingResponder lifecycle on the
+    # caller's responder roster (we don't re-query here; the caller
+    # passes the bucket). Default to roll-up if not provided.
+    if (b.resolved_report_count or 0) > 0 and (b.resolved_report_count or 0) >= (b.report_count or 0):
+        response_state = "CLEARED"
+    elif (b.responding_report_count or 0) > 0:
+        response_state = "ON_SITE"
+    elif b.state in ("MONITORED", "RESPONDING"):
+        response_state = "ASSESSING"
+    else:
+        response_state = "NO_RESPONSE"
+
+    return {
+        "severity_trend": severity_trend,
+        "activity_trend": activity_trend,
+        "response_state": response_state,
+    }
 
 
 async def generate_building_summary(db: Session, b: Building) -> dict:
@@ -107,7 +190,12 @@ async def generate_building_summary(db: Session, b: Building) -> dict:
         .all()
     )
 
-    prompt = _compose_prompt(b, reports, responders, notes, events)
+    # Phase H.9 — derive deterministic trend signals from the raw
+    # report stream + roll-ups, then feed them into the prompt as
+    # ground truth so Claude's narrative is grounded rather than
+    # invented.
+    trends = compute_trend_signals(b, reports)
+    prompt = _compose_prompt(b, reports, responders, notes, events, trends)
 
     try:
         import anthropic
@@ -141,11 +229,30 @@ async def generate_building_summary(db: Session, b: Building) -> dict:
     if not summary:
         raise SummaryUnavailable("Claude response missing 'summary' field")
 
+    # Phase H.9 — coerce + clamp the new structured fields.
+    recommended_types = _coerce_str_list(
+        parsed.get("recommended_responder_types"), max_items=5, max_len=40
+    )
+    allowed_types = {
+        "MEDICAL", "FIRE", "SEARCH_RESCUE", "ENGINEERING",
+        "POLICE", "LOGISTICS", "EVACUATION", "ASSESSMENT", "STAND_DOWN",
+    }
+    recommended_types = [
+        t.upper().replace(" ", "_") for t in recommended_types
+        if t.upper().replace(" ", "_") in allowed_types
+    ]
+
     return {
         "summary": summary[:2000],
         "key_findings": _coerce_str_list(parsed.get("key_findings"), max_items=8, max_len=200),
         "conflicting_signals": _coerce_str_list(parsed.get("conflicting_signals"), max_items=6, max_len=200),
         "responder_recommendation": (parsed.get("responder_recommendation") or "").strip()[:600],
+        # Phase H.9 — structured fields for the dashboard's trend
+        # chips + responder-type badge. Trends are deterministic
+        # (server-computed, not Claude-derived); the structured
+        # responder types are Claude-classified into a bounded set.
+        "trends": trends,
+        "recommended_responder_types": recommended_types,
         "model": _ANTHROPIC_MODEL,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -155,16 +262,18 @@ async def generate_building_summary(db: Session, b: Building) -> dict:
 _SYSTEM_PROMPT = """You are a humanitarian operations analyst writing
 operator-facing briefs for a crisis-response dashboard. Your job: take
 the joined view of one building (constituent crisis reports, responder
-activity, operator notes, recent events) and produce a tight,
-evidence-grounded JSON summary.
+activity, operator notes, recent events, plus server-computed trend
+signals) and produce a tight, evidence-grounded JSON summary.
 
 Rules:
   - Output VALID JSON only. No markdown fences, no prose around it.
   - Keys: summary, key_findings, conflicting_signals,
-    responder_recommendation. All required.
+    responder_recommendation, recommended_responder_types. All required.
   - `summary` — 2-3 short sentences. State current situation, severity
     posture, what's been done. Cite specifics (counts, times,
-    responder presence) — not vibes.
+    responder presence) — not vibes. INCORPORATE the trend signals
+    provided in the prompt so the brief reflects whether things
+    are escalating, stable, or de-escalating.
   - `key_findings` — 3-6 short bullet strings. Each is a single
     factual observation an operator can act on.
   - `conflicting_signals` — array of strings (may be empty). Note when
@@ -174,6 +283,13 @@ Rules:
   - `responder_recommendation` — one short paragraph. What kind of
     responder type / count is needed next, or "stand down" if signals
     suggest resolution.
+  - `recommended_responder_types` — array (1-3) of UPPERCASE codes
+    drawn ONLY from this bounded set:
+      MEDICAL, FIRE, SEARCH_RESCUE, ENGINEERING, POLICE,
+      LOGISTICS, EVACUATION, ASSESSMENT, STAND_DOWN
+    Use STAND_DOWN when trends + state show the situation is
+    resolving. Pick ASSESSMENT when reports are sparse or
+    conflicting and ground-truth needs verification first.
   - Operator-friendly tone. No filler, no apologies, no "as an AI".
   - Never invent data. If reports are sparse, say so."""
 
@@ -184,9 +300,19 @@ def _compose_prompt(
     responders: List[BuildingResponder],
     notes: List[BuildingNote],
     events: List[BuildingEvent],
+    trends: Optional[dict] = None,
 ) -> str:
     """Pack the building's joined view into a single user message."""
     lines: List[str] = []
+    # Phase H.9 — server-computed trend signals go FIRST so Claude
+    # frames the narrative around them rather than re-deriving from
+    # the raw stream.
+    if trends:
+        lines.append("# Server-computed trends (use as ground truth)")
+        lines.append(f"severity_trend: {trends.get('severity_trend', 'UNKNOWN')}")
+        lines.append(f"activity_trend: {trends.get('activity_trend', 'UNKNOWN')}")
+        lines.append(f"response_state: {trends.get('response_state', 'UNKNOWN')}")
+        lines.append("")
     lines.append("# Building snapshot")
     lines.append(f"id: {b.id}")
     lines.append(f"name: {b.osm_name or '(no OSM name)'}")
