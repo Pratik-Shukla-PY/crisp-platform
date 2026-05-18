@@ -5524,11 +5524,13 @@ function _closeCameraModal() {
 // ──────────────────────────────────────────────────────────────────────
 let _cmOverlayState = null;  // { gpsIntervalId, orientHandler, mediaTrack }
 
-function _attachCameraOverlay(_stream) {
+async function _attachCameraOverlay(stream) {
     _cmOverlayState = {
         gpsIntervalId: null,
         orientHandler: null,
-        mediaTrack: null,
+        mediaTrack: (stream && stream.getVideoTracks
+                     ? (stream.getVideoTracks()[0] || null)
+                     : null),
     };
 
     // Live GPS poll — 1 Hz. Reads from the existing
@@ -5550,6 +5552,61 @@ function _attachCameraOverlay(_stream) {
     };
     tickGps();
     _cmOverlayState.gpsIntervalId = setInterval(tickGps, 1000);
+
+    // Toolbar button bindings — same close path as the bottom X / Done
+    // controls, so BACK doesn't fork the teardown logic. Flash / focus /
+    // lock are wired to their own helpers; each gracefully no-ops if the
+    // underlying MediaTrackCapability isn't supported.
+    const backBtn  = document.getElementById('btn-cm-back');
+    const flashBtn = document.getElementById('btn-cm-flash');
+    const focusBtn = document.getElementById('btn-cm-focus');
+    const lockBtn  = document.getElementById('btn-cm-lock');
+    if (backBtn)  backBtn.onclick  = _closeCameraModal;
+    if (flashBtn) flashBtn.onclick = _toggleFlashMode;
+    if (focusBtn) focusBtn.onclick = _recenterFocus;
+    if (lockBtn)  lockBtn.onclick  = _toggleRotationLock;
+
+    // Compass wiring. iOS Safari 13+ requires an explicit user-gesture
+    // permission grant via DeviceOrientationEvent.requestPermission;
+    // the very tap that opened the camera satisfies that gesture
+    // requirement on Apple's books. We bail (heading slot stays hidden)
+    // on denial / non-iOS browsers that don't expose the API.
+    //
+    // Implemented via a dedicated handler so _detachCameraOverlay can
+    // unregister it on close — without this, a stale handler keeps
+    // firing in the background and slowly drains battery.
+    try {
+        if (typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+            const grant = await DeviceOrientationEvent.requestPermission();
+            if (grant !== 'granted') return;
+        }
+    } catch (_) {
+        // requestPermission throws on non-iOS — fall through and try
+        // to wire the listener anyway; if the browser doesn't fire
+        // `deviceorientation` events, the slot just stays hidden.
+    }
+    _cmOverlayState.orientHandler = (e) => {
+        // iOS Safari supplies `webkitCompassHeading` (degrees clockwise
+        // from true north). Other browsers expose `alpha` (degrees
+        // counter-clockwise from north, only meaningful when `absolute`
+        // is true). Normalise both to "degrees clockwise from N" so the
+        // status bar reads the same number across platforms.
+        let deg = null;
+        if (typeof e.webkitCompassHeading === 'number') {
+            deg = e.webkitCompassHeading;
+        } else if (e.absolute && typeof e.alpha === 'number') {
+            deg = (360 - e.alpha) % 360;
+        }
+        if (deg == null || !isFinite(deg)) return;
+        // Mirror onto a global so the EXIF-embed step in a later commit
+        // can read the latest heading synchronously without re-attaching
+        // a listener.
+        window._cmLastHeading = deg;
+        _paintCmHeading(deg);
+    };
+    window.addEventListener('deviceorientation',
+                            _cmOverlayState.orientHandler, true);
 }
 
 function _detachCameraOverlay() {
@@ -5563,6 +5620,10 @@ function _detachCameraOverlay() {
         );
     }
     _cmOverlayState = null;
+    // Hide the heading slot so the next open starts in "not yet measured"
+    // state rather than freezing whatever value the last session ended on.
+    const headingEl = document.getElementById('cm-status-heading');
+    if (headingEl) { headingEl.hidden = true; headingEl.textContent = ''; }
 }
 
 // Paint the GPS status bar's three slots: coords (N/S + E/W + 5dp degrees),
@@ -5583,6 +5644,94 @@ function _paintCmStatus(lat, lng, acc) {
     if (accEl && typeof acc === 'number' && isFinite(acc)) {
         accEl.textContent = acc.toFixed(1);
     }
+}
+
+// Paint the heading slot. Separated from _paintCmStatus because GPS and
+// compass arrive on different cadences (GPS 1 Hz from the poll; compass
+// at the browser's deviceorientation rate, often 30-60 Hz on phones).
+function _paintCmHeading(deg) {
+    const el = document.getElementById('cm-status-heading');
+    if (!el) return;
+    el.hidden = false;
+    el.textContent = deg.toFixed(1);
+}
+
+// Cycle AUTO → ON → OFF → AUTO. AUTO is the default user-facing label;
+// under the hood we toggle the MediaStreamTrack `torch` constraint only
+// for the explicit ON state. iOS Safari doesn't implement torch — we
+// detect via getCapabilities().torch and let the label cycle without
+// actually applying the constraint (graceful no-op).
+function _toggleFlashMode() {
+    const btn = document.getElementById('btn-cm-flash');
+    if (!btn) return;
+    const cur = btn.dataset.flashMode || 'auto';
+    const next = cur === 'auto' ? 'on' : cur === 'on' ? 'off' : 'auto';
+    btn.dataset.flashMode = next;
+    const track = _cmOverlayState && _cmOverlayState.mediaTrack;
+    if (!track) return;
+    const caps = (track.getCapabilities ? track.getCapabilities() : null) || {};
+    if (!caps.torch) return;
+    try {
+        track.applyConstraints({ advanced: [{ torch: next === 'on' }] });
+    } catch (e) {
+        console.warn('[camera] torch constraint apply failed:', e);
+    }
+}
+
+// Re-centre the focus reticle at the preview centre and (where supported)
+// apply a continuous-focus track constraint so subsequent frames keep
+// hunting focus. Used when the user taps the crosshair toolbar button.
+// Tap-to-focus on a specific point lands in a later commit (commit 3).
+function _recenterFocus() {
+    const reticle = document.getElementById('cm-focus-reticle');
+    const stream  = document.getElementById('camera-stream');
+    if (reticle && stream) {
+        const r = stream.getBoundingClientRect();
+        _animateReticle(reticle, r.left + r.width / 2, r.top + r.height / 2);
+    }
+    const track = _cmOverlayState && _cmOverlayState.mediaTrack;
+    if (!track) return;
+    const caps = (track.getCapabilities ? track.getCapabilities() : null) || {};
+    if (Array.isArray(caps.focusMode) && caps.focusMode.indexOf('continuous') !== -1) {
+        try {
+            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+        } catch (e) {
+            console.warn('[camera] focus constraint apply failed:', e);
+        }
+    }
+}
+
+// Best-effort screen-orientation lock — flips the icon visually and, on
+// browsers that expose `screen.orientation.lock`, actually pins the
+// orientation. iOS Safari (no `lock` API) gets the visual toggle only.
+function _toggleRotationLock() {
+    const btn = document.getElementById('btn-cm-lock');
+    if (!btn) return;
+    const next = btn.dataset.locked !== 'true';
+    btn.dataset.locked = String(next);
+    if (!screen || !screen.orientation || !screen.orientation.lock) return;
+    if (next) {
+        try { screen.orientation.lock('portrait'); }
+        catch (e) { /* lock can throw "not yet implemented" on some Safari */ }
+    } else {
+        try { screen.orientation.unlock(); }
+        catch (_) {}
+    }
+}
+
+// Reticle animation helper — re-triggers the CSS @keyframes by toggling
+// `animation: none` and reading offsetHeight (forced layout) before
+// restoring the animation. Without the reflow read, the keyframe doesn't
+// re-fire on a second tap at the same position. Used by _recenterFocus
+// in this commit and by tap-to-focus in a later commit.
+function _animateReticle(reticle, x, y) {
+    reticle.style.left = x + 'px';
+    reticle.style.top  = y + 'px';
+    reticle.hidden = false;
+    reticle.style.animation = 'none';
+    // eslint-disable-next-line no-unused-expressions
+    reticle.offsetHeight;
+    reticle.style.animation = '';
 }
 
 // PR 5: camera modal now supports multi-snap. Each tap of the
