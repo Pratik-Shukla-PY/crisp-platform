@@ -81,24 +81,13 @@ async function bootHomeAtTier(page: Page, tier: string, extra: Partial<ProfileSh
 
 test.describe('PWA — dedicated Rewards page (reward-system v2 second pass)', () => {
 
-    // v6.8's actual rendering (ladder card states, CTA disabled-by-tier
-    // copy, decorative-chip claim contradicts the new tappable chip
-    // design). Needs per-test rewrite against the live DOM state. See
-    // 66-rewards-page failure triage notes.
-    test('@smoke home chip is decorative — has role=status, no tabindex, no click handler', async ({ page }) => {
-        await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        const chip = page.locator('#home-badge-chip');
-        await expect(chip).toHaveAttribute('role', 'status');
-        // tabindex was removed when chip went decorative.
-        const tabindex = await chip.getAttribute('tabindex');
-        expect(tabindex).toBeNull();
-        // Clicking the chip must NOT navigate away from home.
-        await chip.click().catch(() => { /* might fail in some browsers when role=status */ });
-        await page.waitForTimeout(200);
-        await expect(page.locator('#stage-home.active')).toBeVisible();
-        await expect(page.locator('#stage-rewards.active')).toHaveCount(0);
-        await expect(page.locator('#stage-badge-studio.active')).toHaveCount(0);
-    });
+    // Phase F triage (May 2026): the "decorative chip" test from the
+    // pre-v6.8 design was deleted — it contradicted the immediate-next
+    // "chip opens stage-rewards" test in this same file. The v6.8 chip
+    // IS interactive (tappable, navigates to stage-rewards) per the
+    // reward-system v2 spec; the role=status / no-click-handler
+    // invariant was a leftover from an earlier "Lifekeeper sticker"
+    // iteration that never shipped.
 
     test('@smoke home #home-badge-chip opens stage-rewards', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');

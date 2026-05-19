@@ -1197,11 +1197,23 @@
         if (!chip.dataset.navBound) {
             chip.dataset.navBound = '1';
             chip.addEventListener('click', () => {
+                // Phase F triage (May 2026): pre-fix this handler called
+                // `goToStage('stage-rewards')` directly, leaving the ladder
+                // cards + Badge Studio CTA unpainted (no `.is-current` /
+                // `.is-locked` / `.is-done` classes, button never disabled
+                // at T1/T2). `_openRewardsStage()` is the only path that
+                // calls `_paintRewardsPage()` before the transition.
                 try {
-                    if (typeof window.goToStage === 'function') {
-                        window.goToStage('stage-rewards');
-                    }
-                } catch (_) { /* no-op if goToStage isn't ready yet */ }
+                    _openRewardsStage();
+                } catch (_) {
+                    // Fallback if open-rewards isn't ready yet — at least
+                    // transition the stage so the user lands somewhere.
+                    try {
+                        if (typeof window.goToStage === 'function') {
+                            window.goToStage('stage-rewards');
+                        }
+                    } catch (__) {}
+                }
             });
         }
         // Optimistic paint from cache (legacy v1 cache also accepted —
