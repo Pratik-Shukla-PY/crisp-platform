@@ -71,6 +71,12 @@ test.describe('PWA My Reports — in-flight reconcile hotfix', () => {
       localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
       localStorage.setItem('crisp_landing_seen', '1');
       localStorage.setItem('crisp_ui_v4', 'off');  // Pre-v4 tests target the v3 capture flow.
+      // PRIMARY device-id key (v6.8+) — _deviceHashForHistory + the
+      // reconcile fetch both read this first. The legacy keys are
+      // defensive fallbacks; without v2 the reconcile uses a
+      // different (auto-generated) hash + status-since returns 0
+      // reports for THIS test's seeded one.
+      localStorage.setItem('crisp_device_id_v2', hash);
       localStorage.setItem('crisp_device_hash', hash);
       localStorage.setItem('crisp_device_id', hash);
     }, deviceHash);
@@ -139,8 +145,18 @@ test.describe('PWA My Reports — in-flight reconcile hotfix', () => {
       return queued.filter((q: any) => q.client_report_id === cid).length === 0;
     }, clientReportId, { timeout: 10_000 });
 
-    // 4. Verify: the in-flight list shows the empty state (no stuck card).
-    await expect(page.locator('#history-partial-list .history-empty')).toBeVisible();
+    // 4. Verify: in-flight list is empty (no stuck card). v6.8 (May
+    //    2026) changed empty-state behaviour: instead of rendering
+    //    `.history-empty` inside `#history-partial-list`, the renderer
+    //    HIDES the entire `#history-inflight-section` and clears the
+    //    list innerHTML. The dequeue happens async AFTER the initial
+    //    history-stage render, so we need to force a re-render before
+    //    asserting the list is clear.
+    await page.evaluate(async () => {
+      const r = (window as any).__crispRenderPartialReports;
+      if (typeof r === 'function') await r();
+    });
+    await expect(page.locator('#history-partial-list')).toBeEmpty();
     // And the submitted list shows the server-authoritative report.
     await expect(page.locator('#history-synced-list .mr-card').first()).toBeVisible({ timeout: 10_000 });
   });
