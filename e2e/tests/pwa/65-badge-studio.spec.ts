@@ -55,12 +55,12 @@ async function bootHomeAtTier(page: Page, tier: string) {
 // May 2026 (reward-system v2 second pass) — Badge Studio is reached
 // via the new Rewards page, not by tapping the (now decorative) home
 // badge chip. All "open studio" navigation in these tests goes
-// through #btn-rewards → #btn-rewards-open-studio. The lock invariant
+// through #home-badge-chip → #btn-rewards-open-studio. The lock invariant
 // (T1/T2 can't open Studio) is covered by spec 66 against the Studio
 // button's `disabled` state; the assertions below focus on the
 // Studio's own behaviour once it's open.
 async function navigateToBadgeStudio(page: Page) {
-    await page.locator('#btn-rewards').click();
+    await page.locator('#home-badge-chip').click();
     await page.locator('#stage-rewards.active').waitFor({ state: 'visible' });
     await page.locator('#btn-rewards-open-studio').click();
     await page.locator('#stage-badge-studio.active').waitFor({ state: 'visible' });

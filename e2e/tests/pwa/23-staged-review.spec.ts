@@ -43,7 +43,7 @@ async function jumpToReview(page) {
         const g: any = (window as any).__crispGoToStage;
         if (typeof g === 'function') g('stage-review');
     });
-    await expect(page.locator('#stage-review')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('#stage-v4-review')).toBeVisible({ timeout: 5_000 });
 }
 
 test.describe('UI v2 — 3-page stage-review split', () => {
@@ -68,7 +68,7 @@ test.describe('UI v2 — 3-page stage-review split', () => {
         await page.evaluate(() => (window as any).__crispGoToReviewV2Page(1));
         const pagesVisible = async () => page.evaluate(() => {
             const rows: Record<string, number> = { '1': 0, '2': 0, '3': 0 };
-            document.querySelectorAll('#stage-review [data-v2-page]').forEach((el: any) => {
+            document.querySelectorAll('#stage-v4-review [data-v2-page]').forEach((el: any) => {
                 const p = el.getAttribute('data-v2-page');
                 const visible = el.offsetParent !== null;
                 if (p && visible) rows[p] = (rows[p] || 0) + 1;
@@ -106,7 +106,7 @@ test.describe('UI v2 — 3-page stage-review split', () => {
         // via CSS (body[data-ui-v2] rule).
         const hasSvg = await page.evaluate(() => {
             const out: Array<{ key: string; svg: boolean }> = [];
-            document.querySelectorAll('#stage-review .chip-btn[data-type], #stage-review .chip-btn[data-crisis]').forEach((el: any) => {
+            document.querySelectorAll('#stage-v4-review .chip-btn[data-type], #stage-v4-review .chip-btn[data-crisis]').forEach((el: any) => {
                 const k = el.getAttribute('data-type') || el.getAttribute('data-crisis') || '?';
                 const svg = !!el.querySelector('.chip-ic svg');
                 out.push({ key: k, svg });
@@ -172,7 +172,7 @@ test.describe('UI v2 — 3-page stage-review split', () => {
         const legacyOk = await page.evaluate(() => {
             // Count legacy review-page divs — the pre-v2 code uses
             // [data-review-page], not [data-v2-page].
-            const legacyPages = document.querySelectorAll('#stage-review .review-page').length;
+            const legacyPages = document.querySelectorAll('#stage-v4-review .review-page').length;
             return legacyPages >= 2;
         });
         expect(legacyOk, 'legacy review-page wrappers should exist for rollback').toBe(true);

@@ -35,7 +35,7 @@ test.describe('PWA review redesign (PR 6)', () => {
     // Drive straight to review via the testability hook (bypasses photo gate
     // since we're asserting DOM structure, not the flow).
     await page.evaluate(() => (window as any).__crispGoToStage && (window as any).__crispGoToStage('stage-review'));
-    await expect(page.locator('#stage-review.active')).toBeVisible();
+    await expect(page.locator('#stage-v4-review.active')).toBeVisible();
     // PR 6 removed these elements entirely.
     await expect(page.locator('#toggle-debris')).toHaveCount(0);
     await expect(page.locator('#input-infra-name')).toHaveCount(0);
@@ -43,7 +43,7 @@ test.describe('PWA review redesign (PR 6)', () => {
 
   test('@smoke crisis label reframed to "What caused damage?"', async ({ page }) => {
     await page.evaluate(() => (window as any).__crispGoToStage && (window as any).__crispGoToStage('stage-review'));
-    await expect(page.locator('#stage-review [data-i18n="crisis_label"]')).toContainText(/What caused damage/i);
+    await expect(page.locator('#stage-v4-review [data-i18n="crisis_label"]')).toContainText(/What caused damage/i);
   });
 
   test('@smoke tapping an infra chip reveals inline severity picker', async ({ page }) => {
@@ -94,7 +94,7 @@ test.describe('PWA review redesign (PR 6)', () => {
 
   test('service status summary reads "Optional:"', async ({ page }) => {
     await page.evaluate(() => (window as any).__crispGoToStage && (window as any).__crispGoToStage('stage-review'));
-    await expect(page.locator('#stage-review summary[data-i18n="service_label"]')).toContainText(/Optional/i);
+    await expect(page.locator('#stage-v4-review summary[data-i18n="service_label"]')).toContainText(/Optional/i);
   });
 
   test('flow-progress z-index stacks above lang-switcher', async ({ page }) => {

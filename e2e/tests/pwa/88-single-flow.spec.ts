@@ -32,7 +32,7 @@ test.describe('Single capture flow — V3 navigation is gone', () => {
 
     test('stage-review DOM is removed (V3 paginated review)', async ({ page }) => {
         await page.goto('index.html');
-        await expect(page.locator('#stage-review')).toHaveCount(0);
+        await expect(page.locator('#stage-v4-review')).toHaveCount(0);
     });
 
     test('?ui=v3 URL param does NOT engage V3 — V4 always wins', async ({ page }) => {

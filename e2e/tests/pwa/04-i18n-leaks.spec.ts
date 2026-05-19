@@ -116,7 +116,7 @@ test.describe('PWA i18n leak guard', () => {
     await expectNoRawKeysIn(page, 'stage-audio');
 
     await page.evaluate(() => (window as any).__crispGoToStage?.('stage-review'));
-    await expect(page.locator('#stage-review.active')).toBeVisible();
+    await expect(page.locator('#stage-v4-review.active')).toBeVisible();
     await expectNoRawKeysIn(page, 'stage-review');
 
     await page.evaluate(() => (window as any).__crispGoToStage?.('stage-send'));

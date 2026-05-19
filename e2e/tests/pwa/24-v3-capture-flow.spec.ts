@@ -131,7 +131,7 @@ test.describe('UI v3 — 8-stage capture-flow reorder', () => {
     test('stage-review in v3 mode shows summary + submit (no input blocks)', async ({ page }) => {
         await openPwa(page);
         await page.evaluate(() => (window as any).__crispGoToStage('stage-review'));
-        await expect(page.locator('#stage-review')).toHaveClass(/active/);
+        await expect(page.locator('#stage-v4-review')).toHaveClass(/active/);
         // The v3 migration moves chip/input blocks out; the summary should be
         // rendered (it lives in the "page 2" wrapper). Submit should be visible.
         const flags = await page.evaluate(() => {

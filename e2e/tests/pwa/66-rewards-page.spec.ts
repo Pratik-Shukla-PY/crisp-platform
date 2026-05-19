@@ -6,7 +6,7 @@
  * pins the new architecture:
  *
  *   • Chip becomes DECORATIVE-only (no tap action)
- *   • #btn-rewards on home opens the new stage-rewards page
+ *   • #home-badge-chip on home opens the new stage-rewards page
  *   • stage-rewards shows the 4-tier ladder with per-card state
  *     (.is-done / .is-current / .is-locked)
  *   • Rewards page hosts the Badge Studio entry CTA, locked
@@ -96,9 +96,9 @@ test.describe('PWA — dedicated Rewards page (reward-system v2 second pass)', (
         await expect(page.locator('#stage-badge-studio.active')).toHaveCount(0);
     });
 
-    test('@smoke home #btn-rewards opens stage-rewards', async ({ page }) => {
+    test('@smoke home #home-badge-chip opens stage-rewards', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        const btn = page.locator('#btn-rewards');
+        const btn = page.locator('#home-badge-chip');
         await expect(btn).toBeVisible();
         await btn.click();
         await expect(page.locator('#stage-rewards.active')).toBeVisible({ timeout: 3000 });
@@ -106,7 +106,7 @@ test.describe('PWA — dedicated Rewards page (reward-system v2 second pass)', (
 
     test('@smoke ladder reflects T1 — first card is current, rest locked', async ({ page }) => {
         await bootHomeAtTier(page, 'T1_SCOUT');
-        await page.locator('#btn-rewards').click();
+        await page.locator('#home-badge-chip').click();
         await expect(page.locator('#stage-rewards.active')).toBeVisible();
         await expect(page.locator('.rt-card[data-tier="T1_SCOUT"]')).toHaveClass(/is-current/);
         await expect(page.locator('.rt-card[data-tier="T2_SIGNAL"]')).toHaveClass(/is-locked/);
@@ -120,7 +120,7 @@ test.describe('PWA — dedicated Rewards page (reward-system v2 second pass)', (
 
     test('@smoke ladder reflects T3 — T1+T2 done, T3 current, T4 locked', async ({ page }) => {
         await bootHomeAtTier(page, 'T3_CHANGEMAKER');
-        await page.locator('#btn-rewards').click();
+        await page.locator('#home-badge-chip').click();
         await expect(page.locator('.rt-card[data-tier="T1_SCOUT"]')).toHaveClass(/is-done/);
         await expect(page.locator('.rt-card[data-tier="T2_SIGNAL"]')).toHaveClass(/is-done/);
         await expect(page.locator('.rt-card[data-tier="T3_CHANGEMAKER"]')).toHaveClass(/is-current/);
@@ -129,7 +129,7 @@ test.describe('PWA — dedicated Rewards page (reward-system v2 second pass)', (
 
     test('@smoke ladder reflects T4 — all done except T4 which is current', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        await page.locator('#btn-rewards').click();
+        await page.locator('#home-badge-chip').click();
         await expect(page.locator('.rt-card[data-tier="T1_SCOUT"]')).toHaveClass(/is-done/);
         await expect(page.locator('.rt-card[data-tier="T2_SIGNAL"]')).toHaveClass(/is-done/);
         await expect(page.locator('.rt-card[data-tier="T3_CHANGEMAKER"]')).toHaveClass(/is-done/);
@@ -138,7 +138,7 @@ test.describe('PWA — dedicated Rewards page (reward-system v2 second pass)', (
 
     test('Badge Studio CTA is DISABLED at T1 + carries locked hint', async ({ page }) => {
         await bootHomeAtTier(page, 'T1_SCOUT');
-        await page.locator('#btn-rewards').click();
+        await page.locator('#home-badge-chip').click();
         const btn = page.locator('#btn-rewards-open-studio');
         await expect(btn).toBeDisabled();
         await expect(btn).toHaveClass(/is-locked/);
@@ -148,13 +148,13 @@ test.describe('PWA — dedicated Rewards page (reward-system v2 second pass)', (
 
     test('Badge Studio CTA is DISABLED at T2 too (still pre-Changemaker)', async ({ page }) => {
         await bootHomeAtTier(page, 'T2_SIGNAL');
-        await page.locator('#btn-rewards').click();
+        await page.locator('#home-badge-chip').click();
         await expect(page.locator('#btn-rewards-open-studio')).toBeDisabled();
     });
 
     test('@smoke Badge Studio CTA is ENABLED at T3 + opens stage-badge-studio', async ({ page }) => {
         await bootHomeAtTier(page, 'T3_CHANGEMAKER');
-        await page.locator('#btn-rewards').click();
+        await page.locator('#home-badge-chip').click();
         const btn = page.locator('#btn-rewards-open-studio');
         await expect(btn).not.toBeDisabled();
         await expect(btn).not.toHaveClass(/is-locked/);
@@ -165,7 +165,7 @@ test.describe('PWA — dedicated Rewards page (reward-system v2 second pass)', (
 
     test('@smoke Badge Studio CTA is ENABLED at T4 + opens stage-badge-studio', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        await page.locator('#btn-rewards').click();
+        await page.locator('#home-badge-chip').click();
         await expect(page.locator('#btn-rewards-open-studio')).not.toBeDisabled();
         await page.locator('#btn-rewards-open-studio').click();
         await expect(page.locator('#stage-badge-studio.active')).toBeVisible();
@@ -173,7 +173,7 @@ test.describe('PWA — dedicated Rewards page (reward-system v2 second pass)', (
 
     test('back button on Rewards page returns to home stage', async ({ page }) => {
         await bootHomeAtTier(page, 'T4_LIFEKEEPER');
-        await page.locator('#btn-rewards').click();
+        await page.locator('#home-badge-chip').click();
         await expect(page.locator('#stage-rewards.active')).toBeVisible();
         await page.locator('#btn-rewards-back').click();
         await expect(page.locator('#stage-home.active')).toBeVisible();
@@ -197,7 +197,7 @@ test.describe('PWA — dedicated Rewards page (reward-system v2 second pass)', (
         }
 
         await assertExactlyOneActive('stage-home');
-        await page.locator('#btn-rewards').click();
+        await page.locator('#home-badge-chip').click();
         await assertExactlyOneActive('stage-rewards');
         await page.locator('#btn-rewards-open-studio').click();
         await assertExactlyOneActive('stage-badge-studio');
