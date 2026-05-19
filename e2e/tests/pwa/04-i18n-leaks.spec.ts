@@ -103,25 +103,17 @@ test.describe('PWA i18n leak guard', () => {
   test('English: no raw keys on any capture stage', async ({ page }) => {
     await openHomeInEnglish(page);
     await page.locator('#btn-start').click();
-    await expect(page.locator('#stage-photo.active')).toBeVisible();
-    await expectNoRawKeysIn(page, 'stage-photo');
+    // v6.8: btn-start lands on stage-v4-capture (V4 is the only flow now).
+    await expect(page.locator('#stage-v4-capture.active')).toBeVisible();
+    await expectNoRawKeysIn(page, 'stage-v4-capture');
 
-    // Seed enough state to advance past the mandatory-photo gate.
-    await page.evaluate(() => {
-      const s = (window as any).state;
-      if (s) s.photoDataUrl = 'data:image/jpeg;base64,AAAA';
-    });
-    await page.evaluate(() => (window as any).__crispGoToStage?.('stage-audio'));
-    await expect(page.locator('#stage-audio.active')).toBeVisible();
-    await expectNoRawKeysIn(page, 'stage-audio');
+    await page.evaluate(() => (window as any).__crispGoToStage?.('stage-v4-classify'));
+    await expect(page.locator('#stage-v4-classify.active')).toBeVisible();
+    await expectNoRawKeysIn(page, 'stage-v4-classify');
 
-    await page.evaluate(() => (window as any).__crispGoToStage?.('stage-review'));
+    await page.evaluate(() => (window as any).__crispGoToStage?.('stage-v4-review'));
     await expect(page.locator('#stage-v4-review.active')).toBeVisible();
-    await expectNoRawKeysIn(page, 'stage-review');
-
-    await page.evaluate(() => (window as any).__crispGoToStage?.('stage-send'));
-    await expect(page.locator('#stage-send.active')).toBeVisible();
-    await expectNoRawKeysIn(page, 'stage-send');
+    await expectNoRawKeysIn(page, 'stage-v4-review');
   });
 
   // The detected local language (Kannada by default via the Bengaluru
@@ -130,15 +122,16 @@ test.describe('PWA i18n leak guard', () => {
   // through to the freshly-added EN values.
   test('Detected local locale: falls through to English cleanly', async ({ page }) => {
     const hadLocal = await openHomeInDetectedLocal(page);
-    test(!hadLocal, 'GPS auto-detection did not resolve to a non-English locale');
+    // Use test.skip() (the runtime skip helper) rather than test() — the
+    // pre-fix call was `test(!hadLocal, msg)` which Playwright interprets
+    // as an attempt to declare a nested test, throwing "test() not
+    // expected to be called here".
+    test.skip(!hadLocal, 'GPS auto-detection did not resolve to a non-English locale');
     await page.locator('#btn-start').click();
-    await expectNoRawKeysIn(page, 'stage-photo');
-    await page.evaluate(() => {
-      const s = (window as any).state;
-      if (s) s.photoDataUrl = 'data:image/jpeg;base64,AAAA';
-    });
-    await page.evaluate(() => (window as any).__crispGoToStage?.('stage-review'));
-    await expectNoRawKeysIn(page, 'stage-review');
+    // v6.8: btn-start → stage-v4-capture (was stage-photo in V3).
+    await expectNoRawKeysIn(page, 'stage-v4-capture');
+    await page.evaluate(() => (window as any).__crispGoToStage?.('stage-v4-review'));
+    await expectNoRawKeysIn(page, 'stage-v4-review');
   });
 
   // Build-time guard (runs without a browser): every data-i18n attribute
