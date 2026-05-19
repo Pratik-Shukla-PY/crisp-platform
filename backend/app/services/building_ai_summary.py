@@ -45,7 +45,8 @@ from app.models.report import (
 
 logger = logging.getLogger(__name__)
 
-# Match the existing classify-suggest pattern: small + cheap model.
+# Small + cheap model (Haiku tier). Building summaries are short
+# bullets, no heavy reasoning needed.
 _ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL_BUILDING_SUMMARY", "claude-haiku-4-5-20251001")
 _TIMEOUT_SECONDS = 25  # PDF / GeoJSON exports are synchronous too; same budget
 _MAX_TOKENS = 800

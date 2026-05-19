@@ -11,13 +11,12 @@
 // Gated behind UI_V4_ENABLED (defaults ON; ?ui=v3 URL or
 // localStorage['crisp_ui_v4']='off' falls back to legacy v3 flow).
 //
-// AI pre-fill (Page 2):
-//   On photo capture, if measured upload bandwidth ≥ FAST tier and an
-//   AbortController-bound 1.5 s timeout permits, POST the image to
-//   /api/v1/reports/classify-suggest. When the response arrives, the
-//   3 chip rows snap to the AI-suggested values. The user is NEVER
-//   blocked waiting for AI — Continue is enabled the moment the photo
-//   lands. AI only updates pre-selected defaults if it returns in time.
+// AI pre-fill (Page 2): RETIRED (May 2026, Phase F operator decision).
+//   The classify-suggest endpoint + service have been deleted from
+//   backend/. The PWA never had a stable client caller for this
+//   endpoint anyway — only this header comment referenced it. Users
+//   classify manually via the 3-chip questions; the v4-flow's auto-
+//   progress on chip-tap keeps the click count low without AI assist.
 //
 // State sharing with v3:
 //   v4 reads/writes the SAME `window.state` object that v3 uses, so on
