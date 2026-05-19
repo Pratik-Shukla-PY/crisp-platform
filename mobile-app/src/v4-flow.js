@@ -2076,6 +2076,11 @@
     }
     // Exposed for tests + late re-syncs after auth / locale changes.
     window.__crispV4RefreshClassifyNext = _refreshClassifyNext;
+    // Substep navigator — exposed so tests can jump directly to
+    // 'damage'/'infra'/'crisis' without driving the Continue gate.
+    window.__crispV4ShowSubStep = (step) => {
+        try { _showSubStep(step); } catch (_) {}
+    };
 
 
     // ── Page 3: review ──────────────────────────────────────────────────

@@ -28,14 +28,16 @@ async function bootV4OnInfraStep(page: Page) {
         () => typeof (window as any).__crispGoToStage === 'function',
         null, { timeout: 8000 },
     );
-    // Seed damage so the Continue gate lets us advance to infra.
-    await page.evaluate(() => {
-        const s = (window as any).state;
-        s.damage_classification = 'PARTIAL';
-    });
+    // Jump directly to the infra sub-step via the test hook —
+    // v4-flow.js exposes `__crispV4ShowSubStep` so tests can navigate
+    // without driving the Continue gate (which requires inter-step
+    // listener registration that page.evaluate-seeded state bypasses).
     await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
-    // Advance to the infra sub-step (the one with the .v4-hit-tile cards).
-    await page.locator('#btn-v4-classify-next').click();
+    await page.evaluate(() => {
+        if (typeof (window as any).__crispV4ShowSubStep === 'function') {
+            (window as any).__crispV4ShowSubStep('infra');
+        }
+    });
     await page.waitForTimeout(200);
 }
 
