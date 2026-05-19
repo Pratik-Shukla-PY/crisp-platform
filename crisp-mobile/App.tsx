@@ -1913,9 +1913,53 @@ export default function App() {
           damageClass={damageClass}
 
           buildingId={buildingId}
-          buildingPickerNode={null /* Phase 5.5 — mount existing
-            BuildingFootprintPicker once we expose its props in a
-            way that integrates cleanly with this screen */}
+          buildingPickerNode={
+            // UNDP must-have #6 — render the open-trigger + selected-
+            // state pill inside V4 review's §D mount. App.tsx still
+            // owns the BuildingFootprintPicker modal (mounted at the
+            // bottom of the tree); this node just toggles its
+            // visibility via setFootprintPickerOpen. Mirrors the v3
+            // pattern at App.tsx:2438-2470 so reporters see the same
+            // affordance regardless of which flow they enter from.
+            buildingId ? (
+              <View style={[s.locSelectedPill, { margin: 14 }]}>
+                <Text style={s.locSelectedPillIcon}>✓</Text>
+                <Text style={s.locSelectedPillText} numberOfLines={1}>
+                  {t('building_selected')}: {infraNameFromOsm && infraName ? infraName : buildingId.replace('osm:way:', '#')}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setBuildingId(null);
+                    if (infraNameFromOsm) { setInfraName(''); setInfraNameFromOsm(false); }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('edit')}>
+                  <Text style={{ color: Colors.accent, fontWeight: '600', fontSize: 12 }}>
+                    {t('edit')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[s.locFootprintBtn, {
+                  margin: 14, paddingVertical: 14,
+                  borderWidth: 1.5, borderColor: Colors.accent,
+                  backgroundColor: 'rgba(124,58,237,0.10)',
+                }]}
+                onPress={() => setFootprintPickerOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t('building_select_title')}>
+                <Text style={[s.locFootprintBtnText, { fontSize: 15, color: Colors.accent }]}>
+                  🏢  {t('building_select_title')}
+                </Text>
+                {!location && (
+                  <Text style={{ marginTop: 4, color: Colors.textDim, fontSize: 12, textAlign: 'center' }}>
+                    {t('building_waiting_gps')}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )
+          }
 
           audioUri={audioUri}
           isRecording={isRecording}
