@@ -82,7 +82,13 @@ test.describe('PWA success screen (PR 7)', () => {
     });
     expect(cleared.photoDataUrl).toBeNull();
     expect(cleared.description).toBe('');
-    expect(cleared.crisisType).toBe('FLOOD');
+    // v6.7 reporter-blocking-fix (CLAUDE.md "Classifier-state field
+    // naming") — `_clearCaptureState` now resets crisisType to NULL,
+    // not the legacy hardcoded 'FLOOD' default. The pre-fix default
+    // was the root cause of misclassification on every report.
+    // The 88-classifier-pick-roundtrip spec guards against the
+    // hardcoded-default regression specifically.
+    expect(cleared.crisisType).toBeNull();
     expect(cleared.extraPhotoCount).toBe(0);
   });
 

@@ -95,6 +95,11 @@ test.describe('PWA My Reports — individual report management', () => {
     // hardcoded false at app.js:39) but harmless; left for legibility.
     await page.evaluate((hash) => {
       localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+      // Force English so status-chip + label assertions match — the
+      // Bengaluru GPS fixture in playwright.config.ts otherwise auto-
+      // detects Kannada and "Submitted" renders as "ಸಲ್ಲಿಸಲಾಗಿದೆ".
+      localStorage.setItem('crisp_lang', 'en');
+      localStorage.setItem('crisp_lang_manual', 'en');
       localStorage.setItem('crisp_landing_seen', '1');
       localStorage.setItem('crisp_ui_v4', 'off');
       localStorage.setItem('crisp_device_id_v2', hash);  // PRIMARY (v6.8+)
