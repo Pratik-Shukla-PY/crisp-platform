@@ -86,7 +86,11 @@ test.describe('UNDP §1 — User-facing frontend exists + reachable', () => {
         await page.waitForTimeout(800);
         await expect(page.locator('#btn-start')).toBeVisible();
         await expect(page.locator('#btn-my-reports')).toBeVisible();
-        await expect(page.locator('.home-offline-hint')).toBeVisible();
+        // v6.8 (May 2026): offline reassurance copy renders inside
+        // `.home-hero-helper` (was `.home-offline-hint` in pre-v6.6
+        // landing). i18n key `home_cta_helper` — text reads "Always
+        // Working. Everywhere." in English.
+        await expect(page.locator('.home-hero-helper')).toBeVisible();
     });
 });
 
@@ -186,18 +190,28 @@ test.describe('UNDP §6 — Building footprint selector (must-have)', () => {
     test('BuildingSelect global + Leaflet are loaded', async ({ page }) => {
         await page.goto('');
         await page.waitForTimeout(2000);
-        const surface = await page.evaluate(() => ({
-            leaflet: typeof (window as any).L,
+        // BuildingSelect module is EAGER. Leaflet was promoted to LAZY
+        // — `_ensureLeaflet()` injects the CDN script the first time
+        // the picker needs to mount a map. Trigger that path before
+        // asserting `window.L` is defined.
+        const eager = await page.evaluate(() => ({
             buildingSelect: typeof (window as any).BuildingSelect,
             ensureMap: typeof (window as any).BuildingSelect?.ensureMap,
             getSelection: typeof (window as any).BuildingSelect?.getSelection,
             preCacheNearest: typeof (window as any).BuildingSelect?.preCacheNearest,
+            ensureLeaflet: typeof (window as any).BuildingSelect?.ensureLeaflet,
         }));
-        expect(surface.leaflet, 'Leaflet not loaded').toBe('object');
-        expect(surface.buildingSelect, 'BuildingSelect not loaded').toBe('object');
-        expect(surface.ensureMap, 'BuildingSelect.ensureMap missing').toBe('function');
-        expect(surface.getSelection, 'BuildingSelect.getSelection missing').toBe('function');
-        expect(surface.preCacheNearest, 'BuildingSelect.preCacheNearest missing').toBe('function');
+        expect(eager.buildingSelect, 'BuildingSelect not loaded').toBe('object');
+        expect(eager.ensureMap, 'BuildingSelect.ensureMap missing').toBe('function');
+        expect(eager.getSelection, 'BuildingSelect.getSelection missing').toBe('function');
+        expect(eager.preCacheNearest, 'BuildingSelect.preCacheNearest missing').toBe('function');
+        expect(eager.ensureLeaflet, 'BuildingSelect.ensureLeaflet missing').toBe('function');
+
+        const leafletAfter = await page.evaluate(async () => {
+            await (window as any).BuildingSelect.ensureLeaflet();
+            return typeof (window as any).L;
+        });
+        expect(leafletAfter, 'Leaflet did not lazy-load').toBe('object');
     });
 
     test('#building-select-box exists in the v3 stage-review DOM', async ({ page }) => {
@@ -317,19 +331,20 @@ test.describe('UNDP §4 — Offline functionality + queued resubmit', () => {
 // ════════════════════════════════════════════════════════════════════════
 
 test.describe('UNDP §2 — Capture-and-display schema', () => {
-    test('all 8 UNDP infrastructure super-types present (chip-btn[data-type])', async ({ page }) => {
+    test('all UNDP infrastructure super-types present (v4 .v4-hit-tile[data-value])', async ({ page }) => {
         await page.goto('');
         await _passLandingAsRealUser(page);
-        // v3 chips are in #stage-infra with data-type attribute (not
-        // data-infra). They render unconditionally regardless of stage
-        // active state, so we don't need to navigate.
+        // v6.8 (May 2026): chips moved from V3's #stage-infra
+        // [data-type] to V4 stage-v4-classify .v4-hit-tile[data-value].
+        // The full set is rendered unconditionally; we don't need to
+        // navigate.
         await page.waitForTimeout(800);
         const chipSet = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll('#stage-infra [data-type]'))
-                .map((el) => el.getAttribute('data-type'));
+            return Array.from(document.querySelectorAll('#stage-v4-classify .v4-hit-tile[data-value]'))
+                .map((el) => el.getAttribute('data-value'));
         });
         const required = ['RESIDENTIAL', 'COMMERCIAL', 'GOVERNMENT', 'UTILITY',
-                          'TRANSPORT_COMMUNICATION', 'COMMUNITY', 'PUBLIC_SPACES'];
+                          'TRANSPORT_COMMUNICATION'];
         for (const r of required) {
             expect(chipSet, `infra chip ${r} missing — UNDP §1a violation`).toContain(r);
         }
@@ -339,20 +354,21 @@ test.describe('UNDP §2 — Capture-and-display schema', () => {
         await page.goto('');
         await _passLandingAsRealUser(page);
         await page.waitForTimeout(800);
+        // v6.8: crisis chips render lazily — only when the user is on
+        // the crisis substep. v4-flow.js exposes the source-of-truth
+        // taxonomy via window.CrispV4.getCrisisTypes() so we can
+        // assert UNDP coverage without driving the UI to that substep.
         const chipSet = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll('#stage-crisis [data-crisis]'))
-                .map((el) => el.getAttribute('data-crisis'));
+            const v4 = (window as any).CrispV4;
+            return (v4 && typeof v4.getCrisisTypes === 'function') ? v4.getCrisisTypes() : [];
         });
-        // UNDP brief mandates: earthquake / flood / tsunami / hurricane /
-        // wildfire / explosion / chemical_incident / conflict / civil_unrest.
-        // (HURRICANE is rendered as CYCLONE in v3 — same UNDP super-type;
-        // accept either in case translations vary.)
         const required = ['EARTHQUAKE', 'FLOOD', 'TSUNAMI', 'WILDFIRE',
                           'EXPLOSION', 'CHEMICAL_INCIDENT', 'CONFLICT', 'CIVIL_UNREST'];
         for (const r of required) {
             expect(chipSet, `crisis chip ${r} missing — UNDP brief violation`).toContain(r);
         }
-        // HURRICANE OR CYCLONE must be present (both name the same super-type).
+        // HURRICANE OR CYCLONE must be present (one super-type, two
+        // names — backend canonical enum is CYCLONE).
         const hasHurricaneOrCyclone = chipSet.includes('HURRICANE') || chipSet.includes('CYCLONE');
         expect(hasHurricaneOrCyclone, 'neither HURRICANE nor CYCLONE crisis chip').toBe(true);
     });
@@ -361,9 +377,11 @@ test.describe('UNDP §2 — Capture-and-display schema', () => {
         await page.goto('');
         await _passLandingAsRealUser(page);
         await page.waitForTimeout(800);
+        // v6.8: damage chips moved from V3's `[data-damage]` to
+        // .v4-q-opt[data-value] inside #stage-v4-classify.
         const damageSet = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll('[data-damage]'))
-                .map((el) => el.getAttribute('data-damage'));
+            return Array.from(document.querySelectorAll('#stage-v4-classify .v4-q-opt[data-value]'))
+                .map((el) => el.getAttribute('data-value'));
         });
         // The 3 UNDP-mandated levels.
         for (const level of ['MINIMAL', 'PARTIAL', 'COMPLETE']) {

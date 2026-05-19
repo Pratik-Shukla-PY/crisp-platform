@@ -2795,6 +2795,10 @@
             startRecording: _startV4Recording,
             stopRecording: _stopV4Recording,
             isRecording: _isV4Recording,
+            // Crisis chips render lazily (only on the crisis substep);
+            // expose the source-of-truth data for tests that need to
+            // assert UNDP taxonomy coverage without driving the UI.
+            getCrisisTypes: () => Object.values(CRISIS_GROUPS).flat().map((c) => c.v),
         };
 
         // Initial GPS fetch when entering capture.
