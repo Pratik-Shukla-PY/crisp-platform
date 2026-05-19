@@ -54,17 +54,19 @@ test.describe('Phase 1 — Optional reporter login (anonymous-first)', () => {
     test('Start Reporting works without any login (anonymous path)', async ({ page }) => {
         await openPwa(page);
         await page.locator('#btn-start').click();
-        // v3 users land on stage-where; v2 would land on stage-photo.
+        // v6.8 lands on stage-v4-capture (V4 flow is the only flow now;
+        // V3 stage-where + V2 stage-photo are retired but their DOMs
+        // remain as helper scaffolding — V4 inherits some helpers).
         const active = await page.evaluate(() => {
             const el = document.querySelector('.stage.active');
             return el ? el.id : null;
         });
-        expect(['stage-where', 'stage-photo']).toContain(active);
+        expect(['stage-v4-capture', 'stage-where', 'stage-photo']).toContain(active);
     });
 
     test('Login button navigates to stage-login with 3-step wizard', async ({ page }) => {
         await openPwa(page);
-        const btnLogin = page.locator('#btn-login');
+        const btnLogin = page.locator('#btn-home-login-icon');
         await expect(btnLogin).toBeVisible();
         await btnLogin.click();
         await expect(page.locator('#stage-login')).toHaveClass(/active/);
@@ -81,14 +83,14 @@ test.describe('Phase 1 — Optional reporter login (anonymous-first)', () => {
 
     test('Skip link on stage-login returns to stage-home', async ({ page }) => {
         await openPwa(page);
-        await page.locator('#btn-login').click();
+        await page.locator('#btn-home-login-icon').click();
         await page.locator('#btn-login-skip').click();
         await expect(page.locator('#stage-home')).toHaveClass(/active/);
     });
 
     test('Channel picker toggles between phone and email inputs', async ({ page }) => {
         await openPwa(page);
-        await page.locator('#btn-login').click();
+        await page.locator('#btn-home-login-icon').click();
         // Phone is default (spec answer 4).
         await expect(page.locator('#login-phone-row')).toBeVisible();
         await page.locator('#login-channel-email').click();
@@ -101,7 +103,7 @@ test.describe('Phase 1 — Optional reporter login (anonymous-first)', () => {
 
     test('Country-code dropdown is populated with a device-default pre-selected', async ({ page }) => {
         await openPwa(page);
-        await page.locator('#btn-login').click();
+        await page.locator('#btn-home-login-icon').click();
         const optionCount = await page.locator('#login-cc-select option').count();
         expect(optionCount).toBeGreaterThan(5);
         const selected = await page.locator('#login-cc-select').inputValue();
