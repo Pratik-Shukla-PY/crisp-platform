@@ -622,6 +622,194 @@ def _purge_loop():
         import time as _t
         _t.sleep(900)  # 15 minutes
 
+
+# ── Phase F image-reliability (May 2026, see migration 0032) ─────────────────
+#
+# Three knobs control the periodic recovery sweep. Defaults match what the
+# operator confirmed in the F.1/F.2/F.3 plan; overridable via env when a
+# crisis-room operator wants a tighter or looser window without redeploying.
+#
+#   _ASSEMBLE_SWEEP_INTERVAL_S — how often the sweep daemon ticks.
+#                                Default 5 min (matches PWA's max chunk-
+#                                retry backoff + a safety margin).
+#   _ABANDON_STALE_MIN         — `pending` rows older than this with
+#                                 incomplete chunks are flipped to `failed`
+#                                 with reason='chunks_never_arrived'.
+#                                 Default 30 min (an offline PWA queue
+#                                 typically drains within minutes of
+#                                 reconnect; 30 min is a generous floor).
+#   _ASSEMBLE_DEADLINE_MIN     — `assembling` rows older than this with
+#                                 chunks NOT yet all arrived are flipped
+#                                 to `failed` with reason='assembly_worker_lost'.
+#                                 The legitimate-assembly path is fast
+#                                 (<10 s); past 30 min the worker is dead.
+#
+# Action ① of the sweep (REVIVE chunks-fully-arrived stuck rows) is
+# resubmitted to the assembly pool — it doesn't use the abandon path.
+# Action ②/③ are terminal flips and set both abandon_reason +
+# abandoned_at so the dashboard can surface "Original lost (network
+# timeout)" instead of perpetual "uploading…".
+_ASSEMBLE_SWEEP_INTERVAL_S = int(os.getenv("CRISP_ASSEMBLE_SWEEP_INTERVAL_S", "300"))
+_ABANDON_STALE_MIN         = int(os.getenv("CRISP_ABANDON_STALE_MIN",         "30"))
+_ASSEMBLE_DEADLINE_MIN     = int(os.getenv("CRISP_ASSEMBLE_DEADLINE_MIN",     "30"))
+
+
+def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
+    """One pass of assembly recovery — invoked on boot AND every
+    _ASSEMBLE_SWEEP_INTERVAL_S seconds by `_assembly_recovery_loop`.
+
+    Three actions, ordered so REVIVE runs FIRST (so we don't ABANDON
+    a row that would have been resubmittable on this tick):
+
+      ① REVIVE chunks-fully-arrived stuck rows.
+         Rows with received_chunks >= chunk_count AND assembly_status in
+         ('assembling', 'failed') AND updated_at > 2 min ago → reset to
+         'pending' and re-submit to the assembly pool. Salvages
+         crashes / OOMs that left an in-flight worker dead. Pre-existing
+         behaviour preserved verbatim; only condition added is
+         abandoned_at IS NULL (don't revive permanently-failed rows).
+
+      ② ABANDON assembly-worker-lost rows.
+         Rows in 'assembling' for > _ASSEMBLE_DEADLINE_MIN AND chunks NOT
+         all arrived → flip to 'failed' with abandon_reason=
+         'assembly_worker_lost'. (Pure 'assembling' for that long with
+         incomplete chunks means a worker started but never reaped its
+         own status — usually a hang inside PII blur or S3 multipart.
+         Action ① only fires when chunks-complete, so these rows would
+         loop forever in 'assembling' otherwise.)
+
+      ③ ABANDON chunks-never-arrived rows.
+         Rows in 'pending' AND received_chunks < chunk_count AND
+         updated_at > _ABANDON_STALE_MIN → flip to 'failed' with
+         abandon_reason='chunks_never_arrived'. The PWA / RN client
+         never delivered the final chunks; the row is unrecoverable
+         without a fresh upload. Dashboard can finally render "Original
+         lost (network timeout)" instead of pulsing forever.
+
+    Boot path passes `boot=True` for log clarity only; the actions are
+    identical between boot and periodic ticks (no special-cases).
+    """
+    from app.db.session import SessionLocal
+    from app.models.report import Media
+    from app.api.endpoints.reports import _try_full_assembly_bg, _assembly_executor
+    from datetime import datetime, timedelta, timezone as _tz
+    from sqlalchemy import or_
+
+    log = logging.getLogger(__name__)
+    tag = "boot" if boot else "periodic"
+    _db = SessionLocal()
+    try:
+        now_utc = datetime.now(_tz.utc)
+        stale_2min       = now_utc - timedelta(minutes=2)
+        abandon_deadline = now_utc - timedelta(minutes=_ABANDON_STALE_MIN)
+        assemble_deadln  = now_utc - timedelta(minutes=_ASSEMBLE_DEADLINE_MIN)
+
+        # ── ① REVIVE chunks-fully-arrived stuck rows ───────────────────
+        # Collect ids BEFORE the UPDATE so we can re-submit them by id
+        # after the commit. The filter is identical to the UPDATE filter.
+        to_resubmit = _db.query(
+            Media.id, Media.type, Media.report_id
+        ).filter(
+            Media.assembly_status.in_(['assembling', 'failed', 'pending']),
+            Media.updated_at < stale_2min,
+            Media.chunk_count > 0,
+            Media.received_chunks >= Media.chunk_count,
+            # Don't revive rows that the sweep has already abandoned —
+            # they need an explicit operator reclaim via the F3 endpoint.
+            Media.abandoned_at.is_(None),
+        ).all()
+        revive_count = _db.query(Media).filter(
+            Media.assembly_status.in_(['assembling', 'failed']),
+            Media.updated_at < stale_2min,
+            Media.chunk_count > 0,
+            Media.received_chunks >= Media.chunk_count,
+            Media.abandoned_at.is_(None),
+        ).update({'assembly_status': 'pending'}, synchronize_session=False)
+        _db.commit()
+        if revive_count:
+            log.info(
+                f"Assembly recovery [{tag}]: revived {revive_count} stuck media → 'pending'"
+            )
+        if to_resubmit:
+            for m in to_resubmit:
+                _assembly_executor.submit(
+                    _try_full_assembly_bg, m.id, m.type.value, m.report_id
+                )
+            log.info(
+                f"Assembly recovery [{tag}]: re-submitted {len(to_resubmit)} media to pool"
+            )
+
+        # ── ② ABANDON assembly-worker-lost rows ────────────────────────
+        # 'assembling' for > _ASSEMBLE_DEADLINE_MIN AND chunks NOT all
+        # arrived. (Rows with chunks COMPLETE would have been captured by
+        # action ① already; only the unsatisfiable ones remain here.)
+        worker_lost = _db.query(Media).filter(
+            Media.assembly_status == 'assembling',
+            Media.updated_at < assemble_deadln,
+            or_(
+                Media.chunk_count == 0,
+                Media.received_chunks < Media.chunk_count,
+            ),
+            Media.abandoned_at.is_(None),
+        ).update({
+            'assembly_status': 'failed',
+            'abandoned_at':    now_utc,
+            'abandon_reason':  'assembly_worker_lost',
+        }, synchronize_session=False)
+        _db.commit()
+        if worker_lost:
+            log.info(
+                f"Assembly recovery [{tag}]: abandoned {worker_lost} rows "
+                f"(reason=assembly_worker_lost, deadline={_ASSEMBLE_DEADLINE_MIN}m)"
+            )
+
+        # ── ③ ABANDON chunks-never-arrived rows ────────────────────────
+        # 'pending' for > _ABANDON_STALE_MIN with chunks NOT all arrived.
+        # chunk_count > 0 guards against rows that haven't been allocated
+        # yet (a row with chunk_count==0 is mid-meta-create; flipping it
+        # to 'failed' here would be a wrong call).
+        chunks_never = _db.query(Media).filter(
+            Media.assembly_status == 'pending',
+            Media.updated_at < abandon_deadline,
+            Media.received_chunks < Media.chunk_count,
+            Media.chunk_count > 0,
+            Media.abandoned_at.is_(None),
+        ).update({
+            'assembly_status': 'failed',
+            'abandoned_at':    now_utc,
+            'abandon_reason':  'chunks_never_arrived',
+        }, synchronize_session=False)
+        _db.commit()
+        if chunks_never:
+            log.info(
+                f"Assembly recovery [{tag}]: abandoned {chunks_never} rows "
+                f"(reason=chunks_never_arrived, deadline={_ABANDON_STALE_MIN}m)"
+            )
+    finally:
+        _db.close()
+
+
+def _assembly_recovery_loop():
+    """Daemon thread — invokes `_run_assembly_recovery_sweep` every
+    `_ASSEMBLE_SWEEP_INTERVAL_S` seconds.
+
+    Boot ordering note: the lifespan handler synchronously calls the
+    boot-time sweep BEFORE this thread is spawned, so the first
+    `_t.sleep(interval)` ensures the periodic tick fires well after the
+    boot pass commits and avoids any double-up on `_assembly_executor`.
+    """
+    import time as _t
+    _t.sleep(_ASSEMBLE_SWEEP_INTERVAL_S)
+    while True:
+        try:
+            _run_assembly_recovery_sweep(boot=False)
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                f"Periodic assembly recovery error: {e}"
+            )
+        _t.sleep(_ASSEMBLE_SWEEP_INTERVAL_S)
+
+
 async def _run_startup_tasks():
     """Body runs once at app startup, invoked from the lifespan handler
     above (line ~241). Was @app.on_event('startup') before May 2026;
@@ -631,65 +819,29 @@ async def _run_startup_tasks():
     t.start()
     logging.getLogger(__name__).info("Deletion purge worker started (runs every 15 min)")
 
-    # P1.1 / P2.15 — Assembly recovery sweep. If the previous backend was
-    # killed (crash, uvicorn --reload, OOM) while assembling a media, its
-    # assembly_status stayed 'assembling' with no worker left to finish it.
-    # On boot we:
-    #   1) reset any media whose status is 'assembling' or 'failed' AND all
-    #      chunks have in fact arrived back to 'pending';
-    #   2) actively RE-SUBMIT those rows to the assembly pool so they finish
-    #      even when no more client chunks are on the way (this is common for
-    #      the guaranteed-delivery pipeline — every variant finishes chunking
-    #      before the next one starts, so a crash mid-assembly on the last
-    #      variant has nothing to retrigger it).
-    # Only resets rows >2 min old to avoid interfering with a legitimately-
-    # in-flight assembly on a sibling process.
+    # Phase F image-reliability (May 2026). Two-stage recovery:
+    #   ① boot-time sweep — runs synchronously RIGHT NOW so we don't
+    #      ship traffic to a backend with stale 'assembling' rows from
+    #      the previous instance's crash. Same logic as the periodic
+    #      sweep below.
+    #   ② periodic daemon — every _ASSEMBLE_SWEEP_INTERVAL_S (5 min)
+    #      thereafter, finds rows the PWA never finished delivering
+    #      and flips them to 'failed' with abandon_reason so the
+    #      dashboard renders "Original lost" instead of perpetual
+    #      "uploading…".
     try:
-        from app.db.session import SessionLocal
-        from app.models.report import Media
-        from app.api.endpoints.reports import _try_full_assembly_bg, _assembly_executor
-        from datetime import datetime, timedelta, timezone as _tz
-        _db = SessionLocal()
-        try:
-            stale = datetime.now(_tz.utc) - timedelta(minutes=2)
-            # First pass — collect the rows we're about to reset so we can
-            # re-submit them by id after the UPDATE commits.
-            to_resubmit = _db.query(
-                Media.id, Media.type, Media.report_id
-            ).filter(
-                Media.assembly_status.in_(['assembling', 'failed', 'pending']),
-                Media.updated_at < stale,
-                Media.chunk_count > 0,
-                Media.received_chunks >= Media.chunk_count,
-            ).all()
-            # Reset stuck 'assembling' / 'failed' back to 'pending'; leave
-            # genuinely-pending rows alone on the status flip but still
-            # enqueue them (they were never submitted in the first place).
-            rowcount = _db.query(Media).filter(
-                Media.assembly_status.in_(['assembling', 'failed']),
-                Media.updated_at < stale,
-                Media.chunk_count > 0,
-                Media.received_chunks >= Media.chunk_count,
-            ).update({'assembly_status': 'pending'}, synchronize_session=False)
-            _db.commit()
-            if rowcount:
-                logging.getLogger(__name__).info(
-                    f"Assembly recovery: reset {rowcount} stuck media to 'pending'"
-                )
-            # Re-submit to the assembly pool. _try_full_assembly_bg does its
-            # own CAS internally so double-submits are safe.
-            if to_resubmit:
-                for m in to_resubmit:
-                    _assembly_executor.submit(
-                        _try_full_assembly_bg, m.id, m.type.value, m.report_id
-                    )
-                logging.getLogger(__name__).info(
-                    f"Assembly recovery: re-submitted {len(to_resubmit)} media to pool"
-                )
-        finally:
-            _db.close()
+        _run_assembly_recovery_sweep(boot=True)
     except Exception as e:
-        logging.getLogger(__name__).warning(f"Assembly recovery sweep failed: {e}")
+        logging.getLogger(__name__).warning(
+            f"Boot-time assembly recovery sweep failed: {e}"
+        )
+    threading.Thread(target=_assembly_recovery_loop, daemon=True).start()
+    logging.getLogger(__name__).info(
+        f"Assembly recovery daemon started "
+        f"(interval={_ASSEMBLE_SWEEP_INTERVAL_S}s, "
+        f"abandon_stale={_ABANDON_STALE_MIN}m, "
+        f"assemble_deadline={_ASSEMBLE_DEADLINE_MIN}m)"
+    )
 
     # Auto-start Telegram polling if token is configured
     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")

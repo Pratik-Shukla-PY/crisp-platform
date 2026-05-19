@@ -539,11 +539,26 @@ class Media(Base):
     # worker is assumed dead (crash / reload) and the lock can be reclaimed.
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # Phase F image-reliability (May 2026, migration 0032).
+    # Terminal-state metadata for stuck uploads. Populated by the periodic
+    # `_assembly_recovery_loop` daemon in app.main when a row sits in
+    # `assembly_status='assembling'` or `received_chunks < chunk_count` past
+    # its deadline. The companion `assembly_status` flips to 'failed' at the
+    # same time; both columns stay NULL on complete / pending / assembling
+    # rows that are still inside the freshness window. See migration 0032
+    # for the abandon_reason vocabulary (chunks_never_arrived /
+    # assembly_worker_lost / checksum_mismatch / operator_manual).
+    abandoned_at = Column(DateTime(timezone=True), nullable=True)
+    abandon_reason = Column(String(40), nullable=True)
+
     report = relationship("Report", back_populates="media")
     chunks = relationship("MediaChunk", back_populates="media", cascade="all, delete-orphan")
 
     # UI v2.1 — pHash dedup endpoint windows by `created_at` for
     # the last 24 h. Mirrors migration 0008.
+    # 0032 — `ix_media_abandoned_at` lives in the migration only (date-range
+    # probe by the periodic sweep); not declared here because the index isn't
+    # used by SQLAlchemy queries directly.
     __table_args__ = (
         Index("ix_media_created_at", "created_at"),
     )

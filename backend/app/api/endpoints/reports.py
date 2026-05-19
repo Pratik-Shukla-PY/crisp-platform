@@ -3384,6 +3384,130 @@ async def attach_media_chunk_bin(
     }
 
 
+# ── F3 — operator-gated media reclaim ──────────────────────────────────────
+#
+# Phase F image-reliability (May 2026). Operator surface for stuck / abandoned
+# media uploads — companion to the periodic recovery sweep in app.main and
+# the dashboard tri-state render. Two modes:
+#
+#   retry_assembly  — Only valid when received_chunks >= chunk_count (all
+#                     chunks ARE on disk). Resets assembly_status to
+#                     'pending', clears abandon metadata, and re-submits
+#                     the row to the assembly pool. Salvages a sweep-
+#                     abandoned row whose chunks were always there but
+#                     the worker had died.
+#
+#   mark_abandoned  — Operator-declared terminal failure. Flips
+#                     assembly_status to 'failed', stamps abandoned_at +
+#                     abandon_reason='operator_manual'. Use when the
+#                     operator KNOWS the upload won't ever complete (e.g.
+#                     reporter is unreachable, device wiped) and wants
+#                     the dashboard chip to stop pulsing.
+#
+# Idempotent: retry against an already-revived row is a no-op (sweep
+# CAS prevents double-submit); mark_abandoned against an already-
+# abandoned row keeps the original abandoned_at + abandon_reason.
+
+from pydantic import BaseModel as _ReclaimBaseModel  # noqa: E402
+
+
+class MediaReclaimRequest(_ReclaimBaseModel):
+    mode: str  # "retry_assembly" | "mark_abandoned"
+
+
+@router.post("/media/{media_id}/reclaim", status_code=status.HTTP_200_OK)
+def reclaim_media(
+    media_id: str,
+    payload: MediaReclaimRequest,
+    user=Depends(require_analyst),
+    db: Session = Depends(get_db),
+):
+    """Operator-driven reclaim for a stuck or abandoned media upload.
+
+    See module-level F3 comment above for the two modes. Emits an
+    `AuthAuditLog` row keyed on the report_id so the dashboard's
+    admin-action ribbon shows the reclaim in the timeline.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    media = db.query(Media).filter(Media.id == media_id).first()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    mode = (payload.mode or "").strip()
+
+    if mode == "retry_assembly":
+        # Hard guard: can't retry assembly when the chunks aren't actually
+        # there. Operator should pick `mark_abandoned` instead.
+        if media.chunk_count == 0 or media.received_chunks < media.chunk_count:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Cannot retry assembly: received_chunks="
+                    f"{media.received_chunks}, chunk_count={media.chunk_count}. "
+                    f"Use mode=mark_abandoned for incomplete uploads."
+                ),
+            )
+
+        media.assembly_status = "pending"
+        media.abandoned_at = None
+        media.abandon_reason = None
+        _audit_report_action(
+            db, user, "MEDIA_RECLAIM_RETRY", media.report_id,
+            details=f"media_id={media_id}",
+        )
+        db.commit()
+        db.refresh(media)
+
+        # Resubmit to the assembly pool — _try_full_assembly_bg's own CAS
+        # handles double-submits safely.
+        try:
+            _assembly_executor.submit(
+                _try_full_assembly_bg,
+                media.id,
+                media.type.value,
+                media.report_id,
+            )
+        except Exception as e:
+            logger.warning(f"[Reclaim] failed to enqueue {media_id[:8]}: {e}")
+
+        return {
+            "media_id": media.id,
+            "mode": "retry_assembly",
+            "assembly_status": media.assembly_status,
+            "abandoned_at": media.abandoned_at,
+            "abandon_reason": media.abandon_reason,
+        }
+
+    if mode == "mark_abandoned":
+        # Operator-declared terminal failure. If already abandoned, keep
+        # the original timestamp + reason for audit fidelity; only stamp
+        # if the row hadn't been abandoned yet.
+        if media.abandoned_at is None:
+            media.abandoned_at = _dt.now(_tz.utc)
+            media.abandon_reason = "operator_manual"
+        media.assembly_status = "failed"
+        _audit_report_action(
+            db, user, "MEDIA_RECLAIM_ABANDON", media.report_id,
+            details=f"media_id={media_id}",
+        )
+        db.commit()
+        db.refresh(media)
+
+        return {
+            "media_id": media.id,
+            "mode": "mark_abandoned",
+            "assembly_status": media.assembly_status,
+            "abandoned_at": media.abandoned_at,
+            "abandon_reason": media.abandon_reason,
+        }
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unknown mode '{mode}'. Use 'retry_assembly' or 'mark_abandoned'.",
+    )
+
+
 @router.post("/", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
 def create_report(report_in: ReportCreate, request: Request, db: Session = Depends(get_db)):
     """

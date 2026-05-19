@@ -223,6 +223,10 @@ def test_0005_adds_pii_blur_status_column_and_backfills():
             conn.execute(text("DROP TABLE IF EXISTS building_monitors CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS building_events CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS buildings CASCADE"))
+            # 0032 — Phase F image-reliability: media abandon columns.
+            conn.execute(text("DROP INDEX IF EXISTS ix_media_abandoned_at"))
+            conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS abandoned_at"))
+            conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS abandon_reason"))
             # Drop ENUMs created by 0028 / 0029 / 0031 — sa.Enum will
             # auto-create at table-create time, but the existing type
             # blocks that.
@@ -334,6 +338,10 @@ def test_legacy_db_is_upgraded_without_data_loss():
             conn.execute(text("DROP TYPE IF EXISTS building_id_source CASCADE"))
             conn.execute(text("DROP TYPE IF EXISTS building_event_actor_kind CASCADE"))
             conn.execute(text("DROP TYPE IF EXISTS building_note_visibility CASCADE"))
+            # 0032 — Phase F image-reliability: media abandon columns.
+            conn.execute(text("DROP INDEX IF EXISTS ix_media_abandoned_at"))
+            conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS abandoned_at"))
+            conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS abandon_reason"))
 
             conn.execute(text(
                 "INSERT INTO reports "

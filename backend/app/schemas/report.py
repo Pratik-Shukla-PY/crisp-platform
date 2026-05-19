@@ -233,6 +233,17 @@ class MediaResponse(MediaBase):
     # dashboard groups media with near-identical hashes (Hamming
     # distance ≤ 10) within the same building_id + 24h window.
     photo_phash: Optional[str] = None
+    # Phase F image-reliability (May 2026, migration 0032).
+    # When the periodic `_assembly_recovery_loop` gives up on a stuck
+    # upload it flips assembly_status to 'failed' and stamps these two
+    # columns. Dashboard reads abandon_reason to render
+    # "Original lost (network timeout)" + a Reclaim button on the
+    # detail panel media chip, instead of pulsing "uploading" forever.
+    # Reason vocabulary: chunks_never_arrived / assembly_worker_lost /
+    # checksum_mismatch / operator_manual. NULL on all rows that haven't
+    # reached terminal failure.
+    abandoned_at: Optional[datetime] = None
+    abandon_reason: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
     # UNDP scaling. The DB stores `s3://<key>` for media
