@@ -32,16 +32,30 @@ test.describe('PWA building-footprint selector', () => {
   test.beforeEach(async ({ page }) => { await openHomeInEnglish(page); });
 
   test('Leaflet + BuildingSelect globals are loaded', async ({ page }) => {
-    const globals = await page.evaluate(() => ({
-      hasLeaflet: typeof (window as any).L !== 'undefined',
+    // BuildingSelect module + its API are EAGER (loaded by the deferred
+    // <script src="building-select.js"> in index.html). Leaflet itself
+    // is LAZY — `_ensureLeaflet()` injects the CDN script the first
+    // time the picker actually needs to mount a map. So `window.L` is
+    // absent on bare page load; the test triggers the lazy path
+    // explicitly via `BuildingSelect.ensureLeaflet()` to verify both
+    // halves work.
+    const eager = await page.evaluate(() => ({
       hasModule: typeof (window as any).BuildingSelect === 'object',
       hasEnsureMap: typeof (window as any).BuildingSelect?.ensureMap === 'function',
       hasGetSelection: typeof (window as any).BuildingSelect?.getSelection === 'function',
+      hasEnsureLeaflet: typeof (window as any).BuildingSelect?.ensureLeaflet === 'function',
     }));
-    expect(globals.hasLeaflet).toBeTruthy();
-    expect(globals.hasModule).toBeTruthy();
-    expect(globals.hasEnsureMap).toBeTruthy();
-    expect(globals.hasGetSelection).toBeTruthy();
+    expect(eager.hasModule).toBeTruthy();
+    expect(eager.hasEnsureMap).toBeTruthy();
+    expect(eager.hasGetSelection).toBeTruthy();
+    expect(eager.hasEnsureLeaflet).toBeTruthy();
+
+    // Trigger the lazy load + verify window.L is now defined.
+    const hasLeafletAfter = await page.evaluate(async () => {
+      await (window as any).BuildingSelect.ensureLeaflet();
+      return typeof (window as any).L !== 'undefined';
+    });
+    expect(hasLeafletAfter).toBeTruthy();
   });
 
   test('#building-select-box exists on stage-review DOM (collapsed)', async ({ page }) => {
