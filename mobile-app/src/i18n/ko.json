@@ -827,6 +827,7 @@
   "mic_permission_alert": "오디오를 녹음하려면 마이크 접근을 허용해 주세요.",
   "camera_blocked_toast": "카메라 접근이 차단됨 — 파일 선택기 사용. 실시간 캡처를 위해 브라우저 설정에서 카메라를 허용하세요.",
   "camera_unavailable_toast": "카메라를 사용할 수 없음 — 파일 선택기 사용.",
+  "camera_heic_unsupported": "iOS 설정 → 카메라 → 포맷에서 \"높은 호환성\"을 선택한 후 다시 촬영해 주세요. 현재 사진 형식 (HEIC)은 지원되지 않습니다.",
   "delete_requested_alert": "데이터는 24시간 이내에 영구적으로 삭제됩니다.",
   "delete_server_unreachable": "서버에 연결할 수 없습니다.",
   "delete_undo_failed": "삭제를 취소할 수 없습니다.",

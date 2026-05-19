@@ -827,6 +827,7 @@
   "mic_permission_alert": "Ses kaydı için lütfen mikrofon erişimine izin verin.",
   "camera_blocked_toast": "Kamera erişimi engellendi — dosya seçici kullanılıyor. Canlı çekim için tarayıcı ayarlarında kameraya izin verin.",
   "camera_unavailable_toast": "Kamera kullanılamıyor — dosya seçici kullanılıyor.",
+  "camera_heic_unsupported": "Bu fotoğraf biçimi (HEIC) desteklenmiyor. iOS Ayarlar → Kamera → Biçimler bölümünden \"En Uyumlu\"yu seçin ve tekrar çekin.",
   "delete_requested_alert": "Verileriniz 24 saat içinde kalıcı olarak silinecek.",
   "delete_server_unreachable": "Sunucuya ulaşılamadı.",
   "delete_undo_failed": "Silme işlemi geri alınamadı.",

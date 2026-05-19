@@ -836,6 +836,7 @@
   "mic_permission_alert": "Permita el acceso al micrófono para grabar audio.",
   "camera_blocked_toast": "Acceso a la cámara bloqueado — usando selector de archivos.",
   "camera_unavailable_toast": "Cámara no disponible — usando selector de archivos.",
+  "camera_heic_unsupported": "Este formato de foto (HEIC) no es compatible. En Ajustes de iOS → Cámara → Formatos, elige \"Más compatible\" y vuelve a hacer la foto.",
   "delete_requested_alert": "Sus datos se eliminarán permanentemente en 24 horas.",
   "delete_server_unreachable": "No se pudo conectar al servidor.",
   "delete_undo_failed": "No se pudo deshacer la eliminación.",

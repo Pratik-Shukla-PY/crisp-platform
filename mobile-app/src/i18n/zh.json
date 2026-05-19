@@ -821,6 +821,7 @@
   "mic_permission_alert": "请允许使用麦克风以录制音频。",
   "camera_blocked_toast": "摄像头访问被阻止 — 改用文件选择器。",
   "camera_unavailable_toast": "摄像头不可用 — 改用文件选择器。",
+  "camera_heic_unsupported": "不支持此照片格式 (HEIC)。在 iOS 设置 → 相机 → 格式中,选择\"兼容性优先\"后重新拍摄。",
   "delete_requested_alert": "您的数据将在 24 小时内永久删除。",
   "delete_server_unreachable": "无法连接到服务器。",
   "delete_undo_failed": "无法撤销删除。",

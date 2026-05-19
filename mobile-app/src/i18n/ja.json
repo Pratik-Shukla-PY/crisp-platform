@@ -826,6 +826,7 @@
   "mic_permission_alert": "音声を録音するためにマイクへのアクセスを許可してください。",
   "camera_blocked_toast": "カメラへのアクセスがブロックされています — ファイル選択を使用。ライブ撮影にはブラウザ設定でカメラを許可してください。",
   "camera_unavailable_toast": "カメラが利用できません — ファイル選択を使用。",
+  "camera_heic_unsupported": "この写真形式 (HEIC) はサポートされていません。iOS の「設定」→「カメラ」→「フォーマット」で「互換性優先」を選択してから撮り直してください。",
   "delete_requested_alert": "データは 24 時間以内に完全に削除されます。",
   "delete_server_unreachable": "サーバーに到達できませんでした。",
   "delete_undo_failed": "削除を取り消せませんでした。",

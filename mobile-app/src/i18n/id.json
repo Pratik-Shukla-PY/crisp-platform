@@ -839,6 +839,7 @@
   "mic_permission_alert": "Mohon izinkan akses mikrofon untuk merekam audio.",
   "camera_blocked_toast": "Akses kamera diblokir — menggunakan pemilih file. Izinkan kamera di pengaturan browser untuk pengambilan langsung.",
   "camera_unavailable_toast": "Kamera tidak tersedia — menggunakan pemilih file.",
+  "camera_heic_unsupported": "Format foto ini (HEIC) tidak didukung. Di Pengaturan iOS → Kamera → Format, pilih \"Paling Kompatibel\" lalu ambil ulang foto.",
   "delete_requested_alert": "Data Anda akan dihapus permanen dalam 24 jam.",
   "delete_server_unreachable": "Tidak dapat mencapai server.",
   "delete_undo_failed": "Tidak dapat membatalkan penghapusan.",

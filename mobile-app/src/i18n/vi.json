@@ -827,6 +827,7 @@
   "mic_permission_alert": "Vui lòng cho phép truy cập micrô để ghi âm.",
   "camera_blocked_toast": "Quyền truy cập máy ảnh bị chặn — đang dùng bộ chọn tệp. Cho phép máy ảnh trong cài đặt trình duyệt để chụp trực tiếp.",
   "camera_unavailable_toast": "Máy ảnh không khả dụng — đang dùng bộ chọn tệp.",
+  "camera_heic_unsupported": "Định dạng ảnh này (HEIC) không được hỗ trợ. Trong Cài đặt iOS → Máy ảnh → Định dạng, chọn \"Tương thích nhất\" và chụp lại.",
   "delete_requested_alert": "Dữ liệu của bạn sẽ bị xóa vĩnh viễn trong vòng 24 giờ.",
   "delete_server_unreachable": "Không thể kết nối máy chủ.",
   "delete_undo_failed": "Không thể hoàn tác việc xóa.",
