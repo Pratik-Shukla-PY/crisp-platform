@@ -157,23 +157,22 @@ test.describe('PWA My Reports — individual report management', () => {
     await expect(page.locator('#rd-feedback')).toBeHidden();
   });
 
-  test('Advanced accordion is CLOSED by default; bulk delete hidden', async ({ page, request }) => {
+  // Phase F triage (May 2026) — #history-advanced accordion deleted.
+  // Bulk "Delete all my reports" relocated to the Settings stage (see
+  // index.html:2772) — same #btn-history-delete-all id so the existing
+  // app.js handler still works. New assertion: from stage-history the
+  // button is NOT directly visible; it lives behind the Settings entry.
+  test('bulk delete moved to Settings (not on stage-history)', async ({ page, request }) => {
     await seedReport(request, deviceHash, { verdict: 'NOT_REVIEWED' });
     await page.locator('#btn-my-reports').click();
     await expect(page.locator('.mr-card').first()).toBeVisible({ timeout: 10_000 });
 
-    // The advanced <details> element exists but is not open.
-    const advanced = page.locator('#history-advanced');
-    await expect(advanced).toBeVisible();
-    await expect(advanced).not.toHaveAttribute('open', /.*/);
-    // Bulk delete button exists in the DOM but isn't rendered until open.
-    // (hidden inside the closed <details>).
-    await expect(page.locator('#btn-history-delete-all')).toBeHidden();
+    // Bulk delete is NOT inside stage-history; it sits in stage-settings.
+    const stageHistory = page.locator('#stage-history');
+    await expect(stageHistory.locator('#btn-history-delete-all')).toHaveCount(0);
 
-    // Click to open.
-    await page.locator('.history-advanced-summary').click();
-    await expect(advanced).toHaveAttribute('open', /.*/);
-    await expect(page.locator('#btn-history-delete-all')).toBeVisible();
+    // But the button DOES exist somewhere in the document (settings stage).
+    await expect(page.locator('#btn-history-delete-all')).toHaveCount(1);
   });
 
   test('individual delete: confirm → deletion-in-progress note replaces button', async ({ page, request }) => {
@@ -183,8 +182,12 @@ test.describe('PWA My Reports — individual report management', () => {
     await page.locator('.mr-card').first().click();
     await expect(page.locator('#stage-report-detail.active')).toBeVisible();
 
-    // Auto-accept the confirm dialog.
-    page.once('dialog', (d) => d.accept());
+    // PWA uses crispConfirm (custom modal), not window.confirm. The
+    // `page.on('dialog', ...)` handler only catches browser-native
+    // dialogs; mock the custom helper to auto-accept instead.
+    await page.evaluate(() => {
+      (window as any).crispConfirm = async () => true;
+    });
     await page.locator('#btn-rd-delete').click();
 
     // Button flips to the "Deletion in progress" note.
@@ -204,7 +207,10 @@ test.describe('PWA My Reports — individual report management', () => {
 
     // Simulate offline: toggle the browser context before tapping Delete.
     await context.setOffline(true);
-    page.once('dialog', (d) => d.accept());
+    // PWA uses crispConfirm (custom modal), not window.confirm — see prior test.
+    await page.evaluate(() => {
+      (window as any).crispConfirm = async () => true;
+    });
     await page.locator('#btn-rd-delete').click();
 
     // Queued-state note appears + delete button disappears.

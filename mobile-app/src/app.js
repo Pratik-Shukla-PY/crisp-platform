@@ -10082,8 +10082,12 @@ async function _reconcileQueueAgainstServer() {
     if (!deviceHash) return;
     let serverReports = [];
     try {
-        // HAR-driven dedupe — see _singleFlightFetch helper.
-        const res = await _singleFlightFetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
+        // HAR-driven dedupe — see _singleFlightFetch helper. Pass ttlMs=0
+        // because this runs on every openMyReports entry — same user-
+        // initiated semantics as _renderSubmittedReports below. A just-
+        // submitted report must reconcile immediately, not after the
+        // 10s cache TTL.
+        const res = await _singleFlightFetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`, undefined, 0);
         if (!res.ok) return;
         serverReports = await res.json();
     } catch (_) {
@@ -10786,8 +10790,13 @@ async function _renderSubmittedReports() {
     }
     let reports = [];
     try {
-        // HAR-driven dedupe — see _singleFlightFetch helper.
-        const res = await _singleFlightFetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
+        // HAR-driven dedupe — see _singleFlightFetch helper. Pass ttlMs=0
+        // because My Reports is a user-INITIATED surface: the user just
+        // tapped "My Reports" expecting fresh data. A just-submitted
+        // report MUST appear immediately, not after the 10s cache TTL
+        // expires. Concurrent-request dedupe still works (the in-flight
+        // map is separate from the response cache).
+        const res = await _singleFlightFetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`, undefined, 0);
         if (res.ok) reports = await res.json();
     } catch (e) {
         console.warn('[MyReports] status-since failed:', e);
