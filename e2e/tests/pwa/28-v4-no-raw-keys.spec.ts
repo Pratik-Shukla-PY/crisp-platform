@@ -123,66 +123,13 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
         }
     });
 
-    test('Page 1 camera hero is bounded ≤ 240px tall', async ({ page }) => {
-        await _gotoV4(page);
-        await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
-        await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-capture'));
-        await page.waitForTimeout(400);
-        const heroHeight = await page.locator('.v4-camera-hero').evaluate((el: any) => el.offsetHeight);
-        expect(heroHeight, `camera hero height ${heroHeight}px should be ≤ 240px`).toBeLessThanOrEqual(240);
-    });
-
-    test('Page 2 chip grids show ≥ 6 tiles visible at once', async ({ page }) => {
-        await _gotoV4(page);
-        await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
-        await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
-        await page.waitForTimeout(500);
-
-        const counts = await page.evaluate(() => {
-            const ids = ['v4-carousel-infra', 'v4-carousel-crisis'];
-            return ids.map((id) => {
-                const c = document.getElementById(id);
-                if (!c) return -1;
-                const tiles = c.querySelectorAll('.v4-chipgrid-tile');
-                const containerRect = c.getBoundingClientRect();
-                let visible = 0;
-                tiles.forEach((t: any) => {
-                    const r = t.getBoundingClientRect();
-                    if (r.bottom > containerRect.top && r.top < containerRect.bottom &&
-                        r.right > containerRect.left && r.left < containerRect.right) {
-                        visible += 1;
-                    }
-                });
-                return visible;
-            });
-        });
-        // Infra has 8, crisis has 9 — both must show all of them.
-        expect(counts[0], `infra grid should show 8 tiles, got ${counts[0]}`).toBeGreaterThanOrEqual(6);
-        expect(counts[1], `crisis grid should show 9 tiles, got ${counts[1]}`).toBeGreaterThanOrEqual(6);
-    });
-
-    test('Page 3 pressing-needs renders all 10 chips full-width', async ({ page }) => {
-        await _gotoV4(page);
-        await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
-        await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-review'));
-        await page.waitForTimeout(400);
-
-        // All 10 chips exist.
-        await expect(page.locator('.v4-need-chip')).toHaveCount(10);
-
-        // The needs-row has the full-width grid — label is on top, not
-        // squeezed into a 90px left column.
-        const layout = await page.evaluate(() => {
-            const row = document.querySelector('.v4-undp-row-needs');
-            if (!row) return null;
-            const cs = window.getComputedStyle(row);
-            return { cols: cs.gridTemplateColumns };
-        });
-        // Either '1fr' or 'none' (single column) is acceptable; the
-        // 90px-90px-1fr two-column layout we had before is NOT acceptable.
-        expect(layout, 'pressing-needs row should be full-width (single column)').toBeTruthy();
-        expect(layout!.cols).not.toContain('90px');
-    });
+    // Phase F triage (May 2026): the three "Page 1 / Page 2 / Page 3"
+    // tests below targeted a v4-redesign paginated single-stage layout
+    // (`.v4-camera-hero`, `.v4-carousel-infra`/`v4-chipgrid-tile`,
+    // `.v4-need-chip` × 10). v6.8 superseded that with the 3-stage
+    // capture → classify → review flow; the legacy DOM markers are
+    // gone. Layout coverage of the v6.8 flow lives in
+    // 27-v4-flow + 88-classifier-pick-roundtrip + 89-safe-area-all-stages.
 
     test('viewport-fit on iPhone SE (320×568) for all 3 v4 stages', async ({ page }) => {
         await page.setViewportSize({ width: 320, height: 568 });
