@@ -119,7 +119,6 @@ async function bootHome(page: Page, fixture: any | 'empty' | 'error') {
     await page.waitForLoadState('networkidle');
 }
 
-// Phase F triage (May 2026) — SKIPPED. 10/10 tests fail with
 // `.home-nearby-row` not found. Per the v6.8 DOM map the row class
 // still ships (rendered by nearby.js:291), so the failure is a
 // fixture/setup issue — likely the nearby module's seed-on-boot
@@ -132,7 +131,7 @@ async function bootHome(page: Page, fixture: any | 'empty' | 'error') {
 // The nearby intel FEATURE works in operator-smoke against PROD
 // (verified PWA captures still show the "Verified Nearby Incidents"
 // chip on home). Only the e2e fixture path is broken.
-test.describe.skip('PWA — "Verified Reports Nearby" intel module', () => {
+test.describe('PWA — "Verified Reports Nearby" intel module', () => {
 
     test('@smoke online + GPS + fixture → block renders with rows', async ({ page }) => {
         await bootHome(page, FIXTURE_PAYLOAD);
@@ -147,8 +146,16 @@ test.describe.skip('PWA — "Verified Reports Nearby" intel module', () => {
     });
 
     test('offline → block HIDDEN, no errors', async ({ page, context }) => {
-        await context.setOffline(true);
+        // Phase F triage (May 2026) — pre-fix `setOffline(true)` ran
+        // BEFORE `bootHome` whose `page.goto` then failed with
+        // ERR_INTERNET_DISCONNECTED (Playwright's offline mode blocks
+        // ALL navigations, not just /api calls). Boot online, THEN
+        // flip offline + reload so the PWA loads from SW cache + the
+        // /nearby fetch correctly fails. Block stays hidden because
+        // nearby.js's catch-path sets root.hidden=true on fetch error.
         await bootHome(page, FIXTURE_PAYLOAD);
+        await context.setOffline(true);
+        await page.reload();
         const block = page.locator('#home-nearby-intel');
         // Hidden via [hidden] attribute (CSS display:none)
         await expect(block).toBeHidden();

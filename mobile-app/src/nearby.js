@@ -522,7 +522,18 @@
     }
 
     function _renderInto(container, payload, opts) {
-        container.innerHTML = '';
+        // Phase F triage (May 2026) — preserve the static eyebrow `<h2
+        // class="home-nearby-eyebrow">` defined in index.html instead
+        // of wiping the entire container. The eyebrow is the screen-
+        // reader-labelled section header (carries data-i18n="nearby_eyebrow"
+        // → "NEARBY REPORTS") and was previously being destroyed every
+        // time nearby.js painted rows or the empty state. Reach for
+        // children explicitly so the eyebrow stays mounted.
+        for (const child of Array.from(container.children)) {
+            if (!child.classList?.contains('home-nearby-eyebrow')) {
+                container.removeChild(child);
+            }
+        }
 
         if (!payload || !payload.groups || payload.groups.length === 0) {
             // May 2026 (operator preference) — append the empty state
