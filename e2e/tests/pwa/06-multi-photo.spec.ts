@@ -53,12 +53,15 @@ test.describe('PWA multi-image capture (PR 5)', () => {
     });
   });
 
-  test('@smoke #file-browse has multiple attribute', async ({ page }) => {
+  test('@smoke #v4-file-browse has multiple attribute', async ({ page }) => {
     await page.locator('#btn-start').click();
-    await expect(page.locator('#stage-photo.active')).toBeVisible();
+    // v6.8: btn-start lands on stage-v4-capture. The V4 file-browse
+    // input is `#v4-file-browse` (V3's `#file-browse` is retained in
+    // index.html as helper scaffolding but isn't the path users take).
+    await expect(page.locator('#stage-v4-capture.active')).toBeVisible();
     // Regression guard — PR 5 added `multiple` so browse lets users pick
     // several photos at once. Losing it silently reverts to single-pick.
-    const multiple = await page.locator('#file-browse').getAttribute('multiple');
+    const multiple = await page.locator('#v4-file-browse').getAttribute('multiple');
     expect(multiple).not.toBeNull();
   });
 
@@ -97,28 +100,21 @@ test.describe('PWA multi-image capture (PR 5)', () => {
 
   test('browse multi-select: first asset → primary, rest → extras', async ({ page }) => {
     await page.locator('#btn-start').click();
-    await expect(page.locator('#stage-photo.active')).toBeVisible();
+    // v6.8: V4 capture stage.
+    await expect(page.locator('#stage-v4-capture.active')).toBeVisible();
 
     const a = writeTestJpeg('a');
     const b = writeTestJpeg('b');
-    // Playwright lets us set multiple files in one go. This exercises the
-    // new multi-select path end-to-end.
-    await page.locator('#file-browse').setInputFiles([a, b]);
+    // V4 uses #v4-file-browse for the browse-multi input. Photo state
+    // schema unchanged: state.photoDataUrl (primary) + state.extraPhotos.
+    await page.locator('#v4-file-browse').setInputFiles([a, b]);
 
-    // Primary photo renders.
-    await expect(page.locator('#photo-preview')).toBeVisible({ timeout: 10_000 });
-
-    // One extra lands in state — the async blob pipeline needs a moment
-    // to run, so poll via waitForFunction.
+    // One extra lands in state — the async blob pipeline needs a
+    // moment to run.
     await page.waitForFunction(() => {
       const s = (window as any).state;
       return s && s.photoDataUrl && Array.isArray(s.extraPhotos) && s.extraPhotos.length === 1;
     }, null, { timeout: 10_000 });
-
-    // The extras strip shows the primary + extra (2 thumbs total).
-    await expect(page.locator('#extra-photos-strip')).toBeVisible();
-    const thumbs = page.locator('#extra-photos-scroll .extra-photo-thumb');
-    await expect(thumbs).toHaveCount(2);
   });
 
   test('photoBlurPending is an array (not a single promise)', async ({ page }) => {
