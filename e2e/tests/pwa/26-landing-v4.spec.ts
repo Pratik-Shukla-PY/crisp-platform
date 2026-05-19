@@ -41,68 +41,93 @@ test.describe('Merged always-on home page', () => {
         await expect(page.locator('#stage-home.active')).toBeVisible({ timeout: 5000 });
     });
 
-    test('all 4 channel buttons + 3 app buttons render', async ({ page }) => {
+    // v6.8 (May 2026): the home channels surface was compressed to a
+    // single `#home-channels-strip` icon row. Full per-channel buttons
+    // (with [data-channel] attrs) now live inside the `#channels-sheet`
+    // bottom-sheet, opened on tap. Tests below tap the strip first then
+    // query `#channels-sheet [data-channel="..."]`.
+    async function openChannelsSheet(page) {
+        // Force English locale — the Bengaluru GPS fixture in
+        // playwright.config.ts would otherwise auto-detect Kannada
+        // and the status copy ("Coming soon" / "Low bandwidth") would
+        // render translated, breaking the regex match below.
+        await page.addInitScript(() => {
+            localStorage.setItem('crisp_lang', 'en');
+            localStorage.setItem('crisp_lang_manual', 'en');
+        });
         await page.goto('');
-        await page.waitForSelector('#home-channels [data-channel]', { timeout: 5000 });
+        await page.waitForSelector('#home-channels-strip', { timeout: 5000 });
+        await page.locator('#home-channels-strip').click();
+        await page.waitForSelector('#channels-sheet[aria-hidden="false"], #channels-sheet:not([hidden])', { timeout: 3000 });
+    }
+
+    test('all 4 channel buttons + 2 app buttons render', async ({ page }) => {
+        await openChannelsSheet(page);
         for (const channel of ['ivr', 'sms', 'telegram', 'whatsapp']) {
-            await expect(page.locator(`[data-channel="${channel}"]`)).toBeVisible();
+            await expect(page.locator(`#channels-sheet [data-channel="${channel}"]`)).toBeVisible();
         }
-        for (const app of ['ios', 'android', 'expo']) {
-            await expect(page.locator(`[data-channel="${app}"]`)).toBeVisible();
+        // v6.8 (May 2026): Expo Go dropped from the public channels list
+        // (still configured in CHANNELS.expo_go_url for internal tester
+        // builds — see home-screen.js:66). Public-facing list has Android
+        // + iOS only.
+        for (const app of ['ios', 'android']) {
+            await expect(page.locator(`#channels-sheet [data-channel="${app}"]`)).toBeVisible();
         }
     });
 
     test('IVR is LIVE — anchor with tel:+16626768896', async ({ page }) => {
-        await page.goto('');
-        await page.waitForSelector('[data-channel="ivr"]');
-        const ivrBtn = page.locator('[data-channel="ivr"]');
+        await openChannelsSheet(page);
+        const ivrBtn = page.locator('#channels-sheet [data-channel="ivr"]');
         const tag = await ivrBtn.evaluate((el) => el.tagName.toLowerCase());
         expect(tag).toBe('a');
         const href = await ivrBtn.getAttribute('href');
         expect(href).toBe('tel:+16626768896');
     });
 
-    test('Telegram is LIVE — anchor with t.me/crisp_undp_bot', async ({ page }) => {
-        await page.goto('');
-        await page.waitForSelector('[data-channel="telegram"]');
-        const tgBtn = page.locator('[data-channel="telegram"]');
+    test('Telegram is LIVE — bot deep-link button', async ({ page }) => {
+        await openChannelsSheet(page);
+        const tgBtn = page.locator('#channels-sheet [data-channel="telegram"]');
+        await expect(tgBtn).toBeVisible();
+        // v6.8 — Telegram switched from a raw anchor to a button with
+        // data-action="telegram-deeplink" (handled by the channels-
+        // sheet click-telemetry wiring). The deep-link includes the
+        // configured bot name (CHANNELS.telegram_bot — currently
+        // 'crisp_crisis_bot'); we just assert it's tagged as the
+        // telegram-deeplink action, not the underlying URL since the
+        // bot name evolves.
+        const action = await tgBtn.getAttribute('data-action');
+        expect(action).toBe('telegram-deeplink');
         const tag = await tgBtn.evaluate((el) => el.tagName.toLowerCase());
-        expect(tag).toBe('a');
-        const href = await tgBtn.getAttribute('href');
-        expect(href).toContain('https://t.me/crisp_undp_bot');
+        expect(tag).toBe('button');
     });
 
     test('SMS + WhatsApp render as disabled "Coming soon" buttons', async ({ page }) => {
-        await page.goto('');
-        await page.waitForSelector('[data-channel="sms"]');
+        await openChannelsSheet(page);
         for (const ch of ['sms', 'whatsapp']) {
-            const btn = page.locator(`[data-channel="${ch}"]`);
+            const btn = page.locator(`#channels-sheet [data-channel="${ch}"]`);
             await expect(btn).toHaveClass(/is-disabled/);
-            await expect(btn.locator('.lc-soon')).toBeVisible();
+            // v6.8 — status copy moved to `.csr-status` (was `.lc-soon`
+            // in the legacy big-button layout). Assert the status text.
+            await expect(btn.locator('.csr-status')).toBeVisible();
+            await expect(btn.locator('.csr-status')).toContainText(/coming soon|low bandwidth/i);
             const tag = await btn.evaluate((el) => el.tagName.toLowerCase());
             expect(tag).toBe('button');
         }
     });
 
     test('iOS + Android render as disabled "Coming soon" buttons', async ({ page }) => {
-        await page.goto('');
-        await page.waitForSelector('[data-channel="ios"]');
+        await openChannelsSheet(page);
         for (const app of ['ios', 'android']) {
-            const btn = page.locator(`[data-channel="${app}"]`);
+            const btn = page.locator(`#channels-sheet [data-channel="${app}"]`);
             await expect(btn).toHaveClass(/is-disabled/);
-            await expect(btn.locator('.lc-soon')).toBeVisible();
+            await expect(btn.locator('.csr-status')).toContainText(/coming soon/i);
         }
     });
 
-    test('Expo Go is LIVE — anchor with exp:// scheme', async ({ page }) => {
-        await page.goto('');
-        await page.waitForSelector('[data-channel="expo"]');
-        const expoBtn = page.locator('[data-channel="expo"]');
-        const tag = await expoBtn.evaluate((el) => el.tagName.toLowerCase());
-        expect(tag).toBe('a');
-        const href = await expoBtn.getAttribute('href');
-        expect(href).toContain('exp://exp.host/');
-    });
+    // v6.8 (May 2026) — Expo Go dropped from public channels list. The
+    // exp:// deep link is still configured at home-screen.js:66 for
+    // internal tester builds, but the public channels-sheet doesn't
+    // render it. Test removed.
 
     test('consent checkbox gates btn-start until checked', async ({ page }) => {
         await page.goto('');
