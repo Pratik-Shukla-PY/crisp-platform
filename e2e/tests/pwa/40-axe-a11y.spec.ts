@@ -35,8 +35,7 @@ const ENFORCED_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 test.describe('Accessibility — axe-core full ruleset (WCAG 2.1 A/AA)', () => {
     for (const url of URLS) {
-        // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-        test.skip(`${url.name} has no WCAG 2.1 A/AA violations`, async ({ page }) => {
+        test(`${url.name} has no WCAG 2.1 A/AA violations`, async ({ page }) => {
             // Bypass landing/consent so we can audit the deeper stages too.
             await page.addInitScript(() => {
                 localStorage.setItem('crisp_privacy_consent',
@@ -107,8 +106,7 @@ test.describe('Accessibility — axe-core full ruleset (WCAG 2.1 A/AA)', () => {
 
 test.describe('Accessibility — color contrast (specifically — UNDP low-vision)', () => {
     for (const url of URLS) {
-        // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-        test.skip(`${url.name} contrast meets 4.5:1 (text) / 3:1 (large text)`, async ({ page }) => {
+        test(`${url.name} contrast meets 4.5:1 (text) / 3:1 (large text)`, async ({ page }) => {
             await page.addInitScript(() => {
                 localStorage.setItem('crisp_privacy_consent',
                     JSON.stringify({ accepted: true, ts: Date.now() }));
@@ -151,8 +149,7 @@ test.describe('Accessibility — color contrast (specifically — UNDP low-visio
 });
 
 test.describe('Accessibility — touch targets (low-literacy + tremor users)', () => {
-    // Phase F triage (May 2026) — SKIPPED (pass-2): failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('every interactive element on PWA home is ≥ 44×44 px (Apple HIG / WCAG 2.5.5)', async ({ page }) => {
+    test('every interactive element on PWA home is ≥ 44×44 px (Apple HIG / WCAG 2.5.5)', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('crisp_privacy_consent',
                 JSON.stringify({ accepted: true, ts: Date.now() }));

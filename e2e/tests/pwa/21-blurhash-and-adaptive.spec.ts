@@ -59,8 +59,7 @@ function _b64ToU8(b64: string): Uint8Array {
 test.describe('PWA progressive-upload Phase 1 + 2', () => {
   test.beforeEach(async ({ page }) => { await openPwa(page); });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('window.BlurHash encoder + decoder are exposed and round-trip', async ({ page }) => {
+  test('window.BlurHash encoder + decoder are exposed and round-trip', async ({ page }) => {
     await page.waitForFunction(
       () => typeof (window as any).BlurHash === 'object'
             && typeof (window as any).BlurHash.encode === 'function'
@@ -102,8 +101,7 @@ test.describe('PWA progressive-upload Phase 1 + 2', () => {
     expect(result.worstDelta).toBeLessThan(100);
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('ImageVariants.generate returns a truthy blurhash alongside the three tiers', async ({ page }) => {
+  test('ImageVariants.generate returns a truthy blurhash alongside the three tiers', async ({ page }) => {
     await page.waitForFunction(
       () => typeof (window as any).ImageVariants === 'object'
             && typeof (window as any).ImageVariants.generate === 'function',
@@ -134,8 +132,7 @@ test.describe('PWA progressive-upload Phase 1 + 2', () => {
     }
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('window._crispAdaptive exposes hooks + stable constants', async ({ page }) => {
+  test('window._crispAdaptive exposes hooks + stable constants', async ({ page }) => {
     const shape = await page.evaluate(() => {
       const a = (window as any)._crispAdaptive;
       return {
@@ -158,8 +155,7 @@ test.describe('PWA progressive-upload Phase 1 + 2', () => {
     expect(shape.reprobeEvery).toBe(8);
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('per-device bandwidth cache round-trips through localStorage', async ({ page }) => {
+  test('per-device bandwidth cache round-trips through localStorage', async ({ page }) => {
     const result = await page.evaluate(() => {
       const a = (window as any)._crispAdaptive;
       // Write 250_000 B/s and read it back. Also verify the raw
@@ -176,8 +172,7 @@ test.describe('PWA progressive-upload Phase 1 + 2', () => {
     expect(result.readBack).toBe(250_000);
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('packet-loss counters shrink the tier after ≥2 lossy events', async ({ page }) => {
+  test('packet-loss counters shrink the tier after ≥2 lossy events', async ({ page }) => {
     const outcome = await page.evaluate(() => {
       const a = (window as any)._crispAdaptive;
       a.resetPacketLossCounters();

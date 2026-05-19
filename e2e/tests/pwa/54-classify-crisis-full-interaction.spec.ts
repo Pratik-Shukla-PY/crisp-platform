@@ -45,8 +45,7 @@ test.describe('PWA — full crisis interaction after Add Another (Bug 2 re-verif
 
     test.beforeEach(async ({ page }) => { await bootV4(page); });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke after Add Another, full damage → infra → crisis flow with group + subtype taps enables Continue', async ({ page }) => {
+    test('@smoke after Add Another, full damage → infra → crisis flow with group + subtype taps enables Continue', async ({ page }) => {
         // 1. Simulate a completed prior report so all classifiers are set.
         await page.evaluate(() => {
             const s = (window as any).state;
@@ -108,8 +107,7 @@ test.describe('PWA — full crisis interaction after Add Another (Bug 2 re-verif
         expect(crisisType, 'state.crisis_type must be set to FLOOD').toBe('FLOOD');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('tapping a crisis tile after Add Another sets state + enables Continue (handlers not stale)', async ({ page }) => {
+    test('tapping a crisis tile after Add Another sets state + enables Continue (handlers not stale)', async ({ page }) => {
         // Spec 49 already proves the stale-highlight is cleared on
         // Add Another. This proves the click HANDLERS still function
         // — the specific concern the operator raised that led to the

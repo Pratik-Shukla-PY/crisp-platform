@@ -57,7 +57,6 @@ async function cleanup(request: APIRequestContext, deviceHash: string) {
   await request.delete(`${BACKEND}/api/v1/reports/device/${deviceHash}`).catch(() => {});
 }
 
-// Phase F triage (May 2026) — SKIPPED. 6/6 tests fail with `.mr-card`
 // not found after `#btn-my-reports` click. Root cause is more complex
 // than a selector rename: the page snapshot at failure time shows both
 // home stage AND stage-v4-capture banner stacked, which means the
@@ -76,7 +75,7 @@ async function cleanup(request: APIRequestContext, deviceHash: string) {
 // the user's real PWA submission earlier this session — submitted
 // report 32bb7e58 landed on dashboard correctly). Only the e2e
 // fixture path is broken.
-test.describe.skip('PWA My Reports — individual report management', () => {
+test.describe('PWA My Reports — individual report management', () => {
   let deviceHash: string;
 
   test.beforeEach(async ({ page }) => {

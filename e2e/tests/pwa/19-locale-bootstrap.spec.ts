@@ -46,8 +46,7 @@ async function openPwaBare(page) {
 }
 
 test.describe('PWA locale-bootstrap invariants', () => {
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('window.I18N / EXTRA_LANG / UNDP_I18N_EXTRA are reachable from window', async ({ page }) => {
+  test('window.I18N / EXTRA_LANG / UNDP_I18N_EXTRA are reachable from window', async ({ page }) => {
     await openPwaBare(page);
     // Allow the DOMContentLoaded + activateLang + async JSON pass to run.
     await page.waitForFunction(
@@ -88,8 +87,7 @@ test.describe('PWA locale-bootstrap invariants', () => {
     { code: 'ru', dir: 'ltr', hasUndpPack: true },
     { code: 'zh', dir: 'ltr', hasUndpPack: true },
   ]) {
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip(`manual locale "${probe.code}" survives a reload (dir=${probe.dir})`, async ({ page }) => {
+    test(`manual locale "${probe.code}" survives a reload (dir=${probe.dir})`, async ({ page }) => {
       await openPwaBare(page);
       await page.evaluate((code) => localStorage.setItem('crisp_lang_manual', code), probe.code);
       await page.reload();
@@ -136,8 +134,7 @@ test.describe('PWA locale-bootstrap invariants', () => {
     expect(htmlLang).toBe('en');
   });
 
-  // Phase F triage (May 2026) — SKIPPED (pass-2): failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('empty / missing manual locale falls back to English', async ({ page }) => {
+  test('empty / missing manual locale falls back to English', async ({ page }) => {
     // Clean slate — no localStorage key at all.
     await page.goto('index.html');
     await page.evaluate(() => {

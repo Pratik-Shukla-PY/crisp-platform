@@ -70,8 +70,7 @@ async function bootHomeWithProfile(page: Page, profile: ProfileShape) {
 
 test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke T1_SCOUT renders 🌱 Scout with first-report progress', async ({ page }) => {
+    test('@smoke T1_SCOUT renders 🌱 Scout with first-report progress', async ({ page }) => {
         await bootHomeWithProfile(page, {
             badge_level: 'T1_SCOUT',
             badge_legacy: 'NEWCOMER',
@@ -92,8 +91,7 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
         await expect(chip).not.toHaveClass(/chip-unlocked/);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke T2_SIGNAL renders 📣 Signal with verified-1 progress', async ({ page }) => {
+    test('@smoke T2_SIGNAL renders 📣 Signal with verified-1 progress', async ({ page }) => {
         await bootHomeWithProfile(page, {
             badge_level: 'T2_SIGNAL',
             badge_legacy: 'NEWCOMER',
@@ -111,8 +109,7 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
         await expect(chip).not.toHaveClass(/chip-unlocked/);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke T3_CHANGEMAKER unlocks the chip + applies body tier-t3 + logo ring', async ({ page }) => {
+    test('@smoke T3_CHANGEMAKER unlocks the chip + applies body tier-t3 + logo ring', async ({ page }) => {
         await bootHomeWithProfile(page, {
             badge_level: 'T3_CHANGEMAKER',
             badge_legacy: 'CONTRIBUTOR',
@@ -132,8 +129,7 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
         await expect(page.locator('body')).toHaveClass(/tier-t3/);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke T4_LIFEKEEPER applies body tier-t4 (top-tier theme tint)', async ({ page }) => {
+    test('@smoke T4_LIFEKEEPER applies body tier-t4 (top-tier theme tint)', async ({ page }) => {
         await bootHomeWithProfile(page, {
             badge_level: 'T4_LIFEKEEPER',
             badge_legacy: 'TRUSTED',
@@ -152,8 +148,7 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
         await expect(page.locator('body')).toHaveClass(/tier-t4/);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('LEGACY: stale backend emitting CONTRIBUTOR falls back to T3_CHANGEMAKER render', async ({ page }) => {
+    test('LEGACY: stale backend emitting CONTRIBUTOR falls back to T3_CHANGEMAKER render', async ({ page }) => {
         // Simulates a backend that has not yet been upgraded to the new
         // 4-tier emit. The PWA must still paint a sensible tier via
         // LEGACY_MAP, not fall through to the T1_SCOUT default. This
@@ -168,16 +163,14 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
         await expect(chip).toHaveAttribute('data-tier', 'T3_CHANGEMAKER');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('LEGACY: stale backend emitting TRUSTED falls back to T4_LIFEKEEPER render', async ({ page }) => {
+    test('LEGACY: stale backend emitting TRUSTED falls back to T4_LIFEKEEPER render', async ({ page }) => {
         await bootHomeWithProfile(page, { badge_level: 'TRUSTED' });
         const chip = page.locator('#home-badge-chip');
         await expect(chip).toHaveClass(/lvl-t4/);
         await expect(chip).toHaveAttribute('data-tier', 'T4_LIFEKEEPER');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('LEGACY: stale backend emitting NEWCOMER maps to T2_SIGNAL (most reporters)', async ({ page }) => {
+    test('LEGACY: stale backend emitting NEWCOMER maps to T2_SIGNAL (most reporters)', async ({ page }) => {
         // The legacy NEWCOMER bucket was the "anyone with <3 verified"
         // catch-all — these reporters have almost always submitted at
         // least one report, so mapping them to T2_SIGNAL (the post-
@@ -189,8 +182,7 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
         await expect(chip).toHaveAttribute('data-tier', 'T2_SIGNAL');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('chip stays visible (never hidden) even on /profile fetch failure', async ({ page }) => {
+    test('chip stays visible (never hidden) even on /profile fetch failure', async ({ page }) => {
         // Network error path — the chip should fall back to T1_SCOUT
         // rather than disappear. Operator-flagged scenario: a flaky
         // 5xx on /profile must not break the home stage layout.

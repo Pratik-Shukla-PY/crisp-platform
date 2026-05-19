@@ -79,8 +79,7 @@ async function emulateNetwork(page: Page, preset: typeof PRESET_4G) {
 
 test.describe('PWA — network-tier coverage (2G / 3G / 4G / offline)', () => {
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke all tier-picker helpers are reachable from page context', async ({ page }) => {
+    test('@smoke all tier-picker helpers are reachable from page context', async ({ page }) => {
         await bootPwa(page);
         // Top-level `function` declarations in a classic script ARE
         // properties of the global object (unlike `const`/`let`). All
@@ -104,8 +103,7 @@ test.describe('PWA — network-tier coverage (2G / 3G / 4G / offline)', () => {
         expect(exposed.computeChunkTimeout,    'computeChunkTimeout').toBe(true);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('chunk-size contract — FAST=512K / MEDIUM=128K / SLOW=32K / VERY_SLOW=1K', async ({ page }) => {
+    test('chunk-size contract — FAST=512K / MEDIUM=128K / SLOW=32K / VERY_SLOW=1K', async ({ page }) => {
         await bootPwa(page);
         // PWA_NETWORK_TIERS is the source of truth the assembler depends
         // on. If anyone tweaks chunkSize without coordinating with the
@@ -136,8 +134,7 @@ test.describe('PWA — network-tier coverage (2G / 3G / 4G / offline)', () => {
         expect(sizes!.VERY_SLOW, 'VERY_SLOW chunk size').toBe(1024);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('offline → tier=VERY_SLOW (navigator.onLine guard)', async ({ page, context }) => {
+    test('offline → tier=VERY_SLOW (navigator.onLine guard)', async ({ page, context }) => {
         await bootPwa(page);
         await context.setOffline(true);
         await page.evaluate(() => window.dispatchEvent(new Event('offline')));
@@ -151,8 +148,7 @@ test.describe('PWA — network-tier coverage (2G / 3G / 4G / offline)', () => {
         expect(tier, 'offline must downgrade to VERY_SLOW').toBe('VERY_SLOW');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@2g CDP throttle to 2G EDGE → bandwidth probe picks VERY_SLOW', async ({ page }) => {
+    test('@2g CDP throttle to 2G EDGE → bandwidth probe picks VERY_SLOW', async ({ page }) => {
         await bootPwa(page);
         await emulateNetwork(page, PRESET_2G);
         const result = await page.evaluate(async () => {
@@ -169,7 +165,7 @@ test.describe('PWA — network-tier coverage (2G / 3G / 4G / offline)', () => {
                 return { error: String(e && e.message) };
             }
         });
-        if ((result as any).skip) test.skip(true, 'adaptTierViaProbe not on window');
+        if ((result as any).skip) test(true, 'adaptTierViaProbe not on window');
         // 2G upload throughput (50 Kbps = 6,250 B/s) falls comfortably
         // into the VERY_SLOW bucket (< 10 KB/s threshold).
         // The probe may fail entirely if the backend isn't running —
@@ -178,8 +174,7 @@ test.describe('PWA — network-tier coverage (2G / 3G / 4G / offline)', () => {
         expect(['SLOW', 'VERY_SLOW']).toContain(result.tier);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@3g CDP throttle to Regular 3G → bandwidth probe picks SLOW', async ({ page }) => {
+    test('@3g CDP throttle to Regular 3G → bandwidth probe picks SLOW', async ({ page }) => {
         await bootPwa(page);
         await emulateNetwork(page, PRESET_3G);
         const result = await page.evaluate(async () => {
@@ -192,15 +187,14 @@ test.describe('PWA — network-tier coverage (2G / 3G / 4G / offline)', () => {
                 return { error: String(e && e.message) };
             }
         });
-        if ((result as any).skip) test.skip(true, 'adaptTierViaProbe not on window');
+        if ((result as any).skip) test(true, 'adaptTierViaProbe not on window');
         // 3G upload (750 Kbps = 93,750 B/s) sits between SLOW (10 KB/s)
         // and MEDIUM (100 KB/s) thresholds — could land in either
         // depending on probe latency overhead. Accept both.
         expect(['SLOW', 'MEDIUM']).toContain(result.tier);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@4g CDP throttle to Fast 4G → bandwidth probe picks MEDIUM or FAST', async ({ page }) => {
+    test('@4g CDP throttle to Fast 4G → bandwidth probe picks MEDIUM or FAST', async ({ page }) => {
         await bootPwa(page);
         await emulateNetwork(page, PRESET_4G);
         const result = await page.evaluate(async () => {
@@ -213,15 +207,14 @@ test.describe('PWA — network-tier coverage (2G / 3G / 4G / offline)', () => {
                 return { error: String(e && e.message) };
             }
         });
-        if ((result as any).skip) test.skip(true, 'adaptTierViaProbe not on window');
+        if ((result as any).skip) test(true, 'adaptTierViaProbe not on window');
         // 4G upload (4 Mbps = 500,000 B/s) easily clears the FAST
         // threshold (1 MB/s) on a good run, or MEDIUM (100 KB/s) on
         // a noisy run. SLOW indicates regression.
         expect(['MEDIUM', 'FAST']).toContain(result.tier);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('offline → enqueue capture → online → queue drains (UNDP must-have #3)', async ({ page, context }) => {
+    test('offline → enqueue capture → online → queue drains (UNDP must-have #3)', async ({ page, context }) => {
         await bootPwa(page);
 
         // Go offline BEFORE enqueueing, mirroring "plane mode at the
@@ -252,7 +245,7 @@ test.describe('PWA — network-tier coverage (2G / 3G / 4G / offline)', () => {
             return { queueLen: (all || []).length };
         }, clientId);
         if ((enqueueResult as any).skip) {
-            test.skip(true, '__crispEnqueueReport not on window');
+            test(true, '__crispEnqueueReport not on window');
         }
         expect(enqueueResult.queueLen, 'queue must hold the enqueued item while offline')
             .toBeGreaterThan(0);

@@ -31,8 +31,7 @@ async function openHomeInEnglish(page) {
 test.describe('PWA building-footprint selector', () => {
   test.beforeEach(async ({ page }) => { await openHomeInEnglish(page); });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('Leaflet + BuildingSelect globals are loaded', async ({ page }) => {
+  test('Leaflet + BuildingSelect globals are loaded', async ({ page }) => {
     const globals = await page.evaluate(() => ({
       hasLeaflet: typeof (window as any).L !== 'undefined',
       hasModule: typeof (window as any).BuildingSelect === 'object',
@@ -45,8 +44,7 @@ test.describe('PWA building-footprint selector', () => {
     expect(globals.hasGetSelection).toBeTruthy();
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('#building-select-box exists on stage-review DOM (collapsed)', async ({ page }) => {
+  test('#building-select-box exists on stage-review DOM (collapsed)', async ({ page }) => {
     const details = page.locator('#building-select-box');
     await expect(details).toHaveCount(1);
     // Collapsed by default — no "open" attribute.
@@ -54,8 +52,7 @@ test.describe('PWA building-footprint selector', () => {
     expect(open).toBeNull();
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('getSelection returns null when nothing picked, populated after tap', async ({ page }) => {
+  test('getSelection returns null when nothing picked, populated after tap', async ({ page }) => {
     const before = await page.evaluate(() => {
       (window as any).state = (window as any).state || {};
       return (window as any).BuildingSelect.getSelection();

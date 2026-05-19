@@ -61,8 +61,7 @@ async function _stageReadyToSubmit(page: Page) {
 // ════════════════════════════════════════════════════════════════════════
 
 test.describe('UNDP §1 — User-facing frontend exists + reachable', () => {
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('app loads + service worker activates', async ({ page }) => {
+    test('app loads + service worker activates', async ({ page }) => {
         await page.goto('');
         await page.waitForFunction(
             () => typeof (window as any).__crispGoToStage === 'function',
@@ -78,8 +77,7 @@ test.describe('UNDP §1 — User-facing frontend exists + reachable', () => {
         expect(swState!.active, 'service worker not active').toBe(true);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('home stage shows Start CTA + My Reports + offline reassurance', async ({ page }) => {
+    test('home stage shows Start CTA + My Reports + offline reassurance', async ({ page }) => {
         await page.goto('');
         await _passLandingAsRealUser(page);
         // v3 home is .active by default once the landing dismisses.
@@ -98,8 +96,7 @@ test.describe('UNDP §1 — User-facing frontend exists + reachable', () => {
 
 test.describe('UNDP §1a — 6 UN locales are loadable + render real text', () => {
     for (const locale of ['en', 'fr', 'es', 'ar', 'ru', 'zh']) {
-        // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-        test.skip(`${locale}.json serves AND populates I18N`, async ({ page }) => {
+        test(`${locale}.json serves AND populates I18N`, async ({ page }) => {
             // Force the locale BEFORE the app boots.
             await page.addInitScript((loc) => {
                 localStorage.setItem('crisp_lang_manual', loc);
@@ -186,8 +183,7 @@ test.describe('UNDP §1a — Photo capture + upload pipeline', () => {
 // ════════════════════════════════════════════════════════════════════════
 
 test.describe('UNDP §6 — Building footprint selector (must-have)', () => {
-    // Phase F triage (May 2026) — SKIPPED (pass-2): failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('BuildingSelect global + Leaflet are loaded', async ({ page }) => {
+    test('BuildingSelect global + Leaflet are loaded', async ({ page }) => {
         await page.goto('');
         await page.waitForTimeout(2000);
         const surface = await page.evaluate(() => ({
@@ -204,8 +200,7 @@ test.describe('UNDP §6 — Building footprint selector (must-have)', () => {
         expect(surface.preCacheNearest, 'BuildingSelect.preCacheNearest missing').toBe('function');
     });
 
-    // Phase F triage (May 2026) — SKIPPED (pass-2): failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('#building-select-box exists in the v3 stage-review DOM', async ({ page }) => {
+    test('#building-select-box exists in the v3 stage-review DOM', async ({ page }) => {
         await page.goto('');
         await page.waitForTimeout(1000);
         const exists = await page.evaluate(() => !!document.getElementById('building-select-box'));
@@ -322,8 +317,7 @@ test.describe('UNDP §4 — Offline functionality + queued resubmit', () => {
 // ════════════════════════════════════════════════════════════════════════
 
 test.describe('UNDP §2 — Capture-and-display schema', () => {
-    // Phase F triage (May 2026) — SKIPPED (pass-2): failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('all 8 UNDP infrastructure super-types present (chip-btn[data-type])', async ({ page }) => {
+    test('all 8 UNDP infrastructure super-types present (chip-btn[data-type])', async ({ page }) => {
         await page.goto('');
         await _passLandingAsRealUser(page);
         // v3 chips are in #stage-infra with data-type attribute (not
@@ -341,8 +335,7 @@ test.describe('UNDP §2 — Capture-and-display schema', () => {
         }
     });
 
-    // Phase F triage (May 2026) — SKIPPED (pass-2): failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('all UNDP crisis types present (Natural / Tech / Human-made)', async ({ page }) => {
+    test('all UNDP crisis types present (Natural / Tech / Human-made)', async ({ page }) => {
         await page.goto('');
         await _passLandingAsRealUser(page);
         await page.waitForTimeout(800);
@@ -364,8 +357,7 @@ test.describe('UNDP §2 — Capture-and-display schema', () => {
         expect(hasHurricaneOrCyclone, 'neither HURRICANE nor CYCLONE crisis chip').toBe(true);
     });
 
-    // Phase F triage (May 2026) — SKIPPED (pass-2): failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('UNDP damage classification levels (Minimal / Partial / Complete)', async ({ page }) => {
+    test('UNDP damage classification levels (Minimal / Partial / Complete)', async ({ page }) => {
         await page.goto('');
         await _passLandingAsRealUser(page);
         await page.waitForTimeout(800);

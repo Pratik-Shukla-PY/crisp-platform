@@ -35,6 +35,10 @@ test.use({ storageState: { cookies: [], origins: [] } });
 // Skip on non-Linux platforms unless CI=true (i.e. running in GH
 // Actions with a Linux baseline). Local devs can still run with
 // --update-snapshots to inspect their own rendering.
+// NOTE: `test.skip(condition, reason)` is the conditional-FILE-skip
+// helper, NOT a test declaration. It tells Playwright to skip THIS
+// SPEC FILE when the condition is true (here: not running in Linux CI).
+// Don't confuse with `test.skip('name', fn)` which marks a single test.
 test.skip(
     process.platform !== 'linux' && !process.env.CI && !process.env.LH_VISUAL_FORCE,
     'Visual regression baselines are Linux-only (committed). Set CI=1 or LH_VISUAL_FORCE=1 to override locally.',
@@ -75,8 +79,7 @@ const STAGES = [
 
 test.describe('Visual regression — PWA stages', () => {
     for (const stage of STAGES) {
-        // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-        test.skip(`${stage} layout matches baseline`, async ({ page }) => {
+        test(`${stage} layout matches baseline`, async ({ page }) => {
             await bootPwa(page);
             await page.evaluate(
                 (s) => (window as any).__crispGoToStage(s),
@@ -112,8 +115,7 @@ test.describe('Visual regression — locale variants', () => {
     // tightest character density). If RTL flip + CJK render correctly,
     // the other 4 UN locales are very likely fine too.
     for (const lang of ['ar', 'zh']) {
-        // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-        test.skip(`stage-home renders correctly in ${lang}`, async ({ page }) => {
+        test(`stage-home renders correctly in ${lang}`, async ({ page }) => {
             await page.addInitScript((l) => {
                 localStorage.setItem('crisp_privacy_consent',
                     JSON.stringify({ accepted: true, ts: Date.now() }));

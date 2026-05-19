@@ -114,8 +114,7 @@ async function bootStandalone(page: Page) {
 
 test.describe('PWA — safe-area / installed-PWA layout invariants', () => {
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke .stage carries env(safe-area-inset-*) on positioning offsets', async ({ page }) => {
+    test('@smoke .stage carries env(safe-area-inset-*) on positioning offsets', async ({ page }) => {
         await bootStandalone(page);
         // After v6.8, every .stage has top/right/bottom/left set to
         // env(safe-area-inset-*). With our 47/34 injection in
@@ -138,8 +137,7 @@ test.describe('PWA — safe-area / installed-PWA layout invariants', () => {
         expect(stageStyles!.bottom).toBe(`${SAFE_AREA_BOTTOM}px`);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke every stage clears the simulated 47px notch band', async ({ page }) => {
+    test('@smoke every stage clears the simulated 47px notch band', async ({ page }) => {
         await bootStandalone(page);
         const failures: string[] = [];
         for (const stageId of STAGES) {
@@ -170,8 +168,7 @@ test.describe('PWA — safe-area / installed-PWA layout invariants', () => {
         expect(failures).toEqual([]);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('stage padding does NOT include env(safe-area-inset-top) (would double-pad)', async ({ page }) => {
+    test('stage padding does NOT include env(safe-area-inset-top) (would double-pad)', async ({ page }) => {
         await bootStandalone(page);
         // After v6.8, .stage's padding-top should be a flat value (20px),
         // NOT calc(20px + env(safe-area-inset-top, 0px)). We verify by
@@ -191,8 +188,7 @@ test.describe('PWA — safe-area / installed-PWA layout invariants', () => {
         expect(stagePt).toBe('20px');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('.home-stage rule does not duplicate safe-area inset on its own', async ({ page }) => {
+    test('.home-stage rule does not duplicate safe-area inset on its own', async ({ page }) => {
         await bootStandalone(page);
         // .home-stage used to have padding-top: env(...). After v6.8,
         // that lives on .mobile-screen only. Verify .home-stage's

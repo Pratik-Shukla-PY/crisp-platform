@@ -53,8 +53,7 @@ test.describe('PWA multi-image capture (PR 5)', () => {
     });
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('@smoke #file-browse has multiple attribute', async ({ page }) => {
+  test('@smoke #file-browse has multiple attribute', async ({ page }) => {
     await page.locator('#btn-start').click();
     await expect(page.locator('#stage-photo.active')).toBeVisible();
     // Regression guard — PR 5 added `multiple` so browse lets users pick
@@ -63,8 +62,7 @@ test.describe('PWA multi-image capture (PR 5)', () => {
     expect(multiple).not.toBeNull();
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('@smoke camera modal exposes mini-gallery + Done button', async ({ page }) => {
+  test('@smoke camera modal exposes mini-gallery + Done button', async ({ page }) => {
     // We don't open the modal via live getUserMedia (unavailable headless),
     // but the DOM scaffolding must be present so PR 5 doesn't regress.
     await expect(page.locator('#camera-modal')).toBeAttached();
@@ -77,8 +75,7 @@ test.describe('PWA multi-image capture (PR 5)', () => {
     expect(disabled).not.toBeNull();
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('@smoke modal controls stay in viewport when modal is open (hotfix)', async ({ page }) => {
+  test('@smoke modal controls stay in viewport when modal is open (hotfix)', async ({ page }) => {
     // Hotfix regression guard — when the modal opens, the shutter row and
     // both side buttons must be inside the viewport. Previously the video's
     // intrinsic aspect ratio pushed them off the bottom on desktop Edge.
@@ -98,8 +95,7 @@ test.describe('PWA multi-image capture (PR 5)', () => {
     }
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('browse multi-select: first asset → primary, rest → extras', async ({ page }) => {
+  test('browse multi-select: first asset → primary, rest → extras', async ({ page }) => {
     await page.locator('#btn-start').click();
     await expect(page.locator('#stage-photo.active')).toBeVisible();
 
@@ -125,8 +121,7 @@ test.describe('PWA multi-image capture (PR 5)', () => {
     await expect(thumbs).toHaveCount(2);
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('photoBlurPending is an array (not a single promise)', async ({ page }) => {
+  test('photoBlurPending is an array (not a single promise)', async ({ page }) => {
     await page.locator('#btn-start').click();
     // Stay on photo stage — state is initialized on boot. The PR 5 refactor
     // changed the slot from a single promise to an array; a regression to

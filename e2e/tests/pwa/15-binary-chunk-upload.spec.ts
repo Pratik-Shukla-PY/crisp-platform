@@ -38,8 +38,7 @@ async function openPwa(page) {
 test.describe('PWA binary-chunk transport', () => {
   test.beforeEach(async ({ page }) => { await openPwa(page); });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('globals + feature flag are exposed by app.js', async ({ page }) => {
+  test('globals + feature flag are exposed by app.js', async ({ page }) => {
     const state = await page.evaluate(() => {
       return {
         hasDjb2Bytes:            typeof (window as any).djb2Bytes === 'function',
@@ -56,8 +55,7 @@ test.describe('PWA binary-chunk transport', () => {
     expect(state.binaryDefaultOn).toBeTruthy();
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('localStorage override disables binary transport', async ({ page }) => {
+  test('localStorage override disables binary transport', async ({ page }) => {
     const beforeAndAfter = await page.evaluate(() => {
       const before = (window as any).isBinaryChunksEnabled?.();
       localStorage.setItem('crisp_binary_chunks', 'off');
@@ -70,8 +68,7 @@ test.describe('PWA binary-chunk transport', () => {
     expect(beforeAndAfter.after).toBeFalsy();
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('djb2Bytes matches simpleChecksum on ASCII input', async ({ page }) => {
+  test('djb2Bytes matches simpleChecksum on ASCII input', async ({ page }) => {
     const result = await page.evaluate(() => {
       // For pure ASCII, byte value === char code, so the two helpers
       // must produce identical output. If they diverge, the client
@@ -88,8 +85,7 @@ test.describe('PWA binary-chunk transport', () => {
     expect(result.binaryHash).toBe('0a9cede7');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('binary chunk endpoint path is selected when flag is on', async ({ page }) => {
+  test('binary chunk endpoint path is selected when flag is on', async ({ page }) => {
     // Arm a request-inspector that records every network call to any
     // /media/chunk* endpoint so we can assert which path is used.
     const hits: string[] = [];

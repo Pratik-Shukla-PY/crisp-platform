@@ -33,8 +33,7 @@ async function openClean(page) {
 test.describe('PWA image viewer + thumbnail-delete (Apr 2026)', () => {
   test.beforeEach(async ({ page }) => { await openClean(page); });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('@smoke viewer overlay + confirm-dialog are in the DOM (hidden by default)', async ({ page }) => {
+  test('@smoke viewer overlay + confirm-dialog are in the DOM (hidden by default)', async ({ page }) => {
     await expect(page.locator('#image-viewer-overlay')).toBeAttached();
     await expect(page.locator('#image-viewer-overlay')).toBeHidden();
     await expect(page.locator('#image-delete-confirm')).toBeAttached();
@@ -46,8 +45,7 @@ test.describe('PWA image viewer + thumbnail-delete (Apr 2026)', () => {
     await expect(page.locator('#btn-idc-confirm')).toBeAttached();
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('@smoke primary photo thumb renders with ❌ on bottom-left', async ({ page }) => {
+  test('@smoke primary photo thumb renders with ❌ on bottom-left', async ({ page }) => {
     await page.locator('#btn-start').click();
     await expect(page.locator('#stage-photo.active')).toBeVisible();
     // Seed a primary photo directly via state and force a strip refresh.
@@ -68,8 +66,7 @@ test.describe('PWA image viewer + thumbnail-delete (Apr 2026)', () => {
     await expect(removes).toHaveCount(count);
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('viewer opens via programmatic trigger + close dismisses', async ({ page }) => {
+  test('viewer opens via programmatic trigger + close dismisses', async ({ page }) => {
     await page.evaluate(() => {
       (window as any).__crispOpenImageViewer(
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=',
@@ -83,8 +80,7 @@ test.describe('PWA image viewer + thumbnail-delete (Apr 2026)', () => {
     await expect(page.locator('#image-viewer-overlay')).toBeHidden();
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('delete-inside-viewer opens confirm + cancel dismisses without delete', async ({ page }) => {
+  test('delete-inside-viewer opens confirm + cancel dismisses without delete', async ({ page }) => {
     await page.evaluate(() => {
       const s = (window as any).state;
       s.photoDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=';

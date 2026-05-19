@@ -40,16 +40,14 @@ async function bootReview(page) {
 
 test.describe('V4 review-page content cards', () => {
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('section title is shown', async ({ page }) => {
+    test('section title is shown', async ({ page }) => {
         await bootReview(page);
         const title = page.locator('.v4-review-title-section h3');
         await expect(title).toBeVisible();
         await expect(title).toContainText(/Review your report/i);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('all 4 content cards render on stage-v4-review boot', async ({ page }) => {
+    test('all 4 content cards render on stage-v4-review boot', async ({ page }) => {
         await bootReview(page);
         await expect(page.locator('.v4-review-card-photo')).toBeVisible();
         await expect(page.locator('.v4-review-card-description')).toBeVisible();
@@ -57,15 +55,13 @@ test.describe('V4 review-page content cards', () => {
         await expect(page.locator('.v4-review-card-classification')).toBeVisible();
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('legacy v4-captured-strip + v4-summary are gone', async ({ page }) => {
+    test('legacy v4-captured-strip + v4-summary are gone', async ({ page }) => {
         await bootReview(page);
         expect(await page.locator('.v4-captured-strip').count()).toBe(0);
         expect(await page.locator('.v4-summary').count()).toBe(0);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('description card shows EMPTY state when no voice + no text', async ({ page }) => {
+    test('description card shows EMPTY state when no voice + no text', async ({ page }) => {
         await bootReview(page);
         await page.evaluate(() => {
             const s: any = (window as any).state || (((window as any).state) = {});
@@ -82,8 +78,7 @@ test.describe('V4 review-page content cards', () => {
         await expect(page.locator('#v4-desc-empty')).toContainText(/Add voice or text/i);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('description card shows FILLED state when text is present', async ({ page }) => {
+    test('description card shows FILLED state when text is present', async ({ page }) => {
         await bootReview(page);
         await page.evaluate(() => {
             const s: any = (window as any).state || (((window as any).state) = {});
@@ -98,8 +93,7 @@ test.describe('V4 review-page content cards', () => {
         await expect(page.locator('#v4-desc-text-snippet')).toContainText(/Water is rising/i);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('NO duplicate "Add voice or text" prompt when content exists', async ({ page }) => {
+    test('NO duplicate "Add voice or text" prompt when content exists', async ({ page }) => {
         await bootReview(page);
         await page.evaluate(() => {
             const s: any = (window as any).state || (((window as any).state) = {});
@@ -116,8 +110,7 @@ test.describe('V4 review-page content cards', () => {
         expect(summaryHidden).toBe(true);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('classification chips show 3 separate values + distinct icons', async ({ page }) => {
+    test('classification chips show 3 separate values + distinct icons', async ({ page }) => {
         await bootReview(page);
         await page.evaluate(() => {
             const s: any = (window as any).state || (((window as any).state) = {});
@@ -142,22 +135,19 @@ test.describe('V4 review-page content cards', () => {
         expect(infraIcon).not.toEqual(damageIcon);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('classification chip taps route to stage-v4-classify', async ({ page }) => {
+    test('classification chip taps route to stage-v4-classify', async ({ page }) => {
         await bootReview(page);
         await page.locator('#v4-edit-infra').click();
         await expect(page.locator('#stage-v4-classify.active')).toBeVisible({ timeout: 1500 });
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('photo card tap routes to stage-v4-capture', async ({ page }) => {
+    test('photo card tap routes to stage-v4-capture', async ({ page }) => {
         await bootReview(page);
         await page.locator('#v4-edit-photo').click();
         await expect(page.locator('#stage-v4-capture.active')).toBeVisible({ timeout: 1500 });
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Send + UNDP trigger remain visible alongside the new cards', async ({ page }) => {
+    test('Send + UNDP trigger remain visible alongside the new cards', async ({ page }) => {
         await bootReview(page);
         await expect(page.locator('#btn-v4-send')).toBeVisible();
         await expect(page.locator('#btn-v4-open-undp')).toBeVisible();

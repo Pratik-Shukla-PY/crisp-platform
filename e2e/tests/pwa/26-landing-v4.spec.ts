@@ -33,8 +33,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 test.describe('Merged always-on home page', () => {
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('home page is visible on every load (no first-visit gating)', async ({ page }) => {
+    test('home page is visible on every load (no first-visit gating)', async ({ page }) => {
         await page.goto('');
         await expect(page.locator('#stage-home.active')).toBeVisible({ timeout: 5000 });
         // Reload — still visible.
@@ -42,8 +41,7 @@ test.describe('Merged always-on home page', () => {
         await expect(page.locator('#stage-home.active')).toBeVisible({ timeout: 5000 });
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('all 4 channel buttons + 3 app buttons render', async ({ page }) => {
+    test('all 4 channel buttons + 3 app buttons render', async ({ page }) => {
         await page.goto('');
         await page.waitForSelector('#home-channels [data-channel]', { timeout: 5000 });
         for (const channel of ['ivr', 'sms', 'telegram', 'whatsapp']) {
@@ -54,8 +52,7 @@ test.describe('Merged always-on home page', () => {
         }
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('IVR is LIVE — anchor with tel:+16626768896', async ({ page }) => {
+    test('IVR is LIVE — anchor with tel:+16626768896', async ({ page }) => {
         await page.goto('');
         await page.waitForSelector('[data-channel="ivr"]');
         const ivrBtn = page.locator('[data-channel="ivr"]');
@@ -65,8 +62,7 @@ test.describe('Merged always-on home page', () => {
         expect(href).toBe('tel:+16626768896');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Telegram is LIVE — anchor with t.me/crisp_undp_bot', async ({ page }) => {
+    test('Telegram is LIVE — anchor with t.me/crisp_undp_bot', async ({ page }) => {
         await page.goto('');
         await page.waitForSelector('[data-channel="telegram"]');
         const tgBtn = page.locator('[data-channel="telegram"]');
@@ -76,8 +72,7 @@ test.describe('Merged always-on home page', () => {
         expect(href).toContain('https://t.me/crisp_undp_bot');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('SMS + WhatsApp render as disabled "Coming soon" buttons', async ({ page }) => {
+    test('SMS + WhatsApp render as disabled "Coming soon" buttons', async ({ page }) => {
         await page.goto('');
         await page.waitForSelector('[data-channel="sms"]');
         for (const ch of ['sms', 'whatsapp']) {
@@ -89,8 +84,7 @@ test.describe('Merged always-on home page', () => {
         }
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('iOS + Android render as disabled "Coming soon" buttons', async ({ page }) => {
+    test('iOS + Android render as disabled "Coming soon" buttons', async ({ page }) => {
         await page.goto('');
         await page.waitForSelector('[data-channel="ios"]');
         for (const app of ['ios', 'android']) {
@@ -100,8 +94,7 @@ test.describe('Merged always-on home page', () => {
         }
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Expo Go is LIVE — anchor with exp:// scheme', async ({ page }) => {
+    test('Expo Go is LIVE — anchor with exp:// scheme', async ({ page }) => {
         await page.goto('');
         await page.waitForSelector('[data-channel="expo"]');
         const expoBtn = page.locator('[data-channel="expo"]');
@@ -111,8 +104,7 @@ test.describe('Merged always-on home page', () => {
         expect(href).toContain('exp://exp.host/');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('consent checkbox gates btn-start until checked', async ({ page }) => {
+    test('consent checkbox gates btn-start until checked', async ({ page }) => {
         await page.goto('');
         await page.waitForSelector('#home-consent-check', { timeout: 5000 });
         const startBtn = page.locator('#btn-start');
@@ -121,8 +113,7 @@ test.describe('Merged always-on home page', () => {
         await expect(startBtn).not.toBeDisabled();
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('checking consent persists + hides the row', async ({ page }) => {
+    test('checking consent persists + hides the row', async ({ page }) => {
         await page.goto('');
         await page.waitForSelector('#home-consent-check');
         await page.locator('#home-consent-check').check();
@@ -137,8 +128,7 @@ test.describe('Merged always-on home page', () => {
         expect(persisted).toBe(true);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('returning visitors with consent see no checkbox + Start enabled', async ({ page }) => {
+    test('returning visitors with consent see no checkbox + Start enabled', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('crisp_privacy_consent',
                 JSON.stringify({ accepted: true, ts: Date.now() }));
@@ -149,8 +139,7 @@ test.describe('Merged always-on home page', () => {
         await expect(page.locator('#btn-start')).not.toBeDisabled();
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('window.InstallPrompt API surface is exposed', async ({ page }) => {
+    test('window.InstallPrompt API surface is exposed', async ({ page }) => {
         await page.goto('');
         await page.waitForSelector('#stage-home.active', { timeout: 5000 });
         const api = await page.evaluate(() => {
@@ -171,8 +160,7 @@ test.describe('Merged always-on home page', () => {
         expect(api.hasPlatform).toBe(true);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('iOS install sheet renders when triggered', async ({ page }) => {
+    test('iOS install sheet renders when triggered', async ({ page }) => {
         await page.addInitScript(() => {
             Object.defineProperty(navigator, 'userAgent', {
                 value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
@@ -188,8 +176,7 @@ test.describe('Merged always-on home page', () => {
         await expect(page.locator('.iis-title')).toContainText(/Install CRISP/i);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('viewport fits 360x640 without horizontal scroll', async ({ page }) => {
+    test('viewport fits 360x640 without horizontal scroll', async ({ page }) => {
         await page.setViewportSize({ width: 360, height: 640 });
         await page.goto('');
         await page.waitForSelector('#stage-home.active');
@@ -200,8 +187,7 @@ test.describe('Merged always-on home page', () => {
         expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('CrispHome public surface is exposed for tests + late init', async ({ page }) => {
+    test('CrispHome public surface is exposed for tests + late init', async ({ page }) => {
         await page.goto('');
         await page.waitForSelector('#stage-home.active', { timeout: 5000 });
         const surface = await page.evaluate(() => {
@@ -225,8 +211,7 @@ test.describe('Merged always-on home page', () => {
 });
 
 test.describe('Stage CSS viewport refactor', () => {
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('#stage-home has min-height 100dvh', async ({ page }) => {
+    test('#stage-home has min-height 100dvh', async ({ page }) => {
         await page.goto('');
         await page.waitForSelector('#stage-home', { state: 'attached', timeout: 5000 });
         const cssMinHeight = await page.evaluate(() => {

@@ -72,8 +72,7 @@ test.describe('Stage-2 classify auto-progress', () => {
     await expect(page.locator('#v4-view-damage')).toBeVisible();
   }
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('Continue button is hidden on the classify stage', async ({ page }) => {
+  test('Continue button is hidden on the classify stage', async ({ page }) => {
     await openClassifyStage(page);
     // The button stays in the DOM for back-compat; only its footer is
     // hidden via CSS. We assert the footer is collapsed.
@@ -86,8 +85,7 @@ test.describe('Stage-2 classify auto-progress', () => {
     expect(footerVisible).toBe(false);
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('damage tile tap auto-advances to infra sub-view', async ({ page }) => {
+  test('damage tile tap auto-advances to infra sub-view', async ({ page }) => {
     await openClassifyStage(page);
     // Tap COMPLETE
     await page.locator('#v4-view-damage .v4-q-opt[data-value="COMPLETE"]').click();
@@ -99,8 +97,7 @@ test.describe('Stage-2 classify auto-progress', () => {
     expect(dc).toBe('COMPLETE');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('non-OTHER infra tile tap auto-advances to crisis sub-view', async ({ page }) => {
+  test('non-OTHER infra tile tap auto-advances to crisis sub-view', async ({ page }) => {
     await openClassifyStage(page);
     await page.locator('#v4-view-damage .v4-q-opt[data-value="PARTIAL"]').click();
     await expect(page.locator('#v4-view-infra')).toBeVisible({ timeout: 800 });
@@ -110,8 +107,7 @@ test.describe('Stage-2 classify auto-progress', () => {
     expect(it).toBe('RESIDENTIAL');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('OTHER infra tile reveals input + waits for Enter to advance', async ({ page }) => {
+  test('OTHER infra tile reveals input + waits for Enter to advance', async ({ page }) => {
     await openClassifyStage(page);
     await page.locator('#v4-view-damage .v4-q-opt[data-value="MINIMAL"]').click();
     await expect(page.locator('#v4-view-infra')).toBeVisible({ timeout: 800 });
@@ -130,8 +126,7 @@ test.describe('Stage-2 classify auto-progress', () => {
     expect(name).toBe('cell tower');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('crisis tile tap auto-advances to review stage', async ({ page }) => {
+  test('crisis tile tap auto-advances to review stage', async ({ page }) => {
     await openClassifyStage(page);
     await page.locator('#v4-view-damage .v4-q-opt[data-value="COMPLETE"]').click();
     await expect(page.locator('#v4-view-infra')).toBeVisible({ timeout: 800 });
@@ -145,8 +140,7 @@ test.describe('Stage-2 classify auto-progress', () => {
     expect(ct).toBe('EARTHQUAKE');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('back navigation preserves prior selection', async ({ page }) => {
+  test('back navigation preserves prior selection', async ({ page }) => {
     await openClassifyStage(page);
     await page.locator('#v4-view-damage .v4-q-opt[data-value="PARTIAL"]').click();
     await expect(page.locator('#v4-view-infra')).toBeVisible({ timeout: 800 });
@@ -162,8 +156,7 @@ test.describe('Stage-2 classify auto-progress', () => {
     expect(newDc).toBe('MINIMAL');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('rapid double-tap fires only ONE navigation', async ({ page }) => {
+  test('rapid double-tap fires only ONE navigation', async ({ page }) => {
     await openClassifyStage(page);
     // Tap PARTIAL twice in quick succession (50ms apart)
     const partial = page.locator('#v4-view-damage .v4-q-opt[data-value="PARTIAL"]');
@@ -182,8 +175,7 @@ test.describe('Stage-2 classify auto-progress', () => {
     await expect(page.locator('#v4-view-crisis')).toBeHidden();
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('reduced-motion users advance faster, no pulse animation', async ({ page, context }) => {
+  test('reduced-motion users advance faster, no pulse animation', async ({ page, context }) => {
     await context.addInitScript(() => {
       Object.defineProperty(window, 'matchMedia', {
         value: (q) => ({
@@ -205,8 +197,7 @@ test.describe('Stage-2 classify auto-progress', () => {
     expect(elapsed).toBeLessThan(400);
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('state persists across stage reload (offline-first)', async ({ page }) => {
+  test('state persists across stage reload (offline-first)', async ({ page }) => {
     await openClassifyStage(page);
     await page.locator('#v4-view-damage .v4-q-opt[data-value="COMPLETE"]').click();
     await expect(page.locator('#v4-view-infra')).toBeVisible({ timeout: 800 });

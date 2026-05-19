@@ -37,13 +37,11 @@ async function openLangAndAssertDir(page, langCode, expectedDir) {
 }
 
 test.describe('PWA text direction', () => {
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('Arabic flips html dir=rtl', async ({ page }) => {
+  test('Arabic flips html dir=rtl', async ({ page }) => {
     await openLangAndAssertDir(page, 'ar', 'rtl');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('Urdu flips html dir=rtl', async ({ page }) => {
+  test('Urdu flips html dir=rtl', async ({ page }) => {
     await openLangAndAssertDir(page, 'ur', 'rtl');
   });
 
@@ -52,18 +50,15 @@ test.describe('PWA text direction', () => {
   // to English (LTR). The test below documents that behavior so a
   // future re-introduction of Hebrew is a deliberate update, not a
   // silent regression.
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('Hebrew is unsupported in Phase 25 — falls back to ltr', async ({ page }) => {
+  test('Hebrew is unsupported in Phase 25 — falls back to ltr', async ({ page }) => {
     await openLangAndAssertDir(page, 'he', 'ltr');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('English stays dir=ltr', async ({ page }) => {
+  test('English stays dir=ltr', async ({ page }) => {
     await openLangAndAssertDir(page, 'en', 'ltr');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('French stays dir=ltr', async ({ page }) => {
+  test('French stays dir=ltr', async ({ page }) => {
     await openLangAndAssertDir(page, 'fr', 'ltr');
   });
 });

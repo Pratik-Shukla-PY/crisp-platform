@@ -63,8 +63,7 @@ test.describe('PWA — queued-report click + Add Another reset', () => {
         });
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('clicking a queued report opens stage-report-detail (Bug 1)', async ({ page }) => {
+    test('clicking a queued report opens stage-report-detail (Bug 1)', async ({ page }) => {
         // Enqueue a minimal queued item with the shape submitReport
         // would have built. Skip the actual submit — we're testing the
         // My Reports interaction, not the upload pipeline.
@@ -135,8 +134,7 @@ test.describe('PWA — queued-report click + Add Another reset', () => {
         expect(detailVisible, 'stage-report-detail must be active + non-empty').toBe(true);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('keyboard Enter on a queued report card opens detail (a11y)', async ({ page }) => {
+    test('keyboard Enter on a queued report card opens detail (a11y)', async ({ page }) => {
         const clientId = `queued-kbd-test-${Date.now()}`;
         await page.evaluate(async (id) => {
             await (window as any).__crispEnqueueReport({
@@ -169,8 +167,7 @@ test.describe('PWA — queued-report click + Add Another reset', () => {
         await expect(page.locator('#stage-report-detail.active')).toBeVisible({ timeout: 4000 });
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Add Another Report clears v4 Send button state (Bug 2)', async ({ page }) => {
+    test('Add Another Report clears v4 Send button state (Bug 2)', async ({ page }) => {
         // Simulate the post-submit state the user complained about:
         //   1. User submitted via v4 Send → button became disabled +
         //      .is-sending + innerHTML replaced with a spinner.
@@ -245,8 +242,7 @@ test.describe('PWA — queued-report click + Add Another reset', () => {
         }
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Add Another Report clears v4Photos + state.extraPhotos (state-side)', async ({ page }) => {
+    test('Add Another Report clears v4Photos + state.extraPhotos (state-side)', async ({ page }) => {
         // Parallel-state-side check: even if the DOM somehow falls
         // out of sync, the state-side reset must zero v4Photos +
         // extraPhotos so the next capture session sees empty arrays.

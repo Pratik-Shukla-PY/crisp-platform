@@ -112,8 +112,7 @@ test.describe('PWA — My Reports dropdown + accordion + lazy-load', () => {
 
     // ── Fix 1 — filter dropdown ────────────────────────────────────────
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke filter chips replaced with native <select>; default value is "all"', async ({ page }) => {
+    test('@smoke filter chips replaced with native <select>; default value is "all"', async ({ page }) => {
         await seedAndOpenMyReports(page, makeReports({ today: 2, yesterday: 0, thisWeek: 0, older: 0 }));
         // The chip-row markup must be gone.
         await expect(page.locator('.mr-filter-chip')).toHaveCount(0);
@@ -124,8 +123,7 @@ test.describe('PWA — My Reports dropdown + accordion + lazy-load', () => {
         expect(value).toBe('all');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('changing the dropdown re-filters and resets pagination', async ({ page }) => {
+    test('changing the dropdown re-filters and resets pagination', async ({ page }) => {
         // Mix of statuses so the filter has something to do.
         const reports = makeReports({ today: 2, yesterday: 0, thisWeek: 0, older: 0 });
         reports[0].reviewer_verdict = 'ACCEPTED';
@@ -139,8 +137,7 @@ test.describe('PWA — My Reports dropdown + accordion + lazy-load', () => {
 
     // ── Fix 2 — empty IN FLIGHT section is hidden ──────────────────────
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke empty IN FLIGHT section is fully hidden (no header, no placeholder)', async ({ page }) => {
+    test('@smoke empty IN FLIGHT section is fully hidden (no header, no placeholder)', async ({ page }) => {
         await seedAndOpenMyReports(page, makeReports({ today: 2, yesterday: 0, thisWeek: 0, older: 0 }));
         const sec = page.locator('#history-inflight-section');
         // The renderer sets style.display='none' on empty.
@@ -150,8 +147,7 @@ test.describe('PWA — My Reports dropdown + accordion + lazy-load', () => {
 
     // ── Fix 3+4 — date accordions + lazy-load ──────────────────────────
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke date-grouped <details> accordions render with only "Today" open', async ({ page }) => {
+    test('@smoke date-grouped <details> accordions render with only "Today" open', async ({ page }) => {
         await seedAndOpenMyReports(page, makeReports({ today: 3, yesterday: 4, thisWeek: 6, older: 8 }));
         const groups = page.locator('details.mr-date-group');
         // 4 non-empty buckets → 4 accordions.
@@ -166,8 +162,7 @@ test.describe('PWA — My Reports dropdown + accordion + lazy-load', () => {
         }
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('"Today" with >5 reports shows first 5 cards + a "Load more" button', async ({ page }) => {
+    test('"Today" with >5 reports shows first 5 cards + a "Load more" button', async ({ page }) => {
         await seedAndOpenMyReports(page, makeReports({ today: 14, yesterday: 0, thisWeek: 0, older: 0 }));
         // Inside the today bucket, count rendered cards.
         const today = page.locator('details.mr-date-group[data-mr-bucket="today"]');
@@ -181,8 +176,7 @@ test.describe('PWA — My Reports dropdown + accordion + lazy-load', () => {
         expect(text, `load-more should show 9 remaining; got "${text}"`).toMatch(/\b9\b/);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('"Load more" appends the next 5 cards in the same group', async ({ page }) => {
+    test('"Load more" appends the next 5 cards in the same group', async ({ page }) => {
         await seedAndOpenMyReports(page, makeReports({ today: 14, yesterday: 0, thisWeek: 0, older: 0 }));
         const today = page.locator('details.mr-date-group[data-mr-bucket="today"]');
         await today.locator('.mr-load-more').click();

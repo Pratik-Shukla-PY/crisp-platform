@@ -48,8 +48,7 @@ async function openPwa(page) {
 test.describe('PWA detail view — thumbnail hot-swap', () => {
     test.beforeEach(async ({ page }) => { await openPwa(page); });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('cache-hit path: openReportDetail renders stashed thumbnail_url', async ({ page }) => {
+    test('cache-hit path: openReportDetail renders stashed thumbnail_url', async ({ page }) => {
         // Seed _submittedCache with a synthesised row whose thumbnail_url
         // points at a known path. Note the synthesiser writes a prefix
         // without leading host; the renderer prepends _backendHost.
@@ -120,8 +119,7 @@ test.describe('PWA detail view — thumbnail hot-swap', () => {
         ).toContain(SMALL_URL);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('cache-miss → status-since refresh populates cache and renders', async ({ page }) => {
+    test('cache-miss → status-since refresh populates cache and renders', async ({ page }) => {
         const MISS_ID = 'id-not-in-cache-yet';
         const PAYLOAD_URL = '/static/refreshed-thumb.jpg';
         // The synthesised cache is empty for MISS_ID, so openReportDetail's
@@ -166,8 +164,7 @@ test.describe('PWA detail view — thumbnail hot-swap', () => {
         expect(refreshHits).toBe(1);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('hot-swap: second open after thumbnail_url changes picks up new URL', async ({ page }) => {
+    test('hot-swap: second open after thumbnail_url changes picks up new URL', async ({ page }) => {
         const REPORT_ID = 'hotswap-report-id';
         const CLIENT_ID = 'hotswap-client-id';
         const SMALL_URL = '/static/variant-small.jpg';

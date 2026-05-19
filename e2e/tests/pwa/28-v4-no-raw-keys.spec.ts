@@ -59,8 +59,7 @@ async function _activeStages(page: Page): Promise<string[]> {
 }
 
 test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('home page has zero raw key leaks', async ({ page }) => {
+    test('home page has zero raw key leaks', async ({ page }) => {
         await _gotoV4(page);
         await page.waitForSelector('#stage-home.active', { timeout: 8000 });
         await page.waitForTimeout(600);  // let async i18n loaders settle
@@ -80,8 +79,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
         expect(leaks, `home page raw key leaks: ${leaks.join(', ')}`).toEqual([]);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('all 3 v4 stages have zero raw key leaks', async ({ page }) => {
+    test('all 3 v4 stages have zero raw key leaks', async ({ page }) => {
         await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
         await page.waitForTimeout(600);
@@ -104,8 +102,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
         }
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('only one .stage.active exists at any moment during navigation', async ({ page }) => {
+    test('only one .stage.active exists at any moment during navigation', async ({ page }) => {
         await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
         await page.waitForTimeout(400);
@@ -126,8 +123,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
         }
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Page 1 camera hero is bounded ≤ 240px tall', async ({ page }) => {
+    test('Page 1 camera hero is bounded ≤ 240px tall', async ({ page }) => {
         await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-capture'));
@@ -136,8 +132,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
         expect(heroHeight, `camera hero height ${heroHeight}px should be ≤ 240px`).toBeLessThanOrEqual(240);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Page 2 chip grids show ≥ 6 tiles visible at once', async ({ page }) => {
+    test('Page 2 chip grids show ≥ 6 tiles visible at once', async ({ page }) => {
         await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
@@ -166,8 +161,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
         expect(counts[1], `crisis grid should show 9 tiles, got ${counts[1]}`).toBeGreaterThanOrEqual(6);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Page 3 pressing-needs renders all 10 chips full-width', async ({ page }) => {
+    test('Page 3 pressing-needs renders all 10 chips full-width', async ({ page }) => {
         await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-review'));
@@ -190,8 +184,7 @@ test.describe('UI v4 — no raw key leaks (first-visit boot path)', () => {
         expect(layout!.cols).not.toContain('90px');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('viewport-fit on iPhone SE (320×568) for all 3 v4 stages', async ({ page }) => {
+    test('viewport-fit on iPhone SE (320×568) for all 3 v4 stages', async ({ page }) => {
         await page.setViewportSize({ width: 320, height: 568 });
         await _gotoV4(page);
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 8000 });

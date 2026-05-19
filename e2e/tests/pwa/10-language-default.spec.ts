@@ -31,8 +31,7 @@ async function openClean(page) {
 }
 
 test.describe('PWA language defaults (Apr 2026)', () => {
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('@smoke default active language auto-activates the detected local', async ({ page }) => {
+  test('@smoke default active language auto-activates the detected local', async ({ page }) => {
     await openClean(page);
     // Visible pill exists.
     await expect(page.locator('#btn-lang-current')).toBeVisible();
@@ -48,8 +47,7 @@ test.describe('PWA language defaults (Apr 2026)', () => {
     expect(['kn', 'en']).toContain(lang);
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('@smoke tapping the pill opens the picker overlay', async ({ page }) => {
+  test('@smoke tapping the pill opens the picker overlay', async ({ page }) => {
     await openClean(page);
     await expect(page.locator('#lang-picker-overlay')).toBeHidden();
     await page.locator('#btn-lang-current').click();
@@ -61,8 +59,7 @@ test.describe('PWA language defaults (Apr 2026)', () => {
     }
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('picking a language activates it AND persists the choice', async ({ page }) => {
+  test('picking a language activates it AND persists the choice', async ({ page }) => {
     await openClean(page);
     await page.locator('#btn-lang-current').click();
     await page.locator('#lang-picker-overlay .lang-picker-flag[data-lang="kn"]').click();
@@ -78,8 +75,7 @@ test.describe('PWA language defaults (Apr 2026)', () => {
     expect(manual).toBe('kn');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('manual choice persists across reloads (no English reset)', async ({ page }) => {
+  test('manual choice persists across reloads (no English reset)', async ({ page }) => {
     await openClean(page);
     // Seed the manual choice directly and reload.
     await page.evaluate(() => localStorage.setItem('crisp_lang_manual', 'hi'));

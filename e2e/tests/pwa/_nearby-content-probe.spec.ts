@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
-// Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-test.skip('empty state renders eyebrow + plain empty message (no ✓ "All clear")', async ({ page }) => {
+test('empty state renders eyebrow + plain empty message (no ✓ "All clear")', async ({ page }) => {
     // Force EN locale so the i18n assertions are deterministic.
     await page.addInitScript(() => {
         localStorage.setItem('crisp_last_location_v2', JSON.stringify({

@@ -28,8 +28,7 @@ async function bootV4(page: Page) {
 
 test.describe('@theme-visual PWA — color theme rewrite (May 2026)', () => {
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('home page', async ({ page }) => {
+    test('home page', async ({ page }) => {
         await bootV4(page);
         // Dismiss any first-visit coachmark / "Save this ID" tooltip so
         // the full primary CTA is visible in the screenshot.
@@ -48,8 +47,7 @@ test.describe('@theme-visual PWA — color theme rewrite (May 2026)', () => {
         await expect(page.locator('#stage-home.active')).toBeVisible({ timeout: 5000 });
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('language picker', async ({ page }) => {
+    test('language picker', async ({ page }) => {
         await bootV4(page);
         await page.locator('#btn-lang-current').click();
         await expect(page.locator('#lang-picker-overlay')).toBeVisible();
@@ -60,8 +58,7 @@ test.describe('@theme-visual PWA — color theme rewrite (May 2026)', () => {
         });
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('classify crisis step (flat grid)', async ({ page }) => {
+    test('classify crisis step (flat grid)', async ({ page }) => {
         await bootV4(page);
         await page.evaluate(() => {
             const s = (window as any).state;
@@ -79,8 +76,7 @@ test.describe('@theme-visual PWA — color theme rewrite (May 2026)', () => {
         await expect(page.locator('.v4-cause-tile')).toHaveCount(9);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('My Reports (empty)', async ({ page }) => {
+    test('My Reports (empty)', async ({ page }) => {
         await bootV4(page);
         // Patch fetch so the status-since call returns 0 reports.
         await page.evaluate(() => {

@@ -32,8 +32,7 @@ async function openPwa(page) {
 
 test.describe('Phase 1 — Optional reporter login (anonymous-first)', () => {
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke AuthStore exists and init is idempotent', async ({ page }) => {
+    test('@smoke AuthStore exists and init is idempotent', async ({ page }) => {
         await openPwa(page);
         const present = await page.evaluate(async () => {
             const a = (window as any).AuthStore;
@@ -52,8 +51,7 @@ test.describe('Phase 1 — Optional reporter login (anonymous-first)', () => {
         expect(present.getUserNull).toBe(true);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Start Reporting works without any login (anonymous path)', async ({ page }) => {
+    test('Start Reporting works without any login (anonymous path)', async ({ page }) => {
         await openPwa(page);
         await page.locator('#btn-start').click();
         // v3 users land on stage-where; v2 would land on stage-photo.
@@ -64,8 +62,7 @@ test.describe('Phase 1 — Optional reporter login (anonymous-first)', () => {
         expect(['stage-where', 'stage-photo']).toContain(active);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Login button navigates to stage-login with 3-step wizard', async ({ page }) => {
+    test('Login button navigates to stage-login with 3-step wizard', async ({ page }) => {
         await openPwa(page);
         const btnLogin = page.locator('#btn-login');
         await expect(btnLogin).toBeVisible();
@@ -82,16 +79,14 @@ test.describe('Phase 1 — Optional reporter login (anonymous-first)', () => {
         expect(step3Display).toBe('none');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Skip link on stage-login returns to stage-home', async ({ page }) => {
+    test('Skip link on stage-login returns to stage-home', async ({ page }) => {
         await openPwa(page);
         await page.locator('#btn-login').click();
         await page.locator('#btn-login-skip').click();
         await expect(page.locator('#stage-home')).toHaveClass(/active/);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Channel picker toggles between phone and email inputs', async ({ page }) => {
+    test('Channel picker toggles between phone and email inputs', async ({ page }) => {
         await openPwa(page);
         await page.locator('#btn-login').click();
         // Phone is default (spec answer 4).
@@ -104,8 +99,7 @@ test.describe('Phase 1 — Optional reporter login (anonymous-first)', () => {
         expect(phoneRowDisplay).toBe('none');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Country-code dropdown is populated with a device-default pre-selected', async ({ page }) => {
+    test('Country-code dropdown is populated with a device-default pre-selected', async ({ page }) => {
         await openPwa(page);
         await page.locator('#btn-login').click();
         const optionCount = await page.locator('#login-cc-select option').count();
@@ -114,8 +108,7 @@ test.describe('Phase 1 — Optional reporter login (anonymous-first)', () => {
         expect(selected).toMatch(/^\+\d/);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Settings stage exists and is reachable programmatically', async ({ page }) => {
+    test('Settings stage exists and is reachable programmatically', async ({ page }) => {
         await openPwa(page);
         await page.evaluate(() => (window as any).__crispGoToStage('stage-settings'));
         await expect(page.locator('#stage-settings')).toHaveClass(/active/);
@@ -123,8 +116,7 @@ test.describe('Phase 1 — Optional reporter login (anonymous-first)', () => {
         await expect(page.locator('#btn-settings-unlink-device')).toBeVisible();
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Logout clears AuthStore local state even without network', async ({ page }) => {
+    test('Logout clears AuthStore local state even without network', async ({ page }) => {
         await openPwa(page);
         const cleared = await page.evaluate(async () => {
             const a = (window as any).AuthStore;

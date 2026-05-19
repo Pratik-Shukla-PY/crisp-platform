@@ -47,8 +47,7 @@ test.describe('PWA — language pill v6.1 redesign', () => {
 
     // ── Structural sanity — DOM ordering preserved ─────────────────────
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke pill renders with dot + flag + code in the expected order', async ({ page }) => {
+    test('@smoke pill renders with dot + flag + code in the expected order', async ({ page }) => {
         const pill = page.locator('#lang-switcher');
         await expect(pill).toBeVisible();
         // Dot before button — the pill reads left-to-right "dot · flag · code".
@@ -59,8 +58,7 @@ test.describe('PWA — language pill v6.1 redesign', () => {
         await expect(btn.locator('.lps-code')).toContainText('EN');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('pill is a full capsule (999px radius) with v6.1 roomier padding', async ({ page }) => {
+    test('pill is a full capsule (999px radius) with v6.1 roomier padding', async ({ page }) => {
         const tokens = await page.locator('#lang-switcher').evaluate((el) => {
             const cs = getComputedStyle(el);
             return {
@@ -77,8 +75,7 @@ test.describe('PWA — language pill v6.1 redesign', () => {
         expect(tokens.paddingLeft).toBe('14px');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('pill stays compact (max-width 140px) and single-line', async ({ page }) => {
+    test('pill stays compact (max-width 140px) and single-line', async ({ page }) => {
         const geom = await page.locator('#lang-switcher').evaluate((el) => {
             const cs = getComputedStyle(el);
             const rect = el.getBoundingClientRect();
@@ -99,8 +96,7 @@ test.describe('PWA — language pill v6.1 redesign', () => {
 
     // ── Flag + code typography ─────────────────────────────────────────
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('flag is 1rem and code is 0.78rem / 700 weight / white', async ({ page }) => {
+    test('flag is 1rem and code is 0.78rem / 700 weight / white', async ({ page }) => {
         const flag = await page.locator('#btn-lang-current .lps-flag').evaluate((el) => {
             const cs = getComputedStyle(el);
             return { fontSize: cs.fontSize, marginRight: cs.marginRight };

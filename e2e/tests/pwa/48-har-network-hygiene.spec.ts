@@ -50,8 +50,7 @@ test.describe('PWA — network-hygiene (HAR-driven, May 2026)', () => {
         });
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke single-flight helper is exposed on window', async ({ page }) => {
+    test('@smoke single-flight helper is exposed on window', async ({ page }) => {
         const exposed = await page.evaluate(() => ({
             singleFlightFetch: typeof (window as any).__crispSingleFlightFetch === 'function',
             clearFetchCache:   typeof (window as any).__crispClearFetchCache === 'function',
@@ -60,8 +59,7 @@ test.describe('PWA — network-hygiene (HAR-driven, May 2026)', () => {
         expect(exposed.clearFetchCache).toBe(true);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('single-flight: 5 concurrent GETs for the same URL fire ONE network call', async ({ page }) => {
+    test('single-flight: 5 concurrent GETs for the same URL fire ONE network call', async ({ page }) => {
         // Instrument: intercept the target URL + count how many times
         // the route handler is invoked. The helper should coalesce all
         // 5 callers onto one Promise.
@@ -95,8 +93,7 @@ test.describe('PWA — network-hygiene (HAR-driven, May 2026)', () => {
         }
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('single-flight: cached response served within TTL without re-hitting network', async ({ page }) => {
+    test('single-flight: cached response served within TTL without re-hitting network', async ({ page }) => {
         let networkHits = 0;
         await page.route('**/__sf_cache_endpoint', (route) => {
             networkHits++;
@@ -120,8 +117,7 @@ test.describe('PWA — network-hygiene (HAR-driven, May 2026)', () => {
         expect(sequence[1], 'second read serves the cached body').toBe(1);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('single-flight: POST always passes through (no dedupe)', async ({ page }) => {
+    test('single-flight: POST always passes through (no dedupe)', async ({ page }) => {
         let networkHits = 0;
         await page.route('**/__sf_post_endpoint', (route) => {
             networkHits++;
@@ -143,8 +139,7 @@ test.describe('PWA — network-hygiene (HAR-driven, May 2026)', () => {
         expect(networkHits, 'POSTs must NOT be deduped (idempotency unsafe)').toBe(3);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('HAR Fix 1: delete-queue replay sends Authorization header when token captured', async ({ page }) => {
+    test('HAR Fix 1: delete-queue replay sends Authorization header when token captured', async ({ page }) => {
         // Inject a known token into AuthStore + enqueue a delete via
         // _enqueueDelete, then trigger _syncDeleteQueue and verify the
         // outgoing fetch carries Bearer.
@@ -189,8 +184,7 @@ test.describe('PWA — network-hygiene (HAR-driven, May 2026)', () => {
         expect(queueAfter, 'queue must drain on 200').toEqual([]);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('HAR Fix 1: 401 response does NOT drain the queue (retry safety)', async ({ page }) => {
+    test('HAR Fix 1: 401 response does NOT drain the queue (retry safety)', async ({ page }) => {
         // If the token is bad / missing, we MUST keep the entry queued
         // so a re-login can re-attempt later — the original prod bug
         // was that this case was silent + the queue accumulated forever.

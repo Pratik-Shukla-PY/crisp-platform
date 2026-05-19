@@ -18,8 +18,7 @@
  */
 import { test } from '@playwright/test';
 
-// Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-test.skip('throttled layout-shift probe — Lighthouse-mobile preset', async ({ page, context }) => {
+test('throttled layout-shift probe — Lighthouse-mobile preset', async ({ page, context }) => {
     // Pre-seed localStorage BEFORE goto so the first-paint cycle
     // matches what a Lighthouse audit sees (fresh visitor, but
     // privacy consent already accepted via the inline pre-paint

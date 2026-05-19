@@ -66,8 +66,7 @@ async function bootPwa(page, serverShape = []) {
 }
 
 test.describe('PWA — deferred-Originals queue retention', () => {
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('reconciler KEEPS item when SMALL landed but deferred variant remains', async ({ page }) => {
+    test('reconciler KEEPS item when SMALL landed but deferred variant remains', async ({ page }) => {
         const cid = 'cid-deferred-1';
         // PROD scenario: client queued 3 variants (S+M+L = expected_media:3)
         // but only SMALL landed on the backend (LARGE was deferred locally
@@ -106,8 +105,7 @@ test.describe('PWA — deferred-Originals queue retention', () => {
         await page.evaluate((c) => (window as any).__crispDequeueReport(c), cid);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('reconciler DEQUEUES item when all variants are complete', async ({ page }) => {
+    test('reconciler DEQUEUES item when all variants are complete', async ({ page }) => {
         const cid = 'cid-all-complete-1';
         await bootPwa(page, [{
             client_report_id: cid,
@@ -140,8 +138,7 @@ test.describe('PWA — deferred-Originals queue retention', () => {
         expect(ours, 'item should be dequeued — all variants complete').toBeUndefined();
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('reconciler DEQUEUES item when 14-day deferral timeout expires', async ({ page }) => {
+    test('reconciler DEQUEUES item when 14-day deferral timeout expires', async ({ page }) => {
         const cid = 'cid-timeout-expired-1';
         await bootPwa(page, [{
             client_report_id: cid,
@@ -177,8 +174,7 @@ test.describe('PWA — deferred-Originals queue retention', () => {
         ).toBeUndefined();
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('sync-badge filters out _submissionLanded items (no "1 queued" forever)', async ({ page }) => {
+    test('sync-badge filters out _submissionLanded items (no "1 queued" forever)', async ({ page }) => {
         const cid = 'cid-syncbadge-1';
         await bootPwa(page, [{
             client_report_id: cid,

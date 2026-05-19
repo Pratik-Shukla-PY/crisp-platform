@@ -37,8 +37,7 @@ async function bootInLocale(page, langCode: string) {
 }
 
 test.describe('Phase 25 — RTL critical patches', () => {
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Arabic flips .v4-header padding from right to left', async ({ page }) => {
+    test('Arabic flips .v4-header padding from right to left', async ({ page }) => {
         await bootInLocale(page, 'ar');
         // Navigate into the capture flow so .v4-header is present.
         // Click "Report an Incident" — the big CTA.
@@ -71,12 +70,11 @@ test.describe('Phase 25 — RTL critical patches', () => {
             // (e.g. consent banner blocked navigation). Skip rather
             // than fail — the css rule is the same regardless of
             // whether the test boots all the way into v4-header.
-            test.skip(true, 'v4-header not in DOM; capture flow not entered');
+            test(true, 'v4-header not in DOM; capture flow not entered');
         }
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('English keeps .v4-header padding on the right side', async ({ page }) => {
+    test('English keeps .v4-header padding on the right side', async ({ page }) => {
         await bootInLocale(page, 'en');
         const cta = page.locator('#btn-start, [data-i18n="big_cta"]').first();
         await cta.click().catch(() => {});
@@ -97,12 +95,11 @@ test.describe('Phase 25 — RTL critical patches', () => {
             expect(rightPx).toBeGreaterThanOrEqual(150);
             expect(leftPx).toBeLessThan(20);
         } else {
-            test.skip(true, 'v4-header not in DOM; capture flow not entered');
+            test(true, 'v4-header not in DOM; capture flow not entered');
         }
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Phase 25 — language pill shows flag emoji + ISO code', async ({ page }) => {
+    test('Phase 25 — language pill shows flag emoji + ISO code', async ({ page }) => {
         await bootInLocale(page, 'hi');
         // Wait for the pill text to refresh to the active code.
         await page.waitForFunction(() => {

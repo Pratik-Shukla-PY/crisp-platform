@@ -88,8 +88,7 @@ async function instrumentEvents(page) {
     });
 }
 
-// Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-test.skip('SCENARIO 1: GPS denied + NO backend — module should show empty state, not silent-hide', async ({ page, context }) => {
+test('SCENARIO 1: GPS denied + NO backend — module should show empty state, not silent-hide', async ({ page, context }) => {
     // Deny geolocation permission at the browser level.
     await context.grantPermissions([]);  // no permissions = denial when asked
     await page.addInitScript(() => {
@@ -127,8 +126,7 @@ test.skip('SCENARIO 1: GPS denied + NO backend — module should show empty stat
     expect(state.nearbyHidden, 'module should be visible (empty state) even when fetch fails — operator preference').toBe(false);
 });
 
-// Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-test.skip('SCENARIO 2: GPS granted with seeded coords (Bangalore test point)', async ({ page, context }) => {
+test('SCENARIO 2: GPS granted with seeded coords (Bangalore test point)', async ({ page, context }) => {
     await context.grantPermissions(['geolocation']);
     await context.setGeolocation({ latitude: 12.846, longitude: 77.660 });
     await stubNearby(page, [SAMPLE_GROUP]);
@@ -153,8 +151,7 @@ test.skip('SCENARIO 2: GPS granted with seeded coords (Bangalore test point)', a
     expect(state.nearbyHidden, 'nearby module should be visible when GPS resolves').toBe(false);
 });
 
-// Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-test.skip('SCENARIO 3: returning visitor with pre-cached coords', async ({ page }) => {
+test('SCENARIO 3: returning visitor with pre-cached coords', async ({ page }) => {
     await page.addInitScript(() => {
         localStorage.setItem('crisp_last_location_v2', JSON.stringify({
             lat: 12.846, lng: 77.660, ts: Date.now(),

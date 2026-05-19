@@ -40,8 +40,7 @@ async function openPwa(page) {
 test.describe('PWA adaptive-tier (UNDP §5 follow-up)', () => {
   test.beforeEach(async ({ page }) => { await openPwa(page); });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('helpers are exposed on window', async ({ page }) => {
+  test('helpers are exposed on window', async ({ page }) => {
     const g = await page.evaluate(() => ({
       measureUploadBandwidth:  typeof (window as any).measureUploadBandwidth  === 'function',
       pickTierFromBandwidth:   typeof (window as any).pickTierFromBandwidth   === 'function',
@@ -58,8 +57,7 @@ test.describe('PWA adaptive-tier (UNDP §5 follow-up)', () => {
     expect(g.getCurrentPWATier).toBeTruthy();
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('pickTierFromBandwidth covers every boundary correctly', async ({ page }) => {
+  test('pickTierFromBandwidth covers every boundary correctly', async ({ page }) => {
     const results = await page.evaluate(() => {
       const pick = (window as any).pickTierFromBandwidth;
       return {
@@ -87,8 +85,7 @@ test.describe('PWA adaptive-tier (UNDP §5 follow-up)', () => {
     expect(results.edge_fast).toBe('FAST');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('detectPWANetworkTier with downlink=0 falls to SLOW (not MEDIUM)', async ({ page }) => {
+  test('detectPWANetworkTier with downlink=0 falls to SLOW (not MEDIUM)', async ({ page }) => {
     // Monkey-patch navigator.connection before the detector runs. This
     // reproduces the exact state observed in the 2 Kbps field test:
     // effectiveType: "4g", downlink: 0.
@@ -107,8 +104,7 @@ test.describe('PWA adaptive-tier (UNDP §5 follow-up)', () => {
     expect(tier).toBe('SLOW');
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('computeChunkTimeout scales with measured bandwidth', async ({ page }) => {
+  test('computeChunkTimeout scales with measured bandwidth', async ({ page }) => {
     const result = await page.evaluate(() => {
       const compute = (window as any).computeChunkTimeout;
       return {
@@ -129,8 +125,7 @@ test.describe('PWA adaptive-tier (UNDP §5 follow-up)', () => {
     expect(result.no_probe_512kb).toBeGreaterThanOrEqual(30_000);
   });
 
-  // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-  test.skip('adaptTierViaProbe picks VERY_SLOW when probe round-trip is slow', async ({ page, baseURL }) => {
+  test('adaptTierViaProbe picks VERY_SLOW when probe round-trip is slow', async ({ page, baseURL }) => {
     // Intercept the probe endpoint and delay the response so the
     // client's measured bytes/sec lands in the VERY_SLOW bucket.
     // 8192 bytes / 800 ms = 10 240 B/s ← just over the SLOW threshold.

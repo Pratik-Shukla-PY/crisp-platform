@@ -47,8 +47,7 @@ test.describe('PWA — Add Another building clear + UNDP-details queue', () => {
 
     // ── Bug 1 ─────────────────────────────────────────────────────────────
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke Add Another clears building-footprint selection (state + DOM)', async ({ page }) => {
+    test('@smoke Add Another clears building-footprint selection (state + DOM)', async ({ page }) => {
         // Seed a building selection as if the user had picked one on the
         // previous report. The actual selection flow involves Overpass +
         // map taps; this seeds the same end state.
@@ -107,8 +106,7 @@ test.describe('PWA — Add Another building clear + UNDP-details queue', () => {
         expect(after.pillVisible, '"Building selected" pill must be hidden').toBe(false);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Add Another preserves user-typed infraName (only OSM-sourced is cleared)', async ({ page }) => {
+    test('Add Another preserves user-typed infraName (only OSM-sourced is cleared)', async ({ page }) => {
         // If the user manually typed a building name (no OSM pick), the
         // clear must NOT wipe their text — building-select.js's
         // `_clearSelection` only clears infraName when the
@@ -134,8 +132,7 @@ test.describe('PWA — Add Another building clear + UNDP-details queue', () => {
 
     // ── Bug 2 ─────────────────────────────────────────────────────────────
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke UNDP-details queue: failed save persists to localStorage', async ({ page }) => {
+    test('@smoke UNDP-details queue: failed save persists to localStorage', async ({ page }) => {
         // Simulate a network failure on the PATCH endpoint.
         await page.route('**/api/v1/reports/*/classify', (route) => {
             return route.fulfill({
@@ -173,8 +170,7 @@ test.describe('PWA — Add Another building clear + UNDP-details queue', () => {
         expect(queued[0].queuedAt, 'must stamp queuedAt').toBeGreaterThan(0);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('UNDP-details queue: dedupes by reportId (latest save wins)', async ({ page }) => {
+    test('UNDP-details queue: dedupes by reportId (latest save wins)', async ({ page }) => {
         // The PATCH endpoint merges fields — a single drained entry per
         // report is sufficient. Two enqueues for the same report should
         // collapse to one row with the latest payload.
@@ -194,8 +190,7 @@ test.describe('PWA — Add Another building clear + UNDP-details queue', () => {
         expect(finalQueue[0].payload.service_status.electricity).toBe('MAJOR_LOSS');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('UNDP-details queue: drains on successful PATCH', async ({ page }) => {
+    test('UNDP-details queue: drains on successful PATCH', async ({ page }) => {
         // Mock the endpoint to return 200 OK so the queue drainer
         // succeeds. The drainer must remove the entry.
         await page.route('**/api/v1/reports/*/classify', (route) => {
@@ -223,8 +218,7 @@ test.describe('PWA — Add Another building clear + UNDP-details queue', () => {
         expect(queueAfter, 'queue must drain after a 200').toEqual([]);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('UNDP-details queue: 401 keeps entry queued (re-login retry)', async ({ page }) => {
+    test('UNDP-details queue: 401 keeps entry queued (re-login retry)', async ({ page }) => {
         // 401 = "your token expired" — keep the entry so the user can
         // re-login and the next drain succeeds.
         await page.route('**/api/v1/reports/*/classify', (route) => {
@@ -248,8 +242,7 @@ test.describe('PWA — Add Another building clear + UNDP-details queue', () => {
         expect(queueAfter.length, '401 must NOT drain — user may re-login').toBe(1);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('UNDP-details queue: 4xx other than 401 drops the entry (unredeemable)', async ({ page }) => {
+    test('UNDP-details queue: 4xx other than 401 drops the entry (unredeemable)', async ({ page }) => {
         // 422 = bad payload, won't succeed on retry. Drop the entry to
         // avoid an infinite loop.
         await page.route('**/api/v1/reports/*/classify', (route) => {

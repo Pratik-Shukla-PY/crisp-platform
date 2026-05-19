@@ -44,8 +44,7 @@ test.describe('PWA — Building re-fetch on location change (UNDP must-have #6)'
 
     test.beforeEach(async ({ page }) => { await bootPwa(page); });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke crisp-location-changed event triggers a building fetch for the new bbox', async ({ page }) => {
+    test('@smoke crisp-location-changed event triggers a building fetch for the new bbox', async ({ page }) => {
         // The internal listener calls the module-scoped `ensureMap`
         // (closure), not the `BuildingSelect.ensureMap` property — so a
         // property-spy would miss it. Verify behaviour via the Overpass
@@ -81,8 +80,7 @@ test.describe('PWA — Building re-fetch on location change (UNDP must-have #6)'
             'second fetch body must reference the new lat (Panaji)').toBe(true);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('ensureMap called >50m from last fetch re-fetches buildings (no early-return regression)', async ({ page }) => {
+    test('ensureMap called >50m from last fetch re-fetches buildings (no early-return regression)', async ({ page }) => {
         // Mock the Overpass POST so we can count how many times the map
         // hits it. Two separate locations → two separate fetches.
         const overpassHits: Array<{ body: string }> = [];
@@ -133,8 +131,7 @@ test.describe('PWA — Building re-fetch on location change (UNDP must-have #6)'
         expect(overpassHits.some(h => h.body.includes('15.4909')), 'second fetch must use Panaji coords').toBe(true);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('ensureMap within ~50m jitter does NOT re-fetch (cache-friendly)', async ({ page }) => {
+    test('ensureMap within ~50m jitter does NOT re-fetch (cache-friendly)', async ({ page }) => {
         // Same setup, but the second call is only ~10 m away — well below
         // the _REFETCH_THRESHOLD_DEG (0.0005°). The fetch counter must
         // stay at 1.

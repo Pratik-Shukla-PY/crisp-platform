@@ -48,8 +48,7 @@ async function jumpToReview(page) {
 
 test.describe('UI v2 — 3-page stage-review split', () => {
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('@smoke feature flag defaults to ON + test hooks exposed', async ({ page }) => {
+    test('@smoke feature flag defaults to ON + test hooks exposed', async ({ page }) => {
         await openPwa(page);
         const flags = await page.evaluate(() => ({
             uiV2: (window as any).__crispUiV2,
@@ -61,8 +60,7 @@ test.describe('UI v2 — 3-page stage-review split', () => {
         expect(flags.iconPack).toBe('function');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('v2 review stage shows 3 distinct pages, one at a time', async ({ page }) => {
+    test('v2 review stage shows 3 distinct pages, one at a time', async ({ page }) => {
         await openPwa(page);
         await jumpToReview(page);
 
@@ -97,8 +95,7 @@ test.describe('UI v2 — 3-page stage-review split', () => {
         expect(v['2']).toBe(0);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('v2 chips render colour SVG icons (no FontAwesome fallback)', async ({ page }) => {
+    test('v2 chips render colour SVG icons (no FontAwesome fallback)', async ({ page }) => {
         await openPwa(page);
         await jumpToReview(page);
         await page.evaluate(() => (window as any).__crispGoToReviewV2Page(1));
@@ -124,8 +121,7 @@ test.describe('UI v2 — 3-page stage-review split', () => {
         expect(missing, `Chips missing SVG icon: ${missing.map((m) => m.key).join(',')}`).toEqual([]);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('flag glyph fallback: every language tile carries an ISO code', async ({ page }) => {
+    test('flag glyph fallback: every language tile carries an ISO code', async ({ page }) => {
         await openPwa(page);
         // The language picker lives on stage-home; first-boot popup may
         // auto-close — re-open it.
@@ -143,8 +139,7 @@ test.describe('UI v2 — 3-page stage-review split', () => {
         expect(counts.isos).toBe(counts.glyphs);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('sticky header: review-page-header stays pinned + z-index ≥ 10', async ({ page }) => {
+    test('sticky header: review-page-header stays pinned + z-index ≥ 10', async ({ page }) => {
         await openPwa(page);
         await jumpToReview(page);
         const style = await page.evaluate(() => {
@@ -159,8 +154,7 @@ test.describe('UI v2 — 3-page stage-review split', () => {
         expect(z).toBeGreaterThanOrEqual(10);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('v1 rollback: setting crisp_ui_v2=off restores legacy 2-page flow', async ({ page }) => {
+    test('v1 rollback: setting crisp_ui_v2=off restores legacy 2-page flow', async ({ page }) => {
         await page.goto('index.html');
         await page.evaluate(() => {
             localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));

@@ -47,22 +47,19 @@ async function bootReview(page) {
 
 test.describe('UNDP details bottom-sheet (V4 review)', () => {
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('sheet is hidden by default on stage-v4-review entry', async ({ page }) => {
+    test('sheet is hidden by default on stage-v4-review entry', async ({ page }) => {
         await bootReview(page);
         const sheet = page.locator('#v4-undp-sheet');
         await expect(sheet).toHaveAttribute('hidden', '');
         await expect(sheet).not.toHaveClass(/is-open/);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('trigger button is visible by default', async ({ page }) => {
+    test('trigger button is visible by default', async ({ page }) => {
         await bootReview(page);
         await expect(page.locator('#btn-v4-open-undp')).toBeVisible();
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('tapping the trigger opens the sheet (slides up + .is-open class)', async ({ page }) => {
+    test('tapping the trigger opens the sheet (slides up + .is-open class)', async ({ page }) => {
         await bootReview(page);
         await page.locator('#btn-v4-open-undp').click();
         const sheet = page.locator('#v4-undp-sheet');
@@ -70,8 +67,7 @@ test.describe('UNDP details bottom-sheet (V4 review)', () => {
         await expect(sheet).toHaveClass(/is-open/, { timeout: 500 });
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('tapping the backdrop closes the sheet', async ({ page }) => {
+    test('tapping the backdrop closes the sheet', async ({ page }) => {
         await bootReview(page);
         await page.locator('#btn-v4-open-undp').click();
         await expect(page.locator('#v4-undp-sheet')).toHaveClass(/is-open/);
@@ -86,8 +82,7 @@ test.describe('UNDP details bottom-sheet (V4 review)', () => {
         await expect(page.locator('#v4-undp-sheet')).toHaveAttribute('hidden', '', { timeout: 600 });
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('tapping the ✕ close button closes the sheet', async ({ page }) => {
+    test('tapping the ✕ close button closes the sheet', async ({ page }) => {
         await bootReview(page);
         await page.locator('#btn-v4-open-undp').click();
         await expect(page.locator('#v4-undp-sheet')).toHaveClass(/is-open/);
@@ -95,8 +90,7 @@ test.describe('UNDP details bottom-sheet (V4 review)', () => {
         await expect(page.locator('#v4-undp-sheet')).not.toHaveClass(/is-open/);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('pressing Escape closes the sheet', async ({ page }) => {
+    test('pressing Escape closes the sheet', async ({ page }) => {
         await bootReview(page);
         await page.locator('#btn-v4-open-undp').click();
         await expect(page.locator('#v4-undp-sheet')).toHaveClass(/is-open/);
@@ -104,8 +98,7 @@ test.describe('UNDP details bottom-sheet (V4 review)', () => {
         await expect(page.locator('#v4-undp-sheet')).not.toHaveClass(/is-open/);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('tapping a power-supply level sets state + highlights the tile', async ({ page }) => {
+    test('tapping a power-supply level sets state + highlights the tile', async ({ page }) => {
         await bootReview(page);
         await page.locator('#btn-v4-open-undp').click();
         // Power supply card — pick the MINOR (Brief) button.
@@ -116,8 +109,7 @@ test.describe('UNDP details bottom-sheet (V4 review)', () => {
         expect(stateVal).toBe('MINOR');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('filling all 5 questions does NOT auto-close the sheet', async ({ page }) => {
+    test('filling all 5 questions does NOT auto-close the sheet', async ({ page }) => {
         await bootReview(page);
         await page.locator('#btn-v4-open-undp').click();
         // Helper: scroll the sheet CARD (the internal scroll container)
@@ -167,8 +159,7 @@ test.describe('UNDP details bottom-sheet (V4 review)', () => {
         expect(stateSnapshot.pressing_needs).toEqual(['food_water']);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('trigger badge updates: Optional → 1/5 → 2/5 as selections are made', async ({ page }) => {
+    test('trigger badge updates: Optional → 1/5 → 2/5 as selections are made', async ({ page }) => {
         await bootReview(page);
         const badge = page.locator('#btn-v4-open-undp .undp-details-cta-time');
         // Zero state — accept either "Optional" (translated) or the
@@ -184,8 +175,7 @@ test.describe('UNDP details bottom-sheet (V4 review)', () => {
         await expect(badge).toContainText('2/5');
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('selections persist across close + re-open', async ({ page }) => {
+    test('selections persist across close + re-open', async ({ page }) => {
         await bootReview(page);
         await page.locator('#btn-v4-open-undp').click();
         const okBtn = page.locator('#v4-undp-sheet .undp-status-row[data-undp-field="electricity_status"] [data-value="OK"]');
@@ -202,8 +192,7 @@ test.describe('UNDP details bottom-sheet (V4 review)', () => {
         await expect(okBtn).toHaveClass(/is-selected/);
     });
 
-    // Phase F triage (May 2026) — SKIPPED: failed in last full PWA e2e run; needs targeted v6.8 DOM/state rewrite.
-    test.skip('Send to UNDP button is visible whether sheet is open or closed', async ({ page }) => {
+    test('Send to UNDP button is visible whether sheet is open or closed', async ({ page }) => {
         await bootReview(page);
         const sendBtn = page.locator('#btn-v4-send');
         await expect(sendBtn).toBeVisible();
