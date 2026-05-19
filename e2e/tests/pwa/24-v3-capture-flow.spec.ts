@@ -38,7 +38,15 @@ async function openPwa(page) {
     });
 }
 
-test.describe('UI v3 — 8-stage capture-flow reorder', () => {
+// Phase F triage (May 2026) — UI v3 is RETIRED. Source declares
+// `const UI_V3_ENABLED = false;` at mobile-app/src/app.js:39 and the
+// dead `if (UI_V3_ENABLED)` branches were stripped at parse time
+// (companion comments at app.js:36, app.js:3092). The 8 failures in
+// this file were testing dead code paths after Batch B's v4-flow
+// rollout removed v3 entirely. Skipped wholesale; if v3 ever gets
+// resurrected (UNDP rubric review wants it back, etc.) flip skip
+// → describe and the assertions still document the legacy contract.
+test.describe.skip('UI v3 — 8-stage capture-flow reorder', () => {
 
     test('@smoke feature flag defaults ON + 4 new stages present in DOM', async ({ page }) => {
         await openPwa(page);

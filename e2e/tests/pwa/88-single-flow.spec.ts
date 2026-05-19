@@ -32,7 +32,10 @@ test.describe('Single capture flow — V3 navigation is gone', () => {
 
     test('stage-review DOM is removed (V3 paginated review)', async ({ page }) => {
         await page.goto('index.html');
-        await expect(page.locator('#stage-v4-review')).toHaveCount(0);
+        // Phase F triage (May 2026) — the V3 paginated review used the
+        // ID #stage-review. V4 renamed to #stage-v4-review; V3 DOM is
+        // gone entirely. This assertion pins that the V3 ID is absent.
+        await expect(page.locator('#stage-review')).toHaveCount(0);
     });
 
     test('?ui=v3 URL param does NOT engage V3 — V4 always wins', async ({ page }) => {
