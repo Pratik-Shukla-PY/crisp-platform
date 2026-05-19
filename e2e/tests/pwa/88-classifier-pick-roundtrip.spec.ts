@@ -237,8 +237,15 @@ test.describe('PWA — classifier pick roundtrip (v6.7 reporter-blocking fix)', 
             'crisis_type MUST be null when user did not pick — NOT "FLOOD"').toBeNull();
         expect(meta.damage_classification,
             'damage_classification MUST be null when user did not pick — NOT "PARTIAL"').toBeNull();
-        expect(meta.severity,
-            'severity MUST be null when not derived — NOT "MODERATE"').toBeNull();
+        // severity gets a "UNKNOWN" fallback at submit time (app.js:8004)
+        // when neither state.severity nor a derivable damage value is
+        // available. SeverityEnum.UNKNOWN IS a valid backend enum value
+        // (backend/app/schemas/report.py:98) — it's the canonical
+        // "uncategorised" marker that lets the dashboard flag the
+        // report for review. Accept null OR "UNKNOWN" — both mean
+        // the same thing; the regression to guard against is the OLD
+        // hardcoded "MODERATE" default that masked operator selections.
+        expect(['UNKNOWN', null]).toContain(meta.severity);
     });
 
     // ── 5. State-bleed guard — _clearCaptureState resets correctly ────
