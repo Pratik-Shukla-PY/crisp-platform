@@ -45,26 +45,15 @@ test.describe('PWA image viewer + thumbnail-delete (Apr 2026)', () => {
     await expect(page.locator('#btn-idc-confirm')).toBeAttached();
   });
 
-  test('@smoke primary photo thumb renders with ❌ on bottom-left', async ({ page }) => {
-    await page.locator('#btn-start').click();
-    await expect(page.locator('#stage-photo.active')).toBeVisible();
-    // Seed a primary photo directly via state and force a strip refresh.
-    await page.evaluate(() => {
-      const s = (window as any).state;
-      s.photoDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=';
-      if (typeof (window as any).__crispRefreshPhotoStrip === 'function') {
-        (window as any).__crispRefreshPhotoStrip();
-      }
-    });
-    // Strip reveals.
-    await expect(page.locator('#extra-photos-strip')).toBeVisible({ timeout: 3000 });
-    // Every rendered thumb has its own ❌.
-    const thumbs = page.locator('#extra-photos-scroll .extra-photo-thumb');
-    const count = await thumbs.count();
-    expect(count).toBeGreaterThanOrEqual(1);
-    const removes = page.locator('#extra-photos-scroll .extra-photo-remove');
-    await expect(removes).toHaveCount(count);
-  });
+  // Phase F triage (May 2026): "primary photo thumb renders with ❌"
+  // targeted V3's #extra-photos-strip + #extra-photos-scroll layout
+  // on #stage-photo. V3 retired; V4 (stage-v4-capture) uses a
+  // different captured-strip DOM. The remove-thumb invariant is now
+  // covered by 30-v4-bug-fixes BUG 7 (state-clear) and
+  // 27-v4-flow's photo-tile tests. Deleting this lone V3 assertion
+  // here; the remaining 3 tests in this file (DOM scaffolding +
+  // viewer open/close + delete-inside-viewer) still pass and cover
+  // the cross-stage image-viewer surface.
 
   test('viewer opens via programmatic trigger + close dismisses', async ({ page }) => {
     await page.evaluate(() => {
