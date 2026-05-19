@@ -30,9 +30,36 @@ test.describe('Stage-2 classify auto-progress', () => {
   // The v4 flow normally requires a photo first; for these UX tests
   // we bypass the photo gate by setting state via window directly
   // and navigating straight to stage-v4-classify.
+  //
+  // NOTE: prior boot pattern used `/?nocache=…` + 5_000ms timeout
+  // and timed out on every test under the v6.7 boot order. Replaced
+  // with the proven `index.html?ui=v4` + localStorage-seed pattern
+  // from 87-home-stage-invariants + 88-classifier-pick-roundtrip.
   async function openClassifyStage(page) {
-    await page.goto('/?nocache=' + Date.now(), { waitUntil: 'networkidle' });
-    await page.waitForFunction(() => typeof window.goToStage === 'function' && typeof window.state === 'object', { timeout: 5_000 });
+    await page.addInitScript(() => {
+      localStorage.setItem('crisp_privacy_consent',
+        JSON.stringify({ accepted: true, ts: Date.now() }));
+      localStorage.setItem('crisp_landing_seen', '1');
+      localStorage.setItem('crisp_ui_v4', 'on');
+      localStorage.setItem('crisp_lang', 'en');
+      localStorage.setItem('crisp_lang_manual', 'en');
+    });
+    // Stub the nearby endpoint so the home boot doesn't gate on a
+    // live backend response.
+    await page.route('**/api/v1/reports/nearby**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ groups: [] }),
+      }),
+    );
+    await page.goto('index.html?ui=v4');
+    await page.waitForLoadState('networkidle');
+    await page.waitForFunction(
+      () => typeof window.goToStage === 'function' && typeof window.state === 'object',
+      null,
+      { timeout: 8000 },
+    );
     await page.evaluate(() => {
       // Pretend the user already added a photo so any gating passes.
       window.state = window.state || {};

@@ -802,6 +802,7 @@
   "mic_permission_alert": "Please allow microphone access to record audio.",
   "camera_blocked_toast": "Camera access blocked — using file picker instead. Allow camera in browser settings for live capture.",
   "camera_unavailable_toast": "Camera unavailable — using file picker instead.",
+  "camera_heic_unsupported": "This photo format (HEIC) is not supported. In iOS Settings → Camera → Formats, choose \"Most Compatible\" and retake.",
   "delete_requested_alert": "Your data will be permanently deleted within 24 hours.",
   "delete_server_unreachable": "Could not reach server.",
   "delete_undo_failed": "Could not undo deletion.",

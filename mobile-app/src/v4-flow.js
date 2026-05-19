@@ -732,7 +732,17 @@
                 _toastCapHit();
                 return;
             }
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            // v6.8 — broaden iOS detection: iPadOS 13+ Safari with
+            // "Request Desktop Site" (the DEFAULT for iPad) reports UA
+            // as "Macintosh; Intel Mac OS X". navigator.platform is
+            // "MacIntel" but maxTouchPoints > 1 distinguishes iPad-touch
+            // from Mac-desktop. Without this check, iPad PWA users
+            // routed to openCameraModal where getUserMedia + tap-to-focus
+            // + the live modal layout have iPadOS-standalone quirks
+            // (verified May 2026 — operator-reported regression).
+            const _ua = navigator.userAgent || '';
+            const isIOS = /iPad|iPhone|iPod/.test(_ua)
+                       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
             const hasGUM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
             if (!isIOS && hasGUM && typeof window.openCameraModal === 'function') {
                 const _preDataUrl = _getState().photoDataUrl;
@@ -1622,6 +1632,28 @@
     };
     const CLASSIFY_ORDER = ['damage', 'infra', 'crisis'];
 
+    // Phase F image-reliability follow-up (May 2026) — derive severity
+    // from the user's damage pick. The v3 capture flow had
+    // `_v3AutoDeriveSeverity()` at app.js:~3234 doing this automatically;
+    // it's gated on `UI_V3_ENABLED` so it never fires for v4. Without
+    // this, v4 reports landed with `state.severity = null` → enqueue
+    // sent severity: null → Pydantic 422 → offline queue retried forever
+    // → "queued at 25%" (operator-reported May 19 via HAR file).
+    // Mirrors the v3 map verbatim so behaviour is unchanged for v3 + v4.
+    const _V4_DAMAGE_TO_SEVERITY = {
+        MINIMAL:   'MINOR',
+        PARTIAL:   'MODERATE',
+        COMPLETE:  'SEVERE',
+        // Legacy values still accepted by the schema; v4 UI doesn't show
+        // them but a future flow / migration might still produce them.
+        NO_DAMAGE: 'MINOR',
+        DESTROYED: 'SEVERE',
+    };
+    function _v4ApplyDamage(damageValue) {
+        const derived = _V4_DAMAGE_TO_SEVERITY[damageValue] || 'MODERATE';
+        _setState({ damage_classification: damageValue, severity: derived });
+    }
+
     function _initClassifyStage() {
         // ── Damage radio (sub-view 1) ──
         const damageView = document.getElementById('v4-view-damage');
@@ -1635,7 +1667,7 @@
                 });
                 opt.classList.add('is-selected');
                 opt.setAttribute('aria-checked', 'true');
-                _setState({ damage_classification: opt.getAttribute('data-value') });
+                _v4ApplyDamage(opt.getAttribute('data-value'));
                 _updateReviewSummary();
                 _refreshClassifyNext();
                 // Auto-progress to "What was hit?" after a 200ms
@@ -1645,7 +1677,7 @@
         });
         // Default selected = the one already with .is-selected (Partial).
         const defaultOpt = damageOpts.find((o) => o.classList.contains('is-selected'));
-        if (defaultOpt) _setState({ damage_classification: defaultOpt.getAttribute('data-value') });
+        if (defaultOpt) _v4ApplyDamage(defaultOpt.getAttribute('data-value'));
 
         // Infra tiles (sub-view 2). Tap a tile to mark selection;
         // user taps Continue to advance. No auto-advance anywhere in

@@ -5,7 +5,123 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v223';
+const CACHE_NAME = 'crisp-v226';
+// v225 → v226 (May 19 — reporter-blocking severity:null 422 loop fix).
+// Operator submitted an incident; UI stuck at "queued 25%" indefinitely.
+// HAR file showed 47 consecutive 422 responses from /api/v1/reports/meta
+// over 8 minutes, all with the same Pydantic error: "Input should be
+// 'MINOR', 'MODERATE', 'SEVERE', 'CRITICAL' or 'UNKNOWN'" against
+// severity: null. Root cause at app.js:8004 — `state.severity || null`
+// degraded to null when the capture flow didn't write to `state.severity`
+// (some entry paths set damage_classification + crisis_type but leave
+// severity untouched). The backend's Pydantic schema
+// (ReportMetaCreate.severity: SeverityEnum = UNKNOWN) has a default but
+// rejects EXPLICIT null with 422 — Pydantic v2 doesn't substitute
+// defaults for explicit null values; the field becomes required-non-null.
+// Two-part fix: (a) enqueue substitutes 'UNKNOWN' for null at build
+// time; (b) the drain loop ALSO substitutes at send time so the
+// already-queued malformed payload in IndexedDB unsticks itself on
+// the next replay tick instead of retrying the bad value forever.
+// Cache eviction required so the new drain logic reaches users.
+//
+// v224 → v225 (May 19 — four PWA regressions, batched fix).
+//
+// Operator-reported the same day as the classifier fix:
+//   1. "No option to change language in the middle of the incident
+//      reporting flow." → added .v4-lang-pill inside every v4-header
+//      (capture / classify / review). Opens the same #lang-picker-overlay
+//      as the home pill. activateLang() preserves all capture state
+//      (v4Photos / audioBlob / infrastructure_type / crisis_type /
+//      damage_classification / location), verified at app.js:4255-4321.
+//   2. "Language modal needs a clear close button at top-right." →
+//      Added a 32px ✕ pill matching the .nearby-sheet-close pattern.
+//      Kept the bottom "Close" button as a redundant large touch target.
+//   3. "iPhone camera UI fix from last release doesn't work." → Root
+//      cause was twofold: (a) iOS 17+ defaults to HEIC camera capture
+//      which Image.src can't decode; _ingestFileAsPhoto silently dropped
+//      every iOS-captured photo. Now detects HEIC by MIME or extension
+//      and re-encodes to JPEG via createImageBitmap → canvas → toBlob
+//      before re-entering the pipeline. (b) iPadOS 13+ Safari "Request
+//      Desktop Site" (the DEFAULT for iPad) reports UA as Macintosh,
+//      so the legacy /iPad|iPhone|iPod/ check failed and iPads routed
+//      to the desktop camera modal where standalone-mode quirks broke
+//      capture. Broadened iOS detection to also catch
+//      navigator.platform==='MacIntel' && maxTouchPoints>1.
+//   4. "Safe-area / scroll / viewport regression — only landing page
+//      behaves correctly in installed-PWA mode." → ROOT CAUSE: d4f1fad
+//      (May 17) added `padding: calc(20px + env(safe-area-inset-top))`
+//      to .stage but DID NOT bump sw.js. Returning iOS PWAs on the
+//      cached old SW kept serving the pre-fix styles.css indefinitely,
+//      so 16 of 17 stages cropped behind the system status bar in
+//      installed-PWA mode. Subsequent bumps (v222, v223) eventually
+//      pushed the new CSS but iOS aggressively pins old SWs until the
+//      PWA is force-killed. ARCHITECTURAL FIX: hoisted all four
+//      env(safe-area-inset-*) paddings to .mobile-screen — the OUTER
+//      shell — so every stage automatically clears notch + status bar
+//      + home indicator + side curves without per-stage opt-in. Per-
+//      stage env() rules dropped from .stage / .home-stage (was
+//      duplicated 2x) / .home-brand-row / .home-channels-strip (3
+//      responsive tiers). New architecture documented in CLAUDE.md
+//      "Safe-area handling — global pattern" invariant. Regression
+//      gated by new e2e/tests/pwa/89-safe-area-all-stages.spec.ts.
+//
+// Why we bump v225 even though the affected styles already shipped
+// in v222-v224: returning iOS PWA users whose SW activated on or
+// before v223 may still be serving the OLD wrapper rule. The cache
+// bump (combined with the now-correct .mobile-screen padding) forces
+// a clean re-fetch so every device converges on the same architecture.
+//
+// v223 → v224 (May 19 — CRITICAL: classifier-state field-naming bug fix).
+// Reporter-blocking bug surfaced by operator (May 19): "I am reporting
+// House damage, shops/market damage, everything lands as Roads and
+// Bridges → Roads. Completely wrong." Confirmed via inspection of a
+// real queued report whose `meta` carried hardcoded defaults `ROAD /
+// FLOOD / PARTIAL / MODERATE` even though the user had selected
+// different infra / crisis / damage values in the v4 capture flow.
+// Violates 3 of 13 UNDP must-haves (damage / crisis / infrastructure-
+// type taxonomies) on every report submitted since the V3 → V4
+// capture-flow transition.
+//
+// ROOT CAUSE — state-field naming mismatch:
+//   · v4-flow.js writes user taps to SNAKE_CASE state fields:
+//       state.infrastructure_type / .crisis_type /
+//       .damage_classification / .infrastructure_name
+//   · submitReport (app.js:7886-7922) read CAMELCASE legacy v3 names:
+//       state.infraType / .crisisType / .damageClass / .infraName
+//   · _clearCaptureState (app.js:12184-12185) RESET those legacy
+//     fields to hardcoded 'ROAD' / 'FLOOD' / 'PARTIAL' / 'MODERATE'
+//     after every submit — so every read returned the same four
+//     wrong values forever.
+//   · V3 capture flow was removed in v192, so nothing else wrote to
+//     the legacy fields. They became write-once-at-reset ghost
+//     variables silently poisoning every meta payload.
+//
+// FIX — three surgical changes:
+//   1. submitReport reads v4 snake_case FIRST, legacy as fallback,
+//      `null` if neither is set. Surfacing null on a missing pick is
+//      correct (dashboard flags for review) — silently using a
+//      default was the worst outcome.
+//   2. _clearCaptureState drops the hardcoded ROAD/FLOOD/PARTIAL/
+//      MODERATE defaults; resets to null instead. Removes the
+//      masking effect that hid the bug for months.
+//   3. Both blocks gain inline comments referencing CLAUDE.md
+//      "Classifier-state field naming" invariant so future
+//      contributors don't re-introduce the bug.
+//
+// REGRESSION GUARD — e2e/tests/pwa/88-classifier-pick-roundtrip.spec.ts
+// (NEW, 5 cases): walks the v4 capture flow with explicit picks
+// (RESIDENTIAL + EARTHQUAKE + COMPLETE, COMMERCIAL + FLOOD + MINIMAL,
+// OTHER + free-text), drives submit, asserts queue-item meta carries
+// those exact picks. A negative test explicitly proves the hardcoded
+// legacy defaults can NEVER reappear (asserts meta values are null,
+// not 'ROAD' / 'FLOOD' / 'PARTIAL' / 'MODERATE').
+//
+// IN-FLIGHT QUEUE ROWS — any report enqueued before this commit has
+// the wrong meta baked into its payload (the user's actual taps were
+// never persisted to a recoverable field). This fix cannot retro-
+// correct them; affected reports must be dequeued + re-submitted.
+//
+// Returning users evict v223 on next activate.
 // v222 → v223 (May 2026 — Sprint D, camera-capture UX upgrade):
 //   * New #camera-modal overlay: GPS status bar (live coords +
 //     accuracy + compass), top toolbar (back/flash/focus/lock),

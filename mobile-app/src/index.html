@@ -28,7 +28,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v223">
+    <meta name="crisp-release" content="crisp-pwa@v226">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -542,6 +542,14 @@
            - Search bar added at top — filters by both Latin and native script. -->
     <div id="lang-picker-overlay" class="lang-picker-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Choose language" data-i18n-aria-label="aria_choose_language">
         <div class="lang-picker-sheet">
+            <!-- v6.8 — top-right ✕ close button. Matches the nearby-sheet
+                 / image-viewer pattern. The bottom-aligned text "Close"
+                 button below is kept as a redundant large touch target. -->
+            <button type="button" class="lang-picker-close-x" id="lang-picker-close-x"
+                    aria-label="Close"
+                    data-i18n-aria-label="aria_close"
+                    title="Close"
+                    data-i18n-title="aria_close">✕</button>
             <h2 class="lang-picker-title" data-i18n="lang_picker_title">Choose language</h2>
             <!-- Populated by detectAndSetupLanguage() — shown as a top row
                  above the main grid when a detected local differs from the
@@ -1366,6 +1374,16 @@
                 <span class="v4-pip"></span>
                 <span class="v4-step-label" data-i18n="v4_step_1_of_3">Step 1 of 3</span>
             </div>
+            <!-- v6.8 mid-flow lang switch — preserves all capture state.
+                 Opens the same #lang-picker-overlay as the home pill. -->
+            <button type="button" class="v4-lang-pill" data-v4-lang-pill
+                    aria-label="Tap to change language"
+                    data-i18n-aria-label="aria_tap_change_language"
+                    title="Tap to change language"
+                    data-i18n-title="aria_tap_change_language">
+                <span class="v4-lang-globe" aria-hidden="true">🌐</span>
+                <span class="v4-lang-code">EN</span>
+            </button>
         </header>
 
         <div class="v4-body">
@@ -1596,6 +1614,15 @@
                 <span class="v4-pip"></span>
                 <span class="v4-step-label" data-i18n="v4_step_2_of_3">Step 2 of 3</span>
             </div>
+            <!-- v6.8 mid-flow lang switch (see #stage-v4-capture). -->
+            <button type="button" class="v4-lang-pill" data-v4-lang-pill
+                    aria-label="Tap to change language"
+                    data-i18n-aria-label="aria_tap_change_language"
+                    title="Tap to change language"
+                    data-i18n-title="aria_tap_change_language">
+                <span class="v4-lang-globe" aria-hidden="true">🌐</span>
+                <span class="v4-lang-code">EN</span>
+            </button>
         </header>
 
         <div class="v4-body">
@@ -1765,6 +1792,15 @@
                 <span class="v4-pip is-active"></span>
                 <span class="v4-step-label" data-i18n="v4_step_3_of_3">Step 3 of 3</span>
             </div>
+            <!-- v6.8 mid-flow lang switch (see #stage-v4-capture). -->
+            <button type="button" class="v4-lang-pill" data-v4-lang-pill
+                    aria-label="Tap to change language"
+                    data-i18n-aria-label="aria_tap_change_language"
+                    title="Tap to change language"
+                    data-i18n-title="aria_tap_change_language">
+                <span class="v4-lang-globe" aria-hidden="true">🌐</span>
+                <span class="v4-lang-code">EN</span>
+            </button>
         </header>
 
         <div class="v4-body">

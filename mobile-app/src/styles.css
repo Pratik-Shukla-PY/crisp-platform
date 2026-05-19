@@ -138,6 +138,16 @@ body {
 body { background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: var(--font); transition: background 0.3s, color 0.3s; overflow-x: hidden; }
 
 /* ── Mobile shell ───────────────────────────────────────────── */
+/* v6.8 (May 2026) — wrapper remains a plain container. Safe-area is
+   applied on the `.stage` element's positioning offsets directly (see
+   the `.stage` rule below). Why not on the wrapper: stages are
+   `position: absolute; inset: 0` so they overlap each other for
+   transition animation. CSS containing-block rules for absolute
+   children use the wrapper's PADDING BOX — which means padding on
+   the wrapper does NOT push absolute children down. Tested + rejected
+   that pattern in spec 89's first run (every stage rendered at y=0
+   despite 47px wrapper padding). The correct architecture is `top:
+   env(safe-area-inset-top, 0)` directly on `.stage` — see below. */
 .mobile-screen {
     width: 100%; max-width: 430px; height: 100dvh;
     background: var(--bg);
@@ -395,24 +405,30 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
      locale produces text that genuinely doesn't fit, the user can
      scroll instead of getting truncated content. */
 .stage {
-    position: absolute; inset: 0;
+    /* v6.8 (May 2026) — GLOBAL SAFE-AREA. Position offsets honour the
+       four env(safe-area-inset-*) directly so every stage clears
+       notch / Dynamic Island / status bar / home indicator / side
+       curves automatically. ONE rule covers all 19 stages (home + 3
+       v4 + 4 v3 + utility). Replaces the previous per-stage
+       `padding: calc(20px + env(...))` shim which only worked for
+       the .home-stage override + 9 of the 16 other stages. Root
+       cause of the multi-attempt May 2026 regression: d4f1fad
+       (May 17) added env() to .stage but DID NOT bump sw.js, so
+       returning iOS PWAs kept the stale pre-fix CSS forever; the
+       patch existed in code but never reached users. The wrapper-
+       padding alternative was attempted in spec 89's first run and
+       rejected — CSS containing-block rules use the wrapper's
+       PADDING BOX for absolute children, so padding on .mobile-screen
+       does NOT push absolute children down. Using top/right/bottom/
+       left directly bypasses that quirk cleanly. */
+    position: absolute;
+    top:    env(safe-area-inset-top, 0);
+    right:  env(safe-area-inset-right, 0);
+    bottom: env(safe-area-inset-bottom, 0);
+    left:   env(safe-area-inset-left, 0);
     display: flex; flex-direction: column;
-    /* May 2026 (installed-PWA fix) — every non-home stage (capture,
-       photo, review, send, audio, where, infra, crisis, extras)
-       inherits this padding. The previous flat `20px 24px 16px`
-       did NOT reserve room for the iPhone notch / Dynamic Island /
-       Android status bar in standalone (installed-PWA) mode, so
-       the stage header overlapped the system status area. Browser
-       mode is unaffected — `env(safe-area-inset-*)` resolves to 0
-       there, restoring the original 20/16 padding.
-
-       `.home-stage` has its own more-specific safe-area handling at
-       styles.css:4234; this rule is the catch-all for every OTHER
-       stage. Viewport meta `viewport-fit=cover` (index.html:11) is
-       what makes the env() values resolve to non-zero on notched
-       devices. */
-    padding: calc(20px + env(safe-area-inset-top, 0px)) 24px
-             calc(16px + env(safe-area-inset-bottom, 0px));
+    /* Internal page chrome — separate from safe-area math. */
+    padding: 20px 24px 16px;
     /* (May 2026 — Fix-P7) `overflow-x: clip` instead of `hidden` so
        descendant `position: fixed` elements (install prompt, language
        pill) escape the stage clipping box. `hidden` was creating a
@@ -422,9 +438,12 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     overflow-x: hidden;
     overflow-x: clip;
     overflow-y: auto;
-    /* Force the height ceiling to the dynamic viewport so headers/
-       footers within a stage can pin to true viewport edges. */
-    max-height: 100dvh;
+    /* v6.8 — height ceiling relative to the wrapper's content area
+       (max-height: 100% instead of 100dvh) so the stage's bottom edge
+       lands inside the safe-area-inset-bottom padding band, not past
+       it. With 100dvh the home-bar would have clipped sticky footers
+       on iPhone in installed-PWA mode. */
+    max-height: 100%;
     opacity: 0; pointer-events: none;
     transform: translateX(40px);
     transition: opacity 0.35s ease, transform 0.35s ease;
@@ -3013,6 +3032,11 @@ details.mr-date-group[open] .mr-date-group-chevron {
     padding: 16px;
 }
 .lang-picker-sheet {
+    /* v6.8 — position:relative anchor for the new top-right .lang-picker-close-x
+       button. Matches the nearby-sheet / image-viewer / UNDP-detail pattern
+       (32px ✕ pill at top-right). The bottom-aligned text "Close" button is
+       kept as a redundant large touch target for a11y. */
+    position: relative;
     width: 100%; max-width: 360px;
     background: #111827;
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -3020,6 +3044,30 @@ details.mr-date-group[open] .mr-date-group-chevron {
     padding: 20px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
+.lang-picker-close-x {
+    position: absolute;
+    top: 12px; right: 12px;
+    width: 32px; height: 32px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text, #f1f5f9);
+    border: 0;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s ease;
+    z-index: 2;
+}
+.lang-picker-close-x:hover,
+.lang-picker-close-x:focus-visible {
+    background: rgba(255, 255, 255, 0.16);
+}
+.lang-picker-close-x:focus-visible {
+    outline: 2px solid var(--brand, #09D1C7);
+    outline-offset: 2px;
+}
+[dir="rtl"] .lang-picker-close-x { right: auto; left: 12px; }
 .lang-picker-title {
     margin: 0 0 16px;
     font-size: 1rem; font-weight: 700;
@@ -4268,17 +4316,14 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 /* Stage container — fills viewport, vertical scroll allowed when content
    exceeds height (small phones in 6-locale RTL stretch to ~700px). */
 .home-stage {
-    min-height: 100dvh;
-    /* May 2026 (operator-reported on iPhone 14) — `viewport-fit=cover` in
-       the meta tag opts the page in to painting under the Dynamic Island
-       / notch, but without a top inset the brand row / lang pill collide
-       with the system status bar (time / Wi-Fi / battery). Adding
-       `env(safe-area-inset-top, 0)` pushes the home stage's content
-       down by the notch height on iPhone (~47-59 px on iPhone 14) and
-       resolves to 0 on Android / non-notched iOS / desktop, where it's
-       a no-op. */
-    padding-top: env(safe-area-inset-top, 0);
-    padding-bottom: env(safe-area-inset-bottom, 0);
+    /* v6.8 (May 2026) — min-height switched from 100dvh to 100%. The
+       wrapper .mobile-screen now owns env(safe-area-inset-*) padding
+       so the home-stage's available area = 100dvh - safe-area-top -
+       safe-area-bottom. min-height: 100% fills that exactly; min-height:
+       100dvh would have overflowed (wrapper height + safe-area math).
+       Per-element env() padding-top/bottom that used to live here is
+       gone — wrapper covers it. */
+    min-height: 100%;
 }
 .home-center {
     width: 100%;
@@ -5448,10 +5493,12 @@ body.tier-t4 .home-impact {
     width: 100%;
     box-sizing: border-box;
     min-height: 32px;
-    /* v6.6 — single application of safe-area-inset-top, here on the
-       row that contains both logo AND pill. Both children inherit
-       the offset together; no more coordinate-system mismatch. */
-    padding-top: env(safe-area-inset-top, 0);
+    /* v6.8 (May 2026) — safe-area-inset-top now lives on the
+       .mobile-screen wrapper (see styles.css:141). The brand row
+       inherits its offset transitively — no per-element env() needed.
+       Logo + wordmark + lang pill still align on the same baseline
+       (align-items: center on this row) per the home-header invariant
+       in CLAUDE.md. */
 }
 [dir="rtl"] .home-brand-row {
     /* RTL — `margin-left: auto` on the pill becomes margin-right:auto
@@ -6432,6 +6479,14 @@ body.tier-t4 .home-impact {
 }
 
 .v4-header {
+    /* May 2026 (v6.8 — mid-flow lang switch): position:relative so
+       the .v4-lang-pill child can anchor to the top-right corner of
+       the header. NOTE: this absolute is INSIDE .v4-header — not
+       inside .mobile-screen — so the CLAUDE.md "Home header
+       alignment" invariant (which forbids absolute positioning of
+       the HOME lang pill against the mobile-screen) is preserved.
+       Different positioning context. */
+    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -6449,6 +6504,42 @@ body.tier-t4 .home-impact {
        pill is fixed-width 140px regardless of viewport. */
     .v4-header { padding-right: 156px; }
 }
+
+/* v6.8 — mid-flow lang pill. Pinned to the 156px reservation on the
+   right side of every .v4-header so users can switch language during
+   capture / classify / review without losing photos, audio, or
+   classifier picks. activateLang() at app.js preserves all capture
+   state (verified: state.v4Photos / .audioBlob / .infrastructure_type
+   / .crisis_type / .damage_classification / .location all survive).
+   Tapping this pill opens the same #lang-picker-overlay as the home
+   pill. */
+.v4-lang-pill {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    max-width: 140px;
+    padding: 4px 10px;
+    border-radius: 16px;
+    border: 1px solid var(--v4-tile-border, rgba(255,255,255,0.16));
+    background: var(--v4-tile-bg, rgba(255,255,255,0.06));
+    color: var(--text, #f1f5f9);
+    font: 600 12px/1 var(--font, system-ui, sans-serif);
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+.v4-lang-pill:hover,
+.v4-lang-pill:focus-visible { background: var(--v4-tile-border, rgba(255,255,255,0.14)); }
+.v4-lang-pill:focus-visible { outline: 2px solid var(--brand, #09D1C7); outline-offset: 2px; }
+.v4-lang-pill .v4-lang-globe { font-size: 14px; line-height: 1; }
+.v4-lang-pill .v4-lang-code { font-weight: 700; }
 .v4-back {
     width: 36px; height: 36px;
     display: flex;
@@ -9308,13 +9399,11 @@ body.tier-t4 .home-impact {
 /* ── A. Three-section layout ─────────────────────────────────────── */
 
 .home-stage {
-    /* Use 100dvh + safe-area insets so notched devices don't clip
-       the brand bar / device-ID. overflow:hidden so the layout
+    /* v6.8 (May 2026) — safe-area moved to .mobile-screen wrapper
+       (see top of file). overflow:hidden kept so the home stage
        NEVER scrolls — content is sized to fit. */
     overflow: hidden;
     overflow-y: hidden;
-    padding-top: env(safe-area-inset-top, 0);
-    padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 .home-stage .home-center {
@@ -9729,16 +9818,15 @@ body.tier-t4 .home-impact {
     align-items: center;
     justify-content: space-around;
     width: 100%;
-    /* v6.6 — safe-area-inset on horizontal padding so the leftmost /
-       rightmost channel icon (WhatsApp was the visible victim) never
-       clips on notched / Dynamic-Island devices in installed-PWA mode
-       where env(safe-area-inset-left/right) is non-zero. Vertical
-       padding stays at 6 px (then 8 / 10 in the height media queries
-       below). See CLAUDE.md "Channels strip safe-area" invariant. */
+    /* v6.8 — safe-area-inset-left/right moved to .mobile-screen wrapper
+       (see styles.css:141). The strip just needs its baseline 10px
+       padding now; the wrapper guarantees the strip never sits inside
+       a notch / curved-edge / fold band. See CLAUDE.md "Safe-area
+       handling — global pattern" invariant. */
     padding-top: 6px;
     padding-bottom: 6px;
-    padding-left:  max(10px, env(safe-area-inset-left, 10px));
-    padding-right: max(10px, env(safe-area-inset-right, 10px));
+    padding-left: 10px;
+    padding-right: 10px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.025);
     border: 1px solid rgba(255, 255, 255, 0.07);
@@ -9826,8 +9914,8 @@ body.tier-t4 .home-impact {
     .home-stage .home-channels-strip {
         min-height: 48px;
         padding-top: 8px; padding-bottom: 8px;
-        padding-left:  max(12px, env(safe-area-inset-left, 12px));
-        padding-right: max(12px, env(safe-area-inset-right, 12px));
+        padding-left: 12px;
+        padding-right: 12px;
     }
     /* v6.6 — min-width matches width at every responsive tier so icons
        cannot shrink under flex pressure. */
@@ -9838,8 +9926,8 @@ body.tier-t4 .home-impact {
     .home-stage .home-channels-strip {
         min-height: 52px;
         padding-top: 10px; padding-bottom: 10px;
-        padding-left:  max(14px, env(safe-area-inset-left, 14px));
-        padding-right: max(14px, env(safe-area-inset-right, 14px));
+        padding-left: 14px;
+        padding-right: 14px;
     }
     .home-stage .hcs-icon { width: 40px; height: 40px; min-width: 40px; font-size: 22px; }
     .home-stage .hcs-icon svg { width: 22px; height: 22px; overflow: visible; }

@@ -883,10 +883,21 @@ async function syncQueueManual(opts) {
                 // queued report is ever lost because the user logged out.
                 const _metaHeaders = { 'Content-Type': 'application/json' };
                 if (item.auth_token) _metaHeaders['Authorization'] = `Bearer ${item.auth_token}`;
+                // Phase F image-reliability follow-up (May 2026) — defensive
+                // fix-up for queue items that pre-date the severity-default
+                // fix at enqueue time (see line ~8004). Items already in
+                // IndexedDB carry `severity: null` which the server rejects
+                // with 422, leaving them stuck retrying forever. Substituting
+                // UNKNOWN at send time lets the in-flight queued report
+                // finally drain on the next replay tick without forcing the
+                // user to wipe IndexedDB.
+                const _metaPayload = (item.meta.severity == null)
+                    ? { ...item.meta, severity: 'UNKNOWN' }
+                    : item.meta;
                 const res = await fetch(`${API_BASE}/reports/meta`, {
                     method: 'POST',
                     headers: _metaHeaders,
-                    body: JSON.stringify(item.meta)
+                    body: JSON.stringify(_metaPayload)
                 });
                 if (res.ok) {
                     const data = await res.json();
@@ -2196,7 +2207,12 @@ async function _fetchEnabledRegions(opts = {}) {
         // sensible default per host: localhost dev → :8000, prod → same origin
         // (behind nginx /api/ proxy). Don't blindly suffix :8000 — that
         // pointed at a closed port behind the ALB.
-        const _earlyIsLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+        // Phase F dev-on-LAN (May 2026) — match the module-level
+        // `_isLocalDev` definition: loopback names + RFC-1918 ranges
+        // resolve to "same host, port 8000".
+        const _earlyLanRe = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/;
+        const _earlyIsLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname)
+                              || _earlyLanRe.test(window.location.hostname);
         const _earlyBase = _earlyIsLocalDev
             ? `${window.location.protocol}//${window.location.hostname}:8000/api/v1`
             : `${window.location.origin}/api/v1`;
@@ -2569,7 +2585,18 @@ const inactivityManager = new InactivityManager(state.inactivityTimeoutMs, handl
 // "submission shows successful but never reaches the backend": the
 // chunked upload's offline queue caught the failed POST and the UI
 // reported success on queue-accept, never on server-ack.
-const _isLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+// Phase F dev-on-LAN (May 2026). Loopback names + RFC-1918 private
+// LAN IPs all resolve to "same host, port 8000" so a tester opening
+// the PWA from their phone on the same Wi-Fi (e.g.
+// http://172.16.110.14:8080/mobile-app/src/) gets the backend
+// reachable WITHOUT a code edit. The backend's own CORS regex at
+// backend/app/main.py:317 mirrors the same RFC-1918 ranges so the
+// preflight succeeds. In production hostname is neither loopback nor
+// RFC-1918, so the branch short-circuits to window.location.origin
+// (nginx proxies /api/ to the same-host backend).
+const _LAN_RE = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/;
+const _isLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname)
+                  || _LAN_RE.test(window.location.hostname);
 const _backendHost = _isLocalDev
     ? `http://${window.location.hostname}:8000`
     : window.location.origin;
@@ -4187,6 +4214,18 @@ function detectAndSetupLanguage() {
                 '<span class="lps-code">' + upper + '</span>';
             currentBtn.dataset.lang = norm;
         }
+        // v6.8 — mirror current language onto all .v4-lang-pill instances
+        // (mid-flow lang switch on stage-v4-capture / classify / review).
+        // We don't reuse the home pill's flag-emoji rendering because the
+        // pill is smaller; a globe icon + uppercase code is enough at the
+        // v4 header size. Pills not in the DOM yet are simply skipped.
+        try {
+            document.querySelectorAll('.v4-lang-pill').forEach((pill) => {
+                pill.dataset.lang = norm;
+                const codeSpan = pill.querySelector('.v4-lang-code');
+                if (codeSpan) codeSpan.textContent = upper;
+            });
+        } catch (_) { /* DOM mutation failure is non-blocking */ }
     }
 
     // UNDP §3.1 April 2026 — RTL-script languages. Flipping the document
@@ -4458,12 +4497,27 @@ function detectAndSetupLanguage() {
 
     if (currentBtn) currentBtn.addEventListener('click', _openLangPicker);
     if (changeBtn) changeBtn.addEventListener('click', _openLangPicker);
+    // v6.8 — mid-flow lang pills on the v4 stages. Delegated via
+    // closest('[data-v4-lang-pill]') so the 3 static pills in
+    // #stage-v4-{capture,classify,review} all share one listener.
+    // Opens the same #lang-picker-overlay modal as the home pill;
+    // activateLang() preserves all capture state (verified at
+    // app.js:4255–4321) so users can switch language without losing
+    // photos, audio, classifier picks, or location.
+    document.addEventListener('click', (e) => {
+        const pill = e.target && e.target.closest && e.target.closest('[data-v4-lang-pill]');
+        if (pill) _openLangPicker();
+    });
     if (pickerOverlay) {
         pickerOverlay.addEventListener('click', (e) => {
             if (e.target === pickerOverlay) _closeLangPicker();
         });
         const closeBtn = document.getElementById('lang-picker-close');
         if (closeBtn) closeBtn.addEventListener('click', _closeLangPicker);
+        // v6.8 — top-right ✕ button (matches nearby-sheet pattern).
+        // Shares the same dismiss path as the legacy bottom "Close" button.
+        const closeBtnX = document.getElementById('lang-picker-close-x');
+        if (closeBtnX) closeBtnX.addEventListener('click', _closeLangPicker);
         const searchInput = document.getElementById('lang-picker-search-input');
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
@@ -5304,9 +5358,14 @@ function setupPhotoStage() {
         });
     }
 
-    // Camera button
+    // Camera button (legacy stage-photo). v4-flow has its own copy of
+    // this routing at v4-flow.js:735+.
     document.getElementById('btn-open-camera').addEventListener('click', () => {
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        // v6.8 — broader iOS detection (catches iPadOS desktop-mode Safari).
+        // See v4-flow.js:735 for the same pattern + rationale.
+        const _ua = navigator.userAgent || '';
+        const isIOS = /iPad|iPhone|iPod/.test(_ua)
+                   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         if (isIOS || !navigator.mediaDevices?.getUserMedia) {
             // Fallback to native camera on iOS
             document.getElementById('file-camera').click();
@@ -5325,8 +5384,58 @@ function setupPhotoStage() {
     // state.extraPhotos; `asExtra=false` fills the primary photo slot. The
     // caller decides routing once, synchronously, based on whether the primary
     // slot is already populated.
+    //
+    // v6.8 (May 2026) — HEIC pre-conversion. iOS 17+ defaults to HEIC for
+    // camera capture (and the user can't change it in standalone-PWA mode
+    // because the per-app setting toggle requires the iOS Camera app to be
+    // the originator). `Image.src = heicDataUrl` does NOT decode HEIC on
+    // most browsers; only Safari ≥ 17 handles it natively, and even there
+    // the canvas pipeline downstream fails MIME checks. Without
+    // re-encoding, captured photos vanished from the v4 capture stage
+    // silently — root cause of the "iPhone camera doesn't work" regression
+    // reported on May 19. We detect HEIC by MIME or file extension and
+    // re-encode to JPEG via createImageBitmap → canvas → toBlob before
+    // re-entering the existing pipeline.
     function _ingestFileAsPhoto(file, { asExtra = false } = {}) {
         if (!file) return;
+        const isHeic = file.type === 'image/heic'
+                    || file.type === 'image/heif'
+                    || /\.(heic|heif)$/i.test(file.name || '');
+        if (isHeic && typeof createImageBitmap === 'function') {
+            createImageBitmap(file).then((bitmap) => {
+                const cv = document.createElement('canvas');
+                cv.width = bitmap.width;
+                cv.height = bitmap.height;
+                cv.getContext('2d').drawImage(bitmap, 0, 0);
+                cv.toBlob((blob) => {
+                    if (!blob) {
+                        // toBlob can return null on memory pressure;
+                        // fall back to passing the original through, the
+                        // Image.onload below will silently fail and we
+                        // skip rather than crash.
+                        return;
+                    }
+                    const jpegFile = new File(
+                        [blob],
+                        (file.name || 'photo').replace(/\.(heic|heif)$/i, '.jpg'),
+                        { type: 'image/jpeg', lastModified: Date.now() }
+                    );
+                    _ingestFileAsPhoto(jpegFile, { asExtra });
+                }, 'image/jpeg', 0.92);
+            }).catch(() => {
+                // Device can't decode HEIC (older iOS, non-Safari).
+                // Surface a toast so the user knows to retake or switch
+                // their iOS Camera setting to "Most Compatible" (JPEG).
+                if (typeof showToast === 'function') {
+                    showToast(
+                        (typeof t === 'function' && t('camera_heic_unsupported'))
+                            || 'This photo format (HEIC) is not supported. In iOS Settings → Camera → Formats, choose "Most Compatible" and retake.',
+                        'info'
+                    );
+                }
+            });
+            return;
+        }
         const reader = new FileReader();
         reader.onload = (ev) => {
             const img = new Image();
@@ -7890,23 +7999,58 @@ async function submitReport() {
                 client_report_id: clientReportId,
                 device_hash: deviceHash,
                 source: 'APP',
-                severity: state.severity,
-                infrastructure_type: state.infraType,
+                // v6.7 (May 2026) — read the V4-flow snake_case field names
+                // FIRST, with the legacy v3 camelCase as a defensive fallback.
+                // Pre-v6.7 these read ONLY the legacy fields (state.infraType /
+                // state.crisisType / state.damageClass / state.infraName /
+                // state.severity / state.infraNameFromOsm), which v4-flow.js
+                // NEVER writes to — the legacy fields stayed at their
+                // hardcoded reset defaults in _clearCaptureState (ROAD /
+                // FLOOD / PARTIAL / MODERATE), so every report submitted
+                // with the same four wrong classifiers regardless of what
+                // the user tapped. This violated 3 UNDP must-haves
+                // (damage / crisis / infra-type taxonomies) on every
+                // report between V3 retirement and v6.7. See CLAUDE.md
+                // "Classifier-state field naming" invariant.
+                // Phase F image-reliability follow-up (May 2026) — never
+                // enqueue severity:null. The backend's Pydantic schema
+                // (`ReportMetaCreate.severity: SeverityEnum = UNKNOWN`)
+                // rejects explicit null with 422 even though it has a
+                // default — Pydantic doesn't substitute defaults for
+                // explicit null. Pre-fix, capture flows that didn't
+                // collect severity sent null → 422 → offline-queue
+                // retried the same payload every ~10s forever → report
+                // "queued at 25%" (operator-reported May 19).
+                //
+                // Severity resolution priority:
+                //   1. state.severity (set by v4-flow._v4ApplyDamage at
+                //      damage-pick time, or any other flow that wrote it)
+                //   2. derive from damage_classification (matches the
+                //      v3 _v3AutoDeriveSeverity map verbatim)
+                //   3. UNKNOWN — the operator triages on the dashboard
+                severity:                     (state.severity || (
+                    { MINIMAL: 'MINOR', NO_DAMAGE: 'MINOR',
+                      PARTIAL: 'MODERATE',
+                      COMPLETE: 'SEVERE', DESTROYED: 'SEVERE'
+                    }[state.damage_classification || state.damageClass]
+                ) || 'UNKNOWN'),
+                infrastructure_type:          state.infrastructure_type   || state.infraType    || null,
                 description: '', // Split to Stage 2 for 1KBPS safety
                 is_auto_submitted: state.isAutoSubmit,
                 client_created_at: new Date().toISOString(),
                 expected_media: expectedMedia,
                 // UNDP required fields
-                crisis_type: state.crisisType,
-                damage_classification: state.damageClass,
-                infrastructure_name: state.infraName || null,
+                crisis_type:                  state.crisis_type           || state.crisisType   || null,
+                damage_classification:        state.damage_classification || state.damageClass  || null,
+                infrastructure_name:          state.infrastructure_name   || state.infraName    || null,
                 // distinguisher between OSM-picked
                 // and user-typed names. Dashboard treats `building_id IS NULL
                 // AND infrastructure_name_from_osm = false` as "needs mapping"
                 // so an operator can resolve the free-text entry to a real OSM
                 // footprint later. Defaults to false when the field is missing
                 // (back-compat with pre-v3 clients).
-                infrastructure_name_from_osm: Boolean(state.infraNameFromOsm),
+                // v6.7 — v4 snake_case first, legacy camelCase fallback.
+                infrastructure_name_from_osm: Boolean(state.infrastructure_name_from_osm ?? state.infraNameFromOsm),
                 // (UI v3 redesign Q14) — v4-flow.js writes to
                 // `debris_present` / `electricity_status` / `pressing_needs`
                 // on window.state, but the legacy v3 review form writes to
@@ -12181,18 +12325,34 @@ function _clearCaptureState() {
     // the pipeline runs", not from the previous report's answer.
     state.photoClientBlurApplied = undefined;
     state.audioBlob = null; state.transcript = ''; state.description = '';
-    state.infraType = 'ROAD'; state.severity = 'MODERATE'; state.isAutoSubmit = false;
-    state.crisisType = 'FLOOD'; state.damageClass = 'PARTIAL'; state.infraName = '';
+    // v6.7 (May 2026) — the legacy v3 fields (infraType / crisisType /
+    // damageClass / infraName / severity) are now NULL-reset, NOT
+    // hardcoded to ROAD / FLOOD / PARTIAL / MODERATE / '' as they were
+    // pre-v6.7. The pre-v6.7 hardcoded defaults were the root cause of
+    // the reporter-blocking bug where every report submitted with
+    // those four wrong classifiers regardless of what the user tapped
+    // — v4-flow.js writes to the snake_case fields below, never to
+    // these legacy camelCase fields, so the legacy values stayed at
+    // their reset defaults forever. submitReport now reads
+    // snake_case-first with these as defensive fallbacks; surfacing
+    // null when a pick is missing is correct behaviour (dashboard
+    // flags for review) rather than silently mis-classifying. DO NOT
+    // re-introduce hardcoded values here — see CLAUDE.md "Classifier-
+    // state field naming" invariant.
+    state.infraType = null; state.crisisType = null; state.damageClass = null;
+    state.infraName = ''; state.severity = null; state.isAutoSubmit = false;
+    state.infraNameFromOsm = false;
     state.debrisClearing = false; state.serviceStatus = { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] };
-    // v4 uses different state-field names
-    // for the same 3 classifiers. Without these resets, the previous
-    // report's damage / infra / crisis selections silently bleed
-    // into the next report (and v4-flow.js's _canAdvanceFrom thinks
-    // the user has already chosen, so Next is armed without any
-    // user tap). Recurring state-bleed regression — keep these resets.
+    // v4 capture flow — authoritative source-of-truth for the four
+    // classifier fields. v4-flow.js writes here on every user tap;
+    // submitReport reads here first. Reset to null so the next
+    // capture starts from "no pick" and v4-flow's _canAdvanceFrom
+    // correctly disables Next until the user re-picks.
     state.damage_classification = null;
-    state.infrastructure_type = null;
-    state.crisis_type = null;
+    state.infrastructure_type   = null;
+    state.crisis_type           = null;
+    state.infrastructure_name   = '';
+    state.infrastructure_name_from_osm = false;
     // Building-footprint selection (OSM way id) — don't carry between reports.
     state.buildingId = null;
     // Media-recorder scaffolding — these accumulate across recordings and
