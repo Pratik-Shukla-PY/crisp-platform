@@ -400,10 +400,14 @@ async function enqueueReport(payload) {
         const tx = db.transaction(IDB_STORE, 'readwrite');
         // Store ALL fields flat at top level — keyPath is client_report_id.
         // Previously nested under `payload` key which broke retry loop reads.
+        // Preserve a caller-supplied timestamp if present (lets the orphan-
+        // self-heal regression test seed rows that look 30 minutes old);
+        // production callers (submitReport) don't pass a timestamp so they
+        // get Date.now() as before.
         tx.objectStore(IDB_STORE).put({
             ...payload,                            // all stage/media/meta fields at top level
-            timestamp: Date.now(),
-            retryCount: payload.retryCount || 0,  // preserve existing retry count
+            timestamp: payload.timestamp || Date.now(),
+            retryCount: payload.retryCount || 0,   // preserve existing retry count
             status: 'queued'
         });
         tx.oncomplete = () => resolve();
