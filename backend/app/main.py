@@ -814,10 +814,17 @@ async def _run_startup_tasks():
     """Body runs once at app startup, invoked from the lifespan handler
     above (line ~241). Was @app.on_event('startup') before May 2026;
     rename + decorator removal closed the FastAPI deprecation warning."""
+    # Skip background daemons during pytest. The daemons query persistent
+    # tables (media, reports) that pytest's per-test transactions roll
+    # back; the daemons then spam stderr with 'relation does not exist'
+    # which drowns the pytest summary line.
+    in_pytest = bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
     # Purge worker
-    t = threading.Thread(target=_purge_loop, daemon=True)
-    t.start()
-    logging.getLogger(__name__).info("Deletion purge worker started (runs every 15 min)")
+    if not in_pytest:
+        t = threading.Thread(target=_purge_loop, daemon=True)
+        t.start()
+        logging.getLogger(__name__).info("Deletion purge worker started (runs every 15 min)")
 
     # Phase F image-reliability (May 2026). Two-stage recovery:
     #   ① boot-time sweep — runs synchronously RIGHT NOW so we don't
@@ -829,19 +836,20 @@ async def _run_startup_tasks():
     #      and flips them to 'failed' with abandon_reason so the
     #      dashboard renders "Original lost" instead of perpetual
     #      "uploading…".
-    try:
-        _run_assembly_recovery_sweep(boot=True)
-    except Exception as e:
-        logging.getLogger(__name__).warning(
-            f"Boot-time assembly recovery sweep failed: {e}"
+    if not in_pytest:
+        try:
+            _run_assembly_recovery_sweep(boot=True)
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                f"Boot-time assembly recovery sweep failed: {e}"
+            )
+        threading.Thread(target=_assembly_recovery_loop, daemon=True).start()
+        logging.getLogger(__name__).info(
+            f"Assembly recovery daemon started "
+            f"(interval={_ASSEMBLE_SWEEP_INTERVAL_S}s, "
+            f"abandon_stale={_ABANDON_STALE_MIN}m, "
+            f"assemble_deadline={_ASSEMBLE_DEADLINE_MIN}m)"
         )
-    threading.Thread(target=_assembly_recovery_loop, daemon=True).start()
-    logging.getLogger(__name__).info(
-        f"Assembly recovery daemon started "
-        f"(interval={_ASSEMBLE_SWEEP_INTERVAL_S}s, "
-        f"abandon_stale={_ABANDON_STALE_MIN}m, "
-        f"assemble_deadline={_ASSEMBLE_DEADLINE_MIN}m)"
-    )
 
     # Auto-start Telegram polling if token is configured
     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
