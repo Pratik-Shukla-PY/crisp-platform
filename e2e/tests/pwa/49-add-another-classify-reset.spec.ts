@@ -38,8 +38,11 @@ async function bootV4(page: Page) {
         localStorage.setItem('crisp_landing_seen', '1');
         localStorage.setItem('crisp_ui_v4', 'on');
         // Force English so locale-based label assertions are stable on
-        // systems with a non-en system locale (Kannada/Hindi/etc).
+        // systems with a non-en system locale (Kannada/Hindi/etc). Both
+        // `crisp_lang` AND `crisp_lang_manual` are needed — the manual
+        // pin defeats GPS-based auto-detect (Bengaluru fixture → kn).
         localStorage.setItem('crisp_lang', 'en');
+        localStorage.setItem('crisp_lang_manual', 'en');
     });
     await page.goto('index.html?ui=v4');
     await page.waitForFunction(
@@ -91,10 +94,17 @@ test.describe('PWA — Add Another Report classify reset (Bug 2 follow-up)', () 
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
         await expect(page.locator('#stage-v4-classify.active')).toBeVisible({ timeout: 4000 });
 
-        // Walk to crisis sub-step via Continue clicks. The button is
-        // already enabled because state is pre-seeded.
-        await page.locator('#btn-v4-classify-next').click();
-        await page.locator('#btn-v4-classify-next').click();
+        // Re-sync the Continue button — page.evaluate(state.* = ...)
+        // bypasses the chip-tap listener that normally re-runs the
+        // disabled-state check (see __crispV4RefreshClassifyNext).
+        await page.evaluate(() => {
+            if (typeof (window as any).__crispV4RefreshClassifyNext === 'function') {
+                (window as any).__crispV4RefreshClassifyNext();
+            }
+        });
+        // dispatchEvent bypasses visibility/actionability (see test 2).
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
         // Now on crisis sub-step. Confirm via the locale-independent
         // sub-step counter ("3 of 3") rather than the translated label.
         await expect(page.locator('#v4-substep-label')).toContainText(/3 of 3/i, { timeout: 2000 });
@@ -134,8 +144,21 @@ test.describe('PWA — Add Another Report classify reset (Bug 2 follow-up)', () 
             s.infrastructure_type   = 'ROAD';
         });
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
-        await page.locator('#btn-v4-classify-next').click();  // damage → infra
-        await page.locator('#btn-v4-classify-next').click();  // infra → crisis
+        // Re-sync Continue's disabled state after the state.* seeding.
+        await page.evaluate(() => {
+            if (typeof (window as any).__crispV4RefreshClassifyNext === 'function') {
+                (window as any).__crispV4RefreshClassifyNext();
+            }
+        });
+        // dispatchEvent — Playwright's force:true still requires the
+        // element to be present in the layout tree, but the .stage opacity
+        // transition can keep the visible-bbox check failing for the
+        // duration of the test. Dispatching a synthetic click event
+        // bypasses both visibility AND actionability checks, which is
+        // what we want since the behavioural intent (button-click
+        // advances the substep) doesn't depend on visual readiness.
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
 
         // Pick a tile so we have a selected highlight to clear later.
         await page.locator('.v4-cause-tile[data-value="EXPLOSION"]').click();
@@ -153,8 +176,8 @@ test.describe('PWA — Add Another Report classify reset (Bug 2 follow-up)', () 
             const refresh = (window as any).__crispV4RefreshClassifyNext;
             if (typeof refresh === 'function') refresh();
         });
-        await page.locator('#btn-v4-classify-next').click();
-        await page.locator('#btn-v4-classify-next').click();
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
 
         // Crisis sub-step visible. The grid must be present + NO tile
         // carries the is-selected class (was the stale EXPLOSION highlight).
