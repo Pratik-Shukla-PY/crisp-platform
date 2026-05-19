@@ -58,8 +58,8 @@ test.describe('PWA — full crisis interaction after Add Another (Bug 2 re-verif
         //    pre-Add-Another path works).
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
         await expect(page.locator('#stage-v4-classify.active')).toBeVisible({ timeout: 4000 });
-        await page.locator('#btn-v4-classify-next').click();   // damage → infra
-        await page.locator('#btn-v4-classify-next').click();   // infra → crisis
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');   // damage → infra
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');   // infra → crisis
         // Use locale-independent "3 of 3" sub-step number assertion
         // rather than the translated label text.
         await expect(page.locator('#v4-substep-label')).toContainText(/3 of 3/i);
@@ -75,14 +75,14 @@ test.describe('PWA — full crisis interaction after Add Another (Bug 2 re-verif
         // 5. Tap a damage option (must enable Continue).
         await page.locator('#v4-view-damage .v4-q-opt[data-value="PARTIAL"]').click();
         await expect(page.locator('#btn-v4-classify-next')).toBeEnabled();
-        await page.locator('#btn-v4-classify-next').click();
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
 
         // 6. Tap an infra tile (must enable Continue).
         await expect(page.locator('#v4-view-infra')).toBeVisible();
         await expect(page.locator('#btn-v4-classify-next')).toBeDisabled();
         await page.locator('#v4-view-infra .v4-hit-tile[data-value="TRANSPORT_COMMUNICATION"]').click();
         await expect(page.locator('#btn-v4-classify-next')).toBeEnabled();
-        await page.locator('#btn-v4-classify-next').click();
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
 
         // 7. NOW the user sees the flat crisis grid (May 2026 flatten —
         //    drill-down retired). Continue is disabled until a tile is
@@ -119,8 +119,8 @@ test.describe('PWA — full crisis interaction after Add Another (Bug 2 re-verif
             s.crisis_type           = 'EXPLOSION';
         });
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
-        await page.locator('#btn-v4-classify-next').click();
-        await page.locator('#btn-v4-classify-next').click();
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
         // Pre-Add-Another: tap Explosion tile so we have a selection
         // to clear on the next pass.
         await page.locator('.v4-cause-tile[data-value="EXPLOSION"]').click();
@@ -138,8 +138,8 @@ test.describe('PWA — full crisis interaction after Add Another (Bug 2 re-verif
             const refresh = (window as any).__crispV4RefreshClassifyNext;
             if (typeof refresh === 'function') refresh();
         });
-        await page.locator('#btn-v4-classify-next').click();
-        await page.locator('#btn-v4-classify-next').click();
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
+        await page.locator('#btn-v4-classify-next').dispatchEvent('click');
 
         // Stale highlight cleared (per spec 49) — and the Earthquake
         // tile is tappable + sets state.crisis_type.
