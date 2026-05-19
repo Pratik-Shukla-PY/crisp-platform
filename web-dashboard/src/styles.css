@@ -3072,6 +3072,140 @@ body.burst-mode .notif-glow {
 .qrt-orig-chip i { font-size: 10px; }
 .qrt-orig-chip .qrt-orig-chip-pct { font-weight: 800; opacity: 0.85; }
 
+/* Phase F image-reliability (May 2026) — tri-state colourisation for the
+   per-card LARGE-tier chip. Default amber matches the existing
+   "uploading" + "missing-fresh" cosmetic; delayed bumps to a stronger
+   warning tone; lost goes red so the operator can spot abandoned
+   originals at a glance from the queue without opening the card.
+   These class names are produced by the `_classifyHighTier` helper +
+   the `chipState` mapping in `createIncidentCard` (web-dashboard/src/
+   app.js around the qrt-orig-chip render site). */
+.qrt-orig-chip-uploading,
+.qrt-orig-chip-missing-fresh {
+    color: #f59e0b;
+    border-color: rgba(245,158,11,0.4);
+    background: rgba(245,158,11,0.10);
+}
+.qrt-orig-chip-delayed {
+    color: #fbbf24;
+    border-color: rgba(251,191,36,0.5);
+    background: rgba(251,191,36,0.14);
+}
+.qrt-orig-chip-lost {
+    color: #ef4444;
+    border-color: rgba(239,68,68,0.5);
+    background: rgba(239,68,68,0.14);
+}
+
+/* Detail-panel chip + Reclaim button — tri-state mirror of the above.
+   The `.dp-gallery-pending-chip` base rule (around line 2100) already
+   gives amber styling; the modifier classes override colour-tone +
+   border-tone for delayed/lost states. The button matches the action-
+   ribbon styling used elsewhere in the panel so it looks native. */
+.dp-gallery-pending-chip-delayed {
+    color: #fbbf24;
+    border-color: rgba(251,191,36,0.5);
+    background: rgba(251,191,36,0.14);
+}
+.dp-gallery-pending-chip-lost {
+    color: #ef4444;
+    border-color: rgba(239,68,68,0.5);
+    background: rgba(239,68,68,0.14);
+}
+.dp-gallery-reclaim-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-left: 6px; padding: 3px 9px; border-radius: 4px;
+    background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.4);
+    color: #60a5fa; font-size: 10px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s ease;
+}
+.dp-gallery-reclaim-btn:hover { background: rgba(59,130,246,0.20); }
+.dp-gallery-reclaim-btn i { font-size: 9px; }
+
+/* Reclaim modal — sits above the detail panel with a backdrop blur.
+   Lists the affected media ids + offers Retry / Mark-abandoned. */
+.reclaim-modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 5000;
+}
+.reclaim-modal {
+    background: #0f172a;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+    padding: 22px 24px 18px;
+    width: min(520px, 92vw); max-height: 80vh; overflow: auto;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+    color: #e2e8f0;
+}
+.reclaim-modal h3 {
+    display: flex; align-items: center; gap: 9px;
+    margin: 0 0 10px; font-size: 16px;
+}
+.reclaim-modal h3 i { color: #60a5fa; }
+.reclaim-modal-blurb {
+    font-size: 12px; color: #94a3b8; line-height: 1.5; margin: 0 0 14px;
+}
+.reclaim-modal-blurb strong { color: #cbd5e1; }
+.reclaim-rows {
+    display: flex; flex-direction: column; gap: 6px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 6px; padding: 8px 10px; margin-bottom: 16px;
+    max-height: 220px; overflow: auto;
+}
+.reclaim-row {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11px; color: #94a3b8;
+}
+.reclaim-row code {
+    background: rgba(255,255,255,0.05);
+    padding: 2px 6px; border-radius: 4px; color: #cbd5e1;
+    font-family: 'JetBrains Mono', monospace;
+}
+.reclaim-row-state {
+    padding: 1px 7px; border-radius: 8px; font-size: 9px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+}
+.reclaim-row-state-lost {
+    color: #ef4444; background: rgba(239,68,68,0.14);
+    border: 1px solid rgba(239,68,68,0.4);
+}
+.reclaim-row-state-delayed {
+    color: #fbbf24; background: rgba(251,191,36,0.14);
+    border: 1px solid rgba(251,191,36,0.4);
+}
+.reclaim-row-chunks { font-family: 'JetBrains Mono', monospace; }
+.reclaim-row-reason {
+    margin-left: auto; opacity: 0.7;
+    font-size: 10px; font-style: italic;
+}
+.reclaim-modal-actions {
+    display: flex; justify-content: flex-end; gap: 10px;
+}
+.reclaim-modal-actions button {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 6px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    border: 1px solid transparent; transition: filter 0.15s ease;
+}
+.reclaim-modal-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+.reclaim-modal-cancel {
+    background: transparent; color: #94a3b8;
+    border-color: rgba(255,255,255,0.10);
+}
+.reclaim-modal-retry {
+    background: rgba(59,130,246,0.18); color: #60a5fa;
+    border-color: rgba(59,130,246,0.4);
+}
+.reclaim-modal-retry:hover:not(:disabled) { filter: brightness(1.15); }
+.reclaim-modal-abandon {
+    background: rgba(239,68,68,0.18); color: #f87171;
+    border-color: rgba(239,68,68,0.4);
+}
+.reclaim-modal-abandon:hover:not(:disabled) { filter: brightness(1.15); }
+
 /* ══ RESPONSIVE ════════════════════════════════════════════ */
 @media (max-width: 1400px) {
     .stat-pill label { display: none; }

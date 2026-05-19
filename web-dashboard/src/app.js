@@ -169,7 +169,18 @@ if (!_crispToken && !window.location.pathname.includes('login')) {
 // localhost:8080 with backend on :8000) we point at :8000 directly. In prod
 // (page served via nginx proxy at the same origin as the API) we use the
 // page origin so HTTPS + same-host work without mixed-content / CORS drama.
-const _isLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+// Phase F dev-on-LAN (May 2026). Loopback names + RFC-1918 private
+// LAN IPs all resolve to "same host, port 8000" so a tester opening
+// the dashboard from their phone on the same Wi-Fi (e.g.
+// http://172.16.110.14:8080/web-dashboard/src/) gets the backend
+// reachable WITHOUT a code edit. The backend's own CORS regex at
+// backend/app/main.py:317 mirrors the same RFC-1918 ranges so the
+// preflight succeeds. In production (https://undp.crisplabs.tech)
+// hostname is neither loopback nor RFC-1918, so this branch
+// short-circuits to `window.location.origin` (same-host via nginx).
+const _LAN_RE = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/;
+const _isLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname)
+                  || _LAN_RE.test(window.location.hostname);
 const BACKEND_HOST = _isLocalDev
     ? `http://${window.location.hostname}:8000`
     : window.location.origin;
@@ -639,6 +650,67 @@ function bestVariant(group) {
         };
     }
     return null;
+}
+
+// ── Phase F image-reliability (May 2026) — tri-state classifier for the
+// LARGE (HIGH-tier) variant of a photo group. Replaces the binary
+// `assembly_status !== 'complete'` check that conflated `pending`,
+// `assembling`, and `failed` into "uploading…" with a pulsing spinner
+// for 14 days. Now the dashboard renders distinct visuals for:
+//
+//   complete    — variant is on S3; render the image.
+//   uploading   — chunks still arriving inside the freshness window;
+//                 show the existing fa-pulse cloud-arrow chip.
+//   delayed     — chunks have been stuck `pending`/`assembling` past
+//                 the freshness window but the backend hasn't yet
+//                 abandoned them (sweep tick lag). Show a yellow
+//                 clock chip + offer the operator a Reclaim button.
+//   lost        — sweep flipped the row to `failed` with
+//                 abandon_reason populated (chunks_never_arrived /
+//                 assembly_worker_lost / operator_manual). Red chip
+//                 + Reclaim button (retry if chunks were full; mark-
+//                 abandoned otherwise — operator confirms in modal).
+//   missing     — no HIGH row at all. Two sub-cases distinguished by
+//                 the freshness window: `missing-fresh` (report
+//                 younger than 30 min, HIGH might still arrive) renders
+//                 the "ORIG pending" chip; `missing-old` returns no
+//                 chip (the PWA gave up retrying, OR the channel
+//                 doesn't capture HIGH at all — Telegram / WhatsApp /
+//                 SMS / IVR).
+//
+// `_ORIG_FRESH_MS` is the SINGLE window applied to both the "HIGH
+// row exists but stuck" path AND the "HIGH row never created" path.
+// Matches the backend sweep's `_ABANDON_STALE_MIN=30 minutes` — any
+// pending row older than this WILL be abandoned on the next sweep
+// tick, so showing a chip past 30 min on a row the sweep can't
+// rescue is operator-confusing noise.
+//
+// Phase F (operator follow-up, May 2026) — the missing-HIGH branch
+// previously used a 14-day deferral horizon under the rationale that
+// the PWA's offline-queue retry runs that long. In practice the
+// 14-day chip was operator-trained noise: stale captures (4-day-old
+// reports, abandoned Telegram-channel rows that never have a HIGH
+// tier by design) lit chips that never cleared. Aligning both
+// branches on the 30-min window matches operator expectation ("if
+// it's been more than 30 min and the LARGE hasn't shown, the PWA
+// won't deliver it without intervention") AND matches the backend's
+// own abandon threshold so the operator's mental model is unified
+// across the client + server.
+const _ORIG_FRESH_MS = 30 * 60 * 1000;  // 30 min — matches backend sweep
+
+function _classifyHighTier(group, reportAgeMs) {
+    if (!group || !group.members) return 'missing-old';
+    const large = group.members.find(m => m.resolution_tier === 'HIGH');
+    if (!large) {
+        // No HIGH row at all. Within the same 30-min freshness window
+        // we use for pending/assembling rows: the HIGH might still
+        // arrive. Past 30 min it's "missing-old" and we stop chipping.
+        return reportAgeMs < _ORIG_FRESH_MS ? 'missing-fresh' : 'missing-old';
+    }
+    if (large.assembly_status === 'complete') return 'complete';
+    if (large.assembly_status === 'failed') return 'lost';
+    // pending / assembling — distinguished by freshness window.
+    return reportAgeMs < _ORIG_FRESH_MS ? 'uploading' : 'delayed';
 }
 
 // Phase B.3 (May 2026, UNDP-grade rebuild) — empty-state CTA for the
@@ -1746,6 +1818,18 @@ function createIncidentCard(r) {
     const card = document.createElement('div');
     const isSelected = (typeof _bulkSelectedIds !== 'undefined') && _bulkSelectedIds.has(r.id);
     card.className = `qrt-card ${selectedId === r.id ? 'selected' : ''} ${isSelected ? 'bulk-checked' : ''}`;
+    // Phase F image-reliability (May 2026) — expose the report id on
+    // the card element so e2e specs + operator devtools can scope to
+    // a specific card without doing visibility heuristics or relying
+    // on `:first` (which is brittle once the progressive-reveal
+    // virtualizer at line ~1511 starts hiding cards beyond index 50).
+    // Specifically required by tests/dashboard/07-multi-image-gallery
+    // ("per-card ORIG chip surfaces on reports with incomplete LARGE"),
+    // which used to be lucky-passing when the dev DB had < 50 reports
+    // and became flaky once F1's sweep tests grew the DB past that
+    // threshold and sank the synthetic-MODERATE report below the
+    // visibility horizon.
+    card.dataset.reportId = r.id;
     card.onclick    = (ev) => {
         // Phase G.5 — checkbox click is opt-in; clicking elsewhere on
         // the card still opens the detail panel via the existing path.
@@ -1814,46 +1898,65 @@ function createIncidentCard(r) {
     // Counts groups for which LARGE is missing or incomplete; shows
     // worst-case completion_pct for context.
     //
-    // May 2026 — companion change to mobile-app PWA reconciler fix.
-    // The PWA gives up retrying deferred Originals after 14 days
-    // (see _hasDeferredVariantsPending in mobile-app/src/app.js).
-    // So for reports older than that horizon, a missing HIGH row
-    // means the Original is PERMANENTLY ABANDONED — not "still
-    // uploading". Stop chipping those; the chip read as misleading
-    // when 53-hour-old reports still showed "Originals pending"
-    // and the device had long since stopped retrying.
-    const _ORIG_DEFERRED_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
+    // Phase F image-reliability (May 2026) — the feed-card chip now
+    // distinguishes uploading / delayed / lost / missing states using
+    // `_classifyHighTier()`. Pre-fix this site conflated pending,
+    // assembling, and failed under one 14-day "still uploading" chip
+    // (operator-reported bug: "Originals pending pill never clears").
+    // The card shows the *worst* state across all photo groups so the
+    // operator can prioritise from the queue without opening the card.
     const _reportAgeMs = r.server_created_at
         ? Date.now() - new Date(r.server_created_at).getTime()
         : 0;
     const _imgRows = (r.media || []).filter(m => m.type === 'IMAGE');
     const _groups = groupPhotos(_imgRows);
-    let origPendingCount = 0;
+    // Counters per tri-state so we can pick the worst chip variant.
+    // State precedence (worst → best): lost > delayed > uploading > missing-fresh.
+    let cntLost = 0, cntDelayed = 0, cntUploading = 0, cntMissingFresh = 0;
     let origMinPct = 100;
     for (const g of _groups) {
+        const st = _classifyHighTier(g, _reportAgeMs);
+        if (st === 'lost') cntLost++;
+        else if (st === 'delayed') cntDelayed++;
+        else if (st === 'uploading') cntUploading++;
+        else if (st === 'missing-fresh') cntMissingFresh++;
+        // 'missing-old' + 'complete' don't count toward the chip.
         const hi = g.members.find(m => m.resolution_tier === 'HIGH');
-        if (!hi) {
-            // No HIGH row at all. Two sub-cases:
-            //   * Report is RECENT (< 14d) → upload still pending; chip.
-            //   * Report is OLD (≥ 14d) → device gave up; don't chip.
-            if (_reportAgeMs < _ORIG_DEFERRED_TIMEOUT_MS) {
-                origPendingCount += 1;
-                if (origMinPct > 0) origMinPct = 0;
-            }
-            continue;
-        }
-        if (hi.assembly_status !== 'complete') {
-            // Mid-assembly — always show the chip regardless of age
-            // (a partial-assembly with received chunks IS recoverable
-            // server-side on next backend restart's recovery sweep).
-            origPendingCount += 1;
+        if (hi && st !== 'complete') {
             const pct = Math.round(hi.completion_pct || 0);
             if (pct < origMinPct) origMinPct = pct;
         }
     }
+    const origPendingCount = cntLost + cntDelayed + cntUploading + cntMissingFresh;
+    // Pick the worst state for the chip cosmetic — operator sees a red
+    // chip if ANY group is `lost`, yellow if any are `delayed`, amber
+    // (pulsing cloud-arrow) for the still-uploading happy path.
+    let chipState = 'uploading';
+    if (cntLost > 0)          chipState = 'lost';
+    else if (cntDelayed > 0)  chipState = 'delayed';
+    else if (cntUploading > 0) chipState = 'uploading';
+    else if (cntMissingFresh > 0) chipState = 'missing-fresh';
+    const _chipIcon = {
+        lost:           'fa-solid fa-circle-xmark',
+        delayed:        'fa-solid fa-clock',
+        uploading:      'fa-solid fa-cloud-arrow-up fa-pulse',
+        'missing-fresh': 'fa-solid fa-cloud-arrow-up fa-pulse',
+    }[chipState];
+    const _chipLabel = {
+        lost:    'LOST',
+        delayed: 'DELAYED',
+        uploading: 'ORIG',
+        'missing-fresh': 'ORIG',
+    }[chipState];
+    const _chipTitle = {
+        lost:    `${cntLost} ${cntLost === 1 ? 'Original' : 'Originals'} permanently lost — network never delivered the final chunks. Click to open the report and use the Reclaim button.`,
+        delayed: `${cntDelayed} ${cntDelayed === 1 ? 'Original is' : 'Originals are'} delayed past the 30-min freshness window. The backend recovery sweep will mark them lost on the next tick. Click to inspect.`,
+        uploading: `${origPendingCount} of ${_groups.length} ${origPendingCount === 1 ? 'Original is' : 'Originals are'} still uploading (worst pct: ${origMinPct}%). Click to open the report.`,
+        'missing-fresh': `${cntMissingFresh} ${cntMissingFresh === 1 ? 'Original has' : 'Originals have'} no HIGH-tier row yet — reporter's device may still be queueing. Click to inspect.`,
+    }[chipState];
     const origPendingChip = origPendingCount > 0 && _groups.length > 0
-        ? `<span class="qrt-orig-chip" title="${origPendingCount} of ${_groups.length} ${origPendingCount === 1 ? 'Original is' : 'Originals are'} still uploading (worst pct: ${origMinPct}%). Click to open the report and see the full tier breakdown.">
-               <i class="fa-solid fa-cloud-arrow-up fa-pulse"></i> ORIG <span class="qrt-orig-chip-pct">${origPendingCount}/${_groups.length}</span>
+        ? `<span class="qrt-orig-chip qrt-orig-chip-${chipState}" title="${_chipTitle}">
+               <i class="${_chipIcon}"></i> ${_chipLabel} <span class="qrt-orig-chip-pct">${origPendingCount}/${_groups.length}</span>
            </span>`
         : '';
 
@@ -2025,12 +2128,15 @@ function updateCommandStats() {
     // so the command bar doesn't grow a permanent "0 ORIG PENDING" chip
     // (which would mislead operators into thinking it's broken).
     //
-    // May 2026 — 14-day deferral horizon (matches the PWA's
-    // _hasDeferredVariantsPending timeout + the per-card chip
-    // logic above). Reports older than that with no HIGH row are
-    // permanently abandoned — count them as "no Original" not
-    // "pending" so the pill drops to zero once the backlog ages out.
-    const _ORIG_DEFERRED_TIMEOUT_MS_STAT = 14 * 24 * 60 * 60 * 1000;
+    // Phase F image-reliability (May 2026). The pill counts reports that
+    // have at least one HIGH-tier variant in `uploading` / `delayed` /
+    // `lost` / `missing-fresh` — i.e. any tri-state OTHER than
+    // `complete` or `missing-old`. Pre-fix this counter conflated all
+    // non-complete states under one label which never decremented when
+    // the backend gave up (no terminal state existed yet). Now the
+    // counter falls to zero correctly once the sweep abandons stuck
+    // rows AND the operator dismisses them via the Reclaim button or
+    // they age past the 14-day horizon.
     let origPending = 0;
     for (const r of reports) {
         const imgs = (r.media || []).filter(m => m.type === 'IMAGE');
@@ -2040,9 +2146,9 @@ function updateCommandStats() {
             : 0;
         const grps = groupPhotos(imgs);
         if (grps.some(g => {
-            const hi = g.members.find(m => m.resolution_tier === 'HIGH');
-            if (!hi) return ageMs < _ORIG_DEFERRED_TIMEOUT_MS_STAT;
-            return hi.assembly_status !== 'complete';
+            const st = _classifyHighTier(g, ageMs);
+            return st === 'lost' || st === 'delayed' ||
+                   st === 'uploading' || st === 'missing-fresh';
         })) {
             origPending += 1;
         }
@@ -3781,24 +3887,71 @@ window.selectReport = (id, skipFly = false) => {
                 const labelText = photoGroups.length === 1
                     ? 'Photo 1 of 1'
                     : `${photoGroups.length} Photos`;
-                // May 2026 — match the qrt-card chip's 14-day deferral
-                // window. A report older than 14d with no HIGH row means
-                // the PWA gave up retrying; stop labelling it as "still
-                // uploading." Mid-assembly partials always chip (server-
-                // side recovery can still finish them).
-                const _ORIG_DEFERRED_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
+                // Phase F image-reliability (May 2026) — tri-state chip
+                // replaces the binary "complete vs pending" check that
+                // pulsed forever on `failed` rows. Now each non-complete
+                // group surfaces under its WORST-state chip and offers
+                // an inline Reclaim button (routes to F3 endpoint
+                // /api/v1/reports/media/{id}/reclaim).
                 const _detailAgeMs = r.server_created_at
                     ? Date.now() - new Date(r.server_created_at).getTime()
                     : 0;
-                const origPending = photoGroups.filter(g => {
-                    const large = g.members.find(m => m.resolution_tier === 'HIGH');
-                    if (!large) {
-                        return _detailAgeMs < _ORIG_DEFERRED_TIMEOUT_MS;
+                let dpLost = 0, dpDelayed = 0, dpUploading = 0, dpMissingFresh = 0;
+                // Collect HIGH media ids for the Reclaim button payload.
+                const _reclaimables = [];
+                for (const g of photoGroups) {
+                    const st = _classifyHighTier(g, _detailAgeMs);
+                    if (st === 'lost') dpLost++;
+                    else if (st === 'delayed') dpDelayed++;
+                    else if (st === 'uploading') dpUploading++;
+                    else if (st === 'missing-fresh') dpMissingFresh++;
+                    const hi = (g.members || []).find(m => m.resolution_tier === 'HIGH');
+                    if (hi && (st === 'lost' || st === 'delayed')) {
+                        _reclaimables.push({ id: hi.id,
+                            chunks: `${hi.received_chunks || 0}/${hi.chunk_count || 0}`,
+                            state: st,
+                            reason: hi.abandon_reason || '',
+                        });
                     }
-                    return large.assembly_status !== 'complete';
-                }).length;
+                }
+                const origPending = dpLost + dpDelayed + dpUploading + dpMissingFresh;
+                let dpChipState = 'uploading';
+                if (dpLost > 0)          dpChipState = 'lost';
+                else if (dpDelayed > 0)  dpChipState = 'delayed';
+                else if (dpUploading > 0) dpChipState = 'uploading';
+                else if (dpMissingFresh > 0) dpChipState = 'missing-fresh';
+                const _dpChipIcon = {
+                    lost:            'fa-solid fa-circle-xmark',
+                    delayed:         'fa-solid fa-clock',
+                    uploading:       'fa-solid fa-cloud-arrow-up fa-pulse',
+                    'missing-fresh': 'fa-solid fa-cloud-arrow-up fa-pulse',
+                }[dpChipState];
+                const _dpChipLabel = {
+                    lost:            `${dpLost} ${dpLost === 1 ? 'Original lost' : 'Originals lost'} (network timeout)`,
+                    delayed:         `${dpDelayed} ${dpDelayed === 1 ? 'Original' : 'Originals'} delayed past 30 min`,
+                    uploading:       `${origPending} ${origPending === 1 ? 'Original' : 'Originals'} uploading`,
+                    'missing-fresh': `${dpMissingFresh} ${dpMissingFresh === 1 ? 'Original' : 'Originals'} not yet sent`,
+                }[dpChipState];
+                const _dpChipTitle = {
+                    lost:    'The reporter\'s device never delivered the final chunks. Use Reclaim → Retry assembly if you believe the file is recoverable, or Reclaim → Mark abandoned to dismiss.',
+                    delayed: 'These uploads are past the 30-minute freshness window. The next backend recovery tick will mark them lost; you can reclaim them in the meantime.',
+                    uploading: 'These uploads are still inside the freshness window. They should appear automatically once the reporter\'s device finishes the chunk stream.',
+                    'missing-fresh': 'The HIGH-tier variant hasn\'t been allocated yet — the reporter\'s device may be queueing it on slow connectivity. The PWA will retry for up to 14 days.',
+                }[dpChipState];
+                // Reclaim button only shown for `lost` + `delayed` states.
+                // Embeds the reclaimable media list as a JSON-encoded data-*
+                // attribute (escapeHtml-safe) so the click handler can pick
+                // up the ids without a second fetch.
+                const _reclaimBtn = _reclaimables.length > 0
+                    ? `<button class="dp-gallery-reclaim-btn" type="button"
+                               data-media-ids="${escapeHtml(JSON.stringify(_reclaimables))}"
+                               onclick="_openMediaReclaimModal('${r.id}', this)"
+                               title="Operator action: retry assembly or mark these originals as permanently lost.">
+                        <i class="fa-solid fa-wrench"></i> Reclaim
+                       </button>`
+                    : '';
                 const pendingChip = origPending > 0
-                    ? `<span class="dp-gallery-pending-chip" title="Original (LARGE) tier hasn't finished assembling for ${origPending} ${origPending === 1 ? 'photo' : 'photos'} — the Original will appear here once the reporter's device finishes uploading."><i class="fa-solid fa-cloud-arrow-up fa-pulse"></i> ${origPending} ${origPending === 1 ? 'original' : 'originals'} pending</span>`
+                    ? `<span class="dp-gallery-pending-chip dp-gallery-pending-chip-${dpChipState}" title="${escapeHtml(_dpChipTitle)}"><i class="${_dpChipIcon}"></i> ${escapeHtml(_dpChipLabel)}</span> ${_reclaimBtn}`
                     : '';
                 return `
             <div class="dp-gallery">
@@ -7087,6 +7240,145 @@ window.runVerification = async (id) => {
     }
 };
 
+// ── Phase F image-reliability (May 2026) — Reclaim modal + handler
+//
+// Operator clicks the Reclaim button on the detail-panel gallery chip
+// (only present when at least one HIGH-tier variant is in `lost` or
+// `delayed` state). This opens a small choice modal: Retry assembly
+// vs Mark abandoned. Each mode POSTs to /api/v1/reports/media/{id}/reclaim
+// in a small batch (one request per HIGH-tier media id; client-side
+// concurrency 3 — keeps the backend's per-report audit log readable).
+//
+// Why a modal and not a one-click action: the wrong mode can lose a
+// recoverable upload (if chunks WERE all there, mark_abandoned drops
+// the row to terminal failed without trying to assemble) or surface
+// a misleading "Retry assembly" 400 (if chunks weren't all there).
+// The modal explains the difference + lets the operator pick the
+// right mode given the per-media chunks_received counter.
+window._openMediaReclaimModal = (reportId, triggerBtn) => {
+    if (!triggerBtn) return;
+    let _reclaimables;
+    try {
+        _reclaimables = JSON.parse(triggerBtn.getAttribute('data-media-ids') || '[]');
+    } catch (e) {
+        _reclaimables = [];
+    }
+    if (!_reclaimables.length) {
+        showToast('No reclaimable media on this report.', 'info');
+        return;
+    }
+    // Strip any prior reclaim modal — only one at a time.
+    document.querySelectorAll('.reclaim-modal-backdrop').forEach(n => n.remove());
+    const rows = _reclaimables.map(m => `
+        <div class="reclaim-row">
+            <code>${escapeHtml(m.id.slice(0, 8))}…</code>
+            <span class="reclaim-row-state reclaim-row-state-${m.state}">${m.state}</span>
+            <span class="reclaim-row-chunks">${escapeHtml(m.chunks)} chunks</span>
+            ${m.reason ? `<span class="reclaim-row-reason">${escapeHtml(m.reason)}</span>` : ''}
+        </div>
+    `).join('');
+    const backdrop = document.createElement('div');
+    backdrop.className = 'reclaim-modal-backdrop';
+    backdrop.innerHTML = `
+        <div class="reclaim-modal">
+            <h3><i class="fa-solid fa-wrench"></i> Reclaim stuck originals</h3>
+            <p class="reclaim-modal-blurb">
+                <strong>${_reclaimables.length}</strong> HIGH-tier upload(s) need operator action.
+                <strong>Retry assembly</strong> only works when all chunks ARE on disk
+                (the worker died); <strong>Mark abandoned</strong> is for uploads where the
+                reporter's device never finished delivering chunks.
+            </p>
+            <div class="reclaim-rows">${rows}</div>
+            <div class="reclaim-modal-actions">
+                <button class="reclaim-modal-cancel" onclick="this.closest('.reclaim-modal-backdrop').remove()">
+                    Cancel
+                </button>
+                <button class="reclaim-modal-retry"
+                        onclick="_runMediaReclaim('${reportId}', 'retry_assembly', this)">
+                    <i class="fa-solid fa-rotate"></i> Retry assembly
+                </button>
+                <button class="reclaim-modal-abandon"
+                        onclick="_runMediaReclaim('${reportId}', 'mark_abandoned', this)">
+                    <i class="fa-solid fa-circle-xmark"></i> Mark abandoned
+                </button>
+            </div>
+        </div>`;
+    backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) backdrop.remove();
+    });
+    document.body.appendChild(backdrop);
+    // Store the reclaimables on the modal so the action handlers can
+    // pick them up without re-reading the trigger button (which may
+    // have re-rendered between open + click).
+    backdrop._reclaimables = _reclaimables;
+};
+
+// Operator clicked "Retry assembly" or "Mark abandoned" inside the modal.
+// Fans out N POST requests in batches of 3 (client-side concurrency
+// cap so the audit log stays readable). Surfaces per-item success/fail
+// via toast; on completion, closes the modal and re-renders the
+// detail panel via selectReport so the chip updates.
+window._runMediaReclaim = async (reportId, mode, actionBtn) => {
+    const backdrop = actionBtn.closest('.reclaim-modal-backdrop');
+    if (!backdrop) return;
+    const reclaimables = backdrop._reclaimables || [];
+    if (!reclaimables.length) {
+        backdrop.remove();
+        return;
+    }
+    // Disable both action buttons during the run.
+    backdrop.querySelectorAll('button').forEach(b => b.disabled = true);
+    actionBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Running…';
+
+    let ok = 0, fail = 0;
+    const errors = [];
+    // Run sequentially with a small await — the per-call backend cost
+    // is cheap and serial keeps the order predictable for the audit log.
+    for (const m of reclaimables) {
+        try {
+            const res = await fetch(`${API}/media/${m.id}/reclaim`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('crisp_token') || ''}`,
+                },
+                body: JSON.stringify({ mode }),
+            });
+            if (res.ok) {
+                ok += 1;
+            } else {
+                fail += 1;
+                const err = await res.json().catch(() => ({}));
+                errors.push(`${m.id.slice(0, 8)}: ${err.detail || res.status}`);
+            }
+        } catch (e) {
+            fail += 1;
+            errors.push(`${m.id.slice(0, 8)}: ${e.message || 'network error'}`);
+        }
+    }
+    const modeLabel = mode === 'retry_assembly' ? 'retry' : 'mark abandoned';
+    if (ok > 0 && fail === 0) {
+        showToast(`Reclaim ${modeLabel}: ${ok}/${reclaimables.length} succeeded`, 'success');
+    } else if (ok > 0 && fail > 0) {
+        showToast(`Reclaim ${modeLabel}: ${ok} OK, ${fail} failed — see console`, 'warning');
+        console.warn('Reclaim errors:', errors);
+    } else {
+        showToast(`Reclaim ${modeLabel}: ${fail} failed — see console`, 'error');
+        console.warn('Reclaim errors:', errors);
+    }
+    backdrop.remove();
+    // Re-render the detail panel so the chip picks up the new state.
+    // selectReport(reportId, true) skips the map fly + re-renders only
+    // the right-side panel.
+    try { selectReport(reportId, true); } catch (_) {}
+    // Force a fresh /reports/ fetch on the next poll tick so the new
+    // abandoned_at / abandon_reason fields land in allReports.
+    if (typeof window.__crispFetchReports === 'function') {
+        try { window.__crispFetchReports(); } catch (_) {}
+    }
+};
+
+
 // Phase C.2 (May 2026, UNDP-grade rebuild) — copy a public, auth-free
 // evidence URL to the clipboard. The verification panel exposes a
 // "Share evidence" button that calls this. Resolves to a static
@@ -9326,6 +9618,12 @@ function _decisionModeActive() {
     return true;
 }
 
+// Phase F image-reliability (May 2026) — remember the current poll
+// interval so `_updateCacheBadge` can pass it to the offline-banner
+// bridge ("Retrying every Ns"). The banner reads this on every
+// fail/success bridge call.
+let _lastPollIntervalMs = null;
+
 function _reschedulePoller() {
     if (_pollTimer) clearTimeout(_pollTimer);
     let interval;
@@ -9337,6 +9635,7 @@ function _reschedulePoller() {
     } else {
         interval = POLL_INTERVAL;
     }
+    _lastPollIntervalMs = interval;
     _pollTimer = setTimeout(fetchReports, interval);
 }
 
@@ -9346,9 +9645,15 @@ function _updateCacheBadge(stale) {
     // to be driven by navigator.onLine (unreliable: gets stuck false after
     // transient network hiccups). Now it tracks ACTUAL fetch results via
     // the bridge `window.setDashboardOnline(ok)` defined in index.html.
+    // Phase F image-reliability (May 2026) — pass the current poll
+    // interval so the banner can render "Retrying every Ns".
     try {
         if (typeof window.setDashboardOnline === 'function') {
-            window.setDashboardOnline(!stale);
+            // _pollIntervalMs is set by _reschedulePoller; default to
+            // POLL_INTERVAL if it hasn't been assigned yet (first poll).
+            const intervalMs = (typeof _lastPollIntervalMs === 'number')
+                ? _lastPollIntervalMs : POLL_INTERVAL;
+            window.setDashboardOnline(!stale, { intervalMs });
         }
     } catch (_) { /* never let banner logic break data rendering */ }
 

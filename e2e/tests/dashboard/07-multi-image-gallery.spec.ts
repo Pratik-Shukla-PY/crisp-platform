@@ -192,12 +192,36 @@ test.describe('Dashboard — multi-image gallery + PhotoSwipe + tier tabs', () =
             if (typeof fn === 'function') fn();
         }, synthReport(reportId, 2, { largeIncomplete: true }));
 
-        // The card renders inside the feed list. The chip is class
-        // `.qrt-orig-chip` and carries "ORIG" text. We don't rely on a
-        // selector against the specific card — at least one chip must
-        // appear because the synthetic report has incomplete HIGH tier.
-        const chip = page.locator('.qrt-orig-chip').first();
-        await expect(chip).toBeVisible({ timeout: 5000 });
-        await expect(chip).toContainText(/ORIG/);
+        // Phase F image-reliability (May 2026) — assert the chip via a
+        // DOM evaluate rather than visibility. The previous
+        // `.qrt-orig-chip.first()` assertion was lucky-passing when
+        // the dev DB had < 50 reports; once F1's sweep tests grew the
+        // DB past that threshold the synthetic MODERATE report sank
+        // below the progressive-reveal virtualizer's 50-card cutoff
+        // (`_applyProgressiveReveal` sets `display:none` on cards
+        // beyond index 50) and toBeVisible() failed even though the
+        // chip element was correctly in the DOM. Polling-driven
+        // refetch also races the visibility check — it can wipe the
+        // synthetic report before Playwright resolves. evaluate()
+        // captures the post-render DOM in one shot and decouples the
+        // intent ("chip surfaces") from viewport coincidence.
+        const probe = await page.evaluate((id) => {
+            const card = document.querySelector(`.qrt-card[data-report-id="${id}"]`);
+            if (!card) return { cardFound: false };
+            const chip = card.querySelector('.qrt-orig-chip');
+            return {
+                cardFound: true,
+                chipFound: !!chip,
+                chipText: chip ? (chip.textContent || '').trim() : '',
+                chipClass: chip ? chip.className : '',
+            };
+        }, reportId);
+        expect(probe.cardFound, 'synthetic card with data-report-id must exist').toBe(true);
+        expect(probe.chipFound, 'card must render .qrt-orig-chip when HIGH is pending').toBe(true);
+        expect(probe.chipText).toMatch(/ORIG/);
+        // Phase F state-modifier class must be present so the CSS tone
+        // (amber pulse) lights up; without this the chip would render
+        // the base styling only.
+        expect(probe.chipClass).toMatch(/qrt-orig-chip-uploading|qrt-orig-chip-missing-fresh/);
     });
 });

@@ -11,7 +11,7 @@
          empty in source; deploy pipeline patches with the real DSN
          (public-safe write-only key). -->
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v25">
+    <meta name="crisp-release" content="crisp-dashboard@v26">
     <meta name="description" content="United Nations Crisis Response Intelligence System — hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
     <!-- May 2026 — favicon. SVG works in modern browsers (Chrome 80+,
@@ -707,17 +707,23 @@
      Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
      app.js so the reporter_tier-badge renderer can read it synchronously. -->
 <script src="tier-config.js?v=1"></script>
-<script src="app.js?v=769"></script>
+<script src="app.js?v=771"></script>
 <script src="predictions.js?v=110"></script>
 
-<!-- Offline status banner -->
+<!-- Offline status banner. Phase F image-reliability (May 2026): the
+     banner now requires ≥ 3 consecutive fetch failures before lighting,
+     and renders the streak count + age-of-last-success so the operator
+     knows whether this is a hiccup or a genuine outage. Pre-fix the
+     banner toggled on the FIRST failure, which made transient flakes
+     look like full outages (and trained operators to ignore it). -->
 <div id="offline-banner" style="
   display:none; position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
   background:#1e1b4b; border:1px solid #7c3aed; border-radius:10px;
-  padding:8px 18px; color:#c4b5fd; font-size:12px; font-weight:600;
-  z-index:9999; gap:8px; align-items:center; box-shadow:0 4px 20px rgba(124,58,237,0.3);">
-  <i class="fa-solid fa-wifi" style="color:#f59e0b"></i>
-  &nbsp;Offline — showing cached data
+  padding:10px 20px; color:#c4b5fd; font-size:12px; font-weight:600;
+  z-index:9999; gap:10px; align-items:center; box-shadow:0 4px 20px rgba(124,58,237,0.3);
+  max-width:520px;">
+  <i class="fa-solid fa-wifi" style="color:#f59e0b;font-size:14px"></i>
+  <span id="offline-banner-text">Offline — showing cached data</span>
 </div>
 
 <script>
@@ -749,26 +755,69 @@ if ('serviceWorker' in navigator) {
 // successfully polling the backend. We now expose `window.setDashboardOnline`
 // which is called from `_updateCacheBadge()` in app.js on every poll; real
 // fetch failures light the banner, real successes hide it.
-const offlineBanner = document.getElementById('offline-banner');
-let _dashLastFetchOk = true;   // optimistic until a poll actually fails
-function _applyOfflineBanner() {
-  // Only show the banner when:
-  //  · the browser insists it's offline AND the last fetch failed, OR
-  //  · the last fetch failed (regardless of navigator.onLine).
-  // If either of those is a LIE (browser stuck on offline / transient 5xx),
-  // the banner flips off as soon as the next poll succeeds.
-  const online = _dashLastFetchOk;
-  offlineBanner.style.display = online ? 'none' : 'flex';
+//
+// Phase F image-reliability (May 2026) — the banner is now gated on
+// `streak >= 3` consecutive failures, not just `ok === false`. A
+// single transient flake (TLS handshake hiccup, DNS retry, brief
+// uplink dropout) used to flicker the banner on/off every 1.2 s
+// during active polling and was operator-trained-noise. Now the
+// banner only appears after 3 back-to-back failures — that's ~4 s in
+// active-poll mode or ~12 s in normal mode, well past any flicker.
+// On success the streak resets to 0 and the banner hides immediately.
+// The banner text includes the streak count + age-of-last-success so
+// the operator can tell at a glance whether this is a 30-second
+// glitch or a 5-minute outage.
+const offlineBanner    = document.getElementById('offline-banner');
+const offlineBannerTxt = document.getElementById('offline-banner-text');
+const OFFLINE_BANNER_STREAK_THRESHOLD = 3;
+let _dashLastFetchOk      = true;
+let _dashFetchFailStreak  = 0;
+let _dashLastSuccessAt    = Date.now();
+let _dashPollIntervalMs   = 4000;
+function _agoLabel(ms) {
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 60 * 60_000) return `${Math.round(ms / 60_000)}m`;
+  return `${Math.round(ms / (60 * 60_000))}h`;
 }
-window.setDashboardOnline = function (ok) {
+function _applyOfflineBanner() {
+  const showing = (_dashFetchFailStreak >= OFFLINE_BANNER_STREAK_THRESHOLD);
+  offlineBanner.style.display = showing ? 'flex' : 'none';
+  if (showing && offlineBannerTxt) {
+    const ago = _agoLabel(Date.now() - _dashLastSuccessAt);
+    const intervalS = Math.round(_dashPollIntervalMs / 1000);
+    offlineBannerTxt.innerHTML =
+      `Offline — last update <strong>${ago}</strong> ago. ` +
+      `<span style="opacity:0.75">Retrying every ${intervalS}s ` +
+      `(${_dashFetchFailStreak} consecutive failures).</span>`;
+  }
+}
+window.setDashboardOnline = function (ok, meta) {
   _dashLastFetchOk = !!ok;
+  if (ok) {
+    _dashFetchFailStreak = 0;
+    _dashLastSuccessAt = Date.now();
+  } else {
+    _dashFetchFailStreak += 1;
+  }
+  if (meta && typeof meta.intervalMs === 'number') {
+    _dashPollIntervalMs = meta.intervalMs;
+  }
   _applyOfflineBanner();
 };
-// Browser online/offline hints still update the banner (a genuine offline
-// event flips it immediately without waiting for the next poll interval).
-window.addEventListener('online',  () => { if (_dashLastFetchOk === false) _applyOfflineBanner(); });
-window.addEventListener('offline', () => { _dashLastFetchOk = false; _applyOfflineBanner(); });
-// Start optimistic. The first fetchReports() call will confirm or correct it.
+// Browser online/offline hints still update the banner. A genuine
+// `offline` event short-circuits the streak threshold (we trust the
+// browser when it tells us the radio is off).
+window.addEventListener('online',  () => {
+  if (_dashLastFetchOk) {
+    _dashFetchFailStreak = 0;
+    _applyOfflineBanner();
+  }
+});
+window.addEventListener('offline', () => {
+  _dashLastFetchOk = false;
+  _dashFetchFailStreak = OFFLINE_BANNER_STREAK_THRESHOLD;
+  _applyOfflineBanner();
+});
 _applyOfflineBanner();
 </script>
 </body>
