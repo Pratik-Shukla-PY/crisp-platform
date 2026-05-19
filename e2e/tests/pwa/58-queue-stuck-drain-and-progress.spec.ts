@@ -197,7 +197,7 @@ test.describe('PWA — stuck-queue drain + progress UX', () => {
             return await fn({ photoVariants: null, extraPhotosVariants: [] }, 'r-no-photos');
         });
         if (result && result.skipped) {
-            test(true, 'Reconcile helper not exposed; skipping');
+            test.skip(true, 'Reconcile helper not exposed; skipping');
             return;
         }
         expect(result.ok).toBe(true);

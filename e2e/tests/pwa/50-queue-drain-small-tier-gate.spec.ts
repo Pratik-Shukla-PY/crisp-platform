@@ -54,6 +54,12 @@ async function bootPwa(page: Page) {
             JSON.stringify({ accepted: true, ts: Date.now() }));
         localStorage.setItem('crisp_landing_seen', '1');
         localStorage.setItem('crisp_ui_v4', 'on');
+        // Force English so the Bengaluru GPS fixture in
+        // playwright.config.ts doesn't auto-detect Kannada — text
+        // assertions in this spec (e.g. "waiting: photo, audio") need
+        // English locale to match.
+        localStorage.setItem('crisp_lang', 'en');
+        localStorage.setItem('crisp_lang_manual', 'en');
     });
     await page.goto('index.html?ui=v4');
     await page.waitForFunction(
@@ -144,7 +150,7 @@ test.describe('PWA — Queue drain SMALL-tier gate (May 2026)', () => {
         });
     });
 
-    test('reconcile dequeues entry where server has SMALL of every photo (even with MEDIUM/LARGE pending)', async ({ page }) => {
+    test('reconcile keeps entry but marks _submissionLanded when SMALL is up + MEDIUM/LARGE deferred', async ({ page }) => {
         // Spoof the server status-since response to mimic the post-SMALL
         // state: server has 1 LOW-tier media row, 0 MEDIUM, 0 HIGH for a
         // single-photo report. expected_media = 3. Pre-fix: have=1 < exp=3
@@ -199,9 +205,21 @@ test.describe('PWA — Queue drain SMALL-tier gate (May 2026)', () => {
         expect(before).toBe(1);
         // Run reconciliation directly (avoids the 15s retry-loop wait).
         await page.evaluate(() => (window as any).__crispReconcileQueue());
-        // Post-condition: queue drained even though only SMALL landed.
-        const after = await page.evaluate(async () => (await (window as any).__crispGetAllQueued()).length);
-        expect(after, 'reconcile must drain when SMALL of every photo is up').toBe(0);
+        // Post-condition (May 2026 BUGFIX, app.js:10168-10222) — when
+        // SMALL is up but MEDIUM/LARGE are flagged `deferred=true`, the
+        // item STAYS queued so the retry loop can finish the deferred
+        // tiers (production audit: ~44% of photo groups had only
+        // SMALL+MEDIUM on backend because Originals were generated
+        // locally then deferred on slow link). The item gets marked
+        // `_submissionLanded=true` so the sync-badge ignores it (the
+        // user-facing "1 queued" pill drops to 0).
+        const items = await page.evaluate(async () => (await (window as any).__crispGetAllQueued()));
+        expect(items.length,
+            'reconcile keeps the entry queued for deferred MEDIUM/LARGE retry'
+        ).toBe(1);
+        expect(items[0]._submissionLanded,
+            'reconcile must mark _submissionLanded=true so the UI badge ignores this row'
+        ).toBe(true);
     });
 
     test('reconcile keeps queued when server has 0 SMALL (still genuinely in flight)', async ({ page }) => {

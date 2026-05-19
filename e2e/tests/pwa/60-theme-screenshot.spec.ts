@@ -66,8 +66,14 @@ test.describe('@theme-visual PWA — color theme rewrite (May 2026)', () => {
             s.infrastructure_type   = 'ROAD';
         });
         await page.evaluate(() => (window as any).__crispGoToStage('stage-v4-classify'));
-        await page.locator('#btn-v4-classify-next').click();
-        await page.locator('#btn-v4-classify-next').click();
+        // Jump directly to the crisis substep via the test hook (added
+        // in commit 4d2f1ea) — Continue-button clicks are visibility-
+        // flaky during the stage opacity transition.
+        await page.evaluate(() => {
+            if (typeof (window as any).__crispV4ShowSubStep === 'function') {
+                (window as any).__crispV4ShowSubStep('crisis');
+            }
+        });
         await page.waitForTimeout(200);
         await page.screenshot({
             path: 'test-results/theme-screenshots/05-classify-crisis-grid.png',
