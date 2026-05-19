@@ -5525,7 +5525,7 @@ function setupPhotoStage() {
                             } catch (_) {}
                         }
                     }
-                })());
+                }));
             };
             img.src = ev.target.result;
         };
@@ -6087,7 +6087,7 @@ function setupCameraModal() {
                         } catch (_) {}
                     }
                 }
-            })());
+            }));
         }, 'image/jpeg', CAMERA_CAPTURE_QUALITY);
     });
 }
