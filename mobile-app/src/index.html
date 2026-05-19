@@ -1911,11 +1911,76 @@
                 </span>
             </button>
 
-            <!-- UNDP must-have #6 — building-footprint picker mount.
+            <!-- UNDP must-have #6 — building-footprint picker.
                  Sits between Location and Classification so the OSM
                  polygon list (when shown) is visually linked to the
-                 location card above it. -->
-            <div id="v4-building-mount" class="v4-building-mount"></div>
+                 location card above it. The #building-select-box
+                 child carries the actual DOM hooks BuildingSelect
+                 (building-select.js) operates on:
+                   #building-map           Leaflet container
+                   #building-map-placeholder GPS-loading state
+                   #building-selected-pill confirmation chip
+                   #input-infra-name-v3    free-text fallback (must-have #6,
+                                            offline path — writes to
+                                            state.infrastructure_name)
+                 May 2026 regression note: this section was deleted
+                 alongside the V3 stages on May 15 (commit 8556979)
+                 because the V3 stage-crisis was its prior host. V4's
+                 reparent-on-stage-entry code at v4-flow.js:2089 then
+                 had nothing to find. Restored in-place so the picker
+                 is wired by default — reparent code now short-
+                 circuits via `mount.contains(box)`. -->
+            <div id="v4-building-mount" class="v4-building-mount">
+                <section class="review-block building-select-details" id="building-select-box" data-v3-slot="where">
+                    <p class="block-label">
+                        <i class="fa-solid fa-building" style="color:var(--accent);"></i>
+                        <span data-i18n="building_select_title">Optional: pick the exact building</span>
+                    </p>
+                    <button class="building-fs-cta" id="btn-building-fs-open" type="button">
+                        <i class="fa-solid fa-up-right-and-down-left-from-center" aria-hidden="true"></i>
+                        <span data-i18n="building_pick_cta">Open fullscreen picker</span>
+                    </button>
+                    <div id="building-map" class="building-map"
+                         role="application"
+                         aria-label="Pick a building from the map"></div>
+                    <div id="building-map-placeholder" class="building-map-placeholder">
+                        <i class="fa-solid fa-location-crosshairs"></i>
+                        <span data-i18n="building_waiting_gps">Waiting for GPS to load buildings nearby…</span>
+                    </div>
+                    <div class="building-select-hint">
+                        <i class="fa-solid fa-hand-pointer"></i>
+                        <span data-i18n="building_select_hint">Tap a building outline to mark it as damaged.</span>
+                    </div>
+                    <div id="building-selected-pill" class="building-selected-pill" style="display:none;">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <span data-i18n="building_selected">Building selected</span>
+                        <span class="building-selected-name" aria-live="polite"></span>
+                        <button id="btn-building-clear" type="button" aria-label="Clear building selection">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="building-free-text" id="building-free-text-block">
+                        <label class="building-free-text-label" for="input-infra-name-v3">
+                            <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
+                            <span data-i18n="bldg_offline_prompt">Type the building name in your language</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="input-infra-name-v3"
+                            class="building-free-text-input"
+                            autocomplete="off"
+                            inputmode="text"
+                            maxlength="120"
+                            placeholder="e.g. Kiambu High School / مدرسة الأمل"
+                            data-i18n-placeholder="placeholder_landmark_example"
+                            aria-describedby="building-free-text-hint">
+                        <p class="building-free-text-hint" id="building-free-text-hint">
+                            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                            <span data-i18n="bldg_offline_hint">The team will map this to GPS later</span>
+                        </p>
+                    </div>
+                </section>
+            </div>
 
             <!-- Card 4 — Classification (3 inline chips: type / hazard /
                  damage). Each chip is its own tappable button that
@@ -3753,7 +3818,7 @@
      (commit 79ffc56). Self-contained IIFE; throttled to once per 24 h.
      Loaded with defer so it runs after app.js wires up the device_id. -->
 <script defer src="device-telemetry.js?v=1"></script>
-<script defer src="app.js?v=1031"></script>
+<script defer src="app.js?v=1032"></script>
 <!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
      applyI18n etc. Internally it _whenReady-polls until those are set. -->
 <!-- May 2026 (photo-consent pass) — modal shown ONCE per device when

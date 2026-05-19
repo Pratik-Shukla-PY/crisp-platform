@@ -5,7 +5,12 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v226';
+const CACHE_NAME = 'crisp-v227';
+// v226 → v227 (May 19 — UNDP must-have #6 restoration: #building-select-box
+// markup put back inside #v4-building-mount after the May 15 V3-cleanup
+// regression deleted it, leaving the v4 review stage with no building
+// picker. Returning users must evict the stale index.html that had an
+// empty mount).
 // v225 → v226 (May 19 — reporter-blocking severity:null 422 loop fix).
 // Operator submitted an incident; UI stuck at "queued 25%" indefinitely.
 // HAR file showed 47 consecutive 422 responses from /api/v1/reports/meta
