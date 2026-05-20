@@ -3528,6 +3528,157 @@ class MediaReclaimRequest(_ReclaimBaseModel):
     mode: str  # "retry_assembly" | "mark_abandoned"
 
 
+# ── K.2.d — mark-deferred endpoint (Phase K, May 2026) ───────────────────────
+class MarkDeferredRequest(_ReclaimBaseModel):
+    """PWA soft-drain signal: 'I gave up on these tiers per photo group'."""
+    tiers_by_group: dict  # { "<photo_group_id>": ["MEDIUM", "HIGH"] }
+    reason: Optional[str] = "bandwidth_tier_deferred"
+
+
+@router.post("/{report_id}/media/mark-deferred", status_code=status.HTTP_200_OK)
+def mark_media_deferred(
+    report_id: str,
+    payload: MarkDeferredRequest,
+    db: Session = Depends(get_db),
+):
+    """K.2.d (May 2026, Phase K). Backend-side companion to the PWA's
+    soft-drain at mobile-app/src/app.js:10170-10178.
+
+    When the PWA's bandwidth tier detection defers MEDIUM/HIGH variants
+    indefinitely (SLOW / VERY_SLOW networks), the SMALL variant lands
+    but the higher tiers never do. The PWA's queue dequeues at SMALL
+    completion (May 2026 'SMALL gates the photo stage' fix) but the
+    backend's `expected_media` stays at the original 3-per-photo count,
+    keeping `sync_status=PARTIAL` forever.
+
+    This endpoint takes the PWA's explicit "I gave up" signal and:
+      1. For each (photo_group_id, tier) marked deferred, find or
+         create a placeholder Media row stamped:
+           - assembly_status = 'failed'
+           - abandon_reason  = 'bandwidth_tier_deferred'  (default)
+           - abandoned_at    = now
+      2. Decrement `report.expected_media` by the count of new
+         abandon-stamps (so the SYNCED gate becomes honest).
+      3. Re-evaluate the SYNCED promotion gate.
+
+    Idempotent: calling twice with the same payload is a noop (rows
+    already in `failed` state aren't re-stamped, expected_media isn't
+    re-decremented).
+
+    Dashboard K.5.a chip-row renders "📶 Original (slow network)" for
+    rows with `abandon_reason='bandwidth_tier_deferred'`.
+    """
+    report = db.query(Report).filter(Report.id == report_id).with_for_update().first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    if not isinstance(payload.tiers_by_group, dict) or not payload.tiers_by_group:
+        raise HTTPException(
+            status_code=422,
+            detail="tiers_by_group must be a non-empty dict of {photo_group_id: [tiers]}",
+        )
+
+    reason = payload.reason or "bandwidth_tier_deferred"
+    valid_tiers = {"LOW", "MEDIUM", "HIGH", "ORIGINAL"}
+    valid_reasons = {
+        "bandwidth_tier_deferred", "encode_failed", "orphan_no_source",
+    }
+    if reason not in valid_reasons:
+        raise HTTPException(
+            status_code=422,
+            detail=f"invalid reason {reason!r}; expected one of {sorted(valid_reasons)}",
+        )
+
+    from datetime import datetime as _dt, timezone as _tz
+    now_utc = _dt.now(_tz.utc)
+    newly_stamped = 0
+
+    for photo_group_id, tiers in payload.tiers_by_group.items():
+        if not photo_group_id or not isinstance(tiers, list):
+            continue
+        for tier_raw in tiers:
+            tier = str(tier_raw).upper()
+            if tier not in valid_tiers:
+                continue
+            try:
+                tier_enum = ResolutionEnum(tier)
+            except ValueError:
+                continue
+
+            # Find existing Media row for this (report, group, tier).
+            existing = db.query(Media).filter(
+                Media.report_id == report.id,
+                Media.photo_group_id == photo_group_id,
+                Media.resolution_tier == tier_enum,
+            ).first()
+
+            if existing:
+                # If already in a terminal state with this reason, skip
+                # (idempotent). If complete, also skip — a SMALL/MEDIUM
+                # /HIGH that DID land beats the PWA's soft-drain claim.
+                if existing.assembly_status == "complete":
+                    continue
+                if existing.assembly_status == "failed" and existing.abandoned_at is not None:
+                    continue
+                existing.assembly_status = "failed"
+                existing.abandon_reason = reason
+                existing.abandoned_at = now_utc
+                newly_stamped += 1
+            else:
+                # Create a placeholder Media row so the dashboard's
+                # photo-group renderer knows the tier was attempted +
+                # gave up. URL stays empty (no asset to fetch).
+                import uuid as _uuid
+                placeholder = Media(
+                    id=str(_uuid.uuid4()),
+                    report_id=report.id,
+                    type=MediaTypeEnum.IMAGE,  # tier deferral only applies to images
+                    resolution_tier=tier_enum,
+                    photo_group_id=photo_group_id,
+                    url="",
+                    is_synced=False,
+                    chunk_count=0,
+                    received_chunks=0,
+                    completion_pct=0.0,
+                    assembly_status="failed",
+                    abandon_reason=reason,
+                    abandoned_at=now_utc,
+                )
+                db.add(placeholder)
+                newly_stamped += 1
+
+    if newly_stamped > 0:
+        # Decrement expected_media by the count of new abandon-stamps so
+        # the SYNCED gate becomes honest. Floor at received_media (can't
+        # go below what's already landed).
+        new_expected = max(
+            report.received_media or 0,
+            (report.expected_media or 0) - newly_stamped,
+        )
+        if new_expected != report.expected_media:
+            report.expected_media = new_expected
+        # Re-evaluate SYNCED gate.
+        if (report.expected_media > 0
+                and (report.received_media or 0) >= report.expected_media
+                and report.sync_status != SyncStatusEnum.SYNCED):
+            report.sync_status = SyncStatusEnum.SYNCED
+            logger.info(
+                f"[MarkDeferred] report {report_id[:8]} promoted to SYNCED "
+                f"(expected={report.expected_media}, received={report.received_media})"
+            )
+
+    db.commit()
+    db.refresh(report)
+
+    return {
+        "report_id": report.id,
+        "newly_stamped": newly_stamped,
+        "expected_media": report.expected_media,
+        "received_media": report.received_media,
+        "sync_status": report.sync_status.value if hasattr(report.sync_status, "value") else report.sync_status,
+    }
+
+
 @router.post("/media/{media_id}/reclaim", status_code=status.HTTP_200_OK)
 def reclaim_media(
     media_id: str,
