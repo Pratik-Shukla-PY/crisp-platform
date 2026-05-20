@@ -5,7 +5,13 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v232';
+const CACHE_NAME = 'crisp-v233';
+// v232 → v233 (May 20 — Phase L Batch 2 second hotfix): caught the
+// 6th surviving 'LOW' default — `uploadChunksBinary({ ..., resolutionTier='LOW', ... })`
+// function-parameter default. ANY call that omitted `resolutionTier`
+// was sending 'LOW' and 422-ing against the post-Batch-1b backend.
+// Default → 'SMALL'.
+
 // v231 → v232 (May 20 — Phase L Batch 2 hotfix: caught 3 surviving
 // `'LOW'`/`'HIGH'` literals that escaped the initial rename pass:
 //   1. sendBinaryChunkWithRetry default — `resolutionTier || 'LOW'`

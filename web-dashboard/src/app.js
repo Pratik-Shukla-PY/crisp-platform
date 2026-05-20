@@ -537,7 +537,11 @@ function blurhashToDataURL(hash, width = 40, height = 40) {
 // back to partial previews if no variant has finished yet. Legacy media
 // without a photo_group_id becomes its own one-member group so reports
 // queued before this feature shipped still render.
-const TIER_RANK = { HIGH: 3, MEDIUM: 2, LOW: 1, ORIGINAL: 4 };
+// Phase L (May 2026) — canonical 3-value SMALL/MEDIUM/ORIGINAL.
+// Legacy LOW/HIGH kept in the rank table only so historical rows
+// (pre-alembic-0035 backfill) still sort sensibly if they
+// somehow appear; backend never emits them post-migration.
+const TIER_RANK = { SMALL: 1, LOW: 1, MEDIUM: 2, HIGH: 3, ORIGINAL: 4 };
 
 // ── Phase 2 (Apr 2026): tier override map ──────────────────────────────────
 // Analysts can click SMALL / MEDIUM / LARGE to manually pick which variant
@@ -7289,9 +7293,10 @@ document.addEventListener('keydown', (e) => {
     const images = r.media?.filter(m => m.type === 'IMAGE') || [];
     const group = groupPhotos(images)[0];
     if (!group) return;
-    const tiersInOrder = ['LOW', 'MEDIUM', 'HIGH'];
+    // Phase L (May 2026) — canonical SMALL/MEDIUM/ORIGINAL.
+    const tiersInOrder = ['SMALL', 'MEDIUM', 'ORIGINAL'];
     const current = _tierOverride.get(selectedId) ||
-        (bestVariant(group)?.tier) || 'HIGH';
+        (bestVariant(group)?.tier) || 'ORIGINAL';
     const idx = tiersInOrder.indexOf(current);
     if (idx < 0) return;
     const nextIdx = e.key === 'ArrowRight'
@@ -8160,7 +8165,7 @@ function _buildGallerySlides(report, startGroupIdx) {
         // best behaviour. Fall back to whatever bestVariant() surfaces (which
         // includes partials/thumbnails for in-flight uploads).
         const pick = highestCompleteVariant(g) || bestVariant(g);
-        _currentGalleryTiers.set(g.group_id || `loose-${idx}`, pick?.tier || 'HIGH');
+        _currentGalleryTiers.set(g.group_id || `loose-${idx}`, pick?.tier || 'ORIGINAL');
         // PhotoSwipe needs intrinsic dimensions to size the slide. Real
         // images carry these in the DB (`width`/`height` columns aren't
         // populated in the schema), so we use generous viewport defaults
@@ -8201,7 +8206,7 @@ window.openGallery = function (reportId, startGroupIdx) {
     // when the user navigates between groups.
     slides.forEach(s => _currentGalleryTiers.set(s._groupId, s._members
         .filter(m => m.assembly_status === 'complete' && m.url)
-        .sort((a,b) => (TIER_RANK[b.resolution_tier]||0) - (TIER_RANK[a.resolution_tier]||0))[0]?.resolution_tier || 'HIGH'));
+        .sort((a,b) => (TIER_RANK[b.resolution_tier]||0) - (TIER_RANK[a.resolution_tier]||0))[0]?.resolution_tier || 'ORIGINAL'));
 
     const pswp = new PhotoSwipe({
         dataSource: slides,
@@ -8231,7 +8236,7 @@ window.openGallery = function (reportId, startGroupIdx) {
                         el.innerHTML = '';
                         return;
                     }
-                    const activeTier = _currentGalleryTiers.get(slide._groupId) || 'HIGH';
+                    const activeTier = _currentGalleryTiers.get(slide._groupId) || 'ORIGINAL';
                     const byTier = Object.fromEntries(
                         slide._members.map(m => [m.resolution_tier, m])
                     );

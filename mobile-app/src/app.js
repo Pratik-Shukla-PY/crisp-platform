@@ -8294,7 +8294,7 @@ function sendFormData(url, formData, timeoutMs = 30000) {
  * @param {number} params.totalChunks
  * @param {Blob|Uint8Array|ArrayBuffer} params.blob  — the raw-byte chunk payload
  * @param {'IMAGE'|'AUDIO'} params.type
- * @param {'LOW'|'MEDIUM'|'HIGH'|'ORIGINAL'} params.resolutionTier
+ * @param {'SMALL'|'MEDIUM'|'ORIGINAL'} params.resolutionTier
  * @param {string|null} params.photoGroupId
  * @param {boolean} params.clientBlurApplied
  * @param {string|null} params.checksum  — hex djb2 over the raw bytes (null → skip)
@@ -8412,7 +8412,9 @@ async function _sendLegacyB64Chunk(reportId, params, retries, timeoutMs) {
  * @returns {Promise<{totalChunks:number}>}
  */
 async function uploadChunksBinary(reportId, mediaId, blob, {
-    type = 'IMAGE', resolutionTier = 'LOW', photoGroupId = null,
+    // Phase L (May 2026) — canonical SMALL default. Pre-L was 'LOW'
+    // which the backend now rejects with 422 post-Batch-1b cleanup.
+    type = 'IMAGE', resolutionTier = 'SMALL', photoGroupId = null,
     clientBlurApplied = false, startSeq = 0,
     onProgress = null,
 } = {}) {
