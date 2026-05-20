@@ -296,14 +296,79 @@ async function syncReport(report: QueuedReport): Promise<void> {
 
   if (mainVariants || extraVariants.some(e => e)) {
     // Tier-first interleave.
+    //
+    // P1.4 (May 2026, audit follow-up to K.3.a): SMALL is the must-have
+    // tier — backend renders no chip at all without it, so we still
+    // throw on SMALL failure to retry the whole report next pass.
+    // MEDIUM and ORIGINAL are best-effort; catching failures here lets
+    // us POST `/media/mark-deferred` after the loop so:
+    //   1. The dashboard renders "📶 Original (slow network)" via
+    //      abandon_reason='bandwidth_tier_deferred' instead of
+    //      "📡 Upload abandoned" via 'chunks_never_arrived' (Action ③).
+    //   2. The Report's expected_media is decremented to match reality,
+    //      so the SYNCED gate flips on time instead of stalling at
+    //      PARTIAL until Action ④ idle-promotes it.
+    // PWA already did this in app.js::_enumerateDeferredByGroup; RN now
+    // matches that surface contract.
+    const deferred: Record<string, ('SMALL' | 'MEDIUM' | 'ORIGINAL')[]> = {};
+    const TIER_WIRE: Record<'small' | 'medium' | 'large', 'SMALL' | 'MEDIUM' | 'ORIGINAL'> = {
+      small: 'SMALL', medium: 'MEDIUM', large: 'ORIGINAL',
+    };
+    const markDeferred = (groupId: string, tier: 'small' | 'medium' | 'large') => {
+      if (!groupId) return;
+      if (!deferred[groupId]) deferred[groupId] = [];
+      const wire = TIER_WIRE[tier];
+      if (!deferred[groupId].includes(wire)) deferred[groupId].push(wire);
+    };
+
     for (const tier of ['small', 'medium', 'large'] as const) {
+      const isHardTier = tier === 'small';
       if (mainVariants) {
-        await uploadOneVariant(mainVariants[tier], tier, report.photo_group_id || '', `main/${tier}`);
+        try {
+          await uploadOneVariant(mainVariants[tier], tier, report.photo_group_id || '', `main/${tier}`);
+        } catch (e) {
+          if (isHardTier) throw e;
+          console.warn(`[Sync] main/${tier}: exhausted retries, marking deferred`, e);
+          markDeferred(report.photo_group_id || '', tier);
+        }
       }
       for (let i = 0; i < extraVariants.length; i++) {
         const ev = extraVariants[i];
         if (!ev) continue;
-        await uploadOneVariant(ev[tier], tier, ev.groupId, `extra[${i}]/${tier}`);
+        try {
+          await uploadOneVariant(ev[tier], tier, ev.groupId, `extra[${i}]/${tier}`);
+        } catch (e) {
+          if (isHardTier) throw e;
+          console.warn(`[Sync] extra[${i}]/${tier}: exhausted retries, marking deferred`, e);
+          markDeferred(ev.groupId, tier);
+        }
+      }
+    }
+
+    // Soft-drain signal — backend converts these to placeholder Media
+    // rows stamped abandon_reason='bandwidth_tier_deferred' so the
+    // dashboard chip is accurate and Action ③ doesn't mis-classify
+    // them as 'chunks_never_arrived' after 30 min idle.
+    if (Object.keys(deferred).length > 0 && serverId) {
+      try {
+        const res = await fetch(`${getApiBase()}/reports/${serverId}/media/mark-deferred`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tiers_by_group: deferred,
+            reason: 'bandwidth_tier_deferred',
+          }),
+        });
+        if (!res.ok) {
+          console.warn(`[Sync] mark-deferred returned HTTP ${res.status} — non-fatal, Action ③ will catch it`);
+        } else {
+          console.log(`[Sync] mark-deferred signalled for ${Object.keys(deferred).length} group(s)`);
+        }
+      } catch (e) {
+        // Non-fatal: backend Action ③ sweep eventually abandons the
+        // missing tiers after 30 min idle. The explicit endpoint just
+        // makes it immediate (and uses the right abandon_reason).
+        telemetrySwallow('markDeferred', e);
       }
     }
   } else if (report.photo) {

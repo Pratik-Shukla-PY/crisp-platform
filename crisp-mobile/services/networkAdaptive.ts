@@ -67,6 +67,13 @@ const CONFIGS: Record<NetworkTier, AdaptiveConfig> = {
     audioBitrate: 16,
     chunkSize: 1024,       // 1KB mandatory minimum (req: 1KB)
     parallelChunks: 1,     // sequential only
+    // Total per-chunk budget (sum of retryDelays): 345 s ≈ 5.75 min.
+    // Matches the PWA's VERY_SLOW curve in mobile-app/src/app.js (Phase K
+    // K.4.c: 15 retries × 30 s cap = ~360 s). Long enough to survive 5+
+    // Wi-Fi flaps within a single chunk attempt on the 2 KBPS humanitarian
+    // baseline; short enough that the report-level retry (MAX_RETRIES=10)
+    // still makes progress within a single user session. Tuning either
+    // ladder requires updating the sibling PWA value to keep them in sync.
     maxRetries: 15,
     retryDelays: [2000, 5000, 10000, 15000, 20000, 25000, 30000, 30000, 30000, 30000, 30000, 30000, 30000, 30000, 30000],
   },
