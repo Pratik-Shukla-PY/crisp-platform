@@ -144,21 +144,22 @@ test.describe('PWA truthful client_blur_applied flag', () => {
       return {
         hasSmall: Boolean(out?.small?.blob),
         hasMedium: Boolean(out?.medium?.blob),
-        hasLarge: Boolean(out?.large?.blob),
+        // Phase L (May 2026): variant key is `original`, was `large`.
+        hasOriginal: Boolean(out?.original?.blob),
         // Parent-level flag threaded from the blur result.
         parentClientBlurApplied: out?.clientBlurApplied,
         // Per-variant — should match the parent.
         smallClientBlurApplied: out?.small?.clientBlurApplied,
         mediumClientBlurApplied: out?.medium?.clientBlurApplied,
-        largeClientBlurApplied: out?.large?.clientBlurApplied,
+        originalClientBlurApplied: out?.original?.clientBlurApplied,
         consistentFlag: out?.small?.clientBlurApplied === out?.medium?.clientBlurApplied
-                     && out?.medium?.clientBlurApplied === out?.large?.clientBlurApplied,
+                     && out?.medium?.clientBlurApplied === out?.original?.clientBlurApplied,
       };
     }, Array.from(tinyJpeg));
 
     expect(result.hasSmall).toBeTruthy();
     expect(result.hasMedium).toBeTruthy();
-    expect(result.hasLarge).toBeTruthy();
+    expect(result.hasOriginal).toBeTruthy();
     expect(typeof result.parentClientBlurApplied).toBe('boolean');
     expect(typeof result.smallClientBlurApplied).toBe('boolean');
     // Whatever value the pipeline landed on, it must be consistent

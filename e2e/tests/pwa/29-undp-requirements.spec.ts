@@ -543,7 +543,9 @@ test.describe('Android back-button navigates between stages', () => {
 
 test.describe('Backend submit endpoint accepts UNDP payload', () => {
     test('POST /reports/meta accepts the full UNDP-aligned payload', async ({ request }) => {
-        const baseURL = (process.env.CRISP_BACKEND_URL || 'https://undp.crisplabs.tech').replace(/\/$/, '');
+        // Same default as e2e/playwright.config.ts: localhost for dev/CI;
+        // CRISP_BACKEND_URL=https://undp.crisplabs.tech for the prod-smoke variant.
+        const baseURL = (process.env.CRISP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
         const payload = {
             device_hash: 'undp-regression-' + Date.now(),
             client_report_id: 'cr-' + Date.now(),
@@ -580,13 +582,17 @@ test.describe('Backend submit endpoint accepts UNDP payload', () => {
 
 test.describe('Channels endpoints reachable (UNDP brief: multi-channel intake)', () => {
     test('GET /push/vapid-public reachable (Web Push channel)', async ({ request }) => {
-        const baseURL = (process.env.CRISP_BACKEND_URL || 'https://undp.crisplabs.tech').replace(/\/$/, '');
+        // Same default as e2e/playwright.config.ts: localhost for dev/CI;
+        // CRISP_BACKEND_URL=https://undp.crisplabs.tech for the prod-smoke variant.
+        const baseURL = (process.env.CRISP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
         const res = await request.get(`${baseURL}/api/v1/push/vapid-public`);
         expect(res.status()).toBe(200);
     });
 
     test('GET /api/v1/auth/sso/providers reachable (auth surface)', async ({ request }) => {
-        const baseURL = (process.env.CRISP_BACKEND_URL || 'https://undp.crisplabs.tech').replace(/\/$/, '');
+        // Same default as e2e/playwright.config.ts: localhost for dev/CI;
+        // CRISP_BACKEND_URL=https://undp.crisplabs.tech for the prod-smoke variant.
+        const baseURL = (process.env.CRISP_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
         const res = await request.get(`${baseURL}/api/v1/auth/sso/providers`);
         expect(res.status()).toBe(200);
     });

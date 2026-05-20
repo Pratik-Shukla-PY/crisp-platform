@@ -107,10 +107,11 @@ test.describe('PWA v4 multi-photo capture (May 2026 bugfix)', () => {
             const extras = s.extraPhotos || [];
             if (extras.length !== 2) return false;        // exactly 2 extras
             // Each extra MUST have variants populated (async pipeline must
-            // have settled). variants.small + .medium + .large all present.
+            // have settled). variants.small + .medium + .original all present.
+            // Phase L (May 2026): variant key is `original`, was `large`.
             for (const e of extras) {
                 if (!e || !e.variants) return false;
-                if (!e.variants.small || !e.variants.medium || !e.variants.large) return false;
+                if (!e.variants.small || !e.variants.medium || !e.variants.original) return false;
             }
             return true;
         }, null, { timeout: 15_000 });

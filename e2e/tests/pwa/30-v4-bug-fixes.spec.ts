@@ -117,22 +117,23 @@ test.describe('BUG 6 — v4 image upload pipeline mirrors v3', () => {
         await page.locator('#v4-file-camera').setInputFiles(jpg);
 
         // ImageVariants.generate is deferred via _runWhenIdle; allow ~6s.
+        // Phase L (May 2026): variant key is `original`, was `large`.
         const variants = await page.waitForFunction(() => {
             const v = (window as any).state.photoVariants;
-            return v && v.small && v.medium && v.large ? {
+            return v && v.small && v.medium && v.original ? {
                 hasSmall: !!v.small.blob,
                 hasMedium: !!v.medium.blob,
-                hasLarge: !!v.large.blob,
+                hasOriginal: !!v.original.blob,
                 smallBytes: v.small.bytes || 0,
                 mediumBytes: v.medium.bytes || 0,
-                largeBytes: v.large.bytes || 0,
+                originalBytes: v.original.bytes || 0,
             } : null;
         }, null, { timeout: 8000 }).then((h) => h.jsonValue()).catch(() => null);
 
         expect(variants, 'state.photoVariants never populated').toBeTruthy();
         expect(variants.hasSmall, 'small tier missing').toBe(true);
         expect(variants.hasMedium, 'medium tier missing').toBe(true);
-        expect(variants.hasLarge, 'large tier missing').toBe(true);
+        expect(variants.hasOriginal, 'original tier missing').toBe(true);
     });
 
     test('v4 capture produces hasPhoto=true in submitReport gate', async ({ page }) => {
@@ -668,19 +669,39 @@ test.describe('BUG 9 — v4 send always enqueues report into IDB', () => {
     test('CrispV4._onSend path persists into IndexedDB on offline submit', async ({ page }) => {
         await _bootV4(page);
         // Set the entire state v4's send path expects.
+        //
+        // v6.7 (May 2026) — submitReport reads snake_case classifier fields
+        // first, camelCase as fallback. We seed BOTH to match what the
+        // v4-flow actually writes, AND set state.photoVariants so the new
+        // _reattemptMissingVariants() (8350ce9) short-circuits — otherwise
+        // ImageVariants.generate runs against the test's 2-byte garbage
+        // blob and stalls the submit path past the 5 s test timeout.
         await page.evaluate(() => {
             const s = (window as any).state;
             s.location = { lat: 12.97, lng: 77.59, acc: 10 };
             s.locationName = 'Test Location';
+            s.crisis_type = 'EARTHQUAKE';
+            s.infrastructure_type = 'COMMERCIAL';
+            s.damage_classification = 'PARTIAL';
             s.crisisType = 'EARTHQUAKE';
             s.infraType = 'COMMERCIAL';
             s.damageClass = 'PARTIAL';
             s.severity = 'MODERATE';
             s.description = 'v4 offline-queue regression test';
             s.photoDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAKAAoDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==';
-            s.photoBlob = new Blob([new Uint8Array([0xFF, 0xD8])], { type: 'image/jpeg' });
+            const stubBlob = new Blob([new Uint8Array([0xFF, 0xD8])], { type: 'image/jpeg' });
+            s.photoBlob = stubBlob;
             s.photoGroupId = 'grp-' + Date.now();
             s.extraPhotos = [];
+            // Pre-populate Phase L canonical variants so _reattemptMissingVariants
+            // sees `photoVariants.small` and returns immediately (avoids the
+            // expensive variant pipeline running against a 2-byte garbage blob).
+            s.photoVariants = {
+                small:    { blob: stubBlob, bytes: 1024, clientBlurApplied: false },
+                medium:   { blob: stubBlob, bytes: 1024, clientBlurApplied: false },
+                original: { blob: stubBlob, bytes: 1024, clientBlurApplied: false },
+                clientBlurApplied: false,
+            };
         });
         // Force offline (network-error scenario).
         await page.context().setOffline(true);

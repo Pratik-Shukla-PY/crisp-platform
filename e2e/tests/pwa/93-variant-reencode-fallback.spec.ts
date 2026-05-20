@@ -87,11 +87,14 @@ test.describe('PWA K.3.c — variant dataUrl re-encode fallback', () => {
                 stages: { meta: true, text: true, photo: false, audio: true },
                 photoGroupId,
                 photo: legacyUrl,    // legacy single-image source
+                // Phase L (May 2026): canonical variant key is `original`.
+                // IDB read-migration converts legacy `large` → `original`,
+                // so tests must enqueue with the canonical key directly.
                 photoVariants: {
                     clientBlurApplied: true,
-                    small:  { mediaId: 'k3c-small-x', complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 1024 },
-                    medium: { mediaId: mediumMediaId, complete: false, deferred: false, dataUrl: '', chunkProgress: 0, size: 4096 },
-                    large:  { mediaId: 'k3c-large-x', complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 16384 },
+                    small:    { mediaId: 'k3c-small-x',     complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 1024 },
+                    medium:   { mediaId: mediumMediaId,     complete: false, deferred: false, dataUrl: '', chunkProgress: 0, size: 4096 },
+                    original: { mediaId: 'k3c-original-x',  complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 16384 },
                 },
                 extraPhotosVariants: [],
                 meta: { expected_media: 3 },
@@ -133,7 +136,7 @@ test.describe('PWA K.3.c — variant dataUrl re-encode fallback', () => {
         const cid = 'k3c-cid-orphan-no-source';
         const reportId = 'k3c-server-report-orphan';
         const photoGroupId = 'k3c-grp-orphan';
-        const largeMediaId = 'k3c-lg-orphan';
+        const originalMediaId = 'k3c-orig-orphan';
 
         await page.route(/\/api\/v1\/reports\/upload-probe$/, (route) =>
             route.fulfill({ status: 200, headers: { 'content-type': 'application/json' },
@@ -142,7 +145,8 @@ test.describe('PWA K.3.c — variant dataUrl re-encode fallback', () => {
         await bootPwa(page);
 
         // No item.photo, no extraPhotos — there's NO legacy source at all.
-        await page.evaluate(async ({ cid, reportId, photoGroupId, largeMediaId }) => {
+        // Phase L (May 2026): canonical variant key is `original`.
+        await page.evaluate(async ({ cid, reportId, photoGroupId, originalMediaId }) => {
             await (window as any).__crispEnqueueReport({
                 client_report_id: cid,
                 serverId: reportId,
@@ -151,24 +155,24 @@ test.describe('PWA K.3.c — variant dataUrl re-encode fallback', () => {
                 photo: null,
                 photoVariants: {
                     clientBlurApplied: true,
-                    small:  { mediaId: 'k3c-sm-orphan', complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 1024 },
-                    medium: { mediaId: 'k3c-md-orphan', complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 4096 },
-                    large:  { mediaId: largeMediaId,    complete: false, deferred: false, dataUrl: '', chunkProgress: 0, size: 16384 },
+                    small:    { mediaId: 'k3c-sm-orphan', complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 1024 },
+                    medium:   { mediaId: 'k3c-md-orphan', complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 4096 },
+                    original: { mediaId: originalMediaId, complete: false, deferred: false, dataUrl: '', chunkProgress: 0, size: 16384 },
                 },
                 extraPhotosVariants: [],
                 meta: { expected_media: 3 },
             });
-        }, { cid, reportId, photoGroupId, largeMediaId });
+        }, { cid, reportId, photoGroupId, originalMediaId });
 
         const items = await page.evaluate(() => (window as any).__crispGetAllQueued());
         const item = items.find((q: any) => q.client_report_id === cid);
 
         await page.evaluate(async ({ item, reportId }) => {
             const unit = {
-                tier: 'large',
+                tier: 'original',
                 groupId: item.photoGroupId,
-                variant: item.photoVariants.large,
-                label: 'main/large',
+                variant: item.photoVariants.original,
+                label: 'main/original',
                 clientBlurApplied: item.photoVariants.clientBlurApplied,
             };
             await (window as any).__crispUploadVariantTier(item, reportId, unit);
@@ -176,10 +180,10 @@ test.describe('PWA K.3.c — variant dataUrl re-encode fallback', () => {
 
         const itemsAfter = await page.evaluate(() => (window as any).__crispGetAllQueued());
         const refreshed = itemsAfter.find((q: any) => q.client_report_id === cid);
-        const lg = refreshed.photoVariants.large;
-        expect(lg.deferred, 'no source means variant must be marked deferred').toBe(true);
-        expect(lg.deferredReason).toBe('orphan_no_source');
-        expect(typeof lg.deferredAt).toBe('number');
+        const orig = refreshed.photoVariants.original;
+        expect(orig.deferred, 'no source means variant must be marked deferred').toBe(true);
+        expect(orig.deferredReason).toBe('orphan_no_source');
+        expect(typeof orig.deferredAt).toBe('number');
 
         // Cleanup.
         await page.evaluate((c) => (window as any).__crispDequeueReport(c), cid);
@@ -220,9 +224,10 @@ test.describe('PWA K.3.c — variant dataUrl re-encode fallback', () => {
                     {
                         groupId: extraGroupId,
                         clientBlurApplied: true,
-                        small:  { mediaId: 'k3c-extra-sm', complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 1024 },
-                        medium: { mediaId: mediumMediaId,  complete: false, deferred: false, dataUrl: '', chunkProgress: 0, size: 4096 },
-                        large:  { mediaId: 'k3c-extra-lg', complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 16384 },
+                        // Phase L: variant key is `original`, was `large`.
+                        small:    { mediaId: 'k3c-extra-sm',   complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 1024 },
+                        medium:   { mediaId: mediumMediaId,    complete: false, deferred: false, dataUrl: '', chunkProgress: 0, size: 4096 },
+                        original: { mediaId: 'k3c-extra-orig', complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 16384 },
                     },
                 ],
                 meta: { expected_media: 3 },

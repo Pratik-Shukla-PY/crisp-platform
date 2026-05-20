@@ -114,14 +114,15 @@ test.describe('PWA progressive-upload Phase 1 + 2', () => {
       return {
         hasSmall: Boolean(out?.small?.blob),
         hasMedium: Boolean(out?.medium?.blob),
-        hasLarge: Boolean(out?.large?.blob),
+        // Phase L (May 2026): variant key is `original`, was `large`.
+        hasOriginal: Boolean(out?.original?.blob),
         blurhash: out?.blurhash,
         blurhashLen: typeof out?.blurhash === 'string' ? out.blurhash.length : 0,
       };
     }, Array.from(tinyJpeg));
     expect(result.hasSmall).toBeTruthy();
     expect(result.hasMedium).toBeTruthy();
-    expect(result.hasLarge).toBeTruthy();
+    expect(result.hasOriginal).toBeTruthy();
     // blurhash MAY be null on headless browsers that can't decode
     // createImageBitmap cleanly; assert non-null OR acknowledge skip.
     // Per design the pipeline falls through with blurhash=null rather

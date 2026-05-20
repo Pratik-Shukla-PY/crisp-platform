@@ -167,7 +167,7 @@ test.describe('PWA — Queue drain SMALL-tier gate (May 2026)', () => {
                     client_report_id: SERVER_CRID,
                     status: 'PENDING',
                     media: [
-                        { id: 'm-small', resolution_tier: 'LOW' },
+                        { id: 'm-small', resolution_tier: 'SMALL' },
                         // medium and large absent on purpose
                     ],
                 }]),
@@ -192,7 +192,7 @@ test.describe('PWA — Queue drain SMALL-tier gate (May 2026)', () => {
                 photoVariants: {
                     small:  { dataUrl: null, mediaId: 'mid-s', complete: true,  chunkProgress: 0, size: 1024 },
                     medium: { dataUrl: 'data:,', mediaId: 'mid-m', complete: false, chunkProgress: 0, size: 4096, deferred: true },
-                    large:  { dataUrl: 'data:,', mediaId: 'mid-l', complete: false, chunkProgress: 0, size: 16384, deferred: true },
+                    original:  { dataUrl: 'data:,', mediaId: 'mid-l', complete: false, chunkProgress: 0, size: 16384, deferred: true },
                 },
                 extraPhotosVariants: [],
                 text: '',
@@ -259,7 +259,7 @@ test.describe('PWA — Queue drain SMALL-tier gate (May 2026)', () => {
                 photoVariants: {
                     small:  { dataUrl: 'data:,', mediaId: 'mid-s', complete: false, chunkProgress: 0, size: 1024 },
                     medium: { dataUrl: 'data:,', mediaId: 'mid-m', complete: false, chunkProgress: 0, size: 4096 },
-                    large:  { dataUrl: 'data:,', mediaId: 'mid-l', complete: false, chunkProgress: 0, size: 16384 },
+                    original:  { dataUrl: 'data:,', mediaId: 'mid-l', complete: false, chunkProgress: 0, size: 16384 },
                 },
                 extraPhotosVariants: [],
                 text: '',

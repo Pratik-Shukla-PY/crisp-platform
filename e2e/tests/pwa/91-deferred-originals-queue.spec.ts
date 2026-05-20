@@ -76,7 +76,7 @@ test.describe('PWA — deferred-Originals queue retention', () => {
         await bootPwa(page, [{
             client_report_id: cid,
             id: 'srv-report-1',
-            media: [{ id: 'm1', resolution_tier: 'LOW', type: 'IMAGE' }],
+            media: [{ id: 'm1', resolution_tier: 'SMALL', type: 'IMAGE' }],
         }]);
 
         await page.evaluate(async (clientId) => {
@@ -86,7 +86,7 @@ test.describe('PWA — deferred-Originals queue retention', () => {
                 photoVariants: {
                     small:  { complete: true,  deferred: false, dataUrl: '' },
                     medium: { complete: true,  deferred: false, dataUrl: '' },
-                    large:  { complete: false, deferred: true,  dataUrl: 'data:image/jpeg;base64,AAAA' },
+                    original:  { complete: false, deferred: true,  dataUrl: 'data:image/jpeg;base64,AAAA' },
                     clientBlurApplied: true,
                 },
                 stages: { meta: true, text: true, photo: true, audio: true },
@@ -111,9 +111,9 @@ test.describe('PWA — deferred-Originals queue retention', () => {
             client_report_id: cid,
             id: 'srv-report-2',
             media: [
-                { id: 'm1', resolution_tier: 'LOW',    type: 'IMAGE' },
+                { id: 'm1', resolution_tier: 'SMALL',    type: 'IMAGE' },
                 { id: 'm2', resolution_tier: 'MEDIUM', type: 'IMAGE' },
-                { id: 'm3', resolution_tier: 'HIGH',   type: 'IMAGE' },
+                { id: 'm3', resolution_tier: 'ORIGINAL',   type: 'IMAGE' },
             ],
         }]);
 
@@ -124,7 +124,7 @@ test.describe('PWA — deferred-Originals queue retention', () => {
                 photoVariants: {
                     small:  { complete: true, deferred: false, dataUrl: '' },
                     medium: { complete: true, deferred: false, dataUrl: '' },
-                    large:  { complete: true, deferred: false, dataUrl: '' },
+                    original:  { complete: true, deferred: false, dataUrl: '' },
                     clientBlurApplied: true,
                 },
                 stages: { meta: true, text: true, photo: true, audio: true },
@@ -143,7 +143,7 @@ test.describe('PWA — deferred-Originals queue retention', () => {
         await bootPwa(page, [{
             client_report_id: cid,
             id: 'srv-report-3',
-            media: [{ id: 'm1', resolution_tier: 'LOW', type: 'IMAGE' }],
+            media: [{ id: 'm1', resolution_tier: 'SMALL', type: 'IMAGE' }],
         }]);
 
         // Enqueue with _deferredSince already 15 days in the past.
@@ -155,7 +155,7 @@ test.describe('PWA — deferred-Originals queue retention', () => {
                 photoVariants: {
                     small:  { complete: true,  deferred: false, dataUrl: '' },
                     medium: { complete: true,  deferred: false, dataUrl: '' },
-                    large:  { complete: false, deferred: true,  dataUrl: '' },
+                    original:  { complete: false, deferred: true,  dataUrl: '' },
                     clientBlurApplied: true,
                 },
                 stages: { meta: true, text: true, photo: true, audio: true },
@@ -179,7 +179,7 @@ test.describe('PWA — deferred-Originals queue retention', () => {
         await bootPwa(page, [{
             client_report_id: cid,
             id: 'srv-report-4',
-            media: [{ id: 'm1', resolution_tier: 'LOW', type: 'IMAGE' }],
+            media: [{ id: 'm1', resolution_tier: 'SMALL', type: 'IMAGE' }],
         }]);
 
         // Enqueue an item already marked _submissionLanded.
@@ -189,7 +189,7 @@ test.describe('PWA — deferred-Originals queue retention', () => {
                 meta: { expected_media: 3 },   // 1 photo × 3 variants
                 photoVariants: {
                     small:  { complete: true,  deferred: false, dataUrl: '' },
-                    large:  { complete: false, deferred: true,  dataUrl: '' },
+                    original:  { complete: false, deferred: true,  dataUrl: '' },
                     clientBlurApplied: true,
                 },
                 stages: { meta: true, text: true, photo: true, audio: true },

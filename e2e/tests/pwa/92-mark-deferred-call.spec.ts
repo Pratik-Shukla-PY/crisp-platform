@@ -44,20 +44,22 @@ test.describe('PWA K.3.a — mark-deferred call on soft-drain', () => {
         const photoGroupId = 'k3a-photo-group-1';
         const smallMediaId = 'k3a-small-mid';
         const mediumMediaId = 'k3a-medium-mid';
-        const largeMediaId = 'k3a-large-mid';
+        const originalMediaId = 'k3a-original-mid';
 
         // Stub /tier-status so reconcile returns: SMALL complete on
-        // server; MEDIUM + HIGH missing → softDrain=true, missing=
-        // [{medium, large}].
+        // server; MEDIUM + ORIGINAL missing → softDrain=true, missing=
+        // [{medium, original}].
+        // Phase L (May 2026): backend ResolutionEnum is SMALL/MEDIUM/ORIGINAL;
+        // pre-L LOW/HIGH were dropped in alembic 0036.
         await page.route(/\/api\/v1\/reports\/[^/]+\/tier-status$/, (route) => {
             route.fulfill({
                 status: 200,
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({
                     media: [
-                        { id: smallMediaId, resolution_tier: 'LOW',
+                        { id: smallMediaId, resolution_tier: 'SMALL',
                           type: 'IMAGE', assembly_status: 'complete' },
-                        // MEDIUM + HIGH: nothing on server
+                        // MEDIUM + ORIGINAL: nothing on server
                     ],
                 }),
             });
@@ -89,7 +91,7 @@ test.describe('PWA K.3.a — mark-deferred call on soft-drain', () => {
         // serverId set, all stages true (so trySendQueuedReport enters
         // the reconcile branch), photoVariants with MEDIUM+LARGE marked
         // complete locally but reconcile will discover they're missing.
-        await page.evaluate(async ({ cid, reportId, photoGroupId, smallMediaId, mediumMediaId, largeMediaId }) => {
+        await page.evaluate(async ({ cid, reportId, photoGroupId, smallMediaId, mediumMediaId, originalMediaId }) => {
             await (window as any).__crispEnqueueReport({
                 client_report_id: cid,
                 serverId: reportId,
@@ -97,14 +99,14 @@ test.describe('PWA K.3.a — mark-deferred call on soft-drain', () => {
                 photoGroupId,
                 photoVariants: {
                     clientBlurApplied: true,
-                    small: { mediaId: smallMediaId, complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 1024 },
-                    medium: { mediaId: mediumMediaId, complete: true, deferred: false, dataUrl: '', chunkProgress: 0, size: 4096 },
-                    large: { mediaId: largeMediaId, complete: true,  deferred: false, dataUrl: '', chunkProgress: 0, size: 16384 },
+                    small:    { mediaId: smallMediaId,    complete: true, deferred: false, dataUrl: '', chunkProgress: 0, size: 1024 },
+                    medium:   { mediaId: mediumMediaId,   complete: true, deferred: false, dataUrl: '', chunkProgress: 0, size: 4096 },
+                    original: { mediaId: originalMediaId, complete: true, deferred: false, dataUrl: '', chunkProgress: 0, size: 16384 },
                 },
                 extraPhotosVariants: [],
                 meta: { expected_media: 3 },
             });
-        }, { cid, reportId, photoGroupId, smallMediaId, mediumMediaId, largeMediaId });
+        }, { cid, reportId, photoGroupId, smallMediaId, mediumMediaId, originalMediaId });
 
         // Trigger trySendQueuedReport — it'll detect all stages done,
         // reconcile (which returns softDrain), then call mark-deferred
@@ -125,8 +127,9 @@ test.describe('PWA K.3.a — mark-deferred call on soft-drain', () => {
         expect(capturedBody.tiers_by_group).toBeDefined();
         expect(capturedBody.tiers_by_group[photoGroupId]).toBeDefined();
         const tiersForGroup = capturedBody.tiers_by_group[photoGroupId].sort();
-        // MEDIUM + HIGH should both be in the list (small landed, so it's not)
-        expect(tiersForGroup).toEqual(['HIGH', 'MEDIUM']);
+        // MEDIUM + ORIGINAL should both be in the list (SMALL landed, so it's not).
+        // Phase L canonical wire vocab — backend 422s anything else.
+        expect(tiersForGroup).toEqual(['MEDIUM', 'ORIGINAL']);
         expect(capturedBody.reason).toBe('bandwidth_tier_deferred');
 
         // Assertion: item was dequeued AFTER the signal was sent.
@@ -140,37 +143,39 @@ test.describe('PWA K.3.a — mark-deferred call on soft-drain', () => {
 
         // Build a minimal item shape with main + one extra, then feed
         // a fake `missing` array as the reconciler would produce.
+        // Phase L canonical vocab: variant keys + tier names are
+        // small/medium/original; backend wire vocab is SMALL/MEDIUM/ORIGINAL.
         const result = await page.evaluate(() => {
             const item = {
                 photoGroupId: 'main-grp',
                 photoVariants: {
-                    small:  { mediaId: 'main-small-mid' },
-                    medium: { mediaId: 'main-medium-mid' },
-                    large:  { mediaId: 'main-large-mid' },
+                    small:    { mediaId: 'main-small-mid' },
+                    medium:   { mediaId: 'main-medium-mid' },
+                    original: { mediaId: 'main-original-mid' },
                 },
                 extraPhotosVariants: [
                     {
                         groupId: 'extra0-grp',
-                        small:  { mediaId: 'extra0-small-mid' },
-                        medium: { mediaId: 'extra0-medium-mid' },
-                        large:  { mediaId: 'extra0-large-mid' },
+                        small:    { mediaId: 'extra0-small-mid' },
+                        medium:   { mediaId: 'extra0-medium-mid' },
+                        original: { mediaId: 'extra0-original-mid' },
                     },
                 ],
             };
             const missing = [
-                // Main MEDIUM + LARGE deferred
-                { mediaId: 'main-medium-mid', tier: 'medium', label: 'main/medium', variant: item.photoVariants.medium },
-                { mediaId: 'main-large-mid',  tier: 'large',  label: 'main/large',  variant: item.photoVariants.large  },
-                // Extra LARGE deferred
-                { mediaId: 'extra0-large-mid', tier: 'large', label: 'extra[0]/large', variant: item.extraPhotosVariants[0].large },
+                // Main MEDIUM + ORIGINAL deferred
+                { mediaId: 'main-medium-mid',   tier: 'medium',   label: 'main/medium',   variant: item.photoVariants.medium },
+                { mediaId: 'main-original-mid', tier: 'original', label: 'main/original', variant: item.photoVariants.original },
+                // Extra ORIGINAL deferred
+                { mediaId: 'extra0-original-mid', tier: 'original', label: 'extra[0]/original', variant: item.extraPhotosVariants[0].original },
             ];
             return (window as any).__crispEnumerateDeferredByGroup(item, missing);
         });
 
         expect(result).toBeDefined();
         expect(Object.keys(result).sort()).toEqual(['extra0-grp', 'main-grp']);
-        expect(result['main-grp'].sort()).toEqual(['HIGH', 'MEDIUM']);
-        expect(result['extra0-grp'].sort()).toEqual(['HIGH']);
+        expect(result['main-grp'].sort()).toEqual(['MEDIUM', 'ORIGINAL']);
+        expect(result['extra0-grp'].sort()).toEqual(['ORIGINAL']);
     });
 
     test('_enumerateDeferredByGroup returns {} when missing is empty', async ({ page }) => {

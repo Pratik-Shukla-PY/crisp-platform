@@ -3802,7 +3802,7 @@ class MediaReclaimRequest(_ReclaimBaseModel):
 # ── K.2.d — mark-deferred endpoint (Phase K, May 2026) ───────────────────────
 class MarkDeferredRequest(_ReclaimBaseModel):
     """PWA soft-drain signal: 'I gave up on these tiers per photo group'."""
-    tiers_by_group: dict  # { "<photo_group_id>": ["MEDIUM", "HIGH"] }
+    tiers_by_group: dict  # { "<photo_group_id>": ["MEDIUM", "ORIGINAL"] }
     reason: Optional[str] = "bandwidth_tier_deferred"
 
 

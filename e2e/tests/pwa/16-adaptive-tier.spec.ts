@@ -128,14 +128,20 @@ test.describe('PWA adaptive-tier (UNDP §5 follow-up)', () => {
   test('adaptTierViaProbe picks VERY_SLOW when probe round-trip is slow', async ({ page, baseURL }) => {
     // Intercept the probe endpoint and delay the response so the
     // client's measured bytes/sec lands in the VERY_SLOW bucket.
-    // 8192 bytes / 800 ms = 10 240 B/s ← just over the SLOW threshold.
-    // We want < 10 KB/s → use a 1500ms delay ⇒ ~5461 B/s ⇒ VERY_SLOW.
+    //
+    // Phase L L.5 (May 2026): probe size bumped 8 KB → 64 KB to clear
+    // the latency floor at typical cloudflare-tunnel RTTs. The bps
+    // arithmetic now uses 65 536 bytes, so the delay needed to fall
+    // below the 10 KB/s SLOW→VERY_SLOW threshold is:
+    //   65 536 ÷ 10 000 = 6.55 s minimum
+    // Use 7 500 ms for headroom: 65 536 / 7 500 = ~8 740 B/s ⇒ VERY_SLOW.
+    // Pre-L.5 this test delayed 1 500 ms (8 192 / 1.5 s ≈ 5 461 B/s).
     await page.route('**/reports/upload-probe', async (route) => {
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 7500));
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ received_bytes: 8192, server_time_ms: Date.now() }),
+        body: JSON.stringify({ received_bytes: 65_536, server_time_ms: Date.now() }),
       });
     });
     const tier = await page.evaluate(async () => {

@@ -33,10 +33,14 @@ async function bootPwa(page) {
 
 
 test.describe('PWA K.4.e — quota guard', () => {
-    test('threshold is 40 MB (under iOS 50 MB cap)', async ({ page }) => {
+    test('threshold is 35 MB (under iOS 50 MB cap, Phase L L.2.d tightening)', async ({ page }) => {
+        // Phase L L.2.d (May 2026) dropped the threshold from 40 → 35 MB
+        // because ORIGINAL tier is now up to 5 MB per photo (vs ~500 KB
+        // pre-Phase-L). 35 MB still leaves 15 MB headroom under iOS's
+        // 50 MB IndexedDB cap.
         await bootPwa(page);
         const t = await page.evaluate(() => (window as any).__crispQuotaWarnThresholdBytes());
-        expect(t).toBe(40 * 1024 * 1024);
+        expect(t).toBe(35 * 1024 * 1024);
     });
 
     test('empty queue item ≈ 0 bytes', async ({ page }) => {
@@ -49,11 +53,12 @@ test.describe('PWA K.4.e — quota guard', () => {
     test('photoVariants with size hints sums tier bytes (×1.34 b64 overhead)', async ({ page }) => {
         await bootPwa(page);
         const b = await page.evaluate(() => {
+            // Phase L (May 2026): variant key is `original`, was `large`.
             const item = {
                 photoVariants: {
-                    small:  { size: 50_000 },
-                    medium: { size: 250_000 },
-                    large:  { size: 2_000_000 },
+                    small:    { size: 50_000 },
+                    medium:   { size: 250_000 },
+                    original: { size: 2_000_000 },
                 },
             };
             return (window as any).__crispEstimateQueueItemBytes(item);
@@ -63,27 +68,28 @@ test.describe('PWA K.4.e — quota guard', () => {
         expect(b).toBeLessThan(3_100_000);
     });
 
-    test('5 photos × 3 tiers (≈2 MB each LARGE) exceeds 40 MB threshold', async ({ page }) => {
+    test('5 photos × 3 tiers (≈2 MB each ORIGINAL) exceeds 35 MB threshold', async ({ page }) => {
         await bootPwa(page);
         const result = await page.evaluate(() => {
             // Realistic worst-case: main + 4 extras, each with 3 variants
             // totaling ~2.5 MB encoded per photo group.
+            // Phase L: variant key is `original`, was `large`.
             const item = {
                 photoVariants: {
-                    small:  { size: 50_000 },
-                    medium: { size: 250_000 },
-                    large:  { size: 2_500_000 },
+                    small:    { size: 50_000 },
+                    medium:   { size: 250_000 },
+                    original: { size: 2_500_000 },
                 },
                 extraPhotosVariants: [
-                    { small: { size: 50_000 }, medium: { size: 250_000 }, large: { size: 2_500_000 } },
-                    { small: { size: 50_000 }, medium: { size: 250_000 }, large: { size: 2_500_000 } },
-                    { small: { size: 50_000 }, medium: { size: 250_000 }, large: { size: 2_500_000 } },
-                    { small: { size: 50_000 }, medium: { size: 250_000 }, large: { size: 2_500_000 } },
+                    { small: { size: 50_000 }, medium: { size: 250_000 }, original: { size: 2_500_000 } },
+                    { small: { size: 50_000 }, medium: { size: 250_000 }, original: { size: 2_500_000 } },
+                    { small: { size: 50_000 }, medium: { size: 250_000 }, original: { size: 2_500_000 } },
+                    { small: { size: 50_000 }, medium: { size: 250_000 }, original: { size: 2_500_000 } },
                 ],
             };
             // Pad with a chunky base64 dataUrl in item.photo to push past
-            // 40 MB — simulates the worst-case HEIC + re-encode bloat.
-            const big = 'A'.repeat(28 * 1024 * 1024);  // 28 MB string
+            // the 35 MB threshold — simulates worst-case HEIC + re-encode bloat.
+            const big = 'A'.repeat(20 * 1024 * 1024);  // 20 MB string
             item.photo = `data:image/jpeg;base64,${big}`;
             const estimate = (window as any).__crispEstimateQueueItemBytes(item);
             const threshold = (window as any).__crispQuotaWarnThresholdBytes();
@@ -95,12 +101,13 @@ test.describe('PWA K.4.e — quota guard', () => {
     test('typical small submission stays well under threshold', async ({ page }) => {
         await bootPwa(page);
         const result = await page.evaluate(() => {
-            // Realistic single-photo submission, ~3 MB total
+            // Realistic single-photo submission, ~3 MB total.
+            // Phase L: variant key is `original`, was `large`.
             const item = {
                 photoVariants: {
-                    small:  { size: 50_000 },
-                    medium: { size: 200_000 },
-                    large:  { size: 1_500_000 },
+                    small:    { size: 50_000 },
+                    medium:   { size: 200_000 },
+                    original: { size: 1_500_000 },
                 },
                 audioSize: 100_000,
             };
@@ -109,7 +116,7 @@ test.describe('PWA K.4.e — quota guard', () => {
             return { estimate, threshold, underThreshold: estimate < threshold };
         });
         expect(result.underThreshold).toBe(true);
-        // ~2.3 MB rough estimate is well under 40 MB
+        // ~2.3 MB rough estimate is well under 35 MB
         expect(result.estimate).toBeLessThan(5_000_000);
     });
 });
