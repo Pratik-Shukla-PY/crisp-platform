@@ -3755,6 +3755,26 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
             db.add(db_media)
             saved_media_entities.append(db_media)
 
+    # K.2.g (May 2026, Phase K) — count the media we just persisted +
+    # promote sync_status if everything expected has landed. Pre-fix
+    # this endpoint added Media rows but never incremented
+    # `received_media` or evaluated the SYNCED gate, so 3rd-party
+    # integrations hitting the one-shot path got reports stuck at
+    # PARTIAL forever. PWA / Telegram / messaging-bot all use
+    # /meta + /chunk-bin so they avoided the bug — but the endpoint
+    # is still public and we shouldn't leave a foot-gun.
+    if saved_media_entities:
+        db_report.received_media = len(saved_media_entities)
+        if (db_report.expected_media is None) or (db_report.expected_media == 0):
+            # Caller didn't declare expected; infer it from what
+            # actually landed. Conservative — we know at least these
+            # arrived; if more were intended the dashboard's
+            # Action ④ idle-promote will still catch up.
+            db_report.expected_media = len(saved_media_entities)
+        if (db_report.expected_media > 0
+                and db_report.received_media >= db_report.expected_media):
+            db_report.sync_status = SyncStatusEnum.SYNCED
+
     db.commit()
 
     # 5. Pipeline Trigger: Local AI NLP & Computer Vision processing
