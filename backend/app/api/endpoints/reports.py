@@ -2589,7 +2589,17 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
     Updates sync_status from PARTIAL → SYNCED when all expected media received.
     Triggers AI pipeline for each media type received.
     """
-    report = db.query(Report).filter(Report.id == report_id).first()
+    # K.2.a (May 2026, Phase K) — row-level lock on the Report row.
+    # The "find existing media → maybe insert" pattern below
+    # (lines 2645-2675) is a check-then-act race: two concurrent
+    # /attach calls for the same (report_id, type) can both observe
+    # `existing_media=None`, both INSERT a new Media row, both
+    # increment received_media. `with_for_update()` acquires a
+    # row-level lock on the parent Report for the duration of this
+    # txn; the second handler waits on the lock, then reads the
+    # winner's committed Media row → enters the UPDATE branch.
+    # The K.1.a atomic increment is preserved as belt-and-suspenders.
+    report = db.query(Report).filter(Report.id == report_id).with_for_update().first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
