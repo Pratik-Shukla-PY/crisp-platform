@@ -3655,10 +3655,14 @@ async def attach_media_chunk_bin(
             media.full_asset_checksum = full_asset_checksum
         # Tier upgrade — same conservative rule as the legacy JSON endpoint.
         # See attach_media_chunk's else branch for the full why.
+        # Phase L (May 2026): the canonical "promote to top tier" trigger is
+        # ORIGINAL now, not HIGH. _RE2.LOW / _RE2.HIGH were removed from
+        # ResolutionEnum in alembic 0036 — referencing them here would
+        # AttributeError. Use SMALL / ORIGINAL.
         from app.models.report import ResolutionEnum as _RE2
-        if (tier_upper == "HIGH"
-                and media.resolution_tier in (_RE2.LOW, _RE2.MEDIUM)):
-            media.resolution_tier = _RE2.HIGH
+        if (tier_upper == "ORIGINAL"
+                and media.resolution_tier in (_RE2.SMALL, _RE2.MEDIUM)):
+            media.resolution_tier = _RE2.ORIGINAL
 
     # ── Idempotent insert. Mirrors the legacy endpoint byte-for-byte
     #    except the column we write (data_binary instead of data_b64).
