@@ -670,6 +670,17 @@ def _purge_loop():
 _ASSEMBLE_SWEEP_INTERVAL_S = int(os.getenv("CRISP_ASSEMBLE_SWEEP_INTERVAL_S", "300"))
 _ABANDON_STALE_MIN         = int(os.getenv("CRISP_ABANDON_STALE_MIN",         "30"))
 _ASSEMBLE_DEADLINE_MIN     = int(os.getenv("CRISP_ASSEMBLE_DEADLINE_MIN",     "30"))
+# May 2026 — companion to the PWA's "SMALL gates the photo stage" fix
+# (mobile-app/src/app.js:8956). On SLOW / VERY_SLOW networks the PWA
+# deliberately defers MEDIUM/HIGH variants; only the LOW (SMALL) variant
+# lands. The Report row's `received_media` (e.g. 2) stays < `expected_media`
+# (e.g. 3) forever, sync_status is permanently PARTIAL, dashboard +
+# PWA "My Reports" both label it as in-queue. Action ④ in the sweep
+# auto-promotes to SYNCED when every photo_group_id has at least one
+# complete variant AND no Media row has been updated within this idle
+# window — giving an in-flight MEDIUM/HIGH upload a chance to land
+# before we flip the status.
+_PARTIAL_PROMOTE_IDLE_S    = int(os.getenv("CRISP_PARTIAL_PROMOTE_IDLE_S",    "60"))
 
 
 def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
@@ -708,7 +719,7 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
     identical between boot and periodic ticks (no special-cases).
     """
     from app.db.session import SessionLocal
-    from app.models.report import Media
+    from app.models.report import Media, Report, SyncStatusEnum
     from app.api.endpoints.reports import _try_full_assembly_bg, _assembly_executor
     from datetime import datetime, timedelta, timezone as _tz
     from sqlalchemy import or_
@@ -802,6 +813,91 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
             log.info(
                 f"Assembly recovery [{tag}]: abandoned {chunks_never} rows "
                 f"(reason=chunks_never_arrived, deadline={_ABANDON_STALE_MIN}m)"
+            )
+
+        # ── ④ PROMOTE PARTIAL → SYNCED at first-complete + idle window ────
+        # The PWA's bandwidth-tier deferral (mobile-app/src/app.js:8649)
+        # holds MEDIUM/HIGH variants back on SLOW / VERY_SLOW networks,
+        # transmitting only the LOW (SMALL) variant. The PWA already
+        # flips its local `stages.photo=true` once SMALL lands (May 2026
+        # "SMALL gates the photo stage" fix) so the IndexedDB queue
+        # drains. But the BACKEND keeps `sync_status=PARTIAL` forever
+        # because `received_media (e.g. 2)` never reaches
+        # `expected_media (e.g. 3)`. The dashboard + PWA both surface
+        # PARTIAL as "in queue" — operator confusion, reports look stuck.
+        #
+        # Promotion rule: for any Report.sync_status==PARTIAL, group its
+        # Media rows by photo_group_id (NULL → solo). If EVERY group has
+        # at least one row with `assembly_status='complete'` AND the
+        # report has had ZERO Media activity within the last
+        # _PARTIAL_PROMOTE_IDLE_S seconds (so we don't preempt an
+        # in-flight MEDIUM/HIGH upload that's still arriving), flip
+        # sync_status → SYNCED. The promotion is non-destructive: a
+        # deferred HIGH-tier upload that lands AFTER promotion just
+        # adds another Media row; sync_status is already SYNCED so the
+        # /attach endpoint's `>=` check is a no-op.
+        #
+        # Conservative by design: this is a one-way PROMOTION (never
+        # demotes a SYNCED back to PARTIAL), so a race with the
+        # /attach endpoint is harmless — both paths converge on SYNCED.
+        idle_cutoff = now_utc - timedelta(seconds=_PARTIAL_PROMOTE_IDLE_S)
+        partial_candidates = (
+            _db.query(Report)
+            .filter(Report.sync_status == SyncStatusEnum.PARTIAL)
+            .all()
+        )
+        promoted_ids: list[str] = []
+        for r in partial_candidates:
+            media_rows = (
+                _db.query(Media)
+                .filter(Media.report_id == r.id)
+                .all()
+            )
+            if not media_rows:
+                # No media landed at all — different bug pattern
+                # (chunks_never_arrived already handled at media-row
+                # scope by action ③). Don't auto-promote here; let
+                # the operator decide.
+                continue
+            # Idle-window gate: if ANY media row has been touched within
+            # the idle window, an upload may still be in flight — wait
+            # for the next sweep tick.
+            most_recent_activity = max(
+                (m.updated_at for m in media_rows if m.updated_at is not None),
+                default=None,
+            )
+            if most_recent_activity is not None and most_recent_activity > idle_cutoff:
+                continue
+            # Group by (photo_group_id, type). Solo rows (no group_id)
+            # form their own group keyed by media id so they're checked
+            # individually. Abandoned rows are excluded from "complete"
+            # consideration (they're terminal-failed by actions ②/③).
+            from collections import defaultdict
+            groups: dict[tuple, list] = defaultdict(list)
+            for m in media_rows:
+                if m.abandoned_at is not None:
+                    continue
+                gid = m.photo_group_id or f"__solo__{m.id}"
+                mtype = m.type.value if hasattr(m.type, "value") else m.type
+                groups[(gid, mtype)].append(m)
+            if not groups:
+                # All media rows abandoned — different operator scenario.
+                continue
+            all_good = all(
+                any(m.assembly_status == "complete" for m in variants)
+                for variants in groups.values()
+            )
+            if all_good:
+                r.sync_status = SyncStatusEnum.SYNCED
+                promoted_ids.append(r.id)
+        if promoted_ids:
+            _db.commit()
+            log.info(
+                f"Assembly recovery [{tag}]: promoted {len(promoted_ids)} reports "
+                f"PARTIAL → SYNCED (first-complete per photo_group + idle "
+                f"≥{_PARTIAL_PROMOTE_IDLE_S}s). IDs: "
+                + ", ".join(rid[:8] for rid in promoted_ids[:8])
+                + (f" … +{len(promoted_ids) - 8} more" if len(promoted_ids) > 8 else "")
             )
     finally:
         _db.close()
