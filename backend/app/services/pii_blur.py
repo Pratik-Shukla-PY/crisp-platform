@@ -151,10 +151,19 @@ def _multiscale_face_detect(img, detector, mp_module):
     return detections_xywh
 
 
-def _nms_merge_faces(detections, iou_threshold=0.4):
+def _nms_merge_faces(detections, iou_threshold=0.4, keep="smallest"):
     """Non-max suppression on face bounding boxes. Multi-scale passes
     produce duplicate detections for the same face (one per scale that
     saw it); collapse to a single bbox per face.
+
+    keep:
+      "smallest" (default, May 2026 operator review) — within each
+          cluster of overlapping detections, keep the SMALLEST bbox.
+          Gives a tighter fit to the actual face — blur stays
+          localized. Larger duplicates from tile passes often include
+          skin / clothing / background adjacent to the face.
+      "largest" — keep the largest. Generous coverage, but blur
+          ellipse can extend onto neck / shoulders / hair.
 
     Returns: deduped list of (fx, fy, fw, fh).
     """
@@ -163,12 +172,12 @@ def _nms_merge_faces(detections, iou_threshold=0.4):
 
     # Convert (x, y, w, h) → (x1, y1, x2, y2) for IoU math.
     boxes = [(x, y, x + w, y + h) for (x, y, w, h) in detections]
-    # Sort by area descending — keep the largest detection per face
-    # (multi-scale tile detections tend to clip; the full-image pass
-    # gives the most generous bbox).
+    # Sort order depends on `keep` strategy. We always iterate
+    # high-priority first + suppress lower-priority overlaps; the
+    # priority for "smallest" is reverse of "largest".
     order = sorted(range(len(boxes)),
                    key=lambda i: (boxes[i][2] - boxes[i][0]) * (boxes[i][3] - boxes[i][1]),
-                   reverse=True)
+                   reverse=(keep == "largest"))
 
     keep = []
     suppressed = set()
@@ -337,31 +346,45 @@ def blur_pii(image_path: str) -> dict:
                 # the request hot path) and the privacy guarantee is
                 # a UNDP must-have.
                 raw_detections = _multiscale_face_detect(img, _face_detector, mp)
-                # Sanity filter: at confidence 0.2 with multi-scale
-                # tiles, BlazeFace occasionally hallucinates "faces"
-                # spanning entire tile crops (clothing, skin patches,
-                # blurred regions from a prior pass that the detector
-                # mistakes for a face). Real human faces in normal
-                # photos occupy < 30% of the image area. Discard
-                # anything larger — it's either a hallucination or a
-                # legitimate close-up that already covers most of the
-                # frame (in which case the user explicitly framed the
-                # face; the smaller component detections from other
-                # scales/tiles will still cover the actual face).
+                # Sanity filter (operator-reviewed, May 2026):
+                # tightened 0.30 → 0.15 of image area. Real human
+                # faces in photos with > 1 person are < 15% of frame
+                # individually (a portrait close-up is ~10–15%, group
+                # photo faces ~1–5% each). Anything larger is either
+                # a tile-detector hallucination (BlazeFace at conf 0.2
+                # mis-labels skin/clothing patches) or a single
+                # close-up where component scales already covered the
+                # face. Filter conservatively to keep blur localized.
                 image_area = w * h
-                MAX_FACE_AREA_RATIO = 0.30
-                sanitized = [
-                    (fx, fy, fw, fh) for (fx, fy, fw, fh) in raw_detections
-                    if (fw * fh) <= image_area * MAX_FACE_AREA_RATIO
-                ]
-                merged = _nms_merge_faces(sanitized, iou_threshold=0.4)
+                MAX_FACE_AREA_RATIO = 0.15
+                # Also reject bboxes with wild aspect ratios — a face
+                # is roughly square (h/w between 0.6 and 1.8). Tile
+                # hallucinations often come back as very wide or
+                # very tall bands.
+                def _looks_like_face(d):
+                    fx, fy, fw, fh = d
+                    if (fw * fh) > image_area * MAX_FACE_AREA_RATIO:
+                        return False
+                    if fw < 20 or fh < 20:
+                        return False  # too tiny to be a real face
+                    ratio = fh / max(1, fw)
+                    if ratio < 0.5 or ratio > 2.2:
+                        return False  # not face-shaped
+                    return True
+                sanitized = [d for d in raw_detections if _looks_like_face(d)]
+                # NMS now keeps the SMALLEST bbox among overlapping
+                # detections, not the largest. The smallest fits the
+                # actual face most tightly; the larger duplicates from
+                # tile passes typically include skin / clothing
+                # adjacent to the face. Tighter bbox → blur stays
+                # localized to the face only.
+                merged = _nms_merge_faces(sanitized, iou_threshold=0.4, keep="smallest")
                 for fx, fy, fw, fh in merged:
-                    # Pre-fix used 5% padding. Bumped to 15% to absorb
-                    # the minor coordinate drift introduced by the
-                    # multi-scale merge — distant faces sometimes shift
-                    # by a few pixels across scales, so a generous pad
-                    # ensures the ellipse covers them even after NMS.
-                    px, py = int(fw * 0.15), int(fh * 0.15)
+                    # Padding tightened 15% → 5% (matches pre-Phase-L
+                    # default). With smaller, tighter merged bboxes the
+                    # extra padding is no longer needed to absorb
+                    # multi-scale coordinate drift.
+                    px, py = int(fw * 0.05), int(fh * 0.05)
                     face_regions.append((
                         max(0, fx - px), max(0, fy - py),
                         min(w, fx + fw + px), min(h, fy + fh + py)))

@@ -41,9 +41,12 @@ from app.services.pii_blur import (
 # ── _nms_merge_faces — pure unit tests, no MediaPipe required ───────────────
 
 
-def test_nms_dedupes_overlapping_bboxes():
+def test_nms_dedupes_overlapping_bboxes_to_smallest():
     """Two highly-overlapping detections from different scales should
-    collapse to one bbox (the larger of the two)."""
+    collapse to ONE bbox — default `keep='smallest'` favours the
+    tighter fit so the blur ellipse stays localized to the face,
+    not its surrounding clothing / background.
+    """
     detections = [
         (100, 100, 80, 80),   # 80×80 box at (100, 100) — IoU with next ~0.6
         (105, 105, 90, 90),   # 90×90 box at (105, 105) — same face, slightly off
@@ -53,7 +56,20 @@ def test_nms_dedupes_overlapping_bboxes():
         f"Two highly-overlapping detections (one face) should NMS to 1; "
         f"got {len(merged)}"
     )
-    # Largest area survives
+    # Default keep='smallest' → 80×80 (tighter fit). Pre-fix this was
+    # 90×90 ('largest') which caused the blur to extend onto pixels
+    # adjacent to the face.
+    assert merged[0] == (100, 100, 80, 80)
+
+
+def test_nms_with_keep_largest_still_works():
+    """The pre-fix `keep='largest'` behaviour is still supported for
+    callers that want generous coverage."""
+    detections = [
+        (100, 100, 80, 80),
+        (105, 105, 90, 90),
+    ]
+    merged = _nms_merge_faces(detections, iou_threshold=0.4, keep="largest")
     assert merged[0] == (105, 105, 90, 90)
 
 
