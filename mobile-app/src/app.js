@@ -4554,6 +4554,17 @@ function detectAndSetupLanguage() {
         // Also keep legacy buttons' active class in sync for tests.
         if (enBtn)   enBtn.classList.toggle('active', code === 'en');
         if (localBtn) localBtn.classList.toggle('active', code !== 'en' && localBtn.dataset.lang === code);
+        // Notify dynamic-renderer modules (nearby.js, future detail
+        // sheets, etc.) so they re-paint their innerHTML output with
+        // the new locale. `applyI18n()` only walks `data-i18n` attrs
+        // baked into static markup; anything rendered via `_t(key)` in
+        // JS template literals stays stale otherwise. Operator-reported
+        // (May 2026): the home Nearby Reports strip kept old-language
+        // copy after a lang switch, and installed-PWA users had no
+        // refresh affordance to fix it.
+        try {
+            document.dispatchEvent(new CustomEvent('crisp:lang-changed', { detail: { code } }));
+        } catch (_) { /* CustomEvent unsupported on ancient WebKit — silent */ }
 
         // i18n fallback chain repair.
         //
@@ -4602,6 +4613,12 @@ function detectAndSetupLanguage() {
                     I18N.en = Object.assign({}, I18N.en);
                 }
                 applyI18n();
+                // Re-fire after the locale JSON merge so dynamic
+                // renderers (nearby.js etc.) pick up any keys that
+                // weren't in the inline pack but only in the JSON.
+                try {
+                    document.dispatchEvent(new CustomEvent('crisp:lang-changed', { detail: { code, phase: 'json-loaded' } }));
+                } catch (_) {}
             } catch (_) {
                 // Non-fatal — inline packs remain in use and the
                 // partial English fallback still works.

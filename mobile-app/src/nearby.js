@@ -521,7 +521,24 @@
         return el;
     }
 
+    // Module-scope cache of the last successful render so we can
+    // re-paint when the user changes language (no re-fetch needed —
+    // strings are derived from the payload + i18n dict). Updated on
+    // every `_renderInto` call; cleared when the module is hidden.
+    let _lastRenderContainer = null;
+    let _lastRenderPayload   = null;
+    let _lastRenderOpts      = null;
+    // Bottom-sheet re-render — track which group is currently shown.
+    let _openSheetGroup = null;
+
     function _renderInto(container, payload, opts) {
+        // Stash for the `crisp:lang-changed` re-render path below. We
+        // need the payload itself (groups + counts) plus the opts
+        // (fromCache, cacheAgeMs) the renderer uses to compose the
+        // "Last seen X min ago" caption.
+        _lastRenderContainer = container;
+        _lastRenderPayload   = payload;
+        _lastRenderOpts      = opts;
         // Phase F triage (May 2026) — preserve the static eyebrow `<h2
         // class="home-nearby-eyebrow">` defined in index.html instead
         // of wiping the entire container. The eyebrow is the screen-
@@ -687,11 +704,15 @@
         // 240 ms slide-out, then hide
         setTimeout(() => { sheet.hidden = true; }, 240);
         document.body.style.overflow = '';
+        _openSheetGroup = null;  // sheet is now closed — drop the lang-re-render anchor
     }
 
     function _openDetailSheet(group) {
         const sheet = document.getElementById('nearby-sheet');
         if (!sheet || !group) return;
+        // Stash the group object so `crisp:lang-changed` can re-render
+        // the sheet's strings without needing the user to close + re-open.
+        _openSheetGroup = group;
 
         // Build the title + distance + tiles
         const titleEl = sheet.querySelector('#nearby-sheet-label');
@@ -902,6 +923,26 @@
             if (list && !list.hidden) _closeListSheet();
             _openDetailSheet(e && e.detail && e.detail.group);
         } catch (err) { /* swallow */ }
+    });
+
+    // Re-render on language change. Strings come from the i18n dict via
+    // `_t(key)` which IS reactive to `activateLang`, but the strings are
+    // baked into `innerHTML` at render time — they don't update unless we
+    // re-paint. The home strip uses the cached payload (no re-fetch);
+    // the detail sheet re-paints from the stashed group object.
+    // Operator-reported (May 2026): installed PWA has no refresh
+    // affordance, so users were stuck with stale strings until the SW
+    // cycled a fresh shell.
+    document.addEventListener('crisp:lang-changed', () => {
+        try {
+            if (_lastRenderContainer && _lastRenderPayload) {
+                _renderInto(_lastRenderContainer, _lastRenderPayload, _lastRenderOpts);
+            }
+            const sheet = document.getElementById('nearby-sheet');
+            if (sheet && !sheet.hidden && _openSheetGroup) {
+                _openDetailSheet(_openSheetGroup);
+            }
+        } catch (err) { console.warn('[NearbyIntel] lang re-render failed:', err); }
     });
 
     // ── Public API ───────────────────────────────────────────────────

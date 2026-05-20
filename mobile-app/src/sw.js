@@ -5,7 +5,14 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v227';
+const CACHE_NAME = 'crisp-v228';
+// v227 → v228 (May 20 — lang-switch dynamic-renderer fix). activateLang
+// now dispatches `crisp:lang-changed` (both sync + after the locale JSON
+// loads). nearby.js stashes its last payload + open-sheet group and re-
+// paints on the event. home-screen.js subscribes too — channels strip,
+// identity bar, devid pill, badge chip, my-reports count, recent-reports
+// list all re-render. Pre-fix the installed PWA had no way to refresh,
+// so users were stuck with stale strings after switching language.
 // v226 → v227 (May 19 — UNDP must-have #6 restoration: #building-select-box
 // markup put back inside #v4-building-mount after the May 15 V3-cleanup
 // regression deleted it, leaving the v4 review stage with no building

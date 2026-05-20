@@ -1748,6 +1748,28 @@
         _channels: CHANNELS,  // for test inspection
     };
 
+    // Operator-reported (May 2026): home-screen modules that render
+    // strings via `t()` into innerHTML (channels strip + sheet, badge
+    // chip, identity bar, recent-reports list, devid pill) didn't
+    // refresh after a lang switch. The installed PWA has no
+    // pull-to-refresh affordance, so users were stuck with stale
+    // copy until the SW cycled a fresh shell. `crisp:lang-changed`
+    // is dispatched by `activateLang(code)` in app.js after every
+    // language switch (sync + once more after the locale JSON
+    // finishes loading); we re-run the cheap no-arg painters here so
+    // every visible string updates immediately.
+    document.addEventListener('crisp:lang-changed', () => {
+        try { _renderChannels(); } catch (_) {}
+        try { _paintIdentityBar(); } catch (_) {}
+        try { _paintDevidBadge(); } catch (_) {}
+        try { _renderMyReportsCount(); } catch (_) {}
+        // The two async painters return Promises; surface a `.catch`
+        // so a rejection (e.g. backend offline) doesn't surface as an
+        // unhandled-rejection toast.
+        try { Promise.resolve(_renderBadgeChip()).catch(() => {}); } catch (_) {}
+        try { Promise.resolve(_renderRecentReports()).catch(() => {}); } catch (_) {}
+    });
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
