@@ -37,10 +37,12 @@ import {
 // scaffold. The expected mapping is intentionally copied so a silent
 // change on the RN side still goes red (and a deliberate change forces
 // updating both spots).
-const TIER_TO_RESOLUTION_EXPECTED: Record<'small' | 'medium' | 'large', 'LOW' | 'MEDIUM' | 'HIGH'> = {
-    small: 'LOW',
+// Phase L (May 2026): wire vocab is SMALL/MEDIUM/ORIGINAL. Backend Pydantic
+// enum 422s any other value. Pre-Phase-L this was LOW/MEDIUM/HIGH.
+const TIER_TO_RESOLUTION_EXPECTED: Record<'small' | 'medium' | 'large', 'SMALL' | 'MEDIUM' | 'ORIGINAL'> = {
+    small: 'SMALL',
     medium: 'MEDIUM',
-    large: 'HIGH',
+    large: 'ORIGINAL',
 };
 
 /** Helper: walk the ladder by calling downgrade or upgrade until the
@@ -132,15 +134,20 @@ describe('networkAdaptive.getAdaptiveConfig', () => {
 });
 
 describe('imageVariants.TIER_TO_RESOLUTION contract', () => {
-    test('pinned mapping: SMALL/MEDIUM/LARGE → LOW/MEDIUM/HIGH', () => {
+    test('pinned Phase L mapping: small/medium/large → SMALL/MEDIUM/ORIGINAL', () => {
         // Bible-of-truth for this contract lives in
         // `services/imageVariants.ts`; the actual import is gated behind
         // jest-expo scaffolding that we explicitly opted out of. If a
         // refactor changes the source map and leaves this file alone,
         // the chunk-assembly code will mis-route at runtime on the
         // backend. Cross-stack contract — worth manual sync.
-        expect(TIER_TO_RESOLUTION_EXPECTED.small).toBe('LOW');
+        //
+        // Phase L (May 2026) — alembic 0036 dropped LOW + HIGH from the
+        // Postgres ResolutionEnum. Any caller still emitting those names
+        // gets a 422 from the backend's Pydantic enum validator. The
+        // entire RN upload pipeline broke until this rename landed.
+        expect(TIER_TO_RESOLUTION_EXPECTED.small).toBe('SMALL');
         expect(TIER_TO_RESOLUTION_EXPECTED.medium).toBe('MEDIUM');
-        expect(TIER_TO_RESOLUTION_EXPECTED.large).toBe('HIGH');
+        expect(TIER_TO_RESOLUTION_EXPECTED.large).toBe('ORIGINAL');
     });
 });

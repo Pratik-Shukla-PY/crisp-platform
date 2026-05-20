@@ -246,8 +246,11 @@ async function syncReport(report: QueuedReport): Promise<void> {
   type VariantRec = { mediaId: string; base64: string; chunkProgress: number; complete: boolean; bytes: number };
   type PhotoVariantsRec = { small: VariantRec; medium: VariantRec; large: VariantRec };
   type ExtraVariantsRec = PhotoVariantsRec & { groupId: string };
-  const TIER_TO_RESOLUTION: Record<'small' | 'medium' | 'large', 'LOW' | 'MEDIUM' | 'HIGH'> = {
-    small: 'LOW', medium: 'MEDIUM', large: 'HIGH',
+  // Phase L wire vocab (May 2026): backend enum is SMALL/MEDIUM/ORIGINAL.
+  // Internal RN tier names stay 'small'/'medium'/'large' — only the wire
+  // payload uses the canonical names.
+  const TIER_TO_RESOLUTION: Record<'small' | 'medium' | 'large', 'SMALL' | 'MEDIUM' | 'ORIGINAL'> = {
+    small: 'SMALL', medium: 'MEDIUM', large: 'ORIGINAL',
   };
 
   const mainVariants: PhotoVariantsRec | null = report.photo_variants
@@ -681,7 +684,7 @@ async function adaptiveUploadBinary(
   reportId: string, mediaId: string, type: string,
   bytes: Uint8Array, startFrom: number,
   onProgress: (chunk: number) => Promise<void>,
-  opts?: { resolution_tier?: 'LOW' | 'MEDIUM' | 'HIGH'; photo_group_id?: string | null },
+  opts?: { resolution_tier?: 'SMALL' | 'MEDIUM' | 'ORIGINAL'; photo_group_id?: string | null },
 ): Promise<void> {
   const API_BASE = getApiBase();
   const totalLen = bytes.length;
@@ -819,7 +822,7 @@ async function adaptiveUpload(
   reportId: string, mediaId: string, type: string,
   b64: string, startFrom: number,
   onProgress: (chunk: number) => Promise<void>,
-  opts?: { resolution_tier?: 'LOW' | 'MEDIUM' | 'HIGH'; photo_group_id?: string | null },
+  opts?: { resolution_tier?: 'SMALL' | 'MEDIUM' | 'ORIGINAL'; photo_group_id?: string | null },
 ): Promise<void> {
   // Apr 2026 — measure actual upload throughput before committing to a
   // tier. Parity with the PWA fix. Cached 60 s so the three variants of
@@ -854,7 +857,7 @@ async function adaptiveUploadLegacy(
   onProgress: (chunk: number) => Promise<void>,
   // Guaranteed-delivery tags. Default null so every existing caller keeps
   // working (chunk handler falls back to defaults when these are absent).
-  opts?: { resolution_tier?: 'LOW' | 'MEDIUM' | 'HIGH'; photo_group_id?: string | null },
+  opts?: { resolution_tier?: 'SMALL' | 'MEDIUM' | 'ORIGINAL'; photo_group_id?: string | null },
 ): Promise<void> {
   const API_BASE = getApiBase();
   const totalLen = b64.length;

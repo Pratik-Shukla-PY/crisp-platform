@@ -30,6 +30,11 @@ const REPO = path.resolve(__dirname, '..');
 // Files in scope: PWA bundle, dashboard JS, bot Python, RN client.
 // Backend Python is EXCLUDED — it intentionally has the literals in
 // comments + (where unavoidable) docstrings explaining the rename.
+//
+// May 2026 — added crisp-mobile/ (React Native) after the audit found
+// syncEngine.ts + imageVariants.ts still emitting LOW/HIGH to the wire,
+// which the post-Phase-L backend 422s. The validator was scanning every
+// other client but missed RN entirely; that gap is now closed.
 const SCAN_PATHS = [
     'mobile-app/src/app.js',
     'mobile-app/src/sw.js',
@@ -39,6 +44,9 @@ const SCAN_PATHS = [
     'messaging-bot/chunked_uploader.py',
     'messaging-bot/telegram/handlers.py',
     'messaging-bot/whatsapp/handlers.py',
+    'crisp-mobile/services/syncEngine.ts',
+    'crisp-mobile/services/imageVariants.ts',
+    'crisp-mobile/services/networkAdaptive.ts',
 ];
 
 // Patterns that indicate a LIVE code path emitting a legacy tier name.
@@ -85,6 +93,26 @@ const VIOLATIONS = [
     {
         re: /"resolution_tier"\s*:\s*"(LOW|HIGH)"/g,
         message: "Python dict assigning LOW/HIGH to resolution_tier",
+    },
+    // TypeScript union-type literal — `'LOW' | 'MEDIUM' | 'HIGH'`.
+    // Added May 2026 after RN's syncEngine.ts hid the regression inside
+    // a Record<...> type annotation that none of the other patterns
+    // matched. We require LOW or HIGH to appear next to a `|` so we
+    // don't false-positive on unrelated 3-letter strings.
+    {
+        re: /['"](LOW|HIGH)['"]\s*\|/g,
+        message: "TS union-type literal includes legacy LOW/HIGH",
+    },
+    {
+        re: /\|\s*['"](LOW|HIGH)['"]/g,
+        message: "TS union-type literal includes legacy LOW/HIGH",
+    },
+    // Object-value assignment: `small: 'LOW'` or `large: 'HIGH'` inside
+    // a tier map. The map key is the internal name ('small' | 'medium'
+    // | 'large'); the value is the WIRE tier that goes to the backend.
+    {
+        re: /\b(small|medium|large)\s*:\s*['"](LOW|HIGH)['"]/g,
+        message: "tier-map value still emits legacy LOW/HIGH on the wire",
     },
 ];
 

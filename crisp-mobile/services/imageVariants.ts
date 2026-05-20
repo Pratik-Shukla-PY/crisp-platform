@@ -54,10 +54,16 @@ export interface PhotoVariants {
 }
 
 // Tier → backend ResolutionEnum. Kept in one place so callers never hard-code.
-export const TIER_TO_RESOLUTION: Record<VariantTier, 'LOW' | 'MEDIUM' | 'HIGH'> = {
-  small: 'LOW',
+// Phase L (May 2026): backend ResolutionEnum was tightened to exactly
+// SMALL/MEDIUM/ORIGINAL; LOW + HIGH were dropped from the Postgres enum in
+// alembic 0036. Pre-Phase-L this map emitted LOW/HIGH and the backend now
+// 422s those payloads — the entire RN upload pipeline was broken until the
+// rename. The internal RN tier names stay 'small'/'medium'/'large' for
+// historical reasons; only the WIRE name changes.
+export const TIER_TO_RESOLUTION: Record<VariantTier, 'SMALL' | 'MEDIUM' | 'ORIGINAL'> = {
+  small: 'SMALL',
   medium: 'MEDIUM',
-  large: 'HIGH',
+  large: 'ORIGINAL',
 };
 
 // Apr 2026: LARGE is now a passthrough tier — no resize, no re-encode. The
