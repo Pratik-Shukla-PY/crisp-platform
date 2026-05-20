@@ -522,6 +522,28 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
         # Perceptual-hash for redundancy detection. Same /tmp/ pattern
         # — worker stages from storage, computes phash, deletes tempfile.
         _ai_executor.submit(_run_photo_phash, media_id, file_url, filename)
+    else:
+        # K.2.b (May 2026, Phase K) — AUDIO leg of the chunked-assembly
+        # path. Audio bypasses PII blur entirely, so 'not_needed' is
+        # the correct terminal state. Mirrors the /attach handler's
+        # audio default (the row-create branch around line 2862 stamps
+        # pii_blur_outcome='not_needed' for audio).
+        # Pre-fix this branch left pii_blur_status=NULL, which broke
+        # the "non-NULL always" invariant for every audio capture from
+        # the PWA — the PWA exclusively uses chunked transport for
+        # audio, so 100% of production audio rows were affected.
+        db.query(Media).filter(Media.id == media_id).update(
+            {'pii_blur_status': 'not_needed'}, synchronize_session=False
+        )
+        db.commit()
+        # K.6.c — bump the persisted-state SLI to match what the /attach
+        # path does at row-create time. Counts the PERSISTED column
+        # value, not the worker outcome (audio has no worker).
+        try:
+            from app.core.observability import pii_blur_status_total
+            pii_blur_status_total.labels(status='not_needed').inc()
+        except Exception:
+            pass
 
     logger.info(f"Assembled {media_id}: {len(file_bytes):,} bytes → {filename}")
     return file_url
@@ -644,11 +666,22 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
             if db:
                 try: db.close()
                 except Exception: pass
-        # Prometheus counter. `import inside` + try/except so a missing
+        # Prometheus counters. `import inside` + try/except so a missing
         # observability module can't break the blur worker.
+        #   pii_blur_runs_total   — counts worker EXECUTIONS by outcome
+        #                            (success/fail of this thread).
+        #   pii_blur_status_total — counts the row's PERSISTED
+        #                            pii_blur_status as actually stored.
+        # These usually agree, but diverge when the DB update above
+        # raised: the worker ran (runs ticks) yet the row stays NULL
+        # (status doesn't). That divergence is the operator signal.
         try:
-            from app.core.observability import pii_blur_runs_total
+            from app.core.observability import (
+                pii_blur_runs_total,
+                pii_blur_status_total,
+            )
             pii_blur_runs_total.labels(outcome=outcome).inc()
+            pii_blur_status_total.labels(status=outcome).inc()
         except Exception:
             pass
 
