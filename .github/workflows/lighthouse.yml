@@ -6,9 +6,9 @@ name: Lighthouse QA
 # Performance < 60 mobile, Accessibility < 90, Best Practices < 80,
 # PWA < 80 on PWA pages). See docs/LIGHTHOUSE_QA.md for the full runbook.
 #
-# AI analysis is NOT done in CI — it's done interactively in Claude Code
-# when you ask "analyze the latest Lighthouse report". The CI only runs
-# the audits + threshold gate; cost in API calls is $0.
+# Deeper performance/a11y analysis happens offline against the JSON
+# reports archived to the `lighthouse-history` branch. The CI only
+# runs the audits + threshold gate; cost in API calls is $0.
 
 on:
   push:

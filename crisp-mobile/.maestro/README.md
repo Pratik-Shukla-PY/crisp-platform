@@ -49,8 +49,8 @@ flows above capture matching screenshots on RN. To do a parity check:
 
 1. Run both suites with the same baseline locale (`en`).
 2. Compare PWA `stage-v4-capture.png` against RN equivalent visually.
-3. Or open Claude Code and ask: *"compare the PWA stage-v4-capture
-   screenshot against the RN one — what's different?"*
+3. Or diff side-by-side in your image viewer of choice (Preview on
+   macOS handles this cleanly via the Tools → Compare menu).
 
 The acceptable variance:
 - Native chrome (status bar, nav bar) differs by design.

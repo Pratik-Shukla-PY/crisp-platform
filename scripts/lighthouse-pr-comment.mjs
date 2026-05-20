@@ -258,7 +258,7 @@ function renderComment(current, baseline, violations) {
     if (REPO) {
         md += `📄 [Full HTML reports](https://github.com/${REPO}/tree/${HISTORY_BRANCH}/${current.sha})\n`;
     }
-    md += `\n> Want a deeper analysis? Open Claude Code and say *"analyze the latest Lighthouse report"*. Claude Code will pull the JSON from \`${HISTORY_BRANCH}\`, prioritize fixes for low-bandwidth / low-literacy / accessibility, and propose a fix plan you can approve.\n`;
+    md += `\n> Full JSON reports are archived to the \`${HISTORY_BRANCH}\` branch for offline drill-down (low-bandwidth / low-literacy / accessibility audits).\n`;
     return md;
 }
 

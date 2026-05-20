@@ -828,7 +828,7 @@
                         _toastCapHit();
                     }
                     // User taps Continue manually after each step — no
-                    // auto-advance, no AI-assisted prefill.
+                    // auto-advance, no auto-prefill.
                     document.removeEventListener('camera-modal-closed', _modalCloseHandler);
                 };
                 document.addEventListener('camera-modal-closed', _modalCloseHandler);
