@@ -332,7 +332,16 @@ app.add_middleware(
     allow_origin_regex=_cors_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Admin-Key"],
+    # May 2026 — must include conditional-GET request headers
+    # (If-None-Match, If-Match) so the dashboard's ETag-based polling
+    # preflight doesn't 400. Without these, the browser preflight for
+    # /api/v1/reports/?since=... fails CORS, the actual GET is blocked,
+    # and the dashboard surfaces "Failed to fetch" / shows zero
+    # reports even though the backend is healthy.
+    allow_headers=[
+        "Content-Type", "Authorization", "X-Admin-Key",
+        "If-None-Match", "If-Match",
+    ],
     # May 2026 (HAR-driven dashboard regression) — `X-Server-Time` + `ETag`
     # MUST be in this list. The reports list endpoint returns both, and the
     # dashboard's delta poller reads them via `res.headers.get(...)` to

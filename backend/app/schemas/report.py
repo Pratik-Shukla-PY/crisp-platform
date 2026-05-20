@@ -471,6 +471,13 @@ class ReportResponse(BaseModel):
     server_created_at: datetime
     deletion_requested_at: Optional[datetime] = None
     lives_impacted: Optional[int] = None
+    # K.2.e (May 2026, Phase K) — surface the "lost attribution" flag so the
+    # dashboard's K.5.a chip row can render "🔓 Attribution lost". Pre-fix
+    # the column existed in the DB (migration 0033) + the chip code existed
+    # in web-dashboard/src/app.js, but this field was missing from the
+    # Pydantic response schema, so the JSON never carried it and the chip
+    # never appeared.
+    submitted_as_anonymous_due_to_expired_token: bool = False
 
     @field_serializer("server_created_at", "deletion_requested_at", when_used="json")
     def _serialize_dt(self, v: Optional[datetime]) -> Optional[str]:

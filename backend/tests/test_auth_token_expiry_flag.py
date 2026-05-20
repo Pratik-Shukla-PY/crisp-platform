@@ -117,6 +117,20 @@ def test_expired_token_sets_lost_attribution_flag(client, db, analyst_user):
     body = res.json()
     report_id = body["id"]
 
+    # May 2026 regression guard: the ReportResponse Pydantic schema MUST
+    # include the K.2.e flag so the dashboard's K.5.a chip row can render
+    # "🔓 Attribution lost". Pre-fix the column existed in the DB but the
+    # response schema didn't expose it → dashboard's
+    # `r.submitted_as_anonymous_due_to_expired_token` was always undefined
+    # → chip never appeared. Found via manual local testing.
+    assert "submitted_as_anonymous_due_to_expired_token" in body, (
+        "ReportResponse JSON must include submitted_as_anonymous_due_to_expired_token "
+        f"so the dashboard chip can render; body keys: {sorted(body.keys())}"
+    )
+    assert body["submitted_as_anonymous_due_to_expired_token"] is True, (
+        f"Response body should carry flag=true; got {body.get('submitted_as_anonymous_due_to_expired_token')!r}"
+    )
+
     db.expire_all()
     r = db.query(Report).filter(Report.id == report_id).first()
     assert r.user_id is None, (

@@ -88,3 +88,52 @@ class TestCORSRejectedOrigins:
         acao = res.headers.get("access-control-allow-origin")
         assert acao is None or acao != origin, \
             f"{origin} should NOT be echoed in allow-origin; got {acao!r}"
+
+
+class TestCORSConditionalGetHeaders:
+    """May 2026 — preflight must allow `If-None-Match` (+ `If-Match`) so the
+    dashboard's ETag-conditional delta polling doesn't 400.
+
+    Found via manual local testing: dev cross-origin
+    `localhost:8080 -> localhost:8000` fired a preflight that included
+    `Access-Control-Request-Headers: if-none-match,authorization`. The
+    CORS middleware's `allow_headers` listed only Content-Type, Authorization,
+    X-Admin-Key — so the preflight 400'd with "Disallowed CORS headers",
+    the browser blocked the actual GET, and the dashboard surfaced
+    "Failed to fetch" / showed zero reports despite the backend being
+    healthy.
+
+    PROD (same-origin via nginx) doesn't hit this because no preflight
+    fires for same-origin requests, but the moment dashboard + API
+    diverge (CDN, separate deploys) it would break PROD too. This guard
+    pins the dev-mode policy AND the prod-future-proofing.
+    """
+
+    @pytest.mark.parametrize("request_headers", [
+        "if-none-match",
+        "if-none-match,authorization",
+        "if-match",
+        "if-match,if-none-match,content-type,authorization",
+    ])
+    def test_conditional_get_headers_in_preflight(self, cors_client, request_headers):
+        """Preflight from localhost:8080 listing If-None-Match / If-Match
+        in Access-Control-Request-Headers must come back 200 with those
+        names in Access-Control-Allow-Headers.
+        """
+        res = cors_client.options(
+            "/api/v1/reports/",
+            headers={
+                "Origin": "http://localhost:8080",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": request_headers,
+            },
+        )
+        assert res.status_code == 200, (
+            f"preflight with headers={request_headers!r} must succeed; "
+            f"got {res.status_code} body={res.text!r}"
+        )
+        allow_headers = (res.headers.get("access-control-allow-headers") or "").lower()
+        for h in [n.strip() for n in request_headers.split(",")]:
+            assert h in allow_headers, (
+                f"Access-Control-Allow-Headers missing {h!r}; got {allow_headers!r}"
+            )
