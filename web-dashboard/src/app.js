@@ -573,10 +573,14 @@ function groupPhotos(mediaList) {
 // gets the `.active` class so analysts can see which tier is showing.
 // Escapes group_id / report_id for safe inline handlers.
 function _buildTierSwitcher(reportId, group, activeTier) {
+    // Phase L (May 2026) — canonical SMALL/MEDIUM/ORIGINAL tier
+    // values match what's in the DB. Pre-L this was LOW/MEDIUM/HIGH
+    // which silently disabled SMALL + ORIGINAL buttons because
+    // byTier[tier] lookups missed the canonical-named Media rows.
     const tiers = [
-        { tier: 'LOW',    label: 'SMALL'  },
-        { tier: 'MEDIUM', label: 'MEDIUM' },
-        { tier: 'HIGH',   label: 'LARGE'  },
+        { tier: 'SMALL',    label: 'SMALL'    },
+        { tier: 'MEDIUM',   label: 'MEDIUM'   },
+        { tier: 'ORIGINAL', label: 'ORIGINAL' },
     ];
     const byTier = Object.fromEntries(group.members.map(m => [m.resolution_tier, m]));
     const gid = (group.group_id || '').replace(/'/g, '');
@@ -8150,10 +8154,13 @@ function formatTime(s) {
 // caption)` — kept as a shim that routes through PhotoSwipe single-slide
 // mode so we never have two distinct lightbox UIs side by side.
 
+// Phase L (May 2026) — canonical SMALL/MEDIUM/ORIGINAL tier values.
+// The lightbox button labels stay user-friendly ("Small"/"Medium"/"Original")
+// while the internal `tier` values match the Media row's resolution_tier.
 const _TIER_BUTTONS = [
-    { tier: 'LOW',    label: 'Small'    },
-    { tier: 'MEDIUM', label: 'Medium'   },
-    { tier: 'HIGH',   label: 'Original' },
+    { tier: 'SMALL',    label: 'Small'    },
+    { tier: 'MEDIUM',   label: 'Medium'   },
+    { tier: 'ORIGINAL', label: 'Original' },
 ];
 
 // Tracks the currently-displayed tier per photo_group_id inside a live

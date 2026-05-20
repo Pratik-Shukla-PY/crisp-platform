@@ -97,13 +97,34 @@ for (const rel of SCAN_PATHS) {
     }
     const lines = fs.readFileSync(abs, 'utf8').split('\n');
     lines.forEach((line, idx) => {
-        // Skip pure-comment lines (single-line // or # only).
+        // Skip pure-comment lines.
         const trimmed = line.trim();
         if (trimmed.startsWith('//') || trimmed.startsWith('*')
             || trimmed.startsWith('#') || trimmed === '') return;
+        // Strip inline // comments before regex match — a comment at
+        // end of line shouldn't trip the validator (false positives
+        // came from descriptive comments quoting the legacy strings
+        // they were renaming away).
+        let codeOnly = line;
+        const inlineCommentIdx = (() => {
+            // naive: find // not inside quotes. Good enough for the
+            // tier-vocab files we scan.
+            let inStr = null;
+            for (let i = 0; i < line.length - 1; i++) {
+                const c = line[i];
+                if (inStr) {
+                    if (c === inStr && line[i - 1] !== '\\') inStr = null;
+                    continue;
+                }
+                if (c === '"' || c === "'" || c === '`') { inStr = c; continue; }
+                if (c === '/' && line[i + 1] === '/') return i;
+            }
+            return -1;
+        })();
+        if (inlineCommentIdx >= 0) codeOnly = line.slice(0, inlineCommentIdx);
         for (const { re, message } of VIOLATIONS) {
             re.lastIndex = 0;
-            const match = re.exec(line);
+            const match = re.exec(codeOnly);
             if (match) {
                 console.error(
                     `\x1b[31m✗\x1b[0m ${rel}:${idx + 1} — ${message}\n` +
