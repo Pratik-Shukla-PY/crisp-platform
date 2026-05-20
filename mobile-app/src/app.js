@@ -632,24 +632,50 @@ async function _reconcileBeforeDequeue(item, reportId) {
     // For each expected variant:
     //   · `notComplete` = server doesn't show assembly_status='complete'
     //   · `notPresent`  = server doesn't have a row for this mediaId at all
-    // A SMALL tier `notPresent` is hard-fail (must re-upload). A SMALL
-    // tier `notComplete but present` is mid-assembly — wait, don't fail.
-    // MEDIUM/HIGH `notComplete` (either case) → soft drain.
+    //
+    // Phase L follow-up (May 2026) — race-fix in reconcile.
+    // Pre-fix: any non-SMALL tier in `notComplete` was treated as
+    // "soft-drain" (caller calls /media/mark-deferred + dequeues).
+    // Bug: if the chunks were STILL being assembled on the server,
+    // the mark-deferred call stamped the row as
+    // `failed/bandwidth_tier_deferred` mid-assembly. All chunks
+    // arrived but the row was already terminal-failed → ORIGINAL
+    // never landed. Operator-reported: "image landed but original
+    // failed with network timeout" — actually a "we gave up
+    // too early" misfire.
+    //
+    // Post-fix: also bucket non-SMALL tiers by whether the server
+    // has a row for them. Mid-assembly (row exists, status not
+    // 'complete') → softAssembling → ok=false → caller waits one
+    // more retry-loop tick (~15 s). Truly missing (no row at all)
+    // → softMissing → softDrain=true → caller marks deferred.
     const notComplete = expected.filter(e => !serverComplete.has(e.mediaId));
     const smallMissing = notComplete.filter(
         e => e.tier === 'small' && !serverHas.has(e.mediaId),
     );
     // SMALL tiers that exist on the server but aren't done assembling.
-    // These shouldn't fail OR soft-drain — caller should wait one
-    // more retry-loop tick (~15 s) for the server to finish.
+    // Caller should wait one more retry-loop tick for the server to finish.
     const smallAssembling = notComplete.filter(
         e => e.tier === 'small' && serverHas.has(e.mediaId),
     );
-    const softMissing = notComplete.filter(e => e.tier !== 'small');
-    // Hard-fail ONLY when a SMALL chunk never landed. Mid-assembly
-    // → return ok=false but with empty smallMissing so the caller
-    // can keep the queue entry without rolling back chunk progress.
-    const ok = smallMissing.length === 0 && smallAssembling.length === 0;
+    // MEDIUM / ORIGINAL tiers that DO exist on the server but aren't
+    // yet `complete`. Same grace window as smallAssembling — wait,
+    // don't soft-drain.
+    const softAssembling = notComplete.filter(
+        e => e.tier !== 'small' && serverHas.has(e.mediaId),
+    );
+    // MEDIUM / ORIGINAL tiers truly missing on the server (no row
+    // at all). These are the genuine "client thought it sent but
+    // server never saw it" case → softDrain.
+    const softMissing = notComplete.filter(
+        e => e.tier !== 'small' && !serverHas.has(e.mediaId),
+    );
+    // ok=true only when no tier (SMALL or non-SMALL) is mid-assembly
+    // AND no SMALL is missing. softDrain stays the same semantics:
+    // some non-SMALL tier truly absent → caller marks deferred.
+    const ok = smallMissing.length === 0
+        && smallAssembling.length === 0
+        && softAssembling.length === 0;
     const softDrain = ok && softMissing.length > 0;
     return {
         ok,
@@ -657,6 +683,7 @@ async function _reconcileBeforeDequeue(item, reportId) {
         missing: ok ? softMissing : notComplete,
         smallMissing,
         smallAssembling,
+        softAssembling,
         breakdown,
         totalExpected,
     };
@@ -9600,9 +9627,14 @@ async function trySendQueuedReport(item) {
                     try { updateSyncBadge(); } catch (_) {}
                     // Phase C.3 (May 2026) — structured verification log.
                     const expectedRows = reconciled.totalExpected || 0;
-                    const actualRows = (reconciled.breakdown.LOW || 0)
-                                     + (reconciled.breakdown.MEDIUM || 0)
-                                     + (reconciled.breakdown.HIGH || 0);
+                    // Phase L (May 2026) — sum canonical SMALL/MEDIUM/ORIGINAL.
+                    // Pre-L breakdown keys were LOW/MEDIUM/HIGH; the backend
+                    // returns canonical names now, so the old key reads
+                    // were silently 0 + 0 + 0 = "0 of N landed" log noise.
+                    const _b = reconciled.breakdown || {};
+                    const actualRows = (_b.SMALL || _b.LOW || 0)
+                                     + (_b.MEDIUM || 0)
+                                     + (_b.ORIGINAL || _b.HIGH || 0);
                     const photoGroupCount = (function () {
                         const ids = new Set();
                         const collect = (variants) => {
