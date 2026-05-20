@@ -3155,6 +3155,67 @@ body.burst-mode .notif-glow {
     border-color: rgba(239,68,68,0.5);
     background: rgba(239,68,68,0.14);
 }
+
+/* K.5.a (May 2026, Phase K) — operator-visible status chips on the
+   feed-card footer. Each chip surfaces one of the new state signals
+   from Phase K backend work: checksum_mismatch, chunks_never_arrived,
+   bandwidth_tier_deferred, pii_blur_status='failed',
+   submitted_as_anonymous_due_to_expired_token, or sync_status=PARTIAL
+   with pending media. The chip-row in createIncidentCard renders the
+   FIRST applicable chip (severity-ordered) so the operator sees the
+   most-concerning state at a glance during triage. */
+.k5a-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 700; padding: 2px 7px;
+    border-radius: 8px; flex-shrink: 0; letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+.k5a-chip i { font-size: 10px; }
+.k5a-chip-red {
+    color: #ef4444;
+    border: 1px solid rgba(239,68,68,0.5);
+    background: rgba(239,68,68,0.14);
+}
+.k5a-chip-amber {
+    color: #f59e0b;
+    border: 1px solid rgba(245,158,11,0.4);
+    background: rgba(245,158,11,0.10);
+}
+.k5a-chip-grey {
+    color: #94a3b8;
+    border: 1px solid rgba(148,163,184,0.4);
+    background: rgba(148,163,184,0.10);
+}
+
+/* K.5.e (May 2026, Phase K) — top-of-page truncation banner.
+   Surfaces when backend X-Total-Count exceeds DASHBOARD_PAGE_LIMIT
+   so operators know they're not seeing the full feed. Stays visible
+   until either dismissed via the × or the next full-refresh poll
+   confirms total <= limit. */
+.truncation-banner {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 99999;
+    display: none;  /* show() flips this to flex */
+    align-items: center; gap: 10px;
+    padding: 10px 18px;
+    background: linear-gradient(90deg, rgba(239,68,68,0.92), rgba(245,158,11,0.92));
+    color: #fff;
+    font-size: 13px; font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+}
+.truncation-banner i { font-size: 14px; }
+.truncation-banner strong { font-weight: 800; }
+.truncation-banner-close {
+    margin-left: auto;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    opacity: 0.7;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+.truncation-banner-close:hover { opacity: 1; background: rgba(255,255,255,0.15); }
 .dp-gallery-reclaim-btn {
     display: inline-flex; align-items: center; gap: 5px;
     margin-left: 6px; padding: 3px 9px; border-radius: 4px;

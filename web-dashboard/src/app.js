@@ -249,8 +249,46 @@ let firstZoomDone = false;
 
 // ── Live Incident Notifications ─────────────────────────────────────────────
 let _unseenReports = [];
-const _MAX_NOTIFS = 10;
-const _seenIds = new Set(JSON.parse(localStorage.getItem('crisp_seen_ids') || '[]'));
+// K.5.d (May 2026, Phase K) — bell cap raised 10 → 50 so burst-mode
+// arrivals (5+ in 5 s) don't lose the older entries off the LIFO. The
+// burst banner above the bell still suppresses per-card spawn under
+// burst conditions; the bell itself can now carry the full burst.
+const _MAX_NOTIFS = 50;
+// K.5.c (May 2026, Phase K) — _seenIds LRU cap. Pre-fix the Set grew
+// unbounded in localStorage; an operator session running for weeks
+// eventually hit the quota → setItem threw → notifications stopped
+// persisting cross-session → stale notifications re-fired next session.
+// Cap at 1000 most-recent ids (FIFO eviction; JS Sets preserve insertion
+// order). 1000 covers a busy day comfortably.
+const _SEEN_IDS_CAP = 1000;
+const _seenIds = (() => {
+    try {
+        const raw = JSON.parse(localStorage.getItem('crisp_seen_ids') || '[]');
+        // Trim on load too — handles legacy localStorage entries from
+        // pre-K.5.c sessions that may have grown unbounded.
+        return new Set(raw.slice(-_SEEN_IDS_CAP));
+    } catch (_) {
+        return new Set();
+    }
+})();
+// K.5.c — central LRU-eviction + persistence helper. Use this instead
+// of bare `localStorage.setItem('crisp_seen_ids', ...)`. The cap is
+// enforced BEFORE write so a quota-exceeded throw only fires when the
+// payload would actually be larger than 1000 ids' worth (~50 KB).
+function _persistSeenIds() {
+    const arr = [..._seenIds];
+    if (arr.length > _SEEN_IDS_CAP) {
+        // Evict the oldest. Sets preserve insertion order so the first
+        // entries are the oldest. Trim the in-memory Set to match.
+        const evictCount = arr.length - _SEEN_IDS_CAP;
+        for (let i = 0; i < evictCount; i++) _seenIds.delete(arr[i]);
+    }
+    try {
+        localStorage.setItem('crisp_seen_ids', JSON.stringify([..._seenIds]));
+    } catch (e) {
+        console.warn('[CRISP] _seenIds persist failed (quota?):', e?.message || e);
+    }
+}
 let _notifPanelOpen = false;
 let _initialLoadDone = false;  // Suppress notifications on first data load
 let heatLayer = null;
@@ -1203,6 +1241,37 @@ function _hideBurstBanner() {
     }
 }
 
+// K.5.e (May 2026, Phase K) — truncation banner.
+// When the backend's X-Total-Count exceeds DASHBOARD_PAGE_LIMIT (10K),
+// the dashboard silently truncates. Pre-fix the only signal was a
+// console.warn that operators never saw. The banner sits at the top of
+// the header chrome and stays visible until the next full-refresh poll
+// where total <= limit.
+function _showTruncationBanner(total, limit) {
+    let banner = document.getElementById('truncation-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'truncation-banner';
+        banner.className = 'truncation-banner';
+        // Insert at the very top of the body so it sits above the
+        // dashboard chrome without needing CSS positioning gymnastics.
+        document.body.insertBefore(banner, document.body.firstChild);
+    }
+    banner.innerHTML = `
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <strong>Showing ${limit.toLocaleString()} of ${total.toLocaleString()} reports</strong>
+        — server-side pagination needed to see the rest.
+        <span class="truncation-banner-close" onclick="_hideTruncationBanner()" title="Dismiss">×</span>
+    `;
+    banner.style.display = 'flex';
+}
+function _hideTruncationBanner() {
+    const banner = document.getElementById('truncation-banner');
+    if (banner) banner.style.display = 'none';
+}
+// Expose for the close button + e2e spec to drive directly.
+window._hideTruncationBanner = _hideTruncationBanner;
+
 // Back-compat: legacy code paths that called _showFlashNotification
 // now route through the new stack renderer. The old per-card centred
 // flash element is no longer used.
@@ -1260,7 +1329,7 @@ window.toggleNotifPanel = () => {
 window.dismissNotif = (id) => {
     _unseenReports = _unseenReports.filter(n => n.id !== id);
     _seenIds.add(id);
-    try { localStorage.setItem('crisp_seen_ids', JSON.stringify([..._seenIds])); } catch(_){}
+    _persistSeenIds();  // K.5.c — LRU cap + safe persist
     _renderNotifications();
     selectReport(id);
     // Close panel if empty
@@ -1274,7 +1343,7 @@ window.dismissNotif = (id) => {
 window.clearAllNotifs = () => {
     _unseenReports.forEach(n => _seenIds.add(n.id));
     _unseenReports = [];
-    try { localStorage.setItem('crisp_seen_ids', JSON.stringify([..._seenIds])); } catch(_){}
+    _persistSeenIds();  // K.5.c — LRU cap + safe persist
     _renderNotifications();
     const panel = document.getElementById('notif-panel');
     if (panel) panel.style.display = 'none';
@@ -1740,7 +1809,12 @@ function renderTriageQueue(el) {
     let reports = allReports;
     if (timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        reports = reports.filter(r => new Date(ensureUTC(r.server_created_at)).getTime() > cutoff);
+        // K.5.b (May 2026, Phase K) — use _priorityTime so offline-
+        // drained reports stay visible by CAPTURE time, not by the
+        // drain timestamp the server stamped when the chunks finally
+        // arrived. Pre-fix the "Last 1 hour" filter silently hid a
+        // 2h-old offline-queued report that drained 30s ago.
+        reports = reports.filter(r => _priorityTime(r) > cutoff);
     }
 
     // Apply pill filter (if user clicked a stat pill)
@@ -2119,6 +2193,50 @@ function createIncidentCard(r) {
            </span>`
         : '';
 
+    // K.5.a (May 2026, Phase K) — operator-visible status chips.
+    // Renders the FIRST applicable chip from the severity-ordered list
+    // below (most-concerning first). Detail panel can show all chips
+    // simultaneously; the feed card stays at one chip per row to keep
+    // operator triage scannable.
+    //
+    // Priority order matches the audit's "operator concern" gradient:
+    //   1. Media corrupt (checksum_mismatch)         — RED, data integrity
+    //   2. Upload abandoned (chunks_never_arrived)   — RED, no recovery
+    //   3. PII review needed (pii_blur_status=failed) — RED, privacy risk
+    //   4. Original (slow network, bandwidth_tier_deferred) — AMBER
+    //   5. Attribution lost (expired token)          — GREY, informational
+    //   6. Uploading… (sync_status=PARTIAL + pending media) — AMBER
+    const _media = r.media || [];
+    const _hasAbandonReason = (reason) => _media.some(m => m && m.abandon_reason === reason);
+    const _hasPiiBlurStatus = (status) => _media.some(m => m && m.pii_blur_status === status);
+    let _statusChip = '';
+    if (_hasAbandonReason('checksum_mismatch')) {
+        _statusChip = `<span class="k5a-chip k5a-chip-red" title="One or more media files failed integrity check (djb2 checksum mismatch on assembly). Bytes on disk are corrupt — only a fresh upload can recover.">
+            <i class="fa-solid fa-triangle-exclamation"></i> Media corrupt
+        </span>`;
+    } else if (_hasAbandonReason('chunks_never_arrived') || _hasAbandonReason('assembly_worker_lost')) {
+        _statusChip = `<span class="k5a-chip k5a-chip-red" title="Upload abandoned after the 30-min freshness window. Operator may reclaim via the F3 Reclaim button on the detail panel.">
+            <i class="fa-solid fa-satellite-dish"></i> Upload abandoned
+        </span>`;
+    } else if (_hasPiiBlurStatus('failed')) {
+        _statusChip = `<span class="k5a-chip k5a-chip-red" title="PII blur (face / text redaction) failed on this image. Review manually before sharing — bytes may contain identifiable faces or text.">
+            <i class="fa-solid fa-eye-low-vision"></i> PII review needed
+        </span>`;
+    } else if (_hasAbandonReason('bandwidth_tier_deferred')) {
+        _statusChip = `<span class="k5a-chip k5a-chip-amber" title="MEDIUM or HIGH variant was not delivered (reporter on slow network). SMALL preview is available and operationally sufficient. Higher-quality bytes may arrive later if the reporter reconnects on a faster link.">
+            <i class="fa-solid fa-signal"></i> Original (slow network)
+        </span>`;
+    } else if (r.submitted_as_anonymous_due_to_expired_token) {
+        _statusChip = `<span class="k5a-chip k5a-chip-grey" title="Reporter was logged in at capture time but their token had expired by the time the report drained. Submission was accepted anonymously. The reporter can retroactively re-link via a future claim-this-report endpoint.">
+            <i class="fa-solid fa-unlock"></i> Attribution lost
+        </span>`;
+    } else if (r.sync_status === 'PARTIAL'
+               && _media.some(m => m && m.assembly_status === 'pending')) {
+        _statusChip = `<span class="k5a-chip k5a-chip-amber" title="Report is still progressing — some chunks pending. Idle-promote (Action ④) will flip to SYNCED after 60s of no media activity.">
+            <i class="fa-solid fa-hourglass-half"></i> Uploading…
+        </span>`;
+    }
+
     // Phase G.5 — bulk-select checkbox at top-left. Visible only when
     // multi-select mode is enabled (operator toggled the toolbar
     // button); otherwise stays out of the way.
@@ -2181,6 +2299,7 @@ function createIncidentCard(r) {
                 </span>` : ''}
             </div>
             <div class="qrt-card-footer">
+                ${_statusChip}
                 ${origPendingChip}
                 ${truthBadge}
                 ${actionEl}
@@ -2215,7 +2334,9 @@ function renderTreeFeed(el) {
     // Filter by time
     if (timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        filtered = filtered.filter(r => new Date(ensureUTC(r.server_created_at)).getTime() > cutoff);
+        // K.5.b — use _priorityTime so offline-drained reports stay visible
+        // by capture time, not the late server-receive timestamp.
+        filtered = filtered.filter(r => _priorityTime(r) > cutoff);
     }
     // Filter by search
     if (treeSearchTerm) {
@@ -2257,7 +2378,8 @@ function _getFilteredReports() {
     let reports = allReports;
     if (timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        reports = reports.filter(r => new Date(ensureUTC(r.server_created_at)).getTime() > cutoff);
+        // K.5.b — use _priorityTime for offline-aware time filter.
+        reports = reports.filter(r => _priorityTime(r) > cutoff);
     }
     if (_crisisDrillFilter != null) {
         reports = reports.filter(r => (r.crisis_type || 'UNKNOWN') === _crisisDrillFilter);
@@ -9140,7 +9262,8 @@ function getFilteredReports() {
     });
     if (timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        filtered = filtered.filter(r => new Date(ensureUTC(r.server_created_at)).getTime() > cutoff);
+        // K.5.b — use _priorityTime for offline-aware time filter.
+        filtered = filtered.filter(r => _priorityTime(r) > cutoff);
     }
     return filtered;
 }
@@ -9214,7 +9337,21 @@ window.setStatusFilter = (f) => {
 window.setTimeFilter = (h) => {
     timeFilterHours = h;
     document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
+    // K.5.b — guard the active-button bookkeeping behind the implicit
+    // click `event` global since tests + programmatic callers don't
+    // necessarily provide one. Falls through cleanly when called from
+    // a non-click context (e.g. e2e test stubbing).
+    try {
+        if (typeof event !== 'undefined' && event && event.target && event.target.classList) {
+            event.target.classList.add('active');
+        }
+    } catch (_) { /* no event in scope — programmatic call */ }
+    renderFeed();
+};
+// K.5.b — test-only helper that bypasses the time-button DOM
+// bookkeeping for e2e specs that drive the filter programmatically.
+window.__crispSetTimeFilterHoursForTest = (h) => {
+    timeFilterHours = h;
     renderFeed();
 };
 
@@ -9625,6 +9762,16 @@ async function fetchReports() {
         const xTotalCount = parseInt(res.headers.get('X-Total-Count') || '0', 10);
         if (xTotalCount > DASHBOARD_PAGE_LIMIT && wantFullRefresh) {
             console.warn(`[CRISP] Dashboard truncation imminent: X-Total-Count=${xTotalCount} exceeds DASHBOARD_PAGE_LIMIT=${DASHBOARD_PAGE_LIMIT}. Proper pagination needed.`);
+            // K.5.e (May 2026, Phase K) — operator-visible banner.
+            // Pre-fix the truncation only logged to console; operators
+            // didn't know reports past row 10K were silently hidden.
+            // Banner sits at the top of the header chrome so anyone
+            // looking at the dashboard knows what they're not seeing.
+            _showTruncationBanner(xTotalCount, DASHBOARD_PAGE_LIMIT);
+        } else if (typeof _hideTruncationBanner === 'function') {
+            // Count dropped back below the threshold — clear the banner
+            // on a subsequent full-refresh poll.
+            if (wantFullRefresh) _hideTruncationBanner();
         }
 
         try {
@@ -9651,7 +9798,7 @@ async function fetchReports() {
             }
             if (!_initialLoadDone) {
                 _initialLoadDone = true;
-                try { localStorage.setItem('crisp_seen_ids', JSON.stringify([..._seenIds])); } catch(_){}
+                _persistSeenIds();  // K.5.c — LRU cap + safe persist
                 console.log('[CRISP] Initial load complete — future reports will trigger notifications');
             }
             console.log('[CRISP] Rendered', allReports.length, 'reports on map');
