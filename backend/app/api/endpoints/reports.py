@@ -961,13 +961,26 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
         media.is_synced = True
         media.completion_pct = 100.0
 
-        report = db.query(Report).filter(Report.id == report_id).first()
-        if report:
-            report.received_media = (report.received_media or 0) + 1
-            if report.expected_media and report.received_media >= report.expected_media:
-                report.sync_status = SyncStatusEnum.SYNCED
+        # K.1.a (May 2026, Phase K) — atomic SQL increment.
+        # Previous read-modify-write `report.received_media = (report.received_media or 0) + 1`
+        # raced with concurrent /attach calls + parallel assembly-bg
+        # threads; the count could diverge from reality (stuck PARTIAL
+        # forever OR premature SYNCED with files still in flight). The
+        # SQL `UPDATE ... SET received_media = received_media + 1` is
+        # atomic at the DB engine level; concurrent transactions
+        # serialise on the row.
+        row = db.query(Report).filter(Report.id == report_id).first()
+        if row:
+            db.query(Report).filter(Report.id == report_id).update(
+                {"received_media": (Report.received_media + 1)},
+                synchronize_session="fetch",
+            )
+            db.commit()
+            db.refresh(row)
+            if row.expected_media and row.received_media >= row.expected_media:
+                row.sync_status = SyncStatusEnum.SYNCED
+                db.commit()
                 logger.info(f"[AssemblyBG] report {report_id[:8]} fully synced")
-        db.commit()
         logger.info(f"[AssemblyBG] complete {media_id[:8]} → {file_url}")
 
         # Guaranteed-delivery: record variant success + time-to-first/full image.
@@ -2661,9 +2674,22 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             completion_pct=100.0,
         )
         db.add(db_media)
+        db.flush()  # ensure the INSERT lands before the atomic UPDATE so
+                    # concurrent /attach calls correctly observe the new row
 
-        # Update received count only for new media
-        report.received_media = (report.received_media or 0) + 1
+        # K.1.a (May 2026, Phase K) — atomic SQL increment (was non-atomic
+        # `report.received_media = (report.received_media or 0) + 1`).
+        # Concurrent /attach for different tiers + parallel assembly-bg
+        # threads previously could interleave reads + writes; either lost
+        # increments (report stuck PARTIAL with media missing from count)
+        # or double-counted (premature SYNCED). The UPDATE ... = col + 1
+        # is atomic at the DB engine level.
+        db.query(Report).filter(Report.id == report.id).update(
+            {"received_media": (Report.received_media + 1)},
+            synchronize_session="fetch",
+        )
+        db.flush()
+        db.refresh(report)
 
     # Check if all expected media received → mark SYNCED
     if report.received_media >= report.expected_media:
