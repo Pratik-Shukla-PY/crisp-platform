@@ -844,7 +844,23 @@ def _apply_building_versioning(_mapper, connection, target: "Report") -> None:  
         if not getattr(target, "building_id", None):
             return
         from sqlalchemy import text as _text
-        # Step 1: count existing rows in this building's partition.
+        # K.1.c (May 2026, Phase K) — partition-scoped advisory lock.
+        # Pre-fix the SELECT COUNT() + UPDATE was a check-then-act race:
+        # two concurrent INSERTs for the same building_id could both
+        # read `existing=N`, both compute `ordinal=N+1`, both mark
+        # `is_latest=True` → duplicate ordinals AND multiple "latest"
+        # rows in the same partition, breaking F.5.c's invariant.
+        # Postgres disallows `SELECT ... FOR UPDATE` with aggregate
+        # functions, so we use `pg_advisory_xact_lock(hashtext(...))`
+        # which is the idiomatic pattern for serialising a partition
+        # at txn scope. The lock auto-releases at COMMIT/ROLLBACK and
+        # is scoped per-building (so different buildings can still
+        # insert concurrently). A second INSERT for the same building
+        # waits on the lock, then reads the freshly-committed count.
+        connection.execute(
+            _text("SELECT pg_advisory_xact_lock(hashtext(:tag))"),
+            {"tag": f"crisp:building:{target.building_id}"},
+        )
         result = connection.execute(
             _text("SELECT COUNT(*) FROM reports WHERE building_id = :bid"),
             {"bid": target.building_id},

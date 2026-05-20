@@ -129,3 +129,69 @@ class TestBuildingHistoryVersioning:
         # Ordinal fields are additive.
         assert "building_version_ordinal" in row
         assert "building_is_latest" in row
+
+
+# ── K.1.c (May 2026, Phase K) — concurrent-INSERT race fix ───────────────────
+
+
+class TestBuildingVersioningConcurrency:
+    """K.1.c: `SELECT COUNT(*) ... FOR UPDATE` locks the partition so two
+    concurrent INSERTs for the same building_id can't both compute the
+    same ordinal. Pre-fix the SELECT was lock-free, producing duplicate
+    ordinals + multiple `building_is_latest=True` rows in the same
+    partition under contention."""
+
+    def test_five_concurrent_inserts_get_distinct_ordinals(self, client):
+        """Spawn 5 concurrent `/reports/meta` POSTs with the same building_id;
+        assert ordinals are `{1, 2, 3, 4, 5}` (all distinct) AND exactly one
+        row carries `building_is_latest=True`."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        bid = f"osm:way:{uuid.uuid4().hex[:12]}"
+
+        def _submit_concurrent(idx):
+            return _submit(
+                client,
+                device_hash=f"DEV-K1c-CONCURRENT-{idx}",
+                building_id=bid,
+                client_report_id=str(uuid.uuid4()),
+            )
+
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            futures = [ex.submit(_submit_concurrent, i) for i in range(5)]
+            results = [f.result(timeout=20) for f in futures]
+
+        # All 5 must have succeeded.
+        assert len(results) == 5
+
+        # Fetch the building's history; ordinals must be 1..5 distinct.
+        body = client.get(f"/api/v1/reports/building/{bid}").json()
+        ordinals = sorted(r["building_version_ordinal"] for r in body["reports"])
+        assert ordinals == [1, 2, 3, 4, 5], (
+            f"Expected ordinals {{1,2,3,4,5}}; got {ordinals}. "
+            f"This means the SELECT COUNT(*) FOR UPDATE lock failed."
+        )
+
+        # Exactly one row in the partition must be marked latest.
+        latest_count = sum(1 for r in body["reports"] if r["building_is_latest"])
+        assert latest_count == 1, (
+            f"building_is_latest=True count={latest_count}; expected exactly 1."
+        )
+
+    def test_serial_inserts_unchanged_behaviour(self, client):
+        """Regression sentinel: serial inserts still produce 1,2,3 ordinals
+        with the last marked latest. The FOR UPDATE lock must not regress
+        the single-threaded happy path."""
+        bid = f"osm:way:{uuid.uuid4().hex[:12]}"
+        for i in range(3):
+            _submit(
+                client,
+                device_hash=f"DEV-K1c-SERIAL-{i}",
+                building_id=bid,
+                client_report_id=str(uuid.uuid4()),
+            )
+        body = client.get(f"/api/v1/reports/building/{bid}").json()
+        ordinals = sorted(r["building_version_ordinal"] for r in body["reports"])
+        assert ordinals == [1, 2, 3]
+        latest_count = sum(1 for r in body["reports"] if r["building_is_latest"])
+        assert latest_count == 1
