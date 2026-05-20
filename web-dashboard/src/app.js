@@ -820,10 +820,18 @@ let _stackQuietTimer = null;
 let _stackSoloTimer  = null;        // exactly one auto-dismiss timer at a
                                     // time (cleared on every stack mutation;
                                     // re-armed only when length === 1).
-// Suppression flag — set by `_replaceReportData` during full-refresh so
-// the upsert loop does not re-fire notifications for reports the user
-// already had visible. Reset to false at the end of the refresh.
-let _suppressNewReportNotifications = false;
+
+// Notification-lifecycle debug hook — set
+// `localStorage.crisp_notif_debug = '1'` in DevTools to trace every
+// dedup decision in the console. Off in production. The state inspector
+// `window.__crispNotifDebug()` is always available regardless of the flag.
+function _notifLog(...args) {
+    try {
+        if (localStorage.getItem('crisp_notif_debug') === '1') {
+            console.log('[CRISP-notif]', ...args);
+        }
+    } catch (_) { /* SSR / disabled storage — silent */ }
+}
 
 function _inBurstMode() {
     const now = Date.now();
@@ -867,11 +875,17 @@ function _refreshStackTimers() {
 }
 
 function _addNotification(r) {
-    // Bug-D defense: full-refresh path sets this flag so an upsert
-    // cascade doesn't re-fire notifications for reports the user
-    // already had on screen.
-    if (_suppressNewReportNotifications) return;
-
+    // May 2026 (regression follow-up) — the prior fix's
+    // `_suppressNewReportNotifications` flag was REMOVED. It papered over
+    // the underlying problem (knownIds.clear() in _replaceReportData
+    // causes EVERY report to look new) by silencing the notify path
+    // wholesale. On any deployment where the dashboard couldn't read
+    // X-Server-Time (cross-origin dev, LAN, cloudflared tunnel — CORS
+    // expose_headers omission) `wantFullRefresh` stayed true forever,
+    // EVERY poll re-walked the snapshot under the suppression flag, and
+    // ALL operator notifications were silently dropped. _replaceReportData
+    // is now diff-based so the only path that ever calls _addNotification
+    // is a TRULY-new report; this entry stays unguarded.
     const locName = r.location?.user_location_name || r.location?.device_location_name || 'Unknown location';
     const srcIcons = {APP:'fa-mobile-screen-button',ANDROID:'fa-robot',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'};
     const srcBrand = ['WHATSAPP','TELEGRAM'].includes(r.source) ? 'fa-brands' : 'fa-solid';
@@ -895,11 +909,12 @@ function _addNotification(r) {
         coalescedCount: 1,
     };
 
-    // ── DEDUP-FIRST (Bug B fix). Previously _unseenReports.unshift +
-    //    _renderNotifications ran BEFORE these checks, so a duplicate
-    //    bumped the bell badge before being recognised as a duplicate.
-    //    Now nothing touches state until we know this is a genuinely
-    //    new event.
+    // ── DEDUP-FIRST. Nothing touches state until we know this is a
+    //    genuinely new event. The four checks below distinguish:
+    //      (1) same id, card still visible       → update in place
+    //      (2) same id, card auto-dismissed      → silent bell-entry refresh
+    //      (3) same clientId (offline reconcile) → adopt server id
+    //      (4) same building+crisis within 60s   → coalesce count chip
 
     // 1. Same report.id already in stack → upgrade in place, no
     //    second card, no bell bump.
@@ -912,15 +927,34 @@ function _addNotification(r) {
         existing._upgraded = true;
         existing._upgradeReason = 'updated';
         _renderNotificationStack();
+        _notifLog('dedup:stack-update', notif.id);
         return;
     }
 
     // 2. Bell-panel dedup. If we've already shown this id in the bell
     //    panel (even after the card disappeared from the stack), we
-    //    don't want a second bell entry. This is the typical "small
-    //    image arrived, then full image arrived 30s later" media-
-    //    upgrade case the operator described.
-    if (_unseenReports.some(n => n.id === notif.id)) return;
+    //    don't want a second center-screen card. This is the typical
+    //    "small image arrived, then full image arrived 30s later"
+    //    media-upgrade case. PRIOR REGRESSION: this used to return
+    //    silently, so the bell entry stayed stale (e.g. old severity).
+    //    Now we update the bell entry IN PLACE so the operator sees
+    //    fresh content on next bell open. Center-screen still suppressed.
+    const bellIdx = _unseenReports.findIndex(n => n.id === notif.id);
+    if (bellIdx >= 0) {
+        const prev = _unseenReports[bellIdx];
+        _unseenReports[bellIdx] = {
+            ...prev,
+            severity: notif.severity,
+            type: notif.type,
+            location: notif.location,
+            sevColor: notif.sevColor,
+            timestamp: notif.timestamp,
+            // addedAt stays — bell entry's "age" is anchored to first arrival.
+        };
+        _renderNotifications();
+        _notifLog('dedup:bell-update', notif.id);
+        return;
+    }
 
     // 3. Same client_report_id (offline-queue reconciliation where the
     //    server assigned a different id).
@@ -932,9 +966,20 @@ function _addNotification(r) {
             byClient._upgraded = true;
             byClient._upgradeReason = 'reconciled';
             _renderNotificationStack();
+            _notifLog('dedup:client-reconcile', notif.clientId, '→', notif.id);
             return;
         }
-        if (_unseenReports.some(n => n.clientId === notif.clientId)) return;
+        const bellClientIdx = _unseenReports.findIndex(n => n.clientId === notif.clientId);
+        if (bellClientIdx >= 0) {
+            // Adopt the server id on the bell entry but don't pop another card.
+            _unseenReports[bellClientIdx] = {
+                ..._unseenReports[bellClientIdx],
+                id: notif.id,
+            };
+            _renderNotifications();
+            _notifLog('dedup:bell-client-reconcile', notif.clientId, '→', notif.id);
+            return;
+        }
     }
 
     // 4. Building + crisis-type coalesce within 60s.
@@ -949,11 +994,13 @@ function _addNotification(r) {
             sib._upgraded = true;
             sib._upgradeReason = `coalesced ×${sib.coalescedCount}`;
             _renderNotificationStack();
+            _notifLog('dedup:coalesce', notif.buildingId, sib.coalescedCount);
             return;
         }
     }
 
     // ── Confirmed: new event. Now mutate state.
+    _notifLog('new', notif.id, notif.severity, notif.type);
 
     // Bell panel — LIFO, cap _MAX_NOTIFS.
     _unseenReports.unshift(notif);
@@ -9630,55 +9677,80 @@ async function fetchReports() {
     _reschedulePoller();
 }
 
-// Phase 3: full-refresh path. Replaces allReports with the server-truth
-// snapshot, dropping any reports the server doesn't see anymore (soft
-// deletes, purges). Notifications + selectedId guard preserved.
+// Phase 3 / May 2026 — full-refresh path. Reconciles allReports with the
+// server-truth snapshot using a HONEST diff (deletions + insertions +
+// updates) rather than the prior "clear knownIds + re-walk under a
+// suppression flag" pattern.
+//
+// PRIOR REGRESSION: the previous implementation called `knownIds.clear()`
+// before re-walking. Every report then looked "new" to `_applyReportData`,
+// which would have re-fired _addNotification for ALL of them. To prevent
+// the cascade, a `_suppressNewReportNotifications` flag suppressed the
+// whole notify path for the duration. The bug: genuinely-new reports
+// arriving during a full-refresh poll ALSO got suppressed — they landed
+// in knownIds via the upsert but never reached _seenIds or _unseenReports.
+// On any deployment where the dashboard couldn't read X-Server-Time
+// (cross-origin dev where CORS hadn't exposed the header), EVERY poll
+// was a full refresh, so EVERY operator notification was silently dropped.
+//
+// The honest diff has three buckets:
+//   - DELETED  : id in knownIds but not in incoming snapshot  → drop
+//   - UPDATED  : id in both                                    → update-in-place, NO notification
+//   - INSERTED : id in incoming but not in knownIds            → insert, notify (subject to dedup)
+//
+// `_applyReportData` already implements the UPDATE / INSERT distinction
+// correctly (the `knownIds.has(r.id)` branch). We just need to handle
+// DELETIONS up front and then call `_applyReportData(data)` unmodified.
+// No flag. No clear-and-rebuild. No silent drops.
 function _replaceReportData(data) {
-    // Rebuild knownIds/_seenIds from scratch using the server snapshot —
-    // anything not in `data` is gone server-side.
     const incomingIds = new Set(data.map(r => r.id));
-    // Track removals so we can clean up tier-override + selectedId.
+
+    // ── 1. Handle DELETIONS. Ids known locally that the server no
+    //    longer surfaces are soft-deletes / hard-purges; drop them from
+    //    knownIds + allReports + tier-override, and close the detail
+    //    panel if the selected report just disappeared.
     for (const id of [...knownIds]) {
         if (!incomingIds.has(id)) {
             knownIds.delete(id);
             _tierOverride.delete(id);
             if (selectedId === id) {
-                // The currently-selected report disappeared server-side.
-                // Best UX is to silently close the panel rather than crash
-                // the open detail view.
                 try { window.closeDetail && window.closeDetail(); } catch (_) { /* fn may be hoisted later */ }
             }
         }
     }
-    // Now feed the server snapshot through the existing upsert path.
-    // Reset allReports so it's rebuilt fresh — `_applyReportData` walks
-    // `data` and pushes anything new.
-    const prev = new Map(allReports.map(r => [r.id, r]));
-    allReports = [];
-    knownIds.clear();
-    // Restore region/country annotations from the prior in-memory copy
-    // so we don't re-geocode every report on every full refresh.
-    data.forEach(r => {
-        const old = prev.get(r.id);
-        if (old) {
-            r._region = old._region;
-            r._country = old._country;
-            r._continent_code = old._continent_code;
-        }
-    });
-    // Bug-D fix — full refresh clears knownIds and re-walks the
-    // snapshot, so EVERY report would otherwise look "new" to
-    // `_applyReportData` and re-fire a notification. Suppress
-    // for the duration of this refresh; everything still lands
-    // in `_seenIds` via the silent-add branch so subsequent
-    // genuine arrivals are still detected.
-    _suppressNewReportNotifications = true;
-    try {
-        _applyReportData(data);
-    } finally {
-        _suppressNewReportNotifications = false;
-    }
+    // Rebuild allReports by filtering to ids that survived (preserves
+    // existing in-memory enrichment — region annotations etc).
+    allReports = allReports.filter(r => incomingIds.has(r.id));
+
+    // ── 2. Hand off to the existing upsert. Each row r:
+    //    - knownIds.has(r.id) → UPDATE branch (no notification)
+    //    - !knownIds.has(r.id) → INSERT branch
+    //        - !_initialLoadDone  → silent _seenIds.add (boot-time)
+    //        - _initialLoadDone   → _addNotification (subject to dedup)
+    //    This is exactly the semantics we want. No suppression flag.
+    _notifLog('replace-data', { incoming: data.length, deleted: 0 /* counted above */, initialLoadDone: _initialLoadDone });
+    _applyReportData(data);
 }
+
+// Operator-visible state inspector. Always available regardless of the
+// `crisp_notif_debug` flag. Useful for "why didn't this report notify?"
+// triage from DevTools: `__crispNotifDebug()`.
+window.__crispNotifDebug = function () {
+    return {
+        initialLoadDone: _initialLoadDone,
+        knownIds: knownIds.size,
+        seenIds: _seenIds.size,
+        unseenBell: _unseenReports.map(n => ({ id: n.id, sev: n.severity, type: n.type, addedAt: n.addedAt })),
+        stack: _notificationStack.map(n => ({ id: n.id, sev: n.severity, type: n.type, addedAt: n.addedAt, upgraded: !!n._upgraded })),
+        burstArrivals: _burstArrivals.length,
+        burstActive: _burstBannerActive,
+        lastServerTime: _lastServerTime,
+        pollsSinceFullRefresh: _pollsSinceFullRefresh,
+        debugFlag: (function () {
+            try { return localStorage.getItem('crisp_notif_debug') === '1'; } catch (_) { return false; }
+        })(),
+    };
+};
 
 function _hasActiveUploads() {
     return allReports.some(r => {

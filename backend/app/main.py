@@ -333,7 +333,25 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Admin-Key"],
-    expose_headers=["X-Total-Count", "X-Limit", "X-Offset"],
+    # May 2026 (HAR-driven dashboard regression) — `X-Server-Time` + `ETag`
+    # MUST be in this list. The reports list endpoint returns both, and the
+    # dashboard's delta poller reads them via `res.headers.get(...)` to
+    # advance `_lastServerTime` (cursor) and `_lastReportsEtag` (304 path).
+    # If they're not exposed to JS via CORS, the browser hides them from
+    # the fetch response — even though the server sets them — and the
+    # dashboard falls back to a full-refresh on EVERY poll. Combined with
+    # the dashboard's full-refresh notification-suppression flag, that
+    # silently drops every operator notification on cross-origin
+    # deployments (localhost:8080 → localhost:8000, LAN, cloudflared
+    # tunnel). Same-origin PROD (nginx reverse proxy) avoided the bug
+    # because CORS doesn't apply there; dev surfaces hit it every time.
+    expose_headers=[
+        "X-Total-Count",
+        "X-Limit",
+        "X-Offset",
+        "X-Server-Time",
+        "ETag",
+    ],
 )
 
 # P3.7 — Prometheus + structured-logging request middleware. Counts every
