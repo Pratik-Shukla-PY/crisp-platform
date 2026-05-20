@@ -742,7 +742,7 @@ const _ORIG_FRESH_MS = 30 * 60 * 1000;  // 30 min — matches backend sweep
 
 function _classifyHighTier(group, reportAgeMs) {
     if (!group || !group.members) return 'missing-old';
-    const large = group.members.find(m => m.resolution_tier === 'HIGH');
+    const large = group.members.find(m => m.resolution_tier === 'ORIGINAL');
     if (!large) {
         // No HIGH row at all. Within the same 30-min freshness window
         // we use for pending/assembling rows: the HIGH might still
@@ -1841,7 +1841,7 @@ function renderTriageQueue(el) {
             if (imgs.length === 0) return false;
             const groups = groupPhotos(imgs);
             return groups.some(g => {
-                const hi = g.members.find(m => m.resolution_tier === 'HIGH');
+                const hi = g.members.find(m => m.resolution_tier === 'ORIGINAL');
                 return !hi || hi.assembly_status !== 'complete';
             });
         });
@@ -2158,7 +2158,7 @@ function createIncidentCard(r) {
         else if (st === 'uploading') cntUploading++;
         else if (st === 'missing-fresh') cntMissingFresh++;
         // 'missing-old' + 'complete' don't count toward the chip.
-        const hi = g.members.find(m => m.resolution_tier === 'HIGH');
+        const hi = g.members.find(m => m.resolution_tier === 'ORIGINAL');
         if (hi && st !== 'complete') {
             const pct = Math.round(hi.completion_pct || 0);
             if (pct < origMinPct) origMinPct = pct;
@@ -4190,7 +4190,7 @@ window.selectReport = (id, skipFly = false) => {
                     else if (st === 'delayed') dpDelayed++;
                     else if (st === 'uploading') dpUploading++;
                     else if (st === 'missing-fresh') dpMissingFresh++;
-                    const hi = (g.members || []).find(m => m.resolution_tier === 'HIGH');
+                    const hi = (g.members || []).find(m => m.resolution_tier === 'ORIGINAL');
                     if (hi && (st === 'lost' || st === 'delayed')) {
                         _reclaimables.push({ id: hi.id,
                             chunks: `${hi.received_chunks || 0}/${hi.chunk_count || 0}`,
@@ -4561,7 +4561,13 @@ window.dpShowGalleryImage = (reportId, groupIdx, thumbEl) => {
     const lightboxSrc = lightboxPick?.src || pick.src;
     const container = document.getElementById(`dp-img-view-${reportId}`);
     if (!container) return;
-    const tierLabel = pick.tier === 'LOW' ? 'SMALL' : pick.tier === 'MEDIUM' ? 'MEDIUM' : pick.tier === 'HIGH' ? 'LARGE' : pick.tier;
+    // Phase L (May 2026) — canonical tier values. Accept legacy LOW/HIGH
+    // for any pre-rename Media rows that might still exist (alembic 0035
+    // backfilled them but defensive).
+    const tierLabel = (pick.tier === 'SMALL' || pick.tier === 'LOW') ? 'SMALL'
+        : pick.tier === 'MEDIUM' ? 'MEDIUM'
+        : (pick.tier === 'ORIGINAL' || pick.tier === 'HIGH') ? 'ORIGINAL'
+        : pick.tier;
     // Preserve the PII badge (and any other overlay children) — only swap the
     // <div class="dp-img"> block. The old innerHTML= wipe lost the shield chip
     // on every thumbnail click.

@@ -65,6 +65,12 @@ const VIOLATIONS = [
         re: /resolution_tier\s*\)\s*\.toUpperCase\(\)\s*===\s*['"](LOW|HIGH)['"]/g,
         message: "comparison against legacy LOW/HIGH",
     },
+    // m.resolution_tier === 'HIGH' (most common dashboard pattern —
+    // dashboards finding the "largest" tier by name match)
+    {
+        re: /\.resolution_tier\s*===?\s*['"](LOW|HIGH)['"]/g,
+        message: "direct .resolution_tier comparison against legacy LOW/HIGH",
+    },
     // tier === 'large' in JS — the lowercase PWA-internal variant key
     {
         re: /tier\s*===?\s*['"]large['"]/g,

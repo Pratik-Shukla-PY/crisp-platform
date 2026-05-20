@@ -3558,6 +3558,14 @@ async def attach_media_chunk_bin(
     # vocabulary was LOW/MEDIUM/HIGH/ORIGINAL; alembic 0036 dropped
     # LOW + HIGH from the Postgres enum.
     if tier_upper not in {"SMALL", "MEDIUM", "ORIGINAL"}:
+        # Operator-actionable error so a 422 is debuggable from
+        # uvicorn's INFO log directly without re-running with debug
+        # logging enabled (caught us during Batch 2 rollout).
+        logger.warning(
+            "[chunk-bin] rejected non-canonical tier=%r from report=%s "
+            "media=%s — client must send SMALL/MEDIUM/ORIGINAL",
+            resolution_tier, report_id, media_id,
+        )
         raise HTTPException(status_code=422, detail=f"invalid resolution_tier: {resolution_tier!r}")
 
     report = db.query(Report).filter(Report.id == report_id).first()
