@@ -221,6 +221,7 @@
   "upload_failed": "Yükleme başarısız — yeniden denenecek",
   "storage_full_toast": "⚠ Bildirim yerel olarak kaydedilemedi. Cihazda yer açıp tekrar deneyin.",
   "storage_full_alert": "Bildiriminiz yerel olarak kaydedilemedi. Cihaz depolama alanını boşaltıp tekrar deneyin.",
+  "storage_almost_full_toast": "⚠ Cihaz depolaması neredeyse dolu — bu gönderi başarısız olursa Raporlarım'dan eski raporları silin.",
   "sync_syncing": "Eşleniyor...",
   "sync_queued": "kuyrukta",
   "sync_failed": "başarısız",

@@ -222,6 +222,7 @@
   "upload_failed": "Échec de l'envoi — nouvelle tentative",
   "storage_full_toast": "⚠ Impossible d'enregistrer le rapport localement. Libérez de l'espace et réessayez.",
   "storage_full_alert": "Impossible d'enregistrer votre rapport localement. Libérez de l'espace de stockage et réessayez.",
+  "storage_almost_full_toast": "⚠ Stockage de l'appareil presque plein — supprimez les anciens rapports depuis Mes rapports si cet envoi échoue.",
   "sync_syncing": "Synchronisation...",
   "sync_queued": "en attente",
   "sync_failed": "échec",

@@ -233,6 +233,7 @@
   "upload_failed": "Unggahan gagal — akan dicoba lagi",
   "storage_full_toast": "⚠ Tidak dapat menyimpan laporan secara lokal. Bebaskan ruang dan coba lagi.",
   "storage_full_alert": "Tidak dapat menyimpan laporan Anda secara lokal. Bebaskan penyimpanan perangkat dan coba lagi.",
+  "storage_almost_full_toast": "⚠ Penyimpanan perangkat hampir penuh — hapus laporan lama di 'Laporan Saya' jika pengiriman ini gagal.",
   "sync_syncing": "Menyinkronkan...",
   "sync_queued": "antrian",
   "sync_failed": "gagal",

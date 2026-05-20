@@ -226,6 +226,7 @@
   "upload_failed": "Falha no envio — nova tentativa",
   "storage_full_toast": "⚠ Não foi possível guardar o relatório. Liberte espaço e tente novamente.",
   "storage_full_alert": "Não foi possível guardar o seu relatório localmente. Liberte espaço de armazenamento e tente de novo.",
+  "storage_almost_full_toast": "⚠ Armazenamento do dispositivo quase cheio — elimine relatórios antigos em Meus Relatórios se este envio falhar.",
   "sync_syncing": "A sincronizar...",
   "sync_queued": "em fila",
   "sync_failed": "falhou",

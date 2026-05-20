@@ -188,6 +188,7 @@
   "upload_failed": "Upload failed — will retry",
   "storage_full_toast": "⚠ Could not save report locally. Free up space on your device and try again.",
   "storage_full_alert": "Could not save your report locally. Free up device storage and try again.",
+  "storage_almost_full_toast": "⚠ Device storage almost full — clear old reports from My Reports if this submission fails.",
   "sync_syncing": "Syncing...",
   "sync_queued": "queued",
   "sync_failed": "failed",

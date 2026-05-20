@@ -215,6 +215,7 @@
   "upload_failed": "上传失败 — 将重试",
   "storage_full_toast": "⚠ 无法本地保存报告。请释放设备空间后重试。",
   "storage_full_alert": "无法本地保存您的报告。请释放设备存储空间后重试。",
+  "storage_almost_full_toast": "⚠ 设备存储空间几乎已满 — 如果此次提交失败，请从「我的报告」中清除旧报告。",
   "sync_syncing": "同步中...",
   "sync_queued": "已排队",
   "sync_failed": "失败",

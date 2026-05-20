@@ -230,6 +230,7 @@
   "upload_failed": "Error al enviar — se reintentará",
   "storage_full_toast": "⚠ No se pudo guardar el informe localmente. Libere espacio e inténtelo de nuevo.",
   "storage_full_alert": "No se pudo guardar su informe localmente. Libere espacio de almacenamiento e inténtelo de nuevo.",
+  "storage_almost_full_toast": "⚠ Almacenamiento del dispositivo casi lleno — elimine informes antiguos desde Mis informes si este envío falla.",
   "sync_syncing": "Sincronizando...",
   "sync_queued": "en cola",
   "sync_failed": "fallido",

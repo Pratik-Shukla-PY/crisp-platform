@@ -221,6 +221,7 @@
   "upload_failed": "Gửi thất bại — sẽ thử lại",
   "storage_full_toast": "⚠ Không thể lưu báo cáo cục bộ. Hãy giải phóng dung lượng và thử lại.",
   "storage_full_alert": "Không thể lưu báo cáo cục bộ. Hãy giải phóng dung lượng thiết bị và thử lại.",
+  "storage_almost_full_toast": "⚠ Bộ nhớ thiết bị gần đầy — xóa báo cáo cũ trong 'Báo cáo của tôi' nếu gửi này thất bại.",
   "sync_syncing": "Đang đồng bộ...",
   "sync_queued": "trong hàng đợi",
   "sync_failed": "thất bại",

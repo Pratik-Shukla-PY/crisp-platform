@@ -220,6 +220,7 @@
   "upload_failed": "送信失敗 — 再試行します",
   "storage_full_toast": "⚠ 報告をローカルに保存できませんでした。空き容量を確保して再試行してください。",
   "storage_full_alert": "報告をローカルに保存できませんでした。端末の空き容量を確保して再試行してください。",
+  "storage_almost_full_toast": "⚠ 端末の空き容量がほぼ満杯です — 送信に失敗した場合は「マイレポート」から古いレポートを削除してください。",
   "sync_syncing": "同期中...",
   "sync_queued": "待機中",
   "sync_failed": "失敗",
