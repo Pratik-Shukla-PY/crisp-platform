@@ -302,6 +302,16 @@ class Report(Base):
         nullable=True,
         index=True,
     )
+    # K.2.e (May 2026, Phase K) — surfaces "I had a Bearer token but
+    # it was expired" so the dashboard chip (K.5.a) can render
+    # "🔓 Attribution lost: token expired". Distinct from `user_id IS
+    # NULL` which covers both genuine anonymous AND lost-attribution.
+    # The reporter retains the ability to retroactively re-link via a
+    # future "claim this report" admin endpoint (out of scope this
+    # batch — flag only).
+    submitted_as_anonymous_due_to_expired_token = Column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     source = Column(Enum(SourceEnum), default=SourceEnum.APP, nullable=False)
     status = Column(Enum(ReportStatusEnum), default=ReportStatusEnum.PENDING, nullable=False)
     sync_status = Column(Enum(SyncStatusEnum), default=SyncStatusEnum.QUEUED, nullable=False)

@@ -1845,29 +1845,52 @@ def _optional_user_from_auth(request: Request, db: Session):
     None otherwise. Never raises: an expired / invalid token silently
     falls back to anonymous submission (crisis-reporting posture — we
     ALWAYS accept the report, even if we can't attribute it).
+
+    K.2.e (May 2026, Phase K) — now returns a 2-tuple (user, downgrade_reason)
+    so the caller can distinguish:
+      - (None, None)          — no auth header (genuine anonymous)
+      - (None, 'expired_token') — Bearer token sent but expired beyond grace.
+                                  Caller stamps Report.submitted_as_anonymous_due_to_expired_token
+                                  so the dashboard surfaces "Attribution lost" chip.
+      - (None, 'invalid_token') — Bearer token sent but malformed / not-a-real-user.
+                                  Also anonymous, also flagged.
+      - (User, None)          — happy path.
     """
+    auth = request.headers.get("authorization") or request.headers.get("Authorization")
+    if not auth or not auth.lower().startswith("bearer "):
+        return None, None  # no header → genuine anonymous
+    parts = auth.split(None, 1)
+    if len(parts) < 2:
+        return None, None  # "Bearer" alone with no token → no auth attempt
+    token = parts[1].strip()
+    if not token:
+        return None, None  # malformed header without payload → treat as no auth
+
     try:
-        auth = request.headers.get("authorization") or request.headers.get("Authorization")
-        if not auth or not auth.lower().startswith("bearer "):
-            return None
-        token = auth.split(None, 1)[1].strip()
-        if not token:
-            return None
         from app.core.security import decode_token
-        payload = decode_token(token)
+        import jwt as _jwt
+        try:
+            payload = decode_token(token)
+        except _jwt.ExpiredSignatureError:
+            return None, 'expired_token'
+        except _jwt.PyJWTError:
+            return None, 'invalid_token'
         if not payload:
-            return None
+            return None, 'invalid_token'
         user_id = payload.get("sub") or payload.get("user_id")
         if not user_id:
-            return None
+            return None, 'invalid_token'
         from app.models.auth import User as _User
         user = db.query(_User).filter(_User.id == user_id).first()
         if not user or not user.is_active:
-            return None
-        return user
+            # Token valid but the user is deactivated / deleted →
+            # attribution effectively lost. Flag for operator visibility.
+            return None, 'invalid_token'
+        return user, None
     except Exception:
-        # Any decoding / query failure → treat as anonymous. Never a 401.
-        return None
+        # Any unexpected failure → treat as expired-token (visible flag
+        # is better than silent anonymous). Never raises 401.
+        return None, 'invalid_token'
 
 
 @router.post("/meta", response_model=ReportResponse, status_code=status.HTTP_201_CREATED)
@@ -1881,7 +1904,7 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     the created row is decorated with `user_id`. Invalid/expired tokens
     are silently ignored — the report still lands as anonymous.
     """
-    auth_user = _optional_user_from_auth(request, db)
+    auth_user, _auth_downgrade_reason = _optional_user_from_auth(request, db)
     # Rate limit: 30 reports/min per device
     from app.main import check_rate_limit
     if not check_rate_limit(f"meta:{meta_in.device_hash}", 30, 60):
@@ -1941,6 +1964,18 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     extra_cols = {}
     if auth_user is not None:
         extra_cols["user_id"] = auth_user.id
+    # K.2.e (May 2026, Phase K) — stamp the "lost attribution" flag
+    # when the caller presented a Bearer token but it had expired or
+    # was invalid. The report is still accepted (UNDP must-have #9 —
+    # anonymous submission always works) but the flag surfaces via
+    # the K.5.a dashboard chip so operators / the reporter can know.
+    if _auth_downgrade_reason == 'expired_token':
+        extra_cols["submitted_as_anonymous_due_to_expired_token"] = True
+        logger.info(
+            f"meta create — accepted as anonymous due to expired Bearer "
+            f"token (device={meta_in.device_hash[:12]}, "
+            f"client_report_id={meta_in.client_report_id})"
+        )
     db_report = Report(
         **report_dict,
         device_id=device.id,
