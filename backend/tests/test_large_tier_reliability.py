@@ -55,7 +55,7 @@ def _seed_report(client) -> str:
 
 
 def _post_chunk(client, report_id: str, *, media_id: str, seq_num: int,
-                total_chunks: int, data: bytes, resolution_tier: str = "LOW",
+                total_chunks: int, data: bytes, resolution_tier: str = "SMALL",
                 photo_group_id: str | None = None,
                 full_asset_checksum: str | None = None):
     form = {
@@ -124,9 +124,9 @@ class TestThreeTierRoundTrip:
         # Interleave the uploads: chunk 0 of every tier first, then
         # chunk 1+, etc. Mirrors the PWA's tier-first delivery policy.
         for tier_name, mid, payload in [
-            ("LOW",    small_id,  small_bytes),
+            ("SMALL",    small_id,  small_bytes),
             ("MEDIUM", medium_id, medium_bytes),
-            ("HIGH",   large_id,  large_bytes),
+            ("ORIGINAL",   large_id,  large_bytes),
         ]:
             res = _post_chunk(
                 client, report_id,
@@ -139,9 +139,9 @@ class TestThreeTierRoundTrip:
 
         # All three rows should land at assembly_status='complete'.
         for mid, expected_tier in [
-            (small_id,  "LOW"),
+            (small_id,  "SMALL"),
             (medium_id, "MEDIUM"),
-            (large_id,  "HIGH"),
+            (large_id,  "ORIGINAL"),
         ]:
             m = _wait_for_assembly(db, mid)
             assert m is not None, f"media row {mid} not found"
@@ -174,7 +174,7 @@ class TestPartialResume:
             res = _post_chunk(
                 client, report_id,
                 media_id=media_id, seq_num=seq, total_chunks=total,
-                data=chunks[seq], resolution_tier="HIGH",
+                data=chunks[seq], resolution_tier="ORIGINAL",
                 full_asset_checksum=full_checksum if seq == 0 else None,
             )
             assert res.status_code == 200, res.text
@@ -192,7 +192,7 @@ class TestPartialResume:
             res = _post_chunk(
                 client, report_id,
                 media_id=media_id, seq_num=seq, total_chunks=total,
-                data=chunks[seq], resolution_tier="HIGH",
+                data=chunks[seq], resolution_tier="ORIGINAL",
             )
             assert res.status_code == 200, res.text
 
@@ -224,7 +224,7 @@ class TestWholeAssetIntegrity:
         res = _post_chunk(
             client, report_id,
             media_id=media_id, seq_num=0, total_chunks=1,
-            data=payload, resolution_tier="HIGH",
+            data=payload, resolution_tier="ORIGINAL",
             full_asset_checksum="deadbeefdeadbeef",
         )
         assert res.status_code == 200, res.text
@@ -253,7 +253,7 @@ class TestWholeAssetIntegrity:
         res = _post_chunk(
             client, report_id,
             media_id=media_id, seq_num=0, total_chunks=1,
-            data=payload, resolution_tier="HIGH",
+            data=payload, resolution_tier="ORIGINAL",
         )
         assert res.status_code == 200, res.text
 
@@ -285,7 +285,7 @@ class TestDuplicateSeqRejected:
         res1 = _post_chunk(
             client, report_id,
             media_id=media_id, seq_num=0, total_chunks=2,
-            data=payload, resolution_tier="HIGH",
+            data=payload, resolution_tier="ORIGINAL",
         )
         assert res1.status_code == 200, res1.text
 
@@ -299,7 +299,7 @@ class TestDuplicateSeqRejected:
         res2 = _post_chunk(
             client, report_id,
             media_id=media_id, seq_num=0, total_chunks=2,
-            data=payload, resolution_tier="HIGH",
+            data=payload, resolution_tier="ORIGINAL",
         )
         assert res2.status_code == 200, res2.text
 

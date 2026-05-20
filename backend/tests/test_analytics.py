@@ -12,6 +12,33 @@ Both endpoints feed pitch-ready dashboard tiles. Tests pin:
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _wipe_reports_for_isolation(db):
+    """The `db` fixture does not roll back between tests in this suite.
+    Earlier suites (e.g. test_blurhash_and_partial) seed Report rows
+    with server_created_at=now(), which fall inside the 24h analytics
+    window and bust `test_empty_db_returns_zero_state`. Wipe all
+    Report-derived rows before each test in this module so analytics
+    assertions see an authentic empty/seeded state.
+    """
+    from sqlalchemy import text
+    # Order: drop child rows first (FKs), then reports themselves.
+    # Use CASCADE-aware ordering; ignore tables that don't exist (drift-safe).
+    for stmt in (
+        "DELETE FROM media_chunks",
+        "DELETE FROM media",
+        "DELETE FROM reports",
+    ):
+        try:
+            db.execute(text(stmt))
+        except Exception:
+            db.rollback()
+    db.commit()
+    yield
+
 
 def _submit(client, device_hash, crisis="FLOOD", lat=12.97, lng=77.59,
             building_id=None):

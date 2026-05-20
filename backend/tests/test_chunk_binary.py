@@ -65,7 +65,7 @@ def _make_binary_chunk_form(
     total_chunks: int,
     data: bytes,
     type: str = "IMAGE",
-    resolution_tier: str = "LOW",
+    resolution_tier: str = "SMALL",
     photo_group_id: str | None = None,
     client_blur_applied: bool = False,
     checksum: str | None = None,

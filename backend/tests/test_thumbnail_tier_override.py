@@ -7,7 +7,7 @@ Net effect: clients that posted the thumbnail BEFORE the first chunk
 (messaging-bot fleet — WhatsApp / Telegram / IVR) ended up with every
 photo tagged MEDIUM regardless of the tier the chunk POSTs declared.
 That in turn broke the dashboard's "Originals pending" chip, which keys
-on `resolution_tier === 'HIGH'`.
+on `resolution_tier === 'ORIGINAL'`.
 
 Two paths exercised here:
 
@@ -64,7 +64,7 @@ def _post_thumbnail(client, report_id, media_id, *, tier=None):
     assert res.status_code == 200, res.text
 
 
-def _post_chunk_bin(client, report_id, media_id, *, tier="HIGH",
+def _post_chunk_bin(client, report_id, media_id, *, tier="ORIGINAL",
                     data=b"jpgbytes", seq=0, total=1):
     form = {
         "media_id": media_id,
@@ -83,7 +83,7 @@ def _post_chunk_bin(client, report_id, media_id, *, tier="HIGH",
     assert res.status_code == 200, res.text
 
 
-def _post_chunk_b64(client, report_id, media_id, *, tier="HIGH",
+def _post_chunk_b64(client, report_id, media_id, *, tier="ORIGINAL",
                     data=b"jpgbytes", seq=0, total=1):
     data_b64 = base64.b64encode(data).decode("ascii")
     res = client.post(
@@ -119,7 +119,7 @@ class TestThumbnailTierField:
         the single-tier transport instead of getting silently bumped
         to MEDIUM by the old hard-code."""
         report_id = _seed_report(client)
-        _post_thumbnail(client, report_id, "m-thumb-low", tier="LOW")
+        _post_thumbnail(client, report_id, "m-thumb-low", tier="SMALL")
         m = db.query(Media).filter(Media.id == "m-thumb-low").first()
         assert m is not None
         assert m.resolution_tier == ResolutionEnum.SMALL
@@ -128,7 +128,7 @@ class TestThumbnailTierField:
         """PWA full-quality variant — thumbnail can declare HIGH directly
         without waiting on the chunk-handler upgrade."""
         report_id = _seed_report(client)
-        _post_thumbnail(client, report_id, "m-thumb-high", tier="HIGH")
+        _post_thumbnail(client, report_id, "m-thumb-high", tier="ORIGINAL")
         m = db.query(Media).filter(Media.id == "m-thumb-high").first()
         assert m is not None
         assert m.resolution_tier == ResolutionEnum.ORIGINAL
@@ -150,7 +150,7 @@ class TestChunkBinTierUpgrade:
         m = db.query(Media).filter(Media.id == media_id).first()
         assert m.resolution_tier == ResolutionEnum.MEDIUM, "thumbnail default"
 
-        _post_chunk_bin(client, report_id, media_id, tier="HIGH")
+        _post_chunk_bin(client, report_id, media_id, tier="ORIGINAL")
         db.refresh(m)
         assert m.resolution_tier == ResolutionEnum.ORIGINAL
 
@@ -162,7 +162,7 @@ class TestChunkBinTierUpgrade:
         media_id = "m-upgrade-b64"
 
         _post_thumbnail(client, report_id, media_id)
-        _post_chunk_b64(client, report_id, media_id, tier="HIGH")
+        _post_chunk_b64(client, report_id, media_id, tier="ORIGINAL")
 
         m = db.query(Media).filter(Media.id == media_id).first()
         assert m.resolution_tier == ResolutionEnum.ORIGINAL
@@ -175,7 +175,7 @@ class TestChunkBinTierUpgrade:
         media_id = "m-no-downgrade"
 
         _post_thumbnail(client, report_id, media_id)  # defaults to MEDIUM
-        _post_chunk_bin(client, report_id, media_id, tier="LOW")
+        _post_chunk_bin(client, report_id, media_id, tier="SMALL")
 
         m = db.query(Media).filter(Media.id == media_id).first()
         assert m.resolution_tier == ResolutionEnum.MEDIUM
@@ -186,8 +186,8 @@ class TestChunkBinTierUpgrade:
         report_id = _seed_report(client)
         media_id = "m-high-stays-high"
 
-        _post_thumbnail(client, report_id, media_id, tier="HIGH")
-        _post_chunk_bin(client, report_id, media_id, tier="LOW")
+        _post_thumbnail(client, report_id, media_id, tier="ORIGINAL")
+        _post_chunk_bin(client, report_id, media_id, tier="SMALL")
 
         m = db.query(Media).filter(Media.id == media_id).first()
         assert m.resolution_tier == ResolutionEnum.ORIGINAL
@@ -199,8 +199,8 @@ class TestChunkBinTierUpgrade:
         report_id = _seed_report(client)
         media_id = "m-msgbot-low"
 
-        _post_thumbnail(client, report_id, media_id, tier="LOW")
-        _post_chunk_bin(client, report_id, media_id, tier="LOW")
+        _post_thumbnail(client, report_id, media_id, tier="SMALL")
+        _post_chunk_bin(client, report_id, media_id, tier="SMALL")
 
         m = db.query(Media).filter(Media.id == media_id).first()
         assert m.resolution_tier == ResolutionEnum.SMALL

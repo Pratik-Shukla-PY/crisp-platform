@@ -170,7 +170,7 @@ class TestPartialAssemblySafeguards:
             id=media_id,
             report_id=parent_id,
             type="IMAGE",
-            resolution_tier="LOW",
+            resolution_tier="SMALL",
             url="",
             is_synced=False,
             chunk_count=total_chunks,
