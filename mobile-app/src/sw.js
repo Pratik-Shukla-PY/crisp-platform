@@ -5,7 +5,23 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v228';
+const CACHE_NAME = 'crisp-v229';
+// v228 → v229 (May 20 — Phase K Batch 4: PWA mark-deferred call on
+// soft-drain + variant dataUrl re-encode fallback).
+// K.3.a — trySendQueuedReport's softDrain branch now POSTs to
+// `/reports/{id}/media/mark-deferred` before dequeue. Backend marks
+// the missing MEDIUM/HIGH tiers as bandwidth_tier_deferred,
+// decrements expected_media, and the K.5.a dashboard chip renders
+// "Original (slow network)" instead of leaving the dashboard
+// permanently PARTIAL.
+// K.3.c — _uploadVariantTier no longer silently skips when
+// variant.dataUrl is missing. Recovers from item.photo (main) /
+// item.extraPhotos[i] (extras) when those legacy data URLs are
+// still present. If no source exists, marks the variant
+// `deferred=true, deferredReason='orphan_no_source'` so the
+// soft-drain path signals the backend honestly.
+// Returning users must evict the stale app.js to pick up the new
+// soft-drain + orphan-recovery behaviour.
 // v227 → v228 (May 20 — lang-switch dynamic-renderer fix). activateLang
 // now dispatches `crisp:lang-changed` (both sync + after the locale JSON
 // loads). nearby.js stashes its last payload + open-sheet group and re-

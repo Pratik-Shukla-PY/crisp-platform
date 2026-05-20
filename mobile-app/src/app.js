@@ -562,6 +562,68 @@ async function _reconcileBeforeDequeue(item, reportId) {
     };
 }
 
+// K.3.a (May 2026, Phase K) — walk the queue item's variant structure
+// and produce the `tiers_by_group` payload shape the backend's
+// /media/mark-deferred endpoint expects:
+//     { "<photo_group_id>": ["MEDIUM", "HIGH"], ... }
+// Each entry in `missing` (from _reconcileBeforeDequeue) carries
+// {mediaId, variant, tier, label}. We join back to the parent
+// photoVariants / extraPhotosVariants[i] container to find its
+// groupId, and map local lower-case tier names to backend enum
+// names (small → LOW, medium → MEDIUM, large → HIGH).
+//
+// Returns {} if nothing maps — the caller should skip the POST in
+// that case to avoid a 422.
+function _enumerateDeferredByGroup(item, missing) {
+    if (!item || !Array.isArray(missing) || missing.length === 0) return {};
+    const TIER_MAP = { small: 'LOW', medium: 'MEDIUM', large: 'HIGH' };
+    const out = {};
+    const pushTier = (groupId, tier) => {
+        if (!groupId || !tier) return;
+        if (!out[groupId]) out[groupId] = [];
+        if (!out[groupId].includes(tier)) out[groupId].push(tier);
+    };
+
+    const mainGroupId = item.photoGroupId || null;
+    const mainVariants = item.photoVariants || null;
+    const extraList = Array.isArray(item.extraPhotosVariants) ? item.extraPhotosVariants : [];
+
+    for (const m of missing) {
+        if (!m || !m.variant || !m.tier) continue;
+        const backendTier = TIER_MAP[m.tier];
+        if (!backendTier) continue;
+        // Try main first
+        if (mainGroupId && mainVariants) {
+            const v = mainVariants[m.tier];
+            if (v && v.mediaId && v.mediaId === m.mediaId) {
+                pushTier(mainGroupId, backendTier);
+                continue;
+            }
+        }
+        // Then walk extras
+        let matched = false;
+        for (const ev of extraList) {
+            if (!ev) continue;
+            const v = ev[m.tier];
+            if (v && v.mediaId && v.mediaId === m.mediaId) {
+                pushTier(ev.groupId, backendTier);
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            // Variant has no parent group we can identify — skip rather
+            // than send a NULL group key (backend would 422).
+            console.warn(
+                `[Soft-drain] orphan deferred variant ${m.mediaId} (${m.label}) — ` +
+                `no parent photoGroup in queue item; skipping mark-deferred for it.`,
+            );
+        }
+    }
+    return out;
+}
+
+
 async function getAllQueued() {
     const db = await openIDB();
     return new Promise((resolve, reject) => {
@@ -3581,6 +3643,18 @@ window.__crispEnqueueReport = (payload) => enqueueReport(payload);
 window.__crispGetAllQueued = () => getAllQueued();
 window.__crispDequeueReport = (clientReportId) => dequeueReport(clientReportId);
 window.__crispReconcileQueue = () => _reconcileQueueAgainstServer();
+// K.3.a (May 2026, Phase K) — let tests invoke trySendQueuedReport
+// directly so the soft-drain mark-deferred branch is exercisable
+// without needing to drive the full retry-loop schedule.
+window.__crispTrySendQueuedReport = (item) => trySendQueuedReport(item);
+// K.3.a — helper-export for the e2e spec to verify the
+// payload-shaping function in isolation.
+window.__crispEnumerateDeferredByGroup = (item, missing) =>
+    _enumerateDeferredByGroup(item, missing);
+// K.3.c — let tests trigger the upload-tier path so the orphan-recovery
+// + deferred-marker branch is exercisable.
+window.__crispUploadVariantTier = (item, reportId, unit) =>
+    _uploadVariantTier(item, reportId, unit);
 // Queue self-heal hooks for the orphan-detection E2E spec.
 window.__crispIsOrphanQueueRow = (item) => _isOrphanQueueRow(item);
 window.__crispSelfHealOrphans = () => _selfHealOrphans();
@@ -8615,8 +8689,58 @@ async function _uploadVariantTier(item, reportId, unit) {
     const { tier, groupId, variant, label, clientBlurApplied } = unit;
     if (variant.complete) return;
     if (!variant.dataUrl) {
-        console.warn(`[Upload] ${label}: missing dataUrl (skip)`);
-        return;
+        // K.3.c (May 2026, Phase K) — re-encode fallback before
+        // silently skipping. Pre-fix, a missing dataUrl warned + returned;
+        // the variant was permanently orphaned and never surfaced to the
+        // operator. New behaviour:
+        //   1. Try to recover the bytes from a sibling source on the
+        //      queue item (item.photo for main; item.extraPhotos[i]
+        //      for extras). These are the legacy single-image data URLs
+        //      that persisted in IDB even after the variant pipeline
+        //      generated the per-tier dataUrls.
+        //   2. If recovery succeeds, persist the regenerated dataUrl
+        //      on the variant + continue with upload.
+        //   3. If no source exists either, mark the variant
+        //      `deferred=true, deferredReason='orphan_no_source'` so
+        //      the soft-drain path (K.3.a) signals the backend. The
+        //      dashboard then renders an explicit chip via K.5.a
+        //      instead of leaving the photo silently absent.
+        const _isMainGroup = item.photoGroupId === groupId;
+        let _recovered = null;
+        if (_isMainGroup && typeof item.photo === 'string' && item.photo.startsWith('data:')) {
+            _recovered = item.photo;
+        } else if (Array.isArray(item.extraPhotos)) {
+            for (let i = 0; i < (item.extraPhotosVariants || []).length; i++) {
+                const ev = item.extraPhotosVariants[i];
+                if (ev && ev.groupId === groupId
+                    && typeof item.extraPhotos[i] === 'string'
+                    && item.extraPhotos[i].startsWith('data:')) {
+                    _recovered = item.extraPhotos[i];
+                    break;
+                }
+            }
+        }
+        if (_recovered) {
+            variant.dataUrl = _recovered;
+            try { await enqueueReport(item); } catch (_) {}
+            console.log(
+                `[Upload] ${label}: dataUrl recovered from legacy source ` +
+                `(${_recovered.length} chars); continuing upload.`,
+            );
+            // Fall through into the standard upload path below.
+        } else {
+            variant.deferred = true;
+            variant.deferredReason = 'orphan_no_source';
+            variant.deferredAt = Date.now();
+            try { await enqueueReport(item); } catch (_) {}
+            console.warn(
+                `[Upload] ${label}: missing dataUrl AND no legacy source ` +
+                `to recover from — marking deferred=orphan_no_source. ` +
+                `Backend will receive 'mark-deferred' on next soft-drain ` +
+                `(K.3.a) and the dashboard will render the chip.`,
+            );
+            return;
+        }
     }
     // adaptive bandwidth probe BEFORE first chunk. Picks
     // tier from actual measured throughput rather than trusting
@@ -9131,6 +9255,48 @@ async function trySendQueuedReport(item) {
                                 m.variant.chunkProgress = 0;
                                 m.variant.complete = false;
                             }
+                        }
+                        // K.3.a (May 2026, Phase K) — tell the backend
+                        // explicitly which tiers we gave up on, so the
+                        // Report's sync_status math reflects reality
+                        // (not the PWA's original 3-tier expectation).
+                        // Backend marks the missing tiers as
+                        // assembly_status='failed' /
+                        // abandon_reason='bandwidth_tier_deferred' and
+                        // decrements expected_media. Dashboard then
+                        // renders an explicit "Original (slow network)"
+                        // chip (K.5.a). Non-fatal: backend Action ③
+                        // sweep eventually catches stragglers anyway —
+                        // this just makes it instant. See backend
+                        // K.2.d for endpoint contract.
+                        try {
+                            const tiersByGroup = _enumerateDeferredByGroup(
+                                item, reconciled.missing,
+                            );
+                            if (Object.keys(tiersByGroup).length > 0) {
+                                const _resp = await fetch(
+                                    `${API_BASE}/reports/${reportId}/media/mark-deferred`,
+                                    {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            tiers_by_group: tiersByGroup,
+                                            reason: 'bandwidth_tier_deferred',
+                                        }),
+                                    },
+                                );
+                                if (!_resp.ok) {
+                                    console.warn(
+                                        `[Soft-drain] mark-deferred returned ${_resp.status}; ` +
+                                        `backend's Action ③ sweep will catch deferred ` +
+                                        `tiers at 30-min deadline.`,
+                                    );
+                                }
+                            }
+                        } catch (_e) {
+                            console.warn(
+                                `[Soft-drain] mark-deferred call failed:`, _e?.message || _e,
+                            );
                         }
                     }
                     try { await dequeueReport(item.client_report_id); } catch (_) {}
