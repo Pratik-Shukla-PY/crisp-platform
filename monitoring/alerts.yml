@@ -1,0 +1,208 @@
+# CRISP — Prometheus alert rules
+# ──────────────────────────────────────────────────────────────────────────
+# Phase K K.6.c (May 2026) — operator-facing SLI alerts for the submission
+# reliability hardening surface.
+#
+# Each alert pairs with one of the dashboard chips introduced in K.5.a so the
+# operator-visible "something is wrong with this report" signal lines up with
+# a fleet-wide "something is wrong with the platform" page-out.
+#
+# Validation: `promtool check rules monitoring/alerts.yml` must exit 0
+# before deploy. CI invokes this automatically in the deploy workflow.
+#
+# Inhibition: critical-tier alerts inhibit their corresponding warning-tier
+# alert so the operator's page list isn't doubled up during a real outage.
+groups:
+  - name: crisp_submission_reliability
+    interval: 60s
+    rules:
+
+      # ── PARTIAL backlog ──────────────────────────────────────────────
+      # When the assembly recovery sweep's Action ④ stops keeping up
+      # (or stops running entirely), reports with deferred MEDIUM/HIGH
+      # variants linger in sync_status=PARTIAL beyond the idle window.
+      # Operator chip "Uploading…" stays on the card; without this
+      # alert the only signal is a swelling chip-row in the dashboard.
+      - alert: CRISPPartialBacklogGrowing
+        expr: |
+          (sum by () (
+            increase(crisp_partial_promote_total[10m])
+          )) < 1
+          and
+          (sum by () (
+            crisp_ai_retry_queue_depth{status="pending"}
+          )) > 50
+        for: 10m
+        labels:
+          severity: warning
+          team: crisp-ops
+        annotations:
+          summary: "CRISP — PARTIAL backlog growing without promotions"
+          description: |
+            No PARTIAL → SYNCED promotions in the last 10 minutes AND the
+            AI retry queue has > 50 pending rows. The assembly recovery
+            daemon may have crashed or the field network has degraded
+            enough that no photo_group has all variants landing.
+            Investigate: `docker logs crisp-backend-1 | grep "Assembly recovery"`.
+
+      # ── Bandwidth-tier deferral rate ────────────────────────────────
+      # K.2.d marks Media rows abandoned with reason=bandwidth_tier_deferred
+      # when the PWA soft-drains higher tiers. A few % is healthy on a
+      # mixed-network deployment; > 20%/h means most reporters are on
+      # SLOW networks and the dashboard's "Original (slow network)"
+      # chip is everywhere.
+      - alert: CRISPBandwidthTierDeferralHigh
+        expr: |
+          (
+            sum(rate(crisp_media_abandon_reason_total{reason="bandwidth_tier_deferred"}[1h]))
+            /
+            ignoring(reason) sum(rate(crisp_variant_uploads_total[1h]))
+          ) > 0.20
+        for: 30m
+        labels:
+          severity: warning
+          team: crisp-ops
+        annotations:
+          summary: "CRISP — > 20% of uploads losing higher tiers (slow networks)"
+          description: |
+            More than 20% of variant uploads in the last hour are being
+            soft-drained as bandwidth_tier_deferred. Field network is
+            degraded enough that operators are seeing the
+            "Original (slow network)" chip on most cards. Consider:
+              • Communicating expected image-quality reduction to ops
+              • Sending a field-team to investigate connectivity
+              • Lowering CRISP_PWA_HIGH_TIER_MAX_BYTES to push less data
+
+      # ── Auth-token expiry rate ──────────────────────────────────────
+      # K.2.e flags Reports submitted with an expired Bearer token —
+      # the PWA captured while logged in but the queue drained after
+      # JWT expiry. > 5%/h means JWT_ACCESS_TTL_MINUTES is too short
+      # for typical capture-to-drain windows in this deployment.
+      - alert: CRISPTokenExpiryAttributionLossHigh
+        expr: |
+          (
+            sum(rate(crisp_report_submitted_anonymous_due_to_expired_token_total[1h]))
+            /
+            sum(rate(crisp_reports_submitted_total[1h]))
+          ) > 0.05
+        for: 30m
+        labels:
+          severity: warning
+          team: crisp-ops
+        annotations:
+          summary: "CRISP — > 5% of logged-in submissions losing attribution"
+          description: |
+            More than 5% of reports in the last hour were accepted with
+            an expired Bearer token (reporter loses credit, dashboard
+            shows "Attribution lost" chip). JWT_ACCESS_TTL_MINUTES is
+            likely too short for typical capture-to-drain windows.
+            Recommended response: raise to ≥ 240 minutes OR ship the
+            PWA-side silent-refresh path (deferred from K.3.b).
+
+      # ── PII blur failure rate ───────────────────────────────────────
+      # K.2.b stamps pii_blur_status='failed' on Media rows when client-
+      # side blur didn't run AND server-side blur crashed (or both were
+      # unavailable). > 5%/h means raw faces may be reaching the
+      # dashboard; the chip "PII review needed" surfaces this per-row.
+      - alert: CRISPPIIBlurFailureRateHigh
+        expr: |
+          (
+            sum(rate(crisp_pii_blur_status_total{status="failed"}[1h]))
+            /
+            sum(rate(crisp_pii_blur_status_total[1h]))
+          ) > 0.05
+        for: 15m
+        labels:
+          severity: critical
+          team: crisp-ops
+        annotations:
+          summary: "CRISP — > 5% of incoming media has PII blur failed"
+          description: |
+            More than 5% of new Media rows in the last hour have
+            pii_blur_status='failed'. This is a UNDP must-have #7
+            regression — faces may be reaching the dashboard unblurred.
+            Page: check MediaPipe / easyocr availability on the backend
+            (`GET /api/v1/health/pii`) AND BlazeFace availability on
+            the PWA (`__crispPIIDebug()` in DevTools).
+
+      # ── Media abandon (uploads never arrived) ───────────────────────
+      # Steady-state should be near zero. A burst indicates a network
+      # disruption AFTER PWA capture (so reports were already queued)
+      # but BEFORE chunks landed. Operator chip "Upload abandoned"
+      # surfaces per card.
+      - alert: CRISPChunksNeverArrivedHigh
+        expr: |
+          sum(rate(crisp_media_abandon_reason_total{reason="chunks_never_arrived"}[15m])) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+          team: crisp-ops
+        annotations:
+          summary: "CRISP — chunk uploads abandoned at > 0.5/sec"
+          description: |
+            More than 30 Media rows in the last 15 minutes flipped to
+            failed/chunks_never_arrived. PWAs captured reports but
+            chunks never landed. Typical cause: a wide-area network
+            outage. Check upstream connectivity + the dashboard for the
+            "Upload abandoned" chip cluster.
+
+      # ── AI retry queue depth ────────────────────────────────────────
+      # A healthy queue drains within minutes; deep backlogs indicate
+      # the daemon is dead OR a sustained upstream-AI outage. Either
+      # way the operator needs to know that AI fields will be NULL on
+      # the affected reports until intervention.
+      - alert: CRISPAIRetryQueueDeep
+        expr: |
+          crisp_ai_retry_queue_depth{status="pending"} > 200
+        for: 30m
+        labels:
+          severity: warning
+          team: crisp-ops
+        annotations:
+          summary: "CRISP — AI retry queue > 200 pending for 30m"
+          description: |
+            Pending AI-retry rows have stayed above 200 for at least
+            30 minutes. Either the daemon stalled (boot logs:
+            `grep "AI retry daemon started"`) or an upstream AI service
+            (Anthropic / Whisper / satellite provider) is mid-outage.
+            Investigate before pending rows hit the 5-attempt cap and
+            flip to terminal_failed.
+
+      - alert: CRISPAITerminalFailedSpike
+        expr: |
+          increase(crisp_ai_retry_queue_depth{status="terminal_failed"}[1h]) > 50
+        for: 1h
+        labels:
+          severity: critical
+          team: crisp-ops
+        annotations:
+          summary: "CRISP — > 50 AI retries reached terminal_failed in 1h"
+          description: |
+            More than 50 ai_retry_queue rows hit the 5-attempt
+            terminal_failed state in the last hour. AI assessment data
+            is permanently missing for these reports without manual
+            operator action. Page: inspect last_error column for the
+            common failure mode + decide whether to manually re-trigger
+            the pipeline.
+
+      # ── Assembly worker lost ────────────────────────────────────────
+      # Pre-K.1 race fixes (atomic received_media + IntegrityError
+      # tolerance), this was the dominant abandon reason during
+      # concurrent /attach traffic. Post-fix it should be near zero.
+      # A burst is the signal that one of the fixes regressed.
+      - alert: CRISPAssemblyWorkerLostRegression
+        expr: |
+          increase(crisp_media_abandon_reason_total{reason="assembly_worker_lost"}[1h]) > 10
+        for: 15m
+        labels:
+          severity: critical
+          team: crisp-ops
+        annotations:
+          summary: "CRISP — assembly_worker_lost regression suspected"
+          description: |
+            > 10 Media rows abandoned with reason=assembly_worker_lost
+            in the last hour. The K.1.a/K.1.b atomic-SQL fixes should
+            have driven this to near-zero. A non-trivial rate means a
+            regression in the assembly pool or DB connection
+            handling. Revert the most recent backend deploy if this
+            started right after a release.

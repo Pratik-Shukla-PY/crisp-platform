@@ -409,6 +409,14 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
                     synchronize_session=False,
                 )
                 db.commit()
+                # K.6.c — operator-visible abandon-reason SLI.
+                try:
+                    from app.core.observability import media_abandon_reason_total
+                    media_abandon_reason_total.labels(
+                        reason="checksum_mismatch",
+                    ).inc()
+                except Exception:
+                    pass
             except Exception as _e:
                 logger.warning(f"[Assembly:integrity] abandon-stamp failed for {media_id}: {_e}")
             return None
@@ -833,11 +841,48 @@ def _run_partial_transcription_bg(report_id: str, partial_url: str):
 
 def _run_ai_pipeline_bg(report_id: str, media_type: str, file_url: str):
     """Background task wrapper — opens its own DB session so the HTTP response
-    is not blocked by Whisper transcription (which can take 10–30 s)."""
+    is not blocked by Whisper transcription (which can take 10–30 s).
+
+    Phase K K.6.b: any uncaught exception lands a row in
+    ``ai_retry_queue`` so the daemon can re-attempt with exponential
+    backoff. Pre-K.6.b the exception was silently swallowed (it
+    runs in a background thread + the bg wrapper had no except
+    clause), leaving the report's ai_assessment NULL forever.
+    """
     from app.db.session import SessionLocal
     db = SessionLocal()
     try:
         _run_ai_pipeline(report_id, media_type, file_url, db)
+    except Exception as e:
+        # Roll back any partial AI-pipeline writes; record the
+        # failure in the retry queue so the daemon picks it up.
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        try:
+            from app.services.ai_retry_queue import enqueue as _ai_enqueue
+            kind = 'transcription' if media_type == 'AUDIO' else 'image_analysis'
+            _ai_enqueue(
+                db,
+                report_id=report_id,
+                kind=kind,
+                file_url=file_url,
+                media_type=media_type,
+                error=str(e),
+            )
+            db.commit()
+        except Exception as q_err:
+            logger.warning(
+                "[ai_pipeline] failed to enqueue retry for report=%s "
+                "kind=%s: %s (orig err: %s)",
+                report_id, media_type, q_err, e,
+            )
+        logger.warning(
+            "[ai_pipeline] report=%s media_type=%s failed: %s "
+            "(queued for retry)",
+            report_id, media_type, e,
+        )
     finally:
         db.close()
 
@@ -1971,6 +2016,16 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     # the K.5.a dashboard chip so operators / the reporter can know.
     if _auth_downgrade_reason == 'expired_token':
         extra_cols["submitted_as_anonymous_due_to_expired_token"] = True
+        # K.6.c — surface field-wide token-expiry rate. Operator
+        # alert fires at > 5%/h, indicating reporter-side auth-TTL
+        # is too short for typical capture → drain windows.
+        try:
+            from app.core.observability import (
+                report_submitted_anonymous_due_to_expired_token_total,
+            )
+            report_submitted_anonymous_due_to_expired_token_total.inc()
+        except Exception:
+            pass
         logger.info(
             f"meta create — accepted as anonymous due to expired Bearer "
             f"token (device={meta_in.device_hash[:12]}, "
@@ -2788,6 +2843,18 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
         db.add(db_media)
         db.flush()  # ensure the INSERT lands before the atomic UPDATE so
                     # concurrent /attach calls correctly observe the new row
+
+        # K.6.c — operator-visible PII-blur outcome SLI. Distinct
+        # from the existing `crisp_pii_blur_runs_total` (which counts
+        # AI-executor run outcomes); this measures the /persisted/
+        # state stamped on every Media row at ingest time.
+        try:
+            from app.core.observability import pii_blur_status_total
+            pii_blur_status_total.labels(
+                status=str(pii_blur_outcome or "unknown"),
+            ).inc()
+        except Exception:
+            pass
 
         # K.1.a (May 2026, Phase K) — atomic SQL increment (was non-atomic
         # `report.received_media = (report.received_media or 0) + 1`).
@@ -3704,6 +3771,18 @@ def mark_media_deferred(
 
     db.commit()
     db.refresh(report)
+
+    # K.6.c — bandwidth_tier_deferred SLI. Only count rows we
+    # actually flipped (idempotent re-call returns 0 here so we
+    # don't double-count an operator's retry).
+    if newly_stamped > 0:
+        try:
+            from app.core.observability import media_abandon_reason_total
+            media_abandon_reason_total.labels(
+                reason="bandwidth_tier_deferred",
+            ).inc(newly_stamped)
+        except Exception:
+            pass
 
     return {
         "report_id": report.id,

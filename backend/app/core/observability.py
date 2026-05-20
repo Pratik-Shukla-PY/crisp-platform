@@ -27,6 +27,7 @@ from contextlib import contextmanager
 from typing import Callable, Iterable
 
 import structlog
+from sqlalchemy import func as _sa_func
 from prometheus_client import (
     CollectorRegistry,
     Counter,
@@ -238,6 +239,67 @@ reports_reviewed_total = Counter(
 )
 
 
+# ── Phase K K.6.c — submission-reliability SLIs ──────────────────────────────
+#
+# Four operator-facing gauges/counters that surface the failure modes
+# the K.0 audit + K.5 dashboard chips made visible. Each metric has a
+# corresponding chip in the dashboard's per-card chip row, so the
+# alert rules in `monitoring/alerts.yml` should fire BEFORE the
+# operator notices the chip pattern visually.
+#
+#   ① media_abandon_reason   — rate of media rows reaching the abandon
+#       terminal state, labelled by reason. Drives the "20%+ of
+#       uploads losing higher tiers" alert.
+#   ② anon_due_expired_token — count of reports whose Bearer token
+#       expired between capture + drain. Drives the "5%+ losing
+#       attribution" alert. Confirms token TTL is appropriate for
+#       field operations.
+#   ③ partial_promote        — count of Action ④ idle-window
+#       promotions. A sudden burst implies the network conditions
+#       degraded (more soft-drained variants) — not a hot-path
+#       failure, but visibility lets ops correlate with backlog.
+#   ④ pii_blur_status        — count of Media rows by pii_blur_status,
+#       sampled at ingest time. Distinct from `pii_blur_runs_total`
+#       (which counts /run/ outcomes inside the AI executor); this
+#       one is /persisted state/ via the /attach path. Operators
+#       watch for an unexpected 'failed' bump.
+media_abandon_reason_total = Counter(
+    "crisp_media_abandon_reason_total",
+    "Media rows entering the abandon terminal state, labelled by reason.",
+    # reason ∈ {chunks_never_arrived, assembly_worker_lost,
+    #           checksum_mismatch, bandwidth_tier_deferred,
+    #           operator_manual}
+    ["reason"],
+)
+report_submitted_anonymous_due_to_expired_token_total = Counter(
+    "crisp_report_submitted_anonymous_due_to_expired_token_total",
+    "Reports accepted with an expired Bearer token (anonymous downgrade). "
+    "Operator burst signals reporter-side auth-TTL misconfig (K.2.e).",
+)
+partial_promote_total = Counter(
+    "crisp_partial_promote_total",
+    "Reports promoted PARTIAL → SYNCED by Action ④ of the assembly "
+    "recovery sweep (bandwidth-tier soft-drain idle window).",
+)
+pii_blur_status_total = Counter(
+    "crisp_pii_blur_status_total",
+    "Per-Media-row pii_blur_status as set at /attach time. "
+    "Distinct from `crisp_pii_blur_runs_total` which measures the "
+    "AI-executor run outcome; this measures the persisted state.",
+    # status ∈ {complete, failed, skipped, not_needed}
+    ["status"],
+)
+
+# K.6.b — AI retry queue depth. Two gauges: total pending rows + a
+# breakdown by status (pending|in_progress|complete|terminal_failed)
+# so operators can see backlog trends without inspecting the DB.
+ai_retry_queue_depth = Gauge(
+    "crisp_ai_retry_queue_depth",
+    "Rows in ai_retry_queue grouped by status (snapshot at scrape).",
+    ["status"],
+)
+
+
 # ── Middleware wiring ────────────────────────────────────────────────────────
 
 
@@ -285,8 +347,48 @@ def _path_template(request: Request) -> str:
     return request.url.path
 
 
+def _sample_ai_retry_queue_gauge() -> None:
+    """K.6.c — refresh the ai_retry_queue depth gauge from the DB
+    at scrape time. Pulled into a try/except so a transient DB
+    blip never breaks /metrics.
+
+    Cheap query (indexed by status); even at 10K queue rows this
+    is sub-millisecond on Postgres. Skipped during pytest because
+    the test DB lifecycle wipes the table between runs.
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+    try:
+        from app.db.session import SessionLocal
+        from app.models.report import AiRetryQueueRow
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(AiRetryQueueRow.status, _sa_func.count())
+                .group_by(AiRetryQueueRow.status)
+                .all()
+            )
+            seen = set()
+            for status_val, count in rows:
+                ai_retry_queue_depth.labels(status=str(status_val)).set(float(count))
+                seen.add(str(status_val))
+            # Zero out any previously-non-empty status that no longer
+            # has rows, so a transient backlog doesn't leave a stale
+            # gauge reading after the rows complete + age out.
+            for s in ("pending", "in_progress", "complete", "terminal_failed"):
+                if s not in seen:
+                    ai_retry_queue_depth.labels(status=s).set(0.0)
+        finally:
+            db.close()
+    except Exception as e:
+        logging.getLogger(__name__).debug(
+            "ai_retry_queue gauge sample failed: %s", e,
+        )
+
+
 def metrics_response() -> Response:
     """Plain-text metrics suitable for a Prometheus scrape."""
+    _sample_ai_retry_queue_gauge()
     data = generate_latest(REGISTRY)
     return Response(content=data, media_type=CONTENT_TYPE_LATEST)
 

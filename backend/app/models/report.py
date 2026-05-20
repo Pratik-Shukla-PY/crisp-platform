@@ -1782,3 +1782,67 @@ class AppealEvent(Base):
         Index("ix_appeal_events_appeal_id_occurred",
               "appeal_id", "occurred_at"),
     )
+
+
+class AiRetryQueueRow(Base):
+    """Phase K K.6.b — persistent retry queue for AI pipeline tasks.
+
+    Pre-K.6.b a transient AI failure (Anthropic 5xx, Whisper OOM,
+    satellite-provider timeout) left the report's ``ai_assessment``
+    NULL forever. The audit (Agent 2, B8) flagged this as P1: no
+    automated retry, no operator-visible signal of partial-AI rows.
+
+    K.6.b introduces this table + a daemon thread in ``app.main``
+    (`_ai_retry_loop`) that polls every 60 s, picks rows where
+    ``status='pending' AND next_attempt_at <= now``, re-runs the AI
+    call, and either marks ``complete`` or backs off
+    exponentially (1 min → 5 min → 30 min → 2 h → 12 h). After
+    5 attempts the row flips to ``terminal_failed`` for manual
+    operator review; the K.5.a chip surface renders "AI analysis
+    failed" once that state is reached.
+
+    Status vocabulary (bounded):
+        pending          — waiting for next retry (next_attempt_at <= now)
+        in_progress      — daemon picked this row up + is running it now
+        complete         — AI call succeeded; row stays for audit
+        terminal_failed  — 5 attempts exhausted; manual op only
+
+    Kind vocabulary (bounded):
+        transcription    — re-run audio → text via Whisper
+        image_analysis   — re-run image → labels via Claude vision
+        truth_scoring    — re-run satellite + truth_scorer fan-out
+    """
+    __tablename__ = "ai_retry_queue"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    report_id = Column(String(36),
+                       ForeignKey("reports.id", ondelete="CASCADE"),
+                       nullable=False)
+    # 'transcription' | 'image_analysis' | 'truth_scoring' | other
+    kind = Column(String(40), nullable=False)
+    # Reference to the asset being processed (Media.url for media-bound
+    # retries; NULL for report-level retries like truth_scoring which
+    # reads multiple assets).
+    file_url = Column(String, nullable=True)
+    media_type = Column(String(10), nullable=True)  # IMAGE | AUDIO
+    attempts = Column(Integer, nullable=False, server_default="0", default=0)
+    last_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    next_attempt_at = Column(DateTime(timezone=True),
+                             server_default=func.now(), nullable=False)
+    last_error = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False,
+                    server_default="pending", default="pending")
+    created_at = Column(DateTime(timezone=True),
+                        server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True),
+                        server_default=func.now(),
+                        onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        # Hot daemon query: status='pending' AND next_attempt_at <= NOW().
+        Index("ix_ai_retry_queue_status_next_attempt",
+              "status", "next_attempt_at"),
+        # Per-report cleanup + the dashboard's "show me the retry
+        # history for this report" surface (planned follow-up).
+        Index("ix_ai_retry_queue_report_id", "report_id"),
+    )

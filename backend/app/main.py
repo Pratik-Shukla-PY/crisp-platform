@@ -791,6 +791,13 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
                 f"Assembly recovery [{tag}]: abandoned {worker_lost} rows "
                 f"(reason=assembly_worker_lost, deadline={_ASSEMBLE_DEADLINE_MIN}m)"
             )
+            try:
+                from app.core.observability import media_abandon_reason_total
+                media_abandon_reason_total.labels(
+                    reason="assembly_worker_lost",
+                ).inc(worker_lost)
+            except Exception:
+                pass
 
         # ── ③ ABANDON chunks-never-arrived rows ────────────────────────
         # 'pending' for > _ABANDON_STALE_MIN with chunks NOT all arrived.
@@ -814,6 +821,13 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
                 f"Assembly recovery [{tag}]: abandoned {chunks_never} rows "
                 f"(reason=chunks_never_arrived, deadline={_ABANDON_STALE_MIN}m)"
             )
+            try:
+                from app.core.observability import media_abandon_reason_total
+                media_abandon_reason_total.labels(
+                    reason="chunks_never_arrived",
+                ).inc(chunks_never)
+            except Exception:
+                pass
 
         # ── ④ PROMOTE PARTIAL → SYNCED at first-complete + idle window ────
         # The PWA's bandwidth-tier deferral (mobile-app/src/app.js:8649)
@@ -892,6 +906,11 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
                 promoted_ids.append(r.id)
         if promoted_ids:
             _db.commit()
+            try:
+                from app.core.observability import partial_promote_total
+                partial_promote_total.inc(len(promoted_ids))
+            except Exception:
+                pass
             log.info(
                 f"Assembly recovery [{tag}]: promoted {len(promoted_ids)} reports "
                 f"PARTIAL → SYNCED (first-complete per photo_group + idle "
@@ -964,6 +983,39 @@ async def _run_startup_tasks():
             f"abandon_stale={_ABANDON_STALE_MIN}m, "
             f"assemble_deadline={_ASSEMBLE_DEADLINE_MIN}m)"
         )
+
+    # Phase K K.6.b — AI retry queue daemon. Picks up
+    # `ai_retry_queue` rows whose `next_attempt_at <= NOW()` and
+    # re-runs the failed Whisper / Claude vision / truth_scoring
+    # call with exponential backoff (1m / 5m / 30m / 2h / 12h).
+    # Pre-K.6.b a transient AI failure left the report's AI fields
+    # NULL forever — no automated retry. The boot-time reclaim
+    # sweeps rows stuck in 'in_progress' from a crashed previous
+    # instance so they're picked up by the next periodic tick.
+    if not in_pytest:
+        try:
+            from app.db.session import SessionLocal as _SL_ai
+            from app.services.ai_retry_queue import reclaim_stuck_in_progress
+            _ai_db = _SL_ai()
+            try:
+                reclaim_stuck_in_progress(_ai_db, older_than_minutes=30)
+            finally:
+                _ai_db.close()
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                f"Boot-time AI retry reclaim failed: {e}"
+            )
+        try:
+            from app.services.ai_retry_queue import _ai_retry_loop
+            threading.Thread(target=_ai_retry_loop, daemon=True).start()
+            logging.getLogger(__name__).info(
+                "AI retry daemon started "
+                "(backoff 1m / 5m / 30m / 2h / 12h, 5-attempt cap)"
+            )
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                f"AI retry daemon failed to start: {e}"
+            )
 
     # Auto-start Telegram polling if token is configured
     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
