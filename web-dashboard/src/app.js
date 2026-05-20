@@ -551,6 +551,57 @@ const TIER_RANK = { SMALL: 1, LOW: 1, MEDIUM: 2, HIGH: 3, ORIGINAL: 4 };
 // is a panel-level preference; cleared on panel close / delete.
 const _tierOverride = new Map();   // reportId → 'LOW' | 'MEDIUM' | 'HIGH'
 
+// ── P1.5 (May 2026, audit follow-up): live tier-status on detail open ──────
+// Operator concern: when a report arrives on the previous list poll, the
+// `r.media[*]` records are stale by up to ~4 s (one polling cycle). Opening
+// the detail panel right after capture would show the tier switcher with
+// outdated assembly_status / completion_pct values, e.g. ORIGINAL stuck at
+// 60 % even though it just finished server-side. Fix: piggy-back a
+// GET `/reports/{id}/tier-status` call when selectReport runs. The backend
+// endpoint is cheap (~1 SELECT) and returns just the per-tier media rows.
+// Merge fresh status into the in-memory record and re-render the tier
+// switcher if anything changed. Listing-poll updates still drive the
+// steady-state view — this just removes the open-the-card lag.
+async function _refreshTierStatusForDetail(reportId) {
+    if (!reportId) return;
+    try {
+        const res = await fetch(`${BACKEND_HOST}/api/v1/reports/${reportId}/tier-status`, {
+            method: 'GET',
+            credentials: 'omit',  // public endpoint; no auth needed for tier surface
+        });
+        if (!res.ok) return;  // 404 on old backend / transient — silent no-op
+        const body = await res.json();
+        if (!body || !Array.isArray(body.media)) return;
+        const r = allReports.find(x => x.id === reportId);
+        if (!r) return;
+        // Merge by media.id. The tier-status endpoint returns the same
+        // shape (id, resolution_tier, assembly_status, completion_pct,
+        // received_chunks, chunk_count, photo_group_id, type, url), so we
+        // copy fields without inventing new ones.
+        const byId = new Map((r.media || []).map(m => [m.id, m]));
+        let changed = false;
+        for (const fresh of body.media) {
+            if (!fresh || !fresh.id) continue;
+            const local = byId.get(fresh.id);
+            if (!local) continue;
+            for (const k of ['assembly_status', 'completion_pct', 'received_chunks', 'chunk_count', 'url', 'thumbnail_url']) {
+                if (k in fresh && local[k] !== fresh[k]) {
+                    local[k] = fresh[k];
+                    changed = true;
+                }
+            }
+        }
+        // Only re-render the panel if (a) something changed AND (b) the
+        // operator is still viewing this report (they may have navigated
+        // away during the round-trip).
+        if (changed && selectedId === reportId && typeof window.selectReport === 'function') {
+            window.selectReport(reportId, /* skipFly */ true);
+        }
+    } catch (e) {
+        // Network blip / abort — silent. Listing poll will catch up.
+    }
+}
+
 function groupPhotos(mediaList) {
     const groups = new Map();
     const loose = [];
@@ -3552,6 +3603,15 @@ window.selectReport = (id, skipFly = false) => {
 
     const panel = document.getElementById('detail-panel');
     panel.style.display = 'flex';
+
+    // P1.5 — fire-and-forget tier-status refresh so the tier switcher /
+    // gallery thumbs show post-poll-cycle fresh state instead of waiting
+    // for the next listing poll (~4 s). Only fires once per open (not on
+    // re-renders triggered by the refresh itself — `skipFly=true` is the
+    // recursion guard since the refresh callback always passes true).
+    if (!skipFly) {
+        _refreshTierStatusForDetail(id);
+    }
 
     const allImages = r.media?.filter(m => m.type === 'IMAGE') || [];
     // Guaranteed-delivery: each captured photo may have up to 3 Media rows
