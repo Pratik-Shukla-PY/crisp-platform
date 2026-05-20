@@ -508,6 +508,19 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
         session.pwa_device_hash if getattr(session, "pwa_device_hash", None)
         else session.user_hash
     )
+    # K.2.f (May 2026, Phase K) — compute `expected_media` from the
+    # session's ACTUAL media state at meta-create time, instead of the
+    # legacy hardcoded `2` (which assumed photo + audio and left every
+    # photo-only Telegram report stuck PARTIAL forever).
+    # Use `session.media_count` (sum of image_data_url + audio_data_url
+    # present-ness, see TelegramSession.media_count at L201) as the
+    # actual count. Defensive floor of 1: Telegram sessions reach
+    # `create_report_early` only after some media has been received,
+    # so 0 should be impossible — but if it ever happens we don't
+    # want to land a row with expected_media=0 that subsequent attach
+    # calls would over-count.
+    _expected_media = max(1, session.media_count)
+
     meta = {
         "device_hash": effective_device_hash,
         "client_report_id": session.client_report_id,
@@ -515,7 +528,7 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
         "severity": session.severity,
         "infrastructure_type": session.infra_type,
         "description": session.text or None,
-        "expected_media": 2,  # assume photo + audio (will adjust)
+        "expected_media": _expected_media,
     }
     # propagate the reporter-typed building name
     # on early-create so the dashboard can render it the instant the row
