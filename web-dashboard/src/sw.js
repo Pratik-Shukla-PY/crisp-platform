@@ -15,7 +15,8 @@
 // the browser was heuristic-pinning the old CSP. Old SWs auto-replace
 // because skipWaiting() runs in install + nginx now sends Cache-Control:
 // no-cache on sw.js so the new code lands within seconds of deploy.
-const APP_CACHE    = 'crisp-app-v26';  // v26 (May 2026): Phase F image-reliability — periodic assembly recovery sweep + abandoned-upload terminal state (migration 0032 + Media.abandoned_at / abandon_reason), dashboard tri-state render for the LARGE-tier originals chip (uploading / delayed / lost / missing-fresh / missing-old) replacing the binary "complete vs pending" check that pulsed forever on `failed` rows, operator-gated Reclaim modal wiring POST /api/v1/reports/media/{id}/reclaim with retry_assembly + mark_abandoned modes, offline banner gated on ≥ 3 consecutive fetch failures with streak count + age-of-last-success. CRITICAL: evicts v25 — old cached app.js still uses _ORIG_DEFERRED_TIMEOUT_MS=14d everywhere; without eviction the new chip styling + Reclaim button won't surface.
+const APP_CACHE    = 'crisp-app-v27';  // v27 (May 2026): notification-stack lifecycle rewrite — dedup-first ordering, incremental DOM (no innerHTML thrash), CSS-driven position transitions, _suppressNewReportNotifications during full-refresh, centralised _refreshStackTimers state machine, .is-entering / .is-leaving entrance/exit classes (replaces baseline flash-in animation that re-fired on every render). Fixes "cards float/reposition randomly" + "notifications repeat for same report on media upgrade" + "full-refresh cascade of duplicate notifications".
+                                       // v26 (May 2026): Phase F image-reliability — assembly recovery sweep, abandoned-upload terminal state, tri-state LARGE-tier chip, Reclaim modal, offline banner.
 const CDN_CACHE    = 'crisp-cdn-v9';
 const API_CACHE    = 'crisp-api-v9';
 const STATIC_CACHE = 'crisp-static-v12';

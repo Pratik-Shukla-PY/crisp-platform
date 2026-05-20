@@ -2756,16 +2756,56 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
         0 0 60px rgba(34,197,94,0.15),
         0 0 100px rgba(34,197,94,0.08),
         0 20px 60px rgba(0,0,0,0.5);
-    animation: flash-in 0.32s ease-out, neon-border-pulse 1.8s ease-in-out infinite;
-    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 0.28s ease;
+    /* Baseline does NOT include flash-in — the entrance animation only
+       runs on cards that just got created (`.is-entering`). The
+       border-pulse stays on every card. This is the critical Bug-A
+       fix: previously every render destroyed + re-created the DOM,
+       which made flash-in re-fire and the whole stack visually jumped
+       on every poll. Now position changes go through the transition
+       below, which interpolates smoothly between data-pos states. */
+    animation: neon-border-pulse 1.8s ease-in-out infinite;
+    transition: transform 0.34s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity   0.28s ease;
     transform-origin: 50% 60%;
+    /* Default transform — overridden by data-pos rules below. */
+    transform: translateY(0) scale(1);
+    opacity: 1;
 }
-/* The TOP card sits at z-index above the others; subsequent cards
-   are pushed down by their inline `transform: translateY` style. */
-.notif-stack-card:nth-child(1) { z-index: 3; }
-.notif-stack-card:nth-child(2) { z-index: 2; }
-.notif-stack-card:nth-child(3) { z-index: 1; }
+
+/* Position via `data-pos` (set by the JS renderer). When index
+   changes (e.g. card moved from pos 1 → pos 0 after the top card
+   was dismissed), the CSS transition above interpolates smoothly. */
+.notif-stack-card[data-pos="0"] {
+    z-index: 3;
+    transform: translateY(0) scale(1) rotate(0);
+    opacity: 1;
+}
+.notif-stack-card[data-pos="1"] {
+    z-index: 2;
+    transform: translateY(10px) scale(0.96) rotate(0);
+    opacity: 0.78;
+}
+.notif-stack-card[data-pos="2"] {
+    z-index: 1;
+    transform: translateY(20px) scale(0.92) rotate(-1.5deg);
+    opacity: 0.6;
+}
+
+/* Entrance — applied for ~360 ms after a card is appended, then
+   stripped by the JS so a subsequent re-render doesn't re-trigger
+   the animation on a surviving card. */
+.notif-stack-card.is-entering {
+    animation: flash-in 0.32s ease-out,
+               neon-border-pulse 1.8s ease-in-out infinite;
+}
+
+/* Exit — JS adds this class then removes the node 320 ms later so
+   the animation has time to complete. */
+.notif-stack-card.is-leaving {
+    opacity: 0;
+    transform: scale(0.9) translateY(-8px);
+    pointer-events: none;
+}
 
 /* Upgrade chip — amber arrow showing the card was updated rather
    than a brand-new event. Solves the operator's "same report's
@@ -2787,8 +2827,11 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     letter-spacing: 0.02em;
 }
 .notif-upgrade-chip i { font-size: 9px; }
+/* Subtle "data updated" highlight — no entrance animation, just a
+   short border-flash so the operator notices the chip if they're
+   already looking at the stack. */
 .notif-stack-card.is-upgraded {
-    animation: flash-in 0.32s ease-out;  /* no border-pulse for upgrades */
+    animation: neon-border-pulse 1.8s ease-in-out infinite;
 }
 
 /* Burst banner — replaces per-card spawn when arrival rate >5 in 5s. */

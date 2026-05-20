@@ -817,6 +817,13 @@ let _notificationStack = [];        // [{ id, clientId, buildingId, crisisType, 
 let _burstArrivals = [];            // timestamps of recent arrivals (in burst window)
 let _burstBannerActive = false;
 let _stackQuietTimer = null;
+let _stackSoloTimer  = null;        // exactly one auto-dismiss timer at a
+                                    // time (cleared on every stack mutation;
+                                    // re-armed only when length === 1).
+// Suppression flag — set by `_replaceReportData` during full-refresh so
+// the upsert loop does not re-fire notifications for reports the user
+// already had visible. Reset to false at the end of the refresh.
+let _suppressNewReportNotifications = false;
 
 function _inBurstMode() {
     const now = Date.now();
@@ -824,7 +831,47 @@ function _inBurstMode() {
     return _burstArrivals.length >= _BURST_THRESHOLD;
 }
 
+// Helper — central place to (re)arm the per-stack timers. Called from
+// `_addNotification` and `_dismissStackCard` so growth + shrink land on
+// the same state machine. Prior code had a per-card `notif._dismissTimer`
+// that leaked when the stack grew from 1 → 2 (the solo timer kept
+// firing and made card 1 vanish mid-stack).
+function _refreshStackTimers() {
+    if (_stackSoloTimer)  { clearTimeout(_stackSoloTimer);  _stackSoloTimer  = null; }
+    if (_stackQuietTimer) { clearTimeout(_stackQuietTimer); _stackQuietTimer = null; }
+    if (_notificationStack.length === 1) {
+        const solo = _notificationStack[0];
+        _stackSoloTimer = setTimeout(() => {
+            _notificationStack = _notificationStack.filter(n => n.id !== solo.id);
+            _stackSoloTimer = null;
+            _renderNotificationStack();
+        }, _STACK_AUTODISMISS_SOLO_MS);
+    } else if (_notificationStack.length > 1) {
+        _stackQuietTimer = setTimeout(() => {
+            // Fly the whole stack to the bell.
+            const stackEl = document.getElementById('notif-stack');
+            if (stackEl) {
+                stackEl.classList.add('fly-away');
+                setTimeout(() => {
+                    _notificationStack = [];
+                    _stackQuietTimer = null;
+                    _renderNotificationStack();
+                }, 700);
+            } else {
+                _notificationStack = [];
+                _stackQuietTimer = null;
+                _renderNotificationStack();
+            }
+        }, _STACK_QUIET_MS);
+    }
+}
+
 function _addNotification(r) {
+    // Bug-D defense: full-refresh path sets this flag so an upsert
+    // cascade doesn't re-fire notifications for reports the user
+    // already had on screen.
+    if (_suppressNewReportNotifications) return;
+
     const locName = r.location?.user_location_name || r.location?.device_location_name || 'Unknown location';
     const srcIcons = {APP:'fa-mobile-screen-button',ANDROID:'fa-robot',WHATSAPP:'fa-whatsapp',TELEGRAM:'fa-telegram',SMS:'fa-comment-sms',IVR:'fa-phone'};
     const srcBrand = ['WHATSAPP','TELEGRAM'].includes(r.source) ? 'fa-brands' : 'fa-solid';
@@ -848,15 +895,14 @@ function _addNotification(r) {
         coalescedCount: 1,
     };
 
-    // Bell-panel state — unchanged. Always tracks the full unseen list
-    // (LIFO, cap at _MAX_NOTIFS). The card-stack is a SEPARATE state
-    // (short-lived visual surface) that derives from the same stream
-    // but with dedup + coalesce + burst rules applied.
-    _unseenReports.unshift(notif);
-    if (_unseenReports.length > _MAX_NOTIFS) _unseenReports.pop();
-    _renderNotifications();
+    // ── DEDUP-FIRST (Bug B fix). Previously _unseenReports.unshift +
+    //    _renderNotifications ran BEFORE these checks, so a duplicate
+    //    bumped the bell badge before being recognised as a duplicate.
+    //    Now nothing touches state until we know this is a genuinely
+    //    new event.
 
-    // ── Dedup: same report.id already in stack → upgrade in place ──
+    // 1. Same report.id already in stack → upgrade in place, no
+    //    second card, no bell bump.
     const existing = _notificationStack.find(n => n.id === notif.id);
     if (existing) {
         existing.severity = notif.severity;
@@ -869,12 +915,18 @@ function _addNotification(r) {
         return;
     }
 
-    // ── Secondary dedup: same client_report_id (offline-queue
-    // reconciliation case where the server assigned a different id) ──
+    // 2. Bell-panel dedup. If we've already shown this id in the bell
+    //    panel (even after the card disappeared from the stack), we
+    //    don't want a second bell entry. This is the typical "small
+    //    image arrived, then full image arrived 30s later" media-
+    //    upgrade case the operator described.
+    if (_unseenReports.some(n => n.id === notif.id)) return;
+
+    // 3. Same client_report_id (offline-queue reconciliation where the
+    //    server assigned a different id).
     if (notif.clientId) {
         const byClient = _notificationStack.find(n => n.clientId === notif.clientId);
         if (byClient) {
-            // Adopt the new server id but keep the existing card.
             byClient.id = notif.id;
             byClient.severity = notif.severity;
             byClient._upgraded = true;
@@ -882,10 +934,10 @@ function _addNotification(r) {
             _renderNotificationStack();
             return;
         }
+        if (_unseenReports.some(n => n.clientId === notif.clientId)) return;
     }
 
-    // ── Tertiary coalesce: same building_id + crisis_type within 60 s
-    // → update existing card's count instead of spawning a second ──
+    // 4. Building + crisis-type coalesce within 60s.
     if (notif.buildingId && notif.crisisType) {
         const sib = _notificationStack.find(n =>
             n.buildingId === notif.buildingId &&
@@ -901,59 +953,76 @@ function _addNotification(r) {
         }
     }
 
+    // ── Confirmed: new event. Now mutate state.
+
+    // Bell panel — LIFO, cap _MAX_NOTIFS.
+    _unseenReports.unshift(notif);
+    if (_unseenReports.length > _MAX_NOTIFS) _unseenReports.pop();
+    _renderNotifications();
+
     // Track arrival for burst detection.
     _burstArrivals.push(now);
 
-    // ── Burst-mode gate ──
     if (_inBurstMode()) {
         _showBurstBanner();
-        // Suppress per-card spawn; the bell badge already updated above.
+        // Suppress per-card spawn; bell already updated.
         return;
     } else if (_burstBannerActive) {
-        // Just exited burst — clear the banner.
         _hideBurstBanner();
     }
 
-    // ── Standard path: prepend to stack ──
+    // Prepend to stack.
     _notificationStack.unshift(notif);
-    // Cap visible cards; older ones drop out (still visible via bell).
     if (_notificationStack.length > _STACK_MAX_VISIBLE) {
         _notificationStack = _notificationStack.slice(0, _STACK_MAX_VISIBLE);
     }
     _renderNotificationStack();
 
-    // Schedule auto-dismiss for solo notifications. With ≥2 cards we
-    // hold the stack visible until the operator engages OR the quiet
-    // timer fires (12s of no new arrivals).
-    if (_notificationStack.length === 1) {
-        notif._dismissTimer = setTimeout(() => {
-            _notificationStack = _notificationStack.filter(n => n !== notif);
-            _renderNotificationStack();
-        }, _STACK_AUTODISMISS_SOLO_MS);
-    } else {
-        // Multi-card: arm/reset the quiet timer.
-        if (_stackQuietTimer) clearTimeout(_stackQuietTimer);
-        _stackQuietTimer = setTimeout(() => {
-            // Fly the whole stack to the bell with the existing flyaway pattern.
-            const stackEl = document.getElementById('notif-stack');
-            if (stackEl) {
-                stackEl.classList.add('fly-away');
-                setTimeout(() => {
-                    _notificationStack = [];
-                    _renderNotificationStack();
-                }, 700);
-            } else {
-                _notificationStack = [];
-                _renderNotificationStack();
-            }
-        }, _STACK_QUIET_MS);
-    }
+    // Re-arm timers based on the new stack size (Bug C fix — the prior
+    // code armed a per-card timer that survived when the stack grew).
+    _refreshStackTimers();
 }
 
-// Render the visible card stack. Center-screen (per operator
-// confirmation) — replaces clobber-and-replace with honest stacking.
+// Build the inner HTML for a stack card. Pure function — no side
+// effects. Called by `_renderNotificationStack` only when a card
+// either needs to be CREATED (new id) or its content changed
+// (severity / upgrade-chip / location / count). Position is NOT
+// embedded here — CSS handles position via `data-pos` so transitions
+// are smooth when index changes.
+function _buildStackCardInner(n) {
+    const srcLabel = {APP:'Mobile App',ANDROID:'Android',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[n.source] || n.source;
+    const upgradeChip = n._upgraded
+        ? `<div class="notif-upgrade-chip" title="${escapeHtml(n._upgradeReason || 'updated')}">
+              <i class="fa-solid fa-arrow-up"></i> ${escapeHtml(n._upgradeReason || 'updated')}
+           </div>` : '';
+    const hintTail = _notificationStack.length === 1 ? ' &middot; Auto-dismiss in 6s' : '';
+    return `
+        ${upgradeChip}
+        <div class="notif-flash-icon" style="color:${n.sevColor};">🚨</div>
+        <div class="notif-flash-title">${n.coalescedCount > 1 ? `${n.coalescedCount}× reports — same building` : 'NEW INCIDENT REPORTED'}</div>
+        <div class="notif-flash-detail">
+            <span class="notif-sev" style="background:${n.sevColor}25;color:${n.sevColor};font-size:13px;padding:4px 10px;">${n.severity}</span>
+            <span style="font-size:16px;font-weight:700;color:#e2e8f0;">${escapeHtml(n.type)}</span>
+        </div>
+        <div class="notif-flash-loc"><i class="fa-solid fa-location-dot" style="color:${n.sevColor};"></i> ${escapeHtml(n.location)}</div>
+        <div class="notif-flash-source"><i class="${n.srcBrand} ${n.srcIcon}"></i> via ${escapeHtml(srcLabel)}</div>
+        <div class="notif-flash-hint">Click to view${hintTail}</div>
+    `;
+}
+
+// Incremental DOM update. Replaces the old `stack.innerHTML = ...`
+// path that destroyed + recreated every card on every render. Now:
+//   · existing nodes are looked up by `data-id`
+//   · brand-new ids are appended (with `.is-entering` for animate-in)
+//   · dropped ids are animate-out + removed
+//   · surviving nodes have data-pos / data attributes / inner HTML
+//     updated in place — no DOM destroy, so CSS transitions on
+//     `transform: translateY(...) scale(...) rotate(...)` interpolate
+//     smoothly from the old position to the new one
+//
+// CSS drives position via `.notif-stack-card[data-pos="N"]` rules,
+// keeping the JS layer free of magic numbers.
 function _renderNotificationStack() {
-    // Ensure stack container exists.
     let stack = document.getElementById('notif-stack');
     if (!stack) {
         stack = document.createElement('div');
@@ -961,52 +1030,95 @@ function _renderNotificationStack() {
         stack.className = 'notif-stack';
         document.body.appendChild(stack);
     }
+
+    // Empty-state: animate out remaining cards then remove.
     if (!_notificationStack.length) {
-        stack.innerHTML = '';
-        stack.classList.remove('has-cards', 'fly-away');
+        // Allow a graceful exit if cards are present; otherwise nothing to do.
+        const kids = Array.from(stack.children);
+        if (!kids.length) {
+            stack.classList.remove('has-cards', 'fly-away');
+            return;
+        }
+        // Mark them all leaving; remove after the CSS transition completes.
+        kids.forEach((el) => el.classList.add('is-leaving'));
+        setTimeout(() => {
+            if (!_notificationStack.length) {
+                stack.innerHTML = '';
+                stack.classList.remove('has-cards', 'fly-away');
+            }
+        }, 320);
         return;
     }
+
     stack.classList.remove('fly-away');
     stack.classList.add('has-cards');
-    stack.innerHTML = _notificationStack.map((n, i) => {
-        const srcLabel = {APP:'Mobile App',ANDROID:'Android',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[n.source] || n.source;
-        // Stagger transforms: first (top) card flat; subsequent
-        // cards offset+scaled+tilted to read as a fanned deck.
-        const stackStyle = i === 0
-            ? ''
-            : i === 1
-                ? 'transform:translateY(10px) scale(0.96);opacity:0.78;'
-                : 'transform:translateY(20px) scale(0.92) rotate(-1.5deg);opacity:0.6;';
-        return `
-            <div class="notif-stack-card ${n._upgraded ? 'is-upgraded' : ''}"
-                 data-id="${escapeHtml(n.id)}"
-                 style="${stackStyle}"
-                 onclick="_dismissStackCard('${n.id}')">
-                ${n._upgraded ? `<div class="notif-upgrade-chip" title="${escapeHtml(n._upgradeReason || 'updated')}">
-                    <i class="fa-solid fa-arrow-up"></i> ${escapeHtml(n._upgradeReason || 'updated')}
-                </div>` : ''}
-                <div class="notif-flash-icon" style="color:${n.sevColor};">🚨</div>
-                <div class="notif-flash-title">${n.coalescedCount > 1 ? `${n.coalescedCount}× reports — same building` : 'NEW INCIDENT REPORTED'}</div>
-                <div class="notif-flash-detail">
-                    <span class="notif-sev" style="background:${n.sevColor}25;color:${n.sevColor};font-size:13px;padding:4px 10px;">${n.severity}</span>
-                    <span style="font-size:16px;font-weight:700;color:#e2e8f0;">${escapeHtml(n.type)}</span>
-                </div>
-                <div class="notif-flash-loc"><i class="fa-solid fa-location-dot" style="color:${n.sevColor};"></i> ${escapeHtml(n.location)}</div>
-                <div class="notif-flash-source"><i class="${n.srcBrand} ${n.srcIcon}"></i> via ${escapeHtml(srcLabel)}</div>
-                <div class="notif-flash-hint">Click to view${_notificationStack.length === 1 ? ' &middot; Auto-dismiss in 6s' : ''}</div>
-            </div>
-        `;
-    }).join('');
+
+    // Desired set: notif id → (notif, index)
+    const desired = new Map();
+    _notificationStack.forEach((n, i) => desired.set(String(n.id), { n, i }));
+
+    // First pass — remove any DOM card whose id is not in the desired set.
+    Array.from(stack.children).forEach((el) => {
+        const id = el.getAttribute('data-id');
+        if (!desired.has(id)) {
+            // Animate out then remove. Guard against double-removal.
+            if (!el.classList.contains('is-leaving')) {
+                el.classList.add('is-leaving');
+                setTimeout(() => { if (el.parentNode === stack) stack.removeChild(el); }, 320);
+            }
+        }
+    });
+
+    // Second pass — for each desired id, update or create.
+    desired.forEach(({ n, i }, id) => {
+        let el = stack.querySelector(`.notif-stack-card[data-id="${cssEscape(id)}"]`);
+        if (!el) {
+            // Create new.
+            el = document.createElement('div');
+            el.className = 'notif-stack-card is-entering';
+            el.setAttribute('data-id', id);
+            el.setAttribute('data-pos', String(i));
+            el.onclick = () => _dismissStackCard(n.id);
+            el.innerHTML = _buildStackCardInner(n);
+            if (n._upgraded) el.classList.add('is-upgraded');
+            stack.appendChild(el);
+            // Drop is-entering after the 320ms flash-in finishes so a
+            // future re-render doesn't restart the entrance.
+            setTimeout(() => el.classList.remove('is-entering'), 360);
+            return;
+        }
+        // Existing — update content + position. NO DOM destroy.
+        // Only rewrite innerHTML if the content fingerprint changed,
+        // so the upgrade-chip animation doesn't re-fire on every poll.
+        const fp = `${n.severity}|${n.type}|${n.location}|${n.coalescedCount}|${n._upgraded ? 1 : 0}|${n._upgradeReason || ''}`;
+        if (el.getAttribute('data-fp') !== fp) {
+            el.innerHTML = _buildStackCardInner(n);
+            el.setAttribute('data-fp', fp);
+        }
+        el.setAttribute('data-pos', String(i));
+        el.classList.toggle('is-upgraded', !!n._upgraded);
+        // Defensive: never mark an existing card "entering" again.
+        el.classList.remove('is-entering', 'is-leaving');
+    });
+}
+
+// Minimal CSS.escape polyfill — Safari < 15 didn't have it.
+function cssEscape(s) {
+    if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
 }
 
 window._dismissStackCard = (id) => {
-    const card = _notificationStack.find(n => n.id === id);
-    if (card && card._dismissTimer) clearTimeout(card._dismissTimer);
     _notificationStack = _notificationStack.filter(n => n.id !== id);
-    if (_stackQuietTimer) { clearTimeout(_stackQuietTimer); _stackQuietTimer = null; }
     _renderNotificationStack();
+    // Re-arm timers for the new stack state — if 2 cards remained and
+    // one was just dismissed, the solo timer needs to start for the
+    // last surviving card. The shared helper centralises this.
+    _refreshStackTimers();
     dismissNotif(id);
 };
+// Expose for any historical caller (kept for back-compat).
+function _dismissStackCard(id) { return window._dismissStackCard(id); }
 
 // Burst banner — pinned center-top when 5+ arrive in 5 s.
 function _showBurstBanner() {
@@ -9554,7 +9666,18 @@ function _replaceReportData(data) {
             r._continent_code = old._continent_code;
         }
     });
-    _applyReportData(data);
+    // Bug-D fix — full refresh clears knownIds and re-walks the
+    // snapshot, so EVERY report would otherwise look "new" to
+    // `_applyReportData` and re-fire a notification. Suppress
+    // for the duration of this refresh; everything still lands
+    // in `_seenIds` via the silent-add branch so subsequent
+    // genuine arrivals are still detected.
+    _suppressNewReportNotifications = true;
+    try {
+        _applyReportData(data);
+    } finally {
+        _suppressNewReportNotifications = false;
+    }
 }
 
 function _hasActiveUploads() {
