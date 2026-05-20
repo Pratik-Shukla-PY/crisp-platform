@@ -2609,6 +2609,10 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
     # "webm" for everything non-image, which produced unplayable
     # audio when iOS recorded MP4/AAC).
     file_url = media_in.url
+    # K.2.b (May 2026, Phase K) — default for non-data: URL paths (an
+    # S3 URL passed directly). 'not_needed' is the right semantic for
+    # audio and for paths that bypass our blur stage.
+    pii_blur_outcome = 'not_needed'
     if media_in.url.startswith("data:"):
         try:
             header, encoded = media_in.url.split(",", 1)
@@ -2627,20 +2631,46 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             # via /tmp/ tempfile (filesystem-based cv2), then we
             # storage.save() the (possibly blurred) bytes.
             final_data = file_data
+            # K.2.b (May 2026, Phase K) — track PII blur outcome on the
+            # Media row so the operator dashboard can flag rows where
+            # blur failed / was skipped. Previously the /attach path
+            # left pii_blur_status=NULL (only the chunked path set it),
+            # so operators had no way to tell whether an attached image
+            # was actually redacted. Mirrors the outcome state machine
+            # at reports.py:565-599 (chunked assembly path).
+            #   'complete'  — blur ran AND something was redacted
+            #   'skipped'   — blur backends unavailable; file as-is,
+            #                 dashboard flags for manual review
+            #   'failed'    — blur raised an exception; file as-is
+            #   'not_needed' — audio media (set below at row creation)
+            pii_blur_outcome = 'not_needed'  # default for audio
             if ext in ('jpg', 'jpeg', 'png'):
+                pii_blur_outcome = 'skipped'  # pessimistic default
                 try:
                     from app.services.pii_blur import blur_pii
                     with _stage_bytes(filename, file_data) as tmp_path:
                         pii_result = blur_pii(tmp_path)
                         with open(tmp_path, "rb") as _fh:
                             final_data = _fh.read()
-                    if pii_result.get("blurred"):
-                        logger.info(
-                            f"PII blurred in attached {filename}: "
-                            f"faces={pii_result['faces']} text={pii_result['pii_texts']}"
+                    if pii_result.get('ran'):
+                        pii_blur_outcome = 'complete'
+                        if pii_result.get("blurred"):
+                            logger.info(
+                                f"PII blurred in attached {filename}: "
+                                f"faces={pii_result['faces']} text={pii_result['pii_texts']}"
+                            )
+                        else:
+                            logger.info(f"PII blur ran on attached {filename}: no PII detected")
+                    else:
+                        # backends unavailable — pii_blur_outcome stays 'skipped'
+                        logger.error(
+                            f"PII-BLUR SKIPPED for attached {filename}: "
+                            f"{pii_result.get('error')} — object kept as-is, "
+                            f"dashboard will flag via pii_blur_status='skipped'."
                         )
                 except Exception as e:
-                    logger.warning(f"PII blur failed for {filename}: {e}")
+                    pii_blur_outcome = 'failed'
+                    logger.warning(f"PII blur failed for attached {filename}: {e}")
 
             file_url = _get_media_storage().save(filename, final_data, content_type)
             logger.info(
@@ -2662,7 +2692,11 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
         # Update existing — don't create duplicate
         existing_media.url = file_url
         existing_media.file_size_bytes = media_in.file_size_bytes or (len(file_data) if file_data else 0)
-        logger.info(f"Media updated (existing): {existing_media.id[:12]}")
+        # K.2.b — refresh pii_blur_status to reflect this fresher upload's
+        # blur outcome. If the operator re-uploads after an earlier failure,
+        # the new status takes precedence (most recent blur attempt wins).
+        existing_media.pii_blur_status = pii_blur_outcome
+        logger.info(f"Media updated (existing): {existing_media.id[:12]} pii_blur={pii_blur_outcome}")
     else:
         # Clean up any failed/orphaned media of same type first
         orphans = db.query(Media).filter(
@@ -2682,6 +2716,10 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             is_synced=True,
             assembly_status='complete',
             completion_pct=100.0,
+            # K.2.b (May 2026, Phase K) — surface PII blur outcome so the
+            # dashboard can render a chip ('PII review needed' on 'failed'
+            # / 'skipped'). Audio gets 'not_needed'. Was NULL pre-fix.
+            pii_blur_status=pii_blur_outcome,
         )
         db.add(db_media)
         db.flush()  # ensure the INSERT lands before the atomic UPDATE so
