@@ -270,6 +270,23 @@ logger_for_pool.info(
 )
 
 
+# ── Phase L L.12.6 — server-side ORIGINAL 5 MB cap ────────────────────────
+#
+# The PWA / RN / Telegram-bot / WhatsApp-bot encoder ladders (L.2.b /
+# L.2.b' / L.2.b'') apply the quality + downscale ladder before
+# upload, so legitimate clients never exceed 5 MB. This server-side
+# guard is the defense-in-depth seatbelt: any channel (3rd-party
+# integration, buggy client, future channel that bypasses the
+# client ladder) is rejected with 413 at /attach or marked
+# `assembly_status='failed', abandon_reason='original_too_large'`
+# at chunked-assembly time so the dashboard chip surfaces it.
+#
+# Operators get K.6.c counter
+# `crisp_media_abandon_reason_total{reason="original_too_large"}`
+# so a runaway bypass rate is immediately visible.
+_ORIGINAL_MAX_BYTES = int(os.getenv("CRISP_ORIGINAL_MAX_BYTES", str(5 * 1024 * 1024)))
+
+
 # ── Data Integrity ────────────────────────────────────────────────────────────
 def djb2_checksum(s: str) -> str:
     """djb2 hash over the char-code sequence of `s`.
@@ -360,6 +377,49 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
 
     file_bytes = b"".join(parts)
 
+    # Phase L L.12.6 (May 2026) — server-side ORIGINAL 5 MB cap on the
+    # chunked-assembly path. Same rationale as the /attach guard: even if
+    # a client (or future channel) bypasses the L.2.b encoder ladder, the
+    # backend rejects oversized ORIGINAL rows so storage + downstream
+    # pipelines (PII blur, dashboard, exports) stay bounded. Stamp the
+    # row with `abandon_reason='original_too_large'` so the K.5.a chip
+    # surfaces it to operators instead of leaving a silently-failed
+    # assembly.
+    media_row_for_cap = db.query(Media).filter(Media.id == media_id).first()
+    if (media_row_for_cap is not None
+            and getattr(getattr(media_row_for_cap, "resolution_tier", None), "value", None) == "ORIGINAL"
+            and len(file_bytes) > _ORIGINAL_MAX_BYTES):
+        logger.error(
+            "[Assembly:size-cap] %s ORIGINAL tier %d bytes exceeds %d cap — "
+            "marking row failed (abandon_reason=original_too_large). Client "
+            "must apply the Phase L L.2.b compression ladder.",
+            media_id, len(file_bytes), _ORIGINAL_MAX_BYTES,
+        )
+        try:
+            from datetime import datetime as _dt, timezone as _tz
+            db.query(Media).filter(Media.id == media_id).update(
+                {
+                    "assembly_status": "failed",
+                    "abandon_reason": "original_too_large",
+                    "abandoned_at": _dt.now(_tz.utc),
+                },
+                synchronize_session=False,
+            )
+            db.commit()
+            try:
+                from app.core.observability import media_abandon_reason_total
+                media_abandon_reason_total.labels(
+                    reason="original_too_large",
+                ).inc()
+            except Exception:
+                pass
+        except Exception as _e:
+            logger.warning(
+                "[Assembly:size-cap] %s abandon-stamp failed: %s",
+                media_id, _e,
+            )
+        return None
+
     # Phase C.1 (May 2026) — whole-asset integrity check. The PWA computes
     # djb2 over the FULL original bytes once before chunking and ships it
     # on chunk 0. We re-compute over the concatenated payload here and
@@ -375,9 +435,13 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
     if expected_checksum:
         computed_checksum = djb2_bytes(file_bytes)
         if computed_checksum != expected_checksum:
-            tier_label = "LOW"
+            # Phase L (May 2026) — canonical tier label is SMALL for the
+            # "minimum-fidelity" tier. Pre-L wrote 'LOW' here; rows are
+            # backfilled by alembic 0035, so falling back to SMALL is
+            # consistent with the post-migration vocabulary.
+            tier_label = "SMALL"
             try:
-                tier_label = getattr(getattr(media_row, "resolution_tier", None), "value", "LOW") or "LOW"
+                tier_label = getattr(getattr(media_row, "resolution_tier", None), "value", "SMALL") or "SMALL"
             except Exception:
                 pass
             logger.error(
@@ -1021,7 +1085,8 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
         # Guaranteed-delivery: capture tier + group NOW (before assembly) so
         # we can label metrics even on the failure branches. `tier_label` is
         # kept as the Enum value's string form for stable Prometheus label sets.
-        _tier_label = getattr(getattr(media, 'resolution_tier', None), 'value', 'LOW') or 'LOW'
+        # Phase L (May 2026) — fallback to canonical 'SMALL' (was 'LOW' pre-L).
+        _tier_label = getattr(getattr(media, 'resolution_tier', None), 'value', 'SMALL') or 'SMALL'
         _group_id = getattr(media, 'photo_group_id', None)
 
         try:
@@ -1112,7 +1177,12 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
                         first_in_group = sibling_count == 0
                     if first_in_group and delta >= 0:
                         time_to_first_image_seconds.observe(delta)
-                    if _tier_label == 'HIGH' and delta >= 0:
+                    # Phase L (May 2026) — `time_to_full_image_seconds` measures
+                    # time-to-highest-tier-landed. Pre-L the highest tier was
+                    # HIGH; post-L it's ORIGINAL. Accept both during transition
+                    # so historical rows + new writes both contribute to the
+                    # histogram.
+                    if _tier_label in ('ORIGINAL', 'HIGH') and delta >= 0:
                         time_to_full_image_seconds.observe(delta)
             except Exception as e:
                 # Metrics must never break the assembly pipeline.
@@ -2037,6 +2107,27 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
 
     # Create report
     report_dict = meta_in.model_dump(exclude={"location", "device_hash"})
+    # UNDP must-have #6 — pre-create the parent `buildings` row for any
+    # PWA-supplied OSM footprint so the FK on the subsequent report INSERT
+    # is satisfied. Without this, a fresh DB (or any client that taps a
+    # building not yet mirrored into `buildings`) trips
+    # `fk_reports_building_id` and 500s the entire submission. On upsert
+    # failure, fall through to NULL + infrastructure_name_from_osm=False
+    # so the dashboard surfaces the report under "needs mapping" rather
+    # than dropping it on the floor.
+    if report_dict.get("building_id"):
+        resolved_bid = _ensure_building_for_pwa_pick(
+            db,
+            report_dict["building_id"],
+            osm_name=(
+                report_dict.get("infrastructure_name")
+                if report_dict.get("infrastructure_name_from_osm")
+                else None
+            ),
+        )
+        if resolved_bid is None:
+            report_dict["building_id"] = None
+            report_dict["infrastructure_name_from_osm"] = False
     # Phase 1: attach user_id if the
     # client presented a valid Bearer token. Anonymous path leaves it NULL.
     extra_cols = {}
@@ -2772,6 +2863,32 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             if not file_data:
                 raise ValueError("Empty base64 data")
 
+            # Phase L L.12.6 (May 2026) — server-side 5 MB cap on the
+            # ORIGINAL tier. The PWA/RN/bot encoder ladders should keep
+            # bytes ≤ 5 MB before reaching this endpoint; this guard is
+            # defense in depth (3rd-party integrations, buggy clients,
+            # or any future channel that bypasses the client ladder).
+            # K.6.c counter ticks so operators can see the bypass rate.
+            if (media_in.resolution_tier == ResolutionEnum.ORIGINAL
+                    and len(file_data) > _ORIGINAL_MAX_BYTES):
+                try:
+                    from app.core.observability import media_abandon_reason_total
+                    media_abandon_reason_total.labels(
+                        reason="original_too_large",
+                    ).inc()
+                except Exception:
+                    pass
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"ORIGINAL tier exceeds 5 MB cap "
+                        f"(got {len(file_data):,} bytes, max "
+                        f"{_ORIGINAL_MAX_BYTES:,}). Client must apply "
+                        "the Phase L L.2.b compression ladder before "
+                        "upload (quality-ladder → downscale-ladder)."
+                    ),
+                )
+
             if "image" in header:
                 ext = "png" if "png" in header else "jpg"
                 content_type = _content_type_for(f"x.{ext}")
@@ -2829,6 +2946,12 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                 f"Attached {ext} ({content_type}): {filename} "
                 f"({len(final_data)} bytes) → {file_url}"
             )
+        except HTTPException:
+            # Phase L L.12.6 — re-raise HTTPException unchanged so the
+            # 5 MB cap (413) doesn't get rewrapped into a 400. Pre-L
+            # this except-Exception caught HTTPException too because
+            # HTTPException is-a Exception in FastAPI.
+            raise
         except Exception as e:
             logger.error(f"Media attach decode error: {e}")
             raise HTTPException(status_code=400, detail=f"Failed to decode media: {str(e)}")
@@ -3714,7 +3837,11 @@ def mark_media_deferred(
         )
 
     reason = payload.reason or "bandwidth_tier_deferred"
-    valid_tiers = {"LOW", "MEDIUM", "HIGH", "ORIGINAL"}
+    # Phase L (May 2026) — accept both legacy and canonical tier names in
+    # the payload during the transition. The taxonomy normalizer rewrites
+    # legacy → canonical so we always persist the canonical Phase L
+    # vocabulary regardless of which client version sent the request.
+    valid_tiers = {"SMALL", "MEDIUM", "ORIGINAL", "LOW", "HIGH"}
     valid_reasons = {
         "bandwidth_tier_deferred", "encode_failed", "orphan_no_source",
     }
@@ -3725,6 +3852,7 @@ def mark_media_deferred(
         )
 
     from datetime import datetime as _dt, timezone as _tz
+    from app.core.taxonomy import normalize_resolution_tier as _norm_tier
     now_utc = _dt.now(_tz.utc)
     newly_stamped = 0
 
@@ -3735,6 +3863,9 @@ def mark_media_deferred(
             tier = str(tier_raw).upper()
             if tier not in valid_tiers:
                 continue
+            # Normalize LOW→SMALL, HIGH→ORIGINAL so the persisted Media
+            # row always carries the canonical Phase L value.
+            tier = _norm_tier(tier)
             try:
                 tier_enum = ResolutionEnum(tier)
             except ValueError:
@@ -3969,6 +4100,26 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
     # 2. Report Creation
     # Dump Pydantic model excluding nested objects for manual handling
     report_dict = report_in.model_dump(exclude={"location", "media", "device_hash"})
+    # UNDP must-have #6 — pre-create the parent `buildings` row for any
+    # PWA-supplied OSM footprint so the FK on the subsequent report INSERT
+    # is satisfied. Same rationale as in /reports/meta: without this, a
+    # tap on an OSM footprint not yet mirrored into `buildings` trips
+    # `fk_reports_building_id` and 500s the submission. On upsert failure
+    # we fall through to NULL + infrastructure_name_from_osm=False so the
+    # dashboard surfaces the report under "needs mapping".
+    if report_dict.get("building_id"):
+        resolved_bid = _ensure_building_for_pwa_pick(
+            db,
+            report_dict["building_id"],
+            osm_name=(
+                report_dict.get("infrastructure_name")
+                if report_dict.get("infrastructure_name_from_osm")
+                else None
+            ),
+        )
+        if resolved_bid is None:
+            report_dict["building_id"] = None
+            report_dict["infrastructure_name_from_osm"] = False
     db_report = Report(**report_dict, device_id=device.id)
     db.add(db_report)
     db.commit()
@@ -5958,6 +6109,51 @@ def get_media_duplicates(
         "window_hours": window_hours,
         "candidates": hits,
     }
+
+
+def _ensure_building_for_pwa_pick(
+    db: Session,
+    building_id: Optional[str],
+    osm_name: Optional[str] = None,
+) -> Optional[str]:
+    """Pre-create the parent `buildings` row for a PWA-supplied
+    `building_id` so the FK on the subsequent reports INSERT is
+    satisfied.
+
+    Background: `_apply_building_link` (after_insert hook) is responsible
+    for maintaining the buildings cache, but it fires AFTER the report
+    INSERT — too late for the FK check. The `_auto_assign_building_id`
+    path below handles the proximity-cluster case, but early-returns
+    when the PWA has already supplied a `building_id`. The result on a
+    fresh DB: a PWA tap on an OSM footprint that hasn't been mirrored
+    into `buildings` yet 500s the entire submission with
+    `psycopg2.errors.ForeignKeyViolation` on `fk_reports_building_id` —
+    UNDP must-have #6 regression.
+
+    Returns the same `building_id` on success. On a DB error, returns
+    None so the caller can fall through to `building_id=NULL +
+    infrastructure_name_from_osm=False` (the "needs mapping" bucket
+    per CLAUDE.md UNDP must-have #6) rather than 500ing the submission.
+    """
+    if not building_id:
+        return building_id
+    try:
+        from app.models.report import _ensure_building_exists
+        _ensure_building_exists(db, building_id, osm_name=osm_name)
+        db.flush()
+        return building_id
+    except Exception as e:
+        logger.warning(
+            "Failed to pre-create buildings row for "
+            f"building_id={building_id!r}: {type(e).__name__}: {e}. "
+            "Report will land with building_id=NULL "
+            "(dashboard 'needs mapping' bucket)."
+        )
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return None
 
 
 def _auto_assign_building_id(report: Report, db: Session):

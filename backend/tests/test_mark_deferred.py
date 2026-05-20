@@ -107,7 +107,11 @@ def test_mark_two_tiers_creates_placeholders_decrements_expected_and_synced(clie
     for fr in failed_rows:
         assert fr.abandon_reason == "bandwidth_tier_deferred"
         assert fr.abandoned_at is not None
-        assert fr.resolution_tier in (ResolutionEnum.MEDIUM, ResolutionEnum.HIGH)
+        # Phase L (May 2026) — legacy 'HIGH' sent in the payload is
+        # normalized to 'ORIGINAL' on the persisted row. Accept either
+        # so the test proves both that legacy clients still work AND
+        # that the persisted value is canonical Phase L vocabulary.
+        assert fr.resolution_tier in (ResolutionEnum.MEDIUM, ResolutionEnum.ORIGINAL)
 
 
 def test_mark_deferred_is_idempotent(client, db):

@@ -181,10 +181,38 @@ class MediaTypeEnum(str, enum.Enum):
     AUDIO = "AUDIO"
 
 class ResolutionEnum(str, enum.Enum):
-    LOW = "LOW"
+    """Photo-variant resolution tier (Phase L taxonomy — May 2026).
+
+    Three canonical values shipped to the dashboard + exports:
+
+        SMALL    — preview-quality (~50 KB), always required
+        MEDIUM   — ~720p (~250 KB)
+        ORIGINAL — raw camera bytes if ≤ 5 MB, else best-effort
+                   re-encoded via the L.2.b quality/downscale ladder
+
+    Two legacy aliases retained so existing DB rows continue to
+    validate at SQLAlchemy load time:
+
+        LOW    — alias for SMALL    (pre-Phase-L writes)
+        HIGH   — alias for ORIGINAL (pre-Phase-L writes; the old
+                 "high quality" tier was 1920px resized JPEG ~500 KB,
+                 NOT actually raw bytes — alembic 0035 backfills
+                 these rows to ORIGINAL since the dashboard
+                 semantics are the same)
+
+    The Pydantic write-path validator
+    (`app.core.taxonomy.normalize_resolution_tier`) rewrites
+    LOW→SMALL and HIGH→ORIGINAL on every new INSERT so the DB
+    converges on the 3-value canonical vocabulary over time.
+    """
+    # Canonical (Phase L)
+    SMALL = "SMALL"
     MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
     ORIGINAL = "ORIGINAL"
+    # Legacy aliases — rejected for NEW writes via Pydantic normalizer,
+    # kept so historical rows continue to validate on read.
+    LOW = "LOW"      # → SMALL
+    HIGH = "HIGH"    # → ORIGINAL
 
 class SyncStatusEnum(str, enum.Enum):
     PARTIAL = "PARTIAL"
@@ -1229,10 +1257,16 @@ def _refresh_building_rollups(connection, building_id: str) -> None:
     """), {"bid": building_id})
 
 
-def _ensure_building_exists(connection, building_id: str) -> None:
+def _ensure_building_exists(connection, building_id: str, osm_name: str | None = None) -> None:
     """Insert a minimal Building row if `building_id` isn't already in
     the buildings table. Mirrors the migration 0028 backfill heuristic
     for id_source + osm_way_id derivation.
+
+    `osm_name` is optional metadata the PWA already has from the
+    Overpass tags it rendered the footprint from; threading it through
+    on first insert means the dashboard shows the building name from
+    the very first report instead of `—` until the H.6 AI summary
+    backfills it.
     """
     from sqlalchemy import text
     exists = connection.execute(
@@ -1240,6 +1274,12 @@ def _ensure_building_exists(connection, building_id: str) -> None:
         {"bid": building_id},
     ).first()
     if exists:
+        if osm_name:
+            connection.execute(
+                text("UPDATE buildings SET osm_name = :name "
+                     "WHERE id = :bid AND osm_name IS NULL"),
+                {"bid": building_id, "name": osm_name},
+            )
         return
     # Determine id_source + osm_way_id by inspecting the id string.
     # OSM ids are `osm:way:<int>` or `osm:node:<int>`; anything else
@@ -1257,10 +1297,10 @@ def _ensure_building_exists(connection, building_id: str) -> None:
         id_source = "PROXIMITY"
         osm_way_id = None
     connection.execute(text("""
-        INSERT INTO buildings (id, id_source, osm_way_id, state)
-        VALUES (:bid, :src, :owid, 'ACTIVE')
+        INSERT INTO buildings (id, id_source, osm_way_id, osm_name, state)
+        VALUES (:bid, :src, :owid, :name, 'ACTIVE')
         ON CONFLICT (id) DO NOTHING
-    """), {"bid": building_id, "src": id_source, "owid": osm_way_id})
+    """), {"bid": building_id, "src": id_source, "owid": osm_way_id, "name": osm_name})
 
 
 def _apply_building_link(_mapper, connection, target: "Report") -> None:  # type: ignore[name-defined]
