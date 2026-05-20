@@ -6692,6 +6692,53 @@ function _runWhenIdle(asyncFn) {
         }
     });
 }
+// P1 fix (May 2026) — defensive variant re-generation for photos whose
+// first-pass `ImageVariants.generate()` failed silently (caught by
+// `_silent`, returning null). Without this, expected_media announces
+// fewer than the actual variant rows the queue ends up uploading,
+// causing the SYNCED gate math on the backend to be wrong.
+//
+// Called at submit time, AFTER `awaitPendingBlur()` so the first-pass
+// has had its chance. For any photo still missing `.variants.small`,
+// we synchronously re-run the variant pipeline. The block is at most
+// a few seconds + only fires when something went wrong, so it's not
+// a hot-path cost.
+async function _reattemptMissingVariants() {
+    if (typeof window.ImageVariants?.generate !== 'function') return;
+
+    // Main photo
+    if (state.photoBlob && !(state.photoVariants && state.photoVariants.small)) {
+        try {
+            const variants = await window.ImageVariants.generate(state.photoBlob);
+            if (variants && variants.small) {
+                state.photoVariants = variants;
+                state.photoClientBlurApplied = Boolean(variants.clientBlurApplied);
+                console.log('[submitReport] main photo: variants recovered on submit-time re-attempt');
+            }
+        } catch (e) {
+            console.warn('[submitReport] main photo variant re-attempt failed:', e?.message || e);
+        }
+    }
+
+    // Extras
+    for (let i = 0; i < state.extraPhotos.length; i++) {
+        const ep = state.extraPhotos[i];
+        if (!ep || !ep.blob) continue;
+        if (ep.variants && ep.variants.small) continue;  // already good
+        try {
+            const variants = await window.ImageVariants.generate(ep.blob);
+            if (variants && variants.small) {
+                ep.variants = variants;
+                ep.clientBlurApplied = Boolean(variants.clientBlurApplied);
+                console.log(`[submitReport] extra[${i}]: variants recovered on submit-time re-attempt`);
+            }
+        } catch (e) {
+            console.warn(`[submitReport] extra[${i}] variant re-attempt failed:`, e?.message || e);
+        }
+    }
+}
+
+
 async function awaitPendingBlur() {
     const pending = state.photoBlurPending;
     if (!pending) return;
@@ -8598,9 +8645,29 @@ async function _submitReportInner() {
         const hasAudio = !!state.audioBlob;
         const extraPhotoCount = state.extraPhotos.length;
         // Guaranteed-delivery: each photo with variants becomes 3 Media rows
-        // on the backend (SMALL/MEDIUM/LARGE) vs 1 without. Count accurately
+        // on the backend (SMALL/MEDIUM/ORIGINAL) vs 1 without. Count accurately
         // so `expected_media` matches what the server will ultimately see —
         // otherwise the report never flips to SYNCED.
+        //
+        // P1 fix (May 2026, operator-reported): the count previously read
+        // from `state.photoVariants` / `state.extraPhotos[i].variants` at
+        // submit time. If a photo's variant pipeline silently failed
+        // (caught by `_silent`, returning null), expected_media was off
+        // by 2 per affected photo (announced 1 tier instead of 3).
+        // Sister bug: the queueItem snapshot at line ~8758 ALSO reads
+        // these same fields, so it stayed consistent with expected_media
+        // — but if the user then re-took the photo / retried, the
+        // late-arriving variant got into the queueItem AFTER the
+        // expected_media announcement, producing a divergence (operator
+        // observed 6 Media rows but expected_media=4 in DB).
+        //
+        // New approach: synchronously re-attempt variant generation for
+        // ANY photo missing `.variants.small` after awaitPendingBlur.
+        // The re-attempt blocks the submit click for at most a few seconds
+        // — much better than silently shipping a degraded count + 1-tier
+        // photo.
+        await _reattemptMissingVariants();
+
         const mainHasVariants = !!(state.photoVariants && state.photoVariants.small);
         const extrasWithVariants = state.extraPhotos.filter(e => e.variants && e.variants.small).length;
         const extrasWithoutVariants = extraPhotoCount - extrasWithVariants;
@@ -8608,6 +8675,23 @@ async function _submitReportInner() {
             (hasPhoto ? (mainHasVariants ? 3 : 1) : 0) +
             (extrasWithVariants * 3) + extrasWithoutVariants +
             (hasAudio ? 1 : 0);
+        // P1 invariant check: for a 2-photo report with variants, this
+        // MUST be 6 (or 7 with audio). If it's 4 something silently
+        // dropped — log + continue (don't block the submission, but
+        // surface the gap to operator + observability).
+        if (hasPhoto && extraPhotoCount > 0 && expectedMedia < 3 + extraPhotoCount * 3) {
+            console.warn(
+                `[submitReport] expected_media (${expectedMedia}) is below the ` +
+                `nominal ${3 + extraPhotoCount * 3} for ${1 + extraPhotoCount} ` +
+                `photo(s). variants missing on:`,
+                {
+                    main: !mainHasVariants ? 'YES (state.photoVariants missing)' : 'no',
+                    extras: state.extraPhotos
+                        .map((e, i) => ({ i, hasVariants: !!(e.variants && e.variants.small) }))
+                        .filter(e => !e.hasVariants),
+                },
+            );
+        }
 
         // capture the
         // bearer token at enqueue time so offline replay submits under
