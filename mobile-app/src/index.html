@@ -28,7 +28,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v230">
+    <meta name="crisp-release" content="crisp-pwa@v231">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -3818,7 +3818,7 @@
      (commit 79ffc56). Self-contained IIFE; throttled to once per 24 h.
      Loaded with defer so it runs after app.js wires up the device_id. -->
 <script defer src="device-telemetry.js?v=1"></script>
-<script defer src="app.js?v=1035"></script>
+<script defer src="app.js?v=1036"></script>
 <!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
      applyI18n etc. Internally it _whenReady-polls until those are set. -->
 <!-- May 2026 (photo-consent pass) — modal shown ONCE per device when

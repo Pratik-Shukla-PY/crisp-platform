@@ -31,13 +31,16 @@
     // visually comparable across clients.
     //
     // `passthrough: true` means the tier uses the blurred source blob
-    // untouched — no canvas resize, no JPEG re-encode. LARGE is now
+    // untouched — no canvas resize, no JPEG re-encode. ORIGINAL is
     // passthrough so responders get archival-quality bytes; SMALL + MEDIUM
     // are still downscaled for fast progressive delivery.
+    //
+    // Phase L (May 2026) — tier vocabulary is SMALL / MEDIUM / ORIGINAL.
+    // Pre-L this was small/medium/large mapped to LOW/MEDIUM/HIGH.
     const TIERS = [
-        { name: 'small',  maxDim: 320,  quality: 0.40, tier: 'LOW' },
-        { name: 'medium', maxDim: 800,  quality: 0.60, tier: 'MEDIUM' },
-        { name: 'large',  passthrough: true,          tier: 'HIGH' },
+        { name: 'small',    maxDim: 320,  quality: 0.40, tier: 'SMALL' },
+        { name: 'medium',   maxDim: 800,  quality: 0.60, tier: 'MEDIUM' },
+        { name: 'original', passthrough: true,            tier: 'ORIGINAL' },
     ];
 
     /**
@@ -56,6 +59,97 @@
             img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
             img.src = url;
         });
+    }
+
+    // Phase L L.2.b (May 2026) — server enforces 5 MB cap on ORIGINAL
+    // at /attach + chunked-assembly. Client mirrors the cap so the
+    // upload never burns chunks just to be rejected at the end. The
+    // ladder runs in order, stops as soon as the blob fits 5 MB:
+    //
+    //   1. passthrough — no decode, no re-encode (best fidelity)
+    //   2. quality ladder at full source dimensions — q=0.85, 0.75, 0.65
+    //   3. downscale ladder at q=0.85 — maxDim 4096, 3072, 2048
+    //
+    // Each call returns { blob, strategy } where `strategy` is one of:
+    //   passthrough / quality_q85 / quality_q75 / quality_q65 /
+    //   downscale_4096px_q85 / downscale_3072px_q85 /
+    //   downscale_2048px_q85 / hard_floor_2048px_q85
+    //
+    // The strategy is stamped onto the variant so the dashboard can
+    // render an "Original (compressed)" chip vs "Original" when the
+    // ladder fell below q=0.95 fidelity.
+    const _ORIGINAL_MAX_BYTES = 5 * 1024 * 1024;
+
+    async function _encodeJpeg(bitmap, maxDim, quality) {
+        const longSide = Math.max(bitmap.width, bitmap.height);
+        const scale = (maxDim && longSide > maxDim) ? (maxDim / longSide) : 1;
+        const w = Math.max(1, Math.round(bitmap.width * scale));
+        const h = Math.max(1, Math.round(bitmap.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, 0, 0, w, h);
+        return await new Promise((resolve, reject) => {
+            canvas.toBlob(
+                (b) => b ? resolve(b) : reject(new Error('canvas.toBlob returned null')),
+                'image/jpeg',
+                quality,
+            );
+        });
+    }
+
+    /**
+     * Apply the L.2.b ladder to keep the ORIGINAL tier ≤ 5 MB.
+     * Returns { blob, strategy }. Best fidelity wins; downscale is the
+     * last resort. If even the hard floor (2048 px q=0.85) exceeds
+     * 5 MB (extremely unusual — would be a 50+ MP capture with
+     * pathological content), we return that floor anyway and the
+     * server-side guard will reject + the operator gets the
+     * "original_too_large" abandon_reason chip.
+     */
+    async function _encodeOriginalWithCap(bitmap, sourceBlob) {
+        // Step 1 — passthrough (no decode/encode at all). Cheapest +
+        // highest fidelity. Common case: phone JPEG already < 5 MB.
+        if (sourceBlob.size <= _ORIGINAL_MAX_BYTES) {
+            return { blob: sourceBlob, strategy: 'passthrough' };
+        }
+
+        // Step 2 — quality ladder at full source dimensions. JPEG
+        // re-encode keeps every pixel; only the compression coefficients
+        // change. For 5 MP–25 MP captures, q=0.85 is visually
+        // indistinguishable from the source.
+        for (const q of [0.85, 0.75, 0.65]) {
+            try {
+                const blob = await _encodeJpeg(bitmap, null, q);
+                if (blob.size <= _ORIGINAL_MAX_BYTES) {
+                    return { blob, strategy: `quality_q${Math.round(q * 100)}` };
+                }
+            } catch (e) {
+                console.warn('[ImageVariants] quality-ladder encode failed:', e);
+            }
+        }
+
+        // Step 3 — downscale ladder at q=0.85. Dimensions drop;
+        // operator-visible quality reduction.
+        for (const maxDim of [4096, 3072, 2048]) {
+            try {
+                const blob = await _encodeJpeg(bitmap, maxDim, 0.85);
+                if (blob.size <= _ORIGINAL_MAX_BYTES) {
+                    return { blob, strategy: `downscale_${maxDim}px_q85` };
+                }
+                // Hard floor — return what we have. Server may still
+                // reject with 413 + operator chip.
+                if (maxDim === 2048) {
+                    return { blob, strategy: 'hard_floor_2048px_q85' };
+                }
+            } catch (e) {
+                console.warn('[ImageVariants] downscale-ladder encode failed:', e);
+            }
+        }
+
+        // Total failure — fall back to source bytes (server will reject)
+        return { blob: sourceBlob, strategy: 'passthrough_fallback_over_cap' };
     }
 
     /** Resize `bitmap` so its long side ≤ maxDim, encode as JPEG at `quality`. */
@@ -112,13 +206,13 @@
 
     /**
      * Public API. Given a source Blob (the raw captured JPEG), return
-     * { small: {blob, bytes}, medium: {...}, large: {...} }.
+     * { small: {blob, bytes}, medium: {...}, original: {...} }.
      *
      * Phase 1: blur-once-then-resize.
      *  - OLD pipeline called _maybeBlur per tier → BlazeFace ran 3× on 3
      *    different downsampled images, producing inconsistent redaction
      *    across variants (SMALL at 320 px sometimes missed small faces that
-     *    LARGE at 1600 px caught).
+     *    ORIGINAL at full-resolution caught).
      *  - NEW pipeline runs PII blur ONCE on the original Blob, then decodes
      *    the blurred output and resizes to all three tiers. The downscale
      *    is itself a low-pass filter so SMALL ends up *more* redacted, not
@@ -149,18 +243,46 @@
         } catch (e) {
             console.warn('[ImageVariants] decode failed, using source as all tiers:', e);
             const fallback = { blob: blurredSrc, bytes: blurredSrc.size, clientBlurApplied };
-            return { small: fallback, medium: fallback, large: fallback, clientBlurApplied };
+            return { small: fallback, medium: fallback, original: fallback, clientBlurApplied };
         }
 
-        // Step 3 — render each tier. `passthrough` tiers
-        // skip the canvas round-trip entirely — the blurred source blob
-        // ships as-is, preserving full capture fidelity for archival use.
-        // Downscaled tiers (SMALL/MEDIUM) go through the canvas path for
+        // Step 3 — render each tier.
+        //
+        // SMALL + MEDIUM go through the canvas resize+toBlob path for
         // fast progressive delivery.
+        //
+        // ORIGINAL (passthrough) runs the L.2.b ladder: passthrough
+        // when source ≤ 5 MB, else quality-then-downscale until the
+        // blob fits 5 MB. The chosen strategy is stamped onto the
+        // variant so the dashboard can render "Original (compressed)"
+        // when fidelity dropped below q=0.95.
         const out = { clientBlurApplied };
         for (const t of TIERS) {
             if (t.passthrough) {
-                out[t.name] = { blob: blurredSrc, bytes: blurredSrc.size, clientBlurApplied };
+                try {
+                    const { blob, strategy } = await _encodeOriginalWithCap(bitmap, blurredSrc);
+                    out[t.name] = {
+                        blob,
+                        bytes: blob.size,
+                        clientBlurApplied,
+                        strategy,
+                    };
+                    if (strategy !== 'passthrough') {
+                        console.log(
+                            `[ImageVariants] ORIGINAL ladder picked '${strategy}' ` +
+                            `(${(blob.size / 1024).toFixed(0)} KB, ` +
+                            `source was ${(blurredSrc.size / 1024).toFixed(0)} KB)`,
+                        );
+                    }
+                } catch (e) {
+                    console.warn('[ImageVariants] ORIGINAL ladder failed; using source as fallback:', e);
+                    out[t.name] = {
+                        blob: blurredSrc,
+                        bytes: blurredSrc.size,
+                        clientBlurApplied,
+                        strategy: 'ladder_failed_fallback',
+                    };
+                }
                 continue;
             }
             try {
@@ -202,7 +324,7 @@
         console.log(
             `[ImageVariants] sizes — small=${(out.small.bytes / 1024).toFixed(1)} KB` +
             `, medium=${(out.medium.bytes / 1024).toFixed(1)} KB` +
-            `, large=${(out.large.bytes / 1024).toFixed(1)} KB` +
+            `, original=${(out.original.bytes / 1024).toFixed(1)} KB` +
             `; clientBlurApplied=${clientBlurApplied} (faces=${blurResult.facesDetected}${blurResult.skipped ? ', SKIPPED: ' + blurResult.error : ''})` +
             (blurhash ? `; blurhash=${blurhash.slice(0, 8)}…(${blurhash.length} chars)` : '; blurhash=skipped')
         );
@@ -212,7 +334,8 @@
 
     // Tier → backend ResolutionEnum mapping. Kept in one place so callers
     // don't hard-code the translation.
-    const TIER_TO_RESOLUTION = { small: 'LOW', medium: 'MEDIUM', large: 'HIGH' };
+    // Phase L (May 2026) — canonical SMALL/MEDIUM/ORIGINAL on both sides.
+    const TIER_TO_RESOLUTION = { small: 'SMALL', medium: 'MEDIUM', original: 'ORIGINAL' };
 
     window.ImageVariants = { generate, TIER_TO_RESOLUTION };
 })();

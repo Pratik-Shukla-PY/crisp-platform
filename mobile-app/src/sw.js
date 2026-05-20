@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v230';
+const CACHE_NAME = 'crisp-v231';
+// v230 → v231 (May 20 — Phase L Batch 2: tier vocabulary rename
+// SMALL/MEDIUM/ORIGINAL + IDB read-migration + quota threshold drop
+// to 35 MB). Returning users MUST evict the stale app.js +
+// image-variants.js so the PWA stops sending the legacy `large`
+// tier (the backend now rejects it with 422 post-Batch-1b cleanup).
+// IDB queue items with `variants.large` are auto-migrated to
+// `variants.original` on read via _migrateVariantsToPhaseL —
+// pending drains land cleanly under the new vocabulary.
 // v229 → v230 (May 20 — Phase K Batch 5: PWA reliability hardening).
 // K.4.a — `_acquireDrainLock` / `_releaseDrainLock` cross-tab mutex
 // via localStorage so two tabs draining the same IDB queue don't

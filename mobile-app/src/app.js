@@ -428,11 +428,16 @@ async function enqueueReport(payload) {
 // K.4.e (May 2026, Phase K) — iOS HEIC quota guard.
 // Constants + helper used by the size-check in submitReport.
 // iOS WebKit caps each origin at 50 MB of IndexedDB storage. We
-// warn at 40 MB to leave headroom for the SW's own caches + a
+// warn at 35 MB to leave headroom for the SW's own caches + a
 // margin for the new submission. Threshold is conservative — false
 // positives (warn-but-actually-fine) are preferred over silent
 // failures.
-const _QUOTA_WARN_THRESHOLD_BYTES = 40 * 1024 * 1024;  // 40 MB
+//
+// Phase L L.2.d (May 2026) — dropped from 40 → 35 MB because
+// ORIGINAL tier is now up to 5 MB per photo (vs ~500 KB pre-L when
+// the highest tier was the resized "LARGE"). Operator gets the
+// warning one photo earlier; iOS quota collapse risk goes down.
+const _QUOTA_WARN_THRESHOLD_BYTES = 35 * 1024 * 1024;  // 35 MB
 
 function _estimateQueueItemBytes(item) {
     if (!item) return 0;
@@ -440,7 +445,7 @@ function _estimateQueueItemBytes(item) {
     // Variants: sum each tier's dataUrl byte length (base64 ~ 4/3 of raw).
     const addVariants = (variants) => {
         if (!variants) return;
-        for (const tier of ['small', 'medium', 'large']) {
+        for (const tier of ['small', 'medium', 'original']) {
             const v = variants[tier];
             if (v && typeof v.dataUrl === 'string') {
                 total += v.dataUrl.length;
@@ -575,7 +580,7 @@ async function _reconcileBeforeDequeue(item, reportId) {
     const expected = [];
     const collect = (variants, label) => {
         if (!variants) return;
-        for (const tier of ['small', 'medium', 'large']) {
+        for (const tier of ['small', 'medium', 'original']) {
             const v = variants[tier];
             if (v && v.mediaId && v.complete) {
                 expected.push({ mediaId: v.mediaId, variant: v, tier, label: `${label}/${tier}` });
@@ -665,13 +670,15 @@ async function _reconcileBeforeDequeue(item, reportId) {
 // {mediaId, variant, tier, label}. We join back to the parent
 // photoVariants / extraPhotosVariants[i] container to find its
 // groupId, and map local lower-case tier names to backend enum
-// names (small → LOW, medium → MEDIUM, large → HIGH).
+// names (small → SMALL, medium → MEDIUM, original → ORIGINAL).
+// Phase L (May 2026) — canonical 3-value vocabulary; pre-L was
+// small/medium/large → LOW/MEDIUM/HIGH.
 //
 // Returns {} if nothing maps — the caller should skip the POST in
 // that case to avoid a 422.
 function _enumerateDeferredByGroup(item, missing) {
     if (!item || !Array.isArray(missing) || missing.length === 0) return {};
-    const TIER_MAP = { small: 'LOW', medium: 'MEDIUM', large: 'HIGH' };
+    const TIER_MAP = { small: 'SMALL', medium: 'MEDIUM', original: 'ORIGINAL' };
     const out = {};
     const pushTier = (groupId, tier) => {
         if (!groupId || !tier) return;
@@ -719,12 +726,39 @@ function _enumerateDeferredByGroup(item, missing) {
 }
 
 
+// Phase L L.2.c (May 2026) — IDB read-migration for tier vocabulary
+// rename. Pre-L queue items had `variants.large`; post-L items have
+// `variants.original`. A user upgrading the PWA between drains may
+// have items with the old key still sitting in IDB. Rename on read
+// so the retry loop's iteration over ['small','medium','original']
+// finds the variant under its new key. Idempotent — already-canonical
+// items pass through unchanged.
+function _migrateVariantsToPhaseL(item) {
+    if (!item) return item;
+    const renameLargeToOriginal = (v) => {
+        if (v && v.large && !v.original) {
+            v.original = v.large;
+            delete v.large;
+        }
+        return v;
+    };
+    if (item.photoVariants) renameLargeToOriginal(item.photoVariants);
+    if (Array.isArray(item.extraPhotosVariants)) {
+        for (const ev of item.extraPhotosVariants) renameLargeToOriginal(ev);
+    }
+    return item;
+}
+
+
 async function getAllQueued() {
     const db = await openIDB();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(IDB_STORE, 'readonly');
         const req = tx.objectStore(IDB_STORE).getAll();
-        req.onsuccess = () => resolve(req.result);
+        req.onsuccess = () => {
+            const rows = (req.result || []).map(_migrateVariantsToPhaseL);
+            resolve(rows);
+        };
         req.onerror = () => reject(req.error);
     });
 }
@@ -2501,10 +2535,10 @@ const state = {
     // Guaranteed-delivery pipeline: three JPEG variants of the main photo
     // (SMALL/MEDIUM/LARGE) share a photoGroupId. Populated by
     // ImageVariants.generate() during capture.
-    photoVariants: null,   // { small: {blob,bytes}, medium: {...}, large: {...} }
+    photoVariants: null,   // { small: {blob,bytes}, medium: {...}, original: {...} }
     photoGroupId: null,    // UUID linking the three variants on the backend
     // Extra photos: each entry now carries its own variants + groupId.
-    // { dataUrl, blob, variants: {small, medium, large}, groupId }.
+    // { dataUrl, blob, variants: {small, medium, original}, groupId }.
     extraPhotos: [],
     audioBlob: null,
     transcript: '',
@@ -7735,12 +7769,27 @@ function detectPWANetworkTier() {
 // signal. The probe itself is cached for 60 s so re-probing every variant
 // of the same report is wasteful.
 
-const _PROBE_SIZE_BYTES = 8192;        // 8 KB — enough signal, fast at 2 Kbps (~30 s)
+// Phase L L.5 (May 2026) — probe size bumped 8 KB → 64 KB. The 8 KB
+// probe hit a latency floor: on cloudflare-tunneled traffic where
+// RTT can be 150–500 ms, 8 KB ÷ 200 ms ≈ 40 KB/s → SLOW tier →
+// ORIGINAL deferred per the defer matrix, even on a 100 Mbps phone.
+// With 64 KB, the same 200 ms RTT yields 64 KB ÷ 0.2 s = 320 KB/s →
+// MEDIUM tier → ORIGINAL ships. Slowest probe time at 2 Kbps =
+// 64 KB / 256 B/s ≈ 250 s — exceeds the 45 s timeout, but at that
+// point the link is unusable anyway and the timeout-fallback to
+// NavigatorConnection's tier (defaults to SLOW) is the correct
+// outcome. For everything FASTER than 2 Kbps, 64 KB is fine.
+const _PROBE_SIZE_BYTES = 65_536;      // 64 KB — clears the latency floor at typical RTTs
 const _PROBE_TIMEOUT_MS = 45_000;      // abort after 45 s even on garbage links
 const _PROBE_CACHE_MS = 60_000;        // re-probe at most once per minute
 
 let _lastProbeBytesPerSec = 0;
 let _lastProbeAt = 0;
+// Phase L L.5 — also remember probe round-trip time so
+// pickTierFromBandwidth's latency-floor heuristic can short-circuit
+// to MEDIUM when RTT is < 100 ms (responsive network with
+// undersized-probe-induced low bps).
+let _lastProbeElapsedMs = 0;
 
 async function measureUploadBandwidth() {
     const probe = new Uint8Array(_PROBE_SIZE_BYTES);
@@ -7781,9 +7830,28 @@ async function measureUploadBandwidth() {
 }
 
 /** Map a measured bytes/sec to one of the four tiers. Thresholds sized so
- *  the picked tier's chunk completes within ~15 s at the measured speed. */
-function pickTierFromBandwidth(bytesPerSec) {
+ *  the picked tier's chunk completes within ~15 s at the measured speed.
+ *
+ *  Phase L L.5 — `elapsedMs` opt-in: if the probe round-trip was
+ *  short enough that the network is clearly responsive (< 100 ms),
+ *  refuse to classify lower than MEDIUM regardless of computed bps.
+ *  This prevents the latency-floor bug where a probe on a fast link
+ *  reads as "slow" because the probe size is too small to amortize
+ *  RTT (typical on cloudflare-tunneled traffic).
+ */
+function pickTierFromBandwidth(bytesPerSec, elapsedMs) {
     if (!Number.isFinite(bytesPerSec) || bytesPerSec <= 0) return 'VERY_SLOW';
+    // Phase L L.5 — RTT-bound floor. If the probe came back in
+    // < 100 ms, the network is responsive even if measured bps
+    // looks low (probe was too small to amortize RTT). Floor at
+    // MEDIUM so the defer matrix doesn't drop ORIGINAL on what's
+    // really a perfectly capable connection. FAST stays gated on
+    // the ≥ 1 MB/s measurement — we only LIFT below-MEDIUM bps to
+    // MEDIUM, never promote to FAST without evidence.
+    if (typeof elapsedMs === 'number' && elapsedMs > 0 && elapsedMs < 100) {
+        if (bytesPerSec >= 1_000_000) return 'FAST';
+        return 'MEDIUM';
+    }
     if (bytesPerSec >= 1_000_000) return 'FAST';      // ≥ 8 Mbps
     if (bytesPerSec >= 100_000)   return 'MEDIUM';    // ≥ 800 Kbps
     if (bytesPerSec >= 10_000)    return 'SLOW';      // ≥ 80 Kbps
@@ -7803,16 +7871,18 @@ async function adaptTierViaProbe(opts = {}) {
     const { force = false } = opts;
     const freshEnough = !force &&
         _lastProbeBytesPerSec > 0 &&
+        _lastProbeAt > 0 &&  // Phase L L.5 — cache-hydration sets _lastProbeAt=0 (see below)
         (Date.now() - _lastProbeAt) < _PROBE_CACHE_MS;
     if (freshEnough) {
-        _pwaTier = pickTierFromBandwidth(_lastProbeBytesPerSec);
+        _pwaTier = pickTierFromBandwidth(_lastProbeBytesPerSec, _lastProbeElapsedMs);
         return _pwaTier;
     }
     const { bytesPerSec, elapsedMs, error } = await measureUploadBandwidth();
     if (bytesPerSec > 0) {
         _lastProbeBytesPerSec = bytesPerSec;
         _lastProbeAt = Date.now();
-        _pwaTier = pickTierFromBandwidth(bytesPerSec);
+        _lastProbeElapsedMs = elapsedMs;
+        _pwaTier = pickTierFromBandwidth(bytesPerSec, elapsedMs);
         console.log(
             `[Probe] ${Math.round(bytesPerSec).toLocaleString()} B/s ` +
             `(${elapsedMs.toFixed(0)} ms) → tier ${_pwaTier}`
@@ -7887,9 +7957,19 @@ function _hydrateBandwidthFromCache() {
     const bps = _readCachedBandwidth();
     if (bps > 0 && _lastProbeBytesPerSec === 0) {
         _lastProbeBytesPerSec = bps;
-        _lastProbeAt = Date.now();
+        // Phase L L.5 — DON'T set _lastProbeAt here. Hydration is a
+        // seed, not a measurement. Pre-L this set Date.now() so the
+        // next adaptTierViaProbe() saw "fresh" cache and returned
+        // the seeded value for 60 s WITHOUT a fresh probe. That's
+        // wrong: the user may have moved networks since the cache
+        // was last written (up to 24 h ago). Leaving _lastProbeAt=0
+        // forces a fresh probe on the next call; adaptTierViaProbe
+        // checks `_lastProbeAt > 0` in the freshness guard so the
+        // seeded bps is used as the pre-probe default tier (via the
+        // _pwaTier assignment below) but never short-circuits a
+        // real measurement.
         _pwaTier = pickTierFromBandwidth(bps);
-        console.log(`[Probe] hydrated from cache: ${Math.round(bps)} B/s → ${_pwaTier}`);
+        console.log(`[Probe] hydrated from cache: ${Math.round(bps)} B/s → ${_pwaTier} (will re-probe on next upload)`);
     }
 }
 // Hydrate at module load so the first report's upload starts with a
@@ -8651,17 +8731,22 @@ async function _submitReportInner() {
                 // ImageVariants.generate). `undefined` on legacy-path reports
                 // still has a sane default via `Boolean()`.
                 clientBlurApplied: Boolean(state.photoVariants.clientBlurApplied ?? state.photoClientBlurApplied),
-                small:  { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: state.photoVariants.small.bytes },
-                medium: { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: state.photoVariants.medium.bytes },
-                large:  { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: state.photoVariants.large.bytes },
+                small:    { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: state.photoVariants.small.bytes },
+                medium:   { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: state.photoVariants.medium.bytes },
+                // Phase L L.2.b — `originalStrategy` records which rung of the
+                // 5 MB ladder produced this blob: passthrough / quality_qNN /
+                // downscale_NNNNpx_q85. Forwarded to the queue + (future)
+                // dashboard chip so operators see "Original (compressed)"
+                // when fidelity dropped below q=0.95.
+                original: { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: state.photoVariants.original.bytes, originalStrategy: state.photoVariants.original.strategy || 'passthrough' },
             } : null,
             // Extras: each entry mirrors the main-photo structure.
             extraPhotosVariants: state.extraPhotos.map(ep => ep.variants ? {
                 groupId: ep.groupId || genUUID(),
                 clientBlurApplied: Boolean(ep.variants.clientBlurApplied ?? ep.clientBlurApplied),
-                small:  { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: ep.variants.small.bytes },
-                medium: { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: ep.variants.medium.bytes },
-                large:  { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: ep.variants.large.bytes },
+                small:    { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: ep.variants.small.bytes },
+                medium:   { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: ep.variants.medium.bytes },
+                original: { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: ep.variants.original.bytes, originalStrategy: ep.variants.original.strategy || 'passthrough' },
             } : null),
         };
 
@@ -8695,7 +8780,7 @@ async function _submitReportInner() {
         // built, so we mutate its variant entries in place.
         async function _encodeVariants(variantsObj, sourceTriple) {
             if (!variantsObj || !sourceTriple) return;
-            for (const tier of ['small', 'medium', 'large']) {
+            for (const tier of ['small', 'medium', 'original']) {
                 if (sourceTriple[tier]?.blob) {
                     try {
                         variantsObj[tier].dataUrl = await _blobToDataUrl(sourceTriple[tier].blob);
@@ -8850,11 +8935,12 @@ async function _submitReportInner() {
 // is idempotent on (media_id, seq_num) so re-sending a completed chunk is
 // a no-op.
 
-const _TIER_MAP = { small: 'LOW', medium: 'MEDIUM', large: 'HIGH' };
+// Phase L (May 2026) — canonical 3-value SMALL/MEDIUM/ORIGINAL.
+const _TIER_MAP = { small: 'SMALL', medium: 'MEDIUM', original: 'ORIGINAL' };
 
 function _buildVariantWork(item) {
     const out = [];
-    const tiers = ['small', 'medium', 'large'];
+    const tiers = ['small', 'medium', 'original'];
     for (const tier of tiers) {
         if (item.photoVariants && item.photoVariants[tier]) {
             out.push({
@@ -8974,7 +9060,7 @@ async function _uploadVariantTier(item, reportId, unit) {
     //   VERY_SLOW  → SMALL transmits; MEDIUM + LARGE deferred
     if (tier !== 'small') {
         const shouldDefer = (_pwaTier === 'VERY_SLOW')
-            || (_pwaTier === 'SLOW' && tier === 'large');
+            || (_pwaTier === 'SLOW' && tier === 'original');
         if (shouldDefer) {
             console.log(`[Upload] ${label}: deferred — netTier=${_pwaTier}, awaiting bandwidth upgrade`);
             variant.deferred = true;
@@ -9254,7 +9340,7 @@ async function trySendQueuedReport(item) {
         // Stage 2: Photo — guaranteed-delivery tier ladder.
         //
         // The new pipeline uploads SMALL of every photo (main + extras)
-        // BEFORE any MEDIUM; then MEDIUM of every photo; then LARGE. That
+        // BEFORE any MEDIUM; then MEDIUM of every photo; then ORIGINAL. That
         // way responders see a complete usable image of every photo in the
         // shortest time physically possible on the current network,
         // instead of waiting for one full-quality LARGE before the next
@@ -9293,7 +9379,7 @@ async function trySendQueuedReport(item) {
                     // SMALL is the dashboard-visible tier; once it lands the
                     // report is functionally submitted. MEDIUM/LARGE keep
                     // uploading on subsequent retry passes (the queue item
-                    // stays in IDB with non-complete medium/large variants)
+                    // stays in IDB with non-complete medium/original variants)
                     // until either bandwidth upgrades and they land, or
                     // until full reconcile drains the entry once everything
                     // is at the backend.
@@ -9310,7 +9396,7 @@ async function trySendQueuedReport(item) {
                         // their dataUrl so the retry loop can re-send.
                         const clearLandedDataUrls = (variantsObj) => {
                             if (!variantsObj) return;
-                            for (const t of ['small', 'medium', 'large']) {
+                            for (const t of ['small', 'medium', 'original']) {
                                 if (variantsObj[t] && variantsObj[t].complete) {
                                     variantsObj[t].dataUrl = null;
                                 }
@@ -9515,7 +9601,7 @@ async function trySendQueuedReport(item) {
                         const ids = new Set();
                         const collect = (variants) => {
                             if (!variants) return;
-                            const v = variants.small || variants.medium || variants.large;
+                            const v = variants.small || variants.medium || variants.original;
                             if (v && v.photoGroupId) ids.add(v.photoGroupId);
                         };
                         collect(item.photoVariants);
@@ -10694,12 +10780,12 @@ async function _reconcileQueueAgainstServer() {
  * "SMALL landed on backend" dequeue gate.
  *
  * Walks both `item.photoVariants` (main photo, has tier keys
- * `small`/`medium`/`large` as object properties) and
+ * `small`/`medium`/`original` as object properties) and
  * `item.extraPhotosVariants` (array of similar objects per extra
  * photo). Safe against missing / malformed shapes.
  */
 function _hasDeferredVariantsPending(item) {
-    const tierKeys = ['small', 'medium', 'large'];
+    const tierKeys = ['small', 'medium', 'original'];
     const _check = (variants) => {
         if (!variants || typeof variants !== 'object') return false;
         for (const k of tierKeys) {
