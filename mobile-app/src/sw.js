@@ -5,7 +5,19 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v231';
+const CACHE_NAME = 'crisp-v232';
+// v231 → v232 (May 20 — Phase L Batch 2 hotfix: caught 3 surviving
+// `'LOW'`/`'HIGH'` literals that escaped the initial rename pass:
+//   1. sendBinaryChunkWithRetry default — `resolutionTier || 'LOW'`
+//      now → 'SMALL'.
+//   2. _sendLegacyB64Chunk default — same fix.
+//   3. Audio legacy attach (manual sync path) — was sending
+//      `resolution_tier: 'LOW'`, backend was rejecting with 422.
+//   4. SW background-sync audio attach — was sending `'LOW'` too.
+//   5. PWA reconcile check — looked for `'LOW'` media on server.
+// Without these, the FIRST submission post-Phase-L deploy was
+// burning chunks against a 422-rejecting backend forever.
+//
 // v230 → v231 (May 20 — Phase L Batch 2: tier vocabulary rename
 // SMALL/MEDIUM/ORIGINAL + IDB read-migration + quota threshold drop
 // to 35 MB). Returning users MUST evict the stale app.js +
@@ -2243,7 +2255,8 @@ async function syncAllReports() {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        type: 'AUDIO', resolution_tier: 'LOW',
+                        // Phase L (May 2026) — canonical SMALL (was LOW pre-L).
+                        type: 'AUDIO', resolution_tier: 'SMALL',
                         url: item.audioBlob, file_size_bytes: item.audioSize || 0
                     })
                 });

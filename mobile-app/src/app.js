@@ -1148,7 +1148,7 @@ async function syncQueueManual(opts) {
                     const res = await fetch(`${API_BASE}/reports/${reportId}/media/attach`, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ type: 'AUDIO', resolution_tier: 'LOW', url: item.audioBlob, file_size_bytes: item.audioSize || 0 })
+                        body: JSON.stringify({ type: 'AUDIO', resolution_tier: 'SMALL', url: item.audioBlob, file_size_bytes: item.audioSize || 0 })
                     });
                     if (res.ok) { item.stages.audio = true; item.audioBlob = null; try { await enqueueReport(item); } catch (_) {} }
                 } catch (e) { _silent('sync.audio', e); }
@@ -8328,7 +8328,10 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
             fd.append('seq_num', String(seqNum));
             fd.append('total_chunks', String(totalChunks));
             fd.append('type', type);
-            fd.append('resolution_tier', resolutionTier || 'LOW');
+            // Phase L (May 2026) — canonical SMALL fallback. Pre-L
+            // was 'LOW' which the backend now rejects with 422 post-
+            // Batch-1b cleanup.
+            fd.append('resolution_tier', resolutionTier || 'SMALL');
             if (photoGroupId) fd.append('photo_group_id', photoGroupId);
             fd.append('client_blur_applied', clientBlurApplied ? 'true' : 'false');
             if (checksum) fd.append('checksum', checksum);
@@ -8392,7 +8395,8 @@ async function _sendLegacyB64Chunk(reportId, params, retries, timeoutMs) {
             media_id: mediaId, type,
             seq_num: seqNum, total_chunks: totalChunks,
             data: b64, checksum: simpleChecksum(b64),
-            resolution_tier: resolutionTier || 'LOW',
+            // Phase L (May 2026) — canonical SMALL fallback.
+            resolution_tier: resolutionTier || 'SMALL',
             photo_group_id: photoGroupId || null,
             client_blur_applied: Boolean(clientBlurApplied),
         },
@@ -10682,7 +10686,7 @@ async function _reconcileQueueAgainstServer() {
                     ? item.extraPhotosVariants.filter(Boolean).length
                     : 0);
             const haveSmall = Array.isArray(srv.media)
-                ? srv.media.filter(m => (m.resolution_tier || '').toUpperCase() === 'LOW').length
+                ? srv.media.filter(m => (m.resolution_tier || '').toUpperCase() === 'SMALL').length
                 : 0;
             if (photoCount > 0 && haveSmall < photoCount) {
                 console.log(
