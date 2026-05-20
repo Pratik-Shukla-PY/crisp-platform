@@ -2891,32 +2891,50 @@ def attach_media_chunk(
     # here, which meant tier mismatches were silently lost. Use the values
     # from the payload; legacy clients that don't send them still work
     # because the schema defaults are `LOW` + null.
+    # K.1.b (May 2026, Phase K) — race-safe Media row create. Two
+    # concurrent chunk-0 submissions for a new media_id both observe
+    # `media=None`, both INSERT, the second hits media.id (PK) unique
+    # violation → 500. Wrap in try/except so the loser re-reads the
+    # winner's row and continues.
+    from sqlalchemy.exc import IntegrityError as _MediaIntegrityError
+
     media = db.query(Media).filter(Media.id == payload.media_id).first()
     if not media:
-        media = Media(
-            id=payload.media_id,
-            report_id=report_id,
-            type=payload.type,
-            resolution_tier=payload.resolution_tier,
-            photo_group_id=payload.photo_group_id,
-            url='',
-            is_synced=False,
-            chunk_count=payload.total_chunks,
-            received_chunks=0,
-            completion_pct=0.0,
-            assembly_status='pending',
-            # : persist the client-blur flag from the first chunk.
-            # Subsequent chunks for the same media_id don't update it —
-            # all chunks for one upload share the same blur status.
-            client_blur_applied=bool(payload.client_blur_applied),
-            # Phase C.1 — whole-asset checksum from the PWA's djb2 over the
-            # full original bytes. Sent on chunk 0 only; the assembler will
-            # verify after concatenation. NULL on later chunks / legacy
-            # clients => check skipped (back-compat).
-            full_asset_checksum=(payload.full_asset_checksum if payload.seq_num == 0 else None),
-        )
-        db.add(media)
-        db.flush()
+        try:
+            media = Media(
+                id=payload.media_id,
+                report_id=report_id,
+                type=payload.type,
+                resolution_tier=payload.resolution_tier,
+                photo_group_id=payload.photo_group_id,
+                url='',
+                is_synced=False,
+                chunk_count=payload.total_chunks,
+                received_chunks=0,
+                completion_pct=0.0,
+                assembly_status='pending',
+                # : persist the client-blur flag from the first chunk.
+                # Subsequent chunks for the same media_id don't update it —
+                # all chunks for one upload share the same blur status.
+                client_blur_applied=bool(payload.client_blur_applied),
+                # Phase C.1 — whole-asset checksum from the PWA's djb2 over the
+                # full original bytes. Sent on chunk 0 only; the assembler will
+                # verify after concatenation. NULL on later chunks / legacy
+                # clients => check skipped (back-compat).
+                full_asset_checksum=(payload.full_asset_checksum if payload.seq_num == 0 else None),
+            )
+            db.add(media)
+            db.flush()
+        except _MediaIntegrityError:
+            db.rollback()
+            media = db.query(Media).filter(Media.id == payload.media_id).first()
+            if not media:
+                # Defensive: if even after rollback we can't find it,
+                # something else corrupted the txn. Surface as 500.
+                raise HTTPException(
+                    status_code=500,
+                    detail="media row creation race could not be reconciled",
+                )
     else:
         if payload.client_blur_applied and not media.client_blur_applied:
             # Client sent the flag on a later chunk (e.g. resumed upload where
@@ -2938,7 +2956,16 @@ def attach_media_chunk(
                 and media.resolution_tier in (ResolutionEnum.LOW, ResolutionEnum.MEDIUM)):
             media.resolution_tier = ResolutionEnum.HIGH
 
-    # Idempotent chunk insert — check for duplicate before incrementing counter
+    # Idempotent chunk insert — check for duplicate before incrementing counter.
+    # K.1.b (May 2026, Phase K) — race-safe insert. The query-then-add
+    # pattern below has a check-then-act race: two concurrent calls with
+    # the same (media_id, seq_num) both observe `existing_chunk=None`,
+    # both attempt to INSERT, the second hits the
+    # `uq_media_chunk_seq` UniqueConstraint and crashes with 500. The
+    # client retries on 500 and the count goes wrong. Wrap the insert
+    # in a try/except so the duplicate becomes an idempotent noop.
+    from sqlalchemy.exc import IntegrityError
+
     existing_chunk = db.query(MediaChunk).filter(
         MediaChunk.media_id == payload.media_id,
         MediaChunk.seq_num == payload.seq_num
@@ -2946,13 +2973,25 @@ def attach_media_chunk(
 
     is_new_chunk = not existing_chunk
     if is_new_chunk:
-        db.add(MediaChunk(
-            media_id=payload.media_id,
-            seq_num=payload.seq_num,
-            total_chunks=payload.total_chunks,
-            data_b64=payload.data,
-            checksum=payload.checksum
-        ))
+        try:
+            db.add(MediaChunk(
+                media_id=payload.media_id,
+                seq_num=payload.seq_num,
+                total_chunks=payload.total_chunks,
+                data_b64=payload.data,
+                checksum=payload.checksum
+            ))
+            db.flush()
+        except IntegrityError:
+            # Concurrent duplicate (uq_media_chunk_seq violation). The
+            # other thread won the race; this call is a legitimate idempotent
+            # retry. Roll back the partial txn and treat as the dup path.
+            db.rollback()
+            # Re-fetch the media row inside the rolled-back session.
+            media = db.query(Media).filter(Media.id == payload.media_id).first()
+            is_new_chunk = False
+
+    if is_new_chunk:
         # P-6 fix: atomic SQL-level increment avoids race condition on concurrent retries
         #
         # Phase-2.4 invariant — `chunk_count` is updated on every
@@ -3224,30 +3263,42 @@ async def attach_media_chunk_bin(
     if photo_group == "":
         photo_group = None
 
-    # ── Find-or-create Media row. Mirrors the legacy endpoint exactly.
+    # ── Find-or-create Media row. Mirrors the legacy endpoint exactly,
+    #    including K.1.b's race-safe wrapper around the create path.
+    from sqlalchemy.exc import IntegrityError as _MediaBinIntegrityError
+
     media = db.query(Media).filter(Media.id == media_id).first()
     if not media:
         from app.models.report import MediaTypeEnum as _MTE, ResolutionEnum as _RE
-        media = Media(
-            id=media_id,
-            report_id=report_id,
-            type=_MTE(type_upper),
-            resolution_tier=_RE(tier_upper),
-            photo_group_id=photo_group,
-            url='',
-            is_synced=False,
-            chunk_count=total_chunks,
-            received_chunks=0,
-            completion_pct=0.0,
-            assembly_status='pending',
-            client_blur_applied=blur_flag,
-            # Phase C.1 — persist the PWA-computed whole-asset checksum on
-            # creation. Only chunk 0 carries this field; later chunks pass
-            # None and `seq_num != 0` short-circuits the assignment below.
-            full_asset_checksum=(full_asset_checksum if seq_num == 0 else None),
-        )
-        db.add(media)
-        db.flush()
+        try:
+            media = Media(
+                id=media_id,
+                report_id=report_id,
+                type=_MTE(type_upper),
+                resolution_tier=_RE(tier_upper),
+                photo_group_id=photo_group,
+                url='',
+                is_synced=False,
+                chunk_count=total_chunks,
+                received_chunks=0,
+                completion_pct=0.0,
+                assembly_status='pending',
+                client_blur_applied=blur_flag,
+                # Phase C.1 — persist the PWA-computed whole-asset checksum on
+                # creation. Only chunk 0 carries this field; later chunks pass
+                # None and `seq_num != 0` short-circuits the assignment below.
+                full_asset_checksum=(full_asset_checksum if seq_num == 0 else None),
+            )
+            db.add(media)
+            db.flush()
+        except _MediaBinIntegrityError:
+            db.rollback()
+            media = db.query(Media).filter(Media.id == media_id).first()
+            if not media:
+                raise HTTPException(
+                    status_code=500,
+                    detail="media row creation race could not be reconciled",
+                )
     else:
         if blur_flag and not media.client_blur_applied:
             # Late-arriving blur flag (same upgrade path as the legacy endpoint).
@@ -3267,6 +3318,10 @@ async def attach_media_chunk_bin(
 
     # ── Idempotent insert. Mirrors the legacy endpoint byte-for-byte
     #    except the column we write (data_binary instead of data_b64).
+    # K.1.b (May 2026, Phase K) — race-safe insert. See the legacy
+    # `attach_media_chunk` handler for the full rationale.
+    from sqlalchemy.exc import IntegrityError as _IntegrityError_bin
+
     existing_chunk = db.query(MediaChunk).filter(
         MediaChunk.media_id == media_id,
         MediaChunk.seq_num == seq_num
@@ -3274,14 +3329,22 @@ async def attach_media_chunk_bin(
 
     is_new_chunk = not existing_chunk
     if is_new_chunk:
-        db.add(MediaChunk(
-            media_id=media_id,
-            seq_num=seq_num,
-            total_chunks=total_chunks,
-            data_b64=None,            # legacy column NULL — binary wins
-            data_binary=raw_bytes,
-            checksum=checksum,
-        ))
+        try:
+            db.add(MediaChunk(
+                media_id=media_id,
+                seq_num=seq_num,
+                total_chunks=total_chunks,
+                data_b64=None,            # legacy column NULL — binary wins
+                data_binary=raw_bytes,
+                checksum=checksum,
+            ))
+            db.flush()
+        except _IntegrityError_bin:
+            db.rollback()
+            media = db.query(Media).filter(Media.id == media_id).first()
+            is_new_chunk = False
+
+    if is_new_chunk:
         # Atomic SQL-level increment — same race-safe pattern as the legacy path.
         db.query(Media).filter(Media.id == media_id).update(
             {"received_chunks": Media.received_chunks + 1,
