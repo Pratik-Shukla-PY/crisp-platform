@@ -391,6 +391,26 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
                 media_asset_integrity_fail_total.labels(tier=tier_label).inc()
             except Exception:
                 pass
+            # K.2.c (May 2026, Phase K) — propagate the checksum-mismatch
+            # signal to the Media row's abandon metadata so the dashboard
+            # can render an explicit "Media corrupt" chip (K.5.a) instead
+            # of the generic "failed" state. Was previously just
+            # `assembly_status='failed'` with `abandon_reason=NULL`,
+            # making it indistinguishable from worker-lost or
+            # chunks-never-arrived failures.
+            try:
+                from datetime import datetime as _dt, timezone as _tz
+                db.query(Media).filter(Media.id == media_id).update(
+                    {
+                        "assembly_status": "failed",
+                        "abandon_reason": "checksum_mismatch",
+                        "abandoned_at": _dt.now(_tz.utc),
+                    },
+                    synchronize_session=False,
+                )
+                db.commit()
+            except Exception as _e:
+                logger.warning(f"[Assembly:integrity] abandon-stamp failed for {media_id}: {_e}")
             return None
 
     # Detect audio format from magic bytes (first few bytes)
@@ -943,7 +963,16 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
 
         if not file_url:
             logger.error(f"[AssemblyBG] {media_id[:8]} assemble returned no url")
-            db.query(Media).filter(Media.id == media_id).update(
+            # K.2.c (May 2026, Phase K) — only stamp `assembly_status='failed'`
+            # if the checksum-mismatch path didn't already do it (in which
+            # case `abandon_reason='checksum_mismatch'` is already set and
+            # we'd otherwise overwrite assembly_status redundantly without
+            # touching the reason). Conditional update preserves the
+            # specific abandon_reason for dashboard chip rendering (K.5.a).
+            db.query(Media).filter(
+                Media.id == media_id,
+                Media.assembly_status != 'failed',
+            ).update(
                 {'assembly_status': 'failed'}, synchronize_session=False
             )
             db.commit()
