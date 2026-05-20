@@ -337,7 +337,24 @@ def blur_pii(image_path: str) -> dict:
                 # the request hot path) and the privacy guarantee is
                 # a UNDP must-have.
                 raw_detections = _multiscale_face_detect(img, _face_detector, mp)
-                merged = _nms_merge_faces(raw_detections, iou_threshold=0.4)
+                # Sanity filter: at confidence 0.2 with multi-scale
+                # tiles, BlazeFace occasionally hallucinates "faces"
+                # spanning entire tile crops (clothing, skin patches,
+                # blurred regions from a prior pass that the detector
+                # mistakes for a face). Real human faces in normal
+                # photos occupy < 30% of the image area. Discard
+                # anything larger — it's either a hallucination or a
+                # legitimate close-up that already covers most of the
+                # frame (in which case the user explicitly framed the
+                # face; the smaller component detections from other
+                # scales/tiles will still cover the actual face).
+                image_area = w * h
+                MAX_FACE_AREA_RATIO = 0.30
+                sanitized = [
+                    (fx, fy, fw, fh) for (fx, fy, fw, fh) in raw_detections
+                    if (fw * fh) <= image_area * MAX_FACE_AREA_RATIO
+                ]
+                merged = _nms_merge_faces(sanitized, iou_threshold=0.4)
                 for fx, fy, fw, fh in merged:
                     # Pre-fix used 5% padding. Bumped to 15% to absorb
                     # the minor coordinate drift introduced by the
@@ -439,15 +456,37 @@ def blur_pii(image_path: str) -> dict:
                 if rw <= 0 or rh <= 0:
                     continue
                 roi = img[y1:y2, x1:x2]
-                # odd, capped at 41 (was 71)
-                ksize = min(41, max(21, (max(rw, rh) // 8) * 2 + 1))
-                # single Gaussian pass (was double)
-                blurred = cv2.GaussianBlur(roi, (ksize, ksize), 25)
+                # P1 follow-up (May 2026, operator-reported "no blur
+                # detected"): kernel size now scales with face
+                # dimensions. Pre-fix the cap was 41 — adequate for
+                # the short-range model's typical 100–300 px faces,
+                # but the multi-scale detector now returns regions
+                # up to 2000+ px (faces in 12 MP phone photos). 41 px
+                # blur on an 800 px face is visually negligible —
+                # variance test on the operator's actual file
+                # showed ratio 0.47 (face still recognizable, target
+                # < 0.20).
+                #
+                # New: kernel ~= face_dim / 6, clamped [25, 199].
+                # Sigma scales proportionally so the blur strength
+                # tracks the kernel — without that, large kernels
+                # with small sigma still leave faces recognizable.
+                face_dim = max(rw, rh)
+                ksize = max(25, min(199, (face_dim // 6) * 2 + 1))
+                # sigma proportional to ksize for heavy blur (Gaussian
+                # spreads only ~3σ before tapering; need σ large
+                # enough to actually mix the face pixels into noise).
+                sigma = max(15, ksize // 3)
+                blurred = cv2.GaussianBlur(roi, (ksize, ksize), sigma)
 
-                # Oval mask with feathered edges
+                # Oval mask with feathered edges. Feather width also
+                # scales with face size so the blur-to-clear transition
+                # stays smooth on large faces (a 21 px feather on a
+                # 2000 px face was effectively a hard edge).
                 mask = np.zeros((rh, rw), dtype=np.uint8)
                 cv2.ellipse(mask, (rw // 2, rh // 2), (rw // 2, rh // 2), 0, 0, 360, 255, -1)
-                mask = cv2.GaussianBlur(mask, (21, 21), 10)
+                feather = max(21, min(101, (face_dim // 20) * 2 + 1))
+                mask = cv2.GaussianBlur(mask, (feather, feather), feather // 3)
                 mask_3ch = cv2.merge([mask, mask, mask]).astype(np.float32) / 255.0
                 img[y1:y2, x1:x2] = (blurred * mask_3ch + roi * (1 - mask_3ch)).astype(np.uint8)
 
