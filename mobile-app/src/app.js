@@ -404,14 +404,109 @@ async function enqueueReport(payload) {
         // self-heal regression test seed rows that look 30 minutes old);
         // production callers (submitReport) don't pass a timestamp so they
         // get Date.now() as before.
+        //
+        // K.4.d (May 2026, Phase K) — monotonic version stamp.
+        // Increments on every enqueue so two tabs draining concurrently
+        // can detect stale-snapshot writes: tab A reads at _version=5,
+        // tab B reads + writes (now _version=6), tab A tries to write
+        // its mid-pass progress (still thinks _version=5) → the version
+        // check at write time (in callers, NOT in IDB itself) aborts the
+        // stale write. The version is just a u32 counter; overflow is
+        // ignored (would take ~4 billion enqueue calls).
         tx.objectStore(IDB_STORE).put({
             ...payload,                            // all stage/media/meta fields at top level
             timestamp: payload.timestamp || Date.now(),
             retryCount: payload.retryCount || 0,   // preserve existing retry count
-            status: 'queued'
+            status: 'queued',
+            _version: (payload._version || 0) + 1,
         });
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
+    });
+}
+
+// K.4.e (May 2026, Phase K) — iOS HEIC quota guard.
+// Constants + helper used by the size-check in submitReport.
+// iOS WebKit caps each origin at 50 MB of IndexedDB storage. We
+// warn at 40 MB to leave headroom for the SW's own caches + a
+// margin for the new submission. Threshold is conservative — false
+// positives (warn-but-actually-fine) are preferred over silent
+// failures.
+const _QUOTA_WARN_THRESHOLD_BYTES = 40 * 1024 * 1024;  // 40 MB
+
+function _estimateQueueItemBytes(item) {
+    if (!item) return 0;
+    let total = 0;
+    // Variants: sum each tier's dataUrl byte length (base64 ~ 4/3 of raw).
+    const addVariants = (variants) => {
+        if (!variants) return;
+        for (const tier of ['small', 'medium', 'large']) {
+            const v = variants[tier];
+            if (v && typeof v.dataUrl === 'string') {
+                total += v.dataUrl.length;
+            } else if (v && typeof v.size === 'number') {
+                // Fallback to declared size (rough, but better than 0)
+                total += v.size * 1.34;  // base64 overhead
+            }
+        }
+    };
+    addVariants(item.photoVariants);
+    if (Array.isArray(item.extraPhotosVariants)) {
+        for (const ev of item.extraPhotosVariants) addVariants(ev);
+    }
+    if (typeof item.photo === 'string') total += item.photo.length;
+    if (Array.isArray(item.extraPhotos)) {
+        for (const ep of item.extraPhotos) {
+            if (typeof ep === 'string') total += ep.length;
+        }
+    }
+    if (typeof item.audioBlob === 'string') total += item.audioBlob.length;
+    if (typeof item.audioSize === 'number' && item.audioSize > 0) {
+        total += item.audioSize * 1.34;
+    }
+    return Math.round(total);
+}
+
+// K.4.d — version-aware enqueue. Use this from inside the retry/
+// upload pass to write progress (chunkProgress, stages, etc.) and
+// have the write rejected if another context advanced the row between
+// our read and write. Returns `true` on success, `false` on stale-
+// snapshot abort. Callers should treat `false` as "abandon this pass;
+// the other tab is making progress."
+async function enqueueReportIfVersionMatches(payload, expectedVersion) {
+    if (!payload || !payload.client_report_id) return false;
+    const db = await openIDB();
+    return new Promise((resolve) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        const getReq = store.get(payload.client_report_id);
+        getReq.onsuccess = () => {
+            const current = getReq.result;
+            const liveVersion = current ? (current._version || 0) : 0;
+            if (typeof expectedVersion === 'number' && liveVersion !== expectedVersion) {
+                console.warn(
+                    `[K.4.d] stale-write aborted for ${payload.client_report_id.slice(0, 8)}: ` +
+                    `expected _version=${expectedVersion}, on-disk=${liveVersion}`,
+                );
+                tx.abort();
+                resolve(false);
+                return;
+            }
+            store.put({
+                ...payload,
+                timestamp: payload.timestamp || Date.now(),
+                retryCount: payload.retryCount || 0,
+                status: 'queued',
+                _version: liveVersion + 1,
+            });
+        };
+        getReq.onerror = () => {
+            tx.abort();
+            resolve(false);
+        };
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+        tx.onabort = () => resolve(false);
     });
 }
 
@@ -1431,6 +1526,7 @@ const I18N = {
         upload_success: "Report sent!",
         upload_failed: "Upload failed — will retry",
         storage_full_toast: "⚠ Could not save report locally. Free up space on your device and try again.",
+        storage_almost_full_toast: "⚠ Device storage almost full — clear old reports from My Reports if this submission fails.",
         storage_full_alert: "Could not save your report locally. Free up device storage and try again.",
         // — Sync badge —
         sync_syncing: "Syncing...",
@@ -3655,6 +3751,27 @@ window.__crispEnumerateDeferredByGroup = (item, missing) =>
 // + deferred-marker branch is exercisable.
 window.__crispUploadVariantTier = (item, reportId, unit) =>
     _uploadVariantTier(item, reportId, unit);
+// K.4.a — drain-mutex helpers exposed for the cross-tab e2e spec.
+window.__crispAcquireDrainLock = () => _acquireDrainLock();
+window.__crispReleaseDrainLock = () => _releaseDrainLock();
+window.__crispDrainLockKey = () => _DRAIN_LOCK_KEY;
+window.__crispStartRetryLoop = () => startRetryLoop();
+// K.4.b — let tests inspect whether a submit is in flight + invoke
+// submitReport directly for the double-tap dedup assertion.
+window.__crispSubmitReport = () => submitReport();
+window.__crispIsSubmitInFlight = () => _submitInFlight !== null;
+// K.4.c — expose the backoff-delay helper so the schedule is verifiable
+// in a unit-style test (10 invocations should return values in the
+// expected capped + jittered range).
+window.__crispBackoffDelayMs = (attempt) => _backoffDelayMs(attempt);
+// K.4.d — let tests verify the version stamp + the
+// `enqueueReportIfVersionMatches` stale-write guard directly.
+window.__crispEnqueueReportIfVersionMatches = (payload, expectedVersion) =>
+    enqueueReportIfVersionMatches(payload, expectedVersion);
+// K.4.e — quota estimator helper + threshold expose so the e2e spec
+// can verify the warn-threshold math without driving a full submission.
+window.__crispEstimateQueueItemBytes = (item) => _estimateQueueItemBytes(item);
+window.__crispQuotaWarnThresholdBytes = () => _QUOTA_WARN_THRESHOLD_BYTES;
 // Queue self-heal hooks for the orphan-detection E2E spec.
 window.__crispIsOrphanQueueRow = (item) => _isOrphanQueueRow(item);
 window.__crispSelfHealOrphans = () => _selfHealOrphans();
@@ -7991,15 +8108,33 @@ function sendJSON(url, payload, timeoutMs = 30000) {
 }
 
 // Retry wrapper: tries up to `retries` times with exponential backoff
-async function sendWithRetry(url, payload, retries = 5, timeoutMs = 30000) {
+// K.4.c (May 2026, Phase K) — capped + jittered exponential backoff.
+// Pre-fix the 5-retry exponential ladder summed to 2+4+8+16+32 = 62 s
+// across 5 attempts. On a Wi-Fi that flapped every 30 s (common in
+// field deployments), the entire retry window could land during
+// outages → chunk failed permanently even though connectivity returned
+// within the next 30 s. New schedule: 7 retries, gap capped at 30 s,
+// with up to 1 s of jitter so multiple clients don't resynchronise.
+// Total budget grows from 62 s → ~3 min, surviving 3 consecutive 30 s
+// flaps within a single chunk upload.
+//
+// Shared helper so both /reports/meta sendWithRetry and binary-chunk
+// sendBinaryChunkWithRetry use the same schedule.
+function _backoffDelayMs(attempt) {
+    // attempt is 1-indexed. base goes 2s → 4s → 8s → 16s → 30s (capped) → 30s → 30s
+    const base = Math.min(2000 * Math.pow(2, attempt - 1), 30_000);
+    const jitter = Math.floor(Math.random() * 1000);  // 0-999 ms
+    return base + jitter;
+}
+
+async function sendWithRetry(url, payload, retries = 7, timeoutMs = 30000) {
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
             return await sendJSON(url, payload, timeoutMs);
         } catch (err) {
             console.warn(`Attempt ${attempt}/${retries} failed for ${url}: ${err.message}`);
             if (attempt === retries) throw err;
-            // Backoff: 2s, 4s, 8s, 16s, 32s
-            await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt - 1)));
+            await new Promise(r => setTimeout(r, _backoffDelayMs(attempt)));
         }
     }
 }
@@ -8144,7 +8279,8 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
             }
             console.warn(`[BinaryChunks] attempt ${attempt}/${retries} failed for seq=${seqNum}: ${err.message}`);
             if (attempt === retries) throw err;
-            await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt - 1)));
+            // K.4.c — capped exponential + jitter (shared with sendWithRetry).
+            await new Promise(r => setTimeout(r, _backoffDelayMs(attempt)));
         }
     }
 }
@@ -8259,7 +8395,42 @@ async function uploadChunksBinary(reportId, mediaId, blob, {
     return { totalChunks: total };
 }
 
-async function submitReport() {
+// K.4.b (May 2026, Phase K) — double-tap submit guard.
+// Module-scope promise that holds the in-flight submitReport call.
+// Two rapid taps land BEFORE the first promise resolves; the second
+// returns the same promise instead of generating a new clientReportId
+// + queueing a duplicate report row. Pre-fix the only guard was
+// `sendBtn.disabled = true` — which the catch-block at line 8640+
+// re-enabled if submitReport threw BEFORE enqueueReport completed,
+// opening a race where a second tap could start a fresh submit with
+// a different clientReportId.
+let _submitInFlight = null;
+
+// NOTE: this entry point is intentionally NOT `async` — if it were,
+// the body's return value (the IIFE promise) would be wrapped in an
+// outer promise per-call, defeating the identity-equality dedup that
+// some callers rely on. Callers can still `await submitReport()`
+// because the function still returns a thenable.
+function submitReport() {
+    // K.4.b — concurrent-tap dedup. Returns the SAME in-flight promise
+    // so both callers observe the same resolution / failure. The
+    // promise is cleared in the finally block once the first call
+    // settles.
+    if (_submitInFlight) {
+        console.log('[Submit] dedup: returning in-flight promise (double-tap guard)');
+        return _submitInFlight;
+    }
+    _submitInFlight = (async () => {
+        try {
+            return await _submitReportInner();
+        } finally {
+            _submitInFlight = null;
+        }
+    })();
+    return _submitInFlight;
+}
+
+async function _submitReportInner() {
     // Phase 6: btn-send was on the old stage-send; btn-review-submit is on
     // the new review page 3. Either may exist in a given session.
     const sendBtn = document.getElementById('btn-send') || document.getElementById('btn-review-submit');
@@ -8557,6 +8728,35 @@ async function submitReport() {
                 queueItem.stages.audio = true; // skip audio
             }
         }
+
+        // K.4.e (May 2026, Phase K) — proactive iOS HEIC quota guard.
+        // iOS limits each web app to 50 MB of IndexedDB storage.
+        // HEIC capture + re-encode + 3 variants per photo × N extras
+        // can push us past that threshold silently — the next
+        // enqueueReport then fails with QuotaExceededError and the
+        // existing storage_full_toast fires, but at that point the
+        // user has already lost their entire form. Surface a warning
+        // BEFORE we even try the enqueue so the user has a chance
+        // to clear old reports first.
+        try {
+            const _wouldUse = _estimateQueueItemBytes(queueItem);
+            if (_wouldUse > _QUOTA_WARN_THRESHOLD_BYTES) {
+                console.warn(
+                    `[K.4.e] queueItem ${clientReportId.slice(0, 8)} would write ` +
+                    `~${Math.round(_wouldUse / 1024 / 1024)} MB to IDB — over ` +
+                    `the ${_QUOTA_WARN_THRESHOLD_BYTES / 1024 / 1024} MB warn ` +
+                    `threshold. iOS PWA quota is 50 MB; user should clear ` +
+                    `old reports if this submission errors.`,
+                );
+                try { showToast(t('storage_almost_full_toast')); } catch (_) {
+                    // i18n key not yet translated in this locale — fall back
+                    showToast(
+                        'Device storage almost full — please clear old reports ' +
+                        'from My Reports if this submission fails.',
+                    );
+                }
+            }
+        } catch (_) { /* size-estimate best-effort; never blocks submit */ }
 
         // ── SAVE TO QUEUE FIRST — this is the safety net ─────────────────────
         // P1.4 — Previously the enqueue error was swallowed with `catch(_){}`,
@@ -9390,40 +9590,104 @@ async function trySendQueuedReport(item) {
 // ── Persistent Retry Loop — runs every 15 seconds ───────────────────────────
 // This is the real workhorse. It keeps trying until everything is sent.
 let _retryLoopRunning = false;
+
+// K.4.a (May 2026, Phase K) — cross-tab/window drain mutex.
+// The in-process `_retryLoopRunning` flag prevents the SAME tab from
+// starting two concurrent retry loops, but a second tab (or the
+// installed PWA + a browser tab on the same domain) has its own JS
+// context with its own `_retryLoopRunning=false` initial value. Both
+// tabs can then enter startRetryLoop simultaneously, race on IDB
+// reads/writes, and regress `chunkProgress` when stale-snapshot
+// writes overwrite the winning tab's progress.
+//
+// The lock is a localStorage timestamp:
+//   - `_acquireDrainLock()` returns true iff no other tab holds the lock
+//     (within the 120 s stale-lock window).
+//   - `_releaseDrainLock()` clears it on retry-loop exit (queue drained
+//     OR explicit stop). A stale lock (>120 s old) is reclaimable —
+//     covers the crashed-tab edge case where the holder went away
+//     without releasing.
+//
+// localStorage writes are synchronously visible across tabs on the
+// same origin, so the check-and-set is effectively atomic per browser.
+// The SW's `syncAllReports` doesn't need this lock — it skips modern
+// variant-shape items via `continue` (sw.js:2166) and only drains
+// legacy single-photo items that are being phased out.
+const _DRAIN_LOCK_KEY = 'crisp_drain_lock_at';
+const _DRAIN_LOCK_TTL_MS = 120_000;
+
+function _acquireDrainLock() {
+    try {
+        const now = Date.now();
+        const existing = parseInt(localStorage.getItem(_DRAIN_LOCK_KEY) || '0', 10);
+        if (existing && (now - existing) < _DRAIN_LOCK_TTL_MS) {
+            return false;  // another tab holds a fresh lock
+        }
+        localStorage.setItem(_DRAIN_LOCK_KEY, String(now));
+        return true;
+    } catch (_) {
+        // localStorage unavailable (private-mode quota, disabled) —
+        // fall back to single-context behaviour (the in-process flag
+        // is the only guard).
+        return true;
+    }
+}
+function _releaseDrainLock() {
+    try { localStorage.removeItem(_DRAIN_LOCK_KEY); } catch (_) {}
+}
+
 async function startRetryLoop() {
     if (_retryLoopRunning) return;
+    // K.4.a — cross-tab mutex. If another tab already holds the lock,
+    // skip this drain pass. The next periodic sweep / online event
+    // will try again. Eventually the lock-holder finishes or its TTL
+    // expires; the next caller wins.
+    if (!_acquireDrainLock()) {
+        console.log('Retry loop: another tab holds the drain lock — skip');
+        return;
+    }
     _retryLoopRunning = true;
     console.log('Retry loop started');
 
-    while (true) {
-        try {
-            // Hotfix: BEFORE retrying uploads, reconcile against
-            // server truth. If a report has already landed server-side but a
-            // stage flag is still false locally (chunk ack lost, variant
-            // accepted but response failed, etc.), purge it from the queue
-            // so the retry loop stops pounding on already-received data.
-            try { await _reconcileQueueAgainstServer(); } catch (_) {}
+    try {
+        while (true) {
+            try {
+                // Hotfix: BEFORE retrying uploads, reconcile against
+                // server truth. If a report has already landed server-side but a
+                // stage flag is still false locally (chunk ack lost, variant
+                // accepted but response failed, etc.), purge it from the queue
+                // so the retry loop stops pounding on already-received data.
+                try { await _reconcileQueueAgainstServer(); } catch (_) {}
 
-            const items = await getAllQueued();
-            if (items.length === 0) {
-                _retryLoopRunning = false;
-                console.log('Retry loop: queue empty, stopping');
-                return;
-            }
-
-            for (const rawItem of items) {
-                // Backward-compat: unwrap old nested format (payload key) if present
-                const item = rawItem.payload && !rawItem.stages ? rawItem.payload : rawItem;
-                if (item.stages && item.meta) {
-                    await trySendQueuedReport(item);
+                const items = await getAllQueued();
+                if (items.length === 0) {
+                    console.log('Retry loop: queue empty, stopping');
+                    return;
                 }
-            }
-        } catch (e) {
-            console.warn('Retry loop error:', e);
-        }
 
-        // Wait 15 seconds before next attempt
-        await new Promise(r => setTimeout(r, 15000));
+                for (const rawItem of items) {
+                    // Backward-compat: unwrap old nested format (payload key) if present
+                    const item = rawItem.payload && !rawItem.stages ? rawItem.payload : rawItem;
+                    if (item.stages && item.meta) {
+                        await trySendQueuedReport(item);
+                    }
+                }
+            } catch (e) {
+                console.warn('Retry loop error:', e);
+            }
+
+            // K.4.a — refresh the lock at every tick so other tabs see
+            // we're still active. Without this, on a slow drain of 100+
+            // items the 120 s TTL could expire and another tab could
+            // jump in mid-pass.
+            try { localStorage.setItem(_DRAIN_LOCK_KEY, String(Date.now())); } catch (_) {}
+
+            // Wait 15 seconds before next attempt
+            await new Promise(r => setTimeout(r, 15000));
+        }
+    } finally {
+        _retryLoopRunning = false;
+        _releaseDrainLock();
     }
 }
 

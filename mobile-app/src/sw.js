@@ -5,7 +5,27 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v229';
+const CACHE_NAME = 'crisp-v230';
+// v229 → v230 (May 20 — Phase K Batch 5: PWA reliability hardening).
+// K.4.a — `_acquireDrainLock` / `_releaseDrainLock` cross-tab mutex
+// via localStorage so two tabs draining the same IDB queue don't
+// regress each other's chunkProgress.
+// K.4.b — `submitReport` now non-async + module-scope
+// `_submitInFlight` promise. Double-tap submission returns the
+// SAME promise instead of generating fresh clientReportIds.
+// K.4.c — `_backoffDelayMs(attempt)` capped at 30 s + ≤1 s jitter.
+// Default retry count bumped 5 → 7. Total budget ~3 min, covers
+// 3 consecutive 30 s Wi-Fi flaps.
+// K.4.d — `_version` field on every queue item via enqueueReport;
+// new `enqueueReportIfVersionMatches(payload, expected)` does a
+// check-and-set so concurrent tabs detect stale-snapshot writes
+// and abort instead of clobbering progress.
+// K.4.e — proactive iOS HEIC quota guard. `_estimateQueueItemBytes`
+// computes the projected IDB write; if >40 MB the user gets a
+// "storage almost full" toast BEFORE the enqueue attempts (and
+// before iOS's 50 MB hard limit triggers a silent QuotaExceededError).
+// Returning users must evict the stale app.js to pick up these
+// reliability fixes.
 // v228 → v229 (May 20 — Phase K Batch 4: PWA mark-deferred call on
 // soft-drain + variant dataUrl re-encode fallback).
 // K.3.a — trySendQueuedReport's softDrain branch now POSTs to
