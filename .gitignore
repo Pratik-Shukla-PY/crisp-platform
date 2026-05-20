@@ -19,6 +19,10 @@ node_modules/
 playwright-report/
 playwright-report-prod/
 test-results/
+# Screenshot captures from i18n + visual specs (e2e/tests/pwa/25-i18n-
+# 22-screenshots.spec.ts and friends). Regenerated on every run; never
+# part of the UNDP-submission build.
+e2e/screenshots/
 
 # Lighthouse CI output — regenerated on every run, archived to the
 # `lighthouse-history` orphan branch by scripts/lighthouse-publish.mjs.
