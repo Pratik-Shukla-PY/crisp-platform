@@ -67,7 +67,7 @@ def _seed_report_media_with_chunks(db, *, device_hash, real_bytes, declared_chec
         id=media_id,
         report_id=r.id,
         type=MediaTypeEnum.IMAGE,
-        resolution_tier=ResolutionEnum.LOW,
+        resolution_tier=ResolutionEnum.SMALL,
         url="",
         chunk_count=1,
         received_chunks=1,

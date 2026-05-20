@@ -89,7 +89,7 @@ def test_image_attach_with_blur_success_sets_complete(client, db):
             json={
                 "type": "IMAGE",
                 "url": _TINY_IMG,
-                "resolution_tier": "LOW",
+                "resolution_tier": "SMALL",
                 "file_size_bytes": 95,
             },
         )
@@ -121,7 +121,7 @@ def test_image_attach_with_blur_ran_no_pii_sets_complete(client, db):
             json={
                 "type": "IMAGE",
                 "url": _TINY_IMG,
-                "resolution_tier": "LOW",
+                "resolution_tier": "SMALL",
                 "file_size_bytes": 95,
             },
         )
@@ -150,7 +150,7 @@ def test_image_attach_with_backends_unavailable_sets_skipped(client, db):
             json={
                 "type": "IMAGE",
                 "url": _TINY_IMG,
-                "resolution_tier": "LOW",
+                "resolution_tier": "SMALL",
                 "file_size_bytes": 95,
             },
         )
@@ -175,7 +175,7 @@ def test_image_attach_with_blur_exception_sets_failed(client, db):
             json={
                 "type": "IMAGE",
                 "url": _TINY_IMG,
-                "resolution_tier": "LOW",
+                "resolution_tier": "SMALL",
                 "file_size_bytes": 95,
             },
         )
@@ -200,7 +200,7 @@ def test_audio_attach_sets_not_needed(client, db):
         json={
             "type": "AUDIO",
             "url": _TINY_AUDIO,
-            "resolution_tier": "LOW",
+            "resolution_tier": "SMALL",
             "file_size_bytes": 48,
         },
     )
@@ -226,7 +226,7 @@ def test_existing_media_update_refreshes_blur_status(client, db):
         mock_blur.side_effect = RuntimeError("first attempt fails")
         res1 = client.patch(
             f"/api/v1/reports/{r.id}/media/attach",
-            json={"type": "IMAGE", "url": _TINY_IMG, "resolution_tier": "LOW",
+            json={"type": "IMAGE", "url": _TINY_IMG, "resolution_tier": "SMALL",
                   "file_size_bytes": 95},
         )
     assert res1.status_code == 200
@@ -244,7 +244,7 @@ def test_existing_media_update_refreshes_blur_status(client, db):
         }
         res2 = client.patch(
             f"/api/v1/reports/{r.id}/media/attach",
-            json={"type": "IMAGE", "url": _TINY_IMG, "resolution_tier": "LOW",
+            json={"type": "IMAGE", "url": _TINY_IMG, "resolution_tier": "SMALL",
                   "file_size_bytes": 95},
         )
     assert res2.status_code == 200

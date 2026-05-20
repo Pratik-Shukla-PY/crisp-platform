@@ -208,7 +208,7 @@ class TestTelegramOriginalsTier:
             chunk_bytes=b"\xff\xd8\xff\xe0",  # JPEG header bytes
         )
         assert result is True
-        assert captured["data"]["resolution_tier"] == "HIGH", \
+        assert captured["data"]["resolution_tier"] == "ORIGINAL", \
             f"IMAGE chunk must tag resolution_tier=HIGH; observed: {captured['data']}"
 
     @pytest.mark.asyncio
@@ -236,7 +236,7 @@ class TestTelegramOriginalsTier:
             chunk_bytes=b"\xff\xd8\xff\xe0",
         )
         assert result is True
-        assert captured["json"]["resolution_tier"] == "HIGH", \
+        assert captured["json"]["resolution_tier"] == "ORIGINAL", \
             f"b64-fallback IMAGE chunk must tag HIGH; observed: {captured['json']}"
 
     @pytest.mark.asyncio
@@ -262,7 +262,7 @@ class TestTelegramOriginalsTier:
             total=1,
             chunk_bytes=b"\x00" * 64,
         )
-        assert captured["data"]["resolution_tier"] == "LOW"
+        assert captured["data"]["resolution_tier"] == "SMALL"
 
 
 # ── Bug C: UNDP taxonomy parity ────────────────────────────────────────────

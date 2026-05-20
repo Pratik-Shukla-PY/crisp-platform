@@ -89,7 +89,7 @@ def test_three_concurrent_same_type_attach_yields_single_media_row(client, db):
             json={
                 "type": "IMAGE",
                 "url": _TINY_IMG,
-                "resolution_tier": "LOW",
+                "resolution_tier": "SMALL",
                 "file_size_bytes": 95,
             },
         ).status_code
@@ -130,7 +130,7 @@ def test_five_concurrent_same_type_attach_stress(client, db):
             json={
                 "type": "IMAGE",
                 "url": _TINY_IMG,
-                "resolution_tier": "LOW",
+                "resolution_tier": "SMALL",
                 "file_size_bytes": 95,
             },
         ).status_code
@@ -163,7 +163,7 @@ def test_serial_same_type_attach_baseline(client, db):
             json={
                 "type": "IMAGE",
                 "url": _TINY_IMG,
-                "resolution_tier": "LOW",
+                "resolution_tier": "SMALL",
                 "file_size_bytes": 95,
             },
         )

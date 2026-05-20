@@ -58,7 +58,7 @@ def _seed_report_with_small_landed(db, *, device_hash, expected=3):
         id=str(uuid.uuid4()),
         report_id=r.id,
         type=MediaTypeEnum.IMAGE,
-        resolution_tier=ResolutionEnum.LOW,
+        resolution_tier=ResolutionEnum.SMALL,
         photo_group_id=photo_group_id,
         url="/fake/small.jpg",
         assembly_status="complete",
@@ -86,7 +86,7 @@ def test_mark_two_tiers_creates_placeholders_decrements_expected_and_synced(clie
     res = client.post(
         f"/api/v1/reports/{r.id}/media/mark-deferred",
         json={
-            "tiers_by_group": {photo_group_id: ["MEDIUM", "HIGH"]},
+            "tiers_by_group": {photo_group_id: ["MEDIUM", "ORIGINAL"]},
             "reason": "bandwidth_tier_deferred",
         },
     )
@@ -107,10 +107,9 @@ def test_mark_two_tiers_creates_placeholders_decrements_expected_and_synced(clie
     for fr in failed_rows:
         assert fr.abandon_reason == "bandwidth_tier_deferred"
         assert fr.abandoned_at is not None
-        # Phase L (May 2026) — legacy 'HIGH' sent in the payload is
-        # normalized to 'ORIGINAL' on the persisted row. Accept either
-        # so the test proves both that legacy clients still work AND
-        # that the persisted value is canonical Phase L vocabulary.
+        # Phase L canonical vocabulary — SMALL/MEDIUM/ORIGINAL only.
+        # Legacy LOW/HIGH are rejected by Pydantic enum validation
+        # (alembic 0036 dropped them from the Postgres enum too).
         assert fr.resolution_tier in (ResolutionEnum.MEDIUM, ResolutionEnum.ORIGINAL)
 
 
@@ -122,14 +121,14 @@ def test_mark_deferred_is_idempotent(client, db):
 
     res1 = client.post(
         f"/api/v1/reports/{r.id}/media/mark-deferred",
-        json={"tiers_by_group": {photo_group_id: ["MEDIUM", "HIGH"]}},
+        json={"tiers_by_group": {photo_group_id: ["MEDIUM", "ORIGINAL"]}},
     )
     assert res1.status_code == 200
     assert res1.json()["newly_stamped"] == 2
 
     res2 = client.post(
         f"/api/v1/reports/{r.id}/media/mark-deferred",
-        json={"tiers_by_group": {photo_group_id: ["MEDIUM", "HIGH"]}},
+        json={"tiers_by_group": {photo_group_id: ["MEDIUM", "ORIGINAL"]}},
     )
     assert res2.status_code == 200
     assert res2.json()["newly_stamped"] == 0, "Second call must be a noop"
@@ -166,7 +165,7 @@ def test_mark_deferred_does_not_overwrite_complete_media(client, db):
     # PWA's stale soft-drain says MEDIUM + HIGH were deferred
     res = client.post(
         f"/api/v1/reports/{r.id}/media/mark-deferred",
-        json={"tiers_by_group": {photo_group_id: ["MEDIUM", "HIGH"]}},
+        json={"tiers_by_group": {photo_group_id: ["MEDIUM", "ORIGINAL"]}},
     )
     assert res.status_code == 200
     body = res.json()
@@ -188,7 +187,7 @@ def test_mark_deferred_with_invalid_reason_returns_422(client, db):
     res = client.post(
         f"/api/v1/reports/{r.id}/media/mark-deferred",
         json={
-            "tiers_by_group": {photo_group_id: ["HIGH"]},
+            "tiers_by_group": {photo_group_id: ["ORIGINAL"]},
             "reason": "someone_made_up_a_reason",
         },
     )
@@ -209,6 +208,6 @@ def test_mark_deferred_with_unknown_report_returns_404(client, db):
     """Bad report_id → 404."""
     res = client.post(
         "/api/v1/reports/00000000-0000-0000-0000-000000000000/media/mark-deferred",
-        json={"tiers_by_group": {"some-group": ["HIGH"]}},
+        json={"tiers_by_group": {"some-group": ["ORIGINAL"]}},
     )
     assert res.status_code == 404

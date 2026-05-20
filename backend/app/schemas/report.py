@@ -1,25 +1,11 @@
 from datetime import datetime, timezone as _dt_timezone
 from typing import List, Optional, Any
-from typing_extensions import Annotated
-from pydantic import (
-    BaseModel, BeforeValidator, ConfigDict, Field, SerializationInfo,
-    field_serializer, model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, SerializationInfo, field_serializer, model_validator
 from app.models.report import (
     SourceEnum, SeverityEnum, InfraTypeEnum, MediaTypeEnum,
     ResolutionEnum, SyncStatusEnum, ReportStatusEnum, ClusterStatusEnum,
     DamageClassEnum, CrisisTypeEnum, ServiceStatusEnum
 )
-from app.core.taxonomy import normalize_resolution_tier as _normalize_resolution_tier
-
-# Phase L (May 2026) — auto-rewrite legacy tier names (LOW, HIGH) to
-# the canonical Phase L vocabulary (SMALL, ORIGINAL) before Pydantic
-# enum validation runs. Clients on pre-Phase-L releases keep working;
-# the DB converges on the 3-value canonical vocabulary on every new write.
-NormalizedResolutionTier = Annotated[
-    ResolutionEnum,
-    BeforeValidator(_normalize_resolution_tier),
-]
 
 
 # P2.9 — All backend datetimes are UTC (see models: DateTime(timezone=True) on
@@ -56,7 +42,7 @@ class LocationBase(BaseModel):
 
 class MediaBase(BaseModel):
     type: MediaTypeEnum
-    resolution_tier: NormalizedResolutionTier = ResolutionEnum.SMALL
+    resolution_tier: ResolutionEnum = ResolutionEnum.SMALL
     url: str
     file_size_bytes: Optional[int] = None
 
@@ -68,7 +54,7 @@ class ThumbnailPayload(BaseModel):
     # when it creates the Media row. Default stays MEDIUM for back-compat
     # (PWA clients pre-dating this field). The downstream chunk POSTs may
     # still upgrade LOW/MEDIUM → HIGH on the existing row.
-    resolution_tier: NormalizedResolutionTier = ResolutionEnum.MEDIUM
+    resolution_tier: ResolutionEnum = ResolutionEnum.MEDIUM
 
 # Chunked upload: adaptive packets 1KB-512KB (network-aware)
 class MediaChunkPayload(BaseModel):
@@ -89,7 +75,7 @@ class MediaChunkPayload(BaseModel):
     # Both default such that legacy single-variant clients keep working
     # (the chunk handler used to hard-code `MEDIUM` on new media rows — we
     # drop that hard-coding and trust this field instead).
-    resolution_tier: NormalizedResolutionTier = ResolutionEnum.SMALL
+    resolution_tier: ResolutionEnum = ResolutionEnum.SMALL
     photo_group_id: Optional[str] = Field(None, max_length=36)
     # : when `true`, the client has already run its PII blur (face
     # redaction via BlazeFace on PWA / similar on RN) against the original
@@ -209,7 +195,7 @@ class ReportMetaCreate(BaseModel):
 # Single media attachment (Stage 2/3 — one file at a time)
 class MediaAttach(BaseModel):
     type: MediaTypeEnum
-    resolution_tier: NormalizedResolutionTier = ResolutionEnum.SMALL
+    resolution_tier: ResolutionEnum = ResolutionEnum.SMALL
     url: str  # base64 data URL
     file_size_bytes: Optional[int] = None
 

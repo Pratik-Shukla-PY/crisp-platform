@@ -76,7 +76,7 @@ def _seed_media_row(
     report,
     *,
     type_: MediaTypeEnum = MediaTypeEnum.IMAGE,
-    tier: ResolutionEnum = ResolutionEnum.LOW,
+    tier: ResolutionEnum = ResolutionEnum.SMALL,
     photo_group_id: str | None = None,
     assembly_status: str = "complete",
     completion_pct: float = 100.0,
@@ -133,7 +133,7 @@ def test_promotes_partial_when_low_tier_complete_and_idle(db):
     r = _seed_partial_report(db, device_hash="promote-low-only", expected=3, received=1)
     _seed_media_row(
         db, r,
-        tier=ResolutionEnum.LOW,
+        tier=ResolutionEnum.SMALL,
         photo_group_id="group-A",
         assembly_status="complete",
         age_seconds=120,  # well past the 60 s idle window
@@ -158,7 +158,7 @@ def test_does_not_promote_when_medium_still_in_flight(db):
     # LOW landed cleanly 10 min ago.
     _seed_media_row(
         db, r,
-        tier=ResolutionEnum.LOW,
+        tier=ResolutionEnum.SMALL,
         photo_group_id="group-B",
         assembly_status="complete",
         age_seconds=600,
@@ -189,7 +189,7 @@ def test_does_not_promote_when_no_complete_variant(db):
     r = _seed_partial_report(db, device_hash="no-complete-skip", expected=3, received=0)
     _seed_media_row(
         db, r,
-        tier=ResolutionEnum.LOW,
+        tier=ResolutionEnum.SMALL,
         photo_group_id="group-C",
         assembly_status="pending",
         completion_pct=0.0,
@@ -208,7 +208,7 @@ def test_promotes_image_group_plus_audio_when_both_complete(db):
     r = _seed_partial_report(db, device_hash="image-plus-audio", expected=4, received=2)
     _seed_media_row(
         db, r,
-        tier=ResolutionEnum.LOW,
+        tier=ResolutionEnum.SMALL,
         photo_group_id="group-D",
         assembly_status="complete",
         age_seconds=600,
@@ -216,7 +216,7 @@ def test_promotes_image_group_plus_audio_when_both_complete(db):
     _seed_media_row(
         db, r,
         type_=MediaTypeEnum.AUDIO,
-        tier=ResolutionEnum.LOW,
+        tier=ResolutionEnum.SMALL,
         photo_group_id=None,  # audio doesn't carry a group_id in the PWA
         assembly_status="complete",
         age_seconds=600,
@@ -236,7 +236,7 @@ def test_does_not_promote_when_only_abandoned_media(db):
     r = _seed_partial_report(db, device_hash="abandoned-only", expected=1, received=0)
     _seed_media_row(
         db, r,
-        tier=ResolutionEnum.LOW,
+        tier=ResolutionEnum.SMALL,
         photo_group_id="group-E",
         assembly_status="failed",
         age_seconds=600,
@@ -258,7 +258,7 @@ def test_promotes_legacy_solo_photo_without_group_id(db):
     r = _seed_partial_report(db, device_hash="legacy-solo-photo", expected=1, received=1)
     _seed_media_row(
         db, r,
-        tier=ResolutionEnum.HIGH,  # legacy path used HIGH for the only variant
+        tier=ResolutionEnum.ORIGINAL,  # legacy path used HIGH for the only variant
         photo_group_id=None,
         assembly_status="complete",
         age_seconds=600,
@@ -277,14 +277,14 @@ def test_partial_with_complete_low_and_abandoned_high_promotes(db):
     r = _seed_partial_report(db, device_hash="low-ok-high-abandoned", expected=3, received=1)
     _seed_media_row(
         db, r,
-        tier=ResolutionEnum.LOW,
+        tier=ResolutionEnum.SMALL,
         photo_group_id="group-F",
         assembly_status="complete",
         age_seconds=600,
     )
     _seed_media_row(
         db, r,
-        tier=ResolutionEnum.HIGH,
+        tier=ResolutionEnum.ORIGINAL,
         photo_group_id="group-F",
         assembly_status="failed",
         age_seconds=600,

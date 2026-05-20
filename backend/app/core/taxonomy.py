@@ -160,43 +160,9 @@ UNDP_CRISIS_TYPES = [
 UNDP_DAMAGE_CLASSES = ["MINIMAL", "PARTIAL", "COMPLETE"]
 
 
-# ── Phase L (May 2026) — resolution tier normalization ────────────────────────
-#
-# Canonical: SMALL / MEDIUM / ORIGINAL. Legacy aliases LOW/HIGH preserved on the
-# enum so historical rows continue to validate; this helper rewrites them on
-# write so every NEW row uses the canonical values.
-
-_RESOLUTION_TIER_ALIASES = {
-    "LOW": "SMALL",
-    "HIGH": "ORIGINAL",
-    # Lowercase forms used by some clients
-    "low": "SMALL",
-    "high": "ORIGINAL",
-    "small": "SMALL",
-    "medium": "MEDIUM",
-    "original": "ORIGINAL",
-}
-
-_RESOLUTION_TIER_CANONICAL = {"SMALL", "MEDIUM", "ORIGINAL"}
-
-
-def normalize_resolution_tier(value):
-    """Rewrite legacy tier names (LOW, HIGH) to the Phase L canonical
-    values (SMALL, ORIGINAL). Idempotent — already-canonical values
-    pass through unchanged. Returns None for None / empty inputs so
-    callers can preserve optional-field semantics.
-
-    Accepts string OR ResolutionEnum member. Returns string (the
-    canonical value) so Pydantic + SQLAlchemy both validate downstream.
-    """
-    if value is None:
-        return None
-    # ResolutionEnum members have `.value` carrying the string
-    raw = getattr(value, "value", value)
-    if not isinstance(raw, str):
-        return value  # let downstream validation raise on garbage
-    if raw in _RESOLUTION_TIER_CANONICAL:
-        return raw
-    if raw in _RESOLUTION_TIER_ALIASES:
-        return _RESOLUTION_TIER_ALIASES[raw]
-    return raw  # unknown — let Pydantic enum validation reject it
+# Phase L (May 2026) — resolution_tier canonical vocabulary is
+# SMALL / MEDIUM / ORIGINAL. The legacy LOW/HIGH aliases that this
+# module previously normalized were removed from `ResolutionEnum`
+# in alembic 0036; Pydantic now rejects them at the schema layer
+# with 422, which is the correct behaviour now that all internal
+# callers have been migrated.

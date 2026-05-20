@@ -138,7 +138,7 @@ class TestMediaPhashEndpoint:
             id=str(uuid.uuid4()),
             report_id=report_id,
             type=MediaTypeEnum.IMAGE,
-            resolution_tier=ResolutionEnum.LOW,
+            resolution_tier=ResolutionEnum.SMALL,
             url=f"/static/{uuid.uuid4().hex}.jpg",
             assembly_status='complete',
             photo_phash=phash,

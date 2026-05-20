@@ -183,36 +183,21 @@ class MediaTypeEnum(str, enum.Enum):
 class ResolutionEnum(str, enum.Enum):
     """Photo-variant resolution tier (Phase L taxonomy — May 2026).
 
-    Three canonical values shipped to the dashboard + exports:
+    Three canonical values, no aliases:
 
         SMALL    — preview-quality (~50 KB), always required
         MEDIUM   — ~720p (~250 KB)
         ORIGINAL — raw camera bytes if ≤ 5 MB, else best-effort
                    re-encoded via the L.2.b quality/downscale ladder
 
-    Two legacy aliases retained so existing DB rows continue to
-    validate at SQLAlchemy load time:
-
-        LOW    — alias for SMALL    (pre-Phase-L writes)
-        HIGH   — alias for ORIGINAL (pre-Phase-L writes; the old
-                 "high quality" tier was 1920px resized JPEG ~500 KB,
-                 NOT actually raw bytes — alembic 0035 backfills
-                 these rows to ORIGINAL since the dashboard
-                 semantics are the same)
-
-    The Pydantic write-path validator
-    (`app.core.taxonomy.normalize_resolution_tier`) rewrites
-    LOW→SMALL and HIGH→ORIGINAL on every new INSERT so the DB
-    converges on the 3-value canonical vocabulary over time.
+    Pre-Phase-L vocabulary (LOW/HIGH) was backfilled to SMALL/ORIGINAL
+    in alembic 0035 and the values removed from the Postgres enum in
+    alembic 0036. Any caller still sending the legacy names gets a
+    422 from Pydantic enum validation.
     """
-    # Canonical (Phase L)
     SMALL = "SMALL"
     MEDIUM = "MEDIUM"
     ORIGINAL = "ORIGINAL"
-    # Legacy aliases — rejected for NEW writes via Pydantic normalizer,
-    # kept so historical rows continue to validate on read.
-    LOW = "LOW"      # → SMALL
-    HIGH = "HIGH"    # → ORIGINAL
 
 class SyncStatusEnum(str, enum.Enum):
     PARTIAL = "PARTIAL"
@@ -522,7 +507,7 @@ class Media(Base):
     id = Column(String(36), primary_key=True, default=gen_uuid)
     report_id = Column(String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False)
     type = Column(Enum(MediaTypeEnum), nullable=False)
-    resolution_tier = Column(Enum(ResolutionEnum), default=ResolutionEnum.LOW, nullable=False)
+    resolution_tier = Column(Enum(ResolutionEnum), default=ResolutionEnum.SMALL, nullable=False)
     # Guaranteed-delivery pipeline: SMALL / MEDIUM / LARGE variants of one
     # captured photo share the same photo_group_id, but each variant lives in
     # its own Media row (independent assembly_status, chunk stream, url).

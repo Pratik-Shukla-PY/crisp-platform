@@ -74,7 +74,7 @@ def _seed_media(
     m = Media(
         report_id=report.id,
         type=MediaTypeEnum.IMAGE,
-        resolution_tier=ResolutionEnum.HIGH,
+        resolution_tier=ResolutionEnum.ORIGINAL,
         url="",
         chunk_count=chunk_count,
         received_chunks=received_chunks,

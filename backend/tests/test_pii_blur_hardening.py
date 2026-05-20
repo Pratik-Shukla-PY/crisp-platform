@@ -217,7 +217,7 @@ class TestBlurPipelineEndToEnd:
                 "seq_num": "0",
                 "total_chunks": "1",
                 "type": "IMAGE",
-                "resolution_tier": "LOW",
+                "resolution_tier": "SMALL",
                 "client_blur_applied": "false",       # the key assertion input
                 "checksum": djb2_bytes(payload),
             },
@@ -275,7 +275,7 @@ class TestBlurPipelineEndToEnd:
                 "seq_num": "0",
                 "total_chunks": "1",
                 "type": "IMAGE",
-                "resolution_tier": "LOW",
+                "resolution_tier": "SMALL",
                 "client_blur_applied": "true",
                 "checksum": djb2_bytes(payload),
             },

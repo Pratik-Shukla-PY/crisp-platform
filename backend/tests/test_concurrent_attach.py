@@ -94,7 +94,7 @@ def test_two_concurrent_different_type_attach_increments_atomically(client, db):
             json={
                 "type": "IMAGE",
                 "url": _TINY_IMG,
-                "resolution_tier": "LOW",
+                "resolution_tier": "SMALL",
                 "file_size_bytes": 95,
             },
         ).status_code
@@ -105,7 +105,7 @@ def test_two_concurrent_different_type_attach_increments_atomically(client, db):
             json={
                 "type": "AUDIO",
                 "url": _TINY_AUDIO,
-                "resolution_tier": "LOW",
+                "resolution_tier": "SMALL",
                 "file_size_bytes": 48,
             },
         ).status_code
@@ -148,7 +148,7 @@ def test_serial_different_type_attach_baseline(client, db):
         json={
             "type": "IMAGE",
             "url": _TINY_IMG,
-            "resolution_tier": "LOW",
+            "resolution_tier": "SMALL",
             "file_size_bytes": 95,
         },
     )
@@ -159,7 +159,7 @@ def test_serial_different_type_attach_baseline(client, db):
         json={
             "type": "AUDIO",
             "url": _TINY_AUDIO,
-            "resolution_tier": "LOW",
+            "resolution_tier": "SMALL",
             "file_size_bytes": 48,
         },
     )
@@ -183,7 +183,7 @@ def test_single_attach_does_not_overshoot(client, db):
         json={
             "type": "IMAGE",
             "url": _TINY_IMG,
-            "resolution_tier": "LOW",
+            "resolution_tier": "SMALL",
             "file_size_bytes": 95,
         },
     )

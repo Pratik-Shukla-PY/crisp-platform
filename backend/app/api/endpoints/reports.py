@@ -1177,12 +1177,9 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
                         first_in_group = sibling_count == 0
                     if first_in_group and delta >= 0:
                         time_to_first_image_seconds.observe(delta)
-                    # Phase L (May 2026) — `time_to_full_image_seconds` measures
-                    # time-to-highest-tier-landed. Pre-L the highest tier was
-                    # HIGH; post-L it's ORIGINAL. Accept both during transition
-                    # so historical rows + new writes both contribute to the
-                    # histogram.
-                    if _tier_label in ('ORIGINAL', 'HIGH') and delta >= 0:
+                    # Phase L — `time_to_full_image_seconds` measures
+                    # time-to-highest-tier-landed (ORIGINAL post-rename).
+                    if _tier_label == 'ORIGINAL' and delta >= 0:
                         time_to_full_image_seconds.observe(delta)
             except Exception as e:
                 # Metrics must never break the assembly pipeline.
@@ -1692,7 +1689,7 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
         if not images:
             return None
         # Prefer a complete SMALL variant (cheapest, best for list thumbs).
-        for tier_preference in ('LOW', 'MEDIUM', 'HIGH'):
+        for tier_preference in ('SMALL', 'MEDIUM', 'ORIGINAL'):
             for m in images:
                 if (m.resolution_tier and m.resolution_tier.value == tier_preference and
                         m.assembly_status == 'complete' and m.url):
@@ -3282,14 +3279,15 @@ def attach_media_chunk(
         if payload.seq_num == 0 and payload.full_asset_checksum and not media.full_asset_checksum:
             media.full_asset_checksum = payload.full_asset_checksum
         # Tier upgrade: /media/thumbnail used to hard-code MEDIUM when it
-        # created the row, which stranded HIGH-tier rows at MEDIUM whenever
-        # the thumbnail landed first. Conservative rule — only upgrade
-        # LOW/MEDIUM → HIGH, never downgrade — so the dashboard "Originals
-        # pending" pill (filters on resolution_tier === 'HIGH') sees the
-        # full-quality variant once the chunks declare it.
-        if (payload.resolution_tier == ResolutionEnum.HIGH
-                and media.resolution_tier in (ResolutionEnum.LOW, ResolutionEnum.MEDIUM)):
-            media.resolution_tier = ResolutionEnum.HIGH
+        # created the row, which stranded ORIGINAL-tier rows at MEDIUM
+        # whenever the thumbnail landed first. Conservative rule — only
+        # upgrade SMALL/MEDIUM → ORIGINAL, never downgrade — so the
+        # dashboard "Originals pending" pill (filters on
+        # resolution_tier === 'ORIGINAL') sees the full-quality variant
+        # once the chunks declare it.
+        if (payload.resolution_tier == ResolutionEnum.ORIGINAL
+                and media.resolution_tier in (ResolutionEnum.SMALL, ResolutionEnum.MEDIUM)):
+            media.resolution_tier = ResolutionEnum.ORIGINAL
 
     # Idempotent chunk insert — check for duplicate before incrementing counter.
     # K.1.b (May 2026, Phase K) — race-safe insert. The query-then-add
@@ -3556,7 +3554,10 @@ async def attach_media_chunk_bin(
     if type_upper not in {"IMAGE", "AUDIO"}:
         raise HTTPException(status_code=422, detail=f"invalid type: {type!r}")
     tier_upper = str(resolution_tier).upper()
-    if tier_upper not in {"LOW", "MEDIUM", "HIGH", "ORIGINAL"}:
+    # Phase L (May 2026) — canonical 3-value vocabulary. Pre-L
+    # vocabulary was LOW/MEDIUM/HIGH/ORIGINAL; alembic 0036 dropped
+    # LOW + HIGH from the Postgres enum.
+    if tier_upper not in {"SMALL", "MEDIUM", "ORIGINAL"}:
         raise HTTPException(status_code=422, detail=f"invalid resolution_tier: {resolution_tier!r}")
 
     report = db.query(Report).filter(Report.id == report_id).first()
@@ -3837,11 +3838,9 @@ def mark_media_deferred(
         )
 
     reason = payload.reason or "bandwidth_tier_deferred"
-    # Phase L (May 2026) — accept both legacy and canonical tier names in
-    # the payload during the transition. The taxonomy normalizer rewrites
-    # legacy → canonical so we always persist the canonical Phase L
-    # vocabulary regardless of which client version sent the request.
-    valid_tiers = {"SMALL", "MEDIUM", "ORIGINAL", "LOW", "HIGH"}
+    # Phase L (May 2026) — canonical vocabulary only. Legacy LOW/HIGH
+    # tier names are rejected (dropped from enum in alembic 0036).
+    valid_tiers = {"SMALL", "MEDIUM", "ORIGINAL"}
     valid_reasons = {
         "bandwidth_tier_deferred", "encode_failed", "orphan_no_source",
     }
@@ -3852,7 +3851,6 @@ def mark_media_deferred(
         )
 
     from datetime import datetime as _dt, timezone as _tz
-    from app.core.taxonomy import normalize_resolution_tier as _norm_tier
     now_utc = _dt.now(_tz.utc)
     newly_stamped = 0
 
@@ -3863,9 +3861,6 @@ def mark_media_deferred(
             tier = str(tier_raw).upper()
             if tier not in valid_tiers:
                 continue
-            # Normalize LOW→SMALL, HIGH→ORIGINAL so the persisted Media
-            # row always carries the canonical Phase L value.
-            tier = _norm_tier(tier)
             try:
                 tier_enum = ResolutionEnum(tier)
             except ValueError:

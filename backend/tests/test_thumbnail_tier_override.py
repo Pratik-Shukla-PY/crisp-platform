@@ -122,7 +122,7 @@ class TestThumbnailTierField:
         _post_thumbnail(client, report_id, "m-thumb-low", tier="LOW")
         m = db.query(Media).filter(Media.id == "m-thumb-low").first()
         assert m is not None
-        assert m.resolution_tier == ResolutionEnum.LOW
+        assert m.resolution_tier == ResolutionEnum.SMALL
 
     def test_thumbnail_with_explicit_high_tags_row_high(self, client, db):
         """PWA full-quality variant — thumbnail can declare HIGH directly
@@ -131,7 +131,7 @@ class TestThumbnailTierField:
         _post_thumbnail(client, report_id, "m-thumb-high", tier="HIGH")
         m = db.query(Media).filter(Media.id == "m-thumb-high").first()
         assert m is not None
-        assert m.resolution_tier == ResolutionEnum.HIGH
+        assert m.resolution_tier == ResolutionEnum.ORIGINAL
 
 
 class TestChunkBinTierUpgrade:
@@ -152,7 +152,7 @@ class TestChunkBinTierUpgrade:
 
         _post_chunk_bin(client, report_id, media_id, tier="HIGH")
         db.refresh(m)
-        assert m.resolution_tier == ResolutionEnum.HIGH
+        assert m.resolution_tier == ResolutionEnum.ORIGINAL
 
     def test_thumbnail_then_high_chunk_b64_ends_high(self, client, db):
         """Same regression on the legacy JSON+base64 transport — the
@@ -165,7 +165,7 @@ class TestChunkBinTierUpgrade:
         _post_chunk_b64(client, report_id, media_id, tier="HIGH")
 
         m = db.query(Media).filter(Media.id == media_id).first()
-        assert m.resolution_tier == ResolutionEnum.HIGH
+        assert m.resolution_tier == ResolutionEnum.ORIGINAL
 
     def test_low_chunk_does_not_downgrade_medium_row(self, client, db):
         """Conservative rule: never downgrade. A MEDIUM thumbnail row
@@ -190,7 +190,7 @@ class TestChunkBinTierUpgrade:
         _post_chunk_bin(client, report_id, media_id, tier="LOW")
 
         m = db.query(Media).filter(Media.id == media_id).first()
-        assert m.resolution_tier == ResolutionEnum.HIGH
+        assert m.resolution_tier == ResolutionEnum.ORIGINAL
 
     def test_messaging_bot_low_thumbnail_plus_low_chunks_stays_low(self, client, db):
         """Smoke-verify mirror of messaging-bot/chunked_uploader.py —
@@ -203,4 +203,4 @@ class TestChunkBinTierUpgrade:
         _post_chunk_bin(client, report_id, media_id, tier="LOW")
 
         m = db.query(Media).filter(Media.id == media_id).first()
-        assert m.resolution_tier == ResolutionEnum.LOW
+        assert m.resolution_tier == ResolutionEnum.SMALL

@@ -158,13 +158,14 @@ async def upload_media_chunked(
                 thumb_url = f"data:{mime_type};base64,{thumb_b64}"
                 await c.post(
                     f"{BACKEND_URL}/api/v1/reports/{report_id}/media/thumbnail",
-                    # Tier matches the LOW the chunk POSTs send below — the
+                    # Tier matches the SMALL the chunk POSTs send below — the
                     # backend used to hard-code MEDIUM on this row regardless,
                     # which left every messaging-bot photo mis-tagged.
+                    # Phase L (May 2026) — canonical SMALL (was LOW pre-rename).
                     json={
                         "media_id": media_id,
                         "thumbnail_data": thumb_url,
-                        "resolution_tier": "LOW",
+                        "resolution_tier": "SMALL",
                     },
                 )
             except Exception:
@@ -241,28 +242,32 @@ async def _send_chunk_with_retry(client, report_id, media_id, media_type,
     # dashboard (operator-reported).
     #
     # Single-tier transport: messaging-channel media isn't run through
-    # the PWA's SMALL/MEDIUM/LARGE variant ladder. The previous default
-    # (`LOW` for every chunk) made the bot's full-resolution photo
-    # land on the backend as a LOW row, and the dashboard's
+    # the PWA's SMALL/MEDIUM/ORIGINAL variant ladder. The previous default
+    # (`LOW` / now `SMALL` for every chunk) made the bot's full-resolution
+    # photo land on the backend as a SMALL row, and the dashboard's
     # "Open original" / Originals UI strictly filters on
-    # `resolution_tier === 'HIGH'`. Net effect: every Telegram photo
+    # `resolution_tier === 'ORIGINAL'`. Net effect: every Telegram photo
     # was permanently hidden from the Originals tab.
     #
     # Telegram serves photos in 4-5 progressively larger renditions
     # (max 1280×1280 for legacy Bot API). The bot already picks
     # `photos[-1]` — the largest the channel can deliver — so those
     # bytes ARE the "Original" for that report from Telegram's
-    # perspective. Tag the chunks as HIGH for IMAGE uploads so the
-    # dashboard surfaces them as the Original. AUDIO/VIDEO stay LOW
-    # because the resolution_tier semantics there are still LOW-only
-    # on the dashboard side.
+    # perspective. Tag the chunks as ORIGINAL for IMAGE uploads so the
+    # dashboard surfaces them as the Original. AUDIO stays SMALL
+    # because the resolution_tier semantics there are still
+    # minimum-tier on the dashboard side.
+    #
+    # Phase L (May 2026) — tier vocabulary is SMALL/MEDIUM/ORIGINAL.
+    # Pre-L this code used LOW/HIGH; the rename keeps the same
+    # operator-visible behaviour with the cleaner canonical names.
     #
     # The backend's existing tier-upgrade logic at
-    # `attach_media_chunk` (line ~2661) already allows a chunk to
-    # *upgrade* an existing LOW/MEDIUM row to HIGH — so even if the
-    # thumbnail (LOW) lands first via /media/thumbnail, the chunks'
-    # HIGH tag wins and the Media row ends up at HIGH for IMAGE.
-    tier = "HIGH" if media_type == "IMAGE" else "LOW"
+    # `attach_media_chunk` already allows a chunk to *upgrade* an
+    # existing SMALL/MEDIUM row to ORIGINAL — so even if the
+    # thumbnail (SMALL) lands first via /media/thumbnail, the chunks'
+    # ORIGINAL tag wins and the Media row ends up at ORIGINAL for IMAGE.
+    tier = "ORIGINAL" if media_type == "IMAGE" else "SMALL"
     form = {
         "media_id": media_id,
         "seq_num": str(seq),
@@ -314,11 +319,12 @@ async def _send_chunk_b64_fallback(client, report_id, media_id, media_type,
     is unavailable on this backend (process-sticky fallback)."""
     data_b64 = base64.b64encode(chunk_bytes).decode("ascii")
     checksum = _djb2_checksum(data_b64)
-    # Match the HIGH-tier-for-IMAGE behaviour of the primary binary
+    # Match the ORIGINAL-tier-for-IMAGE behaviour of the primary binary
     # path. Otherwise a backend that 404s on /media/chunk-bin would
-    # still mis-tag every Telegram photo as LOW and hide it from the
+    # still mis-tag every Telegram photo as SMALL and hide it from the
     # Originals tab. (See the long comment in the bin path above.)
-    tier = "HIGH" if media_type == "IMAGE" else "LOW"
+    # Phase L — canonical SMALL/ORIGINAL (was LOW/HIGH pre-rename).
+    tier = "ORIGINAL" if media_type == "IMAGE" else "SMALL"
     payload = {
         "media_id": media_id, "type": media_type,
         "seq_num": seq, "total_chunks": total,

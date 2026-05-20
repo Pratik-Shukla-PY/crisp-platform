@@ -12,7 +12,10 @@ CREATE TYPE source_enum AS ENUM ('APP', 'WHATSAPP', 'TELEGRAM');
 CREATE TYPE severity_enum AS ENUM ('MINOR', 'MODERATE', 'SEVERE', 'UNKNOWN');
 CREATE TYPE infra_type_enum AS ENUM ('ROAD', 'HOSPITAL', 'HOUSE', 'POWER', 'WATER', 'OTHER');
 CREATE TYPE media_type_enum AS ENUM ('IMAGE', 'AUDIO');
-CREATE TYPE resolution_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'ORIGINAL');
+-- Phase L (May 2026) — canonical 3-value taxonomy. Pre-L vocabulary
+-- was LOW/MEDIUM/HIGH/ORIGINAL; alembic 0035 backfilled LOW→SMALL +
+-- HIGH→ORIGINAL, 0036 dropped LOW/HIGH from the enum.
+CREATE TYPE resolution_enum AS ENUM ('SMALL', 'MEDIUM', 'ORIGINAL');
 CREATE TYPE sync_status_enum AS ENUM ('PARTIAL', 'QUEUED', 'SYNCED', 'FAILED');
 CREATE TYPE report_status_enum AS ENUM ('PENDING', 'VERIFIED', 'REJECTED');
 CREATE TYPE cluster_status_enum AS ENUM ('ACTIVE', 'RESOLVED', 'FALSE_ALARM');
@@ -60,7 +63,7 @@ CREATE TABLE media (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     report_id UUID REFERENCES reports(id) ON DELETE CASCADE,
     type media_type_enum NOT NULL,
-    resolution_tier resolution_enum NOT NULL DEFAULT 'LOW',
+    resolution_tier resolution_enum NOT NULL DEFAULT 'SMALL',
     url TEXT NOT NULL,
     file_size_bytes BIGINT,
     is_synced BOOLEAN DEFAULT FALSE,

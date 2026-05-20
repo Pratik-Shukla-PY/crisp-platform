@@ -88,7 +88,7 @@ def test_legacy_chunk_serial_dup_returns_200_no_double_increment(client, db):
         "total_chunks": 3,
         "data": _PAYLOAD_DATA,
         "checksum": _PAYLOAD_CHECKSUM,
-        "resolution_tier": "LOW",
+        "resolution_tier": "SMALL",
     }
 
     res1 = client.post(f"/api/v1/reports/{r.id}/media/chunk", json=payload)
@@ -123,7 +123,7 @@ def test_legacy_chunk_concurrent_dup_no_500(client, db):
         "total_chunks": 3,
         "data": _PAYLOAD_DATA,
         "checksum": _PAYLOAD_CHECKSUM,
-        "resolution_tier": "LOW",
+        "resolution_tier": "SMALL",
     }
 
     def _post():
@@ -161,7 +161,7 @@ def _bin_post(test_client, report_id, media_id, raw_bytes, checksum):
             "seq_num": "0",
             "total_chunks": "3",
             "type": "IMAGE",
-            "resolution_tier": "LOW",
+            "resolution_tier": "SMALL",
             "checksum": checksum,
         },
     )

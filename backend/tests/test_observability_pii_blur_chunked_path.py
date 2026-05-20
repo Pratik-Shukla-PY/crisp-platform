@@ -80,7 +80,7 @@ def _seed_report_media_chunk(db, *, device_hash, media_type, real_bytes):
         id=media_id,
         report_id=r.id,
         type=media_type,
-        resolution_tier=ResolutionEnum.LOW,
+        resolution_tier=ResolutionEnum.SMALL,
         url="",
         chunk_count=1,
         received_chunks=1,

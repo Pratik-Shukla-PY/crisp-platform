@@ -63,9 +63,9 @@ def test_one_shot_with_three_media_sets_received_and_synced(client, db):
     payload = _base_payload(
         "DEV-K2G-three-media",
         media=[
-            {"type": "IMAGE", "url": _TINY_IMG, "resolution_tier": "LOW", "file_size_bytes": 95},
+            {"type": "IMAGE", "url": _TINY_IMG, "resolution_tier": "SMALL", "file_size_bytes": 95},
             {"type": "IMAGE", "url": _TINY_IMG, "resolution_tier": "MEDIUM", "file_size_bytes": 95},
-            {"type": "AUDIO", "url": _TINY_AUDIO, "resolution_tier": "LOW", "file_size_bytes": 48},
+            {"type": "AUDIO", "url": _TINY_AUDIO, "resolution_tier": "SMALL", "file_size_bytes": 48},
         ],
     )
     res = client.post("/api/v1/reports/", json=payload)
@@ -111,8 +111,8 @@ def test_one_shot_with_media_and_higher_expected_stays_partial(client, db):
     payload = _base_payload(
         "DEV-K2G-partial-expected",
         media=[
-            {"type": "IMAGE", "url": _TINY_IMG, "resolution_tier": "LOW", "file_size_bytes": 95},
-            {"type": "AUDIO", "url": _TINY_AUDIO, "resolution_tier": "LOW", "file_size_bytes": 48},
+            {"type": "IMAGE", "url": _TINY_IMG, "resolution_tier": "SMALL", "file_size_bytes": 95},
+            {"type": "AUDIO", "url": _TINY_AUDIO, "resolution_tier": "SMALL", "file_size_bytes": 48},
         ],
         expected_media=3,
     )

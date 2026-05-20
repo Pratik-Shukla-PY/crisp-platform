@@ -259,7 +259,7 @@ class TestThumbUrlStableContract:
             report_id=r["id"],
             type=MediaTypeEnum.IMAGE,
             url="s3://crisp-uploads/photo-deadbeef.jpg",
-            resolution_tier=ResolutionEnum.LOW,
+            resolution_tier=ResolutionEnum.SMALL,
             assembly_status="complete",
             is_synced=True,
         )
@@ -294,7 +294,7 @@ class TestThumbUrlStableContract:
             report_id=r["id"],
             type=MediaTypeEnum.IMAGE,
             url="https://cdn.example.com/photo.jpg",
-            resolution_tier=ResolutionEnum.LOW,
+            resolution_tier=ResolutionEnum.SMALL,
             assembly_status="complete",
             is_synced=True,
         )

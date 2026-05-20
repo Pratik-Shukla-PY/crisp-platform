@@ -1,22 +1,17 @@
 """Phase L (May 2026) — resolution_tier canonical vocabulary + 5 MB cap.
 
-Asserts the L.1 + L.12.6 sub-phases work end-to-end:
+Asserts the L.1 + L.1b + L.12.6 sub-phases work end-to-end:
 
-L.1.a + L.1.c — Pydantic normalization
-  * MediaAttach with tier='LOW' is normalized to SMALL on persist
-  * MediaAttach with tier='HIGH' is normalized to ORIGINAL on persist
-  * MediaAttach with tier='SMALL' / 'MEDIUM' / 'ORIGINAL' passes through unchanged
-  * Lowercase variants ('low', 'high', 'small') are also normalized
+L.1.a — Enum is the 3 canonical values only
+  * ResolutionEnum has exactly {SMALL, MEDIUM, ORIGINAL} — no legacy aliases
 
-L.1.b — Alembic 0035 backfill
-  * Verified via the migration head check (existing rows are post-backfill;
-    we can't easily insert legacy values via the model layer because
-    Pydantic normalizes them away — a separate sub-test seeds via raw SQL)
+L.1.b — Alembic 0035 backfilled HIGH→ORIGINAL, LOW→SMALL.
+L.1b — Alembic 0036 dropped LOW/HIGH from the Postgres enum.
 
-L.1.d — Endpoint accepts both legacy and canonical tier names
-  * /reports/{id}/media/mark-deferred with ["HIGH"] stamps ORIGINAL rows
-  * /reports/{id}/media/mark-deferred with ["ORIGINAL"] stamps ORIGINAL rows
-  * Already covered by test_mark_deferred.py (updated to assert ORIGINAL)
+L.1.d — Endpoint validates strictly
+  * MediaAttach with tier='LOW' → 422 (rejected by Pydantic enum)
+  * MediaAttach with tier='HIGH' → 422
+  * MediaAttach with tier='SMALL' / 'MEDIUM' / 'ORIGINAL' accepted
 
 L.12.6 — Server-side 5 MB ORIGINAL cap
   * /attach with ORIGINAL tier + 5 MB + 1 byte → 413
@@ -33,7 +28,6 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.core.taxonomy import normalize_resolution_tier
 from app.models.report import (
     Media,
     MediaTypeEnum,
@@ -44,31 +38,21 @@ from app.models.report import (
 )
 
 
-# ── L.1 — Pydantic normalization ─────────────────────────────────────────────
+# ── L.1.a — Enum is the 3 canonical values only ──────────────────────────────
 
 
-def test_normalize_resolution_tier_handles_legacy_and_canonical():
-    """Pure unit test on the normalizer — no DB involved."""
-    # Canonical pass through
-    assert normalize_resolution_tier("SMALL") == "SMALL"
-    assert normalize_resolution_tier("MEDIUM") == "MEDIUM"
-    assert normalize_resolution_tier("ORIGINAL") == "ORIGINAL"
-    # Legacy → canonical
-    assert normalize_resolution_tier("LOW") == "SMALL"
-    assert normalize_resolution_tier("HIGH") == "ORIGINAL"
-    # Lowercase forms
-    assert normalize_resolution_tier("low") == "SMALL"
-    assert normalize_resolution_tier("high") == "ORIGINAL"
-    assert normalize_resolution_tier("small") == "SMALL"
-    assert normalize_resolution_tier("medium") == "MEDIUM"
-    assert normalize_resolution_tier("original") == "ORIGINAL"
-    # Empty / None passthrough
-    assert normalize_resolution_tier(None) is None
-    # Unknown — left untouched, Pydantic enum validation rejects downstream
-    assert normalize_resolution_tier("BOGUS") == "BOGUS"
-    # Enum member input is also accepted
-    assert normalize_resolution_tier(ResolutionEnum.HIGH) == "ORIGINAL"
-    assert normalize_resolution_tier(ResolutionEnum.LOW) == "SMALL"
+def test_resolution_enum_is_three_canonical_values_only():
+    """The Phase L enum has exactly SMALL/MEDIUM/ORIGINAL; legacy
+    LOW/HIGH removed in alembic 0036."""
+    members = {m.name for m in ResolutionEnum}
+    assert members == {"SMALL", "MEDIUM", "ORIGINAL"}, (
+        f"Phase L enum must be exactly the 3 canonical values; "
+        f"got {sorted(members)}"
+    )
+    # And the .value attribute strings match.
+    assert ResolutionEnum.SMALL.value == "SMALL"
+    assert ResolutionEnum.MEDIUM.value == "MEDIUM"
+    assert ResolutionEnum.ORIGINAL.value == "ORIGINAL"
 
 
 # ── L.1.d — /attach accepts legacy names, persists canonical ─────────────────
@@ -102,8 +86,11 @@ _TINY_JPEG_B64 = (
 )
 
 
-def test_attach_with_legacy_LOW_persists_canonical_SMALL(client, db):
-    """/attach payload sends tier='LOW' → row reads back as 'SMALL'."""
+def test_attach_with_legacy_LOW_returns_422(client, db):
+    """Phase L (L.1b cleanup) — legacy LOW is no longer accepted.
+    Clients must send the canonical SMALL value. Pydantic enum
+    validation rejects with 422.
+    """
     r = _make_report_for_attach(db)
     res = client.patch(
         f"/api/v1/reports/{r.id}/media/attach",
@@ -113,16 +100,17 @@ def test_attach_with_legacy_LOW_persists_canonical_SMALL(client, db):
             "url": f"data:image/jpeg;base64,{_TINY_JPEG_B64}",
         },
     )
-    assert res.status_code in (200, 201), f"got {res.status_code} body={res.text}"
-    media = db.query(Media).filter(Media.report_id == r.id).first()
-    assert media is not None
-    assert media.resolution_tier == ResolutionEnum.SMALL, (
-        f"Legacy LOW must normalize to SMALL; got {media.resolution_tier!r}"
+    assert res.status_code == 422, (
+        f"Legacy LOW must be rejected post-L.1b; got {res.status_code} body={res.text}"
     )
+    # No Media row was persisted.
+    assert db.query(Media).filter(Media.report_id == r.id).count() == 0
 
 
-def test_attach_with_legacy_HIGH_persists_canonical_ORIGINAL(client, db):
-    """/attach payload sends tier='HIGH' → row reads back as 'ORIGINAL'."""
+def test_attach_with_legacy_HIGH_returns_422(client, db):
+    """Phase L (L.1b cleanup) — legacy HIGH is no longer accepted.
+    Clients must send the canonical ORIGINAL value.
+    """
     r = _make_report_for_attach(db)
     res = client.patch(
         f"/api/v1/reports/{r.id}/media/attach",
@@ -132,13 +120,11 @@ def test_attach_with_legacy_HIGH_persists_canonical_ORIGINAL(client, db):
             "url": f"data:image/jpeg;base64,{_TINY_JPEG_B64}",
         },
     )
-    assert res.status_code in (200, 201)
-    media = db.query(Media).filter(Media.report_id == r.id).first()
-    assert media is not None
-    assert media.resolution_tier == ResolutionEnum.ORIGINAL
+    assert res.status_code == 422
+    assert db.query(Media).filter(Media.report_id == r.id).count() == 0
 
 
-def test_attach_with_canonical_SMALL_passes_through(client, db):
+def test_attach_with_canonical_SMALL_persists_correctly(client, db):
     """/attach payload sends tier='SMALL' → row reads back as 'SMALL'."""
     r = _make_report_for_attach(db)
     res = client.patch(
@@ -152,6 +138,22 @@ def test_attach_with_canonical_SMALL_passes_through(client, db):
     assert res.status_code in (200, 201)
     media = db.query(Media).filter(Media.report_id == r.id).first()
     assert media.resolution_tier == ResolutionEnum.SMALL
+
+
+def test_attach_with_canonical_ORIGINAL_persists_correctly(client, db):
+    """/attach payload sends tier='ORIGINAL' → row reads back as 'ORIGINAL'."""
+    r = _make_report_for_attach(db)
+    res = client.patch(
+        f"/api/v1/reports/{r.id}/media/attach",
+        json={
+            "type": "IMAGE",
+            "resolution_tier": "ORIGINAL",
+            "url": f"data:image/jpeg;base64,{_TINY_JPEG_B64}",
+        },
+    )
+    assert res.status_code in (200, 201)
+    media = db.query(Media).filter(Media.report_id == r.id).first()
+    assert media.resolution_tier == ResolutionEnum.ORIGINAL
 
 
 # ── L.12.6 — Server-side 5 MB ORIGINAL cap ───────────────────────────────────
