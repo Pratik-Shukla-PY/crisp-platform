@@ -363,6 +363,15 @@ def export_pdf(
 
     reports = _query_reports(db, status, crisis_type, since, until)[:limit]
 
+    # May 2026 audit Item 3 — log a warning when the limit is hit so the
+    # operator knows the export was silently truncated. Pre-fix this was
+    # a silent slice with no visible signal in the response.
+    if len(reports) >= limit:
+        logger.warning(
+            f"[exports/pdf] hit limit={limit} — operator export may be truncated. "
+            f"Consider increasing ?limit or paginating."
+        )
+
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf,
@@ -382,6 +391,18 @@ def export_pdf(
     label = ParagraphStyle(
         "label", parent=body, fontName="Helvetica-Bold", fontSize=9,
     )
+
+    # May 2026 audit Item 3 — for embedding SMALL-tier thumbnails into
+    # the PDF's media section, we read bytes via the storage abstraction.
+    # Lazy-import inside the endpoint so an exports.py import doesn't
+    # pull in the storage stack on every request.
+    from reportlab.platypus import Image as _RLImage
+    from app.services.storage import get_storage as _get_storage
+    _storage = None
+    try:
+        _storage = _get_storage()
+    except Exception as _se:
+        logger.warning(f"[exports/pdf] storage backend unavailable; PDF will list media as text-only links: {_se}")
 
     story = []
     # Cover block
@@ -415,6 +436,21 @@ def export_pdf(
         ))
         story.append(Spacer(1, 0.2 * cm))
 
+        # May 2026 audit Item 3 — building version ordinal in the table
+        # when the report belongs to a multi-version building chain.
+        # Operators viewing a dossier need to know "this is version 3
+        # of 5 reports on this building." Pre-fix the field was only
+        # surfaced in the building_dossier code path.
+        building_version_row = None
+        if getattr(r, "building_id", None):
+            ordinal = getattr(r, "building_version_ordinal", None)
+            is_latest = getattr(r, "building_is_latest", None)
+            if ordinal is not None or is_latest is not None:
+                building_version_row = [
+                    "Building Version",
+                    f"#{ordinal or '?'}" + (" (latest)" if is_latest else ""),
+                ]
+
         data = [
             ["Client Ref",             row["client_report_id"]],
             ["Source",                 row["source"]],
@@ -425,6 +461,10 @@ def export_pdf(
             ["Infrastructure (UNDP)",  row["infrastructure_type"]],
             ["Sub-type",               row.get("infrastructure_sub_type", "")],
             ["Building / Structure",   row["infrastructure_name"]],
+        ]
+        if building_version_row:
+            data.append(building_version_row)
+        data.extend([
             ["Damage Classification",  row["damage_classification"]],
             ["Debris Clearing",        row["debris_clearing_needed"]],
             # Phase 2.1 — V4 fields on the analyst-facing PDF.
@@ -440,7 +480,25 @@ def export_pdf(
             ["Location Name",          row["location_name"]],
             ["Lives Impacted",         row["lives_impacted"]],
             ["Submitted at",           row["timestamp"]],
-        ]
+        ])
+
+        # May 2026 audit Item 3 — append satellite verification rows
+        # (UNDP must-have #11). Pre-fix the PDF only contained 20
+        # plain-text fields with ZERO satellite columns even though
+        # _report_to_row already builds them and CSV/GeoJSON/KML
+        # include them. Six rows: verdict, total_score, acquisition
+        # date, days_gap, cloud_cover_pct, source. Empty values are
+        # rendered as blanks so layout stays consistent for reports
+        # that haven't been scored yet.
+        data.extend([
+            ["Sat. Verdict",            row.get("satellite_verdict", "")],
+            ["Sat. Total Score",        row.get("satellite_total_score", "")],
+            ["Sat. Acquisition Date",   row.get("satellite_acquisition_date", "")],
+            ["Sat. Days Gap",           row.get("satellite_days_gap", "")],
+            ["Sat. Cloud Cover %",      row.get("satellite_cloud_cover_pct", "")],
+            ["Sat. Source",             row.get("satellite_source", "")],
+        ])
+
         table = Table(data, colWidths=[5 * cm, None], hAlign="LEFT")
         table.setStyle(TableStyle([
             ("FONTNAME",   (0, 0), (0, -1), "Helvetica-Bold"),
@@ -462,6 +520,88 @@ def export_pdf(
             story.append(Paragraph("Service status", label))
             for k, v in (r.service_status or {}).items():
                 story.append(Paragraph(f"{k}: {v}", body))
+
+        # May 2026 audit Item 3 — Media section. Pre-fix the PDF
+        # contained ZERO photos and ZERO audio references regardless of
+        # what was actually attached to the report. Now we group media
+        # by photo_group_id, embed the SMALL-tier thumbnail inline (if
+        # storage is reachable), and list every tier's stable URL so
+        # operators can fetch the ORIGINAL from a print copy by typing
+        # the path or clicking through if they have the digital PDF.
+        try:
+            media_list = list(r.media or [])
+        except Exception:
+            media_list = []
+        if media_list:
+            story.append(Spacer(1, 0.3 * cm))
+            story.append(Paragraph("Media", label))
+            # Group images by photo_group_id; audio kept separate.
+            from collections import defaultdict as _dd
+            image_groups = _dd(list)
+            audio_items = []
+            for m in media_list:
+                mtype = (m.type.value if m.type else "") if hasattr(m, "type") else ""
+                if mtype == "IMAGE":
+                    grp = str(m.photo_group_id) if m.photo_group_id else "ungrouped"
+                    image_groups[grp].append(m)
+                elif mtype == "AUDIO":
+                    audio_items.append(m)
+            # Stable URL pattern (matches MediaResponse.field_serializer).
+            for gi, (grp, items) in enumerate(image_groups.items()):
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(Paragraph(
+                    f"Photo {gi + 1} (group {grp[:8] if grp != 'ungrouped' else 'ungrouped'})",
+                    small,
+                ))
+                # Find the best-quality completed tier for the inline embed.
+                # SMALL is fastest to render but lowest fidelity; we embed
+                # SMALL for the PDF's print size + page weight, and link
+                # MEDIUM/ORIGINAL for full-res reference.
+                small_tier = next(
+                    (it for it in items
+                     if it.resolution_tier and it.resolution_tier.value == "SMALL"
+                     and it.assembly_status == "complete" and it.url),
+                    None,
+                )
+                if small_tier and _storage:
+                    try:
+                        img_bytes = _storage.read(small_tier.url)
+                        img_buf = io.BytesIO(img_bytes)
+                        # Fit image to 6cm wide (roughly half a page);
+                        # preserve aspect via ReportLab's natural-size logic.
+                        img = _RLImage(img_buf, width=6 * cm, height=6 * cm * 0.75)
+                        img.hAlign = "LEFT"
+                        story.append(img)
+                    except Exception as _ie:
+                        logger.warning(
+                            f"[exports/pdf] failed to embed SMALL media {small_tier.id[:8]}: {_ie}"
+                        )
+                        # Fall through to text-only listing below.
+                # Tier list with stable URLs + assembly status.
+                tier_lines = []
+                for it in items:
+                    tname = (it.resolution_tier.value if it.resolution_tier else "?")
+                    status_s = it.assembly_status or "?"
+                    abandon = f" — abandoned: {it.abandon_reason}" if it.abandon_reason else ""
+                    url_stable = f"/api/v1/reports/media/{it.id}/file"
+                    tier_lines.append(
+                        f"{tname}: {status_s}{abandon} → {url_stable}"
+                    )
+                if tier_lines:
+                    story.append(Paragraph(
+                        "<br/>".join(tier_lines), small,
+                    ))
+            if audio_items:
+                story.append(Spacer(1, 0.2 * cm))
+                story.append(Paragraph("Audio", label))
+                for ai, a in enumerate(audio_items):
+                    a_status = a.assembly_status or "?"
+                    abandon = f" — abandoned: {a.abandon_reason}" if a.abandon_reason else ""
+                    url_stable = f"/api/v1/reports/media/{a.id}/file"
+                    story.append(Paragraph(
+                        f"Audio {ai + 1}: {a_status}{abandon} → {url_stable}",
+                        small,
+                    ))
 
     # Handle empty result gracefully — don't ship an empty PDF.
     if not reports:
