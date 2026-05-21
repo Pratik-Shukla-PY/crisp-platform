@@ -1,0 +1,52 @@
+{
+  "cids": 10,
+  "totalElapsedMs": 1133560,
+  "fixture": {
+    "name": "IMG_5735_2",
+    "file": "IMG_5735_2.jpg",
+    "lat": 12.84461,
+    "lng": 77.66421
+  },
+  "perReportTiming": [
+    {
+      "cid": "b8480df9-8350-418f-a397-f733cd89697b",
+      "submitToSmallMs": 67422
+    },
+    {
+      "cid": "7b4e7366-077a-4401-a202-32abc923f4dc",
+      "submitToSmallMs": 33983
+    },
+    {
+      "cid": "3304b0a9-c0b3-48d1-856b-6298c420e51f",
+      "submitToSmallMs": 123253
+    },
+    {
+      "cid": "b96a7727-3acd-42dd-891a-e4bf556467ee",
+      "submitToSmallMs": 124652
+    },
+    {
+      "cid": "1d7362d0-df8f-4433-af2b-17688f8f7ac2",
+      "submitToSmallMs": 122603
+    },
+    {
+      "cid": "bf40bdde-fb7c-4986-93fc-82cf14b2a741",
+      "submitToSmallMs": 122566
+    },
+    {
+      "cid": "475e745e-ad67-4acc-80c3-f929a7d2c0f2",
+      "submitToSmallMs": 124316
+    },
+    {
+      "cid": "4b9d2968-4fd5-4217-ab6e-504208c7f28c",
+      "submitToSmallMs": 124853
+    },
+    {
+      "cid": "0071cf34-834f-42f5-919c-7dd0a56b90e8",
+      "submitToSmallMs": 124399
+    },
+    {
+      "cid": "7217c5d3-ec7a-4d97-ae63-f3ad2dff753a",
+      "submitToSmallMs": 124523
+    }
+  ]
+}

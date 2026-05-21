@@ -1,0 +1,68 @@
+{
+  "submitted": 10,
+  "smallLanded": 10,
+  "successRate": 1,
+  "finalStates": [
+    {
+      "cid": "b8480df9",
+      "sync_status": "SYNCED",
+      "small_complete": true,
+      "media_count": 3
+    },
+    {
+      "cid": "7b4e7366",
+      "sync_status": "SYNCED",
+      "small_complete": true,
+      "media_count": 3
+    },
+    {
+      "cid": "3304b0a9",
+      "sync_status": "SYNCED",
+      "small_complete": true,
+      "media_count": 3
+    },
+    {
+      "cid": "b96a7727",
+      "sync_status": "SYNCED",
+      "small_complete": true,
+      "media_count": 3
+    },
+    {
+      "cid": "1d7362d0",
+      "sync_status": "SYNCED",
+      "small_complete": true,
+      "media_count": 3
+    },
+    {
+      "cid": "bf40bdde",
+      "sync_status": "SYNCED",
+      "small_complete": true,
+      "media_count": 3
+    },
+    {
+      "cid": "475e745e",
+      "sync_status": "SYNCED",
+      "small_complete": true,
+      "media_count": 3
+    },
+    {
+      "cid": "4b9d2968",
+      "sync_status": "SYNCED",
+      "small_complete": true,
+      "media_count": 3
+    },
+    {
+      "cid": "0071cf34",
+      "sync_status": "SYNCED",
+      "small_complete": true,
+      "media_count": 3
+    },
+    {
+      "cid": "7217c5d3",
+      "sync_status": "PARTIAL",
+      "small_complete": true,
+      "media_count": 1
+    }
+  ],
+  "totalElapsedMs": 1134192
+}
