@@ -5,7 +5,18 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v238';
+const CACHE_NAME = 'crisp-v239';
+// v238 → v239 (May 21 — force bandwidth re-probe on visibility-resume):
+// Cellular smoke 5 surfaced a false-positive defer when iOS Safari
+// suspended a tab mid-upload — every chunk POST iOS killed during
+// suspension ran through pwaNetworkDowngrade() in the chunk-loop catch,
+// ratcheting _pwaTier MEDIUM → SLOW → VERY_SLOW. On resume, the v237
+// defer rule (VERY_SLOW → mark-deferred MEDIUM + ORIGINAL) fired on a
+// stale tier. Result: 3 of 4 MEDIUMs + 4 of 4 ORIGINALs got marked
+// failed/bandwidth_tier_deferred on a perfectly capable cellular link.
+// Fix: visibilitychange → visible now forces adaptTierViaProbe({force:true})
+// which measures real bandwidth and overwrites _pwaTier (bypassing the
+// ratchet). Matches the existing pattern in the `online` event handler.
 // v237 → v238 (May 21 — retry-loop wedge recovery): startRetryLoop now
 // detects when _retryLoopRunning is stuck true with no chunk POST in
 // 60+ seconds while the queue still has work — force-resets the flag

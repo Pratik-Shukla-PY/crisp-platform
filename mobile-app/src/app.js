@@ -13872,9 +13872,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     // single probe only if we were offline. Still no polling if everything
     // is already green — just a one-shot confirmation that the dot reflects
     // current reality.
+    //
+    // May 21 2026 (cellular smoke 5 follow-up) — also force a fresh
+    // bandwidth re-probe on every visibility-resume. Rationale: when iOS
+    // Safari suspends a tab mid-upload, in-flight chunk POSTs die.
+    // Each killed POST runs through `pwaNetworkDowngrade()` (chunk-loop
+    // catch block), one-way ratcheting `_pwaTier` MEDIUM → SLOW →
+    // VERY_SLOW. The downgrade is a bandwidth proxy, but the failure
+    // wasn't bandwidth — it was iOS killing JS. After resume, `_pwaTier`
+    // sits at VERY_SLOW on a perfectly capable cellular link, and
+    // `_uploadVariantTier`'s v237 defer rule then mark-deferreds every
+    // MEDIUM + ORIGINAL it's about to upload — false-positive defer.
+    // Forcing `adaptTierViaProbe({force:true})` here measures actual
+    // current bandwidth and OVERWRITES `_pwaTier` (bypassing the
+    // ratchet). Matches what the `online` handler already does for
+    // network-change events.
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
         if (navigator.onLine === false) _probeConnectivity();
+        // Fresh bandwidth probe on resume so chunk-loop downgrades that
+        // accumulated during the suspension don't pin us at VERY_SLOW.
+        try { adaptTierViaProbe({ force: true }).catch(() => {}); } catch (_) {}
     });
 
     // Connectivity event listeners.
