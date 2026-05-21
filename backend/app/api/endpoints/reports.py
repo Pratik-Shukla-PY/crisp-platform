@@ -5313,10 +5313,39 @@ def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
     from app.models.report import ReporterProfile
     profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
     if not profile:
-        profile = ReporterProfile(device_hash=device_hash, report_count=0, badge_level="T1_SCOUT", impact_score=0)
-        db.add(profile)
-        db.commit()
-        db.refresh(profile)
+        # Race-safe auto-create (May 21, 2026 — fix discovered during
+        # cellular smoke 5 backend-log audit). The PWA home-screen polls
+        # this endpoint every ~5 s. On the first poll for a brand-new
+        # device, two concurrent requests can both observe profile=None
+        # then both attempt INSERT. The loser hits the unique constraint
+        # `ix_reporter_profiles_device_hash` and 500s. Same family as
+        # K.1.b's IntegrityError-catch pattern on duplicate chunks.
+        from sqlalchemy.exc import IntegrityError as _IntegrityError_profile
+        try:
+            profile = ReporterProfile(
+                device_hash=device_hash,
+                report_count=0,
+                badge_level="T1_SCOUT",
+                impact_score=0,
+            )
+            db.add(profile)
+            db.commit()
+            db.refresh(profile)
+        except _IntegrityError_profile:
+            # Concurrent request won the race — re-SELECT the winning row
+            # and proceed. Idempotent: the response is the same regardless
+            # of who created the row.
+            db.rollback()
+            profile = db.query(ReporterProfile).filter(
+                ReporterProfile.device_hash == device_hash
+            ).first()
+            if not profile:
+                # Extremely unlikely (the dup-key fired, so a row exists)
+                # but defensively guard against a SELECT race.
+                raise HTTPException(
+                    status_code=500,
+                    detail="reporter profile race could not be reconciled",
+                )
 
     # Live count of un-deleted rows for this device. If the device row
     # doesn't exist (rare — only for fresh profiles), fall back to 0.

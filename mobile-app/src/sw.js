@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v241';
+const CACHE_NAME = 'crisp-v242';
+// v241 → v242 (May 21 — sync-badge UX: stop capping at 75% for no-audio
+// reports). Pre-fix the badge denominator was always 4 (meta+text
+// +photo+audio). On the common no-audio capture path, stages.audio
+// stays false forever → max progress visible = 3/4 = 75% while uploads
+// were healthy. Operator saw "75% queued" persistently and read it as
+// "stuck." New denominator: 3 for no-audio reports, 4 for audio-bearing
+// reports. A fully-staged no-audio report now reads 99% (capped) — an
+// accurate "almost done, background tiers still uploading" signal.
 // v240 → v241 (May 21 — two fixes from cellular smoke 5):
 // 1) Freeze chunkSize + total on the variant after the first attempt.
 //    A probe-tier shift between retries previously recomputed `total`

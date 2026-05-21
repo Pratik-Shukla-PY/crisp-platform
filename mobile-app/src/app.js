@@ -1028,22 +1028,44 @@ async function updateSyncBadge() {
         // BUGFIX May 2026 (operator-reported, "1 queued never leaves")
         // — compute a stage-based progress % across the queue so the
         // user has visibility into how close the queue is to draining.
-        // Each report has 4 stages (meta/text/photo/audio); a UNDP-
-        // details patch is binary (queued = 0%, drained = removed from
-        // queue so doesn't count). The % is: sum of completed stages
-        // across all queued reports / (items.length * 4) clamped 0-99
-        // when queue isn't empty (100% would imply nothing left, which
-        // is the hidden-pill case above).
+        //
+        // REVISED May 21 2026 (operator-reported, cellular smoke 5
+        // "why is it stuck at 75%?") — denominator is now per-item:
+        // only count stages this item actually has. Pre-fix, every
+        // report contributed 4 to the denominator (meta+text+photo
+        // +audio). For a no-audio report (which is the common case
+        // on UNDP capture flow — audio is optional), `stages.audio`
+        // stays false forever, capping max progress at 3/4 = 75%.
+        // Operator looked at an actively-draining no-audio report
+        // and saw "75% queued" persistently while uploads were
+        // healthy. Misleading.
+        //
+        // New denominator: 3 stages (meta/text/photo) for every
+        // report, +1 for audio iff the item actually has audio.
+        // A fully-drained no-audio report now reads 3/3 = 99%
+        // (capped) — accurate "almost done, background ORIGINALs
+        // still uploading" signal instead of a permanent 75%.
         let pct = 0;
         if (visibleItems.length > 0) {
             let totalStages = 0;
+            let totalDenom = 0;
             for (const it of visibleItems) {
                 const st = it.stages || {};
+                // Item has audio iff:
+                //   · it.audioBlob is still set (not yet uploaded), OR
+                //   · it.audioMediaId is set (upload was attempted), OR
+                //   · st.audio is true (upload completed; blob cleared)
+                const hasAudio = !!(it.audioBlob || it.audioMediaId || st.audio === true);
+                const photoStageCount = 1;   // every report has the photo stage
+                const audioStageCount = hasAudio ? 1 : 0;
+                totalDenom += 2 + photoStageCount + audioStageCount;  // meta + text always
                 totalStages += (st.meta ? 1 : 0) + (st.text ? 1 : 0)
-                            + (st.photo ? 1 : 0) + (st.audio ? 1 : 0);
+                            + (st.photo ? 1 : 0)
+                            + (hasAudio ? (st.audio ? 1 : 0) : 0);
             }
-            const denom = visibleItems.length * 4;
-            pct = Math.min(99, Math.round((totalStages / denom) * 100));
+            pct = totalDenom > 0
+                ? Math.min(99, Math.round((totalStages / totalDenom) * 100))
+                : 0;
         }
         // Details-queue items don't carry stage progress — they're
         // either queued (0%) or drained (gone from queue). If ALL
