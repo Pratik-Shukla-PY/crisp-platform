@@ -3644,6 +3644,46 @@ async def attach_media_chunk_bin(
                     detail="media row creation race could not be reconciled",
                 )
     else:
+        # PRE-EMPTIVE DEFER REVIVAL (May 2026, Phase A follow-up):
+        # The PWA can call mark-deferred upfront when it decides not to
+        # attempt MEDIUM/ORIGINAL on a VERY_SLOW network. That call
+        # creates this Media row with assembly_status='failed' and
+        # abandon_reason='bandwidth_tier_deferred'. If bandwidth later
+        # improves and the PWA retries with this same media_id, we
+        # REVIVE the row — clear the abandon state + reset chunk_count
+        # to the new total. Without this, the row stays terminal-failed
+        # and the chunks accumulate as data_binary entries with no
+        # assembly trigger.
+        if (media.assembly_status == 'failed'
+                and media.abandon_reason == 'bandwidth_tier_deferred'):
+            logger.info(
+                f"[chunk-bin] reviving pre-emptive-defer placeholder {media_id[:8]} "
+                f"({media.resolution_tier.value if media.resolution_tier else '?'}): "
+                f"abandon→pending, chunk_count {media.chunk_count}→{total_chunks}"
+            )
+            media.assembly_status = 'pending'
+            media.abandon_reason = None
+            media.abandoned_at = None
+            media.chunk_count = total_chunks
+            media.received_chunks = 0
+            media.completion_pct = 0.0
+            media.url = ''
+            # Also bump expected_media on the parent report — mark-deferred
+            # decremented it when this row was abandoned; now we're back
+            # in the running so the SYNCED gate should account for us.
+            db.query(Report).filter(Report.id == report_id).update(
+                {Report.expected_media: Report.expected_media + 1},
+                synchronize_session="fetch",
+            )
+            db.flush()
+            db.refresh(media)
+            try:
+                from app.core.observability import variant_uploads_total as _vut
+                _vut.labels(tier=str(media.resolution_tier.value if media.resolution_tier else 'UNKNOWN'),
+                            outcome='revived').inc()
+            except Exception:
+                pass
+
         if blur_flag and not media.client_blur_applied:
             # Late-arriving blur flag (same upgrade path as the legacy endpoint).
             media.client_blur_applied = True
@@ -3801,9 +3841,25 @@ class MediaReclaimRequest(_ReclaimBaseModel):
 
 # ── K.2.d — mark-deferred endpoint (Phase K, May 2026) ───────────────────────
 class MarkDeferredRequest(_ReclaimBaseModel):
-    """PWA soft-drain signal: 'I gave up on these tiers per photo group'."""
+    """PWA soft-drain / pre-emptive defer signal:
+    'I gave up on these tiers per photo group'.
+
+    Two callers:
+      1. Soft-drain reconciler at dequeue time (K.3.a) — PWA tried to upload
+         MEDIUM/ORIGINAL, the server doesn't show them. Mark deferred.
+      2. Pre-emptive defer on VERY_SLOW networks (May 2026 follow-up) —
+         PWA decided not to attempt MEDIUM/ORIGINAL because bandwidth was
+         insufficient. Mark deferred so the dashboard chip is accurate.
+
+    `media_ids_by_group_and_tier` is OPTIONAL: when provided, the placeholder
+    Media row uses the PWA's planned mediaId, so a LATER successful upload
+    (network improves, retry-loop fires) reuses + revives the same row
+    instead of creating a duplicate.
+    """
     tiers_by_group: dict  # { "<photo_group_id>": ["MEDIUM", "ORIGINAL"] }
     reason: Optional[str] = "bandwidth_tier_deferred"
+    # Optional shape: { "<photo_group_id>": { "MEDIUM": "<mediaId>", "ORIGINAL": "<mediaId>" } }
+    media_ids_by_group_and_tier: Optional[dict] = None
 
 
 @router.post("/{report_id}/media/mark-deferred", status_code=status.HTTP_200_OK)
@@ -3901,9 +3957,23 @@ def mark_media_deferred(
                 # Create a placeholder Media row so the dashboard's
                 # photo-group renderer knows the tier was attempted +
                 # gave up. URL stays empty (no asset to fetch).
+                #
+                # Use the PWA's planned mediaId when supplied so a later
+                # successful upload (bandwidth improved, retry fired)
+                # reuses + revives this same row instead of creating a
+                # duplicate. The chunk-bin endpoint detects the revival
+                # via the failed/bandwidth_tier_deferred state and clears
+                # abandon_at + abandon_reason at chunk-0 receive.
                 import uuid as _uuid
+                placeholder_id: Optional[str] = None
+                if isinstance(payload.media_ids_by_group_and_tier, dict):
+                    group_map = payload.media_ids_by_group_and_tier.get(photo_group_id)
+                    if isinstance(group_map, dict):
+                        candidate = group_map.get(tier)
+                        if isinstance(candidate, str) and len(candidate) == 36:
+                            placeholder_id = candidate
                 placeholder = Media(
-                    id=str(_uuid.uuid4()),
+                    id=placeholder_id or str(_uuid.uuid4()),
                     report_id=report.id,
                     type=MediaTypeEnum.IMAGE,  # tier deferral only applies to images
                     resolution_tier=tier_enum,

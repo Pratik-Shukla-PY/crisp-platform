@@ -109,10 +109,36 @@
      * "original_too_large" abandon_reason chip.
      */
     async function _encodeOriginalWithCap(bitmap, sourceBlob) {
-        // Step 1 — passthrough (no decode/encode at all). Cheapest +
-        // highest fidelity. Common case: phone JPEG already < 5 MB.
+        // PRIVACY FIX (May 2026, validation Finding 4): always re-encode at
+        // very high quality (q=0.95) instead of returning the raw source
+        // blob. canvas.toBlob() does NOT carry EXIF, so this strips GPS +
+        // device-identifying metadata from the ORIGINAL tier. Pre-fix,
+        // passthrough preserved the iPhone HEIC→JPEG EXIF chain, leaking
+        // capture GPS into the assembled storage bytes that responders /
+        // exports can fetch. Verified by `exiftool` on assembled bytes in
+        // validation scenario 01's 04b_exif_phash artifact.
+        //
+        // The visual cost is negligible (q=0.95 is well above visual
+        // threshold for 5 MP+ captures); the privacy guarantee is the
+        // operator-stated requirement.
+        //
+        // Step 1 — high-quality re-encode at full source dimensions.
+        // Common case: phone JPEG already < 5 MB, so this lands in
+        // step 1's first try.
         if (sourceBlob.size <= _ORIGINAL_MAX_BYTES) {
-            return { blob: sourceBlob, strategy: 'passthrough' };
+            try {
+                const stripped = await _encodeJpeg(bitmap, null, 0.95);
+                if (stripped.size <= _ORIGINAL_MAX_BYTES) {
+                    return { blob: stripped, strategy: 'exif_strip_q95' };
+                }
+                // If the q=0.95 re-encode actually grew the file past 5 MB
+                // (rare — typically only when the source was an extremely
+                // small / heavily-compressed JPEG that q=0.95 inflates),
+                // fall through to the quality ladder below.
+            } catch (e) {
+                console.warn('[ImageVariants] EXIF-strip re-encode failed; ' +
+                    'falling back to quality ladder:', e);
+            }
         }
 
         // Step 2 — quality ladder at full source dimensions. JPEG

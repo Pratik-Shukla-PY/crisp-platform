@@ -9508,6 +9508,80 @@ async function trySendQueuedReport(item) {
                     const anyDeferred = workUnits.some(u => u.variant.deferred);
                     if (allSmallDone) {
                         item.stages.photo = true;
+
+                        // PRE-EMPTIVE DEFER → mark-deferred signal (May 2026
+                        // validation Finding 1 fix). If any non-SMALL tier is
+                        // marked `deferred=true && !complete` (i.e. the PWA's
+                        // adaptive-tier defer matrix skipped it on a slow
+                        // network), POST to /media/mark-deferred so the
+                        // backend creates placeholder Media rows. This makes
+                        // the K.5.a dashboard chip ("📶 Original (slow
+                        // network)") fire instead of the operator seeing a
+                        // misleading green SYNCED with no chip.
+                        //
+                        // The placeholder is created with the PWA's planned
+                        // mediaId. If bandwidth later improves and the PWA
+                        // retries, the chunk-bin endpoint REVIVES that same
+                        // row (clears the abandon state + resets chunk
+                        // counters) instead of creating a duplicate.
+                        if (reportId && !allComplete) {
+                            try {
+                                const TIER_MAP = { small: 'SMALL', medium: 'MEDIUM', original: 'ORIGINAL' };
+                                const tiersByGroup = {};
+                                const mediaIdsByGroupAndTier = {};
+                                const collectDeferred = (variants, groupId) => {
+                                    if (!variants || !groupId) return;
+                                    for (const tier of ['medium', 'original']) {
+                                        const v = variants[tier];
+                                        if (v && v.deferred === true && v.complete !== true && v.mediaId) {
+                                            const wire = TIER_MAP[tier];
+                                            if (!tiersByGroup[groupId]) tiersByGroup[groupId] = [];
+                                            if (!tiersByGroup[groupId].includes(wire)) {
+                                                tiersByGroup[groupId].push(wire);
+                                            }
+                                            if (!mediaIdsByGroupAndTier[groupId]) mediaIdsByGroupAndTier[groupId] = {};
+                                            mediaIdsByGroupAndTier[groupId][wire] = v.mediaId;
+                                        }
+                                    }
+                                };
+                                if (item.photoGroupId) collectDeferred(item.photoVariants, item.photoGroupId);
+                                for (const ev of (item.extraPhotosVariants || [])) {
+                                    if (ev && ev.groupId) collectDeferred(ev, ev.groupId);
+                                }
+                                if (Object.keys(tiersByGroup).length > 0) {
+                                    console.log(
+                                        `[Upload:pre-emptive-defer] ${reportId}: signalling mark-deferred ` +
+                                        `for ${Object.keys(tiersByGroup).length} group(s)`,
+                                        tiersByGroup,
+                                    );
+                                    try {
+                                        const res = await fetch(
+                                            `${API_BASE}/reports/${reportId}/media/mark-deferred`,
+                                            {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    tiers_by_group: tiersByGroup,
+                                                    media_ids_by_group_and_tier: mediaIdsByGroupAndTier,
+                                                    reason: 'bandwidth_tier_deferred',
+                                                }),
+                                            },
+                                        );
+                                        if (!res.ok) {
+                                            console.warn(
+                                                `[Upload:pre-emptive-defer] mark-deferred returned ` +
+                                                `HTTP ${res.status} — non-fatal; backend Action ③ will catch ` +
+                                                `eventually`,
+                                            );
+                                        }
+                                    } catch (e) {
+                                        console.warn('[Upload:pre-emptive-defer] mark-deferred POST failed (non-fatal):',
+                                            e?.message || e);
+                                    }
+                                }
+                            } catch (_) { /* never block the upload flow */ }
+                        }
+
                         // Clear ONLY the variant payloads that have actually
                         // landed at the backend; pending tiers must keep
                         // their dataUrl so the retry loop can re-send.

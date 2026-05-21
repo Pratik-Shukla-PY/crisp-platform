@@ -82,7 +82,10 @@ export default defineConfig({
     // runtime budget reasons.
     {
       name: 'pwa-firefox',
-      testMatch: /pwa\/56-.*\.spec\.ts$/,
+      // Also pick up the May 2026 cross-browser validation smoke
+      // (99-validation-11-) so disaster-network claims are tested
+      // against Gecko, not just Chromium.
+      testMatch: /pwa\/(56-|99-validation-11-).*\.spec\.ts$/,
       use: {
         ...devices['Desktop Firefox'],
         baseURL: PWA_BASE,
@@ -90,7 +93,8 @@ export default defineConfig({
     },
     {
       name: 'pwa-webkit',
-      testMatch: /pwa\/56-.*\.spec\.ts$/,
+      // Same: include 99-validation-11- for WebKit (closest to iOS Safari).
+      testMatch: /pwa\/(56-|99-validation-11-).*\.spec\.ts$/,
       use: {
         ...devices['Desktop Safari'],
         baseURL: PWA_BASE,

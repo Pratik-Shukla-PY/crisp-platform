@@ -1,0 +1,52 @@
+{
+  "IMG_5718.jpg": {
+    "size_bytes": 2137081,
+    "sha256": "37d1b944ce77a98b",
+    "dims": [
+      4032,
+      3024
+    ],
+    "phash": "c748b9967c0533ea",
+    "dhash": "c1e1c9466c6c644b"
+  },
+  "IMG_5735_2.jpg": {
+    "size_bytes": 1127813,
+    "sha256": "1203b9c556a7f4db",
+    "dims": [
+      4032,
+      3024
+    ],
+    "phash": "c46caa9217b5f9c1",
+    "dhash": "67678326e4b9ee00"
+  },
+  "IMG_5785.jpg": {
+    "size_bytes": 3173414,
+    "sha256": "80c2c7a281ae9dc8",
+    "dims": [
+      4032,
+      3024
+    ],
+    "phash": "8ab5670a1ce78a3d",
+    "dhash": "1f3f1cf0f1e3c1e1"
+  },
+  "IMG_5832.jpg": {
+    "size_bytes": 2476007,
+    "sha256": "b4a9677c7a94912f",
+    "dims": [
+      3088,
+      2316
+    ],
+    "phash": "f7c1c01ec0a37b5c",
+    "dhash": "c4cacacf2c3c2c8c"
+  },
+  "IMG_5931.jpg": {
+    "size_bytes": 2728275,
+    "sha256": "e8ce8cab019970f8",
+    "dims": [
+      3024,
+      4032
+    ],
+    "phash": "e45d8b5ab2b1119e",
+    "dhash": "42a0a6962daae9cd"
+  }
+}
