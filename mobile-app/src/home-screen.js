@@ -1628,9 +1628,16 @@
             if (cached) backendVer = 'api@' + cached;
         } catch (_) {}
         // Paint immediately with whatever we have (pwa always known,
-        // api may be ?).
+        // api may be ?). Inline `style.display` overrides any
+        // lingering CSS `display: none` from cached stylesheets on
+        // iPhones that haven't picked up v247's CSS reversal yet —
+        // belt-and-suspenders so the pill appears on the first new
+        // build the user installs without requiring two reloads.
         el.textContent = `${pwaRel} · ${backendVer}`;
         el.removeAttribute('hidden');
+        el.style.display = 'inline-block';
+        el.style.visibility = 'visible';
+        el.style.opacity = '0.9';
         // Refresh from /health in the background; non-blocking, fails
         // silent if offline.
         if (backendVer === 'api@?') {

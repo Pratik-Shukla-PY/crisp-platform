@@ -5,7 +5,14 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v247';
+const CACHE_NAME = 'crisp-v248';
+// v247 → v248 (May 21 — version pill belt-and-suspenders). The CSS
+// reversal in v247 fixes the long-term display:none. v248 adds
+// `style.display='inline-block'` inline on the element from JS so
+// iPhones still serving cached v246 CSS see the pill on first
+// reload to v248 (inline style beats external CSS specificity).
+// Regression test 98-version-pill-visible.spec.ts pins both
+// invariants: computed-display ≠ none AND text contains pwa@ + api@.
 // v246 → v247 (May 21 — B5 hotfix: version pill was being hidden by a
 // pre-existing CSS rule at styles.css:10406 (`display: none`) that the
 // v246 JS painter couldn't override by just removing the HTML `hidden`
