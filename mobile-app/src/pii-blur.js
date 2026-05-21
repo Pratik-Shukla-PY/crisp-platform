@@ -344,54 +344,95 @@
             return { blob: srcBlob, blurred: false, facesDetected: 0, skipped: true, error: 'decode failed: ' + (e && e.message || e) };
         }
 
-        let faces = [];
+        // BUGFIX May 2026 (operator-reported, blur cross-contamination
+        // audit) — close the ImageBitmap on EVERY exit path. Pre-fix,
+        // the bitmap was allocated at `_decode()` and abandoned to the
+        // garbage collector at every return below. ImageBitmap is
+        // GPU/shared-memory backed; under rapid multi-image processing
+        // (4 photos in a row from the camera modal), the GC pool can
+        // reuse the underlying memory for the NEXT image's bitmap
+        // before the prior image's `canvas.toBlob()` callback fires.
+        // Result: image B's encoded output reads pixels that still
+        // hold image A's blur paint — operator-visible as "blur
+        // appears in regions of image B with no detected faces."
+        //
+        // The fix has two layers:
+        //   1. Close the bitmap IMMEDIATELY after `drawImage()` copies
+        //      its pixels onto our canvas. The canvas owns the pixels
+        //      independently from that moment forward; the bitmap is
+        //      dead weight that just holds GPU memory until GC.
+        //   2. A try/finally backstop closes the bitmap on any exit
+        //      path that didn't reach drawImage (detect failure, no
+        //      faces, paint exception). `_closeBitmap` is idempotent.
+        const _closeBitmap = () => {
+            if (bitmap && typeof bitmap.close === 'function') {
+                try { bitmap.close(); } catch (_) {}
+            }
+            bitmap = null;
+        };
+
         try {
-            faces = await _detectFaces(bitmap);
-        } catch (e) {
-            console.warn('[PIIBlur] detect failed, returning original:', e);
-            _lastStats = { faces: 0, ms: Math.round(performance.now() - t0), skipped: true };
-            return { blob: srcBlob, blurred: false, facesDetected: 0, skipped: true, error: 'detect failed: ' + (e && e.message || e) };
-        }
+            let faces = [];
+            try {
+                faces = await _detectFaces(bitmap);
+            } catch (e) {
+                console.warn('[PIIBlur] detect failed, returning original:', e);
+                _lastStats = { faces: 0, ms: Math.round(performance.now() - t0), skipped: true };
+                return { blob: srcBlob, blurred: false, facesDetected: 0, skipped: true, error: 'detect failed: ' + (e && e.message || e) };
+            }
 
-        if (faces.length === 0) {
-            _lastStats = { faces: 0, ms: Math.round(performance.now() - t0), skipped: false };
-            // No faces detected — pipeline ran successfully, just had
-            // nothing to redact. Safe for server to skip its face pass.
-            return { blob: srcBlob, blurred: true, facesDetected: 0, skipped: false };
-        }
+            if (faces.length === 0) {
+                _lastStats = { faces: 0, ms: Math.round(performance.now() - t0), skipped: false };
+                // No faces detected — pipeline ran successfully, just had
+                // nothing to redact. Safe for server to skip its face pass.
+                return { blob: srcBlob, blurred: true, facesDetected: 0, skipped: false };
+            }
 
-        // : yield to the event loop before the heavy paint pass so
-        // any queued UI interactions (e.g. the user tapping Next the moment
-        // the preview appears) have a chance to dispatch. Without this the
-        // sync drawImage + filter + canvas-clip work blocked the main
-        // thread for hundreds of ms and the Next button felt frozen.
-        await new Promise((r) => setTimeout(r, 0));
+            // : yield to the event loop before the heavy paint pass so
+            // any queued UI interactions (e.g. the user tapping Next the moment
+            // the preview appears) have a chance to dispatch. Without this the
+            // sync drawImage + filter + canvas-clip work blocked the main
+            // thread for hundreds of ms and the Next button felt frozen.
+            await new Promise((r) => setTimeout(r, 0));
 
-        // Composite a fresh canvas from the bitmap, then paint blur.
-        try {
-            const canvas = document.createElement('canvas');
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-            canvas.getContext('2d').drawImage(bitmap, 0, 0);
-            _paintBlur(canvas, faces);
+            // Composite a fresh canvas from the bitmap, then paint blur.
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                canvas.getContext('2d').drawImage(bitmap, 0, 0);
+                // Layer-1 close: canvas now owns the pixels — release the
+                // bitmap NOW, before _paintBlur + the async toBlob. This
+                // is the close that actually prevents the GPU-memory
+                // aliasing bug (the finally-backstop below would close
+                // too late on the success path, after toBlob has
+                // already had a chance to race on the shared buffer).
+                _closeBitmap();
+                _paintBlur(canvas, faces);
 
-            const outBlob = await new Promise((resolve) => {
-                canvas.toBlob((b) => resolve(b || srcBlob), 'image/jpeg', quality);
-            });
+                const outBlob = await new Promise((resolve) => {
+                    canvas.toBlob((b) => resolve(b || srcBlob), 'image/jpeg', quality);
+                });
 
-            _lastStats = {
-                faces: faces.length,
-                ms: Math.round(performance.now() - t0),
-                skipped: false
-            };
-            console.log(`[PIIBlur] blurred ${faces.length} face(s) in ${_lastStats.ms}ms`);
-            return { blob: outBlob, blurred: true, facesDetected: faces.length, skipped: false };
-        } catch (e) {
-            // Paint / canvas / toBlob crash — faces WERE detected but not
-            // redacted. Server MUST run its own blur on this one.
-            console.warn('[PIIBlur] paint failed, returning original:', e);
-            _lastStats = { faces: faces.length, ms: Math.round(performance.now() - t0), skipped: true };
-            return { blob: srcBlob, blurred: false, facesDetected: faces.length, skipped: true, error: 'paint failed: ' + (e && e.message || e) };
+                _lastStats = {
+                    faces: faces.length,
+                    ms: Math.round(performance.now() - t0),
+                    skipped: false
+                };
+                console.log(`[PIIBlur] blurred ${faces.length} face(s) in ${_lastStats.ms}ms`);
+                return { blob: outBlob, blurred: true, facesDetected: faces.length, skipped: false };
+            } catch (e) {
+                // Paint / canvas / toBlob crash — faces WERE detected but not
+                // redacted. Server MUST run its own blur on this one.
+                console.warn('[PIIBlur] paint failed, returning original:', e);
+                _lastStats = { faces: faces.length, ms: Math.round(performance.now() - t0), skipped: true };
+                return { blob: srcBlob, blurred: false, facesDetected: faces.length, skipped: true, error: 'paint failed: ' + (e && e.message || e) };
+            }
+        } finally {
+            // Layer-2 backstop: any code path above that didn't reach
+            // the explicit close (detect-fail, no-faces, paint-fail
+            // before drawImage) gets cleanup here. Idempotent.
+            _closeBitmap();
         }
     }
 

@@ -5,7 +5,19 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v242';
+const CACHE_NAME = 'crisp-v243';
+// v242 → v243 (May 21 — B1: face-blur cross-contamination fix). Closes
+// the ImageBitmap allocated by `_decode(srcBlob)` on EVERY exit path
+// in pii-blur.js::blurFaces. Pre-fix the bitmap leaked on detect-fail,
+// no-faces, paint-fail, and even the success path (after canvas
+// drawImage). Under rapid multi-image processing, the GC pool could
+// reuse the bitmap's GPU-backed memory before the prior image's
+// async canvas.toBlob() finished, causing image B's encoded output to
+// contain pixels from image A's blur paint — operator-visible as
+// "blur appears on regions of image B with no detected faces".
+// Two-layer fix: close immediately after drawImage (canvas owns
+// pixels from then on), plus a try/finally backstop for every other
+// exit path. Regression test in 97-blur-no-contamination.spec.ts.
 // v241 → v242 (May 21 — sync-badge UX: stop capping at 75% for no-audio
 // reports). Pre-fix the badge denominator was always 4 (meta+text
 // +photo+audio). On the common no-audio capture path, stages.audio
