@@ -5,7 +5,17 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v245';
+const CACHE_NAME = 'crisp-v246';
+// v245 → v246 (May 21 — B5: UI cleanup). Two items from the audit:
+//   · Item 7: removed the "Add 4 quick details" CTA + sub label from
+//     the Thank You / stage-success screen. The post-submission
+//     screen now stays clean and low-cognitive-load. Mid-flow trigger
+//     (during stage-review, BEFORE submit) is preserved.
+//   · Item 6: home-screen utility footer now paints a version pill
+//     showing pwaRelease (from meta) + backendVersion (fetched once
+//     per session from /health, cached in sessionStorage). Operators
+//     have direct in-UI visibility on which PWA build + backend they
+//     are hitting after each deploy.
 // v244 → v245 (May 21 — B4: My Reports rendering + home count). Three
 // fixes from architectural audit Items 1 + 4:
 //   · dropped `loading="lazy"` from the My Reports card thumbnail —

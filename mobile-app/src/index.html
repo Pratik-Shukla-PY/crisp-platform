@@ -28,7 +28,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v245">
+    <meta name="crisp-release" content="crisp-pwa@v246">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -3056,19 +3056,18 @@
                     <span data-i18n="success_btn_rewards">Rewards</span>
                 </button>
             </div>
-            <!-- (UI v3 redesign M3) — soft prompt for the optional
-                 UNDP Step 4 details (debris / power / water / health / needs).
-                 Hidden by default; shown by app.js after a successful submit
-                 IF the user hasn't already filled them in capture flow. Tap
-                 routes to stage-undp-details. -->
-            <button class="undp-details-cta" id="btn-add-undp-details" style="display:none;" type="button">
-                <i class="fa-solid fa-clipboard-list"></i>
-                <span data-i18n="undp_details_cta">Add 4 quick details</span>
-                <span class="undp-details-cta-time" data-i18n="undp_details_cta_time">30 sec</span>
-            </button>
-            <p class="undp-details-cta-sub" id="undp-details-cta-sub" style="display:none;" data-i18n="undp_details_cta_sub">
-                Helps responders prioritise · optional
-            </p>
+            <!-- May 21 2026 (audit Item 7) — REMOVED the post-submission
+                 "Add 4 quick details" CTA that previously appeared on
+                 the Thank You / stage-success screen. The mid-flow
+                 trigger inside stage-review (`.v4-undp-trigger`) stays
+                 — that fires BEFORE submit, where adding details is
+                 in-context. After submit, the Thank You screen should
+                 stay clean and low-cognitive-load.
+                 Pre-removal markup retained in git history (see
+                 commit "fix(pwa): B5 — Thank You cleanup + version pill")
+                 for reference. The wiring in app.js
+                 (`maybeShowUndpDetailsPrompt` + the click handler) is
+                 now a defensive no-op when the buttons are absent. -->
         </div>
     </div>
 

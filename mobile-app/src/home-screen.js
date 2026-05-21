@@ -1588,6 +1588,67 @@
         if (back) back.addEventListener('click', () => {
             if (typeof window.goToStage === 'function') window.goToStage('stage-home');
         });
+        // May 21 2026 (audit Item 6) — paint the version pill in the
+        // utility footer. Shows pwaRelease (from the <meta> tag) and
+        // backendVersion (from /health on first paint). Cached for the
+        // session so deploys reflect immediately without thrashing the
+        // backend.
+        try { _paintVersionPill(); } catch (_) {}
+    }
+
+    // May 21 2026 (audit Item 6) — version visibility.
+    //
+    // Pre-fix the `#home-utility-version` element existed in markup
+    // as a stub ("v0.7.44") but was hidden and never wired. Operators
+    // had no in-UI way to confirm "which PWA build am I on?" or
+    // "which backend version is this hitting?" — they had to dig into
+    // the meta tag in DevTools or hit /health by hand.
+    //
+    // Fix: read the PWA release from the <meta name="crisp-release">
+    // tag and the backend version from a one-shot GET /health. Cache
+    // the backend version in sessionStorage so subsequent home boots
+    // don't re-fetch (the value is stable across the session and only
+    // changes on backend deploy — when the cache is naturally
+    // invalidated by sessionStorage's per-tab lifetime).
+    async function _paintVersionPill() {
+        const el = document.getElementById('home-utility-version');
+        if (!el) return;
+        // PWA side — synchronous, read from the meta tag.
+        let pwaRel = 'pwa@?';
+        try {
+            const m = document.querySelector('meta[name="crisp-release"]');
+            if (m && m.getAttribute('content')) {
+                pwaRel = m.getAttribute('content').replace(/^crisp-/, '');
+            }
+        } catch (_) {}
+        // Backend side — sessionStorage cache + one-shot fetch.
+        let backendVer = 'api@?';
+        try {
+            const cached = sessionStorage.getItem('crisp_backend_version');
+            if (cached) backendVer = 'api@' + cached;
+        } catch (_) {}
+        // Paint immediately with whatever we have (pwa always known,
+        // api may be ?).
+        el.textContent = `${pwaRel} · ${backendVer}`;
+        el.removeAttribute('hidden');
+        // Refresh from /health in the background; non-blocking, fails
+        // silent if offline.
+        if (backendVer === 'api@?') {
+            try {
+                const base = (typeof window.API_BASE === 'string' && window.API_BASE)
+                    ? window.API_BASE.replace(/\/api\/v1\/?$/, '')
+                    : '';
+                const url = `${base}/health`;
+                const res = await fetch(url, { cache: 'no-store', credentials: 'omit' });
+                if (res.ok) {
+                    const body = await res.json();
+                    if (body && typeof body.version === 'string' && body.version) {
+                        try { sessionStorage.setItem('crisp_backend_version', body.version); } catch (_) {}
+                        el.textContent = `${pwaRel} · api@${body.version}`;
+                    }
+                }
+            } catch (_) { /* offline — keep "api@?" */ }
+        }
     }
 
     // ── Recent-reports (logged-in only) ────────────────────────────────
