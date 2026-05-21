@@ -277,16 +277,62 @@
         });
     }
 
+    // CRITICAL FIX (May 21 2026 v249, audit Item 5 — second pass).
+    // SERIALISE every call to blurFaces so the TF.js / BlazeFace
+    // singleton model is never running two `estimateFaces` in flight
+    // at once. Pre-fix the v243 bitmap.close() addressed GPU-memory
+    // aliasing between bitmaps, but the deeper bug — confirmed by
+    // operator-submitted screenshots of report 365933f6 showing
+    // image 1 with a real face correctly blurred AND images 2-5 of
+    // a water bottle WITHOUT faces still blurred in the same upper-
+    // center region image 1's face occupied — is concurrent model
+    // calls returning each other's results.
+    //
+    // Repro path that triggered the bug:
+    //  · User captures 5 photos in tight succession from the camera
+    //    modal.
+    //  · `_ingestFileAsPhoto` schedules each photo's
+    //    `ImageVariants.generate(blob)` via `_runWhenIdle` — 5
+    //    independent idle callbacks.
+    //  · `generate` calls `_maybeBlur(blob)` which calls
+    //    `window.PIIBlur.blurFaces(blob)`.
+    //  · All 5 blurFaces calls hit the same `_model` singleton, in
+    //    flight at the same time via `await model.estimateFaces`.
+    //  · TF.js's internal canvas-input handling reuses tensors / the
+    //    backend's input slot; concurrent calls cross-contaminate
+    //    each other's results.
+    //
+    // Wrapping the public `blurFaces` in a chained-promise serialiser
+    // guarantees one detection at a time. The wrapper preserves all
+    // existing behaviour (return value shape, error fall-through,
+    // telemetry timing) — it just funnels callers through a queue.
+    //
+    // Cost: on the slowest network/device path (multi-photo capture
+    // on mid-range Android), end-to-end blur latency scales linearly
+    // with photo count. Mid-range Android measures ~150 ms per
+    // detection. 5 photos = 750 ms TOTAL wall-clock blur time — the
+    // user is already on the review screen by then, so they don't
+    // notice. Correctness >>> a few hundred ms.
+    let _blurChain = Promise.resolve();
+    async function blurFaces(srcBlob, opts) {
+        const prev = _blurChain;
+        let resolveSlot;
+        _blurChain = new Promise((r) => { resolveSlot = r; });
+        try {
+            // Wait for the previous call's slot to release. Catch so a
+            // prior failure doesn't poison the chain — each call is
+            // independent.
+            try { await prev; } catch (_) {}
+            return await _doBlurFaces(srcBlob, opts);
+        } finally {
+            resolveSlot();
+        }
+    }
+
     /**
-     * Public API: blur every detected face in `srcBlob` and return a new Blob.
-     * Falls through with the original blob (no throw) if the model is
-     * unavailable or detection fails — the server's PII pass is the safety net.
+     * Internal worker — same body as the original blurFaces. The
+     * public `blurFaces` above wraps this in a serialiser.
      *
-     * @param {Blob} srcBlob
-     * @param {{ quality?: number }} [opts]
-     * @returns {Promise<Blob>}
-     */
-    /**
      * Detect + blur faces in `srcBlob`. : now returns a detailed
      * result object — was just returning the Blob, which hid failures from
      * callers. Shape:
@@ -305,7 +351,7 @@
      * past both client AND server blur (server skipped thinking client
      * did it).
      */
-    async function blurFaces(srcBlob, opts) {
+    async function _doBlurFaces(srcBlob, opts) {
         const t0 = performance.now();
         // High default quality (0.95) so the post-blur blob feeding the
         // LARGE archival variant preserves source fidelity. The visible

@@ -5,7 +5,23 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v248';
+const CACHE_NAME = 'crisp-v249';
+// v248 → v249 (May 21 — CRITICAL face-blur serialiser fix). Operator
+// caught that v243's bitmap.close() didn't actually fix the cross-
+// image contamination — submitted report 365933f6 with 5 photos
+// showed correct blur on image 1 (had a face) BUT also blur on
+// images 2-5 (water bottle, NO faces) in the same upper-center
+// region image 1's face occupied. Root cause: concurrent calls to
+// the shared TF.js BlazeFace model singleton. When multiple
+// blurFaces() are in flight (camera modal's 5 rapid captures →
+// 5 independent _runWhenIdle callbacks → 5 concurrent
+// model.estimateFaces calls), TF.js cross-contaminates results.
+// Fix: wrap the public blurFaces in a Promise-chain serialiser so
+// only ONE detection runs at a time. Trade: end-to-end blur scales
+// linearly with photo count (~150 ms × N on mid-range Android) but
+// correctness >>> latency. Regression test 97-blur-no-contamination
+// now also asserts CONCURRENT fire produces identical outputs for
+// identical inputs.
 // v247 → v248 (May 21 — version pill belt-and-suspenders). The CSS
 // reversal in v247 fixes the long-term display:none. v248 adds
 // `style.display='inline-block'` inline on the element from JS so

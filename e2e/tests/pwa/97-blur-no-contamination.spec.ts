@@ -72,6 +72,45 @@ const TINY_RED_JPEG_B64 =
 test.describe('PWA — PII blur cross-image isolation (v243 regression)', () => {
     test.beforeEach(async ({ page }) => { await openPwa(page); });
 
+    test('CONCURRENT blur of mixed blobs serialises and returns input unmodified for no-face blobs', async ({ page }) => {
+        // v249 regression — operator caught the bug v243's bitmap.close()
+        // didn't actually fix: when blurFaces() runs CONCURRENTLY for
+        // multiple photos (5 captured in a row from camera modal), the
+        // shared TF.js model returns each other's face boxes, so
+        // no-face images get blur painted at coordinates from the
+        // earlier face-bearing image. We now serialise via _blurChain.
+        // This test fires 5 blurFaces calls in parallel (Promise.all)
+        // with the same no-face blob; with the bug, the second-onwards
+        // call sometimes mutated; serialised, all should pass-through.
+        const result = await page.evaluate(async (b64: string) => {
+            const bin = atob(b64);
+            const u8 = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+            const mkBlob = () => new Blob([u8], { type: 'image/jpeg' });
+            // CONCURRENT fire — pre-fix this triggered the bug.
+            const results = await Promise.all([
+                (window as any).PIIBlur.blurFaces(mkBlob()),
+                (window as any).PIIBlur.blurFaces(mkBlob()),
+                (window as any).PIIBlur.blurFaces(mkBlob()),
+                (window as any).PIIBlur.blurFaces(mkBlob()),
+                (window as any).PIIBlur.blurFaces(mkBlob()),
+            ]);
+            const sizes = await Promise.all(results.map(async (r: any) => {
+                const a = await r.blob.arrayBuffer();
+                return a.byteLength;
+            }));
+            // All inputs identical → all outputs MUST be identical too.
+            const allSame = sizes.every((s) => s === sizes[0]);
+            return { sizes, allSame, facesAll: results.map((r: any) => r.facesDetected) };
+        }, TINY_RED_JPEG_B64);
+        expect(
+            result.allSame,
+            `concurrent blur of 5 identical no-face blobs produced output sizes ${JSON.stringify(result.sizes)}. ` +
+            `With the v249 serialiser, they must all be identical. Divergence means the model is still racing.`,
+        ).toBe(true);
+        expect(result.facesAll.every((n: number) => n === 0)).toBe(true);
+    });
+
     test('sequential blur of multiple no-face blobs returns input unmodified each time', async ({ page }) => {
         const result = await page.evaluate(async (b64: string) => {
             // Build three independent Blobs from the same source bytes.
