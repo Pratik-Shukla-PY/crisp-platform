@@ -9197,31 +9197,51 @@ async function _uploadVariantTier(item, reportId, unit) {
     // orphaned the higher-fidelity bytes, leaving the dashboard with
     // SMALL forever.
     //
-    // New behaviour: defer the tier instead. It stays in the queue with
-    // `variant.deferred=true`; the retry loop re-checks every cycle and
-    // attempts the tier as soon as the measured bandwidth tier upgrades.
-    // The report still shows up on the dashboard immediately once SMALL
-    // lands; LARGE arrives in the background whenever the device sees
-    // FAST/MEDIUM bandwidth — even hours later.
+    // Mid behaviour (pre-May-21): defer the tier instead. It stays in
+    // the queue with `variant.deferred=true`; the retry loop re-checks
+    // every cycle and attempts the tier as soon as the measured
+    // bandwidth tier upgrades.
     //
-    // Defer matrix:
-    //   FAST       → SMALL + MEDIUM + LARGE   (all 3 transmit immediately)
-    //   MEDIUM     → SMALL + MEDIUM + LARGE   (all 3 transmit immediately)
-    //   SLOW       → SMALL + MEDIUM transmit; LARGE deferred
-    //   VERY_SLOW  → SMALL transmits; MEDIUM + LARGE deferred
-    if (tier !== 'small') {
-        const shouldDefer = (_pwaTier === 'VERY_SLOW')
-            || (_pwaTier === 'SLOW' && tier === 'original');
-        if (shouldDefer) {
-            console.log(`[Upload] ${label}: deferred — netTier=${_pwaTier}, awaiting bandwidth upgrade`);
-            variant.deferred = true;
-            variant.deferredReason = 'bandwidth-tier';
-            variant.deferredAt = Date.now();
-            // Do NOT set variant.complete = true. The retry loop must
-            // pick this back up on the next pass after a tier upgrade.
-            try { await enqueueReport(item); } catch (_) {}
-            return;
-        }
+    // REVISED May 21 2026 (operator-reported, cellular smoke 3 v2) —
+    // the SLOW + ORIGINAL pre-emptive defer rule fired on real 5G via
+    // the cloudflare tunnel even though the radio was perfectly capable.
+    // Root cause: the single 64 KB `/upload-probe` POST measures
+    // anywhere between 80 Kbps and 800 Kbps (the SLOW bucket) when:
+    //   · TCP cold-start hasn't ramped up (first POST after lock)
+    //   · cloudflared free-tunnel queues the probe behind other req
+    //   · iPhone radio handoff during the probe
+    // Operator: "Why does it drop immediately ... if it decides it
+    // will mostly drop in max scenarios." Correct read — most field
+    // cellular submissions DID end up in SLOW on the probe even when
+    // the link was actually capable of full-res. Real cost: user
+    // permanently loses the high-fidelity capture for nothing.
+    //
+    // NEW defer matrix (May 21, 2026):
+    //   FAST       → SMALL + MEDIUM + ORIGINAL   (attempt all 3)
+    //   MEDIUM     → SMALL + MEDIUM + ORIGINAL   (attempt all 3)
+    //   SLOW       → SMALL + MEDIUM + ORIGINAL   (attempt all 3 — was: defer ORIGINAL)
+    //   VERY_SLOW  → SMALL only; defer MEDIUM + ORIGINAL
+    //
+    // SLOW networks now get an honest attempt at ORIGINAL. The chunk
+    // loop's K.4.c backoff (7 retries × cap-30s exp ≈ ~3 min/chunk)
+    // is the per-attempt budget; the in-flight reconcile fix (v236,
+    // commit 8f7635d) keeps the queue alive across retry passes if
+    // chunks fail mid-stream. On a genuinely slow-but-workable link,
+    // ORIGINAL gradually completes (operator data + battery cost
+    // grows proportionally but the result lands — matches the
+    // deterministic-delivery contract). On VERY_SLOW (< 80 Kbps),
+    // uploading a 2 MB ORIGINAL takes 3+ minutes minimum and almost
+    // always fails anyway, so the pre-emptive defer there is still
+    // useful: saves user data + signals the dashboard chip.
+    if (tier !== 'small' && _pwaTier === 'VERY_SLOW') {
+        console.log(`[Upload] ${label}: deferred — netTier=${_pwaTier}, awaiting bandwidth upgrade`);
+        variant.deferred = true;
+        variant.deferredReason = 'bandwidth-tier';
+        variant.deferredAt = Date.now();
+        // Do NOT set variant.complete = true. The retry loop must
+        // pick this back up on the next pass after a tier upgrade.
+        try { await enqueueReport(item); } catch (_) {}
+        return;
     }
     // Clear any prior deferral — we're actually uploading this time.
     if (variant.deferred) {

@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v236';
+const CACHE_NAME = 'crisp-v237';
+// v236 → v237 (May 21 — defer matrix relaxed): _uploadVariantTier no
+// longer pre-emptively defers ORIGINAL on SLOW networks. Operator-
+// reported on cellular smoke 3 v2: the single 64 KB upload-probe
+// routinely measured in the SLOW bucket on real 5G via cloudflared
+// tunnel (TCP cold-start, tunnel queueing, radio handoff). Result was
+// "drops in max scenarios" — full-res lost for no real reason. New
+// matrix: SLOW attempts all 3 tiers; only VERY_SLOW (< 80 Kbps) still
+// pre-emptively defers MEDIUM + ORIGINAL.
 // v235 → v236 (May 21 — cellular smoke 3 fix): _reconcileBeforeDequeue
 // now also tracks MID-FLIGHT variants (mediaId set, chunkProgress > 0,
 // complete=false). Pre-fix, a variant whose chunk loop threw mid-stream
