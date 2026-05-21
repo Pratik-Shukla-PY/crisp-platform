@@ -9319,6 +9319,9 @@ async function _uploadVariantTier(item, reportId, unit) {
                     netConfig.retries, dynamicTimeout,
                 );
                 pwaNetworkUpgrade();
+                // Wedge-detection support: stamp progress so resume hooks can
+                // tell a healthy retry loop from one wedged on a dead fetch.
+                _lastChunkPostAt = Date.now();
             } catch (err) {
                 pwaNetworkDowngrade();
                 variant.chunkProgress = seq;
@@ -9377,6 +9380,9 @@ async function _uploadVariantTier(item, reportId, unit) {
                 netConfig.retries, dynamicTimeout
             );
             pwaNetworkUpgrade();
+            // Wedge-detection support: stamp progress so resume hooks can
+            // tell a healthy retry loop from one wedged on a dead fetch.
+            _lastChunkPostAt = Date.now();
         } catch (err) {
             pwaNetworkDowngrade();
             // Persist the partial progress before bubbling out so a future
@@ -9732,6 +9738,10 @@ async function trySendQueuedReport(item) {
                             netConfig.retries, netConfig.timeout
                         );
                         pwaNetworkUpgrade();
+                        // Wedge-detection support: stamp progress so resume
+                        // hooks can distinguish healthy in-flight uploads
+                        // from a wedged retry loop awaiting a dead fetch.
+                        _lastChunkPostAt = Date.now();
                     } catch (retryErr) {
                         pwaNetworkDowngrade();
                         throw retryErr;
@@ -9972,8 +9982,52 @@ function _releaseDrainLock() {
     try { localStorage.removeItem(_DRAIN_LOCK_KEY); } catch (_) {}
 }
 
+// May 21 2026 (cellular smoke 3 v3) — wedge-detection support.
+// Stamped by every successful chunk POST (bin + base64 paths) so that
+// resume hooks (visibilitychange, online, periodic sweep) can tell the
+// difference between "retry loop is healthily mid-upload" and "retry
+// loop claims to be running but is wedged on a dead awaited fetch".
+// iOS Safari suspends background tabs and may kill the underlying TCP
+// connection while the JS task is awaiting `fetch`. On resume, the
+// awaited Promise never resolves and `_retryLoopRunning` stays `true`
+// forever — every subsequent startRetryLoop() returns immediately
+// without doing anything. Without this stamp + the wedge-detection
+// below, the only recovery was Safari-kill-and-reopen (operator
+// observed during smoke 3 v3).
+let _lastChunkPostAt = 0;
+const _RETRY_LOOP_WEDGE_THRESHOLD_MS = 60_000;
+
 async function startRetryLoop() {
-    if (_retryLoopRunning) return;
+    // Wedge-recovery (runs on EVERY entry to startRetryLoop, before the
+    // running-guard). If the loop claims to be running but no chunk has
+    // POSTed in 60 s AND we know there's still work in the queue, the
+    // loop is wedged on a dead Promise — force-reset and proceed.
+    // Safe to clobber: the K.1.b backend-side IntegrityError catch makes
+    // duplicate chunk POSTs idempotent, so the worst case is a few
+    // wasted retries, not data corruption.
+    if (_retryLoopRunning) {
+        const silentMs = Date.now() - (_lastChunkPostAt || 0);
+        const hasPendingWork = await (async () => {
+            try { return (await getAllQueued()).length > 0; }
+            catch (_) { return false; }
+        })();
+        if (silentMs > _RETRY_LOOP_WEDGE_THRESHOLD_MS && hasPendingWork) {
+            console.warn(
+                `[Retry] wedge detected — _retryLoopRunning=true but no chunk POST in ` +
+                `${Math.round(silentMs/1000)}s with queue non-empty; ` +
+                `force-resetting + re-arming. ` +
+                `Most likely iOS Safari killed an awaited TCP connection during suspension.`
+            );
+            _retryLoopRunning = false;
+            try { _releaseDrainLock(); } catch (_) {}
+            // _inFlightReports holds per-item guards inside trySendQueuedReport;
+            // clearing it ensures the next pass can re-attempt every item.
+            try { if (typeof _inFlightReports !== 'undefined' && _inFlightReports.clear) _inFlightReports.clear(); } catch (_) {}
+            // fall through to normal entry below
+        } else {
+            return;
+        }
+    }
     // K.4.a — cross-tab mutex. If another tab already holds the lock,
     // skip this drain pass. The next periodic sweep / online event
     // will try again. Eventually the lock-holder finishes or its TTL

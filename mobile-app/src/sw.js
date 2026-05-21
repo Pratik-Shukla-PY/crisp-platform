@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v237';
+const CACHE_NAME = 'crisp-v238';
+// v237 → v238 (May 21 — retry-loop wedge recovery): startRetryLoop now
+// detects when _retryLoopRunning is stuck true with no chunk POST in
+// 60+ seconds while the queue still has work — force-resets the flag
+// and re-arms. Closes a real-world wedge observed in cellular smoke 3
+// v3 where iOS Safari suspended a tab mid-upload, killed the TCP
+// connection during background, and the awaited fetch Promise never
+// resolved. Only Safari-kill-and-reopen recovered. This fix lets every
+// visibilitychange/online/periodic-sweep entry self-heal.
 // v236 → v237 (May 21 — defer matrix relaxed): _uploadVariantTier no
 // longer pre-emptively defers ORIGINAL on SLOW networks. Operator-
 // reported on cellular smoke 3 v2: the single 64 KB upload-probe
