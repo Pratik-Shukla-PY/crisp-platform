@@ -10401,9 +10401,15 @@ body.tier-t4 .home-impact {
     gap: 0;
     flex: 0 0 auto;
 }
-/* Hide the version number from the inline footer per the mock
-   (still kept as a hidden span for legacy refs). */
-.home-stage .home-section-bottom .home-footer-row .home-utility-version,
+/* May 21 2026 (audit Item 6) — REVERSED previous "hide version" rule.
+   The version span (.home-utility-version) is now wired by
+   home-screen.js::_paintVersionPill to show "pwa@v246 · api@<ver>"
+   so operators can confirm PWA build + backend pairing without
+   opening DevTools. Only the trailing dot stays hidden (legacy
+   separator that used to delimit a removed link).
+   Pre-fix this rule hid the version unconditionally, so JS painting
+   had no visible effect (HTML `hidden` was removed but CSS still
+   collapsed the element). */
 .home-stage .home-section-bottom .home-footer-row .home-utility-footer .home-utility-dot:last-of-type {
     display: none;
 }

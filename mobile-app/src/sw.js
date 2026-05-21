@@ -5,7 +5,12 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v246';
+const CACHE_NAME = 'crisp-v247';
+// v246 → v247 (May 21 — B5 hotfix: version pill was being hidden by a
+// pre-existing CSS rule at styles.css:10406 (`display: none`) that the
+// v246 JS painter couldn't override by just removing the HTML `hidden`
+// attribute. The CSS rule has been reversed — version span now shows
+// per its painted text; only the trailing legacy dot stays hidden.
 // v245 → v246 (May 21 — B5: UI cleanup). Two items from the audit:
 //   · Item 7: removed the "Add 4 quick details" CTA + sub label from
 //     the Thank You / stage-success screen. The post-submission
