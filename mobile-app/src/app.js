@@ -9188,61 +9188,66 @@ async function _uploadVariantTier(item, reportId, unit) {
     // `_pwaTier` as a side effect.
     await adaptTierViaProbe();
 
-    // Defer-on-slow-bandwidth (was: skip-and-mark-complete).
+    // Defer model — final iteration (May 21, 2026 v240).
     //
-    // On weak links, MEDIUM/LARGE chunks would saturate the connection
-    // and block SMALL from landing the report on the dashboard quickly.
-    // The previous strategy was to mark those tiers `complete=true`
-    // without uploading — that "cleared the queue" but permanently
-    // orphaned the higher-fidelity bytes, leaving the dashboard with
-    // SMALL forever.
+    // History:
+    //   · Pre-v237: SLOW + ORIGINAL pre-emptively deferred. Operator
+    //     hit "drops in max scenarios" on real 5G because the 64 KB
+    //     probe routinely landed in SLOW from TCP cold-start / tunnel
+    //     queueing.
+    //   · v237: relaxed — only VERY_SLOW pre-emptively defers MEDIUM
+    //     + ORIGINAL. SLOW now attempts all 3.
+    //   · v240 (this commit): REMOVE pre-emptive defer entirely. Even
+    //     on VERY_SLOW (< 80 Kbps), every tier attempts upload at
+    //     whatever bandwidth the device can sustain.
     //
-    // Mid behaviour (pre-May-21): defer the tier instead. It stays in
-    // the queue with `variant.deferred=true`; the retry loop re-checks
-    // every cycle and attempts the tier as soon as the measured
-    // bandwidth tier upgrades.
+    // Operator-driven rationale: "if a user is in a very slow internet
+    // he won't get the medium or original image at all. The idea
+    // should be: if SMALL lands, the app should drain the MEDIUM at
+    // whatever bandwidth is available. Dropping it will not help the
+    // analyst looking at the dashboard. Keep trying for at least 24
+    // hours. Once everything lands, stop."
     //
-    // REVISED May 21 2026 (operator-reported, cellular smoke 3 v2) —
-    // the SLOW + ORIGINAL pre-emptive defer rule fired on real 5G via
-    // the cloudflare tunnel even though the radio was perfectly capable.
-    // Root cause: the single 64 KB `/upload-probe` POST measures
-    // anywhere between 80 Kbps and 800 Kbps (the SLOW bucket) when:
-    //   · TCP cold-start hasn't ramped up (first POST after lock)
-    //   · cloudflared free-tunnel queues the probe behind other req
-    //   · iPhone radio handoff during the probe
-    // Operator: "Why does it drop immediately ... if it decides it
-    // will mostly drop in max scenarios." Correct read — most field
-    // cellular submissions DID end up in SLOW on the probe even when
-    // the link was actually capable of full-res. Real cost: user
-    // permanently loses the high-fidelity capture for nothing.
+    // Analyst value-per-decision >> citizen battery cost. For crisis
+    // reporting the right trade is "spend the data + battery, deliver
+    // the evidence." Battery / data sting is an order of magnitude
+    // smaller than missing a usable photo of a collapsed building.
     //
-    // NEW defer matrix (May 21, 2026):
-    //   FAST       → SMALL + MEDIUM + ORIGINAL   (attempt all 3)
-    //   MEDIUM     → SMALL + MEDIUM + ORIGINAL   (attempt all 3)
-    //   SLOW       → SMALL + MEDIUM + ORIGINAL   (attempt all 3 — was: defer ORIGINAL)
-    //   VERY_SLOW  → SMALL only; defer MEDIUM + ORIGINAL
+    // New rule: attempt every tier on every retry pass. Chunk-level
+    // K.4.c backoff (7 retries × cap-30s exp ≈ ~3 min/chunk) handles
+    // transient failures. The in-flight reconcile fix (v236) keeps
+    // the queue alive across mid-stream throws. v238 wedge-recovery
+    // self-heals stuck retry loops. v239 force-reprobe on visibility
+    // resume kills the false-VERY_SLOW state from iOS-suspension-
+    // killed POSTs. The only thing that bypasses all retries: a
+    // 24-hour wall-clock cap from submit (below).
     //
-    // SLOW networks now get an honest attempt at ORIGINAL. The chunk
-    // loop's K.4.c backoff (7 retries × cap-30s exp ≈ ~3 min/chunk)
-    // is the per-attempt budget; the in-flight reconcile fix (v236,
-    // commit 8f7635d) keeps the queue alive across retry passes if
-    // chunks fail mid-stream. On a genuinely slow-but-workable link,
-    // ORIGINAL gradually completes (operator data + battery cost
-    // grows proportionally but the result lands — matches the
-    // deterministic-delivery contract). On VERY_SLOW (< 80 Kbps),
-    // uploading a 2 MB ORIGINAL takes 3+ minutes minimum and almost
-    // always fails anyway, so the pre-emptive defer there is still
-    // useful: saves user data + signals the dashboard chip.
-    if (tier !== 'small' && _pwaTier === 'VERY_SLOW') {
-        console.log(`[Upload] ${label}: deferred — netTier=${_pwaTier}, awaiting bandwidth upgrade`);
-        variant.deferred = true;
-        variant.deferredReason = 'bandwidth-tier';
-        variant.deferredAt = Date.now();
-        // Do NOT set variant.complete = true. The retry loop must
-        // pick this back up on the next pass after a tier upgrade.
-        try { await enqueueReport(item); } catch (_) {}
-        return;
+    // 24-hour cap: if a non-SMALL variant still hasn't completed 24 h
+    // after the user tapped Submit, give up on that tier and mark it
+    // `deferred` with reason `24h_timeout`. The pre-emptive-defer
+    // mark-deferred POST path (line ~9510 onwards in the parent
+    // _uploadVariants caller) picks this up on the next reconcile
+    // pass and tells the backend to abandon the row. The dashboard
+    // K.5.a chip then renders honestly: "couldn't deliver after 24 h".
+    const _ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    if (tier !== 'small') {
+        const submittedAt = item.timestamp || item.client_created_at_ms || Date.now();
+        const ageMs = Date.now() - submittedAt;
+        if (ageMs > _ONE_DAY_MS) {
+            console.log(
+                `[Upload] ${label}: 24h timeout (age=${Math.round(ageMs/3600000)}h since submit) — ` +
+                `marking deferred. Variant.complete=${variant.complete}, chunkProgress=${variant.chunkProgress||0}.`,
+            );
+            variant.deferred = true;
+            variant.deferredReason = '24h_timeout';
+            variant.deferredAt = Date.now();
+            try { await enqueueReport(item); } catch (_) {}
+            return;
+        }
     }
+    // No bandwidth-probe-based pre-emptive defer. The probe still informs
+    // chunkSize + per-chunk timeout via netConfig below, but it no longer
+    // gates whether we attempt the tier at all.
     // Clear any prior deferral — we're actually uploading this time.
     if (variant.deferred) {
         variant.deferred = false;

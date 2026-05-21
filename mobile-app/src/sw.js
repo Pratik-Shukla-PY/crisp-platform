@@ -5,7 +5,16 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v239';
+const CACHE_NAME = 'crisp-v240';
+// v239 → v240 (May 21 — remove VERY_SLOW pre-emptive defer; add 24h cap):
+// Operator-driven model change. Crisis-reporting analyst value-per-
+// decision is much higher than the citizen's battery/data cost on
+// slow networks. Previous matrix dropped MEDIUM + ORIGINAL on
+// VERY_SLOW probe — analyst lost full-fidelity evidence even when the
+// network could have eventually delivered it. New matrix attempts
+// every tier at whatever bandwidth is available. Hard ceiling: 24 h
+// from submit; after that, give up on incomplete non-SMALL tiers with
+// reason='24h_timeout' so the dashboard chip is honest.
 // v238 → v239 (May 21 — force bandwidth re-probe on visibility-resume):
 // Cellular smoke 5 surfaced a false-positive defer when iOS Safari
 // suspended a tab mid-upload — every chunk POST iOS killed during
