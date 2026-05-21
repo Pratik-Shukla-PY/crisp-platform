@@ -1,6 +1,7 @@
 """Health endpoint contracts.
 
 `/health` — global liveness (disk free + version).
+`/api/v1/health` — mirror of /health under the nginx-proxied prefix (May 21 2026).
 `/api/v1/health/pii` — PII-blur backend readiness.
 `/api/v1/health/db` — DB connectivity + schema revision (Apr 2026).
 
@@ -9,6 +10,12 @@ a Postgres outage + a booted uvicorn looked healthy to orchestrators:
 `/health` only checked disk space. Now k8s / ECS / ALB can point a
 readiness-probe at `/api/v1/health/db` and yank the pod when the
 database goes away.
+
+/api/v1/health was added in May 2026 because nginx in PROD only proxies
+/api/v1/* to the backend — a browser fetch of /health (the legacy k8s
+probe route) hits a 404 at the nginx layer. The mirror endpoint lets
+the PWA version-pill resolve the backend version without an nginx
+config change.
 """
 import pytest
 
@@ -28,6 +35,43 @@ class TestHealthBasic:
         res = client.get("/health")
         assert res.status_code != 401
         assert res.status_code != 403
+
+
+class TestHealthApiV1Mirror:
+    """The /api/v1/health endpoint mirrors /health for nginx-proxied access.
+
+    PROD nginx only forwards /api/v1/* to uvicorn. The root /health is
+    fine for in-cluster k8s probes (which can target any path), but
+    browser-side code reaching the backend through the public ingress
+    needs a route under /api/v1/. This pair of tests pins:
+
+      1. Status + shape parity with /health (same fields, same codes).
+      2. Public — never 401/403, mirrors /health's no-auth policy.
+    """
+
+    def test_api_v1_health_returns_200_with_version(self, client):
+        res = client.get("/api/v1/health")
+        assert res.status_code in (200, 503)
+        body = res.json()
+        assert "version" in body
+        assert "disk" in body
+        assert "status" in body
+
+    def test_api_v1_health_no_auth_required(self, client):
+        res = client.get("/api/v1/health")
+        assert res.status_code != 401
+        assert res.status_code != 403
+
+    def test_api_v1_health_shape_matches_root_health(self, client):
+        """The two endpoints must return the same JSON shape so the PWA
+        version-pill (which reads body.version) works against either."""
+        root = client.get("/health")
+        v1 = client.get("/api/v1/health")
+        assert root.status_code == v1.status_code
+        # Same set of top-level keys.
+        assert set(root.json().keys()) == set(v1.json().keys())
+        # version field equal — both come from settings.VERSION.
+        assert root.json()["version"] == v1.json()["version"]
 
 
 class TestHealthDB:

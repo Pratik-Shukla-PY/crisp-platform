@@ -497,6 +497,19 @@ def health_check():
     return body
 
 
+@app.get("/api/v1/health", tags=["system"])
+def health_check_api_v1():
+    # May 21 2026 — mirror of /health under the /api/v1/ prefix that
+    # nginx proxies in PROD. The root /health route exists for use by
+    # k8s-style orchestrators that can be pointed at any path, but
+    # nginx in PROD only proxies /api/v1/* to the backend — so the PWA
+    # (running at the page origin) cannot reach the root /health route.
+    # Mirroring the same response under /api/v1/health lets the PWA
+    # version-pill code resolve the backend version without needing an
+    # nginx config change. Identical response shape + status semantics.
+    return health_check()
+
+
 @app.get("/api/v1/health/db", tags=["system"])
 def db_health_check():
     """Apr 2026 — explicit DB-connectivity probe.

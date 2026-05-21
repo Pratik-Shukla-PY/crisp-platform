@@ -1651,13 +1651,24 @@
                 legacy.removeAttribute('hidden');
             }
         } catch (_) {}
-        // Refresh from /health in the background; non-blocking, fails
-        // silent if offline.
+        // Refresh from /api/v1/health in the background; non-blocking,
+        // fails silent if offline.
+        //
+        // May 21 2026 (v251) — the backend mounts a basic /health route
+        // at the FastAPI root for orchestrator probes (k8s-style), but
+        // PROD's nginx only proxies /api/v1/* to the backend — so a
+        // browser fetch of /health 404s at the nginx layer before
+        // reaching uvicorn. A prior v250 attempt stripped /api/v1 off
+        // window.API_BASE and called /health directly; that worked in
+        // dev (where backend listens at :8000 root) but failed PROD
+        // smoke. Backend now mirrors the same response shape under
+        // /api/v1/health, so fetching window.API_BASE + /health (no
+        // strip) reaches both environments.
         if (backendVer === 'api@?') {
             try {
                 const base = (typeof window.API_BASE === 'string' && window.API_BASE)
-                    ? window.API_BASE.replace(/\/api\/v1\/?$/, '')
-                    : '';
+                    ? window.API_BASE.replace(/\/$/, '')   // trim trailing slash only
+                    : '/api/v1';                            // fallback when API_BASE not set
                 const url = `${base}/health`;
                 const res = await fetch(url, { cache: 'no-store', credentials: 'omit' });
                 if (res.ok) {

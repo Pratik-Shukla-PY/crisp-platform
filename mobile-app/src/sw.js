@@ -5,7 +5,17 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v250';
+const CACHE_NAME = 'crisp-v251';
+// v250 → v251 (May 21 — version-pill /health URL fix). v250 deploy
+// auto-rolled-back when prod-smoke caught a `HTTP 404 /health` on
+// PWA load. Root cause: home-screen.js _paintVersionPill stripped
+// /api/v1 off window.API_BASE and called /health directly — works in
+// dev where the FastAPI root serves /health, but fails in PROD where
+// nginx only proxies /api/v1/* to the backend. Fix: backend mirrors
+// the same response shape under /api/v1/health (main.py); PWA fetches
+// window.API_BASE + /health (no strip). The legacy root /health route
+// is retained for k8s-style orchestrators that probe the FastAPI app
+// directly without going through nginx.
 // v249 → v250 (May 21 — version pill moved to its own row). Operator
 // screenshot proved the legacy `#home-utility-version` span was being
 // rendered into a clipped region (.home-utility-footer has overflow:
