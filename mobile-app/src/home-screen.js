@@ -1611,8 +1611,18 @@
     // changes on backend deploy — when the cache is naturally
     // invalidated by sessionStorage's per-tab lifetime).
     async function _paintVersionPill() {
-        const el = document.getElementById('home-utility-version');
-        if (!el) return;
+        // May 21 2026 (v250) — target the new dedicated #home-version-row
+        // container instead of the legacy #home-utility-version span.
+        // The legacy span was inside .home-utility-footer which has
+        // overflow:hidden + flex-wrap:nowrap to prevent Open-source from
+        // wrapping into the CRISP-ID pill on narrow screens. That clip
+        // was eating the version text — DOM element existed but was
+        // rendered outside the visible nav. The new row lives BELOW
+        // the footer-row entirely, so it has its own horizontal space.
+        // The legacy span is kept for backward-compat (some test
+        // selectors may still reference it) but no longer painted.
+        const row = document.getElementById('home-version-row');
+        if (!row) return;
         // PWA side — synchronous, read from the meta tag.
         let pwaRel = 'pwa@?';
         try {
@@ -1628,16 +1638,19 @@
             if (cached) backendVer = 'api@' + cached;
         } catch (_) {}
         // Paint immediately with whatever we have (pwa always known,
-        // api may be ?). Inline `style.display` overrides any
-        // lingering CSS `display: none` from cached stylesheets on
-        // iPhones that haven't picked up v247's CSS reversal yet —
-        // belt-and-suspenders so the pill appears on the first new
-        // build the user installs without requiring two reloads.
-        el.textContent = `${pwaRel} · ${backendVer}`;
-        el.removeAttribute('hidden');
-        el.style.display = 'inline-block';
-        el.style.visibility = 'visible';
-        el.style.opacity = '0.9';
+        // api may be ?).
+        row.textContent = `${pwaRel} · ${backendVer}`;
+        row.removeAttribute('hidden');
+        // Also paint the legacy span for any test/feature that still
+        // reads it. Doesn't matter that it's invisible in the layout;
+        // this is just for selector-compat.
+        try {
+            const legacy = document.getElementById('home-utility-version');
+            if (legacy) {
+                legacy.textContent = `${pwaRel} · ${backendVer}`;
+                legacy.removeAttribute('hidden');
+            }
+        } catch (_) {}
         // Refresh from /health in the background; non-blocking, fails
         // silent if offline.
         if (backendVer === 'api@?') {
@@ -1651,7 +1664,12 @@
                     const body = await res.json();
                     if (body && typeof body.version === 'string' && body.version) {
                         try { sessionStorage.setItem('crisp_backend_version', body.version); } catch (_) {}
-                        el.textContent = `${pwaRel} · api@${body.version}`;
+                        // Repaint the dedicated row + the legacy span.
+                        row.textContent = `${pwaRel} · api@${body.version}`;
+                        try {
+                            const legacy = document.getElementById('home-utility-version');
+                            if (legacy) legacy.textContent = `${pwaRel} · api@${body.version}`;
+                        } catch (_) {}
                     }
                 }
             } catch (_) { /* offline — keep "api@?" */ }

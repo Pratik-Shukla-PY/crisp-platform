@@ -5,7 +5,17 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v249';
+const CACHE_NAME = 'crisp-v250';
+// v249 → v250 (May 21 — version pill moved to its own row). Operator
+// screenshot proved the legacy `#home-utility-version` span was being
+// rendered into a clipped region (.home-utility-footer has overflow:
+// hidden + flex-wrap: nowrap to prevent Open-source link from
+// colliding with the CRISP-ID pill on narrow screens). New element
+// `#home-version-row` is a separate block-level row BELOW the footer
+// + Add-to-Homescreen button, with its own .home-version-row CSS
+// rule. The JS painter (_paintVersionPill) targets the new row and
+// also writes to the legacy span for backward-compat with any test
+// selectors. Verified visible in iPhone-viewport Playwright screenshot.
 // v248 → v249 (May 21 — CRITICAL face-blur serialiser fix). Operator
 // caught that v243's bitmap.close() didn't actually fix the cross-
 // image contamination — submitted report 365933f6 with 5 photos

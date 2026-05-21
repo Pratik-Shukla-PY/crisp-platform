@@ -28,7 +28,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v249">
+    <meta name="crisp-release" content="crisp-pwa@v250">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -1230,6 +1230,18 @@
                     data-i18n-aria-label="aria_add_to_homescreen"
                     data-i18n="add_to_homescreen"
                     hidden>+ Add to Homescreen</button>
+
+            <!-- May 21 2026 (audit Item 6) — version pill on its own row
+                 below the footer + add2hs button. Previously this lived
+                 inside .home-utility-footer (Privacy / Help / Open source
+                 nav), which has overflow:hidden + flex-wrap:nowrap so the
+                 Open-source link doesn't wrap into the CRISP-ID pill on
+                 narrow screens. That clip ate the version text — DOM
+                 element existed but was rendered outside the visible
+                 nav. Putting it in its own row sidesteps the layout
+                 contention entirely. Painted by
+                 home-screen.js::_paintVersionPill on home init. -->
+            <div class="home-version-row" id="home-version-row" hidden></div>
 
             </section><!-- /.home-section-bottom -->
 

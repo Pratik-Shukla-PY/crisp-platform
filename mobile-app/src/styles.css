@@ -10401,6 +10401,27 @@ body.tier-t4 .home-impact {
     gap: 0;
     flex: 0 0 auto;
 }
+/* May 21 2026 (v250, audit Item 6) — dedicated version-pill row that
+   lives OUTSIDE .home-utility-footer's overflow:hidden + nowrap clip.
+   Painted by home-screen.js::_paintVersionPill with text like
+   "pwa@v250 · api@1.0.0". Compact, muted, sits below the
+   Privacy/Help/Open-source + CRISP-ID footer row + Add to Homescreen
+   button. Operator can confirm PWA build + backend pairing without
+   opening DevTools. */
+.home-version-row {
+    display: block;
+    text-align: center;
+    margin: 8px 0 0;
+    padding: 0 8px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 10.5px;
+    color: var(--text-mute, var(--muted));
+    opacity: 0.75;
+    word-break: break-all;
+    line-height: 1.4;
+}
+.home-version-row[hidden] { display: none; }
+
 /* May 21 2026 (audit Item 6) — REVERSED previous "hide version" rule.
    The version span (.home-utility-version) is now wired by
    home-screen.js::_paintVersionPill to show "pwa@v246 · api@<ver>"
