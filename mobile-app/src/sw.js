@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v243';
+const CACHE_NAME = 'crisp-v244';
+// v243 → v244 (May 21 — B3: nearby self-exclude + map color coding).
+// Backend now accepts `X-Caller-Device-Hash` header on /nearby and
+// filters out the caller's own reports server-side. PWA sends the
+// header (not a query param — keeps the value out of uvicorn access
+// logs per the operator's privacy posture). Map markers now use blue
+// (#3b82f6) for the user's own reports across the My Reports
+// fullscreen map + the detail-view mini-map. The orange shade
+// (#f97316) is reserved for future nearby overlays.
 // v242 → v243 (May 21 — B1: face-blur cross-contamination fix). Closes
 // the ImageBitmap allocated by `_decode(srcBlob)` on EVERY exit path
 // in pii-blur.js::blurFaces. Pre-fix the bitmap leaked on detect-fail,

@@ -11442,6 +11442,33 @@ function _renderRdEta(r) {
     badge.style.display = 'inline-flex';
 }
 
+// May 21, 2026 — audit Item 1 visual differentiation: marker icons use
+// distinct colors so the user can tell at a glance which markers are
+// their own submissions vs nearby community reports. Operator decision:
+//   own  → blue  (#3b82f6, Tailwind blue-500)
+//   nearby → orange (#f97316, Tailwind orange-500)
+// The svg is a teardrop pin with white outline + a small center dot.
+// Returns a Leaflet divIcon. Safe to call before/after Leaflet load —
+// caller guards on `typeof window.L`.
+const _CRISP_MARKER_OWN_COLOR = '#3b82f6';
+const _CRISP_MARKER_NEARBY_COLOR = '#f97316';
+function _crispMarkerIcon(color) {
+    if (typeof window === 'undefined' || !window.L || !window.L.divIcon) return null;
+    const fill = color || _CRISP_MARKER_OWN_COLOR;
+    const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 36" width="24" height="36">' +
+        '<path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 24 12 24s12-15 12-24c0-6.6-5.4-12-12-12z" ' +
+        `fill="${fill}" stroke="white" stroke-width="2"/>` +
+        '<circle cx="12" cy="12" r="4" fill="white"/></svg>';
+    return window.L.divIcon({
+        className: 'crisp-marker',
+        html: svg,
+        iconSize: [24, 36],
+        iconAnchor: [12, 36],
+        popupAnchor: [0, -32],
+    });
+}
+
 // Mini-map: small Leaflet view showing the report's coords. We reuse the
 // already-cached Leaflet bundle from building-select.js (loaded for the
 // capture-flow building picker). If Leaflet isn't on the page yet, we
@@ -11494,7 +11521,12 @@ function _renderRdMiniMap(r) {
         if (_rdMiniMapMarker) {
             _rdMiniMapMarker.setLatLng([lat, lng]);
         } else {
-            _rdMiniMapMarker = window.L.marker([lat, lng]).addTo(_rdMiniMapInstance);
+            // own-report marker → blue. The detail view is always
+            // showing one of the user's own reports.
+            const _icon = _crispMarkerIcon(_CRISP_MARKER_OWN_COLOR);
+            _rdMiniMapMarker = _icon
+                ? window.L.marker([lat, lng], { icon: _icon }).addTo(_rdMiniMapInstance)
+                : window.L.marker([lat, lng]).addTo(_rdMiniMapInstance);
         }
         // Re-invalidate size on next paint — Leaflet under display:none
         // won't have computed its container width yet, so the tiles
@@ -12147,7 +12179,14 @@ function _renderMyReportsMap(reports) {
     for (const r of withCoords) {
         const [lat, lng] = _coordsFromLocation(r.location);
         const st = _mapReportStatus(r);
-        const m = window.L.marker([lat, lng], { title: `${st.icon} ${st.label}` });
+        // My Reports map shows ONLY the user's own reports → blue.
+        // (If a future revision overlays nearby reports on this same
+        // map, those would use _CRISP_MARKER_NEARBY_COLOR; the helper
+        // is parameterised for that case.)
+        const _icon = _crispMarkerIcon(_CRISP_MARKER_OWN_COLOR);
+        const _opts = { title: `${st.icon} ${st.label}` };
+        if (_icon) _opts.icon = _icon;
+        const m = window.L.marker([lat, lng], _opts);
         m.on('click', () => openReportDetail(r.id || r.client_report_id));
         m.addTo(_mrMapInstance);
         _mrMapMarkers.push(m);

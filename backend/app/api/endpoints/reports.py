@@ -4606,8 +4606,14 @@ def _reset_geom_cache_for_tests() -> None:
 
 def _nearby_cache_key(lat3: float, lng3: float, radius_km: float,
                      since_iso: str, group_by: str,
-                     limit: int, max_age_hours: int) -> str:
-    return f"{lat3:.3f}|{lng3:.3f}|{radius_km:.1f}|{since_iso}|{group_by}|{limit}|{max_age_hours}"
+                     limit: int, max_age_hours: int,
+                     caller_device_hash: Optional[str] = None) -> str:
+    # caller_device_hash is part of the key when provided so different
+    # callers don't share each other's filtered cache rows. The hash
+    # itself is short (~40 chars) and never logged elsewhere — see the
+    # privacy comment in get_nearby_reports.
+    suffix = f"|caller={caller_device_hash}" if caller_device_hash else ""
+    return f"{lat3:.3f}|{lng3:.3f}|{radius_km:.1f}|{since_iso}|{group_by}|{limit}|{max_age_hours}{suffix}"
 
 
 @router.get("/nearby", response_model=ReportNearbyResponse)
@@ -4648,13 +4654,55 @@ def get_nearby_reports(
       ✓ Timestamps minute-truncated
       ✓ Same-device contributions capped at 1 per group (anti-spam)
       ✓ Status REJECTED / DUPLICATE / FALSE_ALARM excluded
+
+    Self-report exclusion (May 21, 2026 — audit Item 2):
+      The PWA's nearby feed was showing the caller's own submissions
+      back to them, which broke the "community awareness" intent.
+      The client now opts into server-side filtering via the
+      `X-Caller-Device-Hash` HEADER (not a query param — uvicorn
+      access logs capture query strings but not custom headers, so
+      the hash never enters log files). If the caller's resolved
+      device_id is in the candidate set, those rows are dropped
+      BEFORE the aggregator runs. Privacy posture: the hash is used
+      to compute the device_id lookup + the cache key, then dropped.
+      It is NEVER logged — every log line below uses rounded coords
+      only.
     """
+    # Resolve caller's device_id (if a hash was provided in the
+    # `X-Caller-Device-Hash` header) before building the cache key.
+    # The lookup itself is a fast indexed read on Device.device_hash.
+    # We log only "filter active" / "filter off", never the hash value
+    # itself — see privacy posture above. Using a header instead of a
+    # query param keeps the value out of uvicorn's request-line access
+    # log; cookies/headers don't appear in the default Apache-combined
+    # format uvicorn uses.
+    caller_device_hash = request.headers.get("x-caller-device-hash") if request else None
+    caller_device_id: Optional[str] = None
+    if caller_device_hash:
+        # Defensive: trim whitespace, cap length to avoid log-noise abuse.
+        _h = caller_device_hash.strip()[:128] if caller_device_hash else ""
+        if _h:
+            _cd = db.query(Device).filter(Device.device_hash == _h).first()
+            if _cd:
+                caller_device_id = _cd.id
+            # Note: we don't log the hash itself nor whether it matched
+            # a known device. A bad/typoed hash silently no-ops to "no
+            # filter" rather than 4xx, since the public /nearby endpoint
+            # shouldn't leak whether an arbitrary device_hash exists.
+
     # Cache key uses caller's rounded coords + filter params. 3-decimal
     # rounding (~110m) clusters nearby callers onto the same cache row.
     lat_r = round(lat, 3)
     lng_r = round(lng, 3)
     since_iso = since.isoformat() if since else ""
-    cache_key = _nearby_cache_key(lat_r, lng_r, radius_km, since_iso, group_by, limit, max_age_hours)
+    # caller_device_hash is part of the cache key when present so two
+    # callers from the same 110m cell don't share each other's filtered
+    # results. Empty string when not provided keeps the original cache
+    # contract intact.
+    cache_key = _nearby_cache_key(
+        lat_r, lng_r, radius_km, since_iso, group_by, limit, max_age_hours,
+        caller_device_hash=caller_device_hash if caller_device_id else None,
+    )
 
     now_ts = datetime.now(timezone.utc).timestamp()
     cached = _NEARBY_CACHE.get(cache_key)
@@ -4793,6 +4841,16 @@ def get_nearby_reports(
           .filter(Report.server_created_at >= age_cutoff)
           .options(joinedload(Report.location))
     )
+
+    # Self-report exclusion (May 21, 2026 — audit Item 2). If the
+    # caller's device hash resolved to a known device_id, drop their
+    # own reports from the candidate set BEFORE the aggregator runs.
+    # The aggregator's per-device cap-at-1 anti-spam pass would
+    # under-count (or under-show) their reports without filtering them
+    # out entirely. This filter does the right thing for both groups
+    # and resolved-recent buckets.
+    if caller_device_id:
+        q = q.filter(Report.device_id != caller_device_id)
 
     if since is not None:
         if since.tzinfo is None:

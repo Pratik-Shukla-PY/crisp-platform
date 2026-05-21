@@ -219,13 +219,32 @@
         url.searchParams.set('lng', _round3(lng).toString());
         url.searchParams.set('radius_km', String(radius_km));
         url.searchParams.set('limit', String(limit));
+        // May 21, 2026 — architectural audit Item 2. Resolve the
+        // caller's own device_hash from localStorage so we can send it
+        // as the `X-Caller-Device-Hash` HEADER (not a query param —
+        // headers don't leak into uvicorn's request-line access logs).
+        // Backend uses the hash to exclude the caller's own reports
+        // from the community-awareness feed. Privacy posture: hash
+        // computes a device_id lookup + per-caller cache row, then
+        // dropped. NEVER logged. See backend get_nearby_reports.
+        let _callerHash = null;
+        try {
+            _callerHash = (typeof localStorage !== 'undefined')
+                ? (localStorage.getItem('crisp_device_id_v2')
+                   || localStorage.getItem('crisp_device_hash')
+                   || localStorage.getItem('crisp_device_id'))
+                : null;
+        } catch (_) { /* private-mode localStorage throws — skip silently */ }
         // 6-second hard cap so a slow API doesn't drag down home boot.
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 6000);
         try {
+            const _headers = { 'Accept': 'application/json' };
+            if (_callerHash) _headers['X-Caller-Device-Hash'] = _callerHash;
             const res = await fetch(url.toString(), {
                 signal: ctrl.signal,
                 cache: 'no-store',
+                headers: _headers,
             });
             if (!res.ok) {
                 console.warn('[NearbyIntel] fetch failed:', res.status, url.toString());
