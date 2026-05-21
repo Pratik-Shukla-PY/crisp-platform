@@ -1,0 +1,47 @@
+{
+  "sha": "7e5c18c",
+  "sha_full": "7e5c18c7fb2fdf6bbe6712b11310125ff5133ca0",
+  "ts": "2026-05-21T16:36:35.460Z",
+  "ref": "refs/heads/main",
+  "actor": "Pratik-Shukla-PY",
+  "pages": {
+    "pwa-home": {
+      "url": "http://localhost:33631/mobile-app/src/",
+      "scores": {
+        "performance": 66,
+        "accessibility": 98,
+        "best-practices": 93,
+        "pwa": 100,
+        "seo": 88
+      },
+      "metrics": {
+        "lcp": 7790.6754999999985,
+        "cls": 0.016124,
+        "tbt": 169.47637499999973,
+        "fcp": 2697.173,
+        "si": 5194.5266901568675
+      },
+      "run_count": 3,
+      "median_file": "lhr-1779381316296.json"
+    },
+    "dashboard": {
+      "url": "http://localhost:33631/web-dashboard/src/",
+      "scores": {
+        "performance": 58,
+        "accessibility": 92,
+        "best-practices": 100,
+        "pwa": 38,
+        "seo": 90
+      },
+      "metrics": {
+        "lcp": 8286.09405,
+        "cls": 0.003445,
+        "tbt": 14,
+        "fcp": 7812.643849999999,
+        "si": 7812.643849999999
+      },
+      "run_count": 3,
+      "median_file": "lhr-1779381395000.json"
+    }
+  }
+}
