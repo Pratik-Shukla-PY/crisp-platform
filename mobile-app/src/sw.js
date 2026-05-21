@@ -5,7 +5,21 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v240';
+const CACHE_NAME = 'crisp-v241';
+// v240 → v241 (May 21 — two fixes from cellular smoke 5):
+// 1) Freeze chunkSize + total on the variant after the first attempt.
+//    A probe-tier shift between retries previously recomputed `total`
+//    against the new chunkSize. If new total < chunkProgress, the
+//    chunk for-loop body never ran → variant.complete=true → silent
+//    skip with server stuck at partial chunk count. Real loss observed
+//    on report 5b9823d4 group 62e25fd5 (92/2105 stuck forever).
+// 2) JS-paused-but-visible self-heartbeat. iOS Safari occasionally
+//    pauses JS while the page stays visible (low-power mode, memory
+//    pressure). visibilitychange never fires. The 5-min periodic sweep
+//    eventually catches it, but a 30-s heartbeat with explicit silence
+//    detection (no chunk POST in 60s + queue non-empty + visible) fires
+//    startRetryLoop, which then runs v238 wedge-recovery to clear any
+//    stuck _retryLoopRunning flag.
 // v239 → v240 (May 21 — remove VERY_SLOW pre-emptive defer; add 24h cap):
 // Operator-driven model change. Crisis-reporting analyst value-per-
 // decision is much higher than the citizen's battery/data cost on

@@ -9277,8 +9277,27 @@ async function _uploadVariantTier(item, reportId, unit) {
         // slicing. Ephemeral — doesn't replace the persisted dataUrl
         // (which stays JSON-serialisable for IndexedDB crash recovery).
         const blob = _dataUrlToBlob(variant.dataUrl);
-        const chunkSize = netConfig.chunkSize;
-        const total = Math.max(1, Math.ceil(blob.size / chunkSize));
+        // v241 (May 21, 2026) — FREEZE chunkSize + total on the variant
+        // after the first attempt. Pre-fix bug observed on cellular smoke
+        // 5 (report 5b9823d4 group 62e25fd5): a variant uploaded chunks
+        // 0-91 with chunkSize=1024 (VERY_SLOW probe → total=2105). Probe
+        // upgraded between retries (v239 force-reprobe). On the next
+        // attempt, `total = Math.ceil(blob.size / netConfig.chunkSize)`
+        // recomputed against the NEW chunkSize (e.g., 32KB → total=64).
+        // The for-loop `for (let seq = startSeq=92; seq < total=64; ...)`
+        // body never ran. Function fell through to `variant.complete=true`.
+        // PWA skipped to next variant; server stuck at 92/2105 chunks,
+        // unable to assemble. Result: silent loss of one ORIGINAL.
+        //
+        // Fix: freeze on first call. Subsequent retries reuse the same
+        // chunkSize + total, keeping chunkProgress meaningful and the
+        // server's chunk_count contract intact across probe-tier shifts.
+        if (!variant.frozenChunkSize) {
+            variant.frozenChunkSize = netConfig.chunkSize;
+            variant.frozenTotalChunks = Math.max(1, Math.ceil(blob.size / netConfig.chunkSize));
+        }
+        const chunkSize = variant.frozenChunkSize;
+        const total = variant.frozenTotalChunks;
 
         // Phase C.1 (May 2026) — compute whole-asset djb2 ONCE over the full
         // original bytes BEFORE chunking, cache it on the variant so a
@@ -9346,7 +9365,12 @@ async function _uploadVariantTier(item, reportId, unit) {
 
     // ── Legacy base64 path (feature flag off) ───────────────────────────
     const b64 = variant.dataUrl.includes(',') ? variant.dataUrl.split(',')[1] : variant.dataUrl;
-    const chunks = chunkBase64(b64, netConfig.chunkSize);
+    // v241 — same freeze logic as the bin path above. See the long comment
+    // there for why this matters (silent variant-skip on probe-tier shift).
+    if (!variant.frozenChunkSize) {
+        variant.frozenChunkSize = netConfig.chunkSize;
+    }
+    const chunks = chunkBase64(b64, variant.frozenChunkSize);
     const total = chunks.length;
 
     // Phase C.1 — same whole-asset checksum for the legacy base64 transport.
@@ -13976,6 +14000,53 @@ document.addEventListener('DOMContentLoaded', async () => {
         arm();
     }
     try { _startPeriodicSweep(); } catch (e) { _silent('periodicSweep', e); }
+
+    // v241 (May 21, 2026) — JS-paused-but-visible self-heartbeat.
+    //
+    // The 5-min periodic sweep above + the visibilitychange handler only
+    // re-fire startRetryLoop on visibility transitions or every 5 min.
+    // Cellular smoke 5 (report 5b9823d4) revealed a third stall class:
+    // iOS Safari occasionally pauses JS execution while the page is
+    // visible AND the operator is interacting normally (memory pressure,
+    // low-power mode, OS-level throttling). The visibilitychange handler
+    // never fires because visibility never actually changes. The 5-min
+    // sweep eventually catches it, but 5 minutes is too long for crisis
+    // reporting.
+    //
+    // Fix: tight (30 s) heartbeat that explicitly checks "is the retry
+    // loop alive, given that we still have work?" If chunks haven't fired
+    // in ≥ 60 s AND there's pending work AND we're visible+online, force
+    // a startRetryLoop call. The wedge-recovery inside startRetryLoop
+    // (v238) then handles a stuck `_retryLoopRunning=true` flag.
+    //
+    // Note: this is a one-step recovery — when iOS resumes JS after a
+    // pause, setInterval ticks fire on resume. So even if the heartbeat
+    // was suspended during the pause, the first post-resume tick is what
+    // kicks the loop back to life. No "polling during suspension" — that's
+    // not a thing iOS allows.
+    const _HEARTBEAT_INTERVAL_MS = 30 * 1000;
+    const _HEARTBEAT_SILENCE_THRESHOLD_MS = 60 * 1000;
+    function _startHeartbeat() {
+        const tick = async () => {
+            if (document.visibilityState !== 'visible') return;
+            if (!navigator.onLine) return;
+            const silentMs = Date.now() - (_lastChunkPostAt || 0);
+            if (silentMs < _HEARTBEAT_SILENCE_THRESHOLD_MS) return;
+            // Only kick if there's actually pending work — otherwise
+            // healthy quiet-queue would burn IDB reads forever.
+            let hasPending = false;
+            try { hasPending = (await getAllQueued()).length > 0; }
+            catch (_) { return; }
+            if (!hasPending) return;
+            console.log(
+                `[Heartbeat] retry loop silent ${Math.round(silentMs/1000)}s with ${hasPending ? 'pending work' : 'no work'}; ` +
+                `kicking startRetryLoop. JS likely just resumed from an iOS pause.`,
+            );
+            try { startRetryLoop(); } catch (_) {}
+        };
+        setInterval(tick, _HEARTBEAT_INTERVAL_MS);
+    }
+    try { _startHeartbeat(); } catch (e) { _silent('heartbeat', e); }
 
     // 8. Setup start button. Phase 4: the auto-submit
     // timer is armed inside goToStage() via inactivityManager.tryArm({bustCache:true})
