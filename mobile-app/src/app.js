@@ -11233,6 +11233,41 @@ async function _renderPartialReports() {
             : `<span class="hr-chip hr-chip-queue">${t('status_queued')}</span>`;
         const crisis = (it.meta && it.meta.crisis_type) || '—';
         const infra = (it.meta && it.meta.infrastructure_type) || '—';
+        // May 21 2026 (audit Item 1) — surface a thumbnail for the
+        // in-flight card from the LOCAL SMALL-tier dataUrl. Pre-fix the
+        // in-flight render had NO image preview at all: queued items
+        // sat in IDB carrying photoVariants.small.dataUrl (the locally-
+        // encoded SMALL preview, ~10KB) but the render template only
+        // read r.thumbnail_url, which queue items don't have until the
+        // server assembles. Operator-visible: a freshly-captured report
+        // appeared as a text-only progress card, while a fully-synced
+        // report had a thumbnail. Inconsistent UX.
+        //
+        // Fall-through order:
+        //   1. `it.photoVariants.small.dataUrl` — main photo SMALL preview
+        //   2. `it.extraPhotosVariants[0].small.dataUrl` — first extra
+        //   3. `it.photo` — legacy single-photo dataUrl (pre-variant queue)
+        //   4. none → camera placeholder (same as submitted-card fallback)
+        let _inflightThumbUrl = null;
+        try {
+            const pv = it.photoVariants;
+            if (pv && pv.small && pv.small.dataUrl) _inflightThumbUrl = pv.small.dataUrl;
+            if (!_inflightThumbUrl && Array.isArray(it.extraPhotosVariants)) {
+                for (const ev of it.extraPhotosVariants) {
+                    if (ev && ev.small && ev.small.dataUrl) {
+                        _inflightThumbUrl = ev.small.dataUrl;
+                        break;
+                    }
+                }
+            }
+            if (!_inflightThumbUrl && typeof it.photo === 'string' && it.photo.startsWith('data:')) {
+                _inflightThumbUrl = it.photo;
+            }
+        } catch (_) { /* defensive — never block the render */ }
+        const _inflightThumbHtml = _inflightThumbUrl
+            ? `<img class="hr-thumb" src="${escapeHtmlSimple(_inflightThumbUrl)}" alt=""
+                    onerror="this.outerHTML='<div class=&quot;hr-thumb hr-thumb-placeholder&quot;><i class=&quot;fa-solid fa-camera&quot;></i></div>'">`
+            : `<div class="hr-thumb hr-thumb-placeholder"><i class="fa-solid fa-camera"></i></div>`;
         // BUGFIX May 2026 — stuck-reason hint.
         //
         // A QUEUED card with "75% · <id>" tells the user nothing about WHY
@@ -11258,14 +11293,17 @@ async function _renderPartialReports() {
         // submitted-reports list at line 9301 had the equivalent
         // wiring; in-flight had been shipped without it — an original
         // omission, never had click handling).
-        return `<div class="history-row" role="button" tabindex="0"
+        return `<div class="history-row history-row-with-thumb" role="button" tabindex="0"
                      data-client-report-id="${escapeHtmlSimple(it.client_report_id)}">
-            <div class="hr-top">
-                <span class="hr-title">${escapeHtmlSimple(crisis)} · ${escapeHtmlSimple(infra)}</span>
-                ${statusChip}
+            ${_inflightThumbHtml}
+            <div class="hr-body">
+                <div class="hr-top">
+                    <span class="hr-title">${escapeHtmlSimple(crisis)} · ${escapeHtmlSimple(infra)}</span>
+                    ${statusChip}
+                </div>
+                <div class="hr-progress-track"><div class="hr-progress-fill" style="width:${pct}%"></div></div>
+                <div class="hr-meta">${pct}% · ${it.client_report_id.slice(0, 8)}${_stuckReason ? ` · ${escapeHtmlSimple(_stuckReason)}` : ''}</div>
             </div>
-            <div class="hr-progress-track"><div class="hr-progress-fill" style="width:${pct}%"></div></div>
-            <div class="hr-meta">${pct}% · ${it.client_report_id.slice(0, 8)}${_stuckReason ? ` · ${escapeHtmlSimple(_stuckReason)}` : ''}</div>
         </div>`;
     }).join('');
     // Wire click + keyboard (Enter / Space) handlers AFTER innerHTML. We
@@ -11938,16 +11976,23 @@ async function _renderSubmittedReports() {
             (Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)
                 ? `📍 ${loc.latitude.toFixed(3)}°, ${loc.longitude.toFixed(3)}°`
                 : '');
-        // Lazy-loaded thumbnail (loading="lazy") — large lists don't pay
-        // the download cost until the card scrolls into view. 
-        // (UI v3 redesign Q3) — robust onerror fallback swaps to the
-        // placeholder if the URL fails (covers any future presigned-URL
-        // expiry / CORS / 404 case so judges never see leaking alt text).
-        // Phase 16: routed through window._resolveMediaUrl so any future
-        // s3:// regression surfaces the placeholder cleanly (never a 404).
+        // Card thumbnail. Resolved via window._resolveMediaUrl so any
+        // future s3:// regression surfaces the placeholder cleanly
+        // (never a 404). Robust onerror fallback swaps to the
+        // placeholder if the URL fails (covers presigned-URL expiry /
+        // CORS / 404 cases so judges never see leaking alt text).
+        //
+        // May 21 2026 (audit Item 1) — REMOVED `loading="lazy"`. The
+        // attribute caused silent thumbnail failures when the user
+        // scrolled past a card faster than the lazy fetch fired: the
+        // <img> element rendered but its network request never went
+        // out, so the card sat with an empty image slot. Cards are
+        // small (~50px) and the SMALL tier is tiny (~10 KB); eager
+        // load is the right trade for "every card definitely has
+        // an image when the user sees it."
         const thumbUrl = window._resolveMediaUrl(r.thumbnail_url);
         const thumbHtml = thumbUrl
-            ? `<img class="mr-card-thumb" src="${escapeHtmlSimple(thumbUrl)}" alt="" loading="lazy"
+            ? `<img class="mr-card-thumb" src="${escapeHtmlSimple(thumbUrl)}" alt=""
                     onerror="this.outerHTML='<div class=&quot;mr-card-thumb mr-card-thumb-placeholder&quot;><i class=&quot;fa-solid fa-camera&quot;></i></div>'">`
             : `<div class="mr-card-thumb mr-card-thumb-placeholder"><i class="fa-solid fa-camera"></i></div>`;
         const dateText = _timeAgo(r.server_created_at || r.updated_at);

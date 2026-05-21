@@ -2494,6 +2494,26 @@ details.mr-date-group[open] .mr-date-group-chevron {
     color: rgba(255, 255, 255, 0.3); font-size: 20px;
     border: 1px dashed rgba(255, 255, 255, 0.15);
 }
+/* May 21 2026 (audit Item 1) — thumbnail for in-flight cards.
+   Sized + spaced to mirror the My Reports submitted-card thumbnail,
+   so a freshly-captured (queued) report looks visually consistent
+   with the synced version next to it in the same list. */
+.history-row-with-thumb {
+    display: flex; gap: 12px; align-items: stretch;
+}
+.history-row-with-thumb .hr-body {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;
+}
+.hr-thumb {
+    width: 56px; height: 56px; border-radius: 8px;
+    object-fit: cover; flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.04);
+}
+.hr-thumb-placeholder {
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255, 255, 255, 0.3); font-size: 18px;
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+}
 .mr-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .mr-card-top { display: flex; align-items: flex-start; gap: 8px; justify-content: space-between; }
 .mr-card-title {

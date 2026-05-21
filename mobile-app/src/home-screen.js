@@ -1449,6 +1449,51 @@
         span.removeAttribute('hidden');
     }
 
+    // May 21 2026 (audit Item 4) — prime the count on home boot.
+    // Pre-fix `_renderMyReportsCount()` was called from home init while
+    // `window._submittedCache` was still the empty array initialised
+    // by app.js at module-load time. The cache only got populated when
+    // the user clicked "My Reports" → `_renderSubmittedReports`. So
+    // the home tile showed "0" on every cold start even when the user
+    // had previously-submitted reports on the server.
+    //
+    // Fix: a lightweight async fetch to `/status-since` (same endpoint
+    // My Reports uses) populates the cache + repaints the count
+    // immediately on boot. Non-blocking: if the device is offline or
+    // the fetch fails, we silently keep the current count (which is
+    // 0 for fresh devices — accurate).
+    async function _primeMyReportsCount() {
+        let hash = '';
+        try {
+            hash = (typeof localStorage !== 'undefined')
+                ? (localStorage.getItem('crisp_device_id_v2')
+                   || localStorage.getItem('crisp_device_hash')
+                   || localStorage.getItem('crisp_device_id')
+                   || '')
+                : '';
+        } catch (_) { /* private-mode throws — leave hash empty */ }
+        if (!hash) {
+            try { _renderMyReportsCount(); } catch (_) {}
+            return;
+        }
+        const base = (typeof window.API_BASE === 'string' && window.API_BASE)
+            ? window.API_BASE
+            : '/api/v1';
+        const url = `${base}/reports/device/${encodeURIComponent(hash)}/status-since?since=1970-01-01T00:00:00Z`;
+        try {
+            const res = await fetch(url, { cache: 'no-store', credentials: 'omit' });
+            if (!res.ok) return;
+            const arr = await res.json();
+            if (Array.isArray(arr)) {
+                // Replace the cache rather than merge — fresh fetch is
+                // canonical. The submitted-render path uses the same
+                // semantics when the user opens My Reports.
+                window._submittedCache = arr;
+                try { _renderMyReportsCount(); } catch (_) {}
+            }
+        } catch (_) { /* offline / DNS / abort — silent */ }
+    }
+
     // PWA install icon — always visible until `display-mode: standalone`
     // matches (i.e. the app has been added to home screen).
     function _wireInstallIcon() {
@@ -1707,6 +1752,12 @@
         try {
             document.dispatchEvent(new CustomEvent('crisp-home-rendered'));
         } catch (_) {}
+
+        // May 21 2026 (audit Item 4) — prime the My Reports count
+        // from a non-blocking status-since fetch. Without this the
+        // tile shows "0" on every cold boot until the user opens
+        // My Reports for the first time.
+        try { _primeMyReportsCount(); } catch (_) {}
 
         // "Verified Reports Nearby" intel module — fires AFTER the
         // main home paint so it doesn't block first-paint. Module is

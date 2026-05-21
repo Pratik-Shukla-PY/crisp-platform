@@ -5,7 +5,21 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v244';
+const CACHE_NAME = 'crisp-v245';
+// v244 → v245 (May 21 — B4: My Reports rendering + home count). Three
+// fixes from architectural audit Items 1 + 4:
+//   · dropped `loading="lazy"` from the My Reports card thumbnail —
+//     was causing silent thumbnail-blank when users scrolled past
+//     fast (image never fired its network request).
+//   · in-flight cards (queued / mid-upload) now render a thumbnail
+//     from the LOCAL photoVariants.small.dataUrl that's already in
+//     IDB. Pre-fix in-flight cards were text-only because the render
+//     template only read r.thumbnail_url, which queue items lack.
+//   · home-screen `_primeMyReportsCount` fetches /status-since at
+//     boot and re-paints the My Reports count tile from the result.
+//     Pre-fix the tile read window._submittedCache which started as
+//     [] at app.js module-load and only got populated when the user
+//     entered My Reports.
 // v243 → v244 (May 21 — B3: nearby self-exclude + map color coding).
 // Backend now accepts `X-Caller-Device-Hash` header on /nearby and
 // filters out the caller's own reports server-side. PWA sends the
