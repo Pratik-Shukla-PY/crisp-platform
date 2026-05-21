@@ -74,6 +74,17 @@ CLAUDE.md
 # Add new entries to this block.
 docs/NEARBY_REPORTS_PIPELINE.md
 docs/nearby-pipeline-workflow.html
+PHASE-K-APPROVAL.html
+
+# Validation: per-scenario run artifacts (regenerated on every run; only
+# the soak-50 evidence + 00_baseline_hashes.json are committed). Future
+# scenarios shouldn't add to the repo unless explicitly preserved.
+validation/results/*/
+!validation/results/13-soak-50/
+# Validation report + dev helper scripts (kept locally; not part of the
+# prod build or the deploy artifact).
+validation/VALIDATION-REPORT.md
+validation/scripts/
 
 # Dev probes + seed scripts (underscore-prefixed; not picked up by the
 # playwright spec runner or any deploy step).

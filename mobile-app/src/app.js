@@ -577,13 +577,43 @@ async function _reconcileBeforeDequeue(item, reportId) {
     // Collect every (variant, mediaId) we believe we sent, AND track
     // which ones are the SMALL tier of their photo group (those are
     // the "must be on the server" set; MEDIUM/HIGH are softer).
+    //
+    // BUGFIX May 2026 (operator-reported, cellular smoke 3) — also
+    // include MID-FLIGHT variants (mediaId set, chunks partially
+    // uploaded, complete=false). Pre-fix, the collector only counted
+    // `complete=true` variants. If a chunk loop threw mid-stream
+    // (chunks 1-21 succeeded, chunk 22 failed after `sendWithRetry`
+    // exhausted), the variant stayed `complete=false` and was INVISIBLE
+    // to reconcile. Reconcile saw "every variant I tracked is on the
+    // server" → ok=true → dequeue. The pending chunks 22-24 were
+    // orphaned forever — the queue item was gone so the retry loop
+    // had nothing to resume. The dashboard's report stayed
+    // PARTIAL-promoted-to-SYNCED (Action ④) with one ORIGINAL frozen
+    // at received_chunks < chunk_count and no abandon_reason.
+    //
+    // Post-fix: include `mediaId && (complete || chunkProgress > 0)`
+    // — the variant is either done (server should have it complete)
+    // OR mid-stream (server should have a row with chunks landing).
+    // Either way, the reconciler MUST account for it before dequeueing.
+    // The downstream softAssembling/softMissing bucketing then drives
+    // the right behaviour (wait one more tick for partial rows; mark
+    // deferred + signal backend only for truly missing rows).
     const expected = [];
     const collect = (variants, label) => {
         if (!variants) return;
         for (const tier of ['small', 'medium', 'original']) {
             const v = variants[tier];
-            if (v && v.mediaId && v.complete) {
-                expected.push({ mediaId: v.mediaId, variant: v, tier, label: `${label}/${tier}` });
+            if (!v || !v.mediaId) continue;
+            const isComplete = v.complete === true;
+            const isInflight = !isComplete && (v.chunkProgress || 0) > 0;
+            if (isComplete || isInflight) {
+                expected.push({
+                    mediaId: v.mediaId,
+                    variant: v,
+                    tier,
+                    label: `${label}/${tier}${isInflight ? '-inflight' : ''}`,
+                    inflight: isInflight,
+                });
             }
         }
     };
@@ -3800,6 +3830,10 @@ window.__crispEnqueueReport = (payload) => enqueueReport(payload);
 window.__crispGetAllQueued = () => getAllQueued();
 window.__crispDequeueReport = (clientReportId) => dequeueReport(clientReportId);
 window.__crispReconcileQueue = () => _reconcileQueueAgainstServer();
+// May 2026 cellular-smoke-3 fix — expose _reconcileBeforeDequeue so the
+// in-flight-aware regression test can call it directly + assert ok/
+// softAssembling shape without driving the full retry loop.
+window.__crispReconcileBeforeDequeue = (item, reportId) => _reconcileBeforeDequeue(item, reportId);
 // K.3.a (May 2026, Phase K) — let tests invoke trySendQueuedReport
 // directly so the soft-drain mark-deferred branch is exercisable
 // without needing to drive the full retry-loop schedule.

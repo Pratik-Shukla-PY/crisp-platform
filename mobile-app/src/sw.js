@@ -5,7 +5,15 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v235';
+const CACHE_NAME = 'crisp-v236';
+// v235 → v236 (May 21 — cellular smoke 3 fix): _reconcileBeforeDequeue
+// now also tracks MID-FLIGHT variants (mediaId set, chunkProgress > 0,
+// complete=false). Pre-fix, a variant whose chunk loop threw mid-stream
+// stayed invisible to reconcile → ok=true → dequeue → orphan chunks.
+// Real cellular capture left an ORIGINAL stuck at 21/24 chunks with the
+// PWA queue empty. Post-fix, in-flight variants are tracked as
+// softAssembling → ok=false → keep queued → next pass resumes chunks
+// from chunkProgress.
 // v232 → v233 (May 20 — Phase L Batch 2 second hotfix): caught the
 // 6th surviving 'LOW' default — `uploadChunksBinary({ ..., resolutionTier='LOW', ... })`
 // function-parameter default. ANY call that omitted `resolutionTier`
