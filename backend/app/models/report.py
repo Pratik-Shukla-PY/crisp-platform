@@ -545,6 +545,24 @@ class Media(Base):
     # forward only. NULL for non-PWA channels and legacy uploads;
     # the server falls back to MediaPipe-only detection in that case.
     client_face_boxes_normalized = Column(JSON, nullable=True)
+    # B-F (May 2026, alembic 0039): pre-blur internal store for the
+    # retroactive upgrade path. When the blur worker detects PII and
+    # decides to redact, it ALSO writes the original assembled bytes
+    # to an internal-only storage prefix (`pre_blur/`). If MEDIUM /
+    # ORIGINAL of the same photo_group_id later detects additional
+    # PII, the worker can fetch the SMALL tier's pre-blur bytes and
+    # re-blur with the union — without losing the original detail.
+    # NULL when pii_blur_status='complete_clean' (no PII detected,
+    # public bytes ARE the original — no extra retention needed).
+    # Also NULL after sweep Action ⑤ purges the entry.
+    pre_blur_internal_key = Column(String(255), nullable=True)
+    # B-F: TIMESTAMP after which sweep Action ⑤ purges the
+    # pre-blur internal bytes. Default at write time = now + 24h.
+    # Indexed so the sweep's `WHERE pre_blur_retained_until < now`
+    # query stays fast as media table grows.
+    pre_blur_retained_until = Column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     # server-side PII blur outcome. Legacy rows are NULL.
     # Canonical values (May 2026, Batch B-A — alembic 0037):
     #   pending                  — assembly completed; blur submitted

@@ -701,6 +701,44 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
             try: _read_db.close()
             except Exception: pass
 
+        # B-F (May 2026, alembic 0039) — pre-blur retention. Before
+        # blur runs, snapshot the assembled bytes into the internal
+        # `pre_blur/` store. If a higher-tier arrival later detects
+        # additional PII, the retroactive upgrade path reads from this
+        # snapshot to re-blur lower tiers without losing original
+        # detail. Sweep Action ⑤ purges entries after 24 h.
+        try:
+            _pre_blur_bytes = _get_media_storage().read(db_url)
+            _pre_blur_key = f"{media_id}__pre_blur"
+            _get_media_storage().save_internal(
+                _pre_blur_key, _pre_blur_bytes,
+                _content_type_for(filename),
+            )
+            # Stamp the row so the sweep knows when to purge.
+            _retain_db = SessionLocal()
+            try:
+                _retain_db.query(Media).filter(Media.id == media_id).update(
+                    {
+                        'pre_blur_internal_key': _pre_blur_key,
+                        'pre_blur_retained_until': (
+                            datetime.now(timezone.utc) + timedelta(hours=24)
+                        ),
+                    },
+                    synchronize_session=False,
+                )
+                _retain_db.commit()
+            finally:
+                try: _retain_db.close()
+                except Exception: pass
+        except Exception as _pre_e:
+            # Non-fatal: retroactive upgrade is a bonus, not the
+            # privacy guarantee. Log + continue with the in-place blur.
+            logger.warning(
+                f"[B-F] pre-blur snapshot failed for {media_id[:8]}: "
+                f"{_pre_e}. Retroactive upgrade disabled for this row; "
+                f"in-place blur still runs."
+            )
+
         # Stage bytes from storage into a /tmp/ tempfile for the
         # filesystem-based cv2.imread inside blur_pii. The tempfile
         # is auto-deleted when the context exits — EC2's persistent

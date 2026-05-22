@@ -82,8 +82,35 @@ class MediaStorage(Protocol):
         For S3: signed presigned URL (~15 min TTL)."""
         ...
 
+    # ── B-F (May 2026) — internal-only store for pre-blur retention ──
+    # These methods write/read/delete from a sibling namespace that is
+    # NEVER exposed via public routes. Used by the retroactive blur
+    # upgrade path: when a higher-tier arrival detects additional PII,
+    # the worker fetches the lower tier's pre-blur bytes from here,
+    # re-blurs with the union, and overwrites the public copy.
+
+    def save_internal(
+        self, key: str, data: bytes, content_type: str = "application/octet-stream"
+    ) -> str:
+        """Persist `data` under a private `pre_blur/` namespace. Return
+        a key (relative) for later read/delete. NEVER exposed to a
+        browser route or via public_url()."""
+        ...
+
+    def read_internal(self, key: str) -> bytes:
+        """Read back bytes from `pre_blur/<key>`. Raises if expired or
+        never existed."""
+        ...
+
+    def delete_internal(self, key: str) -> bool:
+        """Remove `pre_blur/<key>`. Idempotent."""
+        ...
+
 
 # ── Local-disk backend ──────────────────────────────────────────────────────
+
+_PRE_BLUR_PREFIX = "pre_blur"
+
 
 class LocalStorage:
     """Writes to UPLOAD_DIR, served by nginx via /static/<filename>.
@@ -93,6 +120,13 @@ class LocalStorage:
     def __init__(self, upload_dir: str):
         self.upload_dir = upload_dir
         os.makedirs(upload_dir, exist_ok=True)
+        # B-F (May 2026): internal store for pre-blur retention.
+        # Lives under a subdir of the same upload root so dev backups
+        # cover it, but nginx is NOT configured to serve from it
+        # (the /static/ alias maps to upload_dir, not pre_blur/).
+        # Bytes here are never exposed publicly.
+        self.pre_blur_dir = os.path.join(upload_dir, _PRE_BLUR_PREFIX)
+        os.makedirs(self.pre_blur_dir, exist_ok=True)
 
     def save(self, filename: str, data: bytes, content_type: str = "application/octet-stream") -> str:
         path = os.path.join(self.upload_dir, filename)
@@ -133,6 +167,41 @@ class LocalStorage:
         # Pass through — dashboard's getMediaUrl() prepends BACKEND_HOST
         # to relative paths starting with `/`.
         return db_url
+
+    # ── B-F internal-store interface ──────────────────────────────────
+    # The pre_blur/ subdir is for storing un-blurred assembled bytes
+    # during the 24h retroactive-upgrade window. Bytes are NEVER served
+    # publicly (nginx alias `/static/` maps to upload_dir only, not
+    # this subdir). The sweep daemon purges entries after retention
+    # expires.
+
+    def save_internal(
+        self, key: str, data: bytes, content_type: str = "application/octet-stream"
+    ) -> str:
+        """Persist `data` under the internal pre_blur/ prefix.
+        Returns a relative key (NOT a public URL) for later read /
+        delete. Idempotent overwrite."""
+        path = os.path.join(self.pre_blur_dir, key)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+        return key
+
+    def read_internal(self, key: str) -> bytes:
+        """Read back bytes from the pre_blur/ prefix. Raises
+        FileNotFoundError if the entry was purged or never existed."""
+        path = os.path.join(self.pre_blur_dir, key)
+        with open(path, "rb") as f:
+            return f.read()
+
+    def delete_internal(self, key: str) -> bool:
+        """Remove a pre_blur/ entry. Idempotent."""
+        path = os.path.join(self.pre_blur_dir, key)
+        try:
+            os.remove(path)
+            return True
+        except FileNotFoundError:
+            return False
 
 
 # ── AWS S3 backend ──────────────────────────────────────────────────────────
@@ -246,6 +315,44 @@ class S3Storage:
                 return db_url
         # Legacy /static/ pass-through — dashboard prepends BACKEND_HOST.
         return db_url
+
+    # ── B-F internal-store interface ──────────────────────────────────
+    # Pre-blur internal store. Lives under a `pre_blur/` prefix in the
+    # SAME bucket. The bucket-level policy does NOT have any public
+    # readability on this prefix; even the existing `media.url` public
+    # routes don't resolve here — these bytes never leave the
+    # server-internal sphere.
+
+    def save_internal(
+        self, key: str, data: bytes, content_type: str = "application/octet-stream"
+    ) -> str:
+        """Persist `data` under `pre_blur/<key>` in S3. Returns the
+        relative key for later read/delete."""
+        s3_key = f"{_PRE_BLUR_PREFIX}/{key}"
+        self.s3.put_object(
+            Bucket=self.bucket,
+            Key=s3_key,
+            Body=data,
+            ContentType=content_type,
+            ServerSideEncryption="AES256",
+        )
+        return key
+
+    def read_internal(self, key: str) -> bytes:
+        """Read back bytes from `pre_blur/<key>`. Raises on 404."""
+        s3_key = f"{_PRE_BLUR_PREFIX}/{key}"
+        resp = self.s3.get_object(Bucket=self.bucket, Key=s3_key)
+        return resp["Body"].read()
+
+    def delete_internal(self, key: str) -> bool:
+        """Remove `pre_blur/<key>`. Idempotent."""
+        s3_key = f"{_PRE_BLUR_PREFIX}/{key}"
+        try:
+            self.s3.delete_object(Bucket=self.bucket, Key=s3_key)
+            return True
+        except Exception as exc:
+            logger.warning(f"S3 delete_internal failed for {s3_key}: {exc}")
+            return False
 
 
 # ── Module-level singleton, selected by env ─────────────────────────────────

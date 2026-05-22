@@ -940,6 +940,58 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
                 + ", ".join(rid[:8] for rid in promoted_ids[:8])
                 + (f" … +{len(promoted_ids) - 8} more" if len(promoted_ids) > 8 else "")
             )
+        # ── Action ⑤ — purge expired pre-blur internal store entries.
+        #
+        # B-F (May 2026): the retroactive upgrade path needs a snapshot
+        # of the assembled-but-pre-blur bytes for up to 24 h, so a
+        # late-arriving higher tier can re-blur a lower tier with the
+        # detected union. After the 24 h retention window, those bytes
+        # are no longer useful — drop them to bound storage.
+        #
+        # Query is indexed (ix_media_pre_blur_retained_until) so the
+        # scan is cheap even as media grows.
+        try:
+            from app.services.storage import get_storage as _gs
+            _purge_db = SessionLocal()
+            purged_keys: list = []
+            try:
+                _expired = (
+                    _purge_db.query(Media)
+                    .filter(Media.pre_blur_internal_key.isnot(None))
+                    .filter(Media.pre_blur_retained_until.isnot(None))
+                    .filter(Media.pre_blur_retained_until < now_utc)
+                    .limit(500)  # cap per pass to keep the daemon responsive
+                    .all()
+                )
+                _storage = _gs()
+                for m in _expired:
+                    key = m.pre_blur_internal_key
+                    try:
+                        _storage.delete_internal(key)
+                    except Exception as _del_e:
+                        # Don't let a single bad delete wedge the sweep.
+                        log.warning(
+                            f"Assembly recovery [{tag}] Action ⑤: "
+                            f"delete_internal failed for key={key}: {_del_e}"
+                        )
+                    purged_keys.append(key)
+                    m.pre_blur_internal_key = None
+                    m.pre_blur_retained_until = None
+                if purged_keys:
+                    _purge_db.commit()
+                    log.info(
+                        f"Assembly recovery [{tag}] Action ⑤: purged "
+                        f"{len(purged_keys)} pre-blur internal entries past "
+                        f"24h retention."
+                    )
+            finally:
+                _purge_db.close()
+        except Exception as _action5_e:
+            # Defensive: a sweep crash MUST NOT kill the daemon. Any
+            # error here is logged + ignored — the next tick retries.
+            log.warning(
+                f"Assembly recovery [{tag}] Action ⑤ failed: {_action5_e}"
+            )
     finally:
         _db.close()
 
