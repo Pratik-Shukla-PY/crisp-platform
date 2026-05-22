@@ -11580,6 +11580,53 @@ function _inflightPct(item) {
 function _mapReportStatus(r) {
     const verdict = r.reviewer_verdict || 'NOT_REVIEWED';
     const status = (r.status || 'PENDING').toUpperCase();
+    // R3.a (May 2026) — surface upload-lifecycle states BEFORE the
+    // review-lifecycle verdict. A report whose upload is paused /
+    // recovering / permanently-failed is in a state the citizen can
+    // ACT on; the reviewer-verdict states only matter after the
+    // upload actually lands. Predicates read from media[].abandon_reason
+    // and media[].recovered_at exposed in MediaResponse (R1).
+    //
+    //   - FAILED_PERMANENT (red, tappable): hard-abandon — corrupt
+    //     bytes or already-rejected. Citizen must allocate a fresh
+    //     submission; chunks can't fix this.
+    //   - RECOVERING (blue): soft-abandon + online — the page retry
+    //     loop / SW background sync is actively draining queued
+    //     chunks against the bumped upload_generation.
+    //   - PAUSED (amber): soft-abandon + offline — chunks ARE
+    //     pending in IDB but the network is down. Will resume on
+    //     reconnect.
+    //
+    // Only fires when at least one media row is in the relevant
+    // state; reports with no media (text-only) or all-media-complete
+    // fall through to the existing review-lifecycle states.
+    const _media = Array.isArray(r.media) ? r.media : [];
+    const _HARD = new Set(['checksum_mismatch', 'original_too_large']);
+    const _SOFT = new Set([
+        'chunks_never_arrived', 'assembly_worker_lost', 'bandwidth_tier_deferred',
+    ]);
+    const _hasHardAbandon = _media.some(m => m
+        && _HARD.has(m.abandon_reason)
+        && !m.recovered_at);
+    const _hasSoftAbandon = _media.some(m => m
+        && _SOFT.has(m.abandon_reason)
+        && !m.recovered_at);
+    if (_hasHardAbandon) {
+        return { state: 'FAILED_PERMANENT', color: '#ef4444', icon: '⛔',
+                 label: t('mr_status_failed_permanent') || 'Upload failed' };
+    }
+    // navigator.onLine is racy + lies under captive portals, but
+    // it's the best signal we have without a network probe. Treat
+    // false as "definitely offline"; true as "probably online".
+    const _isOnline = (typeof navigator !== 'undefined') ? !!navigator.onLine : true;
+    if (_hasSoftAbandon) {
+        if (_isOnline) {
+            return { state: 'RECOVERING', color: '#3b82f6', icon: '🔄',
+                     label: t('mr_status_recovering') || 'Recovering…' };
+        }
+        return { state: 'PAUSED', color: '#eab308', icon: '⏸',
+                 label: t('mr_status_paused') || 'Paused — waiting for network' };
+    }
     if (verdict === 'ACCEPTED') {
         return { state: 'ACCEPTED', color: '#80EE98', icon: '🟢', label: t('rd_status_accepted') };
     }

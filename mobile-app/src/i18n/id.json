@@ -854,5 +854,8 @@
   "bs_share_fallback": "Saya seorang CRISP {tier}. Laporkan apa yang Anda lihat.",
   "bs_char_locked_toast": "Capai {tier} untuk membuka kunci karakter ini.",
   "bs_stats_reports": "laporan",
-  "bs_stats_lives_saved": "jiwa diselamatkan"
+  "bs_stats_lives_saved": "jiwa diselamatkan",
+  "mr_status_paused": "Dijeda — menunggu jaringan",
+  "mr_status_recovering": "Memulihkan…",
+  "mr_status_failed_permanent": "Unggahan gagal"
 }

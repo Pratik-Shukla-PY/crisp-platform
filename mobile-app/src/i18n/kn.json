@@ -839,5 +839,8 @@
   "bs_share_fallback": "ನಾನು ಒಬ್ಬ CRISP {tier}. ನೀವು ನೋಡಿದ್ದನ್ನು ವರದಿ ಮಾಡಿ.",
   "bs_char_locked_toast": "ಈ ಪಾತ್ರವನ್ನು ಅನ್‌ಲಾಕ್ ಮಾಡಲು {tier} ತಲುಪಿರಿ.",
   "bs_stats_reports": "ವರದಿಗಳು",
-  "bs_stats_lives_saved": "ಜೀವಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ"
+  "bs_stats_lives_saved": "ಜೀವಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ",
+  "mr_status_paused": "ತಡೆ — ನೆಟ್ವರ್ಕ್ ಗಾಗಿ ಕಾಯುತ್ತಿದೆ",
+  "mr_status_recovering": "ಮರುಪಡೆಯಲಾಗುತ್ತಿದೆ…",
+  "mr_status_failed_permanent": "ಅಪ್‌ಲೋಡ್ ವಿಫಲ"
 }

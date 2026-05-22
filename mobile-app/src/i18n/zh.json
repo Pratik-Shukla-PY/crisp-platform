@@ -836,5 +836,8 @@
   "bs_share_fallback": "我是 CRISP 的 {tier}。看到就上报。",
   "bs_char_locked_toast": "达到 {tier} 即可解锁该角色。",
   "bs_stats_reports": "份报告",
-  "bs_stats_lives_saved": "挽救生命"
+  "bs_stats_lives_saved": "挽救生命",
+  "mr_status_paused": "已暂停 — 等待网络",
+  "mr_status_recovering": "正在恢复…",
+  "mr_status_failed_permanent": "上传失败"
 }

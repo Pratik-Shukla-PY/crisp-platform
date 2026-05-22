@@ -842,5 +842,8 @@
   "bs_share_fallback": "Tôi là một CRISP {tier}. Báo cáo những gì bạn thấy.",
   "bs_char_locked_toast": "Đạt {tier} để mở khóa nhân vật này.",
   "bs_stats_reports": "báo cáo",
-  "bs_stats_lives_saved": "mạng sống được cứu"
+  "bs_stats_lives_saved": "mạng sống được cứu",
+  "mr_status_paused": "Tạm dừng — đang chờ mạng",
+  "mr_status_recovering": "Đang khôi phục…",
+  "mr_status_failed_permanent": "Tải lên thất bại"
 }

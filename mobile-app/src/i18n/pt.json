@@ -847,5 +847,8 @@
   "bs_share_fallback": "Sou um CRISP {tier}. Reporte o que vê.",
   "bs_char_locked_toast": "Alcance {tier} para desbloquear este personagem.",
   "bs_stats_reports": "relatos",
-  "bs_stats_lives_saved": "vidas salvas"
+  "bs_stats_lives_saved": "vidas salvas",
+  "mr_status_paused": "Em pausa — aguardando rede",
+  "mr_status_recovering": "Recuperando…",
+  "mr_status_failed_permanent": "Falha no envio"
 }

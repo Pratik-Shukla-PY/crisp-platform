@@ -839,5 +839,8 @@
   "bs_share_fallback": "আমি একজন CRISP {tier}। যা দেখেন রিপোর্ট করুন।",
   "bs_char_locked_toast": "এই চরিত্র আনলক করতে {tier} এ পৌঁছান।",
   "bs_stats_reports": "রিপোর্ট",
-  "bs_stats_lives_saved": "জীবন বাঁচানো হয়েছে"
+  "bs_stats_lives_saved": "জীবন বাঁচানো হয়েছে",
+  "mr_status_paused": "বিরতিতে — নেটওয়ার্কের জন্য অপেক্ষায়",
+  "mr_status_recovering": "পুনরুদ্ধার করা হচ্ছে…",
+  "mr_status_failed_permanent": "আপলোড ব্যর্থ"
 }

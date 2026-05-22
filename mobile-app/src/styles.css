@@ -2556,6 +2556,13 @@ details.mr-date-group[open] .mr-date-group-chevron {
 .mr-status-under_review { color: #eab308; background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.4); }
 .mr-status-accepted     { color: #80EE98; background: rgba(128, 238, 152, 0.12); border: 1px solid rgba(128, 238, 152, 0.4); }
 .mr-status-rejected     { color: #ef4444; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); }
+/* R3.a (May 2026) — upload-lifecycle chip variants. PAUSED amber +
+   RECOVERING blue + FAILED_PERMANENT red. State derivation lives in
+   _mapReportStatus(r) and reads media[].abandon_reason +
+   media[].recovered_at. */
+.mr-status-paused           { color: #eab308; background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.4); }
+.mr-status-recovering       { color: #3b82f6; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.4); }
+.mr-status-failed_permanent { color: #ef4444; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); }
 
 /* `.history-advanced` rules retained as no-op
    shims in case any external bookmarklet / CSS still queries them.

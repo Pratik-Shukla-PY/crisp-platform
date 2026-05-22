@@ -839,5 +839,8 @@
   "bs_share_fallback": "میں ایک CRISP {tier} ہوں۔ جو دیکھیں رپورٹ کریں۔",
   "bs_char_locked_toast": "اس کردار کو اَن لاک کرنے کے لیے {tier} تک پہنچیں۔",
   "bs_stats_reports": "رپورٹس",
-  "bs_stats_lives_saved": "زندگیاں بچائیں"
+  "bs_stats_lives_saved": "زندگیاں بچائیں",
+  "mr_status_paused": "موقوف — نیٹ ورک کا منتظر",
+  "mr_status_recovering": "بحال ہو رہا ہے…",
+  "mr_status_failed_permanent": "اپ لوڈ ناکام"
 }

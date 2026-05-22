@@ -842,5 +842,8 @@
   "bs_share_fallback": "저는 CRISP {tier}입니다. 보이는 것을 신고하세요.",
   "bs_char_locked_toast": "이 캐릭터를 잠금 해제하려면 {tier}에 도달하세요.",
   "bs_stats_reports": "신고",
-  "bs_stats_lives_saved": "구한 생명"
+  "bs_stats_lives_saved": "구한 생명",
+  "mr_status_paused": "일시 중지됨 — 네트워크 대기",
+  "mr_status_recovering": "복구 중…",
+  "mr_status_failed_permanent": "업로드 실패"
 }

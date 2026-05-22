@@ -839,5 +839,8 @@
   "bs_share_fallback": "ਮੈਂ ਇੱਕ CRISP {tier} ਹਾਂ। ਜੋ ਦੇਖੋ, ਰਿਪੋਰਟ ਕਰੋ।",
   "bs_char_locked_toast": "ਇਸ ਕਿਰਦਾਰ ਨੂੰ ਅਨਲਾਕ ਕਰਨ ਲਈ {tier} ਤੱਕ ਪਹੁੰਚੋ।",
   "bs_stats_reports": "ਰਿਪੋਰਟਾਂ",
-  "bs_stats_lives_saved": "ਜਾਨਾਂ ਬਚਾਈਆਂ"
+  "bs_stats_lives_saved": "ਜਾਨਾਂ ਬਚਾਈਆਂ",
+  "mr_status_paused": "ਰੁਕਿਆ — ਨੈੱਟਵਰਕ ਦੀ ਉਡੀਕ",
+  "mr_status_recovering": "ਮੁੜ ਪ੍ਰਾਪਤ ਕਰ ਰਿਹਾ…",
+  "mr_status_failed_permanent": "ਅੱਪਲੋਡ ਅਸਫਲ"
 }

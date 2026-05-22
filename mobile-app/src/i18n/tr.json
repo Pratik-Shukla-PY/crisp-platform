@@ -842,5 +842,8 @@
   "bs_share_fallback": "Ben bir CRISP {tier}'ım. Gördüklerinizi bildirin.",
   "bs_char_locked_toast": "Bu karakteri açmak için {tier} seviyesine ulaşın.",
   "bs_stats_reports": "raporlar",
-  "bs_stats_lives_saved": "kurtarılan canlar"
+  "bs_stats_lives_saved": "kurtarılan canlar",
+  "mr_status_paused": "Duraklatıldı — ağ bekleniyor",
+  "mr_status_recovering": "Kurtarılıyor…",
+  "mr_status_failed_permanent": "Yükleme başarısız"
 }

@@ -841,5 +841,8 @@
   "bs_share_fallback": "私は CRISP {tier} です。見たことを報告してください。",
   "bs_char_locked_toast": "{tier} に到達してこのキャラクターをアンロックしてください。",
   "bs_stats_reports": "報告",
-  "bs_stats_lives_saved": "救われた命"
+  "bs_stats_lives_saved": "救われた命",
+  "mr_status_paused": "一時停止 — ネットワーク待ち",
+  "mr_status_recovering": "復旧中…",
+  "mr_status_failed_permanent": "アップロード失敗"
 }

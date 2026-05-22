@@ -832,5 +832,8 @@
   "bs_share_fallback": "أنا {tier} في CRISP. أبلِغ عمّا تراه.",
   "bs_char_locked_toast": "وصول {tier} لفتح هذه الشخصية.",
   "bs_stats_reports": "بلاغًا",
-  "bs_stats_lives_saved": "أرواحًا منقذة"
+  "bs_stats_lives_saved": "أرواحًا منقذة",
+  "mr_status_paused": "متوقف مؤقتًا — في انتظار الشبكة",
+  "mr_status_recovering": "جاري الاستعادة...",
+  "mr_status_failed_permanent": "فشل الرفع"
 }

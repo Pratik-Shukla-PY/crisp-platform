@@ -839,5 +839,8 @@
   "bs_share_fallback": "నేను ఒక CRISP {tier} ని. మీరు చూసేది నివేదించండి.",
   "bs_char_locked_toast": "ఈ పాత్రను అన్‌లాక్ చేయడానికి {tier} కి చేరుకోండి.",
   "bs_stats_reports": "నివేదికలు",
-  "bs_stats_lives_saved": "ప్రాణాలు కాపాడబడ్డాయి"
+  "bs_stats_lives_saved": "ప్రాణాలు కాపాడబడ్డాయి",
+  "mr_status_paused": "నిలిపివేయబడింది — నెట్‌వర్క్ కోసం వేచి",
+  "mr_status_recovering": "తిరిగి పొందుతోంది…",
+  "mr_status_failed_permanent": "అప్‌లోడ్ విఫలమైంది"
 }

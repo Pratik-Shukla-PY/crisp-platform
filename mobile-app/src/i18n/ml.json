@@ -836,5 +836,8 @@
   "bs_share_fallback": "ഞാൻ ഒരു CRISP {tier} ആണ്. കാണുന്നത് റിപ്പോർട്ട് ചെയ്യൂ.",
   "bs_char_locked_toast": "ഈ കഥാപാത്രം അൺലോക്ക് ചെയ്യാൻ {tier} എത്തുക.",
   "bs_stats_reports": "റിപ്പോർട്ടുകൾ",
-  "bs_stats_lives_saved": "ജീവനുകൾ രക്ഷിച്ചു"
+  "bs_stats_lives_saved": "ജീവനുകൾ രക്ഷിച്ചു",
+  "mr_status_paused": "താൽക്കാലികമായി നിർത്തി — നെറ്റ്‌വർക്ക് കാത്തിരിക്കുന്നു",
+  "mr_status_recovering": "പുനഃസ്ഥാപിക്കുന്നു…",
+  "mr_status_failed_permanent": "അപ്‌ലോഡ് പരാജയപ്പെട്ടു"
 }

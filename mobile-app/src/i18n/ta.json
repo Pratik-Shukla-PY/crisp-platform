@@ -839,5 +839,8 @@
   "bs_share_fallback": "நான் ஒரு CRISP {tier}. நீங்கள் காண்பதை புகாரளிக்கவும்.",
   "bs_char_locked_toast": "இந்த கதாபாத்திரத்தை திறக்க {tier} ஐ அடையவும்.",
   "bs_stats_reports": "புகார்கள்",
-  "bs_stats_lives_saved": "உயிர்கள் காப்பாற்றப்பட்டன"
+  "bs_stats_lives_saved": "உயிர்கள் காப்பாற்றப்பட்டன",
+  "mr_status_paused": "இடைநிறுத்தம் — பிணையத்திற்காக காத்திருக்கிறது",
+  "mr_status_recovering": "மீட்டெடுக்கிறது…",
+  "mr_status_failed_permanent": "பதிவேற்றம் தோல்வி"
 }

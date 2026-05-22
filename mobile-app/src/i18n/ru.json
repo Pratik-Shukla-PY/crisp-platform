@@ -839,5 +839,8 @@
   "bs_share_fallback": "Я — {tier} CRISP. Сообщай о том, что видишь.",
   "bs_char_locked_toast": "Достигните уровня {tier}, чтобы открыть этого персонажа.",
   "bs_stats_reports": "отчётов",
-  "bs_stats_lives_saved": "спасённых жизней"
+  "bs_stats_lives_saved": "спасённых жизней",
+  "mr_status_paused": "Приостановлено — ожидание сети",
+  "mr_status_recovering": "Восстановление…",
+  "mr_status_failed_permanent": "Ошибка загрузки"
 }
