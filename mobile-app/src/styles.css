@@ -4311,16 +4311,13 @@ html[dir="rtl"] #lang-switcher {
    #lang-switcher rule above), so the header reservation must flip
    too — otherwise the step-progress label slams into the pill on
    Arabic / Urdu. */
-html[dir="rtl"] .v4-header {
-    padding-inline-end: 0;
-    padding-inline-start: 156px;
-}
-@media (min-width: 380px) {
-    html[dir="rtl"] .v4-header {
-        padding-inline-end: 0;
-        padding-inline-start: 156px;
-    }
-}
+/* AUDIT 2026-05-23 — the previous html[dir="rtl"] .v4-header
+   override block lived here to flip `padding-right` (LTR) → `padding-left`
+   (RTL). With the May 2026 logical-properties refactor, the base
+   `.v4-header { padding-inline-end: 156px }` already auto-mirrors
+   in RTL (inline-end == padding-left in RTL). The override is no
+   longer needed — keeping it would actually INVERT the intent
+   (`padding-inline-start: 156px` in RTL = padding-right). Deleted. */
 
 /* The "STEP X OF 3" caption uses a small physical margin to separate
    it from the pip cluster. Flip the side in RTL so the gap appears
@@ -6677,7 +6674,7 @@ body.tier-t4 .home-impact {
 @media (min-width: 380px) {
     /* On larger screens we still need the same clearance — the lang
        pill is fixed-width 140px regardless of viewport. */
-    .v4-header { padding-right: 156px; }
+    .v4-header { padding-inline-end: 156px; }
 }
 
 /* v6.8 — mid-flow lang pill. Pinned to the 156px reservation on the
