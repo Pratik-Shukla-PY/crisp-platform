@@ -6762,20 +6762,49 @@ function _runWhenIdle(asyncFn) {
 // we synchronously re-run the variant pipeline. The block is at most
 // a few seconds + only fires when something went wrong, so it's not
 // a hot-path cost.
-async function _reattemptMissingVariants() {
+async function _reattemptMissingVariants(opts) {
     if (typeof window.ImageVariants?.generate !== 'function') return;
+
+    // B-E (May 2026) — overall time cap for the submit-time recovery
+    // pass. Pre-fix this could block submit for several seconds when
+    // the worker pool was still chewing through a large photo. Now
+    // each per-photo reattempt races against a shared deadline, and
+    // photos that miss the deadline keep their partial variants
+    // (e.g. SMALL only). The retry-loop's `_reconcileBeforeDequeue`
+    // path picks up the remaining tiers as they arrive on the queue
+    // row.
+    const deadlineMs = (opts && typeof opts.deadlineMs === 'number')
+        ? opts.deadlineMs : 1500;
+    const deadline = Date.now() + deadlineMs;
+
+    function _remainingMs() {
+        return Math.max(0, deadline - Date.now());
+    }
+
+    function _withTimeout(promise, ms, label) {
+        // Race the promise against a timeout. On timeout, return null
+        // (signal: "couldn't recover in time; leave the photo in its
+        // current partial state").
+        return Promise.race([
+            promise.catch((e) => {
+                console.warn(`[submitReport] ${label} re-attempt failed:`,
+                             e?.message || e);
+                return null;
+            }),
+            new Promise((r) => setTimeout(() => r(null), ms)),
+        ]);
+    }
 
     // Main photo
     if (state.photoBlob && !(state.photoVariants && state.photoVariants.small)) {
-        try {
-            const variants = await window.ImageVariants.generate(state.photoBlob);
-            if (variants && variants.small) {
-                state.photoVariants = variants;
-                state.photoClientBlurApplied = Boolean(variants.clientBlurApplied);
-                console.log('[submitReport] main photo: variants recovered on submit-time re-attempt');
-            }
-        } catch (e) {
-            console.warn('[submitReport] main photo variant re-attempt failed:', e?.message || e);
+        const variants = await _withTimeout(
+            window.ImageVariants.generate(state.photoBlob),
+            _remainingMs(), 'main photo'
+        );
+        if (variants && variants.small) {
+            state.photoVariants = variants;
+            state.photoClientBlurApplied = Boolean(variants.clientBlurApplied);
+            console.log('[submitReport] main photo: variants recovered on submit-time re-attempt');
         }
     }
 
@@ -6784,31 +6813,62 @@ async function _reattemptMissingVariants() {
         const ep = state.extraPhotos[i];
         if (!ep || !ep.blob) continue;
         if (ep.variants && ep.variants.small) continue;  // already good
-        try {
-            const variants = await window.ImageVariants.generate(ep.blob);
-            if (variants && variants.small) {
-                ep.variants = variants;
-                ep.clientBlurApplied = Boolean(variants.clientBlurApplied);
-                console.log(`[submitReport] extra[${i}]: variants recovered on submit-time re-attempt`);
-            }
-        } catch (e) {
-            console.warn(`[submitReport] extra[${i}] variant re-attempt failed:`, e?.message || e);
+        if (_remainingMs() <= 0) {
+            console.log(`[submitReport] extra[${i}]: skipping re-attempt — submit deadline hit`);
+            continue;
+        }
+        const variants = await _withTimeout(
+            window.ImageVariants.generate(ep.blob),
+            _remainingMs(), `extra[${i}]`
+        );
+        if (variants && variants.small) {
+            ep.variants = variants;
+            ep.clientBlurApplied = Boolean(variants.clientBlurApplied);
+            console.log(`[submitReport] extra[${i}]: variants recovered on submit-time re-attempt`);
         }
     }
 }
 
 
-async function awaitPendingBlur() {
+async function awaitPendingBlur(opts) {
     const pending = state.photoBlurPending;
-    if (!pending) return;
+    if (!pending) return { timedOut: false, allDone: true };
     // Back-compat: if an older code path assigned a bare promise, await it.
     if (!Array.isArray(pending)) {
         try { await pending; } catch (_) { /* raw blob is fine */ }
-        return;
+        return { timedOut: false, allDone: true };
     }
-    if (pending.length === 0) return;
+    if (pending.length === 0) return { timedOut: false, allDone: true };
+
+    // B-E (May 2026) — submit-instant-return path: if a timeout is
+    // provided, race the pending blurs against a fallback so submit
+    // returns within the operator's no-lag budget (target < 250 ms)
+    // even when the worker pool is still encoding. Stale Promises
+    // continue resolving in background; the retry-loop picks up the
+    // results via the `pre_encode_pending` flag on the queue row.
+    const timeoutMs = (opts && typeof opts.timeoutMs === 'number') ? opts.timeoutMs : 0;
+    if (timeoutMs > 0) {
+        let timedOut = false;
+        const timeout = new Promise((r) => setTimeout(() => { timedOut = true; r(); }, timeoutMs));
+        await Promise.race([
+            Promise.all(pending).catch(() => {}),
+            timeout,
+        ]);
+        if (!timedOut) {
+            // All blurs finished within the budget. Clear the list.
+            state.photoBlurPending = [];
+            return { timedOut: false, allDone: true };
+        }
+        // Time budget exceeded. Don't clear the list — those promises
+        // are still running and `_trackBlur` should let them resolve.
+        return { timedOut: true, allDone: false };
+    }
+
+    // No timeout — legacy unbounded wait (still used for non-submit
+    // call sites that genuinely need the blurs to be done first).
     try { await Promise.all(pending); } catch (_) { /* raw blob is fine */ }
     state.photoBlurPending = [];
+    return { timedOut: false, allDone: true };
 }
 
 function _blobToDataUrl(blob) {
@@ -8687,10 +8747,24 @@ async function _submitReportInner() {
     if (sendBtn) sendBtn.disabled = true;
 
     try {
-        // Phase 1: if a face-blur is still in flight (user was faster than
-        // BlazeFace), wait for it to finish before snapshotting state.photoBlob.
-        // Non-fatal — raw blob will be used if the blur errors.
-        await awaitPendingBlur();
+        // B-E (May 2026) — submit-instant-return. Wait for the blur
+        // pool up to SUBMIT_BLUR_WAIT_MS so the user gets the best
+        // possible variants if they arrive in time, but cap the wait
+        // so submit returns within the no-lag budget when the user
+        // tapped Submit immediately after the final capture. Any
+        // blur promises still running when we time out remain in
+        // state.photoBlurPending; they resolve in background and
+        // _trackBlur lets _reattemptMissingVariants pick up the
+        // resulting variants on a future retry-loop pass.
+        const SUBMIT_BLUR_WAIT_MS = 500;
+        const _gateResult = await awaitPendingBlur({ timeoutMs: SUBMIT_BLUR_WAIT_MS });
+        if (_gateResult.timedOut) {
+            console.log(
+                `[Submit] blur still in flight at submit time; queueing as `
+                + `pre_encode_pending. Workers will finish in background and `
+                + `the retry-loop will lift the flag.`
+            );
+        }
 
         // Generate idempotency key (use shared genUUID() — single source of truth)
         const clientReportId = genUUID();
