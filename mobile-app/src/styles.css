@@ -587,10 +587,16 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 /* ── Hero Icons ─────────────────────────────────────────────── */
 .hero-icon i { filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1)); }
 
-/* ── GENERIC nav button ─────────────────────────────────────── */
+/* ── GENERIC nav button ───────────────────────────────────────
+   Base text is deep navy `#0a1929` (not white). Mint-on-mint
+   white text hit 1.68:1 on settings and every nav-btn-derived
+   surface — see UI:UX Improvements/AUDIT-REPORT-2026-05-23.md
+   for the contrast matrix. Dark navy on mint is 10.5:1 (AAA);
+   on lime (.highlight) it's 12.3:1. Same fix carries the icon
+   colour via currentColor. */
 .nav-btn {
     width: 100%; padding: 17px;
-    background: var(--blue); color: #fff;
+    background: var(--blue); color: #0a1929;
     border: none; border-radius: 16px;
     font-size: 1.05rem; font-weight: 700; cursor: pointer;
     display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -1671,11 +1677,18 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .settings-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
 .settings-value { color: var(--text); font-weight: 600; }
+/* Destructive variant — outlined red on the dark surface (not
+   mint with pink text, which hit 1.12:1). Red text on --bg is
+   5.11:1 with the regraded --red. The transparent bg + 1.5 px
+   red border carries the destructive affordance without needing
+   a colored fill. */
 .nav-btn.danger {
-    border-color: rgba(239,68,68,0.3);
-    color: #fca5a5;
+    background: transparent;
+    border: 1.5px solid var(--red);
+    color: var(--red);
+    box-shadow: none;
 }
-.nav-btn.danger:hover { background: rgba(239,68,68,0.08); }
+.nav-btn.danger:hover { background: rgba(255,138,138,0.08); }
 
 /* ── — 8-stage capture flow ──────────────────
    Four new stages (where / infra / crisis / extras) live as `.v3-stage`
