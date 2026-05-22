@@ -634,6 +634,18 @@ class Media(Base):
     # recovery fact. See migrations/versions/0040_media_recovered_at_recovery.py.
     recovered_at = Column(DateTime(timezone=True), nullable=True)
 
+    # R2.a (May 2026) — epoch / generation counter for the upload session.
+    # Clients echo this on every chunk POST (X-Upload-Generation header on
+    # chunk-bin, upload_generation field on the JSON chunk payload). Server
+    # rejects mismatches with 409 Conflict. On soft-abandon revival the
+    # server bumps this by 1 — any pre-revival in-flight chunk replay (a
+    # zombie tab, a stale service-worker fetch, a delayed retry) now sees
+    # a stale generation and 409s harmlessly instead of racing against the
+    # new session's chunks. Default 1; legacy clients that don't send the
+    # header are treated as generation=1 which matches the default row
+    # value, preserving back-compat. See migration 0041.
+    upload_generation = Column(Integer, nullable=False, server_default="1", default=1)
+
     report = relationship("Report", back_populates="media")
     chunks = relationship("MediaChunk", back_populates="media", cascade="all, delete-orphan")
 

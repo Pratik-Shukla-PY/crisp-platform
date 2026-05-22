@@ -89,6 +89,13 @@ class MediaChunkPayload(BaseModel):
     # assembly. NULL / absent on later chunks (only chunk 0 carries it)
     # and on legacy clients (we just skip the check, preserving back-compat).
     full_asset_checksum: Optional[str] = Field(None, max_length=16)
+    # R2.a (May 2026) — upload epoch / generation echoed back by the
+    # client on every chunk. Server rejects mismatches with 409 Conflict.
+    # Default 1; legacy clients that don't know about this field send no
+    # value (Pydantic uses the default), which matches every Media row's
+    # default upload_generation=1 → no spurious 409s. Bumped server-side
+    # on soft-abandon revival so post-revival chunks have a fresh epoch.
+    upload_generation: int = Field(1, ge=1)
 
 # API Request Payloads
 class ReportCreate(BaseModel):
@@ -260,6 +267,10 @@ class MediaResponse(MediaBase):
     # `abandon_reason && !recovered_at` so successfully-resumed uploads
     # stop rendering as "abandoned" after recovery.
     recovered_at: Optional[datetime] = None
+    # R2.a (May 2026) — epoch / generation. Default 1. Bumped on each
+    # soft-abandon revival; clients echo it on every chunk POST. Server
+    # rejects mismatches with 409 Conflict.
+    upload_generation: int = 1
     model_config = ConfigDict(from_attributes=True)
 
     # UNDP scaling. The DB stores `s3://<key>` for media

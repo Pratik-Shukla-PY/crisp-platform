@@ -3409,6 +3409,10 @@ def attach_media_chunk(
                 # verify after concatenation. NULL on later chunks / legacy
                 # clients => check skipped (back-compat).
                 full_asset_checksum=(payload.full_asset_checksum if payload.seq_num == 0 else None),
+                # R2.a — first-chunk row creation seeds the epoch from the
+                # client's claim. Legacy clients omit it; pydantic defaults
+                # to 1 which matches the row's server_default.
+                upload_generation=payload.upload_generation,
             )
             db.add(media)
             db.flush()
@@ -3423,6 +3427,36 @@ def attach_media_chunk(
                     detail="media row creation race could not be reconciled",
                 )
     else:
+        # R2.a — epoch / generation check. If the client's claimed
+        # generation doesn't match the row's, reject with 409 + the
+        # server's truth so the client can resync. Stale tabs /
+        # zombie service-workers replaying chunks from a pre-revival
+        # session lose this race harmlessly. This check runs BEFORE the
+        # R1 revival logic so a stale-session chunk can't trip a
+        # revival.
+        if payload.upload_generation != media.upload_generation:
+            logger.warning(
+                f"[Chunk] generation mismatch on {payload.media_id[:8]}: "
+                f"client={payload.upload_generation} server={media.upload_generation}; "
+                f"rejecting as stale-session replay"
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "upload_generation_mismatch",
+                    "server_generation": media.upload_generation,
+                    "client_generation": payload.upload_generation,
+                    "media_id": payload.media_id,
+                    "message": (
+                        "This upload session is stale. The server has "
+                        "advanced upload_generation (typically because "
+                        "the upload was abandoned and a fresh session "
+                        "took over). Resync by re-reading the Media "
+                        "row's current upload_generation and retrying "
+                        "with that value, or allocate a fresh media_id."
+                    ),
+                },
+            )
         # ── R1 (May 2026) — soft-abandon revival (legacy JSON endpoint) ─
         # Mirrors the chunk-bin handler's revival rule. See that handler
         # for the full design notes. Hard-abandons (checksum_mismatch /
@@ -3453,7 +3487,12 @@ def attach_media_chunk(
                 and media.abandoned_at is not None
                 and media.recovered_at is None
                 and media.abandon_reason in _SOFT_ABANDON_REASONS_LEGACY):
-            update_payload = {'assembly_status': 'pending'}
+            update_payload = {
+                'assembly_status': 'pending',
+                # R2.a — bump the epoch on revival so any pre-revival
+                # zombie chunk replay 409s harmlessly.
+                'upload_generation': Media.upload_generation + 1,
+            }
             if media.abandon_reason == 'bandwidth_tier_deferred':
                 update_payload.update({
                     'chunk_count': payload.total_chunks,
@@ -3477,7 +3516,8 @@ def attach_media_chunk(
                 logger.info(
                     f"[Chunk] revived {payload.media_id[:8]} from "
                     f"abandon_reason={media.abandon_reason} "
-                    f"(audit trail preserved; recovered_at stamped on assembly)"
+                    f"(audit trail preserved; recovered_at stamped on assembly; "
+                    f"upload_generation bumped to {media.upload_generation + 1})"
                 )
                 try:
                     from app.core.observability import variant_uploads_total as _vut
@@ -3489,6 +3529,13 @@ def attach_media_chunk(
                     pass
             db.flush()
             db.refresh(media)
+            # R2.a — after revival, the client's chunk MUST carry the
+            # NEW generation. If we got here with the OLD generation
+            # (the revival happened on the same chunk that triggered
+            # it — a legitimate client coming back online), accept it:
+            # we bumped on behalf of the recovering client. But if a
+            # SEPARATE stale-session chunk arrives with the OLD value,
+            # reject with 409 on the next request.
 
         if payload.client_blur_applied and not media.client_blur_applied:
             # Client sent the flag on a later chunk (e.g. resumed upload where
@@ -3753,6 +3800,12 @@ async def attach_media_chunk_bin(
     # Absent / NULL on later chunks and on legacy clients; the assembler
     # skips the integrity check when the column is NULL on the Media row.
     full_asset_checksum: Optional[str] = Form(None),
+    # R2.a — upload epoch / generation. Default 1 so legacy clients
+    # that don't send the field continue to match the row's default. The
+    # server rejects mismatches with 409 Conflict and bumps the row's
+    # value on every soft-abandon revival so any post-revival stale
+    # chunk replay 409s.
+    upload_generation: int = Form(1),
     db: Session = Depends(get_db),
 ):
     """Binary variant of `/media/chunk`. See module-level comment above."""
@@ -3896,6 +3949,8 @@ async def attach_media_chunk_bin(
                 # creation. Only chunk 0 carries this field; later chunks pass
                 # None and `seq_num != 0` short-circuits the assignment below.
                 full_asset_checksum=(full_asset_checksum if seq_num == 0 else None),
+                # R2.a — seed epoch from client claim.
+                upload_generation=upload_generation,
             )
             db.add(media)
             db.flush()
@@ -3908,6 +3963,33 @@ async def attach_media_chunk_bin(
                     detail="media row creation race could not be reconciled",
                 )
     else:
+        # R2.a — epoch / generation check (chunk-bin endpoint). See
+        # legacy chunk handler for the design notes. Run BEFORE R1
+        # revival so stale-session chunks can't accidentally trigger
+        # a revival.
+        if upload_generation != media.upload_generation:
+            logger.warning(
+                f"[chunk-bin] generation mismatch on {media_id[:8]}: "
+                f"client={upload_generation} server={media.upload_generation}; "
+                f"rejecting as stale-session replay"
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "upload_generation_mismatch",
+                    "server_generation": media.upload_generation,
+                    "client_generation": upload_generation,
+                    "media_id": media_id,
+                    "message": (
+                        "This upload session is stale. The server has "
+                        "advanced upload_generation (typically because "
+                        "the upload was abandoned and a fresh session "
+                        "took over). Resync by re-reading the Media "
+                        "row's current upload_generation and retrying "
+                        "with that value, or allocate a fresh media_id."
+                    ),
+                },
+            )
         # ── R1 (May 2026) — generalised soft-abandon revival ─────────────
         # The chunk handler is the only place with positive evidence of
         # client-side recovery (actual bytes arriving). The recovery
@@ -3979,7 +4061,11 @@ async def attach_media_chunk_bin(
             # remain the audit-trail signature of the original
             # abandonment. The post-completion `recovered_at` stamp
             # tells the dashboard the row recovered.
-            update_payload = {'assembly_status': 'pending'}
+            update_payload = {
+                'assembly_status': 'pending',
+                # R2.a — bump epoch so post-revival stale chunks 409.
+                'upload_generation': Media.upload_generation + 1,
+            }
             # bandwidth_tier_deferred had two extra side effects in
             # the pre-R1 code that we still need: reset chunk_count to
             # the new total AND re-credit expected_media on the parent

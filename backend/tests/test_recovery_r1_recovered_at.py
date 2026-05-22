@@ -236,15 +236,17 @@ class TestRevivalIdempotency:
             total_chunks=1, received_chunks=0,
         )
         data, checksum = _b64_chunk(_TINY_JPEG)
-        body = {
+        # Initial body uses upload_generation=1 (matches the seed row).
+        body_v1 = {
             "media_id": media_id, "type": "IMAGE",
             "seq_num": 0, "total_chunks": 1,
             "data": data, "checksum": checksum,
             "resolution_tier": "MEDIUM",
             "client_blur_applied": True,
+            "upload_generation": 1,
         }
-        # First post — revives + assembles.
-        res1 = client.post(f"/api/v1/reports/{report_id}/media/chunk", json=body)
+        # First post — revives + assembles + bumps generation 1→2.
+        res1 = client.post(f"/api/v1/reports/{report_id}/media/chunk", json=body_v1)
         assert res1.status_code == 200
         # Wait for assembly to settle.
         deadline = time.monotonic() + 3.0
@@ -257,19 +259,39 @@ class TestRevivalIdempotency:
         m1 = db.query(Media).filter(Media.id == media_id).first()
         first_recovered_at = m1.recovered_at
         first_abandoned_at = m1.abandoned_at
+        first_generation  = m1.upload_generation
         assert first_recovered_at is not None
-        # Second post — duplicate. Must not double-stamp.
-        res2 = client.post(f"/api/v1/reports/{report_id}/media/chunk", json=body)
-        assert res2.status_code == 200
+        assert first_generation == 2, (
+            f"R2.a expects generation to be bumped on revival; got {first_generation}"
+        )
+
+        # Second post with the OLD generation (a stale-session replay)
+        # MUST be rejected with 409 — this is the R2.a contract. Audit
+        # columns + recovered_at must stay untouched.
+        res2 = client.post(f"/api/v1/reports/{report_id}/media/chunk", json=body_v1)
+        assert res2.status_code == 409
         db.expire_all()
         m2 = db.query(Media).filter(Media.id == media_id).first()
-        assert m2.recovered_at == first_recovered_at, (
-            "recovered_at must NOT be re-stamped on a duplicate chunk POST"
-        )
-        assert m2.abandoned_at == first_abandoned_at, (
-            "abandoned_at must NOT be touched on a duplicate chunk POST"
-        )
+        assert m2.recovered_at == first_recovered_at
+        assert m2.abandoned_at == first_abandoned_at
         assert m2.abandon_reason == "chunks_never_arrived"
+        assert m2.upload_generation == 2
+
+        # Third post with the NEW generation (a smart client that read
+        # the 409's server_generation hint and resynced) is idempotent
+        # at the chunk-storage level: uq_media_chunk_seq treats it as a
+        # duplicate, no double-count.
+        body_v2 = dict(body_v1)
+        body_v2["upload_generation"] = 2
+        res3 = client.post(f"/api/v1/reports/{report_id}/media/chunk", json=body_v2)
+        assert res3.status_code == 200
+        db.expire_all()
+        m3 = db.query(Media).filter(Media.id == media_id).first()
+        # Audit trail preserved.
+        assert m3.recovered_at == first_recovered_at, (
+            "recovered_at must NOT be re-stamped on a same-generation duplicate"
+        )
+        assert m3.abandoned_at == first_abandoned_at
 
 
 # ── Schema exposure ─────────────────────────────────────────────────────────
