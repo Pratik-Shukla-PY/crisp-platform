@@ -54,18 +54,45 @@ try:
     model_path = os.path.join(os.path.dirname(__file__), '..', '..', 'blaze_face_short_range.tflite')
     model_path = os.path.abspath(model_path)
     if os.path.exists(model_path):
-        # P1 multi-face fix (May 2026, operator-reported): BlazeFace
-        # internally resizes input to ~128×128 — high-res photos with
-        # distant / multiple faces get downscaled so much that small
-        # faces fall below detection threshold. Mitigated by:
-        #   1. Lower confidence threshold 0.3 → 0.2 (more permissive)
-        #   2. Multi-scale tiled detection in blur_pii() — see below.
+        # L1 — confidence floor (May 2026, blur-audit follow-up).
+        #
+        # Pre-L1: min_detection_confidence=0.2 with 5-pass multi-scale
+        # (1 full image + 4 tiles). On operator-captured iPhone photos
+        # this produced 1-5 false positives per non-face frame
+        # (light fixtures, building windows, vegetation patterns,
+        # cushions, signage — anything with a vaguely face-shaped
+        # luminance pattern). Operator reproduced: 3-photo report where
+        # only 1 photo had a real face → all 3 photos were
+        # `complete_with_redactions`, with disagreeing counts across
+        # SMALL/MEDIUM/ORIGINAL tiers (5/3/5 and 2/3 — classic FP
+        # signature; real faces stay consistent across resolutions).
+        #
+        # The new floor is 0.7. Real faces at any reasonable size
+        # confidently score 0.85-0.99 in BlazeFace; this floor
+        # eliminates most false positives while preserving the
+        # multi-scale recall benefit on small/distant real faces.
+        # Operator-tunable via env in case a field site needs to
+        # tune for higher recall vs lower precision.
+        min_conf = float(os.getenv("CRISP_BLAZEFACE_MIN_CONFIDENCE", "0.7"))
+        # Belt-and-braces: clamp to [0.0, 1.0] in case the env carries
+        # a bad value. The MediaPipe constructor would also clamp but
+        # logging the clamped value here makes operator misconfig
+        # visible at boot.
+        if min_conf < 0.0 or min_conf > 1.0:
+            logger.warning(
+                "CRISP_BLAZEFACE_MIN_CONFIDENCE=%s out of [0,1]; clamping to 0.7",
+                min_conf,
+            )
+            min_conf = 0.7
         options = vision.FaceDetectorOptions(
             base_options=python.BaseOptions(model_asset_path=model_path),
-            min_detection_confidence=0.2
+            min_detection_confidence=min_conf,
         )
         _face_detector = vision.FaceDetector.create_from_options(options)
-        logger.info("PII: MediaPipe face detector loaded (path=%s)", model_path)
+        logger.info(
+            "PII: MediaPipe face detector loaded (path=%s, min_confidence=%.2f)",
+            model_path, min_conf,
+        )
     else:
         _face_detector_error = f"MediaPipe model missing at {model_path}"
         logger.error(
@@ -105,10 +132,26 @@ def _multiscale_face_detect(img, detector, mp_module):
 
     Returns: list of (fx, fy, fw, fh) tuples — duplicates expected;
     caller dedupes via NMS.
+
+    L2 (May 2026, blur-audit) — minimum face size as % of frame.
+    Real faces in citizen-captured "report damage" photos subtend at
+    least `CRISP_MIN_FACE_FRAC` (default 0.03 = 3 %) of the shortest
+    frame dimension. Anything smaller is overwhelmingly a false
+    positive (BlazeFace pareidolia on tiny edge patterns) AND even
+    if it is a real face, it's too small to be identifying. Filter
+    here before NMS so duplicate-of-FP doesn't propagate.
     """
     import cv2 as _cv2
     h, w = img.shape[:2]
     detections_xywh = []
+    min_face_frac = float(os.getenv("CRISP_MIN_FACE_FRAC", "0.03"))
+    if min_face_frac < 0.0 or min_face_frac > 1.0:
+        logger.warning(
+            "CRISP_MIN_FACE_FRAC=%s out of [0,1]; clamping to 0.03",
+            min_face_frac,
+        )
+        min_face_frac = 0.03
+    min_dim_px = max(1, int(min(w, h) * min_face_frac))
 
     def _detect_on_region(region_img, x_offset, y_offset):
         rgb = _cv2.cvtColor(region_img, _cv2.COLOR_BGR2RGB)
@@ -118,6 +161,9 @@ def _multiscale_face_detect(img, detector, mp_module):
         dets = detector.detect(mp_image)
         for det in dets.detections:
             bb = det.bounding_box
+            # L2 — drop too-small candidates (FP-killer).
+            if bb.width < min_dim_px or bb.height < min_dim_px:
+                continue
             detections_xywh.append((
                 bb.origin_x + x_offset,
                 bb.origin_y + y_offset,
