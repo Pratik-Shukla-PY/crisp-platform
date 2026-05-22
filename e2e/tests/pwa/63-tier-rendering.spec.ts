@@ -56,12 +56,16 @@ async function bootHomeWithProfile(page: Page, profile: ProfileShape) {
     });
     await page.goto('index.html?ui=v4');
     await page.waitForLoadState('networkidle');
-    // Wait until the chip has finished painting from the mocked fetch
-    // (the chip starts `hidden`; _paintBadgeChip removes that attribute).
+    // Wait until the chip has finished painting from the mocked fetch.
+    // AUDIT 2026-05-23 — the chip's `hidden` attribute is now SET (not
+    // removed) for first-timers (T1 + 0 lives + first-report progress
+    // key). We just wait until the `data-tier` attribute is set — that
+    // proves the painter ran. Visibility / hidden checks live in the
+    // individual tests.
     await page.waitForFunction(
         () => {
             const el = document.getElementById('home-badge-chip');
-            return el && !el.hasAttribute('hidden') && el.dataset.tier;
+            return el && !!el.dataset.tier;
         },
         null,
         { timeout: 4000 },
@@ -70,7 +74,16 @@ async function bootHomeWithProfile(page: Page, profile: ProfileShape) {
 
 test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
 
-    test('@smoke T1_SCOUT renders 🌱 Scout with first-report progress', async ({ page }) => {
+    test('@smoke T1_SCOUT first-timer chip is hidden (AUDIT 2026-05-23 retime)', async ({ page }) => {
+        // AUDIT 2026-05-23 — gamification re-timed. Tier badge is
+        // hidden for users with no submitted reports because the
+        // "Scout · Submit your first report to level up" framing
+        // reads poorly on a disaster victim's first visit. After a
+        // successful submission (T2+ OR lives > 0 OR a non-first-
+        // report progress key), the chip reveals as positive
+        // reinforcement. State + tier classes still apply when the
+        // chip eventually renders; this test enforces the hidden
+        // default for the first-timer cohort.
         await bootHomeWithProfile(page, {
             badge_level: 'T1_SCOUT',
             badge_legacy: 'NEWCOMER',
@@ -81,13 +94,14 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
             },
         });
         const chip = page.locator('#home-badge-chip');
-        await expect(chip).toBeVisible();
+        // Element exists in DOM (CLS reservation, see styles.css:5014)
+        // but the `hidden` attribute is set; not visible to users.
+        await expect(chip).toHaveAttribute('hidden', '');
         await expect(chip).toHaveClass(/lvl-t1/);
         await expect(chip).toHaveAttribute('data-tier', 'T1_SCOUT');
         await expect(page.locator('#home-badge-emoji')).toHaveText('🌱');
         await expect(page.locator('#home-badge-label')).toHaveText(/Scout/i);
         await expect(page.locator('#home-badge-progress')).toContainText(/Submit your first report/i);
-        // T1 is locked — no "chip-unlocked" class.
         await expect(chip).not.toHaveClass(/chip-unlocked/);
     });
 
@@ -182,10 +196,13 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
         await expect(chip).toHaveAttribute('data-tier', 'T2_SIGNAL');
     });
 
-    test('chip stays visible (never hidden) even on /profile fetch failure', async ({ page }) => {
+    test('chip layout slot preserved (no CLS) even on /profile fetch failure', async ({ page }) => {
         // Network error path — the chip should fall back to T1_SCOUT
-        // rather than disappear. Operator-flagged scenario: a flaky
-        // 5xx on /profile must not break the home stage layout.
+        // and the layout slot must stay reserved (no CLS) even though
+        // it's hidden post-AUDIT 2026-05-23 (gamification retime).
+        // The CLS reservation is on `[hidden]` itself — see
+        // styles.css:5014 — so the page doesn't reflow when the chip
+        // would have rendered.
         await page.addInitScript(() => {
             localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
             localStorage.setItem('crisp_landing_seen', '1');
@@ -198,10 +215,16 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
         );
         await page.goto('index.html?ui=v4');
         await page.waitForLoadState('networkidle');
-        // Give the network error fallback time to paint.
         await page.waitForTimeout(400);
         const chip = page.locator('#home-badge-chip');
-        await expect(chip).toBeVisible();
+        // First-timer fallback — chip in DOM but hidden. Layout slot
+        // is reserved by the .home-badge-chip[hidden] rule (CLS-safe).
+        await expect(chip).toHaveAttribute('hidden', '');
         await expect(chip).toHaveClass(/lvl-t1/);
+        const offsetHeight = await chip.evaluate((el) => (el as HTMLElement).offsetHeight);
+        // Min-height: 36 px reservation observed (was 38 spec, browser
+        // sub-pixel layout lands at 36 — both well above 0, which is
+        // the actual CLS-failure case we're guarding against).
+        expect(offsetHeight).toBeGreaterThanOrEqual(36);
     });
 });

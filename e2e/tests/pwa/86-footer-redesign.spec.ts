@@ -71,8 +71,12 @@ test.describe('PWA — home footer v2 redesign', () => {
         expect(layout.display).toBe('flex');
         expect(layout.flexDirection).toBe('row');
         expect(layout.justifyContent).toBe('space-between');
-        // v2 — nowrap (icon buttons hidden, so the row fits at mobile widths).
-        expect(layout.flexWrap).toBe('nowrap');
+        // AUDIT 2026-05-23 — was `nowrap` with overflow:hidden on the
+        // nav, which clipped "Open source" → "Open sou…" on iPhone SE
+        // and "Помощь" → "Помо" in Russian. Switched to `wrap` so the
+        // device-ID badge stacks to a second row when content exceeds
+        // the viewport, surfacing every trust link.
+        expect(layout.flexWrap).toBe('wrap');
     });
 
     test('row has a visible top divider + roomier padding', async ({ page }) => {
