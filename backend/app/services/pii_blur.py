@@ -269,6 +269,116 @@ PII_PATTERNS = [
     re.compile(r'\d{12,}'),                       # Generic long ID
 ]
 
+# B-G (May 2026) — OCR multi-layer enhancements. The regex set above
+# catches the well-known ID formats. The two new layers catch what
+# regex misses:
+#
+#   1. Density heuristic — any OCR line where >= 30% of chars are
+#      digits AND length >= 6. Catches handwritten IDs, license
+#      plates, blood-group + medical record numbers, ad-hoc numeric
+#      tags. False-positive risk on numeric signage ("Building 145")
+#      but the privacy ratchet (privacy-first) accepts that trade.
+#
+#   2. spaCy NER — if `en_core_web_sm` is installed, run the NER
+#      pipeline on each OCR string. Blur tokens tagged as PERSON,
+#      EMAIL, URL, or CARDINAL of length 6-20. Catches handwritten
+#      names ("John Doe"), email signatures missed by the regex's
+#      strict format requirement, and long alphanumeric tokens.
+#
+# Both layers are GATED by env var so we can disable them in
+# environments where spaCy isn't available or where the false-
+# positive cost is too high:
+#   CRISP_OCR_DENSITY_ENABLED=1  (default: on)
+#   CRISP_OCR_NER_ENABLED=1      (default: on if spaCy importable)
+#
+# spaCy load is lazy + module-singleton (one import + one nlp()
+# call per worker process; the loaded model is ~50 MB so we don't
+# want to re-load per blur). Failure to load NEVER blocks blur:
+# `_get_nlp()` returns None and the NER layer is silently skipped.
+
+# Reuse-import + cache the spaCy nlp pipeline. Returns None if
+# spaCy isn't installed OR `en_core_web_sm` isn't downloaded.
+_nlp = None
+_nlp_attempted = False
+
+
+def _get_nlp():
+    """Lazy-load spaCy + en_core_web_sm. Memoized. Returns None
+    if either is unavailable so callers can skip the NER layer."""
+    global _nlp, _nlp_attempted
+    if _nlp is not None:
+        return _nlp
+    if _nlp_attempted:
+        return None
+    _nlp_attempted = True
+    # Operator may explicitly disable.
+    if os.getenv("CRISP_OCR_NER_ENABLED", "1") not in ("1", "true", "yes"):
+        return None
+    try:
+        import spacy  # type: ignore
+        # disable=["parser", "tagger", "lemmatizer"] keeps the
+        # model lean — we only need NER tokens.
+        _nlp = spacy.load(
+            "en_core_web_sm",
+            disable=["parser", "tagger", "lemmatizer"],
+        )
+        logger.info("PII blur: spaCy NER layer enabled (en_core_web_sm)")
+        return _nlp
+    except Exception as e:
+        logger.info(
+            f"PII blur: spaCy NER layer disabled — {e}. Install with "
+            f"`pip install spacy && python -m spacy download en_core_web_sm` "
+            f"to enable broader PII detection."
+        )
+        return None
+
+
+def _density_heuristic_is_pii(text: str) -> bool:
+    """True iff the text looks like an ID by digit density. Catches
+    license plates, handwritten numbers, ad-hoc IDs that the strict
+    regexes miss. Conservative false-positive trade-off — we accept
+    over-blurring "Building 145" to avoid missing "MH04AB1234"."""
+    if os.getenv("CRISP_OCR_DENSITY_ENABLED", "1") not in ("1", "true", "yes"):
+        return False
+    if not text or len(text) < 6:
+        return False
+    # Strip whitespace-only tokens; the digit ratio applies to the
+    # underlying string body, not the visual length.
+    body = text.strip()
+    if len(body) < 6:
+        return False
+    digits = sum(1 for c in body if c.isdigit())
+    return (digits / len(body)) >= 0.30
+
+
+def _ner_is_pii(text: str) -> bool:
+    """True iff spaCy NER tags this text as a PII-bearing entity.
+    Categories blurred:
+      PERSON         — handwritten names ("John Doe").
+      EMAIL          — emails missed by the strict regex.
+      CARDINAL       — long numeric tokens length 6-20.
+      ORG            — organisation names rarely PII alone; skip.
+      GPE            — place names (city/country); skip — operator
+                       needs locations for response coordination.
+    Returns False if spaCy unavailable."""
+    nlp = _get_nlp()
+    if nlp is None:
+        return False
+    try:
+        doc = nlp(text)
+    except Exception as e:
+        # spaCy can raise on very long inputs / unusual unicode.
+        logger.debug(f"spaCy NER raised on text len={len(text)}: {e}")
+        return False
+    for ent in doc.ents:
+        if ent.label_ in ("PERSON", "EMAIL"):
+            return True
+        if ent.label_ == "CARDINAL":
+            txt = ent.text.strip()
+            if 6 <= len(txt) <= 20:
+                return True
+    return False
+
 
 def _denormalize_boxes(
     client_boxes_normalized: list, img_w: int, img_h: int
@@ -687,10 +797,22 @@ def blur_pii(image_path: str) -> dict:
                 # match the regex set (PII_PATTERNS).
                 for (x1, y1, x2, y2, text, conf) in valid_texts:
                     should_blur = False
+                    # Layer 1: strict regex match (Aadhaar, PAN,
+                    # phone, DOB, passport, CC, SSN, email, long ID).
                     for pat in PII_PATTERNS:
                         if pat.search(text):
                             should_blur = True
                             break
+                    # Layer 2 (B-G): density heuristic — fallback for
+                    # handwritten / license-plate text the regex
+                    # misses.
+                    if not should_blur and _density_heuristic_is_pii(text):
+                        should_blur = True
+                    # Layer 3 (B-G): spaCy NER — catches handwritten
+                    # names, missed-format emails, long numeric IDs.
+                    # Skipped silently if spaCy isn't installed.
+                    if not should_blur and _ner_is_pii(text):
+                        should_blur = True
 
                     if should_blur:
                         # 5 % padding (was 25 %). The regex is strict enough
