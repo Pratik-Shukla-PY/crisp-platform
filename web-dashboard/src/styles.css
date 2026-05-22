@@ -3186,6 +3186,16 @@ body.burst-mode .notif-glow {
     border: 1px solid rgba(148,163,184,0.4);
     background: rgba(148,163,184,0.10);
 }
+/* B-H (May 2026, Forensic Blur Audit) — positive-signal green chip.
+   Used by pii_blur_status='complete_with_redactions'. Same shape +
+   typography as the other chips so the operator's visual scan stays
+   uniform; only the colour differs (emerald, conveys "safely
+   handled" rather than "needs attention"). */
+.k5a-chip-green {
+    color: #10b981;
+    border: 1px solid rgba(16,185,129,0.4);
+    background: rgba(16,185,129,0.10);
+}
 
 /* K.5.e (May 2026, Phase K) — top-of-page truncation banner.
    Surfaces when backend X-Total-Count exceeds DASHBOARD_PAGE_LIMIT

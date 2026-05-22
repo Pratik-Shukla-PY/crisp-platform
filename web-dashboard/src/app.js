@@ -2279,7 +2279,25 @@ function createIncidentCard(r) {
         </span>`;
     } else if (_hasPiiBlurStatus('failed')) {
         _statusChip = `<span class="k5a-chip k5a-chip-red" title="PII blur (face / text redaction) failed on this image. Review manually before sharing — bytes may contain identifiable faces or text.">
-            <i class="fa-solid fa-eye-low-vision"></i> PII review needed
+            <i class="fa-solid fa-eye-low-vision"></i> Redaction failed
+        </span>`;
+    } else if (_hasPiiBlurStatus('pending')) {
+        // B-H (May 2026, Batch B-H of the Forensic Blur Audit) —
+        // canonical 4-state pii_blur_status taxonomy. Pending means
+        // assembly completed but the blur worker hasn't finished yet;
+        // GET /media/{id}/file returns 425 Too Early during this
+        // window (B-A URL gating). Operator sees the amber chip
+        // instead of a broken image — and knows it will resolve
+        // shortly without needing to refresh.
+        _statusChip = `<span class="k5a-chip k5a-chip-amber" title="Image is being scanned for PII (faces + text). Public URL is gated until scan completes — typically 5-30 seconds.">
+            <i class="fa-solid fa-shield-halved"></i> Checking PII…
+        </span>`;
+    } else if (_hasPiiBlurStatus('complete_with_redactions')) {
+        // B-H: positive operator signal — image WAS scanned and
+        // redactions were applied. Green / informational rather than
+        // alerting; the redaction worked.
+        _statusChip = `<span class="k5a-chip k5a-chip-green" title="Faces and / or PII text were detected and automatically blurred. Image is safe to share at any audience tier.">
+            <i class="fa-solid fa-shield-check"></i> Auto-redacted
         </span>`;
     } else if (_hasAbandonReason('bandwidth_tier_deferred')) {
         _statusChip = `<span class="k5a-chip k5a-chip-amber" title="MEDIUM or HIGH variant was not delivered (reporter on slow network). SMALL preview is available and operationally sufficient. Higher-quality bytes may arrive later if the reporter reconnects on a faster link.">
