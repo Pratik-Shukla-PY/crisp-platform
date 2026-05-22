@@ -1344,16 +1344,28 @@
             reviewText.textContent = label;
             reviewText.setAttribute('dir', 'auto');
         }
-        // Coords sub-line. Hidden when no GPS yet, shown as "12.9716°N,
-        // 77.5946°E · ±20m" otherwise.
+        // Coords sub-line.
+        // AUDIT 2026-05-23 — the raw decimal coords "12.9716°, 77.5946°"
+        // added cognitive load for non-technical disaster victims.
+        // Default behaviour now: show accuracy only ("±20 m"), hide
+        // the decimal coords. The technical view is preserved behind
+        // `localStorage.crisp_tech_user = 'on'` for operator demos.
         const coordsEl = document.getElementById('v4-meta-loc-coords');
         if (coordsEl) {
             const loc = s.location;
+            const techMode = (() => {
+                try { return localStorage.getItem('crisp_tech_user') === 'on'; }
+                catch { return false; }
+            })();
             if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lng)) {
                 const acc = Math.max(0, Math.round(loc.acc || 0));
-                coordsEl.textContent =
-                    `${loc.lat.toFixed(4)}°, ${loc.lng.toFixed(4)}°` +
-                    (acc > 0 ? ` · ±${acc} m` : '');
+                if (techMode) {
+                    coordsEl.textContent =
+                        `${loc.lat.toFixed(4)}°, ${loc.lng.toFixed(4)}°` +
+                        (acc > 0 ? ` · ±${acc} m` : '');
+                } else {
+                    coordsEl.textContent = acc > 0 ? `±${acc} m` : '';
+                }
             } else {
                 coordsEl.textContent = '';
             }
@@ -1446,7 +1458,17 @@
             clock = `${h12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
         }
 
-        if (elIana)  elIana.textContent  = iana;
+        // AUDIT 2026-05-23 — default to single-line "10:42 PM · India
+        // Standard Time" for citizen reporters. The IANA name
+        // ("Asia/Kolkata") is technical noise — useful for operator
+        // forensics, useless for a panicked first-time reporter.
+        // Surface it only when `localStorage.crisp_tech_user = 'on'`.
+        const techMode = (() => {
+            try { return localStorage.getItem('crisp_tech_user') === 'on'; }
+            catch { return false; }
+        })();
+        if (elIana)  elIana.textContent  = techMode ? iana : '';
+        if (elIana)  elIana.style.display = techMode ? '' : 'none';
         if (elLabel) elLabel.textContent = label;
         if (elClock) elClock.textContent = clock;
     }
