@@ -170,6 +170,55 @@ def setup_test_db():
                 pass
 
 
+@pytest.fixture(scope="session", autouse=True)
+def seed_e2e_admin(setup_test_db):
+    """Seed the `e2e-admin@crisp-e2e-tests.org` user once per session.
+
+    The nearby-phase test suites (test_nearby_phase2, …phase4, …phase5,
+    …phase5_1) and test_blurhash_and_partial use this canonical admin
+    identity to exercise the protected `/api/v1/admin/...` endpoints
+    via the real auth flow (`POST /auth/login`). Before this fixture
+    landed, those tests `pytest.skip()`-ed when the user wasn't seeded,
+    masking 9 tests in the regression sweep.
+
+    Lifecycle:
+      - `scope="session"` + `autouse=True` → seeds once per pytest run.
+      - Depends on `setup_test_db` so the `users` table exists.
+      - mfa_enabled=False so login doesn't require TOTP at test time
+        (production e2e-admin has TOTP; this is the unit-test
+         equivalent).
+      - role=ADMIN suffices for every endpoint the nearby suites
+        exercise. Tests that need SUPER_ADMIN use the existing
+        `admin_user` fixture instead.
+    """
+    from app.models.auth import User, RoleEnum
+
+    session = TestSessionLocal()
+    try:
+        existing = (
+            session.query(User)
+            .filter(User.email == "e2e-admin@crisp-e2e-tests.org")
+            .first()
+        )
+        if not existing:
+            session.add(
+                User(
+                    email="e2e-admin@crisp-e2e-tests.org",
+                    password_hash=hash_password("E2eAdmin!2026"),
+                    full_name="E2E Admin (seeded by conftest)",
+                    role=RoleEnum.ADMIN.value,
+                    is_active=True,
+                    is_verified=True,
+                    mfa_enabled=False,
+                    gdpr_consent_at=datetime.now(timezone.utc),
+                )
+            )
+            session.commit()
+    finally:
+        session.close()
+    yield
+
+
 @pytest.fixture
 def db():
     """Fresh DB session per test."""
