@@ -245,6 +245,8 @@ def test_0005_adds_pii_blur_status_column_and_backfills():
             conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS recovered_at"))
             # 0041 — R2.a upload_generation epoch.
             conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS upload_generation"))
+            # 0042 — L3 final_face_boxes_normalized JSON column.
+            conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS final_face_boxes_normalized"))
             # 0035 — Phase L resolution_tier enum cleanup. Adds SMALL value
             # if needed, then backfills LOW→SMALL / HIGH→ORIGINAL via
             # `UPDATE media WHERE resolution_tier = 'LOW'`. That UPDATE
@@ -393,6 +395,8 @@ def test_legacy_db_is_upgraded_without_data_loss():
             conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS recovered_at"))
             # 0041 — R2.a upload_generation epoch.
             conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS upload_generation"))
+            # 0042 — L3 final_face_boxes_normalized JSON column.
+            conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS final_face_boxes_normalized"))
             # 0035 / 0036 — Phase L resolution_tier cleanup. Re-add LOW
             # + HIGH so 0035's `UPDATE … WHERE resolution_tier = 'LOW'`
             # backfill has valid enum values to reference (after
