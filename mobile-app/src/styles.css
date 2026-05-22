@@ -6740,6 +6740,16 @@ body.tier-t4 .home-impact {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    /* AUDIT 2026-05-23 — bidi isolation so a Latin-script location name
+       ("D'Souza Layout, Bengaluru, India") inside an Arabic / Urdu
+       container still truncates from the END, not the START. Pre-fix
+       AR rendered "…uza Layout, Bengaluru, India" — the meaningful
+       prefix dropped because the parent direction set the ellipsis
+       on the wrong end. `unicode-bidi: isolate` makes this element
+       a self-contained bidi context; combined with `dir="auto"` on
+       the element (added by the v4-flow painter), the truncation now
+       eats the end of the visible string for every locale. */
+    unicode-bidi: isolate;
 }
 .v4-meta-loc-coords {
     /* Phase 2.4 (May 2026) — WCAG 2.1 AA. `--text-mute` (#64748b)

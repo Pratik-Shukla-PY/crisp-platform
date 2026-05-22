@@ -1333,8 +1333,17 @@
         const label = userName || _formatLocationLabel(s.location, s.locationName);
         const captureText = document.getElementById('v4-meta-location-text');
         const reviewText = document.getElementById('v4-row-location-text');
-        if (captureText) captureText.textContent = label;
-        if (reviewText) reviewText.textContent = label;
+        // dir="auto" lets the browser detect Latin vs RTL per string,
+        // paired with `unicode-bidi: isolate` in styles.css to fix the
+        // AR/UR truncation-from-wrong-end bug for Latin location names.
+        if (captureText) {
+            captureText.textContent = label;
+            captureText.setAttribute('dir', 'auto');
+        }
+        if (reviewText) {
+            reviewText.textContent = label;
+            reviewText.setAttribute('dir', 'auto');
+        }
         // Coords sub-line. Hidden when no GPS yet, shown as "12.9716°N,
         // 77.5946°E · ±20m" otherwise.
         const coordsEl = document.getElementById('v4-meta-loc-coords');
