@@ -9,7 +9,7 @@
 // Adds blur-worker.js + blur-worker-pool.js to STATIC_ASSETS for
 // off-main-thread PII blur. Cache bump forces installed PWAs to
 // fetch the new scripts on next service-worker activation.
-const CACHE_NAME = 'crisp-v252';
+const CACHE_NAME = 'crisp-v253';
 // v250 → v251 (May 21 — version-pill /health URL fix). v250 deploy
 // auto-rolled-back when prod-smoke caught a `HTTP 404 /health` on
 // PWA load. Root cause: home-screen.js _paintVersionPill stripped
@@ -2405,7 +2405,21 @@ async function syncAllReports() {
             if (!reportId) { continue; }
 
             // Stage 2: Send photo if not done
-            if (!stages.photo && item.photo) {
+            //
+            // BUGFIX May 2026 (operator-reported, real iPhone multi-photo
+            // capture): the SW used to PATCH /attach for `item.photo`
+            // (main only) and flip `stages.photo = true`. Extras in
+            // `item.extraPhotos[]` were dropped on the floor, AND the
+            // `stages.photo` flip caused the page's retry loop to skip
+            // the photo stage entirely on next replay — orphaning every
+            // extra. Now: if extras are present, we DEFER the photo
+            // stage to the page entirely (the page's `_uploadLegacyPhoto`
+            // iterates extras with distinct photo_group_id per photo via
+            // /media/chunk). The SW still ferries meta + audio so a
+            // background-fired sync can at least register the report
+            // with the backend before the user reopens the PWA.
+            if (!stages.photo && item.photo
+                && (!Array.isArray(item.extraPhotos) || item.extraPhotos.length === 0)) {
                 const res = await fetch(`${apiBase}/api/v1/reports/${reportId}/media/attach`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
@@ -2421,6 +2435,14 @@ async function syncAllReports() {
                     console.log(`SW: Photo synced for ${reportId}`);
                 }
                 // On failure, leave in queue — will retry next sync
+            } else if (!stages.photo && item.photo && Array.isArray(item.extraPhotos) && item.extraPhotos.length > 0) {
+                // Defer: page's _uploadLegacyPhoto handles main + extras as
+                // distinct chunked uploads with per-photo photo_group_id.
+                console.log(
+                    `SW: deferring photo stage for ${reportId} — ` +
+                    `${item.extraPhotos.length} extra photo(s) present; ` +
+                    `page retry loop will handle multi-photo legacy path.`,
+                );
             }
 
             // Stage 3: Send audio if not done

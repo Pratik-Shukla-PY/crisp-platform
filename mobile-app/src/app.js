@@ -1142,103 +1142,45 @@ async function syncQueueManual(opts) {
         .replace('{n}', String(_initialCount));
     showT(_retryMsg, 'info');
 
-    console.log(`Manual sync: ${_initialCount} queued reports`);
-    for (const item of items) {
+    console.log(`Manual sync: ${_initialCount} queued reports — delegating to modern retry pipeline`);
+    // BUGFIX May 2026 (operator-reported, real iPhone Safari capture):
+    // tapping the sync pill ran a legacy per-item loop that PATCH'd
+    // /media/attach for the main photo AND every extra photo. The
+    // backend's /attach handler dedupes by (report_id, type), so 3
+    // captured photos collapsed into 1 Media row — the operator saw
+    // a 3-photo report arrive at the dashboard as a single-image
+    // report. The loop also ran legacy /attach for variant-shape items
+    // that were already mid-flight on the page's chunked retry path,
+    // double-stomping the same report from two writers.
+    //
+    // Fix: delegate to `trySendQueuedReport` per item. That function
+    // is the canonical chunked-upload path (see ~line 9617). It:
+    //   • runs the upload-bandwidth probe before each stage
+    //   • POSTs /reports/meta + PATCHes /description for meta + text
+    //   • iterates `_buildVariantWork(item)` which expands each photo
+    //     into per-tier work units (SMALL/MEDIUM/ORIGINAL) carrying
+    //     distinct `media_id` + shared `photo_group_id` per photo,
+    //     uploaded via /media/chunk-bin (binary) — so 3 photos always
+    //     produce ≥3 Media rows (one per photo_group_id)
+    //   • falls back to `_uploadLegacyPhoto` (now extras-aware) when
+    //     a queue item predates the variant pipeline
+    //   • carries an `_inFlightReports` guard so a concurrent retry
+    //     loop or primary submit can't double-process the same item
+    //
+    // For each item the inner function handles dequeue, reconcile,
+    // soft-drain + mark-deferred signalling. We just drive it once
+    // per pending item; the persistent retry loop (startRetryLoop)
+    // takes over for any tier still pending after this manual pass.
+    for (const rawItem of items) {
         try {
-            const stages = item.stages || {};
-            let reportId = item.serverId || null;
-
-            // Stage 1: metadata
-            if (!stages.meta && item.meta) {
-                // attach
-                // the Bearer token that was captured at enqueue time
-                // (`item.auth_token`). Server silently accepts anonymous
-                // when the token has expired beyond offline grace, so no
-                // queued report is ever lost because the user logged out.
-                const _metaHeaders = { 'Content-Type': 'application/json' };
-                if (item.auth_token) _metaHeaders['Authorization'] = `Bearer ${item.auth_token}`;
-                // Phase F image-reliability follow-up (May 2026) — defensive
-                // fix-up for queue items that pre-date the severity-default
-                // fix at enqueue time (see line ~8004). Items already in
-                // IndexedDB carry `severity: null` which the server rejects
-                // with 422, leaving them stuck retrying forever. Substituting
-                // UNKNOWN at send time lets the in-flight queued report
-                // finally drain on the next replay tick without forcing the
-                // user to wipe IndexedDB.
-                const _metaPayload = (item.meta.severity == null)
-                    ? { ...item.meta, severity: 'UNKNOWN' }
-                    : item.meta;
-                const res = await fetch(`${API_BASE}/reports/meta`, {
-                    method: 'POST',
-                    headers: _metaHeaders,
-                    body: JSON.stringify(_metaPayload)
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    reportId = data.id;
-                    item.serverId = reportId;
-                    item.stages.meta = true;
-                    try { await enqueueReport(item); } catch (_) {}
-                } else { continue; }
-            }
-
-            if (!reportId) continue;
-
-            // Stage 2: text
-            if (!stages.text && reportId) {
-                try {
-                    const res = await fetch(`${API_BASE}/reports/${reportId}/description`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ description: item.text || '' })
-                    });
-                    if (res.ok) { item.stages.text = true; try { await enqueueReport(item); } catch (_) {} }
-                } catch (e) { _silent('sync.text', e); }
-            }
-
-            // Stage 3: photo
-            if (!stages.photo && item.photo && reportId) {
-                try {
-                    const res = await fetch(`${API_BASE}/reports/${reportId}/media/attach`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ type: 'IMAGE', resolution_tier: 'MEDIUM', url: item.photo, file_size_bytes: item.photoSize || 0 })
-                    });
-                    if (res.ok) { item.stages.photo = true; item.photo = null; try { await enqueueReport(item); } catch (_) {} }
-                } catch (e) { _silent('sync.photo', e); }
-            }
-
-            // Stage 3b: extra photos (multiple images)
-            if (stages.photo && item.extraPhotos && item.extraPhotos.length > 0 && reportId) {
-                for (let ei = 0; ei < item.extraPhotos.length; ei++) {
-                    try {
-                        const res = await fetch(`${API_BASE}/reports/${reportId}/media/attach`, {
-                            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ type: 'IMAGE', resolution_tier: 'MEDIUM', url: item.extraPhotos[ei], file_size_bytes: 0 })
-                        });
-                        if (res.ok) { item.extraPhotos.splice(ei, 1); ei--; try { await enqueueReport(item); } catch(_){} }
-                    } catch (e) { _silent('sync.extra-photo', e); }
-                }
-            }
-
-            // Stage 4: audio
-            if (!stages.audio && item.audioBlob && reportId) {
-                try {
-                    const res = await fetch(`${API_BASE}/reports/${reportId}/media/attach`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ type: 'AUDIO', resolution_tier: 'SMALL', url: item.audioBlob, file_size_bytes: item.audioSize || 0 })
-                    });
-                    if (res.ok) { item.stages.audio = true; item.audioBlob = null; try { await enqueueReport(item); } catch (_) {} }
-                } catch (e) { _silent('sync.audio', e); }
-            }
-
-            // All done?
-            if (item.stages.meta && item.stages.text && item.stages.photo && item.stages.audio) {
-                await dequeueReport(item.client_report_id);
-            }
+            // Unwrap legacy nested format (payload key) seen on
+            // queue rows from pre-v6 builds. trySendQueuedReport
+            // expects the modern flat shape.
+            const item = rawItem.payload && !rawItem.stages ? rawItem.payload : rawItem;
+            if (!item || !item.stages) continue;
+            await trySendQueuedReport(item);
         } catch (e) {
-            console.warn('Manual sync error for', item.client_report_id, e);
+            console.warn('Manual sync delegate error for', rawItem?.client_report_id, e);
         }
     }
     updateSyncBadge();
@@ -9561,48 +9503,149 @@ async function _uploadVariantTier(item, reportId, unit) {
 }
 
 async function _uploadLegacyPhoto(item, reportId) {
-    const mediaId = item.photoMediaId || genUUID();
-    item.photoMediaId = mediaId;
     detectPWANetworkTier();
     const netConfig = getPWAAdaptiveConfig();
-    const b64 = item.photo.includes(',') ? item.photo.split(',')[1] : item.photo;
-    const chunks = chunkBase64(b64, netConfig.chunkSize);
-    const total = chunks.length;
-    const startSeq = item.photoChunkProgress || 0;
-    if (startSeq === 0) {
-        try {
-            const thumb = await generateThumbnail(item.photo);
-            if (thumb) {
-                await sendWithRetry(
-                    `${API_BASE}/reports/${reportId}/media/thumbnail`,
-                    { media_id: mediaId, thumbnail_data: thumb }, 3, 15000);
-            }
-        } catch (e) { console.warn('Thumbnail failed (non-fatal):', e.message); }
-    }
     // truthful flag for the legacy (no-variants) path too.
     // If a reporter's photo went through _blurIfPossible and BlazeFace
     // failed, we now correctly report `false` so the server's PII pass
     // runs. `item.clientBlurApplied` is set at queue-construction time
     // from `state.photoClientBlurApplied`.
     const legacyClientBlurApplied = Boolean(item.clientBlurApplied);
-    for (let seq = startSeq; seq < total; seq++) {
-        await sendWithRetry(
-            `${API_BASE}/reports/${reportId}/media/chunk`,
-            {
-                media_id: mediaId, type: 'IMAGE',
-                seq_num: seq, total_chunks: total,
-                data: chunks[seq], checksum: simpleChecksum(chunks[seq]),
-                client_blur_applied: legacyClientBlurApplied,
-            },
-            netConfig.retries, netConfig.timeout
-        );
-        item.photoChunkProgress = seq + 1;
-        if ((seq + 1) % 5 === 0) { try { await enqueueReport(item); } catch (_) {} }
+
+    // ── Inner helper: upload one data-URL photo via /media/chunk ─────
+    //
+    // BUGFIX May 2026 (operator-reported, real iPhone Safari capture
+    // of 3 photos): the previous implementation only sent `item.photo`
+    // (the main photo) and dropped every entry in `item.extraPhotos[]`
+    // on the floor when the ImageVariants pipeline had failed (Safari
+    // edge cases, BlazeFace CDN block, OOM on burst, etc.). The user
+    // saw a 3-photo report arrive at the dashboard as a 1-image report.
+    //
+    // Each photo now gets:
+    //   • a fresh stable `media_id` (carried on the queue item so resume
+    //     after disconnect lands chunks against the same row)
+    //   • a fresh `photo_group_id` so the backend can distinguish
+    //     multiple photos within one report (the same way the variant
+    //     pipeline does), AND so the dashboard's per-photo grouping
+    //     logic surfaces N photos instead of collapsing to one.
+    //   • independent `chunkProgress` so a network drop mid-upload
+    //     doesn't restart the whole stream.
+    //
+    // We keep `item.photoChunkProgress` for backward-compat with the
+    // single main photo; extras carry their own `_legacyChunkProgress`
+    // on synthetic per-photo records stored on the queue item.
+    async function _sendOnePhoto(dataUrl, ctx) {
+        const { mediaId, groupId, label, progressGetter, progressSetter } = ctx;
+        const b64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+        const chunks = chunkBase64(b64, netConfig.chunkSize);
+        const total = chunks.length;
+        const startSeq = (progressGetter && progressGetter()) || 0;
+        if (startSeq === 0) {
+            try {
+                const thumb = await generateThumbnail(dataUrl);
+                if (thumb) {
+                    await sendWithRetry(
+                        `${API_BASE}/reports/${reportId}/media/thumbnail`,
+                        { media_id: mediaId, thumbnail_data: thumb }, 3, 15000);
+                }
+            } catch (e) { console.warn(`Thumbnail failed (${label}, non-fatal):`, e.message); }
+        }
+        for (let seq = startSeq; seq < total; seq++) {
+            await sendWithRetry(
+                `${API_BASE}/reports/${reportId}/media/chunk`,
+                {
+                    media_id: mediaId, type: 'IMAGE',
+                    seq_num: seq, total_chunks: total,
+                    data: chunks[seq], checksum: simpleChecksum(chunks[seq]),
+                    client_blur_applied: legacyClientBlurApplied,
+                    // resolution_tier defaults to LOW server-side via
+                    // schema; MEDIUM matches what the legacy /attach
+                    // path used to claim. Keep MEDIUM so historic
+                    // metrics + dashboard render the chip the same way.
+                    resolution_tier: 'MEDIUM',
+                    // photo_group_id ensures the backend's per-photo
+                    // grouping treats this as a distinct photo, not a
+                    // variant of an existing photo. /attach used to
+                    // collapse extras into the main row; chunked path
+                    // gives every photo its own row + group.
+                    photo_group_id: groupId,
+                },
+                netConfig.retries, netConfig.timeout
+            );
+            if (progressSetter) progressSetter(seq + 1);
+            if ((seq + 1) % 5 === 0) { try { await enqueueReport(item); } catch (_) {} }
+        }
+        console.log(`Legacy photo sent (${label}): ${total} chunks, group=${groupId.slice(0,8)}, media=${mediaId.slice(0,8)}`);
     }
+
+    // ── Main photo ────────────────────────────────────────────────────
+    if (item.photo) {
+        const mainMediaId = item.photoMediaId || genUUID();
+        item.photoMediaId = mainMediaId;
+        const mainGroupId = item.photoGroupId || genUUID();
+        item.photoGroupId = mainGroupId;
+        await _sendOnePhoto(item.photo, {
+            mediaId: mainMediaId,
+            groupId: mainGroupId,
+            label: 'main',
+            progressGetter: () => item.photoChunkProgress || 0,
+            progressSetter: (n) => { item.photoChunkProgress = n; },
+        });
+        item.photo = null;
+    }
+
+    // ── Extras ────────────────────────────────────────────────────────
+    //
+    // Each extra photo carries its own stable mediaId + groupId on a
+    // parallel array (`_legacyExtraMediaIds` / `_legacyExtraGroupIds`)
+    // so a partial upload can resume against the same Media rows
+    // instead of orphaning bytes on a fresh row each retry.
+    if (Array.isArray(item.extraPhotos) && item.extraPhotos.length > 0) {
+        item._legacyExtraMediaIds   = item._legacyExtraMediaIds   || [];
+        item._legacyExtraGroupIds   = item._legacyExtraGroupIds   || [];
+        item._legacyExtraProgress   = item._legacyExtraProgress   || [];
+        while (item._legacyExtraMediaIds.length   < item.extraPhotos.length) item._legacyExtraMediaIds.push(genUUID());
+        while (item._legacyExtraGroupIds.length   < item.extraPhotos.length) item._legacyExtraGroupIds.push(genUUID());
+        while (item._legacyExtraProgress.length   < item.extraPhotos.length) item._legacyExtraProgress.push(0);
+        // Iterate forward; on success we leave the dataUrl in place for
+        // idempotent /media/chunk (the backend dedupes by media_id +
+        // seq_num) and only null out after every chunk lands.
+        for (let i = 0; i < item.extraPhotos.length; i++) {
+            const dataUrl = item.extraPhotos[i];
+            if (!dataUrl) continue;
+            await _sendOnePhoto(dataUrl, {
+                mediaId: item._legacyExtraMediaIds[i],
+                groupId: item._legacyExtraGroupIds[i],
+                label: `extra[${i}]`,
+                progressGetter: () => item._legacyExtraProgress[i] || 0,
+                progressSetter: (n) => { item._legacyExtraProgress[i] = n; },
+            });
+            item.extraPhotos[i] = null;
+        }
+        // Filter the now-null entries out so we don't iterate them on
+        // the next retry pass. Aligned indices on the parallel arrays
+        // are still meaningful for accidentally-not-cleared rows; we
+        // drop them too to keep the queue compact.
+        const _kept = [];
+        const _keptMediaIds = [];
+        const _keptGroupIds = [];
+        const _keptProgress = [];
+        for (let i = 0; i < item.extraPhotos.length; i++) {
+            if (item.extraPhotos[i]) {
+                _kept.push(item.extraPhotos[i]);
+                _keptMediaIds.push(item._legacyExtraMediaIds[i]);
+                _keptGroupIds.push(item._legacyExtraGroupIds[i]);
+                _keptProgress.push(item._legacyExtraProgress[i]);
+            }
+        }
+        item.extraPhotos = _kept;
+        item._legacyExtraMediaIds = _keptMediaIds;
+        item._legacyExtraGroupIds = _keptGroupIds;
+        item._legacyExtraProgress = _keptProgress;
+    }
+
     item.stages.photo = true;
-    item.photo = null;
     try { await enqueueReport(item); } catch (_) {}
-    console.log(`Legacy photo sent: ${total} chunks`);
 }
 
 // ── Background sender: processes one queued report through all stages ─────────
