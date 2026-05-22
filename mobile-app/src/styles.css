@@ -2590,7 +2590,10 @@ details.mr-date-group[open] .mr-date-group-chevron {
    in stage-settings. Mirrors the old history-delete-note styling. */
 .settings-note {
     font-size: 11.5px;
-    color: var(--text-mute, var(--muted));
+    /* --text-mute (#64748b) is 2.43:1 on --bg — fails WCAG AA. Swapped
+       to --text-dim (#94a3b8) → 4.89:1. Font-size remains small; bump
+       to a token-driven --fz-sm in Batch 3 when the font scale lands. */
+    color: var(--text-dim);
     line-height: 1.45;
     margin: -2px 0 8px;
     padding: 0 4px;
