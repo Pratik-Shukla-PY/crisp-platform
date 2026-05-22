@@ -206,3 +206,53 @@ groups:
             regression in the assembly pool or DB connection
             handling. Revert the most recent backend deploy if this
             started right after a release.
+
+      # ── Daemon false-abandon rate (R2.c, May 2026) ───────────────────
+      # The recovery-sweep daemon abandons rows past 30 minutes of
+      # inactivity. R1's chunk-handler revival path lets late-arriving
+      # chunks recover those rows — but if many rows ARE being
+      # recovered, it means the 30-minute deadline is too aggressive
+      # for the network conditions in the field. The "false-abandon
+      # rate" is the ratio of recovered to abandoned (excluding hard
+      # abandons that can't recover by design).
+      - alert: CRISPDaemonFalseAbandonRateHigh
+        expr: |
+          (sum by () (rate(crisp_media_recovery_total{outcome="succeeded"}[1h])))
+          /
+          (sum by () (rate(crisp_media_abandon_reason_total{
+            reason!~"checksum_mismatch|original_too_large"
+          }[1h]))) > 0.5
+        for: 30m
+        labels:
+          severity: warning
+          team: crisp-ops
+        annotations:
+          summary: "CRISP — daemon false-abandon rate above 50 %"
+          description: |
+            More than half of soft-abandoned rows in the last hour
+            ended up being recovered by the chunk-handler revival
+            path. That means the daemon's 30-minute deadline
+            (_ABANDON_STALE_MIN) is too aggressive for current
+            network conditions. Consider raising
+            CRISP_ABANDON_STALE_MIN via env var.
+
+      # ── Hard-delete rate (R2.b retention sweep) ──────────────────────
+      # Operators expect a steady trickle of hard deletes (rows past
+      # CRISP_HARD_ABANDON_DAYS that never recovered). A sudden spike
+      # could indicate a backend regression that started mass-abandoning
+      # live uploads N days ago.
+      - alert: CRISPHardDeleteSpike
+        expr: |
+          increase(crisp_media_hard_deleted_total[1h]) > 500
+        for: 1h
+        labels:
+          severity: warning
+          team: crisp-ops
+        annotations:
+          summary: "CRISP — hard-delete spike (Action ⑥)"
+          description: |
+            > 500 Media rows hard-deleted by Action ⑥ in the last
+            hour. Either a one-time backlog clean-up (expected
+            shortly after a config change), or a sustained issue
+            with the upstream chunk-handler revival path failing to
+            recover legitimate uploads in time.

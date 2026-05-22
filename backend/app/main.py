@@ -703,6 +703,15 @@ _ASSEMBLE_DEADLINE_MIN     = int(os.getenv("CRISP_ASSEMBLE_DEADLINE_MIN",     "3
 # window — giving an in-flight MEDIUM/HIGH upload a chance to land
 # before we flip the status.
 _PARTIAL_PROMOTE_IDLE_S    = int(os.getenv("CRISP_PARTIAL_PROMOTE_IDLE_S",    "60"))
+# R2.b (May 2026) — hard-delete deadline for abandoned-not-recovered
+# rows. After this many days past abandoned_at (and still
+# recovered_at IS NULL), Action ⑥ deletes the Media row + its
+# chunks + its storage object. Default 30 days gives operators a
+# four-week recovery window before the storage is reclaimed. Set
+# to 0 to disable hard-delete entirely (the daemon will skip
+# Action ⑥ — useful for forensic environments where ALL abandons
+# must be retained).
+_HARD_ABANDON_DAYS         = int(os.getenv("CRISP_HARD_ABANDON_DAYS",         "30"))
 
 
 def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
@@ -991,6 +1000,84 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
             # error here is logged + ignored — the next tick retries.
             log.warning(
                 f"Assembly recovery [{tag}] Action ⑤ failed: {_action5_e}"
+            )
+
+        # ── Action ⑥ — hard-delete abandoned-not-recovered rows past
+        #    the retention window (R2.b, May 2026).
+        #
+        # Soft-abandons live in the DB indefinitely so a returning
+        # client can revive them. That's correct in the short term but
+        # produces an unbounded backlog at scale (a 1 % abandon rate
+        # on a 500k-report crisis is ~5000 stuck Media rows × ~3 MB
+        # chunks ≈ 15 GB of Postgres TOAST per crisis).
+        #
+        # Action ⑥ caps the recovery window with a hard delete past
+        # CRISP_HARD_ABANDON_DAYS (default 30). Rows where:
+        #   - abandoned_at < now - N days
+        #   - recovered_at IS NULL
+        # are deleted. The Media → MediaChunk cascade handles the
+        # chunk rows automatically. The corresponding storage object
+        # (assembled file, if any) is deleted via storage.delete().
+        # Bounded at 500 rows per sweep tick so a backlog clean-up
+        # doesn't block the daemon's other actions.
+        #
+        # Recovered rows (recovered_at IS NOT NULL) are NEVER deleted
+        # — they're successful uploads that happened to have been
+        # abandoned mid-flight. Hard-abandon rows (checksum_mismatch /
+        # original_too_large) are deleted on the same schedule —
+        # their bytes are irrecoverable; the operator's reclaim path
+        # is the F3 button, not chunk replay.
+        try:
+            hard_abandon_deadline = now_utc - timedelta(days=_HARD_ABANDON_DAYS)
+            _purge = (
+                _db.query(Media)
+                .filter(Media.abandoned_at.isnot(None))
+                .filter(Media.abandoned_at < hard_abandon_deadline)
+                .filter(Media.recovered_at.is_(None))
+                .limit(500)
+                .all()
+            )
+            if _purge:
+                from app.services.storage import get_storage as _gs6
+                try:
+                    _storage6 = _gs6()
+                except Exception:
+                    _storage6 = None
+                # Aggregate the abandon-reason counts up front so we
+                # can increment the metric in one bulk operation.
+                from collections import Counter as _Counter
+                reason_counts = _Counter(
+                    (m.abandon_reason or 'unknown') for m in _purge
+                )
+                # Best-effort delete of the storage object (if any).
+                # The Media → MediaChunk cascade handles the row delete
+                # itself; we just need to clean up the on-disk asset.
+                for m in _purge:
+                    if _storage6 is not None and m.url:
+                        try:
+                            _storage6.delete(m.url)
+                        except Exception as _del_e:
+                            log.warning(
+                                f"Assembly recovery [{tag}] Action ⑥: "
+                                f"storage.delete failed for url={m.url}: {_del_e}"
+                            )
+                    _db.delete(m)
+                _db.commit()
+                log.info(
+                    f"Assembly recovery [{tag}] Action ⑥: hard-deleted "
+                    f"{len(_purge)} Media rows past "
+                    f"{_HARD_ABANDON_DAYS}d retention. "
+                    f"Reason breakdown: {dict(reason_counts)}"
+                )
+                try:
+                    from app.core.observability import media_hard_deleted_total as _mhdt
+                    for reason, n in reason_counts.items():
+                        _mhdt.labels(reason=reason).inc(n)
+                except Exception:
+                    pass
+        except Exception as _action6_e:
+            log.warning(
+                f"Assembly recovery [{tag}] Action ⑥ failed: {_action6_e}"
             )
     finally:
         _db.close()

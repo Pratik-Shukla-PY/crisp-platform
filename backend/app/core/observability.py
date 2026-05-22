@@ -290,6 +290,64 @@ pii_blur_status_total = Counter(
     ["status"],
 )
 
+# R2.c (May 2026) — recovery observability for the upload-recovery
+# hardening (R1 + R2 + R3). Three signals:
+#
+#   ① media_recovery_total          — count of post-abandon recovery
+#                                      outcomes. The success rate is
+#                                      `succeeded / (succeeded + failed)`.
+#   ② media_recovery_duration_      — wall-clock interval from
+#      seconds                         abandoned_at to recovered_at.
+#                                      Histogram buckets cover a few
+#                                      minutes (typical reconnect)
+#                                      through several days (long
+#                                      offline gaps the operator wants
+#                                      to honour).
+#   ③ media_hard_deleted_total      — rows purged by daemon Action ⑥
+#                                      past the hard-abandon retention
+#                                      window. Operators alert on this
+#                                      to track storage reclaim.
+#
+# Together with the existing `media_abandon_reason_total` the operator
+# can compute the daemon's "false-abandon rate" — the fraction of
+# rows the daemon abandoned that ended up recovered. A high
+# false-abandon rate means the 30-minute deadline is too aggressive
+# for the network conditions in the field.
+media_recovery_total = Counter(
+    "crisp_media_recovery_total",
+    "Outcomes of post-abandon media recovery. R1 chunk-handler revival "
+    "stamps recovered_at on the Media row when the assembly worker "
+    "completes a previously-abandoned row.",
+    # outcome ∈ {succeeded, failed}
+    ["outcome"],
+)
+media_recovery_duration_seconds = Histogram(
+    "crisp_media_recovery_duration_seconds",
+    "Wall-clock interval from abandoned_at to recovered_at on a "
+    "successfully-recovered Media row. Used to tune the daemon's "
+    "30-minute soft-abandon deadline (_ABANDON_STALE_MIN).",
+    buckets=(60.0, 300.0, 900.0, 1800.0, 3600.0, 14_400.0, 43_200.0,
+             86_400.0, 172_800.0, 604_800.0),
+)
+media_hard_deleted_total = Counter(
+    "crisp_media_hard_deleted_total",
+    "Media rows purged by daemon Action ⑥ past CRISP_HARD_ABANDON_DAYS "
+    "(default 30 days). Operators alert on a sustained non-zero rate "
+    "to track storage reclaim against the abandoned-uploads backlog.",
+    # reason ∈ {chunks_never_arrived, assembly_worker_lost,
+    #           checksum_mismatch, bandwidth_tier_deferred, ...}
+    ["reason"],
+)
+# R3.b — disk-orphan GC counter. See daemon Action ⑦.
+disk_orphan_deleted_total = Counter(
+    "crisp_disk_orphan_deleted_total",
+    "Storage objects deleted by daemon Action ⑦ because no live "
+    "Media.url references them and the object is older than the "
+    "hard-abandon retention window.",
+    # prefix ∈ {uploads, pre_blur, ...}
+    ["prefix"],
+)
+
 # K.6.b — AI retry queue depth. Two gauges: total pending rows + a
 # breakdown by status (pending|in_progress|complete|terminal_failed)
 # so operators can see backlog trends without inspecting the DB.
