@@ -4173,6 +4173,24 @@ html[dir="rtl"] .back-btn .fa-arrow-left {
     transform: scaleX(-1);
 }
 
+/* AUDIT 2026-05-23 — RTL parity for two more directional elements:
+   1. Home primary CTA's inline play-triangle (`.big-cta .ico svg`) is
+      a fixed-direction polygon; without a flip it reads as a
+      backwards-pointing arrow in Arabic / Urdu. scaleX(-1) mirrors it.
+   2. The channels strip is a left-to-right row of 6 brand icons
+      (Telegram, WhatsApp, …, iOS). Conventional RTL reverses the
+      visual order so the locale's "first / leading" channel appears
+      on the trailing visual edge — match user direction-of-reading
+      expectations. */
+html[dir="rtl"] .big-cta .ico,
+html[dir="rtl"] .big-cta i.ico,
+html[dir="rtl"] .big-cta i {
+    transform: scaleX(-1);
+}
+html[dir="rtl"] .home-channels-strip {
+    flex-direction: row-reverse;
+}
+
 /* Language-switcher overlay slides from the trailing edge — keep its
    right/left anchoring sensible in both directions. Mirrors the pill
    to the LEFT in RTL locales (Arabic / Urdu).
