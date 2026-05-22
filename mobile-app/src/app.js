@@ -9371,19 +9371,37 @@ async function _uploadVariantTier(item, reportId, unit) {
         const chunkSize = variant.frozenChunkSize;
         const total = variant.frozenTotalChunks;
 
-        // Phase C.1 (May 2026) — compute whole-asset djb2 ONCE over the full
-        // original bytes BEFORE chunking, cache it on the variant so a
-        // resumed upload (chunkProgress > 0) doesn't have to recompute,
-        // and ship it on chunk 0 (and on chunk 0 only — later chunks pass
-        // null). The backend persists the value on the Media row and re-
-        // verifies after assembly; mismatch flips status='failed' and
-        // bumps `media_asset_integrity_fail_total`. Defence-in-depth for
-        // the original (LARGE) tier where a corrupted assembly would
-        // otherwise reach the dashboard silently.
-        if (!variant.fullAssetChecksum) {
-            const fullBuf = new Uint8Array(await blob.arrayBuffer());
-            variant.fullAssetChecksum = djb2Bytes(fullBuf);
-        }
+        // Phase C.1 (May 2026) — whole-asset djb2 over the full bytes
+        // BEFORE chunking. Shipped on chunk 0 ONLY; backend persists on
+        // the Media row + re-verifies after concat assembly. Mismatch
+        // flips status='failed' / abandon_reason='checksum_mismatch'.
+        //
+        // BUGFIX May 2026 (operator-reported, real iPhone repro):
+        // pre-fix this was CACHED on the variant (`if (!variant.fullAssetChecksum)`)
+        // so a resumed upload wouldn't recompute. BUT the L.2.b
+        // encode-ladder + the iOS HEIC ingest path CAN replace
+        // `variant.blob` between upload attempts (e.g. q=0.95 EXIF-strip
+        // re-encode, then quality ladder if >5 MB, or a queue-resume
+        // after IDB persistence that re-encodes from the cached
+        // photoDataUrl). The cached fullAssetChecksum then reflects
+        // the OLD blob while the chunks come from the NEW blob —
+        // every chunk passes its own per-chunk djb2 check, server
+        // assembles cleanly, then the whole-asset djb2 mismatches
+        // and the row hard-abandons.
+        //
+        // Operator hit this exactly: 3-photo iPhone report, photo #A's
+        // ORIGINAL (`ae7300dd`) chunks all landed (100/100) but
+        // assembly returned `assemble returned no url` 1 second
+        // later — that's the post-concat djb2 failing.
+        //
+        // The cache was an optimisation worth ~10 ms per resumed
+        // upload (single djb2 pass over 5 MB). Dropping it
+        // unconditionally is cheap insurance. We compute from the
+        // CURRENT blob every time chunks are about to ship; the
+        // checksum and the chunk bytes are now guaranteed to refer
+        // to the same blob reference.
+        const fullBuf = new Uint8Array(await blob.arrayBuffer());
+        variant.fullAssetChecksum = djb2Bytes(fullBuf);
 
         console.log(`[Upload:bin] ${label}: ${total} chunks from seq ${startSeq}, tier=${resolution}, netTier=${_pwaTier}, fullChecksum=${variant.fullAssetChecksum}`);
         for (let seq = startSeq; seq < total; seq++) {

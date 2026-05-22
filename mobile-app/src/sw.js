@@ -9,7 +9,7 @@
 // Adds blur-worker.js + blur-worker-pool.js to STATIC_ASSETS for
 // off-main-thread PII blur. Cache bump forces installed PWAs to
 // fetch the new scripts on next service-worker activation.
-const CACHE_NAME = 'crisp-v254';
+const CACHE_NAME = 'crisp-v255';
 // v250 → v251 (May 21 — version-pill /health URL fix). v250 deploy
 // auto-rolled-back when prod-smoke caught a `HTTP 404 /health` on
 // PWA load. Root cause: home-screen.js _paintVersionPill stripped
