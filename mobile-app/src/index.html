@@ -28,7 +28,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v251">
+    <meta name="crisp-release" content="crisp-pwa@v252">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -3779,6 +3779,15 @@
      pii-blur.js's `ensureModel()` now dynamically injects the script
      tags on first call. -->
 <script defer src="pii-blur.js?v=3"></script>
+<!-- B-D (May 2026) — Off-main-thread blur worker pool. Manages a
+     small pool of Web Workers that run BlazeFace + JPEG encode for
+     each captured photo. Main thread stays at 60 fps during burst
+     capture (3 photos × 5-10 MB). pii-blur.js's blurFaces() routes
+     through the pool when available; falls back to its legacy
+     main-thread path otherwise. The actual worker script
+     (blur-worker.js) is loaded via `new Worker()` and is NOT
+     referenced here. -->
+<script defer src="blur-worker-pool.js?v=1"></script>
 <!-- Progressive-upload Phase 1. Exposes window.BlurHash —
      compact ~28-char DCT encoding consumed by image-variants.js at
      capture time and sent in the meta POST. Loaded ahead of

@@ -5,7 +5,11 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-const CACHE_NAME = 'crisp-v251';
+// May 22 2026 (v252) — Batch B-D of the Forensic Blur Audit.
+// Adds blur-worker.js + blur-worker-pool.js to STATIC_ASSETS for
+// off-main-thread PII blur. Cache bump forces installed PWAs to
+// fetch the new scripts on next service-worker activation.
+const CACHE_NAME = 'crisp-v252';
 // v250 → v251 (May 21 — version-pill /health URL fix). v250 deploy
 // auto-rolled-back when prod-smoke caught a `HTTP 404 /health` on
 // PWA load. Root cause: home-screen.js _paintVersionPill stripped
@@ -1923,6 +1927,12 @@ const STATIC_ASSETS = [
     SW_BASE + 'app.js',
     SW_BASE + 'places.js',
     SW_BASE + 'pii-blur.js',
+    // B-D (May 2026): Web Worker pool for off-main-thread blur.
+    // blur-worker-pool.js runs in the page (manages the workers);
+    // blur-worker.js IS the worker script (loaded via `new Worker(URL)`).
+    // Both must be precached so installed PWAs can capture offline.
+    SW_BASE + 'blur-worker-pool.js',
+    SW_BASE + 'blur-worker.js',
     SW_BASE + 'image-variants.js',
     SW_BASE + 'blurhash.js',
     SW_BASE + 'exif-gps.js',         // Sprint D — GPS EXIF embed before chunked upload

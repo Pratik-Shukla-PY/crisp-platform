@@ -315,6 +315,53 @@
     // notice. Correctness >>> a few hundred ms.
     let _blurChain = Promise.resolve();
     async function blurFaces(srcBlob, opts) {
+        // B-D (May 2026) — prefer the Web Worker pool when available.
+        // The pool runs the same detect + blur + encode logic in
+        // worker context, keeping the main thread free. For 3-photo
+        // bursts on mid-range Android, this is the difference between
+        // a smooth 60 fps capture screen and stuttering Next-button
+        // taps.
+        //
+        // Fallback: when the pool isn't available (Safari < 16.4 lacks
+        // OffscreenCanvas in workers; SecurityError under restrictive
+        // CSP; worker constructor throws) we fall through to the
+        // legacy main-thread path below. The v249 Promise-chain
+        // serialiser still applies on that path.
+        try {
+            if (typeof window !== 'undefined'
+                && window.BlurWorkerPool
+                && window.BlurWorkerPool.isAvailable()) {
+                const result = await window.BlurWorkerPool.processPhoto(srcBlob);
+                // Translate pool result → legacy blurFaces() result shape.
+                if (result && !result.error) {
+                    return {
+                        blob: result.blob || srcBlob,
+                        blurred: !!result.blurred,
+                        facesDetected: result.facesDetected || 0,
+                        normalizedBoxes: result.normalizedBoxes || [],
+                        skipped: false,
+                    };
+                }
+                // Worker resolved with an error sentinel — return the
+                // original blob, server safety net handles the rest.
+                if (result) {
+                    return {
+                        blob: result.blob || srcBlob,
+                        blurred: false,
+                        facesDetected: 0,
+                        normalizedBoxes: [],
+                        skipped: true,
+                        error: result.error || 'worker error',
+                    };
+                }
+            }
+        } catch (poolErr) {
+            // Pool init failed (e.g. Worker constructor threw under
+            // strict CSP). Don't crash — fall through to legacy.
+            console.warn('[PIIBlur] worker pool failed; falling back to main-thread blur:', poolErr);
+        }
+
+        // Legacy main-thread path (v249 serialiser preserved).
         const prev = _blurChain;
         let resolveSlot;
         _blurChain = new Promise((r) => { resolveSlot = r; });
