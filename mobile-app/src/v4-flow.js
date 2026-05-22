@@ -2409,6 +2409,16 @@
                 photoCount.textContent = `${n} ` + tt('v4_card_photo_plural', 'photos');
             }
         }
+        // Hide the "🛡 Face blurred for privacy" reassurance when there's
+        // no photo to blur. Previously rendered unconditionally — showed
+        // the line under "No photo captured", which read as either a
+        // glitch or a false claim. The reassurance only carries meaning
+        // when a photo actually exists. (Audit S1 — see
+        // UI:UX Improvements/AUDIT-REPORT-2026-05-23.md.)
+        const photoMeta = document.getElementById('v4-photo-meta');
+        if (photoMeta) {
+            photoMeta.style.display = photos.length > 0 ? '' : 'none';
+        }
 
         // Description card — paint filled vs empty state from state.*
         // (operator review rethink, May 2026).
