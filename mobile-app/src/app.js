@@ -11,6 +11,39 @@ const UI_V2_ENABLED = (() => {
 })();
 window.__crispUiV2 = UI_V2_ENABLED;
 
+// ── Reader Mode ────────────────────────────────
+// AUDIT 2026-05-23 — bumps every --fz-* token one step so elderly /
+// presbyopic / sunlit-screen users can boost text size in one tap
+// from Settings. Applied BEFORE first paint so there's no FOUC.
+// Toggled by the #settings-reader-mode checkbox (see _wireReaderMode).
+(() => {
+  try {
+    const on = localStorage.getItem('crisp_reader_mode') === 'on';
+    if (on) document.documentElement.setAttribute('data-reader-mode', 'on');
+  } catch {}
+})();
+function _wireReaderMode() {
+  const cb = document.getElementById('settings-reader-mode');
+  if (!cb || cb.dataset.bound === '1') return;
+  cb.dataset.bound = '1';
+  try {
+    cb.checked = localStorage.getItem('crisp_reader_mode') === 'on';
+  } catch {}
+  cb.addEventListener('change', () => {
+    const on = !!cb.checked;
+    try {
+      if (on) {
+        localStorage.setItem('crisp_reader_mode', 'on');
+        document.documentElement.setAttribute('data-reader-mode', 'on');
+      } else {
+        localStorage.removeItem('crisp_reader_mode');
+        document.documentElement.removeAttribute('data-reader-mode');
+      }
+    } catch {}
+  });
+}
+window.__crispWireReaderMode = _wireReaderMode;
+
 // ── UI v3 feature flag ───────
 // v3 delivers three user-visible improvements on top of v2:
 //   1. Building-footprint pre-cache — 10 nearest buildings are downloaded
@@ -1499,6 +1532,7 @@ const I18N = {
         settings_title: "Settings",
         settings_account: "Account",
         settings_unlink_device: "Unlink this device",
+        settings_reader_mode: "Reader Mode — larger text",
         settings_logout: "Logout",
         // UNDP §3.1e. Toast strings extracted from hardcoded
         // English literals so AR / FR / ES / RU / ZH locales render
@@ -10644,6 +10678,11 @@ function setupAuthUI() {
     });
     const btnSettingsBack = document.getElementById('btn-settings-back');
     if (btnSettingsBack) btnSettingsBack.addEventListener('click', () => goToStage('stage-home'));
+
+    // AUDIT 2026-05-23 — Reader Mode toggle wiring (init from
+    // localStorage on first paint via the top-of-file IIFE; this
+    // binds the change handler when the user reaches Settings).
+    try { _wireReaderMode(); } catch (_) {}
 }
 
 function _completeLogin(linkedCount) {

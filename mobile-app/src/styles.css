@@ -108,6 +108,28 @@
     --r-xl: 28px;
     --r-pill: 999px;
     --radius: 20px;             /* legacy alias = --r-lg */
+    /* AUDIT 2026-05-23 — Font-size scale tokens. Existing styles use
+       229 hardcoded `font-size: <n>px` literals. Tokenising the scale
+       gives the codebase a single dial for the Reader Mode toggle
+       (Settings) which bumps every step one notch. Naming follows the
+       T-shirt convention used by Tailwind / Material so designers and
+       new contributors recognise it on sight.
+         --fz-xs        micro-labels, badge counts, version pills
+         --fz-sm        captions, settings-note, dim metadata
+         --fz-body      default body text — minimum for elderly users
+         --fz-md        primary buttons, larger body
+         --fz-lg        section titles
+         --fz-xl        page headings
+         --fz-display   hero headlines
+       Reader Mode (data-reader-mode="on" on <html>) bumps each token
+       one step so a 14 px body becomes 16 px etc. */
+    --fz-xs: 12px;
+    --fz-sm: 13px;
+    --fz-body: 14px;
+    --fz-md: 16px;
+    --fz-lg: 18px;
+    --fz-xl: 22px;
+    --fz-display: 32px;
     --shadow: 0 0 60px rgba(0,0,0,0.6);
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
     --shadow-md: 0 8px 24px rgba(0,0,0,0.45);
@@ -132,6 +154,22 @@
     --brand-expo-soft:       rgba(9,209,199,0.16);
     --brand-expo-edge:       rgba(9,209,199,0.32);
 }
+
+/* AUDIT 2026-05-23 — Reader Mode bumps every font-size token one
+   step. Triggered by the toggle in Settings, persists in localStorage
+   `crisp_reader_mode`. home-screen.js / app.js apply the attribute
+   to <html> on boot. Elderly / presbyopic / sunlit-screen users get a
+   one-tap legibility boost without re-authoring every site. */
+html[data-reader-mode="on"] {
+    --fz-xs: 13px;
+    --fz-sm: 14px;
+    --fz-body: 16px;
+    --fz-md: 18px;
+    --fz-lg: 20px;
+    --fz-xl: 24px;
+    --fz-display: 36px;
+}
+
 /* Body background uses the proposal's exact aurora gradient. */
 body {
     background: radial-gradient(circle at 20% 10%, #2a4d70 0%, #213A58 55%) fixed;
@@ -848,6 +886,36 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+/* AUDIT 2026-05-23 — Reader Mode toggle row in stage-settings. Lays
+   out the label + .toggle-switch in a single row, matching the visual
+   weight of the nav-btn rows above it but as a control rather than a
+   navigation. */
+.settings-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    margin-top: 10px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    cursor: pointer;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 1rem;
+}
+.settings-toggle-row .settings-toggle-text {
+    flex: 1 1 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+.settings-toggle-row .settings-toggle-text i {
+    color: var(--accent);
+    font-size: 16px;
+}
 
 /* ── Service status section ───────
    Was <details>/<summary> (collapsible). Field testing showed low-literacy

@@ -2774,6 +2774,22 @@
                 <i class="fa-solid fa-link-slash"></i>
                 <span data-i18n="settings_unlink_device">Unlink this device</span>
             </button>
+            <!-- AUDIT 2026-05-23 — Reader Mode toggle. Bumps every
+                 --fz-* token one step (12→13→14→16→18→20→22→24→32→36)
+                 for elderly / presbyopic users + sunlit-screen reading.
+                 State persists in localStorage `crisp_reader_mode`;
+                 app.js applies `data-reader-mode="on"` to <html> on
+                 boot so the bump is in place before first paint. -->
+            <label class="settings-toggle-row" for="settings-reader-mode">
+                <span class="settings-toggle-text">
+                    <i class="fa-solid fa-text-height" aria-hidden="true"></i>
+                    <span data-i18n="settings_reader_mode">Reader Mode — larger text</span>
+                </span>
+                <span class="toggle-switch">
+                    <input type="checkbox" id="settings-reader-mode">
+                    <span class="toggle-slider"></span>
+                </span>
+            </label>
             <!-- bulk delete relocated here from
                  the legacy <details class="history-advanced"> accordion at
                  the bottom of stage-history. The existing app.js handler
