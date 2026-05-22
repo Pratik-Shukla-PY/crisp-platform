@@ -196,6 +196,37 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     box-shadow: var(--shadow);
     display: flex; flex-direction: column;
 }
+/* AUDIT 2026-05-23 — tablet treatment.
+   Pre-fix, on a tablet (≥ 768 px) the entire app rendered in a
+   430 px-wide phone column centered on screen, leaving ~60 % of the
+   horizontal area as empty dark void. Looked like a misconfigured
+   embed. Now:
+     · ≥ 640 px (large phones / phablets) — wrapper expands to 500 px
+       with a soft border + shadow so the "this is a phone-sized app"
+       framing reads as intentional.
+     · ≥ 900 px (full tablets / desktops) — wrapper holds at 520 px and
+       gets a subtle border-glow so the dark column reads as the app
+       surface rather than a dead area. */
+@media (min-width: 640px) {
+    .mobile-screen {
+        max-width: 500px;
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        height: calc(100dvh - 32px);
+        margin: 16px 0;
+    }
+    body {
+        align-items: flex-start;
+        padding: 0;
+    }
+}
+@media (min-width: 900px) {
+    .mobile-screen {
+        max-width: 520px;
+        box-shadow: 0 24px 64px rgba(0,0,0,0.5),
+                    0 0 0 1px rgba(70,223,177,0.08);
+    }
+}
 
 /* ── Language switcher ──────────────────────────────────────── */
 /* v6 redesign (May 2026, operator screenshot) — pill upgraded from
