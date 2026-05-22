@@ -8393,13 +8393,22 @@ function djb2Bytes(bytes) {
  * distinguish a 404 (legacy backend — fall back to base64) from
  * a 5xx (retry).
  */
-function sendFormData(url, formData, timeoutMs = 30000) {
+function sendFormData(url, formData, timeoutMs = 30000, headers = null) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', url, true);
         // DO NOT set Content-Type — the browser needs to generate it
         // with the multipart boundary. Setting it manually breaks the
         // upload silently.
+        // Custom headers ARE safe (B-C ships X-Client-Face-Boxes here).
+        if (headers && typeof headers === 'object') {
+            for (const k of Object.keys(headers)) {
+                const v = headers[k];
+                if (v != null) {
+                    try { xhr.setRequestHeader(k, String(v)); } catch (_) {}
+                }
+            }
+        }
         xhr.timeout = timeoutMs;
         xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
@@ -8446,6 +8455,13 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
         mediaId, seqNum, totalChunks, blob, type,
         resolutionTier, photoGroupId, clientBlurApplied, checksum,
         fullAssetChecksum,
+        // B-C (May 2026) — optional list of normalized face boxes from
+        // PWA's BlazeFace pass. Array of {x, y, w, h} in [0.0, 1.0].
+        // Shipped to server via X-Client-Face-Boxes header (same value
+        // on every chunk for one media row — server stamps on row
+        // create, ignores on later chunks). Falsy/empty values omit
+        // the header entirely.
+        clientFaceBoxes,
     } = params;
 
     // Quick fallback if we already know the backend doesn't support /chunk-bin.
@@ -8479,7 +8495,16 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
                 : (blob instanceof ArrayBuffer || ArrayBuffer.isView(blob)) ? new Blob([blob])
                 : new Blob([blob]);
             fd.append('data', asBlob, 'chunk.bin');
-            const result = await sendFormData(url, fd, timeoutMs);
+            // B-C: optional client face-box hints header. Skip when
+            // empty so we don't pay the ~50-byte-per-box header tax
+            // on clean photos.
+            let _hdrs = null;
+            if (Array.isArray(clientFaceBoxes) && clientFaceBoxes.length > 0) {
+                try {
+                    _hdrs = { 'X-Client-Face-Boxes': JSON.stringify(clientFaceBoxes) };
+                } catch (_) { /* serialise failed — drop the header silently */ }
+            }
+            const result = await sendFormData(url, fd, timeoutMs, _hdrs);
             // Phase-2.1 — record the retry count for this chunk. 0 = first
             // attempt succeeded; >_PACKET_LOSS_RETRY_THRESHOLD counts as a
             // "lossy" event. See _recordRetryCount in the adaptive block.
@@ -8550,6 +8575,11 @@ async function uploadChunksBinary(reportId, mediaId, blob, {
     type = 'IMAGE', resolutionTier = 'SMALL', photoGroupId = null,
     clientBlurApplied = false, startSeq = 0,
     onProgress = null,
+    // B-C (May 2026) — optional list of normalized face boxes from
+    // PWA's BlazeFace pass. Array of {x, y, w, h} in [0.0, 1.0].
+    // Travels with each chunk (server stamps on row create, ignores
+    // on later chunks). Falsy/empty omits the header.
+    clientFaceBoxes = null,
 } = {}) {
     // Sprint D (May 2026) — embed GPS EXIF into the JPEG bytes BEFORE
     // chunking, so an external `exiftool` reader sees the same coords
@@ -8587,6 +8617,7 @@ async function uploadChunksBinary(reportId, mediaId, blob, {
             {
                 mediaId, seqNum: seq, totalChunks: total, blob: slice,
                 type, resolutionTier, photoGroupId, clientBlurApplied, checksum,
+                clientFaceBoxes,
             },
             netConfig.retries, netConfig.timeout,
         );

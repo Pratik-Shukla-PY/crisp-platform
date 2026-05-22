@@ -333,15 +333,23 @@
      * Internal worker — same body as the original blurFaces. The
      * public `blurFaces` above wraps this in a serialiser.
      *
-     * Detect + blur faces in `srcBlob`. : now returns a detailed
-     * result object — was just returning the Blob, which hid failures from
-     * callers. Shape:
+     * Detect + blur faces in `srcBlob`. Returns a detailed result
+     * object:
      *   {
-     *     blob:           Blob,     // blurred or original, never null
-     *     blurred:        boolean,  // true IFF the full pipeline ran (detect + paint OR detect + no-op on zero faces)
-     *     facesDetected:  number,
-     *     skipped:        boolean,  // true if model load / decode / detect crashed — upload should NOT claim `client_blur_applied=true`
-     *     error:          string,   // present when skipped=true
+     *     blob:             Blob,     // blurred or original, never null
+     *     blurred:          boolean,  // true IFF the full pipeline ran
+     *     facesDetected:    number,
+     *     normalizedBoxes:  Array<{x, y, w, h}>  // B-C — face boxes in
+     *                                   // [0.0, 1.0] coords (fraction
+     *                                   // of width/height). Shipped to
+     *                                   // server via X-Client-Face-Boxes
+     *                                   // header on chunk-bin uploads;
+     *                                   // server takes the UNION with
+     *                                   // its own MediaPipe pass.
+     *                                   // Empty array on no-faces or
+     *                                   // failure paths.
+     *     skipped:          boolean,  // true if model load / decode / detect crashed
+     *     error:            string,   // present when skipped=true
      *   }
      *
      * Legacy behaviour preserved: `blob` is always a Blob, never null,
@@ -370,7 +378,7 @@
             const err = 'tf/blazeface load failed: ' + (e?.message || e);
             console.warn('[PIIBlur] ' + err + ' — returning raw blob; server MUST run its own blur');
             _lastStats = { faces: 0, ms: 0, skipped: true };
-            return { blob: srcBlob, blurred: false, facesDetected: 0, skipped: true, error: err };
+            return { blob: srcBlob, blurred: false, facesDetected: 0, normalizedBoxes: [], skipped: true, error: err };
         }
 
         // Pipeline is disabled entirely if the backing libraries didn't load.
@@ -378,7 +386,7 @@
             const err = 'tf/blazeface not loaded';
             console.warn('[PIIBlur] ' + err + ' — returning raw blob; server MUST run its own blur');
             _lastStats = { faces: 0, ms: 0, skipped: true };
-            return { blob: srcBlob, blurred: false, facesDetected: 0, skipped: true, error: err };
+            return { blob: srcBlob, blurred: false, facesDetected: 0, normalizedBoxes: [], skipped: true, error: err };
         }
 
         let bitmap;
@@ -387,7 +395,7 @@
         } catch (e) {
             console.warn('[PIIBlur] decode failed, returning original:', e);
             _lastStats = { faces: 0, ms: 0, skipped: true };
-            return { blob: srcBlob, blurred: false, facesDetected: 0, skipped: true, error: 'decode failed: ' + (e && e.message || e) };
+            return { blob: srcBlob, blurred: false, facesDetected: 0, normalizedBoxes: [], skipped: true, error: 'decode failed: ' + (e && e.message || e) };
         }
 
         // BUGFIX May 2026 (operator-reported, blur cross-contamination
@@ -424,14 +432,34 @@
             } catch (e) {
                 console.warn('[PIIBlur] detect failed, returning original:', e);
                 _lastStats = { faces: 0, ms: Math.round(performance.now() - t0), skipped: true };
-                return { blob: srcBlob, blurred: false, facesDetected: 0, skipped: true, error: 'detect failed: ' + (e && e.message || e) };
+                return { blob: srcBlob, blurred: false, facesDetected: 0, normalizedBoxes: [], skipped: true, error: 'detect failed: ' + (e && e.message || e) };
             }
+
+            // B-C: derive normalized box coords (0.0–1.0 of W/H) once,
+            // reuse on every return path below. The pixel-coord boxes
+            // (in `faces`) drive the local paint; the normalized boxes
+            // ship to the server.
+            const _imgW = bitmap.width;
+            const _imgH = bitmap.height;
+            const normalizedBoxes = faces.map((f) => ({
+                x: f.x / _imgW,
+                y: f.y / _imgH,
+                w: f.w / _imgW,
+                h: f.h / _imgH,
+            })).filter((b) =>
+                // Drop any box that scales out of [0, 1] (defensive —
+                // shouldn't happen given _detectFaces clamps, but the
+                // server's denormalizer will drop these too).
+                b.x >= 0 && b.y >= 0
+                && b.x + b.w <= 1.0001
+                && b.y + b.h <= 1.0001
+            );
 
             if (faces.length === 0) {
                 _lastStats = { faces: 0, ms: Math.round(performance.now() - t0), skipped: false };
                 // No faces detected — pipeline ran successfully, just had
                 // nothing to redact. Safe for server to skip its face pass.
-                return { blob: srcBlob, blurred: true, facesDetected: 0, skipped: false };
+                return { blob: srcBlob, blurred: true, facesDetected: 0, normalizedBoxes: [], skipped: false };
             }
 
             // : yield to the event loop before the heavy paint pass so
@@ -466,13 +494,15 @@
                     skipped: false
                 };
                 console.log(`[PIIBlur] blurred ${faces.length} face(s) in ${_lastStats.ms}ms`);
-                return { blob: outBlob, blurred: true, facesDetected: faces.length, skipped: false };
+                return { blob: outBlob, blurred: true, facesDetected: faces.length, normalizedBoxes, skipped: false };
             } catch (e) {
                 // Paint / canvas / toBlob crash — faces WERE detected but not
-                // redacted. Server MUST run its own blur on this one.
+                // redacted. Server MUST run its own blur on this one. We
+                // STILL emit the normalizedBoxes so the server can use them
+                // as detection hints (faces we saw but couldn't paint).
                 console.warn('[PIIBlur] paint failed, returning original:', e);
                 _lastStats = { faces: faces.length, ms: Math.round(performance.now() - t0), skipped: true };
-                return { blob: srcBlob, blurred: false, facesDetected: faces.length, skipped: true, error: 'paint failed: ' + (e && e.message || e) };
+                return { blob: srcBlob, blurred: false, facesDetected: faces.length, normalizedBoxes, skipped: true, error: 'paint failed: ' + (e && e.message || e) };
             }
         } finally {
             // Layer-2 backstop: any code path above that didn't reach

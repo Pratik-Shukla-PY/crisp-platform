@@ -232,6 +232,10 @@ def test_0005_adds_pii_blur_status_column_and_backfills():
             # 0034 — K.6.b AI retry queue table.
             conn.execute(text("DROP INDEX IF EXISTS ix_ai_retry_queue_next_attempt_at"))
             conn.execute(text("DROP TABLE IF EXISTS ai_retry_queue CASCADE"))
+            # 0038 — B-C client_face_boxes_normalized JSON column on media.
+            # 0037 widens pii_blur_status (ALTER COLUMN, idempotent-ish
+            # under same-width — re-runs harmlessly).
+            conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS client_face_boxes_normalized"))
             # 0035 — Phase L resolution_tier enum cleanup. Adds SMALL value
             # if needed, then backfills LOW→SMALL / HIGH→ORIGINAL via
             # `UPDATE media WHERE resolution_tier = 'LOW'`. That UPDATE
@@ -369,6 +373,8 @@ def test_legacy_db_is_upgraded_without_data_loss():
             # 0034 — K.6.b AI retry queue table.
             conn.execute(text("DROP INDEX IF EXISTS ix_ai_retry_queue_next_attempt_at"))
             conn.execute(text("DROP TABLE IF EXISTS ai_retry_queue CASCADE"))
+            # 0038 — B-C client_face_boxes_normalized JSON column on media.
+            conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS client_face_boxes_normalized"))
             # 0035 / 0036 — Phase L resolution_tier cleanup. Re-add LOW
             # + HIGH so 0035's `UPDATE … WHERE resolution_tier = 'LOW'`
             # backfill has valid enum values to reference (after

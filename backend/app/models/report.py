@@ -536,6 +536,15 @@ class Media(Base):
     # pass is then skipped to avoid a second lossy re-encode on
     # already-redacted pixels. Defaults false for legacy clients.
     client_blur_applied = Column(Boolean, default=False, nullable=False)
+    # B-C (May 2026, alembic 0038): client-side BlazeFace box hints.
+    # JSON array of {x, y, w, h} in [0.0, 1.0] normalized coords.
+    # The PWA's pii-blur worker emits the box set it used at capture
+    # time; ships them via X-Client-Face-Boxes header on chunk uploads.
+    # The server's blur worker (_run_server_pii_blur) reads this and
+    # computes UNION with its own MediaPipe pass — privacy ratchets
+    # forward only. NULL for non-PWA channels and legacy uploads;
+    # the server falls back to MediaPipe-only detection in that case.
+    client_face_boxes_normalized = Column(JSON, nullable=True)
     # server-side PII blur outcome. Legacy rows are NULL.
     # Canonical values (May 2026, Batch B-A — alembic 0037):
     #   pending                  — assembly completed; blur submitted

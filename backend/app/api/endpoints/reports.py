@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 import tempfile
 import time
@@ -682,15 +683,38 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
                        # values + 'not_needed' for audio, handled elsewhere).
     db = None
     try:
-        from app.services.pii_blur import blur_pii
+        from app.services.pii_blur import blur_pii, blur_pii_with_hints
         from app.db.session import SessionLocal
+
+        # B-C (May 2026, alembic 0038) — pick up client-supplied face
+        # box hints (PWA's BlazeFace pass). If present, the union of
+        # client + server boxes is blurred; if absent, server-only
+        # MediaPipe behaviour is preserved (back-compat with non-PWA
+        # channels + pre-B-C uploads).
+        _read_db = SessionLocal()
+        client_hints = None
+        try:
+            _row = _read_db.query(Media).filter(Media.id == media_id).first()
+            if _row:
+                client_hints = getattr(_row, 'client_face_boxes_normalized', None)
+        finally:
+            try: _read_db.close()
+            except Exception: pass
 
         # Stage bytes from storage into a /tmp/ tempfile for the
         # filesystem-based cv2.imread inside blur_pii. The tempfile
         # is auto-deleted when the context exits — EC2's persistent
         # disk stays empty regardless of upload volume.
         with _stage_from_storage(db_url, filename) as tmp_path:
-            pii_result = blur_pii(tmp_path)
+            if client_hints:
+                pii_result = blur_pii_with_hints(tmp_path, client_hints)
+                logger.info(
+                    f"PII blur with hints for {filename}: "
+                    f"client_box_count={pii_result.get('client_box_count', 0)}, "
+                    f"union_box_count={pii_result.get('union_box_count', 0)}"
+                )
+            else:
+                pii_result = blur_pii(tmp_path)
             if pii_result.get('ran'):
                 if pii_result.get('blurred'):
                     outcome = 'complete_with_redactions'
@@ -3675,6 +3699,45 @@ async def attach_media_chunk_bin(
     if photo_group == "":
         photo_group = None
 
+    # B-C (May 2026, alembic 0038) — client-supplied normalized face
+    # boxes. PWA's BlazeFace pass at capture time emits a list of
+    # {x, y, w, h} in [0.0, 1.0] coords; ships them on every chunk
+    # upload via the X-Client-Face-Boxes header (same value on all
+    # chunks for one media row). Server-side blur worker takes the
+    # union with its own MediaPipe detection — privacy ratchets
+    # forward only.
+    #
+    # Parse defensively: malformed JSON, oversized payloads, or
+    # entries with invalid coord ranges are silently dropped. Worst-
+    # case the server falls back to MediaPipe-only behaviour
+    # (legacy / non-PWA contract). Never raises 4xx on a bogus
+    # client hint.
+    client_face_boxes: Optional[list] = None
+    _hdr = request.headers.get("X-Client-Face-Boxes")
+    if _hdr:
+        # Guard rail on header size — a malicious client shouldn't
+        # be able to ship MB of JSON in this header. 8 KB is huge
+        # for the realistic case (~20 boxes × ~50 bytes each).
+        if len(_hdr) > 8192:
+            logger.warning(
+                f"[chunk-bin] X-Client-Face-Boxes header too large "
+                f"({len(_hdr)} bytes) from media={media_id[:8]}; ignoring."
+            )
+        else:
+            try:
+                _parsed = json.loads(_hdr)
+                if isinstance(_parsed, list):
+                    # Light shape-check on each entry. We don't enforce
+                    # ranges here; blur_pii_with_hints's
+                    # _denormalize_boxes handles that.
+                    if all(isinstance(b, dict) for b in _parsed) and len(_parsed) <= 50:
+                        client_face_boxes = _parsed
+            except (json.JSONDecodeError, ValueError) as _exc:
+                logger.warning(
+                    f"[chunk-bin] X-Client-Face-Boxes malformed JSON "
+                    f"({_exc}) from media={media_id[:8]}; ignoring."
+                )
+
     # ── Find-or-create Media row. Mirrors the legacy endpoint exactly,
     #    including K.1.b's race-safe wrapper around the create path.
     from sqlalchemy.exc import IntegrityError as _MediaBinIntegrityError
@@ -3696,6 +3759,9 @@ async def attach_media_chunk_bin(
                 completion_pct=0.0,
                 assembly_status='pending',
                 client_blur_applied=blur_flag,
+                # B-C: optional client face-box hints. May be None
+                # (non-PWA / legacy); server blur worker handles both.
+                client_face_boxes_normalized=client_face_boxes,
                 # Phase C.1 — persist the PWA-computed whole-asset checksum on
                 # creation. Only chunk 0 carries this field; later chunks pass
                 # None and `seq_num != 0` short-circuits the assignment below.
@@ -3755,6 +3821,14 @@ async def attach_media_chunk_bin(
         if blur_flag and not media.client_blur_applied:
             # Late-arriving blur flag (same upgrade path as the legacy endpoint).
             media.client_blur_applied = True
+        # B-C: late-arriving face-box hints. If the row was created
+        # without boxes (e.g. chunk 0 carried no header) but a later
+        # chunk does have them, stamp them now. Don't overwrite an
+        # existing non-empty value (the first one is canonical — the
+        # PWA emits the same coords on every chunk for the same
+        # media_id).
+        if client_face_boxes and not media.client_face_boxes_normalized:
+            media.client_face_boxes_normalized = client_face_boxes
         # Phase C.1 — late-arriving full-asset checksum. If chunk 0 was lost
         # or re-sent after an intermediate chunk landed first, accept the
         # value when the row doesn't already carry one. Don't overwrite an

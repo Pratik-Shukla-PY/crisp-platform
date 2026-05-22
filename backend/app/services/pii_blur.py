@@ -270,6 +270,232 @@ PII_PATTERNS = [
 ]
 
 
+def _denormalize_boxes(
+    client_boxes_normalized: list, img_w: int, img_h: int
+) -> list:
+    """Convert normalized [0.0–1.0] client boxes to pixel coords.
+
+    Input: ``[{"x": 0.42, "y": 0.18, "w": 0.15, "h": 0.20}, ...]``
+    Output: ``[(x1, y1, x2, y2), ...]`` in pixel coords clamped to
+    the image bounds. Malformed entries (missing keys, out-of-range
+    values, non-numeric) are silently dropped — we never want a
+    bogus client hint to crash the blur worker.
+    """
+    result = []
+    for b in (client_boxes_normalized or []):
+        try:
+            x = float(b["x"])
+            y = float(b["y"])
+            w = float(b["w"])
+            h = float(b["h"])
+            # Reject out-of-range or degenerate.
+            if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+                continue
+            if not (0.0 < w <= 1.0 and 0.0 < h <= 1.0):
+                continue
+            x1 = max(0, int(x * img_w))
+            y1 = max(0, int(y * img_h))
+            x2 = min(img_w, int((x + w) * img_w))
+            y2 = min(img_h, int((y + h) * img_h))
+            if x2 > x1 and y2 > y1:
+                result.append((x1, y1, x2, y2))
+        except (KeyError, ValueError, TypeError):
+            continue
+    return result
+
+
+def _box_iou(a: tuple, b: tuple) -> float:
+    """IoU between two (x1, y1, x2, y2) boxes."""
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1 = max(ax1, bx1)
+    iy1 = max(ay1, by1)
+    ix2 = min(ax2, bx2)
+    iy2 = min(ay2, by2)
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    inter = (ix2 - ix1) * (iy2 - iy1)
+    area_a = (ax2 - ax1) * (ay2 - ay1)
+    area_b = (bx2 - bx1) * (by2 - by1)
+    union = area_a + area_b - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _union_boxes(
+    client_boxes: list, server_boxes: list, iou_threshold: float = 0.4
+) -> list:
+    """Merge two box sets via IoU dedup. Returns the UNION — every
+    distinct region either detector saw is kept. Boxes that overlap
+    (IoU > threshold) collapse into the larger of the two (the larger
+    bounds the union of the two regions, which is the safe redaction
+    choice — privacy ratchets forward only)."""
+    all_boxes = list(client_boxes) + list(server_boxes)
+    # Sort by area descending so the larger box wins in dedup loops.
+    all_boxes.sort(key=lambda b: -((b[2] - b[0]) * (b[3] - b[1])))
+    kept = []
+    for box in all_boxes:
+        # Drop if it overlaps something we already kept.
+        is_dup = False
+        for k in kept:
+            if _box_iou(box, k) > iou_threshold:
+                is_dup = True
+                break
+        if not is_dup:
+            kept.append(box)
+    return kept
+
+
+def blur_pii_with_hints(
+    image_path: str, client_boxes_normalized: list = None
+) -> dict:
+    """B-C — blur with optional client-supplied face-box hints.
+
+    Wrapper around ``blur_pii`` that takes the union of the server's
+    MediaPipe detection + the client's BlazeFace hints before
+    applying blur. The two detectors have different recall profiles
+    (BlazeFace at conf 0.5 vs MediaPipe at 0.2 with multi-scale tiles),
+    so combining their box sets catches faces either model alone
+    would miss.
+
+    Args:
+      image_path: filesystem path to the image to blur in place.
+      client_boxes_normalized: list of {x, y, w, h} dicts in
+        [0.0, 1.0] coords. May be None (legacy / non-PWA uploads) —
+        falls back to MediaPipe-only behaviour.
+
+    Returns: same shape as ``blur_pii``, with two extra fields:
+      * ``client_box_count``: how many hints the client supplied.
+      * ``union_box_count``: how many boxes ended up in the final
+        union (client + server, deduped via IoU).
+
+    Privacy invariant: the final blur applies on the UNION. Never
+    on the intersection. Never with client boxes overriding server
+    boxes. The client is a HINT-PROVIDER, not the authoritative
+    detector — the server-side MediaPipe pass always runs.
+    """
+    # If no client hints, just defer to plain blur_pii.
+    if not client_boxes_normalized:
+        result = blur_pii(image_path)
+        result["client_box_count"] = 0
+        result["union_box_count"] = result.get("faces", 0)
+        return result
+
+    # We need to KNOW the image dimensions before we can scale the
+    # normalized boxes. blur_pii reads the image inside; we need a
+    # peek first. cv2.imread is the same call blur_pii makes, so
+    # this is one extra decode per blur (cheap on JPEG).
+    if not os.path.exists(image_path):
+        return {
+            "faces": 0, "pii_texts": 0, "blurred": False, "clean": False,
+            "error": "File not found", "ran": False,
+            "backends": {"face_detector": False, "ocr_reader": False},
+            "client_box_count": len(client_boxes_normalized or []),
+            "union_box_count": 0,
+        }
+    img = cv2.imread(image_path)
+    if img is None:
+        return {
+            "faces": 0, "pii_texts": 0, "blurred": False, "clean": False,
+            "error": "Could not decode image", "ran": False,
+            "backends": {"face_detector": False, "ocr_reader": False},
+            "client_box_count": len(client_boxes_normalized or []),
+            "union_box_count": 0,
+        }
+    h, w = img.shape[:2]
+
+    # Convert client hints to pixel coords. Malformed entries get
+    # silently dropped.
+    client_pixel_boxes = _denormalize_boxes(client_boxes_normalized, w, h)
+
+    # If we have client hints AND server has at least face_detector,
+    # the standard blur_pii call's MediaPipe pass will produce the
+    # server's box set. We then union with client_pixel_boxes and
+    # apply the additional blur. Approach: call blur_pii first (it
+    # blurs server-detected regions), then apply ADDITIONAL oval
+    # blur to any client_pixel_boxes that DIDN'T overlap a server
+    # box (i.e. faces only the client saw).
+    server_result = blur_pii(image_path)
+
+    # If blur_pii couldn't run (backends unavailable AND we lack
+    # MediaPipe ourselves), just apply client-supplied boxes
+    # directly. This is the failure-mode fallback that ensures
+    # client-detected faces still get blurred even when server-side
+    # MediaPipe is broken.
+    if not server_result.get("ran") and client_pixel_boxes:
+        # Re-read the image (blur_pii may have left it untouched).
+        img = cv2.imread(image_path)
+        if img is None:
+            server_result["client_box_count"] = len(client_pixel_boxes)
+            server_result["union_box_count"] = 0
+            return server_result
+        # Apply oval blur to each client box (same compositing as
+        # the main blur_pii path).
+        for (x1, y1, x2, y2) in client_pixel_boxes:
+            _apply_oval_blur_inplace(img, x1, y1, x2, y2)
+        cv2.imwrite(image_path, img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        server_result["blurred"] = True
+        server_result["clean"] = False
+        server_result["faces"] = len(client_pixel_boxes)
+        server_result["client_box_count"] = len(client_pixel_boxes)
+        server_result["union_box_count"] = len(client_pixel_boxes)
+        # Mark ran=True since SOMETHING ran (the client hints did).
+        server_result["ran"] = True
+        return server_result
+
+    # Server's MediaPipe pass ran. We can't easily reconstruct its
+    # box set post-hoc (blur_pii doesn't return them), but we can
+    # detect whether server already covered each client hint.
+    # Simplest correct behaviour: re-run a quick second pass that
+    # adds blur on each client box, EVEN if server already did
+    # (idempotent — re-blurring already-blurred pixels just makes
+    # them more blurred, never less). The trade-off is one extra
+    # encode round-trip; the upside is provable union semantics
+    # without serializing box sets across calls.
+    if client_pixel_boxes:
+        img = cv2.imread(image_path)
+        if img is not None:
+            for (x1, y1, x2, y2) in client_pixel_boxes:
+                _apply_oval_blur_inplace(img, x1, y1, x2, y2)
+            cv2.imwrite(image_path, img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            # Track that we did re-encode (clean -> not clean if
+            # client had boxes we hadn't blurred yet).
+            if server_result.get("clean"):
+                server_result["clean"] = False
+                server_result["blurred"] = True
+            # The union count is a rough estimate: server faces +
+            # client boxes - estimated overlap. Without recomputing
+            # server boxes we approximate as server + client.
+            server_result["faces"] = (
+                (server_result.get("faces") or 0) + len(client_pixel_boxes)
+            )
+
+    server_result["client_box_count"] = len(client_pixel_boxes)
+    server_result["union_box_count"] = server_result.get("faces", 0)
+    return server_result
+
+
+def _apply_oval_blur_inplace(img, x1: int, y1: int, x2: int, y2: int) -> None:
+    """Apply the same oval-shaped Gaussian blur composite to img[y1:y2, x1:x2]
+    that blur_pii uses on its detected faces. In-place mutation.
+
+    Extracted as a helper for blur_pii_with_hints' fallback path (where
+    we need to blur client hints without re-running MediaPipe)."""
+    rw, rh = x2 - x1, y2 - y1
+    if rw <= 0 or rh <= 0:
+        return
+    roi = img[y1:y2, x1:x2]
+    face_dim = max(rw, rh)
+    ksize = max(25, min(199, (face_dim // 6) * 2 + 1))
+    sigma = max(15, ksize // 3)
+    blurred = cv2.GaussianBlur(roi, (ksize, ksize), sigma)
+    mask = np.zeros((rh, rw), dtype=np.uint8)
+    cv2.ellipse(mask, (rw // 2, rh // 2), (rw // 2, rh // 2), 0, 0, 360, 255, -1)
+    feather = max(21, min(101, (face_dim // 20) * 2 + 1))
+    mask = cv2.GaussianBlur(mask, (feather, feather), feather // 3)
+    mask_3ch = cv2.merge([mask, mask, mask]).astype(np.float32) / 255.0
+    img[y1:y2, x1:x2] = (blurred * mask_3ch + roi * (1 - mask_3ch)).astype(np.uint8)
+
+
 def blur_pii(image_path: str) -> dict:
     """
     Detect faces (MediaPipe) + PII text (easyocr) and conditionally
