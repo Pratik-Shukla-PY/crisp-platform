@@ -27,11 +27,14 @@
 .ddp-lang-switch { display: flex; gap: 2px; background: rgba(0,0,0,0.2); border-radius: 14px; padding: 3px 4px; margin-left: auto; }
 .ddp-lang-btn { background: none; border: none; color: rgba(255,255,255,0.5); padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; cursor: pointer; transition: 0.15s; }
 .ddp-lang-btn.active { background: rgba(255,255,255,0.15); color: #fff; }
-@media (prefers-color-scheme: light) {
-    .ddp-lang-switch { background: rgba(0,0,0,0.06); }
-    .ddp-lang-btn { color: rgba(0,0,0,0.4); }
-    .ddp-lang-btn.active { background: rgba(0,0,0,0.08); color: #1e293b; }
-}
+/* AUDIT 2026-05-23 — removed `@media (prefers-color-scheme: light)`
+   override block here. The codebase is dark-by-design per the May 2026
+   palette rewrite (see :root comment below). The light-theme rules
+   only ever applied when a user on a light-mode OS opened the delete-
+   data panel — but every other surface was always dark, so the panel
+   alone shifting to light was visually inconsistent. Stale path
+   deleted; light-mode users get the same dark panel as everyone else
+   (which has been the actual behaviour everywhere else for months). */
 .ddp-close { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); font-size: 16px; position: relative; z-index: 3; }
 .ddp-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .ddp-item { display: flex; align-items: center; gap: 10px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
@@ -10094,9 +10097,13 @@ body.tier-t4 .home-impact {
 }
 /* Upcoming channels — muted grey, no dot. The opacity is on the
    icon glyph only so the surrounding strip background stays
-   constant + the icons read as a balanced row. */
+   constant + the icons read as a balanced row.
+   AUDIT 2026-05-23 — bumped 0.34 → 0.55 so the Android/iOS install
+   tiles read as "secondary affordance" rather than "broken icon".
+   The full channels sheet (tap to open) clarifies they're install
+   targets, not active reporting channels. */
 .home-stage .hcs-icon--soon {
-    color: rgba(255, 255, 255, 0.34);
+    color: rgba(255, 255, 255, 0.55);
 }
 
 /* Slightly more headroom on tall viewports — the icons can grow
