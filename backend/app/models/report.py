@@ -646,6 +646,14 @@ class Media(Base):
     # value, preserving back-compat. See migration 0041.
     upload_generation = Column(Integer, nullable=False, server_default="1", default=1)
 
+    # L3 (May 2026) — post-gate accepted BlazeFace box list in normalized
+    # [0,1] coordinates. Persisted by the assembly worker after L1+L2+L4
+    # gates pass and blur is applied. Used by the cross-tier consistency
+    # reconciler to spot resolution-dependent false positives (boxes that
+    # only appear at one of SMALL/MEDIUM/ORIGINAL). See migration 0042
+    # and app/services/pii_blur_l3.py for the consensus algorithm.
+    final_face_boxes_normalized = Column(JSON, nullable=True)
+
     report = relationship("Report", back_populates="media")
     chunks = relationship("MediaChunk", back_populates="media", cascade="all, delete-orphan")
 
