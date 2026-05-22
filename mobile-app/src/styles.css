@@ -11657,18 +11657,14 @@ body { background-color: #10284a; }
     color: var(--text, #f1f5f9);
 }
 .home-stage .home-nearby-empty-body {
-    /* May 2026 (operator preference) — was 12px / 500 / dim-white. The
-       operator's screenshot showed the message in a frosted card that
-       looked like a stray empty tile. New treatment is plain inline:
-       no tile, no box (we removed the .home-nearby-list wrapper for
-       the empty path in nearby.js _renderInto). Italic + bold + light
-       yellow so the message reads as a soft notice — "we checked, here
-       is what we found" — rather than a chrome element. Light-yellow
-       picked from the existing palette via --warn-soft fallback. */
-    font-size: 13px;
-    font-style: italic;
-    font-weight: 700;
-    color: #fde68a;
+    /* AUDIT 2026-05-23 — was light-yellow (#fde68a) italic which read
+       as a warning ("uh oh") for what is normally a neutral state
+       ("nothing nearby, this is fine"). Switched to --text-dim
+       (#94a3b8, 4.89:1) and dropped italic — italic reduces low-
+       literacy readability. Same copy, calmer affect. */
+    font-size: var(--fz-sm);
+    font-weight: 600;
+    color: var(--text-dim);
 }
 
 /* "Last seen X min ago" caption — shown when serving stale cache. */
