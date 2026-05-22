@@ -9619,9 +9619,18 @@ body.tier-t4 .home-impact {
     letter-spacing: 0.01em;
     color: rgba(255, 255, 255, 0.62);
     max-width: 100%;
+    /* AUDIT 2026-05-23 — was single-line nowrap + ellipsis which cut
+       FR/RU/UR/JA onboarding mid-word ("Soumettez votre premier
+       rappo…"). Allow up to 2 lines so the full hint shows for every
+       supported locale. EN's "Submit your first report to level up"
+       still fits on one line; longer translations wrap cleanly. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 @media (min-height: 740px) {
     .home-stage .home-badge-chip.home-badge-chip--hero {
