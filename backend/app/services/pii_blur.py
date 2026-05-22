@@ -272,21 +272,39 @@ PII_PATTERNS = [
 
 def blur_pii(image_path: str) -> dict:
     """
-    Detect faces (MediaPipe) + PII text (easyocr) and blur.
-    Original file OVERWRITTEN — PII never stored.
+    Detect faces (MediaPipe) + PII text (easyocr) and conditionally
+    blur. Original file is OVERWRITTEN ONLY if at least one detection
+    landed; clean images pass through byte-for-byte unchanged.
 
-    Apr 2026 — now reports which backends were available + whether the
-    blur pipeline actually ran end-to-end, so the caller (the assembly
-    worker that sets `Media.pii_blur_status`) can distinguish:
-      * ``ran=True, blurred=True``   — something was redacted.
-      * ``ran=True, blurred=False``  — pipeline ran; image was clean.
-      * ``ran=False, error=...``     — backends unavailable; file NOT
-                                       processed; dashboard MUST flag.
+    Result vocabulary (May 2026, Batch B-B):
+      * ``ran=True,  blurred=True,  clean=False`` — at least one face
+        or PII-text region detected; image OVERWRITTEN with the blurred
+        bytes (JPEG re-encode at q=85).
+      * ``ran=True,  blurred=False, clean=True``  — pipeline ran end-
+        to-end and found NOTHING. ``cv2.imwrite`` is NOT called; the
+        file on disk is bit-identical to the input. Important for the
+        70-80 % of crisis photos that legitimately have no PII —
+        operator gets the full original JPEG quality, not a
+        re-compressed copy.
+      * ``ran=False, error=...``                   — backends were
+        unavailable (MediaPipe + easyocr both missing); file NOT
+        processed; dashboard MUST flag the row.
+
+    The `clean` field is the explicit signal callers should branch on
+    when deciding whether to skip a disk read-back (saves one round-
+    trip on every clean image). `blurred` is the legacy field; it
+    equals `not clean` when `ran=True`, but the explicit `clean`
+    avoids the negation logic at every caller.
     """
     result = {
         "faces": 0,
         "pii_texts": 0,
         "blurred": False,
+        # B-B (May 2026) — explicit "no detections, file unchanged"
+        # signal. Mirrors the inverse of `blurred` when `ran=True`;
+        # stays False when `ran=False` (we can't claim cleanliness if
+        # we never inspected).
+        "clean": False,
         "error": None,
         "ran": False,
         "backends": {
@@ -528,6 +546,19 @@ def blur_pii(image_path: str) -> dict:
             result["blurred"] = True
             logger.info(f"PII blurred [{os.path.basename(image_path)}]: "
                         f"faces={result['faces']} text={result['pii_texts']}")
+        else:
+            # B-B (May 2026) — explicit clean path. The pipeline
+            # examined the image and found no PII to redact. We do
+            # NOT call cv2.imwrite here — the file on disk is bit-
+            # identical to the input. Callers can use `clean=True`
+            # to skip the read-back round-trip + save the original
+            # bytes directly to storage (preserves full JPEG quality
+            # for the 70-80 % of crisis photos that have no PII).
+            result["clean"] = True
+            logger.info(
+                f"PII blur ran on [{os.path.basename(image_path)}]: "
+                f"no PII detected — image unchanged (clean)"
+            )
 
     except Exception as e:
         result["error"] = str(e)

@@ -713,14 +713,29 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
                             f"Re-upload of blurred bytes failed for {filename}: {_re_e}. "
                             "Storage object may still hold unblurred bytes — re-run blur worker to fix."
                         )
-                else:
-                    # Blur ran, found nothing. Bytes left UNTOUCHED on
-                    # storage (B-B will guarantee this with explicit
-                    # conditional save inside blur_pii; today blur_pii
-                    # only re-encodes when blurred=True, so this path
-                    # already preserves bytes).
+                elif pii_result.get('clean'):
+                    # B-B (May 2026) — explicit conditional-save path.
+                    # Pipeline ran end-to-end, found NO PII. blur_pii
+                    # did NOT call cv2.imwrite; the bytes on disk are
+                    # byte-identical to the assembled input. We skip
+                    # the re-upload entirely — storage still has the
+                    # original assembled bytes, full JPEG quality
+                    # preserved. Important for the 70-80 % of crisis
+                    # photos that legitimately have no PII.
                     outcome = 'complete_clean'
-                    logger.info(f"PII blur ran on {filename}: no PII detected (clean)")
+                    logger.info(
+                        f"PII blur ran on {filename}: no PII detected — "
+                        f"bytes unchanged (B-B conditional save)"
+                    )
+                else:
+                    # ran=True but neither blurred nor clean — defensive
+                    # fallback (shouldn't happen given blur_pii contract).
+                    outcome = 'complete_clean'
+                    logger.warning(
+                        f"PII blur ran on {filename} but neither blurred "
+                        f"nor clean flag set — defaulting to complete_clean. "
+                        f"Result: {pii_result!r}"
+                    )
             else:
                 # Backends unavailable — the storage object still holds
                 # the unblurred bytes. Treated as 'failed' under the new
@@ -2920,7 +2935,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             # (PR 2) — single-shot attach path. PII blur runs
             # via /tmp/ tempfile (filesystem-based cv2), then we
             # storage.save() the (possibly blurred) bytes.
-            final_data = file_data
+            final_data = file_data  # default: original bytes pass through
             # May 2026 (Batch B-A) — track PII blur outcome on the
             # Media row using the canonical 4-state vocabulary
             # (alembic 0037). Mirrors the chunked-assembly path's
@@ -2933,6 +2948,14 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             #                                 flags for manual review
             #   'not_needed'               — audio media (set below at
             #                                 row creation)
+            #
+            # Batch B-B (May 2026) — conditional save. blur_pii now
+            # returns explicit `clean=True` when the pipeline ran and
+            # found nothing. We branch on that field to skip the
+            # disk read-back (final_data already equals file_data) and
+            # preserve the input JPEG byte-for-byte. Only the
+            # redacted path needs to read the (re-encoded) bytes
+            # back from disk.
             pii_blur_outcome = 'not_needed'  # default for audio
             if ext in ('jpg', 'jpeg', 'png'):
                 pii_blur_outcome = 'failed'  # pessimistic default
@@ -2940,8 +2963,13 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                     from app.services.pii_blur import blur_pii
                     with _stage_bytes(filename, file_data) as tmp_path:
                         pii_result = blur_pii(tmp_path)
-                        with open(tmp_path, "rb") as _fh:
-                            final_data = _fh.read()
+                        # B-B: read back ONLY when blur actually re-encoded
+                        # the file (redactions case). On clean / failed /
+                        # backends-unavailable paths the tmp file is bit-
+                        # identical to file_data — no read needed.
+                        if pii_result.get('blurred'):
+                            with open(tmp_path, "rb") as _fh:
+                                final_data = _fh.read()
                     if pii_result.get('ran'):
                         if pii_result.get("blurred"):
                             pii_blur_outcome = 'complete_with_redactions'
@@ -2949,9 +2977,21 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                                 f"PII blurred in attached {filename}: "
                                 f"faces={pii_result['faces']} text={pii_result['pii_texts']}"
                             )
-                        else:
+                        elif pii_result.get("clean"):
                             pii_blur_outcome = 'complete_clean'
-                            logger.info(f"PII blur ran on attached {filename}: no PII detected (clean)")
+                            logger.info(
+                                f"PII blur ran on attached {filename}: "
+                                f"no PII detected — bytes unchanged (B-B conditional save)"
+                            )
+                        else:
+                            # ran=True but neither blurred nor clean —
+                            # shouldn't happen, defensive log.
+                            pii_blur_outcome = 'complete_clean'
+                            logger.warning(
+                                f"PII blur ran on attached {filename} but "
+                                f"neither blurred nor clean flag set — "
+                                f"defaulting to complete_clean. Result: {pii_result!r}"
+                            )
                     else:
                         # backends unavailable — pii_blur_outcome stays 'failed'.
                         # Pre-0037 this was 'skipped'; the new vocabulary
