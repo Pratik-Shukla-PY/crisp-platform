@@ -1184,7 +1184,25 @@
         // / with a subtle "tap me" cue.
         chip.classList.toggle('chip-unlocked', level === 'T3_CHANGEMAKER' || level === 'T4_LIFEKEEPER');
         _applyBodyTierClass(level);
-        chip.removeAttribute('hidden');
+        // AUDIT 2026-05-23 — retime gamification reveal.
+        // The "Scout · Submit your first report to level up" tier
+        // strip felt tone-mismatched to a disaster victim who hasn't
+        // submitted yet. Hide the chip on home until the user has at
+        // least 1 submitted report (lives > 0 OR a non-T1 tier OR a
+        // payload.progressLabelKey other than "submit first report").
+        // After their first submission the chip shows up as a positive
+        // reinforcement, which is when the gamification reads well.
+        // T3+ always shows because Badge Studio is a real affordance.
+        const isFirstTimer = (
+            level === 'T1_SCOUT' &&
+            (!Number.isFinite(lives) || lives === 0) &&
+            (!progressKey || progressKey === 'tier_progress_first_report')
+        );
+        if (isFirstTimer) {
+            chip.setAttribute('hidden', '');
+        } else {
+            chip.removeAttribute('hidden');
+        }
     }
     async function _renderBadgeChip() {
         const chip = document.getElementById('home-badge-chip');

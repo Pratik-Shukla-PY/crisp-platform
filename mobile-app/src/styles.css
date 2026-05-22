@@ -4983,9 +4983,13 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     /* AUDIT 2026-05-23 — softened from uppercase + 11.5 px micro-eyebrow
        to sentence-case --fz-sm. Sentence case is materially easier for
        low-literacy / presbyopic users; the section weight (bold + dim
-       color) still signals "label, not heading". */
+       color) still signals "label, not heading". `text-transform: none`
+       is explicit so the inline-CSS rule in index.html <head> (which
+       still sets uppercase for above-the-fold paint) is overridden
+       once the deferred stylesheet attaches. */
     font-size: var(--fz-sm);
     color: var(--muted, #94a3b8);
+    text-transform: none;
     letter-spacing: 0.02em;
     margin: 0 0 4px;
     font-weight: 700;
