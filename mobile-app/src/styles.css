@@ -2308,7 +2308,10 @@ details.mr-date-group[open] .mr-date-group-chevron {
 .hr-progress-track { height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden; margin-top:6px; }
 .hr-progress-fill { height:100%; background:linear-gradient(90deg,#09D1C7,#46DFB1); transition:width .25s; }
 
-.history-empty { padding:32px 16px; text-align:center; color:#64748b; }
+/* Empty-state copy used by _historyEmpty (My Reports + filter-empty).
+   Color was #64748b (--text-mute equivalent) — 2.43:1 on --bg, fails AA.
+   --text-dim is 4.89:1, passes. */
+.history-empty { padding:32px 16px; text-align:center; color:var(--text-dim); }
 .history-empty i { font-size:32px; opacity:0.4; display:block; margin-bottom:8px; }
 .history-empty p { font-size:13px; margin:0; }
 

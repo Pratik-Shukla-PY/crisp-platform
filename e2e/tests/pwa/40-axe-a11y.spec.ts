@@ -19,12 +19,28 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-const URLS = [
-    { name: 'pwa-home',            path: 'index.html',         flagsV4: false },
-    { name: 'pwa-home-v4',         path: 'index.html?ui=v4',   flagsV4: true },
-    { name: 'pwa-stage-v4-capture', path: 'index.html?ui=v4',   flagsV4: true,  goToStage: 'stage-v4-capture' },
-    { name: 'pwa-stage-v4-classify', path: 'index.html?ui=v4', flagsV4: true,  goToStage: 'stage-v4-classify' },
-    { name: 'pwa-stage-v4-review',  path: 'index.html?ui=v4',  flagsV4: true,  goToStage: 'stage-v4-review' },
+// Per-URL contrast budget. After the May 2026 contrast pass (Batch 1
+// of AUDIT-REPORT-2026-05-23), the disaster-victim primary flow (home
+// / capture / classify / review / history / settings) hits 0 axe
+// color-contrast violations. The only remaining failure is `report_id`
+// on stage-success (#94a3b8 on #234060 = 4.14:1 — 0.36 short of AA).
+// That gets a per-stage budget of 1 until the --text-dim regrade in
+// Batch 2 brings it over the line. Every other URL must stay at 0.
+const URLS: Array<{
+    name: string; path: string; flagsV4: boolean;
+    goToStage?: string; maxContrast?: number;
+}> = [
+    { name: 'pwa-home',              path: 'index.html',         flagsV4: false },
+    { name: 'pwa-home-v4',           path: 'index.html?ui=v4',   flagsV4: true  },
+    { name: 'pwa-stage-v4-capture',  path: 'index.html?ui=v4',   flagsV4: true,  goToStage: 'stage-v4-capture' },
+    { name: 'pwa-stage-v4-classify', path: 'index.html?ui=v4',   flagsV4: true,  goToStage: 'stage-v4-classify' },
+    // v4-review: building_select_title hint (#94a3b8 on #28405d = 4.13:1)
+    // sits 0.37 below AA. Resolved by the --text-dim regrade in Batch 2;
+    // budget-1 until then.
+    { name: 'pwa-stage-v4-review',   path: 'index.html?ui=v4',   flagsV4: true,  goToStage: 'stage-v4-review', maxContrast: 1 },
+    { name: 'pwa-stage-history',     path: 'index.html?ui=v4',   flagsV4: true,  goToStage: 'stage-history' },
+    { name: 'pwa-stage-settings',    path: 'index.html?ui=v4',   flagsV4: true,  goToStage: 'stage-settings' },
+    { name: 'pwa-stage-success',     path: 'index.html?ui=v4',   flagsV4: true,  goToStage: 'stage-success', maxContrast: 1 },
 ];
 
 // WCAG levels to enforce. WCAG2A is the bare minimum (UNDP requirement);
@@ -138,13 +154,21 @@ test.describe('Accessibility — color contrast (specifically — UNDP low-visio
                     selector: n.target.join(' '),
                     failureSummary: n.failureSummary,
                 }));
-            // Soft for now (low-text-contrast common in dark themes).
-            // Ratchet after a contrast pass.
-            expect.soft(
+            // Per-URL contrast budget. The default (0) is the post-Batch-1
+            // contrast pass commitment for every disaster-victim surface.
+            // Stages with known-deferred failures (stage-success report_id
+            // at 4.14:1, scheduled for Batch 2 --text-dim regrade) carry
+            // an explicit `maxContrast` budget on their URLS entry.
+            //
+            // Hard expect — soft tolerance let the original 6-violation
+            // Settings disaster ship. The audit ratcheted; the gate
+            // ratchets with it.
+            const budget = (url as any).maxContrast ?? 0;
+            expect(
                 failed.length,
-                `${failed.length} contrast failures on ${url.name}: ` +
-                    failed.slice(0, 3).map((f) => f.selector).join(' | '),
-            ).toBeLessThanOrEqual(20);
+                `${failed.length} contrast failures on ${url.name} (budget ${budget}): ` +
+                    failed.slice(0, 5).map((f) => f.selector).join(' | '),
+            ).toBeLessThanOrEqual(budget);
         });
     }
 });
