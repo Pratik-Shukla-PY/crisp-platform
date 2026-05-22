@@ -10403,11 +10403,15 @@ body.tier-t4 .home-impact {
     padding-top: 16px;
     margin-top: 12px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    /* v4 — STRICT single-row guarantee. Combined with each child's
-       white-space:nowrap, the wrapper refuses to break to 2 lines
-       even on narrow viewports — content will overflow rather than
-       wrap, which the inner sizing prevents below. */
-    flex-wrap: nowrap;
+    /* AUDIT 2026-05-23 — previously `flex-wrap: nowrap` with `overflow:
+       hidden` on the inner nav clipped "Open source" → "Open sou…" on
+       iPhone SE (375 px) and Russian "Помощь" → "Помо" even on wider
+       viewports. The truncated links HID UNDP-rubric trust signals
+       (Privacy / Help / Open source). Allowing wrap lets the device-ID
+       badge stack to a second row when needed, surfacing every link.
+       Single-row layout still preferred when content fits. */
+    flex-wrap: wrap;
+    row-gap: 8px;
 }
 /* v4 (May 2026, operator) — operator screenshot shows "Open source"
    wrapping to line 2 and the pill colliding. Root cause: the inner
@@ -10424,12 +10428,17 @@ body.tier-t4 .home-impact {
     margin: 0;
     padding: 0;
     border-top: 0;
-    gap: 6px;                   /* v4 — was 10, now 6 */
-    flex-wrap: nowrap;
+    gap: 6px;
+    /* AUDIT 2026-05-23 — was `overflow: hidden` + `flex-wrap: nowrap`
+       which clipped translated link labels. Allow inner wrapping so
+       every link stays visible; outer .home-footer-row also wraps
+       (device-ID pill stacks below if combined width exceeds the row).
+       Long-link locales (RU "Помощь", JA, multi-word EN) all stay
+       readable. */
+    flex-wrap: wrap;
     justify-content: flex-start;
     min-width: 0;
-    overflow: hidden;           /* v4 — defensive: clip rather than wrap */
-    flex: 0 1 auto;
+    flex: 1 1 auto;
 }
 .home-stage .home-section-bottom .home-footer-row .home-devid-footer {
     margin: 0;
