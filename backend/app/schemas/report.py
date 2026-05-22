@@ -93,7 +93,13 @@ class MediaChunkPayload(BaseModel):
 # API Request Payloads
 class ReportCreate(BaseModel):
     device_hash: str = Field(..., max_length=255)
-    client_report_id: Optional[str] = Field(None, max_length=64)
+    # client_report_id is a bare UUID-4 (36 chars) in every shipping
+    # client (PWA + RN: crypto.randomUUID / genUUID; bots: uuid.uuid4).
+    # The DB column is VARCHAR(36); the previous max_length=64 here let
+    # over-length payloads slip past Pydantic and surface as opaque 500s
+    # when Postgres rejected the INSERT (operator-reported May 2026).
+    # Aligning the schema with the column gives a clean 422 at the API.
+    client_report_id: Optional[str] = Field(None, max_length=36)
     source: SourceEnum = SourceEnum.APP
     severity: SeverityEnum = SeverityEnum.UNKNOWN
     infrastructure_type: InfraTypeEnum = InfraTypeEnum.OTHER
@@ -113,7 +119,9 @@ class ReportCreate(BaseModel):
 # Lightweight metadata-only payload (Stage 1 — tiny, instant)
 class ReportMetaCreate(BaseModel):
     device_hash: str = Field(..., max_length=255)
-    client_report_id: str = Field(..., max_length=64)
+    # See ReportCreate.client_report_id comment — match the DB's
+    # VARCHAR(36) so over-length values are rejected as 422, not 500.
+    client_report_id: str = Field(..., max_length=36)
     source: SourceEnum = SourceEnum.APP
     severity: SeverityEnum = SeverityEnum.UNKNOWN
     infrastructure_type: InfraTypeEnum = InfraTypeEnum.OTHER
