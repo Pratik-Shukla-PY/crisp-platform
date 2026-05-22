@@ -198,6 +198,22 @@ def _multiscale_face_detect(img, detector, mp_module):
             logger.debug("L4 skin-tone gate failed: %s — passing through", _e)
             return True
 
+    # L5 (May 2026, blur-audit) — rejection counter import. Lazy /
+    # best-effort so a missing observability stack (CI without
+    # prometheus_client) doesn't break the blur pipeline.
+    try:
+        from app.core.observability import blur_candidate_rejected_total as _bcrt
+    except Exception:
+        _bcrt = None
+
+    def _bump_reject(layer: str):
+        if _bcrt is None:
+            return
+        try:
+            _bcrt.labels(layer=layer, tier="UNKNOWN").inc()
+        except Exception:
+            pass
+
     def _detect_on_region(region_img, x_offset, y_offset):
         rgb = _cv2.cvtColor(region_img, _cv2.COLOR_BGR2RGB)
         mp_image = mp_module.Image(
@@ -208,6 +224,7 @@ def _multiscale_face_detect(img, detector, mp_module):
             bb = det.bounding_box
             # L2 — drop too-small candidates (FP-killer).
             if bb.width < min_dim_px or bb.height < min_dim_px:
+                _bump_reject("L2_min_size")
                 continue
             # L4 — skin-tone gate. Opt-in via env. Crop the candidate
             # box from the original region and check skin-tone fraction.
@@ -222,6 +239,7 @@ def _multiscale_face_detect(img, detector, mp_module):
                     candidate = region_img[y0:y1, x0:x1]
                     if not _is_skin_tone_dominant(candidate):
                         # Skip — likely FP (no skin-tone interior).
+                        _bump_reject("L4_skin_tone")
                         continue
             detections_xywh.append((
                 bb.origin_x + x_offset,
@@ -229,6 +247,11 @@ def _multiscale_face_detect(img, detector, mp_module):
                 bb.width,
                 bb.height,
             ))
+    # L1 rejection (sub-confidence-threshold) is handled inside MediaPipe
+    # itself before `dets.detections` even lists the candidate — so there
+    # is no in-line increment for L1. We log the configured threshold at
+    # detector-creation time so operators can correlate the counter
+    # absence with "L1 is doing its job silently".
 
     # Pass 1 — full image
     _detect_on_region(img, 0, 0)

@@ -348,6 +348,28 @@ disk_orphan_deleted_total = Counter(
     ["prefix"],
 )
 
+# L5 (May 2026, blur-audit) — face-detection rejection counter.
+# Increments each time a BlazeFace candidate box is rejected by the
+# L1+L2+L4 stack before NMS / blur application. Operators watch this
+# to:
+#   - Verify the false-positive killer is firing (counter > 0 on
+#     real-world traffic confirms FPs were being detected pre-fix)
+#   - Calibrate the thresholds against ground-truth: if recall drops
+#     after a tuning change, look for spikes here
+#   - Spot a misconfigured field deployment (e.g. CRISP_MIN_FACE_FRAC
+#     set too aggressively → mass rejections)
+#
+# Labels:
+#   - layer ∈ {L1_confidence, L2_min_size, L4_skin_tone}
+#   - tier  ∈ {SMALL, MEDIUM, ORIGINAL, UNKNOWN}
+blur_candidate_rejected_total = Counter(
+    "crisp_blur_candidate_rejected_total",
+    "BlazeFace candidate boxes rejected before blur application, "
+    "labelled by the gate layer that dropped them. Used by operators "
+    "to verify the L1+L2+L4 false-positive killers are firing.",
+    ["layer", "tier"],
+)
+
 # K.6.b — AI retry queue depth. Two gauges: total pending rows + a
 # breakdown by status (pending|in_progress|complete|terminal_failed)
 # so operators can see backlog trends without inspecting the DB.
