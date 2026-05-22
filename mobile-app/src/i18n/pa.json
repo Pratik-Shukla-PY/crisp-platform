@@ -502,9 +502,9 @@
   "v4_cap_voice_hint": "ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਟੈਪ। ਰੋਕਣ ਲਈ ਫਿਰ ਟੈਪ।",
   "v4_cap_text_placeholder": "ਕੀ ਹੋਇਆ ਉਹ ਕੁਝ ਸ਼ਬਦਾਂ ਵਿੱਚ ਵਰਣਨ ਕਰੋ...",
   "v4_stop": "ਰਿਕਾਰਡ ਰੋਕੋ",
-  "v4_substep_how_bad": "ਪੜਾਅ 2 — ਕਿੰਨਾ ਮਾੜਾ",
-  "v4_substep_what_hit": "ਪੜਾਅ 2 — ਕੀ ਪ੍ਰਭਾਵਿਤ",
-  "v4_substep_what_caused": "ਪੜਾਅ 2 — ਕਾਰਨ",
+  "v4_substep_how_bad": "ਕਿੰਨਾ ਮਾੜਾ",
+  "v4_substep_what_hit": "ਕੀ ਪ੍ਰਭਾਵਿਤ",
+  "v4_substep_what_caused": "ਕਾਰਨ",
   "v4_damage_minimal_sub": "ਤਰੇੜਾਂ, ਟੁੱਟੇ ਸ਼ੀਸ਼ੇ — ਇਮਾਰਤ ਅਜੇ ਸੁਰੱਖਿਅਤ",
   "v4_damage_partial_sub": "ਮੁਰੰਮਤ ਯੋਗ, ਸਾਵਧਾਨੀ ਨਾਲ ਵਰਤੋਂ",
   "v4_damage_complete_sub": "ਢਾਂਚਾਗਤ ਅਸੁਰੱਖਿਅਤ ਜਾਂ ਡਿੱਗੀ",
@@ -842,5 +842,6 @@
   "bs_stats_lives_saved": "ਜਾਨਾਂ ਬਚਾਈਆਂ",
   "mr_status_paused": "ਰੁਕਿਆ — ਨੈੱਟਵਰਕ ਦੀ ਉਡੀਕ",
   "mr_status_recovering": "ਮੁੜ ਪ੍ਰਾਪਤ ਕਰ ਰਿਹਾ…",
-  "mr_status_failed_permanent": "ਅੱਪਲੋਡ ਅਸਫਲ"
+  "mr_status_failed_permanent": "ਅੱਪਲੋਡ ਅਸਫਲ",
+  "settings_reader_mode": "ਰੀਡਰ ਮੋਡ — ਵੱਡਾ ਟੈਕਸਟ"
 }

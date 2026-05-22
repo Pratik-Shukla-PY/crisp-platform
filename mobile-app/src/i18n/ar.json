@@ -494,9 +494,9 @@
   "v4_cap_voice_hint": "اضغط للبدء. اضغط مرة أخرى للإيقاف.",
   "v4_cap_text_placeholder": "اكتب وصفًا قصيرًا لما حدث...",
   "v4_stop": "إيقاف التسجيل",
-  "v4_substep_how_bad": "الخطوة 2 — مدى الضرر",
-  "v4_substep_what_hit": "الخطوة 2 — ما الذي تأثر",
-  "v4_substep_what_caused": "الخطوة 2 — ما السبب",
+  "v4_substep_how_bad": "مدى الضرر",
+  "v4_substep_what_hit": "ما الذي تأثر",
+  "v4_substep_what_caused": "ما السبب",
   "v4_damage_minimal_sub": "تشققات، زجاج مكسور — المبنى آمن",
   "v4_damage_partial_sub": "يمكن إصلاحه، استخدمه بحذر",
   "v4_damage_complete_sub": "غير آمن إنشائيًا أو منهار",
@@ -835,5 +835,6 @@
   "bs_stats_lives_saved": "أرواحًا منقذة",
   "mr_status_paused": "متوقف مؤقتًا — في انتظار الشبكة",
   "mr_status_recovering": "جاري الاستعادة...",
-  "mr_status_failed_permanent": "فشل الرفع"
+  "mr_status_failed_permanent": "فشل الرفع",
+  "settings_reader_mode": "وضع القراءة — نص أكبر"
 }

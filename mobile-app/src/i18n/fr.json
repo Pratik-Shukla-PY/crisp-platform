@@ -505,9 +505,9 @@
   "v4_cap_voice_hint": "Appuyez pour démarrer. Réappuyez pour arrêter.",
   "v4_cap_text_placeholder": "Décrivez en quelques mots ce qui s'est passé...",
   "v4_stop": "Arrêter l'enregistrement",
-  "v4_substep_how_bad": "Étape 2 — Ampleur",
-  "v4_substep_what_hit": "Étape 2 — Ce qui a été touché",
-  "v4_substep_what_caused": "Étape 2 — Cause",
+  "v4_substep_how_bad": "Ampleur",
+  "v4_substep_what_hit": "Ce qui a été touché",
+  "v4_substep_what_caused": "Cause",
   "v4_damage_minimal_sub": "Fissures, verres cassés — le bâtiment reste sûr",
   "v4_damage_partial_sub": "Réparable, à utiliser avec précaution",
   "v4_damage_complete_sub": "Structurellement non sûr ou effondré",
@@ -846,5 +846,6 @@
   "bs_stats_lives_saved": "vies sauvées",
   "mr_status_paused": "En pause — en attente du réseau",
   "mr_status_recovering": "Récupération…",
-  "mr_status_failed_permanent": "Échec du téléchargement"
+  "mr_status_failed_permanent": "Échec du téléchargement",
+  "settings_reader_mode": "Mode Lecture — texte plus grand"
 }

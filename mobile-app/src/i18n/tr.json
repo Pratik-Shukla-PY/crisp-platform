@@ -504,9 +504,9 @@
   "v4_cap_voice_hint": "Başlatmak için dokun. Durdurmak için tekrar dokun.",
   "v4_cap_text_placeholder": "Ne olduğunu birkaç kelimeyle anlatın...",
   "v4_stop": "Kaydı durdur",
-  "v4_substep_how_bad": "Adım 2 — Ne kadar kötü",
-  "v4_substep_what_hit": "Adım 2 — Ne vuruldu",
-  "v4_substep_what_caused": "Adım 2 — Sebebi ne",
+  "v4_substep_how_bad": "Ne kadar kötü",
+  "v4_substep_what_hit": "Ne vuruldu",
+  "v4_substep_what_caused": "Sebebi ne",
   "v4_damage_minimal_sub": "Çatlaklar, kırık cam — bina hâlâ güvenli",
   "v4_damage_partial_sub": "Onarılabilir, dikkatle kullanın",
   "v4_damage_complete_sub": "Yapısal olarak güvensiz veya çökmüş",
@@ -845,5 +845,6 @@
   "bs_stats_lives_saved": "kurtarılan canlar",
   "mr_status_paused": "Duraklatıldı — ağ bekleniyor",
   "mr_status_recovering": "Kurtarılıyor…",
-  "mr_status_failed_permanent": "Yükleme başarısız"
+  "mr_status_failed_permanent": "Yükleme başarısız",
+  "settings_reader_mode": "Okuyucu Modu — daha büyük metin"
 }

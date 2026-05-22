@@ -499,9 +499,9 @@
   "v4_cap_voice_hint": "തുടങ്ങാൻ ടാപ്. വീണ്ടും ടാപ് ചെയ്ത് നിർത്തുക.",
   "v4_cap_text_placeholder": "എന്താണ് സംഭവിച്ചതെന്ന് ഏതാനും വാക്കുകളിൽ വിവരിക്കുക...",
   "v4_stop": "റെക്കോർഡിംഗ് നിർത്തുക",
-  "v4_substep_how_bad": "ഘട്ടം 2 — എത്ര മോശം",
-  "v4_substep_what_hit": "ഘട്ടം 2 — എന്താണ് നഷ്ടം",
-  "v4_substep_what_caused": "ഘട്ടം 2 — എന്താണ് കാരണം",
+  "v4_substep_how_bad": "എത്ര മോശം",
+  "v4_substep_what_hit": "എന്താണ് നഷ്ടം",
+  "v4_substep_what_caused": "എന്താണ് കാരണം",
   "v4_damage_minimal_sub": "വിള്ളലുകൾ, ഗ്ലാസ് പൊട്ടി — കെട്ടിടം ഇപ്പോഴും സുരക്ഷിതം",
   "v4_damage_partial_sub": "നന്നാക്കാം, ജാഗ്രതയോടെ ഉപയോഗിക്കാം",
   "v4_damage_complete_sub": "ഘടനാപരമായി അസുരക്ഷിതം അല്ലെങ്കിൽ പൂർണ്ണമായും തകർന്നു",
@@ -839,5 +839,6 @@
   "bs_stats_lives_saved": "ജീവനുകൾ രക്ഷിച്ചു",
   "mr_status_paused": "താൽക്കാലികമായി നിർത്തി — നെറ്റ്‌വർക്ക് കാത്തിരിക്കുന്നു",
   "mr_status_recovering": "പുനഃസ്ഥാപിക്കുന്നു…",
-  "mr_status_failed_permanent": "അപ്‌ലോഡ് പരാജയപ്പെട്ടു"
+  "mr_status_failed_permanent": "അപ്‌ലോഡ് പരാജയപ്പെട്ടു",
+  "settings_reader_mode": "റീഡർ മോഡ് — വലിയ ടെക്സ്റ്റ്"
 }

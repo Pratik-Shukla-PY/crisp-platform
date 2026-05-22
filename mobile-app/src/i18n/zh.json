@@ -498,9 +498,9 @@
   "v4_cap_voice_hint": "点按开始。再次点按停止。",
   "v4_cap_text_placeholder": "用几句话描述发生了什么...",
   "v4_stop": "停止录音",
-  "v4_substep_how_bad": "第 2 步 — 严重程度",
-  "v4_substep_what_hit": "第 2 步 — 哪里受影响",
-  "v4_substep_what_caused": "第 2 步 — 什么造成的",
+  "v4_substep_how_bad": "严重程度",
+  "v4_substep_what_hit": "哪里受影响",
+  "v4_substep_what_caused": "什么造成的",
   "v4_damage_minimal_sub": "裂缝、玻璃破损 — 建筑仍然安全",
   "v4_damage_partial_sub": "可修复，谨慎使用",
   "v4_damage_complete_sub": "结构不安全或已倒塌",
@@ -839,5 +839,6 @@
   "bs_stats_lives_saved": "挽救生命",
   "mr_status_paused": "已暂停 — 等待网络",
   "mr_status_recovering": "正在恢复…",
-  "mr_status_failed_permanent": "上传失败"
+  "mr_status_failed_permanent": "上传失败",
+  "settings_reader_mode": "阅读模式 — 更大文字"
 }

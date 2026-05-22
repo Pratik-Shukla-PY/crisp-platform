@@ -516,9 +516,9 @@
   "v4_cap_voice_hint": "Sentuh untuk mulai. Sentuh lagi untuk berhenti.",
   "v4_cap_text_placeholder": "Deskripsikan apa yang terjadi dalam beberapa kata...",
   "v4_stop": "Hentikan rekaman",
-  "v4_substep_how_bad": "Langkah 2 — Seberapa parah",
-  "v4_substep_what_hit": "Langkah 2 — Apa yang terkena",
-  "v4_substep_what_caused": "Langkah 2 — Apa penyebabnya",
+  "v4_substep_how_bad": "Seberapa parah",
+  "v4_substep_what_hit": "Apa yang terkena",
+  "v4_substep_what_caused": "Apa penyebabnya",
   "v4_damage_minimal_sub": "Retakan, kaca pecah — bangunan masih aman",
   "v4_damage_partial_sub": "Dapat diperbaiki, gunakan dengan hati-hati",
   "v4_damage_complete_sub": "Struktur tidak aman atau runtuh",
@@ -857,5 +857,6 @@
   "bs_stats_lives_saved": "jiwa diselamatkan",
   "mr_status_paused": "Dijeda — menunggu jaringan",
   "mr_status_recovering": "Memulihkan…",
-  "mr_status_failed_permanent": "Unggahan gagal"
+  "mr_status_failed_permanent": "Unggahan gagal",
+  "settings_reader_mode": "Mode Pembaca — teks lebih besar"
 }

@@ -482,9 +482,9 @@
   "v4_cap_voice_hint": "Tap to start. Tap again to stop.",
   "v4_cap_text_placeholder": "Describe what happened in a few words...",
   "v4_stop": "Stop recording",
-  "v4_substep_how_bad": "Step 2 — How bad",
-  "v4_substep_what_hit": "Step 2 — What was hit",
-  "v4_substep_what_caused": "Step 2 — What caused it",
+  "v4_substep_how_bad": "How bad",
+  "v4_substep_what_hit": "What was hit",
+  "v4_substep_what_caused": "What caused it",
   "v4_damage_minimal_sub": "Cracks, broken glass — building still safe",
   "v4_damage_partial_sub": "Repairable, use with caution",
   "v4_damage_complete_sub": "Structurally unsafe or collapsed",
@@ -820,5 +820,6 @@
   "bs_share_fallback": "I'm a CRISP {tier}. Report what you see.",
   "bs_char_locked_toast": "Reach {tier} to unlock this character.",
   "bs_stats_reports": "reports",
-  "bs_stats_lives_saved": "lives saved"
+  "bs_stats_lives_saved": "lives saved",
+  "settings_reader_mode": "Reader Mode — larger text"
 }

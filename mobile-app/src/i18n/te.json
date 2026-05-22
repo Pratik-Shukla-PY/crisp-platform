@@ -502,9 +502,9 @@
   "v4_cap_voice_hint": "ప్రారంభించడానికి నొక్కండి. ఆపడానికి మళ్ళీ నొక్కండి.",
   "v4_cap_text_placeholder": "ఏమి జరిగిందో కొన్ని పదాల్లో వివరించండి...",
   "v4_stop": "రికార్డింగ్ ఆపు",
-  "v4_substep_how_bad": "దశ 2 — ఎంత చెడ్డది",
-  "v4_substep_what_hit": "దశ 2 — ఏమి దెబ్బతిన్నది",
-  "v4_substep_what_caused": "దశ 2 — కారణం",
+  "v4_substep_how_bad": "ఎంత చెడ్డది",
+  "v4_substep_what_hit": "ఏమి దెబ్బతిన్నది",
+  "v4_substep_what_caused": "కారణం",
   "v4_damage_minimal_sub": "పగుళ్ళు, విరిగిన అద్దం — భవనం ఇంకా సురక్షితం",
   "v4_damage_partial_sub": "మరమ్మతు చేయవచ్చు, జాగ్రత్తగా ఉపయోగించండి",
   "v4_damage_complete_sub": "నిర్మాణాత్మకంగా అసురక్షితం లేదా కూలింది",
@@ -842,5 +842,6 @@
   "bs_stats_lives_saved": "ప్రాణాలు కాపాడబడ్డాయి",
   "mr_status_paused": "నిలిపివేయబడింది — నెట్‌వర్క్ కోసం వేచి",
   "mr_status_recovering": "తిరిగి పొందుతోంది…",
-  "mr_status_failed_permanent": "అప్‌లోడ్ విఫలమైంది"
+  "mr_status_failed_permanent": "అప్‌లోడ్ విఫలమైంది",
+  "settings_reader_mode": "రీడర్ మోడ్ — పెద్ద వచనం"
 }

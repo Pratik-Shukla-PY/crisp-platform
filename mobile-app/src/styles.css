@@ -4980,10 +4980,13 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 /* Section labels — "OR REPORT BY", "GET THE APP" dividers. */
 .home-section { margin-top: 4px; }
 .home-section-title {
-    font-size: 11.5px;
+    /* AUDIT 2026-05-23 — softened from uppercase + 11.5 px micro-eyebrow
+       to sentence-case --fz-sm. Sentence case is materially easier for
+       low-literacy / presbyopic users; the section weight (bold + dim
+       color) still signals "label, not heading". */
+    font-size: var(--fz-sm);
     color: var(--muted, #94a3b8);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.02em;
     margin: 0 0 4px;
     font-weight: 700;
     text-align: start;
@@ -10246,13 +10249,17 @@ body.tier-t4 .home-impact {
 }
 
 .v4-cap-tips-eyebrow {
+    /* AUDIT 2026-05-23 — was 10.5 px uppercase letter-spaced 0.12em
+       which reads as a typographical "eyebrow" but hurts low-literacy
+       + presbyopic users. Bumped to --fz-sm sentence-case (the i18n
+       string is already "Helpful tips") for an immediately readable
+       section heading. */
     display: block;
     margin: 0 0 10px;
-    font-size: 10.5px;
+    font-size: var(--fz-sm);
     font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: rgba(70, 223, 177, 0.88);
+    letter-spacing: 0.02em;
+    color: rgba(70, 223, 177, 0.95);
 }
 
 .v4-cap-tips-list {

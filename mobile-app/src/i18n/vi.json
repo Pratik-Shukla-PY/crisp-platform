@@ -504,9 +504,9 @@
   "v4_cap_voice_hint": "Chạm để bắt đầu. Chạm lại để dừng.",
   "v4_cap_text_placeholder": "Mô tả vài chữ chuyện gì đã xảy ra...",
   "v4_stop": "Dừng ghi",
-  "v4_substep_how_bad": "Bước 2 — Mức độ",
-  "v4_substep_what_hit": "Bước 2 — Cái gì bị trúng",
-  "v4_substep_what_caused": "Bước 2 — Nguyên nhân",
+  "v4_substep_how_bad": "Mức độ",
+  "v4_substep_what_hit": "Cái gì bị trúng",
+  "v4_substep_what_caused": "Nguyên nhân",
   "v4_damage_minimal_sub": "Nứt, kính vỡ — tòa nhà vẫn an toàn",
   "v4_damage_partial_sub": "Có thể sửa, dùng cẩn thận",
   "v4_damage_complete_sub": "Kết cấu không an toàn hoặc sập",
@@ -845,5 +845,6 @@
   "bs_stats_lives_saved": "mạng sống được cứu",
   "mr_status_paused": "Tạm dừng — đang chờ mạng",
   "mr_status_recovering": "Đang khôi phục…",
-  "mr_status_failed_permanent": "Tải lên thất bại"
+  "mr_status_failed_permanent": "Tải lên thất bại",
+  "settings_reader_mode": "Chế độ Đọc — văn bản lớn hơn"
 }

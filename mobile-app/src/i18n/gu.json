@@ -502,9 +502,9 @@
   "v4_cap_voice_hint": "શરૂ કરવા ટેપ. બંધ કરવા ફરી ટેપ.",
   "v4_cap_text_placeholder": "શું થયું તે થોડા શબ્દોમાં વર્ણવો...",
   "v4_stop": "રેકોર્ડ બંધ",
-  "v4_substep_how_bad": "પગલું 2 — કેટલું ખરાબ",
-  "v4_substep_what_hit": "પગલું 2 — શું પ્રભાવિત",
-  "v4_substep_what_caused": "પગલું 2 — કારણ",
+  "v4_substep_how_bad": "કેટલું ખરાબ",
+  "v4_substep_what_hit": "શું પ્રભાવિત",
+  "v4_substep_what_caused": "કારણ",
   "v4_damage_minimal_sub": "તિરાડ, તૂટેલો કાચ — ઈમારત હજુ સુરક્ષિત",
   "v4_damage_partial_sub": "મરામત શક્ય, સાવધાનીથી વાપરો",
   "v4_damage_complete_sub": "બાંધકામ અસુરક્ષિત અથવા તૂટ્યું",
@@ -842,5 +842,6 @@
   "bs_stats_lives_saved": "જીવ બચાવ્યા",
   "mr_status_paused": "થોભી — નેટવર્કની રાહ",
   "mr_status_recovering": "પુનઃપ્રાપ્ત…",
-  "mr_status_failed_permanent": "અપલોડ નિષ્ફળ"
+  "mr_status_failed_permanent": "અપલોડ નિષ્ફળ",
+  "settings_reader_mode": "રીડર મોડ — મોટું લખાણ"
 }

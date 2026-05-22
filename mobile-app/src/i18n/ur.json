@@ -502,9 +502,9 @@
   "v4_cap_voice_hint": "شروع کرنے کے لیے ٹیپ کریں۔ روکنے کے لیے دوبارہ ٹیپ کریں۔",
   "v4_cap_text_placeholder": "کچھ الفاظ میں بتائیں کیا ہوا...",
   "v4_stop": "ریکارڈنگ بند کریں",
-  "v4_substep_how_bad": "مرحلہ 2 — کتنا برا",
-  "v4_substep_what_hit": "مرحلہ 2 — کیا نقصان ہوا",
-  "v4_substep_what_caused": "مرحلہ 2 — وجہ",
+  "v4_substep_how_bad": "کتنا برا",
+  "v4_substep_what_hit": "کیا نقصان ہوا",
+  "v4_substep_what_caused": "وجہ",
   "v4_damage_minimal_sub": "دراڑیں، ٹوٹا شیشہ — عمارت اب بھی محفوظ",
   "v4_damage_partial_sub": "مرمت کے قابل، احتیاط سے استعمال کریں",
   "v4_damage_complete_sub": "ساختی طور پر غیر محفوظ یا گرا ہوا",
@@ -842,5 +842,6 @@
   "bs_stats_lives_saved": "زندگیاں بچائیں",
   "mr_status_paused": "موقوف — نیٹ ورک کا منتظر",
   "mr_status_recovering": "بحال ہو رہا ہے…",
-  "mr_status_failed_permanent": "اپ لوڈ ناکام"
+  "mr_status_failed_permanent": "اپ لوڈ ناکام",
+  "settings_reader_mode": "ریڈر موڈ — بڑا متن"
 }

@@ -509,9 +509,9 @@
   "v4_cap_voice_hint": "Toque para iniciar. Toque de novo para parar.",
   "v4_cap_text_placeholder": "Descreva o que aconteceu em poucas palavras...",
   "v4_stop": "Parar gravação",
-  "v4_substep_how_bad": "Passo 2 — Quão grave",
-  "v4_substep_what_hit": "Passo 2 — O que foi atingido",
-  "v4_substep_what_caused": "Passo 2 — O que o causou",
+  "v4_substep_how_bad": "Quão grave",
+  "v4_substep_what_hit": "O que foi atingido",
+  "v4_substep_what_caused": "O que o causou",
   "v4_damage_minimal_sub": "Fissuras, vidros partidos — edifício ainda seguro",
   "v4_damage_partial_sub": "Reparável, use com precaução",
   "v4_damage_complete_sub": "Estruturalmente inseguro ou caído",
@@ -850,5 +850,6 @@
   "bs_stats_lives_saved": "vidas salvas",
   "mr_status_paused": "Em pausa — aguardando rede",
   "mr_status_recovering": "Recuperando…",
-  "mr_status_failed_permanent": "Falha no envio"
+  "mr_status_failed_permanent": "Falha no envio",
+  "settings_reader_mode": "Modo Leitura — texto maior"
 }

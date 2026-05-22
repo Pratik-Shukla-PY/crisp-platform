@@ -502,9 +502,9 @@
   "v4_cap_voice_hint": "सुरू करण्यासाठी टॅप. थांबवण्यासाठी पुन्हा टॅप.",
   "v4_cap_text_placeholder": "काय घडले ते काही शब्दांत वर्णन करा...",
   "v4_stop": "रेकॉर्ड थांबवा",
-  "v4_substep_how_bad": "पायरी 2 — किती वाईट",
-  "v4_substep_what_hit": "पायरी 2 — काय प्रभावित",
-  "v4_substep_what_caused": "पायरी 2 — कारण",
+  "v4_substep_how_bad": "किती वाईट",
+  "v4_substep_what_hit": "काय प्रभावित",
+  "v4_substep_what_caused": "कारण",
   "v4_damage_minimal_sub": "तडे, फुटलेली काच — इमारत अद्याप सुरक्षित",
   "v4_damage_partial_sub": "दुरुस्ती शक्य, काळजीपूर्वक वापरा",
   "v4_damage_complete_sub": "संरचनात्मक असुरक्षित किंवा कोसळले",
@@ -842,5 +842,6 @@
   "bs_stats_lives_saved": "जीव वाचवले",
   "mr_status_paused": "थांबवले — नेटवर्कची प्रतीक्षा",
   "mr_status_recovering": "पुनर्प्राप्त होत आहे…",
-  "mr_status_failed_permanent": "अपलोड अयशस्वी"
+  "mr_status_failed_permanent": "अपलोड अयशस्वी",
+  "settings_reader_mode": "वाचक मोड — मोठा मजकूर"
 }

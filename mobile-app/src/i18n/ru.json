@@ -501,9 +501,9 @@
   "v4_cap_voice_hint": "Нажмите, чтобы начать. Нажмите ещё раз, чтобы остановить.",
   "v4_cap_text_placeholder": "Опишите кратко, что произошло...",
   "v4_stop": "Остановить запись",
-  "v4_substep_how_bad": "Шаг 2 — Степень повреждения",
-  "v4_substep_what_hit": "Шаг 2 — Что повреждено",
-  "v4_substep_what_caused": "Шаг 2 — Что вызвало",
+  "v4_substep_how_bad": "Степень повреждения",
+  "v4_substep_what_hit": "Что повреждено",
+  "v4_substep_what_caused": "Что вызвало",
   "v4_damage_minimal_sub": "Трещины, разбитые стёкла — здание ещё безопасно",
   "v4_damage_partial_sub": "Можно отремонтировать, использовать осторожно",
   "v4_damage_complete_sub": "Структурно небезопасно или разрушено",
@@ -842,5 +842,6 @@
   "bs_stats_lives_saved": "спасённых жизней",
   "mr_status_paused": "Приостановлено — ожидание сети",
   "mr_status_recovering": "Восстановление…",
-  "mr_status_failed_permanent": "Ошибка загрузки"
+  "mr_status_failed_permanent": "Ошибка загрузки",
+  "settings_reader_mode": "Режим чтения — крупный текст"
 }

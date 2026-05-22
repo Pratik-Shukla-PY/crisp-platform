@@ -501,9 +501,9 @@
   "v4_cap_voice_hint": "शुरू करने के लिए टैप करें। रोकने के लिए फिर टैप करें।",
   "v4_cap_text_placeholder": "कुछ शब्दों में बताएँ क्या हुआ...",
   "v4_stop": "रिकॉर्डिंग रोकें",
-  "v4_substep_how_bad": "चरण 2 — कितना बुरा",
-  "v4_substep_what_hit": "चरण 2 — क्या प्रभावित हुआ",
-  "v4_substep_what_caused": "चरण 2 — क्या कारण है",
+  "v4_substep_how_bad": "कितना बुरा",
+  "v4_substep_what_hit": "क्या प्रभावित हुआ",
+  "v4_substep_what_caused": "क्या कारण है",
   "v4_damage_minimal_sub": "दरारें, टूटा शीशा — इमारत अब भी सुरक्षित",
   "v4_damage_partial_sub": "ठीक करने योग्य, सावधानी से उपयोग करें",
   "v4_damage_complete_sub": "संरचनात्मक रूप से असुरक्षित या गिरी हुई",
@@ -841,5 +841,6 @@
   "bs_stats_lives_saved": "जानें बचाई गईं",
   "mr_status_paused": "रुका — नेटवर्क का इंतज़ार",
   "mr_status_recovering": "पुनः प्राप्त हो रहा…",
-  "mr_status_failed_permanent": "अपलोड विफल"
+  "mr_status_failed_permanent": "अपलोड विफल",
+  "settings_reader_mode": "रीडर मोड — बड़ा टेक्स्ट"
 }

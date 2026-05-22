@@ -502,9 +502,9 @@
   "v4_cap_voice_hint": "தொடங்க தட்டவும். நிறுத்த மீண்டும் தட்டவும்.",
   "v4_cap_text_placeholder": "என்ன நடந்தது சில வார்த்தைகளில் விவரிக்கவும்...",
   "v4_stop": "பதிவை நிறுத்து",
-  "v4_substep_how_bad": "படி 2 — எவ்வளவு மோசம்",
-  "v4_substep_what_hit": "படி 2 — என்ன பாதிக்கப்பட்டது",
-  "v4_substep_what_caused": "படி 2 — காரணம்",
+  "v4_substep_how_bad": "எவ்வளவு மோசம்",
+  "v4_substep_what_hit": "என்ன பாதிக்கப்பட்டது",
+  "v4_substep_what_caused": "காரணம்",
   "v4_damage_minimal_sub": "விரிசல்கள், உடைந்த கண்ணாடி — கட்டிடம் இன்னும் பாதுகாப்பு",
   "v4_damage_partial_sub": "சரிசெய்யக்கூடியது, கவனமாக பயன்படுத்தவும்",
   "v4_damage_complete_sub": "கட்டமைப்பு ரீதியாக பாதுகாப்பற்றது அல்லது இடிந்தது",
@@ -842,5 +842,6 @@
   "bs_stats_lives_saved": "உயிர்கள் காப்பாற்றப்பட்டன",
   "mr_status_paused": "இடைநிறுத்தம் — பிணையத்திற்காக காத்திருக்கிறது",
   "mr_status_recovering": "மீட்டெடுக்கிறது…",
-  "mr_status_failed_permanent": "பதிவேற்றம் தோல்வி"
+  "mr_status_failed_permanent": "பதிவேற்றம் தோல்வி",
+  "settings_reader_mode": "வாசிப்பு பயன்முறை — பெரிய உரை"
 }

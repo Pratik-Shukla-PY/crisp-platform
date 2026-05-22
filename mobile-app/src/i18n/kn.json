@@ -502,9 +502,9 @@
   "v4_cap_voice_hint": "ಪ್ರಾರಂಭಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ. ನಿಲ್ಲಿಸಲು ಮತ್ತೆ ಟ್ಯಾಪ್ ಮಾಡಿ.",
   "v4_cap_text_placeholder": "ಏನು ಸಂಭವಿಸಿತು ಕೆಲವು ಪದಗಳಲ್ಲಿ ವಿವರಿಸಿ...",
   "v4_stop": "ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಿ",
-  "v4_substep_how_bad": "ಹಂತ 2 — ಎಷ್ಟು ಕೆಟ್ಟದು",
-  "v4_substep_what_hit": "ಹಂತ 2 — ಏನು ಹಾನಿಯಾಗಿದೆ",
-  "v4_substep_what_caused": "ಹಂತ 2 — ಕಾರಣ",
+  "v4_substep_how_bad": "ಎಷ್ಟು ಕೆಟ್ಟದು",
+  "v4_substep_what_hit": "ಏನು ಹಾನಿಯಾಗಿದೆ",
+  "v4_substep_what_caused": "ಕಾರಣ",
   "v4_damage_minimal_sub": "ಬಿರುಕು, ಒಡೆದ ಗಾಜು — ಕಟ್ಟಡ ಇನ್ನೂ ಸುರಕ್ಷಿತ",
   "v4_damage_partial_sub": "ದುರಸ್ತಿ ಮಾಡಬಹುದು, ಎಚ್ಚರಿಕೆಯಿಂದ ಬಳಸಿ",
   "v4_damage_complete_sub": "ರಚನಾತ್ಮಕವಾಗಿ ಅಸುರಕ್ಷಿತ ಅಥವಾ ಕುಸಿದಿದೆ",
@@ -842,5 +842,6 @@
   "bs_stats_lives_saved": "ಜೀವಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ",
   "mr_status_paused": "ತಡೆ — ನೆಟ್ವರ್ಕ್ ಗಾಗಿ ಕಾಯುತ್ತಿದೆ",
   "mr_status_recovering": "ಮರುಪಡೆಯಲಾಗುತ್ತಿದೆ…",
-  "mr_status_failed_permanent": "ಅಪ್‌ಲೋಡ್ ವಿಫಲ"
+  "mr_status_failed_permanent": "ಅಪ್‌ಲೋಡ್ ವಿಫಲ",
+  "settings_reader_mode": "ಓದುಗ ಮೋಡ್ — ದೊಡ್ಡ ಪಠ್ಯ"
 }

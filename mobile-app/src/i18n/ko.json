@@ -504,9 +504,9 @@
   "v4_cap_voice_hint": "탭하여 시작. 다시 탭하여 중지.",
   "v4_cap_text_placeholder": "무슨 일이 있었는지 몇 마디로 설명...",
   "v4_stop": "녹음 중지",
-  "v4_substep_how_bad": "2단계 — 얼마나 심한가",
-  "v4_substep_what_hit": "2단계 — 무엇이 피해를 입었나",
-  "v4_substep_what_caused": "2단계 — 원인",
+  "v4_substep_how_bad": "얼마나 심한가",
+  "v4_substep_what_hit": "무엇이 피해를 입었나",
+  "v4_substep_what_caused": "원인",
   "v4_damage_minimal_sub": "균열, 유리 파손 — 건물은 여전히 안전",
   "v4_damage_partial_sub": "수리 가능, 주의해서 사용",
   "v4_damage_complete_sub": "구조적으로 안전하지 않거나 붕괴",
@@ -845,5 +845,6 @@
   "bs_stats_lives_saved": "구한 생명",
   "mr_status_paused": "일시 중지됨 — 네트워크 대기",
   "mr_status_recovering": "복구 중…",
-  "mr_status_failed_permanent": "업로드 실패"
+  "mr_status_failed_permanent": "업로드 실패",
+  "settings_reader_mode": "리더 모드 — 큰 글자"
 }
