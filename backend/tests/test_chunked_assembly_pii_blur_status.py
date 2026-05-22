@@ -163,6 +163,13 @@ def test_chunked_image_assembly_sets_pending(db):
     assert refreshed.pii_blur_status is not None, (
         "Image chunked assembly must stamp pii_blur_status; got NULL"
     )
-    assert refreshed.pii_blur_status in ('pending', 'complete', 'failed', 'skipped'), (
+    # B-A (alembic 0037) — canonical 4-state taxonomy. Legacy values
+    # ('complete', 'skipped') no longer accepted.
+    assert refreshed.pii_blur_status in (
+        'pending',
+        'complete_clean',
+        'complete_with_redactions',
+        'failed',
+    ), (
         f"Unexpected pii_blur_status={refreshed.pii_blur_status!r}"
     )

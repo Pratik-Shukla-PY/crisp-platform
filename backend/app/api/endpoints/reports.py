@@ -653,18 +653,33 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
     failure is logged and the media row's ``pii_blur_status`` is updated
     accordingly so the dashboard can flag the file.
 
-    Apr 2026 — now observability-instrumented + DB-updating:
-      * bumps ``pii_blur_runs_total{outcome}`` Prometheus counter
-      * writes ``pii_blur_status`` on the Media row
-        (``complete`` / ``failed`` / ``skipped``).
+    May 2026 (Batch B-A) — writes the canonical 4-state taxonomy
+    (alembic 0037). Outcome resolution:
 
-    ``pii_blur_status='skipped'`` is the important one — it means the
-    backends weren't loadable (model missing, package not installed)
-    and the file is on disk UNBLURRED. Operators need to see this
-    loudly, which is why the `/api/v1/health/pii` endpoint + the
-    `PII-BLUR CRITICAL` log lines in `pii_blur.py` exist.
+      - blur ran + detections found  → 'complete_with_redactions'
+                                       (bytes re-uploaded; green chip)
+      - blur ran + no detections     → 'complete_clean'
+                                       (bytes unchanged; no chip)
+      - blur ran + backends missing  → 'failed'
+                                       (was 'skipped' pre-0037;
+                                       bytes are unblurred; red chip
+                                       — operator must investigate)
+      - blur raised an exception     → 'failed'
+                                       (red chip — operator action)
+
+    Observability:
+      * bumps ``pii_blur_runs_total{outcome}`` Prometheus counter
+      * bumps ``pii_blur_status_total{status}`` Prometheus counter
+      * writes ``pii_blur_status`` on the Media row
+
+    URL gating: while pii_blur_status='pending', the public-facing
+    ``GET /media/{id}/file`` route returns 425 Too Early — the
+    operator can't accidentally fetch unblurred bytes through any
+    cache layer. The 425 lifts as soon as this worker writes the
+    terminal status.
     """
-    outcome = 'failed'
+    outcome = 'failed'  # Final pii_blur_status value (one of the 4 canonical
+                       # values + 'not_needed' for audio, handled elsewhere).
     db = None
     try:
         from app.services.pii_blur import blur_pii
@@ -677,8 +692,8 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
         with _stage_from_storage(db_url, filename) as tmp_path:
             pii_result = blur_pii(tmp_path)
             if pii_result.get('ran'):
-                outcome = 'complete'
                 if pii_result.get('blurred'):
+                    outcome = 'complete_with_redactions'
                     logger.info(
                         f"PII blurred in {filename}: "
                         f"faces={pii_result['faces']} pii_text={pii_result['pii_texts']}"
@@ -699,14 +714,23 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
                             "Storage object may still hold unblurred bytes — re-run blur worker to fix."
                         )
                 else:
-                    logger.info(f"PII blur ran on {filename}: no PII detected")
+                    # Blur ran, found nothing. Bytes left UNTOUCHED on
+                    # storage (B-B will guarantee this with explicit
+                    # conditional save inside blur_pii; today blur_pii
+                    # only re-encodes when blurred=True, so this path
+                    # already preserves bytes).
+                    outcome = 'complete_clean'
+                    logger.info(f"PII blur ran on {filename}: no PII detected (clean)")
             else:
-                # backends unavailable — the storage object still holds
-                # the unblurred bytes. Dashboard flags via pii_blur_status.
-                outcome = 'skipped'
+                # Backends unavailable — the storage object still holds
+                # the unblurred bytes. Treated as 'failed' under the new
+                # taxonomy (was 'skipped' pre-0037 — same operational
+                # meaning, unified vocabulary).
+                outcome = 'failed'
                 logger.error(
-                    f"PII-BLUR SKIPPED for {filename}: {pii_result.get('error')} — "
-                    "object kept as-is, dashboard will flag via pii_blur_status='skipped'."
+                    f"PII-BLUR FAILED (backends unavailable) for {filename}: "
+                    f"{pii_result.get('error')} — object kept as-is, dashboard "
+                    "will flag via pii_blur_status='failed'."
                 )
     except Exception as e:
         outcome = 'failed'
@@ -2897,21 +2921,21 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             # via /tmp/ tempfile (filesystem-based cv2), then we
             # storage.save() the (possibly blurred) bytes.
             final_data = file_data
-            # K.2.b (May 2026, Phase K) — track PII blur outcome on the
-            # Media row so the operator dashboard can flag rows where
-            # blur failed / was skipped. Previously the /attach path
-            # left pii_blur_status=NULL (only the chunked path set it),
-            # so operators had no way to tell whether an attached image
-            # was actually redacted. Mirrors the outcome state machine
-            # at reports.py:565-599 (chunked assembly path).
-            #   'complete'  — blur ran AND something was redacted
-            #   'skipped'   — blur backends unavailable; file as-is,
-            #                 dashboard flags for manual review
-            #   'failed'    — blur raised an exception; file as-is
-            #   'not_needed' — audio media (set below at row creation)
+            # May 2026 (Batch B-A) — track PII blur outcome on the
+            # Media row using the canonical 4-state vocabulary
+            # (alembic 0037). Mirrors the chunked-assembly path's
+            # _run_server_pii_blur outcomes at reports.py:650-740.
+            #   'complete_with_redactions' — blur ran AND PII blurred
+            #   'complete_clean'           — blur ran, no PII detected
+            #   'failed'                   — backends unavailable OR
+            #                                 exception raised; file
+            #                                 kept as-is, dashboard
+            #                                 flags for manual review
+            #   'not_needed'               — audio media (set below at
+            #                                 row creation)
             pii_blur_outcome = 'not_needed'  # default for audio
             if ext in ('jpg', 'jpeg', 'png'):
-                pii_blur_outcome = 'skipped'  # pessimistic default
+                pii_blur_outcome = 'failed'  # pessimistic default
                 try:
                     from app.services.pii_blur import blur_pii
                     with _stage_bytes(filename, file_data) as tmp_path:
@@ -2919,20 +2943,24 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                         with open(tmp_path, "rb") as _fh:
                             final_data = _fh.read()
                     if pii_result.get('ran'):
-                        pii_blur_outcome = 'complete'
                         if pii_result.get("blurred"):
+                            pii_blur_outcome = 'complete_with_redactions'
                             logger.info(
                                 f"PII blurred in attached {filename}: "
                                 f"faces={pii_result['faces']} text={pii_result['pii_texts']}"
                             )
                         else:
-                            logger.info(f"PII blur ran on attached {filename}: no PII detected")
+                            pii_blur_outcome = 'complete_clean'
+                            logger.info(f"PII blur ran on attached {filename}: no PII detected (clean)")
                     else:
-                        # backends unavailable — pii_blur_outcome stays 'skipped'
+                        # backends unavailable — pii_blur_outcome stays 'failed'.
+                        # Pre-0037 this was 'skipped'; the new vocabulary
+                        # unifies "blur didn't happen, file may have PII"
+                        # under 'failed' so operators see a single red chip.
                         logger.error(
-                            f"PII-BLUR SKIPPED for attached {filename}: "
+                            f"PII-BLUR FAILED (backends unavailable) for attached {filename}: "
                             f"{pii_result.get('error')} — object kept as-is, "
-                            f"dashboard will flag via pii_blur_status='skipped'."
+                            f"dashboard will flag via pii_blur_status='failed'."
                         )
                 except Exception as e:
                     pii_blur_outcome = 'failed'
@@ -5834,6 +5862,16 @@ def get_media_redirect(
     Cache-Control: public, max-age=3600 — the redirect itself is cached
     for 1 hour, so even hard-refresh paths only hit the backend once per
     image per hour. The actual S3 object cache TTL is set bucket-side.
+
+    URL gating (May 2026, Batch B-A): when an IMAGE row is in
+    `pii_blur_status='pending'`, the route returns 425 Too Early.
+    This closes the 5-30 s window where the storage object held the
+    assembled-but-unblurred bytes and a /file request would otherwise
+    redirect to them. The 425 lifts the moment `_run_server_pii_blur`
+    writes the terminal status (complete_clean /
+    complete_with_redactions / failed). Thumbnails are NOT gated —
+    they're explicitly partial-assembly previews and operators expect
+    them to lead the full file.
     """
     media = db.query(Media).filter(Media.id == media_id).first()
     if not media:
@@ -5842,6 +5880,21 @@ def get_media_redirect(
     # Path-suffix sniff is more reliable than parsing routing params here
     # (FastAPI doesn't expose which alternative `@router.get` matched).
     is_thumb = request.url.path.rstrip("/").endswith("/thumb")
+
+    # B-A URL gating: only applies to the /file route on IMAGE rows.
+    # Thumbnails + audio bypass.
+    if not is_thumb and getattr(media, 'type', None) == 'IMAGE':
+        blur_status = getattr(media, 'pii_blur_status', None)
+        if blur_status == 'pending':
+            # 425 Too Early — RFC 8470. Tells caching layers (CDN,
+            # browsers) that this is a transient state, not a 404 to
+            # cache. Retry-After advises a polite poll cadence.
+            raise HTTPException(
+                status_code=425,
+                detail="PII blur in progress — retry shortly",
+                headers={"Retry-After": "2"},
+            )
+
     db_url = media.thumbnail_url if (is_thumb and media.thumbnail_url) else media.url
     if not db_url:
         raise HTTPException(status_code=404, detail="No URL available for this media")

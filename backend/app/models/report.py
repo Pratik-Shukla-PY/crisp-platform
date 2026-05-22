@@ -537,17 +537,40 @@ class Media(Base):
     # already-redacted pixels. Defaults false for legacy clients.
     client_blur_applied = Column(Boolean, default=False, nullable=False)
     # server-side PII blur outcome. Legacy rows are NULL.
-    # Values:
-    #   not_needed — client_blur_applied=true and client pipeline
-    #                asserted success (no server pass required).
-    #   pending    — assembly completed; blur submitted to _ai_executor
-    #                but not yet finished.
-    #   complete   — server blur finished successfully.
-    #   failed     — server blur raised an exception (operator action).
-    #   skipped    — server blur was a no-op because PII backends are
-    #                unavailable (MediaPipe + easyocr both missing); the
-    #                file is on disk UNBLURRED. Dashboard should flag.
-    pii_blur_status = Column(String(16), nullable=True, index=True)
+    # Canonical values (May 2026, Batch B-A — alembic 0037):
+    #   pending                  — assembly completed; blur submitted
+    #                              to _ai_executor but not yet
+    #                              finished. URL is gated (425).
+    #   complete_clean           — blur ran, NO PII detected. Bytes
+    #                              left untouched (B-B conditional
+    #                              save). Dashboard renders NO chip.
+    #   complete_with_redactions — blur ran, PII detected + blurred.
+    #                              Bytes overwritten. Dashboard
+    #                              renders a green "Auto-redacted"
+    #                              chip.
+    #   failed                   — blur attempted but raised an
+    #                              exception, OR backends were
+    #                              unavailable (formerly 'skipped').
+    #                              Bytes may be unblurred — operator
+    #                              must manually verify. Dashboard
+    #                              renders a red "Redaction failed"
+    #                              chip.
+    #   not_needed               — media type doesn't go through blur
+    #                              (audio rows; chunked-assembly path
+    #                              stamps this at /attach time).
+    #                              Dashboard renders no chip.
+    #
+    # Legacy values (pre-0037, may persist in test fixtures or
+    # rolled-back DBs):
+    #   complete    — superseded by complete_with_redactions /
+    #                 complete_clean. 0037 maps complete →
+    #                 complete_with_redactions (conservative).
+    #   skipped     — superseded by 'failed'. 0037 maps skipped →
+    #                 failed.
+    #
+    # Column widened to String(32) by 0037 (was String(16) — too
+    # narrow for 'complete_with_redactions' = 26 chars).
+    pii_blur_status = Column(String(32), nullable=True, index=True)
     # UI v2.1 — perceptual hash (pHash) of the assembled image
     # for redundancy detection (UNDP nice-to-have #3: "spot duplicates
     # with same time-stamp of submission, or over-reporting"). Computed

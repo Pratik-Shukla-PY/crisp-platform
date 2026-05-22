@@ -84,7 +84,15 @@ class TestPIIBlurStatusColumn:
         db.add(dev); db.commit()
         r = Report(device_id=dev.id)
         db.add(r); db.commit()
-        for status in ("not_needed", "pending", "complete", "failed", "skipped"):
+        # B-A (alembic 0037) — canonical 4-state taxonomy + not_needed.
+        # Legacy values ('complete', 'skipped') retired.
+        for status in (
+            "not_needed",
+            "pending",
+            "complete_clean",
+            "complete_with_redactions",
+            "failed",
+        ):
             m = Media(
                 report_id=r.id, type="IMAGE",
                 chunk_count=1, received_chunks=1,
@@ -128,11 +136,10 @@ class TestBlurWorkerUpdatesStatus:
         # Re-read in a fresh view; the worker committed via its own session.
         db.expire_all()
         m2 = db.query(Media).filter(Media.id == media_id).first()
-        # Either 'skipped' (if backends unavailable in this test env) or
-        # 'failed' (if backends loaded but the path was bogus).
-        # Never leaves it at 'pending' — that's the whole point of the
-        # status update.
-        assert m2.pii_blur_status in ("failed", "skipped"), \
+        # B-A: backends-unavailable and bogus-path BOTH land on 'failed'
+        # under the canonical taxonomy (was 'skipped'/'failed' pre-0037).
+        # Never leaves at 'pending' — that's the whole point of the status update.
+        assert m2.pii_blur_status == "failed", \
             f"status={m2.pii_blur_status!r} — worker didn't update from 'pending'"
 
     def test_prometheus_counter_incremented(self, db):
@@ -140,8 +147,13 @@ class TestBlurWorkerUpdatesStatus:
         We just verify the counter exists and is importable — value
         checks under test hostile for pytest parallelism."""
         from app.core.observability import pii_blur_runs_total
-        # Exercising the labels for each documented outcome; must not raise.
-        for outcome in ("complete", "failed", "skipped"):
+        # B-A: canonical outcomes. 'complete' split into clean/redactions;
+        # 'skipped' folded into 'failed'.
+        for outcome in (
+            "complete_clean",
+            "complete_with_redactions",
+            "failed",
+        ):
             pii_blur_runs_total.labels(outcome=outcome).inc(0)
 
 
@@ -233,18 +245,19 @@ class TestBlurPipelineEndToEnd:
         while time.time() < deadline:
             db.expire_all()
             m = db.query(Media).filter(Media.id == media_id).first()
-            if m and m.pii_blur_status in ("complete", "failed", "skipped"):
+            if m and m.pii_blur_status in ("complete_clean", "complete_with_redactions", "failed"):
                 final_status = m.pii_blur_status
                 break
             time.sleep(0.2)
 
         assert final_status is not None, \
             f"pii_blur_status never left 'pending' within 15s (status={m.pii_blur_status if m else 'no media row'})"
-        # `complete` in the happy case (MediaPipe + easyocr installed),
-        # `skipped` if backends missing in CI. Either is the right
+        # `complete_clean` / `complete_with_redactions` in the happy case
+        # (MediaPipe + easyocr installed; clean image has no detections),
+        # `failed` if backends missing in CI. Either is the right
         # signal — the important thing is the column stops being NULL
         # or 'pending' and becomes a terminal state.
-        assert final_status in {"complete", "failed", "skipped"}
+        assert final_status in {"complete_clean", "complete_with_redactions", "failed"}
 
     def test_upload_with_client_blur_applied_true_still_runs_server_pass(self, client, db):
         """Apr-2026 (revised): `client_blur_applied=true` no longer
@@ -284,20 +297,20 @@ class TestBlurPipelineEndToEnd:
         assert res.status_code == 200, res.text
 
         # Wait for the worker to land. Since server now always runs,
-        # the terminal state is one of complete / failed / skipped.
+        # the terminal state is one of complete_clean / complete_with_redactions / failed.
         # 'not_needed' should NEVER appear — that was the old behaviour.
         deadline = time.time() + 25
         final_status = None
         while time.time() < deadline:
             db.expire_all()
             m = db.query(Media).filter(Media.id == media_id).first()
-            if m and m.pii_blur_status in {"complete", "failed", "skipped"}:
+            if m and m.pii_blur_status in {"complete_clean", "complete_with_redactions", "failed"}:
                 final_status = m.pii_blur_status
                 break
             time.sleep(0.2)
 
         m = db.query(Media).filter(Media.id == media_id).first()
-        assert final_status in {"complete", "failed", "skipped"}, (
+        assert final_status in {"complete_clean", "complete_with_redactions", "failed"}, (
             f"server-side pass must run regardless of client claim; got status="
             f"{m.pii_blur_status if m else 'no media row'} (must NOT be 'not_needed')"
         )

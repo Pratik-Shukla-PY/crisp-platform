@@ -146,10 +146,11 @@ def _stage_image_in_storage(filename: str) -> str:
     return get_storage().save(filename, _JPEG_HEADER, "image/jpeg")
 
 
-def test_chunked_image_blur_complete_bumps_complete_counter(db):
-    """`_run_server_pii_blur` with `blur_pii` returning ran=True ends
-    on outcome='complete'; the K.6.c counter for status='complete'
-    must tick alongside the existing `pii_blur_runs_total` tick.
+def test_chunked_image_blur_clean_bumps_complete_clean_counter(db):
+    """B-A: `_run_server_pii_blur` with `blur_pii` returning ran=True +
+    blurred=False ends on outcome='complete_clean' (was 'complete'
+    pre-0037). The K.6.c counter for status='complete_clean' must tick
+    alongside the existing `pii_blur_runs_total` tick.
     """
     r, m = _seed_report_media_chunk(
         db,
@@ -160,7 +161,7 @@ def test_chunked_image_blur_complete_bumps_complete_counter(db):
     filename = f"{m.id}_assembled.jpg"
     file_url = _stage_image_in_storage(filename)
 
-    before = _counter_value('complete')
+    before = _counter_value('complete_clean')
     with patch("app.services.pii_blur.blur_pii") as mock_blur:
         mock_blur.return_value = {
             "faces": 0,
@@ -171,16 +172,16 @@ def test_chunked_image_blur_complete_bumps_complete_counter(db):
             "backends": {"face_detector": True, "ocr_reader": True},
         }
         _run_server_pii_blur(m.id, file_url, filename)
-    after = _counter_value('complete')
+    after = _counter_value('complete_clean')
 
     assert after - before == 1.0, (
-        f"Expected status='complete' counter to tick by 1, "
+        f"Expected status='complete_clean' counter to tick by 1, "
         f"got delta={after - before}"
     )
 
     db.expire_all()
     refreshed = db.query(Media).filter(Media.id == m.id).first()
-    assert refreshed.pii_blur_status == 'complete'
+    assert refreshed.pii_blur_status == 'complete_clean'
 
 
 def test_chunked_image_blur_failed_bumps_failed_counter(db):
@@ -214,11 +215,12 @@ def test_chunked_image_blur_failed_bumps_failed_counter(db):
     assert refreshed.pii_blur_status == 'failed'
 
 
-def test_chunked_image_blur_skipped_bumps_skipped_counter(db):
-    """Backends-unavailable case — `blur_pii` returns ran=False, which
-    the worker treats as outcome='skipped'. The counter must reflect
-    that distinct terminal state (operators page on this — file is on
-    disk UNBLURRED).
+def test_chunked_image_blur_backends_unavailable_bumps_failed_counter(db):
+    """B-A: Backends-unavailable case — `blur_pii` returns ran=False,
+    which the worker treats as outcome='failed' under the canonical
+    taxonomy (was 'skipped' pre-0037). The counter must reflect that
+    terminal state (operators page on this — file is on disk
+    UNBLURRED).
     """
     r, m = _seed_report_media_chunk(
         db,
@@ -229,7 +231,7 @@ def test_chunked_image_blur_skipped_bumps_skipped_counter(db):
     filename = f"{m.id}_assembled.jpg"
     file_url = _stage_image_in_storage(filename)
 
-    before = _counter_value('skipped')
+    before = _counter_value('failed')
     with patch("app.services.pii_blur.blur_pii") as mock_blur:
         mock_blur.return_value = {
             "faces": 0,
@@ -240,13 +242,14 @@ def test_chunked_image_blur_skipped_bumps_skipped_counter(db):
             "backends": {"face_detector": False, "ocr_reader": False},
         }
         _run_server_pii_blur(m.id, file_url, filename)
-    after = _counter_value('skipped')
+    after = _counter_value('failed')
 
     assert after - before == 1.0, (
-        f"Expected status='skipped' counter to tick by 1, "
+        f"Expected status='failed' counter to tick by 1 "
+        f"(backends-unavailable folded into 'failed' by B-A), "
         f"got delta={after - before}"
     )
 
     db.expire_all()
     refreshed = db.query(Media).filter(Media.id == m.id).first()
-    assert refreshed.pii_blur_status == 'skipped'
+    assert refreshed.pii_blur_status == 'failed'

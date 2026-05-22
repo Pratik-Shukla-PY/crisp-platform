@@ -13,16 +13,19 @@ were saved as-is and the Media.pii_blur_status column stayed NULL.
 Operator dashboard had no signal — image rendered with faces visible,
 no warning chip.
 
-Fix: the /attach flow now mirrors the chunked-assembly outcome state
-machine (reports.py:565-599):
-    'complete'   — blur ran AND something was redacted
-    'skipped'    — blur backends unavailable; file as-is
-    'failed'     — blur raised exception; file as-is
-    'not_needed' — non-image media (audio)
+Fix: the /attach flow mirrors the chunked-assembly outcome state
+machine (reports.py:650-740). Vocabulary refreshed by B-A (alembic
+0037) to the canonical 4-state taxonomy:
+    'complete_with_redactions' — blur ran AND something was redacted
+    'complete_clean'           — blur ran, NO PII detected
+    'failed'                   — backends unavailable OR exception;
+                                 file as-is, operator review needed
+    'not_needed'               — non-image media (audio)
 
 Positive assertions:
-  - IMAGE + valid blur → pii_blur_status == 'complete'
-  - IMAGE + blur backends unavailable (ran=False) → 'skipped'
+  - IMAGE + valid blur w/ detections → 'complete_with_redactions'
+  - IMAGE + valid blur w/o detections → 'complete_clean'
+  - IMAGE + blur backends unavailable (ran=False) → 'failed'
   - IMAGE + blur raises → 'failed' + image still saved
   - AUDIO → 'not_needed'
 """
@@ -71,8 +74,8 @@ def _seed_report(db, *, device_hash):
 # ── K.2.b positive assertions ────────────────────────────────────────────────
 
 
-def test_image_attach_with_blur_success_sets_complete(client, db):
-    """blur_pii returns ran=True, blurred=True → pii_blur_status='complete'."""
+def test_image_attach_with_blur_success_sets_complete_with_redactions(client, db):
+    """blur_pii returns ran=True, blurred=True → 'complete_with_redactions'."""
     r = _seed_report(db, device_hash="k2b-blur-complete")
 
     with patch("app.services.pii_blur.blur_pii") as mock_blur:
@@ -98,13 +101,13 @@ def test_image_attach_with_blur_success_sets_complete(client, db):
     db.expire_all()
     media = db.query(Media).filter_by(report_id=r.id).first()
     assert media is not None
-    assert media.pii_blur_status == 'complete', (
-        f"Expected pii_blur_status='complete', got {media.pii_blur_status!r}"
+    assert media.pii_blur_status == 'complete_with_redactions', (
+        f"Expected pii_blur_status='complete_with_redactions', got {media.pii_blur_status!r}"
     )
 
 
-def test_image_attach_with_blur_ran_no_pii_sets_complete(client, db):
-    """blur_pii returns ran=True, blurred=False (clean image) → 'complete'."""
+def test_image_attach_with_blur_ran_no_pii_sets_complete_clean(client, db):
+    """blur_pii returns ran=True, blurred=False (clean image) → 'complete_clean'."""
     r = _seed_report(db, device_hash="k2b-blur-clean")
 
     with patch("app.services.pii_blur.blur_pii") as mock_blur:
@@ -129,11 +132,11 @@ def test_image_attach_with_blur_ran_no_pii_sets_complete(client, db):
 
     db.expire_all()
     media = db.query(Media).filter_by(report_id=r.id).first()
-    assert media.pii_blur_status == 'complete'
+    assert media.pii_blur_status == 'complete_clean'
 
 
-def test_image_attach_with_backends_unavailable_sets_skipped(client, db):
-    """blur_pii returns ran=False (backends missing) → 'skipped'."""
+def test_image_attach_with_backends_unavailable_sets_failed(client, db):
+    """blur_pii returns ran=False (backends missing) → 'failed' (was 'skipped' pre-0037)."""
     r = _seed_report(db, device_hash="k2b-blur-skipped")
 
     with patch("app.services.pii_blur.blur_pii") as mock_blur:
@@ -159,8 +162,9 @@ def test_image_attach_with_backends_unavailable_sets_skipped(client, db):
     db.expire_all()
     media = db.query(Media).filter_by(report_id=r.id).first()
     assert media is not None
-    assert media.pii_blur_status == 'skipped', (
-        f"backends-unavailable should set 'skipped', got {media.pii_blur_status!r}"
+    assert media.pii_blur_status == 'failed', (
+        f"backends-unavailable should set 'failed' (B-A canonical taxonomy), "
+        f"got {media.pii_blur_status!r}"
     )
 
 
@@ -253,6 +257,6 @@ def test_existing_media_update_refreshes_blur_status(client, db):
     # Should be the SAME Media row (existing-media update path), now refreshed
     m2 = db.query(Media).filter_by(report_id=r.id).first()
     assert m2.id == m1.id, "Should be the same Media row (existing-media update)"
-    assert m2.pii_blur_status == 'complete', (
-        f"Re-attach should refresh pii_blur_status to 'complete', got {m2.pii_blur_status!r}"
+    assert m2.pii_blur_status == 'complete_clean', (
+        f"Re-attach (blurred=False) should refresh to 'complete_clean', got {m2.pii_blur_status!r}"
     )
