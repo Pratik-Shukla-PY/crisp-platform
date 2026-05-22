@@ -153,6 +153,51 @@ def _multiscale_face_detect(img, detector, mp_module):
         min_face_frac = 0.03
     min_dim_px = max(1, int(min(w, h) * min_face_frac))
 
+    # L4 (May 2026, blur-audit) — skin-tone gate.
+    #
+    # After BlazeFace returns a candidate box, sample the interior.
+    # Real-face interiors are dominated by skin-tone pixels (broadly:
+    # H ∈ [0°,50°] ∪ [340°,360°], S ∈ [20,70], V ∈ [40,90] in HSV).
+    # FP sources (light fixtures, building windows, signage, vegetation,
+    # cushions) almost never carry skin-tone interiors — they're
+    # bright-on-bright, dark-on-dark, or texture patterns far outside
+    # the skin band.
+    #
+    # Default OFF — controlled by CRISP_SKIN_TONE_GATE. Default-off
+    # because the gate is opinionated and could drop a legitimate face
+    # in extreme lighting (sodium-vapor streetlamp, full-shadow). Once
+    # we canary against operator's iPhone corpus + 5-photo stress AND
+    # the false-positive set we already have on hand, we flip the
+    # default. Until then, opt-in only.
+    _skin_gate_on = os.getenv("CRISP_SKIN_TONE_GATE", "false").lower() in (
+        "1", "true", "yes",
+    )
+    _skin_min_frac = float(os.getenv("CRISP_SKIN_MIN_FRAC", "0.15"))
+
+    def _is_skin_tone_dominant(region_img):
+        """Return True iff at least `_skin_min_frac` of region pixels
+        fall in the broad skin-tone HSV band. Cheap (vectorised cv2 +
+        numpy)."""
+        try:
+            import numpy as _np
+            hsv = _cv2.cvtColor(region_img, _cv2.COLOR_BGR2HSV)
+            # Two HSV bands cover the skin-tone wrap-around (red is at
+            # both ends of the hue circle).
+            lower_a = _np.array([0,   30, 60], dtype=_np.uint8)
+            upper_a = _np.array([25, 180, 230], dtype=_np.uint8)
+            lower_b = _np.array([160, 30, 60], dtype=_np.uint8)
+            upper_b = _np.array([180,180, 230], dtype=_np.uint8)
+            mask = _cv2.inRange(hsv, lower_a, upper_a) | _cv2.inRange(hsv, lower_b, upper_b)
+            if mask.size == 0:
+                return False
+            frac = float(mask.sum() / 255.0) / float(mask.size)
+            return frac >= _skin_min_frac
+        except Exception as _e:
+            # Belt-and-braces: if the gate function fails (numpy
+            # missing in a CI image), don't reject — fall through.
+            logger.debug("L4 skin-tone gate failed: %s — passing through", _e)
+            return True
+
     def _detect_on_region(region_img, x_offset, y_offset):
         rgb = _cv2.cvtColor(region_img, _cv2.COLOR_BGR2RGB)
         mp_image = mp_module.Image(
@@ -164,6 +209,20 @@ def _multiscale_face_detect(img, detector, mp_module):
             # L2 — drop too-small candidates (FP-killer).
             if bb.width < min_dim_px or bb.height < min_dim_px:
                 continue
+            # L4 — skin-tone gate. Opt-in via env. Crop the candidate
+            # box from the original region and check skin-tone fraction.
+            # The crop is on `region_img` (post-tile crop), so the
+            # bbox coords are already relative to it.
+            if _skin_gate_on:
+                x0 = max(0, bb.origin_x)
+                y0 = max(0, bb.origin_y)
+                x1 = min(region_img.shape[1], bb.origin_x + bb.width)
+                y1 = min(region_img.shape[0], bb.origin_y + bb.height)
+                if x1 > x0 and y1 > y0:
+                    candidate = region_img[y0:y1, x0:x1]
+                    if not _is_skin_tone_dominant(candidate):
+                        # Skip — likely FP (no skin-tone interior).
+                        continue
             detections_xywh.append((
                 bb.origin_x + x_offset,
                 bb.origin_y + y_offset,
