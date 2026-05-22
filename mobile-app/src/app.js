@@ -9125,6 +9125,8 @@ async function _submitReportInner() {
         showUploadOverlay(t('upload_sending'));
         updateUploadProgress(50, t('upload_saved'));
         document.getElementById('report-id-text').textContent = clientReportId.slice(0, 8).toUpperCase();
+        // AUDIT 2026-05-23 — unhide the box now that the id is real.
+        try { document.getElementById('success-id-box').style.display = ''; } catch (_) {}
 
         // PR 7: stash the just-submitted report so the Track button on the
         // success screen can open the detail view before the next status-since
@@ -9176,6 +9178,7 @@ async function _submitReportInner() {
         console.error('submitReport fatal error:', fatalErr);
         hideUploadOverlay();
         document.getElementById('report-id-text').textContent = 'SAVED';
+        try { document.getElementById('success-id-box').style.display = ''; } catch (_) {}
         goToStage('stage-success');
         sendBtn.disabled = false;
     }

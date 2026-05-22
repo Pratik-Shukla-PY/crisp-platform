@@ -3056,9 +3056,16 @@
                 <i class="fa-solid fa-users" aria-hidden="true"></i>
                 <span class="success-impact-text" id="success-impact-text">—</span>
             </div>
-            <div class="success-id-box" id="success-id-box">
+            <!-- AUDIT 2026-05-23 — hidden by default. Pre-fix the
+                 em-dash placeholder rendered when the user navigated
+                 here via the stage-jumper (or briefly during a real
+                 submission while the id was still resolving), looking
+                 like a glitch. The submit success path explicitly
+                 unhides + populates this box; if the id never resolves
+                 the user sees nothing strange instead of a stub. -->
+            <div class="success-id-box" id="success-id-box" style="display:none;">
                 <span data-i18n="report_id">Report ID:</span>
-                <strong id="report-id-text">—</strong>
+                <strong id="report-id-text"></strong>
             </div>
             <!-- Phase 2.2 (May 2026) — V2 gamification badge-card removed.
                  The V4 home-screen chip (#home-badge-chip) is now the
