@@ -181,7 +181,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     flex: 0 0 auto;
 }
 [dir="rtl"] .home-brand-row .home-brand-utility {
-    margin-left: 0;
+    margin-inline-start: 0;
     margin-right: auto;
 }
 
@@ -344,7 +344,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .lang-switcher .lps-flag {
     font-size: 1rem;
     line-height: 1;
-    margin-right: 6px;
+    margin-inline-end: 6px;
     /* v6.5 (May 2026, operator) — `text-shadow: 0 0 1px rgba(0,0,0,0.35)`
        was casting a dark halo around the SVG flag, reading as a
        "black shadow over the icon". Removed entirely — the flag's
@@ -954,7 +954,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
    lang-switcher pill above it. 120px reserves enough space for the
    max-width we just set on the pill. */
 .flow-progress {
-    padding-right: calc(14px + 120px);
+    padding-inline-end: calc(14px + 120px);
 }
 .summary-card-head {
     display: flex; justify-content: space-between; align-items: center;
@@ -1976,7 +1976,7 @@ body[data-ui-v3] .v2-only-description { display: none !important; }
    many photos are left. Turns red/pulses at cap. */
 .extra-photos-cap-chip {
     flex-shrink: 0;
-    margin-left: 4px;
+    margin-inline-start: 4px;
     padding: 2px 8px;
     font-size: 11px;
     font-weight: 700;
@@ -2622,7 +2622,7 @@ details.mr-date-group[open] .mr-date-group-chevron {
 /* stage-history header polish: title icon was crowding the
    back-arrow; add breathing room. */
 #stage-history .stage-header h2 {
-    padding-left: 6px;
+    padding-inline-start: 6px;
 }
 
 /* ── stage-report-detail ────────────────────────────────────────────────── */
@@ -3585,7 +3585,7 @@ details.mr-date-group[open] .mr-date-group-chevron {
    of the language pill. The pill is now capped at 140 px; this reserves
    150 px so there's always a 10 px visual gap even at 320 px viewports. */
 .flow-progress {
-    padding-right: calc(14px + 150px);
+    padding-inline-end: calc(14px + 150px);
 }
 /* Narrower mobiles (< 360 px) — tighten step min-width so all four
    steps + three connecting lines still fit inside the reserved area. */
@@ -4193,13 +4193,13 @@ html[dir="rtl"] #lang-switcher {
    too — otherwise the step-progress label slams into the pill on
    Arabic / Urdu. */
 html[dir="rtl"] .v4-header {
-    padding-right: 0;
-    padding-left: 156px;
+    padding-inline-end: 0;
+    padding-inline-start: 156px;
 }
 @media (min-width: 380px) {
     html[dir="rtl"] .v4-header {
-        padding-right: 0;
-        padding-left: 156px;
+        padding-inline-end: 0;
+        padding-inline-start: 156px;
     }
 }
 
@@ -4207,8 +4207,8 @@ html[dir="rtl"] .v4-header {
    it from the pip cluster. Flip the side in RTL so the gap appears
    on the trailing side of the pips. */
 html[dir="rtl"] .v4-step-label {
-    margin-left: 0;
-    margin-right: 8px;
+    margin-inline-start: 0;
+    margin-inline-end: 8px;
 }
 
 /* The summary-row / captured-strip / summary use CSS grid which auto-
@@ -5383,7 +5383,7 @@ body.tier-t4 .home-impact {
 /* My Reports count pill inline. */
 .mr-count {
     display: inline-block;
-    margin-left: 4px;
+    margin-inline-start: 4px;
     padding: 1px 7px;
     border-radius: 999px;
     background: rgba(21, 145, 155, 0.22);
@@ -5454,8 +5454,8 @@ body.tier-t4 .home-impact {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
-    margin-left: 0;
-    margin-right: 0;
+    margin-inline-start: 0;
+    margin-inline-end: 0;
     /* May 2026 (Lighthouse PROD CLS fix, second attempt) — the grid
        starts empty in HTML and home-screen.js _renderChannels() populates
        6 tiles AFTER defer-scripts load. On Slow-4G + 4× CPU (LH-mobile
@@ -5557,7 +5557,7 @@ body.tier-t4 .home-impact {
        the pill via a separate rule below. */
 }
 [dir="rtl"] .home-brand-row .lang-switcher {
-    margin-left: 0;
+    margin-inline-start: 0;
     margin-right: auto;
 }
 .home-brand { flex: 1; min-width: 0; }
@@ -6545,7 +6545,7 @@ body.tier-t4 .home-impact {
        max-width: 140px (line 151) PLUS its 16px right offset = 156px
        reserved. Earlier we used 110px which left the step text behind
        the pill on iPhone SE — see /tmp/v4-PROD-iphone-se-p3.png. */
-    padding-right: 156px;
+    padding-inline-end: 156px;
     min-height: 36px;
 }
 @media (min-width: 380px) {
@@ -6623,7 +6623,7 @@ body.tier-t4 .home-impact {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     font-weight: 600;
-    margin-left: 8px;
+    margin-inline-start: 8px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -6631,7 +6631,7 @@ body.tier-t4 .home-impact {
 @media (max-width: 380px) {
     .v4-step-label {
         font-size: 10px;
-        margin-left: 6px;
+        margin-inline-start: 6px;
         letter-spacing: 0.3px;
     }
 }
@@ -7104,7 +7104,7 @@ body.tier-t4 .home-impact {
     letter-spacing: 0.05em;
     /* Phase 2.4 (May 2026) — WCAG AA. See `.v4-meta-loc-coords`. */
     color: var(--text-sub, #cbd5e1);
-    margin-left: 4px;
+    margin-inline-start: 4px;
 }
 .v4-cap-extras-row {
     display: grid;
@@ -7402,7 +7402,7 @@ body.tier-t4 .home-impact {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
-    margin-left: 4px;
+    margin-inline-start: 4px;
 }
 
 /* action-sheet shown when the `+` thumb button is
@@ -8350,7 +8350,7 @@ body.tier-t4 .home-impact {
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%2394a3b8' d='M6 9L2 5h8z'/></svg>");
     background-repeat: no-repeat;
     background-position: right 8px center;
-    padding-right: 26px;
+    padding-inline-end: 26px;
 }
 
 .v4-needs {
@@ -9297,7 +9297,7 @@ body.tier-t4 .home-impact {
 }
 .photo-consent-bullets li {
     position: relative;
-    padding-left: 26px;
+    padding-inline-start: 26px;
     font-size: 13.5px;
     line-height: 1.45;
     color: rgba(255, 255, 255, 0.88);
@@ -9598,7 +9598,7 @@ body.tier-t4 .home-impact {
     justify-content: center;
     flex: 0 0 auto;
     width: 22px; height: 22px;
-    margin-left: 4px;
+    margin-inline-start: 4px;
     color: #80EE98;        /* matches the v5 rewards-tile accent */
     opacity: 0.85;
 }
@@ -9883,8 +9883,8 @@ body.tier-t4 .home-impact {
        handling — global pattern" invariant. */
     padding-top: 6px;
     padding-bottom: 6px;
-    padding-left: 10px;
-    padding-right: 10px;
+    padding-inline-start: 10px;
+    padding-inline-end: 10px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.025);
     border: 1px solid rgba(255, 255, 255, 0.07);
@@ -9972,8 +9972,8 @@ body.tier-t4 .home-impact {
     .home-stage .home-channels-strip {
         min-height: 48px;
         padding-top: 8px; padding-bottom: 8px;
-        padding-left: 12px;
-        padding-right: 12px;
+        padding-inline-start: 12px;
+        padding-inline-end: 12px;
     }
     /* v6.6 — min-width matches width at every responsive tier so icons
        cannot shrink under flex pressure. */
@@ -9984,8 +9984,8 @@ body.tier-t4 .home-impact {
     .home-stage .home-channels-strip {
         min-height: 52px;
         padding-top: 10px; padding-bottom: 10px;
-        padding-left: 14px;
-        padding-right: 14px;
+        padding-inline-start: 14px;
+        padding-inline-end: 14px;
     }
     .home-stage .hcs-icon { width: 40px; height: 40px; min-width: 40px; font-size: 22px; }
     .home-stage .hcs-icon svg { width: 22px; height: 22px; overflow: visible; }
@@ -10085,13 +10085,13 @@ body.tier-t4 .home-impact {
     flex: 0 0 auto;
     color: rgba(255, 255, 255, 0.30);
     font-size: 13px;
-    margin-left: 2px;
+    margin-inline-start: 2px;
 }
 [dir="rtl"] .channels-sheet-row { gap: 14px; }
 [dir="rtl"] .csr-arrow {
     transform: scaleX(-1);
-    margin-left: 0;
-    margin-right: 2px;
+    margin-inline-start: 0;
+    margin-inline-end: 2px;
 }
 
 /* ── H. Footer + device-ID consolidated ──────────────────────────── */
@@ -10719,7 +10719,7 @@ body.tier-t4 .home-impact {
     width: 220px;
     height: 220px;
     margin-top: -110px;
-    margin-left: -110px;
+    margin-inline-start: -110px;
     border-radius: 50%;
     background:
         radial-gradient(circle at center,
@@ -10737,7 +10737,7 @@ body.tier-t4 .home-impact {
     width: 200px;
     height: 200px;
     margin-top: -100px;
-    margin-left: -100px;
+    margin-inline-start: -100px;
     border-radius: 50%;
     border: 1px solid rgba(70, 223, 177, 0.32);
     pointer-events: none;
@@ -10964,7 +10964,7 @@ body.tier-t4 .home-impact {
     width: 140px;
     height: 140px;
     margin-top: -70px;
-    margin-left: -70px;
+    margin-inline-start: -70px;
     border-radius: 50%;
     border: 1px solid rgba(70, 223, 177, 0.28);
     background:
@@ -11239,7 +11239,7 @@ body { background-color: #10284a; }
    number"). Mint-green chip echoes the borders + the live channel dot
    so the count reads as a status indicator. */
 .home-stage .home-primary-btn .mr-count {
-    margin-left: 4px;
+    margin-inline-start: 4px;
     padding: 1px 9px;
     border-radius: 999px;
     background: rgba(9, 209, 199, 0.18);
@@ -12121,7 +12121,7 @@ body { background-color: #10284a; }
     width: 200px;
     height: 200px;
     margin-top: -100px;
-    margin-left: -100px;
+    margin-inline-start: -100px;
     border-radius: 50%;
     border: 1px solid rgba(70, 223, 177, 0.32);
     background:
