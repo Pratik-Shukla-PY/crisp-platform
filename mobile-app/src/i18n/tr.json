@@ -301,7 +301,7 @@
   "damage_tip_minimal": "Yapısal olarak sağlam ve işlevsel — yüzeysel veya görünmez hasar.",
   "damage_tip_partial": "Onarılabilir, dikkatle kullanılabilir.",
   "damage_tip_complete": "Yapısal olarak güvensiz veya yıkık.",
-  "photo_cap_reached": "Bildirim başına en fazla 5 fotoğraf",
+  "photo_cap_reached": "Bildirim başına en fazla 3 fotoğraf",
   "chooser_camera": "Kamera",
   "chooser_gallery": "Galeri",
   "auto_loc_label": "Konum (otomatik)",

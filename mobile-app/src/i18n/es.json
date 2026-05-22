@@ -310,7 +310,7 @@
   "damage_tip_minimal": "Estructuralmente sólido y funcional — daños cosméticos o no visibles.",
   "damage_tip_partial": "Reparable, aún utilizable con precaución.",
   "damage_tip_complete": "Estructuralmente inseguro o destruido.",
-  "photo_cap_reached": "Máx. 5 fotos por informe",
+  "photo_cap_reached": "Máx. 3 fotos por informe",
   "chooser_camera": "Cámara",
   "chooser_gallery": "Galería",
   "auto_loc_label": "Ubicación (auto)",

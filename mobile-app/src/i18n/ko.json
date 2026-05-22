@@ -301,7 +301,7 @@
   "damage_tip_minimal": "구조적으로 안정하고 작동 — 표면적 또는 보이지 않는 손상.",
   "damage_tip_partial": "수리 가능, 주의해서 사용 가능.",
   "damage_tip_complete": "구조적으로 안전하지 않거나 파괴됨.",
-  "photo_cap_reached": "보고서당 최대 5장",
+  "photo_cap_reached": "보고서당 최대 3장",
   "chooser_camera": "카메라",
   "chooser_gallery": "갤러리",
   "auto_loc_label": "위치 (자동)",

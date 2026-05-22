@@ -302,7 +302,7 @@
   "damage_tip_minimal": "Structure saine et fonctionnelle — dommages cosmétiques ou invisibles.",
   "damage_tip_partial": "Réparable, encore utilisable avec prudence.",
   "damage_tip_complete": "Structurellement dangereux ou détruit.",
-  "photo_cap_reached": "Max 5 photos par rapport",
+  "photo_cap_reached": "Max 3 photos par rapport",
   "chooser_camera": "Caméra",
   "chooser_gallery": "Galerie",
   "auto_loc_label": "Lieu (auto)",

@@ -262,11 +262,12 @@ function _runAfterInteractions<T>(asyncFn: () => Promise<T>): Promise<T> {
   });
 }
 
-// Apr 2026 UI v3 — per-incident photo cap (PWA/RN parity, see mobile-app/src/app.js).
-// 4 extras + 1 primary = 5 photos total. Guarded at every _ingestExtraFromUri
-// call site so a future code path can't accidentally bypass. Enforced on the
-// client AND on the server's chunked-upload ceiling — matches PWA behaviour.
-const MAX_EXTRA_PHOTOS = 4;
+// Per-incident photo cap (PWA/RN parity, see mobile-app/src/app.js).
+// 2 extras + 1 primary = 3 photos total — operator UX decision May 2026,
+// reduced from 5. Guarded at every _ingestExtraFromUri call site so a
+// future code path can't accidentally bypass. Enforced on the client
+// AND on the server's chunked-upload ceiling — matches PWA behaviour.
+const MAX_EXTRA_PHOTOS = 2;
 const MAX_PHOTOS_TOTAL = MAX_EXTRA_PHOTOS + 1;   // main + extras
 
 // Throttle ref for the cap-reached Alert — prevents 10 popups when the user

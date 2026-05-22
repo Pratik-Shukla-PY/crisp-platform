@@ -295,7 +295,7 @@
   "damage_tip_minimal": "结构完好且功能正常——表面或无可见损坏。",
   "damage_tip_partial": "可修复，仍可谨慎使用。",
   "damage_tip_complete": "结构不安全或已毁坏。",
-  "photo_cap_reached": "每份报告最多 5 张照片",
+  "photo_cap_reached": "每份报告最多 3 张照片",
   "chooser_camera": "相机",
   "chooser_gallery": "相册",
   "auto_loc_label": "位置（自动）",

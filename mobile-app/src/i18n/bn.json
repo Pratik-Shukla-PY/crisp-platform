@@ -299,7 +299,7 @@
   "damage_tip_minimal": "কাঠামোগতভাবে নিরাপদ এবং কার্যকর — পৃষ্ঠ বা অদৃশ্য ক্ষতি।",
   "damage_tip_partial": "মেরামতযোগ্য, সাবধানে ব্যবহার্য।",
   "damage_tip_complete": "কাঠামোগতভাবে অনিরাপদ বা ধ্বংস।",
-  "photo_cap_reached": "প্রতিবেদনে সর্বোচ্চ ৫টি ছবি",
+  "photo_cap_reached": "প্রতিবেদনে সর্বোচ্চ ৩টি ছবি",
   "chooser_camera": "ক্যামেরা",
   "chooser_gallery": "গ্যালারি",
   "auto_loc_label": "অবস্থান (স্বয়ং)",

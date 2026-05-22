@@ -291,7 +291,7 @@
   "damage_tip_minimal": "سليم من الناحية الإنشائية ومُشغَّل — تلف تجميلي أو غير مرئي.",
   "damage_tip_partial": "قابل للإصلاح، لا يزال قابلاً للاستخدام بحذر.",
   "damage_tip_complete": "غير آمن إنشائياً أو مُدمَّر.",
-  "photo_cap_reached": "5 صور كحد أقصى لكل تقرير",
+  "photo_cap_reached": "3 صور كحد أقصى لكل تقرير",
   "chooser_camera": "الكاميرا",
   "chooser_gallery": "المعرض",
   "auto_loc_label": "الموقع (تلقائي)",

@@ -3767,13 +3767,16 @@ function _v3AutoDeriveSeverity() {
     }
 }
 
-// UI v3 — per-incident photo cap. UNDP brief doesn't mandate a
-// max, but field testers showed 95 % of captures land within 4–5 photos
-// and the chunked-upload pipeline slows markedly past 5 on 2 G. We cap
-// EXTRAS at 4 so main + extras = 5 max. Guarded at every push site
-// (there are three: file-input handler, camera-modal, and the legacy
-// `takePhotoFrom` path) so a future code path can't accidentally bypass.
-const MAX_EXTRA_PHOTOS = 4;
+// Per-incident photo cap (May 2026 operator UX decision: was 5, now 3).
+// UNDP brief doesn't mandate a max. 3 photos covers the humanitarian
+// crisis-response workflow (one wide, one close-up, one context); cuts
+// capture-screen time, smaller submission queue per report, and reduces
+// peak CPU + memory pressure for the upcoming Blur Web-Worker pipeline
+// (3 photos × 3 variants = 9 worker jobs per report, well within mobile
+// budgets). We cap EXTRAS at 2 so main + extras = 3 max. Guarded at
+// every push site (file-input handler, camera-modal, legacy
+// `takePhotoFrom`) so a future code path can't accidentally bypass.
+const MAX_EXTRA_PHOTOS = 2;
 const MAX_PHOTOS_TOTAL = MAX_EXTRA_PHOTOS + 1;   // main + extras
 
 /** Guard every extraPhotos.push — returns true when the push is allowed.

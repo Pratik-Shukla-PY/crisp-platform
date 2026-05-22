@@ -177,13 +177,13 @@
     }
     function _getState() { return window.state; }
 
-    // Hard cap on photos per report. Matches the v3 MAX_PHOTOS_TOTAL
-    // (4 extras + 1 primary). Earlier, the `+` button in the v4 thumb
-    // strip accepted photos past the cap because v4's _handlePhoto did
-    // not check. Now enforced at three gates: _handlePhoto,
-    // _renderThumbs (hides the + button at the cap), and the chooser
-    // overlay.
-    const V4_MAX_PHOTOS = 5;
+    // Hard cap on photos per report. Matches MAX_PHOTOS_TOTAL in app.js
+    // (2 extras + 1 primary = 3 total — operator UX decision May 2026,
+    // reduced from 5). Earlier, the `+` button in the v4 thumb strip
+    // accepted photos past the cap because v4's _handlePhoto did not
+    // check. Now enforced at three gates: _handlePhoto, _renderThumbs
+    // (hides the + button at the cap), and the chooser overlay.
+    const V4_MAX_PHOTOS = 3;
 
     // ── Page 1: capture ─────────────────────────────────────────────────
     /**

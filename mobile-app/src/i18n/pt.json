@@ -306,7 +306,7 @@
   "damage_tip_minimal": "Estruturalmente íntegro e funcional — danos cosméticos ou invisíveis.",
   "damage_tip_partial": "Reparável, ainda utilizável com precaução.",
   "damage_tip_complete": "Estruturalmente inseguro ou destruído.",
-  "photo_cap_reached": "Máx. 5 fotos por relatório",
+  "photo_cap_reached": "Máx. 3 fotos por relatório",
   "chooser_camera": "Câmara",
   "chooser_gallery": "Galeria",
   "auto_loc_label": "Local (auto)",

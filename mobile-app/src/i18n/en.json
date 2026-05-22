@@ -268,7 +268,7 @@
   "damage_tip_minimal": "Structurally sound and functional — cosmetic or no visible damage.",
   "damage_tip_partial": "Repairable, still usable with caution.",
   "damage_tip_complete": "Structurally unsafe or destroyed.",
-  "photo_cap_reached": "Max 5 photos per report",
+  "photo_cap_reached": "Max 3 photos per report",
   "chooser_camera": "Camera",
   "chooser_gallery": "Gallery",
   "auto_loc_label": "Location (auto)",

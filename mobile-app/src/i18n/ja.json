@@ -300,7 +300,7 @@
   "damage_tip_minimal": "構造的に問題なく機能している — 表面的または目立たない被害。",
   "damage_tip_partial": "修理可能、注意して使用可能。",
   "damage_tip_complete": "構造的に危険または全壊。",
-  "photo_cap_reached": "1報告につき最大5枚",
+  "photo_cap_reached": "1報告につき最大3枚",
   "chooser_camera": "カメラ",
   "chooser_gallery": "ギャラリー",
   "auto_loc_label": "場所（自動）",
