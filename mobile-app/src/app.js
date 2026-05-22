@@ -11957,8 +11957,17 @@ async function _renderSubmittedReports() {
     const list = document.getElementById('history-synced-list');
     const impactCard = document.getElementById('history-impact-card');
     if (!list) return;
+    // Submitted section is hidden by default (see index.html) so the
+    // headers don't render before the empty state lands. Every commit
+    // path through this function must unhide it — including the
+    // early-return empty branches below. Pre-fix the empty state drew
+    // into a still-hidden section and the user saw "In flight" +
+    // "Submitted" headers with no content for several frames.
+    const _subSec = document.getElementById('history-submitted-section');
+    const _showSubSec = () => { if (_subSec) _subSec.style.display = ''; };
     const deviceHash = _deviceHashForHistory();
     if (!deviceHash) {
+        _showSubSec();
         _historyEmpty(list, t('empty_submitted'), 'fa-paper-plane');
         if (impactCard) impactCard.style.display = 'none';
         // Hide M6 controls when there are no reports.
@@ -12109,6 +12118,7 @@ async function _renderSubmittedReports() {
     // the #hi-lives painter just above (impact-card surface), which
     // stays.
     if (!reports.length) {
+        _showSubSec();
         _historyEmpty(list, t('empty_submitted'), 'fa-paper-plane');
         const ctrl = document.getElementById('mr-controls');
         if (ctrl) ctrl.style.display = 'none';

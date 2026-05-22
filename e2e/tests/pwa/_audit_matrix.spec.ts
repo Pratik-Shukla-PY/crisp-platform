@@ -58,7 +58,25 @@ for (const lang of LOCALES) {
             for (const stage of STAGES) {
                 try {
                     await page.evaluate((s) => (window as any).__crispGoToStage(s), stage);
-                    await page.waitForTimeout(350);
+                    // Some stages defer content rendering to a separate entry
+                    // function (e.g. openMyReports() fires _renderPartialReports
+                    // + _renderSubmittedReports). Direct __crispGoToStage skips
+                    // that, leaving the stage in its initial (often blank) state.
+                    // Trigger the renderers explicitly to capture user-perceived UI.
+                    if (stage === 'stage-history') {
+                        await page.evaluate(async () => {
+                            const w: any = window;
+                            if (typeof w._renderPartialReports === 'function') {
+                                try { await w._renderPartialReports(); } catch {}
+                            }
+                            if (typeof w._renderSubmittedReports === 'function') {
+                                try { await w._renderSubmittedReports(); } catch {}
+                            }
+                        });
+                        await page.waitForTimeout(800);
+                    } else {
+                        await page.waitForTimeout(350);
+                    }
                     await page.screenshot({
                         path: path.join(OUT, `${lang}_${vpName}_${stage}.png`),
                         fullPage: false,

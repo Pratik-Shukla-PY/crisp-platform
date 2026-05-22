@@ -3284,12 +3284,20 @@
             </button>
         </div>
 
-        <div class="history-section" id="history-inflight-section">
+        <!-- Both sections default to hidden. _renderPartialReports +
+             _renderSubmittedReports explicitly unhide their section when
+             they have content OR an empty state to render. Pre-fix the
+             headers rendered first and the empty content appeared briefly
+             below them (or never, if the renderer silently failed via the
+             .catch(()=>{}) at the call site) — making the page look broken
+             to a first-time visitor. See AUDIT-REPORT-2026-05-23.md S1
+             finding for My Reports. -->
+        <div class="history-section" id="history-inflight-section" style="display:none;">
             <h2 class="history-section-title"><i class="fa-solid fa-spinner"></i> <span data-i18n="in_flight">In flight</span></h2>
             <div id="history-partial-list"></div>
         </div>
 
-        <div class="history-section" id="history-submitted-section">
+        <div class="history-section" id="history-submitted-section" style="display:none;">
             <h2 class="history-section-title"><i class="fa-solid fa-paper-plane"></i> <span data-i18n="submitted">Submitted</span></h2>
             <div id="history-synced-list"></div>
         </div>
