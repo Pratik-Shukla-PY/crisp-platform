@@ -624,6 +624,16 @@ class Media(Base):
     abandoned_at = Column(DateTime(timezone=True), nullable=True)
     abandon_reason = Column(String(40), nullable=True)
 
+    # R1 (May 2026) — stamped by the assembly worker when an
+    # abandoned-but-resumed upload completes successfully. NULL means
+    # either (a) never abandoned, or (b) abandoned and not yet recovered.
+    # Dashboard chip predicate uses (abandon_reason AND recovered_at IS NULL)
+    # to distinguish recovered uploads from genuinely-failed ones. The
+    # `abandoned_at` / `abandon_reason` pair stays write-once at the
+    # original abandonment for the audit trail; this column carries the
+    # recovery fact. See migrations/versions/0040_media_recovered_at_recovery.py.
+    recovered_at = Column(DateTime(timezone=True), nullable=True)
+
     report = relationship("Report", back_populates="media")
     chunks = relationship("MediaChunk", back_populates="media", cascade="all, delete-orphan")
 

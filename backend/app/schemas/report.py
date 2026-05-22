@@ -252,6 +252,14 @@ class MediaResponse(MediaBase):
     # reached terminal failure.
     abandoned_at: Optional[datetime] = None
     abandon_reason: Optional[str] = None
+    # R1 (May 2026) — recovery audit-trail completion timestamp. NULL on:
+    #   (a) rows never abandoned (the common case)
+    #   (b) abandoned + not yet resumed
+    # Set when the assembly worker completes a previously-abandoned row.
+    # Dashboard chip predicate flips from `abandon_reason` to
+    # `abandon_reason && !recovered_at` so successfully-resumed uploads
+    # stop rendering as "abandoned" after recovery.
+    recovered_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
     # UNDP scaling. The DB stores `s3://<key>` for media

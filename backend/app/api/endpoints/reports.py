@@ -1233,6 +1233,31 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
         media.assembly_status = 'complete'
         media.is_synced = True
         media.completion_pct = 100.0
+        # R1 (May 2026) — stamp recovery audit trail. The row reaches
+        # this branch via either the happy path (never abandoned) or the
+        # recovery path (abandoned by daemon Action ②/③, revived by a
+        # subsequent chunk arrival in the handler's else branch). Only
+        # the recovery path needs the timestamp — abandoned_at would be
+        # NULL on the happy path. Idempotent (won't overwrite an existing
+        # value) so a re-assembly after a partial-bytes window doesn't
+        # update a previously-stamped row.
+        if media.abandoned_at is not None and media.recovered_at is None:
+            from datetime import datetime as _dt_r1, timezone as _tz_r1
+            media.recovered_at = _dt_r1.now(_tz_r1.utc)
+            try:
+                from app.core.observability import (
+                    media_recovery_total as _mrt,
+                    media_recovery_duration_seconds as _mrd,
+                )
+                _mrt.labels(outcome='succeeded').inc()
+                if media.abandoned_at is not None:
+                    _duration = (media.recovered_at - media.abandoned_at).total_seconds()
+                    _mrd.observe(max(0.0, _duration))
+            except Exception:
+                # Recovery metrics arrive in R2.c. Until then this
+                # try/except keeps the worker working even when the
+                # counters haven't been wired yet.
+                pass
 
         # K.1.a (May 2026, Phase K) — atomic SQL increment.
         # Previous read-modify-write `report.received_media = (report.received_media or 0) + 1`
@@ -3398,6 +3423,73 @@ def attach_media_chunk(
                     detail="media row creation race could not be reconciled",
                 )
     else:
+        # ── R1 (May 2026) — soft-abandon revival (legacy JSON endpoint) ─
+        # Mirrors the chunk-bin handler's revival rule. See that handler
+        # for the full design notes. Hard-abandons (checksum_mismatch /
+        # original_too_large) reject with 410 Gone; soft-abandons revive
+        # atomically while preserving the audit columns.
+        _HARD_ABANDON_REASONS_LEGACY = frozenset({
+            'checksum_mismatch', 'original_too_large',
+        })
+        _SOFT_ABANDON_REASONS_LEGACY = frozenset({
+            'chunks_never_arrived', 'assembly_worker_lost',
+            'bandwidth_tier_deferred',
+        })
+        if (media.abandoned_at is not None
+                and media.abandon_reason in _HARD_ABANDON_REASONS_LEGACY):
+            logger.warning(
+                f"[Chunk] rejecting chunk for hard-abandoned media "
+                f"{payload.media_id[:8]} (reason={media.abandon_reason}); "
+                f"client must allocate a new media_id."
+            )
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    f"media row terminally abandoned "
+                    f"({media.abandon_reason}); allocate a fresh media_id"
+                ),
+            )
+        if (media.assembly_status == 'failed'
+                and media.abandoned_at is not None
+                and media.recovered_at is None
+                and media.abandon_reason in _SOFT_ABANDON_REASONS_LEGACY):
+            update_payload = {'assembly_status': 'pending'}
+            if media.abandon_reason == 'bandwidth_tier_deferred':
+                update_payload.update({
+                    'chunk_count': payload.total_chunks,
+                    'received_chunks': 0,
+                    'completion_pct': 0.0,
+                    'url': '',
+                })
+            revived = db.query(Media).filter(
+                Media.id == payload.media_id,
+                Media.assembly_status == 'failed',
+                Media.abandoned_at.isnot(None),
+                Media.recovered_at.is_(None),
+                Media.abandon_reason.in_(list(_SOFT_ABANDON_REASONS_LEGACY)),
+            ).update(update_payload, synchronize_session=False)
+            if revived and media.abandon_reason == 'bandwidth_tier_deferred':
+                db.query(Report).filter(Report.id == report_id).update(
+                    {Report.expected_media: Report.expected_media + 1},
+                    synchronize_session="fetch",
+                )
+            if revived:
+                logger.info(
+                    f"[Chunk] revived {payload.media_id[:8]} from "
+                    f"abandon_reason={media.abandon_reason} "
+                    f"(audit trail preserved; recovered_at stamped on assembly)"
+                )
+                try:
+                    from app.core.observability import variant_uploads_total as _vut
+                    _vut.labels(
+                        tier=str(media.resolution_tier.value if media.resolution_tier else 'UNKNOWN'),
+                        outcome='revived',
+                    ).inc()
+                except Exception:
+                    pass
+            db.flush()
+            db.refresh(media)
+
         if payload.client_blur_applied and not media.client_blur_applied:
             # Client sent the flag on a later chunk (e.g. resumed upload where
             # first chunk predated the client-blur release). Upgrade the media
@@ -3816,45 +3908,121 @@ async def attach_media_chunk_bin(
                     detail="media row creation race could not be reconciled",
                 )
     else:
-        # PRE-EMPTIVE DEFER REVIVAL (May 2026, Phase A follow-up):
-        # The PWA can call mark-deferred upfront when it decides not to
-        # attempt MEDIUM/ORIGINAL on a VERY_SLOW network. That call
-        # creates this Media row with assembly_status='failed' and
-        # abandon_reason='bandwidth_tier_deferred'. If bandwidth later
-        # improves and the PWA retries with this same media_id, we
-        # REVIVE the row — clear the abandon state + reset chunk_count
-        # to the new total. Without this, the row stays terminal-failed
-        # and the chunks accumulate as data_binary entries with no
-        # assembly trigger.
+        # ── R1 (May 2026) — generalised soft-abandon revival ─────────────
+        # The chunk handler is the only place with positive evidence of
+        # client-side recovery (actual bytes arriving). The recovery
+        # sweep daemon stays conservative and never auto-revives
+        # abandoned rows by timer; that's intentional. Here we revive on
+        # chunk arrival.
+        #
+        # Soft abandons (revivable on chunk arrival):
+        #   - chunks_never_arrived     — daemon Action ③, client just
+        #                                 came back online
+        #   - assembly_worker_lost     — daemon Action ②, worker died
+        #                                 mid-assembly but chunks may
+        #                                 not all be in yet; client
+        #                                 resending finishes the job
+        #   - bandwidth_tier_deferred  — PWA pre-emptive defer; client
+        #                                 retried after bandwidth recovered
+        #
+        # Hard abandons (NOT revivable — reject with 410 Gone at the top
+        # of the handler so we don't pile chunks against a row whose
+        # disk bytes are corrupt or already-rejected):
+        #   - checksum_mismatch        — assembly worker found whole-
+        #                                 asset djb2 mismatch; bytes on
+        #                                 disk are wrong, can't fix by
+        #                                 resending more chunks
+        #   - original_too_large       — 5 MB cap rejected; resending
+        #                                 doesn't shrink the asset
+        #
+        # The revival is one atomic UPDATE with the full WHERE clause so
+        # a concurrent daemon UPDATE (write-then-read race) is harmless:
+        # whoever lost the race reads the post-revival state.
+        #
+        # IMPORTANT: abandoned_at + abandon_reason stay populated (audit
+        # trail). recovered_at gets stamped by the assembly worker on
+        # successful post-revival completion. Dashboard chip predicate
+        # flips to `abandon_reason && !recovered_at`.
+        _HARD_ABANDON_REASONS = frozenset({
+            'checksum_mismatch', 'original_too_large',
+        })
+        _SOFT_ABANDON_REASONS = frozenset({
+            'chunks_never_arrived', 'assembly_worker_lost',
+            'bandwidth_tier_deferred',
+        })
+        if (media.abandoned_at is not None
+                and media.abandon_reason in _HARD_ABANDON_REASONS):
+            # Reject — the client must allocate a fresh media_id.
+            logger.warning(
+                f"[chunk-bin] rejecting chunk for hard-abandoned media "
+                f"{media_id[:8]} (reason={media.abandon_reason}); "
+                f"client must allocate a new media_id."
+            )
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    f"media row terminally abandoned "
+                    f"({media.abandon_reason}); allocate a fresh media_id"
+                ),
+            )
+
         if (media.assembly_status == 'failed'
-                and media.abandon_reason == 'bandwidth_tier_deferred'):
-            logger.info(
-                f"[chunk-bin] reviving pre-emptive-defer placeholder {media_id[:8]} "
-                f"({media.resolution_tier.value if media.resolution_tier else '?'}): "
-                f"abandon→pending, chunk_count {media.chunk_count}→{total_chunks}"
-            )
-            media.assembly_status = 'pending'
-            media.abandon_reason = None
-            media.abandoned_at = None
-            media.chunk_count = total_chunks
-            media.received_chunks = 0
-            media.completion_pct = 0.0
-            media.url = ''
-            # Also bump expected_media on the parent report — mark-deferred
-            # decremented it when this row was abandoned; now we're back
-            # in the running so the SYNCED gate should account for us.
-            db.query(Report).filter(Report.id == report_id).update(
-                {Report.expected_media: Report.expected_media + 1},
-                synchronize_session="fetch",
-            )
+                and media.abandoned_at is not None
+                and media.recovered_at is None
+                and media.abandon_reason in _SOFT_ABANDON_REASONS):
+            # Atomic revival. Only flips when the row matches exactly
+            # the state we expect — if the daemon raced us into a
+            # different state, this UPDATE is a no-op and assembly
+            # proceeds from whatever state actually exists.
+            #
+            # NOTE: abandoned_at + abandon_reason are NOT cleared. They
+            # remain the audit-trail signature of the original
+            # abandonment. The post-completion `recovered_at` stamp
+            # tells the dashboard the row recovered.
+            update_payload = {'assembly_status': 'pending'}
+            # bandwidth_tier_deferred had two extra side effects in
+            # the pre-R1 code that we still need: reset chunk_count to
+            # the new total AND re-credit expected_media on the parent
+            # report (mark-deferred decremented it when it abandoned
+            # the row). We preserve those for this specific reason
+            # only — other soft-abandon reasons don't need them
+            # (chunks_never_arrived / assembly_worker_lost left
+            # chunk_count and expected_media intact at abandon time).
+            if media.abandon_reason == 'bandwidth_tier_deferred':
+                update_payload.update({
+                    'chunk_count': total_chunks,
+                    'received_chunks': 0,
+                    'completion_pct': 0.0,
+                    'url': '',
+                })
+            revived = db.query(Media).filter(
+                Media.id == media_id,
+                Media.assembly_status == 'failed',
+                Media.abandoned_at.isnot(None),
+                Media.recovered_at.is_(None),
+                Media.abandon_reason.in_(list(_SOFT_ABANDON_REASONS)),
+            ).update(update_payload, synchronize_session=False)
+            if revived and media.abandon_reason == 'bandwidth_tier_deferred':
+                db.query(Report).filter(Report.id == report_id).update(
+                    {Report.expected_media: Report.expected_media + 1},
+                    synchronize_session="fetch",
+                )
+            if revived:
+                logger.info(
+                    f"[chunk-bin] revived {media_id[:8]} from "
+                    f"abandon_reason={media.abandon_reason} "
+                    f"(audit trail preserved; recovered_at stamped on assembly)"
+                )
+                try:
+                    from app.core.observability import variant_uploads_total as _vut
+                    _vut.labels(
+                        tier=str(media.resolution_tier.value if media.resolution_tier else 'UNKNOWN'),
+                        outcome='revived',
+                    ).inc()
+                except Exception:
+                    pass
             db.flush()
             db.refresh(media)
-            try:
-                from app.core.observability import variant_uploads_total as _vut
-                _vut.labels(tier=str(media.resolution_tier.value if media.resolution_tier else 'UNKNOWN'),
-                            outcome='revived').inc()
-            except Exception:
-                pass
 
         if blur_flag and not media.client_blur_applied:
             # Late-arriving blur flag (same upgrade path as the legacy endpoint).

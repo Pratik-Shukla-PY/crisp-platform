@@ -2266,7 +2266,18 @@ function createIncidentCard(r) {
     //   5. Attribution lost (expired token)          — GREY, informational
     //   6. Uploading… (sync_status=PARTIAL + pending media) — AMBER
     const _media = r.media || [];
-    const _hasAbandonReason = (reason) => _media.some(m => m && m.abandon_reason === reason);
+    // R1 (May 2026) — chip predicate distinguishes abandoned-and-recovered
+    // from abandoned-forever. Pre-R1 we matched on abandon_reason alone;
+    // that caused successfully-resumed uploads to render the "Upload
+    // abandoned" chip indefinitely because abandon_reason was never
+    // cleared. The post-R1 fix preserves the audit trail (abandon_reason
+    // stays populated) and adds recovered_at as the recovery signal.
+    // A row is "abandoned" for chip purposes iff:
+    //   - abandon_reason matches the chip's signature AND
+    //   - recovered_at IS NULL (no subsequent recovery)
+    const _hasAbandonReason = (reason) => _media.some(m => m
+        && m.abandon_reason === reason
+        && !m.recovered_at);
     const _hasPiiBlurStatus = (status) => _media.some(m => m && m.pii_blur_status === status);
     let _statusChip = '';
     if (_hasAbandonReason('checksum_mismatch')) {
