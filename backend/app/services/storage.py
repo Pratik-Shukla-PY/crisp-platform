@@ -106,6 +106,31 @@ class MediaStorage(Protocol):
         """Remove `pre_blur/<key>`. Idempotent."""
         ...
 
+    # ── R3.b (May 2026) — disk-orphan reconciliation surface ──
+    # The daemon's Action ⑦ walks the storage backend and cross-
+    # references against live Media.url rows. Anything older than
+    # CRISP_HARD_ABANDON_DAYS with no live referrer is deleted.
+
+    def list_keys(
+        self, *, prefix: str = "", older_than_unix_ts: float | None = None,
+        limit: int = 1000,
+    ) -> list[tuple[str, float]]:
+        """Return up to ``limit`` (key, mtime_unix) tuples under ``prefix``.
+
+        ``key`` is the bare filename / S3 object key (no scheme, no
+        leading prefix). ``mtime_unix`` is the storage object's
+        last-modified timestamp.
+
+        If ``older_than_unix_ts`` is supplied, only entries with
+        ``mtime <= older_than_unix_ts`` are returned — this lets the
+        daemon avoid pulling fresh entries it would never delete.
+
+        Implementations MUST be paginated under the hood (S3 buckets
+        can have millions of objects) but always return a single
+        flat list capped at ``limit``. The daemon calls multiple
+        times if it wants more results."""
+        ...
+
 
 # ── Local-disk backend ──────────────────────────────────────────────────────
 
@@ -202,6 +227,48 @@ class LocalStorage:
             return True
         except FileNotFoundError:
             return False
+
+    # ── R3.b — disk-orphan reconciliation surface (local) ──────────
+    def list_keys(
+        self, *, prefix: str = "", older_than_unix_ts: float | None = None,
+        limit: int = 1000,
+    ) -> list[tuple[str, float]]:
+        """List up to ``limit`` (filename, mtime_unix) under ``upload_dir``.
+
+        The ``prefix`` semantics: an empty string lists the upload_dir
+        root (the public assembled files). ``prefix=_PRE_BLUR_PREFIX``
+        lists the internal pre_blur namespace. Anything else is treated
+        as a literal subdir under upload_dir.
+
+        The pre_blur dir is skipped from a root-prefix scan so the
+        daemon's public-storage GC doesn't see internal bytes.
+        """
+        if prefix == _PRE_BLUR_PREFIX:
+            root = self.pre_blur_dir
+        elif prefix:
+            root = os.path.join(self.upload_dir, prefix)
+        else:
+            root = self.upload_dir
+        if not os.path.isdir(root):
+            return []
+        out: list[tuple[str, float]] = []
+        for name in os.listdir(root):
+            # Skip the pre_blur subdir when scanning the root.
+            if prefix == "" and name == _PRE_BLUR_PREFIX:
+                continue
+            path = os.path.join(root, name)
+            if not os.path.isfile(path):
+                continue
+            try:
+                mtime = os.stat(path).st_mtime
+            except OSError:
+                continue
+            if older_than_unix_ts is not None and mtime > older_than_unix_ts:
+                continue
+            out.append((name, mtime))
+            if len(out) >= limit:
+                break
+        return out
 
 
 # ── AWS S3 backend ──────────────────────────────────────────────────────────
@@ -353,6 +420,53 @@ class S3Storage:
         except Exception as exc:
             logger.warning(f"S3 delete_internal failed for {s3_key}: {exc}")
             return False
+
+    # ── R3.b — disk-orphan reconciliation surface (S3) ────────────
+    def list_keys(
+        self, *, prefix: str = "", older_than_unix_ts: float | None = None,
+        limit: int = 1000,
+    ) -> list[tuple[str, float]]:
+        """List up to ``limit`` (key, mtime_unix) entries in the bucket
+        under the given prefix.
+
+        Paginates via list_objects_v2 ContinuationToken; honours the
+        prefix-skip-pre_blur convention for empty-prefix scans.
+        """
+        out: list[tuple[str, float]] = []
+        kwargs = {"Bucket": self.bucket, "MaxKeys": min(1000, max(1, limit))}
+        if prefix:
+            kwargs["Prefix"] = prefix
+        continuation = None
+        while True:
+            if continuation:
+                kwargs["ContinuationToken"] = continuation
+            try:
+                resp = self.s3.list_objects_v2(**kwargs)
+            except Exception as exc:
+                logger.warning(f"S3 list_objects_v2 failed (prefix={prefix!r}): {exc}")
+                return out
+            for obj in resp.get("Contents", []):
+                key = obj["Key"]
+                # Skip the pre_blur namespace from an empty-prefix scan
+                # so the daemon's public-storage GC doesn't see internal
+                # bytes.
+                if not prefix and key.startswith(f"{_PRE_BLUR_PREFIX}/"):
+                    continue
+                last_modified = obj.get("LastModified")
+                if last_modified is None:
+                    continue
+                mtime = last_modified.timestamp()
+                if older_than_unix_ts is not None and mtime > older_than_unix_ts:
+                    continue
+                out.append((key, mtime))
+                if len(out) >= limit:
+                    return out
+            if not resp.get("IsTruncated"):
+                break
+            continuation = resp.get("NextContinuationToken")
+            if not continuation:
+                break
+        return out
 
 
 # ── Module-level singleton, selected by env ─────────────────────────────────

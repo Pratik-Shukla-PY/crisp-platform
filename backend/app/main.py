@@ -712,6 +712,19 @@ _PARTIAL_PROMOTE_IDLE_S    = int(os.getenv("CRISP_PARTIAL_PROMOTE_IDLE_S",    "6
 # Action ⑥ — useful for forensic environments where ALL abandons
 # must be retained).
 _HARD_ABANDON_DAYS         = int(os.getenv("CRISP_HARD_ABANDON_DAYS",         "30"))
+# R3.b (May 2026) — disk-orphan GC interval. Action ⑦ walks the storage
+# backend (uploads/ + pre_blur/) and deletes objects older than
+# CRISP_HARD_ABANDON_DAYS that aren't referenced by any live Media.url.
+# This handles assembled-file orphans (the SQL cascade only handles
+# MediaChunk rows; assembled disk files were leaking pre-R3.b). Default
+# 1 h — long enough to keep the storage scan cost down at 500k-row
+# scale, short enough to bound disk growth between sweeps. Set to 0 to
+# disable.
+_DISK_ORPHAN_GC_INTERVAL_S = int(os.getenv("CRISP_DISK_ORPHAN_GC_INTERVAL_S", "3600"))
+# Tracks the last successful Action ⑦ run so the throttle works across
+# sweep ticks. Module-level so the same value persists across daemon
+# iterations.
+_last_disk_orphan_gc_ts: float = 0.0
 
 
 def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
@@ -1079,6 +1092,99 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
             log.warning(
                 f"Assembly recovery [{tag}] Action ⑥ failed: {_action6_e}"
             )
+
+        # ── Action ⑦ — disk-orphan reconciliation (R3.b, May 2026) ───
+        #
+        # The SQL cascade (Media → MediaChunk) handles chunk-row cleanup,
+        # and Action ⑥ deletes the assembled storage object via
+        # storage.delete(). But two paths still leak disk objects:
+        #
+        #   (a) Pre-R3.b reports that were abandoned + hard-deleted by
+        #       Action ⑥ before this action existed
+        #   (b) Storage writes that succeeded but whose Media.url
+        #       INSERT then failed (very rare but possible under load)
+        #
+        # Action ⑦ walks the storage backend, cross-references each
+        # object against live Media.url values, and deletes anything
+        # older than _HARD_ABANDON_DAYS with no live referrer. Bounded
+        # at 1000 objects per scan to keep the daemon responsive.
+        # Throttled to run at most once every _DISK_ORPHAN_GC_INTERVAL_S
+        # seconds so the cost is amortised across many 5-min sweep
+        # ticks.
+        global _last_disk_orphan_gc_ts
+        if _DISK_ORPHAN_GC_INTERVAL_S > 0:
+            try:
+                import time as _time7
+                now_ts = _time7.time()
+                if (now_ts - _last_disk_orphan_gc_ts) >= _DISK_ORPHAN_GC_INTERVAL_S:
+                    age_cutoff = now_ts - (_HARD_ABANDON_DAYS * 86400)
+                    from app.services.storage import get_storage as _gs7
+                    try:
+                        _storage7 = _gs7()
+                    except Exception:
+                        _storage7 = None
+                    if _storage7 is not None:
+                        # Walk the public uploads/ namespace. The
+                        # storage list_keys() implementation skips
+                        # the pre_blur/ namespace from an empty-prefix
+                        # scan so internal bytes are never touched here.
+                        candidates = _storage7.list_keys(
+                            prefix="",
+                            older_than_unix_ts=age_cutoff,
+                            limit=1000,
+                        )
+                        if candidates:
+                            # Pull all live media.url values so we know
+                            # what's referenced. Using a set for O(1)
+                            # lookup against the candidates list.
+                            live_urls = set(
+                                row[0] for row in
+                                _db.query(Media.url).filter(Media.url != '').all()
+                            )
+                            # Normalise the candidate key into the
+                            # shape `media.url` actually stores. Local
+                            # backend wraps filenames as `/static/<name>`.
+                            # S3 backend stores them as `s3://<key>`.
+                            # We test both representations against the
+                            # live set.
+                            deleted = 0
+                            for (key, mtime) in candidates:
+                                local_form = f"/static/{key}"
+                                s3_form    = f"s3://{key}"
+                                if local_form in live_urls or s3_form in live_urls or key in live_urls:
+                                    continue
+                                # No live referrer + over retention age
+                                # → delete.
+                                ok = False
+                                try:
+                                    ok = bool(_storage7.delete(local_form))
+                                    if not ok:
+                                        ok = bool(_storage7.delete(s3_form))
+                                except Exception as _del7_e:
+                                    log.warning(
+                                        f"Assembly recovery [{tag}] Action ⑦: "
+                                        f"storage.delete failed for key={key}: {_del7_e}"
+                                    )
+                                if ok:
+                                    deleted += 1
+                            if deleted:
+                                log.info(
+                                    f"Assembly recovery [{tag}] Action ⑦: "
+                                    f"GC'd {deleted} disk-orphan object(s) "
+                                    f"under uploads/ (older than "
+                                    f"{_HARD_ABANDON_DAYS}d, no live "
+                                    f"Media.url referrer)"
+                                )
+                                try:
+                                    from app.core.observability import disk_orphan_deleted_total as _dod
+                                    _dod.labels(prefix="uploads").inc(deleted)
+                                except Exception:
+                                    pass
+                        _last_disk_orphan_gc_ts = now_ts
+            except Exception as _action7_e:
+                log.warning(
+                    f"Assembly recovery [{tag}] Action ⑦ failed: {_action7_e}"
+                )
     finally:
         _db.close()
 
