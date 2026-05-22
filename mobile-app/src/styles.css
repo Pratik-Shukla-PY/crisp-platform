@@ -290,7 +290,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .home-brand-name .connectivity-dot {
     position: absolute;
     top: -1px;
-    right: -10px;
+    inset-inline-end: -10px;
     width: 8px;
     height: 8px;
     border-radius: 50%;
@@ -426,9 +426,9 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
        left directly bypasses that quirk cleanly. */
     position: absolute;
     top:    env(safe-area-inset-top, 0);
-    right:  env(safe-area-inset-right, 0);
+    inset-inline-end: env(safe-area-inset-right, 0);
     bottom: env(safe-area-inset-bottom, 0);
-    left:   env(safe-area-inset-left, 0);
+    inset-inline-start: env(safe-area-inset-left, 0);
     display: flex; flex-direction: column;
     /* Internal page chrome — separate from safe-area math. */
     padding: 20px 24px 16px;
@@ -1064,7 +1064,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .success-confetti-dot {
     position: absolute;
-    left: 50%;
+    inset-inline-start: 50%;
     bottom: 50%;
     width: 8px;
     height: 8px;
@@ -1161,7 +1161,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .loc-search-icon {
     position: absolute;
-    left: 14px;
+    inset-inline-start: 14px;
     font-size: 0.85rem;
     color: var(--muted);
     pointer-events: none;
@@ -1187,7 +1187,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 .loc-search-wrap input::placeholder { color: var(--muted); font-size: 0.9rem; }
 .loc-clear-btn {
     position: absolute;
-    right: 10px;
+    inset-inline-end: 10px;
     width: 30px; height: 30px;
     border-radius: 50%;
     background: rgba(255,255,255,0.1);
@@ -1338,7 +1338,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
    Reports. Pulled from updateSyncBadge()'s computed total. */
 .sync-badge-bar {
     position: absolute;
-    left: 0; right: 0; bottom: 0;
+    inset-inline-start: 0; right: 0; bottom: 0;
     height: 3px;
     background: rgba(0, 0, 0, 0.25);
     pointer-events: none;
@@ -1441,7 +1441,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
        on thumb-sized touch surfaces. */
     position: absolute;
     bottom: 2px;
-    left: 2px;
+    inset-inline-start: 2px;
     width: 22px; height: 22px;
     background: rgba(239, 68, 68, 0.92);
     color: white;
@@ -2930,8 +2930,8 @@ details.mr-date-group[open] .mr-date-group-chevron {
 ───────────────────────────────────────────────────────────────────────── */
 .cam-gallery {
     position: absolute;
-    left: 0;
-    right: 0;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
     /* Sits just above the shutter row. ~88px = controls natural height
        (16px padding + 56px button + 16px padding). iOS home-indicator
        safe-area inset keeps it readable on devices that have one. */
@@ -2985,8 +2985,8 @@ details.mr-date-group[open] .mr-date-group-chevron {
    sizing. z-index above the video (stacking within the modal). */
 .cam-controls {
     position: absolute;
-    left: 0;
-    right: 0;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
     bottom: 0;
     display: flex;
     align-items: center;
@@ -3686,7 +3686,7 @@ details.mr-date-group[open] .mr-date-group-chevron {
 .image-viewer-close {
     position: absolute;
     top: calc(16px + env(safe-area-inset-top, 0px));
-    right: 16px;
+    inset-inline-end: 16px;
     width: 44px;
     height: 44px;
     border-radius: 50%;
@@ -3702,7 +3702,7 @@ details.mr-date-group[open] .mr-date-group-chevron {
 .image-viewer-delete {
     position: absolute;
     bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-    left: 50%;
+    inset-inline-start: 50%;
     transform: translateX(-50%);
     padding: 12px 24px;
     background: #ef4444;
@@ -4181,7 +4181,7 @@ html[dir="rtl"] .back-btn .fa-arrow-left {
    produced the visible overlap reported on the Arabic home page. */
 html[dir="rtl"] #lang-switcher {
     right: auto;
-    left: 16px;
+    inset-inline-start: 16px;
 }
 
 /* RTL critical patches.
@@ -4532,7 +4532,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .home-devid-tip {
     position: absolute;
     top: calc(100% + 6px);
-    right: 0;
+    inset-inline-end: 0;
     width: 240px;
     padding: 12px;
     background: var(--surface, #1a3552);
@@ -4562,7 +4562,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     content: '';
     position: absolute;
     top: -5px;
-    right: 12px;
+    inset-inline-end: 12px;
     width: 10px;
     height: 10px;
     background: var(--surface, #1a3552);
@@ -4605,7 +4605,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .home-tools-row {
     position: absolute;
     top: 60px;
-    right: 16px;
+    inset-inline-end: 16px;
     z-index: 99;            /* below the lang pill (z=100) so they don't fight */
     display: flex;
     align-items: center;
@@ -4663,7 +4663,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .icon-status-dot {
     position: absolute;
     top: 4px;
-    right: 4px;
+    inset-inline-end: 4px;
     width: 10px;
     height: 10px;
     border-radius: 50%;
@@ -4687,7 +4687,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
    tools row instead. */
 .home-account-wrap .home-account-menu {
     top: auto;
-    right: 8px;
+    inset-inline-end: 8px;
     margin-top: -8px;            /* tuck under the login icon */
 }
 
@@ -4698,7 +4698,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .home-account-menu {
     position: absolute;
     top: calc(100% + 6px);
-    right: 0;
+    inset-inline-end: 0;
     min-width: 180px;
     background: var(--surface, #1a3552);
     border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
@@ -4917,7 +4917,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .home-top-actions {
     position: absolute;
     top: 16px;
-    right: 158px;            /* sits to the LEFT of #lang-switcher (which is ~140 px wide at right:16) */
+    inset-inline-end: 158px;            /* sits to the LEFT of #lang-switcher (which is ~140 px wide at right:16) */
     z-index: 100;
     display: flex;
     align-items: center;
@@ -4925,7 +4925,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 }
 [dir="rtl"] .home-top-actions {
     right: auto;
-    left: 158px;
+    inset-inline-start: 158px;
 }
 .home-top-icon-btn:hover {
     background: rgba(0, 0, 0, 0.55);
@@ -5195,7 +5195,7 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .home-action-tile .icon-status-dot {
     position: absolute;
     top: 8px;
-    right: 8px;
+    inset-inline-end: 8px;
     width: 9px;
     height: 9px;
     border-radius: 50%;
@@ -6065,7 +6065,7 @@ body.tier-t4 .home-impact {
 .privacy-list li::before {
     content: '✓';
     position: absolute;
-    left: 0;
+    inset-inline-start: 0;
     top: 8px;
     color: var(--good, #80EE98);
     font-weight: 800;
@@ -6260,14 +6260,14 @@ body.tier-t4 .home-impact {
 }
 [dir="rtl"] .home-channel-tile .ct-dot {
     right: auto;
-    left: 5px;
+    inset-inline-start: 5px;
 }
 
 /* "Coming soon" toast for disabled-channel taps. */
 .home-channel-toast {
     position: fixed;
     bottom: max(24px, env(safe-area-inset-bottom, 0px));
-    left: 50%;
+    inset-inline-start: 50%;
     transform: translateX(-50%) translateY(8px);
     z-index: 1400;
     padding: 10px 16px;
@@ -6565,7 +6565,7 @@ body.tier-t4 .home-impact {
 .v4-lang-pill {
     position: absolute;
     top: 4px;
-    right: 8px;
+    inset-inline-end: 8px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -7484,8 +7484,8 @@ body.tier-t4 .home-impact {
    Auto-dismissable via the X (session-scoped, re-prompts on reload). */
 .pwa-update-banner {
     position: fixed;
-    left: 12px;
-    right: 12px;
+    inset-inline-start: 12px;
+    inset-inline-end: 12px;
     bottom: max(12px, env(safe-area-inset-bottom));
     z-index: 9500;
     display: flex;
@@ -7555,7 +7555,7 @@ body.tier-t4 .home-impact {
 @media (min-width: 600px) {
     .pwa-update-banner {
         left: auto;
-        right: 16px;
+        inset-inline-end: 16px;
         max-width: 380px;
     }
 }
@@ -9127,7 +9127,7 @@ body.tier-t4 .home-impact {
     content: '🔒';
     position: absolute;
     top: 4px;
-    right: 4px;
+    inset-inline-end: 4px;
     font-size: 12px;
     line-height: 1;
     opacity: 0.85;
@@ -9142,8 +9142,8 @@ body.tier-t4 .home-impact {
 .bs-char-tile .bs-char-label {
     position: absolute;
     bottom: 2px;
-    left: 4px;
-    right: 4px;
+    inset-inline-start: 4px;
+    inset-inline-end: 4px;
     font-size: 9px;
     font-weight: 700;
     color: rgba(255, 255, 255, 0.78);
@@ -9201,7 +9201,7 @@ body.tier-t4 .home-impact {
 .bs-photo-thumb-clear {
     position: absolute;
     top: -4px;
-    right: -4px;
+    inset-inline-end: -4px;
     width: 20px;
     height: 20px;
     border-radius: 50%;
@@ -9305,7 +9305,7 @@ body.tier-t4 .home-impact {
 .photo-consent-bullets li::before {
     content: '';
     position: absolute;
-    left: 0; top: 2px;
+    inset-inline-start: 0; top: 2px;
     width: 18px; height: 18px;
     border-radius: 50%;
     background: rgba(70, 223, 177, 0.18);
@@ -9314,7 +9314,7 @@ body.tier-t4 .home-impact {
 .photo-consent-bullets li::after {
     content: '';
     position: absolute;
-    left: 6px; top: 7px;
+    inset-inline-start: 6px; top: 7px;
     width: 8px; height: 4px;
     border: 1.6px solid #46DFB1;
     border-top: 0; border-right: 0;
@@ -9839,7 +9839,7 @@ body.tier-t4 .home-impact {
    quieter tile treatment. */
 .home-stage .home-action-tiles--utility .home-action-tile .icon-status-dot {
     top: 6px;
-    right: 6px;
+    inset-inline-end: 6px;
     width: 8px;
     height: 8px;
     border-width: 1.5px;
@@ -10715,7 +10715,7 @@ body.tier-t4 .home-impact {
     content: '';
     position: absolute;
     top: 50%;
-    left: 50%;
+    inset-inline-start: 50%;
     width: 220px;
     height: 220px;
     margin-top: -110px;
@@ -10733,7 +10733,7 @@ body.tier-t4 .home-impact {
     content: '';
     position: absolute;
     top: 50%;
-    left: 50%;
+    inset-inline-start: 50%;
     width: 200px;
     height: 200px;
     margin-top: -100px;
@@ -10886,7 +10886,7 @@ body.tier-t4 .home-impact {
     content: '';
     position: absolute;
     top: 10px;
-    right: 10px;
+    inset-inline-end: 10px;
     width: 10px;
     height: 10px;
     border-radius: 50%;
@@ -10960,7 +10960,7 @@ body.tier-t4 .home-impact {
     content: '';
     position: absolute;
     top: 50%;
-    left: 50%;
+    inset-inline-start: 50%;
     width: 140px;
     height: 140px;
     margin-top: -70px;
@@ -11056,7 +11056,7 @@ body { background-color: #10284a; }
     content: '';
     position: absolute;
     top: -110px;
-    right: -50px;
+    inset-inline-end: -50px;
     width: 240px;
     height: 240px;
     background:
@@ -11106,7 +11106,7 @@ body { background-color: #10284a; }
    `dir="rtl"` so it stays on the leading edge in either direction. */
 [dir="rtl"] .home-stage .home-hero-card::before {
     right: auto;
-    left: -50px;
+    inset-inline-start: -50px;
 }
 
 /* Reduce-motion preference — the static glow doesn't animate, but
@@ -11864,7 +11864,7 @@ body { background-color: #10284a; }
     display: block !important;
     position: absolute;
     top: 8px;
-    right: 8px;
+    inset-inline-end: 8px;
     width: 9px;
     height: 9px;
     border-radius: 50%;
@@ -11878,7 +11878,7 @@ body { background-color: #10284a; }
 }
 [dir="rtl"] .home-stage .home-channel-tile.is-live::after {
     right: auto;
-    left: 8px;
+    inset-inline-start: 8px;
 }
 
 /* ── ② Nearby Reports — dynamic count + ripple feedback ───────────────
@@ -12117,7 +12117,7 @@ body { background-color: #10284a; }
     content: '';
     position: absolute;
     top: 50%;
-    left: 50%;
+    inset-inline-start: 50%;
     width: 200px;
     height: 200px;
     margin-top: -100px;
@@ -12391,7 +12391,7 @@ body { background-color: #10284a; }
     cursor: pointer;
     position: absolute;
     top: 20px;
-    left: 24px;
+    inset-inline-start: 24px;
     z-index: 5;
     display: inline-flex;
     align-items: center;
@@ -12403,7 +12403,7 @@ body { background-color: #10284a; }
 }
 [dir="rtl"] .success-brand {
     left: auto;
-    right: 24px;
+    inset-inline-end: 24px;
 }
 .success-brand:hover,
 .success-brand:focus-visible {
@@ -13020,7 +13020,7 @@ button.v4-review-card { appearance: none; }
 .cm-toolbar {
     position: absolute;
     top: calc(28px + env(safe-area-inset-top, 0));
-    left: 0; right: 0;
+    inset-inline-start: 0; right: 0;
     padding: 4px 8px;
     display: flex;
     justify-content: space-between;
@@ -13075,7 +13075,7 @@ button.v4-review-card { appearance: none; }
 /* Layer 6 — bottom controls (close / shutter / done) */
 .cm-controls {
     position: absolute;
-    left: 0; right: 0;
+    inset-inline-start: 0; right: 0;
     bottom: calc(24px + env(safe-area-inset-bottom, 0));
     padding: 0 24px;
     display: flex;
