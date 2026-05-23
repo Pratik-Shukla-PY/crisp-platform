@@ -885,5 +885,6 @@
   "status_sheet_reassure_offline": "Báo cáo được lưu trên điện thoại và sẽ gửi khi bạn kết nối lại.",
   "aria_build_info": "Thông tin bản dựng — chạm để xem chi tiết",
   "version_label_build": "Bản dựng {n}",
-  "version_label_detail": "Bản dựng {n} · API {api}"
+  "version_label_detail": "Bản dựng {n} · API {api}",
+  "aria_sync_chip": "Trạng thái đồng bộ — chạm để xem chi tiết"
 }

@@ -860,5 +860,6 @@
   "mr_empty_cta": "Report an Incident",
   "aria_build_info": "Build info — tap for details",
   "version_label_build": "Build {n}",
-  "version_label_detail": "Build {n} · API {api}"
+  "version_label_detail": "Build {n} · API {api}",
+  "aria_sync_chip": "Sync status — tap for details"
 }

@@ -5594,12 +5594,97 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .home-reward-hero {
     /* May 2026 (fit-in-viewport pass) — margin 14/6 → 4/2 so the
        hero sits closer to the action tiles above and the consent
-       below, freeing ~14 px of vertical space. */
+       below, freeing ~14 px of vertical space.
+       HC30 (May 23) — was justify-content: center for a single chip;
+       now houses the badge AND the new sync chip as siblings.
+       space-between anchors the badge on the inline-start edge and
+       the sync chip on the inline-end edge with breathing space
+       between them. flex-wrap so they stack gracefully on iPhone SE
+       if both grow to long-text locales. */
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
     margin: 4px 0 2px;
     width: 100%;
+}
+
+/* HC30 — sync chip co-located with the badge. Subtle visual weight
+   (low-contrast bg, small font, no border) so it reads as ambient
+   status next to the more prominent badge chip. State-driven dot
+   colour matches the brand-mark connectivity dot (HC16) so the two
+   surfaces feel like one system at a glance. */
+.home-sync-chip {
+    appearance: none;
+    -webkit-appearance: none;
+    display: none;       /* hidden until painter sets data-state */
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    color: var(--text-sub, #cbd5e1);
+    font-size: var(--fz-sm, 13px);
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    min-height: 30px;
+    -webkit-tap-highlight-color: transparent;
+    transition: background var(--motion-fade, 200ms) var(--easing-linear, linear),
+                border-color var(--motion-fade, 200ms) var(--easing-linear, linear);
+}
+.home-sync-chip[data-state] { display: inline-flex; }
+.home-sync-chip .hsc-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background: var(--text-dim, #94a3b8);
+}
+.home-sync-chip[data-state="online"] .hsc-dot {
+    background: #80EE98;
+    box-shadow: 0 0 6px rgba(128, 238, 152, 0.55);
+}
+.home-sync-chip[data-state="syncing"] .hsc-dot {
+    background: #f59e0b;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.55);
+    animation: hsc-pulse 1.4s infinite ease-in-out;
+}
+.home-sync-chip[data-state="weak"] .hsc-dot {
+    background: #f59e0b;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.55);
+}
+.home-sync-chip[data-state="offline"] {
+    border-color: rgba(239, 68, 68, 0.32);
+    background: rgba(239, 68, 68, 0.08);
+    color: #fca5a5;
+}
+.home-sync-chip[data-state="offline"] .hsc-dot {
+    background: #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.55);
+}
+@keyframes hsc-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+.home-sync-chip:hover { background: rgba(255, 255, 255, 0.07); }
+.home-sync-chip:focus-visible {
+    outline: 2px solid rgba(9, 209, 199, 0.55);
+    outline-offset: 2px;
+}
+/* Narrow viewports — collapse to a dot-only chip so the badge keeps
+   the visual prominence; the popover still carries the full state on
+   tap. Saves ~50 px when the badge label is long ("Lifekeeper"). */
+@media (max-width: 399px) {
+    .home-sync-chip {
+        padding: 5px;
+        min-width: 26px;
+        min-height: 26px;
+        gap: 0;
+    }
+    .home-sync-chip .hsc-label { display: none; }
 }
 /* Compound selector (.home-badge-chip.home-badge-chip--hero) bumps
    the specificity from 1-class to 2-class so this hero treatment
@@ -6572,6 +6657,45 @@ body.tier-t4 .home-impact {
 .home-section-channels {
     margin-top: auto;
     padding-top: 8px;
+}
+
+/* HC28 (May 23) — bordered card with the section title floating ON
+   the top border (the classic fieldset/legend pattern). Saves ~20 px
+   vs the previous separate <h2> + strip stack, and creates a visual
+   grouping that reads as "these are the alternate channels".
+   The title `background` blends into the page background so the
+   border ducks under the text — same effect as a real <legend>. */
+.home-channels-card {
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 14px;
+    padding: 14px 10px 10px;
+    margin-top: 10px;
+}
+.home-channels-card-title {
+    position: absolute;
+    top: -8px;
+    inset-inline-start: 14px;
+    /* Match the page background — this is what hides the border
+       segment behind the text. var(--bg) falls back to the navy
+       blend if the token isn't defined in older themes. */
+    background: var(--bg, #0f1722);
+    padding: 0 8px;
+    font-size: var(--fz-xs, 12px);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim, #94a3b8);
+    line-height: 1;
+    white-space: nowrap;
+    /* Long-text locales (e.g. RU "Другие способы сообщить") would
+       overflow on iPhone SE. Cap width to ~80 % of the card so the
+       title truncates with an ellipsis rather than spilling past the
+       right edge. Sighted users still get the full string via the
+       channels-strip aria-label. */
+    max-width: calc(100% - 28px);
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 /* 6-tile-across grid for narrow viewports (390 px and
    up). Gap tightened from 6 → 4 px so each tile gets enough internal

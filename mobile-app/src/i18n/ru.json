@@ -882,5 +882,6 @@
   "status_sheet_reassure_offline": "Отчёты сохраняются на телефоне и отправятся, когда снова появится сеть.",
   "aria_build_info": "Сведения о сборке — нажмите для деталей",
   "version_label_build": "Сборка {n}",
-  "version_label_detail": "Сборка {n} · API {api}"
+  "version_label_detail": "Сборка {n} · API {api}",
+  "aria_sync_chip": "Статус синхронизации — нажмите для деталей"
 }

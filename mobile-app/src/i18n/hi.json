@@ -881,5 +881,6 @@
   "status_sheet_reassure_offline": "रिपोर्ट आपके फ़ोन में सहेजी जाती हैं और कनेक्शन वापस आने पर भेज दी जाती हैं।",
   "aria_build_info": "बिल्ड जानकारी — विवरण के लिए टैप करें",
   "version_label_build": "बिल्ड {n}",
-  "version_label_detail": "बिल्ड {n} · API {api}"
+  "version_label_detail": "बिल्ड {n} · API {api}",
+  "aria_sync_chip": "सिंक स्थिति — विवरण के लिए टैप करें"
 }

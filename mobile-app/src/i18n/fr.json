@@ -886,5 +886,6 @@
   "status_sheet_reassure_offline": "Les signalements sont enregistrés sur votre téléphone et envoyés au retour de la connexion.",
   "aria_build_info": "Informations sur la version — appuyez pour les détails",
   "version_label_build": "Build {n}",
-  "version_label_detail": "Build {n} · API {api}"
+  "version_label_detail": "Build {n} · API {api}",
+  "aria_sync_chip": "État de synchronisation — appuyez pour plus de détails"
 }

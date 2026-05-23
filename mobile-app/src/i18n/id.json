@@ -897,5 +897,6 @@
   "status_sheet_reassure_offline": "Laporan disimpan di ponsel dan terkirim saat Anda online kembali.",
   "aria_build_info": "Info versi — ketuk untuk detail",
   "version_label_build": "Build {n}",
-  "version_label_detail": "Build {n} · API {api}"
+  "version_label_detail": "Build {n} · API {api}",
+  "aria_sync_chip": "Status sinkronisasi — ketuk untuk detail"
 }

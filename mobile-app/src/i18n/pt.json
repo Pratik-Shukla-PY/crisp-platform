@@ -890,5 +890,6 @@
   "status_sheet_reassure_offline": "Os relatórios são salvos no celular e enviados quando você voltar a ficar online.",
   "aria_build_info": "Informações da versão — toque para detalhes",
   "version_label_build": "Build {n}",
-  "version_label_detail": "Build {n} · API {api}"
+  "version_label_detail": "Build {n} · API {api}",
+  "aria_sync_chip": "Status de sincronização — toque para detalhes"
 }

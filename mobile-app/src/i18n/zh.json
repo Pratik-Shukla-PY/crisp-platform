@@ -879,5 +879,6 @@
   "status_sheet_reassure_offline": "报告将保存在您的手机上，并在重新连接后发送。",
   "aria_build_info": "版本信息 — 点按查看详情",
   "version_label_build": "版本 {n}",
-  "version_label_detail": "版本 {n} · API {api}"
+  "version_label_detail": "版本 {n} · API {api}",
+  "aria_sync_chip": "同步状态 — 点按查看详情"
 }

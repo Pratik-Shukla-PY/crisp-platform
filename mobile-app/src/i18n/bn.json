@@ -882,5 +882,6 @@
   "status_sheet_reassure_offline": "রিপোর্টগুলি আপনার ফোনে সংরক্ষিত থাকে এবং আপনি অনলাইনে ফিরে এলে পাঠানো হবে।",
   "aria_build_info": "বিল্ড তথ্য — বিস্তারিত দেখতে ট্যাপ করুন",
   "version_label_build": "বিল্ড {n}",
-  "version_label_detail": "বিল্ড {n} · API {api}"
+  "version_label_detail": "বিল্ড {n} · API {api}",
+  "aria_sync_chip": "সিঙ্ক অবস্থা — বিস্তারিত দেখতে ট্যাপ করুন"
 }

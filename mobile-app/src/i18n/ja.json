@@ -884,5 +884,6 @@
   "status_sheet_reassure_offline": "報告は端末に保存され、オンラインに戻ったときに送信されます。",
   "aria_build_info": "ビルド情報 — タップして詳細を表示",
   "version_label_build": "ビルド {n}",
-  "version_label_detail": "ビルド {n} · API {api}"
+  "version_label_detail": "ビルド {n} · API {api}",
+  "aria_sync_chip": "同期状態 — タップして詳細を表示"
 }

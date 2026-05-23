@@ -1263,25 +1263,19 @@
         // / with a subtle "tap me" cue.
         chip.classList.toggle('chip-unlocked', level === 'T3_CHANGEMAKER' || level === 'T4_LIFEKEEPER');
         _applyBodyTierClass(level);
-        // AUDIT 2026-05-23 — retime gamification reveal.
-        // The "Scout · Submit your first report to level up" tier
-        // strip felt tone-mismatched to a disaster victim who hasn't
-        // submitted yet. Hide the chip on home until the user has at
-        // least 1 submitted report (lives > 0 OR a non-T1 tier OR a
-        // payload.progressLabelKey other than "submit first report").
-        // After their first submission the chip shows up as a positive
-        // reinforcement, which is when the gamification reads well.
-        // T3+ always shows because Badge Studio is a real affordance.
-        const isFirstTimer = (
-            level === 'T1_SCOUT' &&
-            (!Number.isFinite(lives) || lives === 0) &&
-            (!progressKey || progressKey === 'tier_progress_first_report')
-        );
-        if (isFirstTimer) {
-            chip.setAttribute('hidden', '');
-        } else {
-            chip.removeAttribute('hidden');
-        }
+        // AUDIT 2026-05-23 (HC29 — operator reversal of Batch 3.4).
+        // The Batch 3.4 retime hid the chip until the user submitted
+        // their first report, on the rationale that the "Submit your
+        // first report to level up" copy felt tone-mismatched for a
+        // disaster victim. Operator review (May 23) found the opposite:
+        // hiding the chip made the gamification ladder invisible
+        // and reduced motivation / emotional engagement / progression
+        // awareness for first-time and returning users alike. The
+        // chip now ALWAYS shows; the existing default copy ("Scout —
+        // Submit your first report to level up") functions as the
+        // meaningful empty state operators asked for. Returning
+        // users get their actual tier + progress as before.
+        chip.removeAttribute('hidden');
     }
     async function _renderBadgeChip() {
         const chip = document.getElementById('home-badge-chip');
@@ -1708,6 +1702,10 @@
         // HC16 (replaces HC4): wire the brand cluster as the
         // tap-to-open trigger for the connection-status popover.
         try { _wireStatusSheet(); } catch (_) {}
+        // HC30 (May 23): paint + wire the badge-area sync chip so the
+        // queued state has a dedicated home that doesn't overlap the
+        // brand cluster at the top-left.
+        try { _paintSyncChip(); _wireSyncChip(); } catch (_) {}
     }
 
     // AUDIT 2026-05-23 (HC16) — connection status popover. Replaces
@@ -1894,6 +1892,68 @@
         try { window.addEventListener('offline', repaintIfOpen); } catch (_) {}
         try { document.addEventListener('crisp:queue-changed', repaintIfOpen); } catch (_) {}
         try { document.addEventListener('crisp:lang-changed', repaintIfOpen); } catch (_) {}
+    }
+
+    // AUDIT 2026-05-23 (HC30) — badge-area sync chip.
+    // Sibling to the badge chip inside #home-reward-hero. Shows the
+    // current connectivity state with the queued-reports count so
+    // users have a calm, dedicated read-out without crowding the
+    // top-left brand cluster (where the operator was seeing visual
+    // conflicts with the logo / connectivity-dot). Tap → opens the
+    // existing #home-status-sheet (HC16) for the full detail —
+    // single source of truth for queue / last-sync / reassurance copy.
+    //
+    // Painter shares its data-derivation logic with _paintStatusSheet
+    // (navigator.onLine + IDB queue length + the weak-signal hint).
+    async function _paintSyncChip() {
+        const chip = document.getElementById('home-sync-chip');
+        const label = document.getElementById('home-sync-chip-label');
+        if (!chip || !label) return;
+        const online = navigator.onLine !== false;
+        let queueCount = 0;
+        try {
+            if (typeof window.getAllQueued === 'function') {
+                const all = await window.getAllQueued();
+                queueCount = Array.isArray(all) ? all.length : 0;
+            }
+        } catch (_) {}
+        let state, text;
+        const t = (typeof window.t === 'function') ? window.t : (k => null);
+        if (!online) {
+            state = 'offline';
+            text = queueCount > 0
+                ? (t('status_pill_offline_n') || 'Offline · {n} queued').replace('{n}', String(queueCount))
+                : (t('status_pill_offline') || 'Offline');
+        } else if (window.__crispConnectivityWeak === true) {
+            state = 'weak';
+            text = t('status_sheet_state_weak') || 'Weak signal';
+        } else if (queueCount > 0) {
+            state = 'syncing';
+            text = (t('status_pill_syncing') || 'Syncing {n}').replace('{n}', String(queueCount));
+        } else {
+            state = 'online';
+            text = t('status_pill_online') || 'Online';
+        }
+        chip.setAttribute('data-state', state);
+        label.textContent = text;
+        chip.removeAttribute('hidden');
+    }
+    function _wireSyncChip() {
+        if (window.__crispSyncChipWired) return;
+        window.__crispSyncChipWired = true;
+        const chip = document.getElementById('home-sync-chip');
+        if (!chip) return;
+        // Tap → open the existing status sheet (HC16) so we don't
+        // duplicate the popover surface. _openStatusSheet is defined
+        // earlier in this IIFE.
+        chip.addEventListener('click', () => {
+            try { _openStatusSheet(); } catch (_) {}
+        });
+        const repaint = () => { try { _paintSyncChip(); } catch (_) {} };
+        try { window.addEventListener('online', repaint); } catch (_) {}
+        try { window.addEventListener('offline', repaint); } catch (_) {}
+        try { document.addEventListener('crisp:queue-changed', repaint); } catch (_) {}
+        try { document.addEventListener('crisp:lang-changed', repaint); } catch (_) {}
     }
 
     // May 21 2026 (audit Item 6) — version visibility.

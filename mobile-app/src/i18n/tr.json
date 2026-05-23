@@ -885,5 +885,6 @@
   "status_sheet_reassure_offline": "Raporlar telefonunuzda kaydedilir ve tekrar çevrimiçi olduğunuzda gönderilir.",
   "aria_build_info": "Sürüm bilgisi — ayrıntılar için dokunun",
   "version_label_build": "Sürüm {n}",
-  "version_label_detail": "Sürüm {n} · API {api}"
+  "version_label_detail": "Sürüm {n} · API {api}",
+  "aria_sync_chip": "Eşitleme durumu — ayrıntılar için dokunun"
 }
