@@ -177,7 +177,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v264">
+    <meta name="crisp-release" content="crisp-pwa@v266">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -2848,14 +2848,17 @@
                     </span>
                 </button>
 
-                <!-- v5 reassurance helper — addresses the operator ask
-                     "make CTA emotionally reassuring". Surfaces the
-                     offline-first promise right where the action is
-                     so reporters in low-connectivity / disaster zones
-                     trust their tap. -->
-                <p class="home-hero-helper" data-i18n="home_cta_helper">
-                    Works offline and syncs automatically in low connectivity.
-                </p>
+                <!-- HC35 (May 23, operator) — the "Always Working.
+                     Everywhere." helper paragraph below the CTA was
+                     removed. Trust + offline-first reassurance are
+                     already communicated by the consent banner above
+                     the CTA and the HC16 status sheet popover; the
+                     extra line was adding visual density without
+                     adding new information. Removing it recovers
+                     ~24 px of vertical space which offsets the HC35
+                     CTA size bump. The `.home-hero-helper` CSS rule
+                     stays in the stylesheet as inert (no other DOM
+                     consumer) so any future surface can resurrect it. -->
 
                 <!-- May 2026 (home redesign v6, ask #6) — Sign-in and
                      My Reports promoted from the small action-tiles row

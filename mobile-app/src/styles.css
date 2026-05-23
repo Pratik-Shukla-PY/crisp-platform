@@ -10218,17 +10218,22 @@ body.tier-t4 .home-impact {
 
 .home-stage .big-cta.big-cta--hero {
     /* Visual anchor. Bigger than anything else on the page. Gradient
-       + soft drop-shadow + small inner highlight. Subtitle below the
-       main label. No top/bottom margins — flex parent handles spacing. */
+       + soft drop-shadow + small inner highlight. No top/bottom
+       margins — flex parent handles spacing.
+       HC35 (May 23, operator) — bumped padding / min-height /
+       border-radius / row gap by ~30 % so the CTA reads even more
+       dominant. Deletion of the "Always Working. Everywhere." helper
+       (HC35) recovers ~24 px so the no-scroll budget on iPhone SE
+       (627 px usable) absorbs the net +10-20 px gain. */
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 8px;
     width: 100%;
-    padding: clamp(18px, 4vh, 28px) 24px;
-    min-height: clamp(96px, 16vh, 136px);
-    border-radius: clamp(16px, 2.5vw, 20px);
+    padding: clamp(23px, 5.2vh, 36px) 30px;
+    min-height: clamp(125px, 21vh, 176px);
+    border-radius: clamp(20px, 3.2vw, 26px);
     background: linear-gradient(135deg, #46DFB1 0%, #09D1C7 100%);
     color: #062b1b;
     border: 0;
@@ -10259,9 +10264,11 @@ body.tier-t4 .home-impact {
     cursor: not-allowed;
 }
 .home-stage .big-cta.big-cta--hero .cta-row {
+    /* HC35 — gap 10 → 13 (~30 % bump) to keep the icon + label
+       spacing proportional to the larger button + larger label. */
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: 13px;
 }
 .home-stage .big-cta.big-cta--hero .cta-row .ico {
     display: inline-flex;
@@ -10277,9 +10284,13 @@ body.tier-t4 .home-impact {
     height: 1em;
 }
 .home-stage .big-cta.big-cta--hero .cta-label {
+    /* HC35 — font-size bumped ~30 % across the clamp range
+       (1.15→1.50 rem, 4.2→5.5 vw, 1.5→1.95 rem). 1.95 rem ≈ 31 px
+       at default 16 px root font, comfortably above the WCAG AAA
+       "large text" 24 px threshold so the CTA reads dominant. */
     font-family: var(--heading, 'Outfit', sans-serif);
     font-weight: 800;
-    font-size: clamp(1.15rem, 4.2vw, 1.5rem);
+    font-size: clamp(1.5rem, 5.5vw, 1.95rem);
     line-height: 1.15;
     letter-spacing: -0.005em;
 }
