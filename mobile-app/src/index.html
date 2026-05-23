@@ -17,6 +17,47 @@
          submit button under the keyboard. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <title>CRISP | Report Incident</title>
+    <!-- AUDIT 2026-05-23 (HC27, HAR root-cause fix) —
+         Synchronous API_BASE resolver. Mirrors the __crispBootLang
+         IIFE pattern below: runs SYNCHRONOUSLY in <head> before any
+         `defer` script (home-screen.js, nearby.js, app.js…) parses
+         their module body, so every downstream call site that reads
+         `window.API_BASE` finds the absolute backend URL — not
+         `undefined` (which used to silently fall back to '/api/v1'
+         relative, hitting the static server on :8080 and 404-ing).
+
+         Root cause exposed by /Users/pks/Desktop/api-log-1.har:
+         home-screen.js loads (defer order) BEFORE app.js, so its
+         _paintProfile / _paintRecentReports / _paintVersionPill
+         captured a module-scoped `apiBase = window.API_BASE ||
+         '/api/v1'` while API_BASE was still undefined. Result:
+         120+ fetches landed on http://localhost:8080/api/v1/...
+         and returned 404 from the Python SimpleHTTP server.
+
+         Value is a pure function of window.location — no async work
+         needed. app.js re-assigns the same value later as an
+         idempotent guard; if THIS head IIFE is ever accidentally
+         stripped, app.js's later assignment will still produce the
+         correct API_BASE — but the four early-firing painters in
+         home-screen.js would once again race past it. Keep both
+         assignments in place. -->
+    <script>
+        (function resolveApiBase() {
+            'use strict';
+            try {
+                var host = window.location.hostname || 'localhost';
+                var isLocalDev = host === 'localhost' || host === '127.0.0.1';
+                var backendHost = isLocalDev
+                    ? 'http://' + host + ':8000'
+                    : window.location.origin;
+                window.API_BASE = backendHost + '/api/v1';
+            } catch (_) {
+                // Last-ditch fallback — should never fire. The deferred
+                // app.js re-asserts the same value moments later.
+                window.API_BASE = '/api/v1';
+            }
+        })();
+    </script>
     <!-- AUDIT 2026-05-23 (UI:UX Improvements/I18N-INIT-AUDIT-2026-05-23.md) —
          Synchronous boot-language resolver. Runs as the FIRST script in
          <head> so it sets <html lang> + <html dir> + window.__crispBootLang
@@ -136,7 +177,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v260">
+    <meta name="crisp-release" content="crisp-pwa@v261">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">

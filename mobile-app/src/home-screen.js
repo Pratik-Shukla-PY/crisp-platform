@@ -1331,7 +1331,17 @@
             return;
         }
         try {
-            const apiBase = window.API_BASE || '/api/v1';
+            // HC27 — require window.API_BASE explicitly (set by the
+            // head-inline IIFE in index.html). The previous
+            // `|| '/api/v1'` fallback silently resolved to the
+            // static-server origin on :8080 and 404'd; per the May
+            // 2026 HAR analysis. Bail with the T1_SCOUT fallback
+            // paint so the chip doesn't stay hidden.
+            const apiBase = window.API_BASE;
+            if (!apiBase) {
+                if (!cached) _paintBadgeChip('T1_SCOUT');
+                return;
+            }
             const res = await fetch(`${apiBase}/reports/profile/${encodeURIComponent(hash)}`);
             if (!res.ok) {
                 // Backend error (4xx / 5xx) — keep the existing cached
@@ -1465,7 +1475,9 @@
         } catch (_) {}
         if (!hash) return;
         try {
-            const apiBase = window.API_BASE || '/api/v1';
+            // HC27 — require window.API_BASE (head-IIFE in index.html).
+            const apiBase = window.API_BASE;
+            if (!apiBase) return;
             const res = await fetch(`${apiBase}/reports/profile/${encodeURIComponent(hash)}`);
             if (!res.ok) return;
             const p = await res.json();
@@ -1573,9 +1585,11 @@
             try { _renderMyReportsCount(); } catch (_) {}
             return;
         }
-        const base = (typeof window.API_BASE === 'string' && window.API_BASE)
-            ? window.API_BASE
-            : '/api/v1';
+        // HC27 — require window.API_BASE (head-IIFE in index.html);
+        // bail rather than fall back to relative '/api/v1' which used
+        // to hit the static server on :8080 and 404.
+        const base = (typeof window.API_BASE === 'string' && window.API_BASE) ? window.API_BASE : null;
+        if (!base) return;
         const url = `${base}/reports/device/${encodeURIComponent(hash)}/status-since?since=1970-01-01T00:00:00Z`;
         try {
             const res = await fetch(url, { cache: 'no-store', credentials: 'omit' });
@@ -1990,9 +2004,14 @@
         // mirrors under /api/v1/health for nginx-restricted PROD.)
         if (!backendVer) {
             try {
+                // HC27 — require window.API_BASE (head-IIFE in
+                // index.html). The fallback to '/api/v1' silently
+                // hit the static server on :8080 in dev, producing
+                // 404 SimpleHTTP responses; bail instead.
                 const base = (typeof window.API_BASE === 'string' && window.API_BASE)
                     ? window.API_BASE.replace(/\/$/, '')
-                    : '/api/v1';
+                    : null;
+                if (!base) return;
                 const url = `${base}/health`;
                 const res = await fetch(url, { cache: 'no-store', credentials: 'omit' });
                 if (res.ok) {
@@ -2043,7 +2062,9 @@
                 } catch { return ''; }
             })();
             if (!hash) return [];
-            const apiBase = window.API_BASE || '/api/v1';
+            // HC27 — require window.API_BASE (head-IIFE in index.html).
+            const apiBase = window.API_BASE;
+            if (!apiBase) return [];
             // HAR-driven dedupe (May 2026) — see _singleFlightFetch
             // helper in app.js. Home-screen.js init races app.js's own
             // status-since fetch (and the My Reports panel's later fetch);

@@ -33,7 +33,21 @@
 (function () {
     'use strict';
 
-    var ENDPOINT = '/api/v1/devices/telemetry';
+    // HC27 (May 2026, HAR root-cause fix) — was the bare relative
+    // '/api/v1/devices/telemetry' which the browser anchored to the
+    // current origin. In dev this hit the Python static server on
+    // :8080 and 404'd; in PROD the same-origin nginx proxy made it
+    // accidentally work. Resolve the absolute backend URL from
+    // window.API_BASE (set by the head-IIFE in index.html); the
+    // tail '/devices/telemetry' is appended at fetch time so this
+    // module never resolves an undefined window.API_BASE at parse.
+    var ENDPOINT_TAIL = '/devices/telemetry';
+    function _endpoint() {
+        var base = (typeof window !== 'undefined' && typeof window.API_BASE === 'string' && window.API_BASE)
+            ? window.API_BASE.replace(/\/$/, '')
+            : null;
+        return base ? base + ENDPOINT_TAIL : null;
+    }
     var LS_KEY   = 'crisp_telemetry_collected_at';
     var MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;  // re-capture once per day
     var BOOT_DELAY_MS = 1200;                   // wait past critical path
@@ -230,10 +244,14 @@
             return;
         }
         try {
-            // origin-relative URL works in both dev (proxied through
-            // :8080 → :8000) and PROD (same origin). Auth header NOT
-            // sent — the endpoint is intentionally auth-free.
-            await fetch(ENDPOINT, {
+            // HC27 — resolve the absolute backend URL via window.API_BASE.
+            // Bail if API_BASE isn't set yet (boot timing) — the next
+            // session's BOOT_DELAY_MS tick will retry; no need to risk
+            // hitting the static server. Auth header NOT sent — the
+            // endpoint is intentionally auth-free.
+            var url = _endpoint();
+            if (!url) return;
+            await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ device_hash: deviceHash, summary: summary }),
