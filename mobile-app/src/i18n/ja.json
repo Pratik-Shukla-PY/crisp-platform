@@ -854,5 +854,9 @@
   "devid_sheet_point_1": "このコードはあなただけが見ることができます。",
   "devid_sheet_point_2": "レポートを電話にリンクします — 失われることはありません。",
   "devid_sheet_point_3": "オフラインで動作。アプリを再インストールしてもレポートはリンクされたまま。",
-  "devid_sheet_point_4": "名前なし、メールなし、電話番号なし。コードだけ。"
+  "devid_sheet_point_4": "名前なし、メールなし、電話番号なし。コードだけ。",
+  "install_benefit_offline": "✓ オフラインで動作",
+  "install_benefit_safe": "✓ レポートを安全に保管",
+  "install_benefit_fast": "✓ より速い報告",
+  "install_thanks": "インストール済み。レポートは即座に保存されます。"
 }

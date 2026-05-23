@@ -855,5 +855,9 @@
   "devid_sheet_point_1": "Chỉ bạn có thể thấy mã này.",
   "devid_sheet_point_2": "Liên kết báo cáo của bạn với điện thoại — vì vậy chúng không bao giờ bị mất.",
   "devid_sheet_point_3": "Hoạt động ngoại tuyến. Ngay cả khi bạn cài đặt lại ứng dụng, báo cáo vẫn được liên kết.",
-  "devid_sheet_point_4": "Không tên, không email, không số điện thoại. Chỉ là một mã."
+  "devid_sheet_point_4": "Không tên, không email, không số điện thoại. Chỉ là một mã.",
+  "install_benefit_offline": "✓ Hoạt động ngoại tuyến",
+  "install_benefit_safe": "✓ Báo cáo an toàn",
+  "install_benefit_fast": "✓ Báo cáo nhanh hơn",
+  "install_thanks": "Đã cài đặt. Báo cáo được lưu ngay lập tức."
 }

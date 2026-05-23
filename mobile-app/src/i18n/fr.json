@@ -856,5 +856,9 @@
   "devid_sheet_point_1": "Vous seul pouvez voir ce code.",
   "devid_sheet_point_2": "Il relie vos rapports à votre téléphone — pour qu'ils ne soient jamais perdus.",
   "devid_sheet_point_3": "Fonctionne hors ligne. Même si vous réinstallez l'app, vos rapports restent liés.",
-  "devid_sheet_point_4": "Pas de nom, pas d'email, pas de numéro. Juste un code."
+  "devid_sheet_point_4": "Pas de nom, pas d'email, pas de numéro. Juste un code.",
+  "install_benefit_offline": "✓ Fonctionne hors ligne",
+  "install_benefit_safe": "✓ Rapports en sécurité",
+  "install_benefit_fast": "✓ Signalement rapide",
+  "install_thanks": "Installé. Rapports sauvegardés instantanément."
 }

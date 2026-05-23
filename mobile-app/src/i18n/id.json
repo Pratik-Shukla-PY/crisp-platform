@@ -867,5 +867,9 @@
   "devid_sheet_point_1": "Hanya Anda yang dapat melihat kode ini.",
   "devid_sheet_point_2": "Ini menghubungkan laporan Anda ke ponsel Anda — sehingga tidak pernah hilang.",
   "devid_sheet_point_3": "Bekerja offline. Bahkan jika Anda menginstal ulang aplikasi, laporan Anda tetap terhubung.",
-  "devid_sheet_point_4": "Tanpa nama, tanpa email, tanpa nomor telepon. Hanya sebuah kode."
+  "devid_sheet_point_4": "Tanpa nama, tanpa email, tanpa nomor telepon. Hanya sebuah kode.",
+  "install_benefit_offline": "✓ Bekerja offline",
+  "install_benefit_safe": "✓ Laporan aman",
+  "install_benefit_fast": "✓ Lapor lebih cepat",
+  "install_thanks": "Terpasang. Laporan tersimpan instan."
 }

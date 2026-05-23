@@ -855,5 +855,9 @@
   "devid_sheet_point_1": "Bu kodu yalnızca siz görebilirsiniz.",
   "devid_sheet_point_2": "Raporlarınızı telefonunuza bağlar — böylece asla kaybolmazlar.",
   "devid_sheet_point_3": "Çevrimdışı çalışır. Uygulamayı yeniden yükleseniz bile raporlarınız bağlı kalır.",
-  "devid_sheet_point_4": "İsim yok, e-posta yok, telefon numarası yok. Sadece bir kod."
+  "devid_sheet_point_4": "İsim yok, e-posta yok, telefon numarası yok. Sadece bir kod.",
+  "install_benefit_offline": "✓ Çevrimdışı çalışır",
+  "install_benefit_safe": "✓ Raporlar güvende",
+  "install_benefit_fast": "✓ Daha hızlı raporlama",
+  "install_thanks": "Yüklendi. Raporlar anında kaydedilir."
 }

@@ -830,5 +830,9 @@
   "devid_sheet_point_1": "Only you can see this code.",
   "devid_sheet_point_2": "It links your reports to your phone — so they're never lost.",
   "devid_sheet_point_3": "Works offline. Even if you reinstall the app, your reports stay linked.",
-  "devid_sheet_point_4": "No name, no email, no phone number. Just a code."
+  "devid_sheet_point_4": "No name, no email, no phone number. Just a code.",
+  "install_benefit_offline": "✓ Works offline",
+  "install_benefit_safe": "✓ Reports stay safe",
+  "install_benefit_fast": "✓ Faster reporting",
+  "install_thanks": "Installed. Reports save instantly."
 }

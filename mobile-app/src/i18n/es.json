@@ -864,5 +864,9 @@
   "devid_sheet_point_1": "Solo usted puede ver este código.",
   "devid_sheet_point_2": "Vincula sus informes a su teléfono — para que nunca se pierdan.",
   "devid_sheet_point_3": "Funciona sin conexión. Aunque reinstale la app, sus informes permanecen vinculados.",
-  "devid_sheet_point_4": "Sin nombre, sin correo, sin teléfono. Solo un código."
+  "devid_sheet_point_4": "Sin nombre, sin correo, sin teléfono. Solo un código.",
+  "install_benefit_offline": "✓ Sin conexión",
+  "install_benefit_safe": "✓ Informes seguros",
+  "install_benefit_fast": "✓ Informes rápidos",
+  "install_thanks": "Instalado. Informes guardados al instante."
 }

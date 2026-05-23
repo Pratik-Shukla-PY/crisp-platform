@@ -860,5 +860,9 @@
   "devid_sheet_point_1": "Apenas você pode ver este código.",
   "devid_sheet_point_2": "Vincula seus relatórios ao seu telefone — para que nunca sejam perdidos.",
   "devid_sheet_point_3": "Funciona offline. Mesmo se você reinstalar o app, seus relatórios continuam vinculados.",
-  "devid_sheet_point_4": "Sem nome, sem email, sem número. Apenas um código."
+  "devid_sheet_point_4": "Sem nome, sem email, sem número. Apenas um código.",
+  "install_benefit_offline": "✓ Funciona offline",
+  "install_benefit_safe": "✓ Relatórios seguros",
+  "install_benefit_fast": "✓ Relatos rápidos",
+  "install_thanks": "Instalado. Relatórios salvos instantaneamente."
 }

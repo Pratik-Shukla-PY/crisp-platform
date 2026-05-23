@@ -10941,6 +10941,51 @@ body.tier-t4 .home-impact {
     background: #FFC93A;
     box-shadow: 0 8px 22px rgba(255, 183, 3, 0.45);
 }
+
+/* AUDIT 2026-05-23 (HC7) — install-benefit micro-line. Three checkmark
+   phrases above the amber install button so users understand WHY
+   install matters before tapping. Each phrase short enough that on
+   iPhone SE (375 px) the row fits without wrap; degrades to wrap on
+   long-text locales (RU/UR translations may need 2 lines — line-height
+   absorbs gracefully). */
+.home-stage .home-install-benefits {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px 10px;
+    margin: 6px auto 0;
+    padding: 0 8px;
+    text-align: center;
+    color: var(--text-dim, #94a3b8);
+    font-size: var(--fz-xs, 12px);
+    font-weight: 600;
+    line-height: 1.4;
+    max-width: 360px;
+}
+.home-stage .home-install-benefits .ib-dot {
+    opacity: 0.6;
+    user-select: none;
+}
+
+.home-stage .home-install-thanks {
+    margin: 8px auto 0;
+    padding: 10px 14px;
+    text-align: center;
+    color: var(--good, #80EE98);
+    font-size: var(--fz-sm, 13px);
+    font-weight: 600;
+}
+.home-stage .home-install-thanks[hidden] { display: none; }
+
+/* In installed-PWA mode hide the install button + benefits, show the
+   thank-you. Driven by the JS painter via the data-install-state attr
+   set on the home stage in home-screen.js _wireAddToHomescreenChip. */
+@media all and (display-mode: standalone) {
+    .home-stage .home-install-benefits,
+    .home-stage .home-add2hs-btn { display: none !important; }
+    .home-stage .home-install-thanks { display: block; }
+}
 .home-stage .home-add2hs-btn:focus-visible {
     outline: 2px solid rgba(10, 25, 41, 0.55);
     outline-offset: 2px;

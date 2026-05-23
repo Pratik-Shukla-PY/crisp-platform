@@ -849,5 +849,9 @@
   "devid_sheet_point_1": "只有您可以看到此代码。",
   "devid_sheet_point_2": "它将您的报告与您的手机关联 — 这样它们就永远不会丢失。",
   "devid_sheet_point_3": "离线工作。即使您重新安装应用，您的报告仍保持关联。",
-  "devid_sheet_point_4": "无姓名、无电子邮件、无电话号码。只是一个代码。"
+  "devid_sheet_point_4": "无姓名、无电子邮件、无电话号码。只是一个代码。",
+  "install_benefit_offline": "✓ 离线可用",
+  "install_benefit_safe": "✓ 报告安全保存",
+  "install_benefit_fast": "✓ 报告更快",
+  "install_thanks": "已安装。报告即时保存。"
 }
