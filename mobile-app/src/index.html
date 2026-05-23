@@ -177,7 +177,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v263">
+    <meta name="crisp-release" content="crisp-pwa@v264">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -2783,17 +2783,20 @@
                             </svg>
                         </span>
                     </button>
-                    <!-- AUDIT 2026-05-23 (HC30) — sync / queue chip
-                         co-located with the badge so the
-                         queued-reports state has a dedicated home
-                         that doesn't overlap the brand logo / lang
-                         switcher / audio button at the top-left.
+                    <!-- AUDIT 2026-05-23 (HC30 → HC33) — queue-presence
+                         chip co-located with the badge. HC30 wired it
+                         as an always-on connectivity indicator;
+                         operator review (HC33) narrowed it to surface
+                         ONLY when queueCount > 0, so the chip never
+                         draws when there's nothing to communicate
+                         (was reading as noise above the
+                         Report-an-Incident CTA when collapsed to a
+                         dot on iPhone SE).
                          States (painter in home-screen.js
-                         _paintSyncChip):
-                           online   — solid green dot, no text on narrow
-                           syncing  — pulsing amber, "Syncing N"
+                         _paintSyncChip, fires only with queue > 0):
+                           syncing  — amber pulse, "Syncing N"
+                           weak     — amber, "Syncing N" (flaky link)
                            offline  — red, "Offline · N queued"
-                           weak     — amber, "Weak signal"
                          Tap opens the existing #home-status-sheet
                          (HC16) for the full read-out so we don't
                          duplicate the popover surface. Hidden until

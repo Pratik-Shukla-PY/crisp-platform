@@ -1894,14 +1894,26 @@
         try { document.addEventListener('crisp:lang-changed', repaintIfOpen); } catch (_) {}
     }
 
-    // AUDIT 2026-05-23 (HC30) — badge-area sync chip.
-    // Sibling to the badge chip inside #home-reward-hero. Shows the
-    // current connectivity state with the queued-reports count so
-    // users have a calm, dedicated read-out without crowding the
-    // top-left brand cluster (where the operator was seeing visual
-    // conflicts with the logo / connectivity-dot). Tap → opens the
-    // existing #home-status-sheet (HC16) for the full detail —
-    // single source of truth for queue / last-sync / reassurance copy.
+    // AUDIT 2026-05-23 (HC30 → HC33) — badge-area sync chip.
+    // Sibling to the badge chip inside #home-reward-hero. HC30 wired
+    // it as an always-on connectivity indicator (green dot when
+    // online, red when offline, amber when weak). Operator review
+    // (May 23) noted that the always-on green dot above the
+    // Report-an-Incident CTA on iPhone SE / Galaxy small (where the
+    // label collapses) read as noise — the brand-mark connectivity
+    // dot already covers the at-a-glance online/offline cue.
+    //
+    // HC33: narrow the chip's job to QUEUE-PRESENCE INDICATOR. The
+    // chip only appears when queueCount > 0 — i.e. when the user has
+    // actually submitted reports that haven't yet reached the server.
+    // States surfaced:
+    //   syncing  amber pulse  · "Syncing N"          (online + queue)
+    //   offline  red          · "Offline · N queued" (offline + queue)
+    //   weak     amber        · "Syncing N · weak"   (weak + queue)
+    // When queueCount === 0 the chip is hidden (no draw, no slot
+    // reserved — JS sets the hidden attribute). The popover still
+    // opens via the brand-mark dot for users who want the full
+    // status sheet at any time.
     //
     // Painter shares its data-derivation logic with _paintStatusSheet
     // (navigator.onLine + IDB queue length + the weak-signal hint).
@@ -1909,7 +1921,6 @@
         const chip = document.getElementById('home-sync-chip');
         const label = document.getElementById('home-sync-chip-label');
         if (!chip || !label) return;
-        const online = navigator.onLine !== false;
         let queueCount = 0;
         try {
             if (typeof window.getAllQueued === 'function') {
@@ -1917,22 +1928,29 @@
                 queueCount = Array.isArray(all) ? all.length : 0;
             }
         } catch (_) {}
-        let state, text;
+        // HC33 — empty-queue → hide the chip entirely. No "Online"
+        // copy when there's nothing to communicate.
+        if (queueCount <= 0) {
+            chip.setAttribute('hidden', '');
+            chip.removeAttribute('data-state');
+            label.textContent = '';
+            return;
+        }
+        const online = navigator.onLine !== false;
         const t = (typeof window.t === 'function') ? window.t : (k => null);
+        let state, text;
         if (!online) {
             state = 'offline';
-            text = queueCount > 0
-                ? (t('status_pill_offline_n') || 'Offline · {n} queued').replace('{n}', String(queueCount))
-                : (t('status_pill_offline') || 'Offline');
+            text = (t('status_pill_offline_n') || 'Offline · {n} queued').replace('{n}', String(queueCount));
         } else if (window.__crispConnectivityWeak === true) {
             state = 'weak';
-            text = t('status_sheet_state_weak') || 'Weak signal';
-        } else if (queueCount > 0) {
-            state = 'syncing';
+            // Weak signal AND queue present — communicate that we're
+            // trying to sync on a flaky link. The N-count keeps the
+            // user grounded in progress.
             text = (t('status_pill_syncing') || 'Syncing {n}').replace('{n}', String(queueCount));
         } else {
-            state = 'online';
-            text = t('status_pill_online') || 'Online';
+            state = 'syncing';
+            text = (t('status_pill_syncing') || 'Syncing {n}').replace('{n}', String(queueCount));
         }
         chip.setAttribute('data-state', state);
         label.textContent = text;
