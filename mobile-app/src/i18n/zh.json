@@ -858,5 +858,8 @@
   "status_pill_online": "在线",
   "status_pill_offline": "离线",
   "status_pill_offline_n": "离线 · {n} 排队中",
-  "status_pill_syncing": "同步 {n}"
+  "status_pill_syncing": "同步 {n}",
+  "mr_empty_title": "尚未提交任何内容",
+  "mr_empty_body": "您发送第一个报告后,它们将显示在这里。",
+  "mr_empty_cta": "报告一起事件"
 }

@@ -863,5 +863,8 @@
   "status_pill_online": "Online",
   "status_pill_offline": "Offline",
   "status_pill_offline_n": "Offline · {n} queued",
-  "status_pill_syncing": "Syncing {n}"
+  "status_pill_syncing": "Syncing {n}",
+  "mr_empty_title": "Nothing submitted yet",
+  "mr_empty_body": "Your reports will appear here as soon as you send your first one.",
+  "mr_empty_cta": "Report an Incident"
 }

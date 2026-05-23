@@ -2525,11 +2525,50 @@ details.mr-date-group[open] .mr-date-group-chevron {
 .hr-progress-fill { height:100%; background:linear-gradient(90deg,#09D1C7,#46DFB1); transition:width .25s; }
 
 /* Empty-state copy used by _historyEmpty (My Reports + filter-empty).
-   Color was #64748b (--text-mute equivalent) — 2.43:1 on --bg, fails AA.
-   --text-dim is 4.89:1, passes. */
+   HC8 humanitarian-grade redesign (2026-05-23): the first-time empty
+   state now carries a richer block (title + body + CTA) under the
+   .history-empty--first modifier; secondary / filter-empty states
+   keep the simpler single-line treatment. */
 .history-empty { padding:32px 16px; text-align:center; color:var(--text-dim); }
 .history-empty i { font-size:32px; opacity:0.4; display:block; margin-bottom:8px; }
 .history-empty p { font-size:var(--fz-body); margin:0; }
+.history-empty.history-empty--first { padding: 48px 24px; }
+.history-empty--first i { font-size: 40px; margin-bottom: 14px; }
+.history-empty--first .history-empty-title {
+    font-size: var(--fz-lg, 18px);
+    font-weight: 700;
+    color: var(--text, #f1f5f9);
+    margin: 0 0 8px;
+}
+.history-empty--first .history-empty-body {
+    font-size: var(--fz-body, 14px);
+    color: var(--text-dim, #94a3b8);
+    line-height: 1.5;
+    max-width: 320px;
+    margin: 0 auto 20px;
+}
+.history-empty--first .history-empty-cta {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: var(--accent, #09D1C7);
+    color: #0a1929;
+    border: none;
+    border-radius: 14px;
+    padding: 14px 28px;
+    min-height: 48px;
+    font-size: var(--fz-md, 16px);
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 8px 22px rgba(9, 209, 199, 0.32);
+    transition: transform var(--motion-press, 120ms) var(--easing-out, ease-out);
+}
+.history-empty--first .history-empty-cta:active {
+    transform: scale(0.97);
+}
 
 /* ── UX rewrite — landing screen ───────────────────────────────── */
 

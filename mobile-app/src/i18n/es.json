@@ -873,5 +873,8 @@
   "status_pill_online": "En línea",
   "status_pill_offline": "Sin conexión",
   "status_pill_offline_n": "Sin conexión · {n} en cola",
-  "status_pill_syncing": "Sincronizando {n}"
+  "status_pill_syncing": "Sincronizando {n}",
+  "mr_empty_title": "Aún nada enviado",
+  "mr_empty_body": "Sus informes aparecerán aquí en cuanto envíe el primero.",
+  "mr_empty_cta": "Reportar un incidente"
 }

@@ -860,5 +860,8 @@
   "status_pill_online": "ऑनलाइन",
   "status_pill_offline": "ऑफ़लाइन",
   "status_pill_offline_n": "ऑफ़लाइन · {n} कतार में",
-  "status_pill_syncing": "सिंक {n}"
+  "status_pill_syncing": "सिंक {n}",
+  "mr_empty_title": "अभी तक कुछ नहीं भेजा",
+  "mr_empty_body": "जैसे ही आप पहली रिपोर्ट भेजेंगे, वे यहाँ दिखाई देंगी।",
+  "mr_empty_cta": "घटना की रिपोर्ट करें"
 }

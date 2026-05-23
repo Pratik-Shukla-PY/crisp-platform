@@ -854,5 +854,8 @@
   "status_pill_online": "متصل",
   "status_pill_offline": "غير متصل",
   "status_pill_offline_n": "غير متصل · {n} في الانتظار",
-  "status_pill_syncing": "مزامنة {n}"
+  "status_pill_syncing": "مزامنة {n}",
+  "mr_empty_title": "لم يُرسل شيء بعد",
+  "mr_empty_body": "ستظهر تقاريرك هنا بمجرد إرسال التقرير الأول.",
+  "mr_empty_cta": "أبلِغ عن حادثة"
 }

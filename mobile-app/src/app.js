@@ -11458,10 +11458,66 @@ function _deviceHashForHistory() {
 }
 
 function _historyEmpty(container, text, icon) {
-    container.innerHTML = `<div class="history-empty">
-        <i class="fa-solid ${icon}"></i>
-        <p>${text}</p>
-    </div>`;
+    // HC8 (humanitarian-grade home redesign 2026-05-23) — expand the
+    // empty state with guidance + a "Start your first report" CTA.
+    // Pre-fix it was just "Nothing submitted yet" + an icon. Now a
+    // first-time user sees a clear next-step rather than a dead-end.
+    const titleText = (typeof t === 'function' && t('mr_empty_title'))
+        ? t('mr_empty_title') : 'Nothing submitted yet';
+    const bodyText  = (typeof t === 'function' && t('mr_empty_body'))
+        ? t('mr_empty_body')
+        : 'Your reports will appear here as soon as you send your first one.';
+    const ctaText   = (typeof t === 'function' && t('mr_empty_cta'))
+        ? t('mr_empty_cta') : 'Report an Incident';
+    // The legacy `text` arg still funnels through for non-first-time
+    // empty states (e.g. filter-empty after the user has reports).
+    // When `text` matches the default empty_submitted, use the rich
+    // first-time guidance; otherwise show the simpler filter-empty
+    // copy passed in.
+    const isFirstTime = !text || text === titleText ||
+        text === 'Nothing submitted yet.' || text === 'Nothing submitted yet';
+    if (!isFirstTime) {
+        // Filter-empty / secondary empty — short single-line message.
+        container.innerHTML = `<div class="history-empty">
+            <i class="fa-solid ${icon || 'fa-paper-plane'}"></i>
+            <p>${text}</p>
+        </div>`;
+        return;
+    }
+    container.innerHTML = `
+        <div class="history-empty history-empty--first">
+            <i class="fa-solid ${icon || 'fa-paper-plane'}" aria-hidden="true"></i>
+            <p class="history-empty-title">${titleText}</p>
+            <p class="history-empty-body">${bodyText}</p>
+            <button type="button"
+                    class="history-empty-cta"
+                    id="btn-history-empty-cta"
+                    aria-label="${ctaText}">
+                <span aria-hidden="true">▶</span>
+                <span>${ctaText}</span>
+            </button>
+        </div>
+    `;
+    // Wire the CTA. Tap navigates back to home + opens the report flow.
+    try {
+        const cta = document.getElementById('btn-history-empty-cta');
+        if (cta && !cta.dataset.wired) {
+            cta.dataset.wired = '1';
+            cta.addEventListener('click', () => {
+                if (typeof goToStage === 'function') {
+                    goToStage('stage-home');
+                    // Defer the start-tap so the home stage paints first
+                    // (some animations rely on .active being set before
+                    // the synthetic click). One requestAnimationFrame is
+                    // plenty.
+                    requestAnimationFrame(() => {
+                        const btn = document.getElementById('btn-start');
+                        if (btn) try { btn.click(); } catch (_) {}
+                    });
+                }
+            });
+        }
+    } catch (_) {}
 }
 
 async function _renderPartialReports() {
