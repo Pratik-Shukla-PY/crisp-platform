@@ -61,4 +61,23 @@ if [ -n "$wf_staged" ]; then
     fi
 fi
 
+# ── 5. inline 22-locale i18n packs drift ─────────────────────────────
+# Catches: developer edited any locale JSON (or index.html's inline block)
+# but forgot to re-run scripts/generate-home-i18n-inline.mjs. Pack
+# contents would drift behind source JSON, reintroducing the
+# language-flash bug for the affected locale.
+i18n_staged=$(git diff --cached --name-only --diff-filter=ACM | \
+              grep -E '^(mobile-app/src/i18n/[a-z]{2,3}\.json|mobile-app/src/index\.html)$' || true)
+if [ -n "$i18n_staged" ]; then
+    if command -v node >/dev/null 2>&1; then
+        if ! node scripts/validate-home-i18n-packs.mjs; then
+            echo ""
+            echo "✗ Inline 22-locale i18n packs are out of sync."
+            echo "  Run: node scripts/generate-home-i18n-inline.mjs"
+            echo "  Then: git add mobile-app/src/index.html && git commit --amend --no-edit"
+            exit 1
+        fi
+    fi
+fi
+
 echo "✓ pre-commit checks passed"
