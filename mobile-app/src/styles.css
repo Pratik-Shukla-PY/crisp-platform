@@ -12348,7 +12348,11 @@ body { background-color: #10284a; }
     background: rgba(70, 223, 177, 0.06);
 }
 
-/* Empty state — "All clear" reassurance copy. */
+/* Empty state — "All clear" reassurance copy.
+   HC41 (May 23, operator) — single centered yellow line. The
+   "NEARBY REPORTS" eyebrow is suppressed when the section is in
+   the empty state (rule below) so only one message reads in the
+   middle of the section. */
 .home-stage .home-nearby-empty {
     display: flex;
     flex-direction: column;
@@ -12356,6 +12360,14 @@ body { background-color: #10284a; }
     gap: 4px;
     padding: 22px 16px;
     text-align: center;
+}
+/* HC41 — hide the eyebrow when the section contains the empty-
+   state body. Uses :has() (Safari 15.4+, Chrome 105+ — well within
+   the PWA's modern-browser baseline). When real data arrives the
+   eyebrow is restored automatically because the empty-state child
+   is removed from the DOM. */
+.home-stage .home-nearby-intel:has(.home-nearby-empty) .home-nearby-eyebrow {
+    display: none;
 }
 .home-stage .home-nearby-empty-icon {
     width: 32px; height: 32px;
@@ -12373,18 +12385,16 @@ body { background-color: #10284a; }
     color: var(--text, #f1f5f9);
 }
 .home-stage .home-nearby-empty-body {
-    /* AUDIT 2026-05-23 — was light-yellow (#fde68a) italic which read
-       as a warning ("uh oh") for what is normally a neutral state
-       ("nothing nearby, this is fine"). Switched to --text-dim
-       (#94a3b8, 4.89:1) and dropped italic — italic reduces low-
-       literacy readability. Same copy, calmer affect.
-       HC11 (humanitarian-grade home): bumped from --fz-sm (13 px) to
-       --fz-body (14 px) so the reassurance line is clearly readable
-       at arm's-length on outdoor glare. */
+    /* HC41 (May 23, operator) — restored yellow text (was dim gray
+       per Batch 3.5 / HC32). Now reads as the single attention-
+       drawing line in the section when there's no nearby data.
+       Centered via the parent .home-nearby-empty (text-align:
+       center + flex align-items:center). */
     font-size: var(--fz-body, 14px);
     font-weight: 600;
-    color: var(--text-dim);
+    color: #FACC15;            /* tailwind yellow-400 — clears WCAG AA on navy (~10:1) */
     line-height: 1.5;
+    text-align: center;
 }
 
 /* "Last seen X min ago" caption — shown when serving stale cache. */
