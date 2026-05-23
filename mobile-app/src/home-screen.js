@@ -1782,14 +1782,27 @@
         else state = 'online';
         sheet.setAttribute('data-state', state);
 
-        // Mirror the state onto the brand-mark dot so the same colour
-        // is visible at-a-glance without opening the popover.
+        // Mirror the state onto the brand-mark chip (HC42 — the
+        // 8 px dot became an inline labelled chip). Keep the label
+        // text in sync with the class so green reads "Online", red
+        // reads "Offline", amber reads "Weak". For syncing-but-
+        // online we keep the chip on the online label since the
+        // dedicated sync chip (HC30) carries the "Syncing N"
+        // detail.
         const brandDot = document.getElementById('connectivity-dot');
         if (brandDot) {
             brandDot.classList.remove('connectivity-online', 'connectivity-offline', 'connectivity-weak');
-            if (state === 'offline') brandDot.classList.add('connectivity-offline');
-            else if (state === 'weak') brandDot.classList.add('connectivity-weak');
-            else brandDot.classList.add('connectivity-online');
+            const t = (typeof window.t === 'function') ? window.t : (k => null);
+            if (state === 'offline') {
+                brandDot.classList.add('connectivity-offline');
+                brandDot.textContent = t('status_pill_offline') || 'Offline';
+            } else if (state === 'weak') {
+                brandDot.classList.add('connectivity-weak');
+                brandDot.textContent = t('status_sheet_state_weak') || 'Weak';
+            } else {
+                brandDot.classList.add('connectivity-online');
+                brandDot.textContent = t('status_pill_online') || 'Online';
+            }
         }
 
         // State label.

@@ -3429,20 +3429,30 @@ function _paintLocationDisplays() {
     if (summaryEl) summaryEl.textContent = display;
 }
 
-// PR 3 — update the 🟢/🔴 connectivity dot in the lang-switcher
-// pill. Called from the online/offline listeners + on boot. Setting
-// aria-label + title keeps it accessible.
+// PR 3 — update the connectivity indicator pinned to the CRISP
+// wordmark. HC42 (May 23, 2026) turned the 8 px dot into an inline
+// labelled chip — green "Online" / red "Offline". The element keeps
+// the same #connectivity-dot id + the same online/offline classes
+// so every existing call site (online/offline window events, the
+// boot probe, the HC16 status-sheet tap target) stays wired.
+// Painter writes textContent + classes + aria-label/title.
 function _applyOnlineDot(online) {
     const dot = document.getElementById('connectivity-dot');
     if (!dot) return;
+    // Resolve labels through i18n when available; fall back to EN
+    // literals so the chip still reads correctly during the
+    // synchronous frame-0 boot before i18n loads.
+    const t = (typeof window.t === 'function') ? window.t : (k => null);
     if (online) {
         dot.classList.remove('connectivity-offline');
         dot.classList.add('connectivity-online');
+        dot.textContent = t('status_pill_online') || 'Online';
         dot.setAttribute('aria-label', 'Online');
         dot.setAttribute('title', 'Online — tap to re-check');
     } else {
         dot.classList.remove('connectivity-online');
         dot.classList.add('connectivity-offline');
+        dot.textContent = t('status_pill_offline') || 'Offline';
         dot.setAttribute('aria-label', 'Offline — reports will queue');
         dot.setAttribute('title', 'Offline — tap to re-check');
     }

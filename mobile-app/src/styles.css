@@ -235,10 +235,13 @@ body {
 }
 .home-brand:active { transform: scale(0.98); }
 
-/* HC16 — amber/weak connectivity state on the brand-mark dot. */
+/* HC16 → HC42 — weak connectivity state on the brand-mark label.
+   Was an amber dot; now an amber text chip matching the HC42
+   Online/Offline treatment. */
 .home-brand-name .connectivity-dot.connectivity-weak {
-    background: #f59e0b;
-    box-shadow: 0 0 6px rgba(245, 158, 11, 0.65);
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.10);
+    box-shadow: none;
 }
 
 /* HC16 — small, compact status popover anchored from the brand
@@ -577,23 +580,47 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
    so the dot sits flush against the P's right edge with a hint of
    air above. */
 .home-brand-name { position: relative; display: inline-block; }
+/* HC42 (May 23, operator) — the 8 px coloured dot pinned to the "P"
+   of CRISP is now an inline TEXT LABEL ("Online" / "Offline" /
+   "Weak"). _applyOnlineDot writes the text content; the colour
+   classes paint green / red / amber. The element keeps its id
+   (#connectivity-dot) so all existing handlers + the HC16 status
+   sheet trigger logic stay wired. */
 .home-brand-name .connectivity-dot {
-    position: absolute;
-    top: -1px;
-    inset-inline-end: -10px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+    /* Absolute → inline so the label sits next to "CRISP" naturally. */
+    position: static;
+    display: inline-block;
+    margin-inline-start: 8px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    width: auto;
+    height: auto;
+    /* Subtle pill background so the label reads as a chip even at
+       a glance. State classes set the colour + background tint. */
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1.4;
+    vertical-align: middle;
+    /* Inherit the brand row's clickable affordance (HC16 made the
+       whole .home-brand the tap target for the status sheet). */
     pointer-events: none;
-    transition: background 0.2s ease, box-shadow 0.2s ease;
+    transition: color 0.2s ease, background 0.2s ease;
+    /* HC42 — translateY a hair so the label visually centres against
+       the heavier wordmark glyphs above the baseline. */
+    transform: translateY(-1px);
 }
 .home-brand-name .connectivity-dot.connectivity-online {
-    background: #80EE98;
-    box-shadow: 0 0 6px rgba(128, 238, 152, 0.65);
+    color: #80EE98;
+    background: rgba(128, 238, 152, 0.10);
+    /* drop the dot-era glow + flat background colour */
+    box-shadow: none;
 }
 .home-brand-name .connectivity-dot.connectivity-offline {
-    background: #ef4444;
-    box-shadow: 0 0 6px rgba(239, 68, 68, 0.65);
+    color: #ff8a8a;            /* WCAG-AA-pre-graded --red token */
+    background: rgba(255, 138, 138, 0.10);
+    box-shadow: none;
 }
 
 .lang-switcher button {
