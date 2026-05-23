@@ -6714,22 +6714,22 @@ body.tier-t4 .home-impact {
     background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 14px;
-    /* HC39 — was 10/10/12 (HC31 symmetric). Compressed to 6/10/8
-       so the channels card consumes ~8 px less vertical space on
-       Mac Safari PWA window. The strip icons inside still have
-       their own 6 px padding so touch targets stay 44 px+. */
-    padding: 6px 10px 8px;
+    /* HC51 (May 23, operator) — title moved BACK to the top border
+       (was bottom-center in HC31). Padding flips correspondingly:
+       8 top to clear the floating title, 6 bottom (no title there
+       anymore). The active-channel underline (HC51) needs ~4 px
+       of bottom breathing room so the green line stays inside the
+       card — that's why bottom isn't dropped to 0. */
+    padding: 8px 10px 6px;
     margin-top: 6px;
 }
 .home-channels-card-title {
-    /* HC31 (May 23, operator) — moved from top-left bold treatment
-       to bottom-centre quiet attribution. Smaller (10.5 px, was
-       12 px), un-bolded (font-weight 500, was 700), centred via
-       absolute + transform so the position holds in RTL too. Keeps
-       the uppercase + slight tracking so the label still reads as
-       a category marker, not body copy. */
+    /* HC31 → HC51 (May 23, operator) — moved BACK to top-center
+       (HC31 had it at bottom-center; HC51 brings it back to the
+       cleaner top-border treatment that's standard for fieldset/
+       legend cards). Same calm 10.5 px / 500 weight from HC31. */
     position: absolute;
-    bottom: -7px;
+    top: -7px;
     left: 50%;
     transform: translateX(-50%);
     /* Match the page background — this is what hides the border
@@ -10547,14 +10547,15 @@ body.tier-t4 .home-impact {
                 transform 0.1s ease;
     -webkit-tap-highlight-color: transparent;
 }
-.home-stage .home-channels-strip:hover {
-    background: rgba(255, 255, 255, 0.045);
-    border-color: rgba(255, 255, 255, 0.14);
-}
+/* HC51 (May 23, operator) — dropped hover + focus-visible
+   background tints. Operator: "Remove the current background
+   glow/effect from the entire section/card." Focus outline kept
+   for a11y but without the background fill. */
+.home-stage .home-channels-strip:hover { background: transparent; }
 .home-stage .home-channels-strip:focus-visible {
     outline: 2px solid rgba(70, 223, 177, 0.45);
     outline-offset: 2px;
-    background: rgba(255, 255, 255, 0.045);
+    background: transparent;
 }
 .home-stage .home-channels-strip:active { transform: scale(0.985); }
 /* CLS reservation — the strip starts empty until home-screen.js
@@ -10593,29 +10594,53 @@ body.tier-t4 .home-impact {
    structural bullet-proofing against the WhatsApp-clip regression. */
 .home-stage .hcs-icon svg { width: 18px; height: 18px; flex: 0 0 auto; overflow: visible; }
 .home-stage .channels-sheet-row .csr-icon svg { width: 22px; height: 22px; }
-/* Active channels — brand colour + small live-pip top-right. The
-   --c CSS variable is set inline by _renderChannelsStrip(). */
+/* HC51 (May 23, operator) — Active channels now distinguish via:
+   (a) larger icon cell + glyph (~22 % bigger than inactive)
+   (b) thin green glowing underline below the icon
+   instead of the previous corner dot. The --c CSS variable is set
+   inline by _renderChannelsStrip() and tints the active icon to
+   its brand colour. */
 .home-stage .hcs-icon--live {
     color: var(--c, var(--accent, #09D1C7));
+    /* Bumped cell: 32 → 38 px so the larger glyph centres
+       comfortably without ascender clipping. */
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+}
+.home-stage .hcs-icon--live svg {
+    /* Bumped glyph: 18 → 22 px (~22 % bigger than the .hcs-icon
+       base — matches operator's "~20 %" ask). */
+    width: 22px;
+    height: 22px;
 }
 .home-stage .hcs-icon--live::after {
+    /* Thin green glowing underline (was a 7 px corner dot). 1.5 px
+       line + 4 px box-shadow gives a subtle glow without the noisy
+       "notification dot" feeling. Inset 8 px from each side so the
+       line spans the visual centre of the glyph, not the whole cell. */
     content: '';
     position: absolute;
-    top: 2px; right: 2px;
-    width: 7px; height: 7px;
-    border-radius: 50%;
+    left: 8px;
+    right: 8px;
+    bottom: -3px;
+    height: 1.5px;
     background: #80EE98;
-    box-shadow: 0 0 5px rgba(128, 238, 152, 0.75);
+    box-shadow: 0 0 4px rgba(128, 238, 152, 0.55);
+    border-radius: 1px;
 }
-/* Upcoming channels — muted grey, no dot. The opacity is on the
-   icon glyph only so the surrounding strip background stays
-   constant + the icons read as a balanced row.
-   AUDIT 2026-05-23 — bumped 0.34 → 0.55 so the Android/iOS install
-   tiles read as "secondary affordance" rather than "broken icon".
-   The full channels sheet (tap to open) clarifies they're install
-   targets, not active reporting channels. */
+
+/* Upcoming channels — muted grey, slightly smaller glyph.
+   HC51 — was 0.55 opacity / 18 px glyph (matching .hcs-icon
+   base). Now 16 px glyph + 0.50 opacity so inactive reads as
+   clearly secondary against the larger active icons + glowing
+   underline. */
 .home-stage .hcs-icon--soon {
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(255, 255, 255, 0.50);
+}
+.home-stage .hcs-icon--soon svg {
+    width: 16px;
+    height: 16px;
 }
 
 /* Slightly more headroom on tall viewports — the icons can grow
