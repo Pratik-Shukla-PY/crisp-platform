@@ -1738,16 +1738,16 @@
         // api may be ?).
         row.textContent = `${pwaRel} · ${backendVer}`;
         row.removeAttribute('hidden');
-        // Also paint the legacy span for any test/feature that still
-        // reads it. Doesn't matter that it's invisible in the layout;
-        // this is just for selector-compat.
-        try {
-            const legacy = document.getElementById('home-utility-version');
-            if (legacy) {
-                legacy.textContent = `${pwaRel} · ${backendVer}`;
-                legacy.removeAttribute('hidden');
-            }
-        } catch (_) {}
+        // AUDIT 2026-05-23 (HC5) — dedupe. Previously this also painted
+        // a SECOND copy of the version string into the legacy
+        // #home-utility-version span (inside the footer row next to
+        // Privacy/Help/Open source). The spec calls for a single
+        // location (the dedicated .home-version-row only). The legacy
+        // span is kept in markup (hidden) so any test/dashboard
+        // selector still resolves, but no longer painted with visible
+        // text — the in-DOM value stays the bootstrap default
+        // ("v0.7.44") which downstream consumers can treat as a
+        // placeholder.
         // Refresh from /api/v1/health in the background; non-blocking,
         // fails silent if offline.
         //
@@ -1772,12 +1772,8 @@
                     const body = await res.json();
                     if (body && typeof body.version === 'string' && body.version) {
                         try { sessionStorage.setItem('crisp_backend_version', body.version); } catch (_) {}
-                        // Repaint the dedicated row + the legacy span.
+                        // Repaint the dedicated row only (HC5 dedupe).
                         row.textContent = `${pwaRel} · api@${body.version}`;
-                        try {
-                            const legacy = document.getElementById('home-utility-version');
-                            if (legacy) legacy.textContent = `${pwaRel} · api@${body.version}`;
-                        } catch (_) {}
                     }
                 }
             } catch (_) { /* offline — keep "api@?" */ }
