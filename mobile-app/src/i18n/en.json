@@ -733,7 +733,7 @@
   "nearby_eyebrow": "NEARBY REPORTS",
   "nearby_view_more": "View {n} more",
   "nearby_all_clear": "All clear in your area",
-  "nearby_no_reports": "You're the first eyes on the ground here.",
+  "nearby_no_reports": "No nearby reports",
   "nearby_tier_weak_label": "Weak Signal",
   "nearby_tier_weak_sub": "1 unverified report nearby",
   "nearby_tier_emerging_label": "Emerging Reports",

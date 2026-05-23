@@ -754,7 +754,7 @@
   "nearby_eyebrow": "近隣の報告",
   "nearby_view_more": "他 {n} 件を見る",
   "nearby_all_clear": "周辺は安全です",
-  "nearby_no_reports": "近隣に確認済みの報告はありません",
+  "nearby_no_reports": "近くに報告はありません",
   "nearby_tier_weak_label": "弱い信号",
   "nearby_tier_weak_sub": "近くに未確認の報告 1 件",
   "nearby_tier_emerging_label": "新しい報告",

@@ -749,7 +749,7 @@
   "nearby_eyebrow": "附近报告",
   "nearby_view_more": "查看另外 {n} 个",
   "nearby_all_clear": "您所在区域无事",
-  "nearby_no_reports": "附近无已核实的报告",
+  "nearby_no_reports": "附近没有报告",
   "nearby_tier_weak_label": "弱信号",
   "nearby_tier_weak_sub": "附近有 1 条未核实的报告",
   "nearby_tier_emerging_label": "新发报告",

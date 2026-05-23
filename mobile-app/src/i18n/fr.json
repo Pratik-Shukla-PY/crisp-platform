@@ -756,7 +756,7 @@
   "nearby_eyebrow": "SIGNALEMENTS À PROXIMITÉ",
   "nearby_view_more": "Voir {n} de plus",
   "nearby_all_clear": "Aucun signalement dans votre zone",
-  "nearby_no_reports": "Aucun signalement vérifié à proximité",
+  "nearby_no_reports": "Aucun signalement à proximité",
   "nearby_tier_weak_label": "Signal faible",
   "nearby_tier_weak_sub": "1 signalement non vérifié à proximité",
   "nearby_tier_emerging_label": "Signalements émergents",

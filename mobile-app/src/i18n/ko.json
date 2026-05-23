@@ -755,7 +755,7 @@
   "nearby_eyebrow": "주변 보고",
   "nearby_view_more": "{n}개 더 보기",
   "nearby_all_clear": "주변은 안전합니다",
-  "nearby_no_reports": "주변에 검증된 보고 없음",
+  "nearby_no_reports": "근처에 보고가 없습니다",
   "nearby_tier_weak_label": "약한 신호",
   "nearby_tier_weak_sub": "근처에 미확인 신고 1건",
   "nearby_tier_emerging_label": "새 신고",

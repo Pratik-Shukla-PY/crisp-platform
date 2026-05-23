@@ -6669,33 +6669,44 @@ body.tier-t4 .home-impact {
     position: relative;
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 14px;
-    padding: 14px 10px 10px;
+    /* HC31 — symmetric vertical padding now that the title sits on
+       the bottom border instead of the top. Was 14/10/10 (top-heavy
+       to clear the top-positioned title). */
+    padding: 10px 10px 12px;
     margin-top: 10px;
 }
 .home-channels-card-title {
+    /* HC31 (May 23, operator) — moved from top-left bold treatment
+       to bottom-centre quiet attribution. Smaller (10.5 px, was
+       12 px), un-bolded (font-weight 500, was 700), centred via
+       absolute + transform so the position holds in RTL too. Keeps
+       the uppercase + slight tracking so the label still reads as
+       a category marker, not body copy. */
     position: absolute;
-    top: -8px;
-    inset-inline-start: 14px;
+    bottom: -7px;
+    left: 50%;
+    transform: translateX(-50%);
     /* Match the page background — this is what hides the border
        segment behind the text. var(--bg) falls back to the navy
        blend if the token isn't defined in older themes. */
-    background: var(--bg, #0f1722);
+    background: var(--bg, #213A58);
     padding: 0 8px;
-    font-size: var(--fz-xs, 12px);
-    font-weight: 700;
+    font-size: 10.5px;
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     color: var(--text-dim, #94a3b8);
     line-height: 1;
     white-space: nowrap;
     /* Long-text locales (e.g. RU "Другие способы сообщить") would
        overflow on iPhone SE. Cap width to ~80 % of the card so the
-       title truncates with an ellipsis rather than spilling past the
-       right edge. Sighted users still get the full string via the
+       title truncates with an ellipsis rather than spilling past
+       either edge. Sighted users still get the full string via the
        channels-strip aria-label. */
     max-width: calc(100% - 28px);
     overflow: hidden;
     text-overflow: ellipsis;
+    pointer-events: none;
 }
 /* 6-tile-across grid for narrow viewports (390 px and
    up). Gap tightened from 6 → 4 px so each tile gets enough internal

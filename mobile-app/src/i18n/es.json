@@ -764,7 +764,7 @@
   "nearby_eyebrow": "INFORMES CERCANOS",
   "nearby_view_more": "Ver {n} más",
   "nearby_all_clear": "Todo en orden en tu zona",
-  "nearby_no_reports": "No hay informes verificados cerca",
+  "nearby_no_reports": "Sin informes cercanos",
   "nearby_tier_weak_label": "Señal débil",
   "nearby_tier_weak_sub": "1 informe sin verificar cerca",
   "nearby_tier_emerging_label": "Informes emergentes",

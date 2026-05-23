@@ -752,7 +752,7 @@
   "nearby_eyebrow": "СООБЩЕНИЯ РЯДОМ",
   "nearby_view_more": "Показать ещё {n}",
   "nearby_all_clear": "В вашей зоне спокойно",
-  "nearby_no_reports": "Поблизости нет проверенных сообщений",
+  "nearby_no_reports": "Поблизости нет отчётов",
   "nearby_tier_weak_label": "Слабый сигнал",
   "nearby_tier_weak_sub": "1 непроверенное сообщение поблизости",
   "nearby_tier_emerging_label": "Появляющиеся сообщения",
