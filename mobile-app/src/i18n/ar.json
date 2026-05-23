@@ -857,5 +857,20 @@
   "status_pill_syncing": "مزامنة {n}",
   "mr_empty_title": "لم يُرسل شيء بعد",
   "mr_empty_body": "ستظهر تقاريرك هنا بمجرد إرسال التقرير الأول.",
-  "mr_empty_cta": "أبلِغ عن حادثة"
+  "mr_empty_cta": "أبلِغ عن حادثة",
+  "aria_brand_status": "حالة الاتصال — اضغط لمزيد من التفاصيل",
+  "status_sheet_title": "حالة الاتصال",
+  "status_sheet_state_online": "متصل",
+  "status_sheet_state_offline": "غير متصل",
+  "status_sheet_state_syncing": "مزامنة",
+  "status_sheet_state_weak": "إشارة ضعيفة",
+  "status_sheet_queued_label": "تقارير بانتظار الإرسال",
+  "status_sheet_last_sync_label": "آخر مزامنة",
+  "status_sheet_last_sync_never": "لم يُرسل أي تقرير بعد",
+  "status_sheet_ago_now": "الآن",
+  "status_sheet_ago_minutes": "منذ {n} د",
+  "status_sheet_ago_hours": "منذ {n} س",
+  "status_sheet_ago_days": "منذ {n} ي",
+  "status_sheet_reassure_online": "تُرسل تقاريرك تلقائيًا فور إرسالها.",
+  "status_sheet_reassure_offline": "تُحفظ التقارير على هاتفك وتُرسل عند عودة الاتصال."
 }

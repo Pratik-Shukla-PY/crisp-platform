@@ -879,5 +879,20 @@
   "status_pill_syncing": "Syncing {n}",
   "mr_empty_title": "Nothing submitted yet",
   "mr_empty_body": "Your reports will appear here as soon as you send your first one.",
-  "mr_empty_cta": "Report an Incident"
+  "mr_empty_cta": "Report an Incident",
+  "aria_brand_status": "Status koneksi — ketuk untuk detail",
+  "status_sheet_title": "Status koneksi",
+  "status_sheet_state_online": "Online",
+  "status_sheet_state_offline": "Offline",
+  "status_sheet_state_syncing": "Menyinkronkan",
+  "status_sheet_state_weak": "Sinyal lemah",
+  "status_sheet_queued_label": "Laporan menunggu dikirim",
+  "status_sheet_last_sync_label": "Sinkronisasi terakhir",
+  "status_sheet_last_sync_never": "Belum ada laporan terkirim",
+  "status_sheet_ago_now": "Baru saja",
+  "status_sheet_ago_minutes": "{n} mnt lalu",
+  "status_sheet_ago_hours": "{n} j lalu",
+  "status_sheet_ago_days": "{n} hr lalu",
+  "status_sheet_reassure_online": "Laporan Anda terkirim otomatis saat dikirim.",
+  "status_sheet_reassure_offline": "Laporan disimpan di ponsel dan terkirim saat Anda online kembali."
 }

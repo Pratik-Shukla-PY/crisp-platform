@@ -553,7 +553,17 @@ async function dequeueReport(clientReportId) {
     return new Promise((resolve, reject) => {
         const tx = db.transaction(IDB_STORE, 'readwrite');
         tx.objectStore(IDB_STORE).delete(clientReportId);
-        tx.oncomplete = () => resolve();
+        tx.oncomplete = () => {
+            // HC16 (May 2026) — successful dequeue = a report just
+            // reached the server. Stamp localStorage so the
+            // connection-status popover can render a humanised
+            // "Last sync" time. Best-effort: swallow storage errors
+            // (Safari private mode etc).
+            try { localStorage.setItem('crisp_last_sync_ts', String(Date.now())); } catch (_) {}
+            // Notify any open status sheet to repaint.
+            try { document.dispatchEvent(new CustomEvent('crisp:queue-changed')); } catch (_) {}
+            resolve();
+        };
         tx.onerror = () => reject(tx.error);
     });
 }

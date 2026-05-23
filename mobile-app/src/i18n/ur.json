@@ -864,5 +864,20 @@
   "status_pill_syncing": "Syncing {n}",
   "mr_empty_title": "Nothing submitted yet",
   "mr_empty_body": "Your reports will appear here as soon as you send your first one.",
-  "mr_empty_cta": "Report an Incident"
+  "mr_empty_cta": "Report an Incident",
+  "aria_brand_status": "کنکشن کی حالت — تفصیلات کے لیے ٹیپ کریں",
+  "status_sheet_title": "کنکشن کی حالت",
+  "status_sheet_state_online": "آن لائن",
+  "status_sheet_state_offline": "آف لائن",
+  "status_sheet_state_syncing": "سنک ہو رہا ہے",
+  "status_sheet_state_weak": "کمزور سگنل",
+  "status_sheet_queued_label": "بھیجنے کے لیے قطار میں رپورٹس",
+  "status_sheet_last_sync_label": "آخری سنک",
+  "status_sheet_last_sync_never": "ابھی تک کوئی رپورٹ نہیں بھیجی گئی",
+  "status_sheet_ago_now": "ابھی",
+  "status_sheet_ago_minutes": "{n} منٹ پہلے",
+  "status_sheet_ago_hours": "{n} گھنٹے پہلے",
+  "status_sheet_ago_days": "{n} دن پہلے",
+  "status_sheet_reassure_online": "آپ کی رپورٹس جمع کرواتے ہی خود کار طریقے سے بھیجی جاتی ہیں۔",
+  "status_sheet_reassure_offline": "رپورٹس آپ کے فون پر محفوظ ہو جاتی ہیں اور آن لائن ہونے پر بھیج دی جاتی ہیں۔"
 }

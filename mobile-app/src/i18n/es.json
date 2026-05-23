@@ -876,5 +876,20 @@
   "status_pill_syncing": "Sincronizando {n}",
   "mr_empty_title": "Aún nada enviado",
   "mr_empty_body": "Sus informes aparecerán aquí en cuanto envíe el primero.",
-  "mr_empty_cta": "Reportar un incidente"
+  "mr_empty_cta": "Reportar un incidente",
+  "aria_brand_status": "Estado de conexión — toca para más detalles",
+  "status_sheet_title": "Estado de conexión",
+  "status_sheet_state_online": "En línea",
+  "status_sheet_state_offline": "Sin conexión",
+  "status_sheet_state_syncing": "Sincronizando",
+  "status_sheet_state_weak": "Señal débil",
+  "status_sheet_queued_label": "Informes pendientes de envío",
+  "status_sheet_last_sync_label": "Última sincronización",
+  "status_sheet_last_sync_never": "Aún no se ha enviado ningún informe",
+  "status_sheet_ago_now": "Justo ahora",
+  "status_sheet_ago_minutes": "hace {n} min",
+  "status_sheet_ago_hours": "hace {n} h",
+  "status_sheet_ago_days": "hace {n} d",
+  "status_sheet_reassure_online": "Tus informes se envían automáticamente al enviarlos.",
+  "status_sheet_reassure_offline": "Los informes se guardan en tu teléfono y se envían cuando vuelvas a estar en línea."
 }

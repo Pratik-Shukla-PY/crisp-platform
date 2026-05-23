@@ -1691,75 +1691,195 @@
         // session so deploys reflect immediately without thrashing the
         // backend.
         try { _paintVersionPill(); } catch (_) {}
-        // HC4: connectivity status pill — paint on boot + wire listeners.
-        try { _paintStatusPill(); _wireStatusPill(); } catch (_) {}
+        // HC16 (replaces HC4): wire the brand cluster as the
+        // tap-to-open trigger for the connection-status popover.
+        try { _wireStatusSheet(); } catch (_) {}
     }
 
-    // AUDIT 2026-05-23 (HC4) — connectivity status pill painter.
-    // Subtle persistent indicator next to the lang switcher. Reads
-    // navigator.onLine + IDB queue length on demand. Three states:
-    //   online   green dot · "Online"            — happy path
-    //   offline  red dot   · "Offline · N queued" — N from IDB queue
-    //   syncing  amber dot · "Syncing N"          — set by submit pipeline
+    // AUDIT 2026-05-23 (HC16) — connection status popover. Replaces
+    // the standalone .home-status-pill (HC4) which duplicated the
+    // existing connectivity-dot on the CRISP wordmark. The brand
+    // cluster (.home-brand) is now the tappable surface; tapping
+    // opens this small sheet which reads:
+    //   · current state (Online / Offline / Syncing / Weak)
+    //   · queued-reports count (only when > 0)
+    //   · last successful sync time, humanised
+    //   · short reassuring offline-first message
     //
-    // Wired to:
-    //   · `online` + `offline` window events
-    //   · `crisp:queue-changed` custom event (dispatched by submit
-    //     pipeline when IDB queue grows/shrinks) — best-effort
-    //   · home-stage entry (this paint call from _renderChannels)
-    async function _paintStatusPill() {
-        const pill = document.getElementById('home-status-pill');
-        const label = document.getElementById('home-status-pill-label');
-        if (!pill || !label) return;
+    // Painter is synchronous on the visible state (reads
+    // navigator.onLine + last-sync from localStorage) and reaches
+    // for the IDB queue asynchronously, repainting when the count
+    // resolves. That way the sheet pops open instantly even on a
+    // cold IDB.
+    function _humaniseAgo(ts) {
+        // Defensive: no timestamp → null (the painter swaps in the
+        // "no reports sent yet" string).
+        if (!ts || typeof ts !== 'number' || !isFinite(ts)) return null;
+        const ageSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+        const t = (typeof window.t === 'function') ? window.t : (k => null);
+        if (ageSec < 60) return t('status_sheet_ago_now') || 'Just now';
+        if (ageSec < 3600) {
+            const m = Math.floor(ageSec / 60);
+            return (t('status_sheet_ago_minutes') || '{n} min ago').replace('{n}', String(m));
+        }
+        if (ageSec < 86400) {
+            const h = Math.floor(ageSec / 3600);
+            return (t('status_sheet_ago_hours') || '{n} h ago').replace('{n}', String(h));
+        }
+        const d = Math.floor(ageSec / 86400);
+        return (t('status_sheet_ago_days') || '{n} d ago').replace('{n}', String(d));
+    }
+    function _readLastSyncTs() {
+        // app.js stamps localStorage[CRISP_LAST_SYNC_TS_KEY] = Date.now()
+        // every time a queued report successfully reaches the server.
+        // Fall back gracefully if the key is missing or unparseable.
+        try {
+            const raw = localStorage.getItem('crisp_last_sync_ts');
+            if (!raw) return null;
+            const n = parseInt(raw, 10);
+            return isFinite(n) ? n : null;
+        } catch (_) { return null; }
+    }
+    async function _paintStatusSheet() {
+        const sheet = document.getElementById('home-status-sheet');
+        if (!sheet) return;
+        const dot = document.getElementById('home-status-sheet-dot');
+        const stateEl = document.getElementById('home-status-sheet-state');
+        const queueRow = document.getElementById('home-status-sheet-queue-row');
+        const queueVal = document.getElementById('home-status-sheet-queue-value');
+        const lastSync = document.getElementById('home-status-sheet-last-sync');
+        const reassure = document.getElementById('home-status-sheet-reassure');
+        const t = (typeof window.t === 'function') ? window.t : (k => null);
+
         const online = navigator.onLine !== false;
         let queueCount = 0;
         try {
-            // Best-effort: read the queued-reports IDB store via the
-            // existing window.getAllQueued() helper exposed by app.js
-            // (returns [] when IDB unavailable).
             if (typeof window.getAllQueued === 'function') {
                 const all = await window.getAllQueued();
                 queueCount = Array.isArray(all) ? all.length : 0;
             }
         } catch (_) {}
-        // Resolve i18n strings (defensive — t() may not be wired yet at
-        // boot; falls back to EN literals).
-        const t = (typeof window.t === 'function') ? window.t : (k => null);
-        let state, text;
-        if (!online) {
-            state = 'offline';
-            const tmpl = t('status_pill_offline_n') || 'Offline · {n} queued';
-            text = queueCount > 0
-                ? tmpl.replace('{n}', String(queueCount))
-                : (t('status_pill_offline') || 'Offline');
-        } else if (queueCount > 0) {
-            state = 'syncing';
-            text = (t('status_pill_syncing') || 'Syncing {n}').replace('{n}', String(queueCount));
-        } else {
-            state = 'online';
-            text = t('status_pill_online') || 'Online';
+
+        // Derive state. Weak/intermittent is set by an external hint
+        // (window.__crispConnectivityWeak — set by adaptive-bandwidth
+        // tier when probe latency degrades but we're still online).
+        let state;
+        if (!online) state = 'offline';
+        else if (window.__crispConnectivityWeak === true) state = 'weak';
+        else if (queueCount > 0) state = 'syncing';
+        else state = 'online';
+        sheet.setAttribute('data-state', state);
+
+        // Mirror the state onto the brand-mark dot so the same colour
+        // is visible at-a-glance without opening the popover.
+        const brandDot = document.getElementById('connectivity-dot');
+        if (brandDot) {
+            brandDot.classList.remove('connectivity-online', 'connectivity-offline', 'connectivity-weak');
+            if (state === 'offline') brandDot.classList.add('connectivity-offline');
+            else if (state === 'weak') brandDot.classList.add('connectivity-weak');
+            else brandDot.classList.add('connectivity-online');
         }
-        pill.setAttribute('data-state', state);
-        label.textContent = text;
-        pill.removeAttribute('hidden');
+
+        // State label.
+        const stateKey = ({
+            online:  'status_sheet_state_online',
+            offline: 'status_sheet_state_offline',
+            syncing: 'status_sheet_state_syncing',
+            weak:    'status_sheet_state_weak',
+        })[state];
+        const stateFallback = ({
+            online: 'Online', offline: 'Offline', syncing: 'Syncing', weak: 'Weak signal',
+        })[state];
+        if (stateEl) stateEl.textContent = (t(stateKey) || stateFallback);
+
+        // Queue row — only render when > 0.
+        if (queueRow && queueVal) {
+            if (queueCount > 0) {
+                queueRow.hidden = false;
+                queueVal.textContent = String(queueCount);
+            } else {
+                queueRow.hidden = true;
+            }
+        }
+
+        // Last sync — humanise or fall back to "no reports sent yet".
+        if (lastSync) {
+            const ago = _humaniseAgo(_readLastSyncTs());
+            lastSync.textContent = ago || (t('status_sheet_last_sync_never') || 'No reports sent yet');
+        }
+
+        // Reassurance copy switches with online/offline.
+        if (reassure) {
+            const key = online ? 'status_sheet_reassure_online' : 'status_sheet_reassure_offline';
+            const fallback = online
+                ? 'Your reports send automatically as you submit them.'
+                : "Reports save on your phone and send when you're back online.";
+            reassure.textContent = t(key) || fallback;
+        }
     }
-    function _wireStatusPill() {
-        if (window.__crispStatusPillWired) return;
-        window.__crispStatusPillWired = true;
-        const repaint = () => { try { _paintStatusPill(); } catch (_) {} };
-        try { window.addEventListener('online', repaint); } catch (_) {}
-        try { window.addEventListener('offline', repaint); } catch (_) {}
-        try { document.addEventListener('crisp:queue-changed', repaint); } catch (_) {}
-        try { document.addEventListener('crisp:lang-changed', repaint); } catch (_) {}
-        const pill = document.getElementById('home-status-pill');
-        if (pill) {
-            pill.addEventListener('click', () => {
-                // Minimal feedback: brief re-poll. Could expand to a sheet
-                // in a future commit; for now the visible state IS the
-                // status surface.
-                repaint();
-            });
+    function _openStatusSheet() {
+        const sheet = document.getElementById('home-status-sheet');
+        if (!sheet) return;
+        // Paint first so the popover opens already-populated (no
+        // empty-flash). Async queue read repaints when ready.
+        _paintStatusSheet();
+        sheet.hidden = false;
+        requestAnimationFrame(() => sheet.classList.add('is-open'));
+        const closeBtn = document.getElementById('home-status-sheet-close');
+        if (closeBtn) setTimeout(() => { try { closeBtn.focus(); } catch (_) {} }, 60);
+        const trigger = document.querySelector('.home-brand');
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+    }
+    function _closeStatusSheet() {
+        const sheet = document.getElementById('home-status-sheet');
+        if (!sheet) return;
+        sheet.classList.remove('is-open');
+        setTimeout(() => { sheet.hidden = true; }, 240);
+        const trigger = document.querySelector('.home-brand');
+        if (trigger) {
+            trigger.setAttribute('aria-expanded', 'false');
+            try { trigger.focus(); } catch (_) {}
         }
+    }
+    function _wireStatusSheet() {
+        if (window.__crispStatusSheetWired) return;
+        window.__crispStatusSheetWired = true;
+        const sheet = document.getElementById('home-status-sheet');
+        const trigger = document.querySelector('.home-brand');
+        if (!sheet || !trigger) return;
+
+        // Click + Enter/Space on the brand cluster open the sheet.
+        trigger.addEventListener('click', _openStatusSheet);
+        trigger.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                _openStatusSheet();
+            }
+        });
+
+        const backdrop = document.getElementById('home-status-sheet-backdrop');
+        const closeBtn = document.getElementById('home-status-sheet-close');
+        if (backdrop) backdrop.addEventListener('click', _closeStatusSheet);
+        if (closeBtn) closeBtn.addEventListener('click', _closeStatusSheet);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && sheet.classList.contains('is-open')) {
+                _closeStatusSheet();
+            }
+        });
+
+        // When connectivity / queue / language changes, repaint the
+        // sheet if it's currently open (otherwise it stays stale until
+        // next open — which is fine; opener re-paints).
+        const repaintIfOpen = () => {
+            if (sheet.classList.contains('is-open')) {
+                try { _paintStatusSheet(); } catch (_) {}
+            }
+        };
+        try { window.addEventListener('online', repaintIfOpen); } catch (_) {}
+        try { window.addEventListener('offline', repaintIfOpen); } catch (_) {}
+        try { document.addEventListener('crisp:queue-changed', repaintIfOpen); } catch (_) {}
+        try { document.addEventListener('crisp:lang-changed', repaintIfOpen); } catch (_) {}
     }
 
     // May 21 2026 (audit Item 6) — version visibility.

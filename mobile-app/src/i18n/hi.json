@@ -863,5 +863,20 @@
   "status_pill_syncing": "सिंक {n}",
   "mr_empty_title": "अभी तक कुछ नहीं भेजा",
   "mr_empty_body": "जैसे ही आप पहली रिपोर्ट भेजेंगे, वे यहाँ दिखाई देंगी।",
-  "mr_empty_cta": "घटना की रिपोर्ट करें"
+  "mr_empty_cta": "घटना की रिपोर्ट करें",
+  "aria_brand_status": "कनेक्शन स्थिति — विवरण के लिए टैप करें",
+  "status_sheet_title": "कनेक्शन स्थिति",
+  "status_sheet_state_online": "ऑनलाइन",
+  "status_sheet_state_offline": "ऑफ़लाइन",
+  "status_sheet_state_syncing": "सिंक हो रहा है",
+  "status_sheet_state_weak": "कमज़ोर सिग्नल",
+  "status_sheet_queued_label": "भेजे जाने वाली रिपोर्ट",
+  "status_sheet_last_sync_label": "अंतिम सिंक",
+  "status_sheet_last_sync_never": "अभी तक कोई रिपोर्ट नहीं भेजी",
+  "status_sheet_ago_now": "अभी",
+  "status_sheet_ago_minutes": "{n} मि पहले",
+  "status_sheet_ago_hours": "{n} घं पहले",
+  "status_sheet_ago_days": "{n} दिन पहले",
+  "status_sheet_reassure_online": "जैसे ही आप रिपोर्ट जमा करते हैं, वे अपने-आप भेज दी जाती हैं।",
+  "status_sheet_reassure_offline": "रिपोर्ट आपके फ़ोन में सहेजी जाती हैं और कनेक्शन वापस आने पर भेज दी जाती हैं।"
 }

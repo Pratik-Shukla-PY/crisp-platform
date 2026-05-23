@@ -867,5 +867,20 @@
   "status_pill_syncing": "Syncing {n}",
   "mr_empty_title": "Nothing submitted yet",
   "mr_empty_body": "Your reports will appear here as soon as you send your first one.",
-  "mr_empty_cta": "Report an Incident"
+  "mr_empty_cta": "Report an Incident",
+  "aria_brand_status": "Trạng thái kết nối — chạm để xem chi tiết",
+  "status_sheet_title": "Trạng thái kết nối",
+  "status_sheet_state_online": "Trực tuyến",
+  "status_sheet_state_offline": "Ngoại tuyến",
+  "status_sheet_state_syncing": "Đang đồng bộ",
+  "status_sheet_state_weak": "Tín hiệu yếu",
+  "status_sheet_queued_label": "Báo cáo đang chờ gửi",
+  "status_sheet_last_sync_label": "Đồng bộ gần nhất",
+  "status_sheet_last_sync_never": "Chưa gửi báo cáo nào",
+  "status_sheet_ago_now": "Vừa xong",
+  "status_sheet_ago_minutes": "{n} phút trước",
+  "status_sheet_ago_hours": "{n} giờ trước",
+  "status_sheet_ago_days": "{n} ngày trước",
+  "status_sheet_reassure_online": "Báo cáo của bạn sẽ tự động gửi khi bạn nộp.",
+  "status_sheet_reassure_offline": "Báo cáo được lưu trên điện thoại và sẽ gửi khi bạn kết nối lại."
 }

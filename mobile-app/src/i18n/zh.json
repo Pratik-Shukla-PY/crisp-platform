@@ -861,5 +861,20 @@
   "status_pill_syncing": "同步 {n}",
   "mr_empty_title": "尚未提交任何内容",
   "mr_empty_body": "您发送第一个报告后,它们将显示在这里。",
-  "mr_empty_cta": "报告一起事件"
+  "mr_empty_cta": "报告一起事件",
+  "aria_brand_status": "连接状态 — 点按查看详情",
+  "status_sheet_title": "连接状态",
+  "status_sheet_state_online": "在线",
+  "status_sheet_state_offline": "离线",
+  "status_sheet_state_syncing": "同步中",
+  "status_sheet_state_weak": "信号弱",
+  "status_sheet_queued_label": "待发送的报告",
+  "status_sheet_last_sync_label": "上次同步",
+  "status_sheet_last_sync_never": "尚未发送任何报告",
+  "status_sheet_ago_now": "刚刚",
+  "status_sheet_ago_minutes": "{n} 分钟前",
+  "status_sheet_ago_hours": "{n} 小时前",
+  "status_sheet_ago_days": "{n} 天前",
+  "status_sheet_reassure_online": "提交后系统会自动发送您的报告。",
+  "status_sheet_reassure_offline": "报告将保存在您的手机上，并在重新连接后发送。"
 }

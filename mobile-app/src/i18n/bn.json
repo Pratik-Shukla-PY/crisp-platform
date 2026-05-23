@@ -864,5 +864,20 @@
   "status_pill_syncing": "Syncing {n}",
   "mr_empty_title": "Nothing submitted yet",
   "mr_empty_body": "Your reports will appear here as soon as you send your first one.",
-  "mr_empty_cta": "Report an Incident"
+  "mr_empty_cta": "Report an Incident",
+  "aria_brand_status": "সংযোগের অবস্থা — বিস্তারিত দেখতে ট্যাপ করুন",
+  "status_sheet_title": "সংযোগের অবস্থা",
+  "status_sheet_state_online": "অনলাইন",
+  "status_sheet_state_offline": "অফলাইন",
+  "status_sheet_state_syncing": "সিঙ্ক হচ্ছে",
+  "status_sheet_state_weak": "দুর্বল সিগন্যাল",
+  "status_sheet_queued_label": "পাঠানোর অপেক্ষায় রিপোর্ট",
+  "status_sheet_last_sync_label": "শেষ সিঙ্ক",
+  "status_sheet_last_sync_never": "এখনও কোনো রিপোর্ট পাঠানো হয়নি",
+  "status_sheet_ago_now": "এইমাত্র",
+  "status_sheet_ago_minutes": "{n} মিনিট আগে",
+  "status_sheet_ago_hours": "{n} ঘণ্টা আগে",
+  "status_sheet_ago_days": "{n} দিন আগে",
+  "status_sheet_reassure_online": "আপনি রিপোর্ট জমা দিলে সেগুলি স্বয়ংক্রিয়ভাবে পাঠানো হবে।",
+  "status_sheet_reassure_offline": "রিপোর্টগুলি আপনার ফোনে সংরক্ষিত থাকে এবং আপনি অনলাইনে ফিরে এলে পাঠানো হবে।"
 }

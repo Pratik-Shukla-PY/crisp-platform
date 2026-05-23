@@ -868,5 +868,20 @@
   "status_pill_syncing": "Sync {n}",
   "mr_empty_title": "Rien envoyé pour le moment",
   "mr_empty_body": "Vos rapports apparaîtront ici dès que vous enverrez le premier.",
-  "mr_empty_cta": "Signaler un incident"
+  "mr_empty_cta": "Signaler un incident",
+  "aria_brand_status": "État de la connexion — appuyez pour plus de détails",
+  "status_sheet_title": "État de la connexion",
+  "status_sheet_state_online": "En ligne",
+  "status_sheet_state_offline": "Hors ligne",
+  "status_sheet_state_syncing": "Synchronisation",
+  "status_sheet_state_weak": "Signal faible",
+  "status_sheet_queued_label": "Signalements en attente",
+  "status_sheet_last_sync_label": "Dernière synchronisation",
+  "status_sheet_last_sync_never": "Aucun signalement envoyé",
+  "status_sheet_ago_now": "À l'instant",
+  "status_sheet_ago_minutes": "il y a {n} min",
+  "status_sheet_ago_hours": "il y a {n} h",
+  "status_sheet_ago_days": "il y a {n} j",
+  "status_sheet_reassure_online": "Vos signalements partent automatiquement lors de leur envoi.",
+  "status_sheet_reassure_offline": "Les signalements sont enregistrés sur votre téléphone et envoyés au retour de la connexion."
 }

@@ -136,7 +136,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v256">
+    <meta name="crisp-release" content="crisp-pwa@v257">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -521,9 +521,9 @@
         // any locale JSON. Pre-commit hook gates drift.
         window.__crispHomeI18nPacks = {
   "__meta": {
-    "buildTs": "2026-05-23T08:08:50.663Z",
+    "buildTs": "2026-05-23T08:56:27.779Z",
     "scriptVersion": 2,
-    "keyCount": 67,
+    "keyCount": 70,
     "locales": [
       "en",
       "zh",
@@ -550,12 +550,13 @@
     ]
   },
   "en": {
-    "__version": "38ff3e8a27ff",
-    "__checksum": "a17734d753f308a6",
+    "__version": "66c80e2afa34",
+    "__checksum": "c4e72d1891b298e6",
     "action_tile_download": "Download App",
     "action_tile_login": "Login",
     "add_to_homescreen": "+ Add to Homescreen",
     "aria_add_to_homescreen": "Add CRISP to your home screen",
+    "aria_brand_status": "Connection status — tap for details",
     "aria_channels_strip": "Other ways to report — tap to see all channels",
     "aria_choose_language": "Choose language",
     "aria_close": "Close",
@@ -564,7 +565,6 @@
     "aria_home_devid_info": "What is my reporter ID?",
     "aria_online_status": "Online",
     "aria_read_aloud": "Read this page aloud",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "Tap to change language",
     "badge_chip_lives_stat": "{n} lives saved",
     "devid_sheet_point_1": "Only you can see this code.",
@@ -596,9 +596,6 @@
     "home_recent_reports_empty": "No reports yet.",
     "home_recent_reports_title": "Your recent reports",
     "home_recent_reports_view_all": "View all",
-    "install_benefit_fast": "✓ Faster reporting",
-    "install_benefit_offline": "✓ Works offline",
-    "install_benefit_safe": "✓ Reports stay safe",
     "install_thanks": "Installed. Reports save instantly.",
     "landing_install_pwa": "Install on home screen",
     "lang_picker_close": "Close",
@@ -611,6 +608,12 @@
     "my_reports": "My Reports",
     "nearby_eyebrow": "NEARBY REPORTS",
     "nearby_sheet_close": "Close",
+    "status_sheet_last_sync_label": "Last sync",
+    "status_sheet_last_sync_never": "No reports sent yet",
+    "status_sheet_queued_label": "Reports waiting to send",
+    "status_sheet_reassure_online": "Your reports send automatically as you submit them.",
+    "status_sheet_state_online": "Online",
+    "status_sheet_title": "Connection status",
     "tier_progress_first_report": "Submit your first report to level up",
     "tier_progress_lives_1": "Help save 1 life through your reports",
     "tier_progress_top_share": "Top tier reached",
@@ -621,12 +624,13 @@
     "tier_t4_lifekeeper_label": "Lifekeeper"
   },
   "zh": {
-    "__version": "f9f1be086107",
-    "__checksum": "5d4107c55ddd6759",
+    "__version": "4e4a1aa10127",
+    "__checksum": "8fcd68801d9b903e",
     "action_tile_download": "下载应用",
     "action_tile_login": "登录",
     "add_to_homescreen": "+ 添加到主屏幕",
     "aria_add_to_homescreen": "将 CRISP 添加到主屏幕",
+    "aria_brand_status": "连接状态 — 点按查看详情",
     "aria_channels_strip": "其他报告方式 — 点击查看所有渠道",
     "aria_choose_language": "选择语言",
     "aria_close": "关闭",
@@ -635,7 +639,6 @@
     "aria_home_devid_info": "我的报告员 ID 是什么？",
     "aria_online_status": "在线",
     "aria_read_aloud": "朗读本页",
-    "aria_status_pill": "连接状态",
     "aria_tap_change_language": "点击切换语言",
     "badge_chip_lives_stat": "已挽救 {n} 条生命",
     "devid_sheet_point_1": "只有您可以看到此代码。",
@@ -667,9 +670,6 @@
     "home_recent_reports_empty": "暂无报告。",
     "home_recent_reports_title": "你最近的报告",
     "home_recent_reports_view_all": "查看全部",
-    "install_benefit_fast": "✓ 报告更快",
-    "install_benefit_offline": "✓ 离线可用",
-    "install_benefit_safe": "✓ 报告安全保存",
     "install_thanks": "已安装。报告即时保存。",
     "landing_install_pwa": "添加到主屏幕",
     "lang_picker_close": "关闭",
@@ -682,6 +682,12 @@
     "my_reports": "我的报告",
     "nearby_eyebrow": "附近报告",
     "nearby_sheet_close": "关闭",
+    "status_sheet_last_sync_label": "上次同步",
+    "status_sheet_last_sync_never": "尚未发送任何报告",
+    "status_sheet_queued_label": "待发送的报告",
+    "status_sheet_reassure_online": "提交后系统会自动发送您的报告。",
+    "status_sheet_state_online": "在线",
+    "status_sheet_title": "连接状态",
     "tier_progress_first_report": "提交首份报告以升级",
     "tier_progress_lives_1": "通过你的报告帮助挽救 1 条生命",
     "tier_progress_top_share": "已达到最高等级",
@@ -692,12 +698,13 @@
     "tier_t4_lifekeeper_label": "生命守护者"
   },
   "es": {
-    "__version": "ccfc0c9ab8c2",
-    "__checksum": "32199303de1ae406",
+    "__version": "a90221514ea0",
+    "__checksum": "455a9097d95f84cc",
     "action_tile_download": "Descargar",
     "action_tile_login": "Acceder",
     "add_to_homescreen": "+ Añadir a Inicio",
     "aria_add_to_homescreen": "Añadir CRISP a tu pantalla de inicio",
+    "aria_brand_status": "Estado de conexión — toca para más detalles",
     "aria_channels_strip": "Otras formas de informar — pulsa para ver todos los canales",
     "aria_choose_language": "Elegir idioma",
     "aria_close": "Cerrar",
@@ -706,7 +713,6 @@
     "aria_home_devid_info": "¿Qué es mi ID de reportero?",
     "aria_online_status": "En línea",
     "aria_read_aloud": "Leer esta página en voz alta",
-    "aria_status_pill": "Estado de conexión",
     "aria_tap_change_language": "Toca para cambiar el idioma",
     "badge_chip_lives_stat": "{n} vidas salvadas",
     "devid_sheet_point_1": "Solo usted puede ver este código.",
@@ -738,9 +744,6 @@
     "home_recent_reports_empty": "Aún no hay reportes.",
     "home_recent_reports_title": "Tus reportes recientes",
     "home_recent_reports_view_all": "Ver todos",
-    "install_benefit_fast": "✓ Informes rápidos",
-    "install_benefit_offline": "✓ Sin conexión",
-    "install_benefit_safe": "✓ Informes seguros",
     "install_thanks": "Instalado. Informes guardados al instante.",
     "landing_install_pwa": "Instalar en inicio",
     "lang_picker_close": "Cerrar",
@@ -753,6 +756,12 @@
     "my_reports": "Mis informes",
     "nearby_eyebrow": "INFORMES CERCANOS",
     "nearby_sheet_close": "Cerrar",
+    "status_sheet_last_sync_label": "Última sincronización",
+    "status_sheet_last_sync_never": "Aún no se ha enviado ningún informe",
+    "status_sheet_queued_label": "Informes pendientes de envío",
+    "status_sheet_reassure_online": "Tus informes se envían automáticamente al enviarlos.",
+    "status_sheet_state_online": "En línea",
+    "status_sheet_title": "Estado de conexión",
     "tier_progress_first_report": "Envía tu primer informe para subir de nivel",
     "tier_progress_lives_1": "Ayuda a salvar 1 vida con tus informes",
     "tier_progress_top_share": "Nivel máximo alcanzado",
@@ -763,12 +772,13 @@
     "tier_t4_lifekeeper_label": "Guardián de vidas"
   },
   "ar": {
-    "__version": "1bc860da0dc6",
-    "__checksum": "236f61e7375b0ba2",
+    "__version": "c832a0dffce5",
+    "__checksum": "0e69393863a93e46",
     "action_tile_download": "تنزيل التطبيق",
     "action_tile_login": "تسجيل الدخول",
     "add_to_homescreen": "+ إضافة إلى الشاشة الرئيسية",
     "aria_add_to_homescreen": "إضافة CRISP إلى شاشتك الرئيسية",
+    "aria_brand_status": "حالة الاتصال — اضغط لمزيد من التفاصيل",
     "aria_channels_strip": "طرق أخرى للإبلاغ — اضغط لرؤية جميع القنوات",
     "aria_choose_language": "اختر اللغة",
     "aria_close": "إغلاق",
@@ -777,7 +787,6 @@
     "aria_home_devid_info": "ما هو معرّف المُبلِغ الخاص بي؟",
     "aria_online_status": "متصل",
     "aria_read_aloud": "اقرأ هذه الصفحة بصوت عالٍ",
-    "aria_status_pill": "حالة الاتصال",
     "aria_tap_change_language": "اضغط لتغيير اللغة",
     "badge_chip_lives_stat": "{n} حياة منقذة",
     "devid_sheet_point_1": "يمكنك أنت فقط رؤية هذا الرمز.",
@@ -809,9 +818,6 @@
     "home_recent_reports_empty": "لا تقارير بعد.",
     "home_recent_reports_title": "تقاريرك الأخيرة",
     "home_recent_reports_view_all": "عرض الكل",
-    "install_benefit_fast": "✓ إبلاغ أسرع",
-    "install_benefit_offline": "✓ يعمل دون اتصال",
-    "install_benefit_safe": "✓ التقارير آمنة",
     "install_thanks": "مُثبَّت. تُحفَظ التقارير فورًا.",
     "landing_install_pwa": "ثبّت على الشاشة الرئيسية",
     "lang_picker_close": "إغلاق",
@@ -824,6 +830,12 @@
     "my_reports": "تقاريري",
     "nearby_eyebrow": "تقارير قريبة",
     "nearby_sheet_close": "إغلاق",
+    "status_sheet_last_sync_label": "آخر مزامنة",
+    "status_sheet_last_sync_never": "لم يُرسل أي تقرير بعد",
+    "status_sheet_queued_label": "تقارير بانتظار الإرسال",
+    "status_sheet_reassure_online": "تُرسل تقاريرك تلقائيًا فور إرسالها.",
+    "status_sheet_state_online": "متصل",
+    "status_sheet_title": "حالة الاتصال",
     "tier_progress_first_report": "أرسل أول تقرير لك للترقية",
     "tier_progress_lives_1": "ساعد في إنقاذ حياة واحدة من خلال تقاريرك",
     "tier_progress_top_share": "تم الوصول إلى أعلى مستوى",
@@ -834,12 +846,13 @@
     "tier_t4_lifekeeper_label": "حافظ الحياة"
   },
   "fr": {
-    "__version": "fd45a8862b6c",
-    "__checksum": "190a1b1a2be9ead3",
+    "__version": "b5c571b0128c",
+    "__checksum": "c3eca804258f059a",
     "action_tile_download": "Télécharger",
     "action_tile_login": "Connexion",
     "add_to_homescreen": "+ Ajouter à l'écran d'accueil",
     "aria_add_to_homescreen": "Ajouter CRISP à votre écran d'accueil",
+    "aria_brand_status": "État de la connexion — appuyez pour plus de détails",
     "aria_channels_strip": "Autres moyens de signaler — appuyez pour voir tous les canaux",
     "aria_choose_language": "Choisir la langue",
     "aria_close": "Fermer",
@@ -848,7 +861,6 @@
     "aria_home_devid_info": "Qu'est-ce que mon identifiant de rapporteur ?",
     "aria_online_status": "En ligne",
     "aria_read_aloud": "Lire cette page à voix haute",
-    "aria_status_pill": "État de connexion",
     "aria_tap_change_language": "Appuyez pour changer de langue",
     "badge_chip_lives_stat": "{n} vies sauvées",
     "devid_sheet_point_1": "Vous seul pouvez voir ce code.",
@@ -880,9 +892,6 @@
     "home_recent_reports_empty": "Aucun signalement pour l'instant.",
     "home_recent_reports_title": "Vos signalements récents",
     "home_recent_reports_view_all": "Tout voir",
-    "install_benefit_fast": "✓ Signalement rapide",
-    "install_benefit_offline": "✓ Fonctionne hors ligne",
-    "install_benefit_safe": "✓ Rapports en sécurité",
     "install_thanks": "Installé. Rapports sauvegardés instantanément.",
     "landing_install_pwa": "Installer sur l'écran",
     "lang_picker_close": "Fermer",
@@ -895,6 +904,12 @@
     "my_reports": "Mes rapports",
     "nearby_eyebrow": "SIGNALEMENTS À PROXIMITÉ",
     "nearby_sheet_close": "Fermer",
+    "status_sheet_last_sync_label": "Dernière synchronisation",
+    "status_sheet_last_sync_never": "Aucun signalement envoyé",
+    "status_sheet_queued_label": "Signalements en attente",
+    "status_sheet_reassure_online": "Vos signalements partent automatiquement lors de leur envoi.",
+    "status_sheet_state_online": "En ligne",
+    "status_sheet_title": "État de la connexion",
     "tier_progress_first_report": "Soumettez votre premier rapport pour passer au niveau supérieur",
     "tier_progress_lives_1": "Aidez à sauver 1 vie grâce à vos rapports",
     "tier_progress_top_share": "Niveau maximum atteint",
@@ -905,12 +920,13 @@
     "tier_t4_lifekeeper_label": "Gardien de vies"
   },
   "ru": {
-    "__version": "17d7babeb864",
-    "__checksum": "308a4d452a3179d8",
+    "__version": "7eb26828b78e",
+    "__checksum": "d52e73f1ab5bca6d",
     "action_tile_download": "Скачать",
     "action_tile_login": "Войти",
     "add_to_homescreen": "+ Добавить на главный экран",
     "aria_add_to_homescreen": "Добавить CRISP на главный экран",
+    "aria_brand_status": "Статус подключения — нажмите для деталей",
     "aria_channels_strip": "Другие способы сообщить — нажмите, чтобы увидеть все каналы",
     "aria_choose_language": "Выбрать язык",
     "aria_close": "Закрыть",
@@ -919,7 +935,6 @@
     "aria_home_devid_info": "Что такое мой ID репортера?",
     "aria_online_status": "В сети",
     "aria_read_aloud": "Прочитать страницу вслух",
-    "aria_status_pill": "Состояние соединения",
     "aria_tap_change_language": "Нажмите, чтобы сменить язык",
     "badge_chip_lives_stat": "{n} спасённых жизней",
     "devid_sheet_point_1": "Только вы можете видеть этот код.",
@@ -951,9 +966,6 @@
     "home_recent_reports_empty": "Отчётов пока нет.",
     "home_recent_reports_title": "Ваши недавние отчёты",
     "home_recent_reports_view_all": "Все",
-    "install_benefit_fast": "✓ Быстрее отчёт",
-    "install_benefit_offline": "✓ Работает офлайн",
-    "install_benefit_safe": "✓ Отчёты в безопасности",
     "install_thanks": "Установлено. Отчёты сохраняются мгновенно.",
     "landing_install_pwa": "На главный экран",
     "lang_picker_close": "Закрыть",
@@ -966,6 +978,12 @@
     "my_reports": "Мои отчёты",
     "nearby_eyebrow": "СООБЩЕНИЯ РЯДОМ",
     "nearby_sheet_close": "Закрыть",
+    "status_sheet_last_sync_label": "Последняя синхронизация",
+    "status_sheet_last_sync_never": "Отчётов ещё не было",
+    "status_sheet_queued_label": "Отчётов в очереди",
+    "status_sheet_reassure_online": "Ваши отчёты отправляются автоматически при отправке.",
+    "status_sheet_state_online": "В сети",
+    "status_sheet_title": "Статус подключения",
     "tier_progress_first_report": "Отправьте первый отчёт, чтобы повысить уровень",
     "tier_progress_lives_1": "Помогите спасти 1 жизнь своими отчётами",
     "tier_progress_top_share": "Достигнут высший уровень",
@@ -976,12 +994,13 @@
     "tier_t4_lifekeeper_label": "Хранитель жизней"
   },
   "hi": {
-    "__version": "2afbcf951646",
-    "__checksum": "0e0b390a3180fde6",
+    "__version": "680310d3e6bc",
+    "__checksum": "7f0fab187c930ac3",
     "action_tile_download": "ऐप डाउनलोड करें",
     "action_tile_login": "लॉगिन",
     "add_to_homescreen": "+ होम स्क्रीन पर जोड़ें",
     "aria_add_to_homescreen": "CRISP को अपनी होम स्क्रीन पर जोड़ें",
+    "aria_brand_status": "कनेक्शन स्थिति — विवरण के लिए टैप करें",
     "aria_channels_strip": "रिपोर्ट करने के अन्य तरीके — सभी चैनल देखने के लिए टैप करें",
     "aria_choose_language": "भाषा चुनें",
     "aria_close": "बंद करें",
@@ -990,7 +1009,6 @@
     "aria_home_devid_info": "मेरी रिपोर्टर ID क्या है?",
     "aria_online_status": "ऑनलाइन",
     "aria_read_aloud": "यह पृष्ठ ज़ोर से पढ़ें",
-    "aria_status_pill": "कनेक्शन स्थिति",
     "aria_tap_change_language": "भाषा बदलने के लिए टैप करें",
     "badge_chip_lives_stat": "{n} जीवन बचाए",
     "devid_sheet_point_1": "केवल आप यह कोड देख सकते हैं।",
@@ -1022,9 +1040,6 @@
     "home_recent_reports_empty": "अभी कोई रिपोर्ट नहीं।",
     "home_recent_reports_title": "आपकी हाल की रिपोर्टें",
     "home_recent_reports_view_all": "सभी देखें",
-    "install_benefit_fast": "✓ तेज़ रिपोर्टिंग",
-    "install_benefit_offline": "✓ ऑफ़लाइन काम करता है",
-    "install_benefit_safe": "✓ रिपोर्ट सुरक्षित",
     "install_thanks": "इंस्टॉल हो गया। रिपोर्ट तुरंत सहेजी जाती हैं।",
     "landing_install_pwa": "होम स्क्रीन पर इंस्टॉल करें",
     "lang_picker_close": "बंद करें",
@@ -1037,6 +1052,12 @@
     "my_reports": "मेरी रिपोर्टें",
     "nearby_eyebrow": "पास के रिपोर्ट",
     "nearby_sheet_close": "बंद करें",
+    "status_sheet_last_sync_label": "अंतिम सिंक",
+    "status_sheet_last_sync_never": "अभी तक कोई रिपोर्ट नहीं भेजी",
+    "status_sheet_queued_label": "भेजे जाने वाली रिपोर्ट",
+    "status_sheet_reassure_online": "जैसे ही आप रिपोर्ट जमा करते हैं, वे अपने-आप भेज दी जाती हैं।",
+    "status_sheet_state_online": "ऑनलाइन",
+    "status_sheet_title": "कनेक्शन स्थिति",
     "tier_progress_first_report": "स्तर बढ़ाने के लिए अपनी पहली रिपोर्ट भेजें",
     "tier_progress_lives_1": "अपनी रिपोर्ट से 1 जीवन बचाने में मदद करें",
     "tier_progress_top_share": "सर्वोच्च स्तर प्राप्त",
@@ -1047,12 +1068,13 @@
     "tier_t4_lifekeeper_label": "जीवन रक्षक"
   },
   "pt": {
-    "__version": "34269dfb9ffc",
-    "__checksum": "938d2c2ab7a4c2e2",
+    "__version": "fa7184a7a145",
+    "__checksum": "a829b40d087ed041",
     "action_tile_download": "Baixar App",
     "action_tile_login": "Entrar",
     "add_to_homescreen": "+ Adicionar à Tela Inicial",
     "aria_add_to_homescreen": "Adicionar CRISP à sua tela inicial",
+    "aria_brand_status": "Estado da conexão — toque para mais detalhes",
     "aria_channels_strip": "Outras formas de reportar — toque para ver todos os canais",
     "aria_choose_language": "Escolher idioma",
     "aria_close": "Fechar",
@@ -1061,7 +1083,6 @@
     "aria_home_devid_info": "O que é o meu ID de repórter?",
     "aria_online_status": "Online",
     "aria_read_aloud": "Ler esta página em voz alta",
-    "aria_status_pill": "Estado da conexão",
     "aria_tap_change_language": "Toque para mudar de idioma",
     "badge_chip_lives_stat": "{n} vidas salvas",
     "devid_sheet_point_1": "Apenas você pode ver este código.",
@@ -1093,9 +1114,6 @@
     "home_recent_reports_empty": "Sem relatórios ainda.",
     "home_recent_reports_title": "Os seus relatórios recentes",
     "home_recent_reports_view_all": "Ver todos",
-    "install_benefit_fast": "✓ Relatos rápidos",
-    "install_benefit_offline": "✓ Funciona offline",
-    "install_benefit_safe": "✓ Relatórios seguros",
     "install_thanks": "Instalado. Relatórios salvos instantaneamente.",
     "landing_install_pwa": "Instalar no ecrã inicial",
     "lang_picker_close": "Fechar",
@@ -1108,6 +1126,12 @@
     "my_reports": "Os Meus Relatórios",
     "nearby_eyebrow": "RELATOS POR PERTO",
     "nearby_sheet_close": "Fechar",
+    "status_sheet_last_sync_label": "Última sincronização",
+    "status_sheet_last_sync_never": "Nenhum relatório enviado ainda",
+    "status_sheet_queued_label": "Relatórios aguardando envio",
+    "status_sheet_reassure_online": "Seus relatórios são enviados automaticamente ao submetê-los.",
+    "status_sheet_state_online": "Online",
+    "status_sheet_title": "Estado da conexão",
     "tier_progress_first_report": "Envie seu primeiro relatório para subir de nível",
     "tier_progress_lives_1": "Ajude a salvar 1 vida com seus relatórios",
     "tier_progress_top_share": "Nível máximo alcançado",
@@ -1118,12 +1142,13 @@
     "tier_t4_lifekeeper_label": "Guardião de vidas"
   },
   "bn": {
-    "__version": "ec33733ae92d",
-    "__checksum": "efe09147393bada1",
+    "__version": "bac71320cf1d",
+    "__checksum": "cb19e7e70a427f53",
     "action_tile_download": "অ্যাপ ডাউনলোড",
     "action_tile_login": "লগইন",
     "add_to_homescreen": "+ হোম স্ক্রিনে যোগ করুন",
     "aria_add_to_homescreen": "CRISP আপনার হোম স্ক্রিনে যোগ করুন",
+    "aria_brand_status": "সংযোগের অবস্থা — বিস্তারিত দেখতে ট্যাপ করুন",
     "aria_channels_strip": "রিপোর্ট করার অন্যান্য উপায় — সব চ্যানেল দেখতে ট্যাপ করুন",
     "aria_choose_language": "ভাষা বাছুন",
     "aria_close": "বন্ধ",
@@ -1132,7 +1157,6 @@
     "aria_home_devid_info": "আমার রিপোর্টার ID কী?",
     "aria_online_status": "অনলাইন",
     "aria_read_aloud": "এই পৃষ্ঠা জোরে পড়ুন",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "ভাষা পরিবর্তনে ট্যাপ করুন",
     "badge_chip_lives_stat": "{n} জীবন রক্ষা",
     "devid_sheet_point_1": "শুধু আপনি এই কোডটি দেখতে পারেন।",
@@ -1164,9 +1188,6 @@
     "home_recent_reports_empty": "এখনো কোনো প্রতিবেদন নেই।",
     "home_recent_reports_title": "আপনার সাম্প্রতিক প্রতিবেদন",
     "home_recent_reports_view_all": "সব দেখুন",
-    "install_benefit_fast": "✓ দ্রুত রিপোর্ট",
-    "install_benefit_offline": "✓ অফলাইনে কাজ করে",
-    "install_benefit_safe": "✓ রিপোর্ট নিরাপদ",
     "install_thanks": "ইনস্টল হয়েছে। রিপোর্ট সঙ্গে সঙ্গে সংরক্ষিত।",
     "landing_install_pwa": "হোম স্ক্রিনে ইনস্টল করুন",
     "lang_picker_close": "বন্ধ",
@@ -1179,6 +1200,12 @@
     "my_reports": "আমার প্রতিবেদন",
     "nearby_eyebrow": "কাছাকাছি রিপোর্ট",
     "nearby_sheet_close": "বন্ধ করুন",
+    "status_sheet_last_sync_label": "শেষ সিঙ্ক",
+    "status_sheet_last_sync_never": "এখনও কোনো রিপোর্ট পাঠানো হয়নি",
+    "status_sheet_queued_label": "পাঠানোর অপেক্ষায় রিপোর্ট",
+    "status_sheet_reassure_online": "আপনি রিপোর্ট জমা দিলে সেগুলি স্বয়ংক্রিয়ভাবে পাঠানো হবে।",
+    "status_sheet_state_online": "অনলাইন",
+    "status_sheet_title": "সংযোগের অবস্থা",
     "tier_progress_first_report": "লেভেল আপ করতে প্রথম প্রতিবেদন জমা দিন",
     "tier_progress_lives_1": "আপনার প্রতিবেদন দিয়ে 1টি জীবন বাঁচান",
     "tier_progress_top_share": "সর্বোচ্চ স্তরে পৌঁছেছেন",
@@ -1189,12 +1216,13 @@
     "tier_t4_lifekeeper_label": "জীবনরক্ষাকারী"
   },
   "ja": {
-    "__version": "6b4fa8717b63",
-    "__checksum": "84a7ac05a5cf9170",
+    "__version": "a302f96a1b92",
+    "__checksum": "b2f0c82a3453ab84",
     "action_tile_download": "アプリ取得",
     "action_tile_login": "ログイン",
     "add_to_homescreen": "+ ホーム画面に追加",
     "aria_add_to_homescreen": "CRISP をホーム画面に追加",
+    "aria_brand_status": "接続状態 — タップして詳細を表示",
     "aria_channels_strip": "他の通報方法 — すべてのチャンネルを見るにはタップ",
     "aria_choose_language": "言語を選択",
     "aria_close": "閉じる",
@@ -1203,7 +1231,6 @@
     "aria_home_devid_info": "私の報告者 ID とは？",
     "aria_online_status": "オンライン",
     "aria_read_aloud": "このページを音読",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "タップで言語を変更",
     "badge_chip_lives_stat": "{n} 人の命を救った",
     "devid_sheet_point_1": "このコードはあなただけが見ることができます。",
@@ -1235,9 +1262,6 @@
     "home_recent_reports_empty": "まだ報告はありません。",
     "home_recent_reports_title": "最近の報告",
     "home_recent_reports_view_all": "すべて表示",
-    "install_benefit_fast": "✓ より速い報告",
-    "install_benefit_offline": "✓ オフラインで動作",
-    "install_benefit_safe": "✓ レポートを安全に保管",
     "install_thanks": "インストール済み。レポートは即座に保存されます。",
     "landing_install_pwa": "ホーム画面にインストール",
     "lang_picker_close": "閉じる",
@@ -1250,6 +1274,12 @@
     "my_reports": "マイレポート",
     "nearby_eyebrow": "近隣の報告",
     "nearby_sheet_close": "閉じる",
+    "status_sheet_last_sync_label": "最終同期",
+    "status_sheet_last_sync_never": "送信済みの報告はまだありません",
+    "status_sheet_queued_label": "送信待ちの報告",
+    "status_sheet_reassure_online": "提出した報告は自動的に送信されます。",
+    "status_sheet_state_online": "オンライン",
+    "status_sheet_title": "接続状態",
     "tier_progress_first_report": "レベルアップには最初のレポートを送信してください",
     "tier_progress_lives_1": "あなたのレポートで1人の命を救おう",
     "tier_progress_top_share": "最高ティアに到達",
@@ -1260,12 +1290,13 @@
     "tier_t4_lifekeeper_label": "ライフキーパー"
   },
   "tr": {
-    "__version": "915f20271800",
-    "__checksum": "3216f26656f269c4",
+    "__version": "d04e8e9f94fa",
+    "__checksum": "62c068515536d48a",
     "action_tile_download": "Uygulamayı İndir",
     "action_tile_login": "Giriş",
     "add_to_homescreen": "+ Ana Ekrana Ekle",
     "aria_add_to_homescreen": "CRISP'i ana ekranınıza ekleyin",
+    "aria_brand_status": "Bağlantı durumu — ayrıntılar için dokunun",
     "aria_channels_strip": "Diğer bildirim yolları — tüm kanalları görmek için dokunun",
     "aria_choose_language": "Dil seç",
     "aria_close": "Kapat",
@@ -1274,7 +1305,6 @@
     "aria_home_devid_info": "Muhabir kimliğim nedir?",
     "aria_online_status": "Çevrimiçi",
     "aria_read_aloud": "Bu sayfayı sesli oku",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "Dili değiştirmek için dokun",
     "badge_chip_lives_stat": "{n} hayat kurtarıldı",
     "devid_sheet_point_1": "Bu kodu yalnızca siz görebilirsiniz.",
@@ -1306,9 +1336,6 @@
     "home_recent_reports_empty": "Henüz bildirim yok.",
     "home_recent_reports_title": "Son bildirimleriniz",
     "home_recent_reports_view_all": "Tümünü gör",
-    "install_benefit_fast": "✓ Daha hızlı raporlama",
-    "install_benefit_offline": "✓ Çevrimdışı çalışır",
-    "install_benefit_safe": "✓ Raporlar güvende",
     "install_thanks": "Yüklendi. Raporlar anında kaydedilir.",
     "landing_install_pwa": "Ana ekrana yükle",
     "lang_picker_close": "Kapat",
@@ -1321,6 +1348,12 @@
     "my_reports": "Bildirimlerim",
     "nearby_eyebrow": "YAKINDAKİ RAPORLAR",
     "nearby_sheet_close": "Kapat",
+    "status_sheet_last_sync_label": "Son eşitleme",
+    "status_sheet_last_sync_never": "Henüz rapor gönderilmedi",
+    "status_sheet_queued_label": "Gönderim bekleyen raporlar",
+    "status_sheet_reassure_online": "Raporlarınız gönderildiğinde otomatik olarak iletilir.",
+    "status_sheet_state_online": "Çevrimiçi",
+    "status_sheet_title": "Bağlantı durumu",
     "tier_progress_first_report": "Seviye atlamak için ilk raporunuzu gönderin",
     "tier_progress_lives_1": "Raporlarınızla 1 hayat kurtarın",
     "tier_progress_top_share": "En üst seviyeye ulaşıldı",
@@ -1331,12 +1364,13 @@
     "tier_t4_lifekeeper_label": "Hayat koruyucu"
   },
   "vi": {
-    "__version": "b5019743a0ac",
-    "__checksum": "daf9147a20d48259",
+    "__version": "02d41beb65d4",
+    "__checksum": "736fbfd1e07bf71e",
     "action_tile_download": "Tải Ứng Dụng",
     "action_tile_login": "Đăng nhập",
     "add_to_homescreen": "+ Thêm vào Màn hình chính",
     "aria_add_to_homescreen": "Thêm CRISP vào màn hình chính của bạn",
+    "aria_brand_status": "Trạng thái kết nối — chạm để xem chi tiết",
     "aria_channels_strip": "Các cách báo cáo khác — chạm để xem tất cả kênh",
     "aria_choose_language": "Chọn ngôn ngữ",
     "aria_close": "Đóng",
@@ -1345,7 +1379,6 @@
     "aria_home_devid_info": "ID người báo cáo của tôi là gì?",
     "aria_online_status": "Trực tuyến",
     "aria_read_aloud": "Đọc to trang này",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "Chạm để đổi ngôn ngữ",
     "badge_chip_lives_stat": "Cứu sống {n} người",
     "devid_sheet_point_1": "Chỉ bạn có thể thấy mã này.",
@@ -1377,9 +1410,6 @@
     "home_recent_reports_empty": "Chưa có báo cáo nào.",
     "home_recent_reports_title": "Báo cáo gần đây của bạn",
     "home_recent_reports_view_all": "Xem tất cả",
-    "install_benefit_fast": "✓ Báo cáo nhanh hơn",
-    "install_benefit_offline": "✓ Hoạt động ngoại tuyến",
-    "install_benefit_safe": "✓ Báo cáo an toàn",
     "install_thanks": "Đã cài đặt. Báo cáo được lưu ngay lập tức.",
     "landing_install_pwa": "Cài lên màn hình chính",
     "lang_picker_close": "Đóng",
@@ -1392,6 +1422,12 @@
     "my_reports": "Báo cáo của tôi",
     "nearby_eyebrow": "BÁO CÁO GẦN ĐÂY",
     "nearby_sheet_close": "Đóng",
+    "status_sheet_last_sync_label": "Đồng bộ gần nhất",
+    "status_sheet_last_sync_never": "Chưa gửi báo cáo nào",
+    "status_sheet_queued_label": "Báo cáo đang chờ gửi",
+    "status_sheet_reassure_online": "Báo cáo của bạn sẽ tự động gửi khi bạn nộp.",
+    "status_sheet_state_online": "Trực tuyến",
+    "status_sheet_title": "Trạng thái kết nối",
     "tier_progress_first_report": "Gửi báo cáo đầu tiên để lên cấp",
     "tier_progress_lives_1": "Giúp cứu 1 mạng người qua báo cáo của bạn",
     "tier_progress_top_share": "Đạt cấp cao nhất",
@@ -1402,12 +1438,13 @@
     "tier_t4_lifekeeper_label": "Người giữ mạng sống"
   },
   "ko": {
-    "__version": "13e059d1cc46",
-    "__checksum": "a53bd8d7514190d8",
+    "__version": "86486a8aca75",
+    "__checksum": "62b7bc06b8bd599a",
     "action_tile_download": "앱 다운로드",
     "action_tile_login": "로그인",
     "add_to_homescreen": "+ 홈 화면에 추가",
     "aria_add_to_homescreen": "CRISP를 홈 화면에 추가",
+    "aria_brand_status": "연결 상태 — 자세히 보려면 탭하세요",
     "aria_channels_strip": "다른 신고 방법 — 모든 채널을 보려면 탭하세요",
     "aria_choose_language": "언어 선택",
     "aria_close": "닫기",
@@ -1416,7 +1453,6 @@
     "aria_home_devid_info": "내 신고자 ID는 무엇인가요?",
     "aria_online_status": "온라인",
     "aria_read_aloud": "이 페이지 소리내어 읽기",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "언어 변경을 위해 탭",
     "badge_chip_lives_stat": "{n}개의 생명 구함",
     "devid_sheet_point_1": "이 코드는 당신만 볼 수 있습니다.",
@@ -1448,9 +1484,6 @@
     "home_recent_reports_empty": "아직 보고서가 없습니다.",
     "home_recent_reports_title": "최근 보고서",
     "home_recent_reports_view_all": "전체 보기",
-    "install_benefit_fast": "✓ 더 빠른 보고",
-    "install_benefit_offline": "✓ 오프라인 작동",
-    "install_benefit_safe": "✓ 보고서 안전",
     "install_thanks": "설치됨. 보고서가 즉시 저장됩니다.",
     "landing_install_pwa": "홈 화면에 설치",
     "lang_picker_close": "닫기",
@@ -1463,6 +1496,12 @@
     "my_reports": "내 보고서",
     "nearby_eyebrow": "주변 보고",
     "nearby_sheet_close": "닫기",
+    "status_sheet_last_sync_label": "마지막 동기화",
+    "status_sheet_last_sync_never": "아직 보낸 보고서가 없습니다",
+    "status_sheet_queued_label": "전송 대기 중인 보고",
+    "status_sheet_reassure_online": "제출한 보고서는 자동으로 전송됩니다.",
+    "status_sheet_state_online": "온라인",
+    "status_sheet_title": "연결 상태",
     "tier_progress_first_report": "레벨업하려면 첫 보고서를 제출하세요",
     "tier_progress_lives_1": "보고서를 통해 1명의 생명을 구하세요",
     "tier_progress_top_share": "최고 등급 달성",
@@ -1473,12 +1512,13 @@
     "tier_t4_lifekeeper_label": "라이프키퍼"
   },
   "id": {
-    "__version": "0ddb7b7bc964",
-    "__checksum": "ebc51d0f79e9e0a7",
+    "__version": "61903e33028f",
+    "__checksum": "c0354efd4d54f332",
     "action_tile_download": "Unduh Aplikasi",
     "action_tile_login": "Masuk",
     "add_to_homescreen": "+ Tambahkan ke Layar Utama",
     "aria_add_to_homescreen": "Tambahkan CRISP ke layar utama Anda",
+    "aria_brand_status": "Status koneksi — ketuk untuk detail",
     "aria_channels_strip": "Cara lain untuk melapor — ketuk untuk melihat semua saluran",
     "aria_choose_language": "Pilih bahasa",
     "aria_close": "Tutup",
@@ -1487,7 +1527,6 @@
     "aria_home_devid_info": "Apa itu ID pelapor saya?",
     "aria_online_status": "Online",
     "aria_read_aloud": "Bacakan halaman ini",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "Sentuh untuk ganti bahasa",
     "badge_chip_lives_stat": "{n} nyawa diselamatkan",
     "devid_sheet_point_1": "Hanya Anda yang dapat melihat kode ini.",
@@ -1519,9 +1558,6 @@
     "home_recent_reports_empty": "Belum ada laporan.",
     "home_recent_reports_title": "Laporan terbaru Anda",
     "home_recent_reports_view_all": "Lihat semua",
-    "install_benefit_fast": "✓ Lapor lebih cepat",
-    "install_benefit_offline": "✓ Bekerja offline",
-    "install_benefit_safe": "✓ Laporan aman",
     "install_thanks": "Terpasang. Laporan tersimpan instan.",
     "landing_install_pwa": "Pasang di layar utama",
     "lang_picker_close": "Tutup",
@@ -1534,6 +1570,12 @@
     "my_reports": "Laporan Saya",
     "nearby_eyebrow": "LAPORAN TERDEKAT",
     "nearby_sheet_close": "Tutup",
+    "status_sheet_last_sync_label": "Sinkronisasi terakhir",
+    "status_sheet_last_sync_never": "Belum ada laporan terkirim",
+    "status_sheet_queued_label": "Laporan menunggu dikirim",
+    "status_sheet_reassure_online": "Laporan Anda terkirim otomatis saat dikirim.",
+    "status_sheet_state_online": "Online",
+    "status_sheet_title": "Status koneksi",
     "tier_progress_first_report": "Kirim laporan pertama Anda untuk naik level",
     "tier_progress_lives_1": "Bantu menyelamatkan 1 nyawa melalui laporan Anda",
     "tier_progress_top_share": "Level tertinggi tercapai",
@@ -1544,12 +1586,13 @@
     "tier_t4_lifekeeper_label": "Penjaga Nyawa"
   },
   "ur": {
-    "__version": "f5687eb23375",
-    "__checksum": "48f052ba353ddbb4",
+    "__version": "3f4ee4fc374c",
+    "__checksum": "d601bba0b5fa5dbd",
     "action_tile_download": "ایپ ڈاؤن لوڈ",
     "action_tile_login": "لاگ ان",
     "add_to_homescreen": "+ ہوم اسکرین میں شامل کریں",
     "aria_add_to_homescreen": "CRISP کو اپنی ہوم اسکرین میں شامل کریں",
+    "aria_brand_status": "کنکشن کی حالت — تفصیلات کے لیے ٹیپ کریں",
     "aria_channels_strip": "رپورٹ کرنے کے دیگر طریقے — تمام چینلز دیکھنے کے لیے ٹیپ کریں",
     "aria_choose_language": "زبان منتخب کریں",
     "aria_close": "بند کریں",
@@ -1558,7 +1601,6 @@
     "aria_home_devid_info": "میری رپورٹر ID کیا ہے؟",
     "aria_online_status": "آن لائن",
     "aria_read_aloud": "اس صفحے کو بلند آواز سے پڑھیں",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "زبان تبدیل کرنے کے لیے ٹیپ کریں",
     "badge_chip_lives_stat": "{n} جانیں بچائی گئیں",
     "devid_sheet_point_1": "صرف آپ یہ کوڈ دیکھ سکتے ہیں۔",
@@ -1590,9 +1632,6 @@
     "home_recent_reports_empty": "ابھی کوئی رپورٹ نہیں۔",
     "home_recent_reports_title": "آپ کی حالیہ رپورٹس",
     "home_recent_reports_view_all": "تمام دیکھیں",
-    "install_benefit_fast": "✓ تیز رپورٹنگ",
-    "install_benefit_offline": "✓ آف لائن کام کرتا ہے",
-    "install_benefit_safe": "✓ رپورٹس محفوظ",
     "install_thanks": "انسٹال ہو گیا۔ رپورٹس فوراً محفوظ ہوتی ہیں۔",
     "landing_install_pwa": "ہوم اسکرین پر انسٹال کریں",
     "lang_picker_close": "بند کریں",
@@ -1605,6 +1644,12 @@
     "my_reports": "میری رپورٹس",
     "nearby_eyebrow": "قریب کی رپورٹس",
     "nearby_sheet_close": "بند کریں",
+    "status_sheet_last_sync_label": "آخری سنک",
+    "status_sheet_last_sync_never": "ابھی تک کوئی رپورٹ نہیں بھیجی گئی",
+    "status_sheet_queued_label": "بھیجنے کے لیے قطار میں رپورٹس",
+    "status_sheet_reassure_online": "آپ کی رپورٹس جمع کرواتے ہی خود کار طریقے سے بھیجی جاتی ہیں۔",
+    "status_sheet_state_online": "آن لائن",
+    "status_sheet_title": "کنکشن کی حالت",
     "tier_progress_first_report": "لیول اپ کے لیے اپنی پہلی رپورٹ جمع کرائیں",
     "tier_progress_lives_1": "اپنی رپورٹس کے ذریعے 1 جان بچائیں",
     "tier_progress_top_share": "سب سے اعلیٰ سطح حاصل",
@@ -1616,11 +1661,12 @@
   },
   "kn": {
     "__version": "256df3199ac9",
-    "__checksum": "e91f3ed05c035b1d",
+    "__checksum": "baa82b9e4eb3e236",
     "action_tile_download": "ಆ್ಯಪ್ ಡೌನ್ಲೋಡ್",
     "action_tile_login": "ಲಾಗಿನ್",
     "add_to_homescreen": "+ ಹೋಮ್ ಸ್ಕ್ರೀನ್‌ಗೆ ಸೇರಿಸಿ",
     "aria_add_to_homescreen": "CRISP ಅನ್ನು ನಿಮ್ಮ ಹೋಮ್ ಸ್ಕ್ರೀನ್‌ಗೆ ಸೇರಿಸಿ",
+    "aria_brand_status": "Connection status — tap for details",
     "aria_channels_strip": "ವರದಿ ಮಾಡಲು ಇತರ ಮಾರ್ಗಗಳು — ಎಲ್ಲಾ ಚಾನೆಲ್‌ಗಳನ್ನು ನೋಡಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
     "aria_choose_language": "ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ",
     "aria_close": "ಮುಚ್ಚಿ",
@@ -1629,7 +1675,6 @@
     "aria_home_devid_info": "ನನ್ನ ರಿಪೋರ್ಟರ್ ID ಎಂದರೇನು?",
     "aria_online_status": "ಆನ್‌ಲೈನ್",
     "aria_read_aloud": "ಈ ಪುಟವನ್ನು ಗಟ್ಟಿಯಾಗಿ ಓದಿ",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "ಭಾಷೆ ಬದಲಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
     "badge_chip_lives_stat": "{n} ಜೀವಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ",
     "devid_sheet_point_1": "ಈ ಕೋಡ್ ಅನ್ನು ನೀವು ಮಾತ್ರ ನೋಡಬಹುದು.",
@@ -1661,9 +1706,6 @@
     "home_recent_reports_empty": "ಇನ್ನೂ ವರದಿಗಳಿಲ್ಲ.",
     "home_recent_reports_title": "ಇತ್ತೀಚಿನ ವರದಿಗಳು",
     "home_recent_reports_view_all": "ಎಲ್ಲವನ್ನೂ ನೋಡಿ",
-    "install_benefit_fast": "✓ ವೇಗದ ವರದಿ",
-    "install_benefit_offline": "✓ ಆಫ್‌ಲೈನ್ ಕೆಲಸ",
-    "install_benefit_safe": "✓ ವರದಿಗಳು ಸುರಕ್ಷಿತ",
     "install_thanks": "ಸ್ಥಾಪಿಸಲಾಗಿದೆ. ವರದಿಗಳು ತಕ್ಷಣ ಉಳಿಸಲಾಗುತ್ತದೆ.",
     "landing_install_pwa": "ಹೋಮ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ಸ್ಥಾಪಿಸಿ",
     "lang_picker_close": "ಮುಚ್ಚಿ",
@@ -1676,6 +1718,12 @@
     "my_reports": "ನನ್ನ ವರದಿಗಳು",
     "nearby_eyebrow": "ಸಮೀಪದ ವರದಿಗಳು",
     "nearby_sheet_close": "ಮುಚ್ಚಿ",
+    "status_sheet_last_sync_label": "Last sync",
+    "status_sheet_last_sync_never": "No reports sent yet",
+    "status_sheet_queued_label": "Reports waiting to send",
+    "status_sheet_reassure_online": "Your reports send automatically as you submit them.",
+    "status_sheet_state_online": "Online",
+    "status_sheet_title": "Connection status",
     "tier_progress_first_report": "ಮಟ್ಟ ಏರಲು ನಿಮ್ಮ ಮೊದಲ ವರದಿಯನ್ನು ಸಲ್ಲಿಸಿ",
     "tier_progress_lives_1": "ನಿಮ್ಮ ವರದಿಗಳ ಮೂಲಕ 1 ಜೀವ ರಕ್ಷಿಸಿ",
     "tier_progress_top_share": "ಅತ್ಯುನ್ನತ ಶ್ರೇಣಿ ತಲುಪಿದೆ",
@@ -1687,11 +1735,12 @@
   },
   "ta": {
     "__version": "98d3759433db",
-    "__checksum": "d0562ca709641527",
+    "__checksum": "734e48b95b7492f1",
     "action_tile_download": "ஆப்ஸ் பதிவிறக்கு",
     "action_tile_login": "உள்நுழைய",
     "add_to_homescreen": "+ முகப்புத் திரையில் சேர்க்கவும்",
     "aria_add_to_homescreen": "CRISP ஐ உங்கள் முகப்புத் திரையில் சேர்க்கவும்",
+    "aria_brand_status": "Connection status — tap for details",
     "aria_channels_strip": "புகாரளிக்க பிற வழிகள் — அனைத்து சேனல்களையும் காண தட்டவும்",
     "aria_choose_language": "மொழியை தேர்வு செய்",
     "aria_close": "மூடு",
@@ -1700,7 +1749,6 @@
     "aria_home_devid_info": "எனது அறிக்கையாளர் ID என்ன?",
     "aria_online_status": "ஆன்லைன்",
     "aria_read_aloud": "இந்த பக்கத்தை சத்தமாக படி",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "மொழியை மாற்ற தட்டவும்",
     "badge_chip_lives_stat": "{n} உயிர்கள் காப்பாற்றப்பட்டன",
     "devid_sheet_point_1": "இந்த குறியீட்டை நீங்கள் மட்டுமே பார்க்க முடியும்.",
@@ -1732,9 +1780,6 @@
     "home_recent_reports_empty": "இன்னும் அறிக்கைகள் இல்லை.",
     "home_recent_reports_title": "சமீபத்திய அறிக்கைகள்",
     "home_recent_reports_view_all": "அனைத்தையும் காண்",
-    "install_benefit_fast": "✓ வேகமான அறிக்கை",
-    "install_benefit_offline": "✓ ஆஃப்லைனில் வேலை",
-    "install_benefit_safe": "✓ அறிக்கைகள் பாதுகாப்பு",
     "install_thanks": "நிறுவப்பட்டது. அறிக்கைகள் உடனடியாக சேமிக்கப்படுகின்றன.",
     "landing_install_pwa": "முகப்பு திரையில் நிறுவு",
     "lang_picker_close": "மூடு",
@@ -1747,6 +1792,12 @@
     "my_reports": "எனது அறிக்கைகள்",
     "nearby_eyebrow": "அருகிலுள்ள அறிக்கைகள்",
     "nearby_sheet_close": "மூடு",
+    "status_sheet_last_sync_label": "Last sync",
+    "status_sheet_last_sync_never": "No reports sent yet",
+    "status_sheet_queued_label": "Reports waiting to send",
+    "status_sheet_reassure_online": "Your reports send automatically as you submit them.",
+    "status_sheet_state_online": "Online",
+    "status_sheet_title": "Connection status",
     "tier_progress_first_report": "நிலையை உயர்த்த உங்கள் முதல் அறிக்கையை சமர்ப்பிக்கவும்",
     "tier_progress_lives_1": "உங்கள் அறிக்கைகள் வழியாக 1 உயிரைக் காப்பாற்ற உதவுங்கள்",
     "tier_progress_top_share": "உச்ச நிலையை அடைந்துள்ளீர்கள்",
@@ -1758,11 +1809,12 @@
   },
   "te": {
     "__version": "afed8793076b",
-    "__checksum": "f438d7539f82a0d3",
+    "__checksum": "eab8bfaff5b740c9",
     "action_tile_download": "యాప్ డౌన్‌లోడ్",
     "action_tile_login": "లాగిన్",
     "add_to_homescreen": "+ హోమ్ స్క్రీన్‌కి జోడించండి",
     "aria_add_to_homescreen": "CRISP ని మీ హోమ్ స్క్రీన్‌కి జోడించండి",
+    "aria_brand_status": "Connection status — tap for details",
     "aria_channels_strip": "నివేదించడానికి ఇతర మార్గాలు — అన్ని ఛానెల్‌లను చూడటానికి నొక్కండి",
     "aria_choose_language": "భాష ఎంచుకో",
     "aria_close": "మూసివేయి",
@@ -1771,7 +1823,6 @@
     "aria_home_devid_info": "నా రిపోర్టర్ ID అంటే ఏమిటి?",
     "aria_online_status": "ఆన్‌లైన్",
     "aria_read_aloud": "ఈ పేజీని పెద్దగా చదువు",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "భాష మార్చడానికి నొక్కు",
     "badge_chip_lives_stat": "{n} ప్రాణాలు రక్షించారు",
     "devid_sheet_point_1": "ఈ కోడ్‌ను మీరు మాత్రమే చూడగలరు.",
@@ -1803,9 +1854,6 @@
     "home_recent_reports_empty": "ఇంకా నివేదికలు లేవు.",
     "home_recent_reports_title": "ఇటీవలి నివేదికలు",
     "home_recent_reports_view_all": "అన్నీ చూడు",
-    "install_benefit_fast": "✓ వేగవంతమైన నివేదన",
-    "install_benefit_offline": "✓ ఆఫ్‌లైన్ పని",
-    "install_benefit_safe": "✓ నివేదికలు సురక్షితం",
     "install_thanks": "ఇన్‌స్టాల్ చేయబడింది. నివేదికలు తక్షణం సేవ్ అవుతాయి.",
     "landing_install_pwa": "హోమ్ స్క్రీన్‌లో ఇన్‌స్టాల్ చేయండి",
     "lang_picker_close": "మూసివేయి",
@@ -1818,6 +1866,12 @@
     "my_reports": "నా నివేదికలు",
     "nearby_eyebrow": "సమీపంలోని నివేదికలు",
     "nearby_sheet_close": "మూసివేయండి",
+    "status_sheet_last_sync_label": "Last sync",
+    "status_sheet_last_sync_never": "No reports sent yet",
+    "status_sheet_queued_label": "Reports waiting to send",
+    "status_sheet_reassure_online": "Your reports send automatically as you submit them.",
+    "status_sheet_state_online": "Online",
+    "status_sheet_title": "Connection status",
     "tier_progress_first_report": "లెవల్ అప్ చేయడానికి మీ మొదటి నివేదికను సమర్పించండి",
     "tier_progress_lives_1": "మీ నివేదికల ద్వారా 1 జీవితాన్ని కాపాడండి",
     "tier_progress_top_share": "అత్యున్నత స్థాయి చేరుకున్నారు",
@@ -1829,11 +1883,12 @@
   },
   "ml": {
     "__version": "da0d940e7644",
-    "__checksum": "de5642a757fb0866",
+    "__checksum": "63698d36c595e2e5",
     "action_tile_download": "ആപ്പ് ഡൗൺലോഡ്",
     "action_tile_login": "ലോഗിൻ",
     "add_to_homescreen": "+ ഹോം സ്‌ക്രീനിലേക്ക് ചേർക്കുക",
     "aria_add_to_homescreen": "CRISP നിങ്ങളുടെ ഹോം സ്‌ക്രീനിലേക്ക് ചേർക്കുക",
+    "aria_brand_status": "Connection status — tap for details",
     "aria_channels_strip": "റിപ്പോർട്ട് ചെയ്യാനുള്ള മറ്റ് വഴികൾ — എല്ലാ ചാനലുകളും കാണാൻ ടാപ്പ് ചെയ്യുക",
     "aria_choose_language": "ഭാഷ തിരഞ്ഞെടുക്കുക",
     "aria_close": "അടയ്ക്കുക",
@@ -1842,7 +1897,6 @@
     "aria_home_devid_info": "എന്റെ റിപ്പോർട്ടർ ID എന്താണ്?",
     "aria_online_status": "ഓൺലൈൻ",
     "aria_read_aloud": "ഈ പേജ് ഉറക്കെ വായിക്കുക",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "ഭാഷ മാറ്റാൻ ടാപ് ചെയ്യുക",
     "badge_chip_lives_stat": "{n} ജീവൻ രക്ഷിച്ചു",
     "devid_sheet_point_1": "ഈ കോഡ് നിങ്ങൾക്ക് മാത്രമേ കാണാൻ കഴിയൂ.",
@@ -1874,9 +1928,6 @@
     "home_recent_reports_empty": "ഇതുവരെ റിപ്പോർട്ടുകൾ ഇല്ല.",
     "home_recent_reports_title": "നിങ്ങളുടെ സമീപകാല റിപ്പോർട്ടുകൾ",
     "home_recent_reports_view_all": "എല്ലാം കാണുക",
-    "install_benefit_fast": "✓ വേഗത്തിലുള്ള റിപ്പോർട്ടിംഗ്",
-    "install_benefit_offline": "✓ ഓഫ്‌ലൈൻ പ്രവർത്തനം",
-    "install_benefit_safe": "✓ റിപ്പോർട്ടുകൾ സുരക്ഷിതം",
     "install_thanks": "ഇൻസ്റ്റാൾ ചെയ്തു. റിപ്പോർട്ടുകൾ തൽക്ഷണം സേവ് ചെയ്യപ്പെടും.",
     "landing_install_pwa": "ഹോം സ്ക്രീനിൽ ഇൻസ്റ്റാൾ ചെയ്യുക",
     "lang_picker_close": "അടയ്ക്കുക",
@@ -1889,6 +1940,12 @@
     "my_reports": "എന്റെ റിപ്പോർട്ടുകൾ",
     "nearby_eyebrow": "സമീപത്തെ റിപ്പോർട്ടുകൾ",
     "nearby_sheet_close": "അടയ്ക്കുക",
+    "status_sheet_last_sync_label": "Last sync",
+    "status_sheet_last_sync_never": "No reports sent yet",
+    "status_sheet_queued_label": "Reports waiting to send",
+    "status_sheet_reassure_online": "Your reports send automatically as you submit them.",
+    "status_sheet_state_online": "Online",
+    "status_sheet_title": "Connection status",
     "tier_progress_first_report": "ലെവൽ അപ് ചെയ്യാൻ നിങ്ങളുടെ ആദ്യത്തെ റിപ്പോർട്ട് സമർപ്പിക്കുക",
     "tier_progress_lives_1": "നിങ്ങളുടെ റിപ്പോർട്ടുകൾ വഴി 1 ജീവൻ രക്ഷിക്കാൻ സഹായിക്കുക",
     "tier_progress_top_share": "ഉന്നതശ്രേണി നേടി",
@@ -1900,11 +1957,12 @@
   },
   "gu": {
     "__version": "eebf95054cdb",
-    "__checksum": "e60c03d8152641f4",
+    "__checksum": "97791109fa04689d",
     "action_tile_download": "ઍપ ડાઉનલોડ",
     "action_tile_login": "લૉગિન",
     "add_to_homescreen": "+ હોમ સ્ક્રીન પર ઉમેરો",
     "aria_add_to_homescreen": "CRISP ને તમારી હોમ સ્ક્રીન પર ઉમેરો",
+    "aria_brand_status": "Connection status — tap for details",
     "aria_channels_strip": "રિપોર્ટ કરવાની અન્ય રીતો — બધી ચેનલો જોવા ટેપ કરો",
     "aria_choose_language": "ભાષા પસંદ",
     "aria_close": "બંધ કરો",
@@ -1913,7 +1971,6 @@
     "aria_home_devid_info": "મારી રિપોર્ટર ID શું છે?",
     "aria_online_status": "ઓનલાઈન",
     "aria_read_aloud": "આ પાનું જોરથી વાંચો",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "ભાષા બદલવા ટેપ",
     "badge_chip_lives_stat": "{n} જીવન બચાવ્યા",
     "devid_sheet_point_1": "આ કોડ ફક્ત તમે જ જોઈ શકો છો.",
@@ -1945,9 +2002,6 @@
     "home_recent_reports_empty": "હજુ કોઈ રિપોર્ટ નથી.",
     "home_recent_reports_title": "તાજેતરની રિપોર્ટ્સ",
     "home_recent_reports_view_all": "બધી જુઓ",
-    "install_benefit_fast": "✓ ઝડપી રિપોર્ટિંગ",
-    "install_benefit_offline": "✓ ઑફલાઇન કાર્ય",
-    "install_benefit_safe": "✓ રિપોર્ટ સુરક્ષિત",
     "install_thanks": "સ્થાપિત. રિપોર્ટ્સ તરત જ સેવ થાય છે.",
     "landing_install_pwa": "હોમ સ્ક્રીન પર ઈન્સ્ટોલ કરો",
     "lang_picker_close": "બંધ કરો",
@@ -1960,6 +2014,12 @@
     "my_reports": "મારી રિપોર્ટ્સ",
     "nearby_eyebrow": "નજીકના રિપોર્ટ",
     "nearby_sheet_close": "બંધ કરો",
+    "status_sheet_last_sync_label": "Last sync",
+    "status_sheet_last_sync_never": "No reports sent yet",
+    "status_sheet_queued_label": "Reports waiting to send",
+    "status_sheet_reassure_online": "Your reports send automatically as you submit them.",
+    "status_sheet_state_online": "Online",
+    "status_sheet_title": "Connection status",
     "tier_progress_first_report": "લેવલ અપ કરવા તમારી પ્રથમ રિપોર્ટ સબમિટ કરો",
     "tier_progress_lives_1": "તમારી રિપોર્ટ દ્વારા 1 જીવ બચાવો",
     "tier_progress_top_share": "સર્વોચ્ચ સ્તર પ્રાપ્ત",
@@ -1971,11 +2031,12 @@
   },
   "mr": {
     "__version": "9b735dc99b49",
-    "__checksum": "e6c73a60952c7c91",
+    "__checksum": "dc6b32668b6a6b48",
     "action_tile_download": "ॲप डाउनलोड",
     "action_tile_login": "लॉगिन",
     "add_to_homescreen": "+ होम स्क्रीनवर जोडा",
     "aria_add_to_homescreen": "CRISP तुमच्या होम स्क्रीनवर जोडा",
+    "aria_brand_status": "Connection status — tap for details",
     "aria_channels_strip": "रिपोर्ट करण्याचे इतर मार्ग — सर्व चॅनेल पाहण्यासाठी टॅप करा",
     "aria_choose_language": "भाषा निवडा",
     "aria_close": "बंद करा",
@@ -1984,7 +2045,6 @@
     "aria_home_devid_info": "माझी रिपोर्टर ID काय आहे?",
     "aria_online_status": "ऑनलाइन",
     "aria_read_aloud": "हे पान मोठ्याने वाचा",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "भाषा बदलण्यासाठी टॅप",
     "badge_chip_lives_stat": "{n} जीव वाचवले",
     "devid_sheet_point_1": "हा कोड फक्त तुम्हीच पाहू शकता.",
@@ -2016,9 +2076,6 @@
     "home_recent_reports_empty": "अद्याप अहवाल नाहीत.",
     "home_recent_reports_title": "अलीकडील अहवाल",
     "home_recent_reports_view_all": "सर्व पहा",
-    "install_benefit_fast": "✓ जलद अहवाल",
-    "install_benefit_offline": "✓ ऑफलाइन काम",
-    "install_benefit_safe": "✓ अहवाल सुरक्षित",
     "install_thanks": "स्थापित. अहवाल लगेच जतन होतात.",
     "landing_install_pwa": "होम स्क्रीनवर इंस्टॉल करा",
     "lang_picker_close": "बंद करा",
@@ -2031,6 +2088,12 @@
     "my_reports": "माझे अहवाल",
     "nearby_eyebrow": "जवळचे अहवाल",
     "nearby_sheet_close": "बंद करा",
+    "status_sheet_last_sync_label": "Last sync",
+    "status_sheet_last_sync_never": "No reports sent yet",
+    "status_sheet_queued_label": "Reports waiting to send",
+    "status_sheet_reassure_online": "Your reports send automatically as you submit them.",
+    "status_sheet_state_online": "Online",
+    "status_sheet_title": "Connection status",
     "tier_progress_first_report": "पुढच्या स्तरासाठी पहिला अहवाल सबमिट करा",
     "tier_progress_lives_1": "आपल्या अहवालांद्वारे 1 जीव वाचवा",
     "tier_progress_top_share": "सर्वोच्च स्तर गाठला",
@@ -2042,11 +2105,12 @@
   },
   "pa": {
     "__version": "453a00ddc5df",
-    "__checksum": "4ac016b7051e1d6d",
+    "__checksum": "52a4f946e0e8c969",
     "action_tile_download": "ਐਪ ਡਾਊਨਲੋਡ",
     "action_tile_login": "ਲੌਗਇਨ",
     "add_to_homescreen": "+ ਹੋਮ ਸਕਰੀਨ 'ਤੇ ਜੋੜੋ",
     "aria_add_to_homescreen": "CRISP ਨੂੰ ਆਪਣੀ ਹੋਮ ਸਕਰੀਨ 'ਤੇ ਜੋੜੋ",
+    "aria_brand_status": "Connection status — tap for details",
     "aria_channels_strip": "ਰਿਪੋਰਟ ਕਰਨ ਦੇ ਹੋਰ ਤਰੀਕੇ — ਸਾਰੇ ਚੈਨਲ ਵੇਖਣ ਲਈ ਟੈਪ ਕਰੋ",
     "aria_choose_language": "ਭਾਸ਼ਾ ਚੁਣੋ",
     "aria_close": "ਬੰਦ ਕਰੋ",
@@ -2055,7 +2119,6 @@
     "aria_home_devid_info": "ਮੇਰੀ ਰਿਪੋਰਟਰ ID ਕੀ ਹੈ?",
     "aria_online_status": "ਆਨਲਾਈਨ",
     "aria_read_aloud": "ਇਹ ਪੰਨਾ ਉੱਚੀ ਪੜ੍ਹੋ",
-    "aria_status_pill": "Connection status",
     "aria_tap_change_language": "ਭਾਸ਼ਾ ਬਦਲਣ ਲਈ ਟੈਪ",
     "badge_chip_lives_stat": "{n} ਜਾਨਾਂ ਬਚਾਈਆਂ",
     "devid_sheet_point_1": "ਇਹ ਕੋਡ ਸਿਰਫ਼ ਤੁਸੀਂ ਦੇਖ ਸਕਦੇ ਹੋ।",
@@ -2087,9 +2150,6 @@
     "home_recent_reports_empty": "ਅਜੇ ਕੋਈ ਰਿਪੋਰਟਾਂ ਨਹੀਂ।",
     "home_recent_reports_title": "ਹਾਲੀਆ ਰਿਪੋਰਟਾਂ",
     "home_recent_reports_view_all": "ਸਾਰੀਆਂ ਦੇਖੋ",
-    "install_benefit_fast": "✓ ਤੇਜ਼ ਰਿਪੋਰਟਿੰਗ",
-    "install_benefit_offline": "✓ ਔਫਲਾਈਨ ਕੰਮ",
-    "install_benefit_safe": "✓ ਰਿਪੋਰਟਾਂ ਸੁਰੱਖਿਅਤ",
     "install_thanks": "ਸਥਾਪਿਤ ਹੋ ਗਿਆ। ਰਿਪੋਰਟਾਂ ਤੁਰੰਤ ਸੇਵ ਹੁੰਦੀਆਂ ਹਨ।",
     "landing_install_pwa": "ਹੋਮ ਸਕ੍ਰੀਨ 'ਤੇ ਸਥਾਪਤ ਕਰੋ",
     "lang_picker_close": "ਬੰਦ ਕਰੋ",
@@ -2102,6 +2162,12 @@
     "my_reports": "ਮੇਰੀਆਂ ਰਿਪੋਰਟਾਂ",
     "nearby_eyebrow": "ਨੇੜਲੀਆਂ ਰਿਪੋਰਟਾਂ",
     "nearby_sheet_close": "ਬੰਦ ਕਰੋ",
+    "status_sheet_last_sync_label": "Last sync",
+    "status_sheet_last_sync_never": "No reports sent yet",
+    "status_sheet_queued_label": "Reports waiting to send",
+    "status_sheet_reassure_online": "Your reports send automatically as you submit them.",
+    "status_sheet_state_online": "Online",
+    "status_sheet_title": "Connection status",
     "tier_progress_first_report": "ਲੈਵਲ ਅੱਪ ਲਈ ਆਪਣੀ ਪਹਿਲੀ ਰਿਪੋਰਟ ਜਮ੍ਹਾਂ ਕਰੋ",
     "tier_progress_lives_1": "ਆਪਣੀਆਂ ਰਿਪੋਰਟਾਂ ਰਾਹੀਂ 1 ਜਾਨ ਬਚਾਓ",
     "tier_progress_top_share": "ਸਿਖਰਲਾ ਪੱਧਰ ਪ੍ਰਾਪਤ",
@@ -2379,7 +2445,25 @@
             <section class="home-section-top" aria-label="Identity">
             <div class="home-identity">
                 <div class="home-brand-row">
-                    <div class="home-brand">
+                    <!-- AUDIT 2026-05-23 (HC16) — operator: avoid duplicating
+                         the connectivity indicator. The status PILL added in
+                         HC4 was redundant against the existing
+                         #connectivity-dot pinned to the "P" of CRISP. The
+                         brand cluster (logo + wordmark + dot) is now the
+                         single, tappable connectivity surface; tapping opens
+                         a small low-cognitive-load status popover with
+                         queue + last-sync + reassurance copy. The pill
+                         markup is gone; the dot stays.
+                         role="button" + tabindex + aria-label make the div
+                         keyboard + screen-reader accessible without
+                         restructuring the DOM (we keep .home-brand for
+                         CSS + downstream selectors). -->
+                    <div class="home-brand"
+                         role="button" tabindex="0"
+                         aria-haspopup="dialog"
+                         aria-controls="home-status-sheet"
+                         aria-label="Connection status — tap for details"
+                         data-i18n-aria-label="aria_brand_status">
                         <!-- May 2026 — brand logo refreshed to the "ripple"
                              design (operator-supplied SVGs). Dark navy tile
                              with 4 concentric response rings (faint outer →
@@ -2437,26 +2521,13 @@
                          JS change. See CLAUDE.md "Home header alignment"
                          invariant. -->
                     <div class="home-brand-utility">
-                        <!-- AUDIT 2026-05-23 (HC4) — connectivity status
-                             pill. Subtle persistent indicator next to the
-                             lang switcher. Painter in home-screen.js
-                             _paintStatusPill reads navigator.onLine + IDB
-                             queue length on online/offline events and on
-                             home-stage entry. States:
-                               online  · green dot · "Online"
-                               offline · red   dot · "Offline · N queued"
-                               syncing · amber dot · "Syncing N"
-                             Hidden by default until home-screen.js
-                             populates it (CLS-safe — reserved width via
-                             min-width). -->
-                        <button type="button" class="home-status-pill"
-                                id="home-status-pill"
-                                hidden
-                                aria-label="Connection status"
-                                data-i18n-aria-label="aria_status_pill">
-                            <span class="hsp-dot" aria-hidden="true"></span>
-                            <span class="hsp-label" id="home-status-pill-label"></span>
-                        </button>
+                        <!-- HC16 (May 2026) — the standalone .home-status-pill
+                             added in HC4 was removed. The existing
+                             #connectivity-dot pinned to the "P" of CRISP +
+                             the brand cluster's tap-for-details popover
+                             cover the same affordance with zero clutter.
+                             The audio + lang-switcher buttons keep their
+                             original positions. -->
                         <button type="button" class="home-voice-icon-btn" id="btn-home-voice"
                                 aria-label="Read this page aloud"
                                 data-i18n-aria-label="aria_read_aloud"
@@ -2915,22 +2986,18 @@
                 </div>
             </div>
 
-            <!-- AUDIT 2026-05-23 (HC2 + HC7) — "+ Add to Homescreen"
-                 universal install affordance. Now visible by default on
-                 every browser EXCEPT display-mode: standalone (already
-                 installed). HC7 adds the trust-building benefit micro-
-                 line above so users understand WHY install matters
-                 (offline / safe / faster) before tapping. Both the
-                 micro-line + the button hide together in installed-PWA
-                 mode (handled by home-screen.js _wireAddToHomescreenChip
-                 and the global standalone CSS). -->
-            <div class="home-install-benefits" id="home-install-benefits">
-                <span data-i18n="install_benefit_offline">✓ Works offline</span>
-                <span aria-hidden="true" class="ib-dot">·</span>
-                <span data-i18n="install_benefit_safe">✓ Reports stay safe</span>
-                <span aria-hidden="true" class="ib-dot">·</span>
-                <span data-i18n="install_benefit_fast">✓ Faster reporting</span>
-            </div>
+            <!-- AUDIT 2026-05-23 (HC2 + HC18) — "+ Add to Homescreen"
+                 universal install affordance. Visible by default on every
+                 browser EXCEPT display-mode: standalone (already installed).
+                 HC18 (operator): the HC7 install-benefit micro-line above
+                 the button ("Works offline · Reports stay safe · Faster
+                 reporting") was removed — those qualities are already
+                 communicated elsewhere on the home stage (consent banner,
+                 footer trust links, status popover), and the extra row
+                 added visual density without adding information. HC17
+                 also slimmed the button itself from primary-amber to a
+                 tertiary outlined chip so it doesn't dominate the
+                 hierarchy over Report-an-Incident / Login / My Reports. -->
             <button type="button" class="home-add2hs-btn"
                     id="btn-home-add2hs"
                     aria-label="Add CRISP to your home screen"
@@ -2978,6 +3045,51 @@
                 data-i18n="nearby_eyebrow">NEARBY REPORTS</h3>
             <div class="nearby-list-sheet-list" id="nearby-list-sheet-list">
                 <!-- rows injected by nearby.js _openListSheet() -->
+            </div>
+        </div>
+    </div>
+
+    <!-- AUDIT 2026-05-23 (HC16) — Connection-status popover. Replaces
+         the standalone #home-status-pill (HC4, removed) with a small
+         tap-to-open sheet anchored from the brand cluster. Shows the
+         current connectivity state (Online / Offline / Syncing / Weak),
+         the queued-reports count (if any), the last successful sync
+         time (if any), and a short reassuring offline-first message.
+         Reuses the .nearby-sheet pattern but with a smaller card
+         (.home-status-sheet sets max-width: 360px + capped height) so
+         it reads as a lightweight popover rather than a half-screen
+         modal. Populated on open by home-screen.js _paintStatusSheet.
+    -->
+    <div class="nearby-sheet home-status-sheet" id="home-status-sheet" hidden
+         role="dialog" aria-modal="true" aria-labelledby="home-status-sheet-title">
+        <div class="nearby-sheet-backdrop" id="home-status-sheet-backdrop"></div>
+        <div class="nearby-sheet-card home-status-sheet-card" role="document">
+            <button class="nearby-sheet-close" id="home-status-sheet-close"
+                    type="button" aria-label="Close"
+                    data-i18n-aria-label="nearby_sheet_close">✕</button>
+            <div class="nearby-sheet-handle" aria-hidden="true"></div>
+            <h3 class="nearby-sheet-title home-status-sheet-title"
+                id="home-status-sheet-title"
+                data-i18n="status_sheet_title">Connection status</h3>
+            <div class="home-status-sheet-body">
+                <div class="hss-row hss-row-state">
+                    <span class="hss-dot" id="home-status-sheet-dot" aria-hidden="true"></span>
+                    <span class="hss-state" id="home-status-sheet-state"
+                          data-i18n="status_sheet_state_online">Online</span>
+                </div>
+                <div class="hss-row hss-row-queue" id="home-status-sheet-queue-row" hidden>
+                    <span class="hss-label" data-i18n="status_sheet_queued_label">Reports waiting to send</span>
+                    <span class="hss-value" id="home-status-sheet-queue-value">0</span>
+                </div>
+                <div class="hss-row hss-row-lastsync">
+                    <span class="hss-label" data-i18n="status_sheet_last_sync_label">Last sync</span>
+                    <span class="hss-value" id="home-status-sheet-last-sync"
+                          data-i18n="status_sheet_last_sync_never">No reports sent yet</span>
+                </div>
+                <p class="hss-reassure" id="home-status-sheet-reassure"
+                   data-i18n="status_sheet_reassure_online">
+                    Your reports send automatically as you submit them.
+                </p>
             </div>
         </div>
     </div>

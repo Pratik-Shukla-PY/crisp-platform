@@ -864,5 +864,20 @@
   "status_pill_syncing": "Синхр. {n}",
   "mr_empty_title": "Пока ничего не отправлено",
   "mr_empty_body": "Ваши отчёты появятся здесь, как только вы отправите первый.",
-  "mr_empty_cta": "Сообщить о происшествии"
+  "mr_empty_cta": "Сообщить о происшествии",
+  "aria_brand_status": "Статус подключения — нажмите для деталей",
+  "status_sheet_title": "Статус подключения",
+  "status_sheet_state_online": "В сети",
+  "status_sheet_state_offline": "Не в сети",
+  "status_sheet_state_syncing": "Синхронизация",
+  "status_sheet_state_weak": "Слабый сигнал",
+  "status_sheet_queued_label": "Отчётов в очереди",
+  "status_sheet_last_sync_label": "Последняя синхронизация",
+  "status_sheet_last_sync_never": "Отчётов ещё не было",
+  "status_sheet_ago_now": "Только что",
+  "status_sheet_ago_minutes": "{n} мин назад",
+  "status_sheet_ago_hours": "{n} ч назад",
+  "status_sheet_ago_days": "{n} д назад",
+  "status_sheet_reassure_online": "Ваши отчёты отправляются автоматически при отправке.",
+  "status_sheet_reassure_offline": "Отчёты сохраняются на телефоне и отправятся, когда снова появится сеть."
 }

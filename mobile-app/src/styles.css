@@ -213,76 +213,108 @@ body {
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
-/* AUDIT 2026-05-23 (HC4 humanitarian-grade home) — connectivity status
-   pill. Sits next to the lang switcher in .home-brand-utility. Subtle
-   visual weight (low contrast vs background, small font) so it doesn't
-   dominate the brand row, but tappable for a full status sheet.
-   Hidden by default; home-screen.js unhides + populates on home entry. */
-.home-status-pill {
-    appearance: none;
-    -webkit-appearance: none;
-    display: none;             /* hidden until painter sets data-state */
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 999px;
-    color: var(--text-sub, #cbd5e1);
-    font-size: var(--fz-xs, 12px);
-    font-weight: 600;
-    line-height: 1.2;
+/* AUDIT 2026-05-23 (HC16) — operator: the standalone .home-status-pill
+   from HC4 duplicated the connectivity-dot already pinned to the "P"
+   of the CRISP wordmark. Pill markup + styles removed; the brand
+   cluster (.home-brand) is now the tappable connectivity surface +
+   opens .home-status-sheet (defined below) with the full state read-
+   out. The connectivity-dot keeps its existing online/offline classes
+   + adds a new .connectivity-weak amber state for intermittent links.
+   .home-brand becomes role="button" — cursor + focus ring make the
+   affordance discoverable. */
+.home-brand {
     cursor: pointer;
-    min-height: 32px;
+    border-radius: 12px;
     -webkit-tap-highlight-color: transparent;
-    transition: background var(--motion-fade, 200ms) var(--easing-linear, linear),
-                color var(--motion-fade, 200ms) var(--easing-linear, linear),
-                border-color var(--motion-fade, 200ms) var(--easing-linear, linear);
+    transition: background var(--motion-fade, 200ms) var(--easing-linear, linear);
 }
-.home-status-pill[data-state] { display: inline-flex; }
-.home-status-pill .hsp-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex: 0 0 auto;
-    background: var(--text-dim, #94a3b8);
-    box-shadow: 0 0 0 2px transparent;
-}
-.home-status-pill[data-state="online"] .hsp-dot {
-    background: var(--green, #80EE98);
-    box-shadow: 0 0 6px rgba(128, 238, 152, 0.55);
-}
-.home-status-pill[data-state="syncing"] .hsp-dot {
-    background: var(--warn, #eab308);
-    animation: hsp-pulse 1.4s infinite ease-in-out;
-}
-.home-status-pill[data-state="offline"] {
-    border-color: rgba(255, 138, 138, 0.32);
-    background: rgba(255, 138, 138, 0.08);
-    color: var(--red, #ff8a8a);
-}
-.home-status-pill[data-state="offline"] .hsp-dot {
-    background: var(--red, #ff8a8a);
-}
-@keyframes hsp-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.35; }
-}
-.home-status-pill:hover { background: rgba(255, 255, 255, 0.07); }
-.home-status-pill:focus-visible {
+.home-brand:hover { background: rgba(255, 255, 255, 0.04); }
+.home-brand:focus-visible {
     outline: 2px solid rgba(9, 209, 199, 0.55);
     outline-offset: 2px;
 }
-/* HC4: on iPhone SE / Galaxy small (<400 px) collapse to a dot-only
-   pill — label aria-label still carries the status for screen readers,
-   sighted users get the colored dot. Saves ~50 px in the brand row. */
-@media (max-width: 399px) {
-    .home-status-pill {
-        padding: 6px;
-        min-height: 28px;
-        min-width: 28px;
-    }
-    .home-status-pill .hsp-label { display: none; }
+.home-brand:active { transform: scale(0.98); }
+
+/* HC16 — amber/weak connectivity state on the brand-mark dot. */
+.home-brand-name .connectivity-dot.connectivity-weak {
+    background: #f59e0b;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.65);
+}
+
+/* HC16 — small, compact status popover anchored from the brand
+   cluster. Reuses .nearby-sheet visuals but with a tighter card
+   (max-width: 360px, max-height capped at min(40dvh, 320px)) so it
+   reads as a lightweight popover, not a half-screen modal. */
+.home-status-sheet .home-status-sheet-card {
+    max-width: 360px;
+    width: calc(100% - 32px);
+    max-height: min(40dvh, 320px);
+    margin: 0 auto;
+}
+.home-status-sheet .home-status-sheet-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-3, 12px);
+    padding-top: var(--gap-2, 8px);
+}
+.home-status-sheet .hss-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--gap-3, 12px);
+    font-size: var(--fz-body, 14px);
+    color: var(--text-sub, #cbd5e1);
+}
+.home-status-sheet .hss-row-state {
+    justify-content: flex-start;
+    gap: 10px;
+    font-size: var(--fz-md, 16px);
+    font-weight: 600;
+    color: var(--text, #f8fafc);
+}
+.home-status-sheet .hss-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background: var(--text-dim, #94a3b8);
+}
+.home-status-sheet[data-state="online"] .hss-dot {
+    background: #80EE98;
+    box-shadow: 0 0 8px rgba(128, 238, 152, 0.55);
+}
+.home-status-sheet[data-state="syncing"] .hss-dot {
+    background: #f59e0b;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.55);
+    animation: hss-pulse 1.4s infinite ease-in-out;
+}
+.home-status-sheet[data-state="weak"] .hss-dot {
+    background: #f59e0b;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.55);
+}
+.home-status-sheet[data-state="offline"] .hss-dot {
+    background: #ef4444;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.55);
+}
+@keyframes hss-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+}
+.home-status-sheet .hss-label {
+    color: var(--text-dim, #94a3b8);
+    font-size: var(--fz-sm, 13px);
+}
+.home-status-sheet .hss-value {
+    color: var(--text, #f8fafc);
+    font-weight: 600;
+    font-size: var(--fz-sm, 13px);
+}
+.home-status-sheet .hss-reassure {
+    margin: 0;
+    padding-top: var(--gap-2, 8px);
+    color: var(--text-sub, #cbd5e1);
+    font-size: var(--fz-sm, 13px);
+    line-height: 1.45;
 }
 
 /* AUDIT 2026-05-23 (HC6 humanitarian-grade home) — global motion
@@ -11087,69 +11119,52 @@ body.tier-t4 .home-impact {
    `hidden` HTML attribute the moment display-mode flips to
    `standalone`. */
 .home-stage .home-add2hs-btn {
-    /* Strip default <button> chrome so the class owns every visual.
-       AUDIT 2026-05-23 (HC2) — restyled to match spec: bigger, full-
-       width on small viewports so it reads as a primary install affordance.
-       Color was #ffae00 (CRISP amber); spec calls #FFB703 — close enough
-       to keep the existing CSS variable footprint, no theme drift. */
+    /* AUDIT 2026-05-23 (HC17) — operator: the HC2 styling read as a
+       primary CTA (48 px tall, solid amber, drop-shadow) which
+       competed with Report-an-Incident / Login / My Reports for
+       attention. Slimmed to a tertiary chip: ~36 px tall, outlined
+       amber border on a near-transparent tint (no drop-shadow), 13 px
+       text. Still tappable (36 px clears Material's secondary-action
+       minimum; touches stay accessible via padding), still amber so
+       the install affordance reads instantly, but visually
+       subordinate to the three primary actions above. */
     all: unset;
     cursor: pointer;
     box-sizing: border-box;
-    width: 100%;
-    max-width: 320px;
+    width: auto;
+    max-width: 280px;
     align-self: center;
-    margin: 8px auto 0;
-    padding: 12px 20px;
-    min-height: 48px;
-    border-radius: 14px;
-    background: #FFB703;             /* spec amber */
-    color: #0a1929;                  /* deep navy — 10.5:1 contrast on amber */
+    margin: 4px auto 0;
+    padding: 6px 14px;
+    min-height: 36px;
+    border-radius: 999px;
+    background: rgba(255, 183, 3, 0.10);
+    border: 1px solid rgba(255, 183, 3, 0.55);
+    color: #FFB703;
     font-family: var(--font, 'Inter', sans-serif);
-    font-size: var(--fz-body, 14px);
-    font-weight: 700;
-    letter-spacing: 0.01em;
+    font-size: var(--fz-sm, 13px);
+    font-weight: 600;
+    letter-spacing: 0;
     line-height: 1.2;
-    box-shadow: 0 6px 18px rgba(255, 183, 3, 0.35);
-    transition: transform 0.12s ease, box-shadow 0.15s ease,
-                background 0.15s ease;
+    transition: background 0.15s ease, border-color 0.15s ease;
     -webkit-tap-highlight-color: transparent;
     white-space: nowrap;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
 }
 .home-stage .home-add2hs-btn:hover {
-    transform: translateY(-1px);
-    background: #FFC93A;
-    box-shadow: 0 8px 22px rgba(255, 183, 3, 0.45);
+    background: rgba(255, 183, 3, 0.18);
+    border-color: rgba(255, 183, 3, 0.75);
 }
 
-/* AUDIT 2026-05-23 (HC7) — install-benefit micro-line. Three checkmark
-   phrases above the amber install button so users understand WHY
-   install matters before tapping. Each phrase short enough that on
-   iPhone SE (375 px) the row fits without wrap; degrades to wrap on
-   long-text locales (RU/UR translations may need 2 lines — line-height
-   absorbs gracefully). */
-.home-stage .home-install-benefits {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 6px 10px;
-    margin: 6px auto 0;
-    padding: 0 8px;
-    text-align: center;
-    color: var(--text-dim, #94a3b8);
-    font-size: var(--fz-xs, 12px);
-    font-weight: 600;
-    line-height: 1.4;
-    max-width: 360px;
-}
-.home-stage .home-install-benefits .ib-dot {
-    opacity: 0.6;
-    user-select: none;
-}
+/* HC18 (May 2026) — the HC7 .home-install-benefits microcopy row
+   ("Works offline · Reports stay safe · Faster reporting") was
+   removed. The corresponding markup is gone from index.html and the
+   styles are no longer needed. Trust + offline behaviour are still
+   communicated via the consent banner, footer links, and the new
+   connection-status popover (HC16). */
 
 .home-stage .home-install-thanks {
     margin: 8px auto 0;
@@ -11161,11 +11176,11 @@ body.tier-t4 .home-impact {
 }
 .home-stage .home-install-thanks[hidden] { display: none; }
 
-/* In installed-PWA mode hide the install button + benefits, show the
-   thank-you. Driven by the JS painter via the data-install-state attr
-   set on the home stage in home-screen.js _wireAddToHomescreenChip. */
+/* In installed-PWA mode hide the install button, show the thank-you.
+   Driven by the JS painter via the data-install-state attr set on the
+   home stage in home-screen.js _wireAddToHomescreenChip. HC18 removed
+   the install-benefit microcopy row, so only the button hides here. */
 @media all and (display-mode: standalone) {
-    .home-stage .home-install-benefits,
     .home-stage .home-add2hs-btn { display: none !important; }
     .home-stage .home-install-thanks { display: block; }
 }

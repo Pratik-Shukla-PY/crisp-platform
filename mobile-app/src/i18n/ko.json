@@ -867,5 +867,20 @@
   "status_pill_syncing": "Syncing {n}",
   "mr_empty_title": "Nothing submitted yet",
   "mr_empty_body": "Your reports will appear here as soon as you send your first one.",
-  "mr_empty_cta": "Report an Incident"
+  "mr_empty_cta": "Report an Incident",
+  "aria_brand_status": "연결 상태 — 자세히 보려면 탭하세요",
+  "status_sheet_title": "연결 상태",
+  "status_sheet_state_online": "온라인",
+  "status_sheet_state_offline": "오프라인",
+  "status_sheet_state_syncing": "동기화 중",
+  "status_sheet_state_weak": "약한 신호",
+  "status_sheet_queued_label": "전송 대기 중인 보고",
+  "status_sheet_last_sync_label": "마지막 동기화",
+  "status_sheet_last_sync_never": "아직 보낸 보고서가 없습니다",
+  "status_sheet_ago_now": "방금",
+  "status_sheet_ago_minutes": "{n}분 전",
+  "status_sheet_ago_hours": "{n}시간 전",
+  "status_sheet_ago_days": "{n}일 전",
+  "status_sheet_reassure_online": "제출한 보고서는 자동으로 전송됩니다.",
+  "status_sheet_reassure_offline": "보고서는 휴대전화에 저장되고 다시 온라인이 되면 전송됩니다."
 }
