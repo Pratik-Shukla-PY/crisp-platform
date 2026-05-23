@@ -6103,7 +6103,10 @@ body.tier-t4 .home-impact {
     align-items: stretch;
     justify-content: flex-start;
     text-align: start;
-    min-height: 100dvh;
+    /* HC40 — was `min-height: 100dvh`; same fit bug as the canonical
+       later rule (see comment there). Anchor to the parent so the
+       tablet framing on .mobile-screen never clips this container. */
+    min-height: 100%;
 }
 /* Eliminate the global .stage's 24 px horizontal padding on the home
    stage so .home-center owns the gutter exclusively. */
@@ -6679,23 +6682,17 @@ body.tier-t4 .home-impact {
    border ducks under the text — same effect as a real <legend>. */
 .home-channels-card {
     position: relative;
-    /* HC34 (May 23, operator) — transparent fill, thinner border.
-       Was `1px solid rgba(255,255,255,0.10)` paired with the strip's
-       own 1 px border + 2.5 % white fill; that combination read as a
-       heavy double-bordered card with a visible inner tint. Stripped
-       the strip's chrome AND lifted the outer line to a barely-there
-       6 % opacity so the card reads as a quiet outline on the page
-       background, not a filled tile. The 1 px width is the smallest
-       reliably-rendered border across browsers; finer would alias
-       inconsistently on non-Retina displays. */
+    /* HC34 — transparent fill + 6 % opacity outline so the card
+       reads as a quiet group, not a filled tile. */
     background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 14px;
-    /* HC31 — symmetric vertical padding now that the title sits on
-       the bottom border instead of the top. Was 14/10/10 (top-heavy
-       to clear the top-positioned title). */
-    padding: 10px 10px 12px;
-    margin-top: 10px;
+    /* HC39 — was 10/10/12 (HC31 symmetric). Compressed to 6/10/8
+       so the channels card consumes ~8 px less vertical space on
+       Mac Safari PWA window. The strip icons inside still have
+       their own 6 px padding so touch targets stay 44 px+. */
+    padding: 6px 10px 8px;
+    margin-top: 6px;
 }
 .home-channels-card-title {
     /* HC31 (May 23, operator) — moved from top-left bold treatment
@@ -10042,15 +10039,25 @@ body.tier-t4 .home-impact {
 .home-stage .home-center {
     display: flex;
     flex-direction: column;
-    /* Use min-height (not height) so the column can grow when content
-       exceeds the viewport on very short phones. height: 100dvh +
-       overflow: hidden was silently clipping channel tiles on
-       iPhone 5S / older Galaxy (<600 dp tall). */
-    min-height: 100dvh;
-    /* HC38 (May 23, operator) — was `16px 20px 12px` (4 px less at
-       the bottom). Now symmetric 14 px vertical so the brand row
-       and the install row sit at the same inset from each edge. */
-    padding: 14px 20px;
+    /* HC40 (May 23, operator — tablet-wide fit). At min-width 640 px
+       (.mobile-screen rule) the wrapper becomes
+       `height: calc(100dvh - 32px); margin: 16px 0` so the app
+       renders as a framed phone-like column on tablet/desktop. But
+       `.home-center` was claiming 100svh (full viewport) which is
+       32+ px TALLER than its parent .mobile-screen at that
+       breakpoint, so .home-center extended below the parent's
+       clipped bottom edge and the footer-meta row vanished under
+       the clip (operator's 642 × 908 reproduction).
+       Anchor to the parent (100%) so .home-center always fits
+       exactly inside .mobile-screen at every breakpoint. The
+       parent itself sets the viewport-anchored height
+       (100dvh / 100svh / calc(100dvh - 32px) per tier). */
+    min-height: 100%;
+    /* HC38 → HC39 — was 14/20 (symmetric); compressed to 10/20 on
+       the base tier so a ~500 px Safari PWA window can still fit
+       the whole stage without scrolling. Larger viewport tiers
+       below restore generous padding. */
+    padding: 10px 20px;
     gap: 0;                          /* sections own their own margins */
     /* (May 2026 — Fix-P4) — graceful scroll on short viewports
        instead of silent clip. Tall viewports (≥740 dp) never see
@@ -10071,7 +10078,9 @@ body.tier-t4 .home-impact {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: clamp(10px, 2vh, 18px);
+    /* HC39 — lower bound 10 → 6 px so the badge ↔ CTA ↔ Login row
+       gaps collapse to ~6 px on short Mac Safari PWA windows. */
+    gap: clamp(6px, 2vh, 18px);
     /* May 2026 (Phase 5.1 follow-up — operator-reported "Top tile
        collapsed"). The prior `min-height: 0` was too permissive:
        once Phase 1's nearby module added ~217px to section-bottom,
@@ -10086,10 +10095,13 @@ body.tier-t4 .home-impact {
     padding: 8px 0;
 }
 .home-stage .home-section-bottom {
+    /* HC39 — gap 8 → 6 px to recover ~4 px from the inter-row
+       spacing inside the bottom area (channels card → footer-row →
+       footer-meta). */
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 /* May 2026 (alignment-rhythm pass) — horizontal padding pinned at
@@ -10238,24 +10250,22 @@ body.tier-t4 .home-impact {
     /* Visual anchor. Bigger than anything else on the page. Gradient
        + soft drop-shadow + small inner highlight. No top/bottom
        margins — flex parent handles spacing.
-       HC35 → HC37 (May 23, Safari PWA fit pass) — HC35 bumped the
-       CTA ~30 % which fit fine in Playwright iPhone 14 (844 px
-       viewport) but overflowed on real Safari iPhone SE PWA mode
-       (~553 px usable after URL bar + home indicator + safe-area).
-       HC37 trims back: padding clamp ceiling 36 → 30 px, min-height
-       clamp ceiling 176 → 150 px, vh-based middle stop 21 → 17 so
-       short viewports cap earlier. Net: ~16-26 px recovered on
-       iPhone SE Safari, CTA stays visibly dominant (still ~150 px
-       tall vs ~96 px pre-HC35). */
+       HC35 → HC37 → HC39 (May 23, Mac Safari PWA fit). HC37 set
+       min-height clamp(118, 17vh, 150). HC39 drops the LOWER bound
+       to 100 px so very short windows (Mac Safari PWA window
+       ~500 px) can collapse the CTA without losing its visual
+       dominance — at 100 px it's still ~25 % taller than every
+       other interactive element on the page. The clamp ceiling
+       stays 150 px for taller iPhone-class viewports. */
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 4px;
     width: 100%;
-    padding: clamp(20px, 4.2vh, 30px) 28px;
-    min-height: clamp(118px, 17vh, 150px);
-    border-radius: clamp(18px, 3vw, 24px);
+    padding: clamp(14px, 3.5vh, 30px) 28px;
+    min-height: clamp(100px, 16vh, 150px);
+    border-radius: clamp(16px, 3vw, 24px);
     background: linear-gradient(135deg, #46DFB1 0%, #09D1C7 100%);
     color: #062b1b;
     border: 0;
@@ -11187,19 +11197,19 @@ body.tier-t4 .home-impact {
    markup change so the painter + back-compat selectors continue
    to resolve. */
 .home-footer-meta {
-    /* HC37 — margin-top 8 → 4 px, min-height 36 → 32 px to recover
-       ~8 px on Safari iPhone SE PWA mode where the URL bar +
-       safe-area-inset-bottom (home indicator) reduce the usable
-       viewport by ~50 px vs Chrome/Playwright. The row still has a
-       comfortable 32 px tap height. */
+    /* HC37 → HC39 — margin-top 4 → 2 px, min-height 32 → 28 px to
+       shave another 6 px for the Mac Safari PWA window fit. The
+       install chip (.home-add2hs-btn) is 36 px tall so the row
+       grows to fit its content — the min-height just guarantees a
+       28 px frame for the version-only "installed" state. */
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 6px 12px;
-    margin: 4px 0 0;
+    gap: 4px 12px;
+    margin: 2px 0 0;
     padding: 0 4px;
-    min-height: 32px;
+    min-height: 28px;
 }
 .home-footer-meta > * { margin: 0; }
 
