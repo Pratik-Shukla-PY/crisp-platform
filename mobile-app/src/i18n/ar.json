@@ -872,5 +872,8 @@
   "status_sheet_ago_hours": "منذ {n} س",
   "status_sheet_ago_days": "منذ {n} ي",
   "status_sheet_reassure_online": "تُرسل تقاريرك تلقائيًا فور إرسالها.",
-  "status_sheet_reassure_offline": "تُحفظ التقارير على هاتفك وتُرسل عند عودة الاتصال."
+  "status_sheet_reassure_offline": "تُحفظ التقارير على هاتفك وتُرسل عند عودة الاتصال.",
+  "aria_build_info": "معلومات الإصدار — اضغط للتفاصيل",
+  "version_label_build": "البنية {n}",
+  "version_label_detail": "البنية {n} · API {api}"
 }

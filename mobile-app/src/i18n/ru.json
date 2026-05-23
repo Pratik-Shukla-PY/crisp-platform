@@ -879,5 +879,8 @@
   "status_sheet_ago_hours": "{n} ч назад",
   "status_sheet_ago_days": "{n} д назад",
   "status_sheet_reassure_online": "Ваши отчёты отправляются автоматически при отправке.",
-  "status_sheet_reassure_offline": "Отчёты сохраняются на телефоне и отправятся, когда снова появится сеть."
+  "status_sheet_reassure_offline": "Отчёты сохраняются на телефоне и отправятся, когда снова появится сеть.",
+  "aria_build_info": "Сведения о сборке — нажмите для деталей",
+  "version_label_build": "Сборка {n}",
+  "version_label_detail": "Сборка {n} · API {api}"
 }

@@ -891,5 +891,8 @@
   "status_sheet_ago_hours": "hace {n} h",
   "status_sheet_ago_days": "hace {n} d",
   "status_sheet_reassure_online": "Tus informes se envían automáticamente al enviarlos.",
-  "status_sheet_reassure_offline": "Los informes se guardan en tu teléfono y se envían cuando vuelvas a estar en línea."
+  "status_sheet_reassure_offline": "Los informes se guardan en tu teléfono y se envían cuando vuelvas a estar en línea.",
+  "aria_build_info": "Información de versión — toca para detalles",
+  "version_label_build": "Compilación {n}",
+  "version_label_detail": "Compilación {n} · API {api}"
 }

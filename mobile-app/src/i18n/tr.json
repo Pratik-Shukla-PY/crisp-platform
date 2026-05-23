@@ -882,5 +882,8 @@
   "status_sheet_ago_hours": "{n} sa önce",
   "status_sheet_ago_days": "{n} gün önce",
   "status_sheet_reassure_online": "Raporlarınız gönderildiğinde otomatik olarak iletilir.",
-  "status_sheet_reassure_offline": "Raporlar telefonunuzda kaydedilir ve tekrar çevrimiçi olduğunuzda gönderilir."
+  "status_sheet_reassure_offline": "Raporlar telefonunuzda kaydedilir ve tekrar çevrimiçi olduğunuzda gönderilir.",
+  "aria_build_info": "Sürüm bilgisi — ayrıntılar için dokunun",
+  "version_label_build": "Sürüm {n}",
+  "version_label_detail": "Sürüm {n} · API {api}"
 }

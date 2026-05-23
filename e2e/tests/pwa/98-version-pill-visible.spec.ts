@@ -1,22 +1,25 @@
 /**
  * May 21 2026 — audit Item 6 regression guard.
  *
- * The "version pill" in the home utility footer was previously hidden
- * by a CSS rule at styles.css:10406 (`display: none`) that left the
- * span un-paintable. v247 reversed the CSS rule + v248 also forces
- * the inline `style.display = 'inline-block'` from JS, so cached-CSS
- * iPhones still see the pill on the first reload.
+ * Originally the "version pill" in the home utility footer was a
+ * dedicated row painting `pwa@v259 · api@1.0.0`. HC25 (May 23) folded
+ * the version into the Privacy/Help/Open-source nav as a 4th utility
+ * item with consumer-grade copy: "Build 259". The technical detail
+ * (API version, build timestamp) is exposed on click + via the title
+ * attribute for native long-press tooltips, but not in the default
+ * visible text.
  *
- * This test pins both invariants:
+ * This test pins both updated invariants:
  *  1. `#home-utility-version` is computed as visible (display !== none).
- *  2. The pill's text contains both `pwa@` and `api@` (or starts with
- *     pwa@ and the backend `?` placeholder while the /health fetch
- *     is in flight).
+ *  2. The visible text reads "Build N" where N is a positive integer.
+ *  3. The title attribute carries the long-form "Build N · API …"
+ *     detail (or at least the Build N segment while /health is in
+ *     flight).
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('PWA home — version pill visibility (audit Item 6)', () => {
-    test('@smoke pill is visible on first paint and shows pwa@ + api@', async ({ page }) => {
+test.describe('PWA home — version pill visibility (audit Item 6, post-HC25)', () => {
+    test('@smoke build chip is visible on first paint and reads "Build N"', async ({ page }) => {
         // iPhone 14 viewport — the layout that previously hid the pill
         // because of overflow:hidden in .home-utility-footer.
         await page.setViewportSize({ width: 390, height: 844 });
@@ -28,28 +31,29 @@ test.describe('PWA home — version pill visibility (audit Item 6)', () => {
         await page.goto('index.html');
         await page.waitForLoadState('networkidle');
 
-        // v250: target the NEW dedicated row element. Lives outside
-        // the clipped utility-footer.
-        const row = page.locator('#home-version-row');
-        await expect(row).toBeVisible();
+        // HC25: the canonical visible surface is the build-info button
+        // inside the .home-utility-footer nav.
+        const btn = page.locator('#home-utility-version');
+        await expect(btn).toBeVisible();
 
-        // Also assert the bounding box is inside the viewport — not
-        // just "exists in DOM" but "actually painted within the
-        // visible page area." This is the assertion the prior version
-        // of this test missed.
-        const rect = await row.evaluate((el) => {
+        // Bounding box must be inside the visible page area.
+        const rect = await btn.evaluate((el) => {
             const r = (el as HTMLElement).getBoundingClientRect();
             return { x: r.x, y: r.y, w: r.width, h: r.height };
         });
-        expect(rect.w, `pill width must be > 0 (got ${rect.w})`).toBeGreaterThan(20);
-        expect(rect.h, `pill height must be > 0 (got ${rect.h})`).toBeGreaterThan(0);
-        expect(rect.y, `pill y must be inside iPhone 14 viewport (got ${rect.y})`).toBeLessThan(844);
+        expect(rect.w, `chip width must be > 0 (got ${rect.w})`).toBeGreaterThan(20);
+        expect(rect.h, `chip height must be > 0 (got ${rect.h})`).toBeGreaterThan(0);
+        expect(rect.y, `chip y must be inside iPhone 14 viewport (got ${rect.y})`).toBeLessThan(844);
 
-        const text = await row.textContent();
-        expect(text, 'pill should show pwa@... text').toMatch(/pwa@/);
-        // backend value may still be `?` while /health is in flight
-        // (or the API isn't reachable in the test harness). We only
-        // require the `api@` prefix.
-        expect(text, 'pill should show api@... segment').toMatch(/api@/);
+        // Visible label reads "Build N" where N is a positive integer.
+        const text = ((await btn.textContent()) || '').trim();
+        expect(text, 'chip should show consumer-grade "Build N" text').toMatch(/^Build\s+\d+$/);
+
+        // Title attribute carries the long-form detail. While the
+        // /health fetch is in flight the title may still be just
+        // "Build N" — so we accept either "Build N" or
+        // "Build N · API …".
+        const title = (await btn.getAttribute('title')) || '';
+        expect(title, 'title attribute should at minimum start with "Build N"').toMatch(/^Build\s+\d+/);
     });
 });

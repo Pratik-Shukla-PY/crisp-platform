@@ -887,5 +887,8 @@
   "status_sheet_ago_hours": "há {n} h",
   "status_sheet_ago_days": "há {n} d",
   "status_sheet_reassure_online": "Seus relatórios são enviados automaticamente ao submetê-los.",
-  "status_sheet_reassure_offline": "Os relatórios são salvos no celular e enviados quando você voltar a ficar online."
+  "status_sheet_reassure_offline": "Os relatórios são salvos no celular e enviados quando você voltar a ficar online.",
+  "aria_build_info": "Informações da versão — toque para detalhes",
+  "version_label_build": "Build {n}",
+  "version_label_detail": "Build {n} · API {api}"
 }

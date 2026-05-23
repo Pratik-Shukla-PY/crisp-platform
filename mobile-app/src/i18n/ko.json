@@ -882,5 +882,8 @@
   "status_sheet_ago_hours": "{n}시간 전",
   "status_sheet_ago_days": "{n}일 전",
   "status_sheet_reassure_online": "제출한 보고서는 자동으로 전송됩니다.",
-  "status_sheet_reassure_offline": "보고서는 휴대전화에 저장되고 다시 온라인이 되면 전송됩니다."
+  "status_sheet_reassure_offline": "보고서는 휴대전화에 저장되고 다시 온라인이 되면 전송됩니다.",
+  "aria_build_info": "빌드 정보 — 자세히 보려면 탭하세요",
+  "version_label_build": "빌드 {n}",
+  "version_label_detail": "빌드 {n} · API {api}"
 }

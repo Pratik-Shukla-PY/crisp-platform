@@ -5828,13 +5828,14 @@ body.tier-t4 .home-impact {
     opacity: 0.85;
     font-size: var(--fz-sm, 13px);
 }
-.home-utility-version {
-    font-family: 'SFMono-Regular', Consolas, monospace;
-    font-size: 10.5px;
-    color: var(--text-mute, var(--muted));
-    opacity: 0.7;
-    padding: 0 4px;
-}
+/* HC25 — legacy .home-utility-version rule replaced. The button
+   now also carries .home-utility-link so it inherits font + padding
+   from that class; this rule only ADDs the tabular-nums + muted
+   colour treatment (see the .home-utility-version block farther
+   down at HC25's CSS location). Empty rule kept here as an anchor
+   for any back-compat overrides that may target this selector
+   from outside the home stage. */
+.home-utility-version { padding: 0; }
 
 /* Channel grid revert: 6-across → 3×2 grid so labels fit
    without clipping. Same brand-token CSS for working state; the
@@ -10546,23 +10547,21 @@ body.tier-t4 .home-impact {
     justify-content: center;
 }
 
-/* AUDIT 2026-05-23 (HC3 → HC20) — Reporter-ID icon button. HC3
-   shipped a 48 × 48 bordered tile that felt over-padded next to
-   the slim footer links. HC20 (operator polish) strips the
-   border, drops the explicit background, slims the button to
-   32 × 32, and switches the glyph to solid white so it reads as
-   a clean utility affordance — same visual weight class as the
-   footer trust links. Touch target stays comfortable (32 px
-   clears WCAG 2.5.8 Minimum @ 24 px); the in-flow padding
-   provided by the parent .home-devid-footer keeps thumbs from
-   colliding with adjacent links. */
+/* AUDIT 2026-05-23 (HC3 → HC20 → HC26) — Reporter-ID icon button.
+   HC3 shipped a 48 × 48 bordered tile, HC20 simplified to a 32 × 32
+   borderless solid-white glyph. HC26 (operator polish) recolors the
+   glyph to Telegram-style brand blue (#229ED9) — recognisable,
+   subtle, and visually lighter than the previous full-white
+   treatment. Blends naturally with the footer utility row without
+   pulling attention away from the Privacy/Help/Open-source links.
+   Touch target unchanged at 32 × 32 (clears WCAG 2.5.8 Minimum). */
 .home-stage .home-devid-icon {
     appearance: none;
     -webkit-appearance: none;
     background: transparent;
     border: none;
     border-radius: 8px;
-    color: #fff;
+    color: #229ED9;
     width: 32px;
     height: 32px;
     padding: 0;
@@ -10570,16 +10569,15 @@ body.tier-t4 .home-impact {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: transform 0.12s ease, background 0.15s ease, opacity 0.15s ease;
+    transition: transform 0.12s ease, background 0.15s ease, color 0.15s ease;
     -webkit-tap-highlight-color: transparent;
-    opacity: 0.85;
 }
 .home-stage .home-devid-icon:hover {
-    background: rgba(255, 255, 255, 0.08);
-    opacity: 1;
+    background: rgba(34, 158, 217, 0.10);
+    color: #2BB1ED;
 }
 .home-stage .home-devid-icon:focus-visible {
-    outline: 2px solid rgba(9, 209, 199, 0.55);
+    outline: 2px solid rgba(34, 158, 217, 0.55);
     outline-offset: 2px;
 }
 .home-stage .home-devid-icon:active { transform: scale(0.94); }
@@ -10994,48 +10992,32 @@ body.tier-t4 .home-impact {
    Privacy/Help/Open-source + CRISP-ID footer row + Add to Homescreen
    button. Operator can confirm PWA build + backend pairing without
    opening DevTools. */
-/* HC21 (May 2026) — single-row utility footer. Install CTA on the
-   inline-start edge, version pill on the inline-end edge. Wraps
-   when content + gap exceed the row width so they stack instead of
-   overlapping on iPhone SE / Galaxy small. HC22 bumps the version
-   text size + contrast for presbyopia readability. */
-.home-footer-utility-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px 12px;
-    margin: 6px 0 0;
-    padding: 0 4px;
-    min-height: 36px;
-}
-.home-footer-utility-row > * { margin: 0; }
-
-.home-version-row {
-    display: inline-block;
-    text-align: end;
-    /* HC22 — was 10.5 px / 75 % opacity / text-mute (~3.0:1 contrast)
-       which the operator flagged as unreadable for presbyopic eyes
-       in glare. Bumped to 13 px / 95 % opacity / text-dim
-       (~5.5:1 contrast — passes WCAG AA for small text). */
-    font-family: 'SFMono-Regular', Consolas, monospace;
-    font-size: var(--fz-sm, 13px);
-    font-weight: 500;
+/* HC25 (May 2026) — the previous .home-footer-utility-row +
+   .home-version-row pair was removed. The version label now lives
+   INSIDE the .home-utility-footer nav as a 4th utility item
+   ("Build 259"), styled like the Privacy/Help/Open-source links
+   but slightly muted so it reads as metadata, not navigation.
+   See .home-utility-version below + the HC25 markup change in
+   index.html. */
+.home-utility-version {
+    /* Inherits .home-utility-link layout (it carries that class too)
+       — min-height 44 px for tap-target, font-size --fz-sm (13 px,
+       HC22 readability), 4/10 padding. Visual treatment differs:
+       slightly muted color + tabular-nums so "Build 259" digits
+       stay aligned through state changes. */
     color: var(--text-dim, #94a3b8);
-    opacity: 0.95;
-    word-break: keep-all;
-    white-space: nowrap;
-    line-height: 1.3;
-    flex: 0 0 auto;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    cursor: pointer;
 }
-.home-version-row[hidden] { display: none; }
-
-/* When the install button hides (standalone mode) or the version
-   is centred alone, keep the row visually balanced — no jarring
-   empty side from justify-content: space-between. */
-.home-footer-utility-row:has(.home-add2hs-btn[hidden]):not(:has(.home-install-thanks:not([hidden]))) {
-    justify-content: center;
+.home-utility-version:hover { color: var(--text-sub, #cbd5e1); }
+.home-utility-version:focus-visible {
+    outline: 2px solid rgba(9, 209, 199, 0.55);
+    outline-offset: 2px;
+    border-radius: 6px;
 }
+.home-utility-version[hidden] { display: none; }
 
 /* May 21 2026 (audit Item 6) — REVERSED previous "hide version" rule.
    The version span (.home-utility-version) is now wired by

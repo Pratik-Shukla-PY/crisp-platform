@@ -894,5 +894,8 @@
   "status_sheet_ago_hours": "{n} j lalu",
   "status_sheet_ago_days": "{n} hr lalu",
   "status_sheet_reassure_online": "Laporan Anda terkirim otomatis saat dikirim.",
-  "status_sheet_reassure_offline": "Laporan disimpan di ponsel dan terkirim saat Anda online kembali."
+  "status_sheet_reassure_offline": "Laporan disimpan di ponsel dan terkirim saat Anda online kembali.",
+  "aria_build_info": "Info versi — ketuk untuk detail",
+  "version_label_build": "Build {n}",
+  "version_label_detail": "Build {n} · API {api}"
 }

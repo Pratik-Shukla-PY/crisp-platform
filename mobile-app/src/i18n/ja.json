@@ -881,5 +881,8 @@
   "status_sheet_ago_hours": "{n}時間前",
   "status_sheet_ago_days": "{n}日前",
   "status_sheet_reassure_online": "提出した報告は自動的に送信されます。",
-  "status_sheet_reassure_offline": "報告は端末に保存され、オンラインに戻ったときに送信されます。"
+  "status_sheet_reassure_offline": "報告は端末に保存され、オンラインに戻ったときに送信されます。",
+  "aria_build_info": "ビルド情報 — タップして詳細を表示",
+  "version_label_build": "ビルド {n}",
+  "version_label_detail": "ビルド {n} · API {api}"
 }

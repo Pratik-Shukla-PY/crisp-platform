@@ -1896,76 +1896,116 @@
     // don't re-fetch (the value is stable across the session and only
     // changes on backend deploy — when the cache is naturally
     // invalidated by sessionStorage's per-tab lifetime).
-    async function _paintVersionPill() {
-        // May 21 2026 (v250) — target the new dedicated #home-version-row
-        // container instead of the legacy #home-utility-version span.
-        // The legacy span was inside .home-utility-footer which has
-        // overflow:hidden + flex-wrap:nowrap to prevent Open-source from
-        // wrapping into the CRISP-ID pill on narrow screens. That clip
-        // was eating the version text — DOM element existed but was
-        // rendered outside the visible nav. The new row lives BELOW
-        // the footer-row entirely, so it has its own horizontal space.
-        // The legacy span is kept for backward-compat (some test
-        // selectors may still reference it) but no longer painted.
-        const row = document.getElementById('home-version-row');
-        if (!row) return;
-        // PWA side — synchronous, read from the meta tag.
-        let pwaRel = 'pwa@?';
+    // HC25 (May 2026, operator) — consumer-grade version label.
+    // The previous "pwa@v259 · api@?" read as developer-internal /
+    // unfinished. Now we extract the BUILD NUMBER from the release
+    // tag and render it as "Build 259" — recognisable, calm, premium.
+    // The button lives inside the Privacy / Help / Open Source nav
+    // (HC25 markup change in index.html); clicking it expands inline
+    // for 4 s to "Build 259 · API 1.0.0" so operators can confirm
+    // the backend pairing without exposing the raw label by default.
+    // The title attribute always carries the full string for native
+    // long-press / hover tooltips.
+    function _extractBuildNumber() {
         try {
             const m = document.querySelector('meta[name="crisp-release"]');
-            if (m && m.getAttribute('content')) {
-                pwaRel = m.getAttribute('content').replace(/^crisp-/, '');
-            }
-        } catch (_) {}
+            if (!m) return null;
+            const content = (m.getAttribute('content') || '').trim();
+            // Format is `crisp-pwa@v259`; strip everything except the
+            // trailing digit run.
+            const match = content.match(/v(\d+)\b/);
+            return match ? match[1] : null;
+        } catch (_) { return null; }
+    }
+    async function _paintVersionPill() {
+        // HC25 — the dedicated .home-version-row stand-alone has been
+        // removed (was its own physical row eating ~24 px). The
+        // canonical visible surface is now the #home-utility-version
+        // button inside the .home-utility-footer nav. Repaint
+        // BOTH targets where present so back-compat consumers don't
+        // break; the legacy #home-version-row also receives the new
+        // "Build N" text in case any external selector still expects
+        // it.
+        const btn = document.getElementById('home-utility-version');
+        const legacyRow = document.getElementById('home-version-row');
+        if (!btn) return;
+
+        const build = _extractBuildNumber();
         // Backend side — sessionStorage cache + one-shot fetch.
-        let backendVer = 'api@?';
+        let backendVer = null;
         try {
             const cached = sessionStorage.getItem('crisp_backend_version');
-            if (cached) backendVer = 'api@' + cached;
+            if (cached) backendVer = cached;
         } catch (_) {}
-        // Paint immediately with whatever we have (pwa always known,
-        // api may be ?).
-        row.textContent = `${pwaRel} · ${backendVer}`;
-        row.removeAttribute('hidden');
-        // AUDIT 2026-05-23 (HC5) — dedupe. Previously this also painted
-        // a SECOND copy of the version string into the legacy
-        // #home-utility-version span (inside the footer row next to
-        // Privacy/Help/Open source). The spec calls for a single
-        // location (the dedicated .home-version-row only). The legacy
-        // span is kept in markup (hidden) so any test/dashboard
-        // selector still resolves, but no longer painted with visible
-        // text — the in-DOM value stays the bootstrap default
-        // ("v0.7.44") which downstream consumers can treat as a
-        // placeholder.
+
+        const t = (typeof window.t === 'function') ? window.t : (k => null);
+        const buildLabel = (s) => {
+            const tmpl = t('version_label_build') || 'Build {n}';
+            return tmpl.replace('{n}', String(s));
+        };
+        const detailLabel = (b, api) => {
+            const tmpl = t('version_label_detail') || 'Build {n} · API {api}';
+            return tmpl.replace('{n}', String(b)).replace('{api}', String(api));
+        };
+
+        // Paint visible label + title attribute for long-press tooltip.
+        const visible = build ? buildLabel(build) : buildLabel('—');
+        const titleStr = (build && backendVer)
+            ? detailLabel(build, backendVer)
+            : visible;
+        btn.textContent = visible;
+        btn.setAttribute('title', titleStr);
+        btn.removeAttribute('hidden');
+        if (legacyRow) {
+            legacyRow.textContent = visible;
+            legacyRow.setAttribute('title', titleStr);
+        }
+
+        // Click handler: expand inline for 4 s to show API version
+        // + build, then collapse back. One handler per element.
+        if (!btn.dataset.wired) {
+            btn.dataset.wired = '1';
+            let collapseTimer = null;
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const b = _extractBuildNumber();
+                let api = null;
+                try { api = sessionStorage.getItem('crisp_backend_version'); } catch (_) {}
+                if (b && api) {
+                    btn.textContent = detailLabel(b, api);
+                } else if (b) {
+                    btn.textContent = buildLabel(b) + ' · API …';
+                }
+                if (collapseTimer) clearTimeout(collapseTimer);
+                collapseTimer = setTimeout(() => {
+                    const nb = _extractBuildNumber();
+                    btn.textContent = nb ? buildLabel(nb) : buildLabel('—');
+                }, 4000);
+            });
+        }
+
         // Refresh from /api/v1/health in the background; non-blocking,
-        // fails silent if offline.
-        //
-        // May 21 2026 (v251) — the backend mounts a basic /health route
-        // at the FastAPI root for orchestrator probes (k8s-style), but
-        // PROD's nginx only proxies /api/v1/* to the backend — so a
-        // browser fetch of /health 404s at the nginx layer before
-        // reaching uvicorn. A prior v250 attempt stripped /api/v1 off
-        // window.API_BASE and called /health directly; that worked in
-        // dev (where backend listens at :8000 root) but failed PROD
-        // smoke. Backend now mirrors the same response shape under
-        // /api/v1/health, so fetching window.API_BASE + /health (no
-        // strip) reaches both environments.
-        if (backendVer === 'api@?') {
+        // fails silent if offline. (Existing HC5 / v251 dev/PROD note
+        // applied — fetch window.API_BASE + /health, which the backend
+        // mirrors under /api/v1/health for nginx-restricted PROD.)
+        if (!backendVer) {
             try {
                 const base = (typeof window.API_BASE === 'string' && window.API_BASE)
-                    ? window.API_BASE.replace(/\/$/, '')   // trim trailing slash only
-                    : '/api/v1';                            // fallback when API_BASE not set
+                    ? window.API_BASE.replace(/\/$/, '')
+                    : '/api/v1';
                 const url = `${base}/health`;
                 const res = await fetch(url, { cache: 'no-store', credentials: 'omit' });
                 if (res.ok) {
                     const body = await res.json();
                     if (body && typeof body.version === 'string' && body.version) {
                         try { sessionStorage.setItem('crisp_backend_version', body.version); } catch (_) {}
-                        // Repaint the dedicated row only (HC5 dedupe).
-                        row.textContent = `${pwaRel} · api@${body.version}`;
+                        if (build) {
+                            btn.setAttribute('title', detailLabel(build, body.version));
+                            if (legacyRow) legacyRow.setAttribute('title', detailLabel(build, body.version));
+                        }
                     }
                 }
-            } catch (_) { /* offline — keep "api@?" */ }
+            } catch (_) { /* offline — keep title at "Build N" only */ }
         }
     }
 

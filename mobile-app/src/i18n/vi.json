@@ -882,5 +882,8 @@
   "status_sheet_ago_hours": "{n} giờ trước",
   "status_sheet_ago_days": "{n} ngày trước",
   "status_sheet_reassure_online": "Báo cáo của bạn sẽ tự động gửi khi bạn nộp.",
-  "status_sheet_reassure_offline": "Báo cáo được lưu trên điện thoại và sẽ gửi khi bạn kết nối lại."
+  "status_sheet_reassure_offline": "Báo cáo được lưu trên điện thoại và sẽ gửi khi bạn kết nối lại.",
+  "aria_build_info": "Thông tin bản dựng — chạm để xem chi tiết",
+  "version_label_build": "Bản dựng {n}",
+  "version_label_detail": "Bản dựng {n} · API {api}"
 }

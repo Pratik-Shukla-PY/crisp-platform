@@ -879,5 +879,8 @@
   "status_sheet_ago_hours": "{n} گھنٹے پہلے",
   "status_sheet_ago_days": "{n} دن پہلے",
   "status_sheet_reassure_online": "آپ کی رپورٹس جمع کرواتے ہی خود کار طریقے سے بھیجی جاتی ہیں۔",
-  "status_sheet_reassure_offline": "رپورٹس آپ کے فون پر محفوظ ہو جاتی ہیں اور آن لائن ہونے پر بھیج دی جاتی ہیں۔"
+  "status_sheet_reassure_offline": "رپورٹس آپ کے فون پر محفوظ ہو جاتی ہیں اور آن لائن ہونے پر بھیج دی جاتی ہیں۔",
+  "aria_build_info": "بلڈ کی معلومات — تفصیلات کے لیے ٹیپ کریں",
+  "version_label_build": "بلڈ {n}",
+  "version_label_detail": "بلڈ {n} · API {api}"
 }

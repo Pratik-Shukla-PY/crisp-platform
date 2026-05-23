@@ -857,5 +857,8 @@
   "status_sheet_reassure_offline": "Reports save on your phone and send when you're back online.",
   "mr_empty_title": "Nothing submitted yet",
   "mr_empty_body": "Your reports will appear here as soon as you send your first one.",
-  "mr_empty_cta": "Report an Incident"
+  "mr_empty_cta": "Report an Incident",
+  "aria_build_info": "Build info — tap for details",
+  "version_label_build": "Build {n}",
+  "version_label_detail": "Build {n} · API {api}"
 }

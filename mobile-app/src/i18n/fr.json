@@ -883,5 +883,8 @@
   "status_sheet_ago_hours": "il y a {n} h",
   "status_sheet_ago_days": "il y a {n} j",
   "status_sheet_reassure_online": "Vos signalements partent automatiquement lors de leur envoi.",
-  "status_sheet_reassure_offline": "Les signalements sont enregistrés sur votre téléphone et envoyés au retour de la connexion."
+  "status_sheet_reassure_offline": "Les signalements sont enregistrés sur votre téléphone et envoyés au retour de la connexion.",
+  "aria_build_info": "Informations sur la version — appuyez pour les détails",
+  "version_label_build": "Build {n}",
+  "version_label_detail": "Build {n} · API {api}"
 }

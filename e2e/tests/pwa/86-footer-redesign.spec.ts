@@ -101,22 +101,29 @@ test.describe('PWA — home footer v2 redesign', () => {
     // ── Links + bullets ────────────────────────────────────────────────
 
     test('@smoke each link uses the v2 mid-gray (phone breakpoint: 12 px, desktop: 13 px)', async ({ page }) => {
-        const linkSamples = await page.locator('#home-utility-footer .home-utility-link').evaluateAll((els) =>
+        // HC22 (May 2026) bumped link font-size to 13 px floor for
+        // presbyopia readability + lifted the link colour to text-sub
+        // (rgb 203 213 225). HC25 added a 4th .home-utility-link
+        // child — the Build-N version button — which uses a *muted*
+        // text-dim colour (rgb 148 163 184) by design (metadata
+        // shouldn't compete with navigation). Exclude the version
+        // button from this colour assertion via id, but keep the
+        // count check at 4 (3 nav links + 1 build chip).
+        const links = page.locator('#home-utility-footer .home-utility-link');
+        const total = await links.count();
+        expect(total).toBe(4);
+        const navLinks = await page.locator('#home-utility-footer .home-utility-link:not(#home-utility-version)').evaluateAll((els) =>
             els.map((el) => {
                 const cs = getComputedStyle(el);
                 return { text: el.textContent?.trim() || '', fontSize: cs.fontSize, color: cs.color };
             }),
         );
-        // Three links: Privacy, Help, Open source.
-        expect(linkSamples.length).toBe(3);
-        // Phone vs desktop pixel-exact sizes drift with CSS tuning; we
-        // only assert the link copy is readable (10-14px) + uses the
-        // v2 mid-gray colour band.
-        for (const link of linkSamples) {
+        expect(navLinks.length).toBe(3);
+        for (const link of navLinks) {
             const px = parseFloat(link.fontSize);
-            expect(px).toBeGreaterThanOrEqual(10);
+            expect(px).toBeGreaterThanOrEqual(12);
             expect(px).toBeLessThanOrEqual(14);
-            // rgba(203, 213, 225, 0.75) serialises with the same channels.
+            // text-sub (#cbd5e1) — passes WCAG AA on navy background.
             expect(link.color).toMatch(/203,\s*213,\s*225/);
         }
     });
