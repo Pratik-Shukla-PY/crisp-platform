@@ -521,7 +521,7 @@
         // any locale JSON. Pre-commit hook gates drift.
         window.__crispHomeI18nPacks = {
   "__meta": {
-    "buildTs": "2026-05-23T06:22:52.972Z",
+    "buildTs": "2026-05-23T07:41:26.838Z",
     "scriptVersion": 2,
     "keyCount": 61,
     "locales": [
@@ -550,7 +550,7 @@
     ]
   },
   "en": {
-    "__version": "13ff5ee764bc",
+    "__version": "925649a04095",
     "__checksum": "08234d37d1d89063",
     "action_tile_download": "Download App",
     "action_tile_login": "Login",
@@ -2657,7 +2657,17 @@
                  home-screen.js on home-stage activation. The empty
                  container + i18n-bound eyebrow gives us a stable
                  selector for spec 69. -->
-            <section class="home-nearby-intel" id="home-nearby-intel" aria-labelledby="home-nearby-eyebrow" hidden>
+            <!-- AUDIT 2026-05-23 (humanitarian-grade home redesign) — the
+                 `hidden` attribute that used to gate this section has been
+                 removed. The Nearby Reports block is now ALWAYS visible on
+                 the home stage so first-time disaster victims see the spec's
+                 "instant situational awareness" affordance regardless of GPS
+                 / network state. Empty-state copy + skeleton are owned by
+                 nearby.js. The aria-live="polite" ensures screen readers
+                 announce state changes (skeleton → empty → real data). -->
+            <section class="home-nearby-intel" id="home-nearby-intel"
+                     aria-labelledby="home-nearby-eyebrow"
+                     aria-live="polite">
                 <h2 class="home-nearby-eyebrow" id="home-nearby-eyebrow"
                     data-i18n="nearby_eyebrow">NEARBY REPORTS</h2>
                 <!-- nearby.js renders the rows or empty state into

@@ -367,10 +367,14 @@
         // it just couldn't reach the service. New empty state is a
         // single plain line that's honest about its scope:
         // "No nearby reports" — no checkmark, no editorialising.
+        // AUDIT 2026-05-23 — softened copy from operational "No nearby
+        // reports" to reassuring "You're the first eyes on the ground
+        // here." Same i18n key (`nearby_no_reports`); the EN value is
+        // updated in en.json + propagated via the home-i18n gen-script.
         const el = document.createElement('div');
         el.className = 'home-nearby-empty';
         el.innerHTML = `
-            <span class="home-nearby-empty-body">${_esc(_t('nearby_no_reports', 'No nearby reports'))}</span>
+            <span class="home-nearby-empty-body">${_esc(_t('nearby_no_reports', "You're the first eyes on the ground here."))}</span>
         `;
         return el;
     }
@@ -625,20 +629,23 @@
             return;
         }
 
-        // Always start HIDDEN. We unhide only when we have data to show.
-        root.hidden = true;
+        // AUDIT 2026-05-23 — section is now always visible (the `hidden`
+        // attribute was removed in index.html). The empty state paints
+        // immediately on home-stage entry so the user never sees a blank
+        // slot, then upgrades to real data once GPS + fetch resolve.
+        root.hidden = false;
+        // Paint the empty state synchronously so the section has content
+        // from frame 0 (no CLS when the upgrade lands).
+        _renderInto(root, { groups: [] }, {});
 
         const location = _getCachedLocation();
         if (!location) {
-            // May 2026 — silent-hide is intentional. App-wide IP geo +
-            // GPS-success paths in app.js write to `crisp_last_location_v2`
-            // via `_saveLocCtx`, dispatching a `crisp:location-cached`
-            // event when they do. The boot listener at the bottom of
-            // this module re-runs `boot()` on that event, so the module
-            // appears automatically once location resolves — no user tap,
-            // no permission prompt of our own. Until then, the slot
-            // stays hidden (no cognitive load).
-            console.log('[NearbyIntel] no cached GPS yet — waiting for crisp:location-cached event.');
+            // No GPS yet — keep the empty state visible. The
+            // `crisp:location-cached` listener at the bottom of this
+            // module re-runs boot() when location resolves, which
+            // triggers the real fetch + re-render. Until then, the
+            // user reads "You're the first eyes on the ground here."
+            console.log('[NearbyIntel] no cached GPS — empty state shown; waiting for crisp:location-cached.');
             return;
         }
         console.log('[NearbyIntel] boot with cached GPS:', location);
