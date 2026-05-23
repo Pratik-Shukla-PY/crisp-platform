@@ -103,16 +103,12 @@ test.describe('PWA — home footer v2 redesign', () => {
     test('@smoke each link uses the v2 mid-gray (phone breakpoint: 12 px, desktop: 13 px)', async ({ page }) => {
         // HC22 (May 2026) bumped link font-size to 13 px floor for
         // presbyopia readability + lifted the link colour to text-sub
-        // (rgb 203 213 225). HC25 added a 4th .home-utility-link
-        // child — the Build-N version button — which uses a *muted*
-        // text-dim colour (rgb 148 163 184) by design (metadata
-        // shouldn't compete with navigation). Exclude the version
-        // button from this colour assertion via id, but keep the
-        // count check at 4 (3 nav links + 1 build chip).
-        const links = page.locator('#home-utility-footer .home-utility-link');
-        const total = await links.count();
-        expect(total).toBe(4);
-        const navLinks = await page.locator('#home-utility-footer .home-utility-link:not(#home-utility-version)').evaluateAll((els) =>
+        // (rgb 203 213 225). HC25 had added a 4th link (the Build-N
+        // chip) inside the nav; HC36 (May 23, operator) moved the
+        // version OUT of the nav back to a dedicated .home-footer-meta
+        // row below, so the nav is back to its original 3 trust links
+        // (Privacy / Help / Open Source).
+        const navLinks = await page.locator('#home-utility-footer .home-utility-link').evaluateAll((els) =>
             els.map((el) => {
                 const cs = getComputedStyle(el);
                 return { text: el.textContent?.trim() || '', fontSize: cs.fontSize, color: cs.color };

@@ -1988,98 +1988,83 @@
     // don't re-fetch (the value is stable across the session and only
     // changes on backend deploy — when the cache is naturally
     // invalidated by sessionStorage's per-tab lifetime).
-    // HC25 (May 2026, operator) — consumer-grade version label.
-    // The previous "pwa@v259 · api@?" read as developer-internal /
-    // unfinished. Now we extract the BUILD NUMBER from the release
-    // tag and render it as "Build 259" — recognisable, calm, premium.
-    // The button lives inside the Privacy / Help / Open Source nav
-    // (HC25 markup change in index.html); clicking it expands inline
-    // for 4 s to "Build 259 · API 1.0.0" so operators can confirm
-    // the backend pairing without exposing the raw label by default.
-    // The title attribute always carries the full string for native
-    // long-press / hover tooltips.
+    // HC25 → HC36 (May 23, 2026) — consumer-grade version label.
+    // HC25 rendered the build number as "Build 259" inside the
+    // Privacy/Help/Open-source nav with a click-to-expand
+    // "Build 259 · API 1.0.0" affordance. Operator review (HC36)
+    // prefers the semver-style "CRISP vX.Y.Z" format on a dedicated
+    // bottom-row meta line (.home-footer-meta), with NO click
+    // expansion — the full API/build detail surfaces via the HC16
+    // status sheet on the brand cluster, and via the native long-
+    // press tooltip on the title attribute. The element keeps the
+    // legacy #home-utility-version id so back-compat dashboard /
+    // spec queries still resolve.
     function _extractBuildNumber() {
         try {
             const m = document.querySelector('meta[name="crisp-release"]');
             if (!m) return null;
             const content = (m.getAttribute('content') || '').trim();
-            // Format is `crisp-pwa@v259`; strip everything except the
+            // Format is `crisp-pwa@v266`; strip everything except the
             // trailing digit run.
             const match = content.match(/v(\d+)\b/);
             return match ? match[1] : null;
         } catch (_) { return null; }
     }
+    // HC36 — derive a semver-style "vX.Y.Z" string from the
+    // monotonic build number by splitting it into per-digit
+    // major/minor/patch. e.g. Build 266 → "2.6.6" → "CRISP v2.6.6".
+    // Builds ≥ 1000 wrap the leading group: 1234 → "12.3.4".
+    // Builds < 100 pad to keep the X.Y.Z shape: 42 → "0.4.2".
+    // Degenerate fallback when the build can't be resolved: "CRISP v—".
+    function _formatVersion(build) {
+        if (!build) return 'CRISP v—';
+        const s = String(build);
+        let major, minor, patch;
+        if (s.length >= 3) {
+            patch = s.slice(-1);
+            minor = s.slice(-2, -1);
+            major = s.slice(0, -2);
+        } else {
+            const padded = s.padStart(3, '0');
+            major = parseInt(padded[0], 10).toString();
+            minor = padded[1];
+            patch = padded[2];
+        }
+        return `CRISP v${major}.${minor}.${patch}`;
+    }
     async function _paintVersionPill() {
-        // HC25 — the dedicated .home-version-row stand-alone has been
-        // removed (was its own physical row eating ~24 px). The
-        // canonical visible surface is now the #home-utility-version
-        // button inside the .home-utility-footer nav. Repaint
-        // BOTH targets where present so back-compat consumers don't
-        // break; the legacy #home-version-row also receives the new
-        // "Build N" text in case any external selector still expects
-        // it.
-        const btn = document.getElementById('home-utility-version');
+        // HC36 — canonical visible surface is the
+        // #home-utility-version <span> inside .home-footer-meta
+        // (left side of the bottom row, with the install button on
+        // the right). Repaint the legacy #home-version-row sibling
+        // too if any dashboard / spec selector still expects it.
+        const el = document.getElementById('home-utility-version');
         const legacyRow = document.getElementById('home-version-row');
-        if (!btn) return;
+        if (!el) return;
 
         const build = _extractBuildNumber();
-        // Backend side — sessionStorage cache + one-shot fetch.
+        const visible = _formatVersion(build);
+        el.textContent = visible;
+        el.removeAttribute('hidden');
+        if (legacyRow) legacyRow.textContent = visible;
+
+        // Title attribute carries the full build + API pairing so
+        // long-press / hover tooltips reveal the operational detail
+        // without polluting the visible label.
         let backendVer = null;
         try {
             const cached = sessionStorage.getItem('crisp_backend_version');
             if (cached) backendVer = cached;
         } catch (_) {}
-
-        const t = (typeof window.t === 'function') ? window.t : (k => null);
-        const buildLabel = (s) => {
-            const tmpl = t('version_label_build') || 'Build {n}';
-            return tmpl.replace('{n}', String(s));
-        };
-        const detailLabel = (b, api) => {
-            const tmpl = t('version_label_detail') || 'Build {n} · API {api}';
-            return tmpl.replace('{n}', String(b)).replace('{api}', String(api));
-        };
-
-        // Paint visible label + title attribute for long-press tooltip.
-        const visible = build ? buildLabel(build) : buildLabel('—');
         const titleStr = (build && backendVer)
-            ? detailLabel(build, backendVer)
-            : visible;
-        btn.textContent = visible;
-        btn.setAttribute('title', titleStr);
-        btn.removeAttribute('hidden');
-        if (legacyRow) {
-            legacyRow.textContent = visible;
-            legacyRow.setAttribute('title', titleStr);
-        }
+            ? `${visible} · Build ${build} · API ${backendVer}`
+            : (build ? `${visible} · Build ${build}` : visible);
+        el.setAttribute('title', titleStr);
+        if (legacyRow) legacyRow.setAttribute('title', titleStr);
 
-        // Click handler: expand inline for 4 s to show API version
-        // + build, then collapse back. One handler per element.
-        if (!btn.dataset.wired) {
-            btn.dataset.wired = '1';
-            let collapseTimer = null;
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                const b = _extractBuildNumber();
-                let api = null;
-                try { api = sessionStorage.getItem('crisp_backend_version'); } catch (_) {}
-                if (b && api) {
-                    btn.textContent = detailLabel(b, api);
-                } else if (b) {
-                    btn.textContent = buildLabel(b) + ' · API …';
-                }
-                if (collapseTimer) clearTimeout(collapseTimer);
-                collapseTimer = setTimeout(() => {
-                    const nb = _extractBuildNumber();
-                    btn.textContent = nb ? buildLabel(nb) : buildLabel('—');
-                }, 4000);
-            });
-        }
-
-        // Refresh from /api/v1/health in the background; non-blocking,
-        // fails silent if offline. (Existing HC5 / v251 dev/PROD note
-        // applied — fetch window.API_BASE + /health, which the backend
-        // mirrors under /api/v1/health for nginx-restricted PROD.)
+        // Background refresh of the backend version from /api/v1/health
+        // so the long-press tooltip carries the latest pairing on
+        // subsequent paints. Non-blocking; fails silent if offline.
         if (!backendVer) {
             try {
                 // HC27 — require window.API_BASE (head-IIFE in
@@ -2097,12 +2082,13 @@
                     if (body && typeof body.version === 'string' && body.version) {
                         try { sessionStorage.setItem('crisp_backend_version', body.version); } catch (_) {}
                         if (build) {
-                            btn.setAttribute('title', detailLabel(build, body.version));
-                            if (legacyRow) legacyRow.setAttribute('title', detailLabel(build, body.version));
+                            const fullTitle = `${visible} · Build ${build} · API ${body.version}`;
+                            el.setAttribute('title', fullTitle);
+                            if (legacyRow) legacyRow.setAttribute('title', fullTitle);
                         }
                     }
                 }
-            } catch (_) { /* offline — keep title at "Build N" only */ }
+            } catch (_) { /* offline — keep the Build-only title */ }
         }
     }
 

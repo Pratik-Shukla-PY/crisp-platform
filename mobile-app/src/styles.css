@@ -5883,18 +5883,19 @@ body.tier-t4 .home-impact {
     font-size: 11px;
 }
 .home-utility-link {
-    /* Apple HIG / WCAG 2.5.5: 44×44 minimum tap target. The visible
-       text stays small; min-height + horizontal padding handle the
-       hit area without disturbing the footer's compact density.
-       HC22 (May 2026, operator presbyopia bump) — font-size 11 →
-       13 px (--fz-sm), color text-dim → text-sub for higher
-       contrast against the navy background (~5.8:1 vs the prior
-       ~4.4:1). Still well within the no-scroll budget. */
+    /* HC22 / HC37 — 13 px text, text-sub colour (~5.8:1 contrast on
+       navy). HC37 (Safari PWA fit pass) — min-height 44 → 36 px and
+       min-width 44 → 36 px to recover ~8 px on iPhone SE Safari
+       where total stage height was over-budget. 36 px still clears
+       WCAG 2.5.8 Minimum (24 px) and Apple HIG's effective
+       reach-zone target for inline text nav. Privacy / Help / Open
+       Source are tap-rare; the strict 44 px floor matters more for
+       primary actions (CTA, Login, My Reports — those stay 48+). */
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 44px;
-    min-width: 44px;
+    min-height: 36px;
+    min-width: 36px;
     background: transparent;
     border: 0;
     padding: 4px 10px;
@@ -10220,20 +10221,24 @@ body.tier-t4 .home-impact {
     /* Visual anchor. Bigger than anything else on the page. Gradient
        + soft drop-shadow + small inner highlight. No top/bottom
        margins — flex parent handles spacing.
-       HC35 (May 23, operator) — bumped padding / min-height /
-       border-radius / row gap by ~30 % so the CTA reads even more
-       dominant. Deletion of the "Always Working. Everywhere." helper
-       (HC35) recovers ~24 px so the no-scroll budget on iPhone SE
-       (627 px usable) absorbs the net +10-20 px gain. */
+       HC35 → HC37 (May 23, Safari PWA fit pass) — HC35 bumped the
+       CTA ~30 % which fit fine in Playwright iPhone 14 (844 px
+       viewport) but overflowed on real Safari iPhone SE PWA mode
+       (~553 px usable after URL bar + home indicator + safe-area).
+       HC37 trims back: padding clamp ceiling 36 → 30 px, min-height
+       clamp ceiling 176 → 150 px, vh-based middle stop 21 → 17 so
+       short viewports cap earlier. Net: ~16-26 px recovered on
+       iPhone SE Safari, CTA stays visibly dominant (still ~150 px
+       tall vs ~96 px pre-HC35). */
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
-    padding: clamp(23px, 5.2vh, 36px) 30px;
-    min-height: clamp(125px, 21vh, 176px);
-    border-radius: clamp(20px, 3.2vw, 26px);
+    padding: clamp(20px, 4.2vh, 30px) 28px;
+    min-height: clamp(118px, 17vh, 150px);
+    border-radius: clamp(18px, 3vw, 24px);
     background: linear-gradient(135deg, #46DFB1 0%, #09D1C7 100%);
     color: #062b1b;
     border: 0;
@@ -11154,30 +11159,62 @@ body.tier-t4 .home-impact {
    Privacy/Help/Open-source + CRISP-ID footer row + Add to Homescreen
    button. Operator can confirm PWA build + backend pairing without
    opening DevTools. */
-/* HC25 (May 2026) — the previous .home-footer-utility-row +
-   .home-version-row pair was removed. The version label now lives
-   INSIDE the .home-utility-footer nav as a 4th utility item
-   ("Build 259"), styled like the Privacy/Help/Open-source links
-   but slightly muted so it reads as metadata, not navigation.
-   See .home-utility-version below + the HC25 markup change in
-   index.html. */
-.home-utility-version {
-    /* Inherits .home-utility-link layout (it carries that class too)
-       — min-height 44 px for tap-target, font-size --fz-sm (13 px,
-       HC22 readability), 4/10 padding. Visual treatment differs:
-       slightly muted color + tabular-nums so "Build 259" digits
-       stay aligned through state changes. */
-    color: var(--text-dim, #94a3b8);
+/* HC25 → HC36 (May 23, 2026) — operator shifted the version label
+   from the in-nav "Build N" chip back to a dedicated bottom row,
+   reading as the operator-preferred "CRISP vX.Y.Z" semver label.
+   The new container .home-footer-meta sits directly under the
+   Privacy/Help/Open-source nav: version on the inline-start edge,
+   Add-to-Homescreen amber chip on the inline-end edge, wrapping
+   gracefully on narrow viewports.
+   The element id #home-utility-version is preserved across the
+   markup change so the painter + back-compat selectors continue
+   to resolve. */
+.home-footer-meta {
+    /* HC37 — margin-top 8 → 4 px, min-height 36 → 32 px to recover
+       ~8 px on Safari iPhone SE PWA mode where the URL bar +
+       safe-area-inset-bottom (home indicator) reduce the usable
+       viewport by ~50 px vs Chrome/Playwright. The row still has a
+       comfortable 32 px tap height. */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    margin: 4px 0 0;
+    padding: 0 4px;
+    min-height: 32px;
+}
+.home-footer-meta > * { margin: 0; }
+
+.home-footer-version {
+    /* HC36 — static text, not a button. tabular-nums keeps "v2.6.6"
+       digits aligned through paint cycles. Color + size match the
+       HC22 presbyopia floor (13 px / --fz-sm, ~5.5:1 contrast on
+       navy). letter-spacing slight so "CRISP" reads as branded. */
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: var(--fz-sm, 13px);
     font-weight: 500;
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.01em;
-    cursor: pointer;
+    letter-spacing: 0.02em;
+    color: var(--text-dim, #94a3b8);
+    line-height: 1.3;
+    white-space: nowrap;
+    flex: 0 0 auto;
+    cursor: default;
 }
-.home-utility-version:hover { color: var(--text-sub, #cbd5e1); }
-.home-utility-version:focus-visible {
-    outline: 2px solid rgba(9, 209, 199, 0.55);
-    outline-offset: 2px;
-    border-radius: 6px;
+.home-footer-version[hidden] { display: none; }
+
+/* Legacy alias — kept inert in case any back-compat selector still
+   references the in-nav button class. HC36 markup uses
+   .home-footer-version; this rule now only zeros any inherited
+   .home-utility-link padding if the legacy class accidentally still
+   resolves. */
+.home-utility-version {
+    color: var(--text-dim, #94a3b8);
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
 }
 .home-utility-version[hidden] { display: none; }
 
