@@ -293,6 +293,58 @@ button:not(.no-press-feedback):active {
     transform: scale(0.97);
     transition: transform var(--motion-press, 120ms) var(--easing-out, ease-out);
 }
+
+/* AUDIT 2026-05-23 (HC9 humanitarian-grade home) — skeleton loader.
+   Used for surfaces that need to communicate "loading, not broken"
+   on slow networks / cold IDB reads / SW warm-up. Single class +
+   shimmer animation; reduced-motion variant falls back to a static
+   surface tint (no movement). */
+.crisp-skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--surface, #1a3552) 0%,
+        var(--surface2, #234060) 50%,
+        var(--surface, #1a3552) 100%
+    );
+    background-size: 200% 100%;
+    animation: crisp-shimmer var(--motion-shimmer, 1400ms) linear infinite;
+    border-radius: 8px;
+    color: transparent;
+    user-select: none;
+    pointer-events: none;
+}
+@keyframes crisp-shimmer {
+    0%   { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .crisp-skeleton {
+        animation: none;
+        background: var(--surface2, #234060);
+    }
+}
+
+/* AUDIT 2026-05-23 (HC10) — timeout-fallback retry footer. Surfaces
+   under the Nearby empty state when a fetch hasn't resolved within
+   the deterministic window. Tappable to re-poll. */
+.home-nearby-retry {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px auto 0;
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px dashed var(--border, rgba(70, 223, 177, 0.18));
+    border-radius: 999px;
+    color: var(--text-dim, #94a3b8);
+    font-size: var(--fz-xs, 12px);
+    font-weight: 600;
+    cursor: pointer;
+}
+.home-nearby-retry:hover {
+    color: var(--accent, #09D1C7);
+    border-color: rgba(9, 209, 199, 0.45);
+}
 body { background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: var(--font); transition: background 0.3s, color 0.3s; overflow-x: hidden; }
 
 /* ── Mobile shell ───────────────────────────────────────────── */
