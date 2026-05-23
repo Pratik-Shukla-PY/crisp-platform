@@ -6090,8 +6090,15 @@ body.tier-t4 .home-impact {
     /* May 2026 (fit-in-viewport pass v2) — gap dropped to 8 px on
        the shortest viewports (iPhone SE 667 / desktop 720) so the
        3 × 2 channels grid fits with the rest of the stage. Larger
-       viewports get bumped via the media queries below. */
-    padding: 16px 20px 12px;
+       viewports get bumped via the media queries below.
+       HC38 (May 23, operator) — was `16px 20px 12px` (4 px less at
+       the bottom), which left the brand row higher than the install
+       button was low and made the layout feel top-heavy. Symmetric
+       14 px vertical padding (down 2 from top, up 2 from bottom)
+       keeps the same total fit budget while balancing the breathing
+       space at both ends. The other media queries below were
+       similarly normalised. */
+    padding: 14px 20px;
     gap: 8px;
     align-items: stretch;
     justify-content: flex-start;
@@ -6119,19 +6126,23 @@ body.tier-t4 .home-impact {
    genuinely taller phones get bumped gaps. */
 @media (min-height: 740px) {
     .home-stage .home-center {
-        padding: 16px 20px 14px;
+        /* HC38 — was 16/20/14, now symmetric 15. */
+        padding: 15px 20px;
         gap: 10px;
     }
 }
 @media (min-height: 820px) {
     .home-stage .home-center {
-        padding: 16px 20px 16px;
+        /* HC38 — already symmetric (16/20/16); written as the
+           two-value shorthand for parity with the other tiers. */
+        padding: 16px 20px;
         gap: 12px;
     }
 }
 @media (min-height: 920px) {
     .home-stage .home-center {
-        padding: 16px 20px 18px;
+        /* HC38 — was 16/20/18, now symmetric 17. */
+        padding: 17px 20px;
         gap: 14px;
     }
 }
@@ -10036,7 +10047,10 @@ body.tier-t4 .home-impact {
        overflow: hidden was silently clipping channel tiles on
        iPhone 5S / older Galaxy (<600 dp tall). */
     min-height: 100dvh;
-    padding: 16px 20px 12px;
+    /* HC38 (May 23, operator) — was `16px 20px 12px` (4 px less at
+       the bottom). Now symmetric 14 px vertical so the brand row
+       and the install row sit at the same inset from each edge. */
+    padding: 14px 20px;
     gap: 0;                          /* sections own their own margins */
     /* (May 2026 — Fix-P4) — graceful scroll on short viewports
        instead of silent clip. Tall viewports (≥740 dp) never see
@@ -10084,15 +10098,18 @@ body.tier-t4 .home-impact {
    height. Operator: "Horizontal alignment between elements feels
    inconsistent." */
 @media (min-height: 740px) {
-    .home-stage .home-center { padding: 18px 20px 14px; gap: 0; }
+    /* HC38 — was 18/20/14 → symmetric 16. */
+    .home-stage .home-center { padding: 16px 20px; gap: 0; }
     .home-stage .home-section-hero { gap: clamp(12px, 2.5vh, 22px); }
 }
 @media (min-height: 820px) {
-    .home-stage .home-center { padding: 22px 20px 16px; }
+    /* HC38 — was 22/20/16 → symmetric 19. */
+    .home-stage .home-center { padding: 19px 20px; }
     .home-stage .home-section-hero { gap: clamp(14px, 3vh, 26px); }
 }
 @media (min-height: 920px) {
-    .home-stage .home-center { padding: 26px 20px 18px; }
+    /* HC38 — was 26/20/18 → symmetric 22. */
+    .home-stage .home-center { padding: 22px 20px; }
 }
 
 /* ── B. Brand row — minimal, aligned to lang pill ────────────────── */
