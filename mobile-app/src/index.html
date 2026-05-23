@@ -17,6 +17,114 @@
          submit button under the keyboard. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <title>CRISP | Report Incident</title>
+    <!-- AUDIT 2026-05-23 (UI:UX Improvements/I18N-INIT-AUDIT-2026-05-23.md) —
+         Synchronous boot-language resolver. Runs as the FIRST script in
+         <head> so it sets <html lang> + <html dir> + window.__crispBootLang
+         BEFORE any other script reads navigator.language and BEFORE the
+         body parses (so screen readers + bidi + font-fallback all use the
+         right locale from frame 0).
+
+         Resolution order mirrors app.js (CLAUDE.md "Language policy"):
+           1. localStorage.crisp_lang_manual          — explicit user pick
+           2. localStorage.crisp_loc_ctx.lang         — last GPS/IP cache
+           3. navigator.language(s)[0]                — browser locale
+           4. 'en'                                    — last-resort default
+
+         Fail-safe guarantees:
+           - Every step wrapped in try/catch; never throws.
+           - Unsupported locale codes route to family-fallback or 'en'.
+           - Never blocks app startup — if everything fails we land on 'en'.
+
+         Output exposed to the body-time walker (after #stage-home) +
+         app.js boot path:
+           window.__crispBootLang         — resolved locale code
+           window.__crispI18nMetrics      — boot + walker telemetry (Phase 4) -->
+    <script>
+        (function resolveBootLang() {
+            'use strict';
+            var t0 = (typeof performance !== 'undefined' && performance.now)
+                ? performance.now() : Date.now();
+            window.__crispI18nMetrics = {
+                t0: t0, source: null, lang: null, dir: null, walker: 'pending',
+            };
+
+            var SUPPORTED = [
+                'en','zh','es','ar','fr','ru',
+                'hi','pt','bn','ja','tr','vi','ko','id','ur',
+                'kn','ta','te','ml','gu','mr','pa',
+            ];
+            var RTL = { ar: 1, ur: 1, fa: 1, he: 1 };
+            // Family-fallback subset for non-supported codes that have a
+            // close-enough sibling already in our pack. Mirrors a subset
+            // of LANG_NEIGHBOUR in app.js.
+            var FAMILY = {
+                'it': 'es', 'ro': 'es', 'ca': 'es', 'gl': 'es',
+                'de': 'en', 'nl': 'en', 'sv': 'en', 'no': 'en',
+                'da': 'en', 'fi': 'en',
+                'pl': 'ru', 'cs': 'ru', 'sk': 'ru', 'uk': 'ru',
+                'be': 'ru', 'bg': 'ru', 'sr': 'ru', 'hr': 'ru',
+                'el': 'en', 'he': 'en', 'fa': 'en', 'sq': 'en',
+                'th': 'en', 'ms': 'en', 'tl': 'en',
+                'as': 'hi', 'or': 'hi', 'ne': 'hi', 'si': 'hi', 'sd': 'hi',
+            };
+            function pick(code) {
+                if (!code) return null;
+                code = String(code).toLowerCase();
+                if (SUPPORTED.indexOf(code) >= 0) return code;
+                var base = code.split('-')[0];
+                if (SUPPORTED.indexOf(base) >= 0) return base;
+                var fam = FAMILY[code] || FAMILY[base];
+                return (fam && SUPPORTED.indexOf(fam) >= 0) ? fam : null;
+            }
+
+            var source = 'fallback_en';
+            var lang = null;
+
+            // 1. manual pick
+            try {
+                var m = localStorage.getItem('crisp_lang_manual');
+                if (m) { var p = pick(m); if (p) { lang = p; source = 'manual'; } }
+            } catch (_) {}
+
+            // 2. cached GPS/IP context
+            if (!lang) {
+                try {
+                    var raw = localStorage.getItem('crisp_loc_ctx');
+                    if (raw) {
+                        var ctx = JSON.parse(raw);
+                        if (ctx && ctx.lang) {
+                            var p2 = pick(ctx.lang);
+                            if (p2) { lang = p2; source = 'cached_ctx'; }
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            // 3. browser language
+            if (!lang) {
+                try {
+                    var nav = (navigator.languages && navigator.languages[0])
+                        || navigator.language || 'en';
+                    var p3 = pick(nav);
+                    if (p3) { lang = p3; source = 'browser'; }
+                } catch (_) {}
+            }
+
+            // 4. fallback
+            if (!lang) { lang = 'en'; source = 'fallback_en'; }
+
+            var dir = RTL[lang] ? 'rtl' : 'ltr';
+            try {
+                document.documentElement.setAttribute('lang', lang);
+                document.documentElement.setAttribute('dir', dir);
+            } catch (_) {}
+
+            window.__crispBootLang = lang;
+            window.__crispI18nMetrics.source = source;
+            window.__crispI18nMetrics.lang = lang;
+            window.__crispI18nMetrics.dir = dir;
+        })();
+    </script>
     <!-- Sentry configuration (May 2026 — PWA observability).
          The DSN content is empty in source so Sentry stays inert
          by default. Deploy pipeline patches `content` with the
@@ -2784,6 +2892,132 @@
             </div>
         </div>
     </div>
+
+    <!-- AUDIT 2026-05-23 — Body-time i18n walker. Runs synchronously
+         AFTER #stage-home and #lang-picker-overlay finish parsing (so
+         querySelectorAll finds them) and BEFORE the browser commits
+         FCP on the home stage. Replaces every `data-i18n*` element's
+         textContent / placeholder / aria-label / title with the
+         appropriate value from window.__crispHomeI18nPacks[<bootLang>].
+
+         5-layer fallback chain (NEVER throws, NEVER blanks):
+           1. window.__crispHomeI18nPacks[lang][key]        (target lang)
+           2. window.__crispHomeI18nPacks.en[key]           (EN pack)
+           3. HTML innerText (already English fallback)     (untouched)
+           4. Per-element try/catch — one broken element won't stop the loop
+           5. Outer try/catch — walker crash → HTML innerText fallback
+
+         A 100ms post-DCL watchdog logs telemetry if the walker didn't
+         complete (probably means try/catch swallowed something the user
+         needs to know about). User experience is unaffected because
+         the HTML innerText carries an English fallback. -->
+    <script>
+        (function applyHomeI18nWalker() {
+            'use strict';
+            var metrics = window.__crispI18nMetrics || (window.__crispI18nMetrics = {});
+            var lang = window.__crispBootLang || 'en';
+            var fallbackFired = 0;
+            var packs = (typeof window !== 'undefined' && window.__crispHomeI18nPacks) || null;
+
+            function pickPack(code) {
+                try {
+                    if (!packs || typeof packs !== 'object') return null;
+                    var p = packs[code];
+                    if (!p || typeof p !== 'object') return null;
+                    // Basic integrity probe — we don't recompute sha256
+                    // client-side, just verify the metadata fields exist.
+                    // A missing field = pack was corrupted at build or
+                    // in-transit; safer to fall through to EN.
+                    if (!p.__version || !p.__checksum) return null;
+                    return p;
+                } catch (_) { return null; }
+            }
+
+            function applyEl(el, val) {
+                try {
+                    if (typeof val !== 'string') return;
+                    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                        el.placeholder = val;
+                    } else {
+                        el.textContent = val;
+                    }
+                } catch (_) { /* swallow per-element */ }
+            }
+
+            function walk(pack, enPack, attr, setter) {
+                try {
+                    var els = document.querySelectorAll('[' + attr + ']');
+                    for (var i = 0; i < els.length; i++) {
+                        try {
+                            var key = els[i].getAttribute(attr);
+                            var v = pack[key];
+                            if (typeof v !== 'string' && enPack) {
+                                v = enPack[key];
+                                if (typeof v === 'string') fallbackFired++;
+                            }
+                            if (typeof v === 'string') setter(els[i], v);
+                        } catch (_) {}
+                    }
+                } catch (_) {}
+            }
+
+            try {
+                var pack = pickPack(lang);
+                var enPack = pickPack('en') || {};
+                if (!pack) {
+                    // Layer 2: target pack invalid → use EN pack as the
+                    // primary. This is still a fallback (lang flicker visible
+                    // for non-EN), but better than blanking.
+                    pack = enPack;
+                    metrics.walker = 'fallback_en';
+                } else {
+                    metrics.walker = 'ok';
+                }
+                if (pack && Object.keys(pack).length > 2) {
+                    walk(pack, enPack, 'data-i18n', applyEl);
+                    walk(pack, enPack, 'data-i18n-placeholder', function (el, v) {
+                        try { el.placeholder = v; } catch (_) {}
+                    });
+                    walk(pack, enPack, 'data-i18n-aria-label', function (el, v) {
+                        try { el.setAttribute('aria-label', v); } catch (_) {}
+                    });
+                    walk(pack, enPack, 'data-i18n-title', function (el, v) {
+                        try { el.setAttribute('title', v); } catch (_) {}
+                    });
+                } else {
+                    // Layer 3: no pack at all → HTML innerText fallback.
+                    metrics.walker = 'fallback_html';
+                }
+                metrics.fallbackFired = fallbackFired;
+                metrics.t1 = (typeof performance !== 'undefined' && performance.now)
+                    ? performance.now() : Date.now();
+                metrics.duration = metrics.t1 - (metrics.t0 || 0);
+            } catch (e) {
+                // Layer 5: outer catch. NEVER throw.
+                metrics.walker = 'crashed';
+                metrics.error = String(e && e.message || e);
+            }
+
+            // 100ms post-DCL watchdog. Walker is inline so it normally
+            // finishes during HTML parse (before DCL). If `pending` is
+            // still set 100ms after DCL, something is wrong — log + emit
+            // telemetry. UX is unaffected (HTML innerText is English
+            // fallback).
+            try {
+                document.addEventListener('DOMContentLoaded', function () {
+                    setTimeout(function () {
+                        if (window.__crispI18nMetrics
+                            && window.__crispI18nMetrics.walker === 'pending') {
+                            window.__crispI18nMetrics.walker = 'watchdog';
+                            if (window.console && console.warn) {
+                                console.warn('[crisp-i18n] walker did not complete within 100ms of DCL');
+                            }
+                        }
+                    }, 100);
+                });
+            } catch (_) {}
+        })();
+    </script>
 
     <!-- ══════════════════════════════════════════════════════════════
          UI v4 (May 2026) — 3-page capture flow.
