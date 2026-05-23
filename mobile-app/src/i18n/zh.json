@@ -853,5 +853,10 @@
   "install_benefit_offline": "✓ 离线可用",
   "install_benefit_safe": "✓ 报告安全保存",
   "install_benefit_fast": "✓ 报告更快",
-  "install_thanks": "已安装。报告即时保存。"
+  "install_thanks": "已安装。报告即时保存。",
+  "aria_status_pill": "连接状态",
+  "status_pill_online": "在线",
+  "status_pill_offline": "离线",
+  "status_pill_offline_n": "离线 · {n} 排队中",
+  "status_pill_syncing": "同步 {n}"
 }

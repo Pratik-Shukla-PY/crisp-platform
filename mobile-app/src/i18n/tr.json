@@ -859,5 +859,10 @@
   "install_benefit_offline": "✓ Çevrimdışı çalışır",
   "install_benefit_safe": "✓ Raporlar güvende",
   "install_benefit_fast": "✓ Daha hızlı raporlama",
-  "install_thanks": "Yüklendi. Raporlar anında kaydedilir."
+  "install_thanks": "Yüklendi. Raporlar anında kaydedilir.",
+  "aria_status_pill": "Connection status",
+  "status_pill_online": "Online",
+  "status_pill_offline": "Offline",
+  "status_pill_offline_n": "Offline · {n} queued",
+  "status_pill_syncing": "Syncing {n}"
 }

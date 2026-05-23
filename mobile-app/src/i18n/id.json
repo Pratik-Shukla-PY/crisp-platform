@@ -871,5 +871,10 @@
   "install_benefit_offline": "✓ Bekerja offline",
   "install_benefit_safe": "✓ Laporan aman",
   "install_benefit_fast": "✓ Lapor lebih cepat",
-  "install_thanks": "Terpasang. Laporan tersimpan instan."
+  "install_thanks": "Terpasang. Laporan tersimpan instan.",
+  "aria_status_pill": "Connection status",
+  "status_pill_online": "Online",
+  "status_pill_offline": "Offline",
+  "status_pill_offline_n": "Offline · {n} queued",
+  "status_pill_syncing": "Syncing {n}"
 }

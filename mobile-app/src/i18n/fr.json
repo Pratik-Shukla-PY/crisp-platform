@@ -860,5 +860,10 @@
   "install_benefit_offline": "✓ Fonctionne hors ligne",
   "install_benefit_safe": "✓ Rapports en sécurité",
   "install_benefit_fast": "✓ Signalement rapide",
-  "install_thanks": "Installé. Rapports sauvegardés instantanément."
+  "install_thanks": "Installé. Rapports sauvegardés instantanément.",
+  "aria_status_pill": "État de connexion",
+  "status_pill_online": "En ligne",
+  "status_pill_offline": "Hors ligne",
+  "status_pill_offline_n": "Hors ligne · {n} en file",
+  "status_pill_syncing": "Sync {n}"
 }

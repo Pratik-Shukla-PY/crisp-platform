@@ -856,5 +856,10 @@
   "install_benefit_offline": "✓ ऑफलाइन काम",
   "install_benefit_safe": "✓ अहवाल सुरक्षित",
   "install_benefit_fast": "✓ जलद अहवाल",
-  "install_thanks": "स्थापित. अहवाल लगेच जतन होतात."
+  "install_thanks": "स्थापित. अहवाल लगेच जतन होतात.",
+  "aria_status_pill": "Connection status",
+  "status_pill_online": "Online",
+  "status_pill_offline": "Offline",
+  "status_pill_offline_n": "Offline · {n} queued",
+  "status_pill_syncing": "Syncing {n}"
 }

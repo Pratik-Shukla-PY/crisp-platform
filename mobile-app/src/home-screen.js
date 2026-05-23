@@ -1691,6 +1691,75 @@
         // session so deploys reflect immediately without thrashing the
         // backend.
         try { _paintVersionPill(); } catch (_) {}
+        // HC4: connectivity status pill — paint on boot + wire listeners.
+        try { _paintStatusPill(); _wireStatusPill(); } catch (_) {}
+    }
+
+    // AUDIT 2026-05-23 (HC4) — connectivity status pill painter.
+    // Subtle persistent indicator next to the lang switcher. Reads
+    // navigator.onLine + IDB queue length on demand. Three states:
+    //   online   green dot · "Online"            — happy path
+    //   offline  red dot   · "Offline · N queued" — N from IDB queue
+    //   syncing  amber dot · "Syncing N"          — set by submit pipeline
+    //
+    // Wired to:
+    //   · `online` + `offline` window events
+    //   · `crisp:queue-changed` custom event (dispatched by submit
+    //     pipeline when IDB queue grows/shrinks) — best-effort
+    //   · home-stage entry (this paint call from _renderChannels)
+    async function _paintStatusPill() {
+        const pill = document.getElementById('home-status-pill');
+        const label = document.getElementById('home-status-pill-label');
+        if (!pill || !label) return;
+        const online = navigator.onLine !== false;
+        let queueCount = 0;
+        try {
+            // Best-effort: read the queued-reports IDB store via the
+            // existing window.getAllQueued() helper exposed by app.js
+            // (returns [] when IDB unavailable).
+            if (typeof window.getAllQueued === 'function') {
+                const all = await window.getAllQueued();
+                queueCount = Array.isArray(all) ? all.length : 0;
+            }
+        } catch (_) {}
+        // Resolve i18n strings (defensive — t() may not be wired yet at
+        // boot; falls back to EN literals).
+        const t = (typeof window.t === 'function') ? window.t : (k => null);
+        let state, text;
+        if (!online) {
+            state = 'offline';
+            const tmpl = t('status_pill_offline_n') || 'Offline · {n} queued';
+            text = queueCount > 0
+                ? tmpl.replace('{n}', String(queueCount))
+                : (t('status_pill_offline') || 'Offline');
+        } else if (queueCount > 0) {
+            state = 'syncing';
+            text = (t('status_pill_syncing') || 'Syncing {n}').replace('{n}', String(queueCount));
+        } else {
+            state = 'online';
+            text = t('status_pill_online') || 'Online';
+        }
+        pill.setAttribute('data-state', state);
+        label.textContent = text;
+        pill.removeAttribute('hidden');
+    }
+    function _wireStatusPill() {
+        if (window.__crispStatusPillWired) return;
+        window.__crispStatusPillWired = true;
+        const repaint = () => { try { _paintStatusPill(); } catch (_) {} };
+        try { window.addEventListener('online', repaint); } catch (_) {}
+        try { window.addEventListener('offline', repaint); } catch (_) {}
+        try { document.addEventListener('crisp:queue-changed', repaint); } catch (_) {}
+        try { document.addEventListener('crisp:lang-changed', repaint); } catch (_) {}
+        const pill = document.getElementById('home-status-pill');
+        if (pill) {
+            pill.addEventListener('click', () => {
+                // Minimal feedback: brief re-poll. Could expand to a sheet
+                // in a future commit; for now the visible state IS the
+                // status surface.
+                repaint();
+            });
+        }
     }
 
     // May 21 2026 (audit Item 6) — version visibility.

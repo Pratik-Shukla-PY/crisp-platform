@@ -853,5 +853,10 @@
   "install_benefit_offline": "✓ ഓഫ്‌ലൈൻ പ്രവർത്തനം",
   "install_benefit_safe": "✓ റിപ്പോർട്ടുകൾ സുരക്ഷിതം",
   "install_benefit_fast": "✓ വേഗത്തിലുള്ള റിപ്പോർട്ടിംഗ്",
-  "install_thanks": "ഇൻസ്റ്റാൾ ചെയ്തു. റിപ്പോർട്ടുകൾ തൽക്ഷണം സേവ് ചെയ്യപ്പെടും."
+  "install_thanks": "ഇൻസ്റ്റാൾ ചെയ്തു. റിപ്പോർട്ടുകൾ തൽക്ഷണം സേവ് ചെയ്യപ്പെടും.",
+  "aria_status_pill": "Connection status",
+  "status_pill_online": "Online",
+  "status_pill_offline": "Offline",
+  "status_pill_offline_n": "Offline · {n} queued",
+  "status_pill_syncing": "Syncing {n}"
 }

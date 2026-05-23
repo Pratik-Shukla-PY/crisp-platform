@@ -864,5 +864,10 @@
   "install_benefit_offline": "✓ Funciona offline",
   "install_benefit_safe": "✓ Relatórios seguros",
   "install_benefit_fast": "✓ Relatos rápidos",
-  "install_thanks": "Instalado. Relatórios salvos instantaneamente."
+  "install_thanks": "Instalado. Relatórios salvos instantaneamente.",
+  "aria_status_pill": "Estado da conexão",
+  "status_pill_online": "Online",
+  "status_pill_offline": "Offline",
+  "status_pill_offline_n": "Offline · {n} na fila",
+  "status_pill_syncing": "Sincronizando {n}"
 }

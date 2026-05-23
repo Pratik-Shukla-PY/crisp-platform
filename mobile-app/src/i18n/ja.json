@@ -858,5 +858,10 @@
   "install_benefit_offline": "✓ オフラインで動作",
   "install_benefit_safe": "✓ レポートを安全に保管",
   "install_benefit_fast": "✓ より速い報告",
-  "install_thanks": "インストール済み。レポートは即座に保存されます。"
+  "install_thanks": "インストール済み。レポートは即座に保存されます。",
+  "aria_status_pill": "Connection status",
+  "status_pill_online": "Online",
+  "status_pill_offline": "Offline",
+  "status_pill_offline_n": "Offline · {n} queued",
+  "status_pill_syncing": "Syncing {n}"
 }

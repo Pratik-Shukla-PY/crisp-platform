@@ -859,5 +859,10 @@
   "install_benefit_offline": "✓ Hoạt động ngoại tuyến",
   "install_benefit_safe": "✓ Báo cáo an toàn",
   "install_benefit_fast": "✓ Báo cáo nhanh hơn",
-  "install_thanks": "Đã cài đặt. Báo cáo được lưu ngay lập tức."
+  "install_thanks": "Đã cài đặt. Báo cáo được lưu ngay lập tức.",
+  "aria_status_pill": "Connection status",
+  "status_pill_online": "Online",
+  "status_pill_offline": "Offline",
+  "status_pill_offline_n": "Offline · {n} queued",
+  "status_pill_syncing": "Syncing {n}"
 }

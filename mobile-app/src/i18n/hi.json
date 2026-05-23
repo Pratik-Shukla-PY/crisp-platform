@@ -855,5 +855,10 @@
   "install_benefit_offline": "✓ ऑफ़लाइन काम करता है",
   "install_benefit_safe": "✓ रिपोर्ट सुरक्षित",
   "install_benefit_fast": "✓ तेज़ रिपोर्टिंग",
-  "install_thanks": "इंस्टॉल हो गया। रिपोर्ट तुरंत सहेजी जाती हैं।"
+  "install_thanks": "इंस्टॉल हो गया। रिपोर्ट तुरंत सहेजी जाती हैं।",
+  "aria_status_pill": "कनेक्शन स्थिति",
+  "status_pill_online": "ऑनलाइन",
+  "status_pill_offline": "ऑफ़लाइन",
+  "status_pill_offline_n": "ऑफ़लाइन · {n} कतार में",
+  "status_pill_syncing": "सिंक {n}"
 }

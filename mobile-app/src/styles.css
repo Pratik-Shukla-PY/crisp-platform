@@ -193,6 +193,78 @@ body {
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* AUDIT 2026-05-23 (HC4 humanitarian-grade home) — connectivity status
+   pill. Sits next to the lang switcher in .home-brand-utility. Subtle
+   visual weight (low contrast vs background, small font) so it doesn't
+   dominate the brand row, but tappable for a full status sheet.
+   Hidden by default; home-screen.js unhides + populates on home entry. */
+.home-status-pill {
+    appearance: none;
+    -webkit-appearance: none;
+    display: none;             /* hidden until painter sets data-state */
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+    color: var(--text-sub, #cbd5e1);
+    font-size: var(--fz-xs, 12px);
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    min-height: 32px;
+    -webkit-tap-highlight-color: transparent;
+    transition: background var(--motion-fade, 200ms) var(--easing-linear, linear),
+                color var(--motion-fade, 200ms) var(--easing-linear, linear),
+                border-color var(--motion-fade, 200ms) var(--easing-linear, linear);
+}
+.home-status-pill[data-state] { display: inline-flex; }
+.home-status-pill .hsp-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background: var(--text-dim, #94a3b8);
+    box-shadow: 0 0 0 2px transparent;
+}
+.home-status-pill[data-state="online"] .hsp-dot {
+    background: var(--green, #80EE98);
+    box-shadow: 0 0 6px rgba(128, 238, 152, 0.55);
+}
+.home-status-pill[data-state="syncing"] .hsp-dot {
+    background: var(--warn, #eab308);
+    animation: hsp-pulse 1.4s infinite ease-in-out;
+}
+.home-status-pill[data-state="offline"] {
+    border-color: rgba(255, 138, 138, 0.32);
+    background: rgba(255, 138, 138, 0.08);
+    color: var(--red, #ff8a8a);
+}
+.home-status-pill[data-state="offline"] .hsp-dot {
+    background: var(--red, #ff8a8a);
+}
+@keyframes hsp-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+.home-status-pill:hover { background: rgba(255, 255, 255, 0.07); }
+.home-status-pill:focus-visible {
+    outline: 2px solid rgba(9, 209, 199, 0.55);
+    outline-offset: 2px;
+}
+/* HC4: on iPhone SE / Galaxy small (<400 px) collapse to a dot-only
+   pill — label aria-label still carries the status for screen readers,
+   sighted users get the colored dot. Saves ~50 px in the brand row. */
+@media (max-width: 399px) {
+    .home-status-pill {
+        padding: 6px;
+        min-height: 28px;
+        min-width: 28px;
+    }
+    .home-status-pill .hsp-label { display: none; }
+}
+
 /* AUDIT 2026-05-23 (HC6 humanitarian-grade home) — global motion
    reduction for users with vestibular sensitivity or animation-
    intolerance (Apple HIG / WCAG 2.3.3 / UNDP a11y rubric). When the

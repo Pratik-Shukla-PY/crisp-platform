@@ -849,5 +849,10 @@
   "install_benefit_offline": "✓ يعمل دون اتصال",
   "install_benefit_safe": "✓ التقارير آمنة",
   "install_benefit_fast": "✓ إبلاغ أسرع",
-  "install_thanks": "مُثبَّت. تُحفَظ التقارير فورًا."
+  "install_thanks": "مُثبَّت. تُحفَظ التقارير فورًا.",
+  "aria_status_pill": "حالة الاتصال",
+  "status_pill_online": "متصل",
+  "status_pill_offline": "غير متصل",
+  "status_pill_offline_n": "غير متصل · {n} في الانتظار",
+  "status_pill_syncing": "مزامنة {n}"
 }

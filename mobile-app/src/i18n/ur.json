@@ -856,5 +856,10 @@
   "install_benefit_offline": "✓ آف لائن کام کرتا ہے",
   "install_benefit_safe": "✓ رپورٹس محفوظ",
   "install_benefit_fast": "✓ تیز رپورٹنگ",
-  "install_thanks": "انسٹال ہو گیا۔ رپورٹس فوراً محفوظ ہوتی ہیں۔"
+  "install_thanks": "انسٹال ہو گیا۔ رپورٹس فوراً محفوظ ہوتی ہیں۔",
+  "aria_status_pill": "Connection status",
+  "status_pill_online": "Online",
+  "status_pill_offline": "Offline",
+  "status_pill_offline_n": "Offline · {n} queued",
+  "status_pill_syncing": "Syncing {n}"
 }

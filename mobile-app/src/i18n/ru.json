@@ -856,5 +856,10 @@
   "install_benefit_offline": "✓ Работает офлайн",
   "install_benefit_safe": "✓ Отчёты в безопасности",
   "install_benefit_fast": "✓ Быстрее отчёт",
-  "install_thanks": "Установлено. Отчёты сохраняются мгновенно."
+  "install_thanks": "Установлено. Отчёты сохраняются мгновенно.",
+  "aria_status_pill": "Состояние соединения",
+  "status_pill_online": "Онлайн",
+  "status_pill_offline": "Офлайн",
+  "status_pill_offline_n": "Офлайн · {n} в очереди",
+  "status_pill_syncing": "Синхр. {n}"
 }

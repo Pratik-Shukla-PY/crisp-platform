@@ -856,5 +856,10 @@
   "install_benefit_offline": "✓ ஆஃப்லைனில் வேலை",
   "install_benefit_safe": "✓ அறிக்கைகள் பாதுகாப்பு",
   "install_benefit_fast": "✓ வேகமான அறிக்கை",
-  "install_thanks": "நிறுவப்பட்டது. அறிக்கைகள் உடனடியாக சேமிக்கப்படுகின்றன."
+  "install_thanks": "நிறுவப்பட்டது. அறிக்கைகள் உடனடியாக சேமிக்கப்படுகின்றன.",
+  "aria_status_pill": "Connection status",
+  "status_pill_online": "Online",
+  "status_pill_offline": "Offline",
+  "status_pill_offline_n": "Offline · {n} queued",
+  "status_pill_syncing": "Syncing {n}"
 }

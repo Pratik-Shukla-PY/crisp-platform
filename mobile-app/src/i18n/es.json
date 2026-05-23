@@ -868,5 +868,10 @@
   "install_benefit_offline": "✓ Sin conexión",
   "install_benefit_safe": "✓ Informes seguros",
   "install_benefit_fast": "✓ Informes rápidos",
-  "install_thanks": "Instalado. Informes guardados al instante."
+  "install_thanks": "Instalado. Informes guardados al instante.",
+  "aria_status_pill": "Estado de conexión",
+  "status_pill_online": "En línea",
+  "status_pill_offline": "Sin conexión",
+  "status_pill_offline_n": "Sin conexión · {n} en cola",
+  "status_pill_syncing": "Sincronizando {n}"
 }
