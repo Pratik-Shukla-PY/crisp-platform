@@ -854,5 +854,11 @@
   "settings_reader_mode": "Modo Leitura — texto maior",
   "install_sheet_title": "Adicionar CRISP à tela inicial",
   "install_sheet_sub": "Funciona offline. Salva na hora. Mais rápido.",
-  "install_sheet_note": "CRISP funcionará como qualquer outro app — mesmo offline."
+  "install_sheet_note": "CRISP funcionará como qualquer outro app — mesmo offline.",
+  "aria_home_devid_info": "O que é o meu ID de repórter?",
+  "devid_sheet_title": "Seu ID de repórter",
+  "devid_sheet_point_1": "Apenas você pode ver este código.",
+  "devid_sheet_point_2": "Vincula seus relatórios ao seu telefone — para que nunca sejam perdidos.",
+  "devid_sheet_point_3": "Funciona offline. Mesmo se você reinstalar o app, seus relatórios continuam vinculados.",
+  "devid_sheet_point_4": "Sem nome, sem email, sem número. Apenas um código."
 }

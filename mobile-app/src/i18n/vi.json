@@ -849,5 +849,11 @@
   "settings_reader_mode": "Chế độ Đọc — văn bản lớn hơn",
   "install_sheet_title": "Thêm CRISP vào màn hình chính",
   "install_sheet_sub": "Hoạt động ngoại tuyến. Lưu tức thì. Báo cáo nhanh hơn.",
-  "install_sheet_note": "Sau đó CRISP sẽ hoạt động như mọi ứng dụng khác — kể cả ngoại tuyến."
+  "install_sheet_note": "Sau đó CRISP sẽ hoạt động như mọi ứng dụng khác — kể cả ngoại tuyến.",
+  "aria_home_devid_info": "ID người báo cáo của tôi là gì?",
+  "devid_sheet_title": "ID người báo cáo của bạn",
+  "devid_sheet_point_1": "Chỉ bạn có thể thấy mã này.",
+  "devid_sheet_point_2": "Liên kết báo cáo của bạn với điện thoại — vì vậy chúng không bao giờ bị mất.",
+  "devid_sheet_point_3": "Hoạt động ngoại tuyến. Ngay cả khi bạn cài đặt lại ứng dụng, báo cáo vẫn được liên kết.",
+  "devid_sheet_point_4": "Không tên, không email, không số điện thoại. Chỉ là một mã."
 }

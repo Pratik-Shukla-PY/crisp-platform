@@ -849,5 +849,11 @@
   "settings_reader_mode": "Okuyucu Modu — daha büyük metin",
   "install_sheet_title": "CRISP'i ana ekrana ekle",
   "install_sheet_sub": "Çevrimdışı çalışır. Anında kaydeder. Daha hızlı.",
-  "install_sheet_note": "CRISP daha sonra herhangi bir uygulama gibi çalışır — çevrimdışıyken bile."
+  "install_sheet_note": "CRISP daha sonra herhangi bir uygulama gibi çalışır — çevrimdışıyken bile.",
+  "aria_home_devid_info": "Muhabir kimliğim nedir?",
+  "devid_sheet_title": "Muhabir kimliğiniz",
+  "devid_sheet_point_1": "Bu kodu yalnızca siz görebilirsiniz.",
+  "devid_sheet_point_2": "Raporlarınızı telefonunuza bağlar — böylece asla kaybolmazlar.",
+  "devid_sheet_point_3": "Çevrimdışı çalışır. Uygulamayı yeniden yükleseniz bile raporlarınız bağlı kalır.",
+  "devid_sheet_point_4": "İsim yok, e-posta yok, telefon numarası yok. Sadece bir kod."
 }

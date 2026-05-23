@@ -848,5 +848,11 @@
   "settings_reader_mode": "リーダーモード — 大きな文字",
   "install_sheet_title": "CRISP をホーム画面に追加",
   "install_sheet_sub": "オフラインで動作。即座に保存。素早い報告。",
-  "install_sheet_note": "CRISP は他のアプリと同じように動作します — オフラインでも。"
+  "install_sheet_note": "CRISP は他のアプリと同じように動作します — オフラインでも。",
+  "aria_home_devid_info": "私の報告者 ID とは？",
+  "devid_sheet_title": "あなたの報告者 ID",
+  "devid_sheet_point_1": "このコードはあなただけが見ることができます。",
+  "devid_sheet_point_2": "レポートを電話にリンクします — 失われることはありません。",
+  "devid_sheet_point_3": "オフラインで動作。アプリを再インストールしてもレポートはリンクされたまま。",
+  "devid_sheet_point_4": "名前なし、メールなし、電話番号なし。コードだけ。"
 }

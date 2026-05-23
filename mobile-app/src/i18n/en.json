@@ -824,5 +824,11 @@
   "settings_reader_mode": "Reader Mode — larger text",
   "install_sheet_title": "Add CRISP to your home screen",
   "install_sheet_sub": "Works offline. Reports save instantly. Faster reporting.",
-  "install_sheet_note": "CRISP will then work like any other app — even when offline."
+  "install_sheet_note": "CRISP will then work like any other app — even when offline.",
+  "aria_home_devid_info": "What is my reporter ID?",
+  "devid_sheet_title": "Your reporter ID",
+  "devid_sheet_point_1": "Only you can see this code.",
+  "devid_sheet_point_2": "It links your reports to your phone — so they're never lost.",
+  "devid_sheet_point_3": "Works offline. Even if you reinstall the app, your reports stay linked.",
+  "devid_sheet_point_4": "No name, no email, no phone number. Just a code."
 }

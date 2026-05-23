@@ -849,5 +849,11 @@
   "settings_reader_mode": "리더 모드 — 큰 글자",
   "install_sheet_title": "CRISP를 홈 화면에 추가",
   "install_sheet_sub": "오프라인에서 작동. 즉시 저장. 더 빠른 보고.",
-  "install_sheet_note": "그러면 CRISP는 다른 앱처럼 작동합니다 — 오프라인에서도."
+  "install_sheet_note": "그러면 CRISP는 다른 앱처럼 작동합니다 — 오프라인에서도.",
+  "aria_home_devid_info": "내 신고자 ID는 무엇인가요?",
+  "devid_sheet_title": "귀하의 신고자 ID",
+  "devid_sheet_point_1": "이 코드는 당신만 볼 수 있습니다.",
+  "devid_sheet_point_2": "귀하의 보고서를 전화기에 연결합니다 — 절대 잃어버리지 않습니다.",
+  "devid_sheet_point_3": "오프라인에서 작동합니다. 앱을 재설치해도 보고서는 연결된 상태로 유지됩니다.",
+  "devid_sheet_point_4": "이름도, 이메일도, 전화번호도 없습니다. 단지 코드일 뿐입니다."
 }

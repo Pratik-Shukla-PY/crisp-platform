@@ -843,5 +843,11 @@
   "settings_reader_mode": "阅读模式 — 更大文字",
   "install_sheet_title": "将 CRISP 添加到主屏幕",
   "install_sheet_sub": "离线可用。即时保存。报告更快。",
-  "install_sheet_note": "之后 CRISP 将像任何其他应用一样工作 — 即使在离线状态下。"
+  "install_sheet_note": "之后 CRISP 将像任何其他应用一样工作 — 即使在离线状态下。",
+  "aria_home_devid_info": "我的报告员 ID 是什么？",
+  "devid_sheet_title": "您的报告员 ID",
+  "devid_sheet_point_1": "只有您可以看到此代码。",
+  "devid_sheet_point_2": "它将您的报告与您的手机关联 — 这样它们就永远不会丢失。",
+  "devid_sheet_point_3": "离线工作。即使您重新安装应用，您的报告仍保持关联。",
+  "devid_sheet_point_4": "无姓名、无电子邮件、无电话号码。只是一个代码。"
 }

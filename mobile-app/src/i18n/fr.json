@@ -850,5 +850,11 @@
   "settings_reader_mode": "Mode Lecture — texte plus grand",
   "install_sheet_title": "Ajouter CRISP à l'écran d'accueil",
   "install_sheet_sub": "Fonctionne hors ligne. Signalements instantanés. Plus rapide.",
-  "install_sheet_note": "CRISP fonctionnera alors comme n'importe quelle autre app — même hors ligne."
+  "install_sheet_note": "CRISP fonctionnera alors comme n'importe quelle autre app — même hors ligne.",
+  "aria_home_devid_info": "Qu'est-ce que mon identifiant de rapporteur ?",
+  "devid_sheet_title": "Votre identifiant de rapporteur",
+  "devid_sheet_point_1": "Vous seul pouvez voir ce code.",
+  "devid_sheet_point_2": "Il relie vos rapports à votre téléphone — pour qu'ils ne soient jamais perdus.",
+  "devid_sheet_point_3": "Fonctionne hors ligne. Même si vous réinstallez l'app, vos rapports restent liés.",
+  "devid_sheet_point_4": "Pas de nom, pas d'email, pas de numéro. Juste un code."
 }

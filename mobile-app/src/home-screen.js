@@ -455,6 +455,82 @@
         }
     }
 
+    // AUDIT 2026-05-23 (HC3) — Reporter-ID explainer sheet.
+    // Open / close / copy / Esc / backdrop wiring mirrors the channels
+    // sheet pattern above. The sheet is populated from the canonical
+    // #home-devid-text span which the existing devid painter keeps
+    // up to date.
+    function _openDevidSheet() {
+        const sheet = document.getElementById('home-devid-sheet');
+        if (!sheet) return;
+        // Populate the visible code each time the sheet opens so the
+        // latest painted ID is shown (the painter writes to the hidden
+        // span at boot + on profile updates).
+        const code = document.getElementById('home-devid-text');
+        const display = document.getElementById('home-devid-sheet-code');
+        if (code && display) {
+            display.textContent = (code.textContent || '').trim() || 'CRISP-····-····';
+        }
+        sheet.hidden = false;
+        requestAnimationFrame(() => sheet.classList.add('is-open'));
+        const closeBtn = document.getElementById('home-devid-sheet-close');
+        if (closeBtn) setTimeout(() => { try { closeBtn.focus(); } catch (_) {} }, 60);
+        const trigger = document.getElementById('btn-home-devid-info');
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+    }
+    function _closeDevidSheet() {
+        const sheet = document.getElementById('home-devid-sheet');
+        if (!sheet) return;
+        sheet.classList.remove('is-open');
+        setTimeout(() => { sheet.hidden = true; }, 240);
+        const trigger = document.getElementById('btn-home-devid-info');
+        if (trigger) {
+            trigger.setAttribute('aria-expanded', 'false');
+            try { trigger.focus(); } catch (_) {}
+        }
+    }
+    function _wireDevidSheet() {
+        const sheet = document.getElementById('home-devid-sheet');
+        const trigger = document.getElementById('btn-home-devid-info');
+        if (!sheet || !trigger) return;
+        if (!trigger.dataset.wired) {
+            trigger.addEventListener('click', _openDevidSheet);
+            trigger.dataset.wired = '1';
+        }
+        const backdrop = document.getElementById('home-devid-sheet-backdrop');
+        const closeBtn = document.getElementById('home-devid-sheet-close');
+        const copyBtn  = document.getElementById('home-devid-sheet-copy');
+        if (backdrop && !backdrop.dataset.wired) {
+            backdrop.addEventListener('click', _closeDevidSheet);
+            backdrop.dataset.wired = '1';
+        }
+        if (closeBtn && !closeBtn.dataset.wired) {
+            closeBtn.addEventListener('click', _closeDevidSheet);
+            closeBtn.dataset.wired = '1';
+        }
+        if (copyBtn && !copyBtn.dataset.wired) {
+            copyBtn.addEventListener('click', async () => {
+                const display = document.getElementById('home-devid-sheet-code');
+                const text = (display && display.textContent || '').trim();
+                if (!text || text.indexOf('····') >= 0) return;
+                try {
+                    await navigator.clipboard.writeText(text);
+                    copyBtn.classList.add('is-copied');
+                    setTimeout(() => copyBtn.classList.remove('is-copied'), 1200);
+                } catch (_) { /* clipboard unavailable; degrade silently */ }
+            });
+            copyBtn.dataset.wired = '1';
+        }
+        if (!document.body.dataset.devidEscWired) {
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && sheet.classList.contains('is-open')) {
+                    _closeDevidSheet();
+                }
+            });
+            document.body.dataset.devidEscWired = '1';
+        }
+    }
+
     /**
      * Click-delegation for the rows inside the bottom sheet. Same
      * routing rules as the pre-Phase-5.1 _wireChannelTelemetry but
@@ -512,6 +588,9 @@
     function _renderChannels() {
         _renderChannelsStrip();
         _wireChannelsSheet();
+        // AUDIT 2026-05-23 (HC3) — wire the Reporter-ID sheet on the same
+        // boot tick. Idempotent; safe to call multiple times.
+        _wireDevidSheet();
         // #home-apps is the legacy 2nd-row container; remains hidden.
         const appsEl = document.getElementById('home-apps');
         if (appsEl) appsEl.innerHTML = '';

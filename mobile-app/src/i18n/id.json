@@ -861,5 +861,11 @@
   "settings_reader_mode": "Mode Pembaca — teks lebih besar",
   "install_sheet_title": "Tambahkan CRISP ke layar utama",
   "install_sheet_sub": "Bekerja offline. Simpan instan. Lapor lebih cepat.",
-  "install_sheet_note": "CRISP akan bekerja seperti aplikasi lain — bahkan offline."
+  "install_sheet_note": "CRISP akan bekerja seperti aplikasi lain — bahkan offline.",
+  "aria_home_devid_info": "Apa itu ID pelapor saya?",
+  "devid_sheet_title": "ID pelapor Anda",
+  "devid_sheet_point_1": "Hanya Anda yang dapat melihat kode ini.",
+  "devid_sheet_point_2": "Ini menghubungkan laporan Anda ke ponsel Anda — sehingga tidak pernah hilang.",
+  "devid_sheet_point_3": "Bekerja offline. Bahkan jika Anda menginstal ulang aplikasi, laporan Anda tetap terhubung.",
+  "devid_sheet_point_4": "Tanpa nama, tanpa email, tanpa nomor telepon. Hanya sebuah kode."
 }
