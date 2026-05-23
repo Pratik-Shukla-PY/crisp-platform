@@ -151,10 +151,11 @@ test.describe('PWA — home footer v2 redesign', () => {
     // ── Pill ───────────────────────────────────────────────────────────
 
     test('@smoke device-ID surface is an icon button that opens a sheet', async ({ page }) => {
-        // HC3 (humanitarian-grade home, 2026-05-23) — the .home-devid-badge
-        // PILL was replaced by a 48 × 48 key icon button (#btn-home-devid-info)
-        // that opens an explainer bottom sheet. Frees ~32-44 px on iPhone SE.
-        // Test updated to verify the new pattern.
+        // HC3 (May 2026) replaced the .home-devid-badge pill with a
+        // 48 × 48 bordered tile that opened an explainer sheet. HC20
+        // (operator polish, May 23) simplified that tile to a compact
+        // 32 × 32 borderless key glyph that matches the footer-link
+        // aesthetic. The bottom-sheet wiring is unchanged.
         const btn = page.locator('#btn-home-devid-info');
         await expect(btn).toBeVisible();
         const tokens = await btn.evaluate((el) => {
@@ -164,13 +165,16 @@ test.describe('PWA — home footer v2 redesign', () => {
                 height: cs.height,
                 borderRadius: cs.borderRadius,
                 cursor: cs.cursor,
+                borderTopWidth: cs.borderTopWidth,
+                background: cs.backgroundColor,
             };
         });
-        // 48 × 48 touch target (Material / HIG / WCAG 2.5.5).
-        expect(parseFloat(tokens.width)).toBeGreaterThanOrEqual(48);
-        expect(parseFloat(tokens.height)).toBeGreaterThanOrEqual(48);
-        // Rounded square (not full capsule).
-        expect(parseInt(tokens.borderRadius, 10)).toBeGreaterThanOrEqual(8);
+        // Compact target — at least 32 × 32 (clears WCAG 2.5.8 Minimum
+        // at 24 px, comfortable for a tertiary utility action).
+        expect(parseFloat(tokens.width)).toBeGreaterThanOrEqual(32);
+        expect(parseFloat(tokens.height)).toBeGreaterThanOrEqual(32);
+        // No heavy chrome — HC20 stripped the bordered tile look.
+        expect(tokens.borderTopWidth).toBe('0px');
         // Tappable.
         expect(tokens.cursor).toBe('pointer');
 

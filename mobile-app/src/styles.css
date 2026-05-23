@@ -5800,7 +5800,11 @@ body.tier-t4 .home-impact {
 .home-utility-link {
     /* Apple HIG / WCAG 2.5.5: 44×44 minimum tap target. The visible
        text stays small; min-height + horizontal padding handle the
-       hit area without disturbing the footer's compact density. */
+       hit area without disturbing the footer's compact density.
+       HC22 (May 2026, operator presbyopia bump) — font-size 11 →
+       13 px (--fz-sm), color text-dim → text-sub for higher
+       contrast against the navy background (~5.8:1 vs the prior
+       ~4.4:1). Still well within the no-scroll budget. */
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -5809,15 +5813,21 @@ body.tier-t4 .home-impact {
     background: transparent;
     border: 0;
     padding: 4px 10px;
-    color: var(--text-dim, var(--muted));
-    font-size: 11px;
+    color: var(--text-sub, #cbd5e1);
+    font-size: var(--fz-sm, 13px);
     font-weight: 600;
     cursor: pointer;
     text-decoration: none;
     transition: color 0.15s ease;
 }
 .home-utility-link:hover { color: var(--text, #f1f5f9); }
-.home-utility-dot { color: var(--text-mute, #64748b); opacity: 0.6; }
+/* HC22 — separator dot opacity 0.6 → 0.85, font-size aligned with
+   the links so the dot doesn't look orphaned at the new size. */
+.home-utility-dot {
+    color: var(--text-dim, #94a3b8);
+    opacity: 0.85;
+    font-size: var(--fz-sm, 13px);
+}
 .home-utility-version {
     font-family: 'SFMono-Regular', Consolas, monospace;
     font-size: 10.5px;
@@ -5913,11 +5923,22 @@ body.tier-t4 .home-impact {
     /* v6.6 (May 2026) — PERMANENT alignment fix. The lang-switcher
        is now a flex child of this row (see index.html). align-items:
        center puts the logo + wordmark + lang pill on the same
-       baseline structurally; no pixel math required. The pre-v6.6
-       padding-right:110px clearance for the absolute pill is GONE —
-       the pill is now in-flow and takes its own space. */
+       baseline structurally; no pixel math required.
+
+       HC19 (May 2026, operator) — explicit `justify-content:
+       space-between` replaces the previous reliance on
+       `margin-left: auto` (utility) + `flex: 1` (brand). The old
+       combo had the brand cluster expand to fill all available
+       width which (a) drew the HC16 hover background across the
+       empty gap, making the button feel like it extended past the
+       wordmark, and (b) gave inconsistent visual right-alignment
+       when the brand text wrapped at narrow widths. With
+       space-between, the brand snaps to its content width on the
+       left, the utility cluster anchors hard to the right edge,
+       and any remaining viewport room is the gap between them. */
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 10px;
     width: 100%;
     box-sizing: border-box;
@@ -5940,7 +5961,12 @@ body.tier-t4 .home-impact {
     margin-inline-start: 0;
     margin-right: auto;
 }
-.home-brand { flex: 1; min-width: 0; }
+/* HC19 — was `flex: 1` which expanded the brand cluster across the
+   row and made the HC16 hover background span the empty gap toward
+   the utility cluster. With space-between on the parent, brand sizes
+   to content only; the empty gap becomes the natural breathing
+   space between the wordmark and the utility cluster. */
+.home-brand { flex: 0 1 auto; min-width: 0; }
 [dir="rtl"] .home-brand-actions { margin-left: 0; margin-right: auto; }
 
 /* Smaller visual circle, same 44 × 44 tap target.
@@ -6320,16 +6346,20 @@ body.tier-t4 .home-impact {
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     gap: 5px;
 }
+/* HC22 — was 10.5 px / 11 px which the operator flagged as
+   unreadable for presbyopic users. Floor is now 13 px (--fz-sm)
+   across all viewport heights so the trust links + separators
+   stay legible. */
 .home-utility-footer .home-utility-link,
 .home-utility-footer .home-utility-version,
 .home-utility-footer .home-utility-dot {
-    font-size: 10.5px;
+    font-size: var(--fz-sm, 13px);
 }
 @media (min-height: 700px) {
     .home-utility-footer { padding-top: 14px; gap: 6px; }
     .home-utility-footer .home-utility-link,
     .home-utility-footer .home-utility-version,
-    .home-utility-footer .home-utility-dot { font-size: 11px; }
+    .home-utility-footer .home-utility-dot { font-size: var(--fz-sm, 13px); }
 }
 
 /* ── Reporter-ID footer block — May 2026 ──────────────────────────
@@ -10510,38 +10540,43 @@ body.tier-t4 .home-impact {
     justify-content: center;
 }
 
-/* AUDIT 2026-05-23 (HC3) — collapsed Reporter-ID row into a single
-   icon button. 48 × 48 px tap target with a 20 px inner glyph so it
-   meets WCAG 2.5.5 + Material/HIG touch-target spec without screaming
-   for attention. */
+/* AUDIT 2026-05-23 (HC3 → HC20) — Reporter-ID icon button. HC3
+   shipped a 48 × 48 bordered tile that felt over-padded next to
+   the slim footer links. HC20 (operator polish) strips the
+   border, drops the explicit background, slims the button to
+   32 × 32, and switches the glyph to solid white so it reads as
+   a clean utility affordance — same visual weight class as the
+   footer trust links. Touch target stays comfortable (32 px
+   clears WCAG 2.5.8 Minimum @ 24 px); the in-flow padding
+   provided by the parent .home-devid-footer keeps thumbs from
+   colliding with adjacent links. */
 .home-stage .home-devid-icon {
     appearance: none;
     -webkit-appearance: none;
     background: transparent;
-    border: 1px solid var(--border, rgba(70, 223, 177, 0.18));
-    border-radius: 12px;
-    color: var(--text-dim, #94a3b8);
-    width: 48px;
-    height: 48px;
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    font-size: 18px;
-    transition: transform 0.12s ease, border-color 0.15s ease,
-                background 0.15s ease, color 0.15s ease;
+    transition: transform 0.12s ease, background 0.15s ease, opacity 0.15s ease;
     -webkit-tap-highlight-color: transparent;
+    opacity: 0.85;
 }
 .home-stage .home-devid-icon:hover {
-    color: var(--accent, #09D1C7);
-    border-color: rgba(9, 209, 199, 0.45);
-    background: rgba(9, 209, 199, 0.06);
+    background: rgba(255, 255, 255, 0.08);
+    opacity: 1;
 }
 .home-stage .home-devid-icon:focus-visible {
     outline: 2px solid rgba(9, 209, 199, 0.55);
     outline-offset: 2px;
 }
-.home-stage .home-devid-icon:active { transform: scale(0.96); }
+.home-stage .home-devid-icon:active { transform: scale(0.94); }
 
 /* AUDIT 2026-05-23 (HC3) — Reporter-ID explainer bottom sheet.
    Mirrors the nearby-sheet visual language; height capped so it
@@ -10953,19 +10988,48 @@ body.tier-t4 .home-impact {
    Privacy/Help/Open-source + CRISP-ID footer row + Add to Homescreen
    button. Operator can confirm PWA build + backend pairing without
    opening DevTools. */
+/* HC21 (May 2026) — single-row utility footer. Install CTA on the
+   inline-start edge, version pill on the inline-end edge. Wraps
+   when content + gap exceed the row width so they stack instead of
+   overlapping on iPhone SE / Galaxy small. HC22 bumps the version
+   text size + contrast for presbyopia readability. */
+.home-footer-utility-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin: 6px 0 0;
+    padding: 0 4px;
+    min-height: 36px;
+}
+.home-footer-utility-row > * { margin: 0; }
+
 .home-version-row {
-    display: block;
-    text-align: center;
-    margin: 8px 0 0;
-    padding: 0 8px;
+    display: inline-block;
+    text-align: end;
+    /* HC22 — was 10.5 px / 75 % opacity / text-mute (~3.0:1 contrast)
+       which the operator flagged as unreadable for presbyopic eyes
+       in glare. Bumped to 13 px / 95 % opacity / text-dim
+       (~5.5:1 contrast — passes WCAG AA for small text). */
     font-family: 'SFMono-Regular', Consolas, monospace;
-    font-size: 10.5px;
-    color: var(--text-mute, var(--muted));
-    opacity: 0.75;
-    word-break: break-all;
-    line-height: 1.4;
+    font-size: var(--fz-sm, 13px);
+    font-weight: 500;
+    color: var(--text-dim, #94a3b8);
+    opacity: 0.95;
+    word-break: keep-all;
+    white-space: nowrap;
+    line-height: 1.3;
+    flex: 0 0 auto;
 }
 .home-version-row[hidden] { display: none; }
+
+/* When the install button hides (standalone mode) or the version
+   is centred alone, keep the row visually balanced — no jarring
+   empty side from justify-content: space-between. */
+.home-footer-utility-row:has(.home-add2hs-btn[hidden]):not(:has(.home-install-thanks:not([hidden]))) {
+    justify-content: center;
+}
 
 /* May 21 2026 (audit Item 6) — REVERSED previous "hide version" rule.
    The version span (.home-utility-version) is now wired by
@@ -11085,8 +11149,12 @@ body.tier-t4 .home-impact {
        row stays single-line on iPhone SE (375 px). */
     .home-stage .home-section-bottom .home-footer-row { gap: 10px; }
     .home-stage .home-section-bottom .home-footer-row .home-utility-footer { gap: 4px; }
-    .home-stage .home-section-bottom .home-footer-row .home-utility-link { font-size: 11.5px; }
-    .home-stage .home-section-bottom .home-footer-row .home-utility-dot { font-size: 11.5px; padding: 0 1px; }
+    /* HC22 — narrow phones keep the presbyopia-friendly 13 px floor;
+       previously dropped to 11.5 px which the operator flagged as
+       unreadable in sunlight. The link min-width 44 + horizontal
+       padding still wraps gracefully on iPhone SE (375 px). */
+    .home-stage .home-section-bottom .home-footer-row .home-utility-link { font-size: var(--fz-sm, 13px); }
+    .home-stage .home-section-bottom .home-footer-row .home-utility-dot { font-size: var(--fz-sm, 13px); padding: 0 1px; }
     .home-stage .home-section-bottom .home-footer-row .home-devid-badge {
         padding: 3px 4px 3px 10px;
         gap: 2px;
