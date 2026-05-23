@@ -5,11 +5,31 @@
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-// May 22 2026 (v252) — Batch B-D of the Forensic Blur Audit.
-// Adds blur-worker.js + blur-worker-pool.js to STATIC_ASSETS for
-// off-main-thread PII blur. Cache bump forces installed PWAs to
-// fetch the new scripts on next service-worker activation.
-const CACHE_NAME = 'crisp-v255';
+// May 23 2026 (v256) — UX audit (Batches 1-4) + i18n sync-resolver.
+// Net change across ~30 commits since v255:
+//   · WCAG AA contrast pass — .nav-btn dark text, --red regrade to
+//     #ff8a8a, .settings-note → --text-dim, .history-empty token swap.
+//     Settings stage: 6 violations → 0.
+//   · 22-locale inline critical-text packs + synchronous head
+//     resolver + body-time walker — eliminates the visible English
+//     flash for every non-EN user (was 170 ms-5 s; now 0 ms).
+//   · Logical properties refactor — 92 sites of left/right + padding/
+//     margin -left/-right converted to inset-inline-* / -inline-* so
+//     AR/UR mirror without manual override.
+//   · RTL: play-arrow + channels-strip mirror, bidi-isolate Latin
+//     location names, html dir from frame 0.
+//   · Font tokens (--fz-xs..--fz-display) + Reader Mode toggle in
+//     Settings — bumps every size step for elderly/presbyopic users.
+//   · Tier-badge retime — hidden for first-timers (gamification only
+//     after first successful submission).
+//   · Tablet layout 640-1024 px — frame + max-width.
+//   · Hide raw coords + IANA timezone on capture (citizens see
+//     human-readable info; tech-mode flag preserves operator demo).
+//   · 8 new regression specs (99-105 + audit_matrix); 17/17 axe a11y;
+//     78 @smoke pass; Lighthouse PWA 100, A11y 98.
+// Cache bump forces every installed PWA to fetch the new shell + new
+// inline 22-locale packs on next service-worker activation.
+const CACHE_NAME = 'crisp-v256';
 // v250 → v251 (May 21 — version-pill /health URL fix). v250 deploy
 // auto-rolled-back when prod-smoke caught a `HTTP 404 /health` on
 // PWA load. Root cause: home-screen.js _paintVersionPill stripped
