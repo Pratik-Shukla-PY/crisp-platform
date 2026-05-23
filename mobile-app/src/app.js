@@ -5013,8 +5013,19 @@ function detectAndSetupLanguage() {
         if (btn) btn.addEventListener('click', () => {
             activateLang(code);
             localStorage.setItem('crisp_lang_manual', code);
+            _recordLangPickerChange();
             _closeLangPicker();
         });
+    }
+
+    // AUDIT 2026-05-23 — telemetry counter for "user picked a different
+    // lang after first paint". Read by device-telemetry.js. Session-
+    // scoped (resets on new session) so we measure per-session friction.
+    function _recordLangPickerChange() {
+        try {
+            const n = parseInt(sessionStorage.getItem('crisp_lang_picker_changes') || '0', 10) || 0;
+            sessionStorage.setItem('crisp_lang_picker_changes', String(n + 1));
+        } catch (_) {}
     }
 
     // Back-compat shim: older code paths call showLocalLangBtn(code, label)
@@ -5114,6 +5125,7 @@ function detectAndSetupLanguage() {
                 // Remember manual choice so subsequent loads skip the
                 // English default and open directly in this locale.
                 try { localStorage.setItem('crisp_lang_manual', code); } catch (_) {}
+                _recordLangPickerChange();
                 _closeLangPicker();
             });
         });
@@ -5125,10 +5137,12 @@ function detectAndSetupLanguage() {
         const code = localBtn.dataset.lang || 'en';
         activateLang(code);
         try { localStorage.setItem('crisp_lang_manual', code); } catch (_) {}
+        _recordLangPickerChange();
     });
     enBtn.addEventListener('click', () => {
         activateLang('en');
         try { localStorage.setItem('crisp_lang_manual', 'en'); } catch (_) {}
+        _recordLangPickerChange();
     });
 
     // ── Restore cached location + language instantly (before any network call) ──

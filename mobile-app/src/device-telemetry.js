@@ -158,6 +158,43 @@
 
         summary.accel_active = await _probeAccel();
         summary.collected_at = new Date().toISOString();
+
+        // AUDIT 2026-05-23 — i18n startup telemetry. Frontend-only (no
+        // backend schema change); dropped into the existing `summary`
+        // payload which the backend stores as-is. Fields are bounded +
+        // contain no PII. Never blocks captureNow if missing — uses
+        // optional-chaining + safe defaults.
+        try {
+            var im = (typeof window !== 'undefined' && window.__crispI18nMetrics) || {};
+            summary.i18n = {
+                source: im.source || null,               // manual | cached_ctx | browser | fallback_en
+                boot_lang: im.lang || null,              // resolved locale code
+                dir: im.dir || null,                     // ltr | rtl
+                walker: im.walker || null,               // ok | fallback_en | fallback_html | crashed | watchdog | pending
+                startup_ms: (typeof im.duration === 'number') ? Math.round(im.duration) : null,
+                fallback_fired: (typeof im.fallbackFired === 'number') ? im.fallbackFired : null,
+                error: im.error || null,                 // short message if walker crashed
+                // Pack version (sha256 prefix of source JSON) — lets the
+                // backend correlate sessions to specific builds.
+                pack_version: (function () {
+                    try {
+                        var packs = window.__crispHomeI18nPacks;
+                        return (packs && packs[im.lang || 'en'] && packs[im.lang || 'en'].__version) || null;
+                    } catch (_) { return null; }
+                })(),
+                // How many times the user opened the lang picker + picked
+                // a different lang this session. Read from a session
+                // counter app.js maintains (see _onLangPickerChange).
+                user_lang_change_count: (function () {
+                    try { return parseInt(sessionStorage.getItem('crisp_lang_picker_changes') || '0', 10) || 0; }
+                    catch (_) { return null; }
+                })(),
+            };
+        } catch (_) {
+            // i18n telemetry capture failure must never block the rest
+            // of the device telemetry payload.
+            summary.i18n = null;
+        }
         return summary;
     }
 
