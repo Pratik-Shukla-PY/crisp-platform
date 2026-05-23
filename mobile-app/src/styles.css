@@ -6667,7 +6667,17 @@ body.tier-t4 .home-impact {
    border ducks under the text — same effect as a real <legend>. */
 .home-channels-card {
     position: relative;
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    /* HC34 (May 23, operator) — transparent fill, thinner border.
+       Was `1px solid rgba(255,255,255,0.10)` paired with the strip's
+       own 1 px border + 2.5 % white fill; that combination read as a
+       heavy double-bordered card with a visible inner tint. Stripped
+       the strip's chrome AND lifted the outer line to a barely-there
+       6 % opacity so the card reads as a quiet outline on the page
+       background, not a filled tile. The 1 px width is the smallest
+       reliably-rendered border across browsers; finer would alias
+       inconsistently on non-Retina displays. */
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 14px;
     /* HC31 — symmetric vertical padding now that the title sits on
        the bottom border instead of the top. Was 14/10/10 (top-heavy
@@ -10447,9 +10457,15 @@ body.tier-t4 .home-impact {
     padding-bottom: 6px;
     padding-inline-start: 10px;
     padding-inline-end: 10px;
+    /* HC34 (May 23, operator) — the strip's own bg + border were
+       doubling up against the HC28 .home-channels-card wrapper's
+       border, giving the card a heavy chrome look. Drop both so the
+       strip is pure layout and the outer card owns the visible
+       border. Border-radius kept for the click ripple / hover
+       feedback footprint. */
     border-radius: 14px;
-    background: rgba(255, 255, 255, 0.025);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: transparent;
+    border: 0;
     min-height: 44px;
     cursor: pointer;
     box-sizing: border-box;
