@@ -532,6 +532,7 @@
   "action_tile_audio": "Audio",
   "home_cta_sub": "Capture · Verify · Help",
   "home_cta_helper": "Always Working. Everywhere.",
+
   "v4_cap_tips_eyebrow": "Helpful tips",
   "v4_cap_tip_photo": "Show what's damaged, blocked, or unsafe",
   "v4_cap_tip_voice": "Voice helps when writing is hard or hands are full",
@@ -861,5 +862,15 @@
   "aria_build_info": "Build info — tap for details",
   "version_label_build": "Build {n}",
   "version_label_detail": "Build {n} · API {api}",
-  "aria_sync_chip": "Sync status — tap for details"
+  "aria_sync_chip": "Sync status — tap for details",
+  "privacy_sheet_title": "Privacy & Safety",
+  "privacy_sheet_point_1": "No personal identity collected. We never ask for your name, email, or phone number.",
+  "privacy_sheet_point_2": "Faces in photos are blurred on your phone before upload — the server never sees raw faces.",
+  "privacy_sheet_point_3": "Your reports are linked only to an anonymous device code that you alone can see.",
+  "privacy_sheet_point_4": "Delete all your data any time from Settings — every report is removed within 24 hours.",
+  "help_sheet_title": "How to use CRISP",
+  "help_sheet_point_1": "Tap \"Report an Incident\" to start. Add a photo and describe what you see.",
+  "help_sheet_point_2": "Reports work offline. They send automatically when you're back online.",
+  "help_sheet_point_3": "Prefer a different channel? Use WhatsApp, Telegram, SMS, or Voice — same report shape.",
+  "help_sheet_point_4": "CRISP is open source. Code at github.com/Pratik-Shukla-PY/crisp-platform"
 }

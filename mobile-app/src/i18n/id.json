@@ -898,5 +898,15 @@
   "aria_build_info": "Info versi — ketuk untuk detail",
   "version_label_build": "Build {n}",
   "version_label_detail": "Build {n} · API {api}",
-  "aria_sync_chip": "Status sinkronisasi — ketuk untuk detail"
+  "aria_sync_chip": "Status sinkronisasi — ketuk untuk detail",
+  "privacy_sheet_title": "Privasi & Keamanan",
+  "privacy_sheet_point_1": "Kami tidak mengumpulkan identitas pribadi. Tidak pernah meminta nama, email, atau telepon Anda.",
+  "privacy_sheet_point_2": "Wajah di foto diburamkan di ponsel Anda sebelum diunggah — server tidak pernah melihat wajah asli.",
+  "privacy_sheet_point_3": "Laporan Anda hanya terhubung ke kode perangkat anonim yang hanya bisa Anda lihat.",
+  "privacy_sheet_point_4": "Hapus semua data kapan saja dari Pengaturan — semua laporan dihapus dalam 24 jam.",
+  "help_sheet_title": "Cara menggunakan CRISP",
+  "help_sheet_point_1": "Ketuk \"Laporkan Insiden\" untuk memulai. Tambahkan foto dan jelaskan yang Anda lihat.",
+  "help_sheet_point_2": "Laporan bekerja offline. Otomatis terkirim saat Anda online kembali.",
+  "help_sheet_point_3": "Suka saluran lain? WhatsApp, Telegram, SMS, atau Suara — format laporan sama.",
+  "help_sheet_point_4": "CRISP open source. Kode di github.com/Pratik-Shukla-PY/crisp-platform"
 }

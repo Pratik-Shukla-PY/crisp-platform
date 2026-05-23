@@ -886,5 +886,15 @@
   "aria_build_info": "Thông tin bản dựng — chạm để xem chi tiết",
   "version_label_build": "Bản dựng {n}",
   "version_label_detail": "Bản dựng {n} · API {api}",
-  "aria_sync_chip": "Trạng thái đồng bộ — chạm để xem chi tiết"
+  "aria_sync_chip": "Trạng thái đồng bộ — chạm để xem chi tiết",
+  "privacy_sheet_title": "Quyền riêng tư & An toàn",
+  "privacy_sheet_point_1": "Chúng tôi không thu thập danh tính cá nhân. Không bao giờ hỏi tên, email hay số điện thoại của bạn.",
+  "privacy_sheet_point_2": "Khuôn mặt trong ảnh được làm mờ trên điện thoại trước khi tải lên — máy chủ không thấy mặt thật.",
+  "privacy_sheet_point_3": "Báo cáo chỉ liên kết với một mã thiết bị ẩn danh mà chỉ bạn thấy được.",
+  "privacy_sheet_point_4": "Xóa toàn bộ dữ liệu bất cứ lúc nào từ Cài đặt — tất cả báo cáo bị xóa trong 24 giờ.",
+  "help_sheet_title": "Cách dùng CRISP",
+  "help_sheet_point_1": "Chạm \"Báo cáo sự cố\" để bắt đầu. Thêm ảnh và mô tả điều bạn thấy.",
+  "help_sheet_point_2": "Báo cáo hoạt động ngoại tuyến. Sẽ tự gửi khi bạn kết nối lại.",
+  "help_sheet_point_3": "Thích kênh khác? WhatsApp, Telegram, SMS hay Thoại — cùng định dạng.",
+  "help_sheet_point_4": "CRISP là mã nguồn mở. Mã tại github.com/Pratik-Shukla-PY/crisp-platform"
 }

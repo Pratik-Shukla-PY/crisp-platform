@@ -886,5 +886,15 @@
   "aria_build_info": "Sürüm bilgisi — ayrıntılar için dokunun",
   "version_label_build": "Sürüm {n}",
   "version_label_detail": "Sürüm {n} · API {api}",
-  "aria_sync_chip": "Eşitleme durumu — ayrıntılar için dokunun"
+  "aria_sync_chip": "Eşitleme durumu — ayrıntılar için dokunun",
+  "privacy_sheet_title": "Gizlilik ve güvenlik",
+  "privacy_sheet_point_1": "Hiçbir kişisel kimlik bilgisi toplamayız. Adınızı, e-postanızı veya telefonunuzu istemeyiz.",
+  "privacy_sheet_point_2": "Fotoğraflardaki yüzler yüklemeden önce telefonunuzda bulanıklaştırılır — sunucu ham yüzü görmez.",
+  "privacy_sheet_point_3": "Raporlarınız yalnızca sadece sizin görebildiğiniz anonim bir cihaz koduna bağlıdır.",
+  "privacy_sheet_point_4": "Tüm verilerinizi istediğiniz an Ayarlar'dan silebilirsiniz — 24 saat içinde kaldırılır.",
+  "help_sheet_title": "CRISP nasıl kullanılır",
+  "help_sheet_point_1": "Başlamak için \"Olay Bildir\"e dokunun. Bir fotoğraf ekleyin ve gördüklerinizi yazın.",
+  "help_sheet_point_2": "Raporlar çevrimdışı çalışır. Tekrar çevrimiçi olduğunuzda otomatik olarak gönderilir.",
+  "help_sheet_point_3": "Başka kanal mı? WhatsApp, Telegram, SMS veya Sesli — aynı format.",
+  "help_sheet_point_4": "CRISP açık kaynak. Kod: github.com/Pratik-Shukla-PY/crisp-platform"
 }

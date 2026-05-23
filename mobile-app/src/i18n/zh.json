@@ -880,5 +880,15 @@
   "aria_build_info": "版本信息 — 点按查看详情",
   "version_label_build": "版本 {n}",
   "version_label_detail": "版本 {n} · API {api}",
-  "aria_sync_chip": "同步状态 — 点按查看详情"
+  "aria_sync_chip": "同步状态 — 点按查看详情",
+  "privacy_sheet_title": "隐私与安全",
+  "privacy_sheet_point_1": "我们不收集任何个人身份信息。永不索取您的姓名、邮箱或电话。",
+  "privacy_sheet_point_2": "照片中的人脸在您的手机上模糊处理后才上传——服务器永远看不到原始人脸。",
+  "privacy_sheet_point_3": "您的报告仅与匿名设备代码关联，只有您能查看。",
+  "privacy_sheet_point_4": "随时在“设置”中删除所有数据 — 所有报告在 24 小时内移除。",
+  "help_sheet_title": "如何使用 CRISP",
+  "help_sheet_point_1": "点击“报告事件”开始。添加一张照片并描述您所见。",
+  "help_sheet_point_2": "报告支持离线使用。重新联网后会自动发送。",
+  "help_sheet_point_3": "更喜欢其他渠道？使用 WhatsApp、Telegram、短信或语音 — 报告格式相同。",
+  "help_sheet_point_4": "CRISP 开源。代码：github.com/Pratik-Shukla-PY/crisp-platform"
 }

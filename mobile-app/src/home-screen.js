@@ -1669,19 +1669,50 @@
     }
 
     // Utility-footer + safety-hint navigation.
+    // HC47 (May 23, operator) — Privacy + Help no longer navigate to
+    // the stage-privacy route. They open in-place bottom-sheet
+    // modals (#home-privacy-sheet / #home-help-sheet) so users
+    // don't lose home-stage context for what should be a quick
+    // reassurance read. The deep-dive stage-privacy stays as the
+    // canonical route reachable from Settings → Privacy & features.
+    function _openInfoSheet(id) {
+        const sheet = document.getElementById(id);
+        if (!sheet) return;
+        sheet.hidden = false;
+        requestAnimationFrame(() => sheet.classList.add('is-open'));
+        const close = sheet.querySelector('.nearby-sheet-close');
+        if (close) setTimeout(() => { try { close.focus(); } catch (_) {} }, 60);
+    }
+    function _closeInfoSheet(id) {
+        const sheet = document.getElementById(id);
+        if (!sheet) return;
+        sheet.classList.remove('is-open');
+        setTimeout(() => { sheet.hidden = true; }, 240);
+    }
+    function _wireInfoSheet(id) {
+        const sheet = document.getElementById(id);
+        if (!sheet || sheet.dataset.wired) return;
+        sheet.dataset.wired = '1';
+        const backdrop = sheet.querySelector('.nearby-sheet-backdrop');
+        const close = sheet.querySelector('.nearby-sheet-close');
+        if (backdrop) backdrop.addEventListener('click', () => _closeInfoSheet(id));
+        if (close) close.addEventListener('click', () => _closeInfoSheet(id));
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && sheet.classList.contains('is-open')) {
+                _closeInfoSheet(id);
+            }
+        });
+    }
     function _wireUtilityFooter() {
         const privacy = document.getElementById('btn-home-privacy');
         const help = document.getElementById('btn-home-help');
         if (privacy) privacy.addEventListener('click', () => {
-            if (typeof window.goToStage === 'function') window.goToStage('stage-privacy');
+            _wireInfoSheet('home-privacy-sheet');
+            _openInfoSheet('home-privacy-sheet');
         });
         if (help) help.addEventListener('click', () => {
-            if (typeof window.goToStage === 'function') window.goToStage('stage-privacy');
-            // Scroll to the "How it works" section after a beat.
-            setTimeout(() => {
-                const t = document.getElementById('privacy-how-it-works');
-                if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 250);
+            _wireInfoSheet('home-help-sheet');
+            _openInfoSheet('home-help-sheet');
         });
         // Settings → Privacy & features button.
         const settingsPrivacy = document.getElementById('btn-settings-privacy');

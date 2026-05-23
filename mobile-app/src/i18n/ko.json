@@ -886,5 +886,15 @@
   "aria_build_info": "빌드 정보 — 자세히 보려면 탭하세요",
   "version_label_build": "빌드 {n}",
   "version_label_detail": "빌드 {n} · API {api}",
-  "aria_sync_chip": "동기화 상태 — 자세히 보려면 탭하세요"
+  "aria_sync_chip": "동기화 상태 — 자세히 보려면 탭하세요",
+  "privacy_sheet_title": "개인정보 및 안전",
+  "privacy_sheet_point_1": "개인 신원 정보를 수집하지 않습니다. 이름·이메일·전화번호를 묻지 않습니다.",
+  "privacy_sheet_point_2": "사진 속 얼굴은 업로드 전 기기에서 흐리게 처리됩니다 — 서버는 원본 얼굴을 보지 않습니다.",
+  "privacy_sheet_point_3": "보고서는 본인만 볼 수 있는 익명 기기 코드에만 연결됩니다.",
+  "privacy_sheet_point_4": "설정에서 언제든 모든 데이터를 삭제할 수 있습니다 — 24시간 이내 제거.",
+  "help_sheet_title": "CRISP 사용 방법",
+  "help_sheet_point_1": "‘사건 신고’를 탭하여 시작하세요. 사진을 추가하고 본 것을 설명하세요.",
+  "help_sheet_point_2": "보고서는 오프라인에서도 작동합니다. 다시 온라인이 되면 자동 전송됩니다.",
+  "help_sheet_point_3": "다른 채널이 좋다면? WhatsApp / Telegram / SMS / 음성 — 형식은 동일합니다.",
+  "help_sheet_point_4": "CRISP는 오픈 소스입니다. 코드: github.com/Pratik-Shukla-PY/crisp-platform"
 }

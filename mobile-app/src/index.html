@@ -177,7 +177,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v269">
+    <meta name="crisp-release" content="crisp-pwa@v273">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -562,9 +562,9 @@
         // any locale JSON. Pre-commit hook gates drift.
         window.__crispHomeI18nPacks = {
   "__meta": {
-    "buildTs": "2026-05-23T14:13:28.148Z",
+    "buildTs": "2026-05-23T15:18:05.403Z",
     "scriptVersion": 2,
-    "keyCount": 70,
+    "keyCount": 79,
     "locales": [
       "en",
       "zh",
@@ -591,8 +591,8 @@
     ]
   },
   "en": {
-    "__version": "52faa875ef11",
-    "__checksum": "d54673bf7b24cf7d",
+    "__version": "e7485ee28721",
+    "__checksum": "b7211b05fc901695",
     "action_tile_download": "Download App",
     "action_tile_login": "Login",
     "add_to_homescreen": "+ Add to Homescreen",
@@ -621,13 +621,17 @@
     "fp_photo": "Photo",
     "fp_send": "Send",
     "fp_what": "What",
+    "help_sheet_point_1": "Tap \"Report an Incident\" to start. Add a photo and describe what you see.",
+    "help_sheet_point_2": "Reports work offline. They send automatically when you're back online.",
+    "help_sheet_point_3": "Prefer a different channel? Use WhatsApp, Telegram, SMS, or Voice — same report shape.",
+    "help_sheet_point_4": "CRISP is open source. Code at github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "How to use CRISP",
     "home_account_settings": "Settings",
     "home_brand_tagline": "Crisis Reporter",
     "home_channels_title": "Other ways to report",
     "home_consent_v2": "I consent to share my report. Faces are blurred on my phone before upload, and reports are linked only to my anonymous ID.",
     "home_cta_primary": "Report an Incident",
     "home_footer_help": "Help",
-    "home_footer_opensrc": "Open source",
     "home_footer_privacy": "Privacy",
     "home_greeting_loggedin": "Welcome back, {name}.",
     "home_greeting_sub": "Tap below to report another incident.",
@@ -649,6 +653,11 @@
     "my_reports": "My Reports",
     "nearby_eyebrow": "NEARBY REPORTS",
     "nearby_sheet_close": "Close",
+    "privacy_sheet_point_1": "No personal identity collected. We never ask for your name, email, or phone number.",
+    "privacy_sheet_point_2": "Faces in photos are blurred on your phone before upload — the server never sees raw faces.",
+    "privacy_sheet_point_3": "Your reports are linked only to an anonymous device code that you alone can see.",
+    "privacy_sheet_point_4": "Delete all your data any time from Settings — every report is removed within 24 hours.",
+    "privacy_sheet_title": "Privacy & Safety",
     "status_sheet_last_sync_label": "Last sync",
     "status_sheet_last_sync_never": "No reports sent yet",
     "status_sheet_queued_label": "Reports waiting to send",
@@ -665,8 +674,8 @@
     "tier_t4_lifekeeper_label": "Lifekeeper"
   },
   "zh": {
-    "__version": "96a8014ebbfa",
-    "__checksum": "e6162408b698f464",
+    "__version": "defa2fde1614",
+    "__checksum": "8a6d723d93866fe8",
     "action_tile_download": "下载应用",
     "action_tile_login": "登录",
     "add_to_homescreen": "+ 添加到主屏幕",
@@ -695,13 +704,17 @@
     "fp_photo": "照片",
     "fp_send": "发送",
     "fp_what": "什么",
+    "help_sheet_point_1": "点击“报告事件”开始。添加一张照片并描述您所见。",
+    "help_sheet_point_2": "报告支持离线使用。重新联网后会自动发送。",
+    "help_sheet_point_3": "更喜欢其他渠道？使用 WhatsApp、Telegram、短信或语音 — 报告格式相同。",
+    "help_sheet_point_4": "CRISP 开源。代码：github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "如何使用 CRISP",
     "home_account_settings": "设置",
     "home_brand_tagline": "危机报告者",
     "home_channels_title": "其他报告方式",
     "home_consent_v2": "我同意分享我的报告。人脸会在上传前在手机上模糊处理，报告只与我的匿名 ID 关联。",
     "home_cta_primary": "报告一起事件",
     "home_footer_help": "帮助",
-    "home_footer_opensrc": "开源",
     "home_footer_privacy": "隐私",
     "home_greeting_loggedin": "{name}，欢迎回来。",
     "home_greeting_sub": "点按下方报告另一起事件。",
@@ -723,6 +736,11 @@
     "my_reports": "我的报告",
     "nearby_eyebrow": "附近报告",
     "nearby_sheet_close": "关闭",
+    "privacy_sheet_point_1": "我们不收集任何个人身份信息。永不索取您的姓名、邮箱或电话。",
+    "privacy_sheet_point_2": "照片中的人脸在您的手机上模糊处理后才上传——服务器永远看不到原始人脸。",
+    "privacy_sheet_point_3": "您的报告仅与匿名设备代码关联，只有您能查看。",
+    "privacy_sheet_point_4": "随时在“设置”中删除所有数据 — 所有报告在 24 小时内移除。",
+    "privacy_sheet_title": "隐私与安全",
     "status_sheet_last_sync_label": "上次同步",
     "status_sheet_last_sync_never": "尚未发送任何报告",
     "status_sheet_queued_label": "待发送的报告",
@@ -739,8 +757,8 @@
     "tier_t4_lifekeeper_label": "生命守护者"
   },
   "es": {
-    "__version": "11840a77847a",
-    "__checksum": "06a4b2f7a1926366",
+    "__version": "23ad50679bc5",
+    "__checksum": "8b7addc36bbf3e07",
     "action_tile_download": "Descargar",
     "action_tile_login": "Acceder",
     "add_to_homescreen": "+ Añadir a Inicio",
@@ -769,13 +787,17 @@
     "fp_photo": "Foto",
     "fp_send": "Enviar",
     "fp_what": "Qué",
+    "help_sheet_point_1": "Toca \"Reportar un incidente\" para empezar. Añade una foto y describe lo que ves.",
+    "help_sheet_point_2": "Los informes funcionan sin conexión. Se envían automáticamente al volver a estar en línea.",
+    "help_sheet_point_3": "¿Prefieres otro canal? Usa WhatsApp, Telegram, SMS o Voz — misma forma de informe.",
+    "help_sheet_point_4": "CRISP es de código abierto. Código en github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "Cómo usar CRISP",
     "home_account_settings": "Ajustes",
     "home_brand_tagline": "Reportero de crisis",
     "home_channels_title": "Otras formas de reportar",
     "home_consent_v2": "Acepto compartir mi reporte. Los rostros se difuminan en mi teléfono antes de subirlos, y los reportes solo se vinculan a mi ID anónimo.",
     "home_cta_primary": "Reportar un incidente",
     "home_footer_help": "Ayuda",
-    "home_footer_opensrc": "Código abierto",
     "home_footer_privacy": "Privacidad",
     "home_greeting_loggedin": "Bienvenido de nuevo, {name}.",
     "home_greeting_sub": "Toca abajo para reportar otro incidente.",
@@ -797,6 +819,11 @@
     "my_reports": "Mis informes",
     "nearby_eyebrow": "INFORMES CERCANOS",
     "nearby_sheet_close": "Cerrar",
+    "privacy_sheet_point_1": "No recopilamos identidad personal. Nunca pedimos tu nombre, correo o teléfono.",
+    "privacy_sheet_point_2": "Los rostros en las fotos se difuminan en tu teléfono antes de subirse — el servidor nunca ve rostros reales.",
+    "privacy_sheet_point_3": "Tus informes se vinculan solo a un código de dispositivo anónimo que solo tú puedes ver.",
+    "privacy_sheet_point_4": "Elimina todos tus datos cuando quieras desde Ajustes — todos los informes se borran en 24 horas.",
+    "privacy_sheet_title": "Privacidad y seguridad",
     "status_sheet_last_sync_label": "Última sincronización",
     "status_sheet_last_sync_never": "Aún no se ha enviado ningún informe",
     "status_sheet_queued_label": "Informes pendientes de envío",
@@ -813,8 +840,8 @@
     "tier_t4_lifekeeper_label": "Guardián de vidas"
   },
   "ar": {
-    "__version": "806c091f4827",
-    "__checksum": "9d5b904bb63e43ce",
+    "__version": "23eaf857f6e9",
+    "__checksum": "46f3e06dab0c601f",
     "action_tile_download": "تنزيل التطبيق",
     "action_tile_login": "تسجيل الدخول",
     "add_to_homescreen": "+ إضافة إلى الشاشة الرئيسية",
@@ -843,13 +870,17 @@
     "fp_photo": "صورة",
     "fp_send": "إرسال",
     "fp_what": "ماذا",
+    "help_sheet_point_1": "اضغط \"الإبلاغ عن حادثة\" للبدء. أضف صورة وصِف ما تراه.",
+    "help_sheet_point_2": "تعمل التقارير دون اتصال. تُرسل تلقائيًا عند عودة الإنترنت.",
+    "help_sheet_point_3": "تفضل قناة أخرى؟ استخدم واتساب أو تيليغرام أو الرسائل أو الصوت — نفس شكل التقرير.",
+    "help_sheet_point_4": "CRISP مفتوح المصدر. الكود على github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "كيفية استخدام CRISP",
     "home_account_settings": "الإعدادات",
     "home_brand_tagline": "مُبلِّغ الأزمات",
     "home_channels_title": "طرق أخرى للإبلاغ",
     "home_consent_v2": "أوافق على مشاركة تقريري. تُموَّه الوجوه على هاتفك قبل الرفع، وترتبط التقارير بمعرّفك المجهول فقط.",
     "home_cta_primary": "أبلِغ عن حادثة",
     "home_footer_help": "المساعدة",
-    "home_footer_opensrc": "مفتوح المصدر",
     "home_footer_privacy": "الخصوصية",
     "home_greeting_loggedin": "مرحبًا بعودتك، {name}.",
     "home_greeting_sub": "اضغط أدناه للإبلاغ عن حادثة أخرى.",
@@ -871,6 +902,11 @@
     "my_reports": "تقاريري",
     "nearby_eyebrow": "تقارير قريبة",
     "nearby_sheet_close": "إغلاق",
+    "privacy_sheet_point_1": "لا نجمع أي هوية شخصية. لا نطلب اسمك أو بريدك أو رقم هاتفك.",
+    "privacy_sheet_point_2": "الوجوه في الصور تُموَّه على هاتفك قبل التحميل — الخادم لا يرى وجوهًا حقيقية.",
+    "privacy_sheet_point_3": "ترتبط تقاريرك فقط برمز جهاز مجهول لا يراه سواك.",
+    "privacy_sheet_point_4": "احذف كل بياناتك في أي وقت من الإعدادات — تُزال كل تقاريرك خلال 24 ساعة.",
+    "privacy_sheet_title": "الخصوصية والأمان",
     "status_sheet_last_sync_label": "آخر مزامنة",
     "status_sheet_last_sync_never": "لم يُرسل أي تقرير بعد",
     "status_sheet_queued_label": "تقارير بانتظار الإرسال",
@@ -887,8 +923,8 @@
     "tier_t4_lifekeeper_label": "حافظ الحياة"
   },
   "fr": {
-    "__version": "71e2e374007d",
-    "__checksum": "919ececd5e69240a",
+    "__version": "8cbccf7ef524",
+    "__checksum": "00bdfa40d590a6c7",
     "action_tile_download": "Télécharger",
     "action_tile_login": "Connexion",
     "add_to_homescreen": "+ Ajouter à l'écran d'accueil",
@@ -917,13 +953,17 @@
     "fp_photo": "Photographie",
     "fp_send": "Envoyer",
     "fp_what": "Quoi",
+    "help_sheet_point_1": "Appuyez sur « Signaler un incident » pour commencer. Ajoutez une photo et décrivez ce que vous voyez.",
+    "help_sheet_point_2": "Les signalements fonctionnent hors ligne. Ils partent automatiquement au retour de la connexion.",
+    "help_sheet_point_3": "Vous préférez un autre canal ? WhatsApp, Telegram, SMS ou Voix — même format.",
+    "help_sheet_point_4": "CRISP est open source. Code sur github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "Comment utiliser CRISP",
     "home_account_settings": "Paramètres",
     "home_brand_tagline": "Rapporteur de crise",
     "home_channels_title": "Autres façons de signaler",
     "home_consent_v2": "J'accepte de partager mon signalement. Les visages sont floutés sur mon téléphone avant l'envoi, et les signalements sont liés uniquement à mon ID anonyme.",
     "home_cta_primary": "Signaler un incident",
     "home_footer_help": "Aide",
-    "home_footer_opensrc": "Code source ouvert",
     "home_footer_privacy": "Confidentialité",
     "home_greeting_loggedin": "Bon retour, {name}.",
     "home_greeting_sub": "Appuyez ci-dessous pour signaler un autre incident.",
@@ -945,6 +985,11 @@
     "my_reports": "Mes rapports",
     "nearby_eyebrow": "SIGNALEMENTS À PROXIMITÉ",
     "nearby_sheet_close": "Fermer",
+    "privacy_sheet_point_1": "Aucune identité personnelle collectée. Nous ne demandons jamais votre nom, e-mail ou téléphone.",
+    "privacy_sheet_point_2": "Les visages sont floutés sur votre téléphone avant l'envoi — le serveur ne voit jamais de visages bruts.",
+    "privacy_sheet_point_3": "Vos signalements ne sont liés qu'à un code d'appareil anonyme que vous seul voyez.",
+    "privacy_sheet_point_4": "Supprimez toutes vos données quand vous voulez depuis Paramètres — tout est effacé sous 24 h.",
+    "privacy_sheet_title": "Confidentialité et sécurité",
     "status_sheet_last_sync_label": "Dernière synchronisation",
     "status_sheet_last_sync_never": "Aucun signalement envoyé",
     "status_sheet_queued_label": "Signalements en attente",
@@ -961,8 +1006,8 @@
     "tier_t4_lifekeeper_label": "Gardien de vies"
   },
   "ru": {
-    "__version": "5448687ac964",
-    "__checksum": "b6a1c5113d03d1e4",
+    "__version": "4fef077741ef",
+    "__checksum": "54cdaa274561d9df",
     "action_tile_download": "Скачать",
     "action_tile_login": "Войти",
     "add_to_homescreen": "+ Добавить на главный экран",
@@ -991,13 +1036,17 @@
     "fp_photo": "Фото",
     "fp_send": "Отправить",
     "fp_what": "Что",
+    "help_sheet_point_1": "Нажмите «Сообщить об инциденте». Добавьте фото и опишите, что видите.",
+    "help_sheet_point_2": "Отчёты работают офлайн. Они отправятся автоматически, когда появится сеть.",
+    "help_sheet_point_3": "Другой канал? WhatsApp, Telegram, SMS или Голос — тот же формат отчёта.",
+    "help_sheet_point_4": "CRISP с открытым кодом. Код на github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "Как пользоваться CRISP",
     "home_account_settings": "Настройки",
     "home_brand_tagline": "Кризисный репортёр",
     "home_channels_title": "Другие способы сообщить",
     "home_consent_v2": "Я согласен поделиться своим отчётом. Лица размываются на моём телефоне до загрузки, а отчёты связаны только с моим анонимным ID.",
     "home_cta_primary": "Сообщить о происшествии",
     "home_footer_help": "Помощь",
-    "home_footer_opensrc": "Открытый код",
     "home_footer_privacy": "Конфиденциальность",
     "home_greeting_loggedin": "С возвращением, {name}.",
     "home_greeting_sub": "Нажмите ниже, чтобы сообщить о другом инциденте.",
@@ -1019,6 +1068,11 @@
     "my_reports": "Мои отчёты",
     "nearby_eyebrow": "СООБЩЕНИЯ РЯДОМ",
     "nearby_sheet_close": "Закрыть",
+    "privacy_sheet_point_1": "Мы не собираем личных данных. Никогда не спрашиваем имя, e-mail или телефон.",
+    "privacy_sheet_point_2": "Лица на фото размываются на вашем телефоне до загрузки — сервер не видит лиц.",
+    "privacy_sheet_point_3": "Ваши отчёты связаны только с анонимным кодом устройства, который видите только вы.",
+    "privacy_sheet_point_4": "Удалите все данные в любой момент через Настройки — отчёты удаляются в течение 24 ч.",
+    "privacy_sheet_title": "Конфиденциальность и безопасность",
     "status_sheet_last_sync_label": "Последняя синхронизация",
     "status_sheet_last_sync_never": "Отчётов ещё не было",
     "status_sheet_queued_label": "Отчётов в очереди",
@@ -1035,8 +1089,8 @@
     "tier_t4_lifekeeper_label": "Хранитель жизней"
   },
   "hi": {
-    "__version": "5241fa0277de",
-    "__checksum": "636a02edf5d18912",
+    "__version": "3f36520d8fb8",
+    "__checksum": "357be74f9db5ffcd",
     "action_tile_download": "ऐप डाउनलोड करें",
     "action_tile_login": "लॉगिन",
     "add_to_homescreen": "+ होम स्क्रीन पर जोड़ें",
@@ -1065,13 +1119,17 @@
     "fp_photo": "फोटो",
     "fp_send": "भेजें",
     "fp_what": "क्या",
+    "help_sheet_point_1": "शुरू करने के लिए \"घटना की रिपोर्ट करें\" टैप करें। फ़ोटो जोड़ें और जो दिखे उसका वर्णन करें।",
+    "help_sheet_point_2": "रिपोर्ट ऑफ़लाइन काम करती है। दोबारा ऑनलाइन होने पर अपने आप भेज दी जाती है।",
+    "help_sheet_point_3": "दूसरा चैनल चाहिए? WhatsApp, Telegram, SMS या वॉइस — फॉर्मेट वही है।",
+    "help_sheet_point_4": "CRISP ओपन सोर्स है। कोड: github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "CRISP कैसे उपयोग करें",
     "home_account_settings": "सेटिंग्स",
     "home_brand_tagline": "संकट रिपोर्टर",
     "home_channels_title": "रिपोर्ट करने के अन्य तरीके",
     "home_consent_v2": "मैं अपनी रिपोर्ट साझा करने के लिए सहमत हूँ। चेहरे अपलोड से पहले मेरे फोन पर धुंधले हो जाते हैं, और रिपोर्टें केवल मेरी गुमनाम ID से जुड़ी होती हैं।",
     "home_cta_primary": "घटना की रिपोर्ट करें",
     "home_footer_help": "सहायता",
-    "home_footer_opensrc": "ओपन सोर्स",
     "home_footer_privacy": "गोपनीयता",
     "home_greeting_loggedin": "वापस स्वागत है, {name}।",
     "home_greeting_sub": "किसी और घटना की रिपोर्ट करने के लिए नीचे टैप करें।",
@@ -1093,6 +1151,11 @@
     "my_reports": "मेरी रिपोर्टें",
     "nearby_eyebrow": "पास के रिपोर्ट",
     "nearby_sheet_close": "बंद करें",
+    "privacy_sheet_point_1": "हम कोई व्यक्तिगत पहचान नहीं लेते। हम कभी आपका नाम, ईमेल या फ़ोन नहीं माँगते।",
+    "privacy_sheet_point_2": "तस्वीरों में चेहरे आपके फ़ोन पर अपलोड से पहले धुंधले हो जाते हैं — सर्वर असली चेहरे नहीं देखता।",
+    "privacy_sheet_point_3": "आपकी रिपोर्ट केवल एक गुमनाम डिवाइस कोड से जुड़ी होती है जिसे केवल आप देख सकते हैं।",
+    "privacy_sheet_point_4": "सेटिंग्स से कभी भी अपना सारा डेटा हटाएं — सब कुछ 24 घंटे में हटा दिया जाता है।",
+    "privacy_sheet_title": "गोपनीयता और सुरक्षा",
     "status_sheet_last_sync_label": "अंतिम सिंक",
     "status_sheet_last_sync_never": "अभी तक कोई रिपोर्ट नहीं भेजी",
     "status_sheet_queued_label": "भेजे जाने वाली रिपोर्ट",
@@ -1109,8 +1172,8 @@
     "tier_t4_lifekeeper_label": "जीवन रक्षक"
   },
   "pt": {
-    "__version": "84cec974b07a",
-    "__checksum": "fa180b3f37816adf",
+    "__version": "7e89a3aafb49",
+    "__checksum": "7e009a122e5c55a7",
     "action_tile_download": "Baixar App",
     "action_tile_login": "Entrar",
     "add_to_homescreen": "+ Adicionar à Tela Inicial",
@@ -1139,13 +1202,17 @@
     "fp_photo": "Foto",
     "fp_send": "Enviar",
     "fp_what": "O quê",
+    "help_sheet_point_1": "Toque em \"Reportar um Incidente\" para começar. Adicione uma foto e descreva o que vê.",
+    "help_sheet_point_2": "Os relatórios funcionam offline. São enviados automaticamente quando você voltar a ficar online.",
+    "help_sheet_point_3": "Prefere outro canal? WhatsApp, Telegram, SMS ou Voz — mesmo formato.",
+    "help_sheet_point_4": "CRISP é open source. Código em github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "Como usar o CRISP",
     "home_account_settings": "Definições",
     "home_brand_tagline": "Reporter de Crise",
     "home_channels_title": "Outras formas de reportar",
     "home_consent_v2": "Aceito partilhar o meu relatório. Os rostos são desfocados no meu telemóvel antes do envio, e os relatórios são associados apenas ao meu ID anónimo.",
     "home_cta_primary": "Reportar um Incidente",
     "home_footer_help": "Ajuda",
-    "home_footer_opensrc": "Código aberto",
     "home_footer_privacy": "Privacidade",
     "home_greeting_loggedin": "Bem-vindo de volta, {name}.",
     "home_greeting_sub": "Toque abaixo para reportar outro incidente.",
@@ -1167,6 +1234,11 @@
     "my_reports": "Os Meus Relatórios",
     "nearby_eyebrow": "RELATOS POR PERTO",
     "nearby_sheet_close": "Fechar",
+    "privacy_sheet_point_1": "Não coletamos identidade pessoal. Nunca pedimos seu nome, e-mail ou telefone.",
+    "privacy_sheet_point_2": "Os rostos nas fotos são desfocados no seu celular antes do envio — o servidor nunca vê rostos reais.",
+    "privacy_sheet_point_3": "Seus relatórios ficam ligados apenas a um código de dispositivo anônimo que só você vê.",
+    "privacy_sheet_point_4": "Apague todos os seus dados a qualquer momento em Configurações — tudo é removido em 24 h.",
+    "privacy_sheet_title": "Privacidade e segurança",
     "status_sheet_last_sync_label": "Última sincronização",
     "status_sheet_last_sync_never": "Nenhum relatório enviado ainda",
     "status_sheet_queued_label": "Relatórios aguardando envio",
@@ -1183,8 +1255,8 @@
     "tier_t4_lifekeeper_label": "Guardião de vidas"
   },
   "bn": {
-    "__version": "562a391273a7",
-    "__checksum": "87319afbda6fa9a2",
+    "__version": "e217e1b0cda3",
+    "__checksum": "903ecdcf427ee4f9",
     "action_tile_download": "অ্যাপ ডাউনলোড",
     "action_tile_login": "লগইন",
     "add_to_homescreen": "+ হোম স্ক্রিনে যোগ করুন",
@@ -1213,13 +1285,17 @@
     "fp_photo": "ছবি",
     "fp_send": "পাঠান",
     "fp_what": "কী",
+    "help_sheet_point_1": "শুরু করতে \"ঘটনার রিপোর্ট করুন\" ট্যাপ করুন। ছবি যুক্ত করুন এবং যা দেখছেন তা লিখুন।",
+    "help_sheet_point_2": "রিপোর্ট অফলাইনে কাজ করে। আপনি অনলাইনে ফিরলে স্বয়ংক্রিয়ভাবে পাঠানো হয়।",
+    "help_sheet_point_3": "অন্য চ্যানেল চান? WhatsApp, Telegram, SMS বা ভয়েস — একই ফরম্যাট।",
+    "help_sheet_point_4": "CRISP ওপেন সোর্স। কোড: github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "CRISP কীভাবে ব্যবহার করবেন",
     "home_account_settings": "সেটিংস",
     "home_brand_tagline": "সংকট রিপোর্টার",
     "home_channels_title": "অন্যান্য রিপোর্টিং উপায়",
     "home_consent_v2": "আমি আমার প্রতিবেদন ভাগ করতে সম্মত। আপলোডের আগে মুখ ফোনে ঝাপসা হয়, এবং প্রতিবেদন কেবল আমার বেনামি ID-র সাথে যুক্ত।",
     "home_cta_primary": "ঘটনা রিপোর্ট করুন",
     "home_footer_help": "সাহায্য",
-    "home_footer_opensrc": "ওপেন সোর্স",
     "home_footer_privacy": "গোপনীয়তা",
     "home_greeting_loggedin": "স্বাগতম ফিরে এসে, {name}।",
     "home_greeting_sub": "আরেকটি ঘটনা রিপোর্ট করতে নীচে ট্যাপ করুন।",
@@ -1241,6 +1317,11 @@
     "my_reports": "আমার প্রতিবেদন",
     "nearby_eyebrow": "কাছাকাছি রিপোর্ট",
     "nearby_sheet_close": "বন্ধ করুন",
+    "privacy_sheet_point_1": "আমরা কোনো ব্যক্তিগত পরিচয় সংগ্রহ করি না। আপনার নাম, ইমেল বা ফোন কখনই চাই না।",
+    "privacy_sheet_point_2": "ছবিতে মুখগুলো আপনার ফোনে ঝাপসা করা হয় তারপরে আপলোড হয় — সার্ভার কখনো আসল মুখ দেখে না।",
+    "privacy_sheet_point_3": "আপনার রিপোর্টগুলি কেবল একটি গুমনাম ডিভাইস কোডে সংযুক্ত যা কেবল আপনি দেখতে পান।",
+    "privacy_sheet_point_4": "সেটিংস থেকে যেকোনো সময় সব ডেটা মুছুন — সব 24 ঘণ্টার মধ্যে মুছে যায়।",
+    "privacy_sheet_title": "গোপনীয়তা ও সুরক্ষা",
     "status_sheet_last_sync_label": "শেষ সিঙ্ক",
     "status_sheet_last_sync_never": "এখনও কোনো রিপোর্ট পাঠানো হয়নি",
     "status_sheet_queued_label": "পাঠানোর অপেক্ষায় রিপোর্ট",
@@ -1257,8 +1338,8 @@
     "tier_t4_lifekeeper_label": "জীবনরক্ষাকারী"
   },
   "ja": {
-    "__version": "3d12be466c17",
-    "__checksum": "961227d2b13e384a",
+    "__version": "73459bdaee60",
+    "__checksum": "c9408b2b469c77b8",
     "action_tile_download": "アプリ取得",
     "action_tile_login": "ログイン",
     "add_to_homescreen": "+ ホーム画面に追加",
@@ -1287,13 +1368,17 @@
     "fp_photo": "写真",
     "fp_send": "送信",
     "fp_what": "何",
+    "help_sheet_point_1": "「インシデントを報告」をタップ。写真を追加して状況を記述してください。",
+    "help_sheet_point_2": "報告はオフラインで動作します。オンラインに戻ると自動送信されます。",
+    "help_sheet_point_3": "別のチャネルがいい？ WhatsApp / Telegram / SMS / 音声でも報告できます。",
+    "help_sheet_point_4": "CRISP はオープンソースです。コード: github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "CRISP の使い方",
     "home_account_settings": "設定",
     "home_brand_tagline": "危機レポーター",
     "home_channels_title": "他の報告方法",
     "home_consent_v2": "報告の共有に同意します。顔はアップロード前に端末上でぼかされ、報告は匿名IDのみと紐付けられます。",
     "home_cta_primary": "事故を報告",
     "home_footer_help": "ヘルプ",
-    "home_footer_opensrc": "オープンソース",
     "home_footer_privacy": "プライバシー",
     "home_greeting_loggedin": "おかえりなさい、{name}さん。",
     "home_greeting_sub": "下をタップして別の事故を報告してください。",
@@ -1315,6 +1400,11 @@
     "my_reports": "マイレポート",
     "nearby_eyebrow": "近隣の報告",
     "nearby_sheet_close": "閉じる",
+    "privacy_sheet_point_1": "個人を特定する情報は収集しません。氏名・メール・電話番号を尋ねることはありません。",
+    "privacy_sheet_point_2": "写真の顔は端末側でぼかしてからアップロードします — サーバーは生の顔を見ません。",
+    "privacy_sheet_point_3": "報告は匿名のデバイスコードにのみ紐づきます。コードはあなただけが確認できます。",
+    "privacy_sheet_point_4": "設定からいつでもすべてのデータを削除できます — 24 時間以内に消去されます。",
+    "privacy_sheet_title": "プライバシーと安全",
     "status_sheet_last_sync_label": "最終同期",
     "status_sheet_last_sync_never": "送信済みの報告はまだありません",
     "status_sheet_queued_label": "送信待ちの報告",
@@ -1331,8 +1421,8 @@
     "tier_t4_lifekeeper_label": "ライフキーパー"
   },
   "tr": {
-    "__version": "03c92686dba8",
-    "__checksum": "e61d833ce096385a",
+    "__version": "895511f43dda",
+    "__checksum": "bc0a77016737595b",
     "action_tile_download": "Uygulamayı İndir",
     "action_tile_login": "Giriş",
     "add_to_homescreen": "+ Ana Ekrana Ekle",
@@ -1361,13 +1451,17 @@
     "fp_photo": "Fotoğraf",
     "fp_send": "Gönder",
     "fp_what": "Ne",
+    "help_sheet_point_1": "Başlamak için \"Olay Bildir\"e dokunun. Bir fotoğraf ekleyin ve gördüklerinizi yazın.",
+    "help_sheet_point_2": "Raporlar çevrimdışı çalışır. Tekrar çevrimiçi olduğunuzda otomatik olarak gönderilir.",
+    "help_sheet_point_3": "Başka kanal mı? WhatsApp, Telegram, SMS veya Sesli — aynı format.",
+    "help_sheet_point_4": "CRISP açık kaynak. Kod: github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "CRISP nasıl kullanılır",
     "home_account_settings": "Ayarlar",
     "home_brand_tagline": "Kriz Bildirici",
     "home_channels_title": "Diğer bildirim yolları",
     "home_consent_v2": "Bildirimi paylaşmayı kabul ediyorum. Yüzler telefonumda yüklemeden önce bulanıklaştırılır ve bildirimler yalnızca anonim kimliğime bağlanır.",
     "home_cta_primary": "Olay Bildir",
     "home_footer_help": "Yardım",
-    "home_footer_opensrc": "Açık kaynak",
     "home_footer_privacy": "Gizlilik",
     "home_greeting_loggedin": "Tekrar hoş geldiniz, {name}.",
     "home_greeting_sub": "Başka bir olay bildirmek için aşağıya dokun.",
@@ -1389,6 +1483,11 @@
     "my_reports": "Bildirimlerim",
     "nearby_eyebrow": "YAKINDAKİ RAPORLAR",
     "nearby_sheet_close": "Kapat",
+    "privacy_sheet_point_1": "Hiçbir kişisel kimlik bilgisi toplamayız. Adınızı, e-postanızı veya telefonunuzu istemeyiz.",
+    "privacy_sheet_point_2": "Fotoğraflardaki yüzler yüklemeden önce telefonunuzda bulanıklaştırılır — sunucu ham yüzü görmez.",
+    "privacy_sheet_point_3": "Raporlarınız yalnızca sadece sizin görebildiğiniz anonim bir cihaz koduna bağlıdır.",
+    "privacy_sheet_point_4": "Tüm verilerinizi istediğiniz an Ayarlar'dan silebilirsiniz — 24 saat içinde kaldırılır.",
+    "privacy_sheet_title": "Gizlilik ve güvenlik",
     "status_sheet_last_sync_label": "Son eşitleme",
     "status_sheet_last_sync_never": "Henüz rapor gönderilmedi",
     "status_sheet_queued_label": "Gönderim bekleyen raporlar",
@@ -1405,8 +1504,8 @@
     "tier_t4_lifekeeper_label": "Hayat koruyucu"
   },
   "vi": {
-    "__version": "8f39fb5b27b9",
-    "__checksum": "b731a128ffe7ff83",
+    "__version": "4e8dd6b89640",
+    "__checksum": "657b7fe443db9bb6",
     "action_tile_download": "Tải Ứng Dụng",
     "action_tile_login": "Đăng nhập",
     "add_to_homescreen": "+ Thêm vào Màn hình chính",
@@ -1435,13 +1534,17 @@
     "fp_photo": "Ảnh",
     "fp_send": "Gửi",
     "fp_what": "Gì",
+    "help_sheet_point_1": "Chạm \"Báo cáo sự cố\" để bắt đầu. Thêm ảnh và mô tả điều bạn thấy.",
+    "help_sheet_point_2": "Báo cáo hoạt động ngoại tuyến. Sẽ tự gửi khi bạn kết nối lại.",
+    "help_sheet_point_3": "Thích kênh khác? WhatsApp, Telegram, SMS hay Thoại — cùng định dạng.",
+    "help_sheet_point_4": "CRISP là mã nguồn mở. Mã tại github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "Cách dùng CRISP",
     "home_account_settings": "Cài đặt",
     "home_brand_tagline": "Người báo cáo khủng hoảng",
     "home_channels_title": "Cách báo cáo khác",
     "home_consent_v2": "Tôi đồng ý chia sẻ báo cáo. Khuôn mặt được làm mờ trên điện thoại trước khi tải lên, và báo cáo chỉ được liên kết với ID ẩn danh của tôi.",
     "home_cta_primary": "Báo cáo sự cố",
     "home_footer_help": "Trợ giúp",
-    "home_footer_opensrc": "Mã nguồn mở",
     "home_footer_privacy": "Quyền riêng tư",
     "home_greeting_loggedin": "Chào mừng trở lại, {name}.",
     "home_greeting_sub": "Chạm bên dưới để báo cáo sự cố khác.",
@@ -1463,6 +1566,11 @@
     "my_reports": "Báo cáo của tôi",
     "nearby_eyebrow": "BÁO CÁO GẦN ĐÂY",
     "nearby_sheet_close": "Đóng",
+    "privacy_sheet_point_1": "Chúng tôi không thu thập danh tính cá nhân. Không bao giờ hỏi tên, email hay số điện thoại của bạn.",
+    "privacy_sheet_point_2": "Khuôn mặt trong ảnh được làm mờ trên điện thoại trước khi tải lên — máy chủ không thấy mặt thật.",
+    "privacy_sheet_point_3": "Báo cáo chỉ liên kết với một mã thiết bị ẩn danh mà chỉ bạn thấy được.",
+    "privacy_sheet_point_4": "Xóa toàn bộ dữ liệu bất cứ lúc nào từ Cài đặt — tất cả báo cáo bị xóa trong 24 giờ.",
+    "privacy_sheet_title": "Quyền riêng tư & An toàn",
     "status_sheet_last_sync_label": "Đồng bộ gần nhất",
     "status_sheet_last_sync_never": "Chưa gửi báo cáo nào",
     "status_sheet_queued_label": "Báo cáo đang chờ gửi",
@@ -1479,8 +1587,8 @@
     "tier_t4_lifekeeper_label": "Người giữ mạng sống"
   },
   "ko": {
-    "__version": "2f99e8bbb154",
-    "__checksum": "c3f5e92a185635ca",
+    "__version": "e40458487d43",
+    "__checksum": "29fe984ba78fe6fc",
     "action_tile_download": "앱 다운로드",
     "action_tile_login": "로그인",
     "add_to_homescreen": "+ 홈 화면에 추가",
@@ -1509,13 +1617,17 @@
     "fp_photo": "사진",
     "fp_send": "전송",
     "fp_what": "무엇",
+    "help_sheet_point_1": "‘사건 신고’를 탭하여 시작하세요. 사진을 추가하고 본 것을 설명하세요.",
+    "help_sheet_point_2": "보고서는 오프라인에서도 작동합니다. 다시 온라인이 되면 자동 전송됩니다.",
+    "help_sheet_point_3": "다른 채널이 좋다면? WhatsApp / Telegram / SMS / 음성 — 형식은 동일합니다.",
+    "help_sheet_point_4": "CRISP는 오픈 소스입니다. 코드: github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "CRISP 사용 방법",
     "home_account_settings": "설정",
     "home_brand_tagline": "위기 신고자",
     "home_channels_title": "다른 신고 방법",
     "home_consent_v2": "내 보고서 공유에 동의합니다. 얼굴은 업로드 전 휴대폰에서 흐리게 처리되며, 보고서는 익명 ID에만 연결됩니다.",
     "home_cta_primary": "사고 신고",
     "home_footer_help": "도움말",
-    "home_footer_opensrc": "오픈소스",
     "home_footer_privacy": "개인정보",
     "home_greeting_loggedin": "다시 오신 것을 환영합니다, {name}님.",
     "home_greeting_sub": "다른 사고를 신고하려면 아래를 탭하세요.",
@@ -1537,6 +1649,11 @@
     "my_reports": "내 보고서",
     "nearby_eyebrow": "주변 보고",
     "nearby_sheet_close": "닫기",
+    "privacy_sheet_point_1": "개인 신원 정보를 수집하지 않습니다. 이름·이메일·전화번호를 묻지 않습니다.",
+    "privacy_sheet_point_2": "사진 속 얼굴은 업로드 전 기기에서 흐리게 처리됩니다 — 서버는 원본 얼굴을 보지 않습니다.",
+    "privacy_sheet_point_3": "보고서는 본인만 볼 수 있는 익명 기기 코드에만 연결됩니다.",
+    "privacy_sheet_point_4": "설정에서 언제든 모든 데이터를 삭제할 수 있습니다 — 24시간 이내 제거.",
+    "privacy_sheet_title": "개인정보 및 안전",
     "status_sheet_last_sync_label": "마지막 동기화",
     "status_sheet_last_sync_never": "아직 보낸 보고서가 없습니다",
     "status_sheet_queued_label": "전송 대기 중인 보고",
@@ -1553,8 +1670,8 @@
     "tier_t4_lifekeeper_label": "라이프키퍼"
   },
   "id": {
-    "__version": "a9c087c7e563",
-    "__checksum": "36d442e7504cd78a",
+    "__version": "56ca8d58a9ac",
+    "__checksum": "3546ff89b5480aaa",
     "action_tile_download": "Unduh Aplikasi",
     "action_tile_login": "Masuk",
     "add_to_homescreen": "+ Tambahkan ke Layar Utama",
@@ -1583,13 +1700,17 @@
     "fp_photo": "Foto",
     "fp_send": "Kirim",
     "fp_what": "Apa",
+    "help_sheet_point_1": "Ketuk \"Laporkan Insiden\" untuk memulai. Tambahkan foto dan jelaskan yang Anda lihat.",
+    "help_sheet_point_2": "Laporan bekerja offline. Otomatis terkirim saat Anda online kembali.",
+    "help_sheet_point_3": "Suka saluran lain? WhatsApp, Telegram, SMS, atau Suara — format laporan sama.",
+    "help_sheet_point_4": "CRISP open source. Kode di github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "Cara menggunakan CRISP",
     "home_account_settings": "Pengaturan",
     "home_brand_tagline": "Pelapor Krisis",
     "home_channels_title": "Cara lain melapor",
     "home_consent_v2": "Saya setuju membagikan laporan saya. Wajah diburamkan di telepon sebelum diunggah, dan laporan hanya tertaut ke ID anonim saya.",
     "home_cta_primary": "Laporkan Insiden",
     "home_footer_help": "Bantuan",
-    "home_footer_opensrc": "Sumber terbuka",
     "home_footer_privacy": "Privasi",
     "home_greeting_loggedin": "Selamat datang kembali, {name}.",
     "home_greeting_sub": "Sentuh di bawah untuk melaporkan insiden lain.",
@@ -1611,6 +1732,11 @@
     "my_reports": "Laporan Saya",
     "nearby_eyebrow": "LAPORAN TERDEKAT",
     "nearby_sheet_close": "Tutup",
+    "privacy_sheet_point_1": "Kami tidak mengumpulkan identitas pribadi. Tidak pernah meminta nama, email, atau telepon Anda.",
+    "privacy_sheet_point_2": "Wajah di foto diburamkan di ponsel Anda sebelum diunggah — server tidak pernah melihat wajah asli.",
+    "privacy_sheet_point_3": "Laporan Anda hanya terhubung ke kode perangkat anonim yang hanya bisa Anda lihat.",
+    "privacy_sheet_point_4": "Hapus semua data kapan saja dari Pengaturan — semua laporan dihapus dalam 24 jam.",
+    "privacy_sheet_title": "Privasi & Keamanan",
     "status_sheet_last_sync_label": "Sinkronisasi terakhir",
     "status_sheet_last_sync_never": "Belum ada laporan terkirim",
     "status_sheet_queued_label": "Laporan menunggu dikirim",
@@ -1627,8 +1753,8 @@
     "tier_t4_lifekeeper_label": "Penjaga Nyawa"
   },
   "ur": {
-    "__version": "e9acb49d6da9",
-    "__checksum": "2eeec140bc0b5493",
+    "__version": "0a7cad58f8ee",
+    "__checksum": "fc45f9b3028f5d74",
     "action_tile_download": "ایپ ڈاؤن لوڈ",
     "action_tile_login": "لاگ ان",
     "add_to_homescreen": "+ ہوم اسکرین میں شامل کریں",
@@ -1657,13 +1783,17 @@
     "fp_photo": "تصویر",
     "fp_send": "بھیجیں",
     "fp_what": "کیا",
+    "help_sheet_point_1": "شروع کرنے کے لیے \"واقعہ کی رپورٹ کریں\" پر ٹیپ کریں۔ ایک تصویر شامل کریں اور جو نظر آئے اسے بیان کریں۔",
+    "help_sheet_point_2": "رپورٹس آف لائن کام کرتی ہیں۔ دوبارہ آن لائن ہونے پر خود بخود بھیج دی جاتی ہیں۔",
+    "help_sheet_point_3": "کوئی اور چینل پسند ہے؟ WhatsApp، Telegram، SMS یا وائس — فارمیٹ ایک ہی ہے۔",
+    "help_sheet_point_4": "CRISP اوپن سورس ہے۔ کوڈ: github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "CRISP کیسے استعمال کریں",
     "home_account_settings": "سیٹنگز",
     "home_brand_tagline": "بحران رپورٹر",
     "home_channels_title": "رپورٹ کرنے کے دیگر طریقے",
     "home_consent_v2": "میں اپنی رپورٹ شیئر کرنے سے متفق ہوں۔ چہرے اپ لوڈ سے پہلے میرے فون پر دھندلے ہوتے ہیں، اور رپورٹس صرف میرے گمنام ID سے جڑی ہوتی ہیں۔",
     "home_cta_primary": "واقعہ رپورٹ کریں",
     "home_footer_help": "مدد",
-    "home_footer_opensrc": "اوپن سورس",
     "home_footer_privacy": "پرائیویسی",
     "home_greeting_loggedin": "واپس خوش آمدید، {name}۔",
     "home_greeting_sub": "کسی اور واقعے کی رپورٹ کے لیے نیچے ٹیپ کریں۔",
@@ -1685,6 +1815,11 @@
     "my_reports": "میری رپورٹس",
     "nearby_eyebrow": "قریب کی رپورٹس",
     "nearby_sheet_close": "بند کریں",
+    "privacy_sheet_point_1": "ہم کوئی ذاتی شناخت اکٹھی نہیں کرتے۔ ہم کبھی آپ کا نام، ای میل یا فون نہیں مانگتے۔",
+    "privacy_sheet_point_2": "تصاویر میں چہرے اپ لوڈ سے پہلے آپ کے فون پر دھندلے کیے جاتے ہیں — سرور اصل چہرے نہیں دیکھتا۔",
+    "privacy_sheet_point_3": "آپ کی رپورٹس صرف ایک گمنام ڈیوائس کوڈ سے جڑی ہوتی ہیں جو صرف آپ دیکھ سکتے ہیں۔",
+    "privacy_sheet_point_4": "سیٹنگز سے کسی بھی وقت اپنا تمام ڈیٹا حذف کریں — سب کچھ 24 گھنٹے میں ہٹا دیا جاتا ہے۔",
+    "privacy_sheet_title": "رازداری اور حفاظت",
     "status_sheet_last_sync_label": "آخری سنک",
     "status_sheet_last_sync_never": "ابھی تک کوئی رپورٹ نہیں بھیجی گئی",
     "status_sheet_queued_label": "بھیجنے کے لیے قطار میں رپورٹس",
@@ -1702,7 +1837,7 @@
   },
   "kn": {
     "__version": "e918d03fdd44",
-    "__checksum": "79ac71915eca84db",
+    "__checksum": "26c49a074084ad49",
     "action_tile_download": "ಆ್ಯಪ್ ಡೌನ್ಲೋಡ್",
     "action_tile_login": "ಲಾಗಿನ್",
     "add_to_homescreen": "+ ಹೋಮ್ ಸ್ಕ್ರೀನ್‌ಗೆ ಸೇರಿಸಿ",
@@ -1731,13 +1866,17 @@
     "fp_photo": "ಫೋಟೋ",
     "fp_send": "ಕಳುಹಿಸಿ",
     "fp_what": "ಏನು",
+    "help_sheet_point_1": "Tap \"Report an Incident\" to start. Add a photo and describe what you see.",
+    "help_sheet_point_2": "Reports work offline. They send automatically when you're back online.",
+    "help_sheet_point_3": "Prefer a different channel? Use WhatsApp, Telegram, SMS, or Voice — same report shape.",
+    "help_sheet_point_4": "CRISP is open source. Code at github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "How to use CRISP",
     "home_account_settings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
     "home_brand_tagline": "ಬಿಕ್ಕಟ್ಟು ರಿಪೋರ್ಟರ್",
     "home_channels_title": "ವರದಿ ಮಾಡುವ ಇತರ ಮಾರ್ಗಗಳು",
     "home_consent_v2": "ನನ್ನ ವರದಿಯನ್ನು ಹಂಚಿಕೊಳ್ಳಲು ಒಪ್ಪುತ್ತೇನೆ. ಅಪ್‌ಲೋಡ್ ಮೊದಲು ಫೋನ್‌ನಲ್ಲಿ ಮುಖಗಳು ಮಸುಕಾಗುತ್ತವೆ, ಮತ್ತು ವರದಿಗಳು ನನ್ನ ಅನಾಮಧೇಯ ID ಗೆ ಮಾತ್ರ ಲಿಂಕ್ ಆಗಿರುತ್ತವೆ.",
     "home_cta_primary": "ಘಟನೆ ವರದಿ ಮಾಡಿ",
     "home_footer_help": "ಸಹಾಯ",
-    "home_footer_opensrc": "ತೆರೆದ ಮೂಲ",
     "home_footer_privacy": "ಗೌಪ್ಯತೆ",
     "home_greeting_loggedin": "ಮರಳಿ ಸ್ವಾಗತ, {name}.",
     "home_greeting_sub": "ಮತ್ತೊಂದು ಘಟನೆ ವರದಿ ಮಾಡಲು ಕೆಳಗೆ ಟ್ಯಾಪ್ ಮಾಡಿ.",
@@ -1759,6 +1898,11 @@
     "my_reports": "ನನ್ನ ವರದಿಗಳು",
     "nearby_eyebrow": "ಸಮೀಪದ ವರದಿಗಳು",
     "nearby_sheet_close": "ಮುಚ್ಚಿ",
+    "privacy_sheet_point_1": "No personal identity collected. We never ask for your name, email, or phone number.",
+    "privacy_sheet_point_2": "Faces in photos are blurred on your phone before upload — the server never sees raw faces.",
+    "privacy_sheet_point_3": "Your reports are linked only to an anonymous device code that you alone can see.",
+    "privacy_sheet_point_4": "Delete all your data any time from Settings — every report is removed within 24 hours.",
+    "privacy_sheet_title": "Privacy & Safety",
     "status_sheet_last_sync_label": "Last sync",
     "status_sheet_last_sync_never": "No reports sent yet",
     "status_sheet_queued_label": "Reports waiting to send",
@@ -1776,7 +1920,7 @@
   },
   "ta": {
     "__version": "e3684823afd7",
-    "__checksum": "1880389e6115dca3",
+    "__checksum": "16d6136a99439f09",
     "action_tile_download": "ஆப்ஸ் பதிவிறக்கு",
     "action_tile_login": "உள்நுழைய",
     "add_to_homescreen": "+ முகப்புத் திரையில் சேர்க்கவும்",
@@ -1805,13 +1949,17 @@
     "fp_photo": "புகைப்படம்",
     "fp_send": "அனுப்பு",
     "fp_what": "என்ன",
+    "help_sheet_point_1": "Tap \"Report an Incident\" to start. Add a photo and describe what you see.",
+    "help_sheet_point_2": "Reports work offline. They send automatically when you're back online.",
+    "help_sheet_point_3": "Prefer a different channel? Use WhatsApp, Telegram, SMS, or Voice — same report shape.",
+    "help_sheet_point_4": "CRISP is open source. Code at github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "How to use CRISP",
     "home_account_settings": "அமைப்புகள்",
     "home_brand_tagline": "நெருக்கடி ரிப்போர்ட்டர்",
     "home_channels_title": "மற்ற அறிக்கையிடும் வழிகள்",
     "home_consent_v2": "எனது அறிக்கையை பகிர ஒப்புக்கொள்கிறேன். பதிவேற்றத்திற்கு முன் முகங்கள் தொலைபேசியில் மங்கச் செய்யப்படும், மற்றும் அறிக்கைகள் எனது அநாமதேய ID க்கு மட்டுமே இணைக்கப்படும்.",
     "home_cta_primary": "சம்பவத்தை அறிக்கையிடு",
     "home_footer_help": "உதவி",
-    "home_footer_opensrc": "திறந்த மூலம்",
     "home_footer_privacy": "தனியுரிமை",
     "home_greeting_loggedin": "மீண்டும் வரவேற்கிறோம், {name}.",
     "home_greeting_sub": "மற்றொரு சம்பவத்தை அறிக்கையிட கீழே தட்டவும்.",
@@ -1833,6 +1981,11 @@
     "my_reports": "எனது அறிக்கைகள்",
     "nearby_eyebrow": "அருகிலுள்ள அறிக்கைகள்",
     "nearby_sheet_close": "மூடு",
+    "privacy_sheet_point_1": "No personal identity collected. We never ask for your name, email, or phone number.",
+    "privacy_sheet_point_2": "Faces in photos are blurred on your phone before upload — the server never sees raw faces.",
+    "privacy_sheet_point_3": "Your reports are linked only to an anonymous device code that you alone can see.",
+    "privacy_sheet_point_4": "Delete all your data any time from Settings — every report is removed within 24 hours.",
+    "privacy_sheet_title": "Privacy & Safety",
     "status_sheet_last_sync_label": "Last sync",
     "status_sheet_last_sync_never": "No reports sent yet",
     "status_sheet_queued_label": "Reports waiting to send",
@@ -1850,7 +2003,7 @@
   },
   "te": {
     "__version": "70aadad7ed60",
-    "__checksum": "3373194ca587a666",
+    "__checksum": "b268550d5b996bcf",
     "action_tile_download": "యాప్ డౌన్‌లోడ్",
     "action_tile_login": "లాగిన్",
     "add_to_homescreen": "+ హోమ్ స్క్రీన్‌కి జోడించండి",
@@ -1879,13 +2032,17 @@
     "fp_photo": "ఫోటో",
     "fp_send": "పంపండి",
     "fp_what": "ఏమి",
+    "help_sheet_point_1": "Tap \"Report an Incident\" to start. Add a photo and describe what you see.",
+    "help_sheet_point_2": "Reports work offline. They send automatically when you're back online.",
+    "help_sheet_point_3": "Prefer a different channel? Use WhatsApp, Telegram, SMS, or Voice — same report shape.",
+    "help_sheet_point_4": "CRISP is open source. Code at github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "How to use CRISP",
     "home_account_settings": "సెట్టింగులు",
     "home_brand_tagline": "బిక్కట్టు రిపోర్టర్",
     "home_channels_title": "ఇతర నివేదిక మార్గాలు",
     "home_consent_v2": "నా నివేదికను పంచుకోవడానికి అంగీకరిస్తున్నాను. అప్‌లోడ్ ముందు ముఖాలు నా ఫోన్‌లో అస్పష్టం అవుతాయి, మరియు నివేదికలు నా అనామక IDకి మాత్రమే లింక్ అవుతాయి.",
     "home_cta_primary": "సంఘటనను నివేదించండి",
     "home_footer_help": "సహాయం",
-    "home_footer_opensrc": "ఓపెన్ సోర్స్",
     "home_footer_privacy": "గోప్యత",
     "home_greeting_loggedin": "తిరిగి స్వాగతం, {name}.",
     "home_greeting_sub": "మరో సంఘటనను నివేదించడానికి క్రింద నొక్కండి.",
@@ -1907,6 +2064,11 @@
     "my_reports": "నా నివేదికలు",
     "nearby_eyebrow": "సమీపంలోని నివేదికలు",
     "nearby_sheet_close": "మూసివేయండి",
+    "privacy_sheet_point_1": "No personal identity collected. We never ask for your name, email, or phone number.",
+    "privacy_sheet_point_2": "Faces in photos are blurred on your phone before upload — the server never sees raw faces.",
+    "privacy_sheet_point_3": "Your reports are linked only to an anonymous device code that you alone can see.",
+    "privacy_sheet_point_4": "Delete all your data any time from Settings — every report is removed within 24 hours.",
+    "privacy_sheet_title": "Privacy & Safety",
     "status_sheet_last_sync_label": "Last sync",
     "status_sheet_last_sync_never": "No reports sent yet",
     "status_sheet_queued_label": "Reports waiting to send",
@@ -1924,7 +2086,7 @@
   },
   "ml": {
     "__version": "d1af270427b2",
-    "__checksum": "d286be28cfb3be15",
+    "__checksum": "a384f269be7d7ed5",
     "action_tile_download": "ആപ്പ് ഡൗൺലോഡ്",
     "action_tile_login": "ലോഗിൻ",
     "add_to_homescreen": "+ ഹോം സ്‌ക്രീനിലേക്ക് ചേർക്കുക",
@@ -1953,13 +2115,17 @@
     "fp_photo": "ഫോട്ടോ",
     "fp_send": "അയയ്ക്കുക",
     "fp_what": "എന്ത്",
+    "help_sheet_point_1": "Tap \"Report an Incident\" to start. Add a photo and describe what you see.",
+    "help_sheet_point_2": "Reports work offline. They send automatically when you're back online.",
+    "help_sheet_point_3": "Prefer a different channel? Use WhatsApp, Telegram, SMS, or Voice — same report shape.",
+    "help_sheet_point_4": "CRISP is open source. Code at github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "How to use CRISP",
     "home_account_settings": "ക്രമീകരണങ്ങൾ",
     "home_brand_tagline": "ക്രൈസിസ് റിപ്പോർട്ടർ",
     "home_channels_title": "റിപ്പോർട്ട് ചെയ്യാനുള്ള മറ്റ് വഴികൾ",
     "home_consent_v2": "എന്റെ റിപ്പോർട്ട് റെസ്ക്യൂ ടീമുകളുമായി പങ്കിടാൻ ഞാൻ സമ്മതിക്കുന്നു.",
     "home_cta_primary": "സംഭവം റിപ്പോർട്ട് ചെയ്യുക",
     "home_footer_help": "സഹായം",
-    "home_footer_opensrc": "ഓപ്പൺ സോഴ്സ്",
     "home_footer_privacy": "സ്വകാര്യത",
     "home_greeting_loggedin": "വീണ്ടും സ്വാഗതം, {name}.",
     "home_greeting_sub": "മറ്റൊരു സംഭവം റിപ്പോർട്ട് ചെയ്യാൻ താഴെ ടാപ് ചെയ്യുക.",
@@ -1981,6 +2147,11 @@
     "my_reports": "എന്റെ റിപ്പോർട്ടുകൾ",
     "nearby_eyebrow": "സമീപത്തെ റിപ്പോർട്ടുകൾ",
     "nearby_sheet_close": "അടയ്ക്കുക",
+    "privacy_sheet_point_1": "No personal identity collected. We never ask for your name, email, or phone number.",
+    "privacy_sheet_point_2": "Faces in photos are blurred on your phone before upload — the server never sees raw faces.",
+    "privacy_sheet_point_3": "Your reports are linked only to an anonymous device code that you alone can see.",
+    "privacy_sheet_point_4": "Delete all your data any time from Settings — every report is removed within 24 hours.",
+    "privacy_sheet_title": "Privacy & Safety",
     "status_sheet_last_sync_label": "Last sync",
     "status_sheet_last_sync_never": "No reports sent yet",
     "status_sheet_queued_label": "Reports waiting to send",
@@ -1998,7 +2169,7 @@
   },
   "gu": {
     "__version": "5b15791f54f9",
-    "__checksum": "60dba50591307bd3",
+    "__checksum": "e77bea95d054abaf",
     "action_tile_download": "ઍપ ડાઉનલોડ",
     "action_tile_login": "લૉગિન",
     "add_to_homescreen": "+ હોમ સ્ક્રીન પર ઉમેરો",
@@ -2027,13 +2198,17 @@
     "fp_photo": "ફોટો",
     "fp_send": "મોકલો",
     "fp_what": "શું",
+    "help_sheet_point_1": "Tap \"Report an Incident\" to start. Add a photo and describe what you see.",
+    "help_sheet_point_2": "Reports work offline. They send automatically when you're back online.",
+    "help_sheet_point_3": "Prefer a different channel? Use WhatsApp, Telegram, SMS, or Voice — same report shape.",
+    "help_sheet_point_4": "CRISP is open source. Code at github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "How to use CRISP",
     "home_account_settings": "સેટિંગ્સ",
     "home_brand_tagline": "આપદા રિપોર્ટર",
     "home_channels_title": "રિપોર્ટ કરવાની અન્ય રીતો",
     "home_consent_v2": "મારી રિપોર્ટ વહેંચવા સહમત છું. અપલોડ પહેલા ચહેરા ફોન પર ધૂંધળા થાય છે, અને રિપોર્ટ્સ ફક્ત મારી અનામી ID સાથે જોડાય છે.",
     "home_cta_primary": "ઘટના રિપોર્ટ કરો",
     "home_footer_help": "મદદ",
-    "home_footer_opensrc": "ઓપન સોર્સ",
     "home_footer_privacy": "ગોપનીયતા",
     "home_greeting_loggedin": "પાછા સ્વાગત, {name}.",
     "home_greeting_sub": "બીજી ઘટના રિપોર્ટ કરવા નીચે ટેપ.",
@@ -2055,6 +2230,11 @@
     "my_reports": "મારી રિપોર્ટ્સ",
     "nearby_eyebrow": "નજીકના રિપોર્ટ",
     "nearby_sheet_close": "બંધ કરો",
+    "privacy_sheet_point_1": "No personal identity collected. We never ask for your name, email, or phone number.",
+    "privacy_sheet_point_2": "Faces in photos are blurred on your phone before upload — the server never sees raw faces.",
+    "privacy_sheet_point_3": "Your reports are linked only to an anonymous device code that you alone can see.",
+    "privacy_sheet_point_4": "Delete all your data any time from Settings — every report is removed within 24 hours.",
+    "privacy_sheet_title": "Privacy & Safety",
     "status_sheet_last_sync_label": "Last sync",
     "status_sheet_last_sync_never": "No reports sent yet",
     "status_sheet_queued_label": "Reports waiting to send",
@@ -2072,7 +2252,7 @@
   },
   "mr": {
     "__version": "d15bddb0b381",
-    "__checksum": "e0ea4c2e107038d4",
+    "__checksum": "61136ee4878c8aed",
     "action_tile_download": "ॲप डाउनलोड",
     "action_tile_login": "लॉगिन",
     "add_to_homescreen": "+ होम स्क्रीनवर जोडा",
@@ -2101,13 +2281,17 @@
     "fp_photo": "फोटो",
     "fp_send": "पाठवा",
     "fp_what": "काय",
+    "help_sheet_point_1": "Tap \"Report an Incident\" to start. Add a photo and describe what you see.",
+    "help_sheet_point_2": "Reports work offline. They send automatically when you're back online.",
+    "help_sheet_point_3": "Prefer a different channel? Use WhatsApp, Telegram, SMS, or Voice — same report shape.",
+    "help_sheet_point_4": "CRISP is open source. Code at github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "How to use CRISP",
     "home_account_settings": "सेटिंग्ज",
     "home_brand_tagline": "संकट रिपोर्टर",
     "home_channels_title": "तक्रार करण्याचे इतर मार्ग",
     "home_consent_v2": "माझा अहवाल सामायिक करण्यास सहमत. अपलोडपूर्वी चेहरे फोनवर अस्पष्ट होतात, आणि अहवाल फक्त माझ्या निनावी ID शी जोडले जातात.",
     "home_cta_primary": "घटनेची तक्रार करा",
     "home_footer_help": "मदत",
-    "home_footer_opensrc": "ओपन सोर्स",
     "home_footer_privacy": "गोपनीयता",
     "home_greeting_loggedin": "परत स्वागत, {name}.",
     "home_greeting_sub": "आणखी एक घटनेची तक्रार करण्यासाठी खाली टॅप.",
@@ -2129,6 +2313,11 @@
     "my_reports": "माझे अहवाल",
     "nearby_eyebrow": "जवळचे अहवाल",
     "nearby_sheet_close": "बंद करा",
+    "privacy_sheet_point_1": "No personal identity collected. We never ask for your name, email, or phone number.",
+    "privacy_sheet_point_2": "Faces in photos are blurred on your phone before upload — the server never sees raw faces.",
+    "privacy_sheet_point_3": "Your reports are linked only to an anonymous device code that you alone can see.",
+    "privacy_sheet_point_4": "Delete all your data any time from Settings — every report is removed within 24 hours.",
+    "privacy_sheet_title": "Privacy & Safety",
     "status_sheet_last_sync_label": "Last sync",
     "status_sheet_last_sync_never": "No reports sent yet",
     "status_sheet_queued_label": "Reports waiting to send",
@@ -2146,7 +2335,7 @@
   },
   "pa": {
     "__version": "9124236c6186",
-    "__checksum": "c6ee6095bcbf1a6c",
+    "__checksum": "f14f4e0e1f5a2659",
     "action_tile_download": "ਐਪ ਡਾਊਨਲੋਡ",
     "action_tile_login": "ਲੌਗਇਨ",
     "add_to_homescreen": "+ ਹੋਮ ਸਕਰੀਨ 'ਤੇ ਜੋੜੋ",
@@ -2175,13 +2364,17 @@
     "fp_photo": "ਫ਼ੋਟੋ",
     "fp_send": "ਭੇਜੋ",
     "fp_what": "ਕੀ",
+    "help_sheet_point_1": "Tap \"Report an Incident\" to start. Add a photo and describe what you see.",
+    "help_sheet_point_2": "Reports work offline. They send automatically when you're back online.",
+    "help_sheet_point_3": "Prefer a different channel? Use WhatsApp, Telegram, SMS, or Voice — same report shape.",
+    "help_sheet_point_4": "CRISP is open source. Code at github.com/Pratik-Shukla-PY/crisp-platform",
+    "help_sheet_title": "How to use CRISP",
     "home_account_settings": "ਸੈਟਿੰਗਾਂ",
     "home_brand_tagline": "ਸੰਕਟ ਰਿਪੋਰਟਰ",
     "home_channels_title": "ਰਿਪੋਰਟ ਕਰਨ ਦੇ ਹੋਰ ਤਰੀਕੇ",
     "home_consent_v2": "ਮੈਂ ਆਪਣੀ ਰਿਪੋਰਟ ਸਾਂਝੀ ਕਰਨ ਲਈ ਸਹਿਮਤ ਹਾਂ। ਅੱਪਲੋਡ ਤੋਂ ਪਹਿਲਾਂ ਚਿਹਰੇ ਫੋਨ 'ਤੇ ਧੁੰਦਲੇ ਹੁੰਦੇ ਹਨ, ਅਤੇ ਰਿਪੋਰਟਾਂ ਸਿਰਫ਼ ਮੇਰੀ ਅਗਿਆਤ ID ਨਾਲ ਜੁੜਦੀਆਂ ਹਨ।",
     "home_cta_primary": "ਘਟਨਾ ਦੀ ਰਿਪੋਰਟ ਕਰੋ",
     "home_footer_help": "ਮਦਦ",
-    "home_footer_opensrc": "ਓਪਨ ਸੋਰਸ",
     "home_footer_privacy": "ਨਿੱਜਤਾ",
     "home_greeting_loggedin": "ਫਿਰ ਜੀ ਆਇਆਂ ਨੂੰ, {name}।",
     "home_greeting_sub": "ਇੱਕ ਹੋਰ ਘਟਨਾ ਦੀ ਰਿਪੋਰਟ ਕਰਨ ਲਈ ਹੇਠਾਂ ਟੈਪ।",
@@ -2203,6 +2396,11 @@
     "my_reports": "ਮੇਰੀਆਂ ਰਿਪੋਰਟਾਂ",
     "nearby_eyebrow": "ਨੇੜਲੀਆਂ ਰਿਪੋਰਟਾਂ",
     "nearby_sheet_close": "ਬੰਦ ਕਰੋ",
+    "privacy_sheet_point_1": "No personal identity collected. We never ask for your name, email, or phone number.",
+    "privacy_sheet_point_2": "Faces in photos are blurred on your phone before upload — the server never sees raw faces.",
+    "privacy_sheet_point_3": "Your reports are linked only to an anonymous device code that you alone can see.",
+    "privacy_sheet_point_4": "Delete all your data any time from Settings — every report is removed within 24 hours.",
+    "privacy_sheet_title": "Privacy & Safety",
     "status_sheet_last_sync_label": "Last sync",
     "status_sheet_last_sync_never": "No reports sent yet",
     "status_sheet_queued_label": "Reports waiting to send",
@@ -3016,21 +3214,16 @@
                  (any spec / dashboard query that selects #home-
                  utility-version still resolves). -->
             <div class="home-footer-row" id="home-footer-row">
-                <!-- HC36 (May 23, operator) — the "Build N" chip that
-                     HC25 folded into this nav was removed. The version
-                     is now surfaced on a dedicated second row below
-                     (.home-footer-meta) as "CRISP vX.Y.Z" — the
-                     operator-preferred semver-style label. The nav
-                     stays as the clean trust-link row: Privacy · Help
-                     · Open Source + the device-ID key icon. -->
+                <!-- HC43 (May 23, operator) — "Open Source" link
+                     removed; the footer reads "Privacy · Help"
+                     only. The GitHub URL stays reachable from the
+                     #home-help-sheet (HC47) which links out to it.
+                     HC47 also converted these from stage-router
+                     buttons to bottom-sheet openers. -->
                 <nav class="home-utility-footer" id="home-utility-footer" aria-label="Footer links">
                     <button class="home-utility-link" id="btn-home-privacy" type="button" data-i18n="home_footer_privacy">Privacy</button>
                     <span class="home-utility-dot" aria-hidden="true">•</span>
                     <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
-                    <span class="home-utility-dot" aria-hidden="true">•</span>
-                    <a class="home-utility-link" id="btn-home-opensrc"
-                       href="https://github.com/Pratik-Shukla-PY/crisp-platform"
-                       target="_blank" rel="noopener" data-i18n="home_footer_opensrc">Open source</a>
                 </nav>
 
                 <!-- AUDIT 2026-05-23 (HC3) — Reporter ID UX collapsed from
@@ -3062,7 +3255,7 @@
                              on the home stage; ship the glyph inline
                              so it paints at frame 0 + survives offline
                              cold start. -->
-                        <svg viewBox="0 0 24 24" width="18" height="18"
+                        <svg viewBox="0 0 24 24" width="22" height="22"
                              fill="currentColor" aria-hidden="true">
                             <path d="M21 10h-8.35A5.99 5.99 0 0 0 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6a5.99 5.99 0 0 0 5.65-4H13l2 2 2-2 2 2 4-4.04L21 10zM7 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
                         </svg>
@@ -3187,6 +3380,56 @@
         </div>
     </div>
 
+    <!-- AUDIT 2026-05-23 (HC47) — Privacy bottom sheet. Replaces
+         the previous stage-privacy route navigation with a concise
+         in-place modal so users don't lose context. Same
+         .nearby-sheet visual + a11y pattern as the devid / status
+         sheets. Content distilled to 4 reassurance bullets — the
+         full deep-dive privacy text still lives at #stage-privacy
+         (still reachable from Settings → Privacy & features). -->
+    <div class="nearby-sheet home-privacy-sheet" id="home-privacy-sheet" hidden
+         role="dialog" aria-modal="true" aria-labelledby="home-privacy-sheet-title">
+        <div class="nearby-sheet-backdrop" id="home-privacy-sheet-backdrop"></div>
+        <div class="nearby-sheet-card home-privacy-sheet-card" role="document">
+            <button class="nearby-sheet-close" id="home-privacy-sheet-close"
+                    type="button" aria-label="Close"
+                    data-i18n-aria-label="nearby_sheet_close">✕</button>
+            <div class="nearby-sheet-handle" aria-hidden="true"></div>
+            <h3 class="nearby-sheet-title home-privacy-sheet-title"
+                id="home-privacy-sheet-title"
+                data-i18n="privacy_sheet_title">Privacy & Safety</h3>
+            <ul class="home-info-sheet-points">
+                <li data-i18n="privacy_sheet_point_1">No personal identity collected. We never ask for your name, email, or phone number.</li>
+                <li data-i18n="privacy_sheet_point_2">Faces in photos are blurred on your phone before upload — the server never sees raw faces.</li>
+                <li data-i18n="privacy_sheet_point_3">Your reports are linked only to an anonymous device code that you alone can see.</li>
+                <li data-i18n="privacy_sheet_point_4">Delete all your data any time from Settings — every report is removed within 24 hours.</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- AUDIT 2026-05-23 (HC47) — Help bottom sheet. Concise
+         "how to use CRISP" copy in the same visual pattern as
+         the privacy sheet above. -->
+    <div class="nearby-sheet home-help-sheet" id="home-help-sheet" hidden
+         role="dialog" aria-modal="true" aria-labelledby="home-help-sheet-title">
+        <div class="nearby-sheet-backdrop" id="home-help-sheet-backdrop"></div>
+        <div class="nearby-sheet-card home-help-sheet-card" role="document">
+            <button class="nearby-sheet-close" id="home-help-sheet-close"
+                    type="button" aria-label="Close"
+                    data-i18n-aria-label="nearby_sheet_close">✕</button>
+            <div class="nearby-sheet-handle" aria-hidden="true"></div>
+            <h3 class="nearby-sheet-title home-help-sheet-title"
+                id="home-help-sheet-title"
+                data-i18n="help_sheet_title">How to use CRISP</h3>
+            <ul class="home-info-sheet-points">
+                <li data-i18n="help_sheet_point_1">Tap "Report an Incident" to start. Add a photo and describe what you see.</li>
+                <li data-i18n="help_sheet_point_2">Reports work offline. They send automatically when you're back online.</li>
+                <li data-i18n="help_sheet_point_3">Prefer a different channel? Use WhatsApp, Telegram, SMS, or Voice — same report shape.</li>
+                <li data-i18n="help_sheet_point_4">CRISP is open source. Code at <a href="https://github.com/Pratik-Shukla-PY/crisp-platform" target="_blank" rel="noopener" class="home-info-sheet-link">github.com/Pratik-Shukla-PY/crisp-platform</a></li>
+            </ul>
+        </div>
+    </div>
+
     <!-- AUDIT 2026-05-23 (HC3) — Reporter-ID explainer sheet. Replaces
          the permanent footer ID row with a tap-to-open modal. Mirrors
          the channels-sheet pattern for visuals + a11y; height capped at
@@ -3215,7 +3458,17 @@
                         type="button"
                         aria-label="Copy reporter ID"
                         data-i18n-aria-label="aria_copy_id">
-                    <i class="fa-solid fa-copy" aria-hidden="true"></i>
+                    <!-- HC46 — was `<i class="fa-solid fa-copy">`
+                         which depended on the lazy-loaded FontAwesome
+                         CSS and rendered as a blank slot at frame 0
+                         (operator-reported "Copy icon missing").
+                         Inline SVG renders immediately + survives
+                         offline cold start (same pattern as HC20
+                         key glyph). -->
+                    <svg viewBox="0 0 24 24" width="20" height="20"
+                         fill="currentColor" aria-hidden="true">
+                        <path d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                    </svg>
                 </button>
             </div>
             <ul class="home-devid-sheet-points">

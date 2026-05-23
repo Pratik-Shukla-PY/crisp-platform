@@ -5651,7 +5651,9 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
     padding: 4px 10px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
+    /* HC44 — was 999px (pill). Proportional 10 px reads as a
+       small chip not a pill. */
+    border-radius: 10px;
     color: var(--text-sub, #cbd5e1);
     font-size: var(--fz-sm, 13px);
     font-weight: 600;
@@ -10768,23 +10770,20 @@ body.tier-t4 .home-impact {
     justify-content: center;
 }
 
-/* AUDIT 2026-05-23 (HC3 → HC20 → HC26) — Reporter-ID icon button.
-   HC3 shipped a 48 × 48 bordered tile, HC20 simplified to a 32 × 32
-   borderless solid-white glyph. HC26 (operator polish) recolors the
-   glyph to Telegram-style brand blue (#229ED9) — recognisable,
-   subtle, and visually lighter than the previous full-white
-   treatment. Blends naturally with the footer utility row without
-   pulling attention away from the Privacy/Help/Open-source links.
-   Touch target unchanged at 32 × 32 (clears WCAG 2.5.8 Minimum). */
+/* AUDIT 2026-05-23 (HC3 → HC20 → HC26 → HC46) — Reporter-ID icon
+   button. HC46 (May 23, operator) — bumped 32 → 40 px for better
+   visibility + touch usability against the slimmed footer trust
+   links. Telegram brand blue glyph stays. Touch target now matches
+   the rest of the home stage's secondary actions. */
 .home-stage .home-devid-icon {
     appearance: none;
     -webkit-appearance: none;
     background: transparent;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     color: #229ED9;
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -10807,7 +10806,11 @@ body.tier-t4 .home-impact {
    Mirrors the nearby-sheet visual language; height capped so it
    never exceeds half the viewport on iPhone SE per spec. */
 .home-devid-sheet .home-devid-sheet-card {
-    max-height: min(50dvh, 360px);
+    /* HC46 — bumped max-height ceiling so the bullets don't trigger
+       internal scroll when typography grows. The clamp keeps short
+       viewports comfortable but lets the sheet expand on tall
+       devices for an entirely scroll-free read. */
+    max-height: min(70dvh, 440px);
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -10815,50 +10818,67 @@ body.tier-t4 .home-impact {
 .home-devid-sheet .home-devid-sheet-display {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
+    gap: 10px;
+    padding: 12px 14px;
     background: var(--surface2, #234060);
     border: 1px solid var(--border, rgba(70, 223, 177, 0.18));
     border-radius: 12px;
     font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
 .home-devid-sheet .home-devid-sheet-code {
+    /* HC46 — code text bumped 13 → 16 px (--fz-md). Reading the
+       CRISP-XXXX-XXXX device ID is the single most important act
+       inside this sheet — presbyopic users couldn't make out the
+       small monospace digits. 16 px clears the WCAG large-text
+       comfort floor. Tracking widened 0.05 → 0.08 em so adjacent
+       characters in mono read distinctly. */
     flex: 1 1 auto;
     color: var(--text, #f1f5f9);
-    font-size: var(--fz-sm, 13px);
-    letter-spacing: 0.05em;
+    font-size: var(--fz-md, 16px);
+    font-weight: 600;
+    letter-spacing: 0.08em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     unicode-bidi: isolate;
 }
 .home-devid-sheet .home-devid-sheet-copy {
+    /* HC46 — bumped 36 → 44 px touch target (WCAG 2.5.5) so
+       elderly users with reduced fine-motor control can hit Copy
+       reliably. Inline SVG copy glyph (markup change in
+       index.html) renders at frame 0; previously a lazy-loaded
+       FontAwesome icon left the button blank. */
     appearance: none;
     -webkit-appearance: none;
-    background: transparent;
-    border: 1px solid var(--border, rgba(70, 223, 177, 0.18));
+    background: rgba(9, 209, 199, 0.08);
+    border: 1px solid var(--border, rgba(70, 223, 177, 0.32));
     color: var(--accent, #09D1C7);
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    flex: 0 0 auto;
     transition: background 0.15s ease;
 }
 .home-devid-sheet .home-devid-sheet-copy:hover {
     background: rgba(9, 209, 199, 0.08);
 }
 .home-devid-sheet .home-devid-sheet-points {
+    /* HC46 — bullet text 14 → 15 px and gap 10 → 12 px for
+       presbyopia readability + a calmer rhythm between the four
+       reassurance points. Line-height stays at 1.5 (Apple HIG
+       comfort target). */
     list-style: none;
     padding: 0;
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     color: var(--text-sub, #cbd5e1);
-    font-size: var(--fz-body, 14px);
+    font-size: 15px;
     line-height: 1.5;
 }
 .home-devid-sheet .home-devid-sheet-points li {
@@ -10872,6 +10892,48 @@ body.tier-t4 .home-impact {
     color: var(--green, #80EE98);
     font-weight: 700;
 }
+
+/* HC47 — Privacy + Help bottom sheets. Reuse the .nearby-sheet
+   visual + slide-in animation; this rule set styles the inner
+   bullet list shared by both. */
+.home-privacy-sheet .home-privacy-sheet-card,
+.home-help-sheet .home-help-sheet-card {
+    max-height: min(72dvh, 480px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.home-info-sheet-points {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    color: var(--text-sub, #cbd5e1);
+    font-size: 15px;
+    line-height: 1.55;
+}
+.home-info-sheet-points li {
+    position: relative;
+    padding-inline-start: 22px;
+}
+.home-info-sheet-points li::before {
+    content: '·';
+    position: absolute;
+    inset-inline-start: 6px;
+    top: -2px;
+    color: var(--accent, #09D1C7);
+    font-weight: 900;
+    font-size: 20px;
+    line-height: 1;
+}
+.home-info-sheet-link {
+    color: var(--accent, #09D1C7);
+    text-decoration: underline;
+    word-break: break-all;
+}
+.home-info-sheet-link:hover { color: #5EEAD4; }
 
 /* ── I. Cleanup of older overrides that fight the redesign ───────── */
 
@@ -11224,18 +11286,20 @@ body.tier-t4 .home-impact {
    markup change so the painter + back-compat selectors continue
    to resolve. */
 .home-footer-meta {
-    /* HC37 → HC39 — margin-top 4 → 2 px, min-height 32 → 28 px to
-       shave another 6 px for the Mac Safari PWA window fit. The
-       install chip (.home-add2hs-btn) is 36 px tall so the row
-       grows to fit its content — the min-height just guarantees a
-       28 px frame for the version-only "installed" state. */
+    /* HC37 → HC39 → HC45 — margin-top 2 px, min-height 28 px, and
+       padding now 0 0 (was 0 4 px) so the install chip's right edge
+       sits flush with the lang-switcher's right edge above (same
+       vertical grid as the rest of .home-center's children — none
+       of which have horizontal padding of their own). The install
+       chip (.home-add2hs-btn) is 36 px tall so the row grows to
+       fit its content. */
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 4px 12px;
     margin: 2px 0 0;
-    padding: 0 4px;
+    padding: 0;
     min-height: 28px;
 }
 .home-footer-meta > * { margin: 0; }
@@ -11446,7 +11510,10 @@ body.tier-t4 .home-impact {
     margin: 4px auto 0;
     padding: 6px 14px;
     min-height: 36px;
-    border-radius: 999px;
+    /* HC44 — was border-radius: 999px (full pill). Operator: prefer
+       proportional corner radii for a more premium / professional
+       feel. 12 px reads as a rounded button without the "pill" look. */
+    border-radius: 12px;
     background: rgba(255, 183, 3, 0.10);
     border: 1px solid rgba(255, 183, 3, 0.55);
     color: #FFB703;

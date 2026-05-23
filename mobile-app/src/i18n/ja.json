@@ -885,5 +885,15 @@
   "aria_build_info": "ビルド情報 — タップして詳細を表示",
   "version_label_build": "ビルド {n}",
   "version_label_detail": "ビルド {n} · API {api}",
-  "aria_sync_chip": "同期状態 — タップして詳細を表示"
+  "aria_sync_chip": "同期状態 — タップして詳細を表示",
+  "privacy_sheet_title": "プライバシーと安全",
+  "privacy_sheet_point_1": "個人を特定する情報は収集しません。氏名・メール・電話番号を尋ねることはありません。",
+  "privacy_sheet_point_2": "写真の顔は端末側でぼかしてからアップロードします — サーバーは生の顔を見ません。",
+  "privacy_sheet_point_3": "報告は匿名のデバイスコードにのみ紐づきます。コードはあなただけが確認できます。",
+  "privacy_sheet_point_4": "設定からいつでもすべてのデータを削除できます — 24 時間以内に消去されます。",
+  "help_sheet_title": "CRISP の使い方",
+  "help_sheet_point_1": "「インシデントを報告」をタップ。写真を追加して状況を記述してください。",
+  "help_sheet_point_2": "報告はオフラインで動作します。オンラインに戻ると自動送信されます。",
+  "help_sheet_point_3": "別のチャネルがいい？ WhatsApp / Telegram / SMS / 音声でも報告できます。",
+  "help_sheet_point_4": "CRISP はオープンソースです。コード: github.com/Pratik-Shukla-PY/crisp-platform"
 }

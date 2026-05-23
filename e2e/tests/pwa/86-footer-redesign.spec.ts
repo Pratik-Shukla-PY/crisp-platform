@@ -103,18 +103,17 @@ test.describe('PWA — home footer v2 redesign', () => {
     test('@smoke each link uses the v2 mid-gray (phone breakpoint: 12 px, desktop: 13 px)', async ({ page }) => {
         // HC22 (May 2026) bumped link font-size to 13 px floor for
         // presbyopia readability + lifted the link colour to text-sub
-        // (rgb 203 213 225). HC25 had added a 4th link (the Build-N
-        // chip) inside the nav; HC36 (May 23, operator) moved the
-        // version OUT of the nav back to a dedicated .home-footer-meta
-        // row below, so the nav is back to its original 3 trust links
-        // (Privacy / Help / Open Source).
+        // (rgb 203 213 225). HC25 had added a 4th link (Build-N chip)
+        // — HC36 (May 23) moved that OUT to .home-footer-meta. HC43
+        // (May 23, operator) then removed the "Open Source" link
+        // entirely, leaving just Privacy + Help in the nav.
         const navLinks = await page.locator('#home-utility-footer .home-utility-link').evaluateAll((els) =>
             els.map((el) => {
                 const cs = getComputedStyle(el);
                 return { text: el.textContent?.trim() || '', fontSize: cs.fontSize, color: cs.color };
             }),
         );
-        expect(navLinks.length).toBe(3);
+        expect(navLinks.length).toBe(2);
         for (const link of navLinks) {
             const px = parseFloat(link.fontSize);
             expect(px).toBeGreaterThanOrEqual(12);
@@ -136,10 +135,11 @@ test.describe('PWA — home footer v2 redesign', () => {
                 };
             }),
         );
-        // Two visible dots between three links. (The last-of-type dot
-        // is hidden by the version-number rule — verified separately.)
+        // HC43 (May 23) — one visible dot between the two remaining
+        // links (Privacy · Help). The former Open-Source separator
+        // dot is gone with the link.
         const visible = dots.filter((d) => d.text === '•');
-        expect(visible.length).toBeGreaterThanOrEqual(2);
+        expect(visible.length).toBeGreaterThanOrEqual(1);
         // Semantic check: dot glyph + visible + mid-slate colour.
         // Exact font-size drifts with CSS tuning across breakpoints.
         for (const dot of visible) {

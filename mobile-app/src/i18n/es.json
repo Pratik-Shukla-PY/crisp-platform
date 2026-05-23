@@ -895,5 +895,15 @@
   "aria_build_info": "Información de versión — toca para detalles",
   "version_label_build": "Compilación {n}",
   "version_label_detail": "Compilación {n} · API {api}",
-  "aria_sync_chip": "Estado de sincronización — toca para detalles"
+  "aria_sync_chip": "Estado de sincronización — toca para detalles",
+  "privacy_sheet_title": "Privacidad y seguridad",
+  "privacy_sheet_point_1": "No recopilamos identidad personal. Nunca pedimos tu nombre, correo o teléfono.",
+  "privacy_sheet_point_2": "Los rostros en las fotos se difuminan en tu teléfono antes de subirse — el servidor nunca ve rostros reales.",
+  "privacy_sheet_point_3": "Tus informes se vinculan solo a un código de dispositivo anónimo que solo tú puedes ver.",
+  "privacy_sheet_point_4": "Elimina todos tus datos cuando quieras desde Ajustes — todos los informes se borran en 24 horas.",
+  "help_sheet_title": "Cómo usar CRISP",
+  "help_sheet_point_1": "Toca \"Reportar un incidente\" para empezar. Añade una foto y describe lo que ves.",
+  "help_sheet_point_2": "Los informes funcionan sin conexión. Se envían automáticamente al volver a estar en línea.",
+  "help_sheet_point_3": "¿Prefieres otro canal? Usa WhatsApp, Telegram, SMS o Voz — misma forma de informe.",
+  "help_sheet_point_4": "CRISP es de código abierto. Código en github.com/Pratik-Shukla-PY/crisp-platform"
 }
