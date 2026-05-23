@@ -6707,20 +6707,28 @@ body.tier-t4 .home-impact {
    grouping that reads as "these are the alternate channels".
    The title `background` blends into the page background so the
    border ducks under the text — same effect as a real <legend>. */
-.home-channels-card {
+/* HC52 — selector combines both classes the element carries so
+   the (0,3,0) specificity beats the (0,2,0)
+   `.home-stage .home-section-channels { padding: 0 }` rule at
+   line ~10502 — the .home-stage prefix alone tied on specificity
+   and lost to source order. */
+.home-stage .home-section-channels.home-channels-card {
     position: relative;
-    /* HC34 — transparent fill + 6 % opacity outline so the card
-       reads as a quiet group, not a filled tile. */
+    /* HC34 → HC52 — full 1 px outline collapsed to a single TOP
+       hairline. Operator: "Remove the border for the Other ways
+       to report entire card border & just keep one line at the
+       top and at the center of that write 'Other Ways to report'".
+       Section now reads as a divider line + label + icon strip,
+       not as a boxed card. */
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 14px;
-    /* HC51 (May 23, operator) — title moved BACK to the top border
-       (was bottom-center in HC31). Padding flips correspondingly:
-       8 top to clear the floating title, 6 bottom (no title there
-       anymore). The active-channel underline (HC51) needs ~4 px
-       of bottom breathing room so the green line stays inside the
-       card — that's why bottom isn't dropped to 0. */
-    padding: 8px 10px 6px;
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0;
+    /* HC52 — top padding bumped 8 → 18 px so the icons sit lower
+       (further from the top hairline + title). Bottom padding stays
+       6 px to keep the active-icon underline glow visible inside
+       the strip. */
+    padding: 18px 10px 6px;
     margin-top: 6px;
 }
 .home-channels-card-title {
@@ -10615,19 +10623,29 @@ body.tier-t4 .home-impact {
     height: 22px;
 }
 .home-stage .hcs-icon--live::after {
-    /* Thin green glowing underline (was a 7 px corner dot). 1.5 px
-       line + 4 px box-shadow gives a subtle glow without the noisy
-       "notification dot" feeling. Inset 8 px from each side so the
-       line spans the visual centre of the glyph, not the whole cell. */
+    /* HC52 (May 23, operator) — was a solid 1.5 px green line +
+       symmetric box-shadow glow. Operator wants the glow to feel
+       like it's "transmitting upward toward the icon from below" —
+       converted to a vertical gradient that's solid green at the
+       BOTTOM and fades to transparent at the TOP. Visually reads
+       as a plume of light rising from beneath the icon.
+       The 10 px tall element sits at bottom: -2px so most of the
+       plume falls below the icon's box (3 px inside the icon, 7 px
+       below) — the eye perceives "glow rising from the floor of
+       the strip toward the active icon". */
     content: '';
     position: absolute;
     left: 8px;
     right: 8px;
-    bottom: -3px;
-    height: 1.5px;
-    background: #80EE98;
-    box-shadow: 0 0 4px rgba(128, 238, 152, 0.55);
-    border-radius: 1px;
+    bottom: -2px;
+    height: 10px;
+    background: linear-gradient(
+        to top,
+        #80EE98 0%,
+        rgba(128, 238, 152, 0.65) 25%,
+        rgba(128, 238, 152, 0.0)  100%
+    );
+    border-radius: 1px 1px 0 0;
 }
 
 /* Upcoming channels — muted grey, slightly smaller glyph.
