@@ -858,5 +858,8 @@
   "mr_status_paused": "Dijeda — menunggu jaringan",
   "mr_status_recovering": "Memulihkan…",
   "mr_status_failed_permanent": "Unggahan gagal",
-  "settings_reader_mode": "Mode Pembaca — teks lebih besar"
+  "settings_reader_mode": "Mode Pembaca — teks lebih besar",
+  "install_sheet_title": "Tambahkan CRISP ke layar utama",
+  "install_sheet_sub": "Bekerja offline. Simpan instan. Lapor lebih cepat.",
+  "install_sheet_note": "CRISP akan bekerja seperti aplikasi lain — bahkan offline."
 }

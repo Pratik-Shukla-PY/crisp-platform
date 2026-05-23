@@ -49,9 +49,19 @@
 
     _platform = _detectPlatform();
 
-    // iOS can always "install" via Add-to-Home-Screen (manual). Android
-    // depends on `beforeinstallprompt` firing; desktop Chrome same.
-    if (_platform === 'ios') {
+    // AUDIT 2026-05-23 (HC2 humanitarian-grade home) — default `canInstall`
+    // to TRUE on every platform EXCEPT `standalone` (already installed).
+    // Pre-fix, Android / Desktop / Firefox / Samsung Internet had to wait
+    // for the Chromium-specific `beforeinstallprompt` to fire before the
+    // button appeared — and that event NEVER fires in some browsers (FF
+    // Android, in-app webviews, older Samsung Internet). The spec asks
+    // for an always-visible install affordance with a universal fallback.
+    //
+    // The fallback sheet (`_showIosSheet` below) is no longer iOS-only:
+    // it carries instructions for Safari + Chrome + Firefox + Samsung
+    // Internet so tapping the button always teaches the user how to
+    // install regardless of browser.
+    if (_platform !== 'standalone') {
         _canInstall = true;
     }
 
@@ -85,47 +95,95 @@
         console.log('[InstallPrompt] app installed');
     });
 
-    // Show iOS Add-to-Home-Screen instructions sheet.
-    function _showIosSheet() {
+    // Universal Add-to-Home-Screen instructions sheet.
+    // AUDIT 2026-05-23 (HC2) — renamed from `_showIosSheet` because it
+    // now serves Safari iOS + Chrome + Firefox + Samsung Internet users,
+    // not just iPhone. Per-browser instruction blocks are shown/hidden
+    // based on platform detection. The sheet is the universal fallback
+    // when `beforeinstallprompt` doesn't fire.
+    function _showInstallSheet() {
         const existing = document.getElementById('ios-install-sheet');
         if (existing) { existing.style.display = 'flex'; return; }
 
         const sheet = document.createElement('div');
-        sheet.id = 'ios-install-sheet';
+        sheet.id = 'ios-install-sheet';      // keep legacy id for CSS continuity
         sheet.className = 'ios-install-sheet';
         sheet.setAttribute('role', 'dialog');
         sheet.setAttribute('aria-modal', 'true');
+        sheet.setAttribute('aria-labelledby', 'iis-title');
+
+        // Detect platform variant fresh in case UA spoofing changed since boot.
+        const ua = (window.navigator.userAgent || '').toLowerCase();
+        const isIos = /iphone|ipad|ipod/.test(ua);
+        const isAndroid = /android/.test(ua);
+        const isSamsung = /samsungbrowser/.test(ua);
+        const isFirefox = /firefox|fxios/.test(ua);
+
+        // Title + first-line instruction picks the right active step.
+        let primaryStep = '';
+        if (isIos) {
+            primaryStep = `
+                <li class="iis-active-step">
+                    <span class="iis-step-num">1</span>
+                    <span class="iis-step-text">
+                        Tap the Share button
+                        <span class="iis-icon"><i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i></span>
+                        in Safari, then <strong>Add to Home Screen</strong>.
+                    </span>
+                </li>`;
+        } else if (isSamsung) {
+            primaryStep = `
+                <li class="iis-active-step">
+                    <span class="iis-step-num">1</span>
+                    <span class="iis-step-text">
+                        Tap the menu button (☰) in Samsung Internet, then
+                        <strong>Add page to → Home screen</strong>.
+                    </span>
+                </li>`;
+        } else if (isFirefox) {
+            primaryStep = `
+                <li class="iis-active-step">
+                    <span class="iis-step-num">1</span>
+                    <span class="iis-step-text">
+                        Tap the menu (⋮) in Firefox, then
+                        <strong>Install</strong> or <strong>Add to Home Screen</strong>.
+                    </span>
+                </li>`;
+        } else if (isAndroid) {
+            primaryStep = `
+                <li class="iis-active-step">
+                    <span class="iis-step-num">1</span>
+                    <span class="iis-step-text">
+                        Tap the menu (⋮) in Chrome, then
+                        <strong>Install app</strong>.
+                    </span>
+                </li>`;
+        } else {
+            primaryStep = `
+                <li class="iis-active-step">
+                    <span class="iis-step-num">1</span>
+                    <span class="iis-step-text">
+                        Click the install icon in your browser's address bar,
+                        or open the menu → <strong>Install CRISP</strong>.
+                    </span>
+                </li>`;
+        }
+
         sheet.innerHTML = `
-            <div class="iis-card">
-                <button class="iis-close" aria-label="Close">
-                    <i class="fa-solid fa-xmark"></i>
+            <div class="iis-card" role="document">
+                <button class="iis-close" aria-label="Close" data-i18n-aria-label="lang_picker_close">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
                 </button>
-                <h3 class="iis-title">Install CRISP on your iPhone</h3>
+                <h3 class="iis-title" id="iis-title" data-i18n="install_sheet_title">
+                    Add CRISP to your home screen
+                </h3>
+                <p class="iis-sub" data-i18n="install_sheet_sub">
+                    Works offline. Reports save instantly. Faster reporting.
+                </p>
                 <ol class="iis-steps">
-                    <li>
-                        <span class="iis-step-num">1</span>
-                        <span class="iis-step-text">
-                            Tap the Share button
-                            <span class="iis-icon"><i class="fa-solid fa-arrow-up-from-bracket"></i></span>
-                            at the bottom of Safari.
-                        </span>
-                    </li>
-                    <li>
-                        <span class="iis-step-num">2</span>
-                        <span class="iis-step-text">
-                            Scroll and tap
-                            <strong>Add to Home Screen</strong>
-                            <span class="iis-icon"><i class="fa-solid fa-square-plus"></i></span>
-                        </span>
-                    </li>
-                    <li>
-                        <span class="iis-step-num">3</span>
-                        <span class="iis-step-text">
-                            Tap <strong>Add</strong> in the top-right corner.
-                        </span>
-                    </li>
+                    ${primaryStep}
                 </ol>
-                <p class="iis-note">
+                <p class="iis-note" data-i18n="install_sheet_note">
                     CRISP will then work like any other app — even when offline.
                 </p>
             </div>
@@ -139,19 +197,21 @@
     }
 
     async function _show() {
-        if (_platform === 'ios') {
-            _showIosSheet();
-            return { outcome: 'ios_instructions_shown' };
-        }
+        // Universal flow: prefer the native prompt if Chromium cached it,
+        // otherwise open the instructional sheet — works on every browser.
         if (_deferredPrompt) {
             _deferredPrompt.prompt();
             const result = await _deferredPrompt.userChoice;
             _deferredPrompt = null;
-            _canInstall = false;
+            // Keep canInstall true on dismiss so the user can retry; flip
+            // false only on appinstalled (handled by the event listener
+            // above).
             _emit();
             return result;
         }
-        return { outcome: 'no_prompt_available' };
+        // Fallback: any platform without a cached prompt → instructional sheet.
+        _showInstallSheet();
+        return { outcome: 'instructions_shown', platform: _platform };
     }
 
     function _onChange(cb) {

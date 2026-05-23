@@ -843,5 +843,8 @@
   "mr_status_paused": "இடைநிறுத்தம் — பிணையத்திற்காக காத்திருக்கிறது",
   "mr_status_recovering": "மீட்டெடுக்கிறது…",
   "mr_status_failed_permanent": "பதிவேற்றம் தோல்வி",
-  "settings_reader_mode": "வாசிப்பு பயன்முறை — பெரிய உரை"
+  "settings_reader_mode": "வாசிப்பு பயன்முறை — பெரிய உரை",
+  "install_sheet_title": "CRISP-ஐ முகப்புத் திரையில் சேர்க்கவும்",
+  "install_sheet_sub": "ஆஃப்லைனில் வேலை செய்யும். உடனடி சேமிப்பு.",
+  "install_sheet_note": "பின்னர் CRISP மற்ற செயலிகள் போல வேலை செய்யும் — ஆஃப்லைனிலும்."
 }

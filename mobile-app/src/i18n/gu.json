@@ -843,5 +843,8 @@
   "mr_status_paused": "થોભી — નેટવર્કની રાહ",
   "mr_status_recovering": "પુનઃપ્રાપ્ત…",
   "mr_status_failed_permanent": "અપલોડ નિષ્ફળ",
-  "settings_reader_mode": "રીડર મોડ — મોટું લખાણ"
+  "settings_reader_mode": "રીડર મોડ — મોટું લખાણ",
+  "install_sheet_title": "CRISP ને હોમ સ્ક્રીન પર ઉમેરો",
+  "install_sheet_sub": "ઑફલાઇન કામ કરે છે. તરત જ સેવ.",
+  "install_sheet_note": "પછી CRISP કોઈપણ અન્ય એપ્લિકેશનની જેમ કાર્ય કરશે — ઑફલાઇન પણ."
 }

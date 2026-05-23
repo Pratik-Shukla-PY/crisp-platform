@@ -821,5 +821,8 @@
   "bs_char_locked_toast": "Reach {tier} to unlock this character.",
   "bs_stats_reports": "reports",
   "bs_stats_lives_saved": "lives saved",
-  "settings_reader_mode": "Reader Mode — larger text"
+  "settings_reader_mode": "Reader Mode — larger text",
+  "install_sheet_title": "Add CRISP to your home screen",
+  "install_sheet_sub": "Works offline. Reports save instantly. Faster reporting.",
+  "install_sheet_note": "CRISP will then work like any other app — even when offline."
 }

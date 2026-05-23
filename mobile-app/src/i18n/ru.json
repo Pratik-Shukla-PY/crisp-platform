@@ -843,5 +843,8 @@
   "mr_status_paused": "Приостановлено — ожидание сети",
   "mr_status_recovering": "Восстановление…",
   "mr_status_failed_permanent": "Ошибка загрузки",
-  "settings_reader_mode": "Режим чтения — крупный текст"
+  "settings_reader_mode": "Режим чтения — крупный текст",
+  "install_sheet_title": "Добавьте CRISP на главный экран",
+  "install_sheet_sub": "Работает офлайн. Мгновенное сохранение. Быстрее.",
+  "install_sheet_note": "CRISP будет работать как любое другое приложение — даже офлайн."
 }

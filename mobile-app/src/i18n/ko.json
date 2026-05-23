@@ -846,5 +846,8 @@
   "mr_status_paused": "일시 중지됨 — 네트워크 대기",
   "mr_status_recovering": "복구 중…",
   "mr_status_failed_permanent": "업로드 실패",
-  "settings_reader_mode": "리더 모드 — 큰 글자"
+  "settings_reader_mode": "리더 모드 — 큰 글자",
+  "install_sheet_title": "CRISP를 홈 화면에 추가",
+  "install_sheet_sub": "오프라인에서 작동. 즉시 저장. 더 빠른 보고.",
+  "install_sheet_note": "그러면 CRISP는 다른 앱처럼 작동합니다 — 오프라인에서도."
 }

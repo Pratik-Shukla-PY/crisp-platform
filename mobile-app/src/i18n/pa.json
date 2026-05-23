@@ -843,5 +843,8 @@
   "mr_status_paused": "ਰੁਕਿਆ — ਨੈੱਟਵਰਕ ਦੀ ਉਡੀਕ",
   "mr_status_recovering": "ਮੁੜ ਪ੍ਰਾਪਤ ਕਰ ਰਿਹਾ…",
   "mr_status_failed_permanent": "ਅੱਪਲੋਡ ਅਸਫਲ",
-  "settings_reader_mode": "ਰੀਡਰ ਮੋਡ — ਵੱਡਾ ਟੈਕਸਟ"
+  "settings_reader_mode": "ਰੀਡਰ ਮੋਡ — ਵੱਡਾ ਟੈਕਸਟ",
+  "install_sheet_title": "CRISP ਨੂੰ ਹੋਮ ਸਕਰੀਨ ਤੇ ਜੋੜੋ",
+  "install_sheet_sub": "ਔਫਲਾਈਨ ਕੰਮ ਕਰਦਾ ਹੈ। ਤੁਰੰਤ ਸੇਵ।",
+  "install_sheet_note": "ਫਿਰ CRISP ਕਿਸੇ ਵੀ ਹੋਰ ਐਪ ਵਾਂਗ ਕੰਮ ਕਰੇਗਾ — ਔਫਲਾਈਨ ਵਿੱਚ ਵੀ."
 }

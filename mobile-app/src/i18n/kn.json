@@ -843,5 +843,8 @@
   "mr_status_paused": "ತಡೆ — ನೆಟ್ವರ್ಕ್ ಗಾಗಿ ಕಾಯುತ್ತಿದೆ",
   "mr_status_recovering": "ಮರುಪಡೆಯಲಾಗುತ್ತಿದೆ…",
   "mr_status_failed_permanent": "ಅಪ್‌ಲೋಡ್ ವಿಫಲ",
-  "settings_reader_mode": "ಓದುಗ ಮೋಡ್ — ದೊಡ್ಡ ಪಠ್ಯ"
+  "settings_reader_mode": "ಓದುಗ ಮೋಡ್ — ದೊಡ್ಡ ಪಠ್ಯ",
+  "install_sheet_title": "CRISP ಅನ್ನು ಹೋಮ್ ಸ್ಕ್ರೀನ್‌ಗೆ ಸೇರಿಸಿ",
+  "install_sheet_sub": "ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ತಕ್ಷಣ ಉಳಿಸುತ್ತದೆ.",
+  "install_sheet_note": "ನಂತರ CRISP ಇತರ ಅಪ್ಲಿಕೇಶನ್‌ಗಳಂತೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ — ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿಯೂ."
 }

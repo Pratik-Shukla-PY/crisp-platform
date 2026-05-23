@@ -847,5 +847,8 @@
   "mr_status_paused": "En pause — en attente du réseau",
   "mr_status_recovering": "Récupération…",
   "mr_status_failed_permanent": "Échec du téléchargement",
-  "settings_reader_mode": "Mode Lecture — texte plus grand"
+  "settings_reader_mode": "Mode Lecture — texte plus grand",
+  "install_sheet_title": "Ajouter CRISP à l'écran d'accueil",
+  "install_sheet_sub": "Fonctionne hors ligne. Signalements instantanés. Plus rapide.",
+  "install_sheet_note": "CRISP fonctionnera alors comme n'importe quelle autre app — même hors ligne."
 }

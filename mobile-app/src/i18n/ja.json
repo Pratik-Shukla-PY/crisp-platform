@@ -845,5 +845,8 @@
   "mr_status_paused": "一時停止 — ネットワーク待ち",
   "mr_status_recovering": "復旧中…",
   "mr_status_failed_permanent": "アップロード失敗",
-  "settings_reader_mode": "リーダーモード — 大きな文字"
+  "settings_reader_mode": "リーダーモード — 大きな文字",
+  "install_sheet_title": "CRISP をホーム画面に追加",
+  "install_sheet_sub": "オフラインで動作。即座に保存。素早い報告。",
+  "install_sheet_note": "CRISP は他のアプリと同じように動作します — オフラインでも。"
 }

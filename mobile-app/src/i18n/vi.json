@@ -846,5 +846,8 @@
   "mr_status_paused": "Tạm dừng — đang chờ mạng",
   "mr_status_recovering": "Đang khôi phục…",
   "mr_status_failed_permanent": "Tải lên thất bại",
-  "settings_reader_mode": "Chế độ Đọc — văn bản lớn hơn"
+  "settings_reader_mode": "Chế độ Đọc — văn bản lớn hơn",
+  "install_sheet_title": "Thêm CRISP vào màn hình chính",
+  "install_sheet_sub": "Hoạt động ngoại tuyến. Lưu tức thì. Báo cáo nhanh hơn.",
+  "install_sheet_note": "Sau đó CRISP sẽ hoạt động như mọi ứng dụng khác — kể cả ngoại tuyến."
 }

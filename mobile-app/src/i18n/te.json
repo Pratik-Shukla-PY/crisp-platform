@@ -843,5 +843,8 @@
   "mr_status_paused": "నిలిపివేయబడింది — నెట్‌వర్క్ కోసం వేచి",
   "mr_status_recovering": "తిరిగి పొందుతోంది…",
   "mr_status_failed_permanent": "అప్‌లోడ్ విఫలమైంది",
-  "settings_reader_mode": "రీడర్ మోడ్ — పెద్ద వచనం"
+  "settings_reader_mode": "రీడర్ మోడ్ — పెద్ద వచనం",
+  "install_sheet_title": "CRISPను హోమ్ స్క్రీన్‌కు జోడించండి",
+  "install_sheet_sub": "ఆఫ్‌లైన్‌లో పని చేస్తుంది. తక్షణ సేవ్.",
+  "install_sheet_note": "తర్వాత CRISP ఇతర యాప్‌ల వలె పనిచేస్తుంది — ఆఫ్‌లైన్‌లో కూడా."
 }

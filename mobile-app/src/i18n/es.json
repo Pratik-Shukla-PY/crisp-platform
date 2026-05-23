@@ -855,5 +855,8 @@
   "mr_status_paused": "En pausa — esperando red",
   "mr_status_recovering": "Recuperando…",
   "mr_status_failed_permanent": "Carga fallida",
-  "settings_reader_mode": "Modo Lectura — texto más grande"
+  "settings_reader_mode": "Modo Lectura — texto más grande",
+  "install_sheet_title": "Añade CRISP a tu pantalla de inicio",
+  "install_sheet_sub": "Funciona sin conexión. Guarda al instante. Más rápido.",
+  "install_sheet_note": "CRISP funcionará como cualquier otra app — incluso sin conexión."
 }

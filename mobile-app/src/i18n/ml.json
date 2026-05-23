@@ -840,5 +840,8 @@
   "mr_status_paused": "താൽക്കാലികമായി നിർത്തി — നെറ്റ്‌വർക്ക് കാത്തിരിക്കുന്നു",
   "mr_status_recovering": "പുനഃസ്ഥാപിക്കുന്നു…",
   "mr_status_failed_permanent": "അപ്‌ലോഡ് പരാജയപ്പെട്ടു",
-  "settings_reader_mode": "റീഡർ മോഡ് — വലിയ ടെക്സ്റ്റ്"
+  "settings_reader_mode": "റീഡർ മോഡ് — വലിയ ടെക്സ്റ്റ്",
+  "install_sheet_title": "CRISP ഹോം സ്ക്രീനിലേക്ക് ചേർക്കുക",
+  "install_sheet_sub": "ഓഫ്‌ലൈൻ പ്രവർത്തിക്കുന്നു. തൽക്ഷണം സേവ്.",
+  "install_sheet_note": "പിന്നീട് CRISP മറ്റേതൊരു ആപ്പിനെയും പോലെ പ്രവർത്തിക്കും — ഓഫ്‌ലൈനിലും."
 }

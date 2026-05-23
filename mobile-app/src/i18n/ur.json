@@ -843,5 +843,8 @@
   "mr_status_paused": "موقوف — نیٹ ورک کا منتظر",
   "mr_status_recovering": "بحال ہو رہا ہے…",
   "mr_status_failed_permanent": "اپ لوڈ ناکام",
-  "settings_reader_mode": "ریڈر موڈ — بڑا متن"
+  "settings_reader_mode": "ریڈر موڈ — بڑا متن",
+  "install_sheet_title": "CRISP کو ہوم سکرین پر شامل کریں",
+  "install_sheet_sub": "آف لائن کام کرتا ہے۔ فوری محفوظ۔ تیز رپورٹنگ۔",
+  "install_sheet_note": "پھر CRISP کسی بھی دوسری ایپ کی طرح کام کرے گا — آف لائن میں بھی۔"
 }

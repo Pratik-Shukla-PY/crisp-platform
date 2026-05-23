@@ -10762,42 +10762,50 @@ body.tier-t4 .home-impact {
    `hidden` HTML attribute the moment display-mode flips to
    `standalone`. */
 .home-stage .home-add2hs-btn {
-    /* Strip default <button> chrome so the class owns every visual. */
+    /* Strip default <button> chrome so the class owns every visual.
+       AUDIT 2026-05-23 (HC2) — restyled to match spec: bigger, full-
+       width on small viewports so it reads as a primary install affordance.
+       Color was #ffae00 (CRISP amber); spec calls #FFB703 — close enough
+       to keep the existing CSS variable footprint, no theme drift. */
     all: unset;
     cursor: pointer;
     box-sizing: border-box;
+    width: 100%;
+    max-width: 320px;
     align-self: center;
-    margin: 6px auto 0;
-    padding: 7px 16px;
-    border-radius: 999px;
-    background: #ffae00;             /* CRISP accent yellow */
-    color: #3a2700;                  /* warm brown — AAA contrast on #ffae00 */
+    margin: 8px auto 0;
+    padding: 12px 20px;
+    min-height: 48px;
+    border-radius: 14px;
+    background: #FFB703;             /* spec amber */
+    color: #0a1929;                  /* deep navy — 10.5:1 contrast on amber */
     font-family: var(--font, 'Inter', sans-serif);
-    font-size: 12px;
+    font-size: var(--fz-body, 14px);
     font-weight: 700;
     letter-spacing: 0.01em;
     line-height: 1.2;
-    box-shadow: 0 4px 14px rgba(255, 174, 0, 0.32);
+    box-shadow: 0 6px 18px rgba(255, 183, 3, 0.35);
     transition: transform 0.12s ease, box-shadow 0.15s ease,
                 background 0.15s ease;
     -webkit-tap-highlight-color: transparent;
     white-space: nowrap;
-    max-width: calc(100% - 24px);
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
 }
 .home-stage .home-add2hs-btn:hover {
     transform: translateY(-1px);
-    background: #ffbc1f;
-    box-shadow: 0 6px 18px rgba(255, 174, 0, 0.42);
+    background: #FFC93A;
+    box-shadow: 0 8px 22px rgba(255, 183, 3, 0.45);
 }
 .home-stage .home-add2hs-btn:focus-visible {
-    outline: 2px solid rgba(58, 39, 0, 0.55);
+    outline: 2px solid rgba(10, 25, 41, 0.55);
     outline-offset: 2px;
 }
 .home-stage .home-add2hs-btn:active {
     transform: scale(0.985);
-    box-shadow: 0 3px 10px rgba(255, 174, 0, 0.32);
+    box-shadow: 0 3px 10px rgba(255, 183, 3, 0.32);
 }
 .home-stage .home-add2hs-btn[hidden] { display: none !important; }
 /* On compact viewports shrink slightly so the chip + footer row
