@@ -5898,18 +5898,16 @@ body.tier-t4 .home-impact {
 }
 
 /* Utility footer at the very bottom of the home stage.
-   Replaces the old "Works offline" trust line. Four small text
-   links (Privacy · Open source · Help · version chip). */
+   HC50 (May 23, operator) — `display: contents` so the nav's
+   children (Privacy + Help buttons) become DIRECT flex items of
+   the parent .home-footer-row. Combined with the parent's
+   `justify-content: space-between`, this distributes all four
+   row items — Privacy, Help, CRISP version label, key icon —
+   with equal gaps between them and equal padding to each edge.
+   The nav keeps its role + aria-label for screen readers; only
+   the layout box vanishes. */
 .home-utility-footer {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 10px 0 4px;
-    margin-top: 12px;
-    color: var(--text-mute, var(--muted));
-    font-size: 11px;
+    display: contents;
 }
 .home-utility-link {
     /* HC22 / HC37 — 13 px text, text-sub colour (~5.8:1 contrast on
@@ -11286,16 +11284,14 @@ body.tier-t4 .home-impact {
    markup change so the painter + back-compat selectors continue
    to resolve. */
 .home-footer-meta {
-    /* HC37 → HC39 → HC45 — margin-top 2 px, min-height 28 px, and
-       padding now 0 0 (was 0 4 px) so the install chip's right edge
-       sits flush with the lang-switcher's right edge above (same
-       vertical grid as the rest of .home-center's children — none
-       of which have horizontal padding of their own). The install
-       chip (.home-add2hs-btn) is 36 px tall so the row grows to
-       fit its content. */
+    /* HC50 (May 23, operator) — version label was promoted to Row 1
+       so this row now hosts only the install chip (or the post-
+       install thank-you in display-mode: standalone). Centred via
+       justify-content: center; install chip stays its own width
+       at ~280 px max. */
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     flex-wrap: wrap;
     gap: 4px 12px;
     margin: 2px 0 0;

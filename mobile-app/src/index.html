@@ -177,7 +177,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v274">
+    <meta name="crisp-release" content="crisp-pwa@v275">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -3280,17 +3280,26 @@
                  (any spec / dashboard query that selects #home-
                  utility-version still resolves). -->
             <div class="home-footer-row" id="home-footer-row">
-                <!-- HC43 (May 23, operator) — "Open Source" link
-                     removed; the footer reads "Privacy · Help"
-                     only. The GitHub URL stays reachable from the
-                     #home-help-sheet (HC47) which links out to it.
-                     HC47 also converted these from stage-router
-                     buttons to bottom-sheet openers. -->
+                <!-- HC43 → HC50 (May 23, operator) — footer Row 1
+                     is now a 4-up equidistant layout: Privacy, Help,
+                     CRISP version label, device-ID key icon. The
+                     nav wrapper uses `display: contents` (CSS rule
+                     below) so its two children become direct flex
+                     items of .home-footer-row — the parent's
+                     `justify-content: space-between` then spreads
+                     all four items with equal gaps from the same
+                     14 px gutter on each side. The · separator
+                     between Privacy and Help was dropped per the
+                     operator's "remove dots" instruction. -->
                 <nav class="home-utility-footer" id="home-utility-footer" aria-label="Footer links">
                     <button class="home-utility-link" id="btn-home-privacy" type="button" data-i18n="home_footer_privacy">Privacy</button>
-                    <span class="home-utility-dot" aria-hidden="true">•</span>
                     <button class="home-utility-link" id="btn-home-help" type="button" data-i18n="home_footer_help">Help</button>
                 </nav>
+                <!-- HC50 — version label promoted from Row 2 into
+                     this row so all four utility items share the
+                     same horizontal grid. Painted by home-screen.js
+                     ::_paintVersionPill. -->
+                <span class="home-footer-version" id="home-utility-version">CRISP v—</span>
 
                 <!-- AUDIT 2026-05-23 (HC3) — Reporter ID UX collapsed from
                      a permanent visible row into a compact icon button that
@@ -3342,35 +3351,19 @@
                  when the version moved into the nav; HC36 brings
                  the two-element row back with a semver-style label
                  instead of "Build N"). -->
+            <!-- HC50 (May 23, operator) — version label moved UP
+                 into .home-footer-row alongside Privacy + Help +
+                 key icon. The meta row below now hosts only the
+                 install chip (centred on its own line). Post-
+                 install thank-you replaces the chip in
+                 display-mode: standalone. -->
             <div class="home-footer-meta" id="home-footer-meta">
-                <!-- Version label painted by home-screen.js
-                     ::_paintVersionPill as "CRISP v{X}.{Y}.{Z}" where
-                     X.Y.Z is the digit-split form of the build number
-                     (Build 266 → CRISP v2.6.6). Static text — no
-                     click-to-expand affordance; full API/build detail
-                     surfaces via the HC16 status sheet on the brand
-                     cluster. The element keeps the legacy
-                     #home-utility-version id so the painter doesn't
-                     need to know about a new selector + so back-compat
-                     dashboard / spec queries still resolve. -->
-                <span class="home-footer-version" id="home-utility-version">CRISP v—</span>
-                <!-- HC2 + HC17 + HC18 — "+ Add to Homescreen" universal
-                     install affordance. Visible by default on every
-                     browser EXCEPT display-mode: standalone. HC17
-                     slimmed it from primary-amber to a tertiary
-                     outlined chip; HC18 dropped the benefit microcopy
-                     row above it. -->
                 <button type="button" class="home-add2hs-btn"
                         id="btn-home-add2hs"
                         aria-label="Add CRISP to your home screen"
                         data-i18n-aria-label="aria_add_to_homescreen"
                         data-i18n="add_to_homescreen"
                         hidden>+ Add to Homescreen</button>
-                <!-- HC7 post-install thank-you (rendered in place of
-                     the button when display-mode: standalone).
-                     HC36 — moved INSIDE .home-footer-meta so when
-                     installed the version stays on the left and the
-                     thank-you takes the right slot. -->
                 <p class="home-install-thanks" id="home-install-thanks"
                    hidden data-i18n="install_thanks">
                     Installed. Reports save instantly.

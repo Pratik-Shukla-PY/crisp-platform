@@ -123,32 +123,14 @@ test.describe('PWA — home footer v2 redesign', () => {
         }
     });
 
-    test('bullet separators are visible (• glyph, mid-slate)', async ({ page }) => {
-        const dots = await page.locator('#home-utility-footer .home-utility-dot').evaluateAll((els) =>
-            els.map((el) => {
-                const cs = getComputedStyle(el);
-                return {
-                    text: el.textContent?.trim() || '',
-                    fontSize: cs.fontSize,
-                    color: cs.color,
-                    opacity: cs.opacity,
-                };
-            }),
-        );
-        // HC43 (May 23) — one visible dot between the two remaining
-        // links (Privacy · Help). The former Open-Source separator
-        // dot is gone with the link.
-        const visible = dots.filter((d) => d.text === '•');
-        expect(visible.length).toBeGreaterThanOrEqual(1);
-        // Semantic check: dot glyph + visible + mid-slate colour.
-        // Exact font-size drifts with CSS tuning across breakpoints.
-        for (const dot of visible) {
-            expect(dot.text).toBe('•');
-            expect(parseFloat(dot.fontSize)).toBeGreaterThanOrEqual(10);
-            expect(parseFloat(dot.opacity)).toBe(1);
-            // rgba(148, 163, 184, 0.55).
-            expect(dot.color).toMatch(/148,\s*163,\s*184/);
-        }
+    test('bullet separators are gone (HC50 4-up equidistant layout)', async ({ page }) => {
+        // HC50 (May 23) — the footer row was restructured into a 4-up
+        // equidistant flex layout (Privacy, Help, CRISP version, key
+        // icon) with `justify-content: space-between`. The · dot
+        // separators were dropped — gaps come from the parent flex
+        // distribution instead.
+        const dots = await page.locator('#home-utility-footer .home-utility-dot').count();
+        expect(dots).toBe(0);
     });
 
     // ── Pill ───────────────────────────────────────────────────────────
