@@ -150,6 +150,26 @@
     --motion-shimmer: 1400ms;
     --easing-out: cubic-bezier(0.22, 1, 0.36, 1);  /* settle from velocity */
     --easing-linear: linear;
+    /* AUDIT 2026-05-23 (HC13 humanitarian-grade home) — spacing scale.
+       Centralises gap / padding / margin steps so future components
+       compose from one dial. Naming follows the T-shirt convention
+       used by Tailwind / Radix / Material; numbers map roughly to
+       4-pixel increments × 2.
+         --gap-2  8 px   inner card padding, tight chip rows
+         --gap-3 12 px   default section gap
+         --gap-4 16 px   primary block separator
+         --gap-5 20 px   between hero + secondary actions
+         --gap-6 24 px   hero margin-bottom
+         --gap-8 32 px   stage padding / large sections
+       Existing hardcoded `gap: 8/12/16/...` values on the home stage
+       continue to work; new code uses the tokens. Reader Mode does
+       not need to scale these — spacing is independent of text size. */
+    --gap-2: 8px;
+    --gap-3: 12px;
+    --gap-4: 16px;
+    --gap-5: 20px;
+    --gap-6: 24px;
+    --gap-8: 32px;
     /* branded reporting-channel tile tokens.
        Each channel gets a foreground colour, a 16% soft-fill background,
        and a 32% edge border so .home-channel-tile can render a brand-
