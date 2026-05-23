@@ -6016,10 +6016,16 @@ body.tier-t4 .home-impact {
 .stage.home-stage { padding: 0; }
 
 /* Very narrow phones (iPhone SE / small Android, ≤ 380 px): tighter
-   horizontal gutter so 3-across channel grid keeps legible labels. */
+   horizontal gutter so 3-across channel grid keeps legible labels.
+   HC24 (May 2026, operator) — the legacy `padding-right: 96px`
+   rule on .home-brand-row was deleted. It was a v5-era clearance
+   for the THEN-absolutely-positioned lang switcher. Since v6.6 the
+   pill is an in-flow flex child of the brand row, so the padding
+   no longer protects anything — it just pushed `justify-content:
+   space-between`'s right-anchor 96 px inward, making the audio +
+   lang switcher visually drift toward the centre on iPhone SE. */
 @media (max-width: 380px) {
     .home-stage .home-center { padding-left: 16px; padding-right: 16px; }
-    .home-brand-row { padding-right: 96px; }
 }
 /* May 2026 (fit-in-viewport pass v2) — breakpoints raised so 720 px
    desktop viewports stay on the compact base (gap: 8 px) and only
