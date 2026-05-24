@@ -796,9 +796,25 @@
         // Severity bar
         const fillEl = sheet.querySelector('#nearby-sheet-severity-fill');
         const labelEl = sheet.querySelector('#nearby-sheet-severity-label');
+        // P1 (i18n audit, May 23) — was rendering the raw enum
+        // ("PARTIAL" / "MINIMAL" / "COMPLETE" / "UNKNOWN") in every
+        // locale. Now resolved via the damage_class_<lower> i18n
+        // key (re-using the existing partial_damage / minimal_damage
+        // / complete_damage keys where they exist, otherwise the
+        // new damage_class_unknown). EN fallbacks guard the user.
         const sev = group.severity_max || 'UNKNOWN';
         if (fillEl) fillEl.style.width = `${_SEVERITY_FILL[sev] || 12}%`;
-        if (labelEl) labelEl.textContent = sev;
+        if (labelEl) {
+            const _tSev = (typeof window.t === 'function') ? window.t : (k => null);
+            const _sevMap = {
+                MINIMAL:  ['minimal_damage', 'Minimal'],
+                PARTIAL:  ['partial_damage', 'Partial'],
+                COMPLETE: ['complete_damage', 'Complete'],
+                UNKNOWN:  ['damage_class_unknown', 'Unknown'],
+            };
+            const [k, fallback] = _sevMap[sev] || ['damage_class_unknown', sev];
+            labelEl.textContent = _tSev(k) || fallback;
+        }
 
         // Soft pre-fill for "Add Your Report Here" — operator-approved
         // option #7: pre-fill only building_id + lat/lng. Store in

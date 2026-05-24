@@ -119,55 +119,43 @@
         const isSamsung = /samsungbrowser/.test(ua);
         const isFirefox = /firefox|fxios/.test(ua);
 
-        // Title + first-line instruction picks the right active step.
-        let primaryStep = '';
+        // P1 (i18n audit, May 23) — was 5 hard-coded EN <li> blocks.
+        // Now reads through window.t() with EN fallback so every
+        // locale gets a translated install instruction.
+        const _t = (k, fallback) => {
+            try {
+                if (typeof window.t === 'function') {
+                    const v = window.t(k);
+                    if (v && v !== k) return v;
+                }
+            } catch (_) {}
+            return fallback;
+        };
+        const _esc = (s) => String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        let stepKey, stepFallback;
         if (isIos) {
-            primaryStep = `
-                <li class="iis-active-step">
-                    <span class="iis-step-num">1</span>
-                    <span class="iis-step-text">
-                        Tap the Share button
-                        <span class="iis-icon"><i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i></span>
-                        in Safari, then <strong>Add to Home Screen</strong>.
-                    </span>
-                </li>`;
+            stepKey = 'install_step_ios';
+            stepFallback = 'Tap the Share button in Safari, then choose Add to Home Screen.';
         } else if (isSamsung) {
-            primaryStep = `
-                <li class="iis-active-step">
-                    <span class="iis-step-num">1</span>
-                    <span class="iis-step-text">
-                        Tap the menu button (☰) in Samsung Internet, then
-                        <strong>Add page to → Home screen</strong>.
-                    </span>
-                </li>`;
+            stepKey = 'install_step_samsung';
+            stepFallback = 'Tap the menu button in Samsung Internet, then Add page to → Home screen.';
         } else if (isFirefox) {
-            primaryStep = `
-                <li class="iis-active-step">
-                    <span class="iis-step-num">1</span>
-                    <span class="iis-step-text">
-                        Tap the menu (⋮) in Firefox, then
-                        <strong>Install</strong> or <strong>Add to Home Screen</strong>.
-                    </span>
-                </li>`;
+            stepKey = 'install_step_firefox';
+            stepFallback = 'Tap the menu in Firefox, then Install or Add to Home Screen.';
         } else if (isAndroid) {
-            primaryStep = `
-                <li class="iis-active-step">
-                    <span class="iis-step-num">1</span>
-                    <span class="iis-step-text">
-                        Tap the menu (⋮) in Chrome, then
-                        <strong>Install app</strong>.
-                    </span>
-                </li>`;
+            stepKey = 'install_step_chrome';
+            stepFallback = 'Tap the menu (⋮) in Chrome, then Install app.';
         } else {
-            primaryStep = `
-                <li class="iis-active-step">
-                    <span class="iis-step-num">1</span>
-                    <span class="iis-step-text">
-                        Click the install icon in your browser's address bar,
-                        or open the menu → <strong>Install CRISP</strong>.
-                    </span>
-                </li>`;
+            stepKey = 'install_step_desktop';
+            stepFallback = 'Click the install icon in your browser\'s address bar, or open the menu → Install CRISP.';
         }
+        const primaryStep = `
+            <li class="iis-active-step">
+                <span class="iis-step-num">1</span>
+                <span class="iis-step-text">${_esc(_t(stepKey, stepFallback))}</span>
+            </li>`;
 
         sheet.innerHTML = `
             <div class="iis-card" role="document">

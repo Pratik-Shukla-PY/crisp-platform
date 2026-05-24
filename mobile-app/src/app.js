@@ -11024,26 +11024,31 @@ function _renderLandmarkFallback() {
  *  (building name, service status) but do require the headline chip pick so
  *  downstream stages have something meaningful to render. */
 function _validateV3Stage(stageId) {
+    // P1 (i18n audit, May 23) — was reusing `t('photo_required')` for
+    // all three validators, which resolved to "Please add a photo"
+    // in every locale instead of the contextual message. Now wired
+    // to dedicated keys + a safe EN fallback that only fires when
+    // the key is missing.
     if (stageId === 'stage-where') {
         // Damage class is pre-selected PARTIAL by default so this passes
         // unless the user deselects everything (unusual). Location is soft
         // — users can submit without GPS on slow / no-signal devices.
         if (!state.damageClass) {
-            try { showToast(t('photo_required') || 'Please pick a damage level', 'info'); } catch (_) {}
+            try { showToast(t('v3_pick_damage_required') || 'Pick how bad the damage is to continue.', 'info'); } catch (_) {}
             return false;
         }
         return true;
     }
     if (stageId === 'stage-infra') {
         if (!state.infraType) {
-            try { showToast(t('photo_required') || 'Please pick what was damaged', 'info'); } catch (_) {}
+            try { showToast(t('v3_pick_infra_required') || 'Pick what was damaged to continue.', 'info'); } catch (_) {}
             return false;
         }
         return true;
     }
     if (stageId === 'stage-crisis') {
         if (!state.crisisType) {
-            try { showToast(t('photo_required') || 'Please pick a crisis type', 'info'); } catch (_) {}
+            try { showToast(t('v3_pick_crisis_required') || 'Pick the crisis type to continue.', 'info'); } catch (_) {}
             return false;
         }
         return true;

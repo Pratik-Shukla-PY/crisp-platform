@@ -683,9 +683,11 @@
             if (canInstall) {
                 installBlock.style.display = '';
                 if (installLabel) {
+                    // P1 (i18n audit, May 23) — was hard-coded EN.
+                    const t = (typeof window.t === 'function') ? window.t : (k => null);
                     installLabel.textContent = platform === 'ios'
-                        ? 'How to install on iPhone'
-                        : 'Install on home screen';
+                        ? (t('landing_install_pwa_ios') || 'How to install on iPhone')
+                        : (t('landing_install_pwa') || 'Install on home screen');
                 }
             } else {
                 installBlock.style.display = 'none';
@@ -2212,7 +2214,18 @@
                 }
                 return '';
             })();
-            const status = String(r.status || 'PENDING').toLowerCase();
+            // P1 (i18n audit, May 23) — was rendered as the raw
+            // enum literal in lowercase ("pending", "verified",
+            // …) in every locale. Now resolved via the
+            // report_status_<value> i18n key with EN fallback.
+            const _statusRaw = String(r.status || 'PENDING').toLowerCase();
+            const _statusKey = `report_status_${_statusRaw}`;
+            const _tStatus = (typeof window.t === 'function') ? window.t : (k => null);
+            const _statusFallbacks = {
+                pending: 'Pending', verified: 'Verified', rejected: 'Not verified',
+                action_required: 'Action needed', resolved: 'Resolved',
+            };
+            const status = _tStatus(_statusKey) || _statusFallbacks[_statusRaw] || _statusRaw;
             // route through window._resolveMediaUrl so any
             // future s3:// regression surfaces a placeholder cleanly.
             // onerror handler swaps the broken <img> for the camera

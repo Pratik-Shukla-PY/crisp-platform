@@ -2526,7 +2526,11 @@
         } catch (err) {
             console.error('[v4 mic] error:', err);
             if (typeof window.showToast === 'function') {
-                window.showToast('Mic permission denied or unsupported.');
+                // P1 (i18n audit, May 23) — was hard-coded EN.
+                window.showToast(
+                    (typeof window.t === 'function' && window.t('v4_mic_permission_denied'))
+                    || 'Microphone access denied or not supported on this device.'
+                );
             }
         }
     }
@@ -2714,7 +2718,12 @@
             sendBtn.classList.remove('is-sending');
             sendBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> <span data-i18n="v4_send">Send to UNDP</span>';
             if (typeof window.showToast === 'function') {
-                window.showToast('Send failed — your report was saved offline and will retry.', 'error');
+                // P1 (i18n audit, May 23) — was hard-coded EN.
+                window.showToast(
+                    (typeof window.t === 'function' && window.t('v4_send_failed_toast'))
+                    || 'Send failed — your report was saved offline and will retry.',
+                    'error'
+                );
             }
         }
     }
