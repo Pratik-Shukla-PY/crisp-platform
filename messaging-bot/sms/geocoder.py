@@ -17,12 +17,34 @@ Returns: { latitude, longitude, location_name, confidence, source }
 import os
 import json
 import logging
+import hashlib
+from datetime import datetime, timedelta, timezone
+
 import httpx
+from aiolimiter import AsyncLimiter
 
 logger = logging.getLogger(__name__)
 
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# HC55 (May 2026) — worker-shared rate limiters.
+#
+# Nominatim's usage policy caps third-party apps at ≤ 1 req/s globally.
+# Without a worker-shared token bucket, each FastAPI coroutine in this
+# worker would happily fire its own RPS budget and earn the whole
+# deployment a 429 ban — exactly what the operator's 2026-05-24 HAR
+# captured. `AsyncLimiter(1, 1)` blocks the second concurrent call until
+# the per-second budget refreshes. Multi-worker safety still relies on
+# the Redis bucket in app/utils/rate_limit.py, but the hot path through
+# this module is the one user-facing taps actually exercise.
+_NOMINATIM_LIMITER = AsyncLimiter(max_rate=1, time_period=1)
+
+# Mapbox geocoding API allows 600 req/min (~10 RPS) on the free tier.
+# The limiter is mostly defensive — runaway code paths (e.g. an infinite
+# retry loop) get clamped at the policy limit rather than burning the
+# operator's free-tier budget in seconds.
+_MAPBOX_LIMITER = AsyncLimiter(max_rate=600, time_period=60)
 
 # Common noise words to strip before geocoding
 NOISE_WORDS = [
@@ -110,7 +132,10 @@ async def _geocode_mapbox(query: str, country_hint: str = "IN", language: str = 
 
     try:
         country_code = {"India": "IN", "india": "IN"}.get(country_hint, country_hint or "IN")
-        async with httpx.AsyncClient(timeout=10) as c:
+        # HC55 — defensive rate-limit (see _MAPBOX_LIMITER comment at top
+        # of file). Mapbox's free tier is 600 req/min; we run a single
+        # token bucket so a runaway loop can't blow it.
+        async with _MAPBOX_LIMITER, httpx.AsyncClient(timeout=10) as c:
             r = await c.get(
                 f"https://api.mapbox.com/geocoding/v5/mapbox.places/{query}.json",
                 params={
@@ -164,7 +189,10 @@ async def _geocode_nominatim(query: str, country_hint: str = "India", language: 
     """
     search_query = f"{query}, {country_hint}" if country_hint else query
     try:
-        async with httpx.AsyncClient(timeout=10) as c:
+        # HC55 — the policy-mandated ≤ 1 RPS gate. Every Nominatim hit
+        # in this module (forward + reverse) blocks on _NOMINATIM_LIMITER
+        # so the operator's 2026-05-24 429 cascade can't repeat.
+        async with _NOMINATIM_LIMITER, httpx.AsyncClient(timeout=10) as c:
             r = await c.get(
                 "https://nominatim.openstreetmap.org/search",
                 params={"q": search_query, "format": "json", "limit": 1, "addressdetails": 1},
@@ -308,3 +336,301 @@ async def geocode_text(location_text: str, country_hint: str = "India", language
 
     logger.warning(f"All geocoding layers failed for: '{location_text[:80]}'")
     return empty
+
+
+# ── HC55 (May 2026) — Reverse geocoding (coords → place name) ────────────────
+#
+# Replaces the 3 inline browser → Nominatim calls in mobile-app/src/app.js
+# (lines 3305, 5386, 5598) that the operator's 2026-05-24 HAR caught
+# returning 429 from Nominatim's Varnish edge. PWA now POSTs lat/lng to
+# /api/v1/reports/geocode/reverse; that route calls reverse_geocode_coords
+# below, which fans through cache → Mapbox → rate-limited Nominatim →
+# coords-only fallback.
+
+# Coord rounding precision. 4 decimal places ≈ 11 m on the equator — finer
+# than Nominatim's neighbourhood resolution, so two reporters in the same
+# city block hit the same cache row.
+_COORD_PRECISION = 4
+
+# Default TTL for cached geocodes (7 days). Place names rarely change
+# faster than this; the OSM-side updates that DO matter (new road, new
+# building) will percolate into Mapbox on a similar cadence.
+_CACHE_TTL = timedelta(days=7)
+
+
+def _round_coord(value: float) -> float:
+    """Round a lat/lng to the cache-key precision."""
+    return round(float(value), _COORD_PRECISION)
+
+
+def _stable_text_hash(text: str) -> float:
+    """Stable int hash of a query string, fits in a Float column.
+
+    Used only for forward-direction cache rows (lng_key = 0, lat_key =
+    this hash). MD5 → 12 hex chars → int → float-safe (≤ 2^48).
+    """
+    h = hashlib.md5(text.strip().lower().encode("utf-8")).hexdigest()[:12]
+    return float(int(h, 16))
+
+
+async def _geocode_mapbox_reverse(lat: float, lng: float, language: str = "en") -> dict:
+    """Mapbox reverse-geocode tier. Returns the place name closest to
+    the given coords, or {} on failure.
+
+    Mapbox expects ``{lng},{lat}`` in the URL path (NOT {lat},{lng} —
+    that's a common bug). The `language` query param honours
+    UNDP §3.1f.5 so AR/ZH users get native-script place names.
+    """
+    if not MAPBOX_TOKEN:
+        return {}
+
+    try:
+        async with _MAPBOX_LIMITER, httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                f"https://api.mapbox.com/geocoding/v5/mapbox.places/{lng},{lat}.json",
+                params={
+                    "access_token": MAPBOX_TOKEN,
+                    "limit": 1,
+                    "types": "neighborhood,locality,place",
+                    "language": _normalise_language(language),
+                },
+            )
+            if r.status_code == 200:
+                data = r.json()
+                features = data.get("features", [])
+                if features:
+                    feat = features[0]
+                    place_name = feat.get("place_name", "")
+                    relevance = feat.get("relevance", 0)
+                    parts = [feat.get("text", "")]
+                    for ctx in feat.get("context", []):
+                        cid = ctx.get("id", "")
+                        if any(t in cid for t in ["place", "district", "region"]):
+                            parts.append(ctx.get("text", ""))
+                    location_name = ", ".join([p for p in parts[:3] if p])
+                    confidence = ("high" if relevance > 0.8
+                                  else "medium" if relevance > 0.5 else "low")
+                    logger.info(
+                        "Mapbox-reverse %.4f,%.4f → %s (rel=%.2f)",
+                        lat, lng, location_name, relevance,
+                    )
+                    return {
+                        "location_name": location_name or place_name,
+                        "confidence": confidence,
+                        "source": "mapbox",
+                        "latitude": lat,
+                        "longitude": lng,
+                    }
+            elif r.status_code == 429:
+                logger.warning("Mapbox reverse 429 — falling through to Nominatim")
+    except Exception as exc:
+        logger.warning(f"Mapbox reverse-geocode error: {exc}")
+    return {}
+
+
+async def _geocode_nominatim_reverse(lat: float, lng: float, language: str = "en") -> dict:
+    """Nominatim reverse-geocode tier. Rate-limited to 1 RPS via
+    _NOMINATIM_LIMITER. Identifies CRISP via the User-Agent header
+    (Nominatim policy requirement).
+    """
+    try:
+        async with _NOMINATIM_LIMITER, httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={
+                    "lat": lat, "lon": lng, "format": "json",
+                    "zoom": 16, "addressdetails": 1,
+                },
+                headers={
+                    "User-Agent": "CRISP-Platform/1.0",
+                    "Accept-Language": _normalise_language(language),
+                },
+            )
+            if r.status_code == 200:
+                data = r.json() or {}
+                addr = data.get("address") or {}
+                parts = []
+                local = (addr.get("neighbourhood") or addr.get("suburb")
+                         or addr.get("hamlet") or addr.get("village")
+                         or addr.get("town") or "")
+                city = (addr.get("city") or addr.get("county")
+                        or addr.get("state_district") or addr.get("state") or "")
+                if local:
+                    parts.append(local)
+                if city and city != local:
+                    parts.append(city)
+                if addr.get("country"):
+                    parts.append(addr["country"])
+                location_name = ", ".join(parts) if parts else (data.get("display_name") or "")
+                if location_name:
+                    logger.info(
+                        "Nominatim-reverse %.4f,%.4f → %s",
+                        lat, lng, location_name,
+                    )
+                    return {
+                        "location_name": location_name,
+                        "confidence": "medium",
+                        "source": "nominatim",
+                        "latitude": lat,
+                        "longitude": lng,
+                    }
+            elif r.status_code == 429:
+                logger.warning(
+                    "Nominatim reverse 429 — rate-limit shouldn't fire under "
+                    "_NOMINATIM_LIMITER, investigate if recurring"
+                )
+    except Exception as exc:
+        logger.warning(f"Nominatim reverse-geocode error: {exc}")
+    return {}
+
+
+def _coords_fallback(lat: float, lng: float) -> dict:
+    """Last-resort response shape — used when both Mapbox and Nominatim
+    return empty. The PWA's client-side renderer keeps showing raw
+    coordinates rather than blanking the location pill, so the response
+    contract stays uniform.
+    """
+    return {
+        "location_name": f"{lat:.4f}°, {lng:.4f}°",
+        "confidence": "none",
+        "source": "fallback",
+        "latitude": lat,
+        "longitude": lng,
+    }
+
+
+def _cache_lookup(db, *, direction: str, lat_key: float, lng_key: float,
+                  language: str) -> dict | None:
+    """Return a cached geocode dict, or None if no live row exists.
+
+    Lazy eviction — only rows whose expires_at is still in the future
+    are returned. The hourly sweep (separate follow-up) reclaims old
+    rows in bulk.
+    """
+    from app.models.report import GeocodeCache  # local import: avoid cycles
+    now = datetime.now(timezone.utc)
+    row = (
+        db.query(GeocodeCache)
+        .filter(
+            GeocodeCache.direction == direction,
+            GeocodeCache.lat_key == lat_key,
+            GeocodeCache.lng_key == lng_key,
+            GeocodeCache.language == language,
+            GeocodeCache.expires_at > now,
+        )
+        .first()
+    )
+    if not row:
+        return None
+    return {
+        "location_name": row.location_name,
+        "confidence": row.confidence or "medium",
+        "source": "cache",
+        "latitude": row.latitude,
+        "longitude": row.longitude,
+    }
+
+
+def _cache_write(db, *, direction: str, lat_key: float, lng_key: float,
+                 language: str, payload: dict) -> None:
+    """Persist a geocode result. Idempotent: if a row already exists
+    (race between two coroutines for the same coord), the second writer
+    wins — same payload, just a fresher expires_at.
+    """
+    from app.models.report import GeocodeCache  # local import
+    if payload.get("source") in ("fallback", "cache"):
+        return  # Never persist the synthetic shapes.
+    now = datetime.now(timezone.utc)
+    existing = (
+        db.query(GeocodeCache)
+        .filter(
+            GeocodeCache.direction == direction,
+            GeocodeCache.lat_key == lat_key,
+            GeocodeCache.lng_key == lng_key,
+            GeocodeCache.language == language,
+        )
+        .first()
+    )
+    if existing:
+        existing.location_name = payload.get("location_name") or existing.location_name
+        existing.source = payload.get("source") or existing.source
+        existing.confidence = payload.get("confidence")
+        existing.latitude = payload.get("latitude")
+        existing.longitude = payload.get("longitude")
+        existing.expires_at = now + _CACHE_TTL
+    else:
+        db.add(GeocodeCache(
+            direction=direction,
+            lat_key=lat_key,
+            lng_key=lng_key,
+            language=language,
+            location_name=payload.get("location_name", ""),
+            source=payload.get("source", "unknown"),
+            confidence=payload.get("confidence"),
+            latitude=payload.get("latitude"),
+            longitude=payload.get("longitude"),
+            expires_at=now + _CACHE_TTL,
+        ))
+    try:
+        db.commit()
+    except Exception as exc:
+        # Cache failures are non-blocking — the live response still
+        # ships. Roll back so the surrounding request transaction
+        # isn't poisoned by a unique-constraint race.
+        logger.warning(f"Geocode cache write failed: {exc}")
+        db.rollback()
+
+
+async def reverse_geocode_coords(
+    lat: float, lng: float, language: str = "en", db=None,
+) -> dict:
+    """coords → {location_name, confidence, source, latitude, longitude}.
+
+    Cascade order:
+      1. Postgres cache (when ``db`` provided)
+      2. Mapbox reverse-geocode
+      3. Nominatim reverse-geocode (rate-limited to 1 RPS)
+      4. ``_coords_fallback`` — raw "lat°, lng°" string
+
+    Always returns a non-empty dict so the caller can paint *something*
+    on the location pill — the operator's pre-HC55 experience of seeing
+    raw lat/lng was actually the implicit fallback from a null return.
+    Now the contract is explicit.
+    """
+    lat = float(lat)
+    lng = float(lng)
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0):
+        raise ValueError(f"Coords out of range: lat={lat}, lng={lng}")
+
+    norm_lang = _normalise_language(language)
+    lat_key = _round_coord(lat)
+    lng_key = _round_coord(lng)
+
+    # 1. Cache hit?
+    if db is not None:
+        cached = _cache_lookup(
+            db, direction="reverse",
+            lat_key=lat_key, lng_key=lng_key, language=norm_lang,
+        )
+        if cached:
+            logger.debug("geocode cache HIT reverse %.4f,%.4f", lat_key, lng_key)
+            return cached
+
+    # 2. Mapbox.
+    result = await _geocode_mapbox_reverse(lat, lng, norm_lang)
+    if not result:
+        # 3. Nominatim fallback.
+        result = await _geocode_nominatim_reverse(lat, lng, norm_lang)
+
+    if not result:
+        result = _coords_fallback(lat, lng)
+
+    # 4. Persist if real.
+    if db is not None and result.get("source") not in ("fallback", "cache"):
+        _cache_write(
+            db, direction="reverse",
+            lat_key=lat_key, lng_key=lng_key, language=norm_lang,
+            payload=result,
+        )
+
+    return result

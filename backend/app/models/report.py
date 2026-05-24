@@ -1951,3 +1951,58 @@ class AiRetryQueueRow(Base):
         # history for this report" surface (planned follow-up).
         Index("ix_ai_retry_queue_report_id", "report_id"),
     )
+
+
+class GeocodeCache(Base):
+    """HC55 (May 2026) — persistent cache for geocoder results.
+
+    Both reverse (lat/lng → place name) and forward (text → lat/lng)
+    geocodes are cached here, keyed by direction + rounded coords +
+    language. The cache layer fronts the Mapbox / Nominatim cascade in
+    messaging-bot/sms/geocoder.py and is the single source of truth
+    every PWA + RN reverse-geocode call resolves against.
+
+    Why a table instead of pure Redis? Two reasons:
+      1. Multi-worker deploys want a shared cache without standing up
+         a separate Redis just for geocode lookups. Postgres is
+         already on the hot path.
+      2. The Nominatim usage policy explicitly asks heavy users to
+         cache results; a persistent table is the auditable record
+         that we comply.
+
+    Eviction: lazy at read-time via ``WHERE expires_at > now()``. The
+    default TTL is 7 days; coord rounding to 4 dp (~11 m) keeps the
+    row count manageable (≤ 100 k rows at UNDP-scale).
+    """
+    __tablename__ = "geocode_cache"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # Direction: 'reverse' (lat/lng → name) or 'forward' (text → lat/lng).
+    direction = Column(String(8), nullable=False)
+    # For reverse: rounded lat/lng (4 decimal places).
+    # For forward: ``lat_key`` carries a stable int hash of the cleaned
+    # query string; ``lng_key`` holds 0 (non-null so the composite
+    # index works for both shapes).
+    lat_key = Column(Float, nullable=False)
+    lng_key = Column(Float, nullable=False)
+    language = Column(String(8), nullable=False,
+                      server_default="en", default="en")
+    location_name = Column(String(256), nullable=False)
+    # Origin tier: 'mapbox' | 'nominatim'. 'fallback' and 'cache' are
+    # computed at response time and never persisted.
+    source = Column(String(32), nullable=False)
+    confidence = Column(String(16), nullable=True)
+    # Forward direction only — coords resolved by the original lookup.
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    created_at = Column(DateTime(timezone=True),
+                        server_default=func.now(), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        # Hot lookup: WHERE direction = ? AND lat_key = ? AND
+        # lng_key = ? AND language = ? AND expires_at > now().
+        Index("ix_geocode_cache_lookup",
+              "direction", "lat_key", "lng_key", "language"),
+        # Eviction sweep.
+        Index("ix_geocode_cache_expires", "expires_at"),
+    )

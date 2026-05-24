@@ -1090,8 +1090,31 @@
         nextBtn.addEventListener('click', _goToClassify);
         backBtn.addEventListener('click', () => window.__crispGoToStage('stage-home'));
 
+        // HC55 (May 2026) — 5-second cooldown on the "Refresh GPS"
+        // button. Pre-HC55 a tap-spam earned the entire mobile carrier
+        // a 429 from Nominatim's CDN edge (the operator's HAR caught
+        // two refreshes 10s apart, both rate-limited). The new backend
+        // route caches results for 7 days so most refreshes are cheap,
+        // but a client-side debounce makes the network behaviour
+        // observably tame in DevTools too. aria-busy keeps screen
+        // readers in step with the visual disabled state.
+        const _GPS_REFRESH_COOLDOWN_MS = 5000;
+        let _lastGpsRefreshAt = 0;
         retryGpsBtn.addEventListener('click', () => {
-            _refreshGps();
+            const now = Date.now();
+            const sinceLast = now - _lastGpsRefreshAt;
+            if (sinceLast < _GPS_REFRESH_COOLDOWN_MS) return;
+            _lastGpsRefreshAt = now;
+            retryGpsBtn.disabled = true;
+            retryGpsBtn.setAttribute('aria-busy', 'true');
+            try {
+                _refreshGps();
+            } finally {
+                setTimeout(() => {
+                    retryGpsBtn.disabled = false;
+                    retryGpsBtn.removeAttribute('aria-busy');
+                }, _GPS_REFRESH_COOLDOWN_MS);
+            }
         });
 
         // ── Delta-C — multi-modal additive capture wiring ──

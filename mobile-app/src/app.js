@@ -3302,32 +3302,92 @@ async function tryIPGeolocation() {
 }
 
 // ── Reverse Geocoding (coordinates → place name) ─────────────────────────────
+//
+// HC55 (May 2026) — refactored from a direct `nominatim.openstreetmap.org/
+// reverse` fetch into a POST against our backend's
+// `/api/v1/reports/geocode/reverse`. The operator's 2026-05-24 HAR
+// caught the legacy browser-direct call returning 429 from Nominatim's
+// CDN edge, so the location pill fell back to raw lat/lng. The new
+// backend route fans through Mapbox (production-licensed) → rate-
+// limited Nominatim → coords-only fallback, and caches every successful
+// resolution by rounded coord + language for 7 days.
+//
+// Client-side TTL cache layered on top — once a coord-language pair
+// resolves, subsequent reads within 24 h skip the backend round-trip
+// entirely. Cache key rounds coords to 4dp (~11 m) so neighbouring
+// taps share entries.
+const _GEO_CACHE_PREFIX = 'crisp_geo:';
+const _GEO_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function _geoCacheKey(lat, lng, lang) {
+    return _GEO_CACHE_PREFIX
+        + Number(lat).toFixed(4) + ',' + Number(lng).toFixed(4)
+        + ':' + (lang || 'en');
+}
+
+function _readGeoCache(key) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const { name, exp } = JSON.parse(raw);
+        if (Date.now() < exp) return name;
+        // Expired — clear lazily.
+        localStorage.removeItem(key);
+        return null;
+    } catch (_) { return null; }
+}
+
+function _writeGeoCache(key, name) {
+    try {
+        localStorage.setItem(key, JSON.stringify({
+            name, exp: Date.now() + _GEO_CACHE_TTL_MS,
+        }));
+    } catch (_) { /* localStorage quota — non-fatal */ }
+}
+
 async function reverseGeocode(lat, lng) {
     // Offline-first guard: skip if offline. A blank place name is fine —
     // the review page already falls back to the raw lat/lng string.
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         return null;
     }
+    const apiBase = window.API_BASE;
+    if (!apiBase) {
+        // window.API_BASE missing means the head-IIFE didn't run (or
+        // was stripped). Bail loudly rather than fall back to a relative
+        // path that 404s on the static dev server.
+        console.warn('[reverseGeocode] window.API_BASE missing — bailing');
+        return null;
+    }
+
+    const lang = (document.documentElement && document.documentElement.lang) || 'en';
+    const key = _geoCacheKey(lat, lng, lang);
+
+    // 1. Client-side cache hit?
+    const cached = _readGeoCache(key);
+    if (cached) return cached;
+
+    // 2. Backend round-trip.
     try {
-        const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=16&addressdetails=1`,
-            { signal: AbortSignal.timeout(8000) }
-        );
+        const res = await fetch(`${apiBase}/reports/geocode/reverse`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat, lng, language: lang }),
+            signal: AbortSignal.timeout(8000),
+        });
         if (!res.ok) return null;
         const data = await res.json();
-        if (!data || !data.address) return null;
-
-        const a = data.address;
-        // Build a short, readable name: neighbourhood/suburb, city, country
-        const parts = [];
-        const local = a.neighbourhood || a.suburb || a.hamlet || a.village || a.town || '';
-        const city = a.city || a.county || a.state_district || a.state || '';
-        if (local) parts.push(local);
-        if (city && city !== local) parts.push(city);
-        if (a.country) parts.push(a.country);
-        return parts.length > 0 ? parts.join(', ') : (data.display_name || null);
+        // The route ALWAYS returns a uniform shape, including a
+        // synthetic fallback when both upstreams fail. We don't cache
+        // the synthetic shape — let the client surface coords until
+        // a real name resolves.
+        if (!data || !data.location_name || data.source === 'fallback') {
+            return null;
+        }
+        _writeGeoCache(key, data.location_name);
+        return data.location_name;
     } catch (e) {
-        console.log('Reverse geocoding failed (offline?):', e.message);
+        console.log('Reverse geocoding failed (offline?):', e && e.message);
         return null;
     }
 }
@@ -5382,6 +5442,18 @@ function detectAndSetupLanguage() {
                     const lng = pos.coords.longitude;
                     // Online-only reverse geocode. Offline → silently skip.
                     if (navigator.onLine === false) return;
+                    // HC55 follow-up — this boot-time language-detection
+                    // path consumes Nominatim's raw `address` object
+                    // (country_code / state / county) for the region-
+                    // to-locale matcher. Routing through the new
+                    // `/geocode/reverse` backend would lose that shape
+                    // (the route returns the formatted `location_name`,
+                    // not the structured address). Tracked as a separate
+                    // chore — the backend route needs to expose an
+                    // optional `raw_address` field before this site can
+                    // join the proper cascade. Per-session boot call
+                    // (not user-tap-driven), so the rate-limit pressure
+                    // is low relative to site #1 above.
                     const res = await fetch(
                         `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`,
                         { headers: { 'Accept-Language': 'en' } }
@@ -5594,6 +5666,15 @@ function detectAndSetupLanguage() {
             return;
         }
         try {
+            // HC55 follow-up — same caveat as site #2 above: this
+            // post-GPS-lock language-detection path needs Nominatim's
+            // raw `address` shape, which the new `/geocode/reverse`
+            // backend route doesn't expose yet. Per-session boot call,
+            // single fire per onboarding — low rate-limit pressure.
+            // The user-facing reverseGeocode() (called by
+            // resolveLocationName() / v4-flow.js) IS routed through
+            // the backend now; this auxiliary detection call is the
+            // remaining direct hit, tracked as a separate chore.
             const res = await fetch(
                 `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&addressdetails=1`,
                 { headers: { 'Accept-Language': 'en' } }

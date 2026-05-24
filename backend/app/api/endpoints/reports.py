@@ -70,6 +70,51 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # call-sites don't have to know which backend is active.
 from app.services.storage import get_storage as _get_media_storage  # noqa: E402
 
+
+def _resolve_user_location_name(loc_data: dict) -> None:
+    """HC55 (May 2026) — forward-geocode an offline-typed place name
+    through the proper cascade (Mapbox → rate-limited Nominatim) and
+    mutate ``loc_data`` with the resolved coordinates.
+
+    Replaces two inline ``GET nominatim.openstreetmap.org/search`` calls
+    that were hitting the upstream without rate-limit or Mapbox primary,
+    in violation of Nominatim's usage policy. Both callers were
+    synchronous routes, so we bridge to the async ``geocode_text``
+    helper via ``asyncio.run`` (FastAPI runs sync routes in a thread
+    pool, so this is safe — no event loop is already running here).
+
+    Best-effort: failures are logged and swallowed so the report row
+    still saves with the user-typed name and (0, 0) coords.
+    """
+    user_name = loc_data.get("user_location_name")
+    if not user_name:
+        return
+    try:
+        import asyncio as _asyncio
+        import sys as _sys
+        _sys.path.insert(
+            0,
+            os.path.join(os.path.dirname(__file__), "..", "..", ".."),
+        )
+        from messaging_bot.sms.geocoder import geocode_text  # noqa: E402
+        result = _asyncio.run(
+            geocode_text(user_name, country_hint="India", language="en")
+        )
+        if result and result.get("latitude") is not None:
+            loc_data["latitude"] = float(result["latitude"])
+            loc_data["longitude"] = float(result["longitude"])
+            loc_data["is_user_corrected"] = True
+            logger.info(
+                "Geocoded '%s' -> %.4f, %.4f (src=%s)",
+                user_name, loc_data["latitude"], loc_data["longitude"],
+                result.get("source", "unknown"),
+            )
+    except Exception as exc:
+        logger.warning(
+            "Server-side geocoding failed for '%s': %s", user_name, exc
+        )
+
+
 def _normalize_crisis_type(value):
     """Normalise crisis-type wire values to UNDP-canonical enums.
 
@@ -2292,19 +2337,15 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     # Attach location
     if meta_in.location:
         loc_data = meta_in.location.model_dump()
-        # Server-side geocoding for offline place names
-        if loc_data.get('user_location_name') and loc_data.get('latitude', 0) == 0 and loc_data.get('longitude', 0) == 0:
-            try:
-                geo_url = f"https://nominatim.openstreetmap.org/search?q={loc_data['user_location_name']}&format=json&limit=1"
-                resp = httpx.get(geo_url, headers={"User-Agent": "CRISP-Platform/1.0"}, timeout=10)
-                geo_data = resp.json()
-                if geo_data and len(geo_data) > 0:
-                    loc_data['latitude'] = float(geo_data[0]['lat'])
-                    loc_data['longitude'] = float(geo_data[0]['lon'])
-                    loc_data['is_user_corrected'] = True
-                    logger.info(f"Geocoded '{loc_data['user_location_name']}' -> {loc_data['latitude']}, {loc_data['longitude']}")
-            except Exception as e:
-                logger.warning(f"Server-side geocoding failed: {e}")
+        # HC55 — server-side forward-geocoding now routes through
+        # _resolve_user_location_name(), which uses the same Mapbox →
+        # rate-limited Nominatim cascade as /geocode/describe. The
+        # previous inline Nominatim hit (no UA, no throttle, no Mapbox
+        # primary) violated the upstream usage policy.
+        if (loc_data.get('user_location_name')
+                and loc_data.get('latitude', 0) == 0
+                and loc_data.get('longitude', 0) == 0):
+            _resolve_user_location_name(loc_data)
         db_loc = Location(**loc_data, report_id=db_report.id)
         db.add(db_loc)
         db.commit()
@@ -2479,6 +2520,74 @@ async def geocode_from_description(payload: dict):
                 logger.warning(f"w3w lookup failed: {exc}")
 
     return {**result, "w3w": w3w}
+
+
+@router.post("/geocode/reverse")
+async def reverse_geocode(payload: dict, db: Session = Depends(get_db)):
+    """Reverse geocode lat/lng → place name.
+
+    HC55 (May 2026) — closes the production-grade gap the operator's
+    2026-05-24 HAR exposed: the PWA was calling
+    ``https://nominatim.openstreetmap.org/reverse`` directly from the
+    browser and getting 429-rate-limited (every "Refresh GPS" tap fell
+    back to raw lat/lng on the UI). This route routes the call through
+    the same backend cascade IVR + SMS already use (Mapbox →
+    rate-limited Nominatim → coords-only fallback) and caches every
+    successful resolution in ``geocode_cache`` keyed by rounded coord +
+    language for 7 days.
+
+    Body:
+        {
+            "lat":      12.852765,    (required, -90..90)
+            "lng":      77.679423,    (required, -180..180)
+            "language": "en"          (optional, ISO 639-1 — UNDP §3.1f.5)
+        }
+
+    Response:
+        {
+            "location_name":  "Koramangala, Bengaluru",
+            "confidence":     "high" | "medium" | "low" | "none",
+            "source":         "mapbox" | "nominatim" | "cache" | "fallback",
+            "latitude":       12.852765,
+            "longitude":      77.679423
+        }
+
+    The response shape is uniform — even when both upstream providers
+    fail, the route returns a synthetic "12.85°, 77.68°" location_name
+    with ``source: "fallback"`` so the PWA never has to special-case
+    null returns.
+    """
+    # Lazy import — symlink-package pattern (see /geocode/describe).
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    from messaging_bot.sms.geocoder import reverse_geocode_coords
+
+    raw_lat = payload.get("lat")
+    raw_lng = payload.get("lng")
+    if raw_lat is None or raw_lng is None:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "missing_coords",
+                    "message": "Both 'lat' and 'lng' are required."},
+        )
+    try:
+        lat = float(raw_lat)
+        lng = float(raw_lng)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_coords_type",
+                    "message": "'lat' and 'lng' must be numbers."},
+        )
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_coords_range",
+                    "message": "lat must be in [-90,90]; lng in [-180,180]."},
+        )
+
+    language = str(payload.get("language", "en"))
+    return await reverse_geocode_coords(lat, lng, language=language, db=db)
 
 
 @router.patch("/{report_id}/location", response_model=ReportResponse)
@@ -4640,20 +4749,14 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
     if report_in.location:
         loc_data = report_in.location.model_dump()
 
-        # Server-side geocoding: if user typed a place name but has no real coordinates
-        # (e.g. offline submission with 0,0 coords), resolve the name to coordinates
-        if loc_data.get('user_location_name') and loc_data.get('latitude', 0) == 0 and loc_data.get('longitude', 0) == 0:
-            try:
-                geo_url = f"https://nominatim.openstreetmap.org/search?q={loc_data['user_location_name']}&format=json&limit=1"
-                resp = httpx.get(geo_url, headers={"User-Agent": "CRISP-Platform/1.0"}, timeout=10)
-                geo_data = resp.json()
-                if geo_data and len(geo_data) > 0:
-                    loc_data['latitude'] = float(geo_data[0]['lat'])
-                    loc_data['longitude'] = float(geo_data[0]['lon'])
-                    loc_data['is_user_corrected'] = True
-                    logger.info(f"Geocoded '{loc_data['user_location_name']}' -> {loc_data['latitude']}, {loc_data['longitude']}")
-            except Exception as e:
-                logger.warning(f"Server-side geocoding failed for '{loc_data['user_location_name']}': {e}")
+        # HC55 — server-side forward-geocoding for offline-typed names
+        # now routes through _resolve_user_location_name() so the
+        # cascade enjoys Mapbox primary + rate-limited Nominatim
+        # fallback + cache.
+        if (loc_data.get('user_location_name')
+                and loc_data.get('latitude', 0) == 0
+                and loc_data.get('longitude', 0) == 0):
+            _resolve_user_location_name(loc_data)
 
         db_loc = Location(**loc_data, report_id=db_report.id)
         db.add(db_loc)

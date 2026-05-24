@@ -101,3 +101,19 @@ redis>=5.0.0
 # wheel can't be installed on the target arch — the env flag stays off
 # by default, and import failure is a no-op rather than a crash.
 h3>=4.0.0
+
+# HC55 (May 2026) — async rate-limiter for the geocoder cascade.
+# Nominatim's usage policy caps third-party apps at ≤ 1 req/s globally.
+# Without a worker-shared token bucket, each FastAPI worker would
+# happily fire its own RPS budget at Nominatim's CDN and earn the whole
+# deployment a 429 ban. `AsyncLimiter(1, 1)` enforces single-RPS across
+# every coroutine in the worker (worker-local cap is the floor we
+# never want to cross; multi-worker safety is a separate Redis-bucket
+# layer if/when Mapbox isn't enough).
+aiolimiter>=1.1.0
+
+# HC55 — in-memory LRU cache shim for the reverse-geocode hot path.
+# First 1 000 most-recent rounded-coord keys served without a Postgres
+# round-trip (~0.3 ms vs ~3 ms). Async-aware so we can decorate the
+# upstream-call helpers, not just the DB lookup.
+async-lru>=2.0.4
