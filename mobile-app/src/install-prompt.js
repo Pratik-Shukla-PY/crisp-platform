@@ -159,7 +159,7 @@
 
         sheet.innerHTML = `
             <div class="iis-card" role="document">
-                <button class="iis-close" aria-label="Close" data-i18n-aria-label="lang_picker_close">
+                <button class="iis-close" aria-label="Close" data-i18n-aria-label="aria_close">
                     <i class="fa-solid fa-xmark" aria-hidden="true"></i>
                 </button>
                 <h3 class="iis-title" id="iis-title" data-i18n="install_sheet_title">

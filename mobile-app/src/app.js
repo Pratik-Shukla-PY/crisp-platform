@@ -1604,12 +1604,10 @@ const I18N = {
         // the per-key t() chain (PR 1).
         // — Language picker chrome —
         lang_picker_title: "Choose language",
-        lang_picker_close: "Close",
-        // (UI v3 redesign Q8) — neutral section labels. Users
-        // don't care about the UN classification; they want THEIR
-        // language. UN-priority sort order is preserved internally.
-        lang_picker_un_section: "Most common",
-        lang_picker_other_section: "All languages",
+        // HC54 (May 2026) — `lang_picker_close` was removed when the
+        // bottom Close button was dropped; `lang_picker_un_section` /
+        // `lang_picker_other_section` removed when the picker became
+        // a single 21-tile grid.
         lang_picker_search_placeholder: "Search 24 languages…",
         lang_picker_no_match: "No match. Try the language name in English or its native script.",
         // — Photo stage —
@@ -2020,7 +2018,6 @@ const I18N = {
         // full set of previously-hardcoded strings. Missing keys fall
         // through to English via the per-key t() chain (PR 1).
         lang_picker_title: "ಭಾಷೆಯನ್ನು ಆರಿಸಿ",
-        lang_picker_close: "ಮುಚ್ಚಿ",
         no_photo: "ಇನ್ನೂ ಫೋಟೋ ಇಲ್ಲ",
         recording_tap_stop: "ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ... ನಿಲ್ಲಿಸಲು ಒತ್ತಿ",
         recording_in_progress: "🎤 ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ — ಸಲ್ಲಿಸಿದ ನಂತರ ಲಿಪ್ಯಂತರಣವಾಗುತ್ತದೆ",
@@ -2151,7 +2148,6 @@ const I18N = {
         retry_gps: "Tap 🔄 फिर से",
         // i18n-coverage sweep — Hindi translations.
         lang_picker_title: "भाषा चुनें",
-        lang_picker_close: "बंद करें",
         no_photo: "अभी तक कोई फोटो नहीं",
         recording_tap_stop: "रिकॉर्ड हो रहा है... रोकने के लिए टैप करें",
         recording_in_progress: "🎤 रिकॉर्ड हो रहा है — भेजने के बाद ऑडियो लिखा जाएगा",
@@ -2279,7 +2275,6 @@ const I18N = {
         retry_gps: "மீண்டும் முயற்சிக்க புதுப்பிக்கவும்",
         // i18n-coverage sweep — Tamil translations.
         lang_picker_title: "மொழியைத் தேர்ந்தெடுக்கவும்",
-        lang_picker_close: "மூடு",
         no_photo: "இன்னும் புகைப்படம் இல்லை",
         recording_tap_stop: "பதிவு செய்யப்படுகிறது... நிறுத்த தட்டவும்",
         recording_in_progress: "🎤 பதிவு செய்யப்படுகிறது — சமர்ப்பித்த பிறகு எழுதப்படும்",
