@@ -4799,15 +4799,24 @@ function detectAndSetupLanguage() {
                 '<span class="lps-code">' + upper + '</span>';
             currentBtn.dataset.lang = norm;
         }
-        // v6.8 — mirror current language onto all .v4-lang-pill instances
-        // (mid-flow lang switch on stage-v4-capture / classify / review).
-        // We don't reuse the home pill's flag-emoji rendering because the
-        // pill is smaller; a globe icon + uppercase code is enough at the
-        // v4 header size. Pills not in the DOM yet are simply skipped.
+        // HC53 (May 2026) — every .v4-lang-pill mirrors the home pill:
+        // same .lps-flag SVG (via data-cc) + same .lps-code text. This
+        // reverses the v6.8 "globe + code is enough" call — operator
+        // reported missing flag identity on capture / classify / review.
+        // Reuses the existing 15-flag SVG library (.lps-flag[data-cc])
+        // at styles.css:3658-3672, so zero new CSS data URIs.
         try {
             document.querySelectorAll('.v4-lang-pill').forEach((pill) => {
                 pill.dataset.lang = norm;
-                const codeSpan = pill.querySelector('.v4-lang-code');
+                const flagSpan = pill.querySelector('.lps-flag');
+                if (flagSpan) {
+                    if (cc) flagSpan.setAttribute('data-cc', cc);
+                    else flagSpan.removeAttribute('data-cc');
+                    // Emoji is the SR-invisible fallback when the CSS
+                    // SVG can't paint (e.g. exotic locale w/o data-cc).
+                    flagSpan.textContent = flag;
+                }
+                const codeSpan = pill.querySelector('.lps-code');
                 if (codeSpan) codeSpan.textContent = upper;
             });
         } catch (_) { /* DOM mutation failure is non-blocking */ }

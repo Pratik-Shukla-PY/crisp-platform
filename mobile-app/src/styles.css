@@ -7193,8 +7193,14 @@ body.tier-t4 .home-impact {
 .v4-lang-pill:hover,
 .v4-lang-pill:focus-visible { background: var(--v4-tile-border, rgba(255,255,255,0.14)); }
 .v4-lang-pill:focus-visible { outline: 2px solid var(--brand, #09D1C7); outline-offset: 2px; }
-.v4-lang-pill .v4-lang-globe { font-size: 14px; line-height: 1; }
-.v4-lang-pill .v4-lang-code { font-weight: 700; }
+/* HC53 — v4-lang-pill reuses .lps-flag / .lps-code (same classes as the
+   home pill) so flag identity is consistent across home and the 3 v4
+   capture stages. The home pill margin-inline-end is 6 px; the v4 pill
+   is 32 px tall vs the home pill's 40 px so tighten the gap to 4 px to
+   keep proportions. The base .lps-flag[data-cc] rule (line 3641) sets
+   width/height/background — these are local overrides only. */
+.v4-lang-pill .lps-flag { margin-inline-end: 4px; }
+.v4-lang-pill .lps-code { font-size: 12px; font-weight: 700; }
 .v4-back {
     width: 36px; height: 36px;
     display: flex;
