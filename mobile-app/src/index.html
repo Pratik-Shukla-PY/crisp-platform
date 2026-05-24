@@ -177,7 +177,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v279">
+    <meta name="crisp-release" content="crisp-pwa@v280">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -2798,82 +2798,69 @@
            - Search bar added at top — filters by both Latin and native script. -->
     <div id="lang-picker-overlay" class="lang-picker-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Choose language" data-i18n-aria-label="aria_choose_language">
         <div class="lang-picker-sheet">
-            <!-- v6.8 — top-right ✕ close button. Matches the nearby-sheet
-                 / image-viewer pattern. The bottom-aligned text "Close"
-                 button below is kept as a redundant large touch target. -->
-            <button type="button" class="lang-picker-close-x" id="lang-picker-close-x"
-                    aria-label="Close"
-                    data-i18n-aria-label="aria_close"
-                    title="Close"
-                    data-i18n-title="aria_close">✕</button>
-            <h2 class="lang-picker-title" data-i18n="lang_picker_title">Choose language</h2>
-            <!-- Populated by detectAndSetupLanguage() — shown as a top row
-                 above the main grid when a detected local differs from the
-                 active locale. "📍 Your region: ಕನ್ನಡ" style hint. -->
-            <div id="lang-picker-suggested" class="lang-picker-suggested" style="display:none;"></div>
-            <!-- v3 search bar — filters ALL .lang-picker-flag tiles below
-                 by their data-lang code, aria-label (English name) and
-                 .lpf-label text (native script). Wired by lang-picker.js. -->
-            <div class="lang-picker-search">
-                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                <input type="text" id="lang-picker-search-input"
-                       data-i18n-placeholder="lang_picker_search_placeholder"
-                       placeholder="Search 21 languages…"
-                       autocomplete="off" spellcheck="false">
-            </div>
-            <!-- ── Most common (6 UN languages — sorted first by priority) ── -->
-            <div class="lang-picker-section">
-                <h4 class="lang-picker-section-title" data-i18n="lang_picker_un_section">
-                    Most common
-                </h4>
-                <div class="lang-picker-grid lang-picker-grid-un">
-                    <button class="lang-picker-flag lpf-un" data-lang="en" aria-label="English"><span class="lpf-glyph" data-cc="gb">🇬🇧</span><span class="lpf-label">English</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="fr" aria-label="French"><span class="lpf-glyph" data-cc="fr">🇫🇷</span><span class="lpf-label">Français</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="es" aria-label="Spanish"><span class="lpf-glyph" data-cc="es">🇪🇸</span><span class="lpf-label">Español</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="ar" aria-label="Arabic"><span class="lpf-glyph" data-cc="sa">🇸🇦</span><span class="lpf-label">العربية</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="ru" aria-label="Russian"><span class="lpf-glyph" data-cc="ru">🇷🇺</span><span class="lpf-label">Русский</span></button>
-                    <button class="lang-picker-flag lpf-un" data-lang="zh" aria-label="Chinese"><span class="lpf-glyph" data-cc="cn">🇨🇳</span><span class="lpf-label">中文</span></button>
+            <!-- HC54 (May 2026) — sticky header zone. Title, region
+                 suggestion, search bar, and X close button stay pinned
+                 while the user scrolls the language grid below. The
+                 X is the single close affordance (bottom "Close"
+                 button removed per operator). -->
+            <div class="lang-picker-header">
+                <button type="button" class="lang-picker-close-x" id="lang-picker-close-x"
+                        aria-label="Close"
+                        data-i18n-aria-label="aria_close"
+                        title="Close"
+                        data-i18n-title="aria_close">✕</button>
+                <h2 class="lang-picker-title" data-i18n="lang_picker_title">Choose language</h2>
+                <!-- Populated by detectAndSetupLanguage() — shown as a
+                     top row above the main grid when a detected local
+                     differs from the active locale. "📍 Your region:
+                     ಕನ್ನಡ" style hint. -->
+                <div id="lang-picker-suggested" class="lang-picker-suggested" style="display:none;"></div>
+                <!-- v3 search bar — filters ALL .lang-picker-flag tiles
+                     below by their data-lang code, aria-label (English
+                     name) and .lpf-label text (native script). Wired by
+                     lang-picker.js. -->
+                <div class="lang-picker-search">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    <input type="text" id="lang-picker-search-input"
+                           data-i18n-placeholder="lang_picker_search_placeholder"
+                           placeholder="Search 21 languages…"
+                           autocomplete="off" spellcheck="false">
                 </div>
             </div>
-            <!-- ── Tier 2 + 3 (16 tiles in priority order: UNDP set
-                 first, Indian sub-national after). Rendered as a
-                 horizontal scroll-snap carousel so the row stays
-                 thumb-reachable on phones without a long vertical
-                 scroll. The set is exactly the 22 supported locales;
-                 the previously-listed German / Italian / Polish /
-                 Romanian / Greek / Ukrainian / Hebrew / Persian / Thai
-                 / Malay / Swahili / Amharic tiles were removed because
-                 they routed
-                 silently to English on tap. ── -->
-            <div class="lang-picker-section">
-                <h4 class="lang-picker-section-title" data-i18n="lang_picker_other_section">
-                    Also supported
-                </h4>
-                <div class="lang-picker-grid lang-picker-grid-other lang-picker-scroll-others">
-                    <!-- Tier 2 — UNDP submission set -->
-                    <button class="lang-picker-flag lpf-scroll" data-lang="hi" aria-label="Hindi"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">हिन्दी</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="pt" aria-label="Portuguese"><span class="lpf-glyph" data-cc="pt">🇵🇹</span><span class="lpf-label">Português</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="bn" aria-label="Bengali"><span class="lpf-glyph" data-cc="bd">🇧🇩</span><span class="lpf-label">বাংলা</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="ja" aria-label="Japanese"><span class="lpf-glyph" data-cc="jp">🇯🇵</span><span class="lpf-label">日本語</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="tr" aria-label="Turkish"><span class="lpf-glyph" data-cc="tr">🇹🇷</span><span class="lpf-label">Türkçe</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="vi" aria-label="Vietnamese"><span class="lpf-glyph" data-cc="vn">🇻🇳</span><span class="lpf-label">Tiếng Việt</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="ko" aria-label="Korean"><span class="lpf-glyph" data-cc="kr">🇰🇷</span><span class="lpf-label">한국어</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="id" aria-label="Indonesian"><span class="lpf-glyph" data-cc="id">🇮🇩</span><span class="lpf-label">Bahasa Indonesia</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="ur" aria-label="Urdu"><span class="lpf-glyph" data-cc="pk">🇵🇰</span><span class="lpf-label">اردو</span></button>
-                    <!-- Tier 3 — Indian sub-national -->
-                    <button class="lang-picker-flag lpf-scroll" data-lang="kn" aria-label="Kannada"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">ಕನ್ನಡ</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="ta" aria-label="Tamil"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">தமிழ்</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="te" aria-label="Telugu"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">తెలుగు</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="gu" aria-label="Gujarati"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">ગુજરાતી</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="mr" aria-label="Marathi"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">मराठी</span></button>
-                    <button class="lang-picker-flag lpf-scroll" data-lang="pa" aria-label="Punjabi"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">ਪੰਜਾਬੀ</span></button>
-                </div>
+            <!-- HC54 — single continuous 21-tile grid (was 2 sections
+                 "UN Official" + "Also Supported" with separate styling).
+                 Priority order: 6 UN languages first (en/fr/es/ar/ru/zh),
+                 then 9 UNDP tier-2 (hi/pt/bn/ja/tr/vi/ko/id/ur), then
+                 6 Indian sub-national (kn/ta/te/gu/mr/pa). All tiles
+                 share the same uniform style — no visual fragmentation.
+                 -->
+            <div class="lang-picker-grid lang-picker-grid-all">
+                <button class="lang-picker-flag" data-lang="en" aria-label="English"><span class="lpf-glyph" data-cc="gb">🇬🇧</span><span class="lpf-label">English</span></button>
+                <button class="lang-picker-flag" data-lang="fr" aria-label="French"><span class="lpf-glyph" data-cc="fr">🇫🇷</span><span class="lpf-label">Français</span></button>
+                <button class="lang-picker-flag" data-lang="es" aria-label="Spanish"><span class="lpf-glyph" data-cc="es">🇪🇸</span><span class="lpf-label">Español</span></button>
+                <button class="lang-picker-flag" data-lang="ar" aria-label="Arabic"><span class="lpf-glyph" data-cc="sa">🇸🇦</span><span class="lpf-label">العربية</span></button>
+                <button class="lang-picker-flag" data-lang="ru" aria-label="Russian"><span class="lpf-glyph" data-cc="ru">🇷🇺</span><span class="lpf-label">Русский</span></button>
+                <button class="lang-picker-flag" data-lang="zh" aria-label="Chinese"><span class="lpf-glyph" data-cc="cn">🇨🇳</span><span class="lpf-label">中文</span></button>
+                <button class="lang-picker-flag" data-lang="hi" aria-label="Hindi"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">हिन्दी</span></button>
+                <button class="lang-picker-flag" data-lang="pt" aria-label="Portuguese"><span class="lpf-glyph" data-cc="pt">🇵🇹</span><span class="lpf-label">Português</span></button>
+                <button class="lang-picker-flag" data-lang="bn" aria-label="Bengali"><span class="lpf-glyph" data-cc="bd">🇧🇩</span><span class="lpf-label">বাংলা</span></button>
+                <button class="lang-picker-flag" data-lang="ja" aria-label="Japanese"><span class="lpf-glyph" data-cc="jp">🇯🇵</span><span class="lpf-label">日本語</span></button>
+                <button class="lang-picker-flag" data-lang="tr" aria-label="Turkish"><span class="lpf-glyph" data-cc="tr">🇹🇷</span><span class="lpf-label">Türkçe</span></button>
+                <button class="lang-picker-flag" data-lang="vi" aria-label="Vietnamese"><span class="lpf-glyph" data-cc="vn">🇻🇳</span><span class="lpf-label">Tiếng Việt</span></button>
+                <button class="lang-picker-flag" data-lang="ko" aria-label="Korean"><span class="lpf-glyph" data-cc="kr">🇰🇷</span><span class="lpf-label">한국어</span></button>
+                <button class="lang-picker-flag" data-lang="id" aria-label="Indonesian"><span class="lpf-glyph" data-cc="id">🇮🇩</span><span class="lpf-label">Bahasa Indonesia</span></button>
+                <button class="lang-picker-flag" data-lang="ur" aria-label="Urdu"><span class="lpf-glyph" data-cc="pk">🇵🇰</span><span class="lpf-label">اردو</span></button>
+                <button class="lang-picker-flag" data-lang="kn" aria-label="Kannada"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">ಕನ್ನಡ</span></button>
+                <button class="lang-picker-flag" data-lang="ta" aria-label="Tamil"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">தமிழ்</span></button>
+                <button class="lang-picker-flag" data-lang="te" aria-label="Telugu"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">తెలుగు</span></button>
+                <button class="lang-picker-flag" data-lang="gu" aria-label="Gujarati"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">ગુજરાતી</span></button>
+                <button class="lang-picker-flag" data-lang="mr" aria-label="Marathi"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">मराठी</span></button>
+                <button class="lang-picker-flag" data-lang="pa" aria-label="Punjabi"><span class="lpf-glyph" data-cc="in">🇮🇳</span><span class="lpf-label">ਪੰਜਾਬੀ</span></button>
             </div>
             <div class="lang-picker-empty" id="lang-picker-empty" style="display:none;">
                 <i class="fa-solid fa-circle-question"></i>
                 <span data-i18n="lang_picker_no_match">No match. Try the language name in English or its native script.</span>
             </div>
-            <button class="lang-picker-close" id="lang-picker-close" data-i18n="lang_picker_close">Close</button>
         </div>
     </div>
 

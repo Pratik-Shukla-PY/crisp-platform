@@ -5134,10 +5134,11 @@ function detectAndSetupLanguage() {
         pickerOverlay.addEventListener('click', (e) => {
             if (e.target === pickerOverlay) _closeLangPicker();
         });
-        const closeBtn = document.getElementById('lang-picker-close');
-        if (closeBtn) closeBtn.addEventListener('click', _closeLangPicker);
-        // v6.8 — top-right ✕ button (matches nearby-sheet pattern).
-        // Shares the same dismiss path as the legacy bottom "Close" button.
+        // HC54 (May 2026) — top-right ✕ inside the sticky header is now
+        // the sole close affordance. The legacy bottom #lang-picker-close
+        // button was dropped per operator's UX brief (single close
+        // option, reduced visual clutter). Tap-outside-overlay still
+        // dismisses (handled above by the overlay's own click listener).
         const closeBtnX = document.getElementById('lang-picker-close-x');
         if (closeBtnX) closeBtnX.addEventListener('click', _closeLangPicker);
         const searchInput = document.getElementById('lang-picker-search-input');

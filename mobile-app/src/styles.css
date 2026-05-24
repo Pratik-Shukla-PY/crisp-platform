@@ -3466,17 +3466,31 @@ details.mr-date-group[open] .mr-date-group-chevron {
     padding: 16px;
 }
 .lang-picker-sheet {
-    /* v6.8 — position:relative anchor for the new top-right .lang-picker-close-x
-       button. Matches the nearby-sheet / image-viewer / UNDP-detail pattern
-       (32px ✕ pill at top-right). The bottom-aligned text "Close" button is
-       kept as a redundant large touch target for a11y. */
+    /* HC54 — `.lang-picker-header` (sticky child) needs the sheet to
+       act as scroll container. position:relative is its own context. */
     position: relative;
     width: 100%; max-width: 360px;
     background: #111827;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
-    padding: 20px;
+    /* HC54 — vertical padding moved INTO .lang-picker-header (top) and
+       the grid wrapper (bottom). Horizontal padding stays on the sheet
+       because the grid spans full width. */
+    padding: 0 20px 20px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+/* HC54 — sticky header zone. Title, region suggestion, search bar,
+   and X close button are pinned while the user scrolls the grid.
+   The negative inline margins extend the sticky background to bleed
+   into the sheet's horizontal padding so the visual edge is clean. */
+.lang-picker-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #111827;
+    margin: 0 -20px;
+    padding: 20px 20px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 .lang-picker-close-x {
     position: absolute;
@@ -3508,19 +3522,37 @@ details.mr-date-group[open] .mr-date-group-chevron {
     color: #f1f5f9;
     text-align: center;
 }
+/* HC54 — unified single grid (was 2 sections with separate styling).
+   21 tiles in priority order. Stacked flag-above-label rhythm matches
+   the screenshot the operator referenced; uniform background removes
+   the previous UN-vs-Also-Supported visual fragmentation. */
 .lang-picker-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
 }
+/* The grid container needs top padding because .lang-picker-header
+   below uses border-bottom for separation, not margin. */
+.lang-picker-grid-all {
+    padding-top: 12px;
+}
+/* HC54 — uniform tile style for all 21 languages. Stacked
+   flag-above-label rhythm (was horizontal flag-left/label-right).
+   Replaces the previous .lpf-un / .lpf-scroll variants. */
 .lang-picker-flag {
-    display: flex; align-items: center; gap: 10px;
-    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 14px 8px 12px;
+    min-height: 88px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
     color: #e2e8f0;
-    font-size: 0.9rem; font-weight: 600;
+    font-size: 0.82rem; font-weight: 600;
+    text-align: center;
     cursor: pointer;
     transition: background 150ms ease, border-color 150ms ease;
 }
@@ -3528,7 +3560,25 @@ details.mr-date-group[open] .mr-date-group-chevron {
     background: rgba(21, 145, 155, 0.12);
     border-color: rgba(21, 145, 155, 0.35);
 }
-.lang-picker-flag .lpf-glyph { font-size: 1.25rem; }
+.lang-picker-flag .lpf-glyph {
+    font-size: 1.8rem;
+    line-height: 1;
+}
+.lang-picker-flag .lpf-label {
+    /* Arabic / Cyrillic / CJK scripts can overflow the narrow tile —
+       allow wrapping onto a second line rather than clipping. */
+    white-space: normal;
+    line-height: 1.15;
+    word-break: keep-all;
+}
+
+/* Narrow viewports (≤ 340 px): collapse grid to 2 columns so labels
+   stay legible on iPhone SE width / Galaxy Fold cover. */
+@media (max-width: 340px) {
+    .lang-picker-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
 
 /* ── Cross-browser flag rendering (May 2026, operator-reported) ──────
    The native Unicode flag emojis we use (🇬🇧 🇫🇷 🇮🇳 …) only render as
@@ -3677,19 +3727,11 @@ details.mr-date-group[open] .mr-date-group-chevron {
     /* no override — falls back to the native emoji text rendering */
 }
 
-/* §3.1 UX — picker sections.
-   The UN section (6 tiles) gets a 3-column grid with stacked flag-above-
-   label tiles, a subtly highlighted tint, and a 2rem flag glyph so the
-   UNDP six-official-languages requirement is the visual anchor of the
-   picker. The "Other Languages" section drops back to the compact
-   2-column flag-left/label-right layout defined by .lang-picker-flag
-   above. */
-.lang-picker-section {
-    margin-bottom: 16px;
-}
-.lang-picker-section:last-of-type {
-    margin-bottom: 0;
-}
+/* HC54 (May 2026) — removed legacy .lang-picker-section /
+   .lang-picker-grid-un / .lpf-un / .lpf-scroll rule stack.
+   Replaced by uniform .lang-picker-flag + .lang-picker-grid-all
+   below. Operator's UX brief: "less visual fragmentation" + "single
+   continuous grid". */
 
 /* (UI v3 redesign Q9) — search bar at top of language picker.
    Filters all .lang-picker-flag tiles by both the English aria-label and
@@ -3700,7 +3742,10 @@ details.mr-date-group[open] .mr-date-group-chevron {
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 999px;
-    margin-bottom: 14px;
+    /* HC54 — search bar is now the last child of .lang-picker-header
+       (sticky), so we drop its previous 14 px margin-bottom. The
+       grid below has its own padding-top. */
+    margin-bottom: 0;
 }
 .lang-picker-search i { color: #94a3b8; font-size: 0.9rem; flex-shrink: 0; }
 .lang-picker-search input {
@@ -3727,118 +3772,14 @@ details.mr-date-group[open] .mr-date-group-chevron {
     gap: 8px;
 }
 .lang-picker-empty i { font-size: 1.6rem; opacity: 0.6; }
-.lang-picker-section-title {
-    margin: 0 0 8px;
-    font-size: 0.68rem;
-    font-weight: 800;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: #94a3b8;
-    text-align: start;
-    padding-inline-start: 4px;
-}
-.lang-picker-grid-un {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-}
-.lang-picker-flag.lpf-un {
-    flex-direction: column;
-    gap: 6px;
-    padding: 14px 8px 12px;
-    min-height: 92px;
-    justify-content: center;
-    text-align: center;
-    background: linear-gradient(
-        135deg,
-        rgba(21, 145, 155, 0.14),
-        rgba(21, 145, 155, 0.08)
-    );
-    border-color: rgba(21, 145, 155, 0.28);
-}
-.lang-picker-flag.lpf-un:hover {
-    background: linear-gradient(
-        135deg,
-        rgba(21, 145, 155, 0.24),
-        rgba(21, 145, 155, 0.14)
-    );
-    border-color: rgba(21, 145, 155, 0.5);
-}
-.lang-picker-flag.lpf-un .lpf-glyph {
-    font-size: 2rem;
-    line-height: 1;
-}
-.lang-picker-flag.lpf-un .lpf-label {
-    font-size: 0.82rem;
-    text-align: center;
-    /* Arabic / Cyrillic / CJK scripts can overflow the narrow tile —
-       allow wrapping onto a second line rather than clipping. */
-    white-space: normal;
-    line-height: 1.15;
-}
-
-/* Narrow viewports (≤ 340 px): collapse UN grid to 2 columns so the
-   larger tiles don't squeeze the label into an unreadable width. */
-@media (max-width: 340px) {
-    .lang-picker-grid-un {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-
-/* tier-2 / tier-3 GRID tiles.
-   Replaces the previous horizontal scroll-snap carousel: per user
-   feedback, all 15 "also supported" tiles are now visible at once
-   in a 3-column grid (5 rows × 3 cols, ~15 tiles after the
-   Malayalam removal) so a returning user doesn't have to discover
-   a horizontal scroll affordance to find their language. Tiles
-   keep the UN-tile flag-on-top / label-below rhythm. */
-.lang-picker-grid-other.lang-picker-scroll-others {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    padding: 4px 2px 8px;
-}
-.lang-picker-flag.lpf-scroll {
-    flex-direction: column;
-    gap: 6px;
-    padding: 12px 6px 10px;
-    min-height: 84px;
-    justify-content: center;
-    text-align: center;
-}
-.lang-picker-flag.lpf-scroll .lpf-glyph {
-    font-size: 1.6rem;
-    line-height: 1;
-}
-.lang-picker-flag.lpf-scroll .lpf-label {
-    font-size: 0.78rem;
-    white-space: normal;
-    line-height: 1.15;
-    /* Long autonyms ("Bahasa Indonesia") wrap to a second line
-       instead of overflowing the narrow grid tile. */
-    word-break: keep-all;
-}
-
-/* Narrow viewports (≤ 340 px): collapse to 2 columns so the labels
-   stay legible. Same breakpoint as the UN grid. */
-@media (max-width: 340px) {
-    .lang-picker-grid-other.lang-picker-scroll-others {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-.lang-picker-close {
-    display: block;
-    width: 100%;
-    margin-top: 12px;
-    padding: 10px;
-    background: rgba(255, 255, 255, 0.06);
-    border: none; border-radius: 10px;
-    color: #cbd5e1;
-    font-size: 0.85rem; font-weight: 600;
-    cursor: pointer;
-}
-.lang-picker-close:hover {
-    background: rgba(255, 255, 255, 0.12);
-}
+/* HC54 (May 2026) — removed obsolete rule blocks:
+   - .lang-picker-section-title (header text dropped per operator)
+   - .lang-picker-grid-un + .lpf-un (UN-section gradient tile variant)
+   - .lang-picker-grid-other.lang-picker-scroll-others + .lpf-scroll
+   - @media (max-width: 340px) collapse for both legacy grids
+   - .lang-picker-close (bottom Close button — X is sole affordance)
+   All replaced by the unified .lang-picker-flag + .lang-picker-grid
+   rules above. */
 
 /* UX rewrite — "📍 Your region" suggestion row. Rendered
    above the full grid when GPS / IP detection resolves a locale the user
