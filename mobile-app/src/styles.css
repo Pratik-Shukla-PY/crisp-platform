@@ -8564,11 +8564,22 @@ body.tier-t4 .home-impact {
 /* Phase 2.4 (May 2026) — WCAG AA: `--text-mute` (#64748b) is 2.21:1 on
    navy — fails. Bump to `--text-sub` (#cbd5e1, ~8.5:1). */
 .v4-substep-of { color: var(--text-sub); font-weight: 600; }
-/* HC61 (May 2026) — tightened sub-view rhythm. Was `gap: 14`; the
-   inter-section gap inside a classify view (title → grid → other-
-   prompt) no longer needs that much breathing room because the tile
-   grid itself carries its own `gap: 8` now. */
-.v4-classify-view { display: flex; flex-direction: column; gap: 10px; }
+/* HC62 (May 2026) — `.v4-classify-view` now flex-grows to fill the
+   body. Pre-HC62 it was `flex: 0 0 auto` (default), so when the
+   classify body was taller than the content, the sub-view shrank to
+   content-height and left ~480 px of empty space below the infra
+   grid on iPhone SE. With `flex: 1 1 auto` the view fills the body,
+   and its `.v4-hit-grid` child (also `flex: 1`) takes the remaining
+   space after the title + substep label, letting all 8 infra tiles
+   flex-distribute that height across `grid-template-rows: repeat(8,
+   1fr)` for a no-scroll, no-empty-space layout. */
+.v4-classify-view {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-height: 0;
+}
 .v4-classify-view[hidden] { display: none; }
 .v4-q-question {
     font-family: var(--heading, 'Outfit', sans-serif);
@@ -8647,47 +8658,61 @@ body.tier-t4 .home-impact {
     box-shadow: 0 0 8px var(--accent, #09D1C7);
 }
 
-/* Sub-view 2: What was hit — 2-col grid of 8 tiles with sub-text.
-   HC61 (May 2026) — pre-HC61 the tile rendered as a column-flex
-   stacking icon (48×48) above title above sub-label, with min-height
-   92 px and 14 px padding. 4 rows × 92 + 3 × 10 = 398 px just for the
-   grid, clipping rows 3-4 on iPhone SE.
+/* Sub-view 2: What was hit — 8-row single-column grid that flex-fills
+   the available body space (no empty area below the last tile).
 
-   New layout: side-by-side grid. Icon occupies a 36 × 36 cell on the
-   left (spanning both content rows so it's vertically centred against
-   the title + sub stack). Title sits on row 1 of column 2, sub on row
-   2. Tile shrinks to `min-height: 64 px` with `padding: 8 10`. New
-   grid total: 4 × 64 + 3 × 8 = 280 px (saves 118 px). */
+   HC62 (May 2026) — operator: "I see a lot of empty space below — can
+   we have 8 cards one in each row fitting the entire screen and the
+   icons become responsive?" Pre-HC62 was a 2 × 4 grid with `min-height:
+   64` per tile (~280 px total) — fit the SE viewport but left ~480 px
+   of empty space below the grid on the same device, and felt visually
+   sparse on every taller phone.
+
+   New layout:
+     · `grid-template-columns: 1fr` (single column).
+     · `grid-template-rows: repeat(8, minmax(0, 1fr))` (8 equal rows).
+     · `flex: 1 1 auto; min-height: 0` so the grid stretches vertically
+       to consume whatever space the body has left after the substep
+       label + title + voice-button.
+   Each tile auto-sizes to (body_height − overhead) ÷ 8. On iPhone SE
+   that's ~50 px; on Pixel 7 ~75 px; on tablet 100+ px. The icon scales
+   in lockstep via the responsive `@media (min-height: …)` cascade
+   below.
+
+   HC61's side-icon tile structure (`display: grid; grid-template-
+   columns: auto 1fr`) is preserved unchanged — only the OUTER grid's
+   topology + sizing changes. */
 .v4-hit-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    /* HC61 — was `gap: 10`. Tightened to 8 for 6 px savings across
-       3 inter-row gaps. */
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(8, minmax(0, 1fr));
+    gap: 6px;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 .v4-hit-tile {
     display: grid;
-    /* Icon column auto-sized to its content (36 px). Text column
-       fills the remaining width. */
+    /* Icon column auto-sized to its content. Text column fills
+       the remaining width. */
     grid-template-columns: auto 1fr;
     grid-template-rows: auto auto;
-    column-gap: 10px;
+    column-gap: 12px;
     row-gap: 2px;
     align-items: center;
-    /* HC61 — was `padding: 14`. Tighter `8 10` saves ~12 px per tile.
-       The 44 × 44 WCAG touch target survives via the tile's
-       `min-height: 64`. */
-    padding: 8px 10px;
+    align-content: center;
+    padding: 6px 14px;
     background: var(--surface, #1a3552);
     border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
-    border-radius: 14px;
+    border-radius: 12px;
     color: var(--text);
     cursor: pointer;
     text-align: start;
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
-    /* HC61 — was `92`. 64 px keeps the tile comfortably above the
-       WCAG floor while saving 28 px × 4 rows = 112 px total. */
-    min-height: 64px;
+    /* HC62 — no min-height; the outer grid's `repeat(8, 1fr)` drives
+       row size. Setting `min-height: 0` overrides any inherited floor
+       so the grid can squeeze tiles on very short viewports (e.g.
+       landscape SE) without breaking the `1fr` distribution. */
+    min-height: 0;
     min-width: 0;
     overflow: hidden;
 }
@@ -8699,9 +8724,10 @@ body.tier-t4 .home-impact {
     box-shadow: 0 0 22px rgba(9, 209, 199, 0.24);
 }
 .v4-hit-tile-icon {
-    /* HC61 — was 48×48 with `font-size: 28`. Tighter 36 × 36 + 20 px
-       glyph reads as scannable but compact. The icon cell spans both
-       content rows so it's centred against the title + sub stack. */
+    /* HC62 — icon is now responsive: 36 × 36 baseline (iPhone SE),
+       scaling up at taller viewports via the media-query cascade
+       below. The icon cell spans both content rows so it's centred
+       against the title + sub stack regardless of cell height. */
     grid-column: 1;
     grid-row: 1 / span 2;
     width: 36px;
@@ -8711,7 +8737,7 @@ body.tier-t4 .home-impact {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 22px;
     line-height: 1;
     flex-shrink: 0;
 }
@@ -8754,32 +8780,39 @@ body.tier-t4 .home-impact {
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
-/* HC61 — responsive cascade refactored. The 92 → 104 → 112 → 120 →
-   128 ladder was the original goal of making iPhone SE the BASELINE
-   and bumping for taller viewports. HC61 inverts that — iPhone SE
-   is the tightest constraint AND the most common installed-PWA
-   device, so the 64 px tile becomes the baseline. Taller viewports
-   get marginally roomier tiles (≥ 380 px wide: 72; ≥ 700 px tall:
-   80; ≥ 800 px tall: 88) but nothing extreme so the grid never
-   pushes the Continue button below the fold. */
+/* HC62 (May 2026) — responsive cascade refactored AGAIN. HC61's
+   `min-height` ladder is incompatible with HC62's flex-fill grid
+   (a `min-height: 88` floor on tiles inside `grid-template-rows:
+   repeat(8, 1fr)` forces the grid to grow past the body and reintroduce
+   scroll on short viewports). New cascade only scales the icon +
+   font sizes; the tile height is driven entirely by the `1fr` row
+   distribution so it naturally fills available space without
+   overflowing.
+
+   Breakpoints chosen to match a representative device cascade:
+     ·   < 380 px wide / 667 px tall  → iPhone SE baseline (36 px icon)
+     ·  ≥ 380 px wide                 → Pixel 5 / iPhone 13 mini (40 px)
+     ·  ≥ 700 px tall                 → Pixel 7 / Galaxy S22 (44 px)
+     ·  ≥ 850 px tall                 → Pixel 7 Pro / iPhone 14 Pro Max (52 px)
+     ·  ≥ 1000 px tall                → tablets, landscape laptop (60 px) */
 @media (min-width: 380px) {
-    .v4-hit-tile { min-height: 72px; padding: 10px 12px; }
-    .v4-hit-tile-icon { width: 40px; height: 40px; font-size: 22px; border-radius: 11px; }
+    .v4-hit-tile { padding: 8px 16px; }
+    .v4-hit-tile-icon { width: 40px; height: 40px; font-size: 24px; border-radius: 11px; }
     .v4-hit-tile-title { font-size: 14px; }
 }
 @media (min-height: 700px) {
-    .v4-hit-tile { min-height: 80px; }
-    .v4-hit-tile-icon { width: 44px; height: 44px; font-size: 24px; }
-}
-@media (min-height: 800px) {
-    .v4-hit-tile { min-height: 88px; padding: 12px 14px; }
-    .v4-hit-tile-icon { width: 48px; height: 48px; font-size: 26px; border-radius: 12px; }
+    .v4-hit-tile-icon { width: 44px; height: 44px; font-size: 26px; }
     .v4-hit-tile-title { font-size: 15px; }
-    .v4-hit-tile-sub   { font-size: 11.5px; }
 }
-@media (min-height: 900px) {
-    .v4-hit-tile { min-height: 96px; }
-    .v4-hit-tile-icon { width: 52px; height: 52px; font-size: 28px; }
+@media (min-height: 850px) {
+    .v4-hit-tile { padding: 10px 18px; }
+    .v4-hit-tile-icon { width: 52px; height: 52px; font-size: 30px; border-radius: 12px; }
+    .v4-hit-tile-title { font-size: 16px; }
+    .v4-hit-tile-sub   { font-size: 12px; }
+}
+@media (min-height: 1000px) {
+    .v4-hit-tile-icon { width: 60px; height: 60px; font-size: 34px; }
+    .v4-hit-tile-title { font-size: 17px; }
 }
 /* Conditional reveal below the infra tile grid when OTHER is selected.
    UNDP "Other, please specify" requirement — reporter MUST type a

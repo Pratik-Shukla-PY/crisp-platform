@@ -158,26 +158,61 @@ test.describe('PWA — HC61 V4 Classify Stage 2 zero-scroll', () => {
         ).toBeGreaterThanOrEqual(3);
     });
 
-    test('@smoke tile min-height is compact (≤ 70 px on iPhone SE)', async ({ page }) => {
+    test('@smoke HC62 grid is single-column with 8 flex-fill rows', async ({ page }) => {
         await openInfraView(page);
-        const minHeight = await page.locator('#v4-view-infra .v4-hit-tile').first().evaluate(
+        // HC62 — the 2-col grid was replaced with a 1-col 8-row grid
+        // that flex-fills the available body height. Pin the contract:
+        // single column, 8 rows, all rows roughly equal in height
+        // (consistent with `repeat(8, 1fr)`).
+        const grid = await page.locator('#v4-view-infra .v4-hit-grid').evaluate(
             (el) => {
-                // Read the computed style's min-height — we measure
-                // the rule's value, not the rendered height (which
-                // can grow if a sub-label wraps).
-                return parseFloat(getComputedStyle(el).minHeight) || 0;
+                const s = getComputedStyle(el);
+                return {
+                    cols: s.gridTemplateColumns,
+                    rows: s.gridTemplateRows,
+                };
             },
         );
-        // HC61 sets the baseline tile min-height to 64 px on viewports
-        // narrower than 380 px (iPhone SE bucket). Allow some headroom
-        // for future bumps but pin under 70 to catch a regression.
+        // Single column → only one non-whitespace token.
+        const colTracks = grid.cols.split(/\s+/).filter(Boolean);
         expect(
-            minHeight,
-            `tile min-height must be ≤ 70 px on iPhone SE (got ${minHeight})`,
-        ).toBeLessThanOrEqual(70);
+            colTracks.length,
+            `grid must be single-column (got "${grid.cols}")`,
+        ).toBe(1);
+        // 8 rows → 8 non-whitespace tokens.
+        const rowTracks = grid.rows.split(/\s+/).filter(Boolean);
         expect(
-            minHeight,
-            'tile min-height must be ≥ 44 px (WCAG touch target)',
+            rowTracks.length,
+            `grid must have 8 rows (got "${grid.rows}")`,
+        ).toBe(8);
+        // Every row should be the same size (equal `1fr` distribution).
+        // Computed style reports the resolved pixel values; assert
+        // the spread is < 2 px (1fr variance under sub-pixel rounding).
+        const rowPx = rowTracks.map((t) => parseFloat(t)).filter((n) => !Number.isNaN(n));
+        if (rowPx.length === 8) {
+            const min = Math.min(...rowPx);
+            const max = Math.max(...rowPx);
+            expect(
+                max - min,
+                `all 8 rows must be equal height (1fr); got spread ${max - min} px`,
+            ).toBeLessThanOrEqual(2);
+        }
+    });
+
+    test('@smoke HC62 tile rendered height meets WCAG 44 px touch-target floor', async ({ page }) => {
+        await openInfraView(page);
+        // HC62 removed the `min-height: 64` floor (incompatible with
+        // `repeat(8, 1fr)`). The WCAG 2.5.5 / 2.5.8 touch-target floor
+        // is now satisfied by the resolved row track height, which
+        // must be ≥ 44 px on every device in the matrix. On iPhone SE
+        // (~430 px grid available) → ~48 px per tile. The first row's
+        // tile gives us the resolved value.
+        const offsetH = await page.locator('#v4-view-infra .v4-hit-tile').first().evaluate(
+            (el) => (el as HTMLElement).offsetHeight,
+        );
+        expect(
+            offsetH,
+            `tile rendered height must be ≥ 44 px (WCAG touch target); got ${offsetH}`,
         ).toBeGreaterThanOrEqual(44);
     });
 
