@@ -41,7 +41,8 @@ import { test, expect, type Page } from '@playwright/test';
 
 const IPHONE_SE = { width: 375, height: 667 };
 
-async function openReviewStage(page: Page, lang = 'en') {
+async function openReviewStage(page: Page, lang = 'en', opts: { photos?: number } = {}) {
+    const photoCount = opts.photos ?? 1;
     await page.setViewportSize(IPHONE_SE);
     await page.addInitScript((langCode) => {
         localStorage.setItem('crisp_privacy_consent',
@@ -80,14 +81,18 @@ async function openReviewStage(page: Page, lang = 'en') {
         { timeout: 8000 },
     );
     // Seed the minimum capture state so the review stage paints
-    // its review summary properly (photo, classifications, etc.)
-    // and jump directly to the review stage.
-    await page.evaluate(() => {
+    // its review summary properly (photo strip, classifications,
+    // etc.) and jump directly to the review stage. `photoCount` is
+    // controlled by the test — 0 / 1 / 2 / 3 to exercise the
+    // different photo-strip fill states.
+    await page.evaluate((n: number) => {
         (window as any).state = (window as any).state || {};
-        (window as any).state.photoDataUrl = 'data:image/png;base64,iVBORw0KGgo=';
-        (window as any).state.v4Photos = [{
-            url: 'data:image/png;base64,iVBORw0KGgo=',
-        }];
+        const photos = [];
+        for (let i = 0; i < n; i++) {
+            photos.push({ url: `data:image/png;base64,iVBORw0KGgo=#${i}` });
+        }
+        (window as any).state.v4Photos = photos;
+        (window as any).state.photoDataUrl = n > 0 ? photos[0].url : null;
         (window as any).state.location = {
             lat: 12.9716, lng: 77.5946, acc: 35,
         };
@@ -95,7 +100,7 @@ async function openReviewStage(page: Page, lang = 'en') {
         (window as any).state.crisis_type = 'EARTHQUAKE';
         (window as any).state.damage_classification = 'PARTIAL';
         (window as any).goToStage('stage-v4-review');
-    });
+    }, photoCount);
     await expect(page.locator('#stage-v4-review.active'))
         .toBeVisible({ timeout: 3000 });
     // Let the review summary paint (geocode resolution + photo thumb
@@ -140,109 +145,156 @@ test.describe('PWA — HC65 V4 Step 3 review zero-scroll', () => {
         await expect(page.locator('#btn-v4-send')).toHaveCount(1);
     });
 
-    test('@smoke HC65 four uniform .v4-review-row rows render (Photo, Location, Building, UNDP)', async ({ page }) => {
-        await openReviewStage(page);
-        // Each of the 4 rows uses the same `.v4-review-row` skin.
-        for (const id of ['v4-edit-photo', 'v4-edit-location', 'btn-building-fs-open', 'btn-v4-open-undp']) {
-            const row = page.locator(`#${id}`);
-            await expect(row, `#${id} must exist`).toHaveCount(1);
-            await expect(row, `#${id} must be visible`).toBeVisible();
-            await expect(
-                row,
-                `#${id} must carry .v4-review-row class for uniform skin`,
-            ).toHaveClass(/v4-review-row/);
-            const h = await row.evaluate((el) => (el as HTMLElement).offsetHeight);
-            expect(
-                h,
-                `#${id} rendered height must be ≥ 44 px (WCAG); got ${h}`,
-            ).toBeGreaterThanOrEqual(44);
-            expect(
-                h,
-                `#${id} rendered height should be reasonably compact (≤ 80 px); got ${h}`,
-            ).toBeLessThanOrEqual(80);
-        }
+    test('@smoke HC66 photo strip has 3 slots, all empty when no photos', async ({ page }) => {
+        await openReviewStage(page, 'en', { photos: 0 });
+        // Photo strip lives at `#v4-review-photo-strip`. With 0 photos
+        // all 3 slots must be `.v4-review-photo-add` CTAs.
+        const strip = page.locator('#v4-review-photo-strip');
+        await expect(strip).toBeVisible();
+        const slots = strip.locator('> *');
+        await expect(slots, 'must have exactly 3 slots').toHaveCount(3);
+        const addCtas = strip.locator('.v4-review-photo-add');
+        await expect(addCtas, 'all 3 slots must be empty Add CTAs').toHaveCount(3);
+        const tiles = strip.locator('.v4-review-photo-tile');
+        await expect(tiles, 'no filled tiles when 0 photos').toHaveCount(0);
     });
 
-    test('@smoke HC65 3-chip classification strip is a single horizontal row', async ({ page }) => {
+    test('@smoke HC66 photo strip with 2 photos: 2 filled tiles + 1 Add CTA', async ({ page }) => {
+        await openReviewStage(page, 'en', { photos: 2 });
+        const strip = page.locator('#v4-review-photo-strip');
+        await expect(strip).toBeVisible();
+        const slots = strip.locator('> *');
+        await expect(slots, 'must have exactly 3 slots').toHaveCount(3);
+        const tiles = strip.locator('.v4-review-photo-tile');
+        await expect(tiles, 'should be 2 filled tiles').toHaveCount(2);
+        const addCtas = strip.locator('.v4-review-photo-add');
+        await expect(addCtas, 'should be 1 Add CTA').toHaveCount(1);
+        // Each filled tile carries a `× delete` corner button.
+        const deleteBtns = strip.locator('.v4-review-photo-tile-x');
+        await expect(deleteBtns, 'each filled tile has a × button').toHaveCount(2);
+    });
+
+    test('@smoke HC66 photo × delete removes the photo + updates state', async ({ page }) => {
+        await openReviewStage(page, 'en', { photos: 2 });
+        // Before delete: 2 photos in state.
+        const before = await page.evaluate(() => (window as any).state.v4Photos.length);
+        expect(before, 'should start with 2 photos').toBe(2);
+        // Tap the × on the first tile.
+        await page.locator('#v4-review-photo-strip .v4-review-photo-tile-x').first().click();
+        const after = await page.evaluate(() => (window as any).state.v4Photos.length);
+        expect(after, 'should have 1 photo after delete').toBe(1);
+        // Strip re-painted: 1 filled + 2 Add CTAs.
+        await expect(
+            page.locator('#v4-review-photo-strip .v4-review-photo-tile'),
+            '1 filled tile remaining',
+        ).toHaveCount(1);
+        await expect(
+            page.locator('#v4-review-photo-strip .v4-review-photo-add'),
+            '2 Add CTAs after delete',
+        ).toHaveCount(2);
+    });
+
+    test('@smoke HC66 location strip is inline 2 lines, no card chrome', async ({ page }) => {
         await openReviewStage(page);
-        const strip = page.locator('#stage-v4-review .v4-review-classify-strip');
-        await expect(strip, 'classify strip must exist').toHaveCount(1);
-        const cols = await strip.evaluate(
-            (el) => getComputedStyle(el).gridTemplateColumns.split(/\s+/).filter(Boolean).length,
-        );
+        const strip = page.locator('#v4-edit-location');
+        await expect(strip).toBeVisible();
+        // No card chrome — border-width must be 0 (or close to it
+        // counting all 4 sides, since the strip uses
+        // `background: transparent; border: 0` per HC66).
+        const borderTotal = await strip.evaluate((el) => {
+            const s = getComputedStyle(el);
+            return ['Top', 'Right', 'Bottom', 'Left']
+                .map((d) => parseFloat(s.getPropertyValue(`border-${d.toLowerCase()}-width`)) || 0)
+                .reduce((a, b) => a + b, 0);
+        });
         expect(
-            cols,
-            'classify strip must have exactly 3 columns (Type | Hazard | Damage)',
-        ).toBe(3);
-        // All 3 chips exist + are visible.
-        const chips = page.locator('#stage-v4-review .v4-classify-strip-chip');
-        await expect(chips, 'must have 3 chip buttons').toHaveCount(3);
-        const tops = await chips.evaluateAll((nodes) =>
+            borderTotal,
+            `location strip must have no card border (got total ${borderTotal} px)`,
+        ).toBe(0);
+        // Two child lines (location + time).
+        const lines = strip.locator('.v4-review-loc-line');
+        await expect(lines, 'must have 2 lines').toHaveCount(2);
+        // Time line is rendered with non-empty content (locale-aware).
+        const time = await page.locator('#v4-row-location-time').textContent();
+        expect(
+            time && time.trim().length,
+            'time line must have content',
+        ).toBeGreaterThan(0);
+    });
+
+    test('@smoke HC66 classification rows are vertical plain text rows', async ({ page }) => {
+        await openReviewStage(page);
+        const wrapper = page.locator('#stage-v4-review .v4-review-classify-rows');
+        await expect(wrapper, 'classify rows wrapper must exist').toHaveCount(1);
+        const rows = wrapper.locator('.v4-classify-row');
+        await expect(rows, 'must have 3 classification rows').toHaveCount(3);
+        // Vertical stack — each next row's top must be STRICTLY
+        // greater than the previous row's top.
+        const tops = await rows.evaluateAll((nodes) =>
             (nodes as HTMLElement[]).map((el) => el.getBoundingClientRect().top),
         );
-        // All 3 chips on the same row → same top coordinate (within
-        // sub-pixel rounding).
-        const min = Math.min(...tops);
-        const max = Math.max(...tops);
-        expect(
-            max - min,
-            'all 3 classify chips must share the same row',
-        ).toBeLessThanOrEqual(2);
+        expect(tops[1], 'row 2 should sit below row 1').toBeGreaterThan(tops[0]);
+        expect(tops[2], 'row 3 should sit below row 2').toBeGreaterThan(tops[1]);
+        // Each row has a `.v4-classify-row-pen` icon (edit affordance).
+        const pens = wrapper.locator('.v4-classify-row-pen');
+        await expect(pens, 'each row has a pen icon').toHaveCount(3);
     });
 
-    test('@smoke HC65 description card is hidden on review (HC60 voice/text is on capture)', async ({ page }) => {
+    test('@smoke HC66 inline building map is back at compact ~140 px', async ({ page }) => {
         await openReviewStage(page);
-        // The description card markup is kept in DOM (so JS hooks
-        // attach without errors) but flagged `hidden`. Verify it
-        // takes zero vertical space.
-        const card = page.locator('#v4-desc-card');
-        await expect(card).toHaveCount(1);
-        const display = await card.evaluate((el) => getComputedStyle(el).display);
+        // HC66 reverses HC65's hide-the-map decision. The inline map
+        // is now visible at 140 px (down from pre-HC65's 260 px).
+        const map = page.locator('#stage-v4-review #building-map');
+        await expect(map, 'inline map must exist').toHaveCount(1);
+        const display = await map.evaluate((el) => getComputedStyle(el).display);
         expect(
             display,
-            'description card must be display:none on review (HC65)',
-        ).toBe('none');
+            'inline building map must be visible on review (HC66)',
+        ).not.toBe('none');
+        const h = await map.evaluate((el) => (el as HTMLElement).offsetHeight);
+        expect(h, `map height must be ≥ 80 px (got ${h})`).toBeGreaterThanOrEqual(80);
+        expect(h, `map height must be ≤ 130 px (got ${h})`).toBeLessThanOrEqual(130);
     });
 
-    test('@smoke HC65 inline building map is hidden — fullscreen picker is primary entry', async ({ page }) => {
+    test('@smoke HC66 placeholder carries crisp-skeleton class during loading', async ({ page }) => {
         await openReviewStage(page);
-        // The 260 px inline Leaflet map is the biggest pre-HC65
-        // offender. HC65 hides it via CSS; building-select.js still
-        // sees the DOM node (so its Leaflet controller doesn't NPE),
-        // but it never renders inline. The fullscreen picker (opened
-        // by tapping #btn-building-fs-open) handles building
-        // selection.
-        const inlineMap = page.locator('#stage-v4-review #building-map');
-        await expect(inlineMap, 'inline map node still exists in DOM').toHaveCount(1);
-        const display = await inlineMap.evaluate(
-            (el) => getComputedStyle(el).display,
-        );
+        // The skeleton shimmer paints over the placeholder during the
+        // GPS + Overpass + Leaflet warm-up window. The class is
+        // applied statically in markup; building-select.js hides the
+        // placeholder (display: none) once tiles render. So as long
+        // as the placeholder hasn't been hidden yet, the class
+        // should be present.
+        const placeholder = page.locator('#building-map-placeholder');
+        await expect(placeholder).toHaveCount(1);
+        const classes = await placeholder.evaluate((el) => el.className);
         expect(
-            display,
-            'inline building map must be hidden on review (HC65)',
-        ).toBe('none');
-        // Fullscreen CTA is the primary entry point — must be visible.
-        await expect(page.locator('#btn-building-fs-open')).toBeVisible();
+            classes,
+            'placeholder must carry crisp-skeleton class for shimmer',
+        ).toContain('crisp-skeleton');
     });
 
-    test('@smoke HC65 "Tap any card to edit" subtitle is removed', async ({ page }) => {
+    test('@smoke HC66 photo card legacy classes are gone (no .v4-review-row--photo on review)', async ({ page }) => {
         await openReviewStage(page);
-        // The pre-HC65 subtitle was inside `.v4-review-title-section
-        // > p[data-i18n="v4_review_subtitle"]`. HC65 drops the
-        // wrapper section entirely + replaces it with a single
-        // `.v4-review-title` h3. The subtitle markup must no longer
-        // exist.
+        // HC66 removed the photo `.v4-review-row` wrapper + the
+        // location `.v4-review-row` wrapper + the chip strip.
+        // Pre-HC66 markup elements (kept here as regression guards
+        // so a future revert is caught).
         await expect(
-            page.locator('#stage-v4-review [data-i18n="v4_review_subtitle"]'),
-            'v4_review_subtitle markup must be gone',
+            page.locator('#stage-v4-review .v4-review-row--photo'),
+            'pre-HC66 photo row class must be gone',
         ).toHaveCount(0);
         await expect(
-            page.locator('#stage-v4-review .v4-review-title-section'),
-            'old `.v4-review-title-section` wrapper must be gone',
+            page.locator('#stage-v4-review .v4-review-row--location'),
+            'pre-HC66 location row class must be gone',
         ).toHaveCount(0);
-        // New title element exists.
         await expect(
-            page.locator('#stage-v4-review .v4-review-title'),
+            page.locator('#stage-v4-review .v4-review-classify-strip'),
+            'pre-HC66 classify-strip wrapper must be gone',
+        ).toHaveCount(0);
+        // UNDP "Additional info" row stays as a `.v4-review-row`.
+        await expect(
+            page.locator('#btn-v4-open-undp.v4-review-row'),
+            'Additional info row keeps its `.v4-review-row` skin',
         ).toHaveCount(1);
     });
 

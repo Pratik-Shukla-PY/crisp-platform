@@ -14546,14 +14546,24 @@ button.v4-review-card { appearance: none; }
    ──────────────────────────────────────────────────────────────── */
 
 .v4-review-title {
-    margin: 4px 0 6px;
+    /* HC66 — was 18 / 4-0-6. Tightened to 16 / 0-0-2 so the title
+       feels like a header line, not a full section break — fits the
+       final-confirmation aesthetic + saves ~8 px of vertical run. */
+    margin: 0 0 2px;
     text-align: center;
     font-family: var(--heading, 'Outfit', sans-serif);
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 800;
     letter-spacing: -0.01em;
     color: #f1f5f9;
 }
+/* HC66 — review-stage-only `.v4-body` gap override. Default
+   capture/classify stages keep `gap: 10` (their content is sparse
+   enough). Review packs 6 sections into the same body height, so
+   the tighter 4 px gap saves ~24 px (4 inter-section gaps × 6 px)
+   and gives long-translation locales (Arabic / Hindi) the headroom
+   they need without compressing any one section. */
+#stage-v4-review .v4-body { gap: 4px; }
 
 .v4-review-row {
     display: grid;
@@ -14721,16 +14731,67 @@ button.v4-review-row { appearance: none; }
     border: 0;
     padding: 0;
     margin: 0;
+    /* HC66 — flex column for the layout: map (140 px), then selected
+       pill below (when present). The label, hint, free-text, and
+       fullscreen-CTA are all hidden via the next rule. */
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
+/* HC66 — only the fullscreen CTA, label, hint and free-text are
+   hidden on review. The inline map + placeholder come BACK (operator
+   wanted a "compact embedded map" for visual confirmation). */
 .v4-stage #v4-building-mount #building-select-box > .block-label,
-.v4-stage #v4-building-mount #building-select-box > #building-map,
-.v4-stage #v4-building-mount #building-select-box > #building-map-placeholder,
+.v4-stage #v4-building-mount #building-select-box > .building-fs-cta,
 .v4-stage #v4-building-mount #building-select-box > .building-select-hint,
 .v4-stage #v4-building-mount #building-select-box > .building-free-text {
-    /* The OSM map + supporting UI move to the fullscreen picker
-       on review. They re-render via the same DOM nodes when the
-       picker overlay opens. */
+    /* These supporting nodes live in the fullscreen picker on review.
+       building-select.js reparents `#building-map` into the
+       fullscreen overlay when opened; the offline free-text input is
+       there too. */
     display: none !important;
+}
+/* HC66 — inline building map: compact 96 px (down from the
+   pre-HC65 260 px). building-select.js manages the Leaflet
+   container; we just set the height + radius. iPhone SE budget is
+   tight — 96 px shows street geometry + 2-3 building footprints
+   inline, full detail in the fullscreen picker. */
+.v4-stage #v4-building-mount #building-map {
+    display: block !important;
+    height: 96px;
+    min-height: 96px;
+    border-radius: 12px;
+    overflow: hidden;
+}
+/* HC66 — skeleton shimmer for the placeholder. The pre-HC66 rule
+   set this to dashed-border at `padding: 24px 16px`. On review we
+   want the placeholder to FEEL like a loading map (shimmer fills
+   the would-be map area). building-select.js adds/removes the
+   `crisp-skeleton` class as the loading state changes; the
+   base styling here keeps the dashed border for accessibility
+   contrast even when the shimmer animation is off. */
+.v4-stage #v4-building-mount #building-map-placeholder {
+    display: flex !important;
+    height: 96px;
+    min-height: 96px;
+    margin: 0;
+    padding: 0;
+    border-radius: 12px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 12px;
+}
+/* When Leaflet has finished initializing the map AND tiles are
+   visible, building-select.js removes the placeholder from the
+   DOM (or hides it). In the brief window where Leaflet is still
+   warming up, the .crisp-skeleton class (from styles.css:357)
+   paints the shimmer animation on top of the placeholder. */
+.v4-stage #v4-building-mount #building-map-placeholder.crisp-skeleton {
+    /* Inherit the shipped .crisp-skeleton animation; only border-
+       radius needs to match the map. */
+    border-radius: 12px;
 }
 /* The selected-pill stays visible on the review surface so the
    reporter sees confirmation of their pick without re-opening
@@ -14738,12 +14799,207 @@ button.v4-review-row { appearance: none; }
    building is bound to state. */
 .v4-stage #v4-building-mount .building-selected-pill {
     margin: 0;
-    padding: 10px 14px;
-    min-height: 50px;
-    border-radius: 14px;
+    padding: 8px 12px;
+    min-height: 36px;
+    border-radius: 10px;
     background: rgba(9, 209, 199, 0.08);
     border: 1px solid rgba(9, 209, 199, 0.30);
+    font-size: 13px;
 }
+
+/* ──────────────────────────────────────────────────────────────────
+   HC66 (May 2026) — Step 3 review as a final-confirmation screen.
+
+   HC65 unified all 5 sections under the `.v4-review-row` skin which
+   read as "still a form". HC66 pushes further into a confirmation
+   feel: photo strip with `× delete` corners (no labels around
+   images), inline 2-line location, plain vertical classify rows,
+   compact inline building map. Operator brief 2026-05-25:
+   "comparable to Apple Wallet review flows / Uber trip confirmation
+   / premium humanitarian-response applications".
+   ──────────────────────────────────────────────────────────────── */
+
+/* ── Photo strip: 3 square slots side-by-side. */
+.v4-review-photo-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+.v4-review-photo-tile,
+.v4-review-photo-add {
+    position: relative;
+    /* HC66 — fixed 64 px tall, width fills via the parent grid 1fr.
+       Pre-fix: `aspect-ratio: 1` made tiles ~110 × 110 px on iPhone
+       SE which blew the body budget by ~60 px. Tightened from 72
+       → 64 to give long-translation locales (Hindi Devanagari,
+       Russian) the headroom they need elsewhere in the body. Tiles
+       render ~114 × 64 on iPhone SE — close to a 16:9 thumbnail. */
+    height: 64px;
+    width: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-sub, #cbd5e1);
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.v4-review-photo-tile { padding: 0; }
+.v4-review-photo-tile img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.v4-review-photo-add {
+    /* Empty slot reads as a slot, not a card — dashed border + accent
+       `+` glyph. */
+    border-style: dashed;
+    border-color: rgba(9, 209, 199, 0.25);
+    background: rgba(9, 209, 199, 0.04);
+    font-size: 22px;
+}
+.v4-review-photo-add i { color: var(--accent, #09D1C7); }
+.v4-review-photo-add:hover,
+.v4-review-photo-add:focus-visible {
+    background: rgba(9, 209, 199, 0.08);
+    border-color: rgba(9, 209, 199, 0.5);
+    outline: none;
+}
+.v4-review-photo-add:active { transform: scale(0.98); }
+.v4-review-photo-tile-x {
+    position: absolute;
+    top: 4px;
+    inset-inline-end: 4px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    border: 0;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+}
+.v4-review-photo-tile-x:hover,
+.v4-review-photo-tile-x:focus-visible {
+    background: rgba(220, 38, 38, 0.85);
+    outline: none;
+}
+
+/* ── Location strip: no card chrome, two compact inline lines. */
+.v4-review-loc-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    width: 100%;
+    background: transparent;
+    border: 0;
+    color: var(--text, #f1f5f9);
+    text-align: start;
+    cursor: pointer;
+    font-family: inherit;
+}
+.v4-review-loc-strip:hover,
+.v4-review-loc-strip:focus-visible {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 6px;
+    outline: none;
+}
+.v4-review-loc-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    color: var(--text, #f1f5f9);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.v4-review-loc-line > i {
+    color: var(--accent, #09D1C7);
+    font-size: 13px;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+}
+.v4-review-loc-line > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.v4-review-loc-line--time {
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 12px;
+}
+
+/* ── Classification rows: plain vertical text rows, no card chrome.
+   Hairline top/bottom borders bracket the group; inter-row hairlines
+   between adjacent rows. */
+.v4-review-classify-rows {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.v4-classify-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    column-gap: 10px;
+    align-items: center;
+    /* HC66 — was `padding: 8 4` `min-height: 36`. Tightened to fit
+       iPhone SE budget after the inline map came back at 110 px. */
+    padding: 6px 4px;
+    min-height: 30px;
+    background: transparent;
+    border: 0;
+    color: var(--text, #f1f5f9);
+    text-align: start;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+}
+.v4-classify-row + .v4-classify-row {
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+.v4-classify-row:hover,
+.v4-classify-row:focus-visible {
+    background: rgba(9, 209, 199, 0.04);
+    outline: none;
+}
+.v4-classify-row > i:first-child {
+    color: var(--accent, #09D1C7);
+    font-size: 14px;
+    width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+}
+.v4-classify-row > span:not(.visually-hidden) {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text, #f1f5f9);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.v4-classify-row-pen {
+    color: rgba(255, 255, 255, 0.30);
+    font-size: 11px;
+    flex-shrink: 0;
+    transition: color 0.12s;
+}
+.v4-classify-row:hover .v4-classify-row-pen { color: var(--accent, #09D1C7); }
 
 /* ── UNDP trigger row override.
    `.v4-undp-trigger` was a custom flex row; HC65 wraps it in

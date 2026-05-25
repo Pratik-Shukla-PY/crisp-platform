@@ -204,7 +204,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v292">
+    <meta name="crisp-release" content="crisp-pwa@v293">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -589,7 +589,7 @@
         // any locale JSON. Pre-commit hook gates drift.
         window.__crispHomeI18nPacks = {
   "__meta": {
-    "buildTs": "2026-05-25T14:00:36.509Z",
+    "buildTs": "2026-05-25T15:12:32.653Z",
     "scriptVersion": 2,
     "keyCount": 101,
     "locales": [
@@ -4903,23 +4903,20 @@
 
             <h3 class="v4-review-title" data-i18n="v4_review_title">Review your report</h3>
 
-            <!-- Row 1 — Photo (compact thumb + count + retake chev) -->
-            <button class="v4-review-row v4-review-row--photo" id="v4-edit-photo" type="button">
-                <div class="v4-review-row-thumb" id="v4-summary-thumb" aria-label="Photo placeholder">
-                    <i class="fa-solid fa-camera"></i>
-                </div>
-                <div class="v4-review-row-body">
-                    <div class="v4-review-row-title">
-                        <span id="v4-photo-count" data-i18n="v4_card_photo_added">Photo captured</span>
-                    </div>
-                    <div class="v4-review-row-meta" id="v4-photo-meta">
-                        <span data-i18n="v4_card_photo_blur">Face blurred for privacy</span>
-                    </div>
-                </div>
-                <span class="v4-review-row-chev">
-                    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-                </span>
-            </button>
+            <!-- HC66 — Photo strip: 3 square slots in a row.
+                 Painted by _renderReviewPhotoStrip in v4-flow.js. Each
+                 slot is either a filled `.v4-review-photo-tile` (with
+                 `× delete` corner button) or an empty `.v4-review-
+                 photo-add` (universal `+` CTA → openCameraModal). No
+                 labels around the images — the thumbs themselves
+                 convey "I added these". The legacy `#v4-edit-photo`
+                 button + `#v4-summary-thumb` + `#v4-photo-count` /
+                 `#v4-photo-meta` IDs from HC65 are retired; the
+                 helper now paints the strip directly. -->
+            <div class="v4-review-photo-strip" id="v4-review-photo-strip"
+                 role="group" aria-label="Captured photos">
+                <!-- Slots painted by v4-flow.js on stage entry. -->
+            </div>
 
             <!-- Description card — HIDDEN on review (HC65). HC60's
                  capture-stage voice/text is the authoritative input
@@ -4959,76 +4956,73 @@
                 </details>
             </div>
 
-            <!-- Row 2 — Location (icon + address + refine chev) -->
-            <button class="v4-review-row v4-review-row--location" id="v4-edit-location" type="button">
-                <div class="v4-review-row-icon v4-icon-pill-location">
-                    <i class="fa-solid fa-location-dot"></i>
-                </div>
-                <div class="v4-review-row-body">
-                    <div class="v4-review-row-title">
-                        <span data-i18n="v4_card_location">Location</span>
-                    </div>
-                    <div class="v4-review-row-meta" id="v4-row-location-text"
-                         data-i18n="v4_locating">Locating…</div>
-                </div>
-                <span class="v4-review-row-chev">
-                    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+            <!-- HC66 — Location strip: inline 2-line layout, no card
+                 chrome. Line 1: `📍 <geocoded name>`. Line 2: `🕐 <tz>
+                 · <local time>`. Tap-target wrapper is keyboard-
+                 reachable + still routes through the existing
+                 `#v4-edit-location` ID so `_initReviewStage`'s click
+                 handler binds without change. Time line painted by
+                 `_renderReviewLocationMeta()` using
+                 `Intl.DateTimeFormat` (locale-aware via the active
+                 i18n language). -->
+            <button class="v4-review-loc-strip" id="v4-edit-location" type="button"
+                    aria-label="Location — tap to refine">
+                <span class="v4-review-loc-line">
+                    <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+                    <span id="v4-row-location-text" data-i18n="v4_locating">Locating…</span>
+                </span>
+                <span class="v4-review-loc-line v4-review-loc-line--time">
+                    <i class="fa-regular fa-clock" aria-hidden="true"></i>
+                    <span id="v4-row-location-time">—</span>
                 </span>
             </button>
 
-            <!-- Row 3 — Classification (3 inline chips on a single row).
-                 HC65 — was a vertical block with 3 stacked chips at
-                 ~32 px each + label + value + pen icon, totalling
-                 ~110 px. New: 3 chips share one ~50 px row via
-                 `grid-template-columns: repeat(3, 1fr)`. Each chip
-                 still re-opens its specific classify sub-view via the
-                 existing button IDs (`#v4-edit-infra`, etc.). -->
-            <div class="v4-review-classify-strip">
-                <button class="v4-classify-strip-chip" id="v4-edit-infra" type="button"
-                        aria-labelledby="v4-classify-chip-infra-label">
+            <!-- HC66 — Classification: 3 plain vertical rows, no card
+                 chrome, no labels. Each row shows the user's selected
+                 value (Title-cased by `_updateReviewSummary`) with a
+                 leading category icon + trailing pen affordance. Tap
+                 anywhere on the row re-opens the corresponding
+                 classify sub-view (existing button IDs preserved). -->
+            <div class="v4-review-classify-rows">
+                <button class="v4-classify-row" id="v4-edit-infra" type="button"
+                        aria-labelledby="v4-classify-row-infra-label">
                     <i class="fa-solid fa-building" aria-hidden="true"></i>
-                    <span id="v4-row-infra-text" class="v4-classify-strip-chip-text">—</span>
-                    <span class="v4-classify-strip-chip-pen">
-                        <i class="fa-solid fa-pen" aria-hidden="true"></i>
-                    </span>
-                    <span id="v4-classify-chip-infra-label" class="visually-hidden"
+                    <span id="v4-row-infra-text">—</span>
+                    <i class="fa-solid fa-pen v4-classify-row-pen" aria-hidden="true"></i>
+                    <span id="v4-classify-row-infra-label" class="visually-hidden"
                           data-i18n="v4_card_infra_label">Type</span>
                 </button>
-                <button class="v4-classify-strip-chip" id="v4-edit-crisis" type="button"
-                        aria-labelledby="v4-classify-chip-crisis-label">
+                <button class="v4-classify-row" id="v4-edit-crisis" type="button"
+                        aria-labelledby="v4-classify-row-crisis-label">
                     <i class="fa-solid fa-tornado" aria-hidden="true"></i>
-                    <span id="v4-row-crisis-text" class="v4-classify-strip-chip-text">—</span>
-                    <span class="v4-classify-strip-chip-pen">
-                        <i class="fa-solid fa-pen" aria-hidden="true"></i>
-                    </span>
-                    <span id="v4-classify-chip-crisis-label" class="visually-hidden"
+                    <span id="v4-row-crisis-text">—</span>
+                    <i class="fa-solid fa-pen v4-classify-row-pen" aria-hidden="true"></i>
+                    <span id="v4-classify-row-crisis-label" class="visually-hidden"
                           data-i18n="v4_card_crisis_label">Hazard</span>
                 </button>
-                <button class="v4-classify-strip-chip" id="v4-edit-damage" type="button"
-                        aria-labelledby="v4-classify-chip-damage-label">
+                <button class="v4-classify-row" id="v4-edit-damage" type="button"
+                        aria-labelledby="v4-classify-row-damage-label">
                     <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-                    <span id="v4-row-damage-text" class="v4-classify-strip-chip-text">—</span>
-                    <span class="v4-classify-strip-chip-pen">
-                        <i class="fa-solid fa-pen" aria-hidden="true"></i>
-                    </span>
-                    <span id="v4-classify-chip-damage-label" class="visually-hidden"
+                    <span id="v4-row-damage-text">—</span>
+                    <i class="fa-solid fa-pen v4-classify-row-pen" aria-hidden="true"></i>
+                    <span id="v4-classify-row-damage-label" class="visually-hidden"
                           data-i18n="v4_card_damage_label">Damage</span>
                 </button>
             </div>
 
-            <!-- Row 4 — Building picker (UNDP must-have #6).
-                 HC65 — pre-HC65 inlined a 260 px Leaflet map + GPS
-                 placeholder + tap hint + free-text input + selected
-                 pill all stacked together (~360 px total). New: only
-                 the fullscreen CTA renders inline as a compact row.
-                 The hidden map / placeholder / hint / free-text /
-                 selected-pill nodes stay in DOM under
-                 `#building-select-box` so building-select.js can
-                 still attach its Leaflet controller + free-text
-                 input listeners; the fullscreen picker reuses the
-                 same nodes when opened. UNDP must-have #6 (free-text
-                 fallback for offline) is reachable via the fullscreen
-                 picker which contains the same input. -->
+            <!-- HC66 — Building picker (UNDP must-have #6).
+                 HC65 hid the inline 260 px map entirely + made the
+                 fullscreen CTA the primary entry. HC66 restores a
+                 COMPACT inline map (140 px) with `.crisp-skeleton`
+                 shimmer while Leaflet + Overpass load — the operator
+                 wanted a visible map for confidence ("compact
+                 embedded map, smooth loading behavior"). The
+                 fullscreen CTA button itself is now hidden on review
+                 (inline map IS the primary entry); the fullscreen
+                 picker still hosts the free-text fallback +
+                 building-name input (UNDP must-have #6 reachable via
+                 the fullscreen surface, OR via tapping a footprint
+                 directly on the inline map). -->
             <div id="v4-building-mount" class="v4-building-mount">
                 <section class="review-block building-select-details" id="building-select-box" data-v3-slot="where">
                     <p class="block-label">
@@ -5050,7 +5044,7 @@
                     <div id="building-map" class="building-map"
                          role="application"
                          aria-label="Pick a building from the map"></div>
-                    <div id="building-map-placeholder" class="building-map-placeholder">
+                    <div id="building-map-placeholder" class="building-map-placeholder crisp-skeleton">
                         <i class="fa-solid fa-location-crosshairs"></i>
                         <span data-i18n="building_waiting_gps">Waiting for GPS to load buildings nearby…</span>
                     </div>

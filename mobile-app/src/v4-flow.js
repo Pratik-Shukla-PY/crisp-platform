@@ -185,6 +185,72 @@
     // (hides the + button at the cap), and the chooser overlay.
     const V4_MAX_PHOTOS = 3;
 
+    /**
+     * HC66 (May 2026) — shared photo-delete helper.
+     *
+     * Factored out of the capture-stage `_renderThumbs` × handler at
+     * v4-flow.js:1410 (HC60) so the new HC66 review-stage photo strip
+     * can reuse the same state-mutation contract. Preserves the May
+     * 2026 bugfix that keeps `state.extraPhotos` in sync with
+     * `state.v4Photos` (otherwise `submitReport` queues already-
+     * deleted photos for upload). Also preserves the primary-photo
+     * promotion when idx === 0 — the next-in-line photo lifts its
+     * variants up into the `state.photoBlob` / `.photoDataUrl` /
+     * `.photoVariants` slots so `submitReport`'s primary-photo
+     * branch finds them.
+     *
+     * Returns the removed entry (or `null` if idx was out of range)
+     * so callers can refresh their own UI without re-reading state.
+     */
+    function _deleteV4PhotoAt(idx) {
+        const state = _getState();
+        if (!state || !Array.isArray(state.v4Photos) || idx < 0 ||
+            idx >= state.v4Photos.length) {
+            return null;
+        }
+        const removed = state.v4Photos[idx];
+        state.v4Photos.splice(idx, 1);
+
+        // Keep state.extraPhotos in sync (HC60 bugfix). submitReport
+        // reads from state.extraPhotos to build the upload work list;
+        // a stale entry would queue a deleted photo.
+        if (removed && state.extraPhotos && state.extraPhotos.length > 0) {
+            const extraIdx = state.extraPhotos.findIndex(
+                (e) => e && e.dataUrl === removed.url,
+            );
+            if (extraIdx >= 0) state.extraPhotos.splice(extraIdx, 1);
+        }
+
+        // Promote the next photo into the PRIMARY slot when idx 0
+        // was the one removed AND another remains. Variants for the
+        // promoted entry live in state.extraPhotos (because the
+        // asExtra ingest pipeline persisted them there).
+        if (idx === 0 && state.v4Photos.length > 0) {
+            const newPrimary = state.v4Photos[0];
+            const promotedExtraIdx = state.extraPhotos.findIndex(
+                (e) => e && e.dataUrl === newPrimary.url,
+            );
+            if (promotedExtraIdx >= 0) {
+                const promoted = state.extraPhotos[promotedExtraIdx];
+                state.photoDataUrl = promoted.dataUrl;
+                state.photoBlob = promoted.blob;
+                state.photoVariants = promoted.variants || null;
+                state.photoGroupId = promoted.groupId || state.photoGroupId;
+                state.photoClientBlurApplied = Boolean(promoted.clientBlurApplied);
+                state.extraPhotos.splice(promotedExtraIdx, 1);
+            }
+        }
+        if (state.v4Photos.length === 0) {
+            _setState({
+                photoBlob: null,
+                photoDataUrl: null,
+                photoVariants: null,
+                extraPhotos: [],
+            });
+        }
+        return removed;
+    }
+
     // ── Page 1: capture ─────────────────────────────────────────────────
     /**
      * Phase 3 (May 2026 — docs §4.4) — consume any
@@ -1411,58 +1477,16 @@
                 btn.addEventListener('click', (ev) => {
                     ev.stopPropagation();
                     const idx = parseInt(btn.getAttribute('data-idx') || '0', 10);
+                    // HC66 — delegate state mutation to the shared
+                    // helper (see _deleteV4PhotoAt at module top).
+                    // Same primary-promotion + extraPhotos-sync
+                    // behaviour, now shared with the review-stage
+                    // photo strip.
+                    _deleteV4PhotoAt(idx);
                     const state = _getState();
-                    const removed = state.v4Photos[idx];
-                    state.v4Photos.splice(idx, 1);
-
-                    // BUGFIX May 2026 — keep state.extraPhotos in sync.
-                    // submitReport reads from state.extraPhotos to build
-                    // the upload work list. If a user removes a thumbnail
-                    // here but the corresponding extraPhotos entry stays,
-                    // submit queues a deleted photo. Match by dataUrl.
-                    if (removed && state.extraPhotos && state.extraPhotos.length > 0) {
-                        const extraIdx = state.extraPhotos.findIndex(
-                            (e) => e && e.dataUrl === removed.url
-                        );
-                        if (extraIdx >= 0) state.extraPhotos.splice(extraIdx, 1);
-                    }
-
-                    // If the user removed the PRIMARY (idx === 0) and
-                    // there's at least one other photo, promote the new
-                    // first v4Photo into the primary slot — its variants
-                    // live in state.extraPhotos (because the asExtra
-                    // pipeline persisted them there). Copy the variants
-                    // up into state.photoVariants so submitReport's
-                    // primary-photo branch finds them.
-                    if (idx === 0 && state.v4Photos.length > 0) {
-                        const newPrimary = state.v4Photos[0];
-                        // Find the matching extraPhotos entry for the
-                        // promoted photo (still there if it was an
-                        // extra) and lift its data into primary slots.
-                        const promotedExtraIdx = state.extraPhotos.findIndex(
-                            (e) => e && e.dataUrl === newPrimary.url
-                        );
-                        if (promotedExtraIdx >= 0) {
-                            const promoted = state.extraPhotos[promotedExtraIdx];
-                            state.photoDataUrl = promoted.dataUrl;
-                            state.photoBlob = promoted.blob;
-                            state.photoVariants = promoted.variants || null;
-                            state.photoGroupId = promoted.groupId || state.photoGroupId;
-                            state.photoClientBlurApplied = Boolean(promoted.clientBlurApplied);
-                            // Once promoted, drop the extras entry — it's
-                            // now represented in the primary slot.
-                            state.extraPhotos.splice(promotedExtraIdx, 1);
-                        }
-                    }
                     if (state.v4Photos.length === 0) {
                         nextBtn.disabled = true;
                         nextBtn.classList.remove('is-ready');
-                        _setState({
-                            photoBlob: null,
-                            photoDataUrl: null,
-                            photoVariants: null,
-                            extraPhotos: [],
-                        });
                     }
                     _renderThumbs();
                 });
@@ -2572,6 +2596,103 @@
         );
     }
 
+    /**
+     * HC66 (May 2026) — render the review photo strip.
+     *
+     * Replaces the pre-HC66 `#v4-summary-thumb` + `#v4-photo-count` +
+     * `#v4-photo-meta` writes (those elements are gone in HC66 — the
+     * legacy getElementById guards in `_updateReviewSummary` fall
+     * through harmlessly when their targets don't exist).
+     *
+     * Paints 3 square slots into `#v4-review-photo-strip`:
+     *   · Filled slots (one per existing v4Photo) → `<img>` thumb
+     *     with a `× delete` corner button. Tap × → calls
+     *     `_deleteV4PhotoAt(idx)` then re-paints.
+     *   · Empty slots → `+` CTA button. Tap → opens the existing
+     *     camera modal (or falls back to capture stage when
+     *     `window.openCameraModal` isn't available).
+     */
+    function _renderReviewPhotoStrip() {
+        const strip = document.getElementById('v4-review-photo-strip');
+        if (!strip) return;
+        const photos = (_getState().v4Photos || []).slice(0, V4_MAX_PHOTOS);
+        const slots = [];
+        for (let i = 0; i < V4_MAX_PHOTOS; i++) {
+            if (photos[i]) {
+                slots.push(
+                    '<div class="v4-review-photo-tile">' +
+                    `<img src="${photos[i].url}" alt="">` +
+                    `<button class="v4-review-photo-tile-x" type="button" ` +
+                    `data-idx="${i}" aria-label="Remove photo">` +
+                    '<i class="fa-solid fa-xmark" aria-hidden="true"></i>' +
+                    '</button></div>',
+                );
+            } else {
+                slots.push(
+                    '<button class="v4-review-photo-add" type="button" ' +
+                    'data-add-photo aria-label="Add photo">' +
+                    '<i class="fa-solid fa-plus" aria-hidden="true"></i>' +
+                    '</button>',
+                );
+            }
+        }
+        strip.innerHTML = slots.join('');
+        // Wire `× delete` corner buttons. State mutation goes through
+        // the shared `_deleteV4PhotoAt(idx)` helper so the
+        // extraPhotos sync + primary-promotion behaviour matches
+        // the capture-stage strip exactly.
+        strip.querySelectorAll('.v4-review-photo-tile-x').forEach((btn) => {
+            btn.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                const idx = parseInt(btn.getAttribute('data-idx') || '0', 10);
+                _deleteV4PhotoAt(idx);
+                _renderReviewPhotoStrip();
+            });
+        });
+        // Wire `+ Add` empty-slot CTAs. Opens the existing camera
+        // modal when available; falls back to navigating to the
+        // capture stage where the explicit Camera + Gallery buttons
+        // live (older Android browsers without getUserMedia).
+        strip.querySelectorAll('[data-add-photo]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                if (typeof window.openCameraModal === 'function') {
+                    window.openCameraModal();
+                } else {
+                    window.__crispGoToStage('stage-v4-capture');
+                }
+            });
+        });
+    }
+
+    /**
+     * HC66 (May 2026) — paint the timezone + local-time line under
+     * the geocoded location name. `Intl.DateTimeFormat` is locale-
+     * aware via the device's active language, so Arabic / Hindi /
+     * any locale renders the time format correctly.
+     */
+    function _renderReviewLocationMeta() {
+        const el = document.getElementById('v4-row-location-time');
+        if (!el) return;
+        try {
+            const now = new Date();
+            let tzShort = '';
+            try {
+                const parts = Intl.DateTimeFormat(undefined, {
+                    timeZoneName: 'short',
+                }).formatToParts(now);
+                const tzPart = parts.find((p) => p.type === 'timeZoneName');
+                tzShort = (tzPart && tzPart.value) || '';
+            } catch (_) {}
+            const time = now.toLocaleTimeString(undefined, {
+                hour: 'numeric',
+                minute: '2-digit',
+            });
+            el.textContent = tzShort ? `${tzShort} · ${time}` : time;
+        } catch (_) {
+            el.textContent = '';
+        }
+    }
+
     function _updateReviewSummary() {
         const s = _getState();
         const setText = (id, val) => {
@@ -2588,8 +2709,17 @@
             ? s.damage_classification.charAt(0) + s.damage_classification.slice(1).toLowerCase()
             : '—');
 
-        // Photo thumb. hot-fix: add `.has-photo` class so the
-        // dashed-border placeholder styling flips to a clean image card.
+        // HC66 — paint the new photo strip + location-time line. The
+        // pre-HC66 `#v4-summary-thumb` / `#v4-photo-count` /
+        // `#v4-photo-meta` writes below fall through harmlessly when
+        // the elements are missing (HC66 markup removed them).
+        try { _renderReviewPhotoStrip(); } catch (_) {}
+        try { _renderReviewLocationMeta(); } catch (_) {}
+
+        // Pre-HC66 photo thumb + count + meta writes. The HC66 markup
+        // removed these elements; the getElementById guards null-out
+        // and the calls become no-ops. Kept for back-compatibility if
+        // a future HC ever re-introduces a single-thumb review tile.
         const photos = s.v4Photos || [];
         const thumbDiv = document.getElementById('v4-summary-thumb');
         if (thumbDiv) {
@@ -2603,8 +2733,6 @@
                 }
             }
         }
-        // Update photo-card count + meta line (May 2026 review rethink).
-        // Shows "1 photo" / "N photos" + a privacy reassurance line.
         const photoCount = document.getElementById('v4-photo-count');
         if (photoCount) {
             const n = photos.length;
@@ -2617,12 +2745,6 @@
                 photoCount.textContent = `${n} ` + tt('v4_card_photo_plural', 'photos');
             }
         }
-        // Hide the "🛡 Face blurred for privacy" reassurance when there's
-        // no photo to blur. Previously rendered unconditionally — showed
-        // the line under "No photo captured", which read as either a
-        // glitch or a false claim. The reassurance only carries meaning
-        // when a photo actually exists. (Audit S1 — see
-        // UI:UX Improvements/AUDIT-REPORT-2026-05-23.md.)
         const photoMeta = document.getElementById('v4-photo-meta');
         if (photoMeta) {
             photoMeta.style.display = photos.length > 0 ? '' : 'none';
