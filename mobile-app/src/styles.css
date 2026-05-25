@@ -7712,6 +7712,51 @@ body.tier-t4 .home-impact {
     background: rgba(255, 255, 255, 0.06);
 }
 
+/* ──────────────────────────────────────────────────────────────────
+   HC68 (May 2026) — capture stage flex-fill on tall viewports.
+
+   Operator screenshot 2026-05-26: on Pixel 7 / Android Chrome the
+   capture body left ~300 px of empty space below the tips card.
+   The HC60 layout was sized for iPhone SE (~589 px usable) and
+   didn't redistribute the surplus on larger devices.
+
+   Same pattern as HC62 / HC64 (flex-fill grids): the photo
+   section's `.v4-cap-actions` (Camera + Gallery button grid)
+   becomes the flex-grow target. CSS Grid items default to
+   `align-items: stretch`, so the buttons themselves grow with the
+   grid container — Camera + Gallery scale up proportionally on
+   bigger devices, giving primary CTAs more visual weight where
+   there's room. iPhone SE budget unchanged because the
+   `min-height: 44 px` floor on each button + the natural content
+   sum stays the same as HC60.
+   ──────────────────────────────────────────────────────────────── */
+#stage-v4-capture .v4-cap-sections {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+#stage-v4-capture .v4-cap-section-photo {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+#stage-v4-capture .v4-cap-section-photo .v4-cap-section-body {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+#stage-v4-capture .v4-cap-actions {
+    flex: 1 1 auto;
+    /* WCAG 44 px floor × 2 buttons + 8 px gap → 96 px minimum.
+       On iPhone SE the natural content height stays at ~96 px so
+       this is a no-op; on Pixel 7 the grid grows to fill remaining
+       body space (~250-300 px); on tablets larger still. */
+    min-height: 96px;
+}
+/* HC68 — when the tips card is hidden (secondary input open OR
+   ≥ 1 photo captured per HC60), the action grid gets even more
+   room to grow. No special rules needed — flex-fill handles it
+   automatically. */
+
 /* HC60 (May 2026) — single adaptive "Add details" container.
    Pre-HC60 this section rendered as:
      · 22 px "Add more (optional)" eyebrow label

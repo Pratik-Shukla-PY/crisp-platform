@@ -250,4 +250,71 @@ test.describe('PWA — HC60 V4 Stage 1 zero-scroll', () => {
             ).toBeLessThanOrEqual(2);
         });
     }
+
+    // ── HC68 (May 2026) — flex-fill on tall viewports ────────────────
+    //
+    // Operator screenshot 2026-05-26 (Pixel 7 / Android Chrome): the
+    // capture body left ~300 px of empty space below the tips card.
+    // HC68 makes `.v4-cap-actions` (the Camera + Gallery grid)
+    // flex-grow inside `.v4-cap-section-photo` inside `.v4-cap-
+    // sections`, so the action buttons stretch to consume leftover
+    // body height on bigger devices. iPhone SE baseline is unchanged
+    // because content height = `min-height: 96` floor of the grid
+    // (no surplus to redistribute).
+
+    test('@smoke HC68 Pixel 7 viewport: action buttons grow to fill body', async ({ page }) => {
+        // Pixel 7 viewport (412 × 915) — meaningfully taller than iPhone SE.
+        await page.setViewportSize({ width: 412, height: 915 });
+        await bootCaptureStage(page);
+        // Don't re-set viewport (bootCaptureStage will overwrite ours).
+        // Set it AGAIN after boot so the layout settles at the bigger size.
+        await page.setViewportSize({ width: 412, height: 915 });
+        await page.waitForTimeout(200);
+        // Body must still NOT overflow.
+        const overflow = await page.evaluate(() => {
+            const body = document.querySelector('#stage-v4-capture .v4-body') as HTMLElement | null;
+            if (!body) return -1;
+            return body.scrollHeight - body.clientHeight;
+        });
+        expect(
+            overflow,
+            `Pixel 7: v4-body overflow must be ≤ 4 px (got ${overflow})`,
+        ).toBeLessThanOrEqual(4);
+        // The Camera + Gallery action buttons should be visibly taller
+        // than the iPhone SE baseline (~52 px). On a 915-tall viewport
+        // there's ~250+ px of surplus body height — buttons should
+        // grow to absorb most of it.
+        const cameraHeight = await page.locator('#btn-v4-camera').evaluate(
+            (el) => (el as HTMLElement).offsetHeight,
+        );
+        expect(
+            cameraHeight,
+            `Pixel 7: Camera button should grow ≥ 80 px (got ${cameraHeight})`,
+        ).toBeGreaterThanOrEqual(80);
+        // Gallery button should match Camera's height (both share the
+        // grid track via `align-items: stretch`).
+        const galleryHeight = await page.locator('#btn-v4-browse').evaluate(
+            (el) => (el as HTMLElement).offsetHeight,
+        );
+        expect(
+            Math.abs(cameraHeight - galleryHeight),
+            `Camera + Gallery should share equal height (got ${cameraHeight} vs ${galleryHeight})`,
+        ).toBeLessThanOrEqual(2);
+    });
+
+    test('@smoke HC68 Pixel 7 viewport: Continue CTA still pinned in stage grid', async ({ page }) => {
+        await page.setViewportSize({ width: 412, height: 915 });
+        await bootCaptureStage(page);
+        await page.setViewportSize({ width: 412, height: 915 });
+        await page.waitForTimeout(200);
+        // The stage grid `auto 1fr auto` should still pin the footer.
+        const continueBtn = page.locator('#btn-v4-capture-next');
+        await expect(continueBtn).toBeVisible();
+        const rect = await continueBtn.evaluate((el) => {
+            const r = (el as HTMLElement).getBoundingClientRect();
+            return { y: r.y, h: r.height };
+        });
+        // Bottom edge within viewport (915 px tall).
+        expect(rect.y + rect.h, 'Continue bottom within Pixel 7 viewport').toBeLessThanOrEqual(915);
+    });
 });
