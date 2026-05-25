@@ -29,7 +29,7 @@
 //     78 @smoke pass; Lighthouse PWA 100, A11y 98.
 // Cache bump forces every installed PWA to fetch the new shell + new
 // inline 22-locale packs on next service-worker activation.
-const CACHE_NAME = 'crisp-v300';
+const CACHE_NAME = 'crisp-v301';
 // v250 → v251 (May 21 — version-pill /health URL fix). v250 deploy
 // auto-rolled-back when prod-smoke caught a `HTTP 404 /health` on
 // PWA load. Root cause: home-screen.js _paintVersionPill stripped
@@ -1928,7 +1928,7 @@ const SW_ASSET_MANIFEST = {
     "i18n/vi.json": "58acd0e6c30a",
     "i18n/zh.json": "151ce4443ffd",
     "image-variants.js": "206a66ac153d",
-    "index.html": "60244a37b61a",
+    "index.html": "6b19c69a14ea",
     "install-prompt.js": "f3d8588009e9",
     "manifest.json": "6ccfd61d4297",
     "nearby.js": "347cb6c40ea3",
@@ -1937,7 +1937,7 @@ const SW_ASSET_MANIFEST = {
     "sentry-init.js": "1bc08e7032f4",
     "styles.css": "e69246c4ca8e",
     "tier-config.js": "79b393bc143d",
-    "v4-flow.js": "e66fa2f077c5",
+    "v4-flow.js": "bc28a2a55c3c",
     "vendor/sentry.min.js": "25bf89b834f7",
     "voice-readout.js": "d578b11e8bb6",
 };

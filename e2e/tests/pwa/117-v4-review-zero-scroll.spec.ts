@@ -174,6 +174,34 @@ test.describe('PWA — HC65 V4 Step 3 review zero-scroll', () => {
         await expect(deleteBtns, 'each filled tile has a × button').toHaveCount(2);
     });
 
+    test('@smoke HC74 photos in state.photoDataUrl + extraPhotos render in review strip', async ({ page }) => {
+        // Seed state as if the user captured 3 photos via the camera
+        // modal on the REVIEW page (the path that writes to
+        // state.photoDataUrl + state.extraPhotos but NOT state.v4Photos).
+        await openReviewStage(page, 'en', { photos: 0 });
+        await page.evaluate(() => {
+            (window as any).state.v4Photos = [];
+            (window as any).state.photoDataUrl = 'data:image/png;base64,iVBORw0KGgo=#primary';
+            (window as any).state.photoBlob = null;
+            (window as any).state.extraPhotos = [
+                { dataUrl: 'data:image/png;base64,iVBORw0KGgo=#x1', blob: null },
+                { dataUrl: 'data:image/png;base64,iVBORw0KGgo=#x2', blob: null },
+            ];
+            // Trigger a review-summary repaint via the existing hook.
+            (window as any).goToStage('stage-v4-review');
+        });
+        await page.waitForTimeout(300);
+        // All 3 photos should now render as filled tiles in the strip,
+        // not empty + Add CTAs.
+        const filledTiles = page.locator('#v4-review-photo-strip .v4-review-photo-tile');
+        await expect(filledTiles, 'must show 3 filled tiles from primary + 2 extras').toHaveCount(3);
+        // v4Photos should now be in sync.
+        const v4PhotosLength = await page.evaluate(
+            () => ((window as any).state.v4Photos || []).length,
+        );
+        expect(v4PhotosLength, 'state.v4Photos should be back-filled to 3').toBe(3);
+    });
+
     test('@smoke HC66 photo × delete removes the photo + updates state', async ({ page }) => {
         await openReviewStage(page, 'en', { photos: 2 });
         // Before delete: 2 photos in state.

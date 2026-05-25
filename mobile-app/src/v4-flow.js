@@ -227,11 +227,26 @@
         // asExtra ingest pipeline persisted them there).
         if (idx === 0 && state.v4Photos.length > 0) {
             const newPrimary = state.v4Photos[0];
+            // HC74 — ALWAYS update photoDataUrl + photoBlob to the
+            // new v4Photos[0], even if extras doesn't have a matching
+            // entry. Pre-HC74 this update ONLY happened when extras
+            // had a match — but if the deleted photo was the primary
+            // and the new primary was added via the review's + Add
+            // flow (which writes to extras as `{ dataUrl }` not
+            // `{ url }`), the find could miss it. Result: stale
+            // photoDataUrl pointing to the just-deleted URL, which
+            // HC74's render-time sync then resurrects.
+            state.photoDataUrl = newPrimary.url;
+            state.photoBlob = newPrimary.blob || null;
             const promotedExtraIdx = state.extraPhotos.findIndex(
                 (e) => e && e.dataUrl === newPrimary.url,
             );
             if (promotedExtraIdx >= 0) {
                 const promoted = state.extraPhotos[promotedExtraIdx];
+                // Match found — pull variants/group/blur metadata up
+                // into the primary slots; photoDataUrl + Blob already
+                // set above but overwrite from the extras entry for
+                // tighter accuracy.
                 state.photoDataUrl = promoted.dataUrl;
                 state.photoBlob = promoted.blob;
                 state.photoVariants = promoted.variants || null;
@@ -2715,7 +2730,60 @@
             };
             window.__crispV4RefreshReviewWired = true;
         }
-        const photos = (_getState().v4Photos || []).slice(0, V4_MAX_PHOTOS);
+        // HC74 (May 2026) — derive the photo list from ALL state sources,
+        // not just `state.v4Photos`. The capture stage's `_handlePhoto`
+        // (v4-flow.js:1066) pushes to v4Photos AFTER ingest. But when
+        // the user adds a photo via the REVIEW's + Add CTA, the
+        // openCameraModal → _ingestFileAsPhoto path writes to
+        // `state.photoDataUrl` + `state.extraPhotos` and never reaches
+        // the capture-stage closure that maintains v4Photos. Result:
+        // operator's screenshot — 3 photos captured, review strip
+        // still shows 3 empty + slots.
+        //
+        // Fix: build a unified deduped list from primary + extras +
+        // v4Photos, then sync it BACK to state.v4Photos so the existing
+        // `_deleteV4PhotoAt` helper (which splices both v4Photos AND
+        // extras) continues to work.
+        const state = _getState();
+        const seen = new Set();
+        const allPhotos = [];
+        // Primary first (oldest — was captured first).
+        if (state.photoDataUrl) {
+            allPhotos.push({
+                url: state.photoDataUrl,
+                blob: state.photoBlob || null,
+                ts: 0,
+            });
+            seen.add(state.photoDataUrl);
+        }
+        // Then extras in their insertion order.
+        for (const e of (state.extraPhotos || [])) {
+            if (e && e.dataUrl && !seen.has(e.dataUrl)) {
+                allPhotos.push({
+                    url: e.dataUrl,
+                    blob: e.blob || null,
+                    ts: e.ts || 0,
+                });
+                seen.add(e.dataUrl);
+            }
+        }
+        // Then anything in v4Photos that wasn't already counted (legacy
+        // capture-stage path may have entries we missed).
+        for (const p of (state.v4Photos || [])) {
+            if (p && p.url && !seen.has(p.url)) {
+                allPhotos.push(p);
+                seen.add(p.url);
+            }
+        }
+        // Sync back to state.v4Photos ONLY when we have more photos than
+        // it currently knows about. After a delete via the review strip
+        // `_deleteV4PhotoAt` splices BOTH v4Photos AND extras (HC67), so
+        // both lengths stay in sync; this guard prevents the sync from
+        // re-resurrecting a just-deleted photo.
+        if (allPhotos.length > (state.v4Photos || []).length) {
+            state.v4Photos = allPhotos;
+        }
+        const photos = allPhotos.slice(0, V4_MAX_PHOTOS);
         const slots = [];
         for (let i = 0; i < V4_MAX_PHOTOS; i++) {
             if (photos[i]) {
