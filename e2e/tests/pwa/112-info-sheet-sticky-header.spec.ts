@@ -128,5 +128,70 @@ test.describe('PWA — HC56 info-sheet sticky header', () => {
             expect(headerCSS.position, `${name} header must be position:sticky`).toBe('sticky');
             expect(headerCSS.top, `${name} header top offset must be 0px`).toBe('0px');
         });
+
+        // ── HC59 (May 2026) — padding/handle tightening ────────────────
+        //
+        // Operator screenshot 2026-05-25 (Hindi Privacy & Safety): the
+        // sticky header had ~36 px of dead space above the title because
+        // `.nearby-sheet-handle` (`margin: -10px auto 14px`, leftover
+        // from the pre-HC56 non-sticky layout) sat above the title
+        // inside the now-sticky header. The X close button at
+        // `top: 14px` already provides explicit dismissal affordance —
+        // the drag handle was redundant signalling.
+        //
+        // HC59:
+        //   · `.nearby-sheet-handle` inside the sticky-header variant
+        //     is `display: none`.
+        //   · header `padding-top` ≤ 16 px (was 24 px — too loose,
+        //     especially in Devanagari / Arabic scripts whose ascenders
+        //     visually consume more vertical real estate).
+
+        test(`@smoke ${name}: HC59 handle is hidden inside sticky header`, async ({ page }) => {
+            await openHome(page);
+            await page.locator(trigger).click();
+            await expect(page.locator(sheetId)).toBeVisible();
+
+            const handle = page.locator(
+                `${sheetId} .home-info-sheet-header .nearby-sheet-handle`,
+            );
+            // Handle markup still exists (kept for non-sticky callers'
+            // copy-paste parity), but it MUST be display:none in the
+            // sticky variant.
+            await expect(handle).toHaveCount(1);
+            const display = await handle.evaluate(
+                (el) => getComputedStyle(el).display,
+            );
+            expect(
+                display,
+                `${name} sticky-header handle must be display:none (HC59)`,
+            ).toBe('none');
+        });
+
+        test(`@smoke ${name}: HC59 header top padding is tightened`, async ({ page }) => {
+            await openHome(page);
+            await page.locator(trigger).click();
+            await expect(page.locator(sheetId)).toBeVisible();
+
+            const paddingTopPx = await page
+                .locator(`${sheetId} .home-info-sheet-header`)
+                .evaluate((el) =>
+                    parseFloat(getComputedStyle(el).paddingTop) || 0,
+                );
+            // Was 24 px pre-HC59. Tightened to ≤ 16 px so the title
+            // baseline sits much closer to the modal top edge. The
+            // X close button at `top: 14px` sets the visual top
+            // register; the header padding-top now matches it.
+            expect(
+                paddingTopPx,
+                `${name} header padding-top must be ≤ 16 px (HC59)`,
+            ).toBeLessThanOrEqual(16);
+            // Guard rail — must still leave breathing room above
+            // the title (avoid 0 px / cramped layout if a future
+            // refactor accidentally zeroes it).
+            expect(
+                paddingTopPx,
+                `${name} header padding-top must be ≥ 10 px`,
+            ).toBeGreaterThanOrEqual(10);
+        });
     }
 });

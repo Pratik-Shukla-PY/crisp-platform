@@ -10920,8 +10920,32 @@ body.tier-t4 .home-impact {
     /* Negative margins extend the background into the card's
        horizontal padding so the header spans full card width. */
     margin: 0 -22px 14px;
-    padding: 24px 22px 14px;
+    /* HC59 (May 2026) — top padding was 24px to match the legacy
+       non-sticky layout (where the handle's `-10px` margin pulled it
+       flush with the card edge). In the sticky variant the handle is
+       hidden (next rule) and the X close button at `top:14px` already
+       sets the visual top register, so 24px above the title was dead
+       space — Hindi Devanagari, with its `शिरोरेखा` top-bar, made the
+       overpad even more pronounced. Operator screenshot 2026-05-25. */
+    padding: 14px 22px 14px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+/* HC59 — drop the iOS-style drag handle inside the sticky-header
+   variant. Two reasons:
+     1. The X close button sits inside the same sticky header at
+        `top: 14px / right: 14px`, so the modal already has a clear
+        explicit dismissal affordance — the handle is duplicate
+        signalling.
+     2. The handle's `margin: -10px auto 14px` (designed for the old
+        non-sticky card layout where it sat flush with the card's
+        rounded top edge) was pulling the visual top of the header
+        zone up by 10 px and adding 14 px of bottom margin, eating
+        ~24 px of vertical space that pushed the title down. With
+        Hindi Devanagari script (top-bar `शिरोरेखा` extends above the
+        x-height), this overpad clipped visually into the body
+        scroll zone. */
+.nearby-sheet-card--sticky-header > .home-info-sheet-header > .nearby-sheet-handle {
+    display: none;
 }
 .home-info-sheet-points {
     list-style: none;
