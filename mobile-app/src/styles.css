@@ -10891,6 +10891,34 @@ body.tier-t4 .home-impact {
     flex-direction: column;
     gap: 14px;
 }
+
+/* HC56 (May 2026) — sticky-header variant for info-sheet cards. Used
+   by Privacy & Safety + Help so the close button + title stay anchored
+   at the top while the bullet list scrolls. Same pattern as HC54's
+   .lang-picker-header. Drops the card's top padding so the sticky
+   header sits flush with the card edge; the header bleeds horizontally
+   into the card's padding area so its background fills the full width. */
+.nearby-sheet-card--sticky-header {
+    padding-top: 0;
+    /* The card's 14px flex-gap previously sat between flow items; the
+       header's own bottom padding + border now provide the visual
+       separation, so the gap becomes redundant. */
+    gap: 0;
+}
+.nearby-sheet-card--sticky-header > .home-info-sheet-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    /* Solid colour matches the gradient TOP edge (`#1a3552`). As the
+       body scrolls under the header, the solid background hides the
+       moving content — no visual bleed. */
+    background: #1a3552;
+    /* Negative margins extend the background into the card's
+       horizontal padding so the header spans full card width. */
+    margin: 0 -22px 14px;
+    padding: 24px 22px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
 .home-info-sheet-points {
     list-style: none;
     padding: 0;

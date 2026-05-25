@@ -177,7 +177,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v282">
+    <meta name="crisp-release" content="crisp-pwa@v283">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -3592,14 +3592,19 @@
     <div class="nearby-sheet home-privacy-sheet" id="home-privacy-sheet" hidden
          role="dialog" aria-modal="true" aria-labelledby="home-privacy-sheet-title">
         <div class="nearby-sheet-backdrop" id="home-privacy-sheet-backdrop"></div>
-        <div class="nearby-sheet-card home-privacy-sheet-card" role="document">
-            <button class="nearby-sheet-close" id="home-privacy-sheet-close"
-                    type="button" aria-label="Close"
-                    data-i18n-aria-label="nearby_sheet_close">✕</button>
-            <div class="nearby-sheet-handle" aria-hidden="true"></div>
-            <h3 class="nearby-sheet-title home-privacy-sheet-title"
-                id="home-privacy-sheet-title"
-                data-i18n="privacy_sheet_title">Privacy & Safety</h3>
+        <div class="nearby-sheet-card home-privacy-sheet-card nearby-sheet-card--sticky-header" role="document">
+            <!-- HC56 (May 2026) — header zone is sticky so close button +
+                 title stay anchored at the top while only the bullet list
+                 below scrolls. Matches the HC54 lang-picker pattern. -->
+            <div class="home-info-sheet-header">
+                <button class="nearby-sheet-close" id="home-privacy-sheet-close"
+                        type="button" aria-label="Close"
+                        data-i18n-aria-label="nearby_sheet_close">✕</button>
+                <div class="nearby-sheet-handle" aria-hidden="true"></div>
+                <h3 class="nearby-sheet-title home-privacy-sheet-title"
+                    id="home-privacy-sheet-title"
+                    data-i18n="privacy_sheet_title">Privacy & Safety</h3>
+            </div>
             <!-- HC48 (May 23, 2026) — expanded from 4 to 7 bullets to
                  cover UNDP Personal Data Privacy Policy Annex 2
                  disclosure items: lawful basis, sub-processor
@@ -3625,14 +3630,17 @@
     <div class="nearby-sheet home-help-sheet" id="home-help-sheet" hidden
          role="dialog" aria-modal="true" aria-labelledby="home-help-sheet-title">
         <div class="nearby-sheet-backdrop" id="home-help-sheet-backdrop"></div>
-        <div class="nearby-sheet-card home-help-sheet-card" role="document">
-            <button class="nearby-sheet-close" id="home-help-sheet-close"
-                    type="button" aria-label="Close"
-                    data-i18n-aria-label="nearby_sheet_close">✕</button>
-            <div class="nearby-sheet-handle" aria-hidden="true"></div>
-            <h3 class="nearby-sheet-title home-help-sheet-title"
-                id="home-help-sheet-title"
-                data-i18n="help_sheet_title">How to use CRISP</h3>
+        <div class="nearby-sheet-card home-help-sheet-card nearby-sheet-card--sticky-header" role="document">
+            <!-- HC56 — sticky header (same pattern as Privacy sheet). -->
+            <div class="home-info-sheet-header">
+                <button class="nearby-sheet-close" id="home-help-sheet-close"
+                        type="button" aria-label="Close"
+                        data-i18n-aria-label="nearby_sheet_close">✕</button>
+                <div class="nearby-sheet-handle" aria-hidden="true"></div>
+                <h3 class="nearby-sheet-title home-help-sheet-title"
+                    id="home-help-sheet-title"
+                    data-i18n="help_sheet_title">How to use CRISP</h3>
+            </div>
             <ul class="home-info-sheet-points">
                 <li data-i18n="help_sheet_point_1">Tap "Report an Incident" to start. Add a photo and describe what you see.</li>
                 <li data-i18n="help_sheet_point_2">Reports work offline. They send automatically when you're back online.</li>
