@@ -2246,6 +2246,16 @@
             const stepNum = CLASSIFY_ORDER.indexOf(step) + 1;
             const ttl = (typeof window.t === 'function' ? window.t(titleKey) : titleKey);
             label.innerHTML = `<span>${ttl}</span><span class="v4-substep-of"> · ${stepNum} of 3</span>`;
+            // HC64 (May 2026) — crisis sub-view stacks 9 cause tiles
+            // in a single-column flex-fill grid; we need every pixel
+            // for the tiles. The substep label "WHAT CAUSED IT · 3
+            // OF 3" is redundant — the page title says the same
+            // thing one row below, and the progress pips in the
+            // header already encode "3 of 3". Hide it for crisis
+            // only; damage + infra keep it (those views still have
+            // breathing room for it). Inline style is the simplest
+            // toggle here — no class added/removed each visit.
+            label.style.display = step === 'crisis' ? 'none' : '';
         }
         // Continue button enabled based on current selection.
         const nextBtn = document.getElementById('btn-v4-classify-next');

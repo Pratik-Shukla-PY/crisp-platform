@@ -132,35 +132,60 @@ test.describe('PWA — HC63 V4 Classify "What caused it?" zero-scroll', () => {
         expect(headers, 'must have 3 section headers').toBe(3);
     });
 
-    test('@smoke HC63 orphan tile (5th in Natural) spans full grid width', async ({ page }) => {
+    test('@smoke HC64 every cause tile is full-width (single-column flex-fill)', async ({ page }) => {
         await openCrisisView(page);
-        // The Natural group has 5 tiles. The 5th — Wildfire — is the
-        // orphan: 5 is odd AND last, so the CSS selector
-        // `:last-child:nth-child(odd)` makes it span both columns.
-        const naturalTiles = page.locator(
-            '#v4-cause-grid .v4-cause-group-natural .v4-cause-tile',
+        // HC64 — every tile lives in its own row (single-column flex
+        // column inside its group). All 9 tiles' widths should match
+        // the grid container's content width (within a few px of
+        // sub-pixel rounding).
+        const gridWidth = await page.locator('#v4-cause-grid').evaluate(
+            (el) => (el as HTMLElement).clientWidth,
         );
-        await expect(naturalTiles).toHaveCount(5);
-        const widths = await naturalTiles.evaluateAll((nodes) =>
-            (nodes as HTMLElement[]).map((el) => el.offsetWidth),
+        const widths = await page.locator('#v4-cause-grid .v4-cause-tile').evaluateAll(
+            (nodes) => (nodes as HTMLElement[]).map((el) => el.offsetWidth),
         );
-        // First 4 tiles (Earthquake, Flood, Tsunami, Hurricane/Cyclone)
-        // share 2-col widths. The 5th (Wildfire) spans full width.
-        const halfWidths = widths.slice(0, 4);
-        const lastWidth = widths[4];
-        // Each of the first 4 must be roughly the same (paired).
-        const halfMin = Math.min(...halfWidths);
-        const halfMax = Math.max(...halfWidths);
+        expect(widths.length, 'must have all 9 tiles').toBe(9);
+        for (let i = 0; i < widths.length; i++) {
+            expect(
+                Math.abs(widths[i] - gridWidth),
+                `tile #${i} width (${widths[i]}) must match grid container width (${gridWidth})`,
+            ).toBeLessThanOrEqual(2);
+        }
+    });
+
+    test('@smoke HC64 tiles in same group share equal height (flex: 1 1 0)', async ({ page }) => {
+        await openCrisisView(page);
+        // Each group's tiles use `flex: 1 1 0` so they split their
+        // group's allotted height equally. Pin the contract by
+        // checking heights within each group are within 2 px.
+        for (const groupClass of ['v4-cause-group-natural', 'v4-cause-group-tech', 'v4-cause-group-human']) {
+            const heights = await page.locator(
+                `#v4-cause-grid .${groupClass} .v4-cause-tile`,
+            ).evaluateAll(
+                (nodes) => (nodes as HTMLElement[]).map((el) => el.offsetHeight),
+            );
+            expect(heights.length, `${groupClass} must have tiles`).toBeGreaterThan(0);
+            const min = Math.min(...heights);
+            const max = Math.max(...heights);
+            expect(
+                max - min,
+                `${groupClass}: tiles must share equal height (got spread ${max - min} px across ${heights.length} tiles)`,
+            ).toBeLessThanOrEqual(2);
+        }
+    });
+
+    test('@smoke HC64 substep label hidden on crisis view', async ({ page }) => {
+        await openCrisisView(page);
+        // HC64 — substep label "WHAT CAUSED IT · 3 OF 3" is hidden
+        // via inline style on the crisis view to free the ~26 px the
+        // label was costing. Damage + infra views keep it.
+        const display = await page.locator('#v4-substep-label').evaluate(
+            (el) => getComputedStyle(el).display,
+        );
         expect(
-            halfMax - halfMin,
-            'first 4 Natural tiles must share equal half-widths',
-        ).toBeLessThanOrEqual(2);
-        // The orphan Wildfire must be ~2× a half-tile (allowing for
-        // the 6 px inter-column gap).
-        expect(
-            lastWidth,
-            `Wildfire (orphan) must span full width — got ${lastWidth} vs half-width ${halfMin}`,
-        ).toBeGreaterThan(halfMin * 1.5);
+            display,
+            'v4-substep-label must be hidden on crisis view',
+        ).toBe('none');
     });
 
     test('@smoke tile rendered height meets WCAG 44 px touch-target floor', async ({ page }) => {

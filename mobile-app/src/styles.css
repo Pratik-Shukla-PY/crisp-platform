@@ -8857,38 +8857,56 @@ body.tier-t4 .home-impact {
     from { opacity: 0; transform: translateY(-4px); }
     to   { opacity: 1; transform: translateY(0); }
 }
-/* Sub-view 3: What caused it — compact 3-section 2-col tile grid.
+/* Sub-view 3: What caused it — single-column 9-tile flex-fill grid.
 
-   HC63 (May 2026) — operator screenshot 2026-05-25 showed the crisis
-   view overflowing iPhone SE by ~189 px (5 + 2 + 2 = 9 tiles at 96 px
-   each + 3 section headers + 16 px inter-group gaps = 778 px stage
-   total). The orphan Wildfire tile (5th in Natural with 2-col grid)
-   also looked unbalanced against an empty right cell.
+   HC64 (May 2026) — operator: "Make it also in end to end on the
+   page with every card in a single row. fit in one". HC63's compact
+   2-col layout fit on iPhone SE but still left ~200+ px of empty
+   space below the last row on every device (the cause-grid's
+   intrinsic height was less than the body's `1fr` allocation).
 
-   Pre-HC63: column-flex tile stacking icon above label, min-height 96.
-   HC63: side-icon grid layout matching HC61's `.v4-hit-tile` — icon
-   LEFT (32 × 32), label RIGHT (1-2 line clamp). Tile min-height 48
-   (WCAG floor). Section headers compressed to 10 px micro-caps with
-   subtle margin. Inter-group gap 16 → 6. Orphan tile in Natural
-   spans full width via `:nth-child(odd):last-child` selector. */
+   New topology:
+     · `.v4-cause-grid` becomes a flex column that fills the body
+       (`flex: 1 1 auto; min-height: 0`).
+     · Each `.v4-cause-group` gets a flex-grow proportional to its
+       tile count — Natural (5 tiles) → `5fr`, Tech + Human (2
+       each) → `2fr`. This keeps tiles in the same group equally
+       sized while giving Natural's 5 tiles 5/9 of the available
+       grid height.
+     · `.v4-cause-group-tiles` becomes a single-column flex
+       container; each tile uses `flex: 1 1 0` so all tiles in the
+       group split their group's space equally.
+
+   Substep label hidden via JS on crisis view (`_showSubStep` in
+   v4-flow.js) — frees the ~26 px the label was costing. */
 .v4-cause-grid {
     display: flex;
     flex-direction: column;
-    /* HC63 — was `gap: 16`. Tighter inter-group spacing (the section
-       header's own padding-top now carries the visual separation). */
-    gap: 6px;
+    /* HC64 — was `gap: 6`. Tightened to 4 since the group flex-grow
+       now carries the visual rhythm — no need for as much air. */
+    gap: 4px;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 .v4-cause-group {
     display: flex;
     flex-direction: column;
-    /* HC63 — was `gap: 8`. Header sits closer to its tiles. */
-    gap: 4px;
+    /* HC64 — was `gap: 4`. Tighter header-to-tiles spacing. */
+    gap: 3px;
+    min-height: 0;
 }
+/* HC64 — flex-grow proportional to tile count so all 9 cause tiles
+   end up the same height regardless of which group they belong to.
+   `flex: 5 1 0` means "grow with weight 5, shrink with weight 1,
+   start from basis 0". With totals 5 + 2 + 2 = 9, Natural gets 5/9
+   of the available grid height (room for 5 tiles), Tech + Human
+   each get 2/9 (room for 2 tiles). */
+.v4-cause-group-natural { flex: 5 1 0; }
+.v4-cause-group-tech    { flex: 2 1 0; }
+.v4-cause-group-human   { flex: 2 1 0; }
 .v4-cause-group-header {
-    /* HC63 — was 11 / 0.6px / `--text-dim`. Compressed to 10 /
-       letter-spaced 0.08em / `rgba(255,255,255,0.5)` muted. Reads as
-       a micro-cap divider rather than a bold section label, which
-       lets the eye flow into the tiles below faster. */
+    /* HC64 — was 10 px font with `padding 0 2px`. Marginally tighter
+       now since space is precious. Stays muted micro-cap. */
     font-size: 10px;
     font-weight: 700;
     color: rgba(255, 255, 255, 0.5);
@@ -8896,40 +8914,36 @@ body.tier-t4 .home-impact {
     letter-spacing: 0.08em;
     padding: 0 2px;
     margin: 0;
+    line-height: 1.2;
+    flex: 0 0 auto;
 }
 .v4-cause-group-tiles {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    /* HC63 — was `gap: 10`. */
-    gap: 6px;
-}
-/* HC63 — orphan-tile fix. When a section has an odd number of tiles
-   in a 2-column grid (Natural has 5: Earthquake, Flood, Tsunami,
-   Hurricane/Cyclone, Wildfire), the last tile previously sat alone
-   in the left column with an empty right cell. Spanning the orphan
-   to full width fills the row and rebalances the visual rhythm.
-   Selector: ":last-child:nth-child(odd)" matches a tile that is both
-   the LAST tile AND at an ODD index (1, 3, 5, …). For 2-tile
-   sections (Tech, Human) the 2nd tile is even — no span; for 5-tile
-   Natural the 5th tile is odd AND last — spans. */
-.v4-cause-group-tiles .v4-cause-tile:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
+    /* HC64 — was 2-col CSS grid. Now a flex column so the orphan-
+       tile span trick is unnecessary (every tile is full-width by
+       default) AND tiles can `flex: 1 1 0` to share their group's
+       allotted height equally. */
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 .v4-cause-tile {
     display: grid;
-    /* HC63 — side-icon layout matching `.v4-hit-tile`. Icon column
-       auto-sized to its content; label column fills the rest. The
-       label spans both rows so a 2-line wrap (Hurricane / Cyclone)
-       expands cleanly without breaking the icon's centred position. */
+    /* HC64 — side-icon layout preserved (icon LEFT, label RIGHT)
+       but the tile itself is now flex-item with `flex: 1 1 0` so
+       all tiles in a group share their group's height equally. */
     grid-template-columns: auto 1fr;
     column-gap: 12px;
     align-items: center;
-    /* HC63 — was `padding: 14`, min-height 96, column-flex with
-       icon stacked above label. New: 6 / 12 padding, min-height 48
-       (WCAG floor). The full-width orphan tile keeps the same
-       height because grid rows auto-size to the tallest cell. */
-    padding: 6px 12px;
-    min-height: 48px;
+    /* HC64 — was `padding: 6 12`, min-height 48. Padding `4 14` is
+       a touch tighter vertically (room is now controlled by the
+       flex-fill row height) and a touch roomier horizontally (the
+       tile spans full width — more breathing room for the label).
+       min-height 44 is the WCAG 2.5.5 touch-target floor. */
+    padding: 4px 14px;
+    min-height: 44px;
+    flex: 1 1 0;
     background: var(--surface, #1a3552);
     border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
     border-radius: 12px;
