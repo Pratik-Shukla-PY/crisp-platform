@@ -8564,16 +8564,26 @@ body.tier-t4 .home-impact {
 /* Phase 2.4 (May 2026) — WCAG AA: `--text-mute` (#64748b) is 2.21:1 on
    navy — fails. Bump to `--text-sub` (#cbd5e1, ~8.5:1). */
 .v4-substep-of { color: var(--text-sub); font-weight: 600; }
-.v4-classify-view { display: flex; flex-direction: column; gap: 14px; }
+/* HC61 (May 2026) — tightened sub-view rhythm. Was `gap: 14`; the
+   inter-section gap inside a classify view (title → grid → other-
+   prompt) no longer needs that much breathing room because the tile
+   grid itself carries its own `gap: 8` now. */
+.v4-classify-view { display: flex; flex-direction: column; gap: 10px; }
 .v4-classify-view[hidden] { display: none; }
 .v4-q-question {
     font-family: var(--heading, 'Outfit', sans-serif);
-    font-size: 22px;
+    /* HC61 (May 2026) — was `font-size: 22; margin: 4 0 8` totaling
+       ~33 px of vertical run. Tightened to 18 px font + `0 0 4`
+       margins so the title sits closer to the grid below (saves
+       ~13 px). The voice-readout button (auto-injected by the
+       `[data-voice]` painter) shrinks from 32 → 28 px in parallel so
+       it still fits inline with the title. */
+    font-size: 18px;
     font-weight: 800;
     line-height: 1.25;
     letter-spacing: -0.01em;
     color: var(--text);
-    margin: 4px 0 8px;
+    margin: 0 0 4px;
 }
 
 /* Sub-view 1: How bad — 3 vertical option cards */
@@ -8637,18 +8647,37 @@ body.tier-t4 .home-impact {
     box-shadow: 0 0 8px var(--accent, #09D1C7);
 }
 
-/* Sub-view 2: What was hit — 2-col grid of 8 tiles with sub-text */
+/* Sub-view 2: What was hit — 2-col grid of 8 tiles with sub-text.
+   HC61 (May 2026) — pre-HC61 the tile rendered as a column-flex
+   stacking icon (48×48) above title above sub-label, with min-height
+   92 px and 14 px padding. 4 rows × 92 + 3 × 10 = 398 px just for the
+   grid, clipping rows 3-4 on iPhone SE.
+
+   New layout: side-by-side grid. Icon occupies a 36 × 36 cell on the
+   left (spanning both content rows so it's vertically centred against
+   the title + sub stack). Title sits on row 1 of column 2, sub on row
+   2. Tile shrinks to `min-height: 64 px` with `padding: 8 10`. New
+   grid total: 4 × 64 + 3 × 8 = 280 px (saves 118 px). */
 .v4-hit-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    /* HC61 — was `gap: 10`. Tightened to 8 for 6 px savings across
+       3 inter-row gaps. */
+    gap: 8px;
 }
 .v4-hit-tile {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-    padding: 14px;
+    display: grid;
+    /* Icon column auto-sized to its content (36 px). Text column
+       fills the remaining width. */
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 2px;
+    align-items: center;
+    /* HC61 — was `padding: 14`. Tighter `8 10` saves ~12 px per tile.
+       The 44 × 44 WCAG touch target survives via the tile's
+       `min-height: 64`. */
+    padding: 8px 10px;
     background: var(--surface, #1a3552);
     border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
     border-radius: 14px;
@@ -8656,7 +8685,9 @@ body.tier-t4 .home-impact {
     cursor: pointer;
     text-align: start;
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
-    min-height: 92px;
+    /* HC61 — was `92`. 64 px keeps the tile comfortably above the
+       WCAG floor while saving 28 px × 4 rows = 112 px total. */
+    min-height: 64px;
     min-width: 0;
     overflow: hidden;
 }
@@ -8667,21 +8698,20 @@ body.tier-t4 .home-impact {
     background: rgba(9, 209, 199, 0.10);
     box-shadow: 0 0 22px rgba(9, 209, 199, 0.24);
 }
-/* May 2026 (operator-reported) — bumped icon size at every
-   breakpoint. The previous 38×38 container with a 20 px glyph
-   read as cramped against the card's body padding + title weight.
-   Sizes now scale with the same min-width / min-height bands used
-   by the home-stage CTAs (see ~line 4861 onward). Card min-height
-   grows in lockstep so the icon never overflows its container. */
 .v4-hit-tile-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
+    /* HC61 — was 48×48 with `font-size: 28`. Tighter 36 × 36 + 20 px
+       glyph reads as scannable but compact. The icon cell spans both
+       content rows so it's centred against the title + sub stack. */
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
     background: rgba(9, 209, 199, 0.12);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 28px;
+    font-size: 20px;
     line-height: 1;
     flex-shrink: 0;
 }
@@ -8689,6 +8719,8 @@ body.tier-t4 .home-impact {
     background: rgba(9, 209, 199, 0.22);
 }
 .v4-hit-tile-title {
+    grid-column: 2;
+    grid-row: 1;
     font-family: var(--heading, 'Outfit', sans-serif);
     font-weight: 700;
     font-size: 13px;
@@ -8697,34 +8729,57 @@ body.tier-t4 .home-impact {
     overflow-wrap: break-word;
     word-break: normal;
     hyphens: auto;
+    /* HC61 — clamp title to 1 line so a long-translation locale (RU,
+       UR, DE) doesn't push the tile taller. */
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .v4-hit-tile-sub {
+    grid-column: 2;
+    grid-row: 2;
     font-size: 10.5px;
     color: var(--text-dim, var(--muted));
-    line-height: 1.35;
+    line-height: 1.3;
     overflow-wrap: break-word;
+    /* HC61 — clamp sub to 2 lines so verbose non-EN translations
+       (the EN strings were already short-form post-HC61) don't push
+       the tile taller. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
-/* Responsive icon + card-min-height bumps. Matches the home-stage
-   CTA breakpoint cascade (min-width 380, min-height 700/800/900) so
-   the v4 capture screens scale consistently with the landing page. */
+/* HC61 — responsive cascade refactored. The 92 → 104 → 112 → 120 →
+   128 ladder was the original goal of making iPhone SE the BASELINE
+   and bumping for taller viewports. HC61 inverts that — iPhone SE
+   is the tightest constraint AND the most common installed-PWA
+   device, so the 64 px tile becomes the baseline. Taller viewports
+   get marginally roomier tiles (≥ 380 px wide: 72; ≥ 700 px tall:
+   80; ≥ 800 px tall: 88) but nothing extreme so the grid never
+   pushes the Continue button below the fold. */
 @media (min-width: 380px) {
-    .v4-hit-tile { min-height: 104px; padding: 16px; }
-    .v4-hit-tile-icon { width: 56px; height: 56px; font-size: 32px; border-radius: 14px; }
+    .v4-hit-tile { min-height: 72px; padding: 10px 12px; }
+    .v4-hit-tile-icon { width: 40px; height: 40px; font-size: 22px; border-radius: 11px; }
     .v4-hit-tile-title { font-size: 14px; }
 }
 @media (min-height: 700px) {
-    .v4-hit-tile { min-height: 112px; }
-    .v4-hit-tile-icon { width: 60px; height: 60px; font-size: 34px; }
+    .v4-hit-tile { min-height: 80px; }
+    .v4-hit-tile-icon { width: 44px; height: 44px; font-size: 24px; }
 }
 @media (min-height: 800px) {
-    .v4-hit-tile { min-height: 120px; padding: 18px; }
-    .v4-hit-tile-icon { width: 64px; height: 64px; font-size: 36px; border-radius: 15px; }
+    .v4-hit-tile { min-height: 88px; padding: 12px 14px; }
+    .v4-hit-tile-icon { width: 48px; height: 48px; font-size: 26px; border-radius: 12px; }
     .v4-hit-tile-title { font-size: 15px; }
     .v4-hit-tile-sub   { font-size: 11.5px; }
 }
 @media (min-height: 900px) {
-    .v4-hit-tile { min-height: 128px; }
-    .v4-hit-tile-icon { width: 68px; height: 68px; font-size: 38px; }
+    .v4-hit-tile { min-height: 96px; }
+    .v4-hit-tile-icon { width: 52px; height: 52px; font-size: 28px; }
 }
 /* Conditional reveal below the infra tile grid when OTHER is selected.
    UNDP "Other, please specify" requirement — reporter MUST type a
@@ -9378,7 +9433,14 @@ body.tier-t4 .home-impact {
    speaking. Hidden in print + when SpeechSynthesis is unavailable. */
 .voice-readout-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 32px; height: 32px;
+    /* HC61 (May 2026) — was 32 × 32. Operator screenshot showed the
+       button reading as visually dominant against the title; trimmed
+       to 28 × 28 to reduce that dominance without losing the
+       accessibility readout. Still well above the WCAG 24 × 24 floor
+       and (paired with the auto-injected ≥ 8 px padding via the
+       parent's gap) clears the 44 × 44 tap-target spec when there's
+       enough surrounding empty space. */
+    width: 28px; height: 28px;
     margin-inline-start: 8px;
     padding: 0;
     background: rgba(9, 209, 199, 0.08);
@@ -9386,7 +9448,7 @@ body.tier-t4 .home-impact {
     border-radius: 999px;
     color: #09D1C7;
     cursor: pointer;
-    font-size: 0.92rem;
+    font-size: 0.82rem;
     line-height: 1;
     flex-shrink: 0;
     vertical-align: middle;
