@@ -14529,6 +14529,253 @@ button.v4-review-card { appearance: none; }
 .v4-summary-row { display: none !important; }
 
 /* ──────────────────────────────────────────────────────────────────
+   HC65 (May 2026) — Step 3 review redesign.
+
+   Pre-HC65: 4 fat cards (Photo / Description / Location / Building +
+   3-row Classification) + a 260 px inline OSM map = ~1100 px of
+   content vs ~589 px iPhone SE budget. The Send CTA spent most of
+   its life below the fold.
+
+   New layout: one compact heading + 4 uniform `.v4-review-row`
+   horizontal rows + a 3-chip classification strip + 1 building
+   CTA + 1 UNDP trigger row. Inline 260 px map hidden — the
+   fullscreen picker (which already shipped, see building-select.js)
+   becomes the primary entry point. Description card hidden on
+   review since HC60's capture-stage voice/text is the
+   authoritative input surface.
+   ──────────────────────────────────────────────────────────────── */
+
+.v4-review-title {
+    margin: 4px 0 6px;
+    text-align: center;
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: #f1f5f9;
+}
+
+.v4-review-row {
+    display: grid;
+    /* Three columns: icon (auto-sized) | body (flex) | chev/badge */
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: 12px;
+    align-items: center;
+    width: 100%;
+    padding: 8px 14px;
+    min-height: 50px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    color: #f1f5f9;
+    cursor: pointer;
+    text-align: start;
+    font-family: inherit;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+button.v4-review-row { appearance: none; }
+.v4-review-row:hover,
+.v4-review-row:focus-visible {
+    background: rgba(9, 209, 199, 0.06);
+    border-color: rgba(9, 209, 199, 0.30);
+    outline: none;
+}
+.v4-review-row:active { transform: scale(0.99); }
+
+.v4-review-row-thumb,
+.v4-review-row-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(9, 209, 199, 0.10);
+    border: 1px solid rgba(9, 209, 199, 0.25);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #80EE98;
+    font-size: 15px;
+    line-height: 1;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+.v4-review-row-thumb.has-photo {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.12);
+}
+.v4-review-row-thumb img,
+.v4-review-row-thumb canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.v4-review-row-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.v4-review-row-title {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-weight: 700;
+    font-size: 14px;
+    color: #f1f5f9;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.v4-review-row-meta {
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.62);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.v4-review-row-chev {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+/* ── Classification strip — 3 chips on a single row.
+   Replaces the pre-HC65 vertical block of 3 stacked
+   `.v4-classify-chip` buttons (~110 px). New row is ~50 px. */
+.v4-review-classify-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 6px;
+}
+.v4-classify-strip-chip {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    column-gap: 6px;
+    align-items: center;
+    padding: 8px 10px;
+    min-height: 50px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    color: #f1f5f9;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: start;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.v4-classify-strip-chip:hover,
+.v4-classify-strip-chip:focus-visible {
+    background: rgba(9, 209, 199, 0.06);
+    border-color: rgba(9, 209, 199, 0.30);
+    outline: none;
+}
+.v4-classify-strip-chip > i {
+    color: #80EE98;
+    font-size: 15px;
+    width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+}
+.v4-classify-strip-chip-text {
+    font-weight: 700;
+    font-size: 12px;
+    color: #f1f5f9;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.v4-classify-strip-chip-pen {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 10px;
+    flex-shrink: 0;
+    transition: color 0.12s;
+}
+.v4-classify-strip-chip:hover .v4-classify-strip-chip-pen { color: #80EE98; }
+
+/* Visually-hidden accessibility helper (used by the strip-chips'
+   aria-labelledby targets so screen readers announce the category
+   name even though the visible text shows only the value). */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ── Building picker — collapse to button-only on review.
+   Pre-HC65 the 260 px Leaflet map + placeholder + tap-hint +
+   free-text input were all visible inline (~360 px of vertical
+   real estate). HC65 keeps these nodes in DOM so building-
+   select.js's Leaflet controller + free-text listeners still
+   attach, but hides them visually. The fullscreen picker (already
+   shipped, opened via `#btn-building-fs-open`) becomes the primary
+   entry point and surfaces the same input nodes inside its
+   overlay. UNDP must-have #6 (free-text offline fallback) stays
+   reachable via the fullscreen picker. */
+.v4-stage #v4-building-mount #building-select-box {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    margin: 0;
+}
+.v4-stage #v4-building-mount #building-select-box > .block-label,
+.v4-stage #v4-building-mount #building-select-box > #building-map,
+.v4-stage #v4-building-mount #building-select-box > #building-map-placeholder,
+.v4-stage #v4-building-mount #building-select-box > .building-select-hint,
+.v4-stage #v4-building-mount #building-select-box > .building-free-text {
+    /* The OSM map + supporting UI move to the fullscreen picker
+       on review. They re-render via the same DOM nodes when the
+       picker overlay opens. */
+    display: none !important;
+}
+/* The selected-pill stays visible on the review surface so the
+   reporter sees confirmation of their pick without re-opening
+   the picker. JS toggles its inline `display: flex` when a
+   building is bound to state. */
+.v4-stage #v4-building-mount .building-selected-pill {
+    margin: 0;
+    padding: 10px 14px;
+    min-height: 50px;
+    border-radius: 14px;
+    background: rgba(9, 209, 199, 0.08);
+    border: 1px solid rgba(9, 209, 199, 0.30);
+}
+
+/* ── UNDP trigger row override.
+   `.v4-undp-trigger` was a custom flex row; HC65 wraps it in
+   `.v4-review-row` so it adopts the uniform geometry. The
+   `.undp-details-cta-time` badge keeps its own pill style for
+   the live "Optional ↔ 1/5–5/5" state. */
+.v4-review-row.v4-undp-trigger {
+    /* `.v4-review-row` already supplies grid + padding + radius. */
+}
+.v4-review-row .undp-details-cta-time {
+    /* Was sized for the bigger row; trim to fit the 50 px row. */
+    font-size: 10.5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.78);
+    flex-shrink: 0;
+}
+.v4-review-row .undp-details-cta-time.has-progress {
+    background: rgba(9, 209, 199, 0.16);
+    color: #80EE98;
+}
+
+/* HC65 — description card hidden on review (operator's `Core
+   Requirements` list does not include description editing on
+   review). The HC60 capture-stage Voice/Text inline panel is the
+   authoritative input surface. If the operator ever wants to
+   re-surface description editing on review, drop `hidden` from
+   the markup AND the `display: none` here. */
+#stage-v4-review .v4-review-card-description[hidden] { display: none; }
+
+/* ──────────────────────────────────────────────────────────────────
    Camera modal overlay (May 2026 redesign) — `.cm-*` namespace.
 
    Six-layer structure (see #camera-modal in index.html):
