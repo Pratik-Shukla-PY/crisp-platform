@@ -261,6 +261,40 @@ test.describe('PWA — HC65 V4 Step 3 review zero-scroll', () => {
         expect(h, `map height must be ≥ 100 px (got ${h})`).toBeGreaterThanOrEqual(100);
     });
 
+    test('@smoke HC71 fullscreen-expand button is visible over the map', async ({ page }) => {
+        await openReviewStage(page);
+        // The fs-cta is absolutely positioned over the top-right
+        // corner of the map. HC69 dropped `position: relative` from
+        // `#building-select-box` which made the button anchor against
+        // the wrong ancestor (off-screen). HC71 restores it. Verify
+        // the button is in the DOM, has non-zero size, AND its
+        // bounding rect falls within the map's bounding rect (so
+        // it's actually overlaying the map, not hiding elsewhere).
+        const btn = page.locator('#btn-building-fs-open');
+        await expect(btn, 'fs-cta button must exist').toHaveCount(1);
+        const dims = await btn.evaluate((el) => {
+            const r = (el as HTMLElement).getBoundingClientRect();
+            return { x: r.x, y: r.y, w: r.width, h: r.height };
+        });
+        expect(dims.w, 'fs-cta width must be > 0').toBeGreaterThan(0);
+        expect(dims.h, 'fs-cta height must be > 0').toBeGreaterThan(0);
+        const mapDims = await page.locator('#building-map').evaluate((el) => {
+            const r = (el as HTMLElement).getBoundingClientRect();
+            return { x: r.x, y: r.y, w: r.width, h: r.height };
+        });
+        // The fs-cta center should fall within the map's bounding rect.
+        const cx = dims.x + dims.w / 2;
+        const cy = dims.y + dims.h / 2;
+        expect(
+            cx >= mapDims.x && cx <= mapDims.x + mapDims.w,
+            `fs-cta center.x (${cx}) must be within map x range [${mapDims.x}, ${mapDims.x + mapDims.w}]`,
+        ).toBe(true);
+        expect(
+            cy >= mapDims.y && cy <= mapDims.y + mapDims.h,
+            `fs-cta center.y (${cy}) must be within map y range [${mapDims.y}, ${mapDims.y + mapDims.h}]`,
+        ).toBe(true);
+    });
+
     test('@smoke HC66 placeholder carries crisp-skeleton class during loading', async ({ page }) => {
         await openReviewStage(page);
         // The skeleton shimmer paints over the placeholder during the

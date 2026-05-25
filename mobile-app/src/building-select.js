@@ -481,6 +481,32 @@
             L.marker([lat, lng], { zIndexOffset: 1000 }).addTo(_map);
 
             _overlay = L.layerGroup().addTo(_map);
+
+            // HC71 (May 2026) — keep Leaflet in sync with container
+            // resizes. HC69 made the map flex-grow inside the review
+            // body; the container size keeps changing as the flex
+            // layout settles AND when the user enters/leaves the
+            // review stage. Leaflet caches `_map._size` at init —
+            // without a `ResizeObserver` re-trigger, polygons and
+            // tiles render against stale dimensions, leaving the
+            // expanded portion blank (the "building tags not loading"
+            // symptom the operator reported). The observer is cheap:
+            // one invalidateSize per resize, debounced via rAF.
+            if (typeof ResizeObserver !== 'undefined') {
+                let _resizeRaf = null;
+                const ro = new ResizeObserver(() => {
+                    if (_resizeRaf) cancelAnimationFrame(_resizeRaf);
+                    _resizeRaf = requestAnimationFrame(() => {
+                        _resizeRaf = null;
+                        if (!_map) return;
+                        try {
+                            _map.invalidateSize({ animate: false });
+                        } catch (_) {}
+                    });
+                });
+                try { ro.observe(container); } catch (_) {}
+            }
+
             // Single source of truth for the polygon paint; `_paintBuildings`
             // both fetches + draws + updates the `_lastFetchLat/Lng` cache
             // tracker so the re-fetch threshold check above works on every

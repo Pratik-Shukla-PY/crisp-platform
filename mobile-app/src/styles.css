@@ -14862,6 +14862,14 @@ button.v4-review-row { appearance: none; }
     /* HC69 — section grows with its mount so the map can flex-fill. */
     flex: 1 1 auto;
     min-height: 0;
+    /* HC71 (May 2026) — positioning context for the absolutely-
+       positioned `.building-fs-cta` overlay button. HC67 set this
+       on `#building-select-box` originally; HC69 rewrote the rule
+       and dropped it, which made the fs-cta button anchor against
+       the next positioned ancestor (somewhere up the stage), so
+       it disappeared off-screen. Restoring it puts the button at
+       the top-right corner of the map again. */
+    position: relative;
 }
 /* HC67 — hide the section label, the tap-hint, and the free-text
    block on the review surface. The free-text block reparents into
