@@ -3462,7 +3462,11 @@ details.mr-date-group[open] .mr-date-group-chevron {
     position: fixed; inset: 0;
     background: rgba(0, 0, 0, 0.65);
     display: flex; align-items: center; justify-content: center;
-    z-index: 300;
+    /* HC58 — bumped from 300 → 600 so the picker lands ABOVE the
+       consent onboarding modal (z-index: 500). First-time visitors
+       can switch language before accepting consent without the picker
+       being trapped behind the modal. */
+    z-index: 600;
     padding: 16px;
 }
 .lang-picker-sheet {
@@ -11004,9 +11008,23 @@ html:not(.crisp-consented) body { overflow: hidden; }
 /* ── Header ─────────────────────────────────────────────────────── */
 .consent-onboarding-header {
     flex: 0 0 auto;
+    /* HC58 — position:relative anchors the new language pill (.v4-lang-
+       pill child) to the top-right corner of the header. */
+    position: relative;
     padding: 24px 22px 18px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     text-align: center;
+}
+/* HC58 — language pill on the consent modal. Reuses .v4-lang-pill's
+   visual treatment but overrides the v4-header's `inset-inline-end: 8px`
+   to align with the modal's 14 px header gutter. */
+.consent-onboarding-lang-pill {
+    position: absolute;
+    top: 14px;
+    inset-inline-end: 14px;
+}
+[dir="rtl"] .consent-onboarding-lang-pill {
+    inset-inline-end: 14px;  /* logical property already handles RTL */
 }
 .consent-onboarding-brand {
     width: 56px;

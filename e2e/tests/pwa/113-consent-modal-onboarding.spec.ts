@@ -171,4 +171,52 @@ test.describe('PWA — HC57 consent onboarding modal', () => {
         await expect(page.locator('#home-consent')).toHaveCount(0);
         await expect(page.locator('#home-consent-check')).toHaveCount(0);
     });
+
+    // ── HC58 — language pill inside the consent modal header ─────────────
+    //
+    // First-time visitors can't reach the home page's lang switcher
+    // because the consent modal covers it. The HC58 pill exposes the
+    // same picker overlay directly from inside the modal, and the
+    // picker overlay's z-index was bumped from 300 → 600 so it lands
+    // above the consent modal.
+
+    test('@smoke HC58 language pill is rendered inside the consent header', async ({ page }) => {
+        await gotoFirstVisit(page);
+        const pill = page.locator(
+            '#consent-onboarding .consent-onboarding-lang-pill',
+        );
+        await expect(pill, 'lang pill must exist inside the consent header').toHaveCount(1);
+        await expect(pill).toBeVisible();
+
+        // Pill carries the v4 mirror class + data attribute so the
+        // existing _updateLangSwitcherMode picks it up automatically.
+        const hasV4LangPillClass = await pill.evaluate((el) =>
+            el.classList.contains('v4-lang-pill'),
+        );
+        expect(hasV4LangPillClass, 'pill must opt into the mirror class').toBe(true);
+        const hasDataAttr = await pill.evaluate((el) =>
+            el.hasAttribute('data-v4-lang-pill'),
+        );
+        expect(hasDataAttr, 'pill must opt into the picker-open data-attr').toBe(true);
+    });
+
+    test('@smoke HC58 tapping the consent pill opens the picker above the consent modal', async ({ page }) => {
+        await gotoFirstVisit(page);
+        await page.locator(
+            '#consent-onboarding .consent-onboarding-lang-pill',
+        ).click();
+
+        const picker = page.locator('#lang-picker-overlay');
+        await expect(picker, 'picker must open over the consent modal').toBeVisible();
+
+        // Picker z-index must be ABOVE consent overlay (500). HC58
+        // bumped it from 300 → 600.
+        const pickerZ = await picker.evaluate(
+            (el) => parseInt(getComputedStyle(el).zIndex, 10) || 0,
+        );
+        const consentZ = await page.locator('#consent-onboarding').evaluate(
+            (el) => parseInt(getComputedStyle(el).zIndex, 10) || 0,
+        );
+        expect(pickerZ, 'picker z-index must be above consent overlay').toBeGreaterThan(consentZ);
+    });
 });

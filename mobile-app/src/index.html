@@ -204,7 +204,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v284">
+    <meta name="crisp-release" content="crisp-pwa@v285">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -3958,9 +3958,31 @@
          role="dialog" aria-modal="true"
          aria-labelledby="consent-onboarding-title">
         <div class="consent-onboarding-card" role="document">
-            <!-- Sticky header — title + subtitle. No close X (modal is
-                 non-dismissible). flex: 0 0 auto so it doesn't shrink. -->
+            <!-- Sticky header — title + subtitle + language pill. No
+                 close X (modal is non-dismissible). flex: 0 0 auto so
+                 it doesn't shrink. -->
             <header class="consent-onboarding-header">
+                <!-- HC58 (May 2026) — language pill anchored top-right
+                     of the consent header so first-time visitors can
+                     switch locale BEFORE accepting consent (the home
+                     pill is covered by this modal). Reuses
+                     `.v4-lang-pill` + `data-v4-lang-pill` so the
+                     existing flag/code mirror in app.js
+                     (_updateLangSwitcherMode) AND the existing
+                     click→openLangPicker handler both light up without
+                     any new wiring. The picker overlay's z-index is
+                     bumped above the consent overlay so it lands on
+                     top of the modal. -->
+                <button type="button"
+                        class="v4-lang-pill consent-onboarding-lang-pill"
+                        data-v4-lang-pill
+                        aria-label="Tap to change language"
+                        data-i18n-aria-label="aria_tap_change_language"
+                        title="Tap to change language"
+                        data-i18n-title="aria_tap_change_language">
+                    <span class="lps-flag" aria-hidden="true">🌐</span>
+                    <span class="lps-code">EN</span>
+                </button>
                 <div class="consent-onboarding-brand" aria-hidden="true">
                     <!-- Shield + check inline SVG. Reuses the brand palette
                          (mint/teal) used throughout the home stage. -->
