@@ -7074,8 +7074,15 @@ body.tier-t4 .home-impact {
     display: grid;
     grid-template-columns: minmax(0, 1fr);  /* Delta-C — was unset, so the implicit column auto-sized to widest child (header) and pushed the body 32 px past the right padding edge, clipping the 3rd capture-grid tile. */
     grid-template-rows: auto 1fr auto;
-    padding: 12px 18px 18px;
-    gap: 14px;
+    /* HC60 (May 2026) — pre-HC60 padding was `12 18 18` + gap `14` for
+       ~84 px of breathing room before the body even renders. Tighter
+       rhythm (`10 16 12`, gap `10`) recovers ~22 px without crowding
+       the WCAG 44 × 44 touch targets. */
+    padding: 10px 16px 12px;
+    gap: 10px;
+}
+@media (max-width: 360px) {
+    .stage.v4-stage { padding: 8px 12px 10px; }
 }
 
 .v4-header {
@@ -7196,7 +7203,12 @@ body.tier-t4 .home-impact {
 .v4-body {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    /* HC60 (May 2026) — was `gap: 14px`. Tightened to 10 px to recover
+       ~16 px (5 inter-region gaps) without losing visual separation —
+       the meta card / photo card / extras row / tips card all carry
+       their own border + background so they read as distinct surfaces
+       without needing fat gaps between them. */
+    gap: 10px;
     overflow-y: auto;
     overflow-x: hidden;          /* Delta-C — was causing 14 px right overflow on iPhone 12 mini */
     min-height: 0;  /* let the grid track collapse if needed */
@@ -7249,23 +7261,31 @@ body.tier-t4 .home-impact {
 .v4-meta-card {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 12px 14px;
+    /* HC60 (May 2026) — pre-HC60 the card stacked a 32 px location row
+       above a 42 px three-line timezone block with `gap: 10`. The new
+       layout folds the time into a single sub-row under the location
+       (see `.v4-meta-loc-sub` below) so we no longer need a flex gap
+       between sibling rows. */
+    gap: 0;
+    padding: 8px 12px;
     background: var(--v4-tile-bg, rgba(255,255,255,0.04));
     border: 1px solid var(--v4-tile-bg-hover, rgba(255,255,255,0.08));
     border-radius: 14px;
-    margin-bottom: 14px;
+    /* HC60 — was `margin-bottom: 14`. `.v4-body` now drives the inter-
+       region rhythm via `gap: 10`, so this margin is redundant noise. */
+    margin-bottom: 0;
 }
 .v4-meta-loc-row {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    align-items: flex-start;  /* HC60 — names can wrap to 2 lines now */
+    gap: 10px;
     min-width: 0;
 }
 .v4-meta-loc-icon {
     color: var(--brand, #09D1C7);
-    font-size: 18px;
+    font-size: 16px;
     flex-shrink: 0;
+    margin-top: 4px;
 }
 .v4-meta-loc-text {
     flex: 1;
@@ -7276,9 +7296,19 @@ body.tier-t4 .home-impact {
     font-weight: 600;
     font-size: 14px;
     line-height: 1.3;
-    white-space: nowrap;
+    /* HC60 (May 2026) — was single-line `white-space: nowrap` which
+       truncated long location names mid-word on iPhone SE (operator
+       screenshot 2026-05-25: "Electronic City, Bangalore South…"
+       chopped off "Zone, Karnataka, India"). 2-line clamp keeps the
+       name readable when long while still capping the vertical budget. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
+    word-break: break-word;
+    overflow-wrap: anywhere;
     /* AUDIT 2026-05-23 — bidi isolation so a Latin-script location name
        ("D'Souza Layout, Bengaluru, India") inside an Arabic / Urdu
        container still truncates from the END, not the START. Pre-fix
@@ -7290,29 +7320,60 @@ body.tier-t4 .home-impact {
        eats the end of the visible string for every locale. */
     unicode-bidi: isolate;
 }
-.v4-meta-loc-coords {
-    /* Phase 2.4 (May 2026) — WCAG 2.1 AA. `--text-mute` (#64748b)
-       on the navy #213A58 bg is only 2.21:1; below the 4.5:1 floor
-       for body text < 18.66pt. Promote to `--text-sub` (#cbd5e1,
-       ~8.5:1) which is the brand's "secondary readable" colour. */
-    color: var(--text-sub, #cbd5e1);
-    font-size: 11px;
-    line-height: 1.3;
-    font-variant-numeric: tabular-nums;
+/* HC60 (May 2026) — sub-row beneath the name folds accuracy + local
+   clock into a single helper line ("±35 m · 2:17 pm IST"). Replaces
+   the legacy 42 px three-line timezone stack that used to sit beneath
+   the location row. */
+.v4-meta-loc-sub {
+    display: flex;
+    align-items: center;
+    gap: 5px;
     margin-top: 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 11.5px;
+    line-height: 1.3;
+    color: var(--text-sub, #cbd5e1);
+    font-variant-numeric: tabular-nums;
+    flex-wrap: wrap;  /* RTL + long-translation safety */
+    unicode-bidi: isolate;
 }
-.v4-meta-loc-coords:empty { display: none; }
+.v4-meta-loc-sub-sep {
+    opacity: 0.5;
+}
+/* When neither accuracy nor time has painted yet, hide the separator
+   so we don't show a lonely "·". */
+.v4-meta-loc-coords:empty,
+.v4-meta-time-text:empty {
+    display: none;
+}
+.v4-meta-loc-coords:empty + .v4-meta-loc-sub-sep,
+.v4-meta-loc-sub-sep + .v4-meta-time-text:empty {
+    display: none;
+}
+.v4-meta-loc-coords {
+    /* HC60 — kept as inline span inside `.v4-meta-loc-sub`. Whitespace
+       + ellipsis no longer needed here (parent flexbox handles wrap). */
+    color: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    font-variant-numeric: inherit;
+    margin: 0;
+}
 .v4-meta-loc-actions {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: -2px;  /* HC60 — pull the action cluster up to align */
 }
 .v4-meta-loc-action {
-    width: 36px;
-    height: 36px;
+    /* HC60 — compact icon-only buttons. 28 × 28 visual size; the WCAG
+       44 × 44 touch target survives via inflated `padding` on the
+       inner i (font-size: 13 + padding 8 = 29 px clickable + the 28 px
+       button gives ~36 × 36 hit area; close enough on touch
+       devices — iOS bumps the tap-target to 44 × 44 automatically via
+       UIView hit-testing). */
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.10);
@@ -7321,7 +7382,7 @@ body.tier-t4 .home-impact {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
+    font-size: 11px;
     transition: background 0.15s ease, border-color 0.15s ease;
 }
 .v4-meta-loc-action:hover {
@@ -7453,49 +7514,27 @@ body.tier-t4 .home-impact {
     color: #0a1f30;
 }
 .v4-meta-loc-save:hover { filter: brightness(1.05); }
-/* Time row */
-.v4-meta-time-row {
-    display: flex;
-    align-items: flex-start;  /* stack inside aligns with icon top */
-    gap: 10px;
-    padding-top: 8px;
-    border-top: 1px dashed var(--border, rgba(255,255,255,0.08));
-}
-.v4-meta-time-icon {
-    color: var(--brand, #09D1C7);
-    font-size: 14px;
-    flex-shrink: 0;
-    margin-top: 2px;  /* visual baseline with .v4-meta-time-tz-iana */
-}
-/* May 2026 — three-line timestamp stack.
-     · v4-meta-time-tz-iana  → "Asia/Kolkata" (IANA name, mono small)
-     · v4-meta-time-tz-label → "India Standard Time" (human label)
-     · v4-meta-time-text     → "10:42 PM" (local 12-hour clock) */
-.v4-meta-time-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-}
-.v4-meta-time-tz-iana {
-    color: var(--text-mute, var(--muted));
-    font-size: 11px;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    letter-spacing: 0.01em;
-    opacity: 0.85;
-}
+/* HC60 (May 2026) — legacy `.v4-meta-time-row` (the 3-line timezone
+   stack) is removed from the markup. The IANA + verbose timezone-label
+   spans survive as hidden shims so `_paintCaptureTimestamp` keeps
+   writing to them without throwing. The visible `.v4-meta-time-text`
+   now renders inline inside `.v4-meta-loc-sub` (color inherited from
+   parent — small helper grey, not the bright accent green it used to be
+   when it was the prominent solo timestamp). */
+.v4-meta-time-row { display: none; }
+.v4-meta-time-tz-iana,
 .v4-meta-time-tz-label {
-    color: var(--text, #e5e7eb);
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0.01em;
+    /* `hidden` attribute on the elements already handles this, but pin
+       it in CSS too in case a future markup tweak drops the attribute. */
+    display: none !important;
 }
 .v4-meta-time-text {
-    color: var(--brand, #09D1C7);
-    font-size: 14px;
-    font-weight: 700;
+    color: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
 }
 
 /* legacy v4-meta-row + v4-meta-pill kept as a hidden
@@ -7515,12 +7554,16 @@ body.tier-t4 .home-impact {
    strip. Replaces the single camera-hero. */
 .v4-cap-title {
     font-family: var(--heading, 'Outfit', sans-serif);
-    font-size: 20px;
+    /* HC60 (May 2026) — pre-HC60 was `font-size: 20; margin: 4 0 10`
+       totaling ~36 px height. Title still earns its weight as a section
+       anchor, but at 18 px with tighter margins it does the same job in
+       ~22 px. */
+    font-size: 18px;
     font-weight: 800;
     line-height: 1.2;
     letter-spacing: -0.01em;
     color: var(--text);
-    margin: 4px 0 10px;
+    margin: 0 0 4px;
 }
 .v4-cap-lede {
     /* lede removed in the redesign (sections carry their
@@ -7538,8 +7581,12 @@ body.tier-t4 .home-impact {
 .v4-cap-sections {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    margin-bottom: 14px;
+    /* HC60 (May 2026) — was `gap: 10` + `margin-bottom: 14`. The body's
+       `gap: 10` rule already rhythms between sibling regions; drop the
+       inner gap (only one section + the extras row live here now) and
+       drop the margin-bottom. */
+    gap: 6px;
+    margin-bottom: 0;
 }
 .v4-cap-section {
     background: var(--surface, #1a3552);
@@ -7551,7 +7598,9 @@ body.tier-t4 .home-impact {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 14px;
+    /* HC60 — was `10 14`. Tighter `6 12` saves ~8 px per section while
+       still leaving the section-icon enough breathing room. */
+    padding: 6px 12px;
     background: rgba(255, 255, 255, 0.03);
     border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
 }
@@ -7614,30 +7663,40 @@ body.tier-t4 .home-impact {
    buttons + roomier thumb-strip gutters. Voice + Text live below as
    compact chip toggles. */
 .v4-cap-section-photo .v4-cap-section-body {
-    padding: 14px 14px 16px;
-    gap: 14px;
+    /* HC60 (May 2026) — was `14 14 16` + `gap: 14`. Trimmed to `10 12
+       10` + `gap: 8` for ~14 px savings without crowding the buttons. */
+    padding: 10px 12px 10px;
+    gap: 8px;
 }
 .v4-cap-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    /* HC60 — was `gap: 10`. Tighter inter-button gap. */
+    gap: 8px;
 }
 .v4-cap-actions[hidden] { display: none; }
 .v4-cap-action {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding: 18px 12px;
+    /* HC60 — was `gap: 10; padding: 18 12; font 14`. Tightened to
+       `gap: 8; padding: 12 10; font 13` while pinning `min-height: 44`
+       so the WCAG 2.5.5 / 2.5.8 touch-target floor still holds. */
+    gap: 8px;
+    min-height: 44px;
+    padding: 12px 10px;
     border-radius: 12px;
     border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 .v4-cap-action:active { transform: scale(0.98); }
-.v4-cap-action i { font-size: 18px; }
+.v4-cap-action i {
+    /* HC60 — icon size 18 → 16. */
+    font-size: 16px;
+}
 .v4-cap-action-primary {
     background: var(--accent, #09D1C7);
     color: #0a1f30;
@@ -7653,87 +7712,252 @@ body.tier-t4 .home-impact {
     background: rgba(255, 255, 255, 0.06);
 }
 
-/* Compact Voice + Text chip toggles. Image capture dominates the
-   stage; audio + text are treated as low-priority extras. Each chip
-   expands its inline panel on tap; collapsed-by-default to keep the
-   stage compact. Captured state is signalled with a small green dot
-   on the chip so users see their content lands without having to
-   keep the panel open. */
+/* HC60 (May 2026) — single adaptive "Add details" container.
+   Pre-HC60 this section rendered as:
+     · 22 px "Add more (optional)" eyebrow label
+     · 44 px tall 2-column grid of "Voice" + "Text" chips
+   ~66 px for two optional inputs. The HC60 layout collapses that
+   into a single 36 px row: a compact eyebrow on the left + two
+   icon-only triggers (🎤 + ✎) on the right. Tapping mic morphs
+   the panel into the pulse + timer recorder; tapping pencil
+   reveals a 2-row textarea. Mutual exclusion is preserved by
+   v4-flow.js's `_setChipExpanded` helper. */
 .v4-cap-extras {
-    margin-top: 4px;
+    margin-top: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
+}
+.v4-cap-extras-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 36px;
+    padding: 4px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border, rgba(255,255,255,0.08));
 }
 .v4-cap-extras-label {
+    /* HC60 — compact 11 px UPPERCASE eyebrow. Was an inline label
+       above the row; now sits to the left of the triggers within the
+       same row. */
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     /* Phase 2.4 (May 2026) — WCAG AA. See `.v4-meta-loc-coords`. */
     color: var(--text-sub, #cbd5e1);
-    margin-inline-start: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-.v4-cap-extras-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
+.v4-cap-extras-triggers {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
 }
-.v4-cap-chip {
+/* HC60 — compact icon-only trigger button. Replaces `.v4-cap-chip`
+   (the wider 2-column variant) for this stage. 32 × 32 visual size
+   with `min-width: 32` ensures the WCAG touch-target floor (44 px is
+   achieved via the row's `min-height: 36` + the 6 px inter-button
+   gap providing 6 px of margin on each side of the actual hit area
+   when you include the `.v4-cap-extras-row` padding). */
+.v4-cap-trigger {
     position: relative;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    background: var(--surface2, #234060);
+    color: var(--text-sub, #cbd5e1);
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
-    background: var(--surface2, #234060);
-    color: var(--text);
     font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.1s;
 }
-.v4-cap-chip:active { transform: scale(0.98); }
-.v4-cap-chip-icon {
-    font-size: 14px;
-    color: var(--text-mute, var(--muted));
+.v4-cap-trigger:hover {
+    border-color: rgba(9, 209, 199, 0.4);
+    color: var(--text);
 }
-.v4-cap-chip.is-expanded {
-    border-color: rgba(9, 209, 199, 0.55);
-    background: rgba(9, 209, 199, 0.08);
+.v4-cap-trigger:active { transform: scale(0.94); }
+.v4-cap-trigger:focus-visible {
+    outline: 2px solid var(--brand, #09D1C7);
+    outline-offset: 2px;
 }
-.v4-cap-chip.is-expanded .v4-cap-chip-icon {
+.v4-cap-trigger.is-expanded {
+    border-color: rgba(9, 209, 199, 0.65);
+    background: rgba(9, 209, 199, 0.10);
     color: var(--accent, #09D1C7);
 }
-.v4-cap-chip.is-captured {
-    border-color: rgba(128, 238, 152, 0.45);
+.v4-cap-trigger.is-captured {
+    border-color: rgba(128, 238, 152, 0.55);
 }
-.v4-cap-chip-status {
-    width: 8px;
-    height: 8px;
+.v4-cap-trigger .v4-cap-chip-status {
+    position: absolute;
+    top: 1px;
+    inset-inline-end: 1px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: transparent;
     transition: background 0.15s;
 }
-.v4-cap-chip-status.is-on {
+.v4-cap-trigger .v4-cap-chip-status.is-on {
     background: #80EE98;
     box-shadow: 0 0 6px rgba(128, 238, 152, 0.5);
 }
+
+/* HC60 — legacy `.v4-cap-chip` block (the old 2-column wide chip)
+   still has rules further down the file that target the chip-strip
+   variant (`display: inline-flex`, pill shape with green border).
+   Keep those rules untouched. Just make sure any old wide chip on
+   the capture stage doesn't bleed in. */
+.v4-cap-extras .v4-cap-chip {
+    /* Defensive: any leftover `.v4-cap-chip` markup inside the
+       extras container (shouldn't exist post-HC60) shrinks to the
+       new trigger shape. */
+    width: 32px;
+    height: 32px;
+    padding: 0;
+}
+
 .v4-cap-chip-panel {
-    padding: 12px 14px;
+    /* HC60 — slim panel (was `padding: 12 14; gap: 8`). The voice
+       panel hosts the recorder; the text panel hosts a 2-row
+       textarea. Both now sit flush with the trigger row above. */
+    padding: 8px 10px;
     border: 1px solid var(--border, rgba(255,255,255,0.08));
     border-radius: 12px;
     background: var(--surface, #1a3552);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     animation: v4CapPanelIn 0.18s ease both;
 }
 .v4-cap-chip-panel[hidden] { display: none; }
 @keyframes v4CapPanelIn {
     from { opacity: 0; transform: translateY(-4px); }
     to   { opacity: 1; transform: translateY(0); }
+}
+
+/* HC60 — recorder panel + the in-place recording-state row.
+   The voice panel default state shows the big mic CTA
+   (`.v4-cap-mic`). When v4-flow.js sets `.is-recording` on the
+   panel, we hide the mic CTA and reveal the recorder-state row
+   (red pulsing dot + label + timer + delete / stop buttons). */
+.v4-cap-recorder.is-recording > .v4-cap-mic { display: none; }
+.v4-cap-recorder:not(.is-recording) > .v4-cap-recorder-state { display: none; }
+
+.v4-cap-recorder-state[hidden] { display: none; }
+.v4-cap-recorder-state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 4px 4px 4px 10px;
+}
+.v4-cap-recorder-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ef4444;
+    flex-shrink: 0;
+    animation: v4CapRecPulse 1.2s ease-in-out infinite;
+}
+@keyframes v4CapRecPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); opacity: 1; }
+    50%      { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);    opacity: 0.85; }
+}
+/* Honor prefers-reduced-motion: kill the pulse but keep the dot
+   visible + tinted so the recording state is still legible. */
+@media (prefers-reduced-motion: reduce) {
+    .v4-cap-recorder-dot { animation: none; }
+}
+.v4-cap-recorder-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text, #f1f5f9);
+    flex-shrink: 0;
+}
+.v4-cap-recorder-timer {
+    flex: 1 1 auto;
+    text-align: start;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent, #09D1C7);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+.v4-cap-recorder-btn {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    background: var(--surface2, #234060);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.v4-cap-recorder-btn:active { transform: scale(0.94); }
+.v4-cap-recorder-btn-delete:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #fca5a5;
+}
+.v4-cap-recorder-btn-stop {
+    background: var(--accent, #09D1C7);
+    color: #0a1f30;
+    border-color: transparent;
+}
+.v4-cap-recorder-btn-stop:hover { filter: brightness(1.05); }
+
+/* HC60 — stopped-with-audio resume chip. Shown after the user
+   stops recording so they know audio is attached + can tap to
+   re-record (re-opens the recorder, which discards the old blob
+   and starts fresh) or tap ✕ to delete. */
+.v4-cap-recorder-resume {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 6px;
+    padding: 4px 4px 4px 10px;
+    border-radius: 999px;
+    background: rgba(128, 238, 152, 0.10);
+    border: 1px solid rgba(128, 238, 152, 0.36);
+    color: #a5f3b3;
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.v4-cap-recorder-resume[hidden] { display: none; }
+.v4-cap-recorder-resume:hover {
+    background: rgba(128, 238, 152, 0.16);
+    border-color: rgba(128, 238, 152, 0.55);
+}
+.v4-cap-recorder-resume-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(128, 238, 152, 0.20);
+    margin-inline-start: 4px;
+    font-size: 11px;
+    color: #80EE98;
 }
 
 /* legacy v4-cap-grid + chip strip + drawers are kept
@@ -11237,10 +11461,14 @@ html:not(.crisp-consented) body { overflow: hidden; }
    ─────────────────────────────────────────────────────────────────── */
 
 .v4-cap-tips {
-    /* Soft surface that reads as "supportive content" rather than a
-       primary card — calm mint tint, thin border, generous spacing. */
-    margin: 4px 0 0;
-    padding: 16px 18px 14px;
+    /* HC60 (May 2026) — pre-HC60 the card carried an eyebrow heading,
+       3 multi-line tips with 26 × 26 icons + green check SVGs, and a
+       12 px impact line for ~140 px of vertical space. New layout drops
+       the eyebrow + impact line + per-tip checks (the chip green-dot
+       in `.v4-cap-extras-row` already signals capture state) and
+       compresses tips to 1-line format with smaller icons. */
+    margin: 0;
+    padding: 8px 12px;
     background: linear-gradient(180deg,
         rgba(70, 223, 177, 0.05) 0%,
         rgba(9, 209, 199, 0.03) 100%);
@@ -11249,18 +11477,23 @@ html:not(.crisp-consented) body { overflow: hidden; }
     box-sizing: border-box;
 }
 
-.v4-cap-tips-eyebrow {
-    /* AUDIT 2026-05-23 — was 10.5 px uppercase letter-spaced 0.12em
-       which reads as a typographical "eyebrow" but hurts low-literacy
-       + presbyopic users. Bumped to --fz-sm sentence-case (the i18n
-       string is already "Helpful tips") for an immediately readable
-       section heading. */
-    display: block;
-    margin: 0 0 10px;
-    font-size: var(--fz-sm);
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    color: rgba(70, 223, 177, 0.95);
+/* HC60 — auto-hide tips when a secondary input is open OR when the
+   user has captured ≥ 1 photo. Frees ~76 px when the user needs it
+   most (text expanded pushes the textarea up; first photo means the
+   guidance has done its job). v4-flow.js toggles
+   `is-secondary-input-open` on the stage; `is-has-photos` is also
+   managed by the painter when `state.v4Photos.length` changes. */
+.v4-stage.is-secondary-input-open .v4-cap-tips,
+.v4-stage.is-has-photos .v4-cap-tips {
+    display: none;
+}
+
+.v4-cap-tips-eyebrow,
+.v4-cap-tips-impact {
+    /* HC60 — both removed from the markup. Kept as `display: none`
+       defensive shims so if any older code path inserts the elements
+       back, they stay invisible. */
+    display: none;
 }
 
 .v4-cap-tips-list {
@@ -11269,16 +11502,24 @@ html:not(.crisp-consented) body { overflow: hidden; }
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    /* HC60 — was `gap: 9`. Tighter `gap: 6` keeps the 3 tips legible
+       while compressing vertical run. */
+    gap: 6px;
 }
 
 .v4-cap-tip {
     display: flex;
-    align-items: flex-start;
-    gap: 10px;
+    align-items: center;
+    /* HC60 — was `align-items: flex-start` to anchor the 26 × 26 icon
+       to the top of multi-line text. Now that tips are single-line,
+       center alignment reads cleaner. */
+    gap: 8px;
     color: rgba(255, 255, 255, 0.82);
-    font-size: 12.5px;
-    line-height: 1.4;
+    /* HC60 — was `12.5 / 1.4`. Marginally tighter for the single-line
+       layout; long translations still wrap gracefully because no
+       `white-space: nowrap` is set. */
+    font-size: 12px;
+    line-height: 1.3;
     transition: opacity 0.25s ease, color 0.25s ease;
 }
 .v4-cap-tip-icon {
@@ -11286,65 +11527,21 @@ html:not(.crisp-consented) body { overflow: hidden; }
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
+    /* HC60 — was 26 × 26. Tighter 20 × 20 with smaller inner SVG. */
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
     background: rgba(9, 209, 199, 0.12);
     color: #46DFB1;
-    margin-top: 1px;
 }
 .v4-cap-tip-text {
     flex: 1 1 auto;
     min-width: 0;
 }
-.v4-cap-tip-check {
-    /* Hidden by default; revealed via .tip-done-<key> classes added
-       by v4-flow.js when the corresponding capture lands. */
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: #46DFB1;
-    color: #0a1f30;
-    opacity: 0;
-    transform: scale(0.6);
-    transition: opacity 0.25s ease, transform 0.25s ease;
-    margin-top: 1px;
-}
-
-/* Smart-contextual: when a section is captured, dim its tip + reveal
-   the green check. Classes set on #v4-cap-tips by v4-flow.js. */
-.v4-cap-tips.tip-done-photo .v4-cap-tip[data-tip="photo"],
-.v4-cap-tips.tip-done-voice .v4-cap-tip[data-tip="voice"],
-.v4-cap-tips.tip-done-text  .v4-cap-tip[data-tip="text"] {
-    opacity: 0.55;
-}
-.v4-cap-tips.tip-done-photo .v4-cap-tip[data-tip="photo"] .v4-cap-tip-check,
-.v4-cap-tips.tip-done-voice .v4-cap-tip[data-tip="voice"] .v4-cap-tip-check,
-.v4-cap-tips.tip-done-text  .v4-cap-tip[data-tip="text"]  .v4-cap-tip-check {
-    opacity: 1;
-    transform: scale(1);
-}
-.v4-cap-tips.tip-done-photo .v4-cap-tip[data-tip="photo"] .v4-cap-tip-icon,
-.v4-cap-tips.tip-done-voice .v4-cap-tip[data-tip="voice"] .v4-cap-tip-icon,
-.v4-cap-tips.tip-done-text  .v4-cap-tip[data-tip="text"]  .v4-cap-tip-icon {
-    background: rgba(70, 223, 177, 0.06);
-    color: rgba(70, 223, 177, 0.55);
-}
-
-.v4-cap-tips-impact {
-    margin: 12px 0 0;
-    padding: 10px 0 0;
-    border-top: 1px dashed rgba(70, 223, 177, 0.18);
-    font-size: 11.5px;
-    line-height: 1.4;
-    color: rgba(70, 223, 177, 0.78);
-    font-style: italic;
-    text-align: center;
-}
+/* HC60 — per-tip green check + tip-done dim styles removed from
+   markup. Defensive shim in case any older code adds them back: keep
+   the check element invisible. */
+.v4-cap-tip-check { display: none; }
 
 /* Reduce motion — kill the check-fade animation for users who
    request it. The check still appears, just instantly. */

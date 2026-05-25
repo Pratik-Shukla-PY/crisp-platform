@@ -580,6 +580,10 @@
             if (photoCount) {
                 photoCount.textContent = `${photos}/${V4_MAX_PHOTOS}`;
                 photoCount.classList.toggle('is-captured', photos > 0);
+                // HC60 — counter starts hidden (decorative noise pre-
+                // capture) and reveals as soon as photos > 0.
+                if (photos > 0) photoCount.removeAttribute('hidden');
+                else            photoCount.setAttribute('hidden', '');
             }
             // Voice + Text are now compact chip toggles
             // (`#v4-cap-chip-voice-status` / `#v4-cap-chip-text-status`)
@@ -594,16 +598,16 @@
             if (textChip) textChip.classList.toggle('is-captured', anyText);
             if (textChipStatus) textChipStatus.classList.toggle('is-on', anyText);
 
-            // May 2026 — smart-contextual tips card. Mark each tip as
-            // done when its corresponding capture lands; CSS dims the
-            // tip + reveals a green check. Wired into the same
-            // section-badge refresh so it stays in sync with the
-            // existing chip-status painter.
-            const tips = document.getElementById('v4-cap-tips');
-            if (tips) {
-                tips.classList.toggle('tip-done-photo', photos > 0);
-                tips.classList.toggle('tip-done-voice', audioOk);
-                tips.classList.toggle('tip-done-text',  anyText);
+            // HC60 (May 2026) — auto-hide the tips card once the user
+            // has captured ≥ 1 photo (by then the guidance has done its
+            // job and the vertical real estate is more valuable for the
+            // photo grid + the Continue CTA). `.v4-stage.is-has-photos`
+            // hides `.v4-cap-tips` via CSS. Mirror class drops when
+            // photos return to zero (e.g. user removed all captures via
+            // the thumb-strip X buttons).
+            const stageEl = document.getElementById('stage-v4-capture');
+            if (stageEl) {
+                stageEl.classList.toggle('is-has-photos', photos > 0);
             }
         }
         // Expose so _renderThumbs + other mutators can call it.
@@ -620,6 +624,18 @@
         const textChipBtn = document.getElementById('v4-cap-chip-text');
         const voicePanel = document.getElementById('v4-cap-voice-panel');
         const textPanel = document.getElementById('v4-cap-text-panel');
+        // HC60 (May 2026) — `_setChipExpanded` now also toggles
+        // `is-secondary-input-open` on the stage so the tips card
+        // auto-hides whenever EITHER voice or text panel is open.
+        // CSS rule:
+        //     .v4-stage.is-secondary-input-open .v4-cap-tips { display:none }
+        function _syncSecondaryInputClass() {
+            const stageEl = document.getElementById('stage-v4-capture');
+            if (!stageEl) return;
+            const voiceOpen = voiceChipBtn && voiceChipBtn.getAttribute('aria-expanded') === 'true';
+            const textOpen  = textChipBtn  && textChipBtn.getAttribute('aria-expanded')  === 'true';
+            stageEl.classList.toggle('is-secondary-input-open', !!(voiceOpen || textOpen));
+        }
         function _setChipExpanded(chip, panel, on) {
             if (!chip || !panel) return;
             if (on) {
@@ -631,6 +647,7 @@
                 chip.classList.remove('is-expanded');
                 chip.setAttribute('aria-expanded', 'false');
             }
+            _syncSecondaryInputClass();
         }
         if (voiceChipBtn && voicePanel) {
             voiceChipBtn.addEventListener('click', () => {
@@ -1167,28 +1184,155 @@
             });
         }
 
-        // Voice mic — start/stop using the same MediaRecorder helpers
-        // wired for the (now legacy) review-stage drawer.
+        // HC60 (May 2026) — capture-stage recorder state machine.
+        //
+        // Three states drive the `.v4-cap-recorder` panel UI:
+        //   · IDLE              → big mic CTA visible
+        //   · RECORDING         → CTA hidden, recorder-state row visible
+        //                         (pulsing red dot + live timer + delete/stop)
+        //   · STOPPED-WITH-AUDIO → resume chip visible ("🎤 0:12 ✕")
+        //
+        // Class on the `.v4-cap-recorder` panel:
+        //   · `.is-recording` toggles which child renders (CSS handles
+        //     the hide/reveal — no DOM removal).
+        //   · `.has-audio`   reveals the resume chip + hides the CTA.
+        //
+        // Cheap UX: pulse animation is CSS-only (no rAF loop), timer is
+        // a single setInterval(1000), so battery cost is negligible.
+        let _capRecorderTimerHandle = null;
+        let _capRecorderStartTs = 0;
+
+        function _fmtRecorderTimer(ms) {
+            const total = Math.max(0, Math.floor(ms / 1000));
+            const mm = Math.floor(total / 60);
+            const ss = (total % 60).toString().padStart(2, '0');
+            return `${mm}:${ss}`;
+        }
+        function _renderCapRecorderState(stateName, opts) {
+            const panel       = document.getElementById('v4-cap-voice-panel');
+            const micCta      = document.getElementById('btn-v4-cap-mic');
+            const stateRow    = document.getElementById('v4-cap-recorder-state');
+            const timerEl     = document.getElementById('v4-cap-recorder-timer');
+            const resumeChip  = document.getElementById('v4-cap-recorder-resume');
+            const resumeTime  = document.getElementById('v4-cap-recorder-resume-time');
+            if (!panel) return;
+            opts = opts || {};
+
+            if (stateName === 'recording') {
+                panel.classList.add('is-recording');
+                panel.classList.remove('has-audio');
+                if (stateRow) stateRow.removeAttribute('hidden');
+                if (resumeChip) resumeChip.setAttribute('hidden', '');
+                if (micCta) micCta.setAttribute('hidden', '');
+                if (timerEl) timerEl.textContent = '0:00';
+                _capRecorderStartTs = Date.now();
+                if (_capRecorderTimerHandle) clearInterval(_capRecorderTimerHandle);
+                _capRecorderTimerHandle = setInterval(() => {
+                    if (!timerEl) return;
+                    timerEl.textContent =
+                        _fmtRecorderTimer(Date.now() - _capRecorderStartTs);
+                }, 1000);
+            } else if (stateName === 'stopped') {
+                panel.classList.remove('is-recording');
+                panel.classList.add('has-audio');
+                if (stateRow) stateRow.setAttribute('hidden', '');
+                if (_capRecorderTimerHandle) {
+                    clearInterval(_capRecorderTimerHandle);
+                    _capRecorderTimerHandle = null;
+                }
+                if (resumeChip) {
+                    resumeChip.removeAttribute('hidden');
+                    if (resumeTime) {
+                        resumeTime.textContent = opts.durationLabel ||
+                            _fmtRecorderTimer(Date.now() - _capRecorderStartTs);
+                    }
+                }
+                if (micCta) micCta.setAttribute('hidden', '');
+            } else {
+                // 'idle' — default state. Mic CTA visible, no recording.
+                panel.classList.remove('is-recording');
+                panel.classList.remove('has-audio');
+                if (stateRow) stateRow.setAttribute('hidden', '');
+                if (resumeChip) resumeChip.setAttribute('hidden', '');
+                if (micCta) micCta.removeAttribute('hidden');
+                if (_capRecorderTimerHandle) {
+                    clearInterval(_capRecorderTimerHandle);
+                    _capRecorderTimerHandle = null;
+                }
+            }
+        }
+        // Expose for tests + edge callers (e.g. _clearCaptureState in
+        // app.js can pull the recorder back to idle after a clean reset).
+        window.__crispV4RenderCapRecorderState = _renderCapRecorderState;
+
+        // Voice mic CTA — start recording + flip into the RECORDING state.
         if (capMicBtn) {
             capMicBtn.addEventListener('click', () => {
                 if (_isV4Recording()) {
+                    // Defensive — shouldn't be visible during recording,
+                    // but if it is, treat as a "stop" press.
                     _stopV4Recording();
-                    capMicBtn.classList.remove('is-recording');
-                    const lbl = capMicBtn.querySelector('span');
-                    if (lbl) lbl.textContent =
-                        (typeof window.t === 'function' ? (window.t('v4_record') || 'Record voice') : 'Record voice');
-                    const ic = capMicBtn.querySelector('i');
-                    if (ic) ic.className = 'fa-solid fa-microphone';
+                    _renderCapRecorderState('stopped');
                 } else {
                     _startV4Recording();
-                    capMicBtn.classList.add('is-recording');
-                    const lbl = capMicBtn.querySelector('span');
-                    if (lbl) lbl.textContent =
-                        (typeof window.t === 'function' ? (window.t('v4_stop') || 'Stop recording') : 'Stop recording');
-                    const ic = capMicBtn.querySelector('i');
-                    if (ic) ic.className = 'fa-solid fa-stop';
+                    _renderCapRecorderState('recording');
                 }
                 setTimeout(_refreshCapStrip, 120);
+            });
+        }
+
+        // HC60 — Delete (trash) button: abort the in-progress recording,
+        // discard the assembled blob, return to idle.
+        const recDeleteBtn = document.getElementById('btn-v4-cap-recorder-delete');
+        if (recDeleteBtn) {
+            recDeleteBtn.addEventListener('click', () => {
+                try {
+                    if (window.state && window.state.mediaRecorder &&
+                        window.state.mediaRecorder.state !== 'inactive') {
+                        window.state.mediaRecorder.stop();
+                    }
+                } catch (_) {}
+                window.state.audioBlob = null;
+                window.state.audioChunks = [];
+                window.state.isRecording = false;
+                _renderCapRecorderState('idle');
+                setTimeout(_refreshCapStrip, 60);
+            });
+        }
+        // HC60 — Stop button: stop recording, KEEP the blob, show the
+        // resume chip with the elapsed duration.
+        const recStopBtn = document.getElementById('btn-v4-cap-recorder-stop');
+        if (recStopBtn) {
+            recStopBtn.addEventListener('click', () => {
+                const dur = _fmtRecorderTimer(Date.now() - _capRecorderStartTs);
+                _stopV4Recording();
+                _renderCapRecorderState('stopped', { durationLabel: dur });
+                setTimeout(_refreshCapStrip, 120);
+            });
+        }
+        // HC60 — Resume chip: tap to re-record (discards old blob), tap
+        // the inner ✕ to delete.
+        const resumeChipBtn = document.getElementById('v4-cap-recorder-resume');
+        if (resumeChipBtn) {
+            resumeChipBtn.addEventListener('click', (ev) => {
+                const target = ev.target;
+                const isXTap = target && target.closest &&
+                    target.closest('.v4-cap-recorder-resume-x');
+                if (isXTap) {
+                    // Delete-from-resume: clear blob + back to idle.
+                    window.state.audioBlob = null;
+                    window.state.audioChunks = [];
+                    _renderCapRecorderState('idle');
+                    setTimeout(_refreshCapStrip, 60);
+                    ev.stopPropagation();
+                    return;
+                }
+                // Re-record: clear blob first so the previous take
+                // doesn't linger if the user backs out.
+                window.state.audioBlob = null;
+                window.state.audioChunks = [];
+                _startV4Recording();
+                _renderCapRecorderState('recording');
             });
         }
 
