@@ -13430,6 +13430,14 @@ function setupBuildingFullscreenPicker() {
     let _originalParent = null;       // where #building-map lived before we lifted it
     let _selectionAtOpen = null;      // snapshot of state.buildingId on open (for Cancel revert)
     let _isOpen = false;
+    // HC67 (May 2026) — track where the free-text "type the building
+    // name" block lived before we lifted it into the fullscreen sheet.
+    // HC66 hid the inline free-text block on review; HC67 makes it
+    // reachable via the fullscreen picker (operator: "Inside the
+    // expanded building picker modal, the option to manually enter
+    // the building name is missing"). Same reparent dance as the
+    // map: lift on open, restore on close.
+    let _freeTextOriginalParent = null;
 
     function _setSheetIdle() {
         // Empty / awaiting-selection state.
@@ -13472,6 +13480,26 @@ function setupBuildingFullscreenPicker() {
         // canvas + tile layer follow via appendChild — we just need to
         // call invalidateSize after the layout settles.
         mount.appendChild(map);
+        // HC67 — also lift the free-text "type the building name"
+        // block into the fullscreen sheet so users have the offline
+        // fallback there. Mounts at the bottom of the sheet body
+        // (above the actions row).
+        const freeText = document.getElementById('building-free-text-block');
+        const sheetBody = overlay.querySelector('.building-fs-sheet-body');
+        const actionsRow = overlay.querySelector('.building-fs-sheet-actions');
+        if (freeText && sheetBody) {
+            _freeTextOriginalParent = freeText.parentNode;
+            if (actionsRow) {
+                sheetBody.insertBefore(freeText, actionsRow);
+            } else {
+                sheetBody.appendChild(freeText);
+            }
+            // The CSS rule that hides the free-text on review keys off
+            // its parent (`.v4-stage #v4-building-mount #building-
+            // select-box > .building-free-text`). Once reparented out
+            // of `#building-select-box`, that descendant selector no
+            // longer matches — the block paints normally.
+        }
         overlay.hidden = false;
         // Force one paint frame before applying the open class so the
         // CSS transition actually animates (translateY 100% → 0).
@@ -13518,6 +13546,14 @@ function setupBuildingFullscreenPicker() {
             if (map && _originalParent && _originalParent.isConnected) {
                 _originalParent.appendChild(map);
             }
+            // HC67 — restore the free-text block to its original
+            // parent (`#building-select-box`). The HC66 CSS rule
+            // re-applies and hides it on review.
+            const freeText = document.getElementById('building-free-text-block');
+            if (freeText && _freeTextOriginalParent && _freeTextOriginalParent.isConnected) {
+                _freeTextOriginalParent.appendChild(freeText);
+            }
+            _freeTextOriginalParent = null;
             overlay.hidden = true;
             _originalParent = null;
             _selectionAtOpen = null;

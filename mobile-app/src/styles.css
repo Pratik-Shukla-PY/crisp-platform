@@ -14095,7 +14095,13 @@ body { background-color: #10284a; }
 .v4-undp-sheet {
     position: fixed;
     inset: 0;
-    z-index: 240;
+    /* HC67 — was z-index: 240. Bumped above the lang-picker (600)
+       AND above any Leaflet pane (Leaflet's overlay pane runs ~400).
+       Operator brief: "Additional Info modal is overlapping with
+       the building tag map render/view." Now the sheet's backdrop
+       fully covers the inline map's footprint when the sheet is
+       open. */
+    z-index: 800;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -14119,11 +14125,17 @@ body { background-color: #10284a; }
     width: 100%;
     max-width: 520px;
     margin: 0 auto;
-    /* Fallback for browsers without dvh support, then the dynamic
-       viewport-height for iOS Safari address-bar collapse. */
-    max-height: 60vh;
-    max-height: 60dvh;
-    overflow-y: auto;
+    /* HC67 — was a single overflow:auto block where the handle + head
+       scrolled with the body. New layout: flex column, the body is
+       the ONLY scroll region. Handle + head stay pinned at the top
+       of the card. Same pattern as HC57's consent modal (cleaner
+       than `position: sticky` because only one child has overflow).
+       Max-height bumped to 75dvh so longer modals don't truncate. */
+    display: flex;
+    flex-direction: column;
+    max-height: 75vh;
+    max-height: 75dvh;
+    overflow: hidden;
     background: linear-gradient(180deg, #1a3552 0%, #10284a 100%);
     border-top-left-radius: 22px;
     border-top-right-radius: 22px;
@@ -14131,6 +14143,17 @@ body { background-color: #10284a; }
     box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
     transform: translateY(100%);
     transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* HC67 — pin handle + head as non-scrolling flex items; the body
+   below becomes the single scroll region. */
+.v4-undp-sheet-card > .v4-undp-sheet-handle,
+.v4-undp-sheet-card > .v4-undp-sheet-head { flex: 0 0 auto; }
+.v4-undp-sheet-card > .v4-undp-sheet-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
 }
 .v4-undp-sheet.is-open .v4-undp-sheet-card { transform: translateY(0); }
 
@@ -14559,11 +14582,14 @@ button.v4-review-card { appearance: none; }
 }
 /* HC66 — review-stage-only `.v4-body` gap override. Default
    capture/classify stages keep `gap: 10` (their content is sparse
-   enough). Review packs 6 sections into the same body height, so
-   the tighter 4 px gap saves ~24 px (4 inter-section gaps × 6 px)
-   and gives long-translation locales (Arabic / Hindi) the headroom
-   they need without compressing any one section. */
-#stage-v4-review .v4-body { gap: 4px; }
+   enough). HC67 — tightened further from 4 → 2 px to absorb the
+   map height bump (96 → ~145 px clamped) without overflowing the
+   iPhone SE body in Arabic / Hindi (the longest-translation
+   locales). 6 sections × 2 px gaps = 10 px total, vs HC66's
+   20 px. Sections still read as distinct because each carries its
+   own visual treatment (photo tiles, classify hairlines, map
+   surface, UNDP row border). */
+#stage-v4-review .v4-body { gap: 2px; }
 
 .v4-review-row {
     display: grid;
@@ -14738,30 +14764,76 @@ button.v4-review-row { appearance: none; }
     flex-direction: column;
     gap: 6px;
 }
-/* HC66 — only the fullscreen CTA, label, hint and free-text are
-   hidden on review. The inline map + placeholder come BACK (operator
-   wanted a "compact embedded map" for visual confirmation). */
+/* HC67 — hide the section label, the tap-hint, and the free-text
+   block on the review surface. The free-text block reparents into
+   the fullscreen sheet on open (see setupBuildingFullscreenPicker
+   in app.js). The fullscreen CTA gets a different treatment below
+   (re-styled as a floating overlay button). */
 .v4-stage #v4-building-mount #building-select-box > .block-label,
-.v4-stage #v4-building-mount #building-select-box > .building-fs-cta,
 .v4-stage #v4-building-mount #building-select-box > .building-select-hint,
 .v4-stage #v4-building-mount #building-select-box > .building-free-text {
-    /* These supporting nodes live in the fullscreen picker on review.
-       building-select.js reparents `#building-map` into the
-       fullscreen overlay when opened; the offline free-text input is
-       there too. */
     display: none !important;
 }
-/* HC66 — inline building map: compact 96 px (down from the
-   pre-HC65 260 px). building-select.js manages the Leaflet
-   container; we just set the height + radius. iPhone SE budget is
-   tight — 96 px shows street geometry + 2-3 building footprints
-   inline, full detail in the fullscreen picker. */
+/* HC67 — fullscreen CTA as an overlay icon button. Pre-HC67 the
+   button was `display: none`. Now it floats over the map's top-
+   right corner so tap-to-expand is always reachable. WCAG 44 px
+   target via padding; visually the icon reads 18 px. */
+.v4-stage #v4-building-mount .building-fs-cta {
+    position: absolute;
+    top: 6px;
+    inset-inline-end: 6px;
+    z-index: 5;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(8, 16, 28, 0.7);
+    color: #fff;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+}
+.v4-stage #v4-building-mount .building-fs-cta:hover,
+.v4-stage #v4-building-mount .building-fs-cta:focus-visible {
+    background: rgba(9, 209, 199, 0.85);
+    outline: none;
+}
+.v4-stage #v4-building-mount .building-fs-cta:active { transform: scale(0.92); }
+.v4-stage #v4-building-mount .building-fs-cta > i { font-size: 13px; }
+/* Hide the text label inside the fs-cta on the review surface
+   (icon-only). The same button reuses its full label inside the
+   fullscreen picker via different scoping. */
+.v4-stage #v4-building-mount .building-fs-cta > span { display: none; }
+/* HC67 — inline building map: responsive size via `clamp()`.
+   Operator brief 2026-05-26: "Use the full space currently occupied
+   by the 'Waiting for GPS to load' section." On iPhone SE (667 vh)
+   the budget caps at ~110 px; on Pixel 7 (~900 vh) ~150 px; on
+   tablets ~165 px. `16vh` basis keeps the map proportional to the
+   user's actual screen — bigger devices get bigger maps. Floor
+   110 px keeps the map informative even on the smallest viewport;
+   ceiling 165 px stops it dominating on tall tablets. */
 .v4-stage #v4-building-mount #building-map {
     display: block !important;
-    height: 96px;
-    min-height: 96px;
+    height: clamp(100px, 16vh, 165px);
+    min-height: clamp(100px, 16vh, 165px);
     border-radius: 12px;
     overflow: hidden;
+    /* HC67 — positioning context for the fullscreen-expand overlay
+       button. */
+    position: relative;
+}
+/* HC67 — wrap the inline building section so the fullscreen-expand
+   button can absolute-position itself over the map's top-right
+   corner. The `#building-select-box` is the natural wrap (already
+   contains map + placeholder + fs-cta + selected-pill). */
+.v4-stage #v4-building-mount #building-select-box {
+    position: relative;
 }
 /* HC66 — skeleton shimmer for the placeholder. The pre-HC66 rule
    set this to dashed-border at `padding: 24px 16px`. On review we
@@ -14772,8 +14844,10 @@ button.v4-review-row { appearance: none; }
    contrast even when the shimmer animation is off. */
 .v4-stage #v4-building-mount #building-map-placeholder {
     display: flex !important;
-    height: 96px;
-    min-height: 96px;
+    /* HC67 — matches the map's responsive height so loader→map
+       transition doesn't shift layout. */
+    height: clamp(100px, 16vh, 165px);
+    min-height: clamp(100px, 16vh, 165px);
     margin: 0;
     padding: 0;
     border-radius: 12px;
@@ -14782,6 +14856,15 @@ button.v4-review-row { appearance: none; }
     gap: 8px;
     color: rgba(255, 255, 255, 0.62);
     font-size: 12px;
+}
+/* HC67 — placeholder is pure shimmer: hide the icon + "Waiting for
+   GPS..." copy. Operator brief: "Show only a clean dynamic loader
+   until nearby buildings are populated." The shimmer animation from
+   `.crisp-skeleton` (styles.css:357) communicates loading without
+   the extra copy that read as "stalled / error". */
+.v4-stage #v4-building-mount #building-map-placeholder > i,
+.v4-stage #v4-building-mount #building-map-placeholder > span {
+    display: none;
 }
 /* When Leaflet has finished initializing the map AND tiles are
    visible, building-select.js removes the placeholder from the
@@ -14828,13 +14911,12 @@ button.v4-review-row { appearance: none; }
 .v4-review-photo-tile,
 .v4-review-photo-add {
     position: relative;
-    /* HC66 — fixed 64 px tall, width fills via the parent grid 1fr.
-       Pre-fix: `aspect-ratio: 1` made tiles ~110 × 110 px on iPhone
-       SE which blew the body budget by ~60 px. Tightened from 72
-       → 64 to give long-translation locales (Hindi Devanagari,
-       Russian) the headroom they need elsewhere in the body. Tiles
-       render ~114 × 64 on iPhone SE — close to a 16:9 thumbnail. */
-    height: 64px;
+    /* HC67 — tightened further from 64 → 56 to absorb the larger
+       building map (96 → clamped ~145 px). Tiles render ~114 × 56
+       on iPhone SE — still legible as a thumbnail, edges clearly
+       defined. Operator's screenshot showed photos at roughly this
+       proportion (wider-than-tall, like a TV remote button). */
+    height: 56px;
     width: 100%;
     border-radius: 12px;
     overflow: hidden;
@@ -14899,8 +14981,10 @@ button.v4-review-row { appearance: none; }
 .v4-review-loc-strip {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 4px;
+    gap: 1px;
+    /* HC67 — was `padding: 4`. Tightened to 2 to absorb the
+       building-map height bump. */
+    padding: 2px;
     width: 100%;
     background: transparent;
     border: 0;
@@ -14957,10 +15041,11 @@ button.v4-review-row { appearance: none; }
     grid-template-columns: auto 1fr auto;
     column-gap: 10px;
     align-items: center;
-    /* HC66 — was `padding: 8 4` `min-height: 36`. Tightened to fit
-       iPhone SE budget after the inline map came back at 110 px. */
-    padding: 6px 4px;
-    min-height: 30px;
+    /* HC67 — tightened to `padding: 4 4`, `min-height: 28` (down
+       from HC66's 6/4 / 30) to absorb the building-map clamp bump.
+       Hairline borders between rows keep the visual rhythm. */
+    padding: 4px 4px;
+    min-height: 28px;
     background: transparent;
     border: 0;
     color: var(--text, #f1f5f9);

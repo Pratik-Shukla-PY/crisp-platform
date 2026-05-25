@@ -2393,22 +2393,29 @@
         };
         document.getElementById('btn-v4-desc-edit')?.addEventListener('click', _openDescDrawer);
         document.getElementById('v4-desc-empty')?.addEventListener('click', _openDescDrawer);
-        // Tap classification rows → jump back to Page 2 with focus on that row.
-        document.getElementById('v4-edit-infra').addEventListener('click', () => {
+        // HC67 (May 2026) — tap classification rows → jump back to Page 2
+        // AND open the targeted sub-step. Pre-HC67 all three handlers just
+        // called `goToStage('stage-v4-classify')` which restored whatever
+        // sub-step `_classifyStep` was last set to. After the user
+        // completed the flow this was always 'crisis', so every edit
+        // button landed on the same screen regardless of which one was
+        // tapped. The `_carousel-infra` / `_carousel-crisis` scroll-into-
+        // view targets were legacy V3 IDs that no longer exist. The fix:
+        // explicitly call `_showSubStep(target)` for each handler.
+        const _editSubStep = (target) => {
             window.__crispGoToStage('stage-v4-classify');
+            // Defer one frame so the stage's display:flex applies before
+            // _showSubStep flips the sub-view's `[hidden]` attribute.
             setTimeout(() => {
-                document.getElementById('v4-carousel-infra')?.scrollIntoView({ behavior: 'smooth' });
-            }, 200);
-        });
-        document.getElementById('v4-edit-crisis').addEventListener('click', () => {
-            window.__crispGoToStage('stage-v4-classify');
-            setTimeout(() => {
-                document.getElementById('v4-carousel-crisis')?.scrollIntoView({ behavior: 'smooth' });
-            }, 200);
-        });
-        document.getElementById('v4-edit-damage').addEventListener('click', () => {
-            window.__crispGoToStage('stage-v4-classify');
-        });
+                try { _showSubStep(target); } catch (_) {}
+            }, 30);
+        };
+        document.getElementById('v4-edit-damage').addEventListener('click',
+            () => _editSubStep('damage'));
+        document.getElementById('v4-edit-infra').addEventListener('click',
+            () => _editSubStep('infra'));
+        document.getElementById('v4-edit-crisis').addEventListener('click',
+            () => _editSubStep('crisis'));
 
         // Voice drawer — wire mic + textarea.
         // voice-only path. v4 originally forwarded
@@ -2615,6 +2622,30 @@
     function _renderReviewPhotoStrip() {
         const strip = document.getElementById('v4-review-photo-strip');
         if (!strip) return;
+        // HC67 — wrap the existing capture-stage refresher so any
+        // photo added/removed via `_ingestFileAsPhoto` (camera modal,
+        // gallery picker, or paste) re-paints the review strip too.
+        // Idempotent via the `__crispV4RefreshReviewWired` flag so
+        // repeated paints don't stack wrappers. The wrapper is
+        // installed lazily on first review-stage render — before
+        // that point, only the capture stage was painting from
+        // ingest events, so there was no review strip to refresh.
+        if (!window.__crispV4RefreshReviewWired) {
+            const _origCapRefresh = window.__crispV4RefreshCapStrip;
+            window.__crispV4RefreshCapStrip = function () {
+                if (typeof _origCapRefresh === 'function') {
+                    try { _origCapRefresh(); } catch (_) {}
+                }
+                // Only re-paint the review strip when the review
+                // stage is actually the active stage — keeps the
+                // capture-stage thumb row's repaints from doing
+                // double work.
+                if (document.querySelector('#stage-v4-review.active')) {
+                    try { _renderReviewPhotoStrip(); } catch (_) {}
+                }
+            };
+            window.__crispV4RefreshReviewWired = true;
+        }
         const photos = (_getState().v4Photos || []).slice(0, V4_MAX_PHOTOS);
         const slots = [];
         for (let i = 0; i < V4_MAX_PHOTOS; i++) {
@@ -2705,9 +2736,31 @@
         setText('v4-row-crisis-text', s.crisis_type
             ? s.crisis_type.replace('_', ' ').toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase())
             : '—');
-        setText('v4-row-damage-text', s.damage_classification
-            ? s.damage_classification.charAt(0) + s.damage_classification.slice(1).toLowerCase()
-            : '—');
+        // HC67 (May 2026) — use the same translation keys the damage
+        // sub-view uses, so the review's display label stays in sync
+        // with the canonical labels the user originally picked from
+        // (and follows i18n into all 22 locales). Operator brief:
+        // "Minimal Damage / Partial Damage / Fully Destroyed".
+        const _damageLabel = (d) => {
+            const map = {
+                MINIMAL: 'damage_minimal',
+                PARTIAL: 'damage_partial',
+                COMPLETE: 'damage_complete',
+            };
+            const key = map[d];
+            if (!key) return '—';
+            if (typeof window.t === 'function') {
+                const v = window.t(key);
+                if (v) return v;
+            }
+            // Fallback if the i18n runtime hasn't booted yet —
+            // canonical EN strings.
+            return d === 'MINIMAL' ? 'Minimal Damage'
+                : d === 'PARTIAL' ? 'Partial Damage'
+                : d === 'COMPLETE' ? 'Fully Destroyed'
+                : '—';
+        };
+        setText('v4-row-damage-text', _damageLabel(s.damage_classification));
 
         // HC66 — paint the new photo strip + location-time line. The
         // pre-HC66 `#v4-summary-thumb` / `#v4-photo-count` /

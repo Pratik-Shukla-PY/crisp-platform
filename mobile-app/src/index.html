@@ -204,7 +204,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v293">
+    <meta name="crisp-release" content="crisp-pwa@v294">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -589,7 +589,7 @@
         // any locale JSON. Pre-commit hook gates drift.
         window.__crispHomeI18nPacks = {
   "__meta": {
-    "buildTs": "2026-05-25T15:12:32.653Z",
+    "buildTs": "2026-05-25T17:16:36.709Z",
     "scriptVersion": 2,
     "keyCount": 101,
     "locales": [
@@ -618,7 +618,7 @@
     ]
   },
   "en": {
-    "__version": "4ae3a6b9e2a5",
+    "__version": "f2e40007914b",
     "__checksum": "cfb13c954fd45d00",
     "action_tile_download": "Download App",
     "action_tile_login": "Login",
@@ -5029,17 +5029,16 @@
                         <i class="fa-solid fa-building" style="color:var(--accent);"></i>
                         <span data-i18n="building_select_title">Optional: pick the exact building</span>
                     </p>
-                    <button class="building-fs-cta v4-review-row v4-review-row--building" id="btn-building-fs-open" type="button">
-                        <span class="v4-review-row-icon">
-                            <i class="fa-solid fa-building" aria-hidden="true"></i>
-                        </span>
-                        <span class="v4-review-row-body">
-                            <span class="v4-review-row-title" data-i18n="building_pick_cta">Pick exact building</span>
-                            <span class="v4-review-row-meta" data-i18n="building_select_title">Optional — helps responders</span>
-                        </span>
-                        <span class="v4-review-row-chev">
-                            <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-                        </span>
+                    <!-- HC67 — icon-only fullscreen expand button.
+                         Absolute-positioned over the map's top-right
+                         corner via the .building-fs-cta CSS in the
+                         HC67 block. The accessible label still says
+                         "Open fullscreen picker"; the visual is
+                         just the expand glyph. -->
+                    <button class="building-fs-cta" id="btn-building-fs-open" type="button"
+                            aria-label="Open fullscreen picker"
+                            data-i18n-aria-label="building_pick_cta">
+                        <i class="fa-solid fa-up-right-and-down-left-from-center" aria-hidden="true"></i>
                     </button>
                     <div id="building-map" class="building-map"
                          role="application"
