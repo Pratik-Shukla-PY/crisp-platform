@@ -620,55 +620,75 @@
         el.addEventListener('click', dismiss);
     }
 
-    // ── Consent gate ────────────────────────────────────────────────────
-    function _wireConsent() {
-        const consentRow = document.getElementById('home-consent');
-        const consentCheck = document.getElementById('home-consent-check');
-        const startBtn = document.getElementById('btn-start');
-        if (!consentRow || !consentCheck || !startBtn) return;
+    // ── Consent onboarding modal (HC57, May 2026) ───────────────────────
+    //
+    // Replaces the legacy small checkbox + shake-animation pattern. The
+    // modal lives at #consent-onboarding (defined in index.html) and is
+    // shown to first-time visitors via the absence of the
+    // `crisp-consented` class on <html> (set by the head IIFE at frame
+    // 0 when localStorage already carries the consent flag).
+    //
+    // This wiring handles:
+    //   · Accept tap        → persist localStorage + dismiss modal + focus btn-start
+    //   · Policy link tap   → open #home-privacy-sheet on top of the modal
+    //   · Esc / tap-outside → IGNORED (modal is non-dismissible)
+    //
+    // Backward-compat: same `crisp_privacy_consent` key as pre-HC57. Any
+    // already-installed PWA whose user tapped the old checkbox will NOT
+    // see the modal on the upgrade.
+    function _wireConsentModal() {
+        const overlay = document.getElementById('consent-onboarding');
+        const acceptBtn = document.getElementById('consent-onboarding-accept-btn');
+        const policyLink = document.getElementById('consent-onboarding-policy-link');
+        if (!overlay || !acceptBtn) return;
 
-        // Returning visitor (already consented) — hide the row, leave btn
-        // enabled. Persists across sessions via localStorage.
-        if (_hasConsented()) {
-            consentRow.style.display = 'none';
-            consentCheck.checked = true;
-            startBtn.disabled = false;
-            startBtn.classList.remove('is-locked');
-            return;
-        }
+        // Returning user — the head IIFE already added `crisp-consented`
+        // to <html>, so the modal is `display: none`. Nothing more to do.
+        if (_hasConsented()) return;
 
-        // First-time visitor — gate Start until consent is checked.
-        startBtn.disabled = true;
-        startBtn.classList.add('is-locked');
-
-        const _updateLock = () => {
-            startBtn.disabled = !consentCheck.checked;
-            startBtn.classList.toggle('is-locked', !consentCheck.checked);
-            if (consentCheck.checked) {
-                _markConsent();
-                // Hide the consent row with a short fade so the user sees
-                // their action persisted. Use display:none after 250ms so
-                // the layout reclaims the space.
-                consentRow.style.transition = 'opacity 0.2s ease';
-                consentRow.style.opacity = '0';
-                setTimeout(() => { consentRow.style.display = 'none'; }, 220);
+        // First-time visitor — modal is visible; wire interactions.
+        const _accept = () => {
+            _markConsent();
+            try { document.documentElement.classList.add('crisp-consented'); } catch (_) {}
+            // Restore background scroll (the CSS rule keys off the
+            // `crisp-consented` class, so this is belt-and-braces).
+            try { document.body.style.overflow = ''; } catch (_) {}
+            // Focus the primary CTA so the next action is obvious to
+            // keyboard + AT users.
+            const startBtn = document.getElementById('btn-start');
+            if (startBtn && typeof startBtn.focus === 'function') {
+                try { startBtn.focus(); } catch (_) {}
             }
         };
+        acceptBtn.addEventListener('click', _accept);
 
-        consentCheck.addEventListener('change', _updateLock);
-
-        // Block btn-start clicks BEFORE app.js / v4-flow handlers run
-        // (capture phase) when consent is missing. The handler also
-        // animates a shake on the consent row to draw the eye.
-        startBtn.addEventListener('click', (e) => {
-            if (!consentCheck.checked) {
+        // Policy link opens the existing Privacy bottom sheet (#home-
+        // privacy-sheet) on top of this modal. The privacy sheet's own
+        // close button + tap-outside-backdrop dismiss back to the
+        // consent modal; nothing about the consent flow changes.
+        if (policyLink) {
+            policyLink.addEventListener('click', (e) => {
                 e.preventDefault();
-                e.stopImmediatePropagation();
-                consentRow.classList.add('shake');
-                setTimeout(() => consentRow.classList.remove('shake'), 400);
-                consentCheck.focus();
+                const privacyBtn = document.getElementById('btn-home-privacy');
+                if (privacyBtn) privacyBtn.click();
+            });
+        }
+
+        // Non-dismissible: explicitly block Esc on the overlay (focus
+        // trap not strictly required since the only path forward IS
+        // Accept; nothing in the modal navigates elsewhere).
+        overlay.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
             }
-        }, true);   // capture: true — runs before bubble-phase listeners
+        });
+
+        // Move initial focus to the Accept button after a tick so the
+        // first paint settles before AT picks it up.
+        setTimeout(() => {
+            try { acceptBtn.focus({ preventScroll: true }); } catch (_) {}
+        }, 100);
     }
 
     // ── Install prompt (PWA Add-to-Home-Screen) ─────────────────────────
@@ -2278,7 +2298,7 @@
     // ── Init ────────────────────────────────────────────────────────────
     function init() {
         _renderChannels();
-        _wireConsent();
+        _wireConsentModal();
         _wireInstallPrompt();
         _wireChannelTelemetry();
         _wireDevidBadge();

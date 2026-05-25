@@ -948,5 +948,18 @@
   "aria_mr_filter": "보고서 필터",
   "aria_mr_view_toggle": "레이아웃",
   "aria_mr_view_list": "목록 보기",
-  "aria_mr_view_map": "지도 보기"
+  "aria_mr_view_map": "지도 보기",
+  "consent_modal_title": "CRISP에 오신 것을 환영합니다",
+  "consent_modal_subtitle": "여러분의 신고가 대응자들이 생명을 구하는 데 도움이 됩니다",
+  "consent_card_location_title": "위치",
+  "consent_card_location_body": "도움이 필요한 곳을 지도화하기 위해 위치 정보를 사용합니다. 대응자만 볼 수 있습니다.",
+  "consent_card_camera_title": "카메라 및 사진",
+  "consent_card_camera_body": "사진은 대응자가 상황을 파악하는 데 도움이 됩니다. 업로드 전에 휴대전화에서 얼굴이 흐려집니다 — 서버는 가공되지 않은 얼굴을 절대 보지 않습니다.",
+  "consent_card_offline_title": "오프라인 작동",
+  "consent_card_offline_body": "인터넷 없이도 신고를 보낼 수 있습니다. 온라인 상태로 돌아오면 자동으로 동기화됩니다.",
+  "consent_card_privacy_title": "당신의 개인정보",
+  "consent_card_privacy_body": "이름, 이메일, 전화번호를 수집하지 않습니다. 오직 본인만 볼 수 있는 익명 디바이스 코드만 사용합니다.",
+  "consent_modal_fine_print": "\"동의하고 계속\"을 누르면 위기 대응자와 신고를 공유하는 데 동의하는 것입니다. 설정에서 언제든지 동의를 철회할 수 있습니다.",
+  "consent_modal_accept_cta": "동의하고 계속",
+  "consent_modal_policy_link": "개인정보 보호 정책 전문 읽기"
 }

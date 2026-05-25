@@ -938,5 +938,18 @@
   "aria_mr_filter": "تصفية التقارير",
   "aria_mr_view_toggle": "التخطيط",
   "aria_mr_view_list": "عرض القائمة",
-  "aria_mr_view_map": "عرض الخريطة"
+  "aria_mr_view_map": "عرض الخريطة",
+  "consent_modal_title": "مرحبًا بك في CRISP",
+  "consent_modal_subtitle": "تقاريرك تساعد المستجيبين على إنقاذ الأرواح",
+  "consent_card_location_title": "الموقع",
+  "consent_card_location_body": "نستخدم موقعك لتحديد الأماكن التي تحتاج إلى المساعدة. يراه المستجيبون فقط.",
+  "consent_card_camera_title": "الكاميرا والصور",
+  "consent_card_camera_body": "الصور تساعد المستجيبين على رؤية ما حدث. الوجوه مموهة على هاتفك قبل الرفع — الخادم لا يرى الوجوه الخام أبدًا.",
+  "consent_card_offline_title": "يعمل دون اتصال",
+  "consent_card_offline_body": "أرسل التقارير دون إنترنت. تتم مزامنتها تلقائيًا عند عودتك إلى الإنترنت.",
+  "consent_card_privacy_title": "خصوصيتك",
+  "consent_card_privacy_body": "لا يتم جمع اسم أو بريد إلكتروني أو رقم هاتف. فقط رمز جهاز مجهول يمكنك أنت فقط رؤيته.",
+  "consent_modal_fine_print": "بالنقر على \"قبول ومتابعة\"، فإنك توافق على مشاركة تقاريرك مع فرق الاستجابة للأزمات. يمكنك سحب الموافقة في أي وقت من الإعدادات.",
+  "consent_modal_accept_cta": "قبول ومتابعة",
+  "consent_modal_policy_link": "قراءة سياسة الخصوصية الكاملة"
 }

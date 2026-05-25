@@ -960,5 +960,18 @@
   "aria_mr_filter": "Filter laporan",
   "aria_mr_view_toggle": "Tata letak",
   "aria_mr_view_list": "Tampilan daftar",
-  "aria_mr_view_map": "Tampilan peta"
+  "aria_mr_view_map": "Tampilan peta",
+  "consent_modal_title": "Selamat datang di CRISP",
+  "consent_modal_subtitle": "Laporan Anda membantu responden menyelamatkan nyawa",
+  "consent_card_location_title": "Lokasi",
+  "consent_card_location_body": "Kami menggunakan lokasi Anda untuk memetakan tempat yang membutuhkan bantuan. Hanya responden yang melihatnya.",
+  "consent_card_camera_title": "Kamera & foto",
+  "consent_card_camera_body": "Foto membantu responden melihat apa yang terjadi. Wajah diburamkan di ponsel Anda sebelum diunggah — server tidak pernah melihat wajah mentah.",
+  "consent_card_offline_title": "Berfungsi luring",
+  "consent_card_offline_body": "Kirim laporan tanpa internet. Akan disinkronkan otomatis saat Anda kembali daring.",
+  "consent_card_privacy_title": "Privasi Anda",
+  "consent_card_privacy_body": "Tidak ada nama, email, atau nomor telepon yang dikumpulkan. Hanya kode perangkat anonim yang hanya Anda yang bisa lihat.",
+  "consent_modal_fine_print": "Dengan mengetuk \"Setuju & Lanjutkan\", Anda setuju membagikan laporan dengan responden krisis. Anda dapat menarik persetujuan kapan saja di Pengaturan.",
+  "consent_modal_accept_cta": "Setuju & Lanjutkan",
+  "consent_modal_policy_link": "Baca Kebijakan Privasi lengkap"
 }

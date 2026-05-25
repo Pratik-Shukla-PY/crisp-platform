@@ -10951,6 +10951,231 @@ body.tier-t4 .home-impact {
 }
 .home-info-sheet-link:hover { color: #5EEAD4; }
 
+/* ─────────────────────────────────────────────────────────────────────
+   HC57 (May 2026) — Privacy & Consent onboarding modal.
+
+   First-visit only: the head IIFE adds `crisp-consented` to <html> for
+   returning users, so this overlay is `display: none` from frame 0 for
+   them. New users see the modal cover the whole viewport.
+
+   Layout: flex column on the card, with three regions —
+     · header (flex: 0 0 auto, no scroll)
+     · body   (flex: 1 1 auto, overflow-y: auto)
+     · footer (flex: 0 0 auto, no scroll, sticky Accept CTA)
+   This is cleaner than position:sticky because only the body has
+   `overflow`; the header + footer sit outside the scroll context
+   entirely and naturally stay put.
+   ───────────────────────────────────────────────────────────────────── */
+.consent-onboarding-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(8, 16, 28, 0.78);
+    padding: env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 16px);
+    /* Frame-0 visibility is controlled by the `crisp-consented` class on
+       <html> (set by the head IIFE for returning visitors). When that
+       class is present, the modal never paints — no flicker. */
+}
+html.crisp-consented .consent-onboarding-overlay { display: none; }
+/* Lock background scroll while the consent modal is on screen. */
+html:not(.crisp-consented) body { overflow: hidden; }
+
+.consent-onboarding-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 480px;
+    /* ~80% of viewport per operator; 90dvh ceiling for very tall
+       phones, 80dvh floor for shorter ones (Galaxy Fold cover, iPhone
+       SE landscape). `dvh` matches the real visible viewport on iOS
+       Safari (excludes the URL bar). */
+    height: 88dvh;
+    max-height: 720px;
+    background: linear-gradient(180deg, #1a3552 0%, #10284a 100%);
+    border-radius: 24px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+    color: var(--text, #f1f5f9);
+    overflow: hidden;          /* card itself never scrolls; only .body */
+}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+.consent-onboarding-header {
+    flex: 0 0 auto;
+    padding: 24px 22px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    text-align: center;
+}
+.consent-onboarding-brand {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 12px;
+    border-radius: 16px;
+    background: rgba(9, 209, 199, 0.10);
+    border: 1px solid rgba(9, 209, 199, 0.28);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent, #09D1C7);
+}
+.consent-onboarding-brand svg { width: 36px; height: 36px; }
+.consent-onboarding-title {
+    margin: 0 0 6px;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--text, #f1f5f9);
+    line-height: 1.2;
+}
+.consent-onboarding-subtitle {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+/* ── Body (the only scrollable region) ──────────────────────────── */
+.consent-onboarding-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 16px 22px 8px;
+    /* On short viewports the cards stack with smaller gaps. */
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.consent-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 14px 14px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+}
+.consent-card-icon {
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(9, 209, 199, 0.10);
+    color: var(--accent, #09D1C7);
+}
+.consent-card-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.consent-card-title {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text, #f1f5f9);
+    letter-spacing: -0.005em;
+}
+.consent-card-text {
+    margin: 0;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.consent-onboarding-fine-print {
+    margin: 8px 0 4px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.58);
+    text-align: center;
+}
+
+/* ── Footer (sticky Accept CTA) ─────────────────────────────────── */
+.consent-onboarding-footer {
+    flex: 0 0 auto;
+    padding: 14px 22px 18px;
+    /* Account for iOS Safari home-indicator safe-area when the modal
+       reaches the very bottom of the viewport. */
+    padding-bottom: max(18px, env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, rgba(16, 40, 74, 0.6) 0%, #10284a 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+.consent-onboarding-accept-btn {
+    width: 100%;
+    min-height: 56px;
+    padding: 16px 20px;
+    border: 0;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #5EEAD4 0%, #09D1C7 100%);
+    color: #0b1f33;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.18s ease;
+    box-shadow: 0 8px 22px rgba(9, 209, 199, 0.34);
+}
+.consent-onboarding-accept-btn:hover,
+.consent-onboarding-accept-btn:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(9, 209, 199, 0.44);
+}
+.consent-onboarding-accept-btn:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+}
+.consent-onboarding-accept-btn:active { transform: translateY(0); }
+
+.consent-onboarding-policy-link {
+    background: transparent;
+    border: 0;
+    padding: 10px 12px;
+    min-height: 40px;
+    color: var(--accent, #09D1C7);
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+}
+.consent-onboarding-policy-link:hover { color: #5EEAD4; }
+.consent-onboarding-policy-link:focus-visible {
+    outline: 2px solid var(--accent, #09D1C7);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+/* Reduced motion — no transforms on the Accept button. */
+@media (prefers-reduced-motion: reduce) {
+    .consent-onboarding-accept-btn { transition: none; }
+    .consent-onboarding-accept-btn:hover,
+    .consent-onboarding-accept-btn:focus-visible {
+        transform: none;
+    }
+}
+
+/* Narrow viewports (≤ 360 px) — tighten paddings + drop the brand
+   icon size slightly so the header doesn't dominate. */
+@media (max-width: 360px) {
+    .consent-onboarding-card { height: 92dvh; border-radius: 18px; }
+    .consent-onboarding-header { padding: 18px 18px 14px; }
+    .consent-onboarding-brand { width: 48px; height: 48px; }
+    .consent-onboarding-brand svg { width: 30px; height: 30px; }
+    .consent-onboarding-title { font-size: 20px; }
+    .consent-onboarding-subtitle { font-size: 14px; }
+    .consent-onboarding-body { padding: 12px 18px 6px; gap: 10px; }
+    .consent-card { padding: 12px; gap: 12px; }
+    .consent-card-icon { width: 40px; height: 40px; }
+    .consent-onboarding-footer { padding: 12px 18px 14px; }
+}
+
 /* ── I. Cleanup of older overrides that fight the redesign ───────── */
 
 /* The legacy hidden-but-styled blocks shouldn't take any space. */

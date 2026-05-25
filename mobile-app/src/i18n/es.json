@@ -957,5 +957,18 @@
   "aria_mr_filter": "Filtrar informes",
   "aria_mr_view_toggle": "Diseño",
   "aria_mr_view_list": "Vista de lista",
-  "aria_mr_view_map": "Vista de mapa"
+  "aria_mr_view_map": "Vista de mapa",
+  "consent_modal_title": "Bienvenido a CRISP",
+  "consent_modal_subtitle": "Tus reportes ayudan a los respondedores a salvar vidas",
+  "consent_card_location_title": "Ubicación",
+  "consent_card_location_body": "Usamos tu ubicación para mapear dónde se necesita ayuda. Sólo la ven los respondedores.",
+  "consent_card_camera_title": "Cámara y fotos",
+  "consent_card_camera_body": "Las fotos ayudan a los respondedores a ver lo ocurrido. Las caras se difuminan en tu teléfono antes de subir — el servidor nunca ve caras sin difuminar.",
+  "consent_card_offline_title": "Funciona sin conexión",
+  "consent_card_offline_body": "Envía reportes sin internet. Se sincronizan automáticamente cuando vuelves a estar en línea.",
+  "consent_card_privacy_title": "Tu privacidad",
+  "consent_card_privacy_body": "No se recopila nombre, correo ni teléfono. Sólo un código de dispositivo anónimo que sólo tú puedes ver.",
+  "consent_modal_fine_print": "Al tocar \"Aceptar y continuar\" aceptas compartir tus reportes con los respondedores de crisis. Puedes retirar el consentimiento cuando quieras desde Configuración.",
+  "consent_modal_accept_cta": "Aceptar y continuar",
+  "consent_modal_policy_link": "Leer la política de privacidad completa"
 }

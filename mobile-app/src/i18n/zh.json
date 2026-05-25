@@ -942,5 +942,18 @@
   "aria_mr_filter": "筛选报告",
   "aria_mr_view_toggle": "布局",
   "aria_mr_view_list": "列表视图",
-  "aria_mr_view_map": "地图视图"
+  "aria_mr_view_map": "地图视图",
+  "consent_modal_title": "欢迎使用 CRISP",
+  "consent_modal_subtitle": "您的报告帮助救援人员挽救生命",
+  "consent_card_location_title": "位置",
+  "consent_card_location_body": "我们使用您的位置来标识需要帮助的地点。只有救援人员能看到。",
+  "consent_card_camera_title": "相机和照片",
+  "consent_card_camera_body": "照片帮助救援人员了解情况。上传前在您的手机上对人脸进行模糊处理 — 服务器从不看到原始人脸。",
+  "consent_card_offline_title": "离线工作",
+  "consent_card_offline_body": "无需互联网即可提交报告。重新联网后自动同步。",
+  "consent_card_privacy_title": "您的隐私",
+  "consent_card_privacy_body": "不收集姓名、电子邮件或电话号码。仅一个只有您能看到的匿名设备代码。",
+  "consent_modal_fine_print": "点击\"接受并继续\"，即表示您同意与危机响应人员共享报告。您可以随时在设置中撤回同意。",
+  "consent_modal_accept_cta": "接受并继续",
+  "consent_modal_policy_link": "阅读完整的隐私政策"
 }

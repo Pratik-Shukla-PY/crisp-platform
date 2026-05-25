@@ -923,5 +923,18 @@
   "aria_mr_filter": "Filter reports",
   "aria_mr_view_toggle": "Layout",
   "aria_mr_view_list": "List view",
-  "aria_mr_view_map": "Map view"
+  "aria_mr_view_map": "Map view",
+  "consent_modal_title": "Welcome to CRISP",
+  "consent_modal_subtitle": "Your reports help responders save lives",
+  "consent_card_location_title": "Location",
+  "consent_card_location_body": "We use your location to map where help is needed. Only the responders see it.",
+  "consent_card_camera_title": "Camera & Photos",
+  "consent_card_camera_body": "Photos help responders see what happened. Faces are blurred on your phone before upload — the server never sees raw faces.",
+  "consent_card_offline_title": "Works Offline",
+  "consent_card_offline_body": "Send reports without internet. They sync automatically when you're back online.",
+  "consent_card_privacy_title": "Your Privacy",
+  "consent_card_privacy_body": "No name, email, or phone number collected. Just an anonymous device code that only you can see.",
+  "consent_modal_fine_print": "By tapping Accept & Continue, you agree to share reports with crisis responders. You can withdraw anytime in Settings.",
+  "consent_modal_accept_cta": "Accept & Continue",
+  "consent_modal_policy_link": "Read full Privacy Policy"
 }

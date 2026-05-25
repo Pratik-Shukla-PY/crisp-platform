@@ -58,6 +58,33 @@
             }
         })();
     </script>
+    <!-- HC57 (May 2026) — first-paint consent gate.
+         Adds `crisp-consented` to <html> if localStorage already has
+         the consent flag; the CSS rule `html.crisp-consented
+         #consent-onboarding { display: none }` then prevents the modal
+         from painting for returning users — zero flicker.
+
+         First-time visitors land WITHOUT the class → modal paints at
+         frame 0 covering the home stage. home-screen.js's wireConsent
+         function adds the class + persists localStorage on Accept.
+
+         Same `crisp_privacy_consent` key as pre-HC57 so existing
+         installed PWAs retain their consent across the upgrade. -->
+    <script>
+        (function applyConsentFlag() {
+            'use strict';
+            try {
+                var raw = localStorage.getItem('crisp_privacy_consent');
+                var hasConsent = false;
+                if (raw) {
+                    try { hasConsent = !!JSON.parse(raw); } catch (_) {}
+                }
+                if (hasConsent) {
+                    document.documentElement.classList.add('crisp-consented');
+                }
+            } catch (_) { /* localStorage blocked — treat as first-visit */ }
+        })();
+    </script>
     <!-- AUDIT 2026-05-23 (UI:UX Improvements/I18N-INIT-AUDIT-2026-05-23.md) —
          Synchronous boot-language resolver. Runs as the FIRST script in
          <head> so it sets <html lang> + <html dir> + window.__crispBootLang
@@ -177,7 +204,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v283">
+    <meta name="crisp-release" content="crisp-pwa@v284">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -562,9 +589,9 @@
         // any locale JSON. Pre-commit hook gates drift.
         window.__crispHomeI18nPacks = {
   "__meta": {
-    "buildTs": "2026-05-24T19:28:36.467Z",
+    "buildTs": "2026-05-25T07:25:57.869Z",
     "scriptVersion": 2,
-    "keyCount": 89,
+    "keyCount": 101,
     "locales": [
       "en",
       "zh",
@@ -591,8 +618,8 @@
     ]
   },
   "en": {
-    "__version": "ad06e10f1c98",
-    "__checksum": "de7af34ca3b12a7e",
+    "__version": "2babd338dbcf",
+    "__checksum": "cfb13c954fd45d00",
     "action_tile_download": "Download App",
     "action_tile_login": "Login",
     "add_to_homescreen": "+ Add to Homescreen",
@@ -619,6 +646,19 @@
     "aria_sync_chip": "Sync status — tap for details",
     "aria_tap_change_language": "Tap to change language",
     "badge_chip_lives_stat": "{n} lives saved",
+    "consent_card_camera_body": "Photos help responders see what happened. Faces are blurred on your phone before upload — the server never sees raw faces.",
+    "consent_card_camera_title": "Camera & Photos",
+    "consent_card_location_body": "We use your location to map where help is needed. Only the responders see it.",
+    "consent_card_location_title": "Location",
+    "consent_card_offline_body": "Send reports without internet. They sync automatically when you're back online.",
+    "consent_card_offline_title": "Works Offline",
+    "consent_card_privacy_body": "No name, email, or phone number collected. Just an anonymous device code that only you can see.",
+    "consent_card_privacy_title": "Your Privacy",
+    "consent_modal_accept_cta": "Accept & Continue",
+    "consent_modal_fine_print": "By tapping Accept & Continue, you agree to share reports with crisis responders. You can withdraw anytime in Settings.",
+    "consent_modal_policy_link": "Read full Privacy Policy",
+    "consent_modal_subtitle": "Your reports help responders save lives",
+    "consent_modal_title": "Welcome to CRISP",
     "devid_sheet_point_1": "Only you can see this code.",
     "devid_sheet_point_2": "It links your reports to your phone — so they're never lost.",
     "devid_sheet_point_3": "Works offline. Even if you reinstall the app, your reports stay linked.",
@@ -639,7 +679,6 @@
     "home_account_settings": "Settings",
     "home_brand_tagline": "Crisis Reporter",
     "home_channels_title": "Other ways to report",
-    "home_consent_v2": "I consent to share my report. Faces are blurred on my phone before upload, and reports are linked only to my anonymous ID.",
     "home_cta_primary": "Report an Incident",
     "home_footer_help": "Help",
     "home_footer_privacy": "Privacy",
@@ -684,8 +723,8 @@
     "tier_t4_lifekeeper_label": "Lifekeeper"
   },
   "zh": {
-    "__version": "90eb01152134",
-    "__checksum": "a249c9621de8a6ba",
+    "__version": "064def6541bd",
+    "__checksum": "9e71773f384d0058",
     "action_tile_download": "下载应用",
     "action_tile_login": "登录",
     "add_to_homescreen": "+ 添加到主屏幕",
@@ -712,6 +751,19 @@
     "aria_sync_chip": "同步状态 — 点按查看详情",
     "aria_tap_change_language": "点击切换语言",
     "badge_chip_lives_stat": "已挽救 {n} 条生命",
+    "consent_card_camera_body": "照片帮助救援人员了解情况。上传前在您的手机上对人脸进行模糊处理 — 服务器从不看到原始人脸。",
+    "consent_card_camera_title": "相机和照片",
+    "consent_card_location_body": "我们使用您的位置来标识需要帮助的地点。只有救援人员能看到。",
+    "consent_card_location_title": "位置",
+    "consent_card_offline_body": "无需互联网即可提交报告。重新联网后自动同步。",
+    "consent_card_offline_title": "离线工作",
+    "consent_card_privacy_body": "不收集姓名、电子邮件或电话号码。仅一个只有您能看到的匿名设备代码。",
+    "consent_card_privacy_title": "您的隐私",
+    "consent_modal_accept_cta": "接受并继续",
+    "consent_modal_fine_print": "点击\"接受并继续\"，即表示您同意与危机响应人员共享报告。您可以随时在设置中撤回同意。",
+    "consent_modal_policy_link": "阅读完整的隐私政策",
+    "consent_modal_subtitle": "您的报告帮助救援人员挽救生命",
+    "consent_modal_title": "欢迎使用 CRISP",
     "devid_sheet_point_1": "只有您可以看到此代码。",
     "devid_sheet_point_2": "它将您的报告与您的手机关联 — 这样它们就永远不会丢失。",
     "devid_sheet_point_3": "离线工作。即使您重新安装应用，您的报告仍保持关联。",
@@ -732,7 +784,6 @@
     "home_account_settings": "设置",
     "home_brand_tagline": "危机报告者",
     "home_channels_title": "其他报告方式",
-    "home_consent_v2": "我同意分享我的报告。人脸会在上传前在手机上模糊处理，报告只与我的匿名 ID 关联。",
     "home_cta_primary": "报告一起事件",
     "home_footer_help": "帮助",
     "home_footer_privacy": "隐私",
@@ -777,8 +828,8 @@
     "tier_t4_lifekeeper_label": "生命守护者"
   },
   "es": {
-    "__version": "a3ffa69d6e76",
-    "__checksum": "6481296b5698884b",
+    "__version": "5a7fd5586266",
+    "__checksum": "83184382aa1bb71d",
     "action_tile_download": "Descargar",
     "action_tile_login": "Acceder",
     "add_to_homescreen": "+ Añadir a Inicio",
@@ -805,6 +856,19 @@
     "aria_sync_chip": "Estado de sincronización — toca para detalles",
     "aria_tap_change_language": "Toca para cambiar el idioma",
     "badge_chip_lives_stat": "{n} vidas salvadas",
+    "consent_card_camera_body": "Las fotos ayudan a los respondedores a ver lo ocurrido. Las caras se difuminan en tu teléfono antes de subir — el servidor nunca ve caras sin difuminar.",
+    "consent_card_camera_title": "Cámara y fotos",
+    "consent_card_location_body": "Usamos tu ubicación para mapear dónde se necesita ayuda. Sólo la ven los respondedores.",
+    "consent_card_location_title": "Ubicación",
+    "consent_card_offline_body": "Envía reportes sin internet. Se sincronizan automáticamente cuando vuelves a estar en línea.",
+    "consent_card_offline_title": "Funciona sin conexión",
+    "consent_card_privacy_body": "No se recopila nombre, correo ni teléfono. Sólo un código de dispositivo anónimo que sólo tú puedes ver.",
+    "consent_card_privacy_title": "Tu privacidad",
+    "consent_modal_accept_cta": "Aceptar y continuar",
+    "consent_modal_fine_print": "Al tocar \"Aceptar y continuar\" aceptas compartir tus reportes con los respondedores de crisis. Puedes retirar el consentimiento cuando quieras desde Configuración.",
+    "consent_modal_policy_link": "Leer la política de privacidad completa",
+    "consent_modal_subtitle": "Tus reportes ayudan a los respondedores a salvar vidas",
+    "consent_modal_title": "Bienvenido a CRISP",
     "devid_sheet_point_1": "Solo usted puede ver este código.",
     "devid_sheet_point_2": "Vincula sus informes a su teléfono — para que nunca se pierdan.",
     "devid_sheet_point_3": "Funciona sin conexión. Aunque reinstale la app, sus informes permanecen vinculados.",
@@ -825,7 +889,6 @@
     "home_account_settings": "Ajustes",
     "home_brand_tagline": "Reportero de crisis",
     "home_channels_title": "Otras formas de reportar",
-    "home_consent_v2": "Acepto compartir mi reporte. Los rostros se difuminan en mi teléfono antes de subirlos, y los reportes solo se vinculan a mi ID anónimo.",
     "home_cta_primary": "Reportar un incidente",
     "home_footer_help": "Ayuda",
     "home_footer_privacy": "Privacidad",
@@ -870,8 +933,8 @@
     "tier_t4_lifekeeper_label": "Guardián de vidas"
   },
   "ar": {
-    "__version": "a36111b658d5",
-    "__checksum": "1c952dbe6b3a970a",
+    "__version": "8bd8b6406cfc",
+    "__checksum": "0f85dc8d720dc146",
     "action_tile_download": "تنزيل التطبيق",
     "action_tile_login": "تسجيل الدخول",
     "add_to_homescreen": "+ إضافة إلى الشاشة الرئيسية",
@@ -898,6 +961,19 @@
     "aria_sync_chip": "حالة المزامنة — اضغط للتفاصيل",
     "aria_tap_change_language": "اضغط لتغيير اللغة",
     "badge_chip_lives_stat": "{n} حياة منقذة",
+    "consent_card_camera_body": "الصور تساعد المستجيبين على رؤية ما حدث. الوجوه مموهة على هاتفك قبل الرفع — الخادم لا يرى الوجوه الخام أبدًا.",
+    "consent_card_camera_title": "الكاميرا والصور",
+    "consent_card_location_body": "نستخدم موقعك لتحديد الأماكن التي تحتاج إلى المساعدة. يراه المستجيبون فقط.",
+    "consent_card_location_title": "الموقع",
+    "consent_card_offline_body": "أرسل التقارير دون إنترنت. تتم مزامنتها تلقائيًا عند عودتك إلى الإنترنت.",
+    "consent_card_offline_title": "يعمل دون اتصال",
+    "consent_card_privacy_body": "لا يتم جمع اسم أو بريد إلكتروني أو رقم هاتف. فقط رمز جهاز مجهول يمكنك أنت فقط رؤيته.",
+    "consent_card_privacy_title": "خصوصيتك",
+    "consent_modal_accept_cta": "قبول ومتابعة",
+    "consent_modal_fine_print": "بالنقر على \"قبول ومتابعة\"، فإنك توافق على مشاركة تقاريرك مع فرق الاستجابة للأزمات. يمكنك سحب الموافقة في أي وقت من الإعدادات.",
+    "consent_modal_policy_link": "قراءة سياسة الخصوصية الكاملة",
+    "consent_modal_subtitle": "تقاريرك تساعد المستجيبين على إنقاذ الأرواح",
+    "consent_modal_title": "مرحبًا بك في CRISP",
     "devid_sheet_point_1": "يمكنك أنت فقط رؤية هذا الرمز.",
     "devid_sheet_point_2": "يربط تقاريرك بهاتفك — حتى لا تُفقد أبدًا.",
     "devid_sheet_point_3": "يعمل دون اتصال. حتى لو أعدت تثبيت التطبيق، تبقى تقاريرك مرتبطة.",
@@ -918,7 +994,6 @@
     "home_account_settings": "الإعدادات",
     "home_brand_tagline": "مُبلِّغ الأزمات",
     "home_channels_title": "طرق أخرى للإبلاغ",
-    "home_consent_v2": "أوافق على مشاركة تقريري. تُموَّه الوجوه على هاتفك قبل الرفع، وترتبط التقارير بمعرّفك المجهول فقط.",
     "home_cta_primary": "أبلِغ عن حادثة",
     "home_footer_help": "المساعدة",
     "home_footer_privacy": "الخصوصية",
@@ -963,8 +1038,8 @@
     "tier_t4_lifekeeper_label": "حافظ الحياة"
   },
   "fr": {
-    "__version": "fb0fae01b4dd",
-    "__checksum": "b1f9fc2742733111",
+    "__version": "a819abe142c9",
+    "__checksum": "b08d118c545747d2",
     "action_tile_download": "Télécharger",
     "action_tile_login": "Connexion",
     "add_to_homescreen": "+ Ajouter à l'écran d'accueil",
@@ -991,6 +1066,19 @@
     "aria_sync_chip": "État de synchronisation — appuyez pour plus de détails",
     "aria_tap_change_language": "Appuyez pour changer de langue",
     "badge_chip_lives_stat": "{n} vies sauvées",
+    "consent_card_camera_body": "Les photos aident les secouristes à voir ce qui s'est passé. Les visages sont floutés sur votre téléphone avant l'envoi — le serveur ne voit jamais les visages bruts.",
+    "consent_card_camera_title": "Caméra et photos",
+    "consent_card_location_body": "Nous utilisons votre localisation pour cartographier les zones où l'aide est nécessaire. Seuls les secouristes la voient.",
+    "consent_card_location_title": "Localisation",
+    "consent_card_offline_body": "Envoyez des rapports sans internet. Ils se synchronisent automatiquement à votre retour en ligne.",
+    "consent_card_offline_title": "Fonctionne hors ligne",
+    "consent_card_privacy_body": "Pas de nom, d'email ou de numéro de téléphone collectés. Seulement un code d'appareil anonyme que vous seul pouvez voir.",
+    "consent_card_privacy_title": "Votre vie privée",
+    "consent_modal_accept_cta": "Accepter et continuer",
+    "consent_modal_fine_print": "En appuyant sur \"Accepter et continuer\", vous acceptez de partager vos rapports avec les secouristes. Vous pouvez retirer ce consentement à tout moment dans les Paramètres.",
+    "consent_modal_policy_link": "Lire la politique de confidentialité complète",
+    "consent_modal_subtitle": "Vos rapports aident les secouristes à sauver des vies",
+    "consent_modal_title": "Bienvenue sur CRISP",
     "devid_sheet_point_1": "Vous seul pouvez voir ce code.",
     "devid_sheet_point_2": "Il relie vos rapports à votre téléphone — pour qu'ils ne soient jamais perdus.",
     "devid_sheet_point_3": "Fonctionne hors ligne. Même si vous réinstallez l'app, vos rapports restent liés.",
@@ -1011,7 +1099,6 @@
     "home_account_settings": "Paramètres",
     "home_brand_tagline": "Rapporteur de crise",
     "home_channels_title": "Autres façons de signaler",
-    "home_consent_v2": "J'accepte de partager mon signalement. Les visages sont floutés sur mon téléphone avant l'envoi, et les signalements sont liés uniquement à mon ID anonyme.",
     "home_cta_primary": "Signaler un incident",
     "home_footer_help": "Aide",
     "home_footer_privacy": "Confidentialité",
@@ -1056,8 +1143,8 @@
     "tier_t4_lifekeeper_label": "Gardien de vies"
   },
   "ru": {
-    "__version": "16ff930d4998",
-    "__checksum": "4a03cffc4fcade25",
+    "__version": "d9e8b6641f2f",
+    "__checksum": "cb567d231e31e27b",
     "action_tile_download": "Скачать",
     "action_tile_login": "Войти",
     "add_to_homescreen": "+ Добавить на главный экран",
@@ -1084,6 +1171,19 @@
     "aria_sync_chip": "Статус синхронизации — нажмите для деталей",
     "aria_tap_change_language": "Нажмите, чтобы сменить язык",
     "badge_chip_lives_stat": "{n} спасённых жизней",
+    "consent_card_camera_body": "Фотографии помогают спасателям увидеть, что произошло. Лица размываются на вашем телефоне перед загрузкой — сервер никогда не видит исходные лица.",
+    "consent_card_camera_title": "Камера и фотографии",
+    "consent_card_location_body": "Мы используем ваше местоположение, чтобы отметить, где нужна помощь. Его видят только спасатели.",
+    "consent_card_location_title": "Местоположение",
+    "consent_card_offline_body": "Отправляйте сообщения без интернета. Они синхронизируются автоматически, когда вы снова в сети.",
+    "consent_card_offline_title": "Работает офлайн",
+    "consent_card_privacy_body": "Имя, email и номер телефона не собираются. Только анонимный код устройства, который видите только вы.",
+    "consent_card_privacy_title": "Ваша конфиденциальность",
+    "consent_modal_accept_cta": "Принять и продолжить",
+    "consent_modal_fine_print": "Нажимая «Принять и продолжить», вы соглашаетесь делиться сообщениями со спасателями. Вы можете отозвать согласие в любое время в Настройках.",
+    "consent_modal_policy_link": "Прочитать полную политику конфиденциальности",
+    "consent_modal_subtitle": "Ваши сообщения помогают спасателям спасать жизни",
+    "consent_modal_title": "Добро пожаловать в CRISP",
     "devid_sheet_point_1": "Только вы можете видеть этот код.",
     "devid_sheet_point_2": "Связывает ваши отчёты с телефоном — чтобы они не пропали.",
     "devid_sheet_point_3": "Работает офлайн. Даже после переустановки приложения отчёты остаются связаны.",
@@ -1104,7 +1204,6 @@
     "home_account_settings": "Настройки",
     "home_brand_tagline": "Кризисный репортёр",
     "home_channels_title": "Другие способы сообщить",
-    "home_consent_v2": "Я согласен поделиться своим отчётом. Лица размываются на моём телефоне до загрузки, а отчёты связаны только с моим анонимным ID.",
     "home_cta_primary": "Сообщить о происшествии",
     "home_footer_help": "Помощь",
     "home_footer_privacy": "Конфиденциальность",
@@ -1149,8 +1248,8 @@
     "tier_t4_lifekeeper_label": "Хранитель жизней"
   },
   "hi": {
-    "__version": "05c77e29c190",
-    "__checksum": "bea3ac7fb8dbacc1",
+    "__version": "4de04581b478",
+    "__checksum": "586d93d1186d6997",
     "action_tile_download": "ऐप डाउनलोड करें",
     "action_tile_login": "लॉगिन",
     "add_to_homescreen": "+ होम स्क्रीन पर जोड़ें",
@@ -1177,6 +1276,19 @@
     "aria_sync_chip": "सिंक स्थिति — विवरण के लिए टैप करें",
     "aria_tap_change_language": "भाषा बदलने के लिए टैप करें",
     "badge_chip_lives_stat": "{n} जीवन बचाए",
+    "consent_card_camera_body": "तस्वीरें प्रतिक्रिया दलों को घटना देखने में मदद करती हैं। अपलोड से पहले आपके फ़ोन पर चेहरे धुंधले होते हैं — सर्वर कच्चे चेहरे कभी नहीं देखता।",
+    "consent_card_camera_title": "कैमरा और फ़ोटो",
+    "consent_card_location_body": "हम आपके स्थान का उपयोग यह दिखाने के लिए करते हैं कि मदद कहाँ चाहिए। केवल प्रतिक्रिया दल ही इसे देखते हैं।",
+    "consent_card_location_title": "स्थान",
+    "consent_card_offline_body": "बिना इंटरनेट के रिपोर्ट भेजें। ऑनलाइन वापस आने पर वे अपने आप सिंक हो जाती हैं।",
+    "consent_card_offline_title": "ऑफ़लाइन काम करता है",
+    "consent_card_privacy_body": "नाम, ईमेल या फ़ोन नंबर एकत्रित नहीं किया जाता। बस एक अनाम डिवाइस कोड जो केवल आप देख सकते हैं।",
+    "consent_card_privacy_title": "आपकी गोपनीयता",
+    "consent_modal_accept_cta": "स्वीकारें और जारी रखें",
+    "consent_modal_fine_print": "\"स्वीकारें और जारी रखें\" टैप करके, आप अपनी रिपोर्ट प्रतिक्रिया दलों के साथ साझा करने के लिए सहमत हैं। आप सेटिंग्स से कभी भी सहमति वापस ले सकते हैं।",
+    "consent_modal_policy_link": "पूर्ण गोपनीयता नीति पढ़ें",
+    "consent_modal_subtitle": "आपकी रिपोर्ट प्रतिक्रिया दलों को जीवन बचाने में मदद करती हैं",
+    "consent_modal_title": "CRISP में आपका स्वागत है",
     "devid_sheet_point_1": "केवल आप यह कोड देख सकते हैं।",
     "devid_sheet_point_2": "यह आपकी रिपोर्ट को आपके फोन से जोड़ता है — ताकि वे कभी न खोएँ।",
     "devid_sheet_point_3": "ऑफ़लाइन काम करता है। ऐप को फिर से इंस्टॉल करने पर भी आपकी रिपोर्ट जुड़ी रहती हैं।",
@@ -1197,7 +1309,6 @@
     "home_account_settings": "सेटिंग्स",
     "home_brand_tagline": "संकट रिपोर्टर",
     "home_channels_title": "रिपोर्ट करने के अन्य तरीके",
-    "home_consent_v2": "मैं अपनी रिपोर्ट साझा करने के लिए सहमत हूँ। चेहरे अपलोड से पहले मेरे फोन पर धुंधले हो जाते हैं, और रिपोर्टें केवल मेरी गुमनाम ID से जुड़ी होती हैं।",
     "home_cta_primary": "घटना की रिपोर्ट करें",
     "home_footer_help": "सहायता",
     "home_footer_privacy": "गोपनीयता",
@@ -1242,8 +1353,8 @@
     "tier_t4_lifekeeper_label": "जीवन रक्षक"
   },
   "pt": {
-    "__version": "959f32ab8eaf",
-    "__checksum": "fe7b6970d263e918",
+    "__version": "dfbbc67b3859",
+    "__checksum": "f0c9819066b488a2",
     "action_tile_download": "Baixar App",
     "action_tile_login": "Entrar",
     "add_to_homescreen": "+ Adicionar à Tela Inicial",
@@ -1270,6 +1381,19 @@
     "aria_sync_chip": "Status de sincronização — toque para detalhes",
     "aria_tap_change_language": "Toque para mudar de idioma",
     "badge_chip_lives_stat": "{n} vidas salvas",
+    "consent_card_camera_body": "As fotos ajudam os socorristas a ver o que aconteceu. Os rostos são desfocados no seu telefone antes do envio — o servidor nunca vê rostos brutos.",
+    "consent_card_camera_title": "Câmara e fotos",
+    "consent_card_location_body": "Usamos a sua localização para mapear onde a ajuda é necessária. Apenas os socorristas a veem.",
+    "consent_card_location_title": "Localização",
+    "consent_card_offline_body": "Envie relatórios sem internet. Sincronizam automaticamente quando voltar a estar online.",
+    "consent_card_offline_title": "Funciona offline",
+    "consent_card_privacy_body": "Não recolhemos nome, email ou número de telefone. Apenas um código de dispositivo anónimo que só você pode ver.",
+    "consent_card_privacy_title": "A sua privacidade",
+    "consent_modal_accept_cta": "Aceitar e continuar",
+    "consent_modal_fine_print": "Ao tocar em \"Aceitar e continuar\", concorda em partilhar os relatórios com os socorristas. Pode retirar o consentimento a qualquer momento nas Definições.",
+    "consent_modal_policy_link": "Ler a Política de Privacidade completa",
+    "consent_modal_subtitle": "Os seus relatórios ajudam os socorristas a salvar vidas",
+    "consent_modal_title": "Bem-vindo ao CRISP",
     "devid_sheet_point_1": "Apenas você pode ver este código.",
     "devid_sheet_point_2": "Vincula seus relatórios ao seu telefone — para que nunca sejam perdidos.",
     "devid_sheet_point_3": "Funciona offline. Mesmo se você reinstalar o app, seus relatórios continuam vinculados.",
@@ -1290,7 +1414,6 @@
     "home_account_settings": "Definições",
     "home_brand_tagline": "Reporter de Crise",
     "home_channels_title": "Outras formas de reportar",
-    "home_consent_v2": "Aceito partilhar o meu relatório. Os rostos são desfocados no meu telemóvel antes do envio, e os relatórios são associados apenas ao meu ID anónimo.",
     "home_cta_primary": "Reportar um Incidente",
     "home_footer_help": "Ajuda",
     "home_footer_privacy": "Privacidade",
@@ -1335,8 +1458,8 @@
     "tier_t4_lifekeeper_label": "Guardião de vidas"
   },
   "bn": {
-    "__version": "05d2590c09d4",
-    "__checksum": "ddf5010dd87e422f",
+    "__version": "ad85119a4254",
+    "__checksum": "d0e21549987b34fb",
     "action_tile_download": "অ্যাপ ডাউনলোড",
     "action_tile_login": "লগইন",
     "add_to_homescreen": "+ হোম স্ক্রিনে যোগ করুন",
@@ -1363,6 +1486,19 @@
     "aria_sync_chip": "সিঙ্ক অবস্থা — বিস্তারিত দেখতে ট্যাপ করুন",
     "aria_tap_change_language": "ভাষা পরিবর্তনে ট্যাপ করুন",
     "badge_chip_lives_stat": "{n} জীবন রক্ষা",
+    "consent_card_camera_body": "ছবি সাড়াদাতাদের কী ঘটেছে তা দেখতে সাহায্য করে। আপলোডের আগে আপনার ফোনে মুখ ঝাপসা করা হয় — সার্ভার কখনো কাঁচা মুখ দেখে না।",
+    "consent_card_camera_title": "ক্যামেরা ও ছবি",
+    "consent_card_location_body": "আমরা আপনার অবস্থান ব্যবহার করি যেখানে সাহায্য প্রয়োজন সেখানে মানচিত্র করতে। শুধু সাড়াদাতারা এটি দেখেন।",
+    "consent_card_location_title": "অবস্থান",
+    "consent_card_offline_body": "ইন্টারনেট ছাড়াই রিপোর্ট পাঠান। আপনি অনলাইনে ফিরে এলে স্বয়ংক্রিয়ভাবে সিঙ্ক হয়।",
+    "consent_card_offline_title": "অফলাইনে কাজ করে",
+    "consent_card_privacy_body": "নাম, ইমেল বা ফোন নম্বর সংগ্রহ করা হয় না। শুধু একটি বেনামী ডিভাইস কোড যা শুধু আপনি দেখতে পারেন।",
+    "consent_card_privacy_title": "আপনার গোপনীয়তা",
+    "consent_modal_accept_cta": "গ্রহণ ও চালিয়ে যান",
+    "consent_modal_fine_print": "\"গ্রহণ ও চালিয়ে যান\" ট্যাপ করে, আপনি সংকট সাড়াদাতাদের সাথে রিপোর্ট ভাগ করতে সম্মত হন। আপনি সেটিংস থেকে যেকোনো সময় প্রত্যাহার করতে পারেন।",
+    "consent_modal_policy_link": "সম্পূর্ণ গোপনীয়তা নীতি পড়ুন",
+    "consent_modal_subtitle": "আপনার রিপোর্ট সাড়াদাতাদের জীবন বাঁচাতে সাহায্য করে",
+    "consent_modal_title": "CRISP-এ স্বাগতম",
     "devid_sheet_point_1": "শুধু আপনি এই কোডটি দেখতে পারেন।",
     "devid_sheet_point_2": "এটি আপনার রিপোর্টগুলিকে আপনার ফোনের সাথে যুক্ত করে — তাই সেগুলি কখনই হারায় না।",
     "devid_sheet_point_3": "অফলাইনে কাজ করে। আপনি অ্যাপটি পুনরায় ইনস্টল করলেও, আপনার রিপোর্টগুলি লিঙ্ক থাকে।",
@@ -1383,7 +1519,6 @@
     "home_account_settings": "সেটিংস",
     "home_brand_tagline": "সংকট রিপোর্টার",
     "home_channels_title": "অন্যান্য রিপোর্টিং উপায়",
-    "home_consent_v2": "আমি আমার প্রতিবেদন ভাগ করতে সম্মত। আপলোডের আগে মুখ ফোনে ঝাপসা হয়, এবং প্রতিবেদন কেবল আমার বেনামি ID-র সাথে যুক্ত।",
     "home_cta_primary": "ঘটনা রিপোর্ট করুন",
     "home_footer_help": "সাহায্য",
     "home_footer_privacy": "গোপনীয়তা",
@@ -1428,8 +1563,8 @@
     "tier_t4_lifekeeper_label": "জীবনরক্ষাকারী"
   },
   "ja": {
-    "__version": "2b96af3a7ee9",
-    "__checksum": "c7730574f5041ea7",
+    "__version": "b4b1cf24d020",
+    "__checksum": "74c21e81951d65a9",
     "action_tile_download": "アプリ取得",
     "action_tile_login": "ログイン",
     "add_to_homescreen": "+ ホーム画面に追加",
@@ -1456,6 +1591,19 @@
     "aria_sync_chip": "同期状態 — タップして詳細を表示",
     "aria_tap_change_language": "タップで言語を変更",
     "badge_chip_lives_stat": "{n} 人の命を救った",
+    "consent_card_camera_body": "写真は救助隊員が状況を把握するのに役立ちます。アップロード前に端末上で顔がぼかされます — サーバーは生の顔を見ることはありません。",
+    "consent_card_camera_title": "カメラと写真",
+    "consent_card_location_body": "助けが必要な場所をマッピングするために位置情報を使用します。救助隊員のみが閲覧します。",
+    "consent_card_location_title": "位置情報",
+    "consent_card_offline_body": "インターネットなしで報告を送信できます。オンラインに戻ったとき自動的に同期されます。",
+    "consent_card_offline_title": "オフラインでも動作",
+    "consent_card_privacy_body": "名前、メール、電話番号は収集しません。あなただけが見られる匿名のデバイスコードのみです。",
+    "consent_card_privacy_title": "あなたのプライバシー",
+    "consent_modal_accept_cta": "同意して続行",
+    "consent_modal_fine_print": "「同意して続行」をタップすると、危機対応者と報告を共有することに同意したことになります。設定からいつでも同意を撤回できます。",
+    "consent_modal_policy_link": "プライバシーポリシー全文を読む",
+    "consent_modal_subtitle": "あなたの報告が救助隊員の命を救う助けになります",
+    "consent_modal_title": "CRISPへようこそ",
     "devid_sheet_point_1": "このコードはあなただけが見ることができます。",
     "devid_sheet_point_2": "レポートを電話にリンクします — 失われることはありません。",
     "devid_sheet_point_3": "オフラインで動作。アプリを再インストールしてもレポートはリンクされたまま。",
@@ -1476,7 +1624,6 @@
     "home_account_settings": "設定",
     "home_brand_tagline": "危機レポーター",
     "home_channels_title": "他の報告方法",
-    "home_consent_v2": "報告の共有に同意します。顔はアップロード前に端末上でぼかされ、報告は匿名IDのみと紐付けられます。",
     "home_cta_primary": "事故を報告",
     "home_footer_help": "ヘルプ",
     "home_footer_privacy": "プライバシー",
@@ -1521,8 +1668,8 @@
     "tier_t4_lifekeeper_label": "ライフキーパー"
   },
   "tr": {
-    "__version": "651f24201c16",
-    "__checksum": "43dd2fed3dadfe90",
+    "__version": "ba6d12435006",
+    "__checksum": "c9484cf4fe0554f6",
     "action_tile_download": "Uygulamayı İndir",
     "action_tile_login": "Giriş",
     "add_to_homescreen": "+ Ana Ekrana Ekle",
@@ -1549,6 +1696,19 @@
     "aria_sync_chip": "Eşitleme durumu — ayrıntılar için dokunun",
     "aria_tap_change_language": "Dili değiştirmek için dokun",
     "badge_chip_lives_stat": "{n} hayat kurtarıldı",
+    "consent_card_camera_body": "Fotoğraflar müdahale ekiplerinin ne olduğunu görmesine yardımcı olur. Yüzler yüklemeden önce telefonunuzda bulanıklaştırılır — sunucu asla ham yüzleri görmez.",
+    "consent_card_camera_title": "Kamera ve fotoğraflar",
+    "consent_card_location_body": "Yardımın gerekli olduğu yerleri haritalandırmak için konumunuzu kullanırız. Yalnızca müdahale ekipleri görür.",
+    "consent_card_location_title": "Konum",
+    "consent_card_offline_body": "İnternet olmadan bildirim gönderin. Çevrimiçi olduğunuzda otomatik olarak senkronize olurlar.",
+    "consent_card_offline_title": "Çevrimdışı çalışır",
+    "consent_card_privacy_body": "Ad, e-posta veya telefon numarası toplanmaz. Yalnızca sizin görebileceğiniz anonim bir cihaz kodu.",
+    "consent_card_privacy_title": "Gizliliğiniz",
+    "consent_modal_accept_cta": "Kabul Et ve Devam Et",
+    "consent_modal_fine_print": "\"Kabul Et ve Devam Et\"e dokunarak bildirimleri kriz müdahale ekipleriyle paylaşmayı kabul edersiniz. Onayınızı istediğiniz zaman Ayarlar'dan geri çekebilirsiniz.",
+    "consent_modal_policy_link": "Tüm Gizlilik Politikasını oku",
+    "consent_modal_subtitle": "Bildirimleriniz müdahale ekiplerinin hayat kurtarmasına yardımcı olur",
+    "consent_modal_title": "CRISP'e hoş geldiniz",
     "devid_sheet_point_1": "Bu kodu yalnızca siz görebilirsiniz.",
     "devid_sheet_point_2": "Raporlarınızı telefonunuza bağlar — böylece asla kaybolmazlar.",
     "devid_sheet_point_3": "Çevrimdışı çalışır. Uygulamayı yeniden yükleseniz bile raporlarınız bağlı kalır.",
@@ -1569,7 +1729,6 @@
     "home_account_settings": "Ayarlar",
     "home_brand_tagline": "Kriz Bildirici",
     "home_channels_title": "Diğer bildirim yolları",
-    "home_consent_v2": "Bildirimi paylaşmayı kabul ediyorum. Yüzler telefonumda yüklemeden önce bulanıklaştırılır ve bildirimler yalnızca anonim kimliğime bağlanır.",
     "home_cta_primary": "Olay Bildir",
     "home_footer_help": "Yardım",
     "home_footer_privacy": "Gizlilik",
@@ -1614,8 +1773,8 @@
     "tier_t4_lifekeeper_label": "Hayat koruyucu"
   },
   "vi": {
-    "__version": "33cf7fa06eb6",
-    "__checksum": "8759616d751c64aa",
+    "__version": "a7c0cf2d91ac",
+    "__checksum": "561d31d594654e80",
     "action_tile_download": "Tải Ứng Dụng",
     "action_tile_login": "Đăng nhập",
     "add_to_homescreen": "+ Thêm vào Màn hình chính",
@@ -1642,6 +1801,19 @@
     "aria_sync_chip": "Trạng thái đồng bộ — chạm để xem chi tiết",
     "aria_tap_change_language": "Chạm để đổi ngôn ngữ",
     "badge_chip_lives_stat": "Cứu sống {n} người",
+    "consent_card_camera_body": "Ảnh giúp đội ứng phó thấy chuyện gì đã xảy ra. Khuôn mặt được làm mờ trên điện thoại của bạn trước khi tải lên — máy chủ không bao giờ thấy khuôn mặt thô.",
+    "consent_card_camera_title": "Máy ảnh & ảnh",
+    "consent_card_location_body": "Chúng tôi sử dụng vị trí của bạn để lập bản đồ nơi cần giúp đỡ. Chỉ đội ứng phó mới xem được.",
+    "consent_card_location_title": "Vị trí",
+    "consent_card_offline_body": "Gửi báo cáo không cần internet. Chúng sẽ đồng bộ tự động khi bạn trực tuyến trở lại.",
+    "consent_card_offline_title": "Hoạt động ngoại tuyến",
+    "consent_card_privacy_body": "Không thu thập tên, email hay số điện thoại. Chỉ một mã thiết bị ẩn danh mà chỉ bạn thấy.",
+    "consent_card_privacy_title": "Quyền riêng tư của bạn",
+    "consent_modal_accept_cta": "Chấp nhận & Tiếp tục",
+    "consent_modal_fine_print": "Bằng cách nhấn \"Chấp nhận & Tiếp tục\", bạn đồng ý chia sẻ báo cáo với đội ứng phó khủng hoảng. Bạn có thể rút lại sự đồng ý bất kỳ lúc nào trong Cài đặt.",
+    "consent_modal_policy_link": "Đọc Chính sách Bảo mật đầy đủ",
+    "consent_modal_subtitle": "Báo cáo của bạn giúp đội ứng phó cứu sinh mạng",
+    "consent_modal_title": "Chào mừng đến với CRISP",
     "devid_sheet_point_1": "Chỉ bạn có thể thấy mã này.",
     "devid_sheet_point_2": "Liên kết báo cáo của bạn với điện thoại — vì vậy chúng không bao giờ bị mất.",
     "devid_sheet_point_3": "Hoạt động ngoại tuyến. Ngay cả khi bạn cài đặt lại ứng dụng, báo cáo vẫn được liên kết.",
@@ -1662,7 +1834,6 @@
     "home_account_settings": "Cài đặt",
     "home_brand_tagline": "Người báo cáo khủng hoảng",
     "home_channels_title": "Cách báo cáo khác",
-    "home_consent_v2": "Tôi đồng ý chia sẻ báo cáo. Khuôn mặt được làm mờ trên điện thoại trước khi tải lên, và báo cáo chỉ được liên kết với ID ẩn danh của tôi.",
     "home_cta_primary": "Báo cáo sự cố",
     "home_footer_help": "Trợ giúp",
     "home_footer_privacy": "Quyền riêng tư",
@@ -1707,8 +1878,8 @@
     "tier_t4_lifekeeper_label": "Người giữ mạng sống"
   },
   "ko": {
-    "__version": "3f2b50a132f6",
-    "__checksum": "1084b8c22628fcbb",
+    "__version": "f763bc28f2d7",
+    "__checksum": "e749fe449cbc28cc",
     "action_tile_download": "앱 다운로드",
     "action_tile_login": "로그인",
     "add_to_homescreen": "+ 홈 화면에 추가",
@@ -1735,6 +1906,19 @@
     "aria_sync_chip": "동기화 상태 — 자세히 보려면 탭하세요",
     "aria_tap_change_language": "언어 변경을 위해 탭",
     "badge_chip_lives_stat": "{n}개의 생명 구함",
+    "consent_card_camera_body": "사진은 대응자가 상황을 파악하는 데 도움이 됩니다. 업로드 전에 휴대전화에서 얼굴이 흐려집니다 — 서버는 가공되지 않은 얼굴을 절대 보지 않습니다.",
+    "consent_card_camera_title": "카메라 및 사진",
+    "consent_card_location_body": "도움이 필요한 곳을 지도화하기 위해 위치 정보를 사용합니다. 대응자만 볼 수 있습니다.",
+    "consent_card_location_title": "위치",
+    "consent_card_offline_body": "인터넷 없이도 신고를 보낼 수 있습니다. 온라인 상태로 돌아오면 자동으로 동기화됩니다.",
+    "consent_card_offline_title": "오프라인 작동",
+    "consent_card_privacy_body": "이름, 이메일, 전화번호를 수집하지 않습니다. 오직 본인만 볼 수 있는 익명 디바이스 코드만 사용합니다.",
+    "consent_card_privacy_title": "당신의 개인정보",
+    "consent_modal_accept_cta": "동의하고 계속",
+    "consent_modal_fine_print": "\"동의하고 계속\"을 누르면 위기 대응자와 신고를 공유하는 데 동의하는 것입니다. 설정에서 언제든지 동의를 철회할 수 있습니다.",
+    "consent_modal_policy_link": "개인정보 보호 정책 전문 읽기",
+    "consent_modal_subtitle": "여러분의 신고가 대응자들이 생명을 구하는 데 도움이 됩니다",
+    "consent_modal_title": "CRISP에 오신 것을 환영합니다",
     "devid_sheet_point_1": "이 코드는 당신만 볼 수 있습니다.",
     "devid_sheet_point_2": "귀하의 보고서를 전화기에 연결합니다 — 절대 잃어버리지 않습니다.",
     "devid_sheet_point_3": "오프라인에서 작동합니다. 앱을 재설치해도 보고서는 연결된 상태로 유지됩니다.",
@@ -1755,7 +1939,6 @@
     "home_account_settings": "설정",
     "home_brand_tagline": "위기 신고자",
     "home_channels_title": "다른 신고 방법",
-    "home_consent_v2": "내 보고서 공유에 동의합니다. 얼굴은 업로드 전 휴대폰에서 흐리게 처리되며, 보고서는 익명 ID에만 연결됩니다.",
     "home_cta_primary": "사고 신고",
     "home_footer_help": "도움말",
     "home_footer_privacy": "개인정보",
@@ -1800,8 +1983,8 @@
     "tier_t4_lifekeeper_label": "라이프키퍼"
   },
   "id": {
-    "__version": "391aa2cae281",
-    "__checksum": "8e322fdb28553945",
+    "__version": "fed75548c2bc",
+    "__checksum": "65cd5e05d8572129",
     "action_tile_download": "Unduh Aplikasi",
     "action_tile_login": "Masuk",
     "add_to_homescreen": "+ Tambahkan ke Layar Utama",
@@ -1828,6 +2011,19 @@
     "aria_sync_chip": "Status sinkronisasi — ketuk untuk detail",
     "aria_tap_change_language": "Sentuh untuk ganti bahasa",
     "badge_chip_lives_stat": "{n} nyawa diselamatkan",
+    "consent_card_camera_body": "Foto membantu responden melihat apa yang terjadi. Wajah diburamkan di ponsel Anda sebelum diunggah — server tidak pernah melihat wajah mentah.",
+    "consent_card_camera_title": "Kamera & foto",
+    "consent_card_location_body": "Kami menggunakan lokasi Anda untuk memetakan tempat yang membutuhkan bantuan. Hanya responden yang melihatnya.",
+    "consent_card_location_title": "Lokasi",
+    "consent_card_offline_body": "Kirim laporan tanpa internet. Akan disinkronkan otomatis saat Anda kembali daring.",
+    "consent_card_offline_title": "Berfungsi luring",
+    "consent_card_privacy_body": "Tidak ada nama, email, atau nomor telepon yang dikumpulkan. Hanya kode perangkat anonim yang hanya Anda yang bisa lihat.",
+    "consent_card_privacy_title": "Privasi Anda",
+    "consent_modal_accept_cta": "Setuju & Lanjutkan",
+    "consent_modal_fine_print": "Dengan mengetuk \"Setuju & Lanjutkan\", Anda setuju membagikan laporan dengan responden krisis. Anda dapat menarik persetujuan kapan saja di Pengaturan.",
+    "consent_modal_policy_link": "Baca Kebijakan Privasi lengkap",
+    "consent_modal_subtitle": "Laporan Anda membantu responden menyelamatkan nyawa",
+    "consent_modal_title": "Selamat datang di CRISP",
     "devid_sheet_point_1": "Hanya Anda yang dapat melihat kode ini.",
     "devid_sheet_point_2": "Ini menghubungkan laporan Anda ke ponsel Anda — sehingga tidak pernah hilang.",
     "devid_sheet_point_3": "Bekerja offline. Bahkan jika Anda menginstal ulang aplikasi, laporan Anda tetap terhubung.",
@@ -1848,7 +2044,6 @@
     "home_account_settings": "Pengaturan",
     "home_brand_tagline": "Pelapor Krisis",
     "home_channels_title": "Cara lain melapor",
-    "home_consent_v2": "Saya setuju membagikan laporan saya. Wajah diburamkan di telepon sebelum diunggah, dan laporan hanya tertaut ke ID anonim saya.",
     "home_cta_primary": "Laporkan Insiden",
     "home_footer_help": "Bantuan",
     "home_footer_privacy": "Privasi",
@@ -1893,8 +2088,8 @@
     "tier_t4_lifekeeper_label": "Penjaga Nyawa"
   },
   "ur": {
-    "__version": "429c87b16819",
-    "__checksum": "ea620480458568fa",
+    "__version": "cca1ac324eea",
+    "__checksum": "64858a3fa71bc4ac",
     "action_tile_download": "ایپ ڈاؤن لوڈ",
     "action_tile_login": "لاگ ان",
     "add_to_homescreen": "+ ہوم اسکرین میں شامل کریں",
@@ -1921,6 +2116,19 @@
     "aria_sync_chip": "سنک حالت — تفصیلات کے لیے ٹیپ کریں",
     "aria_tap_change_language": "زبان تبدیل کرنے کے لیے ٹیپ کریں",
     "badge_chip_lives_stat": "{n} جانیں بچائی گئیں",
+    "consent_card_camera_body": "تصاویر امدادی ٹیموں کو حالات دیکھنے میں مدد دیتی ہیں۔ اپ لوڈ سے پہلے آپ کے فون پر چہرے دھندلے کیے جاتے ہیں — سرور کبھی خام چہرے نہیں دیکھتا۔",
+    "consent_card_camera_title": "کیمرہ اور تصاویر",
+    "consent_card_location_body": "ہم آپ کا مقام اس لیے استعمال کرتے ہیں تاکہ یہ معلوم ہو کہ مدد کہاں چاہیے۔ صرف امدادی ٹیمیں ہی اسے دیکھتی ہیں۔",
+    "consent_card_location_title": "مقام",
+    "consent_card_offline_body": "انٹرنیٹ کے بغیر رپورٹس بھیجیں۔ آپ کے آن لائن واپس آنے پر وہ خود بخود ہم وقت ہو جاتی ہیں۔",
+    "consent_card_offline_title": "آف لائن کام کرتا ہے",
+    "consent_card_privacy_body": "نام، ای میل یا فون نمبر اکٹھا نہیں کیا جاتا۔ صرف ایک گمنام ڈیوائس کوڈ جسے صرف آپ دیکھ سکتے ہیں۔",
+    "consent_card_privacy_title": "آپ کی رازداری",
+    "consent_modal_accept_cta": "قبول کریں اور جاری رکھیں",
+    "consent_modal_fine_print": "\"قبول کریں اور جاری رکھیں\" پر ٹیپ کرنے سے، آپ بحرانی ردِعمل دہندگان کے ساتھ رپورٹس شیئر کرنے سے اتفاق کرتے ہیں۔ آپ ترتیبات سے کسی بھی وقت رضامندی واپس لے سکتے ہیں۔",
+    "consent_modal_policy_link": "مکمل پرائیویسی پالیسی پڑھیں",
+    "consent_modal_subtitle": "آپ کی رپورٹس امدادی ٹیموں کو زندگیاں بچانے میں مدد دیتی ہیں",
+    "consent_modal_title": "CRISP میں خوش آمدید",
     "devid_sheet_point_1": "صرف آپ یہ کوڈ دیکھ سکتے ہیں۔",
     "devid_sheet_point_2": "یہ آپ کی رپورٹس کو آپ کے فون سے جوڑتا ہے — تاکہ وہ کبھی ضائع نہ ہوں۔",
     "devid_sheet_point_3": "آف لائن کام کرتا ہے۔ یہاں تک کہ اگر آپ ایپ کو دوبارہ انسٹال کریں، آپ کی رپورٹس منسلک رہتی ہیں۔",
@@ -1941,7 +2149,6 @@
     "home_account_settings": "سیٹنگز",
     "home_brand_tagline": "بحران رپورٹر",
     "home_channels_title": "رپورٹ کرنے کے دیگر طریقے",
-    "home_consent_v2": "میں اپنی رپورٹ شیئر کرنے سے متفق ہوں۔ چہرے اپ لوڈ سے پہلے میرے فون پر دھندلے ہوتے ہیں، اور رپورٹس صرف میرے گمنام ID سے جڑی ہوتی ہیں۔",
     "home_cta_primary": "واقعہ رپورٹ کریں",
     "home_footer_help": "مدد",
     "home_footer_privacy": "پرائیویسی",
@@ -1986,8 +2193,8 @@
     "tier_t4_lifekeeper_label": "حیاتکیپر"
   },
   "kn": {
-    "__version": "2813664fad6c",
-    "__checksum": "d07c02fe07ec4058",
+    "__version": "a0a7acbb60fc",
+    "__checksum": "8921eefa7d59cedc",
     "action_tile_download": "ಆ್ಯಪ್ ಡೌನ್ಲೋಡ್",
     "action_tile_login": "ಲಾಗಿನ್",
     "add_to_homescreen": "+ ಹೋಮ್ ಸ್ಕ್ರೀನ್‌ಗೆ ಸೇರಿಸಿ",
@@ -2014,6 +2221,19 @@
     "aria_sync_chip": "ಸಿಂಕ್ ಸ್ಥಿತಿ — ವಿವರಗಳಿಗಾಗಿ ಟ್ಯಾಪ್ ಮಾಡಿ",
     "aria_tap_change_language": "ಭಾಷೆ ಬದಲಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
     "badge_chip_lives_stat": "{n} ಜೀವಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ",
+    "consent_card_camera_body": "ಫೋಟೋಗಳು ಏನು ಸಂಭವಿಸಿತು ಎಂಬುದನ್ನು ಪ್ರತಿಕ್ರಿಯಿಸುವವರಿಗೆ ತೋರಿಸುತ್ತವೆ. ಅಪ್‌ಲೋಡ್ ಮಾಡುವ ಮೊದಲು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಮುಖಗಳು ಮಸುಕಾಗಿರುತ್ತವೆ — ಸರ್ವರ್ ಕಚ್ಚಾ ಮುಖಗಳನ್ನು ಎಂದಿಗೂ ನೋಡುವುದಿಲ್ಲ.",
+    "consent_card_camera_title": "ಕ್ಯಾಮೆರಾ ಮತ್ತು ಫೋಟೋಗಳು",
+    "consent_card_location_body": "ಸಹಾಯ ಎಲ್ಲಿ ಬೇಕು ಎಂಬುದನ್ನು ನಕ್ಷೆ ಮಾಡಲು ನಾವು ನಿಮ್ಮ ಸ್ಥಳವನ್ನು ಬಳಸುತ್ತೇವೆ. ಕೇವಲ ಪ್ರತಿಕ್ರಿಯಿಸುವವರು ಮಾತ್ರ ನೋಡುತ್ತಾರೆ.",
+    "consent_card_location_title": "ಸ್ಥಳ",
+    "consent_card_offline_body": "ಇಂಟರ್ನೆಟ್ ಇಲ್ಲದೆ ವರದಿಗಳನ್ನು ಕಳುಹಿಸಿ. ನೀವು ಆನ್‌ಲೈನ್‌ಗೆ ಮರಳಿದಾಗ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸಿಂಕ್ ಆಗುತ್ತವೆ.",
+    "consent_card_offline_title": "ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ",
+    "consent_card_privacy_body": "ಯಾವುದೇ ಹೆಸರು, ಇಮೇಲ್ ಅಥವಾ ಫೋನ್ ನಂಬರ್ ಸಂಗ್ರಹಿಸುವುದಿಲ್ಲ. ಕೇವಲ ಒಂದು ಅನಾಮಧೇಯ ಡಿವೈಸ್ ಕೋಡ್ ಅದನ್ನು ನೀವು ಮಾತ್ರ ನೋಡಬಹುದು.",
+    "consent_card_privacy_title": "ನಿಮ್ಮ ಗೌಪ್ಯತೆ",
+    "consent_modal_accept_cta": "ಒಪ್ಪಿ ಮತ್ತು ಮುಂದುವರಿಯಿರಿ",
+    "consent_modal_fine_print": "\"ಒಪ್ಪಿ ಮತ್ತು ಮುಂದುವರಿಯಿರಿ\" ಟ್ಯಾಪ್ ಮಾಡುವ ಮೂಲಕ, ನೀವು ಕ್ರೈಸಿಸ್ ರೆಸ್ಪಾಂಡರ್‌ಗಳೊಂದಿಗೆ ವರದಿಗಳನ್ನು ಹಂಚಿಕೊಳ್ಳಲು ಒಪ್ಪುತ್ತೀರಿ. ನೀವು ಯಾವಾಗ ಬೇಕಾದರೂ ಸೆಟ್ಟಿಂಗ್‌ಗಳಿಂದ ಸಮ್ಮತಿಯನ್ನು ಹಿಂಪಡೆಯಬಹುದು.",
+    "consent_modal_policy_link": "ಪೂರ್ಣ ಗೌಪ್ಯತಾ ನೀತಿಯನ್ನು ಓದಿ",
+    "consent_modal_subtitle": "ನಿಮ್ಮ ವರದಿಗಳು ಪ್ರತಿಕ್ರಿಯಿಸುವವರಿಗೆ ಜೀವ ಉಳಿಸಲು ಸಹಾಯ ಮಾಡುತ್ತವೆ",
+    "consent_modal_title": "CRISP ಗೆ ಸ್ವಾಗತ",
     "devid_sheet_point_1": "ಈ ಕೋಡ್ ಅನ್ನು ನೀವು ಮಾತ್ರ ನೋಡಬಹುದು.",
     "devid_sheet_point_2": "ಇದು ನಿಮ್ಮ ವರದಿಗಳನ್ನು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಲಿಂಕ್ ಮಾಡುತ್ತದೆ — ಆದ್ದರಿಂದ ಅವು ಎಂದಿಗೂ ಕಳೆದುಹೋಗುವುದಿಲ್ಲ.",
     "devid_sheet_point_3": "ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ಮರುಸ್ಥಾಪಿಸಿದರೂ ಸಹ, ನಿಮ್ಮ ವರದಿಗಳು ಲಿಂಕ್ ಆಗಿರುತ್ತವೆ.",
@@ -2034,7 +2254,6 @@
     "home_account_settings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
     "home_brand_tagline": "ಬಿಕ್ಕಟ್ಟು ರಿಪೋರ್ಟರ್",
     "home_channels_title": "ವರದಿ ಮಾಡುವ ಇತರ ಮಾರ್ಗಗಳು",
-    "home_consent_v2": "ನನ್ನ ವರದಿಯನ್ನು ಹಂಚಿಕೊಳ್ಳಲು ಒಪ್ಪುತ್ತೇನೆ. ಅಪ್‌ಲೋಡ್ ಮೊದಲು ಫೋನ್‌ನಲ್ಲಿ ಮುಖಗಳು ಮಸುಕಾಗುತ್ತವೆ, ಮತ್ತು ವರದಿಗಳು ನನ್ನ ಅನಾಮಧೇಯ ID ಗೆ ಮಾತ್ರ ಲಿಂಕ್ ಆಗಿರುತ್ತವೆ.",
     "home_cta_primary": "ಘಟನೆ ವರದಿ ಮಾಡಿ",
     "home_footer_help": "ಸಹಾಯ",
     "home_footer_privacy": "ಗೌಪ್ಯತೆ",
@@ -2079,8 +2298,8 @@
     "tier_t4_lifekeeper_label": "ಜೀವರಕ್ಷಕ"
   },
   "ta": {
-    "__version": "fe553dfa831a",
-    "__checksum": "2da7408ebf8a5bc0",
+    "__version": "f2a60a8eb24f",
+    "__checksum": "be8b3513864faba7",
     "action_tile_download": "ஆப்ஸ் பதிவிறக்கு",
     "action_tile_login": "உள்நுழைய",
     "add_to_homescreen": "+ முகப்புத் திரையில் சேர்க்கவும்",
@@ -2107,6 +2326,19 @@
     "aria_sync_chip": "சிங்க் நிலை — விவரங்களுக்குத் தட்டவும்",
     "aria_tap_change_language": "மொழியை மாற்ற தட்டவும்",
     "badge_chip_lives_stat": "{n} உயிர்கள் காப்பாற்றப்பட்டன",
+    "consent_card_camera_body": "புகைப்படங்கள் என்ன நடந்தது என்பதைப் பதிலளிப்பாளர்களுக்குக் காட்ட உதவுகின்றன. பதிவேற்றத்திற்கு முன் உங்கள் தொலைபேசியில் முகங்கள் மங்கச் செய்யப்படுகின்றன — சர்வர் மூல முகங்களை ஒருபோதும் பார்ப்பதில்லை.",
+    "consent_card_camera_title": "கேமரா மற்றும் புகைப்படங்கள்",
+    "consent_card_location_body": "உதவி எங்கு தேவைப்படுகிறது என்பதை வரைபடமாக்க உங்கள் இடத்தைப் பயன்படுத்துகிறோம். பதிலளிப்பாளர்கள் மட்டுமே பார்ப்பார்கள்.",
+    "consent_card_location_title": "இடம்",
+    "consent_card_offline_body": "இணையம் இல்லாமல் அறிக்கைகளை அனுப்புங்கள். நீங்கள் மீண்டும் ஆன்லைனில் வரும்போது தானாகவே ஒத்திசைகிறது.",
+    "consent_card_offline_title": "ஆஃப்லைனிலும் வேலை செய்கிறது",
+    "consent_card_privacy_body": "பெயர், மின்னஞ்சல் அல்லது தொலைபேசி எண் சேகரிக்கப்படவில்லை. உங்களால் மட்டுமே பார்க்கக்கூடிய ஒரு அநாமதேய சாதன குறியீடு மட்டுமே.",
+    "consent_card_privacy_title": "உங்கள் தனியுரிமை",
+    "consent_modal_accept_cta": "ஏற்று தொடரவும்",
+    "consent_modal_fine_print": "\"ஏற்று தொடரவும்\" தட்டுவதன் மூலம், நெருக்கடி பதிலளிப்பாளர்களுடன் அறிக்கைகளைப் பகிர்வதற்கு நீங்கள் ஒப்புக்கொள்கிறீர்கள். அமைப்புகளில் இருந்து எந்த நேரத்திலும் ஒப்புதலை திரும்பப் பெறலாம்.",
+    "consent_modal_policy_link": "முழு தனியுரிமைக் கொள்கையைப் படிக்கவும்",
+    "consent_modal_subtitle": "உங்கள் அறிக்கைகள் பதிலளிப்பாளர்களுக்கு உயிர்களைக் காப்பாற்ற உதவுகின்றன",
+    "consent_modal_title": "CRISP-க்கு வரவேற்கிறோம்",
     "devid_sheet_point_1": "இந்த குறியீட்டை நீங்கள் மட்டுமே பார்க்க முடியும்.",
     "devid_sheet_point_2": "இது உங்கள் அறிக்கைகளை உங்கள் தொலைபேசியுடன் இணைக்கிறது — அதனால் அவை ஒருபோதும் இழக்கப்படாது.",
     "devid_sheet_point_3": "ஆஃப்லைனில் வேலை செய்கிறது. செயலியை மீண்டும் நிறுவினாலும், உங்கள் அறிக்கைகள் இணைக்கப்பட்டே இருக்கும்.",
@@ -2127,7 +2359,6 @@
     "home_account_settings": "அமைப்புகள்",
     "home_brand_tagline": "நெருக்கடி ரிப்போர்ட்டர்",
     "home_channels_title": "மற்ற அறிக்கையிடும் வழிகள்",
-    "home_consent_v2": "எனது அறிக்கையை பகிர ஒப்புக்கொள்கிறேன். பதிவேற்றத்திற்கு முன் முகங்கள் தொலைபேசியில் மங்கச் செய்யப்படும், மற்றும் அறிக்கைகள் எனது அநாமதேய ID க்கு மட்டுமே இணைக்கப்படும்.",
     "home_cta_primary": "சம்பவத்தை அறிக்கையிடு",
     "home_footer_help": "உதவி",
     "home_footer_privacy": "தனியுரிமை",
@@ -2172,8 +2403,8 @@
     "tier_t4_lifekeeper_label": "உயிர் காப்பாளர்"
   },
   "te": {
-    "__version": "eca116f3bf45",
-    "__checksum": "830c9ebaf6a657a9",
+    "__version": "f8c83bea73c8",
+    "__checksum": "73c481a6071eb37b",
     "action_tile_download": "యాప్ డౌన్‌లోడ్",
     "action_tile_login": "లాగిన్",
     "add_to_homescreen": "+ హోమ్ స్క్రీన్‌కి జోడించండి",
@@ -2200,6 +2431,19 @@
     "aria_sync_chip": "సింక్ స్థితి — వివరాల కోసం నొక్కండి",
     "aria_tap_change_language": "భాష మార్చడానికి నొక్కు",
     "badge_chip_lives_stat": "{n} ప్రాణాలు రక్షించారు",
+    "consent_card_camera_body": "ఫోటోలు జరిగిన దాన్ని ప్రతిస్పందనదారులకు చూపించడంలో సహాయపడతాయి. అప్‌లోడ్‌కు ముందు మీ ఫోన్‌లో ముఖాలు మసకబారతాయి — సర్వర్ ముడి ముఖాలను ఎప్పుడూ చూడదు.",
+    "consent_card_camera_title": "కెమెరా & ఫోటోలు",
+    "consent_card_location_body": "సహాయం ఎక్కడ అవసరమో మ్యాప్ చేయడానికి మేము మీ స్థానాన్ని ఉపయోగిస్తాము. ప్రతిస్పందనదారులు మాత్రమే చూస్తారు.",
+    "consent_card_location_title": "స్థానం",
+    "consent_card_offline_body": "ఇంటర్నెట్ లేకుండా నివేదికలను పంపండి. మీరు ఆన్‌లైన్‌కు తిరిగి వచ్చినప్పుడు అవి స్వయంచాలకంగా సింక్ అవుతాయి.",
+    "consent_card_offline_title": "ఆఫ్‌లైన్‌లో పనిచేస్తుంది",
+    "consent_card_privacy_body": "పేరు, ఇమెయిల్ లేదా ఫోన్ నంబర్ సేకరించబడవు. మీరు మాత్రమే చూడగలిగే అనామక పరికర కోడ్ మాత్రమే.",
+    "consent_card_privacy_title": "మీ గోప్యత",
+    "consent_modal_accept_cta": "అంగీకరించి కొనసాగండి",
+    "consent_modal_fine_print": "\"అంగీకరించి కొనసాగండి\" నొక్కడం ద్వారా, మీరు సంక్షోభ ప్రతిస్పందనదారులతో నివేదికలను పంచుకోవడానికి అంగీకరిస్తున్నారు. మీరు ఎప్పుడైనా సెట్టింగ్‌ల నుండి అంగీకారాన్ని ఉపసంహరించుకోవచ్చు.",
+    "consent_modal_policy_link": "పూర్తి గోప్యతా విధానాన్ని చదవండి",
+    "consent_modal_subtitle": "మీ నివేదికలు ప్రతిస్పందనదారులకు ప్రాణాలను కాపాడడంలో సహాయపడతాయి",
+    "consent_modal_title": "CRISP కి స్వాగతం",
     "devid_sheet_point_1": "ఈ కోడ్‌ను మీరు మాత్రమే చూడగలరు.",
     "devid_sheet_point_2": "ఇది మీ నివేదికలను మీ ఫోన్‌కు లింక్ చేస్తుంది — కాబట్టి అవి ఎప్పటికీ కోల్పోవు.",
     "devid_sheet_point_3": "ఆఫ్‌లైన్‌లో పని చేస్తుంది. మీరు యాప్‌ను రీఇన్‌స్టాల్ చేసినా, మీ నివేదికలు లింక్‌గా ఉంటాయి.",
@@ -2220,7 +2464,6 @@
     "home_account_settings": "సెట్టింగులు",
     "home_brand_tagline": "బిక్కట్టు రిపోర్టర్",
     "home_channels_title": "ఇతర నివేదిక మార్గాలు",
-    "home_consent_v2": "నా నివేదికను పంచుకోవడానికి అంగీకరిస్తున్నాను. అప్‌లోడ్ ముందు ముఖాలు నా ఫోన్‌లో అస్పష్టం అవుతాయి, మరియు నివేదికలు నా అనామక IDకి మాత్రమే లింక్ అవుతాయి.",
     "home_cta_primary": "సంఘటనను నివేదించండి",
     "home_footer_help": "సహాయం",
     "home_footer_privacy": "గోప్యత",
@@ -2265,8 +2508,8 @@
     "tier_t4_lifekeeper_label": "జీవరక్షకుడు"
   },
   "ml": {
-    "__version": "6be68a52c508",
-    "__checksum": "a20094bfd682cfae",
+    "__version": "04c4d3cea29d",
+    "__checksum": "feeeefe62c3ed056",
     "action_tile_download": "ആപ്പ് ഡൗൺലോഡ്",
     "action_tile_login": "ലോഗിൻ",
     "add_to_homescreen": "+ ഹോം സ്‌ക്രീനിലേക്ക് ചേർക്കുക",
@@ -2293,6 +2536,19 @@
     "aria_sync_chip": "സിങ്ക് നില — വിശദാംശങ്ങൾക്ക് ടാപ്പ് ചെയ്യുക",
     "aria_tap_change_language": "ഭാഷ മാറ്റാൻ ടാപ് ചെയ്യുക",
     "badge_chip_lives_stat": "{n} ജീവൻ രക്ഷിച്ചു",
+    "consent_card_camera_body": "ഫോട്ടോകൾ പ്രതികരണ ടീമുകൾക്ക് സംഭവിച്ചത് കാണാൻ സഹായിക്കുന്നു. അപ്‌ലോഡിന് മുമ്പ് നിങ്ങളുടെ ഫോണിൽ മുഖങ്ങൾ ബ്ലർ ചെയ്യപ്പെടും — സെർവർ അസംസ്കൃത മുഖങ്ങൾ ഒരിക്കലും കാണില്ല.",
+    "consent_card_camera_title": "ക്യാമറയും ഫോട്ടോകളും",
+    "consent_card_location_body": "സഹായം ആവശ്യമുള്ളിടത്ത് മാപ്പ് ചെയ്യാൻ ഞങ്ങൾ നിങ്ങളുടെ സ്ഥാനം ഉപയോഗിക്കുന്നു. പ്രതികരണ ടീമുകൾ മാത്രമേ കാണൂ.",
+    "consent_card_location_title": "സ്ഥാനം",
+    "consent_card_offline_body": "ഇന്റർനെറ്റ് ഇല്ലാതെ റിപ്പോർട്ടുകൾ അയക്കുക. നിങ്ങൾ ഓൺലൈൻ ആകുമ്പോൾ സ്വയം സിങ്ക് ചെയ്യും.",
+    "consent_card_offline_title": "ഓഫ്‌ലൈനിൽ പ്രവർത്തിക്കും",
+    "consent_card_privacy_body": "പേര്, ഇമെയിൽ, ഫോൺ നമ്പർ എന്നിവ ശേഖരിക്കില്ല. നിങ്ങൾക്ക് മാത്രം കാണാവുന്ന ഒരു അജ്ഞാത ഉപകരണ കോഡ് മാത്രം.",
+    "consent_card_privacy_title": "നിങ്ങളുടെ സ്വകാര്യത",
+    "consent_modal_accept_cta": "സ്വീകരിച്ച് തുടരുക",
+    "consent_modal_fine_print": "\"സ്വീകരിച്ച് തുടരുക\" ടാപ്പ് ചെയ്യുന്നതിലൂടെ, പ്രതിസന്ധി പ്രതികരണ ടീമുകളുമായി റിപ്പോർട്ടുകൾ പങ്കിടാൻ നിങ്ങൾ സമ്മതിക്കുന്നു. ക്രമീകരണങ്ങളിൽ നിന്ന് എപ്പോൾ വേണമെങ്കിലും പിൻവലിക്കാം.",
+    "consent_modal_policy_link": "സമ്പൂർണ്ണ സ്വകാര്യതാ നയം വായിക്കുക",
+    "consent_modal_subtitle": "നിങ്ങളുടെ റിപ്പോർട്ടുകൾ ജീവൻ രക്ഷിക്കാൻ പ്രതികരണ ടീമുകളെ സഹായിക്കുന്നു",
+    "consent_modal_title": "CRISP-ലേക്ക് സ്വാഗതം",
     "devid_sheet_point_1": "ഈ കോഡ് നിങ്ങൾക്ക് മാത്രമേ കാണാൻ കഴിയൂ.",
     "devid_sheet_point_2": "ഇത് നിങ്ങളുടെ റിപ്പോർട്ടുകൾ ഫോണിലേക്ക് ലിങ്ക് ചെയ്യുന്നു — അതിനാൽ അവ ഒരിക്കലും നഷ്ടപ്പെടില്ല.",
     "devid_sheet_point_3": "ഓഫ്‌ലൈൻ പ്രവർത്തിക്കുന്നു. നിങ്ങൾ ആപ്പ് വീണ്ടും ഇൻസ്റ്റാൾ ചെയ്താലും, റിപ്പോർട്ടുകൾ ലിങ്ക് ചെയ്തിരിക്കും.",
@@ -2313,7 +2569,6 @@
     "home_account_settings": "ക്രമീകരണങ്ങൾ",
     "home_brand_tagline": "ക്രൈസിസ് റിപ്പോർട്ടർ",
     "home_channels_title": "റിപ്പോർട്ട് ചെയ്യാനുള്ള മറ്റ് വഴികൾ",
-    "home_consent_v2": "എന്റെ റിപ്പോർട്ട് റെസ്ക്യൂ ടീമുകളുമായി പങ്കിടാൻ ഞാൻ സമ്മതിക്കുന്നു.",
     "home_cta_primary": "സംഭവം റിപ്പോർട്ട് ചെയ്യുക",
     "home_footer_help": "സഹായം",
     "home_footer_privacy": "സ്വകാര്യത",
@@ -2358,8 +2613,8 @@
     "tier_t4_lifekeeper_label": "ജീവൻ കാത്തവൻ"
   },
   "gu": {
-    "__version": "75c9fe287201",
-    "__checksum": "6a2ffd0529336344",
+    "__version": "ae50992476cb",
+    "__checksum": "bf0cd8f03c94a0fb",
     "action_tile_download": "ઍપ ડાઉનલોડ",
     "action_tile_login": "લૉગિન",
     "add_to_homescreen": "+ હોમ સ્ક્રીન પર ઉમેરો",
@@ -2386,6 +2641,19 @@
     "aria_sync_chip": "સિંક સ્થિતિ — વિગતો માટે ટૅપ કરો",
     "aria_tap_change_language": "ભાષા બદલવા ટેપ",
     "badge_chip_lives_stat": "{n} જીવન બચાવ્યા",
+    "consent_card_camera_body": "ફોટા રિસ્પૉન્ડર્સને જે થયું તે જોવામાં મદદ કરે છે. અપલોડ પહેલાં તમારા ફોન પર ચહેરા બ્લર કરવામાં આવે છે — સર્વર ક્યારેય કાચા ચહેરા જોતું નથી.",
+    "consent_card_camera_title": "કૅમેરા અને ફોટા",
+    "consent_card_location_body": "જ્યાં મદદની જરૂર છે તે મેપ કરવા માટે અમે તમારું સ્થાન વાપરીએ છીએ. ફક્ત રિસ્પૉન્ડર્સ જ તે જુએ છે.",
+    "consent_card_location_title": "સ્થાન",
+    "consent_card_offline_body": "ઇન્ટરનેટ વગર રિપોર્ટ મોકલો. તમે ઑનલાઇન પાછા આવો ત્યારે તે આપમેળે સિંક થાય છે.",
+    "consent_card_offline_title": "ઑફલાઇન કામ કરે છે",
+    "consent_card_privacy_body": "નામ, ઈમેઇલ કે ફોન નંબર એકત્રિત નહીં. ફક્ત એક અનામી ડિવાઇસ કોડ જે ફક્ત તમે જ જોઈ શકો.",
+    "consent_card_privacy_title": "તમારી ગોપનીયતા",
+    "consent_modal_accept_cta": "સ્વીકારો અને ચાલુ રાખો",
+    "consent_modal_fine_print": "\"સ્વીકારો અને ચાલુ રાખો\" ટૅપ કરીને, તમે કટોકટી રિસ્પૉન્ડર્સ સાથે રિપોર્ટ શૅર કરવા સહમત છો. તમે કોઈપણ સમયે સેટિંગ્સમાંથી પાછી ખેંચી શકો છો.",
+    "consent_modal_policy_link": "સંપૂર્ણ ગોપનીયતા નીતિ વાંચો",
+    "consent_modal_subtitle": "તમારા રિપોર્ટ રિસ્પૉન્ડર્સને જીવ બચાવવામાં મદદ કરે છે",
+    "consent_modal_title": "CRISP માં આપનું સ્વાગત છે",
     "devid_sheet_point_1": "આ કોડ ફક્ત તમે જ જોઈ શકો છો.",
     "devid_sheet_point_2": "તે તમારા રિપોર્ટ્સને તમારા ફોન સાથે જોડે છે — જેથી તેઓ ક્યારેય ખોવાય નહીં.",
     "devid_sheet_point_3": "ઑફલાઇન કામ કરે છે. તમે એપ્લિકેશન ફરી ઇન્સ્ટોલ કરો તો પણ, તમારા રિપોર્ટ્સ લિંક રહે છે.",
@@ -2406,7 +2674,6 @@
     "home_account_settings": "સેટિંગ્સ",
     "home_brand_tagline": "આપદા રિપોર્ટર",
     "home_channels_title": "રિપોર્ટ કરવાની અન્ય રીતો",
-    "home_consent_v2": "મારી રિપોર્ટ વહેંચવા સહમત છું. અપલોડ પહેલા ચહેરા ફોન પર ધૂંધળા થાય છે, અને રિપોર્ટ્સ ફક્ત મારી અનામી ID સાથે જોડાય છે.",
     "home_cta_primary": "ઘટના રિપોર્ટ કરો",
     "home_footer_help": "મદદ",
     "home_footer_privacy": "ગોપનીયતા",
@@ -2451,8 +2718,8 @@
     "tier_t4_lifekeeper_label": "જીવનરક્ષક"
   },
   "mr": {
-    "__version": "2fb904fb5d54",
-    "__checksum": "c9f49142610bc0fa",
+    "__version": "892c528e18bc",
+    "__checksum": "8a4d9a14aa1455ae",
     "action_tile_download": "ॲप डाउनलोड",
     "action_tile_login": "लॉगिन",
     "add_to_homescreen": "+ होम स्क्रीनवर जोडा",
@@ -2479,6 +2746,19 @@
     "aria_sync_chip": "सिंक स्थिती — तपशीलांसाठी टॅप करा",
     "aria_tap_change_language": "भाषा बदलण्यासाठी टॅप",
     "badge_chip_lives_stat": "{n} जीव वाचवले",
+    "consent_card_camera_body": "फोटो प्रतिसादकर्त्यांना घडलेले पाहण्यास मदत करतात. अपलोडपूर्वी तुमच्या फोनवर चेहरे अस्पष्ट केले जातात — सर्व्हर कच्चे चेहरे कधीही पाहत नाही.",
+    "consent_card_camera_title": "कॅमेरा आणि फोटो",
+    "consent_card_location_body": "मदत कुठे आवश्यक आहे हे नकाशावर दाखवण्यासाठी आम्ही तुमचे स्थान वापरतो. फक्त प्रतिसादकर्ते ते पाहतात.",
+    "consent_card_location_title": "स्थान",
+    "consent_card_offline_body": "इंटरनेटशिवाय अहवाल पाठवा. तुम्ही ऑनलाइन परत येताच ते आपोआप सिंक होतात.",
+    "consent_card_offline_title": "ऑफलाइन काम करते",
+    "consent_card_privacy_body": "नाव, ईमेल किंवा फोन नंबर गोळा केला जात नाही. फक्त एक अनामिक डिव्हाइस कोड जो फक्त तुम्ही पाहू शकता.",
+    "consent_card_privacy_title": "तुमची गोपनीयता",
+    "consent_modal_accept_cta": "स्वीकारा आणि सुरू ठेवा",
+    "consent_modal_fine_print": "\"स्वीकारा आणि सुरू ठेवा\" टॅप करून, तुम्ही संकट प्रतिसादकर्त्यांसह अहवाल सामायिक करण्यास सहमत आहात. सेटिंग्जमधून तुम्ही कधीही संमती मागे घेऊ शकता.",
+    "consent_modal_policy_link": "पूर्ण गोपनीयता धोरण वाचा",
+    "consent_modal_subtitle": "तुमचे अहवाल प्रतिसादकर्त्यांना जीव वाचवण्यास मदत करतात",
+    "consent_modal_title": "CRISP मध्ये आपले स्वागत आहे",
     "devid_sheet_point_1": "हा कोड फक्त तुम्हीच पाहू शकता.",
     "devid_sheet_point_2": "हे तुमच्या अहवालांना तुमच्या फोनशी जोडते — जेणेकरून ते कधीच हरवू नयेत.",
     "devid_sheet_point_3": "ऑफलाइन काम करते. तुम्ही ॲप पुन्हा इंस्टॉल केले तरीही तुमचे अहवाल जोडलेले राहतात.",
@@ -2499,7 +2779,6 @@
     "home_account_settings": "सेटिंग्ज",
     "home_brand_tagline": "संकट रिपोर्टर",
     "home_channels_title": "तक्रार करण्याचे इतर मार्ग",
-    "home_consent_v2": "माझा अहवाल सामायिक करण्यास सहमत. अपलोडपूर्वी चेहरे फोनवर अस्पष्ट होतात, आणि अहवाल फक्त माझ्या निनावी ID शी जोडले जातात.",
     "home_cta_primary": "घटनेची तक्रार करा",
     "home_footer_help": "मदत",
     "home_footer_privacy": "गोपनीयता",
@@ -2544,8 +2823,8 @@
     "tier_t4_lifekeeper_label": "जीवन रक्षक"
   },
   "pa": {
-    "__version": "1ca63fb8f5dc",
-    "__checksum": "2fa9a089db41bd22",
+    "__version": "358e282674da",
+    "__checksum": "2c80f060fe0d2f8f",
     "action_tile_download": "ਐਪ ਡਾਊਨਲੋਡ",
     "action_tile_login": "ਲੌਗਇਨ",
     "add_to_homescreen": "+ ਹੋਮ ਸਕਰੀਨ 'ਤੇ ਜੋੜੋ",
@@ -2572,6 +2851,19 @@
     "aria_sync_chip": "ਸਿੰਕ ਸਥਿਤੀ — ਵੇਰਵਿਆਂ ਲਈ ਟੈਪ ਕਰੋ",
     "aria_tap_change_language": "ਭਾਸ਼ਾ ਬਦਲਣ ਲਈ ਟੈਪ",
     "badge_chip_lives_stat": "{n} ਜਾਨਾਂ ਬਚਾਈਆਂ",
+    "consent_card_camera_body": "ਫੋਟੋਆਂ ਪ੍ਰਤੀਕਰਮਕਾਰਾਂ ਨੂੰ ਕੀ ਹੋਇਆ ਦੇਖਣ ਵਿੱਚ ਮਦਦ ਕਰਦੀਆਂ ਹਨ। ਅਪਲੋਡ ਤੋਂ ਪਹਿਲਾਂ ਤੁਹਾਡੇ ਫੋਨ 'ਤੇ ਚਿਹਰੇ ਧੁੰਦਲੇ ਕੀਤੇ ਜਾਂਦੇ ਹਨ — ਸਰਵਰ ਕਦੇ ਵੀ ਕੱਚੇ ਚਿਹਰੇ ਨਹੀਂ ਦੇਖਦਾ।",
+    "consent_card_camera_title": "ਕੈਮਰਾ ਅਤੇ ਫੋਟੋਆਂ",
+    "consent_card_location_body": "ਅਸੀਂ ਤੁਹਾਡੇ ਟਿਕਾਣੇ ਦੀ ਵਰਤੋਂ ਉਨ੍ਹਾਂ ਥਾਵਾਂ ਨੂੰ ਮੈਪ ਕਰਨ ਲਈ ਕਰਦੇ ਹਾਂ ਜਿੱਥੇ ਮਦਦ ਚਾਹੀਦੀ ਹੈ। ਸਿਰਫ਼ ਪ੍ਰਤੀਕਰਮਕਾਰ ਇਸਨੂੰ ਦੇਖਦੇ ਹਨ।",
+    "consent_card_location_title": "ਸਥਾਨ",
+    "consent_card_offline_body": "ਇੰਟਰਨੈੱਟ ਤੋਂ ਬਿਨਾਂ ਰਿਪੋਰਟਾਂ ਭੇਜੋ। ਜਦੋਂ ਤੁਸੀਂ ਔਨਲਾਈਨ ਵਾਪਸ ਆਉਂਦੇ ਹੋ ਤਾਂ ਉਹ ਆਪਣੇ ਆਪ ਸਿੰਕ ਹੋ ਜਾਂਦੀਆਂ ਹਨ।",
+    "consent_card_offline_title": "ਆਫਲਾਈਨ ਕੰਮ ਕਰਦਾ ਹੈ",
+    "consent_card_privacy_body": "ਕੋਈ ਨਾਮ, ਈਮੇਲ ਜਾਂ ਫੋਨ ਨੰਬਰ ਇਕੱਠਾ ਨਹੀਂ ਕੀਤਾ ਜਾਂਦਾ। ਬਸ ਇੱਕ ਅਣਜਾਣ ਡਿਵਾਈਸ ਕੋਡ ਜੋ ਸਿਰਫ਼ ਤੁਸੀਂ ਦੇਖ ਸਕਦੇ ਹੋ।",
+    "consent_card_privacy_title": "ਤੁਹਾਡੀ ਨਿੱਜਤਾ",
+    "consent_modal_accept_cta": "ਸਵੀਕਾਰ ਕਰੋ ਅਤੇ ਜਾਰੀ ਰੱਖੋ",
+    "consent_modal_fine_print": "\"ਸਵੀਕਾਰ ਕਰੋ ਅਤੇ ਜਾਰੀ ਰੱਖੋ\" ਟੈਪ ਕਰਕੇ, ਤੁਸੀਂ ਸੰਕਟ ਪ੍ਰਤੀਕਰਮਕਾਰਾਂ ਨਾਲ ਰਿਪੋਰਟਾਂ ਸਾਂਝੀਆਂ ਕਰਨ ਲਈ ਸਹਿਮਤ ਹੋ। ਤੁਸੀਂ ਕਿਸੇ ਵੀ ਸਮੇਂ ਸੈਟਿੰਗਜ਼ ਤੋਂ ਸਹਿਮਤੀ ਵਾਪਸ ਲੈ ਸਕਦੇ ਹੋ।",
+    "consent_modal_policy_link": "ਪੂਰੀ ਨਿੱਜਤਾ ਨੀਤੀ ਪੜ੍ਹੋ",
+    "consent_modal_subtitle": "ਤੁਹਾਡੀਆਂ ਰਿਪੋਰਟਾਂ ਪ੍ਰਤੀਕਰਮਕਾਰਾਂ ਨੂੰ ਜਾਨਾਂ ਬਚਾਉਣ ਵਿੱਚ ਮਦਦ ਕਰਦੀਆਂ ਹਨ",
+    "consent_modal_title": "CRISP ਵਿੱਚ ਜੀ ਆਇਆਂ ਨੂੰ",
     "devid_sheet_point_1": "ਇਹ ਕੋਡ ਸਿਰਫ਼ ਤੁਸੀਂ ਦੇਖ ਸਕਦੇ ਹੋ।",
     "devid_sheet_point_2": "ਇਹ ਤੁਹਾਡੀਆਂ ਰਿਪੋਰਟਾਂ ਨੂੰ ਤੁਹਾਡੇ ਫ਼ੋਨ ਨਾਲ ਜੋੜਦਾ ਹੈ — ਤਾਂ ਜੋ ਉਹ ਕਦੇ ਗੁੰਮ ਨਾ ਹੋਣ।",
     "devid_sheet_point_3": "ਔਫਲਾਈਨ ਕੰਮ ਕਰਦਾ ਹੈ। ਜੇ ਤੁਸੀਂ ਐਪ ਨੂੰ ਮੁੜ-ਸਥਾਪਿਤ ਕਰੋ, ਤਾਂ ਵੀ ਤੁਹਾਡੀਆਂ ਰਿਪੋਰਟਾਂ ਜੁੜੀਆਂ ਰਹਿੰਦੀਆਂ ਹਨ।",
@@ -2592,7 +2884,6 @@
     "home_account_settings": "ਸੈਟਿੰਗਾਂ",
     "home_brand_tagline": "ਸੰਕਟ ਰਿਪੋਰਟਰ",
     "home_channels_title": "ਰਿਪੋਰਟ ਕਰਨ ਦੇ ਹੋਰ ਤਰੀਕੇ",
-    "home_consent_v2": "ਮੈਂ ਆਪਣੀ ਰਿਪੋਰਟ ਸਾਂਝੀ ਕਰਨ ਲਈ ਸਹਿਮਤ ਹਾਂ। ਅੱਪਲੋਡ ਤੋਂ ਪਹਿਲਾਂ ਚਿਹਰੇ ਫੋਨ 'ਤੇ ਧੁੰਦਲੇ ਹੁੰਦੇ ਹਨ, ਅਤੇ ਰਿਪੋਰਟਾਂ ਸਿਰਫ਼ ਮੇਰੀ ਅਗਿਆਤ ID ਨਾਲ ਜੁੜਦੀਆਂ ਹਨ।",
     "home_cta_primary": "ਘਟਨਾ ਦੀ ਰਿਪੋਰਟ ਕਰੋ",
     "home_footer_help": "ਮਦਦ",
     "home_footer_privacy": "ਨਿੱਜਤਾ",
@@ -3174,20 +3465,17 @@
                     </button>
                 </div>
 
-                <!-- One-time consent gate. home-screen.js wires a
-                     click capture-phase preempt on btn-start until
-                     consent ticks; once accepted, the row is hidden +
-                     persisted in localStorage['crisp_privacy_consent'].
-                     Phase 15 — copy expanded to cover anonymous-
-                     identity + face-blur. -->
-                <div class="home-consent" id="home-consent">
-                    <label class="home-consent-row">
-                        <input type="checkbox" id="home-consent-check">
-                        <span data-i18n="home_consent_v2">
-                            I consent to share my report. Faces are blurred on my phone before upload, and reports are linked only to my anonymous ID.
-                        </span>
-                    </label>
-                </div>
+                <!-- HC57 (May 2026) — the small consent checkbox + row
+                     was replaced with a full first-visit onboarding
+                     modal (#consent-onboarding, defined below the home
+                     stage). The legacy checkbox is intentionally gone;
+                     btn-start is no longer gated at the home-stage
+                     level — the modal blocks the entire surface until
+                     the user taps Accept & Continue. Same
+                     `localStorage['crisp_privacy_consent']` key for
+                     backward compatibility with already-installed
+                     PWAs. -->
+                <!-- (the legacy #home-consent block was removed) -->
 
                 <!-- Primary CTA — visual anchor of the page. Scaled
                      up via clamp(), mint→teal gradient + 18px glow,
@@ -3647,6 +3935,155 @@
                 <li data-i18n="help_sheet_point_3">Prefer a different channel? Use WhatsApp, Telegram, SMS, or Voice — same report shape.</li>
                 <li data-i18n="help_sheet_point_4">CRISP is open source. Code at <a href="https://github.com/Pratik-Shukla-PY/crisp-platform" target="_blank" rel="noopener" class="home-info-sheet-link">github.com/Pratik-Shukla-PY/crisp-platform</a></li>
             </ul>
+        </div>
+    </div>
+
+    <!-- HC57 (May 2026) — Privacy & Consent onboarding modal.
+         Replaces the small inline checkbox at the bottom of #stage-home
+         with a first-visit modal that covers ~80% of the viewport and
+         explains:
+            · why Location is requested (responder mapping)
+            · why Camera & Photos are requested (face blur happens
+              on-device before upload)
+            · offline-first behaviour (queue + auto-sync on reconnect)
+            · privacy approach (anonymous device code, no PII)
+         Non-dismissible: the user MUST tap Accept & Continue to proceed.
+         No Esc, no tap-outside, no close-X. Persists to the SAME
+         `localStorage['crisp_privacy_consent']` key the legacy checkbox
+         used, so existing installed PWAs do NOT re-prompt across the
+         upgrade. The head IIFE at the top of <head> adds the
+         `crisp-consented` class to <html> for returning users, so this
+         modal is `display:none` at frame 0 with zero flicker. -->
+    <div class="consent-onboarding-overlay" id="consent-onboarding"
+         role="dialog" aria-modal="true"
+         aria-labelledby="consent-onboarding-title">
+        <div class="consent-onboarding-card" role="document">
+            <!-- Sticky header — title + subtitle. No close X (modal is
+                 non-dismissible). flex: 0 0 auto so it doesn't shrink. -->
+            <header class="consent-onboarding-header">
+                <div class="consent-onboarding-brand" aria-hidden="true">
+                    <!-- Shield + check inline SVG. Reuses the brand palette
+                         (mint/teal) used throughout the home stage. -->
+                    <svg viewBox="0 0 48 48" width="48" height="48"
+                         fill="none" stroke="currentColor"
+                         stroke-width="2.5" stroke-linecap="round"
+                         stroke-linejoin="round">
+                        <path d="M24 4 L40 10 V22 C40 33 32 41 24 44 C16 41 8 33 8 22 V10 Z"
+                              fill="rgba(9,209,199,0.12)"/>
+                        <path d="M16 24 L22 30 L34 18"/>
+                    </svg>
+                </div>
+                <h2 class="consent-onboarding-title"
+                    id="consent-onboarding-title"
+                    data-i18n="consent_modal_title">Welcome to CRISP</h2>
+                <p class="consent-onboarding-subtitle"
+                   data-i18n="consent_modal_subtitle">
+                    Your reports help responders save lives
+                </p>
+            </header>
+
+            <!-- Scrollable body — 4 step cards + fine print. flex: 1 1 auto
+                 + overflow-y: auto so this is the sole scrolling region. -->
+            <div class="consent-onboarding-body">
+                <article class="consent-card">
+                    <span class="consent-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="22" height="22"
+                             fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22 C12 22 4 15 4 10 a8 8 0 0 1 16 0 c0 5 -8 12 -8 12 z"/>
+                            <circle cx="12" cy="10" r="3"/>
+                        </svg>
+                    </span>
+                    <div class="consent-card-body">
+                        <h3 class="consent-card-title"
+                            data-i18n="consent_card_location_title">Location</h3>
+                        <p class="consent-card-text"
+                           data-i18n="consent_card_location_body">
+                            We use your location to map where help is needed. Only the responders see it.
+                        </p>
+                    </div>
+                </article>
+
+                <article class="consent-card">
+                    <span class="consent-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="22" height="22"
+                             fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 8 a2 2 0 0 1 2 -2 h3 l2 -2 h4 l2 2 h3 a2 2 0 0 1 2 2 v10 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 z"/>
+                            <circle cx="12" cy="13" r="4"/>
+                        </svg>
+                    </span>
+                    <div class="consent-card-body">
+                        <h3 class="consent-card-title"
+                            data-i18n="consent_card_camera_title">Camera &amp; Photos</h3>
+                        <p class="consent-card-text"
+                           data-i18n="consent_card_camera_body">
+                            Photos help responders see what happened. Faces are blurred on your phone before upload — the server never sees raw faces.
+                        </p>
+                    </div>
+                </article>
+
+                <article class="consent-card">
+                    <span class="consent-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="22" height="22"
+                             fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M2 12 a14 14 0 0 1 20 0"/>
+                            <path d="M5 15 a10 10 0 0 1 14 0"/>
+                            <path d="M8 18 a6 6 0 0 1 8 0"/>
+                            <circle cx="12" cy="21" r="0.9" fill="currentColor"/>
+                        </svg>
+                    </span>
+                    <div class="consent-card-body">
+                        <h3 class="consent-card-title"
+                            data-i18n="consent_card_offline_title">Works Offline</h3>
+                        <p class="consent-card-text"
+                           data-i18n="consent_card_offline_body">
+                            Send reports without internet. They sync automatically when you're back online.
+                        </p>
+                    </div>
+                </article>
+
+                <article class="consent-card">
+                    <span class="consent-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="22" height="22"
+                             fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="5" y="11" width="14" height="9" rx="2"/>
+                            <path d="M8 11 V8 a4 4 0 0 1 8 0 v3"/>
+                        </svg>
+                    </span>
+                    <div class="consent-card-body">
+                        <h3 class="consent-card-title"
+                            data-i18n="consent_card_privacy_title">Your Privacy</h3>
+                        <p class="consent-card-text"
+                           data-i18n="consent_card_privacy_body">
+                            No name, email, or phone number collected. Just an anonymous device code that only you can see.
+                        </p>
+                    </div>
+                </article>
+
+                <p class="consent-onboarding-fine-print"
+                   data-i18n="consent_modal_fine_print">
+                    By tapping Accept &amp; Continue, you agree to share reports with crisis responders. You can withdraw anytime in Settings.
+                </p>
+            </div>
+
+            <!-- Sticky footer — Accept CTA + policy link. flex: 0 0 auto. -->
+            <footer class="consent-onboarding-footer">
+                <button type="button"
+                        class="consent-onboarding-accept-btn"
+                        id="consent-onboarding-accept-btn"
+                        data-i18n="consent_modal_accept_cta">
+                    Accept &amp; Continue
+                </button>
+                <button type="button"
+                        class="consent-onboarding-policy-link"
+                        id="consent-onboarding-policy-link"
+                        data-i18n="consent_modal_policy_link">
+                    Read full Privacy Policy
+                </button>
+            </footer>
         </div>
     </div>
 

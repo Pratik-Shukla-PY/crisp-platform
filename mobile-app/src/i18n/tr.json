@@ -948,5 +948,18 @@
   "aria_mr_filter": "Raporları filtrele",
   "aria_mr_view_toggle": "Düzen",
   "aria_mr_view_list": "Liste görünümü",
-  "aria_mr_view_map": "Harita görünümü"
+  "aria_mr_view_map": "Harita görünümü",
+  "consent_modal_title": "CRISP'e hoş geldiniz",
+  "consent_modal_subtitle": "Bildirimleriniz müdahale ekiplerinin hayat kurtarmasına yardımcı olur",
+  "consent_card_location_title": "Konum",
+  "consent_card_location_body": "Yardımın gerekli olduğu yerleri haritalandırmak için konumunuzu kullanırız. Yalnızca müdahale ekipleri görür.",
+  "consent_card_camera_title": "Kamera ve fotoğraflar",
+  "consent_card_camera_body": "Fotoğraflar müdahale ekiplerinin ne olduğunu görmesine yardımcı olur. Yüzler yüklemeden önce telefonunuzda bulanıklaştırılır — sunucu asla ham yüzleri görmez.",
+  "consent_card_offline_title": "Çevrimdışı çalışır",
+  "consent_card_offline_body": "İnternet olmadan bildirim gönderin. Çevrimiçi olduğunuzda otomatik olarak senkronize olurlar.",
+  "consent_card_privacy_title": "Gizliliğiniz",
+  "consent_card_privacy_body": "Ad, e-posta veya telefon numarası toplanmaz. Yalnızca sizin görebileceğiniz anonim bir cihaz kodu.",
+  "consent_modal_fine_print": "\"Kabul Et ve Devam Et\"e dokunarak bildirimleri kriz müdahale ekipleriyle paylaşmayı kabul edersiniz. Onayınızı istediğiniz zaman Ayarlar'dan geri çekebilirsiniz.",
+  "consent_modal_accept_cta": "Kabul Et ve Devam Et",
+  "consent_modal_policy_link": "Tüm Gizlilik Politikasını oku"
 }

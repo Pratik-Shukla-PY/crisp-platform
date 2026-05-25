@@ -947,5 +947,18 @@
   "aria_mr_filter": "レポートをフィルター",
   "aria_mr_view_toggle": "レイアウト",
   "aria_mr_view_list": "リスト表示",
-  "aria_mr_view_map": "マップ表示"
+  "aria_mr_view_map": "マップ表示",
+  "consent_modal_title": "CRISPへようこそ",
+  "consent_modal_subtitle": "あなたの報告が救助隊員の命を救う助けになります",
+  "consent_card_location_title": "位置情報",
+  "consent_card_location_body": "助けが必要な場所をマッピングするために位置情報を使用します。救助隊員のみが閲覧します。",
+  "consent_card_camera_title": "カメラと写真",
+  "consent_card_camera_body": "写真は救助隊員が状況を把握するのに役立ちます。アップロード前に端末上で顔がぼかされます — サーバーは生の顔を見ることはありません。",
+  "consent_card_offline_title": "オフラインでも動作",
+  "consent_card_offline_body": "インターネットなしで報告を送信できます。オンラインに戻ったとき自動的に同期されます。",
+  "consent_card_privacy_title": "あなたのプライバシー",
+  "consent_card_privacy_body": "名前、メール、電話番号は収集しません。あなただけが見られる匿名のデバイスコードのみです。",
+  "consent_modal_fine_print": "「同意して続行」をタップすると、危機対応者と報告を共有することに同意したことになります。設定からいつでも同意を撤回できます。",
+  "consent_modal_accept_cta": "同意して続行",
+  "consent_modal_policy_link": "プライバシーポリシー全文を読む"
 }

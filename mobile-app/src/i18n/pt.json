@@ -953,5 +953,18 @@
   "aria_mr_filter": "Filtrar relatórios",
   "aria_mr_view_toggle": "Layout",
   "aria_mr_view_list": "Vista de lista",
-  "aria_mr_view_map": "Vista de mapa"
+  "aria_mr_view_map": "Vista de mapa",
+  "consent_modal_title": "Bem-vindo ao CRISP",
+  "consent_modal_subtitle": "Os seus relatórios ajudam os socorristas a salvar vidas",
+  "consent_card_location_title": "Localização",
+  "consent_card_location_body": "Usamos a sua localização para mapear onde a ajuda é necessária. Apenas os socorristas a veem.",
+  "consent_card_camera_title": "Câmara e fotos",
+  "consent_card_camera_body": "As fotos ajudam os socorristas a ver o que aconteceu. Os rostos são desfocados no seu telefone antes do envio — o servidor nunca vê rostos brutos.",
+  "consent_card_offline_title": "Funciona offline",
+  "consent_card_offline_body": "Envie relatórios sem internet. Sincronizam automaticamente quando voltar a estar online.",
+  "consent_card_privacy_title": "A sua privacidade",
+  "consent_card_privacy_body": "Não recolhemos nome, email ou número de telefone. Apenas um código de dispositivo anónimo que só você pode ver.",
+  "consent_modal_fine_print": "Ao tocar em \"Aceitar e continuar\", concorda em partilhar os relatórios com os socorristas. Pode retirar o consentimento a qualquer momento nas Definições.",
+  "consent_modal_accept_cta": "Aceitar e continuar",
+  "consent_modal_policy_link": "Ler a Política de Privacidade completa"
 }

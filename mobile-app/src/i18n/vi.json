@@ -948,5 +948,18 @@
   "aria_mr_filter": "Lọc báo cáo",
   "aria_mr_view_toggle": "Bố cục",
   "aria_mr_view_list": "Dạng danh sách",
-  "aria_mr_view_map": "Dạng bản đồ"
+  "aria_mr_view_map": "Dạng bản đồ",
+  "consent_modal_title": "Chào mừng đến với CRISP",
+  "consent_modal_subtitle": "Báo cáo của bạn giúp đội ứng phó cứu sinh mạng",
+  "consent_card_location_title": "Vị trí",
+  "consent_card_location_body": "Chúng tôi sử dụng vị trí của bạn để lập bản đồ nơi cần giúp đỡ. Chỉ đội ứng phó mới xem được.",
+  "consent_card_camera_title": "Máy ảnh & ảnh",
+  "consent_card_camera_body": "Ảnh giúp đội ứng phó thấy chuyện gì đã xảy ra. Khuôn mặt được làm mờ trên điện thoại của bạn trước khi tải lên — máy chủ không bao giờ thấy khuôn mặt thô.",
+  "consent_card_offline_title": "Hoạt động ngoại tuyến",
+  "consent_card_offline_body": "Gửi báo cáo không cần internet. Chúng sẽ đồng bộ tự động khi bạn trực tuyến trở lại.",
+  "consent_card_privacy_title": "Quyền riêng tư của bạn",
+  "consent_card_privacy_body": "Không thu thập tên, email hay số điện thoại. Chỉ một mã thiết bị ẩn danh mà chỉ bạn thấy.",
+  "consent_modal_fine_print": "Bằng cách nhấn \"Chấp nhận & Tiếp tục\", bạn đồng ý chia sẻ báo cáo với đội ứng phó khủng hoảng. Bạn có thể rút lại sự đồng ý bất kỳ lúc nào trong Cài đặt.",
+  "consent_modal_accept_cta": "Chấp nhận & Tiếp tục",
+  "consent_modal_policy_link": "Đọc Chính sách Bảo mật đầy đủ"
 }
