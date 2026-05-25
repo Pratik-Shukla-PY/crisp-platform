@@ -14889,7 +14889,13 @@ button.v4-review-row { appearance: none; }
     position: absolute;
     top: 8px;
     inset-inline-end: 8px;
-    z-index: 5;
+    /* HC73 — bumped from 5 → 1500 as defensive backup to the
+       `isolation: isolate` on `#building-map` above. Even if a
+       future Leaflet update or browser quirk lets internal panes
+       escape the map's stacking context, 1500 still beats
+       Leaflet's documented max (`.leaflet-bottom`, `.leaflet-top`
+       at z-index 1000). */
+    z-index: 1500;
     /* HC72 (May 2026) — was 32 × 32 with 0.7 alpha + backdrop-blur.
        Operator: "always show with dark black bold colour." Solid
        black 100 % alpha + bold glyph + subtle outline + drop shadow
@@ -14952,6 +14958,19 @@ button.v4-review-row { appearance: none; }
     /* HC67 — positioning context for the fullscreen-expand overlay
        button. */
     position: relative;
+    /* HC73 (May 2026) — `isolation: isolate` forces this element to
+       form a new stacking context. Without it, Leaflet's internal
+       panes (tile-pane z-index 200, marker-pane 600, top-controls
+       1000) escape the map's box and compete with our sibling
+       fs-cta button in the parent (`#building-select-box`'s)
+       stacking context — Leaflet's z-index 200+ wins, painting the
+       tile layer ON TOP of our z-index 5 button, making it
+       completely invisible. Operator screenshot 2026-05-26 showed
+       exactly this: map rendered, button gone.
+       `isolation: isolate` contains all of Leaflet's z-indices
+       inside the map's own stacking context — anything sibling-to-
+       map paints above it regardless of internal Leaflet stacking. */
+    isolation: isolate;
 }
 /* HC67 — wrap the inline building section so the fullscreen-expand
    button can absolute-position itself over the map's top-right
