@@ -252,11 +252,13 @@ test.describe('PWA — HC65 V4 Step 3 review zero-scroll', () => {
             'inline building map must be visible on review (HC66)',
         ).not.toBe('none');
         const h = await map.evaluate((el) => (el as HTMLElement).offsetHeight);
-        // HC67 — responsive height via `clamp(110, 16vh, 165)`. On
-        // iPhone SE (667 vh) → 110 px floor; on Pixel 7 (~900 vh) →
-        // ~145 px; on tablet → ~165 px ceiling.
+        // HC69 — map flex-grows to fill remaining body height
+        // instead of being clamped to a fixed range. Just pin the
+        // min-height floor (100 px keeps the map informative on
+        // iPhone SE even if other sections expanded into the body).
+        // No upper bound — operator wants the map to use ALL
+        // available space.
         expect(h, `map height must be ≥ 100 px (got ${h})`).toBeGreaterThanOrEqual(100);
-        expect(h, `map height must be ≤ 170 px (got ${h})`).toBeLessThanOrEqual(170);
     });
 
     test('@smoke HC66 placeholder carries crisp-skeleton class during loading', async ({ page }) => {

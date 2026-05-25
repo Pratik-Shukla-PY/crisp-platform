@@ -14625,16 +14625,16 @@ button.v4-review-card { appearance: none; }
     letter-spacing: -0.01em;
     color: #f1f5f9;
 }
-/* HC66 — review-stage-only `.v4-body` gap override. Default
-   capture/classify stages keep `gap: 10` (their content is sparse
-   enough). HC67 — tightened further from 4 → 2 px to absorb the
-   map height bump (96 → ~145 px clamped) without overflowing the
-   iPhone SE body in Arabic / Hindi (the longest-translation
-   locales). 6 sections × 2 px gaps = 10 px total, vs HC66's
-   20 px. Sections still read as distinct because each carries its
-   own visual treatment (photo tiles, classify hairlines, map
-   surface, UNDP row border). */
-#stage-v4-review .v4-body { gap: 2px; }
+/* HC69 — review-stage-only `.v4-body` gap. Operator brief
+   2026-05-26: "Keep some padding and space between sections along
+   height (images / Location / type of damage / Map / Additional
+   Info)." HC67 had tightened to 2 px to fit the fixed-height map;
+   HC69 makes the map flex-grow instead, so the gap can return to
+   a more breathable 6 px. Five inter-section gaps × 6 = 30 px;
+   the map's flex-grow absorbs that overhead. Sections now feel
+   distinct without being cramped — primary requirement for the
+   low-literacy / emergency UX. */
+#stage-v4-review .v4-body { gap: 6px; }
 
 .v4-review-row {
     display: grid;
@@ -14797,17 +14797,31 @@ button.v4-review-row { appearance: none; }
    entry point and surfaces the same input nodes inside its
    overlay. UNDP must-have #6 (free-text offline fallback) stays
    reachable via the fullscreen picker. */
+.v4-stage #v4-building-mount {
+    /* HC69 (May 2026) — the mount + the building-select-box inside it
+       both flex-grow inside the review body. The inline map then
+       becomes the elastic target: on bigger devices it absorbs the
+       surplus space that previously rendered as an empty dashed box
+       below the placeholder. */
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
 .v4-stage #v4-building-mount #building-select-box {
     background: transparent;
     border: 0;
     padding: 0;
     margin: 0;
-    /* HC66 — flex column for the layout: map (140 px), then selected
-       pill below (when present). The label, hint, free-text, and
-       fullscreen-CTA are all hidden via the next rule. */
+    /* HC66 — flex column for the layout: map (responsive), then
+       selected pill below (when present). The label, hint, free-text,
+       and fullscreen-CTA are all hidden via the next rule. */
     display: flex;
     flex-direction: column;
     gap: 6px;
+    /* HC69 — section grows with its mount so the map can flex-fill. */
+    flex: 1 1 auto;
+    min-height: 0;
 }
 /* HC67 — hide the section label, the tap-hint, and the free-text
    block on the review surface. The free-text block reparents into
@@ -14855,18 +14869,18 @@ button.v4-review-row { appearance: none; }
    (icon-only). The same button reuses its full label inside the
    fullscreen picker via different scoping. */
 .v4-stage #v4-building-mount .building-fs-cta > span { display: none; }
-/* HC67 — inline building map: responsive size via `clamp()`.
-   Operator brief 2026-05-26: "Use the full space currently occupied
-   by the 'Waiting for GPS to load' section." On iPhone SE (667 vh)
-   the budget caps at ~110 px; on Pixel 7 (~900 vh) ~150 px; on
-   tablets ~165 px. `16vh` basis keeps the map proportional to the
-   user's actual screen — bigger devices get bigger maps. Floor
-   110 px keeps the map informative even on the smallest viewport;
-   ceiling 165 px stops it dominating on tall tablets. */
+/* HC69 — inline building map: flex-grows to fill remaining body
+   height. Pre-HC69 the map was sized via `clamp(100px, 16vh, 165px)`
+   which left the surplus body height (on Pixel 7 / tablets) as an
+   empty dashed box below the placeholder. New: the map's flex-grow
+   chain consumes that surplus naturally; the `min-height: 100`
+   floor keeps the map informative on iPhone SE; no upper bound so
+   tablets get a generous map. */
 .v4-stage #v4-building-mount #building-map {
     display: block !important;
-    height: clamp(100px, 16vh, 165px);
-    min-height: clamp(100px, 16vh, 165px);
+    flex: 1 1 auto;
+    min-height: 100px;
+    height: auto;
     border-radius: 12px;
     overflow: hidden;
     /* HC67 — positioning context for the fullscreen-expand overlay
@@ -14888,11 +14902,18 @@ button.v4-review-row { appearance: none; }
    base styling here keeps the dashed border for accessibility
    contrast even when the shimmer animation is off. */
 .v4-stage #v4-building-mount #building-map-placeholder {
-    display: flex !important;
-    /* HC67 — matches the map's responsive height so loader→map
-       transition doesn't shift layout. */
-    height: clamp(100px, 16vh, 165px);
-    min-height: clamp(100px, 16vh, 165px);
+    /* HC69 — was `display: flex !important`. The `!important` was
+       overriding building-select.js's inline `style.display = 'none'`
+       after Leaflet finished init — so the dashed skeleton kept
+       painting BELOW the rendered map (operator screenshot 2026-05-26
+       showed a big empty dashed box below the small map). Dropping
+       `!important` lets the inline JS toggle work as designed. The
+       placeholder shimmers in the same flex slot the map will fill,
+       so the loader→loaded transition doesn't shift layout. */
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 100px;
+    height: auto;
     margin: 0;
     padding: 0;
     border-radius: 12px;
