@@ -8857,51 +8857,87 @@ body.tier-t4 .home-impact {
     from { opacity: 0; transform: translateY(-4px); }
     to   { opacity: 1; transform: translateY(0); }
 }
-/* Sub-view 3: What caused it — 3 large progressive cards + drill-down */
-/* ── Crisis sub-step — flat tile grid (May 2026 rewrite) ──
-   Operator-reported: the old drill-down (3 group cards → tap one →
-   subtypes list) cost an extra click + had its own state-leak history.
-   Replaced with: 3 visual section headers + a 2-column tile grid per
-   section, all 9 tiles visible at once. Same responsive icon
-   cascade as `.v4-hit-tile-icon` (commit 05e36a0) for consistency
-   between the "What was hit?" and "What caused it?" screens. */
+/* Sub-view 3: What caused it — compact 3-section 2-col tile grid.
+
+   HC63 (May 2026) — operator screenshot 2026-05-25 showed the crisis
+   view overflowing iPhone SE by ~189 px (5 + 2 + 2 = 9 tiles at 96 px
+   each + 3 section headers + 16 px inter-group gaps = 778 px stage
+   total). The orphan Wildfire tile (5th in Natural with 2-col grid)
+   also looked unbalanced against an empty right cell.
+
+   Pre-HC63: column-flex tile stacking icon above label, min-height 96.
+   HC63: side-icon grid layout matching HC61's `.v4-hit-tile` — icon
+   LEFT (32 × 32), label RIGHT (1-2 line clamp). Tile min-height 48
+   (WCAG floor). Section headers compressed to 10 px micro-caps with
+   subtle margin. Inter-group gap 16 → 6. Orphan tile in Natural
+   spans full width via `:nth-child(odd):last-child` selector. */
 .v4-cause-grid {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    /* HC63 — was `gap: 16`. Tighter inter-group spacing (the section
+       header's own padding-top now carries the visual separation). */
+    gap: 6px;
 }
 .v4-cause-group {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    /* HC63 — was `gap: 8`. Header sits closer to its tiles. */
+    gap: 4px;
 }
 .v4-cause-group-header {
-    font-size: 11px;
+    /* HC63 — was 11 / 0.6px / `--text-dim`. Compressed to 10 /
+       letter-spaced 0.08em / `rgba(255,255,255,0.5)` muted. Reads as
+       a micro-cap divider rather than a bold section label, which
+       lets the eye flow into the tiles below faster. */
+    font-size: 10px;
     font-weight: 700;
-    color: var(--text-dim, var(--muted));
+    color: rgba(255, 255, 255, 0.5);
     text-transform: uppercase;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.08em;
     padding: 0 2px;
+    margin: 0;
 }
 .v4-cause-group-tiles {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* HC63 — was `gap: 10`. */
+    gap: 6px;
+}
+/* HC63 — orphan-tile fix. When a section has an odd number of tiles
+   in a 2-column grid (Natural has 5: Earthquake, Flood, Tsunami,
+   Hurricane/Cyclone, Wildfire), the last tile previously sat alone
+   in the left column with an empty right cell. Spanning the orphan
+   to full width fills the row and rebalances the visual rhythm.
+   Selector: ":last-child:nth-child(odd)" matches a tile that is both
+   the LAST tile AND at an ODD index (1, 3, 5, …). For 2-tile
+   sections (Tech, Human) the 2nd tile is even — no span; for 5-tile
+   Natural the 5th tile is odd AND last — spans. */
+.v4-cause-group-tiles .v4-cause-tile:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
 }
 .v4-cause-tile {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 14px;
+    display: grid;
+    /* HC63 — side-icon layout matching `.v4-hit-tile`. Icon column
+       auto-sized to its content; label column fills the rest. The
+       label spans both rows so a 2-line wrap (Hurricane / Cyclone)
+       expands cleanly without breaking the icon's centred position. */
+    grid-template-columns: auto 1fr;
+    column-gap: 12px;
+    align-items: center;
+    /* HC63 — was `padding: 14`, min-height 96, column-flex with
+       icon stacked above label. New: 6 / 12 padding, min-height 48
+       (WCAG floor). The full-width orphan tile keeps the same
+       height because grid rows auto-size to the tallest cell. */
+    padding: 6px 12px;
+    min-height: 48px;
     background: var(--surface, #1a3552);
     border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
-    border-radius: 14px;
+    border-radius: 12px;
     color: var(--text);
     cursor: pointer;
     text-align: start;
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
-    min-height: 96px;
+    min-width: 0;
     overflow: hidden;
 }
 .v4-cause-tile:hover { background: var(--surface2, #234060); border-color: rgba(9, 209, 199, 0.4); }
@@ -8912,14 +8948,17 @@ body.tier-t4 .home-impact {
     box-shadow: 0 0 22px rgba(9, 209, 199, 0.24);
 }
 .v4-cause-tile-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
+    /* HC63 — was 48 × 48 with `font-size: 28; svg 28 × 28`. Tighter
+       32 × 32 with 18 px glyph for the iPhone SE baseline. Scales up
+       via the responsive cascade below. */
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
     background: rgba(9, 209, 199, 0.12);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 28px;
+    font-size: 18px;
     line-height: 1;
     flex-shrink: 0;
     color: #80EE98;
@@ -8928,8 +8967,8 @@ body.tier-t4 .home-impact {
     background: rgba(9, 209, 199, 0.22);
 }
 .v4-cause-tile-svg {
-    width: 28px;
-    height: 28px;
+    width: 18px;
+    height: 18px;
 }
 .v4-cause-tile-label {
     font-family: var(--heading, 'Outfit', sans-serif);
@@ -8937,9 +8976,17 @@ body.tier-t4 .home-impact {
     font-size: 13px;
     color: var(--text);
     line-height: 1.2;
+    letter-spacing: -0.01em;
     overflow-wrap: break-word;
     word-break: normal;
     hyphens: auto;
+    /* HC63 — 2-line clamp for "Hurricane / Cyclone" + "Civil unrest"
+       so they wrap gracefully without breaking the icon centring. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 /* Group-tinted icon backgrounds — visual cue per UN-style category,
    matches the colour grammar from the previous drill-down. */
@@ -8947,33 +8994,30 @@ body.tier-t4 .home-impact {
 .v4-cause-group-tech    .v4-cause-tile-icon { background: rgba(234, 179, 8, 0.14); color: #fde68a; }
 .v4-cause-group-human   .v4-cause-tile-icon { background: rgba(244, 114, 182, 0.14); color: #f9a8d4; }
 
-/* Responsive icon + tile growth — mirrors `.v4-hit-tile` cascade so
-   "What was hit?" and "What caused it?" feel consistent across
-   screens. The tile's icon scales the SVG via the `font-size` —
-   inline SVG inherits via `currentColor` only; explicit width/height
-   on the .v4-cause-tile-svg keeps the SVG shape proportional. */
+/* HC63 (May 2026) — responsive cascade. Mirrors HC62's `.v4-hit-tile`
+   approach: NO `min-height` ladder (would force overflow on short
+   viewports), only icon + typography scaling. */
 @media (min-width: 380px) {
-    .v4-cause-tile { min-height: 108px; padding: 16px; }
-    .v4-cause-tile-icon { width: 56px; height: 56px; font-size: 32px; border-radius: 14px; }
-    .v4-cause-tile-svg  { width: 32px; height: 32px; }
+    .v4-cause-tile { padding: 8px 14px; }
+    .v4-cause-tile-icon { width: 36px; height: 36px; font-size: 20px; border-radius: 11px; }
+    .v4-cause-tile-svg  { width: 20px; height: 20px; }
     .v4-cause-tile-label { font-size: 14px; }
 }
 @media (min-height: 700px) {
-    .v4-cause-tile { min-height: 116px; }
-    .v4-cause-tile-icon { width: 60px; height: 60px; font-size: 34px; }
-    .v4-cause-tile-svg  { width: 34px; height: 34px; }
-}
-@media (min-height: 800px) {
-    .v4-cause-tile { min-height: 124px; padding: 18px; }
-    .v4-cause-tile-icon { width: 64px; height: 64px; font-size: 36px; border-radius: 15px; }
-    .v4-cause-tile-svg  { width: 36px; height: 36px; }
+    .v4-cause-tile-icon { width: 40px; height: 40px; font-size: 22px; }
+    .v4-cause-tile-svg  { width: 22px; height: 22px; }
     .v4-cause-tile-label { font-size: 15px; }
-    .v4-cause-group-header { font-size: 12px; letter-spacing: 0.8px; }
 }
-@media (min-height: 900px) {
-    .v4-cause-tile { min-height: 132px; }
-    .v4-cause-tile-icon { width: 68px; height: 68px; font-size: 38px; }
-    .v4-cause-tile-svg  { width: 38px; height: 38px; }
+@media (min-height: 850px) {
+    .v4-cause-tile { padding: 10px 16px; }
+    .v4-cause-tile-icon { width: 48px; height: 48px; font-size: 26px; border-radius: 12px; }
+    .v4-cause-tile-svg  { width: 26px; height: 26px; }
+    .v4-cause-tile-label { font-size: 16px; }
+    .v4-cause-group-header { font-size: 11px; letter-spacing: 0.1em; }
+}
+@media (min-height: 1000px) {
+    .v4-cause-tile-icon { width: 56px; height: 56px; font-size: 30px; }
+    .v4-cause-tile-svg  { width: 30px; height: 30px; }
 }
 
 /* Retired drill-down selectors — kept as defensive no-ops so any
