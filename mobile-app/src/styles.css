@@ -14887,32 +14887,50 @@ button.v4-review-row { appearance: none; }
    target via padding; visually the icon reads 18 px. */
 .v4-stage #v4-building-mount .building-fs-cta {
     position: absolute;
-    top: 6px;
-    inset-inline-end: 6px;
+    top: 8px;
+    inset-inline-end: 8px;
     z-index: 5;
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
+    /* HC72 (May 2026) — was 32 × 32 with 0.7 alpha + backdrop-blur.
+       Operator: "always show with dark black bold colour." Solid
+       black 100 % alpha + bold glyph + subtle outline + drop shadow
+       so the button reads as a primary affordance against any map
+       tile colour (bright streets, dark forest, etc.). Bumped to
+       34 × 34 to give the bolder glyph room to breathe. */
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
     padding: 0;
-    border: 0;
+    border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 50%;
-    background: rgba(8, 16, 28, 0.7);
+    background: #000;
     color: #fff;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    /* Drop shadow lifts the button off the map even when both are
+       dark (e.g. forest / water tiles). */
+    box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.45),
+        0 0 0 2px rgba(0, 0, 0, 0.25);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background 0.15s, transform 0.1s;
+    transition: background 0.15s, transform 0.1s, border-color 0.15s;
 }
 .v4-stage #v4-building-mount .building-fs-cta:hover,
 .v4-stage #v4-building-mount .building-fs-cta:focus-visible {
-    background: rgba(9, 209, 199, 0.85);
+    background: var(--accent, #09D1C7);
+    color: #000;
+    border-color: rgba(0, 0, 0, 0.3);
     outline: none;
 }
 .v4-stage #v4-building-mount .building-fs-cta:active { transform: scale(0.92); }
-.v4-stage #v4-building-mount .building-fs-cta > i { font-size: 13px; }
+.v4-stage #v4-building-mount .building-fs-cta > i {
+    /* HC72 — bolder + larger glyph. font-weight: 900 ensures the
+       icon paints at the heaviest available weight (Font Awesome
+       Solid uses `font-weight: 900` by default). */
+    font-size: 15px;
+    font-weight: 900;
+    line-height: 1;
+}
 /* Hide the text label inside the fs-cta on the review surface
    (icon-only). The same button reuses its full label inside the
    fullscreen picker via different scoping. */
