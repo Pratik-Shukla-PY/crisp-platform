@@ -367,6 +367,8 @@
   "v4_recorder_delete": "Удалить запись",
   "v4_recorder_stop": "Остановить запись",
   "v4_recorder_resume": "Записано — нажмите, чтобы заменить",
+  "v4_recorder_play": "Воспроизвести запись",
+  "v4_recorder_rerecord": "Перезаписать",
   "v4_or_type": "…или введите описание",
   "v4_undp_modules": "Сведения ПРООН",
   "v4_undp_trigger": "Дополнительная информация",

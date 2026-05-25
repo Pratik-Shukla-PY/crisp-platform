@@ -302,6 +302,78 @@ test.describe('PWA — HC60 V4 Stage 1 zero-scroll', () => {
         ).toBeLessThanOrEqual(2);
     });
 
+    // ── HC70 (May 2026) — recorder resume chip ───────────────────────
+    //
+    // Operator brief 2026-05-26: "Once the voice note is recorded
+    // there is currently no option for the user to listen to the
+    // recording before submission. Add Play/Listen + Delete +
+    // Re-record within the same compact UI area. Also: the green
+    // active state/glow should appear ONLY when a valid audio
+    // recording is actually present."
+    //
+    // Pre-HC70 the resume chip was a single `<button>` with the whole
+    // body acting as "re-record" and an inner ✕ acting as "delete"
+    // — opaque, no listen affordance. HC70 splits the chip into a
+    // duration label + 3 explicit icon buttons.
+
+    test('@smoke HC70 resume chip has Play / Re-record / Delete buttons', async ({ page }) => {
+        await bootCaptureStage(page);
+        // The chip is `hidden` until a recording is captured. Markup
+        // contract: 3 buttons exist with the documented IDs + aria-
+        // labels, regardless of the chip's current visibility. That
+        // way operator-extended logic can wire the buttons before
+        // the user records, and the chip can be revealed
+        // declaratively.
+        for (const id of ['btn-v4-cap-recorder-play',
+                          'btn-v4-cap-recorder-rerecord',
+                          'btn-v4-cap-recorder-resume-delete']) {
+            const btn = page.locator(`#${id}`);
+            await expect(btn, `#${id} must exist in markup`).toHaveCount(1);
+            const ariaLabel = await btn.getAttribute('aria-label');
+            expect(
+                ariaLabel && ariaLabel.length,
+                `#${id} must have an aria-label for screen readers`,
+            ).toBeGreaterThan(0);
+        }
+    });
+
+    test('@smoke HC70 chip-voice glow resets when state.audioBlob clears', async ({ page }) => {
+        await bootCaptureStage(page);
+        // Simulate "recording captured" by writing a non-empty blob to
+        // state.audioBlob, then call the badge refresher (the same
+        // function the recorder state-machine calls on transitions).
+        await page.evaluate(() => {
+            (window as any).state.audioBlob = new Blob(['x'.repeat(100)], { type: 'audio/webm' });
+            if (typeof (window as any).__crispV4RefreshSectionBadges === 'function') {
+                (window as any).__crispV4RefreshSectionBadges();
+            }
+        });
+        // Green `.is-captured` glow on the trigger button should now be present.
+        await expect(
+            page.locator('#v4-cap-chip-voice'),
+            'voice chip trigger button must be in DOM',
+        ).toHaveCount(1);
+        const hasCapturedBefore = await page.locator('#v4-cap-chip-voice').evaluate(
+            (el) => el.classList.contains('is-captured'),
+        );
+        expect(hasCapturedBefore, 'chip-voice should be `.is-captured` when audio present').toBe(true);
+
+        // Now clear the blob (simulating delete) and refresh badges.
+        await page.evaluate(() => {
+            (window as any).state.audioBlob = null;
+            if (typeof (window as any).__crispV4RefreshSectionBadges === 'function') {
+                (window as any).__crispV4RefreshSectionBadges();
+            }
+        });
+        const hasCapturedAfter = await page.locator('#v4-cap-chip-voice').evaluate(
+            (el) => el.classList.contains('is-captured'),
+        );
+        expect(
+            hasCapturedAfter,
+            'chip-voice `.is-captured` must clear when state.audioBlob is null (HC70)',
+        ).toBe(false);
+    });
+
     test('@smoke HC68 Pixel 7 viewport: Continue CTA still pinned in stage grid', async ({ page }) => {
         await page.setViewportSize({ width: 412, height: 915 });
         await bootCaptureStage(page);

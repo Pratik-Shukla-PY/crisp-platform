@@ -348,6 +348,8 @@
   "v4_recorder_delete": "Delete recording",
   "v4_recorder_stop": "Stop recording",
   "v4_recorder_resume": "Recorded — tap to replace",
+  "v4_recorder_play": "Play recording",
+  "v4_recorder_rerecord": "Re-record",
   "v4_or_type": "…or type a short description",
   "v4_undp_modules": "UNDP details",
   "v4_undp_trigger": "Additional info",

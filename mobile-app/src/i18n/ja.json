@@ -369,6 +369,8 @@
   "v4_recorder_delete": "録音を削除",
   "v4_recorder_stop": "録音を停止",
   "v4_recorder_resume": "録音済み — タップして置き換え",
+  "v4_recorder_play": "録音を再生",
+  "v4_recorder_rerecord": "録音し直す",
   "v4_or_type": "…または短い説明を入力",
   "v4_undp_modules": "UNDP詳細",
   "v4_undp_trigger": "追加情報",

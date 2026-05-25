@@ -1376,29 +1376,98 @@
                 setTimeout(_refreshCapStrip, 120);
             });
         }
-        // HC60 — Resume chip: tap to re-record (discards old blob), tap
-        // the inner ✕ to delete.
-        const resumeChipBtn = document.getElementById('v4-cap-recorder-resume');
-        if (resumeChipBtn) {
-            resumeChipBtn.addEventListener('click', (ev) => {
-                const target = ev.target;
-                const isXTap = target && target.closest &&
-                    target.closest('.v4-cap-recorder-resume-x');
-                if (isXTap) {
-                    // Delete-from-resume: clear blob + back to idle.
-                    window.state.audioBlob = null;
-                    window.state.audioChunks = [];
-                    _renderCapRecorderState('idle');
-                    setTimeout(_refreshCapStrip, 60);
-                    ev.stopPropagation();
+        // HC70 (May 2026) — three explicit handlers on the resume chip:
+        // Play / Re-record / Delete. Each is its own <button> in markup
+        // so this code doesn't have to sniff the event target.
+
+        // Play — preview the recorded audio before submitting. Uses a
+        // closure-local <audio> element + Object URL pair; releases
+        // the URL on stop/end/error so we don't leak memory across
+        // repeated previews. The play button doubles as stop: the
+        // glyph swaps via `.is-playing` class.
+        const playBtn = document.getElementById('btn-v4-cap-recorder-play');
+        if (playBtn) {
+            let _audioEl = null;
+            let _audioUrl = null;
+            const _stopPlayback = () => {
+                if (_audioEl) {
+                    try { _audioEl.pause(); } catch (_) {}
+                    try { _audioEl.src = ''; } catch (_) {}
+                    _audioEl = null;
+                }
+                if (_audioUrl) {
+                    try { URL.revokeObjectURL(_audioUrl); } catch (_) {}
+                    _audioUrl = null;
+                }
+                playBtn.classList.remove('is-playing');
+                const icon = playBtn.querySelector('i');
+                if (icon) icon.className = 'fa-solid fa-play';
+            };
+            playBtn.addEventListener('click', () => {
+                const blob = window.state && window.state.audioBlob;
+                if (!blob || !blob.size) return;
+                // Toggle: if currently playing, stop.
+                if (_audioEl && !_audioEl.paused) {
+                    _stopPlayback();
                     return;
                 }
-                // Re-record: clear blob first so the previous take
-                // doesn't linger if the user backs out.
+                try {
+                    _audioUrl = URL.createObjectURL(blob);
+                    _audioEl = new Audio(_audioUrl);
+                    _audioEl.addEventListener('ended', _stopPlayback);
+                    _audioEl.addEventListener('error', _stopPlayback);
+                    _audioEl.play().then(() => {
+                        playBtn.classList.add('is-playing');
+                        const icon = playBtn.querySelector('i');
+                        if (icon) icon.className = 'fa-solid fa-stop';
+                    }).catch(() => _stopPlayback());
+                } catch (_) {
+                    _stopPlayback();
+                }
+            });
+            // Expose stop so other paths (delete, re-record) can
+            // cancel an in-flight preview before mutating the blob.
+            window.__crispV4StopPlayback = _stopPlayback;
+        }
+
+        // Re-record — discard the old blob and start a fresh recording.
+        const rerecordBtn = document.getElementById('btn-v4-cap-recorder-rerecord');
+        if (rerecordBtn) {
+            rerecordBtn.addEventListener('click', () => {
+                // Cancel any in-progress playback before mutating state.
+                try {
+                    if (typeof window.__crispV4StopPlayback === 'function') {
+                        window.__crispV4StopPlayback();
+                    }
+                } catch (_) {}
                 window.state.audioBlob = null;
                 window.state.audioChunks = [];
                 _startV4Recording();
                 _renderCapRecorderState('recording');
+            });
+        }
+
+        // Delete — clear the blob + return to idle. HC70 also refreshes
+        // the section badges so the green `is-captured` glow on the
+        // `#v4-cap-chip-voice` trigger button resets correctly. (Pre-
+        // HC70 only `_refreshCapStrip` was called, which paints photo
+        // thumbs — the chip-voice badge stayed lit after delete.)
+        const resumeDeleteBtn = document.getElementById('btn-v4-cap-recorder-resume-delete');
+        if (resumeDeleteBtn) {
+            resumeDeleteBtn.addEventListener('click', () => {
+                try {
+                    if (typeof window.__crispV4StopPlayback === 'function') {
+                        window.__crispV4StopPlayback();
+                    }
+                } catch (_) {}
+                window.state.audioBlob = null;
+                window.state.audioChunks = [];
+                _renderCapRecorderState('idle');
+                // Explicit badge refresh — `_renderCapRecorderState`
+                // doesn't know about chip-voice-status; this call
+                // toggles `.is-captured` off the trigger button.
+                try { _refreshSectionBadges(); } catch (_) {}
+                setTimeout(_refreshCapStrip, 60);
             });
         }
 

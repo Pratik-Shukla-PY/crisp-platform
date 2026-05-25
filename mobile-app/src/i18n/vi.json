@@ -370,6 +370,8 @@
   "v4_recorder_delete": "Xóa bản ghi",
   "v4_recorder_stop": "Dừng ghi âm",
   "v4_recorder_resume": "Đã ghi — chạm để thay thế",
+  "v4_recorder_play": "Phát bản ghi",
+  "v4_recorder_rerecord": "Ghi lại",
   "v4_or_type": "…hoặc nhập mô tả ngắn",
   "v4_undp_modules": "Chi tiết UNDP",
   "v4_undp_trigger": "Thông tin bổ sung",

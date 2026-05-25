@@ -375,6 +375,8 @@
   "v4_recorder_delete": "Excluir gravação",
   "v4_recorder_stop": "Parar gravação",
   "v4_recorder_resume": "Gravado — toque para substituir",
+  "v4_recorder_play": "Reproduzir gravação",
+  "v4_recorder_rerecord": "Regravar",
   "v4_or_type": "…ou escreva uma breve descrição",
   "v4_undp_modules": "Detalhes UNDP",
   "v4_undp_trigger": "Informação adicional",

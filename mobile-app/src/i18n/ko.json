@@ -370,6 +370,8 @@
   "v4_recorder_delete": "녹음 삭제",
   "v4_recorder_stop": "녹음 중지",
   "v4_recorder_resume": "녹음됨 — 탭하여 교체",
+  "v4_recorder_play": "녹음 재생",
+  "v4_recorder_rerecord": "다시 녹음",
   "v4_or_type": "…또는 짧은 설명 입력",
   "v4_undp_modules": "UNDP 세부사항",
   "v4_undp_trigger": "추가 정보",

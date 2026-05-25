@@ -360,6 +360,8 @@
   "v4_recorder_delete": "حذف التسجيل",
   "v4_recorder_stop": "إيقاف التسجيل",
   "v4_recorder_resume": "تم التسجيل — اضغط للاستبدال",
+  "v4_recorder_play": "تشغيل التسجيل",
+  "v4_recorder_rerecord": "إعادة التسجيل",
   "v4_or_type": "…أو اكتب وصفاً",
   "v4_undp_modules": "تفاصيل UNDP",
   "v4_undp_trigger": "معلومات إضافية",

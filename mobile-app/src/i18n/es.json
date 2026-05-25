@@ -379,6 +379,8 @@
   "v4_recorder_delete": "Eliminar grabación",
   "v4_recorder_stop": "Detener grabación",
   "v4_recorder_resume": "Grabado — toca para reemplazar",
+  "v4_recorder_play": "Reproducir grabación",
+  "v4_recorder_rerecord": "Volver a grabar",
   "v4_or_type": "…o escribe una descripción",
   "v4_undp_modules": "Detalles PNUD",
   "v4_undp_trigger": "Información adicional",

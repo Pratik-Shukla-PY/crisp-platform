@@ -204,7 +204,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v296">
+    <meta name="crisp-release" content="crisp-pwa@v297">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -589,7 +589,7 @@
         // any locale JSON. Pre-commit hook gates drift.
         window.__crispHomeI18nPacks = {
   "__meta": {
-    "buildTs": "2026-05-25T17:16:36.709Z",
+    "buildTs": "2026-05-25T18:09:05.260Z",
     "scriptVersion": 2,
     "keyCount": 101,
     "locales": [
@@ -618,7 +618,7 @@
     ]
   },
   "en": {
-    "__version": "f2e40007914b",
+    "__version": "72517be3fa82",
     "__checksum": "cfb13c954fd45d00",
     "action_tile_download": "Download App",
     "action_tile_login": "Login",
@@ -723,7 +723,7 @@
     "tier_t4_lifekeeper_label": "Lifekeeper"
   },
   "zh": {
-    "__version": "500a94f1222d",
+    "__version": "151ce4443ffd",
     "__checksum": "9e71773f384d0058",
     "action_tile_download": "下载应用",
     "action_tile_login": "登录",
@@ -828,7 +828,7 @@
     "tier_t4_lifekeeper_label": "生命守护者"
   },
   "es": {
-    "__version": "4828f4b01533",
+    "__version": "374ba827f831",
     "__checksum": "83184382aa1bb71d",
     "action_tile_download": "Descargar",
     "action_tile_login": "Acceder",
@@ -933,7 +933,7 @@
     "tier_t4_lifekeeper_label": "Guardián de vidas"
   },
   "ar": {
-    "__version": "a5967e1d1f49",
+    "__version": "d70af2c995a4",
     "__checksum": "0f85dc8d720dc146",
     "action_tile_download": "تنزيل التطبيق",
     "action_tile_login": "تسجيل الدخول",
@@ -1038,7 +1038,7 @@
     "tier_t4_lifekeeper_label": "حافظ الحياة"
   },
   "fr": {
-    "__version": "b476b8e25aeb",
+    "__version": "a17362709d47",
     "__checksum": "b08d118c545747d2",
     "action_tile_download": "Télécharger",
     "action_tile_login": "Connexion",
@@ -1143,7 +1143,7 @@
     "tier_t4_lifekeeper_label": "Gardien de vies"
   },
   "ru": {
-    "__version": "f1f02f3bc350",
+    "__version": "78e211b5a470",
     "__checksum": "cb567d231e31e27b",
     "action_tile_download": "Скачать",
     "action_tile_login": "Войти",
@@ -1353,7 +1353,7 @@
     "tier_t4_lifekeeper_label": "जीवन रक्षक"
   },
   "pt": {
-    "__version": "f13c38b054f9",
+    "__version": "f1e89d46e56e",
     "__checksum": "f0c9819066b488a2",
     "action_tile_download": "Baixar App",
     "action_tile_login": "Entrar",
@@ -1563,7 +1563,7 @@
     "tier_t4_lifekeeper_label": "জীবনরক্ষাকারী"
   },
   "ja": {
-    "__version": "fa79937b2b71",
+    "__version": "e065f04a814f",
     "__checksum": "74c21e81951d65a9",
     "action_tile_download": "アプリ取得",
     "action_tile_login": "ログイン",
@@ -1668,7 +1668,7 @@
     "tier_t4_lifekeeper_label": "ライフキーパー"
   },
   "tr": {
-    "__version": "56667e8bf803",
+    "__version": "e285bd79793c",
     "__checksum": "c9484cf4fe0554f6",
     "action_tile_download": "Uygulamayı İndir",
     "action_tile_login": "Giriş",
@@ -1773,7 +1773,7 @@
     "tier_t4_lifekeeper_label": "Hayat koruyucu"
   },
   "vi": {
-    "__version": "fe52bc81a1cf",
+    "__version": "58acd0e6c30a",
     "__checksum": "561d31d594654e80",
     "action_tile_download": "Tải Ứng Dụng",
     "action_tile_login": "Đăng nhập",
@@ -1878,7 +1878,7 @@
     "tier_t4_lifekeeper_label": "Người giữ mạng sống"
   },
   "ko": {
-    "__version": "c3ec329c10a3",
+    "__version": "de2d964e098d",
     "__checksum": "e749fe449cbc28cc",
     "action_tile_download": "앱 다운로드",
     "action_tile_login": "로그인",
@@ -1983,7 +1983,7 @@
     "tier_t4_lifekeeper_label": "라이프키퍼"
   },
   "id": {
-    "__version": "b4f75c7143a1",
+    "__version": "3d503e94e708",
     "__checksum": "65cd5e05d8572129",
     "action_tile_download": "Unduh Aplikasi",
     "action_tile_login": "Masuk",
@@ -2088,7 +2088,7 @@
     "tier_t4_lifekeeper_label": "Penjaga Nyawa"
   },
   "ur": {
-    "__version": "ba7cdb2a2863",
+    "__version": "67a73e945c15",
     "__checksum": "64858a3fa71bc4ac",
     "action_tile_download": "ایپ ڈاؤن لوڈ",
     "action_tile_login": "لاگ ان",
@@ -4604,18 +4604,54 @@
                                 <i class="fa-solid fa-stop" aria-hidden="true"></i>
                             </button>
                         </div>
-                        <!-- HC60 — stopped-with-audio chip. Appears after
-                             the user stops a recording; tap to re-open the
-                             recorder for re-record, tap ✕ to delete. Filled
-                             by v4-flow.js with the recorded duration. -->
-                        <button class="v4-cap-recorder-resume"
-                                id="v4-cap-recorder-resume" type="button" hidden
-                                aria-label="Recorded — tap to replace"
-                                data-i18n-aria-label="v4_recorder_resume">
-                            <i class="fa-solid fa-microphone" aria-hidden="true"></i>
-                            <span class="v4-cap-recorder-resume-time" id="v4-cap-recorder-resume-time">0:00</span>
-                            <span class="v4-cap-recorder-resume-x" aria-hidden="true">✕</span>
-                        </button>
+                        <!-- HC70 (May 2026) — stopped-with-audio chip.
+                             Pre-HC70 the chip was a single button with the
+                             whole body acting as "re-record" + a ✕ inner
+                             acting as "delete" — opaque, no listen
+                             affordance. Operator brief 2026-05-26: "Add
+                             Play/Listen + Delete + Re-record within the
+                             same compact UI area without significantly
+                             changing the existing layout."
+                             New: a `<div>` container with a duration
+                             label + 3 small icon buttons (Play / Re-record
+                             / Delete). Each button has its own click
+                             handler in v4-flow.js — no more event-target
+                             sniffing inside a single button. Container
+                             stays inline-flex pill shape; total height
+                             unchanged from HC60. -->
+                        <div class="v4-cap-recorder-resume"
+                             id="v4-cap-recorder-resume" hidden
+                             role="group" aria-label="Recorded voice note">
+                            <span class="v4-cap-recorder-resume-meta">
+                                <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+                                <span class="v4-cap-recorder-resume-time"
+                                      id="v4-cap-recorder-resume-time">0:00</span>
+                            </span>
+                            <button class="v4-cap-recorder-resume-btn"
+                                    id="btn-v4-cap-recorder-play" type="button"
+                                    aria-label="Play recording"
+                                    data-i18n-aria-label="v4_recorder_play"
+                                    title="Play recording"
+                                    data-i18n-title="v4_recorder_play">
+                                <i class="fa-solid fa-play" aria-hidden="true"></i>
+                            </button>
+                            <button class="v4-cap-recorder-resume-btn"
+                                    id="btn-v4-cap-recorder-rerecord" type="button"
+                                    aria-label="Re-record"
+                                    data-i18n-aria-label="v4_recorder_rerecord"
+                                    title="Re-record"
+                                    data-i18n-title="v4_recorder_rerecord">
+                                <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+                            </button>
+                            <button class="v4-cap-recorder-resume-btn v4-cap-recorder-resume-btn-delete"
+                                    id="btn-v4-cap-recorder-resume-delete" type="button"
+                                    aria-label="Delete recording"
+                                    data-i18n-aria-label="v4_recorder_delete"
+                                    title="Delete recording"
+                                    data-i18n-title="v4_recorder_delete">
+                                <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </div>
                     <!-- HC60 — text panel: rows=2 was rows=3 (saves ~22 px).
                          Mobile keyboards push enough chrome that 2 rows

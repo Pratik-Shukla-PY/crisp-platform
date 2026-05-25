@@ -370,6 +370,8 @@
   "v4_recorder_delete": "Kaydı sil",
   "v4_recorder_stop": "Kaydı durdur",
   "v4_recorder_resume": "Kaydedildi — değiştirmek için dokunun",
+  "v4_recorder_play": "Kaydı oynat",
+  "v4_recorder_rerecord": "Yeniden kaydet",
   "v4_or_type": "…veya kısa bir açıklama yaz",
   "v4_undp_modules": "UNDP ayrıntıları",
   "v4_undp_trigger": "Ek bilgi",

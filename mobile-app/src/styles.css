@@ -7967,15 +7967,21 @@ body.tier-t4 .home-impact {
 }
 .v4-cap-recorder-btn-stop:hover { filter: brightness(1.05); }
 
-/* HC60 — stopped-with-audio resume chip. Shown after the user
-   stops recording so they know audio is attached + can tap to
-   re-record (re-opens the recorder, which discards the old blob
-   and starts fresh) or tap ✕ to delete. */
+/* HC70 (May 2026) — stopped-with-audio chip.
+   Pre-HC70 was a single button with ✕ delete inside; the whole
+   body acted as "re-record". Operator wanted explicit Play /
+   Re-record / Delete affordances in the same compact pill area.
+   New: a flex `<div>` container with a duration label on the left
+   + 3 small icon buttons on the right. Pill shape + total height
+   preserved (~28 px) — no layout shift. */
 .v4-cap-recorder-resume {
     display: inline-flex;
     align-items: center;
     align-self: flex-start;
     gap: 6px;
+    /* HC70 — tighter padding on the right (4) to give the buttons
+       their own breathing room; left padding (10) keeps the
+       duration label visually anchored. */
     padding: 4px 4px 4px 10px;
     border-radius: 999px;
     background: rgba(128, 238, 152, 0.10);
@@ -7984,25 +7990,59 @@ body.tier-t4 .home-impact {
     font-size: 12px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
 }
 .v4-cap-recorder-resume[hidden] { display: none; }
-.v4-cap-recorder-resume:hover {
-    background: rgba(128, 238, 152, 0.16);
-    border-color: rgba(128, 238, 152, 0.55);
+.v4-cap-recorder-resume-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    /* The meta block is non-interactive; the buttons handle taps. */
+    pointer-events: none;
 }
-.v4-cap-recorder-resume-x {
+/* HC70 — 3 inline icon buttons inside the chip. 24 × 24 each;
+   compact but still meets a touchable target when combined with
+   the chip's own surrounding padding. Each carries its own
+   click handler in v4-flow.js (no event-target sniffing). */
+.v4-cap-recorder-resume-btn {
+    appearance: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
     border-radius: 50%;
     background: rgba(128, 238, 152, 0.20);
-    margin-inline-start: 4px;
-    font-size: 11px;
+    border: 0;
     color: #80EE98;
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s, color 0.15s;
+}
+.v4-cap-recorder-resume-btn:hover,
+.v4-cap-recorder-resume-btn:focus-visible {
+    background: rgba(128, 238, 152, 0.32);
+    outline: none;
+}
+.v4-cap-recorder-resume-btn:active { transform: scale(0.92); }
+.v4-cap-recorder-resume-btn-delete {
+    /* Visually distinct so users don't tap delete by mistake. */
+    background: rgba(239, 68, 68, 0.18);
+    color: #fca5a5;
+}
+.v4-cap-recorder-resume-btn-delete:hover,
+.v4-cap-recorder-resume-btn-delete:focus-visible {
+    background: rgba(239, 68, 68, 0.32);
+    color: #fef2f2;
+}
+/* HC70 — play button switches to a "stop" glyph when audio is
+   playing. The JS handler toggles a class so a single button
+   doubles as play/pause without changing markup. */
+.v4-cap-recorder-resume-btn.is-playing {
+    background: rgba(9, 209, 199, 0.32);
+    color: #67e8f9;
 }
 
 /* legacy v4-cap-grid + chip strip + drawers are kept

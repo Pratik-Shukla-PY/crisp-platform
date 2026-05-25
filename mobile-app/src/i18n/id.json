@@ -382,6 +382,8 @@
   "v4_recorder_delete": "Hapus rekaman",
   "v4_recorder_stop": "Hentikan rekaman",
   "v4_recorder_resume": "Direkam — ketuk untuk mengganti",
+  "v4_recorder_play": "Putar rekaman",
+  "v4_recorder_rerecord": "Rekam ulang",
   "v4_or_type": "…atau ketik deskripsi singkat",
   "v4_undp_modules": "Detail UNDP",
   "v4_undp_trigger": "Info tambahan",

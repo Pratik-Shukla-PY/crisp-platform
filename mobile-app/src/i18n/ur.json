@@ -368,6 +368,8 @@
   "v4_recorder_delete": "ریکارڈنگ حذف کریں",
   "v4_recorder_stop": "ریکارڈنگ روکیں",
   "v4_recorder_resume": "ریکارڈ ہو گیا — تبدیل کرنے کے لیے ٹیپ کریں",
+  "v4_recorder_play": "ریکارڈنگ چلائیں",
+  "v4_recorder_rerecord": "دوبارہ ریکارڈ کریں",
   "v4_or_type": "…یا ایک مختصر تفصیل لکھیں",
   "v4_undp_modules": "UNDP تفصیلات",
   "v4_undp_trigger": "اضافی معلومات",

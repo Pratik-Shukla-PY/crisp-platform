@@ -364,6 +364,8 @@
   "v4_recorder_delete": "删除录音",
   "v4_recorder_stop": "停止录音",
   "v4_recorder_resume": "已录制 — 点击替换",
+  "v4_recorder_play": "播放录音",
+  "v4_recorder_rerecord": "重新录制",
   "v4_or_type": "…或输入简短说明",
   "v4_undp_modules": "开发署详情",
   "v4_undp_trigger": "更多信息",

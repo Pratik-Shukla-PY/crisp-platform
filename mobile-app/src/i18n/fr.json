@@ -371,6 +371,8 @@
   "v4_recorder_delete": "Supprimer l'enregistrement",
   "v4_recorder_stop": "Arrêter l'enregistrement",
   "v4_recorder_resume": "Enregistré — appuyez pour remplacer",
+  "v4_recorder_play": "Lire l'enregistrement",
+  "v4_recorder_rerecord": "Réenregistrer",
   "v4_or_type": "…ou tapez une description",
   "v4_undp_modules": "Détails PNUD",
   "v4_undp_trigger": "Infos supplémentaires",
