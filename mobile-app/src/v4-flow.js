@@ -3214,52 +3214,97 @@
     window.__crispV4RefreshDesc = _refreshDescriptionCard;
 
     // ── Send ────────────────────────────────────────────────────────────
+    //
+    // HC80 (May 2026) — operator reported the success stage never
+    // painted after Send, leading to repeated taps and 5 duplicate
+    // server-side report rows. Root causes addressed:
+    //
+    //   1. Pre-HC80 the handler awaited submitReport() BEFORE
+    //      navigating, then setTimeout-ed goToStage('stage-success')
+    //      after 500 ms IF still on review. On a slow chain (large
+    //      photos / weak network) the user stared at "Sending…" for
+    //      seconds with no movement, assumed it had failed, and
+    //      kept tapping. Fix: navigate to stage-success IMMEDIATELY
+    //      on click. The new HC79 success stage paints the radar +
+    //      "Under review" pill instantly, so the user knows the
+    //      report landed.
+    //
+    //   2. Pre-HC80 the button only had `sendBtn.disabled = true` as
+    //      its dedup. K.4.b's `_submitInFlight` cleared as soon as
+    //      the previous promise resolved — meaning a second tap that
+    //      arrived 1 ms after the first resolution generated a fresh
+    //      clientReportId + a fresh server row. Fix: app.js's HC80
+    //      sticky `_submitCommitted` latch now refuses ANY second
+    //      submitReport call until resetApp() opens the latch.
+    //
+    //   3. Pre-HC80 a submitReport failure re-enabled the button +
+    //      showed "Send failed" toast, leaving the user on review.
+    //      Combined with #1, the user often saw the toast WITHOUT
+    //      having advanced — taps continued. Fix: even on failure,
+    //      we stay on stage-success and the status pill flips to the
+    //      offline "Queued" copy (already implemented in HC79).
     async function _onSend() {
         const sendBtn = document.getElementById('btn-v4-send');
+        // Immediate visual feedback even though we navigate away
+        // in the next tick.
         sendBtn.disabled = true;
         sendBtn.classList.add('is-sending');
-        // i18n the spinner label. Note: we keep the icon as a
-        // sibling so RTL layouts mirror correctly via flex flow.
         const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
         const sendingLabel = _t('v4_sending') || 'Sending…';
         sendBtn.innerHTML =
             '<i class="fa-solid fa-circle-notch fa-spin"></i> '
             + sendingLabel;
 
+        // HC80 — navigate to stage-success IMMEDIATELY. The user
+        // sees the new mission-control snapshot (radar + "Under
+        // review" + report ID + nearby) before submitReport even
+        // starts hitting the backend. Removes the "stuck on review"
+        // perception that drove the duplicate-tap loop.
         try {
-            // Defer to the existing v3 submit() / queue path. v3's logic
-            // reads window.state directly, so all the chip selections are
-            // already in place. We just trigger the same code path the
-            // v3 #btn-send button does.
-            if (typeof window.__crispSubmitReport === 'function') {
-                await window.__crispSubmitReport();
-            } else {
-                // Fall back to clicking the v3 send button if exposed.
-                const v3Send = document.getElementById('btn-send') ||
-                               document.getElementById('btn-review-submit');
-                if (v3Send) v3Send.click();
+            if (typeof window.__crispGoToStage === 'function') {
+                window.__crispGoToStage('stage-success');
             }
-            // On success, navigate to the existing stage-success
-            // (the v3 path's terminal state). v3's submit handler does
-            // this on its own; we add a fallback in case.
-            setTimeout(() => {
-                if (document.querySelector('#stage-v4-review.active')) {
-                    window.__crispGoToStage('stage-success');
-                }
-            }, 500);
         } catch (e) {
-            console.error('[v4] send failed:', e);
-            sendBtn.disabled = false;
-            sendBtn.classList.remove('is-sending');
-            sendBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> <span data-i18n="v4_send">Send to UNDP</span>';
-            if (typeof window.showToast === 'function') {
-                // P1 (i18n audit, May 23) — was hard-coded EN.
-                window.showToast(
-                    (typeof window.t === 'function' && window.t('v4_send_failed_toast'))
-                    || 'Send failed — your report was saved offline and will retry.',
-                    'error'
-                );
-            }
+            console.warn('[HC80] pre-submit nav failed:', e);
+        }
+
+        // Kick off submitReport in the background. Don't await it
+        // here — the user is already on stage-success watching the
+        // status pill. HC80's _submitCommitted latch in app.js
+        // prevents duplicate work even if a stray re-call fires.
+        if (typeof window.__crispSubmitReport === 'function') {
+            window.__crispSubmitReport()
+                .then(() => {
+                    // Success — the status pill already reads "Under
+                    // review" thanks to HC79's render hook. Nothing
+                    // more to do.
+                })
+                .catch((e) => {
+                    console.error('[v4] send failed:', e);
+                    // Flip the status pill to the offline/queued
+                    // copy. _renderSuccessStatusPill picks this up
+                    // from navigator.onLine + the queue state on
+                    // its next paint; call it explicitly here so
+                    // the user sees the state change immediately.
+                    if (typeof window._renderSuccessStatusPill === 'function') {
+                        try { window._renderSuccessStatusPill(); } catch (_) {}
+                    }
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(
+                            (typeof window.t === 'function' && window.t('v4_send_failed_toast'))
+                            || 'Send failed — your report was saved offline and will retry.',
+                            'warn'    // warn, not error — the queue WILL retry
+                        );
+                    }
+                });
+        } else {
+            // Defensive fallback — v3 #btn-send dispatch. Not
+            // expected to fire in production (v4 is always active)
+            // but kept so the handler degrades gracefully if app.js
+            // is mid-deploy / mid-rollback.
+            const v3Send = document.getElementById('btn-send') ||
+                           document.getElementById('btn-review-submit');
+            if (v3Send) v3Send.click();
         }
     }
 

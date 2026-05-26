@@ -9009,36 +9009,73 @@ async function uploadChunksBinary(reportId, mediaId, blob, {
 // Module-scope promise that holds the in-flight submitReport call.
 // Two rapid taps land BEFORE the first promise resolves; the second
 // returns the same promise instead of generating a new clientReportId
-// + queueing a duplicate report row. Pre-fix the only guard was
-// `sendBtn.disabled = true` — which the catch-block at line 8640+
-// re-enabled if submitReport threw BEFORE enqueueReport completed,
-// opening a race where a second tap could start a fresh submit with
-// a different clientReportId.
+// + queueing a duplicate report row.
 let _submitInFlight = null;
 
-// NOTE: this entry point is intentionally NOT `async` — if it were,
-// the body's return value (the IIFE promise) would be wrapped in an
-// outer promise per-call, defeating the identity-equality dedup that
-// some callers rely on. Callers can still `await submitReport()`
-// because the function still returns a thenable.
+// HC80 (May 2026) — bulletproof submit-once latch. K.4.b only dedups
+// CONCURRENT calls (those that land while the first promise hasn't
+// resolved). After the first promise resolves, the latch is open
+// and the NEXT tap fires a fresh submitReport with a fresh
+// clientReportId — duplicating the report row server-side. Operator
+// reproducer (2026-05-26): rapid Send taps generated 5 server-side
+// reports in 17 s because each tap landed AFTER the previous in-
+// flight promise had resolved.
+//
+// Fix: track a sticky `_submitCommitted` flag that LOCKS once a
+// submit has been committed for the current capture state. Subsequent
+// submitReport calls short-circuit with the cached promise / a
+// resolved success until the flag is cleared by resetApp (which
+// also clears state — i.e., a NEW report is being started).
+let _submitCommitted = false;
+let _lastSubmitPromise = null;
+
 function submitReport() {
+    // HC80 — sticky latch. Once we've committed a submit for the
+    // current capture state, every subsequent call returns the same
+    // resolution (no fresh clientReportId, no fresh server row).
+    // resetApp() opens the latch when starting a new flow.
+    if (_submitCommitted) {
+        console.log('[Submit] HC80 dedup: latch closed — submit already committed for this capture state');
+        return _lastSubmitPromise || Promise.resolve();
+    }
     // K.4.b — concurrent-tap dedup. Returns the SAME in-flight promise
     // so both callers observe the same resolution / failure. The
     // promise is cleared in the finally block once the first call
     // settles.
     if (_submitInFlight) {
-        console.log('[Submit] dedup: returning in-flight promise (double-tap guard)');
+        console.log('[Submit] K.4.b dedup: returning in-flight promise (concurrent-tap guard)');
         return _submitInFlight;
     }
     _submitInFlight = (async () => {
         try {
-            return await _submitReportInner();
+            const out = await _submitReportInner();
+            // HC80 — close the latch. Subsequent submitReport calls
+            // for the same capture state are no-ops. Only resetApp()
+            // re-opens it.
+            _submitCommitted = true;
+            _lastSubmitPromise = Promise.resolve(out);
+            return out;
+        } catch (err) {
+            // On failure we deliberately DO NOT close the latch — the
+            // user should be able to retry. The K.4.b concurrent-
+            // tap guard still protects against rapid retries while
+            // the next attempt is in flight.
+            throw err;
         } finally {
             _submitInFlight = null;
         }
     })();
     return _submitInFlight;
 }
+
+// HC80 — exposed for resetApp + for explicit clears (e.g. on the
+// success stage's "Report another" tap, the flow re-enters from a
+// clean state).
+function _openSubmitLatch() {
+    _submitCommitted = false;
+    _lastSubmitPromise = null;
+}
+try { window.__crispOpenSubmitLatch = _openSubmitLatch; } catch (_) {}
 
 async function _submitReportInner() {
     // Phase 6: btn-send was on the old stage-send; btn-review-submit is on
@@ -14773,6 +14810,9 @@ window._clearCaptureState = _clearCaptureState;
 
 function resetApp() {
     _clearCaptureState();
+    // HC80 — opening the latch only on resetApp ensures the user can
+    // submit ONLY ONCE per capture flow. Fresh flow → fresh latch.
+    try { _openSubmitLatch(); } catch (_) {}
     goToStage('stage-home');
 }
 
