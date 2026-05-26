@@ -5499,6 +5499,13 @@ def get_nearby_reports(
             reports=inputs,
             user_lat=lat,
             user_lng=lng,
+            # HC83 — plumb the caller's actual radius through so the
+            # relevance-sort proximity normalizer matches the query
+            # window. Pre-HC83 this was implicitly hardcoded to 25 km
+            # inside the aggregator, which silently flattened proximity
+            # ranking for groups in the 25–100 km tail once HC82 raised
+            # the validator cap to 100.
+            radius_km=radius_km,
             max_zones=min(limit, 20),
         )
         response.headers["X-Crisp-Density-Mode"] = "disaster"

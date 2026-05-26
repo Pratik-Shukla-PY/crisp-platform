@@ -544,6 +544,7 @@ def aggregate_disaster_zones(
     user_lat: float,
     user_lng: float,
     *,
+    radius_km: float = 25.0,
     max_zones: int = 20,
 ) -> List[NearbyGroup]:
     """Phase 4 (docs §3.8) — alternate aggregation for high-density
@@ -556,6 +557,15 @@ def aggregate_disaster_zones(
     `_summarize_bucket` (centroid only, minute-truncated timestamps,
     per-device cap) applies. Disaster mode just changes the SHAPE
     of the buckets, not their privacy treatment.
+
+    HC83 (May 2026, follow-up to HC82) — `radius_km` is now plumbed
+    through to the relevance-sort proximity normalizer. Pre-HC83 the
+    sort used a hardcoded `radius_km=25`, which produced
+    `proximity_score=0` for any group beyond 25 km from the caller.
+    Once HC82 bumped the validator cap from 25 → 100 km, the
+    disaster-zone sort ranked groups in the 25–100 km range purely
+    by count + recency, ignoring proximity entirely. Default kept at
+    25.0 for callers that don't supply it (pre-HC83 callers + tests).
     """
     if not reports:
         return []
@@ -576,9 +586,11 @@ def aggregate_disaster_zones(
             groups.append(g)
 
     # Sort by relevance + acute / burst boosts (same key as the
-    # normal cascade).
+    # normal cascade). HC83 — `radius_km` now flows in from the
+    # caller instead of being hardcoded to 25, so the proximity
+    # normalizer matches the caller's actual query range.
     def _sort_key(g: NearbyGroup) -> float:
-        score = _relevance_score(g, now, radius_km=25)
+        score = _relevance_score(g, now, radius_km)
         if g.is_acute:
             score += 10.0
         if g.is_burst:
