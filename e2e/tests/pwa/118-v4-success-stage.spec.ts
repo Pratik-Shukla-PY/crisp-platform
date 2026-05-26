@@ -224,6 +224,27 @@ async function openSuccessStage(
             `;
         });
         await page.waitForTimeout(150);
+    } else {
+        // nearby === 'empty'. As the populated branch above notes,
+        // `page.route` doesn't reliably intercept the cross-origin
+        // fetch to the dev backend on :8000 (SW-mediated). Before
+        // HC82 this branch "passed" implicitly because the fetch was
+        // CORS-preflight-blocked and the empty fallback rendered.
+        // After HC82 the fetch SUCCEEDS and (against a populated dev
+        // DB) returns real groups — rings render, empty-state hides,
+        // assertion fails. Force-paint the empty state via the public
+        // helper, same pattern as the populated branch.
+        await page.evaluate(() => {
+            const w = window as unknown as {
+                _renderSuccessNearbyEmpty?: () => void;
+            };
+            const root = document.getElementById('success-nearby-rings');
+            if (root) root.innerHTML = '';
+            if (typeof w._renderSuccessNearbyEmpty === 'function') {
+                w._renderSuccessNearbyEmpty();
+            }
+        });
+        await page.waitForTimeout(150);
     }
 }
 

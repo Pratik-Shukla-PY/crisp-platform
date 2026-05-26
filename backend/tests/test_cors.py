@@ -137,3 +137,81 @@ class TestCORSConditionalGetHeaders:
             assert h in allow_headers, (
                 f"Access-Control-Allow-Headers missing {h!r}; got {allow_headers!r}"
             )
+
+
+class TestCORSCallerExclusionHeader:
+    """May 2026 (HC82) — preflight must allow `X-Caller-Device-Hash` so the
+    PWA home + success-stage nearby fetches (which send it for backend
+    caller-exclusion) don't preflight-fail with 400.
+
+    Discovered via operator HAR after HC81 shipped: the new bucket-ring UI
+    rendered the empty state ("first eyes here") even when the caller had
+    reports nearby. Root cause: HC80.1/HC81 L9 added the custom header on
+    the success-stage fetch (and earlier on home), but the CORSMiddleware
+    `allow_headers` list never picked it up. The browser preflight came
+    back 400, the actual GET was blocked, and the rings silently rendered
+    empty. Spec 119 missed it because Playwright `page.route` stubs bypass
+    the browser's CORS preflight entirely — only a real-backend probe
+    catches this class of bug.
+
+    Also pins the bumped `radius_km` validator (HC81 frontend default is
+    100 km; backend cap was 25 before HC82, now 100).
+    """
+
+    @pytest.mark.parametrize("request_headers", [
+        "x-caller-device-hash",
+        "X-Caller-Device-Hash",                        # spec is case-insensitive
+        "x-caller-device-hash,content-type",
+        "if-none-match,x-caller-device-hash",
+    ])
+    def test_caller_device_hash_header_in_preflight(self, cors_client, request_headers):
+        """Preflight for /reports/nearby listing X-Caller-Device-Hash in
+        Access-Control-Request-Headers must come back 200 with the header
+        echoed in Access-Control-Allow-Headers (case-insensitive)."""
+        res = cors_client.options(
+            "/api/v1/reports/nearby",
+            headers={
+                "Origin": "http://localhost:8080",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": request_headers,
+            },
+        )
+        assert res.status_code == 200, (
+            f"preflight with headers={request_headers!r} must succeed; "
+            f"got {res.status_code} body={res.text!r}"
+        )
+        allow_headers = (res.headers.get("access-control-allow-headers") or "").lower()
+        assert "x-caller-device-hash" in allow_headers, (
+            f"Access-Control-Allow-Headers missing x-caller-device-hash; "
+            f"got {allow_headers!r}"
+        )
+
+    def test_nearby_radius_km_accepts_up_to_100(self, cors_client):
+        """HC82 bumped the backend `radius_km` validator from `le=25.0` to
+        `le=100.0` to match the HC81 frontend bucket-ring outer threshold.
+        Without this bump the actual GET that follows a passing preflight
+        would 422 — same user-visible failure, different layer."""
+        # HC81 frontend default — must not 422.
+        res = cors_client.get(
+            "/api/v1/reports/nearby",
+            params={"lat": 12.853, "lng": 77.679, "radius_km": 100.0, "limit": 50},
+            headers={
+                "Origin": "http://localhost:8080",
+                "X-Caller-Device-Hash": "PWA-test-hash",
+            },
+        )
+        assert res.status_code == 200, (
+            f"radius_km=100 must be accepted by validator after HC82; "
+            f"got {res.status_code} body={res.text!r}"
+        )
+
+    def test_nearby_radius_km_rejects_above_100(self, cors_client):
+        """Sanity: 101 km should still fail validation. Pins the ceiling."""
+        res = cors_client.get(
+            "/api/v1/reports/nearby",
+            params={"lat": 12.853, "lng": 77.679, "radius_km": 101.0, "limit": 50},
+            headers={"Origin": "http://localhost:8080"},
+        )
+        assert res.status_code == 422, (
+            f"radius_km=101 must still 422 (cap is 100); got {res.status_code}"
+        )

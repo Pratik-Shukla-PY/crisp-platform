@@ -338,9 +338,22 @@ app.add_middleware(
     # /api/v1/reports/?since=... fails CORS, the actual GET is blocked,
     # and the dashboard surfaces "Failed to fetch" / shows zero
     # reports even though the backend is healthy.
+    #
+    # May 2026 (HC82, HAR-driven nearby regression) — `X-Caller-Device-Hash`
+    # MUST be in this list. The PWA home + success-stage nearby fetches
+    # (`nearby.js _fetchNearby`, `app.js _bootSuccessNearby`) send this
+    # custom header so the backend can exclude the caller's own reports
+    # from the result set. Because it's a non-simple header the browser
+    # sends a CORS preflight; without whitelisting here the preflight
+    # returns 400, the actual GET is blocked (net::ERR_FAILED), and the
+    # nearby concentric bucket rings silently render the empty state
+    # ("first eyes here") even when the caller has reports nearby. The
+    # bug slipped past spec 119 because Playwright `page.route` stubs
+    # bypass the browser's CORS preflight entirely.
     allow_headers=[
         "Content-Type", "Authorization", "X-Admin-Key",
         "If-None-Match", "If-Match",
+        "X-Caller-Device-Hash",
     ],
     # May 2026 (HAR-driven dashboard regression) — `X-Server-Time` + `ETag`
     # MUST be in this list. The reports list endpoint returns both, and the

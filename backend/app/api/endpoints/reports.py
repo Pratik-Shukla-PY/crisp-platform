@@ -5161,8 +5161,11 @@ def get_nearby_reports(
                        description="Latitude of the user's location. Client SHOULD round to 3dp (~110m) before sending."),
     lng: float = Query(..., ge=-180, le=180,
                        description="Longitude of the user's location. Client SHOULD round to 3dp (~110m) before sending."),
-    radius_km: float = Query(5.0, ge=0.1, le=25.0,
-                             description="Search radius in kilometres. Default 5, max 25."),
+    radius_km: float = Query(5.0, ge=0.1, le=100.0,
+                             description="Search radius in kilometres. Default 5, max 100. "
+                                         "HC81 (May 2026) — bucket-ring UI uses thresholds "
+                                         "1/5/10/20/100 km, so the outer bucket needs the "
+                                         "validator to accept up to 100. Previously capped at 25."),
     since: Optional[datetime] = Query(None,
                                       description="ISO 8601 timestamp; delta-sync filter (same shape as /reports/)."),
     group_by: str = Query("building", pattern="^(building|crisis_type)$",
