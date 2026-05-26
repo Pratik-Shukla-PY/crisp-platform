@@ -1,26 +1,26 @@
 name: Deploy to Production
 
-# Triggered automatically on every push to main, OR manually via the
-# "Run workflow" button on the GitHub Actions page (workflow_dispatch).
-# Manual dispatch lets you pick a different branch in the UI when you
-# need to deploy a hotfix without merging to main first.
+# Auto-deploy on push to main is DISABLED. Per the operator's
+# deploy-discipline rule (see CLAUDE.md "Deploy discipline"), every
+# PROD deploy must be gated by an explicit in-chat confirmation.
+# Use the "Run workflow" button on the GitHub Actions page
+# (workflow_dispatch) to ship to PROD; pick a branch in the UI.
+#
+# To re-enable auto-deploy on push to main, restore the commented
+# block below (move the indented lines under `on:`):
+#
+#   push:
+#     branches: [main]
+#     paths-ignore:
+#       - '**/*.md'
+#       - 'docs/**'
+#       - 'LICENSE'
+#       - 'LICENSE.*'
+#       - 'CRISP-Presentation.html'
+#       - '.gitignore'
+#       - 'e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/**'
+#       - '.github/workflows/visual-baselines.yml'
 on:
-  push:
-    branches: [main]
-    # Skip deploy on changes that can't affect what's served to users.
-    # Comment-only / docs-only / image-baseline commits don't need to
-    # rebuild + ship to EC2. Saves ~9-10 Actions minutes per such commit.
-    # Anything that affects runtime (mobile-app/, backend/, scripts/,
-    # workflows/, sw.js, configs) still triggers normally.
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - 'LICENSE.*'
-      - 'CRISP-Presentation.html'
-      - '.gitignore'
-      - 'e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/**'
-      - '.github/workflows/visual-baselines.yml'
   workflow_dispatch:
     inputs:
       branch:
