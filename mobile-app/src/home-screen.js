@@ -2373,6 +2373,10 @@
         paintIdentityBar: _paintIdentityBar,
         paintDevidBadge: _paintDevidBadge,
         renderRecentReports: _renderRecentReports,
+        // HC79 — app.js triggers the same devid bottom-sheet from
+        // the success stage's devid pill. Exposing the function
+        // avoids duplicating the sheet-open logic across files.
+        openDevidSheet: _openDevidSheet,
         // exposed for app.js to call after _submittedCache
         // mutations + after profile fetches.
         paintBadgeChip: _renderBadgeChip,

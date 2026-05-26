@@ -1344,138 +1344,645 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     display: flex; align-items: center; justify-content: center; gap: 8px;
 }
 
-/* ── SUCCESS stage ──────────────────────────────────────────── */
-.success-center { gap: 16px; }
-.success-icon { font-size: 5rem; animation: pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-@keyframes pop { from { transform: scale(0) rotate(-10deg); opacity: 0; } to { transform: scale(1) rotate(0deg); opacity: 1; } }
+/* ── SUCCESS stage (HC79, May 2026) ──────────────────────────
+   Holistic redesign — was a static thank-you screen with heart +
+   confetti + hero text + 3 CTAs. Now: live mission-control snapshot
+   with radar status pill, responder activity strip, contribution-
+   tier identity, number-only nearby trigger that opens a bottom-
+   sheet modal (mirrors home-stage .nearby-sheet pattern). Old
+   .success-heart / .success-confetti / .success-ripple /
+   .success-impact-strip / .success-id-box rules deleted with their
+   markup. The new layout uses .success-thanks / .success-status-pill
+   / .success-responder-strip / .success-contribution-strip /
+   .success-nearby-trigger + the .success-footer for stacked CTAs.
 
-/* PR 7: heart replaces the ✅ on the success screen. Pulses
-   with a soft scale + red glow, 2s loop. Reduce-motion users get a
-   static heart (animation disabled).
-
-   M4 (May 2026): heart now sits inside `.success-heart-wrap` so we can
-   layer a single ripple ring + 6 tiny confetti dots behind it. The
-   ripple plays once on stage entry; confetti dots float up over 1.4s
-   with staggered delays. Heart's existing pulse loop is preserved. */
-.success-heart-wrap {
-    position: relative;
+   Layout is grid: header (auto) + body (flex-fill) + footer (auto)
+   so the stage fits iPhone SE 375x667 without scroll and flex-fills
+   on tall devices. */
+#stage-success {
+    display: flex;
+    flex-direction: column;
+}
+.v4-header-success {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 130px;
-    height: 130px;
-    isolation: isolate;
+    gap: var(--gap-2, 8px);
+    padding: var(--gap-2, 8px) var(--gap-4, 16px);
+    min-height: 48px;
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
 }
-.success-heart {
-    font-size: 5rem;
-    line-height: 1;
-    animation: success-heart-pulse 2s ease-in-out infinite;
-    filter: drop-shadow(0 0 14px rgba(239, 68, 68, 0.45));
+/* The brand cluster reuses .home-brand-logo / .home-brand-name from
+   the home stage so the visual treatment matches exactly. .success-
+   brand keeps its existing rules block further down — only the
+   absolute positioning block needs to flip to flex-inline. */
+.v4-header-success .success-brand {
+    position: static;            /* override the absolute layout below */
+    top: auto;
+    inset-inline-start: auto;
+}
+.v4-header-success .success-brand .home-brand-logo {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    box-shadow: none;
+}
+.v4-header-success .success-brand .home-brand-name {
+    font-size: var(--fz-md, 16px);
+    position: relative;
+    display: inline-block;
+}
+.v4-header-success .success-brand .home-brand-name .connectivity-dot {
+    position: absolute;
+    top: 2px;
+    inset-inline-end: -8px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px rgba(128, 238, 152, 0.7);
+}
+.success-devid-pill {
+    margin-inline-start: auto;
+    margin-inline-end: var(--gap-2, 8px);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-sub);
+    font-size: var(--fz-xs, 12px);
+    font-weight: 600;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    letter-spacing: 0.3px;
+    padding: 6px 10px;
+    border-radius: var(--r-pill, 999px);
+    cursor: pointer;
+    min-height: 28px;
+}
+.success-devid-pill i {
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+/* BODY */
+.success-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-3, 12px);
+    padding: var(--gap-3, 12px) var(--gap-4, 16px);
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* THANKS BAR — heart on left, copy stacked on right. Horizontal
+   layout (was the old big-hero stacked heart) — reclaims ~30 px
+   on iPhone SE.  */
+.success-thanks {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--gap-3, 12px);
+    padding: 6px 4px;
+    flex: 0 0 auto;
+}
+.success-thanks-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+.success-thanks-heart {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+}
+.success-thanks-heart i {
+    color: #ff7a90;                             /* warm coral */
+    font-size: 22px;
+    filter: drop-shadow(0 0 10px rgba(255, 122, 144, 0.55));
+    animation: success-heart-beat 1.8s ease-in-out infinite;
     position: relative;
     z-index: 2;
 }
-@keyframes success-heart-pulse {
-    0%   { transform: scale(1);     filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.35)); }
-    50%  { transform: scale(1.09);  filter: drop-shadow(0 0 22px rgba(239, 68, 68, 0.65)); }
-    100% { transform: scale(1);     filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.35)); }
-}
-/* M4 — ripple ring. Plays once when stage-success activates (JS adds
-   .is-active to the wrap to retrigger). 1.5s duration, no loop. */
-.success-ripple {
-    position: absolute;
-    inset: 50% auto auto 50%;
-    width: 90px;
-    height: 90px;
-    margin: -45px 0 0 -45px;
-    border: 2px solid rgba(239, 68, 68, 0.6);
-    border-radius: 50%;
-    z-index: 1;
-    opacity: 0;
-    pointer-events: none;
-}
-.success-heart-wrap.is-active .success-ripple {
-    animation: success-ripple-out 1.5s ease-out forwards;
-}
-@keyframes success-ripple-out {
-    0%   { transform: scale(0.4); opacity: 0.85; border-width: 3px; }
-    100% { transform: scale(2.4); opacity: 0;    border-width: 1px; }
-}
-/* M4 — confetti dots. Six tiny circles tucked behind the heart that
-   drift up + fade. Each gets a stagger via --cf-delay and a horizontal
-   spread via --cf-x (set inline in HTML). */
-.success-confetti {
+.success-thanks-heart::before,
+.success-thanks-heart::after {
+    content: "";
     position: absolute;
     inset: 0;
-    pointer-events: none;
-    z-index: 1;
-}
-.success-confetti-dot {
-    position: absolute;
-    inset-inline-start: 50%;
-    bottom: 50%;
-    width: 8px;
-    height: 8px;
-    margin: 0 0 -4px -4px;
     border-radius: 50%;
-    background: var(--cf-color, #fb7185);
+    border: 1px solid rgba(255, 122, 144, 0.45);
+    animation: success-heart-ring 2.4s var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1)) infinite;
     opacity: 0;
-    box-shadow: 0 0 6px var(--cf-color, #fb7185);
 }
-.success-heart-wrap.is-active .success-confetti-dot {
-    animation: success-confetti-rise 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-    animation-delay: var(--cf-delay, 0s);
+.success-thanks-heart::after { animation-delay: 1.2s; }
+@keyframes success-heart-beat {
+    0%, 100% { transform: scale(1); }
+    20%      { transform: scale(1.18); }
+    40%      { transform: scale(1); }
+    60%      { transform: scale(1.10); }
 }
-@keyframes success-confetti-rise {
-    0%   { transform: translate(0, 0)              scale(0.4); opacity: 0; }
-    20%  { opacity: 0.95; }
-    100% { transform: translate(var(--cf-x, 0), -90px) scale(1.0); opacity: 0; }
+@keyframes success-heart-ring {
+    0%   { transform: scale(0.5); opacity: 0.55; }
+    100% { transform: scale(1.7); opacity: 0; }
 }
-@media (prefers-reduced-motion: reduce) {
-    .success-heart { animation: none; }
-    .success-heart-wrap.is-active .success-ripple,
-    .success-heart-wrap.is-active .success-confetti-dot { animation: none; opacity: 0; }
+.success-thanks-title {
+    font-family: var(--heading);
+    font-size: var(--fz-md, 16px);
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: 0.2px;
+}
+.success-thanks-sub {
+    font-size: var(--fz-sm, 13px);
+    color: var(--text-sub);
+    font-weight: 500;
+    line-height: 1.3;
 }
 
-/* M4 — community-impact strip. Small green pill below the headline,
-   shown after we fetch the day's report count. Soft green so it reads
-   as a positive social signal (not an alert/warning). */
-.success-impact-strip {
+/* STATUS PILL — radar (3 concentric rings + central dot) + label
+   + report-id + locale-aware time-ago. */
+.success-status-pill {
+    background: var(--surface);
+    border: 1px solid var(--accent-soft);
+    border-radius: var(--r-lg, 20px);
+    padding: var(--gap-3, 12px) var(--gap-4, 16px);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--gap-3, 12px);
+    position: relative;
+    overflow: hidden;
+    min-height: 64px;
+    flex: 0 0 auto;
+}
+.success-radar {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+}
+.success-radar-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px rgba(9, 209, 199, 0.7);
+    position: relative;
+    z-index: 2;
+}
+.success-radar-ring {
+    position: absolute;
+    inset: 0;
+    border: 1.5px solid rgba(9, 209, 199, 0.55);
+    border-radius: 50%;
+    opacity: 0;
+    animation: success-radar-ring 2.4s var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1)) infinite;
+}
+.success-radar-ring:nth-of-type(2) { animation-delay: 0.8s; }
+.success-radar-ring:nth-of-type(3) { animation-delay: 1.6s; }
+@keyframes success-radar-ring {
+    0%   { transform: scale(0.4); opacity: 0.7; }
+    100% { transform: scale(1.7); opacity: 0; }
+}
+.success-status-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+.success-status-label {
+    font-family: var(--heading);
+    font-size: var(--fz-sm, 13px);
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    color: var(--accent);
+    text-transform: uppercase;
+}
+.success-status-meta {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 14px;
-    background: rgba(128, 238, 152, 0.12);
-    border: 1px solid rgba(128, 238, 152, 0.32);
-    border-radius: 999px;
-    color: #80EE98;
-    font-size: 13px;
-    font-weight: 600;
-    margin: 4px 0;
-    animation: success-impact-fade 0.5s ease-out;
+    font-size: var(--fz-xs, 12px);
+    color: var(--text-sub);
+    font-family: 'SF Mono', 'Menlo', monospace;
 }
-.success-impact-strip > i {
-    font-size: 14px;
+.success-status-meta .sep { color: var(--text-mute); }
+/* Offline / queued state — radar collapses, accent shifts to amber */
+.success-status-pill[data-state="offline"] .success-radar-ring {
+    animation: none;
+    opacity: 0;
 }
-@keyframes success-impact-fade {
-    0%   { opacity: 0; transform: translateY(6px); }
-    100% { opacity: 1; transform: translateY(0); }
+.success-status-pill[data-state="offline"] .success-radar-dot {
+    background: var(--warn);
+    box-shadow: 0 0 12px rgba(234, 179, 8, 0.6);
 }
-@media (prefers-reduced-motion: reduce) {
-    .success-impact-strip { animation: none; }
+.success-status-pill[data-state="offline"] .success-status-label {
+    color: var(--warn);
 }
-.success-center h2 { font-family: var(--heading); font-size: 2.2rem; }
-.success-center p { color: var(--muted); line-height: 1.6; }
-.success-id-box {
-    background: var(--surface2); border: 1px dashed var(--border);
-    padding: 14px 24px; border-radius: 12px;
-    font-size: 0.95rem; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 4px;
+.success-status-pill[data-state="offline"] {
+    border-color: rgba(234, 179, 8, 0.32);
 }
-.success-id-box strong { font-family: monospace; font-size: 1.2rem; color: var(--text); letter-spacing: 2px; }
 
-/* ── Phase 2.2 (May 2026) — legacy .badge-card / .badge-icon /
-   .badge-info / .badge-bar* rules deleted alongside the success-
-   page DOM that consumed them. V4 #home-badge-chip is the single
-   tier-display surface now. */
+/* RESPONDER STRIP */
+.success-responder-strip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--gap-2, 8px);
+    padding: 8px 12px;
+    background: rgba(9, 209, 199, 0.06);
+    border: 1px solid var(--accent-soft);
+    border-radius: var(--r-pill, 999px);
+    font-size: var(--fz-sm, 13px);
+    color: var(--text-sub);
+    min-height: 36px;
+    flex: 0 0 auto;
+    align-self: stretch;
+}
+.success-responder-strip i {
+    color: var(--accent);
+    font-size: var(--fz-sm, 13px);
+    animation: chip-pulse 3.6s ease-in-out infinite;
+}
+.success-responder-strip strong {
+    color: var(--text);
+    font-weight: 700;
+}
+
+/* CONTRIBUTION STRIP — current tier emoji left, next-tier emoji
+   right, progress bar between. The next-tier emoji is dimmed
+   (grayscale + opacity) until unlocked. */
+.success-contribution-strip {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-3, 12px);
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md, 12px);
+    color: var(--text-sub);
+    cursor: pointer;
+    width: 100%;
+    text-align: start;
+    min-height: 60px;
+    transition: background var(--motion-press, 120ms) var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1));
+    flex: 0 0 auto;
+}
+.success-contribution-strip:hover { background: var(--surface2); }
+.sc-tier-now,
+.sc-tier-next {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+    min-width: 56px;
+}
+.sc-tier-emoji {
+    font-size: 22px;
+    line-height: 1;
+}
+.sc-tier-emoji.sc-tier-next-emoji {
+    filter: grayscale(0.4) opacity(0.7);
+}
+.sc-tier-emoji.sc-tier-next-unlocked {
+    filter: none;
+}
+.sc-tier-label {
+    font-family: var(--heading);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--text);
+    text-transform: uppercase;
+}
+.sc-tier-next .sc-tier-label { color: var(--text-dim); }
+.sc-progress-bar {
+    flex: 1 1 auto;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: var(--r-pill, 999px);
+    position: relative;
+    overflow: hidden;
+}
+.sc-progress-fill {
+    position: absolute;
+    inset: 0;
+    width: 0%;            /* JS sets the real width */
+    background: linear-gradient(90deg, var(--accent), var(--green));
+    border-radius: var(--r-pill, 999px);
+    animation: sc-progress-pulse 3.2s ease-in-out infinite;
+    transition: width var(--motion-fade, 200ms) var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1));
+}
+@keyframes sc-progress-pulse {
+    0%, 100% { box-shadow: 0 0 6px rgba(9, 209, 199, 0.4); }
+    50%      { box-shadow: 0 0 14px rgba(9, 209, 199, 0.7); }
+}
+.sc-progress-meta {
+    position: absolute;
+    inset-inline-end: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text);
+    font-family: 'SF Mono', 'Menlo', monospace;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* NEARBY TRIGGER PILL */
+.success-nearby-trigger {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-3, 12px);
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md, 12px);
+    color: var(--text);
+    cursor: pointer;
+    width: 100%;
+    text-align: start;
+    min-height: 56px;
+    transition: background var(--motion-press, 120ms) var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1));
+    flex: 0 0 auto;
+}
+.success-nearby-trigger:hover { background: var(--surface2); }
+.success-nearby-trigger .snt-dot-wrap {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+}
+.success-nearby-trigger .snt-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px rgba(9, 209, 199, 0.5);
+    position: relative;
+    z-index: 2;
+}
+.success-nearby-trigger.has-reports .snt-dot-wrap::before,
+.success-nearby-trigger.has-reports .snt-dot-wrap::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1.5px solid rgba(9, 209, 199, 0.55);
+    animation: success-nearby-ripple 2.6s var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1)) infinite;
+    opacity: 0;
+}
+.success-nearby-trigger.has-reports .snt-dot-wrap::after {
+    animation-delay: 1.3s;
+}
+@keyframes success-nearby-ripple {
+    0%   { transform: scale(0.4); opacity: 0.6; }
+    100% { transform: scale(2.2); opacity: 0; }
+}
+.success-nearby-trigger .snt-text {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.success-nearby-trigger .snt-label {
+    font-family: var(--heading);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+}
+.success-nearby-trigger .snt-meta {
+    font-size: var(--fz-body, 14px);
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.success-nearby-trigger .snt-count {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+.success-nearby-trigger .snt-meta-sub {
+    font-size: var(--fz-xs, 12px);
+    color: var(--text-dim);
+    font-weight: 500;
+}
+.success-nearby-trigger .snt-chevron {
+    font-size: var(--fz-sm, 13px);
+    color: var(--text-dim);
+    flex: 0 0 auto;
+}
+[dir="rtl"] .success-nearby-trigger .snt-chevron {
+    transform: scaleX(-1);
+}
+/* Empty state — pill becomes a static informational card */
+.success-nearby-trigger.is-empty {
+    cursor: default;
+    background: rgba(9, 209, 199, 0.03);
+    border-style: dashed;
+}
+.success-nearby-trigger.is-empty .snt-chevron { display: none; }
+.success-nearby-trigger.is-empty .snt-meta {
+    font-size: var(--fz-sm, 13px);
+    color: var(--text-sub);
+    font-weight: 600;
+}
+
+/* Flex spacer pinning the footer down */
+.success-spacer {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* FOOTER — stacked CTA (primary big + inline link) */
+.success-footer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-2, 8px);
+    padding: var(--gap-3, 12px) var(--gap-4, 16px) var(--gap-4, 16px);
+    border-top: 1px solid var(--border);
+    flex: 0 0 auto;
+}
+.success-footer .big-cta {
+    width: 100%;
+    margin: 0;
+}
+.success-myreports-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: transparent;
+    border: 0;
+    color: var(--text-sub);
+    font-size: var(--fz-sm, 13px);
+    font-weight: 600;
+    cursor: pointer;
+    padding: 10px;
+    border-radius: var(--r-md, 12px);
+    min-height: 44px;
+}
+.success-myreports-link i {
+    color: var(--text-dim);
+    font-size: var(--fz-sm, 13px);
+}
+.success-myreports-link .mr-count {
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: var(--r-pill, 999px);
+    font-size: var(--fz-xs, 12px);
+    font-weight: 700;
+    margin-inline-start: 4px;
+}
+.success-myreports-link .mr-count:empty { display: none; }
+
+/* Nearby sheet — reuses the production .nearby-sheet pattern so
+   the modal styling is consistent with the home stage. We only
+   need a slightly tighter list layout below. */
+.success-nearby-sheet-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-top: var(--gap-2, 8px);
+}
+.success-nearby-sheet-list .success-nearby-row {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md, 12px);
+    min-height: 58px;
+    cursor: pointer;
+}
+.success-nearby-sheet-list .snr-dot-wrap {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    margin-top: 4px;
+    display: grid;
+    place-items: center;
+}
+.success-nearby-sheet-list .snr-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px rgba(9, 209, 199, 0.5);
+    position: relative;
+    z-index: 2;
+}
+.success-nearby-sheet-list .success-nearby-row.is-active .snr-dot-wrap::before,
+.success-nearby-sheet-list .success-nearby-row.is-active .snr-dot-wrap::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1.5px solid rgba(9, 209, 199, 0.55);
+    animation: success-nearby-ripple 2.6s var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1)) infinite;
+    opacity: 0;
+}
+.success-nearby-sheet-list .success-nearby-row.is-active .snr-dot-wrap::after {
+    animation-delay: 1.3s;
+}
+.success-nearby-sheet-list .snr-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.success-nearby-sheet-list .snr-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: var(--fz-sm, 13px);
+    font-weight: 700;
+    color: var(--text);
+    flex-wrap: wrap;
+}
+.success-nearby-sheet-list .snr-count {
+    color: var(--green);
+    font-variant-numeric: tabular-nums;
+}
+.success-nearby-sheet-list .snr-sep {
+    color: rgba(255, 255, 255, 0.30);
+    font-weight: 400;
+}
+.success-nearby-sheet-list .snr-summary {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: var(--fz-xs, 12px);
+    color: rgba(255, 255, 255, 0.78);
+}
+.success-nearby-sheet-list .snr-meta {
+    font-size: var(--fz-xs, 12px);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.48);
+}
+.success-nearby-sheet-list .snr-verified {
+    color: var(--green);
+    font-weight: 600;
+}
+.success-nearby-sheet-list .snr-pending {
+    color: #f5d76e;
+    font-weight: 600;
+}
+.success-nearby-sheet-list .success-nearby-sheet-empty {
+    text-align: center;
+    padding: 24px 16px;
+    color: var(--text-dim);
+    font-size: var(--fz-sm, 13px);
+}
+
+/* Reduced motion overrides */
+@media (prefers-reduced-motion: reduce) {
+    .success-radar-ring,
+    .success-thanks-heart i,
+    .success-thanks-heart::before,
+    .success-thanks-heart::after,
+    .success-responder-strip i,
+    .success-contribution-strip .sc-progress-fill,
+    .success-nearby-trigger.has-reports .snt-dot-wrap::before,
+    .success-nearby-trigger.has-reports .snt-dot-wrap::after,
+    .success-nearby-sheet-list .success-nearby-row.is-active .snr-dot-wrap::before,
+    .success-nearby-sheet-list .success-nearby-row.is-active .snr-dot-wrap::after {
+        animation: none !important;
+    }
+    .success-radar-ring,
+    .success-thanks-heart::before,
+    .success-thanks-heart::after,
+    .success-nearby-trigger.has-reports .snt-dot-wrap::before,
+    .success-nearby-trigger.has-reports .snt-dot-wrap::after,
+    .success-nearby-sheet-list .success-nearby-row.is-active .snr-dot-wrap::before,
+    .success-nearby-sheet-list .success-nearby-row.is-active .snr-dot-wrap::after {
+        opacity: 0.3;
+    }
+    .success-radar-dot { box-shadow: 0 0 4px rgba(9, 209, 199, 0.5); }
+}
+
 
 /* ── Location Verification ───────────────────────────────────── */
 .location-verify-box {
@@ -6889,15 +7396,11 @@ body.tier-t4 .home-impact {
     gap: 8px;
     margin-top: 4px;
 }
-/* May 2026 (operator) — the post-submit success page used to hold
-   3 buttons (Track + Rewards + Home). Home was removed; the CRISP
-   brand at the top of the stage handles home navigation. Row is
-   now 2-col (Track + Rewards). Default `.home-secondary-row`
-   grid-template-columns: 1fr 1fr already matches, so we just
-   remove the 3-col override. */
-.success-secondary-row.home-secondary-row {
-    grid-template-columns: 1fr 1fr;
-}
+/* HC79 (May 2026) — the .success-secondary-row 2-button row was
+   removed from the success-stage markup when the page was redesigned
+   into a live mission-control snapshot. The .home-secondary-row
+   rules below still apply to other surfaces that use the row;
+   this override is now dead. */
 .home-secondary-row .secondary-cta,
 .home-secondary-row .tertiary-cta {
     width: auto;
@@ -14152,24 +14655,11 @@ body { background-color: #10284a; }
    #stage-badge-studio — .badge-studio-actions
    ─────────────────────────────────────────────────────────────────── */
 
-#stage-success .big-cta {
-    position: sticky;
-    /* Pin ABOVE the secondary row. secondary-row min-height: 44 +
-       sticky padding-top 8 + sticky padding-bottom (safe-area or 8)
-       = ~60 px. Add the safe-area inset on top of that. */
-    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
-    z-index: 2;
-}
-
-#stage-success .success-secondary-row {
-    position: sticky;
-    bottom: 0;
-    z-index: 2;
-    /* Opaque background so scrolled content doesn't render through. */
-    background: var(--bg);
-    padding-block: 8px;
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
-}
+/* HC79 — old sticky-overlay rules for #stage-success .big-cta +
+   .success-secondary-row removed. The redesigned stage uses a
+   flex column with the footer (.success-footer) at the bottom of
+   the flex track; the stage no longer scrolls (zero-scroll budget)
+   so sticky positioning is unnecessary. */
 
 #stage-badge-studio .badge-studio-actions {
     position: sticky;

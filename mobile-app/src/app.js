@@ -4133,12 +4133,17 @@ function goToStage(id) {
     // never nag a repeat question.
     if (id === 'stage-success') {
         try { maybeShowUndpDetailsPrompt(); } catch (e) { console.warn('[M3] prompt:', e); }
-        // M4 — kick off the celebratory motion + impact strip
-        // every time stage-success activates (incl. submitting a second
-        // report in the same session). Both are best-effort: failures are
-        // logged but never block the success state.
-        try { _triggerSuccessMotion(); } catch (e) { console.warn('[M4] motion:', e); }
-        try { _renderSuccessImpactStrip(); } catch (e) { console.warn('[M4] strip:', e); }
+        // HC79 (May 2026) — paint the live mission-control snapshot.
+        // All 5 paints are best-effort; failures log + continue.
+        try { _paintSuccessDevidPill(); }            catch (e) { console.warn('[HC79] devid:', e); }
+        try { _renderSuccessStatusPill(); }          catch (e) { console.warn('[HC79] status:', e); }
+        try { _renderSuccessContributionStrip(); }   catch (e) { console.warn('[HC79] contrib:', e); }
+        try { _renderSuccessMyReportsCount(); }      catch (e) { console.warn('[HC79] mr-count:', e); }
+        try { _bootSuccessNearby(); }                catch (e) { console.warn('[HC79] nearby:', e); }
+    } else {
+        // HC79 — leaving stage-success: stop the time-ago ticker so the
+        // setInterval doesn't keep firing in the background.
+        try { _stopSuccessTimers(); } catch (_) {}
     }
 }
 
@@ -11323,48 +11328,17 @@ function setupSendStage() {
     // the operator-requested cleanup; V4 has stage-v4-review). Back
     // from stage-send routes to the V4 review stage instead.
     if (_bsb) _bsb.addEventListener('click', () => goToStage('stage-v4-review'));
-    document.getElementById('btn-new-report').addEventListener('click', resetApp);
+    document.getElementById('btn-new-report').addEventListener('click', () => {
+        try { resetApp(); } catch (_) {}
+        // HC79 — Report another routes back to the photo step, NOT to
+        // home, so the user can immediately start a fresh capture flow
+        // without an extra tap. The v4 capture stage is the canonical
+        // entry point.
+        try { goToStage('stage-v4-capture'); } catch (_) {}
+    });
 
-    // PR 7: Track button on the success screen. Opens the detail
-    // view for the just-submitted report. openReportDetail() first looks in
-    // _submittedCache; if the status-since poll hasn't fired yet, submitReport()
-    // seeds a synthetic local row (see submitReport → _synthesizeSubmittedReport)
-    // so the detail view has something to render immediately.
-    const trackBtn = document.getElementById('btn-track-report');
-    if (trackBtn) {
-        trackBtn.addEventListener('click', () => {
-            const id = _lastSubmittedClientId || _lastSubmittedServerId;
-            if (!id) {
-                if (typeof showToast === 'function') showToast(t('report_no_tracking'));
-                return;
-            }
-            if (typeof window.openReportDetail === 'function') {
-                window.openReportDetail(id);
-            }
-        });
-    }
-    // May 2026 (reward-system v2 second pass) — Rewards + Home
-    // shortcuts on the success page, alongside Track. Gives the user
-    // three clean off-ramps after a submit.
-    const successRewardsBtn = document.getElementById('btn-success-rewards');
-    if (successRewardsBtn) {
-        successRewardsBtn.addEventListener('click', () => goToStage('stage-rewards'));
-    }
-    const successHomeBtn = document.getElementById('btn-success-home');
-    if (successHomeBtn) {
-        // Legacy guard — the explicit Home button was removed from
-        // stage-success in May 2026 (operator: home nav lives on the
-        // CRISP brand at the top of the stage). Handler kept for
-        // back-compat in case any older cached HTML still has the
-        // element; gracefully no-ops when the button is absent.
-        successHomeBtn.addEventListener('click', () => {
-            try { resetApp(); } catch (_) {}
-            try { goToStage('stage-home'); } catch (_) {}
-        });
-    }
-    // May 2026 (operator) — clickable CRISP brand at the top of
-    // stage-success routes home. Same resetApp + goToStage chain so
-    // the next visit starts on a clean home stage.
+    // HC79 (May 2026) — CRISP brand at the top of stage-success routes
+    // home (same behaviour as pre-HC79).
     const successBrandBtn = document.getElementById('btn-success-brand');
     if (successBrandBtn) {
         successBrandBtn.addEventListener('click', () => {
@@ -11372,6 +11346,74 @@ function setupSendStage() {
             try { goToStage('stage-home'); } catch (_) {}
         });
     }
+
+    // HC79 — devid pill in the success header opens the same devid
+    // bottom-sheet the home stage uses. The sheet element + opener
+    // live in home-screen.js.
+    const successDevidBtn = document.getElementById('btn-success-devid');
+    if (successDevidBtn) {
+        successDevidBtn.addEventListener('click', () => {
+            if (typeof window.CrispHome === 'object' &&
+                typeof window.CrispHome.openDevidSheet === 'function') {
+                window.CrispHome.openDevidSheet();
+            } else {
+                // Fallback: dispatch a click on the home devid trigger
+                // so the existing handler picks it up.
+                const homeDevid = document.getElementById('home-devid-trigger');
+                if (homeDevid) homeDevid.click();
+            }
+        });
+    }
+
+    // HC79 — My Reports inline link goes to stage-history.
+    const successMyReportsBtn = document.getElementById('btn-success-my-reports');
+    if (successMyReportsBtn) {
+        successMyReportsBtn.addEventListener('click', () => goToStage('stage-history'));
+    }
+
+    // HC79 — contribution / tier strip routes to the rewards page.
+    const successContribStrip = document.getElementById('success-contribution-strip');
+    if (successContribStrip) {
+        successContribStrip.addEventListener('click', () => goToStage('stage-rewards'));
+    }
+
+    // HC79 — nearby trigger pill opens the bottom-sheet modal. Sheet
+    // close handlers (backdrop + ✕ button) wire to the same close
+    // routine.
+    const successNearbyTrigger = document.getElementById('success-nearby-trigger');
+    const successNearbySheet = document.getElementById('success-nearby-sheet');
+    const successNearbySheetClose = document.getElementById('success-nearby-sheet-close');
+    const successNearbySheetBackdrop = document.getElementById('success-nearby-sheet-backdrop');
+    function _openSuccessNearbySheet() {
+        if (!successNearbySheet) return;
+        if (successNearbyTrigger && successNearbyTrigger.classList.contains('is-empty')) return;
+        successNearbySheet.hidden = false;
+        // Two-frame trick so the CSS opening transition actually plays.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => successNearbySheet.classList.add('is-open'));
+        });
+    }
+    function _closeSuccessNearbySheet() {
+        if (!successNearbySheet) return;
+        successNearbySheet.classList.remove('is-open');
+        setTimeout(() => { successNearbySheet.hidden = true; }, 280);
+    }
+    if (successNearbyTrigger) {
+        successNearbyTrigger.addEventListener('click', _openSuccessNearbySheet);
+    }
+    if (successNearbySheetClose) {
+        successNearbySheetClose.addEventListener('click', _closeSuccessNearbySheet);
+    }
+    if (successNearbySheetBackdrop) {
+        successNearbySheetBackdrop.addEventListener('click', _closeSuccessNearbySheet);
+    }
+    // ESC closes the sheet (a11y).
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' &&
+            successNearbySheet && successNearbySheet.classList.contains('is-open')) {
+            _closeSuccessNearbySheet();
+        }
+    });
 
     // ── M3 — UNDP Step 4 details flow ──────────
     // Soft prompt on stage-success: "Add 4 quick details · 30s". Opens a
@@ -13971,84 +14013,351 @@ function setupUndpDetailsStage() {
 //      own profile (auth-free `/reports/profile/<device_hash>` endpoint
 //      already exists). Encourages return engagement without pushing
 //      raw volume incentives (UNDP §3.8 frowns on those).
-function _triggerSuccessMotion() {
-    const wrap = document.querySelector('#stage-success .success-heart-wrap');
-    if (!wrap) return;
-    // Retrigger the animation by removing-then-adding `.is-active`. Browser
-    // collapses the two style mutations into one paint, so the keyframes
-    // restart cleanly even when stage-success is shown back-to-back.
-    wrap.classList.remove('is-active');
-    // Force reflow so the next class-add restarts the keyframes.
-    void wrap.offsetWidth;
-    wrap.classList.add('is-active');
-    // Self-clean after the longest animation completes (1.5s + slack).
-    setTimeout(() => { wrap.classList.remove('is-active'); }, 1900);
-}
+// ── HC79 (May 2026) — stage-success render helpers ───────────────
+//
+// Holistic redesign of the post-submit experience. Replaces:
+//   * _triggerSuccessMotion (heart + confetti + ripple animation)
+//   * _renderSuccessImpactStrip (the "Your Nth report" pill)
+// with a live mission-control snapshot:
+//   * Status pill (radar + label + report id + locale-aware time-ago)
+//   * Responder activity strip
+//   * Contribution / next-tier identity strip
+//   * Number-only nearby trigger + bottom-sheet modal
+//   * Stacked CTA footer with My Reports inline link
+//
+// The legacy function names (_triggerSuccessMotion,
+// _renderSuccessImpactStrip) remain exported below as no-op stubs so
+// any external caller (tests, plugins) doesn't crash. New code should
+// call the helpers below.
 
-function _ordinalSuffix(n) {
-    // English ordinal — "1st", "2nd", "3rd", "4th", "21st", etc. The
-    // localised string in t('success_impact_nth') wraps the result and
-    // formats it into the per-locale phrase ("Tu 4ª denuncia — gracias",
-    // "あなたの4回目 — ありがとう"). We always emit a number even on
-    // failed locales because "4" is universal.
-    if (!Number.isFinite(n) || n < 1) return String(n);
-    const mod10 = n % 10;
-    const mod100 = n % 100;
-    if (mod10 === 1 && mod100 !== 11) return n + 'st';
-    if (mod10 === 2 && mod100 !== 12) return n + 'nd';
-    if (mod10 === 3 && mod100 !== 13) return n + 'rd';
-    return n + 'th';
-}
+// Shared timer handle so the time-ago ticker can be stopped on stage
+// exit. Module-scoped — there's at most one active ticker at a time.
+let _successTimeAgoIntervalId = null;
+let _successSubmittedAt = null;          // Date when the user landed on stage-success
 
-async function _renderSuccessImpactStrip() {
-    const strip = document.getElementById('success-impact-strip');
-    const text = document.getElementById('success-impact-text');
-    if (!strip || !text) return;
-    // Default-hide; we only show after we have a real number to render.
-    strip.style.display = 'none';
-    let deviceHash = '';
+function _paintSuccessDevidPill() {
+    const el = document.getElementById('success-devid-text');
+    if (!el) return;
+    let hash = '';
     try {
-        deviceHash = localStorage.getItem('crisp_device_id_v2') ||
-                     localStorage.getItem('crisp_device_hash') ||
-                     localStorage.getItem('crisp_device_id') || '';
+        hash = localStorage.getItem('crisp_device_id_v2') ||
+               localStorage.getItem('crisp_device_hash') ||
+               localStorage.getItem('crisp_device_id') || '';
     } catch (_) {}
-    if (!deviceHash) {
-        // Brand-new user with no device-hash yet — show the warmer
-        // "first report" message (no number to render). This keeps the
-        // emotional payoff from being silent.
-        text.textContent = (typeof t === 'function' && t('success_impact_first'))
-            || 'Your first report — thank you for stepping up.';
-        strip.style.display = 'inline-flex';
+    if (!hash) {
+        el.textContent = 'CRISP-…';
         return;
     }
-    try {
-        // HAR-driven dedupe — see _singleFlightFetch helper near API_BASE.
-        const res = await _singleFlightFetch(`${API_BASE}/reports/profile/${encodeURIComponent(deviceHash)}`);
-        if (!res.ok) throw new Error(`profile ${res.status}`);
-        const p = await res.json();
-        const reportCount = Number.isFinite(p.report_count) ? p.report_count : 0;
-        // Build the message. We always render — even reportCount=0 gets
-        // the warm "first report" line so the strip is consistent.
-        let msg;
-        if (reportCount <= 1) {
-            msg = (typeof t === 'function' && t('success_impact_first'))
-                || 'Your first report — thank you for stepping up.';
+    // CRISP-AABB — short slug. The full hash lives in the devid
+    // bottom-sheet (tap pill → _openDevidSheet).
+    const short = String(hash).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || '…';
+    el.textContent = `CRISP-${short}`;
+}
+
+function _formatSuccessTimeAgo(elapsedMs) {
+    const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
+    const sec = Math.max(0, Math.floor(elapsedMs / 1000));
+    if (sec < 5)       return tt('success_time_just_now', 'just now');
+    if (sec < 60)      return tt('success_time_seconds_ago', '{n} sec ago').replace('{n}', String(sec));
+    const min = Math.floor(sec / 60);
+    return tt('success_time_minutes_ago', '{n} min ago').replace('{n}', String(min));
+}
+
+function _renderSuccessStatusPill() {
+    const pill = document.getElementById('success-status-pill');
+    const idEl = document.getElementById('success-report-id-mini');
+    const timeEl = document.getElementById('success-time-ago');
+    const labelEl = document.getElementById('success-status-label');
+    if (!pill) return;
+    // Online vs offline (queued) state. submitReport sets
+    // _lastSubmittedServerId on a successful POST; if it's null AND
+    // we have an in-flight queued row, treat as offline.
+    const isOffline = !navigator.onLine;
+    pill.dataset.state = isOffline ? 'offline' : 'online';
+    if (labelEl) {
+        const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
+        labelEl.textContent = isOffline
+            ? tt('success_queued_for_sync', 'Queued — will sync when online')
+            : tt('success_under_review', 'Under review');
+    }
+    // Report ID — use the just-submitted client report id, truncated.
+    const id = window._lastSubmittedClientId || window._lastSubmittedServerId || '';
+    if (idEl) {
+        if (id) {
+            const short = String(id).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+            idEl.textContent = `CRISP-${short}`;
         } else {
-            const ordinal = _ordinalSuffix(reportCount);
-            const tmpl = (typeof t === 'function' && t('success_impact_nth')) || 'Your {n} report — thank you!';
-            msg = tmpl.replace('{n}', ordinal);
+            idEl.textContent = '—';
         }
-        text.textContent = msg;
-        strip.style.display = 'inline-flex';
-    } catch (e) {
-        // Network / 404 — surface the "first report" line (still warm,
-        // never raw English fallback that could leak through).
-        console.warn('[M4] impact strip fetch failed:', e);
-        text.textContent = (typeof t === 'function' && t('success_impact_first'))
-            || 'Your report — thank you for stepping up.';
-        strip.style.display = 'inline-flex';
+    }
+    // Time-ago ticker. Reset every time we enter stage-success.
+    _successSubmittedAt = Date.now();
+    _stopSuccessTimers();
+    if (timeEl) {
+        timeEl.textContent = _formatSuccessTimeAgo(0);
+    }
+    _successTimeAgoIntervalId = setInterval(() => {
+        if (!timeEl || !_successSubmittedAt) return;
+        timeEl.textContent = _formatSuccessTimeAgo(Date.now() - _successSubmittedAt);
+    }, 10000);     // 10 s cadence is sufficient — bucket boundaries are second / minute
+}
+
+function _stopSuccessTimers() {
+    if (_successTimeAgoIntervalId) {
+        clearInterval(_successTimeAgoIntervalId);
+        _successTimeAgoIntervalId = null;
     }
 }
+
+// Tier ladder mirrors home-screen.js BADGE_LEVELS (T1 SCOUT → T2
+// SIGNAL → T3 CHANGEMAKER → T4 LIFEKEEPER). The success-stage strip
+// shows the user's CURRENT tier on the left + their NEXT tier on the
+// right with a progress bar between.
+const _SUCCESS_TIER_LADDER = [
+    { key: 'T1_SCOUT',       emoji: '🌱', label: 'SCOUT',       threshold: 0 },
+    { key: 'T2_SIGNAL',      emoji: '📣', label: 'SIGNAL',      threshold: 1 },
+    { key: 'T3_CHANGEMAKER', emoji: '🛡',  label: 'CHANGEMAKER', threshold: 3 },
+    { key: 'T4_LIFEKEEPER',  emoji: '🦸', label: 'LIFEKEEPER',  threshold: 10 },
+];
+
+function _renderSuccessContributionStrip() {
+    const nowEmoji = document.getElementById('sc-tier-now-emoji');
+    const nowLabel = document.getElementById('sc-tier-now-label');
+    const nextEmoji = document.getElementById('sc-tier-next-emoji');
+    const nextLabel = document.getElementById('sc-tier-next-label');
+    const fill = document.getElementById('sc-progress-fill');
+    const meta = document.getElementById('sc-progress-meta');
+    if (!nowEmoji || !nowLabel || !nextEmoji || !nextLabel || !fill || !meta) return;
+    // Read the cached badge profile the home stage already paints from.
+    let reportCount = 0;
+    try {
+        const cached = sessionStorage.getItem('crisp_home_badge_v2');
+        if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Number.isFinite(parsed.report_count)) reportCount = parsed.report_count;
+        }
+    } catch (_) {}
+    // Find the user's current tier (largest threshold <= reportCount)
+    // and the next tier (smallest threshold > reportCount).
+    let currentIdx = 0;
+    for (let i = 0; i < _SUCCESS_TIER_LADDER.length; i++) {
+        if (reportCount >= _SUCCESS_TIER_LADDER[i].threshold) currentIdx = i;
+    }
+    const current = _SUCCESS_TIER_LADDER[currentIdx];
+    const next = _SUCCESS_TIER_LADDER[currentIdx + 1] || null;
+    nowEmoji.textContent = current.emoji;
+    nowLabel.textContent = current.label;
+    if (next) {
+        nextEmoji.textContent = next.emoji;
+        nextEmoji.classList.remove('sc-tier-next-unlocked');
+        nextLabel.textContent = next.label;
+        const span = next.threshold - current.threshold;
+        const done = Math.max(0, Math.min(span, reportCount - current.threshold));
+        const pct = span > 0 ? Math.round((done / span) * 100) : 100;
+        fill.style.width = `${pct}%`;
+        meta.textContent = `${reportCount} / ${next.threshold}`;
+    } else {
+        // At top of ladder — show the current emoji on both sides + max
+        // out the bar.
+        nextEmoji.textContent = current.emoji;
+        nextEmoji.classList.add('sc-tier-next-unlocked');
+        nextLabel.textContent = current.label;
+        fill.style.width = '100%';
+        meta.textContent = `${reportCount}`;
+    }
+}
+
+function _renderSuccessMyReportsCount() {
+    const el = document.getElementById('success-mr-count');
+    if (!el) return;
+    let n = null;
+    try {
+        const cached = sessionStorage.getItem('crisp_mr_count_v1');
+        if (cached !== null) {
+            const parsed = Number.parseInt(cached, 10);
+            if (Number.isFinite(parsed)) n = parsed;
+        }
+    } catch (_) {}
+    if (typeof window._submittedCache !== 'undefined' &&
+        Array.isArray(window._submittedCache)) {
+        n = window._submittedCache.length;
+    }
+    el.textContent = (n !== null) ? String(n) : '';
+}
+
+// Fetch /reports/nearby + paint the trigger pill summary + sheet
+// list. Mirrors the home-stage NearbyIntel data shape so the rows
+// read identically.
+async function _bootSuccessNearby() {
+    const trigger = document.getElementById('success-nearby-trigger');
+    const list = document.getElementById('success-nearby-sheet-list');
+    const countEl = document.getElementById('snt-count');
+    const subEl = document.getElementById('snt-meta-sub');
+    const metaEl = document.getElementById('snt-meta');
+    if (!trigger || !list || !countEl || !metaEl) return;
+    // Initial loading state — show skeleton while we fetch.
+    trigger.classList.remove('has-reports', 'is-empty');
+    countEl.textContent = '…';
+    if (subEl) subEl.textContent = '';
+    // Resolve last-known GPS from cache. Same key NearbyIntel uses.
+    let coords = null;
+    try {
+        const raw = localStorage.getItem('crisp_last_location_v2');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Number.isFinite(parsed.lat) && Number.isFinite(parsed.lng)) {
+                coords = parsed;
+            }
+        }
+    } catch (_) {}
+    if (!coords) {
+        _renderSuccessNearbyEmpty();
+        return;
+    }
+    // Fetch using the SAME endpoint the home stage uses.
+    try {
+        const url = new URL(`${API_BASE}/reports/nearby`);
+        url.searchParams.set('lat', String(Math.round(coords.lat * 1000) / 1000));
+        url.searchParams.set('lng', String(Math.round(coords.lng * 1000) / 1000));
+        url.searchParams.set('radius_km', '5');
+        url.searchParams.set('limit', '8');
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 6000);
+        const res = await fetch(url.toString(), { signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!res.ok) throw new Error(`nearby ${res.status}`);
+        const data = await res.json();
+        const groups = Array.isArray(data.groups) ? data.groups : [];
+        _paintSuccessNearby(groups);
+        _renderSuccessResponderStrip(groups);
+    } catch (e) {
+        console.warn('[HC79] nearby fetch failed:', e);
+        _renderSuccessNearbyEmpty();
+        _renderSuccessResponderStrip([]);
+    }
+}
+
+function _paintSuccessNearby(groups) {
+    const trigger = document.getElementById('success-nearby-trigger');
+    const list = document.getElementById('success-nearby-sheet-list');
+    const metaEl = document.getElementById('snt-meta');
+    // metaEl is the inner container — its children (#snt-count and
+    // #snt-meta-sub) may have been destroyed by a prior call to
+    // _renderSuccessNearbyEmpty (which replaces metaEl.innerHTML
+    // wholesale). We therefore rebuild the inner structure
+    // unconditionally so the populated state always finds intact
+    // children, regardless of what the previous state did.
+    if (!trigger || !list || !metaEl) return;
+    if (!groups || groups.length === 0) {
+        _renderSuccessNearbyEmpty();
+        return;
+    }
+    const totalReports = groups.reduce((sum, g) => sum + (Number(g.count) || 0), 0);
+    const activeAreas = groups.filter((g) => (Number(g.pending_count) || 0) > 0).length;
+    const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
+    trigger.classList.add('has-reports');
+    trigger.classList.remove('is-empty');
+    // Rebuild the inner meta structure (count + word + sub).
+    const reportsWord = tt('success_nearby_reports_word', 'reports');
+    const subText = activeAreas > 0
+        ? '· ' + tt('success_nearby_areas_active', '{n} areas active').replace('{n}', String(activeAreas))
+        : '';
+    metaEl.innerHTML =
+        `<span class="snt-count" id="snt-count">${totalReports}</span>` +
+        `<span>${_escapeHtml(reportsWord)}</span>` +
+        `<span class="snt-meta-sub" id="snt-meta-sub">${_escapeHtml(subText)}</span>`;
+    // Sheet list — every group renders as a row.
+    list.innerHTML = groups.map((g) => {
+        const count = Number(g.count) || 0;
+        const verified = Number(g.verified_count) || 0;
+        const pending = Number(g.pending_count) || 0;
+        const summary = (g.summary || g.dominant_crisis_type || g.crisis_type || '').toString();
+        const distKm = Number(g.distance_km);
+        const label = g.label || g.name || g.location_name || 'Nearby';
+        const active = pending > 0 ? ' is-active' : '';
+        const verifiedFrag = verified > 0
+            ? `<span class="snr-verified">${verified} ${tt('verified_chip', 'verified')}</span>`
+            : '';
+        const pendingFrag = pending > 0
+            ? `<span class="snr-pending">${pending} ${tt('pending_chip', 'pending')}</span>`
+            : '';
+        const metaParts = [];
+        if (Number.isFinite(distKm)) metaParts.push(`${distKm} km ${tt('nearby_away', 'away')}`);
+        const splits = [verifiedFrag, pendingFrag].filter(Boolean).join(' · ');
+        const metaText = [metaParts.join(' '), splits].filter(Boolean).join(' · ');
+        return `
+            <div class="success-nearby-row${active}" role="button" tabindex="0">
+                <div class="snr-dot-wrap" aria-hidden="true"><span class="snr-dot"></span></div>
+                <div class="snr-info">
+                    <div class="snr-head">
+                        <span class="snr-label">${_escapeHtml(label)}</span>
+                        <span class="snr-sep">·</span>
+                        <span class="snr-count">${count}</span>
+                        ${summary ? `<span class="snr-sep">·</span><span class="snr-summary">${_escapeHtml(summary)}</span>` : ''}
+                    </div>
+                    <div class="snr-meta">${metaText}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function _renderSuccessNearbyEmpty() {
+    const trigger = document.getElementById('success-nearby-trigger');
+    const list = document.getElementById('success-nearby-sheet-list');
+    const countEl = document.getElementById('snt-count');
+    const subEl = document.getElementById('snt-meta-sub');
+    const metaEl = document.getElementById('snt-meta');
+    if (!trigger || !list || !countEl || !metaEl) return;
+    const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
+    trigger.classList.remove('has-reports');
+    trigger.classList.add('is-empty');
+    // Replace the count + "reports" with the empty-state copy.
+    metaEl.innerHTML =
+        `<span>${tt('success_nearby_first_eyes', "You're the first eyes here")}</span>`;
+    if (subEl) subEl.textContent = '';
+    list.innerHTML =
+        `<div class="success-nearby-sheet-empty">${tt('success_nearby_first_eyes_sub', 'No nearby reports yet — your signal matters')}</div>`;
+}
+
+function _renderSuccessResponderStrip(groups) {
+    const el = document.getElementById('success-responder-text');
+    if (!el) return;
+    const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
+    const active = (groups || []).reduce(
+        (sum, g) => sum + (Number(g.verified_count) || 0) + (Number(g.pending_count) || 0),
+        0,
+    );
+    if (active > 0) {
+        const tmpl = tt('success_responders_active', 'Responders reviewing — {n} active nearby');
+        el.innerHTML = tmpl.replace('{n}', `<strong>${active}</strong>`);
+    } else {
+        el.textContent = tt('success_responders_standby', 'Responders standing by — report received');
+    }
+}
+
+function _escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = String(s ?? '');
+    return div.innerHTML;
+}
+
+// Legacy no-op stubs for any external caller still referencing the
+// pre-HC79 function names. New code should call the helpers above.
+function _triggerSuccessMotion() { /* HC79: superseded by CSS-driven radar pulse */ }
+async function _renderSuccessImpactStrip() { /* HC79: replaced by _renderSuccessContributionStrip */ }
+
+// HC79 — expose the paint helpers on window so specs can seed the
+// success stage deterministically without depending on the
+// cross-origin /reports/nearby fetch. Pure paint surface; safe to
+// expose publicly.
+try {
+    window._renderSuccessStatusPill = _renderSuccessStatusPill;
+    window._renderSuccessContributionStrip = _renderSuccessContributionStrip;
+    window._paintSuccessNearby = _paintSuccessNearby;
+    window._renderSuccessNearbyEmpty = _renderSuccessNearbyEmpty;
+    window._renderSuccessResponderStrip = _renderSuccessResponderStrip;
+} catch (_) {}
 
 // Show / hide the post-submission UNDP-details soft prompt on stage-success.
 // Called from submitReport's success path. We hide it when the user has
