@@ -6254,7 +6254,24 @@ function setupPhotoStage() {
 
                 if (asExtra) {
                     if (!_canAddMorePhotos()) return;
-                    const entry = { dataUrl: previewDataUrl, blob: sourceBlob, groupId: genUUID(), variants: null };
+                    // HC77 — dedupe at push site (same as camera-modal
+                    // shutter path). Prevents the file-picker / gallery
+                    // path from inserting a duplicate `dataUrl` into
+                    // state.extraPhotos, which would render twice on
+                    // the review strip.
+                    const dup = (state.extraPhotos || []).some(
+                        (e) => e && e.dataUrl === previewDataUrl,
+                    );
+                    if (dup || state.photoDataUrl === previewDataUrl) {
+                        return;
+                    }
+                    const entry = {
+                        dataUrl: previewDataUrl,
+                        blob: sourceBlob,
+                        groupId: genUUID(),
+                        pid: genUUID(),
+                        variants: null,
+                    };
                     state.extraPhotos.push(entry);
                     _updateExtraPhotoStrip();
                     _trackBlur(_runWhenIdle(async () => {
@@ -6820,7 +6837,32 @@ function setupCameraModal() {
             state.photoGroupId = state.photoGroupId || genUUID();
             if (asExtra) {
                 if (!_canAddMorePhotos()) return;
-                const entry = { dataUrl, blob: rawBlob, groupId: genUUID(), variants: null };
+                // HC77 (May 2026) — dedupe at push site. Pre-HC77 the
+                // shutter could fire twice on consecutive video frames
+                // that produce byte-identical JPEG dataUrls (high-FPS
+                // device + matte-still scene), leaving extraPhotos with
+                // 2 entries pointing at the same image — the review
+                // strip then rendered the same image in 2 slots
+                // (operator screenshot 2026-05-26). Also: if the same
+                // dataUrl is already the primary, skip too — no point
+                // adding it as an extra of itself.
+                const dup = (state.extraPhotos || []).some(
+                    (e) => e && e.dataUrl === dataUrl,
+                );
+                if (dup || state.photoDataUrl === dataUrl) {
+                    return;
+                }
+                const entry = {
+                    dataUrl,
+                    blob: rawBlob,
+                    groupId: genUUID(),
+                    // HC77 — unique photo ID so two truly-different
+                    // photos that happen to encode to identical bytes
+                    // can still be tracked as distinct in queue +
+                    // upload paths.
+                    pid: genUUID(),
+                    variants: null,
+                };
                 state.extraPhotos.push(entry);
                 // HC76 (May 2026) — kick the V4 review-strip refresher
                 // immediately on each snap so the user sees the new

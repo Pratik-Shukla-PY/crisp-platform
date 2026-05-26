@@ -174,6 +174,36 @@ test.describe('PWA — HC65 V4 Step 3 review zero-scroll', () => {
         await expect(deleteBtns, 'each filled tile has a × button').toHaveCount(2);
     });
 
+    test('@smoke HC77 duplicate dataUrl in extras sanitized on render — no double-render', async ({ page }) => {
+        await openReviewStage(page, 'en', { photos: 0 });
+        // Seed extras with a DUPLICATE dataUrl — simulates the
+        // rapid-shutter-tap bug (same canvas frame, identical JPEG
+        // bytes pushed twice). Pre-HC77 the review strip would
+        // render the duplicate in two slots.
+        await page.evaluate(() => {
+            (window as any).state.v4Photos = [];
+            (window as any).state.photoDataUrl = 'data:image/png;base64,iVBORw0KGgo=#primary';
+            (window as any).state.extraPhotos = [
+                { dataUrl: 'data:image/png;base64,iVBORw0KGgo=#x1', blob: null },
+                { dataUrl: 'data:image/png;base64,iVBORw0KGgo=#x1', blob: null },  // DUPLICATE
+            ];
+            (window as any).goToStage('stage-v4-review');
+        });
+        await page.waitForTimeout(300);
+        // Render must show 2 filled tiles (primary + unique extra),
+        // not 3 — the duplicate should be sanitized away.
+        const filledTiles = page.locator('#v4-review-photo-strip .v4-review-photo-tile');
+        await expect(
+            filledTiles,
+            'duplicate extras dataUrl must NOT render twice',
+        ).toHaveCount(2);
+        // state.extraPhotos itself should be cleaned to 1 unique entry.
+        const extrasLen = await page.evaluate(
+            () => ((window as any).state.extraPhotos || []).length,
+        );
+        expect(extrasLen, 'state.extraPhotos must be deduped to 1 entry').toBe(1);
+    });
+
     test('@smoke HC74 photos in state.photoDataUrl + extraPhotos render in review strip', async ({ page }) => {
         // Seed state as if the user captured 3 photos via the camera
         // modal on the REVIEW page (the path that writes to

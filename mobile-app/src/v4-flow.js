@@ -2770,6 +2770,45 @@
         // `_deleteV4PhotoAt` helper (which splices both v4Photos AND
         // extras) continues to work.
         const state = _getState();
+        // HC77 (May 2026) — sanitize `state.extraPhotos` of any
+        // pre-existing duplicate dataUrls BEFORE building the
+        // render list. Pre-HC77 push sites (camera-modal shutter +
+        // _ingestFileAsPhoto) didn't dedupe — if shutter fired twice
+        // on consecutive identical frames OR the BlazeFace async
+        // rewrote `entry.dataUrl` such that two entries converged,
+        // extras carried duplicates. The dedupe in build-loop below
+        // already skipped them at RENDER time but the operator
+        // reported still seeing the same image in 2 slots — likely
+        // because v4Photos was previously written from a duplicated
+        // extras snapshot and now the duplicate lives in v4Photos.
+        // Fix: hard-clean both arrays at the start of each paint.
+        if (state.extraPhotos && state.extraPhotos.length > 0) {
+            const extrasSeen = new Set();
+            const cleanedExtras = [];
+            for (const e of state.extraPhotos) {
+                if (e && e.dataUrl && !extrasSeen.has(e.dataUrl)) {
+                    extrasSeen.add(e.dataUrl);
+                    cleanedExtras.push(e);
+                }
+            }
+            if (cleanedExtras.length !== state.extraPhotos.length) {
+                state.extraPhotos = cleanedExtras;
+            }
+        }
+        if (state.v4Photos && state.v4Photos.length > 0) {
+            const v4Seen = new Set();
+            const cleanedV4 = [];
+            for (const p of state.v4Photos) {
+                if (p && p.url && !v4Seen.has(p.url)) {
+                    v4Seen.add(p.url);
+                    cleanedV4.push(p);
+                }
+            }
+            if (cleanedV4.length !== state.v4Photos.length) {
+                state.v4Photos = cleanedV4;
+            }
+        }
+
         const seen = new Set();
         const allPhotos = [];
         // Primary first (oldest — was captured first).
