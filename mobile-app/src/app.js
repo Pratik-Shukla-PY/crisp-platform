@@ -11414,43 +11414,11 @@ function setupSendStage() {
         successContribStrip.addEventListener('click', () => goToStage('stage-rewards'));
     }
 
-    // HC79 — nearby trigger pill opens the bottom-sheet modal. Sheet
-    // close handlers (backdrop + ✕ button) wire to the same close
-    // routine.
-    const successNearbyTrigger = document.getElementById('success-nearby-trigger');
-    const successNearbySheet = document.getElementById('success-nearby-sheet');
-    const successNearbySheetClose = document.getElementById('success-nearby-sheet-close');
-    const successNearbySheetBackdrop = document.getElementById('success-nearby-sheet-backdrop');
-    function _openSuccessNearbySheet() {
-        if (!successNearbySheet) return;
-        if (successNearbyTrigger && successNearbyTrigger.classList.contains('is-empty')) return;
-        successNearbySheet.hidden = false;
-        // Two-frame trick so the CSS opening transition actually plays.
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => successNearbySheet.classList.add('is-open'));
-        });
-    }
-    function _closeSuccessNearbySheet() {
-        if (!successNearbySheet) return;
-        successNearbySheet.classList.remove('is-open');
-        setTimeout(() => { successNearbySheet.hidden = true; }, 280);
-    }
-    if (successNearbyTrigger) {
-        successNearbyTrigger.addEventListener('click', _openSuccessNearbySheet);
-    }
-    if (successNearbySheetClose) {
-        successNearbySheetClose.addEventListener('click', _closeSuccessNearbySheet);
-    }
-    if (successNearbySheetBackdrop) {
-        successNearbySheetBackdrop.addEventListener('click', _closeSuccessNearbySheet);
-    }
-    // ESC closes the sheet (a11y).
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' &&
-            successNearbySheet && successNearbySheet.classList.contains('is-open')) {
-            _closeSuccessNearbySheet();
-        }
-    });
+    // HC81 — the HC79 success-stage trigger pill + per-stage bottom
+    // sheet are gone. Ring taps in #success-nearby-rings are handled
+    // by nearby.js's delegated listener inside _buildBucketRings;
+    // they open the SHARED #nearby-list-sheet (the same sheet the
+    // home stage opens). No per-stage open/close wiring needed here.
 
     // ── M3 — UNDP Step 4 details flow ──────────
     // Soft prompt on stage-success: "Add 4 quick details · 30s". Opens a
@@ -14222,20 +14190,20 @@ function _renderSuccessMyReportsCount() {
     el.textContent = (n !== null) ? String(n) : '';
 }
 
-// Fetch /reports/nearby + paint the trigger pill summary + sheet
-// list. Mirrors the home-stage NearbyIntel data shape so the rows
-// read identically.
+// HC81 (May 2026) — success stage's nearby module now renders the
+// SAME concentric distance-bucket rings the home stage uses.  Single
+// SVG with up to 5 nested rings (1/5/10/20/100 km), each tappable to
+// open the SHARED #nearby-list-sheet filtered to that bucket.
+//
+// Replaces HC79's number-only trigger pill + per-stage bottom sheet.
+// The SVG renderer lives in nearby.js (NearbyIntel.buildBucketRings)
+// so both stages stay visually consistent.
 async function _bootSuccessNearby() {
-    const trigger = document.getElementById('success-nearby-trigger');
-    const list = document.getElementById('success-nearby-sheet-list');
-    const countEl = document.getElementById('snt-count');
-    const subEl = document.getElementById('snt-meta-sub');
-    const metaEl = document.getElementById('snt-meta');
-    if (!trigger || !list || !countEl || !metaEl) return;
-    // Initial loading state — show skeleton while we fetch.
-    trigger.classList.remove('has-reports', 'is-empty');
-    countEl.textContent = '…';
-    if (subEl) subEl.textContent = '';
+    const mount = document.getElementById('success-nearby-rings');
+    if (!mount) return;
+    // Initial loading state — keep the mount empty (no skeleton; rings
+    // typically paint within 500 ms on localhost and < 2 s on PROD).
+    mount.innerHTML = '';
     // Resolve last-known GPS from cache. Same key NearbyIntel uses.
     let coords = null;
     try {
@@ -14251,16 +14219,28 @@ async function _bootSuccessNearby() {
         _renderSuccessNearbyEmpty();
         return;
     }
-    // Fetch using the SAME endpoint the home stage uses.
+    // Fetch using the SAME endpoint + SAME caller-exclusion header the
+    // home stage uses. HC80.1: sends X-Caller-Device-Hash so the
+    // backend drops the caller's own reports from the community-
+    // awareness feed (matches home behaviour).
     try {
         const url = new URL(`${API_BASE}/reports/nearby`);
         url.searchParams.set('lat', String(Math.round(coords.lat * 1000) / 1000));
         url.searchParams.set('lng', String(Math.round(coords.lng * 1000) / 1000));
-        url.searchParams.set('radius_km', '5');
-        url.searchParams.set('limit', '8');
+        // HC81 — bumped from 5 to 100 km so all 5 distance buckets
+        // can populate.
+        url.searchParams.set('radius_km', '100');
+        url.searchParams.set('limit', '50');
+        const headers = {};
+        try {
+            const callerHash = localStorage.getItem('crisp_device_id_v2') ||
+                               localStorage.getItem('crisp_device_hash') ||
+                               localStorage.getItem('crisp_device_id') || '';
+            if (callerHash) headers['X-Caller-Device-Hash'] = callerHash;
+        } catch (_) {}
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 6000);
-        const res = await fetch(url.toString(), { signal: ctrl.signal });
+        const res = await fetch(url.toString(), { signal: ctrl.signal, headers });
         clearTimeout(timer);
         if (!res.ok) throw new Error(`nearby ${res.status}`);
         const data = await res.json();
@@ -14268,93 +14248,47 @@ async function _bootSuccessNearby() {
         _paintSuccessNearby(groups);
         _renderSuccessResponderStrip(groups);
     } catch (e) {
-        console.warn('[HC79] nearby fetch failed:', e);
+        console.warn('[HC81] nearby fetch failed:', e);
         _renderSuccessNearbyEmpty();
         _renderSuccessResponderStrip([]);
     }
 }
 
 function _paintSuccessNearby(groups) {
-    const trigger = document.getElementById('success-nearby-trigger');
-    const list = document.getElementById('success-nearby-sheet-list');
-    const metaEl = document.getElementById('snt-meta');
-    // metaEl is the inner container — its children (#snt-count and
-    // #snt-meta-sub) may have been destroyed by a prior call to
-    // _renderSuccessNearbyEmpty (which replaces metaEl.innerHTML
-    // wholesale). We therefore rebuild the inner structure
-    // unconditionally so the populated state always finds intact
-    // children, regardless of what the previous state did.
-    if (!trigger || !list || !metaEl) return;
-    if (!groups || groups.length === 0) {
+    const mount = document.getElementById('success-nearby-rings');
+    if (!mount) return;
+    mount.innerHTML = '';
+    // Build via the shared nearby.js helper so home + success render
+    // identical SVG. Returns null when every bucket is empty.
+    let ringsEl = null;
+    try {
+        if (window.NearbyIntel &&
+            typeof window.NearbyIntel.buildBucketRings === 'function') {
+            ringsEl = window.NearbyIntel.buildBucketRings({ groups: groups || [] });
+        }
+    } catch (e) {
+        console.warn('[HC81] buildBucketRings failed:', e);
+    }
+    if (!ringsEl) {
         _renderSuccessNearbyEmpty();
         return;
     }
-    const totalReports = groups.reduce((sum, g) => sum + (Number(g.count) || 0), 0);
-    const activeAreas = groups.filter((g) => (Number(g.pending_count) || 0) > 0).length;
-    const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
-    trigger.classList.add('has-reports');
-    trigger.classList.remove('is-empty');
-    // Rebuild the inner meta structure (count + word + sub).
-    const reportsWord = tt('success_nearby_reports_word', 'reports');
-    const subText = activeAreas > 0
-        ? '· ' + tt('success_nearby_areas_active', '{n} areas active').replace('{n}', String(activeAreas))
-        : '';
-    metaEl.innerHTML =
-        `<span class="snt-count" id="snt-count">${totalReports}</span>` +
-        `<span>${_escapeHtml(reportsWord)}</span>` +
-        `<span class="snt-meta-sub" id="snt-meta-sub">${_escapeHtml(subText)}</span>`;
-    // Sheet list — every group renders as a row.
-    list.innerHTML = groups.map((g) => {
-        const count = Number(g.count) || 0;
-        const verified = Number(g.verified_count) || 0;
-        const pending = Number(g.pending_count) || 0;
-        const summary = (g.summary || g.dominant_crisis_type || g.crisis_type || '').toString();
-        const distKm = Number(g.distance_km);
-        const label = g.label || g.name || g.location_name || 'Nearby';
-        const active = pending > 0 ? ' is-active' : '';
-        const verifiedFrag = verified > 0
-            ? `<span class="snr-verified">${verified} ${tt('verified_chip', 'verified')}</span>`
-            : '';
-        const pendingFrag = pending > 0
-            ? `<span class="snr-pending">${pending} ${tt('pending_chip', 'pending')}</span>`
-            : '';
-        const metaParts = [];
-        if (Number.isFinite(distKm)) metaParts.push(`${distKm} km ${tt('nearby_away', 'away')}`);
-        const splits = [verifiedFrag, pendingFrag].filter(Boolean).join(' · ');
-        const metaText = [metaParts.join(' '), splits].filter(Boolean).join(' · ');
-        return `
-            <div class="success-nearby-row${active}" role="button" tabindex="0">
-                <div class="snr-dot-wrap" aria-hidden="true"><span class="snr-dot"></span></div>
-                <div class="snr-info">
-                    <div class="snr-head">
-                        <span class="snr-label">${_escapeHtml(label)}</span>
-                        <span class="snr-sep">·</span>
-                        <span class="snr-count">${count}</span>
-                        ${summary ? `<span class="snr-sep">·</span><span class="snr-summary">${_escapeHtml(summary)}</span>` : ''}
-                    </div>
-                    <div class="snr-meta">${metaText}</div>
-                </div>
-            </div>
-        `;
-    }).join('');
+    mount.appendChild(ringsEl);
 }
 
 function _renderSuccessNearbyEmpty() {
-    const trigger = document.getElementById('success-nearby-trigger');
-    const list = document.getElementById('success-nearby-sheet-list');
-    const countEl = document.getElementById('snt-count');
-    const subEl = document.getElementById('snt-meta-sub');
-    const metaEl = document.getElementById('snt-meta');
-    if (!trigger || !list || !countEl || !metaEl) return;
+    const mount = document.getElementById('success-nearby-rings');
+    if (!mount) return;
     const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
-    trigger.classList.remove('has-reports');
-    trigger.classList.add('is-empty');
-    // Replace the count + "reports" with the empty-state copy.
-    metaEl.innerHTML =
-        `<span>${tt('success_nearby_first_eyes', "You're the first eyes here")}</span>`;
-    if (subEl) subEl.textContent = '';
-    list.innerHTML =
-        `<div class="success-nearby-sheet-empty">${tt('success_nearby_first_eyes_sub', 'No nearby reports yet — your signal matters')}</div>`;
+    mount.innerHTML =
+        `<div class="success-nearby-empty">` +
+            `<div class="success-nearby-empty-title">` +
+            `${_escapeHtml(tt('success_nearby_first_eyes', "You're the first eyes here"))}` +
+            `</div>` +
+            `<div class="success-nearby-empty-sub">` +
+            `${_escapeHtml(tt('success_nearby_first_eyes_sub', 'No nearby reports yet — your signal matters'))}` +
+            `</div>` +
+        `</div>`;
 }
 
 function _renderSuccessResponderStrip(groups) {

@@ -1983,6 +1983,163 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     .success-radar-dot { box-shadow: 0 0 4px rgba(9, 209, 199, 0.5); }
 }
 
+/* ── HC81 (May 2026) — Nearby distance-bucket rings ──────────────
+   Concentric SVG rings replacing both the home single-aggregate-
+   number block AND the success-stage trigger pill. Five buckets at
+   1 / 5 / 10 / 20 / 100 km; empty buckets are simply not drawn (the
+   renderer in nearby.js omits the ring element entirely, so no CSS
+   `display: none` plumbing required).
+
+   The ring stroke colour conveys the tier of the bucket (highest
+   tier wins when multiple groups land in the same bucket). The
+   adjacent count text uses the same colour so the bucket reads as
+   a single unit at a glance.
+
+   Stages that mount the rings:
+     · home    → `<section id="home-nearby-intel">` (rings inserted
+                  by nearby.js _renderInto)
+     · success → `<section id="success-nearby-rings">` (rings
+                  inserted by app.js _paintSuccessNearby calling
+                  the SAME nearby.js builder).
+
+   The legacy `.home-nearby-number-block` + `.home-nearby-pulse-halo`
+   + `.home-nearby-tier-pill` rules further down this file are now
+   orphan (no markup mounts them); kept in place to avoid scope-creep
+   churn — they can be pruned in a follow-up. */
+.nearby-bucket-rings {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--gap-2, 8px) 0;
+    /* Keep the SVG contained — on smaller viewports the SVG can be
+       allowed to shrink but never larger than its native size. */
+    max-width: 100%;
+}
+.nearby-bucket-svg {
+    display: block;
+    overflow: visible;                  /* count text extends past r */
+    max-width: 100%;
+    height: auto;
+}
+/* Circle rings — stroke only, NEVER filled. The element-qualified
+   selector (`circle.nearby-bucket-ring`) raises specificity above the
+   tier-colour classes below so the tier `fill` (which colours the
+   adjacent count text) never bleeds back onto the ring as a solid
+   disc.  This was the HC81 first-paint bug operator caught on the
+   live screenshots: every ring rendered as a solid filled circle. */
+circle.nearby-bucket-ring {
+    fill: none;
+    stroke-width: 8;
+    cursor: pointer;
+    transition: stroke-opacity var(--motion-press, 120ms) var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1)),
+                filter var(--motion-press, 120ms) var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1));
+    stroke-opacity: 0.85;
+}
+circle.nearby-bucket-ring:hover,
+circle.nearby-bucket-ring:focus-visible {
+    stroke-opacity: 1;
+    filter: drop-shadow(0 0 6px currentColor);
+    outline: none;
+}
+.nearby-bucket-count {
+    font-family: var(--font);
+    font-size: var(--fz-sm, 13px);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    /* Tier colour inherited via per-tier classes below. */
+}
+/* Tier classes set BOTH stroke (used by circles) and fill (used by
+   the adjacent <text> count).  The element-qualified rules above
+   keep the circle's fill at `none` regardless. */
+.bucket-tier-verified {
+    stroke: var(--green, #80EE98);
+    fill: var(--green, #80EE98);
+}
+.bucket-tier-emerging {
+    stroke: var(--accent, #09D1C7);
+    fill: var(--accent, #09D1C7);
+}
+.bucket-tier-weak {
+    stroke: var(--text-dim, #94a3b8);
+    fill: var(--text-dim, #94a3b8);
+}
+/* Counts are not interactive — only the ring strokes accept taps.
+   `stroke: none` keeps the digits clean (no outline halo) and the
+   per-tier fill colours them. */
+text.nearby-bucket-count {
+    cursor: default;
+    pointer-events: none;
+    fill-opacity: 0.95;
+    stroke: none;
+}
+
+/* RTL — mirror the count text to the LEFT edge of each ring so the
+   numbers don't crash into the rings when the page direction flips.
+   The SVG itself remains symmetric; we only flip the inner `<text>`
+   via attribute override at render time, but a CSS fallback keeps
+   pre-existing pages working without a JS round-trip. */
+[dir="rtl"] .nearby-bucket-svg text.nearby-bucket-count {
+    transform: scaleX(-1);
+    transform-origin: 50% 50%;
+}
+
+/* HC81 reduced-motion override — drop the ring hover transition.
+   The ring colour + count still convey tier; no motion required. */
+@media (prefers-reduced-motion: reduce) {
+    .nearby-bucket-ring,
+    .nearby-bucket-ring:hover,
+    .nearby-bucket-ring:focus-visible {
+        transition: none !important;
+        filter: none !important;
+    }
+}
+
+/* Success-stage mount — centres the SVG horizontally and gives it
+   the same compact card padding as the prior trigger pill so the
+   stage layout budget stays the same.  Also hosts the empty-state
+   fallback (`.success-nearby-empty`) when every bucket is zero. */
+.success-nearby-rings-mount {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* 160 (SVG) + 2*8 padding = 176 minimum so the outermost ring
+       isn't clipped at the bottom on small viewports.  HC81 second-
+       paint fix: pre-fix the mount was constrained to 130 px which
+       cropped the SVG mid-ring on iPhone SE. */
+    min-height: 176px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md, 12px);
+    padding: var(--gap-2, 8px);
+    flex: 0 0 auto;
+}
+.success-nearby-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    text-align: center;
+    padding: var(--gap-3, 12px) var(--gap-4, 16px);
+}
+.success-nearby-empty-title {
+    font-size: var(--fz-sm, 13px);
+    font-weight: 700;
+    color: var(--text);
+}
+.success-nearby-empty-sub {
+    font-size: var(--fz-xs, 12px);
+    color: var(--text-dim);
+    line-height: 1.35;
+}
+
+/* Home mount — centre the SVG. The eyebrow already provides the
+   section header so we don't need additional chrome. */
+.home-stage .home-nearby-intel .nearby-bucket-rings {
+    margin: 0 auto;
+}
+
 
 /* ── Location Verification ───────────────────────────────────── */
 .location-verify-box {

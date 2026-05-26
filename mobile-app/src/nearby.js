@@ -58,9 +58,28 @@
         return '/api/v1';
     }
 
-    const DEFAULT_RADIUS_KM = 5;
-    const DEFAULT_LIMIT = 20;
+    // HC81 (May 2026) — radius bumped 5 → 100 km so the new concentric
+    // distance-bucket rings (1 / 5 / 10 / 20 / 100 km) all have data
+    // to render. The single-aggregate-number view this replaces only
+    // ever showed a "total reports near you" count, so a 5 km cap was
+    // adequate. With distance buckets, the user wants visibility out
+    // to the largest bucket explicitly.
+    const DEFAULT_RADIUS_KM = 100;
+    const DEFAULT_LIMIT = 50;             // bumped from 20 — fills outer buckets
     const COLLAPSED_ROWS = 3;             // rows shown before "View N more"
+
+    // HC81 — distance-bucket thresholds (km). Each group's
+    // approx_distance_km is placed in the SMALLEST bucket whose
+    // threshold >= the distance. Groups beyond 100 km are dropped
+    // (we don't fetch them either; see DEFAULT_RADIUS_KM above).
+    const BUCKET_THRESHOLDS_KM = [1, 5, 10, 20, 100];
+    // Radii (in SVG units) for each bucket — log-scale spacing so
+    // 1 km doesn't get crushed against 5 km visually. Indices map
+    // 1:1 with BUCKET_THRESHOLDS_KM.
+    const BUCKET_RADII_PX = [14, 28, 42, 56, 70];
+    // SVG canvas size — fits comfortably on iPhone SE (375 px wide)
+    // and leaves room for the count text on each ring's edge.
+    const BUCKET_SVG_SIZE = 160;
 
     // Phase 3 (May 2026, docs §5.2-5.3) — per-tier TTL replaces the
     // single CACHE_TTL_MS. Online TTL = "how long the cache stays
@@ -443,6 +462,173 @@
         return best;   // null when groups list is empty
     }
 
+    // ── HC81 — distance-bucket helpers ──────────────────────────────
+    //
+    // Operator brief (2026-05-26): "We can group the reports to 1Km
+    // radius, 5 Km radius & 10 Km radius. If none no need to show
+    // anything not even the name 'within 10k radius' etc. Make 1, 5,
+    // 10, 20, 100. Just show numbers first later on click show
+    // details."
+    //
+    // Implementation: bucket groups by approx_distance_km into one of
+    // the BUCKET_THRESHOLDS_KM steps. Render only buckets with
+    // count > 0 as nested SVG rings (innermost = smallest km).
+    // Tapping a ring opens the SHARED #nearby-list-sheet filtered to
+    // just that bucket's groups (no new modal infrastructure).
+
+    /**
+     * Bucket the input groups by approx_distance_km. Each group is
+     * placed in the smallest bucket whose threshold >= the group's
+     * distance. Groups with no distance / negative distance / distance
+     * beyond the largest bucket are dropped silently.
+     *
+     * Returns an array of bucket descriptors for ONLY the buckets that
+     * ended up with count > 0. Caller iterates this list directly —
+     * empty buckets are not in the output, so the renderer can't
+     * accidentally paint an empty ring.
+     *
+     * The bucket descriptor:
+     *   { km: 5, count: 3, groups: [...], tier: 'emerging' }
+     * The `tier` is the HIGHEST tier present in the bucket
+     * (verified > emerging > weak) so the ring's stroke colour
+     * conveys the bucket's confidence at a glance.
+     */
+    function _bucketGroupsByDistance(groups) {
+        const buckets = BUCKET_THRESHOLDS_KM.map((km) => ({
+            km, count: 0, groups: [], tier: 'weak',
+        }));
+        for (const g of (groups || [])) {
+            const dist = Number(g.approx_distance_km);
+            if (!Number.isFinite(dist) || dist < 0) continue;
+            for (const b of buckets) {
+                if (dist <= b.km) {
+                    b.count += (Number(g.count) || 1);
+                    b.groups.push(g);
+                    const gRank = _TIER_RANK[g.tier] || 0;
+                    const bRank = _TIER_RANK[b.tier] || 0;
+                    if (gRank > bRank) b.tier = g.tier;
+                    break;
+                }
+            }
+        }
+        return buckets.filter((b) => b.count > 0);
+    }
+
+    // Module-scoped cache so the click handler doesn't re-bucket on
+    // every tap. Populated by _buildBucketRings; read by the tap
+    // listener wired to each ring.
+    let _lastBuckets = [];
+
+    /**
+     * Build the concentric-rings SVG for the supplied payload.
+     *
+     * @returns {SVGElement|null}  An SVG node, or null when every
+     *                              bucket is empty (caller falls back
+     *                              to the empty-state copy).
+     */
+    function _buildBucketRings(payload) {
+        const buckets = _bucketGroupsByDistance((payload && payload.groups) || []);
+        _lastBuckets = buckets;     // cache for tap lookups
+        if (buckets.length === 0) return null;
+
+        const NS = 'http://www.w3.org/2000/svg';
+        const wrap = document.createElement('div');
+        wrap.className = 'nearby-bucket-rings';
+
+        const svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('viewBox', `0 0 ${BUCKET_SVG_SIZE} ${BUCKET_SVG_SIZE}`);
+        svg.setAttribute('width', String(BUCKET_SVG_SIZE));
+        svg.setAttribute('height', String(BUCKET_SVG_SIZE));
+        svg.setAttribute('class', 'nearby-bucket-svg');
+        svg.setAttribute('role', 'group');
+        svg.setAttribute('aria-label', _t('nearby_rings_aria', 'Nearby reports by distance'));
+
+        const cx = BUCKET_SVG_SIZE / 2;
+        const cy = BUCKET_SVG_SIZE / 2;
+
+        // Sort innermost-first so the smaller rings sit "on top" of
+        // any visual interactions; not strictly necessary for stroke-
+        // only paths but keeps the DOM order predictable for
+        // keyboard tab order (smallest → largest).
+        buckets.sort((a, b) => a.km - b.km);
+
+        for (const b of buckets) {
+            const idx = BUCKET_THRESHOLDS_KM.indexOf(b.km);
+            if (idx < 0) continue;
+            const r = BUCKET_RADII_PX[idx];
+
+            // The ring itself — a stroke-only circle, no fill, tap
+            // target lives on the stroke band.
+            const ring = document.createElementNS(NS, 'circle');
+            ring.setAttribute('cx', String(cx));
+            ring.setAttribute('cy', String(cy));
+            ring.setAttribute('r', String(r));
+            ring.setAttribute('class',
+                'nearby-bucket-ring bucket-tier-' + b.tier);
+            ring.setAttribute('data-bucket-km', String(b.km));
+            ring.setAttribute('role', 'button');
+            ring.setAttribute('tabindex', '0');
+            ring.setAttribute('aria-label',
+                _t('nearby_ring_aria', '{n} reports within {km} kilometres — tap to open')
+                    .replace('{n}', String(b.count))
+                    .replace('{km}', String(b.km)));
+            svg.appendChild(ring);
+
+            // Count text on the ring's east edge.  We anchor to
+            // `start` and offset by 6 px so the count sits just
+            // outside the ring stroke; this keeps the digits from
+            // intersecting the ring colour and stays scannable.
+            const txt = document.createElementNS(NS, 'text');
+            txt.setAttribute('x', String(cx + r + 6));
+            txt.setAttribute('y', String(cy));
+            txt.setAttribute('dy', '0.35em');             // optical centre
+            txt.setAttribute('class',
+                'nearby-bucket-count bucket-tier-' + b.tier);
+            txt.setAttribute('text-anchor', 'start');
+            txt.setAttribute('pointer-events', 'none');
+            txt.textContent = String(b.count);
+            svg.appendChild(txt);
+        }
+
+        wrap.appendChild(svg);
+
+        // Wire ring clicks — handler reads data-bucket-km, looks up
+        // the cached bucket, and opens the shared list sheet filtered
+        // to that subset. Single delegated listener on the wrap to
+        // avoid per-ring listener proliferation.
+        wrap.addEventListener('click', _onBucketRingActivate);
+        wrap.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                _onBucketRingActivate(e);
+            }
+        });
+        return wrap;
+    }
+
+    function _onBucketRingActivate(ev) {
+        const ring = ev.target && ev.target.closest
+            ? ev.target.closest('.nearby-bucket-ring')
+            : null;
+        if (!ring) return;
+        const km = Number(ring.getAttribute('data-bucket-km'));
+        const bucket = _lastBuckets.find((b) => b.km === km);
+        if (!bucket || !bucket.groups.length) return;
+        // Reuse the existing list sheet; passes ONLY this bucket's
+        // groups so the sheet shows the filtered slice.
+        try { _openListSheet({ groups: bucket.groups }); }
+        catch (e) { console.warn('[NearbyIntel] open list sheet failed:', e); }
+        // Override the sheet title to read e.g.
+        // "Nearby reports — within 5 km" so the user knows they're
+        // looking at the slice, not the full set.
+        const titleEl = document.getElementById('nearby-list-sheet-title');
+        if (titleEl) {
+            titleEl.textContent =
+                _t('nearby_sheet_within_km', 'Nearby reports — within {n} km')
+                    .replace('{n}', String(km));
+        }
+    }
+
     function _buildNumberBlock(payload) {
         const groups = (payload && payload.groups) || [];
         const totalReports = groups.reduce((sum, g) => sum + (g.count || 0), 0);
@@ -593,8 +779,17 @@
             return;
         }
 
-        // v8 — single aggregate number block (not per-group rows).
-        container.appendChild(_buildNumberBlock(payload));
+        // HC81 — concentric distance-bucket rings replace the v8
+        // single-aggregate-number block. The rings show only buckets
+        // with count > 0 (1/5/10/20/100 km). If every bucket is
+        // empty (e.g. groups present but all distances out of range
+        // or missing), fall back to the empty-state copy.
+        const ringsEl = _buildBucketRings(payload);
+        if (ringsEl) {
+            container.appendChild(ringsEl);
+        } else {
+            container.appendChild(_buildEmptyState());
+        }
 
         // Phase 1 (May 2026 — docs §3.6, §4.1) — separate
         // "Recently Resolved: N" subtotal line below the active block.
@@ -995,6 +1190,10 @@
         closeDetailSheet: _closeSheet,
         openListSheet: _openListSheet,
         closeListSheet: _closeListSheet,
+        // HC81 — exposed so app.js (success stage) can paint the
+        // same bucket-rings + reuse the same list-sheet tap handler.
+        buildBucketRings: _buildBucketRings,
+        bucketGroupsByDistance: _bucketGroupsByDistance,
         // Exposed for unit-test injection if needed.
         _round3,
         _humanizeAgo,

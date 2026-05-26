@@ -266,8 +266,10 @@ test.describe('PWA — HC79 success-stage live mission-control redesign', () => 
         await expect(page.locator('#success-contribution-strip')).toBeVisible();
         await expect(page.locator('#sc-tier-now-emoji')).not.toHaveText('');
         await expect(page.locator('#sc-tier-next-emoji')).not.toHaveText('');
-        // 8. Nearby trigger pill
-        await expect(page.locator('#success-nearby-trigger')).toBeVisible();
+        // 8. Nearby module mount — HC81 replaced the HC79 trigger
+        //    pill with the bucket-rings mount. Either the rings SVG
+        //    or the empty-state copy renders inside.
+        await expect(page.locator('#success-nearby-rings')).toBeVisible();
         // 9. Stacked CTA footer
         await expect(page.locator('#btn-new-report')).toBeVisible();
         await expect(page.locator('#btn-success-my-reports')).toBeVisible();
@@ -294,47 +296,21 @@ test.describe('PWA — HC79 success-stage live mission-control redesign', () => 
         await page.context().setOffline(false);
     });
 
-    test('@smoke nearby empty state: is-empty class + sheet stays closed on click', async ({ page }) => {
+    test('@smoke nearby empty state: empty copy renders, no rings drawn', async ({ page }) => {
         await openSuccessStage(page, 'en', { nearby: 'empty' });
-        const trigger = page.locator('#success-nearby-trigger');
-        await expect(trigger).toHaveClass(/is-empty/);
-        await expect(trigger).not.toHaveClass(/has-reports/);
-        // Tap on the empty pill — sheet must NOT open.
-        await trigger.click();
-        await page.waitForTimeout(150);
-        const sheetOpen = await page.locator('#success-nearby-sheet.is-open').count();
-        expect(sheetOpen, 'empty-state pill must not open the sheet').toBe(0);
+        // HC81 — empty groups → no bucket-rings SVG, empty-state copy
+        // renders into the success-nearby-rings mount instead.
+        const ringsCount = await page.locator('#success-nearby-rings .nearby-bucket-rings').count();
+        expect(ringsCount, 'no rings when nearby is empty').toBe(0);
+        const emptyVisible = await page.locator('#success-nearby-rings .success-nearby-empty').isVisible();
+        expect(emptyVisible, 'empty-state copy visible inside the mount').toBe(true);
     });
 
-    // SKIPPED: Playwright cross-origin route interception + service-worker
-    // cache poisoning between test runs prevents the test environment from
-    // reliably driving the trigger pill into the populated state. The
-    // PRODUCTION code paints correctly — verified via
-    // /tmp/hc79-prod-shots/01-iphone-se-default.png (live Chromium run
-    // against the actual stack). Sister tests below cover all other
-    // assertions (empty state, has-reports class transitions, sheet
-    // open/close handlers, etc.). The populated-fetch flow is also
-    // covered by the live-verification screenshot script committed at
-    // /tmp/hc79-live-verify.mjs.
-    test.skip('@smoke nearby populated: has-reports class + click opens sheet', async ({ page }) => {
-        await openSuccessStage(page, 'en', { nearby: 'populated' });
-        const trigger = page.locator('#success-nearby-trigger');
-        await expect(trigger).toHaveClass(/has-reports/);
-        await expect(page.locator('#snt-count')).toHaveText('10');     // 7 + 3
-        // Tap to open sheet.
-        await trigger.click();
-        await expect(page.locator('#success-nearby-sheet.is-open')).toBeVisible();
-        const rows = await page.locator('#success-nearby-sheet-list .success-nearby-row').count();
-        expect(rows, 'sheet must render 2 seeded nearby rows').toBe(2);
-        // Active row (Electronic City has 2 pending) gets the ripple class.
-        const activeRows = await page.locator('#success-nearby-sheet-list .success-nearby-row.is-active').count();
-        expect(activeRows, 'rows with pending count must be active').toBeGreaterThan(0);
-        // Close via ✕.
-        await page.locator('#success-nearby-sheet-close').click();
-        await page.waitForTimeout(300);
-        const stillOpen = await page.locator('#success-nearby-sheet.is-open').count();
-        expect(stillOpen).toBe(0);
-    });
+    // HC81 superseded the HC79 trigger pill + per-stage sheet with
+    // concentric bucket rings + the shared #nearby-list-sheet. The
+    // populated rendering + tap-to-open is now covered by spec 119
+    // (119-nearby-bucket-rings.spec.ts). Old skipped test removed
+    // to avoid stale-DOM confusion.
 
     test('@smoke state cleanup on Report another tap', async ({ page }) => {
         await openSuccessStage(page);
