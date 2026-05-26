@@ -6274,6 +6274,18 @@ function setupPhotoStage() {
                     };
                     state.extraPhotos.push(entry);
                     _updateExtraPhotoStrip();
+                    // HC78 — also kick the V4 review-strip refresher.
+                    // _updateExtraPhotoStrip paints the V3 capture-stage
+                    // extras row only; on the review stage's `+ Add`
+                    // → openCameraModal → file-camera fallback flow
+                    // (when getUserMedia fails), the review strip
+                    // doesn't see the new photo otherwise. The
+                    // camera-modal snap path handles this explicitly
+                    // already; this brings the file-ingest path to
+                    // parity.
+                    if (typeof window.__crispV4RefreshReviewStrip === 'function') {
+                        try { window.__crispV4RefreshReviewStrip(); } catch (_) {}
+                    }
                     _trackBlur(_runWhenIdle(async () => {
                         const variants = window.ImageVariants
                             ? await window.ImageVariants.generate(sourceBlob).catch(e => { _silent('imageVariants.extraFile', e); return null; })
@@ -6282,13 +6294,29 @@ function setupPhotoStage() {
                             entry.variants = variants;
                             entry.blob = variants.small.blob;
                             entry.clientBlurApplied = Boolean(variants.clientBlurApplied);
-                            try { entry.dataUrl = await _blobToDataUrl(variants.small.blob); _updateExtraPhotoStrip(); } catch (_) {}
+                            try {
+                                entry.dataUrl = await _blobToDataUrl(variants.small.blob);
+                                _updateExtraPhotoStrip();
+                                // HC78 — repaint the review strip too so the
+                                // (rebuild-on-paint) `state.v4Photos` picks up
+                                // the BlazeFace-rewritten dataUrl in place of
+                                // the original.
+                                if (typeof window.__crispV4RefreshReviewStrip === 'function') {
+                                    try { window.__crispV4RefreshReviewStrip(); } catch (_) {}
+                                }
+                            } catch (_) {}
                         } else {
                             const br = await _blurIfPossible(sourceBlob);
                             entry.blob = br.blob;
                             entry.clientBlurApplied = br.blurred;
                             if (br.blob !== sourceBlob) {
-                                try { entry.dataUrl = await _blobToDataUrl(br.blob); _updateExtraPhotoStrip(); } catch (_) {}
+                                try {
+                                    entry.dataUrl = await _blobToDataUrl(br.blob);
+                                    _updateExtraPhotoStrip();
+                                    if (typeof window.__crispV4RefreshReviewStrip === 'function') {
+                                        try { window.__crispV4RefreshReviewStrip(); } catch (_) {}
+                                    }
+                                } catch (_) {}
                             }
                         }
                     }));

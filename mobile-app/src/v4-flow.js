@@ -2755,99 +2755,81 @@
             };
             window.__crispV4RefreshReviewWired = true;
         }
-        // HC74 (May 2026) — derive the photo list from ALL state sources,
-        // not just `state.v4Photos`. The capture stage's `_handlePhoto`
-        // (v4-flow.js:1066) pushes to v4Photos AFTER ingest. But when
-        // the user adds a photo via the REVIEW's + Add CTA, the
-        // openCameraModal → _ingestFileAsPhoto path writes to
-        // `state.photoDataUrl` + `state.extraPhotos` and never reaches
-        // the capture-stage closure that maintains v4Photos. Result:
-        // operator's screenshot — 3 photos captured, review strip
-        // still shows 3 empty + slots.
+        // HC78 (May 2026) — REBUILD `state.v4Photos` canonically from
+        // `[primary, ...extras]` at every paint. Replaces the HC74 +
+        // HC77 3-source merge + sanitize chain, which had a fatal
+        // race against BlazeFace's async post-processing:
         //
-        // Fix: build a unified deduped list from primary + extras +
-        // v4Photos, then sync it BACK to state.v4Photos so the existing
-        // `_deleteV4PhotoAt` helper (which splices both v4Photos AND
-        // extras) continues to work.
+        //   1. User snaps photo A. Snap handler pushes `{ dataUrl:
+        //      A_raw }` to `state.extraPhotos`.
+        //   2. Render fires immediately. allPhotos = [primary, A_raw];
+        //      sync-back writes `state.v4Photos = [primary, A_raw]`.
+        //   3. BlazeFace finishes asynchronously and mutates
+        //      `extras[0].dataUrl` to `A_blurred` (visually identical
+        //      to A_raw but with face redaction — a NEW byte
+        //      sequence and therefore a NEW dataUrl string).
+        //   4. Next render fires (camera Done). extras[0].dataUrl =
+        //      A_blurred; v4Photos[1].url still = A_raw. The 3-source
+        //      merge treats them as DIFFERENT photos and pushes both
+        //      → allPhotos = [primary, A_blurred, A_raw]. Operator
+        //      sees the same photo in 2 review tiles (the May 2026
+        //      "5th-attempt" bug).
+        //
+        // Fix: there is exactly ONE source of truth for review-stage
+        // photos — `state.photoDataUrl` (the primary) plus
+        // `state.extraPhotos` (the rest, in insertion order). Rebuild
+        // `state.v4Photos` from this source at every paint so it
+        // CANNOT drift from the live extras entries (whose `.dataUrl`
+        // BlazeFace mutates in place). Each rebuilt entry carries a
+        // LIVE reference back to the extras entry's variants/blob, so
+        // subsequent BlazeFace mutations propagate on next paint.
         const state = _getState();
-        // HC77 (May 2026) — sanitize `state.extraPhotos` of any
-        // pre-existing duplicate dataUrls BEFORE building the
-        // render list. Pre-HC77 push sites (camera-modal shutter +
-        // _ingestFileAsPhoto) didn't dedupe — if shutter fired twice
-        // on consecutive identical frames OR the BlazeFace async
-        // rewrote `entry.dataUrl` such that two entries converged,
-        // extras carried duplicates. The dedupe in build-loop below
-        // already skipped them at RENDER time but the operator
-        // reported still seeing the same image in 2 slots — likely
-        // because v4Photos was previously written from a duplicated
-        // extras snapshot and now the duplicate lives in v4Photos.
-        // Fix: hard-clean both arrays at the start of each paint.
-        if (state.extraPhotos && state.extraPhotos.length > 0) {
-            const extrasSeen = new Set();
-            const cleanedExtras = [];
-            for (const e of state.extraPhotos) {
-                if (e && e.dataUrl && !extrasSeen.has(e.dataUrl)) {
-                    extrasSeen.add(e.dataUrl);
-                    cleanedExtras.push(e);
-                }
-            }
-            if (cleanedExtras.length !== state.extraPhotos.length) {
-                state.extraPhotos = cleanedExtras;
-            }
-        }
-        if (state.v4Photos && state.v4Photos.length > 0) {
-            const v4Seen = new Set();
-            const cleanedV4 = [];
-            for (const p of state.v4Photos) {
-                if (p && p.url && !v4Seen.has(p.url)) {
-                    v4Seen.add(p.url);
-                    cleanedV4.push(p);
-                }
-            }
-            if (cleanedV4.length !== state.v4Photos.length) {
-                state.v4Photos = cleanedV4;
-            }
-        }
-
-        const seen = new Set();
-        const allPhotos = [];
-        // Primary first (oldest — was captured first).
+        const newV4 = [];
+        const seenUrls = new Set();
         if (state.photoDataUrl) {
-            allPhotos.push({
+            newV4.push({
                 url: state.photoDataUrl,
                 blob: state.photoBlob || null,
+                variants: state.photoVariants || null,
+                groupId: state.photoGroupId || null,
+                clientBlurApplied: Boolean(state.photoClientBlurApplied),
                 ts: 0,
             });
-            seen.add(state.photoDataUrl);
+            seenUrls.add(state.photoDataUrl);
         }
-        // Then extras in their insertion order.
+        // Track extras entries that resolve to a unique (and non-primary)
+        // dataUrl. We ALSO sanitize state.extraPhotos in place so the
+        // submitReport upload work-list doesn't queue duplicates.
+        const cleanedExtras = [];
         for (const e of (state.extraPhotos || [])) {
-            if (e && e.dataUrl && !seen.has(e.dataUrl)) {
-                allPhotos.push({
-                    url: e.dataUrl,
-                    blob: e.blob || null,
-                    ts: e.ts || 0,
-                });
-                seen.add(e.dataUrl);
-            }
+            if (!e || !e.dataUrl) continue;
+            // Skip extras entries that duplicate the primary OR a
+            // prior extras entry (rapid-shutter-tap or BlazeFace-
+            // convergence edge cases). The HC78 rebuild from
+            // `[primary, ...extras]` is the canonical source of
+            // truth — there is no second sync from v4Photos, so a
+            // skipped extras entry stays skipped forever (no
+            // resurrection on later paints).
+            if (seenUrls.has(e.dataUrl)) continue;
+            seenUrls.add(e.dataUrl);
+            cleanedExtras.push(e);
+            newV4.push({
+                url: e.dataUrl,
+                blob: e.blob || null,
+                variants: e.variants || null,
+                groupId: e.groupId || null,
+                pid: e.pid || null,
+                clientBlurApplied: Boolean(e.clientBlurApplied),
+                ts: e.ts || 0,
+            });
         }
-        // Then anything in v4Photos that wasn't already counted (legacy
-        // capture-stage path may have entries we missed).
-        for (const p of (state.v4Photos || [])) {
-            if (p && p.url && !seen.has(p.url)) {
-                allPhotos.push(p);
-                seen.add(p.url);
-            }
+        // Persist the dedupe so submitReport's upload pass doesn't
+        // queue the duplicate either.
+        if (cleanedExtras.length !== (state.extraPhotos || []).length) {
+            state.extraPhotos = cleanedExtras;
         }
-        // Sync back to state.v4Photos ONLY when we have more photos than
-        // it currently knows about. After a delete via the review strip
-        // `_deleteV4PhotoAt` splices BOTH v4Photos AND extras (HC67), so
-        // both lengths stay in sync; this guard prevents the sync from
-        // re-resurrecting a just-deleted photo.
-        if (allPhotos.length > (state.v4Photos || []).length) {
-            state.v4Photos = allPhotos;
-        }
-        const photos = allPhotos.slice(0, V4_MAX_PHOTOS);
+        state.v4Photos = newV4;
+        const photos = newV4.slice(0, V4_MAX_PHOTOS);
         const slots = [];
         for (let i = 0; i < V4_MAX_PHOTOS; i++) {
             if (photos[i]) {

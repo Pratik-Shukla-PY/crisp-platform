@@ -93,6 +93,17 @@ async function openReviewStage(page: Page, lang = 'en', opts: { photos?: number 
         }
         (window as any).state.v4Photos = photos;
         (window as any).state.photoDataUrl = n > 0 ? photos[0].url : null;
+        // HC78 — review-stage renderer now rebuilds v4Photos canonically
+        // from [primary, ...extras]. Seed extras for photos[1..] so the
+        // rebuild reproduces the seeded count. (Pre-HC78 the renderer
+        // merged v4Photos with the other state sources, so v4Photos was
+        // the source of truth on its own. Post-HC78 it's strictly
+        // derived from primary + extras.)
+        const extras = [];
+        for (let i = 1; i < n; i++) {
+            extras.push({ dataUrl: photos[i].url, blob: null });
+        }
+        (window as any).state.extraPhotos = extras;
         (window as any).state.location = {
             lat: 12.9716, lng: 77.5946, acc: 35,
         };
@@ -202,6 +213,69 @@ test.describe('PWA — HC65 V4 Step 3 review zero-scroll', () => {
             () => ((window as any).state.extraPhotos || []).length,
         );
         expect(extrasLen, 'state.extraPhotos must be deduped to 1 entry').toBe(1);
+    });
+
+    test('@smoke HC78 BlazeFace dataUrl mutation does NOT resurrect a stale duplicate', async ({ page }) => {
+        // Operator's 5th-attempt reproducer: take 1 photo on the review
+        // stage and see it appear in 2 tiles. Root cause was that
+        // `_renderReviewPhotoStrip` merged from 3 sources (primary +
+        // extras + v4Photos). The capture-stage's BlazeFace pass
+        // asynchronously mutated `extras[0].dataUrl` to a BLURRED
+        // version, leaving the old (RAW) url in state.v4Photos. The
+        // 3-source merge then surfaced both A_RAW (from v4Photos)
+        // and A_BLURRED (from extras) as separate photos.
+        //
+        // HC78 fix: rebuild state.v4Photos canonically from
+        // `[primary, ...extras]` at every paint — there is exactly
+        // ONE source of truth.
+        await openReviewStage(page, 'en', { photos: 0 });
+        await page.evaluate(() => {
+            (window as any).state.v4Photos = [];
+            (window as any).state.photoDataUrl = 'data:image/png;base64,iVBORw0KGgo=#primary';
+            (window as any).state.photoBlob = null;
+            // Simulate the snap-handler having just pushed the RAW
+            // dataUrl as an extra (`A_raw`).
+            (window as any).state.extraPhotos = [
+                { dataUrl: 'data:image/png;base64,iVBORw0KGgo=#A_raw', blob: null },
+            ];
+            (window as any).goToStage('stage-v4-review');
+        });
+        await page.waitForTimeout(300);
+        // After first paint: primary + 1 extra = 2 filled tiles.
+        await expect(
+            page.locator('#v4-review-photo-strip .v4-review-photo-tile'),
+            'after initial paint: 2 filled tiles',
+        ).toHaveCount(2);
+        // NOW simulate BlazeFace finishing — it mutates extras[0].dataUrl
+        // to the BLURRED variant (a NEW byte sequence / NEW dataUrl
+        // string). Pre-HC78 this would leave state.v4Photos with the
+        // RAW url AND extras with the BLURRED url; next paint would
+        // render BOTH as separate photos = 3 tiles total.
+        await page.evaluate(() => {
+            (window as any).state.extraPhotos[0].dataUrl =
+                'data:image/png;base64,iVBORw0KGgo=#A_blurred';
+            // Trigger a repaint via the public hook.
+            if (typeof (window as any).__crispV4RefreshReviewStrip === 'function') {
+                (window as any).__crispV4RefreshReviewStrip();
+            }
+        });
+        await page.waitForTimeout(150);
+        // STILL 2 filled tiles — NOT 3. The BlazeFace rewrite did not
+        // resurrect the raw url as a separate photo.
+        await expect(
+            page.locator('#v4-review-photo-strip .v4-review-photo-tile'),
+            'after BlazeFace rewrites extras[0].dataUrl: STILL 2 tiles, not 3',
+        ).toHaveCount(2);
+        // state.v4Photos rebuilt canonically — length matches
+        // primary + extras count, no stale entries.
+        const v4State = await page.evaluate(() => ({
+            v4: ((window as any).state.v4Photos || []).map((p: any) => p.url),
+            extras: ((window as any).state.extraPhotos || []).map((e: any) => e.dataUrl),
+            primary: (window as any).state.photoDataUrl,
+        }));
+        expect(v4State.v4.length, 'v4Photos has exactly 2 entries').toBe(2);
+        expect(v4State.v4[0], 'v4Photos[0].url === primary').toBe(v4State.primary);
+        expect(v4State.v4[1], 'v4Photos[1].url === live extras[0].dataUrl').toBe(v4State.extras[0]);
     });
 
     test('@smoke HC74 photos in state.photoDataUrl + extraPhotos render in review strip', async ({ page }) => {
