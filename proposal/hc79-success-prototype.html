@@ -1,0 +1,1431 @@
+<!doctype html>
+<!--
+  HC79.1 — Report-Submitted stage prototype.
+
+  Standalone HTML/CSS prototype for the redesigned `#stage-success` in
+  the CRISP PWA. NO production code is touched by this file — it lives
+  alongside the existing UI:UX proposal artefacts and is a paint-only
+  mockup so the operator can validate the visual direction BEFORE the
+  production markup / CSS / JS lands in HC79.2.
+
+  Open at 375x667 (iPhone SE) in Safari for the baseline budget check.
+  Use the controls bar at the top to flip between:
+    - Viewport presets (iPhone SE / 14 / Pixel 7 / iPad portrait)
+    - LTR / RTL direction
+    - Online / Offline submit state
+    - Populated / Empty nearby feed
+    - Default / Reduced-motion preference
+    - Default / Reader Mode (presbyopia bump)
+
+  All design tokens (--gap-*, --fz-*, --motion-*, --r-*, palette) are
+  copied verbatim from `mobile-app/src/styles.css` lines 68-207 so the
+  prototype renders pixel-for-pixel against production.
+-->
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>HC79.1 — Report Submitted (prototype)</title>
+<style>
+/* ── Design tokens (copied from mobile-app/src/styles.css :root) ── */
+:root {
+  --bg: #213A58;
+  --surface: #1a3552;
+  --surface2: #234060;
+  --accent: #09D1C7;
+  --accent-soft: rgba(9,209,199,0.16);
+  --accent-glow: 0 0 36px rgba(9,209,199,0.35);
+  --green: #80EE98;
+  --warn: #eab308;
+  --red: #ff8a8a;
+  --text: #f1f5f9;
+  --text-sub: #cbd5e1;
+  --text-dim: #94a3b8;
+  --text-mute: #64748b;
+  --border: rgba(70,223,177,0.08);
+  --font: 'Inter', 'Noto Sans Arabic', 'Noto Sans SC', sans-serif;
+  --heading: 'Outfit', 'Noto Sans Arabic', 'Noto Sans SC', sans-serif;
+  --r-sm: 6px;
+  --r-md: 12px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+  --fz-xs: 12px;
+  --fz-sm: 13px;
+  --fz-body: 14px;
+  --fz-md: 16px;
+  --fz-lg: 18px;
+  --fz-xl: 22px;
+  --fz-display: 32px;
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.45);
+  --shadow-glow: 0 0 32px rgba(9,209,199,0.22);
+  --motion-press: 120ms;
+  --motion-fade: 200ms;
+  --motion-sheet: 280ms;
+  --motion-shimmer: 1400ms;
+  --easing-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --gap-2: 8px;
+  --gap-3: 12px;
+  --gap-4: 16px;
+  --gap-5: 20px;
+  --gap-6: 24px;
+  --gap-8: 32px;
+}
+html[data-reader-mode="on"] {
+  --fz-xs: 13px;
+  --fz-sm: 14px;
+  --fz-body: 16px;
+  --fz-md: 18px;
+  --fz-lg: 20px;
+  --fz-xl: 24px;
+  --fz-display: 36px;
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { height:100%; }
+body {
+  background: radial-gradient(circle at 20% 10%, #2a4d70 0%, #213A58 55%) fixed;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--fz-body);
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 48px;
+}
+
+/* ── Controls bar (prototype-only chrome) ── */
+.proto-controls {
+  width: 100%;
+  max-width: 920px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--r-lg);
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: center;
+  font-size: var(--fz-sm);
+  color: var(--text-sub);
+}
+.proto-controls h1 {
+  font-family: var(--heading);
+  font-size: var(--fz-md);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  margin-right: 8px;
+}
+.proto-controls fieldset {
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.proto-controls legend {
+  display: none;
+}
+.proto-controls label {
+  font-size: var(--fz-xs);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-right: 4px;
+}
+.proto-controls .seg {
+  display: inline-flex;
+  background: rgba(0,0,0,0.25);
+  border-radius: var(--r-pill);
+  padding: 2px;
+}
+.proto-controls .seg button {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-size: var(--fz-xs);
+  padding: 6px 10px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  font-weight: 600;
+  transition: background var(--motion-press) var(--easing-out),
+              color var(--motion-press) var(--easing-out);
+}
+.proto-controls .seg button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #0b1f33;
+}
+.proto-controls .reset-btn {
+  margin-left: auto;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--text-sub);
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  font-size: var(--fz-xs);
+}
+
+/* ── Device frame (simulates .mobile-screen wrapper + safe-area) ── */
+.device-frame {
+  width: 375px;
+  height: 667px;
+  position: relative;
+  background: #0b1726;
+  border-radius: 32px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,255,255,0.06);
+  overflow: hidden;
+  transition: width var(--motion-fade) var(--easing-out),
+              height var(--motion-fade) var(--easing-out);
+}
+.device-frame[data-size="iphone-14"] { width: 390px; height: 844px; }
+.device-frame[data-size="pixel-7"]   { width: 412px; height: 915px; }
+.device-frame[data-size="ipad"]      { width: 768px; height: 1024px; }
+.device-frame .safe-top    { height: 47px; background: rgba(0,0,0,0.4); }
+.device-frame .safe-bottom { height: 34px; background: rgba(0,0,0,0.4); position:absolute; bottom:0; inset-inline-start:0; inset-inline-end:0; }
+.device-frame .stage-wrap {
+  position: absolute;
+  inset: 47px 0 34px 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   STAGE-SUCCESS — the surface under audit
+   ───────────────────────────────────────────────────────────────── */
+.stage-success {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  font-family: var(--font);
+}
+
+/* HEADER (48 px) — uses the SAME brand cluster (logo SVG + wordmark
+   + connectivity dot) the home stage uses, so the success stage
+   reads as part of the same app, not a separate flow. */
+.v4-header-success {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-2);
+  padding: var(--gap-2) var(--gap-4);
+  min-height: 48px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.success-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--r-md);
+}
+.success-brand-logo {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.success-brand-logo svg { display: block; width: 100%; height: 100%; }
+.success-brand-name {
+  font-family: var(--heading);
+  font-weight: 800;
+  font-size: var(--fz-md);
+  letter-spacing: 0.5px;
+  color: var(--text);
+  position: relative;
+  display: inline-block;
+}
+.success-brand-name .connectivity-dot {
+  position: absolute;
+  top: 2px;
+  inset-inline-end: -8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px rgba(128,238,152,0.7);
+}
+.success-devid-pill {
+  margin-inline-start: auto;
+  margin-inline-end: var(--gap-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-sub);
+  font-size: var(--fz-xs);
+  font-weight: 600;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  letter-spacing: 0.3px;
+  padding: 6px 10px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+.success-devid-pill i {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.v4-lang-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text);
+  font-size: var(--fz-xs);
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+
+/* BODY */
+.success-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-3);
+  padding: var(--gap-3) var(--gap-4);
+  overflow: hidden;
+}
+
+/* THANKS BAR — compact heart on the left, copy on the right.
+   Horizontal layout (was stacked) per operator: saves ~30 px of
+   vertical height so the success-stage budget on iPhone SE keeps
+   comfortable headroom for the rest of the content.  */
+.success-thanks {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--gap-3);
+  padding: 6px 4px;
+}
+.success-thanks-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.success-thanks-heart {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.success-thanks-heart i {
+  color: #ff7a90;                            /* warm coral — heart is universal */
+  font-size: 22px;
+  filter: drop-shadow(0 0 10px rgba(255,122,144,0.55));
+  animation: success-heart-beat 1.8s ease-in-out infinite;
+  position: relative;
+  z-index: 2;
+}
+.success-thanks-heart::before,
+.success-thanks-heart::after {
+  content:"";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255,122,144,0.45);
+  animation: success-heart-ring 2.4s var(--easing-out) infinite;
+  opacity: 0;
+}
+.success-thanks-heart::after { animation-delay: 1.2s; }
+@keyframes success-heart-beat {
+  0%, 100% { transform: scale(1); }
+  20%      { transform: scale(1.18); }
+  40%      { transform: scale(1); }
+  60%      { transform: scale(1.10); }
+}
+@keyframes success-heart-ring {
+  0%   { transform: scale(0.5); opacity: 0.55; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+.success-thanks-title {
+  font-family: var(--heading);
+  font-size: var(--fz-md);
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.2px;
+  text-align: start;
+}
+.success-thanks-sub {
+  font-size: var(--fz-sm);
+  color: var(--text-sub);
+  font-weight: 500;
+  text-align: start;
+  line-height: 1.3;
+}
+
+/* STATUS PILL — radar + label + meta (now sits BELOW the thanks bar) */
+.success-status-pill {
+  background: var(--surface);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--r-lg);
+  padding: var(--gap-3) var(--gap-4);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--gap-3);
+  position: relative;
+  overflow: hidden;
+  min-height: 64px;
+}
+.success-radar {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.success-radar-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px rgba(9,209,199,0.7);
+  position: relative;
+  z-index: 2;
+}
+.success-radar-ring {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid rgba(9,209,199,0.55);
+  border-radius: 50%;
+  opacity: 0;
+  animation: success-radar-ring 2.4s var(--easing-out) infinite;
+}
+.success-radar-ring:nth-child(2) { animation-delay: 0.8s; }
+.success-radar-ring:nth-child(3) { animation-delay: 1.6s; }
+@keyframes success-radar-ring {
+  0%   { transform: scale(0.4); opacity: 0.7; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+.success-status-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.success-status-label {
+  font-family: var(--heading);
+  font-size: var(--fz-sm);
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+.success-status-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fz-xs);
+  color: var(--text-sub);
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+.success-status-meta .sep {
+  color: var(--text-mute);
+}
+/* Offline / queued state replaces the radar with a static dot */
+.stage-success[data-state="offline"] .success-radar-ring { animation: none; opacity: 0; }
+.stage-success[data-state="offline"] .success-radar-dot {
+  background: var(--warn);
+  box-shadow: 0 0 12px rgba(234,179,8,0.6);
+}
+.stage-success[data-state="offline"] .success-status-label { color: var(--warn); }
+.stage-success[data-state="offline"] .success-status-pill { border-color: rgba(234,179,8,0.32); }
+
+/* RESPONDER STRIP (36 px) */
+.success-responder-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-2);
+  padding: 8px 12px;
+  background: rgba(9,209,199,0.06);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--r-pill);
+  font-size: var(--fz-sm);
+  color: var(--text-sub);
+  min-height: 36px;
+  align-self: stretch;
+  justify-content: flex-start;
+}
+.success-responder-strip i {
+  color: var(--accent);
+  font-size: var(--fz-sm);
+  animation: chip-pulse 3.6s ease-in-out infinite;
+}
+.success-responder-strip strong {
+  color: var(--text);
+  font-weight: 700;
+}
+@keyframes chip-pulse {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(9,209,199,0.4)); }
+  50%      { filter: drop-shadow(0 0 8px rgba(9,209,199,0.8)); }
+}
+
+/* CONTRIBUTION STRIP — current tier on the left, next tier on the
+   right with a connecting progress bar. Shows the operator's
+   "Signal logo" (📣 = T2_SIGNAL per home-screen.js BADGE_LEVELS)
+   as the visible next-tier target so the reporter understands
+   what they're working toward, not just a text label. */
+.success-contribution-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-3);
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-sub);
+  cursor: pointer;
+  width: 100%;
+  text-align: start;
+  min-height: 60px;
+  transition: background var(--motion-press) var(--easing-out);
+}
+.success-contribution-strip:hover { background: var(--surface2); }
+.sc-tier-now,
+.sc-tier-next {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  min-width: 56px;
+}
+.sc-tier-emoji {
+  font-size: 22px;
+  line-height: 1;
+}
+.sc-tier-emoji.sc-tier-next-emoji {
+  filter: grayscale(0.4) opacity(0.7);       /* dimmed until unlocked */
+}
+.sc-tier-label {
+  font-family: var(--heading);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--text);
+  text-transform: uppercase;
+}
+.sc-tier-next .sc-tier-label { color: var(--text-dim); }
+.sc-progress-bar {
+  flex: 1 1 auto;
+  height: 8px;
+  background: rgba(255,255,255,0.06);
+  border-radius: var(--r-pill);
+  position: relative;
+  overflow: hidden;
+}
+.sc-progress-fill {
+  position: absolute;
+  inset: 0;
+  width: 60%;                                /* mock: 3 of 5 reports = 60% */
+  background: linear-gradient(90deg, var(--accent), var(--green));
+  border-radius: var(--r-pill);
+  animation: sc-progress-pulse 3.2s ease-in-out infinite;
+}
+@keyframes sc-progress-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(9,209,199,0.4); }
+  50%      { box-shadow: 0 0 14px rgba(9,209,199,0.7); }
+}
+.sc-progress-meta {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: 'SF Mono', 'Menlo', monospace;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+/* NEARBY TRIGGER PILL — collapsed by default. Number-only summary
+   that opens the bottom-sheet modal (mirrors home-page pattern
+   `.nearby-sheet`).  No inline list on the success stage = max
+   vertical breathing room for the rest of the content. */
+.success-nearby-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-3);
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text);
+  cursor: pointer;
+  width: 100%;
+  text-align: start;
+  min-height: 56px;
+  transition: background var(--motion-press) var(--easing-out);
+}
+.success-nearby-trigger:hover { background: var(--surface2); }
+.success-nearby-trigger .snt-dot-wrap {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+.success-nearby-trigger .snt-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(9,209,199,0.5);
+  position: relative;
+  z-index: 2;
+}
+/* Ripple ring around the trigger dot when there are reports nearby */
+.success-nearby-trigger.has-reports .snt-dot-wrap::before,
+.success-nearby-trigger.has-reports .snt-dot-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(9,209,199,0.55);
+  animation: nearby-row-ripple 2.6s var(--easing-out) infinite;
+  opacity: 0;
+}
+.success-nearby-trigger.has-reports .snt-dot-wrap::after {
+  animation-delay: 1.3s;
+}
+.success-nearby-trigger .snt-text {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.success-nearby-trigger .snt-label {
+  font-family: var(--heading);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.success-nearby-trigger .snt-meta {
+  font-size: var(--fz-body);
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.success-nearby-trigger .snt-count {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.success-nearby-trigger .snt-meta-sub {
+  font-size: var(--fz-xs);
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.success-nearby-trigger .snt-chevron {
+  font-size: var(--fz-sm);
+  color: var(--text-dim);
+  flex: 0 0 auto;
+}
+[dir="rtl"] .success-nearby-trigger .snt-chevron {
+  transform: scaleX(-1);
+}
+
+/* Empty-state variant of the trigger pill — when nearby has 0 reports
+   the pill is unclickable + reads as the empty signal. */
+.success-nearby-trigger.is-empty {
+  cursor: default;
+  background: rgba(9,209,199,0.03);
+  border-style: dashed;
+}
+.success-nearby-trigger.is-empty .snt-chevron { display: none; }
+
+/* Flex-fill spacer — pushes the trigger pill up toward the
+   contribution strip so the CTAs at the bottom of the stage stay
+   pinned to the footer instead of floating into the middle. */
+.success-spacer {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ── BOTTOM SHEET (Nearby reports modal) ──────────────────────
+   Mirrors the .nearby-sheet pattern from production styles.css
+   (lines 13309-13340). Position: fixed inside the device frame
+   so the prototype modal stays within the simulated phone.   */
+.nearby-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity var(--motion-fade) var(--easing-out),
+              visibility 0s linear var(--motion-fade);
+}
+.nearby-sheet.is-open {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity var(--motion-fade) var(--easing-out);
+}
+.nearby-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  cursor: pointer;
+}
+.nearby-sheet-card {
+  position: relative;
+  background: var(--surface);
+  border-top-left-radius: var(--r-xl);
+  border-top-right-radius: var(--r-xl);
+  padding: 14px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-3);
+  max-height: 80%;
+  box-shadow: 0 -20px 40px rgba(0,0,0,0.5);
+  transform: translateY(20px);
+  transition: transform var(--motion-sheet) var(--easing-out);
+}
+.nearby-sheet.is-open .nearby-sheet-card {
+  transform: translateY(0);
+}
+.nearby-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: rgba(255,255,255,0.18);
+  margin: 0 auto 4px;
+}
+.nearby-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-3);
+}
+.nearby-sheet-title {
+  font-family: var(--heading);
+  font-size: var(--fz-md);
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: var(--text);
+}
+.nearby-sheet-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  border: 0;
+  color: var(--text-sub);
+  font-size: 16px;
+  cursor: pointer;
+}
+.nearby-sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* NEARBY ROWS — mirror the home-stage .home-nearby-row DOM so the
+   success-stage feed reads as the same component the user sees on
+   home (operator brief: "I am not alone. Others nearby are reporting
+   too."). Verified-count + pending-count + summary uppercase eyebrow
+   all preserved. Adds a pure-CSS ripple ring around the dot when the
+   row carries active (pending) reports — that's the "ripple effect
+   if reports exist nearby" the operator asked for. */
+.nearby-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  min-height: 58px;
+  cursor: pointer;
+  transition: background var(--motion-press) var(--easing-out);
+}
+.nearby-row:hover {
+  background: rgba(70,223,177,0.06);
+}
+/* Dot wrapper hosts the ripple rings. The dot itself stays a static
+   mint marker (matches home), the rings expand outward to signal
+   "there's live activity here". */
+.nearby-row .nr-dot-wrap {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin-top: 4px;
+  display: grid;
+  place-items: center;
+}
+.nearby-row .nr-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(9,209,199,0.5);
+  position: relative;
+  z-index: 2;
+}
+.nearby-row.is-active .nr-dot-wrap::before,
+.nearby-row.is-active .nr-dot-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(9,209,199,0.55);
+  animation: nearby-row-ripple 2.6s var(--easing-out) infinite;
+  opacity: 0;
+}
+.nearby-row.is-active .nr-dot-wrap::after {
+  animation-delay: 1.3s;
+}
+@keyframes nearby-row-ripple {
+  0%   { transform: scale(0.4); opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.nearby-row .nr-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nearby-row .nr-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--fz-sm);
+  font-weight: 700;
+  color: var(--text);
+}
+.nearby-row .nr-count {
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+.nearby-row .nr-sep {
+  color: rgba(255,255,255,0.30);
+  font-weight: 400;
+}
+.nearby-row .nr-summary {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: var(--fz-xs);
+  color: rgba(255,255,255,0.78);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nearby-row .nr-label {
+  font-size: var(--fz-sm);
+  font-weight: 500;
+  color: rgba(255,255,255,0.88);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nearby-row .nr-meta {
+  font-size: var(--fz-xs);
+  font-weight: 500;
+  color: rgba(255,255,255,0.48);
+}
+.nearby-row .nr-verified {
+  color: var(--green);
+  font-weight: 600;
+}
+.nearby-row .nr-pending {
+  color: #f5d76e;
+  font-weight: 600;
+}
+
+/* Empty nearby state — compact (success-stage budget is tight). */
+.nearby-empty {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--gap-3);
+  padding: 12px 14px;
+  background: rgba(9,209,199,0.03);
+  border: 1px dashed rgba(9,209,199,0.18);
+  border-radius: var(--r-md);
+  flex: 0 0 auto;
+}
+.nearby-empty-pulse {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgba(9,209,199,0.15);
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+.nearby-empty-pulse::before,
+.nearby-empty-pulse::after {
+  content:"";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(9,209,199,0.45);
+  animation: nearby-empty-ring 2.8s var(--easing-out) infinite;
+}
+.nearby-empty-pulse::after { animation-delay: 1.4s; }
+.nearby-empty-pulse i {
+  color: var(--accent);
+  font-size: 12px;
+  position: relative;
+  z-index: 1;
+}
+@keyframes nearby-empty-ring {
+  0%   { transform: scale(0.6); opacity: 0.65; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+.nearby-empty-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.nearby-empty-title {
+  font-size: var(--fz-sm);
+  font-weight: 700;
+  color: var(--text);
+}
+.nearby-empty-sub {
+  font-size: var(--fz-xs);
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+
+/* FOOTER — stacked CTAs */
+.v4-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--gap-2);
+  padding: var(--gap-3) var(--gap-4) var(--gap-4);
+  border-top: 1px solid var(--border);
+}
+.v4-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 52px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, var(--accent) 0%, #07b3aa 100%);
+  color: #0b1f33;
+  font-family: var(--heading);
+  font-size: var(--fz-md);
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: var(--shadow-glow);
+}
+.success-myreports-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  color: var(--text-sub);
+  font-size: var(--fz-sm);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: var(--r-md);
+  min-height: 44px;
+}
+.success-myreports-link i { color: var(--text-dim); font-size: var(--fz-sm); }
+.success-myreports-link .mr-count {
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: var(--fz-xs);
+  font-weight: 700;
+  margin-inline-start: 4px;
+}
+
+/* ── Reduced motion override ─────────────────────────────── */
+.stage-success[data-motion="reduced"] .success-radar-ring,
+.stage-success[data-motion="reduced"] .nearby-empty-pulse::before,
+.stage-success[data-motion="reduced"] .nearby-empty-pulse::after,
+.stage-success[data-motion="reduced"] .success-responder-strip i,
+.stage-success[data-motion="reduced"] .nearby-row.is-active .nr-dot-wrap::before,
+.stage-success[data-motion="reduced"] .nearby-row.is-active .nr-dot-wrap::after,
+.stage-success[data-motion="reduced"] .success-thanks-heart i,
+.stage-success[data-motion="reduced"] .success-thanks-heart::before,
+.stage-success[data-motion="reduced"] .success-thanks-heart::after,
+.stage-success[data-motion="reduced"] .sc-progress-fill {
+  animation: none !important;
+}
+.stage-success[data-motion="reduced"] .success-radar-ring,
+.stage-success[data-motion="reduced"] .nearby-empty-pulse::before,
+.stage-success[data-motion="reduced"] .nearby-empty-pulse::after,
+.stage-success[data-motion="reduced"] .nearby-row.is-active .nr-dot-wrap::before,
+.stage-success[data-motion="reduced"] .nearby-row.is-active .nr-dot-wrap::after,
+.stage-success[data-motion="reduced"] .success-thanks-heart::before,
+.stage-success[data-motion="reduced"] .success-thanks-heart::after {
+  opacity: 0.3;
+}
+.stage-success[data-motion="reduced"] .success-radar-dot {
+  box-shadow: 0 0 4px rgba(9,209,199,0.5);
+}
+
+/* ── RTL adjustments (inherited via dir attr) ────────────── */
+[dir="rtl"] .success-status-meta {
+  flex-direction: row-reverse;
+}
+
+/* ── Caption beneath the device frame ────────────────────── */
+.proto-caption {
+  margin-top: 16px;
+  font-size: var(--fz-xs);
+  color: var(--text-dim);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  text-align: center;
+}
+.proto-budget {
+  margin-top: 6px;
+  font-size: var(--fz-xs);
+  color: var(--text-mute);
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+
+<!-- ─────────────────────────────────────────────────────────────────
+     Prototype controls (NOT part of the production design — they
+     just let the operator flip between states for visual review).
+     ───────────────────────────────────────────────────────────── -->
+<div class="proto-controls" id="controls">
+  <h1>HC79.1 prototype</h1>
+
+  <fieldset>
+    <label>Viewport</label>
+    <div class="seg" data-control="viewport">
+      <button data-value="iphone-se" aria-pressed="true">iPhone SE</button>
+      <button data-value="iphone-14">iPhone 14</button>
+      <button data-value="pixel-7">Pixel 7</button>
+      <button data-value="ipad">iPad</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <label>Direction</label>
+    <div class="seg" data-control="dir">
+      <button data-value="ltr" aria-pressed="true">LTR</button>
+      <button data-value="rtl">RTL (AR)</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <label>State</label>
+    <div class="seg" data-control="state">
+      <button data-value="online" aria-pressed="true">Online</button>
+      <button data-value="offline">Offline (queued)</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <label>Nearby</label>
+    <div class="seg" data-control="nearby">
+      <button data-value="populated" aria-pressed="true">Populated</button>
+      <button data-value="empty">Empty</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <label>Motion</label>
+    <div class="seg" data-control="motion">
+      <button data-value="default" aria-pressed="true">Default</button>
+      <button data-value="reduced">Reduced</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <label>Reader</label>
+    <div class="seg" data-control="reader">
+      <button data-value="off" aria-pressed="true">Off</button>
+      <button data-value="on">On (presbyopia)</button>
+    </div>
+  </fieldset>
+
+  <button class="reset-btn" id="reset-btn">Reset all</button>
+</div>
+
+<!-- ── Device frame ─────────────────────────────────────────────── -->
+<div class="device-frame" id="device-frame" data-size="iphone-se">
+  <div class="safe-top" aria-hidden="true"></div>
+  <div class="stage-wrap">
+
+    <!-- THE STAGE -->
+    <div class="stage-success" id="stage-success" data-state="online" data-motion="default">
+
+      <!-- Header — same brand cluster (logo SVG + wordmark + dot)
+           the home stage uses (index.html lines 3212-3238). -->
+      <div class="v4-header-success">
+        <button type="button" class="success-brand" aria-label="Home">
+          <span class="success-brand-logo" aria-hidden="true">
+            <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CRISP">
+              <defs>
+                <linearGradient id="crisp-brand-tile" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#22455F"/>
+                  <stop offset="1" stop-color="#163349"/>
+                </linearGradient>
+              </defs>
+              <rect width="256" height="256" rx="44" fill="url(#crisp-brand-tile)"/>
+              <circle cx="128" cy="128" r="106" fill="none" stroke="#5EEAD4" stroke-width="4.5" opacity="0.3"/>
+              <circle cx="128" cy="128" r="81"  fill="none" stroke="#2DD4BF" stroke-width="5.5" opacity="0.5"/>
+              <circle cx="128" cy="128" r="56"  fill="none" stroke="#22D3EE" stroke-width="7"   opacity="0.78"/>
+              <circle cx="128" cy="128" r="31"  fill="none" stroke="#67E8F9" stroke-width="8"/>
+              <circle cx="128" cy="128" r="13" fill="#67E8F9"/>
+              <circle cx="184" cy="72" r="9" fill="#FB7185"/>
+            </svg>
+          </span>
+          <span class="success-brand-name">
+            CRISP<span class="connectivity-dot" aria-hidden="true"></span>
+          </span>
+        </button>
+        <button type="button" class="success-devid-pill" aria-label="Device ID">
+          <i class="fa-solid fa-circle-info"></i>
+          <span>CRISP-A1B2</span>
+        </button>
+        <button type="button" class="v4-lang-pill" aria-label="Change language">
+          <span>🌐</span><span class="v4-lang-code">EN</span>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="success-body">
+
+        <!-- Thanks bar — heart on left, copy on right (horizontal
+             layout per operator to reclaim vertical height). -->
+        <div class="success-thanks">
+          <div class="success-thanks-heart" aria-hidden="true">
+            <i class="fa-solid fa-heart"></i>
+          </div>
+          <div class="success-thanks-text">
+            <div class="success-thanks-title">Thank you for reporting</div>
+            <div class="success-thanks-sub">Your signal helps responders act faster</div>
+          </div>
+        </div>
+
+        <!-- Status pill — radar + label + report-id + time-ago, now
+             on a single horizontal row to free up vertical space for
+             the thanks bar above. -->
+        <div class="success-status-pill">
+          <div class="success-radar" aria-hidden="true">
+            <span class="success-radar-ring"></span>
+            <span class="success-radar-ring"></span>
+            <span class="success-radar-ring"></span>
+            <span class="success-radar-dot"></span>
+          </div>
+          <div class="success-status-body">
+            <span class="success-status-label" id="status-label">Under review</span>
+            <div class="success-status-meta">
+              <span>CRISP-A1B2C3D4</span>
+              <span class="sep">·</span>
+              <span id="time-ago">14 sec ago</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Responder strip -->
+        <div class="success-responder-strip">
+          <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+          <span>Responders reviewing — <strong>12 active nearby</strong></span>
+        </div>
+
+        <!-- Contribution strip — current tier on the left, NEXT tier
+             on the right with a connecting progress bar. The Signal
+             logo (📣 = T2_SIGNAL emoji from home-screen.js BADGE_LEVELS)
+             is now visually surfaced as the goal, not just a text
+             label. -->
+        <button type="button" class="success-contribution-strip" aria-label="View rewards">
+          <div class="sc-tier-now">
+            <span class="sc-tier-emoji">🌱</span>
+            <span class="sc-tier-label">SCOUT</span>
+          </div>
+          <div class="sc-progress-bar" aria-hidden="true">
+            <div class="sc-progress-fill"></div>
+            <span class="sc-progress-meta">3 / 5</span>
+          </div>
+          <div class="sc-tier-next">
+            <span class="sc-tier-emoji sc-tier-next-emoji">📣</span>
+            <span class="sc-tier-label">SIGNAL</span>
+          </div>
+        </button>
+
+        <!-- Nearby trigger pill — number-only summary. Tap opens
+             the bottom-sheet modal with the full list (mirrors the
+             home stage's .nearby-sheet pattern). -->
+        <button type="button" class="success-nearby-trigger" id="nearby-trigger" aria-label="View nearby reports">
+          <div class="snt-dot-wrap" aria-hidden="true">
+            <span class="snt-dot"></span>
+          </div>
+          <div class="snt-text">
+            <div class="snt-label">Nearby</div>
+            <div class="snt-meta" id="snt-meta">
+              <span class="snt-count" id="snt-count">17</span>
+              <span>reports</span>
+              <span class="snt-meta-sub" id="snt-meta-sub">· 4 areas active</span>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right snt-chevron" aria-hidden="true"></i>
+        </button>
+
+        <!-- Flex spacer keeps the footer pinned at the bottom of the
+             stage instead of floating up under the trigger pill. -->
+        <div class="success-spacer" aria-hidden="true"></div>
+
+      </div>
+
+      <!-- ── Bottom-sheet modal for the nearby list (slides up from
+           below when the trigger pill is tapped). -->
+      <div class="nearby-sheet" id="nearby-sheet" role="dialog" aria-modal="true" aria-labelledby="nearby-sheet-title">
+        <div class="nearby-sheet-backdrop" id="nearby-sheet-backdrop"></div>
+        <div class="nearby-sheet-card" role="document">
+          <div class="nearby-sheet-handle" aria-hidden="true"></div>
+          <div class="nearby-sheet-header">
+            <h3 class="nearby-sheet-title" id="nearby-sheet-title">Nearby reports</h3>
+            <button class="nearby-sheet-close" id="nearby-sheet-close" type="button" aria-label="Close">✕</button>
+          </div>
+          <div class="nearby-sheet-list" id="nearby-list">
+            <!-- Rendered by JS based on populated/empty toggle -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer (stacked CTAs) -->
+      <div class="v4-footer">
+        <button type="button" class="v4-primary">
+          <i class="fa-solid fa-plus"></i>
+          <span>Report another incident</span>
+        </button>
+        <button type="button" class="success-myreports-link" aria-label="Open My Reports">
+          <i class="fa-solid fa-clipboard-list"></i>
+          <span>My Reports</span>
+          <span class="mr-count">3</span>
+        </button>
+      </div>
+
+    </div><!-- /stage-success -->
+  </div>
+  <div class="safe-bottom" aria-hidden="true"></div>
+</div>
+
+<div class="proto-caption" id="proto-caption">iPhone SE · 375 × 667 · LTR · online · populated</div>
+<div class="proto-budget" id="proto-budget">stage body height: — px / available: — px</div>
+
+<script>
+/* Prototype-only state machine. Pure paint; no production code. */
+const FRAME = document.getElementById('device-frame');
+const STAGE = document.getElementById('stage-success');
+const CAPTION = document.getElementById('proto-caption');
+const BUDGET = document.getElementById('proto-budget');
+const NEARBY_LIST = document.getElementById('nearby-list');
+const STATUS_LABEL = document.getElementById('status-label');
+const NEARBY_TRIGGER = document.getElementById('nearby-trigger');
+const NEARBY_SHEET = document.getElementById('nearby-sheet');
+const NEARBY_SHEET_TITLE = document.getElementById('nearby-sheet-title');
+const SNT_COUNT = document.getElementById('snt-count');
+const SNT_META = document.getElementById('snt-meta');
+const SNT_META_SUB = document.getElementById('snt-meta-sub');
+
+const state = {
+  viewport: 'iphone-se',
+  dir: 'ltr',
+  state: 'online',
+  nearby: 'populated',
+  motion: 'default',
+  reader: 'off',
+};
+
+const VP_LABEL = {
+  'iphone-se': 'iPhone SE · 375 × 667',
+  'iphone-14': 'iPhone 14 · 390 × 844',
+  'pixel-7':   'Pixel 7 · 412 × 915',
+  'ipad':      'iPad · 768 × 1024',
+};
+
+// Mirrors the shape window.NearbyIntel renders on the home stage:
+// each group has a count, distance, verified/pending split, and a
+// "summary" eyebrow describing the dominant crisis type. Rows with
+// `pending > 0` get the .is-active class → ripple ring.
+const POPULATED_NEARBY = [
+  { label: 'Electronic City', count: 7, dist: '2 km', summary: 'Flood · Road',          verified: 5, pending: 2 },
+  { label: 'Indiranagar',     count: 3, dist: '3 km', summary: 'Power · Residential',   verified: 1, pending: 2 },
+  { label: 'HSR Layout',      count: 2, dist: '4 km', summary: 'Earthquake · School',   verified: 0, pending: 2 },
+  { label: 'Koramangala 5th', count: 5, dist: '4 km', summary: 'Fire · Commercial',     verified: 4, pending: 1 },
+];
+
+function renderNearby() {
+  if (state.nearby === 'empty') {
+    NEARBY_TRIGGER.classList.add('is-empty');
+    NEARBY_TRIGGER.classList.remove('has-reports');
+    SNT_META.innerHTML =
+      '<span style="color:var(--text-sub);font-weight:600">You\'re the first eyes here</span>';
+    SNT_META_SUB.textContent = '';
+    NEARBY_LIST.innerHTML = `
+      <div class="nearby-empty">
+        <div class="nearby-empty-pulse"><i class="fa-solid fa-satellite-dish"></i></div>
+        <div class="nearby-empty-text">
+          <div class="nearby-empty-title">You're the first eyes here</div>
+          <div class="nearby-empty-sub">No nearby reports yet — your signal matters</div>
+        </div>
+      </div>
+    `;
+    closeSheet();
+    return;
+  }
+  // Populated state — trigger pill shows total count + active areas.
+  const totalReports = POPULATED_NEARBY.reduce((sum, item) => sum + item.count, 0);
+  const activeAreas = POPULATED_NEARBY.filter((item) => item.pending > 0).length;
+  NEARBY_TRIGGER.classList.remove('is-empty');
+  NEARBY_TRIGGER.classList.add('has-reports');
+  SNT_META.innerHTML =
+    `<span class="snt-count">${totalReports}</span>` +
+    `<span>reports</span>` +
+    `<span class="snt-meta-sub" id="snt-meta-sub">· ${activeAreas} areas active</span>`;
+  // Bottom-sheet list renders the FULL group set (no truncation —
+  // the sheet scrolls). Rows match the home-stage nearby-row DOM.
+  NEARBY_LIST.innerHTML = POPULATED_NEARBY.map((item) => {
+    const active = item.pending > 0 ? ' is-active' : '';
+    const verifiedFrag = item.verified > 0
+      ? `<span class="nr-verified">${item.verified} verified</span>`
+      : '';
+    const pendingFrag = item.pending > 0
+      ? `<span class="nr-pending">${item.pending} pending</span>`
+      : '';
+    const metaInner = [verifiedFrag, pendingFrag].filter(Boolean).join(' · ');
+    return `
+      <div class="nearby-row${active}" role="button" tabindex="0">
+        <div class="nr-dot-wrap" aria-hidden="true">
+          <span class="nr-dot"></span>
+        </div>
+        <div class="nr-info">
+          <div class="nr-head">
+            <span class="nr-label">${item.label}</span>
+            <span class="nr-sep">·</span>
+            <span class="nr-count">${item.count}</span>
+            <span class="nr-sep">·</span>
+            <span class="nr-summary">${item.summary}</span>
+          </div>
+          <div class="nr-meta">${item.dist} away${metaInner ? ' · ' + metaInner : ''}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openSheet() {
+  if (state.nearby === 'empty') return;          // unclickable when empty
+  NEARBY_SHEET.classList.add('is-open');
+}
+function closeSheet() {
+  NEARBY_SHEET.classList.remove('is-open');
+}
+NEARBY_TRIGGER.addEventListener('click', openSheet);
+document.getElementById('nearby-sheet-close').addEventListener('click', closeSheet);
+document.getElementById('nearby-sheet-backdrop').addEventListener('click', closeSheet);
+
+function applyState() {
+  FRAME.dataset.size = state.viewport;
+  FRAME.dir = state.dir;
+  STAGE.dataset.state = state.state;
+  STAGE.dataset.motion = state.motion;
+  document.documentElement.dataset.readerMode = (state.reader === 'on') ? 'on' : '';
+
+  // Status pill copy adapts to online/offline.
+  STATUS_LABEL.textContent = (state.state === 'offline')
+    ? 'Queued — will sync when online'
+    : 'Under review';
+
+  renderNearby();
+  document.querySelectorAll('.proto-controls .seg button').forEach((btn) => {
+    const seg = btn.closest('.seg');
+    const ctrl = seg.dataset.control;
+    btn.setAttribute('aria-pressed', String(btn.dataset.value === state[ctrl]));
+  });
+
+  CAPTION.textContent = [
+    VP_LABEL[state.viewport],
+    state.dir.toUpperCase(),
+    state.state,
+    state.nearby,
+    state.motion === 'reduced' ? 'reduced-motion' : null,
+    state.reader === 'on' ? 'reader-mode' : null,
+  ].filter(Boolean).join(' · ');
+
+  // Measure the stage body for the operator's budget readout.
+  requestAnimationFrame(() => {
+    const body = STAGE.querySelector('.success-body');
+    const stageRect = STAGE.getBoundingClientRect();
+    BUDGET.textContent =
+      `stage height: ${Math.round(stageRect.height)} px · ` +
+      `body height: ${Math.round(body.getBoundingClientRect().height)} px · ` +
+      `viewport budget: ${stageRect.height >= STAGE.scrollHeight ? 'fits' : 'OVERFLOW'}`;
+  });
+}
+
+document.querySelectorAll('.proto-controls .seg button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const seg = btn.closest('.seg');
+    const ctrl = seg.dataset.control;
+    state[ctrl] = btn.dataset.value;
+    applyState();
+  });
+});
+document.getElementById('reset-btn').addEventListener('click', () => {
+  Object.assign(state, { viewport:'iphone-se', dir:'ltr', state:'online', nearby:'populated', motion:'default', reader:'off' });
+  applyState();
+});
+
+// Time-ago ticker (visual only — prototype doesn't have real submit time).
+let elapsed = 2;
+setInterval(() => {
+  elapsed += 1;
+  const el = document.getElementById('time-ago');
+  if (!el) return;
+  if (elapsed < 5)       el.textContent = 'just now';
+  else if (elapsed < 60) el.textContent = `${elapsed} sec ago`;
+  else el.textContent = `${Math.floor(elapsed / 60)} min ago`;
+}, 1000);
+
+applyState();
+</script>
+
+</body>
+</html>
