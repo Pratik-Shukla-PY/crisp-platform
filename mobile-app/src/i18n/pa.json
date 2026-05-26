@@ -597,6 +597,8 @@
   "aria_read_aloud": "ਇਹ ਪੰਨਾ ਉੱਚੀ ਪੜ੍ਹੋ",
   "pwa_update_available": "ਨਵਾਂ ਵਰਜਨ ਉਪਲਬਧ",
   "pwa_update_now": "ਅਪਡੇਟ",
+  "pwa_update_now_loading": "Updating…",
+  "pwa_update_done": "Upgraded to",
   "v4_sending": "ਭੇਜ ਰਹੇ…",
   "v4_record_voice_fallback": "ਆਵਾਜ਼ ਰਿਕਾਰਡ",
   "v4_stop_recording": "ਰਿਕਾਰਡ ਰੋਕੋ",

@@ -598,6 +598,8 @@
   "aria_read_aloud": "Прочитать страницу вслух",
   "pwa_update_available": "Доступна новая версия",
   "pwa_update_now": "Обновить",
+  "pwa_update_now_loading": "Обновление…",
+  "pwa_update_done": "Обновлено до",
   "v4_sending": "Отправка…",
   "v4_record_voice_fallback": "Записать голос",
   "v4_stop_recording": "Остановить запись",

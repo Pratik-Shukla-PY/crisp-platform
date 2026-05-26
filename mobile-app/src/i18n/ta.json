@@ -597,6 +597,8 @@
   "aria_read_aloud": "இந்த பக்கத்தை சத்தமாக படி",
   "pwa_update_available": "புதிய பதிப்பு கிடைக்கிறது",
   "pwa_update_now": "புதுப்பி",
+  "pwa_update_now_loading": "Updating…",
+  "pwa_update_done": "Upgraded to",
   "v4_sending": "அனுப்புகிறது…",
   "v4_record_voice_fallback": "குரல் பதிவு",
   "v4_stop_recording": "பதிவை நிறுத்து",

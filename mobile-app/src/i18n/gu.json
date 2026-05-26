@@ -597,6 +597,8 @@
   "aria_read_aloud": "આ પાનું જોરથી વાંચો",
   "pwa_update_available": "નવી આવૃત્તિ ઉપલબ્ધ છે",
   "pwa_update_now": "અપડેટ",
+  "pwa_update_now_loading": "Updating…",
+  "pwa_update_done": "Upgraded to",
   "v4_sending": "મોકલે છે…",
   "v4_record_voice_fallback": "અવાજ રેકોર્ડ",
   "v4_stop_recording": "રેકોર્ડ બંધ",

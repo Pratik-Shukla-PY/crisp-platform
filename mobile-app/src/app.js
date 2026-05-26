@@ -185,8 +185,54 @@ if ('serviceWorker' in navigator) {
             if (!_pwaUpdateClicked) return;
             if (_pwaUpdateReloading) return;
             _pwaUpdateReloading = true;
-            window.location.reload();
+            // HC75 (May 2026) — show a "Upgraded to vNNN" success
+            // toast for ~1 second before the reload, so the user
+            // sees their tap completed successfully. The version
+            // came back from the SW's SKIP_WAITING reply (handler
+            // below); if it didn't arrive we fall back to a generic
+            // "Update applied" message and still reload.
+            try { _renderPwaUpdateSuccess(); } catch (_) {}
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
         });
+
+        // HC75 — listen for the SW's `CRISP_NEW_VERSION` reply
+        // (sent in response to our SKIP_WAITING postMessage). The
+        // payload's `version` field is the new SW's `CACHE_NAME`
+        // (e.g. "crisp-v302"). Cached on the page so the success
+        // toast can render it.
+        navigator.serviceWorker.addEventListener('message', (ev) => {
+            const data = ev && ev.data;
+            if (data && data.type === 'CRISP_NEW_VERSION' && data.version) {
+                _pwaNewVersion = String(data.version);
+            }
+        });
+    }
+    let _pwaNewVersion = '';
+
+    /**
+     * HC75 — swap the banner's contents to a success toast.
+     * Shows for ~1 second; the controllerchange handler reloads the
+     * page right after. Renders even if `_pwaNewVersion` wasn't
+     * captured (fallback to a generic "Update applied").
+     */
+    function _renderPwaUpdateSuccess() {
+        const banner = document.getElementById('pwa-update-banner');
+        if (!banner) return;
+        const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
+        // Trim "crisp-" prefix if present so the toast reads as just
+        // "v302" not "crisp-v302".
+        let ver = _pwaNewVersion;
+        if (ver && ver.indexOf('crisp-') === 0) ver = ver.slice(6);
+        const successMsg = (_t('pwa_update_done') || 'Upgraded to')
+            + (ver ? ' ' + ver : '');
+        banner.classList.add('is-success');
+        banner.innerHTML =
+            '<span class="pwa-update-banner-msg pwa-update-banner-msg-success">'
+            + '<i class="fa-solid fa-check-circle" aria-hidden="true"></i> '
+            + successMsg
+            + '</span>';
     }
 
     function _showPwaUpdateBanner(worker) {
@@ -224,7 +270,13 @@ if ('serviceWorker' in navigator) {
             // brief skipWaiting → controllerchange → reload race.
             const btn = banner.querySelector('.pwa-update-banner-btn');
             btn.disabled = true;
-            btn.textContent = _t('upload_sending') || 'Updating…';
+            // HC75 (May 2026) — was `_t('upload_sending')` which
+            // resolved to "Sending report..." (wrong i18n key
+            // entirely — that's the report-upload progress text).
+            // Operator screenshot 2026-05-26 showed this stuck
+            // visible. Now uses the proper `pwa_update_now_loading`
+            // key with an "Updating…" fallback.
+            btn.textContent = _t('pwa_update_now_loading') || 'Updating…';
             // arm the reload gate. controllerchange will
             // now reload, but ONLY because this explicit user tap
             // armed the flag.

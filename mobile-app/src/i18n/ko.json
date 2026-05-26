@@ -601,6 +601,8 @@
   "aria_read_aloud": "이 페이지 소리내어 읽기",
   "pwa_update_available": "새 버전 사용 가능",
   "pwa_update_now": "업데이트",
+  "pwa_update_now_loading": "업데이트 중…",
+  "pwa_update_done": "업그레이드됨",
   "v4_sending": "전송 중…",
   "v4_record_voice_fallback": "음성 녹음",
   "v4_stop_recording": "녹음 중지",

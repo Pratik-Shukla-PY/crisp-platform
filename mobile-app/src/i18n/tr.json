@@ -601,6 +601,8 @@
   "aria_read_aloud": "Bu sayfayı sesli oku",
   "pwa_update_available": "Yeni sürüm mevcut",
   "pwa_update_now": "Güncelle",
+  "pwa_update_now_loading": "Güncelleniyor…",
+  "pwa_update_done": "Şuna güncellendi",
   "v4_sending": "Gönderiliyor…",
   "v4_record_voice_fallback": "Sesi kaydet",
   "v4_stop_recording": "Kaydı durdur",

@@ -597,6 +597,8 @@
   "aria_read_aloud": "ఈ పేజీని పెద్దగా చదువు",
   "pwa_update_available": "కొత్త వెర్షన్ అందుబాటులో ఉంది",
   "pwa_update_now": "అప్‌డేట్",
+  "pwa_update_now_loading": "Updating…",
+  "pwa_update_done": "Upgraded to",
   "v4_sending": "పంపుతోంది…",
   "v4_record_voice_fallback": "వాయిస్ రికార్డ్",
   "v4_stop_recording": "రికార్డింగ్ ఆపు",

@@ -591,6 +591,8 @@
   "aria_read_aloud": "اقرأ هذه الصفحة بصوت عالٍ",
   "pwa_update_available": "إصدار جديد متاح",
   "pwa_update_now": "تحديث",
+  "pwa_update_now_loading": "جارٍ التحديث…",
+  "pwa_update_done": "تم الترقية إلى",
   "v4_sending": "جارٍ الإرسال…",
   "v4_record_voice_fallback": "تسجيل الصوت",
   "v4_stop_recording": "إيقاف التسجيل",

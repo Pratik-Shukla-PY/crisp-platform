@@ -597,6 +597,8 @@
   "aria_read_aloud": "এই পৃষ্ঠা জোরে পড়ুন",
   "pwa_update_available": "নতুন সংস্করণ উপলব্ধ",
   "pwa_update_now": "আপডেট",
+  "pwa_update_now_loading": "Updating…",
+  "pwa_update_done": "Upgraded to",
   "v4_sending": "পাঠাচ্ছি…",
   "v4_record_voice_fallback": "কণ্ঠ রেকর্ড",
   "v4_stop_recording": "রেকর্ডিং থামান",

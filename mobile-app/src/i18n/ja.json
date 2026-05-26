@@ -600,6 +600,8 @@
   "aria_read_aloud": "このページを音読",
   "pwa_update_available": "新しいバージョンが利用可能です",
   "pwa_update_now": "更新",
+  "pwa_update_now_loading": "更新中…",
+  "pwa_update_done": "アップグレード済み",
   "v4_sending": "送信中…",
   "v4_record_voice_fallback": "音声を録音",
   "v4_stop_recording": "録音を停止",

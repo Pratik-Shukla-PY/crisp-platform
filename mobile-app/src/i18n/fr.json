@@ -602,6 +602,8 @@
   "aria_read_aloud": "Lire cette page à voix haute",
   "pwa_update_available": "Nouvelle version disponible",
   "pwa_update_now": "Mettre à jour",
+  "pwa_update_now_loading": "Mise à jour…",
+  "pwa_update_done": "Mis à jour vers",
   "v4_sending": "Envoi…",
   "v4_record_voice_fallback": "Enregistrer la voix",
   "v4_stop_recording": "Arrêter l'enregistrement",

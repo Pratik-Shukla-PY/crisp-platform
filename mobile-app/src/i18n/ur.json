@@ -599,6 +599,8 @@
   "aria_read_aloud": "اس صفحے کو بلند آواز سے پڑھیں",
   "pwa_update_available": "نیا ورژن دستیاب ہے",
   "pwa_update_now": "اپ ڈیٹ",
+  "pwa_update_now_loading": "اپ ڈیٹ ہو رہا ہے…",
+  "pwa_update_done": "اپ گریڈ ہو گیا",
   "v4_sending": "بھیج رہے ہیں…",
   "v4_record_voice_fallback": "آواز ریکارڈ کریں",
   "v4_stop_recording": "ریکارڈنگ بند کریں",

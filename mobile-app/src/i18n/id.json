@@ -613,6 +613,8 @@
   "aria_read_aloud": "Bacakan halaman ini",
   "pwa_update_available": "Versi baru tersedia",
   "pwa_update_now": "Perbarui",
+  "pwa_update_now_loading": "Memperbarui…",
+  "pwa_update_done": "Diperbarui ke",
   "v4_sending": "Mengirim…",
   "v4_record_voice_fallback": "Rekam suara",
   "v4_stop_recording": "Hentikan rekaman",

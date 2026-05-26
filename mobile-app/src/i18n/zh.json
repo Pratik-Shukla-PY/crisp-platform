@@ -595,6 +595,8 @@
   "aria_read_aloud": "朗读本页",
   "pwa_update_available": "有新版本",
   "pwa_update_now": "更新",
+  "pwa_update_now_loading": "正在更新…",
+  "pwa_update_done": "已升级到",
   "v4_sending": "发送中…",
   "v4_record_voice_fallback": "录制语音",
   "v4_stop_recording": "停止录制",

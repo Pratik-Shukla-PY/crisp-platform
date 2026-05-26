@@ -8403,6 +8403,33 @@ body.tier-t4 .home-impact {
     opacity: 0.6;
     cursor: progress;
 }
+/* HC75 (May 2026) — success state. After the user taps Update, the
+   page postMessages SKIP_WAITING to the SW. SW replies with the new
+   version + calls skipWaiting; controllerchange fires on the page.
+   We swap the banner contents to a success toast for 1 second
+   before reloading. Centered single-line, green-tinted background
+   so it reads as confirmation (vs the pre-tap teal info banner). */
+.pwa-update-banner.is-success {
+    background: linear-gradient(
+        135deg,
+        rgba(70, 223, 177, 0.95),
+        rgba(9, 209, 199, 0.95)
+    );
+    justify-content: center;
+}
+.pwa-update-banner-msg-success {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 13.5px;
+    color: #042818;
+}
+.pwa-update-banner-msg-success > i {
+    font-size: 16px;
+    color: #042818;
+}
 .pwa-update-banner-dismiss {
     flex-shrink: 0;
     width: 28px;

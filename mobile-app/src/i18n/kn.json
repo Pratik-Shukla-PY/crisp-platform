@@ -597,6 +597,8 @@
   "aria_read_aloud": "ಈ ಪುಟವನ್ನು ಗಟ್ಟಿಯಾಗಿ ಓದಿ",
   "pwa_update_available": "ಹೊಸ ಆವೃತ್ತಿ ಲಭ್ಯವಿದೆ",
   "pwa_update_now": "ಅಪ್‌ಡೇಟ್",
+  "pwa_update_now_loading": "Updating…",
+  "pwa_update_done": "Upgraded to",
   "v4_sending": "ಕಳುಹಿಸಲಾಗುತ್ತಿದೆ…",
   "v4_record_voice_fallback": "ಧ್ವನಿ ರೆಕಾರ್ಡ್",
   "v4_stop_recording": "ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಿ",
