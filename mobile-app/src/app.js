@@ -6729,6 +6729,20 @@ function setupCameraModal() {
         if (typeof window.__crispRefreshPhotoStrip === 'function') {
             window.__crispRefreshPhotoStrip();
         }
+        // HC76 (May 2026) — also kick the V4 review-strip refresher.
+        // The V3 `__crispRefreshPhotoStrip` only repaints the V3-era
+        // capture-stage strip; on the review stage's + Add → camera
+        // flow the V4 review strip never got refreshed on Done close,
+        // so newly-captured photos stayed invisible. v4-flow.js's
+        // HC76 wrapper makes the V3 refresher also paint the review
+        // strip, but call the V4 refresher explicitly here as belt +
+        // suspenders.
+        if (typeof window.__crispV4RefreshCapStrip === 'function') {
+            window.__crispV4RefreshCapStrip();
+        }
+        if (typeof window.__crispV4RefreshReviewStrip === 'function') {
+            window.__crispV4RefreshReviewStrip();
+        }
     });
 
     document.getElementById('btn-cam-snap').addEventListener('click', () => {
@@ -6808,6 +6822,14 @@ function setupCameraModal() {
                 if (!_canAddMorePhotos()) return;
                 const entry = { dataUrl, blob: rawBlob, groupId: genUUID(), variants: null };
                 state.extraPhotos.push(entry);
+                // HC76 (May 2026) — kick the V4 review-strip refresher
+                // immediately on each snap so the user sees the new
+                // photo appear behind the modal too. Without this,
+                // only the modal mini-gallery updated until the user
+                // tapped Done. Idempotent + cheap.
+                if (typeof window.__crispV4RefreshReviewStrip === 'function') {
+                    try { window.__crispV4RefreshReviewStrip(); } catch (_) {}
+                }
                 // Bump the modal counter now that the extra has landed.
                 const count2 = document.getElementById('cam-gallery-count');
                 if (count2) {

@@ -2728,6 +2728,31 @@
                     try { _renderReviewPhotoStrip(); } catch (_) {}
                 }
             };
+            // HC76 (May 2026) — ALSO wrap the V3 refresher
+            // `__crispRefreshPhotoStrip`. The camera modal's `btn-cam-
+            // done` handler (app.js:6724) calls this name, NOT the
+            // V4 one. Without this second wrapper, photos captured
+            // from the review's + Add → openCameraModal → snap → Done
+            // flow never trigger a review strip repaint and the
+            // newly-captured photos render as empty + slots forever
+            // (operator screenshot 2026-05-26, repeated after HC74).
+            const _origV3Refresh = window.__crispRefreshPhotoStrip;
+            window.__crispRefreshPhotoStrip = function () {
+                if (typeof _origV3Refresh === 'function') {
+                    try { _origV3Refresh(); } catch (_) {}
+                }
+                if (document.querySelector('#stage-v4-review.active')) {
+                    try { _renderReviewPhotoStrip(); } catch (_) {}
+                }
+            };
+            // HC76 — also expose a direct public hook so callers can
+            // request a refresh without going through one of the
+            // legacy wrappers.
+            window.__crispV4RefreshReviewStrip = function () {
+                if (document.querySelector('#stage-v4-review.active')) {
+                    try { _renderReviewPhotoStrip(); } catch (_) {}
+                }
+            };
             window.__crispV4RefreshReviewWired = true;
         }
         // HC74 (May 2026) — derive the photo list from ALL state sources,
