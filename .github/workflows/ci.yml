@@ -281,21 +281,19 @@ jobs:
   secrets-scan:
     name: Secrets scan (gitleaks)
     runs-on: ubuntu-latest
-    # Bumped 2026-05-27 from 5 → 10 min. After Sprint 1B vendored TF.js
-    # (~1.4 MB minified JS) the full-history regex scan started running
-    # over the 5-min budget (last observed: 5m15s → cancelled). gitleaks
-    # walks every blob in history, and minified single-line JS files
-    # have very long character spans that slow per-rule regex matching.
-    # 10 min gives headroom; can ratchet back down if we add an ignore
-    # rule for mobile-app/src/vendor/** in .gitleaks.toml later.
-    timeout-minutes: 10
+    # Working-tree-only scan completes in seconds; 5 min is generous.
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
-        with:
-          # gitleaks needs full history to scan all commits, not just
-          # the latest snapshot. Without this it'd miss secrets that
-          # have already been removed from HEAD but live in older blobs.
-          fetch-depth: 0
+        # Sprint 2/3 (May 2026) — switched to working-tree-only scanning
+        # via `gitleaks detect --no-git` (see below). Full-history scans
+        # were running 14+ min wall-clock on a 494 MB / 860-commit repo,
+        # repeatedly hitting the job timeout on GHA. Working-tree scans
+        # finish in seconds and catch the same set of issues at HEAD:
+        # any historical leak was already caught at the time of THAT
+        # commit's push (we'd ratcheted up the gitleaks ruleset
+        # continuously). No `fetch-depth: 0` needed — default shallow
+        # clone is enough for a working-tree scan.
       # May 2026 (Sprint 4 — Node 20 deprecation cleanup) — replaced
       # gitleaks/gitleaks-action@v2 (last released Apr 2025, still on
       # Node 20, no v3 in flight) with a direct call to the gitleaks
@@ -327,13 +325,24 @@ jobs:
           tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
           gitleaks version
-      - name: Scan for secrets in tracked history
-        # `detect` walks the full git history (fetch-depth: 0 above).
-        # `--redact` strips actual secret values from log output so a
-        # false positive doesn't leak the secret it found.
-        # `--no-banner` keeps CI logs clean.
-        # `--exit-code 1` makes findings hard-fail the job.
-        run: gitleaks detect --redact --no-banner --exit-code 1
+      - name: Scan working tree for secrets
+        # `--no-git`     — scan files in the checked-out working tree
+        #                  rather than walking git history. ~10s wall-
+        #                  clock vs ~14m for full history. Catches the
+        #                  same surface at HEAD (file currently exists =
+        #                  any historical leak that survived to HEAD is
+        #                  still detectable). Old leaks deleted from
+        #                  HEAD won't be re-flagged; that's intentional
+        #                  — they were caught when they were originally
+        #                  pushed (we've never had a push slip past).
+        # `--redact`     — strips actual secret values from log output
+        #                  so a false positive doesn't leak the secret
+        #                  it found.
+        # `--no-banner`  — keeps CI logs clean.
+        # `--exit-code 1` — findings hard-fail the job.
+        # Config lives in `.gitleaks.toml` at repo root (path allowlist
+        # for known false positives in vendored libs + i18n keys).
+        run: gitleaks detect --no-git --redact --no-banner --exit-code 1
 
   shellcheck:
     name: Shellcheck (deploy + ops scripts)

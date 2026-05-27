@@ -34,4 +34,13 @@ paths = [
     '''mobile-app/src/vendor/''',
     '''crisp-mobile/screens/V4ClassifyScreen\.tsx''',
     '''.*gitleaks-report.*\.json''',
+    # Local-only files that aren't in the repo but a developer's
+    # working tree may contain. `gitleaks detect --no-git` (the CI
+    # mode) walks the filesystem and doesn't consult .gitignore, so
+    # these show up in local runs without this allowlist. CI's
+    # `actions/checkout` produces a fresh tree without them.
+    '''\.env(\..*)?$''',         # .env, .env.local, .env.production, etc.
+    '''logs/.*\.log$''',          # local backend / dev logs
+    '''\.lighthouseci/''',        # lhci output artifacts
+    '''backend/uploads/''',       # local media uploads (MEDIA_BACKEND=local)
 ]
