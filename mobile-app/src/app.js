@@ -9483,9 +9483,22 @@ async function _submitReportInner() {
         // ── Show success to user IMMEDIATELY — don't wait for network ────────
         showUploadOverlay(t('upload_sending'));
         updateUploadProgress(50, t('upload_saved'));
-        document.getElementById('report-id-text').textContent = clientReportId.slice(0, 8).toUpperCase();
-        // AUDIT 2026-05-23 — unhide the box now that the id is real.
-        try { document.getElementById('success-id-box').style.display = ''; } catch (_) {}
+        // HC87 — write to the HC79-redesigned success-stage IDs. The
+        // legacy `#report-id-text` / `#success-id-box` IDs targeted
+        // here pre-redesign no longer exist in `index.html`, so
+        // `getElementById(...).textContent = ...` was crashing with
+        // TypeError before `goToStage('stage-success')` could fire.
+        // Effect: report enqueued OK, but the user stayed on the v4
+        // review screen with no feedback, and HC80's sticky latch
+        // then blocked retries.  Null-guarded so a future markup
+        // change can't re-introduce the same crash class.
+        const idMini = document.getElementById('success-report-id-mini');
+        const idWrap = document.getElementById('success-status-id');
+        if (idMini) idMini.textContent = clientReportId.slice(0, 8).toUpperCase();
+        if (idWrap) idWrap.hidden = false;
+        // Stash so `_renderSuccessStatusPill` picks it up on the next
+        // stage entry (it reads `window._lastSubmittedClientId`).
+        try { window._lastSubmittedClientId = clientReportId; } catch (_) {}
 
         // PR 7: stash the just-submitted report so the Track button on the
         // success screen can open the detail view before the next status-since
@@ -9536,8 +9549,14 @@ async function _submitReportInner() {
     } catch (fatalErr) {
         console.error('submitReport fatal error:', fatalErr);
         hideUploadOverlay();
-        document.getElementById('report-id-text').textContent = 'SAVED';
-        try { document.getElementById('success-id-box').style.display = ''; } catch (_) {}
+        // HC87 — same legacy-ID fix as the happy path above; the catch
+        // handler used to crash AGAIN on these dead IDs, so even the
+        // error-recovery `goToStage('stage-success')` call below was
+        // never reached.  Null-guarded for the same reason.
+        const idMiniErr = document.getElementById('success-report-id-mini');
+        const idWrapErr = document.getElementById('success-status-id');
+        if (idMiniErr) idMiniErr.textContent = 'SAVED';
+        if (idWrapErr) idWrapErr.hidden = false;
         goToStage('stage-success');
         sendBtn.disabled = false;
     }

@@ -276,10 +276,12 @@ test.describe('PWA — HC79 success-stage live mission-control redesign', () => 
         // 4. Thanks bar — heart + title
         await expect(page.locator('.success-thanks-heart i.fa-heart')).toBeVisible();
         await expect(page.locator('.success-thanks-title')).toBeVisible();
-        // 5. Status pill — radar with 3 rings + dot
+        // 5. Status pill — radar with 2 rings + dot (HC86 reduced
+        //    from 3 → 2 to calm the simultaneous animation count
+        //    on the Thank-You page).
         await expect(page.locator('#success-status-pill .success-radar')).toBeVisible();
         const rings = await page.locator('#success-status-pill .success-radar-ring').count();
-        expect(rings, 'radar must have 3 rings').toBe(3);
+        expect(rings, 'radar must have 2 rings (HC86)').toBe(2);
         await expect(page.locator('.success-radar-dot')).toBeVisible();
         // 6. Responder strip
         await expect(page.locator('#success-responder-strip')).toBeVisible();
@@ -302,7 +304,8 @@ test.describe('PWA — HC79 success-stage live mission-control redesign', () => 
         const animNames = await page.locator('.success-radar-ring').evaluateAll((rings) =>
             rings.map((r) => getComputedStyle(r).animationName),
         );
-        expect(animNames).toHaveLength(3);
+        // HC86 — radar reduced from 3 → 2 rings.
+        expect(animNames).toHaveLength(2);
         for (const name of animNames) {
             expect(name, 'each ring has an animation-name').not.toBe('none');
             expect(name).toContain('success-radar-ring');
