@@ -250,8 +250,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Install pip-audit
-        run: pip install pip-audit
+      - name: Install pip-audit (pinned 2.9.0 — see comment)
+        # Pinned May 2026 — pip-audit 2.10.0 has an unhandled
+        # KeyError('ranges') when the OSV API returns an advisory entry
+        # without a `ranges` field (regression in _service/osv.py:135).
+        # Crashes the entire audit; not a vulnerability detection,
+        # just a scanner-tool bug. 2.9.0 was the prior stable release
+        # and handled OSV responses without the same crash class.
+        # Revisit when pip-audit ships a 2.10.1+ with the fix (likely
+        # an except KeyError fallthrough in the OSV service shim).
+        run: pip install 'pip-audit==2.9.0'
       - name: Audit backend dependencies
         # Hard-fail on any unsuppressed advisory — keeps the supply
         # chain honest. Each `--ignore-vuln` MUST be accompanied by a
