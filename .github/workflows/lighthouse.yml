@@ -11,20 +11,15 @@ name: Lighthouse QA
 # runs the audits + threshold gate; cost in API calls is $0.
 
 on:
-  push:
-    branches: [main]
-    # Skip Lighthouse on changes that can't shift the score (docs,
-    # comments, image-baseline-only commits). Saves ~5-6 minutes per
-    # such commit (Extended QA + the Lighthouse audit itself).
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - 'LICENSE.*'
-      - 'CRISP-Presentation.html'
-      - '.gitignore'
-      - 'e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/**'
-      - '.github/workflows/visual-baselines.yml'
+  # Sprint 2C-1 (May 2026) — push-to-main trigger removed. The deploy
+  # path was disabled on push back in 99d6c85 (manual workflow_dispatch
+  # only), so Lighthouse running on every push was burning ~5-6 minutes
+  # of Actions time against the $5/month cap for no actionable signal:
+  # nobody acts on "main got pushed, score changed by ±2 points." Audits
+  # now run where they ARE actionable: PR review (catch regressions
+  # before merge) + manual dispatch (operator-driven pre-deploy check).
+  # If we ever re-enable push-to-deploy, restore the push: trigger here
+  # in the same commit as the deploy.yml re-enable.
   pull_request:
     branches: [main]
     paths-ignore:
@@ -36,6 +31,12 @@ on:
       - '.gitignore'
       - 'e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/**'
       - '.github/workflows/visual-baselines.yml'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch / SHA to audit (defaults to current main)'
+        required: false
+        default: 'main'
 
 # One run per ref. Force-pushes / new commits cancel the in-flight audit.
 concurrency:
