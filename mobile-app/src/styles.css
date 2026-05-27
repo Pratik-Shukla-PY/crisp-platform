@@ -1376,35 +1376,52 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
    the home stage so the visual treatment matches exactly. .success-
    brand keeps its existing rules block further down — only the
    absolute positioning block needs to flip to flex-inline. */
+/* HC86 header — align brand cluster + devid pill + lang pill on one
+   clean baseline. Flex with align-items center; cap devid width so a
+   long hash can't push the lang pill off-screen on iPhone SE. */
+.v4-header-success {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--gap-2, 8px);
+}
 .v4-header-success .success-brand {
     position: static;            /* override the absolute layout below */
     top: auto;
     inset-inline-start: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--gap-2, 8px);
+    flex: 0 1 auto;
+    min-width: 0;
 }
 .v4-header-success .success-brand .home-brand-logo {
     width: 28px;
     height: 28px;
     border-radius: 6px;
     box-shadow: none;
+    flex: 0 0 auto;
 }
 .v4-header-success .success-brand .home-brand-name {
     font-size: var(--fz-md, 16px);
     position: relative;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1;
 }
 .v4-header-success .success-brand .home-brand-name .connectivity-dot {
-    position: absolute;
-    top: 2px;
-    inset-inline-end: -8px;
+    position: static;            /* HC86 — inline, no absolute drift */
     width: 6px;
     height: 6px;
     border-radius: 50%;
     background: var(--green);
     box-shadow: 0 0 6px rgba(128, 238, 152, 0.7);
+    margin-inline-start: 2px;
+    flex: 0 0 auto;
 }
 .success-devid-pill {
     margin-inline-start: auto;
-    margin-inline-end: var(--gap-2, 8px);
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -1419,10 +1436,20 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     border-radius: var(--r-pill, 999px);
     cursor: pointer;
     min-height: 28px;
+    max-width: 140px;            /* HC86 — cap so devid can't squeeze lang pill */
+    flex: 0 1 auto;
+    overflow: hidden;
 }
 .success-devid-pill i {
     font-size: 10px;
     color: var(--text-dim);
+    flex: 0 0 auto;
+}
+.success-devid-pill #success-devid-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 /* BODY */
@@ -1439,18 +1466,21 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 /* THANKS BAR — heart on left, copy stacked on right. Horizontal
    layout (was the old big-hero stacked heart) — reclaims ~30 px
    on iPhone SE.  */
+/* HC86 hero — slightly tighter, heart simplified (one ring instead
+   of two, kept heartbeat for emotional reassurance). Calmer, more
+   premium. */
 .success-thanks {
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: var(--gap-3, 12px);
-    padding: 6px 4px;
+    padding: 4px 4px 8px;
     flex: 0 0 auto;
 }
 .success-thanks-text {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     min-width: 0;
     flex: 1 1 auto;
 }
@@ -1470,43 +1500,44 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     position: relative;
     z-index: 2;
 }
-.success-thanks-heart::before,
-.success-thanks-heart::after {
+/* HC86 — single ring (was 2 overlapping). Less visual noise. */
+.success-thanks-heart::before {
     content: "";
     position: absolute;
     inset: 0;
     border-radius: 50%;
-    border: 1px solid rgba(255, 122, 144, 0.45);
-    animation: success-heart-ring 2.4s var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1)) infinite;
+    border: 1px solid rgba(255, 122, 144, 0.40);
+    animation: success-heart-ring 2.8s var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1)) infinite;
     opacity: 0;
 }
-.success-thanks-heart::after { animation-delay: 1.2s; }
 @keyframes success-heart-beat {
     0%, 100% { transform: scale(1); }
-    20%      { transform: scale(1.18); }
+    20%      { transform: scale(1.16); }
     40%      { transform: scale(1); }
-    60%      { transform: scale(1.10); }
+    60%      { transform: scale(1.08); }
 }
 @keyframes success-heart-ring {
-    0%   { transform: scale(0.5); opacity: 0.55; }
-    100% { transform: scale(1.7); opacity: 0; }
+    0%   { transform: scale(0.55); opacity: 0.50; }
+    100% { transform: scale(1.6); opacity: 0; }
 }
 .success-thanks-title {
     font-family: var(--heading);
-    font-size: var(--fz-md, 16px);
+    font-size: var(--fz-lg, 17px);
     font-weight: 800;
     color: var(--text);
-    letter-spacing: 0.2px;
+    letter-spacing: 0.1px;
+    line-height: 1.2;
 }
 .success-thanks-sub {
     font-size: var(--fz-sm, 13px);
     color: var(--text-sub);
     font-weight: 500;
-    line-height: 1.3;
+    line-height: 1.35;
 }
 
-/* STATUS PILL — radar (3 concentric rings + central dot) + label
-   + report-id + locale-aware time-ago. */
+/* HC86 STATUS PILL — radar (2 concentric rings + central dot, was 3
+   pre-HC86) + label + local time + IANA TZ + locale-aware time-ago
+   + optional CRISP report ID (hidden until submit completes). */
 .success-status-pill {
     background: var(--surface);
     border: 1px solid var(--accent-soft);
@@ -1523,8 +1554,8 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .success-radar {
     position: relative;
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     display: grid;
     place-items: center;
     flex: 0 0 auto;
@@ -1544,10 +1575,9 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     border: 1.5px solid rgba(9, 209, 199, 0.55);
     border-radius: 50%;
     opacity: 0;
-    animation: success-radar-ring 2.4s var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1)) infinite;
+    animation: success-radar-ring 2.8s var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1)) infinite;
 }
-.success-radar-ring:nth-of-type(2) { animation-delay: 0.8s; }
-.success-radar-ring:nth-of-type(3) { animation-delay: 1.6s; }
+.success-radar-ring:nth-of-type(2) { animation-delay: 1.4s; }
 @keyframes success-radar-ring {
     0%   { transform: scale(0.4); opacity: 0.7; }
     100% { transform: scale(1.7); opacity: 0; }
@@ -1566,16 +1596,43 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     letter-spacing: 0.6px;
     color: var(--accent);
     text-transform: uppercase;
+    line-height: 1.15;
 }
 .success-status-meta {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     font-size: var(--fz-xs, 12px);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+}
+.success-status-meta .success-local-time {
+    color: var(--text);
+    font-weight: 600;
+}
+.success-status-meta #success-time-ago {
     color: var(--text-sub);
-    font-family: 'SF Mono', 'Menlo', monospace;
+    font-weight: 500;
 }
 .success-status-meta .sep { color: var(--text-mute); }
+/* HC86 — optional CRISP report ID, hidden until backend assigns it. */
+.success-status-id {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.4px;
+}
+.success-status-id i {
+    font-size: 8px;
+    opacity: 0.6;
+}
+.success-status-id[hidden] { display: none; }
 /* Offline / queued state — radar collapses, accent shifts to amber */
 .success-status-pill[data-state="offline"] .success-radar-ring {
     animation: none;
@@ -1592,34 +1649,41 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     border-color: rgba(234, 179, 8, 0.32);
 }
 
-/* RESPONDER STRIP */
+/* HC86 RESPONDER STRIP — calmer, drops the bolt chip-pulse animation
+   (one less concurrent motion alongside the heart + radar + halo).
+   Bolt icon stays bright accent; text reads as a quiet status line. */
 .success-responder-strip {
     display: inline-flex;
     align-items: center;
+    justify-content: flex-start;
     gap: var(--gap-2, 8px);
-    padding: 8px 12px;
+    padding: 9px 14px;
     background: rgba(9, 209, 199, 0.06);
     border: 1px solid var(--accent-soft);
     border-radius: var(--r-pill, 999px);
     font-size: var(--fz-sm, 13px);
     color: var(--text-sub);
-    min-height: 36px;
+    min-height: 38px;
     flex: 0 0 auto;
     align-self: stretch;
+    line-height: 1.3;
 }
 .success-responder-strip i {
     color: var(--accent);
     font-size: var(--fz-sm, 13px);
-    animation: chip-pulse 3.6s ease-in-out infinite;
+    flex: 0 0 auto;
 }
 .success-responder-strip strong {
     color: var(--text);
     font-weight: 700;
 }
 
-/* CONTRIBUTION STRIP — current tier emoji left, next-tier emoji
-   right, progress bar between. The next-tier emoji is dimmed
-   (grayscale + opacity) until unlocked. */
+/* HC86 CONTRIBUTION STRIP — current tier emoji + label on the left,
+   next-tier emoji + label on the right, progress bar between. The
+   "{n} / {threshold}" meta is now ABOVE the bar (right-aligned) so it
+   doesn't overlap the fill colour or float ambiguously. Calmer pulse
+   (slowed 3.2s → 5s) so the bar doesn't compete with the radar +
+   heart + halo. */
 .success-contribution-strip {
     display: flex;
     align-items: center;
@@ -1632,7 +1696,7 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     cursor: pointer;
     width: 100%;
     text-align: start;
-    min-height: 60px;
+    min-height: 64px;
     transition: background var(--motion-press, 120ms) var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1));
     flex: 0 0 auto;
 }
@@ -1642,9 +1706,9 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 3px;
     flex: 0 0 auto;
-    min-width: 56px;
+    min-width: 48px;
 }
 .sc-tier-emoji {
     font-size: 22px;
@@ -1658,16 +1722,34 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
 }
 .sc-tier-label {
     font-family: var(--heading);
-    font-size: 10px;
+    font-size: 9.5px;
     font-weight: 800;
     letter-spacing: 1px;
     color: var(--text);
     text-transform: uppercase;
+    line-height: 1.2;
 }
 .sc-tier-next .sc-tier-label { color: var(--text-dim); }
-.sc-progress-bar {
+/* HC86 — meta + bar stacked. Meta sits above the bar, right-aligned. */
+.sc-progress-col {
     flex: 1 1 auto;
-    height: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+.sc-progress-meta {
+    align-self: flex-end;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-sub);
+    font-family: 'SF Mono', 'Menlo', monospace;
+    letter-spacing: 0.4px;
+    line-height: 1;
+}
+.sc-progress-bar {
+    width: 100%;
+    height: 6px;
     background: rgba(255, 255, 255, 0.06);
     border-radius: var(--r-pill, 999px);
     position: relative;
@@ -1679,23 +1761,12 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     width: 0%;            /* JS sets the real width */
     background: linear-gradient(90deg, var(--accent), var(--green));
     border-radius: var(--r-pill, 999px);
-    animation: sc-progress-pulse 3.2s ease-in-out infinite;
+    animation: sc-progress-pulse 5s ease-in-out infinite;
     transition: width var(--motion-fade, 200ms) var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1));
 }
 @keyframes sc-progress-pulse {
-    0%, 100% { box-shadow: 0 0 6px rgba(9, 209, 199, 0.4); }
-    50%      { box-shadow: 0 0 14px rgba(9, 209, 199, 0.7); }
-}
-.sc-progress-meta {
-    position: absolute;
-    inset-inline-end: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--text);
-    font-family: 'SF Mono', 'Menlo', monospace;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    0%, 100% { box-shadow: 0 0 4px rgba(9, 209, 199, 0.30); }
+    50%      { box-shadow: 0 0 10px rgba(9, 209, 199, 0.55); }
 }
 
 /* NEARBY TRIGGER PILL */
@@ -1810,11 +1881,14 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     min-height: 0;
 }
 
-/* FOOTER — stacked CTA (primary big + inline link) */
+/* HC86 FOOTER — primary CTA + my-reports link, tighter coupling so
+   the link doesn't float disconnected. Subtle chip-like background on
+   the my-reports row when it has a count, so it reads as a "tap to
+   view N reports" affordance rather than a stray footer link. */
 .success-footer {
     display: flex;
     flex-direction: column;
-    gap: var(--gap-2, 8px);
+    gap: 6px;
     padding: var(--gap-3, 12px) var(--gap-4, 16px) var(--gap-4, 16px);
     border-top: 1px solid var(--border);
     flex: 0 0 auto;
@@ -1827,16 +1901,24 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 8px;
     background: transparent;
     border: 0;
     color: var(--text-sub);
     font-size: var(--fz-sm, 13px);
     font-weight: 600;
     cursor: pointer;
-    padding: 10px;
-    border-radius: var(--r-md, 12px);
-    min-height: 44px;
+    padding: 8px 14px;
+    border-radius: var(--r-pill, 999px);
+    min-height: 38px;
+    align-self: center;          /* HC86 — narrow, centred chip */
+    transition: background var(--motion-press, 120ms) var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.success-myreports-link:hover,
+.success-myreports-link:focus-visible {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    outline: none;
 }
 .success-myreports-link i {
     color: var(--text-dim);
@@ -1850,6 +1932,9 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     font-size: var(--fz-xs, 12px);
     font-weight: 700;
     margin-inline-start: 4px;
+    font-variant-numeric: tabular-nums;
+    min-width: 22px;
+    text-align: center;
 }
 .success-myreports-link .mr-count:empty { display: none; }
 

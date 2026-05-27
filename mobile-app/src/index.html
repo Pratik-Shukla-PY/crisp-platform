@@ -204,7 +204,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v310">
+    <meta name="crisp-release" content="crisp-pwa@v311">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -6192,13 +6192,14 @@
                 </div>
             </div>
 
-            <!-- Status pill: radar (3 rings + dot) + label + report-id
-                 + locale-aware time-ago. Offline state replaces radar
-                 with a static amber dot and the label flips to
-                 "Queued — will sync when online". -->
+            <!-- Status pill: radar (2 rings + dot, HC86 — was 3) + label
+                 + local time + IANA timezone + locale-aware time-ago +
+                 CRISP report ID (hidden until submit completes, so the
+                 em-dash placeholder never leaks). Offline state replaces
+                 the radar with a static amber dot and the label flips
+                 to "Queued — will sync when online". -->
             <div class="success-status-pill" id="success-status-pill">
                 <div class="success-radar" aria-hidden="true">
-                    <span class="success-radar-ring"></span>
                     <span class="success-radar-ring"></span>
                     <span class="success-radar-ring"></span>
                     <span class="success-radar-dot"></span>
@@ -6207,9 +6208,13 @@
                     <span class="success-status-label" id="success-status-label"
                           data-i18n="success_under_review">Under review</span>
                     <div class="success-status-meta">
-                        <span id="success-report-id-mini">—</span>
+                        <span id="success-local-time" class="success-local-time" aria-live="off"></span>
                         <span class="sep" aria-hidden="true">·</span>
                         <span id="success-time-ago" data-i18n="success_time_just_now">just now</span>
+                    </div>
+                    <div class="success-status-id" id="success-status-id" hidden>
+                        <i class="fa-solid fa-hashtag" aria-hidden="true"></i>
+                        <span id="success-report-id-mini"></span>
                     </div>
                 </div>
             </div>
@@ -6228,7 +6233,10 @@
                  the left, next-tier emoji + label on the right, with
                  a connecting progress bar. Tap → stage-rewards.
                  Reuses home-screen.js BADGE_LEVELS (Scout 🌱 → Signal
-                 📣 → Changemaker 🛡 → Lifekeeper 🦸). -->
+                 📣 → Changemaker 🛡 → Lifekeeper 🦸).
+                 HC86 — meta count "{n} / {threshold}" moved ABOVE the
+                 bar (right-aligned) so it doesn't overlap the fill
+                 colour. Better hierarchy + premium feel. -->
             <button class="success-contribution-strip" id="success-contribution-strip"
                     type="button" aria-label="View rewards"
                     data-i18n-aria-label="aria_view_rewards">
@@ -6236,9 +6244,11 @@
                     <span class="sc-tier-emoji" id="sc-tier-now-emoji">🌱</span>
                     <span class="sc-tier-label" id="sc-tier-now-label">SCOUT</span>
                 </div>
-                <div class="sc-progress-bar" aria-hidden="true">
-                    <div class="sc-progress-fill" id="sc-progress-fill"></div>
+                <div class="sc-progress-col">
                     <span class="sc-progress-meta" id="sc-progress-meta">0 / 1</span>
+                    <div class="sc-progress-bar" aria-hidden="true">
+                        <div class="sc-progress-fill" id="sc-progress-fill"></div>
+                    </div>
                 </div>
                 <div class="sc-tier-next">
                     <span class="sc-tier-emoji sc-tier-next-emoji" id="sc-tier-next-emoji">📣</span>

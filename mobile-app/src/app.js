@@ -14071,6 +14071,7 @@ function _formatSuccessTimeAgo(elapsedMs) {
 function _renderSuccessStatusPill() {
     const pill = document.getElementById('success-status-pill');
     const idEl = document.getElementById('success-report-id-mini');
+    const idWrap = document.getElementById('success-status-id');
     const timeEl = document.getElementById('success-time-ago');
     const labelEl = document.getElementById('success-status-label');
     if (!pill) return;
@@ -14085,16 +14086,24 @@ function _renderSuccessStatusPill() {
             ? tt('success_queued_for_sync', 'Queued — will sync when online')
             : tt('success_under_review', 'Under review');
     }
-    // Report ID — use the just-submitted client report id, truncated.
+    // HC86 — Report ID hidden until backend assigns it. No em-dash leak
+    // (previously rendered "— · just now" when no ID was present).
     const id = window._lastSubmittedClientId || window._lastSubmittedServerId || '';
-    if (idEl) {
+    if (idEl && idWrap) {
         if (id) {
             const short = String(id).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
             idEl.textContent = `CRISP-${short}`;
+            idWrap.hidden = false;
         } else {
-            idEl.textContent = '—';
+            idEl.textContent = '';
+            idWrap.hidden = true;
         }
     }
+    // HC86 — paint local time + IANA timezone on first paint + every
+    // tick so the user sees "14:23 IST · 10 sec ago" rather than just
+    // "— · 10 sec ago". `Intl.DateTimeFormat` resolves both the time
+    // string and the TZ short name from the user's locale + device TZ.
+    _renderSuccessLocalTime();
     // Time-ago ticker. Reset every time we enter stage-success.
     _successSubmittedAt = Date.now();
     _stopSuccessTimers();
@@ -14102,9 +14111,47 @@ function _renderSuccessStatusPill() {
         timeEl.textContent = _formatSuccessTimeAgo(0);
     }
     _successTimeAgoIntervalId = setInterval(() => {
-        if (!timeEl || !_successSubmittedAt) return;
-        timeEl.textContent = _formatSuccessTimeAgo(Date.now() - _successSubmittedAt);
+        if (timeEl && _successSubmittedAt) {
+            timeEl.textContent = _formatSuccessTimeAgo(Date.now() - _successSubmittedAt);
+        }
+        _renderSuccessLocalTime();      // keep clock fresh on each tick
     }, 10000);     // 10 s cadence is sufficient — bucket boundaries are second / minute
+}
+
+/**
+ * HC86 — paint local "HH:mm TZ" into #success-local-time. Uses
+ * Intl.DateTimeFormat with the user's resolved locale + device tz,
+ * so the same code emits "14:23 IST" / "10:23 PST" / "10:23 GMT+5:30"
+ * depending on the device + locale. RTL locales (ar/ur) get
+ * native-numeral output where the Intl engine supports it.
+ */
+function _renderSuccessLocalTime() {
+    const el = document.getElementById('success-local-time');
+    if (!el) return;
+    const locale = (document.documentElement.lang || 'en') || undefined;
+    const now = new Date();
+    let timeStr = '';
+    try {
+        timeStr = new Intl.DateTimeFormat(locale, {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        }).format(now);
+    } catch (_) {
+        // Some test environments lack full Intl. Fallback to manual HH:mm.
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        timeStr = `${hh}:${mm}`;
+    }
+    let tzStr = '';
+    try {
+        const parts = new Intl.DateTimeFormat(locale, {
+            hour: '2-digit', timeZoneName: 'short',
+        }).formatToParts(now);
+        const tzPart = parts.find((p) => p.type === 'timeZoneName');
+        if (tzPart && tzPart.value) tzStr = tzPart.value;
+    } catch (_) { /* swallow */ }
+    el.textContent = tzStr ? `${timeStr} ${tzStr}` : timeStr;
 }
 
 function _stopSuccessTimers() {
