@@ -238,7 +238,7 @@ async function openSuccessStage(
             const w = window as unknown as {
                 _renderSuccessNearbyEmpty?: () => void;
             };
-            const root = document.getElementById('success-nearby-rings');
+            const root = document.getElementById('success-nearby-intel');
             if (root) root.innerHTML = '';
             if (typeof w._renderSuccessNearbyEmpty === 'function') {
                 w._renderSuccessNearbyEmpty();
@@ -287,10 +287,11 @@ test.describe('PWA — HC79 success-stage live mission-control redesign', () => 
         await expect(page.locator('#success-contribution-strip')).toBeVisible();
         await expect(page.locator('#sc-tier-now-emoji')).not.toHaveText('');
         await expect(page.locator('#sc-tier-next-emoji')).not.toHaveText('');
-        // 8. Nearby module mount — HC81 replaced the HC79 trigger
-        //    pill with the bucket-rings mount. Either the rings SVG
-        //    or the empty-state copy renders inside.
-        await expect(page.locator('#success-nearby-rings')).toBeVisible();
+        // 8. Nearby module mount — HC84 unified home + success. The
+        //    mount hosts the SAME aggregate-number block as the home
+        //    stage (`.home-nearby-number-block`) when groups exist,
+        //    or the contextual `.success-nearby-empty` copy when not.
+        await expect(page.locator('#success-nearby-intel')).toBeVisible();
         // 9. Stacked CTA footer
         await expect(page.locator('#btn-new-report')).toBeVisible();
         await expect(page.locator('#btn-success-my-reports')).toBeVisible();
@@ -317,21 +318,63 @@ test.describe('PWA — HC79 success-stage live mission-control redesign', () => 
         await page.context().setOffline(false);
     });
 
-    test('@smoke nearby empty state: empty copy renders, no rings drawn', async ({ page }) => {
+    test('@smoke nearby empty state: contextual empty copy renders, no number block drawn', async ({ page }) => {
         await openSuccessStage(page, 'en', { nearby: 'empty' });
-        // HC81 — empty groups → no bucket-rings SVG, empty-state copy
-        // renders into the success-nearby-rings mount instead.
-        const ringsCount = await page.locator('#success-nearby-rings .nearby-bucket-rings').count();
-        expect(ringsCount, 'no rings when nearby is empty').toBe(0);
-        const emptyVisible = await page.locator('#success-nearby-rings .success-nearby-empty').isVisible();
-        expect(emptyVisible, 'empty-state copy visible inside the mount').toBe(true);
+        // HC84 — empty groups → no aggregate-number block; the
+        // success-specific contextual empty copy ("first eyes here")
+        // renders into the success-nearby-intel mount instead.
+        const blockCount = await page.locator('#success-nearby-intel .home-nearby-number-block').count();
+        expect(blockCount, 'no number-block when nearby is empty').toBe(0);
+        const emptyVisible = await page.locator('#success-nearby-intel .success-nearby-empty').isVisible();
+        expect(emptyVisible, 'contextual empty-state copy visible inside the mount').toBe(true);
     });
 
-    // HC81 superseded the HC79 trigger pill + per-stage sheet with
-    // concentric bucket rings + the shared #nearby-list-sheet. The
-    // populated rendering + tap-to-open is now covered by spec 119
-    // (119-nearby-bucket-rings.spec.ts). Old skipped test removed
-    // to avoid stale-DOM confusion.
+    test('@smoke nearby populated state: aggregate-number block renders identical to home', async ({ page }) => {
+        await openSuccessStage(page, 'en', { nearby: 'populated' });
+        // HC84 — unified design. Success stage mounts the SAME
+        // `.home-nearby-number-block` the home stage uses. We force-
+        // seed via the public helper (see populated branch of
+        // openSuccessStage above) so this assertion is deterministic
+        // even when page.route can't intercept the cross-origin fetch.
+        await page.evaluate(() => {
+            const w = window as unknown as {
+                NearbyIntel?: { buildNumberBlock?: (p: { groups: unknown[] }) => HTMLElement | null };
+            };
+            const root = document.getElementById('success-nearby-intel');
+            if (!root || !w.NearbyIntel || !w.NearbyIntel.buildNumberBlock) return;
+            root.innerHTML = '';
+            const block = w.NearbyIntel.buildNumberBlock({
+                groups: [
+                    { id: 'g1', count: 7, approx_distance_km: 0.3, tier: 'verified',
+                      label: 'Electronic City', summary_key: 'flood',
+                      latest_at: new Date().toISOString(),
+                      verified_count: 5, pending_count: 2 },
+                    { id: 'g2', count: 3, approx_distance_km: 1.7, tier: 'emerging',
+                      label: 'Indiranagar', summary_key: 'power',
+                      latest_at: new Date().toISOString(),
+                      verified_count: 1, pending_count: 2 },
+                ],
+            });
+            if (block) root.appendChild(block);
+        });
+        await page.waitForTimeout(150);
+        const block = page.locator('#success-nearby-intel .home-nearby-number-block');
+        await expect(block).toBeVisible();
+        // Halo + number + tier pill all present.
+        const halos = await page.locator('#success-nearby-intel .home-nearby-pulse-halo').count();
+        expect(halos, 'two pulse halos (primary + secondary)').toBe(2);
+        const number = await page.locator('#success-nearby-intel .home-nearby-number').textContent();
+        expect(Number(number)).toBeGreaterThan(0);
+        const tierPill = page.locator('#success-nearby-intel .home-nearby-tier-pill');
+        await expect(tierPill).toBeVisible();
+        // Tap → shared list sheet opens.
+        await block.click();
+        await page.waitForTimeout(350);
+        await expect(page.locator('#nearby-list-sheet')).toHaveClass(/is-open/);
+        // Bucket-grouped sections rendered inside.
+        const sectionCount = await page.locator('#nearby-list-sheet .nearby-bucket-section').count();
+        expect(sectionCount, 'modal renders at least one bucket section').toBeGreaterThan(0);
+    });
 
     test('@smoke state cleanup on Report another tap', async ({ page }) => {
         await openSuccessStage(page);

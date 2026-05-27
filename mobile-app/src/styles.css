@@ -1983,134 +1983,290 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     .success-radar-dot { box-shadow: 0 0 4px rgba(9, 209, 199, 0.5); }
 }
 
-/* ── HC81 (May 2026) — Nearby distance-bucket rings ──────────────
-   Concentric SVG rings replacing both the home single-aggregate-
-   number block AND the success-stage trigger pill. Five buckets at
-   1 / 5 / 10 / 20 / 100 km; empty buckets are simply not drawn (the
-   renderer in nearby.js omits the ring element entirely, so no CSS
-   `display: none` plumbing required).
+/* ── HC84 (May 2026) — Unified nearby aggregate-number block ─────
+   Restores the pre-HC81 home-stage aggregate-number design and applies
+   it IDENTICALLY on the success stage so both surfaces share one
+   interaction model.  Operator brief:
+     · One large aggregate number block at the centre
+     · Soft pulsing radar-style halo behind the number
+     · Tier pill (verified/emerging/weak) below the number
+     · Sub-label: "reports nearby"
+     · Tap → opens #nearby-list-sheet with bucket-grouped rows.
 
-   The ring stroke colour conveys the tier of the bucket (highest
-   tier wins when multiple groups land in the same bucket). The
-   adjacent count text uses the same colour so the bucket reads as
-   a single unit at a glance.
+   Selectors are scope-less (no `.home-stage` ancestor) so the block
+   works equally on `#home-nearby-intel` and `#success-nearby-intel`.
+   The "home-nearby-" class prefix is kept for back-compat with i18n
+   walker hooks + because the class names describe the COMPONENT,
+   not the page that hosts it. */
 
-   Stages that mount the rings:
-     · home    → `<section id="home-nearby-intel">` (rings inserted
-                  by nearby.js _renderInto)
-     · success → `<section id="success-nearby-rings">` (rings
-                  inserted by app.js _paintSuccessNearby calling
-                  the SAME nearby.js builder).
-
-   The legacy `.home-nearby-number-block` + `.home-nearby-pulse-halo`
-   + `.home-nearby-tier-pill` rules further down this file are now
-   orphan (no markup mounts them); kept in place to avoid scope-creep
-   churn — they can be pruned in a follow-up. */
-.nearby-bucket-rings {
+/* Aggregate block — a button so the entire surface is one tap
+   target. Wraps the halos + number + tier pill + sub label. */
+.home-nearby-number-block {
+    all: unset;
+    cursor: pointer;
+    box-sizing: border-box;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: var(--gap-2, 8px) 0;
-    /* Keep the SVG contained — on smaller viewports the SVG can be
-       allowed to shrink but never larger than its native size. */
-    max-width: 100%;
+    gap: 4px;
+    width: 100%;
+    padding: 22px 16px 18px;
+    position: relative;
+    /* Generous radius so the click ripple clips cleanly inside the
+       hit area; no fill/border so the block reads as just the number
+       + halo on the surface. */
+    overflow: hidden;
+    background: transparent;
+    border: 0;
+    border-radius: 22px;
+    transition: transform 0.18s ease;
+    -webkit-tap-highlight-color: transparent;
+    min-height: 156px;
 }
-.nearby-bucket-svg {
-    display: block;
-    overflow: visible;                  /* count text extends past r */
-    max-width: 100%;
-    height: auto;
+.home-nearby-number-block:focus-visible {
+    outline: 2px solid rgba(70, 223, 177, 0.45);
+    outline-offset: 4px;
+    border-radius: 22px;
 }
-/* Circle rings — stroke only, NEVER filled. The element-qualified
-   selector (`circle.nearby-bucket-ring`) raises specificity above the
-   tier-colour classes below so the tier `fill` (which colours the
-   adjacent count text) never bleeds back onto the ring as a solid
-   disc.  This was the HC81 first-paint bug operator caught on the
-   live screenshots: every ring rendered as a solid filled circle. */
-circle.nearby-bucket-ring {
-    fill: none;
-    stroke-width: 8;
-    cursor: pointer;
-    transition: stroke-opacity var(--motion-press, 120ms) var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1)),
-                filter var(--motion-press, 120ms) var(--easing-out, cubic-bezier(0.22, 1, 0.36, 1));
-    stroke-opacity: 0.85;
+.home-nearby-number-block:active { transform: scale(0.985); }
+
+/* Tier modifiers — colour-driven halo + tier-pill treatment.  Weak
+   reads softest, verified strongest. */
+.home-nearby-number-block.is-tier-weak { opacity: 0.85; }
+.home-nearby-number-block.is-tier-weak .home-nearby-pulse-halo {
+    border-color: rgba(160, 160, 160, 0.28);
+    background: radial-gradient(circle at center,
+        rgba(160, 160, 160, 0.06) 0%, transparent 70%);
 }
-circle.nearby-bucket-ring:hover,
-circle.nearby-bucket-ring:focus-visible {
-    stroke-opacity: 1;
-    filter: drop-shadow(0 0 6px currentColor);
-    outline: none;
+.home-nearby-number-block.is-tier-weak .home-nearby-number {
+    color: rgba(255, 255, 255, 0.72);
 }
-.nearby-bucket-count {
-    font-family: var(--font);
-    font-size: var(--fz-sm, 13px);
+.home-nearby-number-block.is-tier-emerging .home-nearby-pulse-halo {
+    border-color: rgba(245, 158, 11, 0.42);
+    background: radial-gradient(circle at center,
+        rgba(245, 158, 11, 0.12) 0%, transparent 70%);
+}
+.home-nearby-number-block.is-tier-verified .home-nearby-pulse-halo {
+    border-color: rgba(70, 223, 177, 0.32);
+    background: radial-gradient(circle at center,
+        rgba(70, 223, 177, 0.10) 0%, rgba(9, 209, 199, 0.05) 35%,
+        transparent 70%);
+}
+/* Acute spike — overlay a brighter red pulse regardless of tier. */
+.home-nearby-number-block.is-acute .home-nearby-pulse-halo {
+    border-color: rgba(239, 68, 68, 0.55);
+    box-shadow: 0 0 24px rgba(239, 68, 68, 0.32);
+}
+
+/* Tier pill — small chip with the tier-label copy. */
+.home-nearby-tier-pill {
+    margin-top: 6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 10px;
     font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    /* Tier colour inherited via per-tier classes below. */
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
-/* Tier classes set BOTH stroke (used by circles) and fill (used by
-   the adjacent <text> count).  The element-qualified rules above
-   keep the circle's fill at `none` regardless. */
-.bucket-tier-verified {
-    stroke: var(--green, #80EE98);
-    fill: var(--green, #80EE98);
+.home-nearby-tier-pill--weak {
+    background: rgba(160, 160, 160, 0.16);
+    border: 1px solid rgba(160, 160, 160, 0.32);
+    color: rgba(255, 255, 255, 0.68);
 }
-.bucket-tier-emerging {
-    stroke: var(--accent, #09D1C7);
-    fill: var(--accent, #09D1C7);
+.home-nearby-tier-pill--emerging {
+    background: rgba(245, 158, 11, 0.16);
+    border: 1px solid rgba(245, 158, 11, 0.40);
+    color: #fbbf24;
 }
-.bucket-tier-weak {
-    stroke: var(--text-dim, #94a3b8);
-    fill: var(--text-dim, #94a3b8);
+.home-nearby-tier-pill--verified {
+    background: rgba(70, 223, 177, 0.16);
+    border: 1px solid rgba(70, 223, 177, 0.40);
+    color: #5eead4;
 }
-/* Counts are not interactive — only the ring strokes accept taps.
-   `stroke: none` keeps the digits clean (no outline halo) and the
-   per-tier fill colours them. */
-text.nearby-bucket-count {
-    cursor: default;
+
+/* Pulsing halo — two concentric expanding circles, 1.7 s offset so
+   one is always mid-expansion. Conveys the "live response network"
+   feeling. */
+.home-nearby-number-block .home-nearby-pulse-halo {
+    content: '';
+    position: absolute;
+    top: 50%;
+    inset-inline-start: 50%;
+    width: 200px;
+    height: 200px;
+    margin-top: -100px;
+    margin-inline-start: -100px;
+    border-radius: 50%;
+    border: 1px solid rgba(70, 223, 177, 0.32);
+    background:
+        radial-gradient(circle at center,
+            rgba(70, 223, 177, 0.10) 0%,
+            rgba(9, 209, 199, 0.05) 35%,
+            transparent 70%);
     pointer-events: none;
-    fill-opacity: 0.95;
-    stroke: none;
+    z-index: 0;
+    animation: nearby-number-pulse 3.4s ease-out infinite;
+}
+.home-nearby-number-block .home-nearby-pulse-halo.is-secondary {
+    animation-delay: 1.7s;
+}
+@keyframes nearby-number-pulse {
+    0%   { transform: scale(0.78); opacity: 0.70; }
+    100% { transform: scale(1.40); opacity: 0;    }
 }
 
-/* RTL — mirror the count text to the LEFT edge of each ring so the
-   numbers don't crash into the rings when the page direction flips.
-   The SVG itself remains symmetric; we only flip the inner `<text>`
-   via attribute override at render time, but a CSS fallback keeps
-   pre-existing pages working without a JS round-trip. */
-[dir="rtl"] .nearby-bucket-svg text.nearby-bucket-count {
-    transform: scaleX(-1);
-    transform-origin: 50% 50%;
+/* The big number itself — dominant scale, tabular numerals so the
+   count doesn't shift left/right between 9 and 10. */
+.home-nearby-number {
+    font-family: var(--heading, 'Outfit', sans-serif);
+    font-size: clamp(2.8rem, 11vw, 4.2rem);
+    line-height: 1;
+    font-weight: 800;
+    color: #80EE98;
+    letter-spacing: -0.04em;
+    text-shadow: 0 0 22px rgba(128, 238, 152, 0.32);
+    position: relative;
+    z-index: 1;
+    font-variant-numeric: tabular-nums;
+}
+.home-nearby-number-sub {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.62);
+    letter-spacing: 0.01em;
+    margin-top: 4px;
+    position: relative;
+    z-index: 1;
+}
+.home-nearby-number-groups {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.42);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    position: relative;
+    z-index: 1;
 }
 
-/* HC81 reduced-motion override — drop the ring hover transition.
-   The ring colour + count still convey tier; no motion required. */
+/* Click ripple — appended by JS at click coords, animates outward
+   then auto-removes. */
+.home-nearby-ripple {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(70, 223, 177, 0.28);
+    pointer-events: none;
+    transform: scale(0);
+    opacity: 1;
+    animation: nearby-ripple 0.6s ease-out forwards;
+}
+@keyframes nearby-ripple {
+    0%   { transform: scale(0);   opacity: 0.5; }
+    100% { transform: scale(2.5); opacity: 0;   }
+}
+
+/* Recently-resolved subtotal — sits below the main block; honest
+   closure feedback that never folds into the headline count. */
+.home-nearby-resolved-subtotal {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 8px 16px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.56);
+    font-size: 12px;
+    font-weight: 500;
+}
+.home-nearby-resolved-label {
+    font-weight: 700;
+    font-size: 10.5px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.42);
+}
+.home-nearby-resolved-count {
+    font-size: 18px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.74);
+}
+.home-nearby-resolved-sub {
+    display: none;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.40);
+}
+@media (min-width: 600px) {
+    .home-nearby-resolved-sub { display: inline; }
+}
+
+/* Reduced motion — kill the halo expansion + ripple animation. The
+   tier-coloured halo stays painted (just static) so the "live"
+   visual hierarchy holds without forbidden motion. */
 @media (prefers-reduced-motion: reduce) {
-    .nearby-bucket-ring,
-    .nearby-bucket-ring:hover,
-    .nearby-bucket-ring:focus-visible {
-        transition: none !important;
-        filter: none !important;
+    .home-nearby-number-block .home-nearby-pulse-halo {
+        animation: none !important;
+        transform: scale(1);
+        opacity: 0.35;
+    }
+    .home-nearby-number-block .home-nearby-pulse-halo.is-secondary {
+        display: none;
+    }
+    .home-nearby-ripple {
+        animation: none !important;
+        opacity: 0 !important;
     }
 }
 
-/* Success-stage mount — centres the SVG horizontally and gives it
-   the same compact card padding as the prior trigger pill so the
-   stage layout budget stays the same.  Also hosts the empty-state
-   fallback (`.success-nearby-empty`) when every bucket is zero. */
-.success-nearby-rings-mount {
+/* Compact viewport — squeeze the block so iPhone SE (375 × 667 CSS
+   px) home-stage + success-stage stay zero-scroll.  Numbers stay
+   readable, halo shrinks, tier pill tightens. */
+@media (max-height: 800px) {
+    .home-nearby-number-block {
+        min-height: 88px;
+        padding: 8px 12px 6px;
+    }
+    .home-nearby-number {
+        font-size: clamp(2rem, 8vw, 2.6rem);
+    }
+    .home-nearby-number-block .home-nearby-pulse-halo {
+        width: 130px; height: 130px;
+        margin-top: -65px;
+        margin-inline-start: -65px;
+    }
+    .home-nearby-tier-pill {
+        margin-top: 2px;
+        padding: 2px 8px;
+        font-size: 9.5px;
+    }
+    .home-nearby-resolved-subtotal {
+        margin-top: 2px;
+        padding: 2px 12px;
+        font-size: 11px;
+    }
+    .home-nearby-resolved-count {
+        font-size: 15px;
+    }
+    /* Footer compaction so iPhone SE stays zero-scroll on home. */
+    .home-stage .home-section-bottom .home-footer-row {
+        padding-top: 6px;
+        margin-top: 4px;
+    }
+    .home-stage .home-section-bottom .home-footer-row .home-utility-link {
+        font-size: 11.5px;
+    }
+}
+
+/* Success-stage mount — just a container, no card chrome. The
+   number-block itself paints the visual. */
+.success-nearby-intel {
     display: flex;
     align-items: center;
     justify-content: center;
-    /* 160 (SVG) + 2*8 padding = 176 minimum so the outermost ring
-       isn't clipped at the bottom on small viewports.  HC81 second-
-       paint fix: pre-fix the mount was constrained to 130 px which
-       cropped the SVG mid-ring on iPhone SE. */
-    min-height: 176px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-md, 12px);
-    padding: var(--gap-2, 8px);
+    /* Min-height matches the block's collapsed (max-height: 800px)
+       min-height so the surrounding flex layout doesn't shift when
+       the block paints / re-paints. */
+    min-height: 88px;
     flex: 0 0 auto;
 }
 .success-nearby-empty {
@@ -2134,10 +2290,42 @@ text.nearby-bucket-count {
     line-height: 1.35;
 }
 
-/* Home mount — centre the SVG. The eyebrow already provides the
-   section header so we don't need additional chrome. */
-.home-stage .home-nearby-intel .nearby-bucket-rings {
-    margin: 0 auto;
+/* ── HC84 modal bucket sections ─────────────────────────────────
+   Inside #nearby-list-sheet, group rows by distance bucket so the
+   user can scan "Within 500 m / 0.5-2 km / 2-5 km / ..." headers.
+   Each section header shows the bucket label + a count badge.
+   Rows themselves keep the existing .home-nearby-row styling. */
+.nearby-bucket-section {
+    display: block;
+    margin: 0;
+    padding: 0;
+}
+.nearby-bucket-section + .nearby-bucket-section {
+    margin-top: var(--gap-3, 12px);
+}
+.nearby-bucket-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--gap-2, 8px);
+    margin: 0 0 var(--gap-2, 8px) 0;
+    padding: 0 var(--gap-2, 8px);
+    font-size: var(--fz-xs, 12px);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim, rgba(255,255,255,0.62));
+}
+.nearby-bucket-header-label { flex: 1 1 auto; }
+.nearby-bucket-header-count {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(70, 223, 177, 0.16);
+    border: 1px solid rgba(70, 223, 177, 0.40);
+    color: #5eead4;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
 }
 
 

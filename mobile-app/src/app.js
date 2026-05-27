@@ -14199,7 +14199,7 @@ function _renderSuccessMyReportsCount() {
 // The SVG renderer lives in nearby.js (NearbyIntel.buildBucketRings)
 // so both stages stay visually consistent.
 async function _bootSuccessNearby() {
-    const mount = document.getElementById('success-nearby-rings');
+    const mount = document.getElementById('success-nearby-intel');
     if (!mount) return;
     // Initial loading state — keep the mount empty (no skeleton; rings
     // typically paint within 500 ms on localhost and < 2 s on PROD).
@@ -14255,29 +14255,37 @@ async function _bootSuccessNearby() {
 }
 
 function _paintSuccessNearby(groups) {
-    const mount = document.getElementById('success-nearby-rings');
+    const mount = document.getElementById('success-nearby-intel');
     if (!mount) return;
     mount.innerHTML = '';
-    // Build via the shared nearby.js helper so home + success render
-    // identical SVG. Returns null when every bucket is empty.
-    let ringsEl = null;
-    try {
-        if (window.NearbyIntel &&
-            typeof window.NearbyIntel.buildBucketRings === 'function') {
-            ringsEl = window.NearbyIntel.buildBucketRings({ groups: groups || [] });
-        }
-    } catch (e) {
-        console.warn('[HC81] buildBucketRings failed:', e);
-    }
-    if (!ringsEl) {
+    // HC84 — paint the SAME aggregate-number block the home stage uses,
+    // via the shared NearbyIntel.buildNumberBlock helper. Single
+    // interaction model: tap → opens #nearby-list-sheet with bucket-
+    // grouped rows. If the payload has no groups, fall back to the
+    // success-specific empty pill (kept for the contextual "first eyes
+    // here" copy that ties the empty state to the just-submitted report).
+    const safeGroups = Array.isArray(groups) ? groups : [];
+    if (safeGroups.length === 0) {
         _renderSuccessNearbyEmpty();
         return;
     }
-    mount.appendChild(ringsEl);
+    try {
+        if (window.NearbyIntel &&
+            typeof window.NearbyIntel.buildNumberBlock === 'function') {
+            const blockEl = window.NearbyIntel.buildNumberBlock({ groups: safeGroups });
+            if (blockEl) {
+                mount.appendChild(blockEl);
+                return;
+            }
+        }
+    } catch (e) {
+        console.warn('[HC84] buildNumberBlock failed:', e);
+    }
+    _renderSuccessNearbyEmpty();
 }
 
 function _renderSuccessNearbyEmpty() {
-    const mount = document.getElementById('success-nearby-rings');
+    const mount = document.getElementById('success-nearby-intel');
     if (!mount) return;
     const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
     mount.innerHTML =
