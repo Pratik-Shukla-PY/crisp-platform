@@ -705,6 +705,16 @@ def _purge_loop():
 _ASSEMBLE_SWEEP_INTERVAL_S = int(os.getenv("CRISP_ASSEMBLE_SWEEP_INTERVAL_S", "300"))
 _ABANDON_STALE_MIN         = int(os.getenv("CRISP_ABANDON_STALE_MIN",         "30"))
 _ASSEMBLE_DEADLINE_MIN     = int(os.getenv("CRISP_ASSEMBLE_DEADLINE_MIN",     "30"))
+# HC91 (Sprint 2B, May 2026) — wedged-assembler deadline. Action ① keeps
+# reviving chunks-complete rows every sweep tick; if the assembly worker
+# permanently fails on the same row (corrupt input, PII-blur hang on a
+# pathological image, S3 outage on this specific media_id), the revive
+# loop is silent CPU burnup forever. After this many minutes of being
+# stuck in 'assembling' / 'pending' WITH all chunks present, abandon
+# with reason='assembler_wedged'. Default 60 min = 12 sweep cycles at
+# _ASSEMBLE_SWEEP_INTERVAL_S = 300 s, giving the worker a full hour of
+# retry budget before we give up.
+_ASSEMBLER_WEDGED_MIN      = int(os.getenv("CRISP_ASSEMBLER_WEDGED_MIN",      "60"))
 # May 2026 — companion to the PWA's "SMALL gates the photo stage" fix
 # (mobile-app/src/app.js:8956). On SLOW / VERY_SLOW networks the PWA
 # deliberately defers MEDIUM/HIGH variants; only the LOW (SMALL) variant
@@ -744,8 +754,19 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
     """One pass of assembly recovery — invoked on boot AND every
     _ASSEMBLE_SWEEP_INTERVAL_S seconds by `_assembly_recovery_loop`.
 
-    Three actions, ordered so REVIVE runs FIRST (so we don't ABANDON
-    a row that would have been resubmittable on this tick):
+    Four actions, ordered so ABANDON-WEDGED runs FIRST (so a row past
+    its hour-long retry budget isn't uselessly re-submitted to the
+    executor on this tick), THEN REVIVE (so we don't ABANDON a row
+    that would have been resubmittable on this tick), THEN the two
+    classic ABANDON paths:
+
+      ⓪ HC91 (May 2026) — ABANDON wedged-assembler rows.
+         Rows in 'assembling' or 'pending' AND chunks COMPLETE AND
+         created_at > _ASSEMBLER_WEDGED_MIN ago → flip to 'failed'
+         with abandon_reason='assembler_wedged'. Closes the loop where
+         Action ① keeps reviving a row but the assembly worker keeps
+         failing on the same data (corrupt input, PII-blur hang,
+         pathological image, persistent S3 5xx for that media_id).
 
       ① REVIVE chunks-fully-arrived stuck rows.
          Rows with received_chunks >= chunk_count AND assembly_status in
@@ -789,6 +810,49 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
         stale_2min       = now_utc - timedelta(minutes=2)
         abandon_deadline = now_utc - timedelta(minutes=_ABANDON_STALE_MIN)
         assemble_deadln  = now_utc - timedelta(minutes=_ASSEMBLE_DEADLINE_MIN)
+        wedged_deadline  = now_utc - timedelta(minutes=_ASSEMBLER_WEDGED_MIN)
+
+        # ── ⓪ ABANDON wedged-assembler-with-complete-chunks ───────────
+        # HC91 (Sprint 2B, May 2026) — closes the silent burnup loop where
+        # Action ① keeps reviving a chunks-complete row but the assembly
+        # worker keeps failing on the same data (corrupt input, PII-blur
+        # hang, S3 outage on this media_id). The created_at filter is the
+        # wedge-age signal — updated_at gets bumped by Action ① on every
+        # revival, so it's NOT a useful signal here; created_at reflects
+        # how long the row has been in the system without successfully
+        # completing.
+        #
+        # Status filter is in_(['assembling','pending']) because Action ①
+        # flips 'assembling' → 'pending' on each tick; we need to catch
+        # rows in either intermediate state.
+        #
+        # Runs BEFORE Action ① so we don't waste an executor submit on a
+        # row we're about to abandon on this same tick.
+        wedged_assembler = _db.query(Media).filter(
+            Media.assembly_status.in_(['assembling', 'pending']),
+            Media.created_at < wedged_deadline,
+            Media.chunk_count > 0,
+            Media.received_chunks >= Media.chunk_count,
+            Media.abandoned_at.is_(None),
+        ).update({
+            'assembly_status': 'failed',
+            'abandoned_at':    now_utc,
+            'abandon_reason':  'assembler_wedged',
+        }, synchronize_session=False)
+        _db.commit()
+        if wedged_assembler:
+            log.info(
+                f"Assembly recovery [{tag}]: abandoned {wedged_assembler} rows "
+                f"(reason=assembler_wedged, created_at>={_ASSEMBLER_WEDGED_MIN}m ago, "
+                f"chunks complete but assembly never finished)"
+            )
+            try:
+                from app.core.observability import media_abandon_reason_total
+                media_abandon_reason_total.labels(
+                    reason="assembler_wedged",
+                ).inc(wedged_assembler)
+            except Exception:
+                pass
 
         # ── ① REVIVE chunks-fully-arrived stuck rows ───────────────────
         # Collect ids BEFORE the UPDATE so we can re-submit them by id

@@ -196,6 +196,117 @@ def test_revive_skips_already_abandoned_rows(db):
     assert m.abandoned_at is not None  # untouched
 
 
+# ── ⓪ ABANDON wedged-assembler (HC91, Sprint 2B, May 2026) ──────────────────
+
+
+def _force_created_at(db, media_row, minutes_ago: int):
+    """Manipulate created_at backward — used by HC91 wedged tests
+    because the wedge detection looks at row age, not updated_at.
+
+    NOTE: this UPDATE statement also resets updated_at via the model's
+    onupdate hook. Tests that need a stale updated_at MUST re-pin it
+    AFTER calling this helper. Use `_force_updated_at` for that.
+    """
+    db.execute(
+        Media.__table__.update()
+        .where(Media.id == media_row.id)
+        .values(created_at=datetime.now(timezone.utc) - timedelta(minutes=minutes_ago))
+    )
+    db.commit()
+    db.refresh(media_row)
+
+
+def _force_updated_at(db, media_row, minutes_ago: int):
+    """Manipulate updated_at backward. Useful AFTER `_force_created_at`
+    when the test needs to satisfy Action ①'s `updated_at < 2 min`
+    precondition with a specific row age."""
+    db.execute(
+        Media.__table__.update()
+        .where(Media.id == media_row.id)
+        .values(updated_at=datetime.now(timezone.utc) - timedelta(minutes=minutes_ago))
+    )
+    db.commit()
+    db.refresh(media_row)
+
+
+def test_abandons_assembling_with_complete_chunks_past_wedged_deadline(db):
+    """HC91 — a row with all chunks present but stuck 'assembling' for >
+    60 min should be abandoned with reason='assembler_wedged'. Action ①
+    would have kept reviving it on every tick otherwise, burning CPU
+    on a permanently-broken assembly job."""
+    r = _seed_report(db, device_hash="hc91-wedged-assembling")
+    m = _seed_media(
+        db, r,
+        assembly_status="assembling",
+        chunk_count=4,
+        received_chunks=4,    # all chunks present
+        age_minutes=10,        # updated_at recent (Action ① keeps touching it)
+    )
+    _force_created_at(db, m, minutes_ago=90)  # row is 90 min old → past 60 min wedged deadline
+
+    with patch("app.api.endpoints.reports._assembly_executor.submit"):
+        _run_sweep_via_test_session(db)
+
+    db.refresh(m)
+    assert m.assembly_status == "failed", (
+        "HC91: chunks-complete + past wedged deadline must be abandoned, not revived"
+    )
+    assert m.abandon_reason == "assembler_wedged"
+    assert m.abandoned_at is not None
+
+
+def test_abandons_pending_with_complete_chunks_past_wedged_deadline(db):
+    """HC91 — same as above but the row is in 'pending' state (just
+    flipped by Action ① on a prior tick). The sweep MUST also catch
+    these on subsequent ticks so the revive-fail loop doesn't continue."""
+    r = _seed_report(db, device_hash="hc91-wedged-pending")
+    m = _seed_media(
+        db, r,
+        assembly_status="pending",
+        chunk_count=3,
+        received_chunks=3,
+        age_minutes=5,
+    )
+    _force_created_at(db, m, minutes_ago=90)
+
+    with patch("app.api.endpoints.reports._assembly_executor.submit"):
+        _run_sweep_via_test_session(db)
+
+    db.refresh(m)
+    assert m.assembly_status == "failed"
+    assert m.abandon_reason == "assembler_wedged"
+
+
+def test_does_not_abandon_young_chunks_complete_row_even_if_assembling(db):
+    """HC91 must NOT preempt Action ①'s normal revival path for young
+    rows. A row that's only 15 min old + chunks complete should be
+    revived (Action ①), not abandoned (HC91)."""
+    r = _seed_report(db, device_hash="hc91-young-revivable")
+    m = _seed_media(
+        db, r,
+        assembly_status="assembling",
+        chunk_count=4,
+        received_chunks=4,
+        age_minutes=10,    # initial updated_at; will be re-pinned below
+    )
+    _force_created_at(db, m, minutes_ago=15)  # well within 60 min wedged window
+    # _force_created_at's UPDATE bumped updated_at to NOW. Re-pin it
+    # to 10 min ago so Action ①'s `updated_at < 2 min` filter matches.
+    _force_updated_at(db, m, minutes_ago=10)
+
+    with patch("app.api.endpoints.reports._assembly_executor.submit"):
+        _run_sweep_via_test_session(db)
+
+    db.refresh(m)
+    # Action ① should have flipped it back to 'pending'; HC91 must NOT
+    # have abandoned it.
+    assert m.assembly_status == "pending", (
+        "HC91 must not abandon young rows — let Action ① revive them"
+    )
+    assert m.abandon_reason is None
+    assert m.abandoned_at is None
+
+
 # ── ② ABANDON assembly-worker-lost ───────────────────────────────────────────
 
 
