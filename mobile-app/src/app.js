@@ -9481,8 +9481,20 @@ async function _submitReportInner() {
         }
 
         // ── Show success to user IMMEDIATELY — don't wait for network ────────
-        showUploadOverlay(t('upload_sending'));
-        updateUploadProgress(50, t('upload_saved'));
+        // HC92 (Sprint 1C, May 2026) — every call below this point is
+        // individually try/catch-wrapped. The report is ALREADY safely
+        // queued in IDB (line 9471). Everything that follows is UX
+        // enhancement: id-pill text, success-stage navigation,
+        // synthesized report sentinel, push prompt, capture-state
+        // clear. A throw in ANY of them used to bubble to the outer
+        // catch, fire the same `goToStage('stage-success')` from the
+        // error path, and if THAT threw too (HC87 class), strand the
+        // user on the half-rendered v4 review with HC80's sticky
+        // latch blocking retries. Belt-and-braces: even if every
+        // single call below fails we still navigate to success-stage
+        // at the bottom of the try-block.
+        try { showUploadOverlay(t('upload_sending')); } catch (e) { console.warn('[submit] showUploadOverlay failed:', e?.message || e); }
+        try { updateUploadProgress(50, t('upload_saved')); } catch (e) { console.warn('[submit] updateUploadProgress failed:', e?.message || e); }
         // HC87 — write to the HC79-redesigned success-stage IDs. The
         // legacy `#report-id-text` / `#success-id-box` IDs targeted
         // here pre-redesign no longer exist in `index.html`, so
@@ -9492,10 +9504,14 @@ async function _submitReportInner() {
         // review screen with no feedback, and HC80's sticky latch
         // then blocked retries.  Null-guarded so a future markup
         // change can't re-introduce the same crash class.
-        const idMini = document.getElementById('success-report-id-mini');
-        const idWrap = document.getElementById('success-status-id');
-        if (idMini) idMini.textContent = clientReportId.slice(0, 8).toUpperCase();
-        if (idWrap) idWrap.hidden = false;
+        try {
+            const idMini = document.getElementById('success-report-id-mini');
+            const idWrap = document.getElementById('success-status-id');
+            if (idMini) idMini.textContent = clientReportId.slice(0, 8).toUpperCase();
+            if (idWrap) idWrap.hidden = false;
+        } catch (e) {
+            console.warn('[submit] success-id paint failed:', e?.message || e);
+        }
         // Stash so `_renderSuccessStatusPill` picks it up on the next
         // stage entry (it reads `window._lastSubmittedClientId`).
         try { window._lastSubmittedClientId = clientReportId; } catch (_) {}
@@ -9503,12 +9519,23 @@ async function _submitReportInner() {
         // PR 7: stash the just-submitted report so the Track button on the
         // success screen can open the detail view before the next status-since
         // poll brings back server-authoritative data.
-        _synthesizeSubmittedReport(clientReportId, {});
+        try { _synthesizeSubmittedReport(clientReportId, {}); }
+        catch (e) { console.warn('[submit] _synthesizeSubmittedReport failed:', e?.message || e); }
 
         // Brief pause so user sees the overlay
         await new Promise(r => setTimeout(r, 800));
-        showUploadSuccess();
-        setTimeout(() => goToStage('stage-success'), 1200);
+        try { showUploadSuccess(); } catch (e) { console.warn('[submit] showUploadSuccess failed:', e?.message || e); }
+        // HC92 — the goToStage callback fires AFTER this function
+        // returns; an exception inside the deferred microtask would
+        // be unhandled and the user would be stranded on v4 review.
+        // Wrap the inner callback explicitly.
+        setTimeout(() => {
+            try { goToStage('stage-success'); }
+            catch (e) {
+                console.error('[submit] goToStage(stage-success) failed:', e?.message || e);
+                try { showToast(t('upload_saved')); } catch (_) {}
+            }
+        }, 1200);
 
         // Phase 2.2 — V2 fetchBadge() removed; the V4 home-screen
         // chip (#home-badge-chip) refreshes itself on next paint.
@@ -9533,7 +9560,8 @@ async function _submitReportInner() {
         } catch (_) { /* localStorage unavailable — silently skip */ }
 
         // ── Now try to send in background (non-blocking) ─────────────────────
-        trySendQueuedReport(queueItem);
+        try { trySendQueuedReport(queueItem); }
+        catch (e) { console.warn('[submit] trySendQueuedReport failed:', e?.message || e); }
 
         // ── Clear capture state ──────────────────────────────────────────────
         // From here the report lives in IndexedDB; the UI state variables and
@@ -9544,21 +9572,33 @@ async function _submitReportInner() {
         // service-worker reload, browser back) starts from a clean slate.
         // Pure state clear, no navigation — navigation is driven by the
         // setTimeout above.
-        _clearCaptureState();
+        try { _clearCaptureState(); }
+        catch (e) { console.warn('[submit] _clearCaptureState failed:', e?.message || e); }
 
     } catch (fatalErr) {
         console.error('submitReport fatal error:', fatalErr);
-        hideUploadOverlay();
+        // HC92 (Sprint 1C, May 2026) — every recovery action here is
+        // also individually wrapped. If hideUploadOverlay throws, we
+        // still want to attempt the success-stage paint; if THAT
+        // throws (HC87 class), we still want to re-enable the
+        // submit button so the user can retry rather than getting
+        // stuck on a frozen disabled state.
+        try { hideUploadOverlay(); } catch (e) { console.warn('[submit:catch] hideUploadOverlay failed:', e?.message || e); }
         // HC87 — same legacy-ID fix as the happy path above; the catch
         // handler used to crash AGAIN on these dead IDs, so even the
         // error-recovery `goToStage('stage-success')` call below was
         // never reached.  Null-guarded for the same reason.
-        const idMiniErr = document.getElementById('success-report-id-mini');
-        const idWrapErr = document.getElementById('success-status-id');
-        if (idMiniErr) idMiniErr.textContent = 'SAVED';
-        if (idWrapErr) idWrapErr.hidden = false;
-        goToStage('stage-success');
-        sendBtn.disabled = false;
+        try {
+            const idMiniErr = document.getElementById('success-report-id-mini');
+            const idWrapErr = document.getElementById('success-status-id');
+            if (idMiniErr) idMiniErr.textContent = 'SAVED';
+            if (idWrapErr) idWrapErr.hidden = false;
+        } catch (e) {
+            console.warn('[submit:catch] success-id paint failed:', e?.message || e);
+        }
+        try { goToStage('stage-success'); }
+        catch (e) { console.error('[submit:catch] goToStage failed too — user stranded; showing toast:', e?.message || e); try { showToast(t('upload_saved')); } catch (_) {} }
+        try { sendBtn.disabled = false; } catch (_) {}
     }
 }
 
