@@ -463,6 +463,7 @@
   "nearby_n_areas": "{n} 个区域",
   "nearby_no_reports": "附近没有报告",
   "nearby_one_area": "1 个区域",
+  "nearby_one_report": "1 份报告",
   "nearby_pending_badge": "待核实",
   "nearby_recently_resolved_label": "近期已解决",
   "nearby_recently_resolved_sub": "过去 24 小时已解决 {n} 起",

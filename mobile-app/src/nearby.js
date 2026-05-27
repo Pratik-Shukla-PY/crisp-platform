@@ -316,8 +316,13 @@
 
     function _buildRow(group) {
         const summary = _summaryLabel(group);
-        const countText = _t('nearby_count_reports', '{n} reports')
-            .replace('{n}', String(group.count));
+        // HC85 — pluralize count: "1 report" vs "{n} reports".
+        // Operator-reported "1 reports" bug in the bucket-grouped
+        // modal sheet rendering rows.
+        const countText = (Number(group.count) === 1)
+            ? _t('nearby_one_report', '1 report')
+            : _t('nearby_count_reports', '{n} reports')
+                .replace('{n}', String(group.count));
         const distance = _t('nearby_distance_km', '{km} km')
             .replace('{km}', group.approx_distance_km.toFixed(1));
         const ago = _humanizeAgo(group.latest_at);

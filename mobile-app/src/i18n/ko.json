@@ -469,6 +469,7 @@
   "nearby_n_areas": "{n}개 지역",
   "nearby_no_reports": "근처에 보고가 없습니다",
   "nearby_one_area": "1개 지역",
+  "nearby_one_report": "1건 신고",
   "nearby_pending_badge": "대기 중",
   "nearby_recently_resolved_label": "최근 해결됨",
   "nearby_recently_resolved_sub": "지난 24시간 동안 {n}건 해결",
