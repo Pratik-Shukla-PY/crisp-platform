@@ -97,6 +97,27 @@ module.exports = {
                         'cumulative-layout-shift':   ['error', { maxNumericValue: 0.25 }],
                         'largest-contentful-paint':  ['warn',  { maxNumericValue: 12000 }],
                         'total-blocking-time':       ['warn',  { maxNumericValue: 1500 }],
+                        // HC89 (Sprint 1B) — bundle-size guard for TF.js
+                        // + BlazeFace lazy-load invariant. The vendored
+                        // libs (~1.4 MB tf.min.js + 12 KB blazeface.min.js)
+                        // are precached by the SW but MUST NOT load
+                        // during home-stage navigation — they only fire
+                        // when the user enters capture stage.
+                        //
+                        // Baseline measured 2026-05-27 via Playwright
+                        // network probe: home stage = 1495 KB of scripts
+                        // across 20 files. We allow ~100 KB headroom for
+                        // natural drift (locale subset growth, future
+                        // home-stage additions) and warn (not error) if
+                        // exceeded. If TF.js leaks into first-paint
+                        // (e.g. an eager import in app.js boot), the
+                        // total would jump to ~2.9 MB → warn fires.
+                        //
+                        //   1.60 MB = 1,638,400 bytes
+                        //   total page weight cap 2.5 MB = 2,621,440 bytes
+                        'resource-summary:script:size':
+                                                      ['warn',  { maxNumericValue: 1638400 }],
+                        'total-byte-weight':         ['warn',  { maxNumericValue: 2621440 }],
                     },
                 },
                 {

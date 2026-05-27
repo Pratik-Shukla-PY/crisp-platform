@@ -56,22 +56,56 @@
 
     /**
      * Lazy-load tf.js + blazeface. Idempotent + concurrent-safe.
-     * Only fired when we actually need to blur a photo — saves ~430 KB
+     * Only fired when we actually need to blur a photo — saves ~1 MB
      * on the home page for users who never capture.
+     *
+     * HC89 (Sprint 1B, May 2026): local-first script load. Previously
+     * we pulled both libs from jsdelivr at every cold start; when
+     * jsdelivr was unreachable / rate-limited / aliased a 404, the
+     * load promise rejected and faces shipped UNBLURRED — a UNDP
+     * must-have #7 violation that surfaced in the May operator HAR.
+     * Vendored copies under mobile-app/src/vendor/{tf,blazeface}/
+     * load same-origin (instant on subsequent visits via SW cache).
+     * If the vendored file's <script> tag errors for any reason
+     * (404, integrity mismatch, security policy block), we fall
+     * back to the original CDN URLs as a last resort.
      */
     function _ensureScripts() {
         if (_scriptsPromise) return _scriptsPromise;
         _scriptsPromise = (async () => {
             // Already loaded by some other script tag (back-compat).
             if (typeof tf !== 'undefined' && typeof blazeface !== 'undefined') return;
+
+            async function _loadWithFallback(localPath, cdnUrl, libName) {
+                const localUrl = new URL(localPath, document.baseURI).toString();
+                try {
+                    await _loadScript(localUrl);
+                    return;
+                } catch (localErr) {
+                    // eslint-disable-next-line no-console
+                    console.warn(
+                        '[PIIBlur] vendored ' + libName + ' load failed; '
+                        + 'falling back to CDN: '
+                        + (localErr && localErr.message || localErr),
+                    );
+                    await _loadScript(cdnUrl);
+                }
+            }
+
             // tfjs FIRST (blazeface needs window.tf). Order matters.
             if (typeof tf === 'undefined') {
-                await _loadScript(
-                    'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
+                await _loadWithFallback(
+                    'vendor/tf/tf.min.js',
+                    'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js',
+                    'tf',
+                );
             }
             if (typeof blazeface === 'undefined') {
-                await _loadScript(
-                    'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.umd.js');
+                await _loadWithFallback(
+                    'vendor/blazeface/blazeface.min.js',
+                    'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.umd.js',
+                    'blazeface',
+                );
             }
         })();
         return _scriptsPromise;

@@ -29,7 +29,7 @@
 //     78 @smoke pass; Lighthouse PWA 100, A11y 98.
 // Cache bump forces every installed PWA to fetch the new shell + new
 // inline 22-locale packs on next service-worker activation.
-const CACHE_NAME = 'crisp-v314';
+const CACHE_NAME = 'crisp-v315';
 // v250 → v251 (May 21 — version-pill /health URL fix). v250 deploy
 // auto-rolled-back when prod-smoke caught a `HTTP 404 /health` on
 // PWA load. Root cause: home-screen.js _paintVersionPill stripped
@@ -1896,7 +1896,7 @@ const SW_ASSET_MANIFEST = {
     "auth.js": "3aa607301909",
     "badge-studio.js": "91f202418d93",
     "blur-worker-pool.js": "eb20908a9c51",
-    "blur-worker.js": "1d925ec86600",
+    "blur-worker.js": "5c8b033a3a4b",
     "blurhash.js": "c840d518fe1d",
     "building-select.js": "6271857e0360",
     "character-pack.js": "3e41c16081bf",
@@ -1928,17 +1928,21 @@ const SW_ASSET_MANIFEST = {
     "i18n/vi.json": "8cebb13006c3",
     "i18n/zh.json": "2eafdffcceda",
     "image-variants.js": "206a66ac153d",
-    "index.html": "25e6fdc12bdb",
+    "index.html": "bb5ad27989fc",
     "install-prompt.js": "f3d8588009e9",
     "manifest.json": "6ccfd61d4297",
     "nearby.js": "c3640d629ec7",
-    "pii-blur.js": "a2b646426b3b",
+    "pii-blur.js": "7e5398a010c5",
     "places.js": "45c2565b646f",
     "sentry-init.js": "1bc08e7032f4",
     "styles.css": "29ac4fe8c6a4",
     "tier-config.js": "79b393bc143d",
     "v4-flow.js": "f485d6c9bf3f",
+    "vendor/blazeface/blazeface.min.js": "e597d1f48a73",
+    "vendor/blazeface/group1-shard1of1.bin": "60b481ab6c19",
+    "vendor/blazeface/model.json": "7b6bb6f35e5a",
     "vendor/sentry.min.js": "25bf89b834f7",
+    "vendor/tf/tf.min.js": "300dfae273d2",
     "voice-readout.js": "d578b11e8bb6",
 };
 // ── END SW_ASSET_MANIFEST ──
@@ -1971,9 +1975,21 @@ const STATIC_ASSETS = [
     SW_BASE + 'tier-config.js',      // Phase 2.1 — canonical V4 tier metadata (generated from shared/tier-config.json)
     SW_BASE + 'sentry-init.js',      // May 2026 — Sentry boot wrapper
     SW_BASE + 'vendor/sentry.min.js', // May 2026 — vendored Sentry browser SDK (~70KB)
-    // vendor/blazeface/model.json + .bin are NOT precached. They're
-    // loaded on demand by pii-blur.js::ensureModel on first photo
-    // capture and runtime-cached by the fetch handler below.
+    // HC89 (Sprint 1B, May 2026) — vendored TF.js + BlazeFace lib +
+    // model weights. Previously the JS libs were fetched from
+    // cdn.jsdelivr.net at first capture (the model weights were
+    // already vendored but runtime-cached). The May 2026 operator
+    // HAR showed both `tf.min.js` and `blazeface.min.js` returning
+    // 404/0 from jsdelivr → clientBlurApplied=false on every upload
+    // → UNDP must-have #7 (PII protection) silently violated.
+    // Precaching the libs + model also guarantees offline-first
+    // capture (must-have #3): a user can install online once and
+    // then capture + blur entirely offline forever after.
+    // Install cost: ~1.9 MB one-time addition to the shell.
+    SW_BASE + 'vendor/tf/tf.min.js',                   // TF.js 4.22.0 (~1.4 MB)
+    SW_BASE + 'vendor/blazeface/blazeface.min.js',     // BlazeFace UMD lib (~12 KB)
+    SW_BASE + 'vendor/blazeface/model.json',           // model topology (~64 KB)
+    SW_BASE + 'vendor/blazeface/group1-shard1of1.bin', // model weights (~400 KB)
     SW_BASE + 'components/icon-pack.js',
     SW_BASE + 'styles.css',
     SW_BASE + 'manifest.json',

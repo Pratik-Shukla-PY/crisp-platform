@@ -49,33 +49,87 @@
 let _modelPromise = null;
 let _tfReady = false;
 
-const TF_CDN = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js';
-const BLAZEFACE_CDN = 'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.js';
+// HC89 (Sprint 1B, May 2026) — local-first script load. Previously
+// the worker pulled both libs from jsdelivr at every cold start; any
+// time jsdelivr was rate-limited / 404'd (which broke
+// `blazeface.min.js`'s alias in some windows) the worker errored
+// closed and faces shipped UNBLURRED — a UNDP must-have #7 violation.
+//
+// Now we try the same-origin vendored copies first
+// (mobile-app/src/vendor/{tf,blazeface}/). If those importScripts
+// calls fail (network glitch, file removed by a SW cache desync,
+// etc.), we fall back to the original CDN URLs as a last resort.
+// The vendored files are part of STATIC_ASSETS so they install
+// with the SW; offline first-capture works without any CDN at all.
+//
+// Version pin: TF.js 4.22.0 (unified with pii-blur.js's main-thread
+// path; pre-HC89 the worker shipped 3.21.0 while the page used
+// 4.22.0 — silent behavioural divergence between the two blur paths).
+const LOCAL_TF = './vendor/tf/tf.min.js';
+const LOCAL_BLAZEFACE = './vendor/blazeface/blazeface.min.js';
+const TF_CDN = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js';
+const BLAZEFACE_CDN = 'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.umd.js';
 
 function _loadTfStack() {
     if (_tfReady) return Promise.resolve();
+    // Classic worker: importScripts is synchronous (blocks the worker
+    // thread, NOT the main thread — that's the point).
+    //
+    // Try vendored first; both libs in a single call so we share the
+    // same network/install round-trip. If that throws, fall back to
+    // the CDN. If both fail, reject and the pool falls back to the
+    // legacy main-thread blur path (pii-blur.js).
     try {
-        // Classic worker: importScripts is synchronous (blocks the
-        // worker thread, NOT the main thread — that's the point).
-        importScripts(TF_CDN, BLAZEFACE_CDN);
+        importScripts(LOCAL_TF, LOCAL_BLAZEFACE);
         _tfReady = true;
         return Promise.resolve();
-    } catch (e) {
-        return Promise.reject(new Error('importScripts failed: ' + (e && e.message || e)));
+    } catch (localErr) {
+        try {
+            importScripts(TF_CDN, BLAZEFACE_CDN);
+            _tfReady = true;
+            // eslint-disable-next-line no-console
+            console.warn(
+                '[blur-worker] vendored libs unavailable, loaded from CDN fallback: '
+                + (localErr && localErr.message || localErr),
+            );
+            return Promise.resolve();
+        } catch (cdnErr) {
+            return Promise.reject(new Error(
+                'importScripts failed (vendored + CDN): '
+                + 'vendored="' + (localErr && localErr.message || localErr) + '", '
+                + 'cdn="' + (cdnErr && cdnErr.message || cdnErr) + '"',
+            ));
+        }
     }
 }
 
 function _ensureModel() {
     if (_modelPromise) return _modelPromise;
-    _modelPromise = _loadTfStack().then(() => {
-        // self.blazeface comes from BLAZEFACE_CDN. The library exposes
-        // load(opts) which downloads model.json (and shards) at first
-        // call. We use the default short-range model (mirrors what the
-        // main-thread pii-blur.js uses).
+    _modelPromise = _loadTfStack().then(async () => {
         if (typeof self.blazeface === 'undefined') {
             throw new Error('blazeface global missing after importScripts');
         }
-        return self.blazeface.load();
+        // HC89 (Sprint 1B, May 2026) — vendored BlazeFace model URL.
+        // Mirrors pii-blur.js's main-thread path. Default
+        // blazeface.load() (no args) fetches model.json from tfhub.dev
+        // / Kaggle which CORS-block from the worker's null origin and
+        // 404 in some windows — same root cause as the JS lib outage.
+        // The vendored model weights (model.json + shards) live at
+        // mobile-app/src/vendor/blazeface/ and are part of STATIC_ASSETS.
+        const modelUrl = new URL(
+            'vendor/blazeface/model.json',
+            self.location.href,
+        ).toString();
+        try {
+            return await self.blazeface.load({ modelUrl });
+        } catch (vendoredErr) {
+            // eslint-disable-next-line no-console
+            console.warn(
+                '[blur-worker] vendored model load failed, trying default URL:',
+                vendoredErr && vendoredErr.message || vendoredErr,
+            );
+            return await self.blazeface.load();
+        }
     });
     return _modelPromise;
 }
