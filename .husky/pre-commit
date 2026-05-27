@@ -66,15 +66,53 @@ fi
 # but forgot to re-run scripts/generate-home-i18n-inline.mjs. Pack
 # contents would drift behind source JSON, reintroducing the
 # language-flash bug for the affected locale.
+#
+# Two layers:
+#   (a) generate-home-i18n-inline.mjs --check  — hard gate on drift
+#       between the inline 22-locale block in index.html and the source
+#       JSONs. Single source of truth (it knows the build rule).
+#   (b) validate-home-i18n-packs.mjs            — pack-content integrity
+#       (checksums match payload, all 22 locales present, no broken JSON).
 i18n_staged=$(git diff --cached --name-only --diff-filter=ACM | \
               grep -E '^(mobile-app/src/i18n/[a-z]{2,3}\.json|mobile-app/src/index\.html)$' || true)
 if [ -n "$i18n_staged" ]; then
     if command -v node >/dev/null 2>&1; then
+        if ! node scripts/generate-home-i18n-inline.mjs --check; then
+            echo ""
+            echo "✗ Inline 22-locale i18n pack drift detected."
+            echo "  Run: node scripts/generate-home-i18n-inline.mjs"
+            echo "  Then: git add mobile-app/src/index.html"
+            exit 1
+        fi
         if ! node scripts/validate-home-i18n-packs.mjs; then
             echo ""
-            echo "✗ Inline 22-locale i18n packs are out of sync."
-            echo "  Run: node scripts/generate-home-i18n-inline.mjs"
-            echo "  Then: git add mobile-app/src/index.html && git commit --amend --no-edit"
+            echo "✗ Inline pack content validation failed."
+            exit 1
+        fi
+    fi
+fi
+
+# ── 6. SW asset manifest drift ──────────────────────────────────────
+# Sprint 1A (May 2026, post-HC88) — catches the silent-drift bug class
+# that hit us in HC84/85: a developer edits any precached file (locale
+# JSON, app.js, styles.css, etc.) but forgets to re-run
+# scripts/generate-sw-manifest.mjs. The manifest hashes in sw.js then
+# drift behind actual content, defeating the per-asset migration in
+# the install handler — returning users re-download the full ~1.2 MB
+# shell instead of taking the per-file delta. No correctness break,
+# but the bandwidth optimization is silently bypassed.
+#
+# Trigger: any file under mobile-app/src/ being staged. The check
+# itself is ~50ms so a slight over-fire is cheaper than missing drift.
+sw_asset_staged=$(git diff --cached --name-only --diff-filter=ACM | \
+                  grep -E '^mobile-app/src/' || true)
+if [ -n "$sw_asset_staged" ]; then
+    if command -v node >/dev/null 2>&1; then
+        if ! node scripts/generate-sw-manifest.mjs --check; then
+            echo ""
+            echo "✗ SW asset manifest drift detected."
+            echo "  Run: node scripts/generate-sw-manifest.mjs"
+            echo "  Then: git add mobile-app/src/sw.js"
             exit 1
         fi
     fi

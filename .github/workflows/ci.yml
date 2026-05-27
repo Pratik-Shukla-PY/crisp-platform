@@ -215,6 +215,31 @@ jobs:
           else
             echo "scripts/sync-tier-config.mjs not found — skipping"
           fi
+      - name: Check SW asset manifest sync
+        # Sprint 1A (May 2026, post-HC88) — closes the silent-drift bug
+        # class that hit us in HC84/85. The pre-commit hook gates this
+        # locally; CI is the second backstop in case anyone bypasses
+        # the hook with --no-verify or commits from a non-husky env.
+        # See scripts/generate-sw-manifest.mjs header for the migration
+        # algorithm details.
+        run: |
+          if [ -f scripts/generate-sw-manifest.mjs ]; then
+            node scripts/generate-sw-manifest.mjs --check
+          else
+            echo "scripts/generate-sw-manifest.mjs not found — skipping"
+          fi
+      - name: Check inline 22-locale i18n pack sync
+        # Sprint 1A (May 2026, post-HC88) — catches the inline-pack
+        # equivalent of the SW manifest drift: a locale JSON edit
+        # without a generate-home-i18n-inline.mjs re-run. Drift here
+        # reintroduces the language-flash bug for the affected locale
+        # on first paint (~170ms warm, up to 5s cold-3G).
+        run: |
+          if [ -f scripts/generate-home-i18n-inline.mjs ]; then
+            node scripts/generate-home-i18n-inline.mjs --check
+          else
+            echo "scripts/generate-home-i18n-inline.mjs not found — skipping"
+          fi
 
   python-security:
     name: Python dep vulnerability scan (pip-audit)

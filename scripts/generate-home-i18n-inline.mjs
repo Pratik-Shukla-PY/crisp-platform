@@ -279,7 +279,14 @@ async function main() {
 
     const sizeKb = (inlineBlock.length / 1024).toFixed(1);
 
-    if (nextSrc === htmlSrc) {
+    // Normalize the non-deterministic buildTs field out of both sides before
+    // the drift comparison. buildTs ticks forward on every run (it's just a
+    // debugging breadcrumb — "this build was generated N hours ago"), so
+    // including it in the diff would make --check fail every time even when
+    // pack content is byte-identical. Per-pack __version + __checksum are
+    // content-derived and DO catch real drift.
+    const stripBuildTs = (s) => s.replace(/"buildTs":\s*"[^"]*"/g, '"buildTs":"<normalized>"');
+    if (stripBuildTs(nextSrc) === stripBuildTs(htmlSrc)) {
         ok(`home-i18n inline block already in sync (${keys.length} keys × ${SUPPORTED_LOCALES.length} locales, ${sizeKb} KB inline)`);
         if (totalEnFallback || totalMissing) {
             warn(`${totalEnFallback} non-EN key(s) fell back to EN; ${totalMissing} key(s) missing entirely`);
