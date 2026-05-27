@@ -662,8 +662,22 @@ class Media(Base):
     # 0032 — `ix_media_abandoned_at` lives in the migration only (date-range
     # probe by the periodic sweep); not declared here because the index isn't
     # used by SQLAlchemy queries directly.
+    # 0044 (Sprint 3B, May 2026) — three perf indexes added by the post-HC91
+    # DB index audit:
+    #   ix_media_report_id           — FK column wasn't auto-indexed by Postgres
+    #   ix_media_assembly_status     — every sweep tick + listing join filter
+    #   ix_media_active_sweep        — composite partial covering all 4 sweep
+    #                                  WHERE clauses (excludes abandoned rows).
+    #                                  Declared here without the WHERE clause —
+    #                                  SQLAlchemy autogen won't synthesize partial
+    #                                  indices, the migration carries the real
+    #                                  filter. Keep this comment in sync with
+    #                                  0044_perf_media_indexes.py.
     __table_args__ = (
-        Index("ix_media_created_at", "created_at"),
+        Index("ix_media_created_at",       "created_at"),
+        Index("ix_media_report_id",        "report_id"),
+        Index("ix_media_assembly_status",  "assembly_status"),
+        Index("ix_media_active_sweep",     "assembly_status", "updated_at", "created_at"),
     )
 
 
