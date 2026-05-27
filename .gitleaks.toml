@@ -1,0 +1,37 @@
+title = "CRISP gitleaks configuration"
+
+# Extend the gitleaks default ruleset (don't replace — we want every
+# built-in detector to fire). The allowlist below only suppresses
+# known false-positive patterns.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Project-wide allowlist — false positives from i18n keys and vendored third-party content"
+
+# File-path allowlist (Go regex, matched against repo-relative paths).
+#
+#   mobile-app/src/vendor/                — third-party libraries
+#     vendored as-is from npm (TF.js, BlazeFace, Sentry SDK, etc.).
+#     Content not authored by us; minified JS routinely contains long
+#     alphanumeric runs that match generic-api-key / aws-secret-key
+#     class regexes.
+#
+#   crisp-mobile/screens/V4ClassifyScreen.tsx — generic-api-key flagged
+#     11 `(label|sub)Key: '...'` declarations on lines 68-83. The
+#     quoted strings are i18n lookup tokens (e.g. 'v4_damage_minimal_sub',
+#     'damage_partial', 'v4_infra_res_label') read by `ti(key)` at
+#     render time; the actual translated string lives in
+#     mobile-app/src/i18n/<lang>.json. These are NOT secrets. The
+#     pattern is concentrated in this one file — allowlisting the
+#     path is more reliable than a content regex (gitleaks' allowlist
+#     regex match-target is the SECRET, not the surrounding context).
+#     If a NEW file ever needs the same exception, add its path here.
+#
+#   *.gitleaks-report*.json               — local-only audit artifacts.
+#   /tmp/...                              — out-of-tree, but listed for clarity.
+paths = [
+    '''mobile-app/src/vendor/''',
+    '''crisp-mobile/screens/V4ClassifyScreen\.tsx''',
+    '''.*gitleaks-report.*\.json''',
+]
