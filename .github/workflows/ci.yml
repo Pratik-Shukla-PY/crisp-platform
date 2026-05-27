@@ -281,7 +281,14 @@ jobs:
   secrets-scan:
     name: Secrets scan (gitleaks)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Bumped 2026-05-27 from 5 → 10 min. After Sprint 1B vendored TF.js
+    # (~1.4 MB minified JS) the full-history regex scan started running
+    # over the 5-min budget (last observed: 5m15s → cancelled). gitleaks
+    # walks every blob in history, and minified single-line JS files
+    # have very long character spans that slow per-rule regex matching.
+    # 10 min gives headroom; can ratchet back down if we add an ignore
+    # rule for mobile-app/src/vendor/** in .gitleaks.toml later.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
         with:
