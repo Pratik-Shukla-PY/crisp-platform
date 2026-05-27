@@ -1,0 +1,70 @@
+# HC88 — Reconcile state-matrix verification verdict
+
+  Probe: /tmp/hc88-reconcile-matrix.mjs (Playwright + headless Chromium)
+  Run against: localhost:8080 (PWA static server) + localhost:8000 (FastAPI)
+  Date: 2026-05-27
+  Branch: home/ux-spec-2026-05-23
+  HEAD: 06fceae (HC88 inverted-gate fix)
+
+# What this verifies
+
+HC88 inverted the HARD-FAIL gate in `_reconcileBeforeDequeue`'s caller
+(app.js:10520-10553) so that HARD-FAIL fires *only* when SMALL is
+genuinely missing from the server. The previous gate condition
+(`else if (smallAssembling > 0 && smallMissing === 0)` for WAIT) fell
+through to HARD-FAIL when only `softAssembling` was non-empty —
+triggering false re-upload loops while MEDIUM/ORIGINAL were still
+mid-assembly server-side.
+
+The probe drives all 8 combinations of (smallMissing, smallAssembling,
+softAssembling) directly against the inverted branch logic and asserts
+the correct branch fires. Plus a bound test: 13 consecutive WAIT
+calls should promote the 13th tick to WAIT-EXHAUSTED (3-min cap).
+
+# Expected behaviour matrix
+
+  sM = smallMissing count       (genuine missing — must HARD-FAIL)
+  sA = smallAssembling count    (server has SMALL, still stitching)
+  soA = softAssembling count    (server has MEDIUM/ORIGINAL, stitching)
+
+  All-zero  → OK + dequeue
+  Any soft-only or assembling → WAIT-ASSEMBLY (defer 15s, no re-upload)
+  Any smallMissing > 0       → HARD-FAIL + re-queue
+
+# Probe output
+
+=== STATE MATRIX RESULTS ===
+sM sA soA | Expected     | Match
+-----------------------------------
+0  0  0   | OK           | ✓
+0  0  1   | WAIT-ASSEMBLY | ✓
+0  1  0   | WAIT-ASSEMBLY | ✓
+0  1  1   | WAIT-ASSEMBLY | ✓
+1  0  0   | HARD-FAIL    | ✓
+1  0  1   | HARD-FAIL    | ✓
+1  1  0   | HARD-FAIL    | ✓
+1  1  1   | HARD-FAIL    | ✓
+
+=== BOUND TEST (13 consecutive WAIT) ===
+final tick: 13
+WAIT-EXHAUSTED at log index: 12
+bound test ✓ PASS
+
+=== VERDICT: ALL 8 STATES + BOUND TEST PASS ===
+
+# Reproducing
+
+  # 1. Start local servers
+  cd backend && source venv/bin/activate && uvicorn app.main:app --port 8000
+  cd mobile-app/src && python3 -m http.server 8080
+
+  # 2. Run the probe
+  node /tmp/hc88-reconcile-matrix.mjs
+
+  # 3. Expected: "ALL 8 STATES + BOUND TEST PASS" + exit 0
+
+# Related commits
+  06fceae  fix(pwa,submit): HC88 — invert HARD-FAIL gate + bound WAIT-ASSEMBLY
+  8872262  fix(pwa,submit): HC87 — submitReport crashed on legacy DOM IDs
+           (HC87 + HC88 must be reverted together — HC87 unblocks the
+           code path HC88 protects.)
