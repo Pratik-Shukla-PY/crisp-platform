@@ -844,6 +844,7 @@
   "unlink_done_toast": "Отвязано отчётов: {n}",
   "unlink_failed_toast": "Сейчас не удаётся отвязать",
   "upload_failed": "Ошибка отправки — будет повтор",
+  "upload_paused_will_retry": "Загрузка приостановлена — повторим через час",
   "upload_saved": "Отчёт сохранён!",
   "upload_sending": "Отправка отчёта...",
   "upload_success": "Отчёт отправлен!",

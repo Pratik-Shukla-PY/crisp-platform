@@ -822,6 +822,7 @@
   "unlink_done_toast": "{n} reports unlinked",
   "unlink_failed_toast": "Could not unlink right now",
   "upload_failed": "Upload failed — will retry",
+  "upload_paused_will_retry": "Upload paused — will retry in an hour",
   "upload_saved": "Report saved!",
   "upload_sending": "Sending report...",
   "upload_success": "Report sent!",

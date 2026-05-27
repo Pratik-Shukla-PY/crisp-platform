@@ -859,6 +859,7 @@
   "unlink_done_toast": "{n} laporan terlepas",
   "unlink_failed_toast": "Tidak dapat melepas sekarang",
   "upload_failed": "Unggahan gagal — akan dicoba lagi",
+  "upload_paused_will_retry": "Unggahan dijeda — akan dicoba lagi dalam satu jam",
   "upload_saved": "Laporan disimpan!",
   "upload_sending": "Mengirim laporan...",
   "upload_success": "Laporan terkirim!",

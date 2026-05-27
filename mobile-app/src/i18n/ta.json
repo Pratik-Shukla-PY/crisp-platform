@@ -845,6 +845,7 @@
   "unlink_done_toast": "{n} அறிக்கைகளின் இணைப்பு அகற்றப்பட்டது",
   "unlink_failed_toast": "இப்போது இணைப்பை அகற்ற முடியவில்லை",
   "upload_failed": "பதிவேற்றம் தோல்வி — மீண்டும் முயற்சிக்கப்படும்",
+  "upload_paused_will_retry": "Upload paused — will retry in an hour",
   "upload_saved": "அறிக்கை சேமிக்கப்பட்டது!",
   "upload_sending": "அறிக்கை அனுப்புகிறது...",
   "upload_success": "அறிக்கை அனுப்பப்பட்டது!",

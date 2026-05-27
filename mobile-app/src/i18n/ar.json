@@ -837,6 +837,7 @@
   "unlink_done_toast": "تم فك ربط {n} تقرير",
   "unlink_failed_toast": "تعذّر فك الربط حالياً",
   "upload_failed": "فشل الإرسال — ستتم إعادة المحاولة",
+  "upload_paused_will_retry": "تم إيقاف التحميل مؤقتًا — سيُعاد المحاولة بعد ساعة",
   "upload_saved": "تم حفظ التقرير!",
   "upload_sending": "جاري إرسال التقرير...",
   "upload_success": "تم إرسال التقرير!",

@@ -845,6 +845,7 @@
   "unlink_done_toast": "{n} رپورٹس کا تعلق ختم ہوا",
   "unlink_failed_toast": "ابھی تعلق ختم نہیں کیا جا سکا",
   "upload_failed": "اپ لوڈ ناکام — دوبارہ کوشش کریں گے",
+  "upload_paused_will_retry": "اپ لوڈ روک دیا گیا — ایک گھنٹے میں دوبارہ کوشش کریں گے",
   "upload_saved": "رپورٹ محفوظ ہو گئی!",
   "upload_sending": "رپورٹ بھیج رہے ہیں...",
   "upload_success": "رپورٹ بھیجی گئی!",

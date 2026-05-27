@@ -842,6 +842,7 @@
   "unlink_done_toast": "{n} റിപ്പോർട്ടുകൾ അൺലിങ്ക് ചെയ്തു",
   "unlink_failed_toast": "ഇപ്പോൾ അൺലിങ്ക് ചെയ്യാൻ കഴിയില്ല",
   "upload_failed": "അപ്‌ലോഡ് പരാജയം — വീണ്ടും ശ്രമിക്കും",
+  "upload_paused_will_retry": "Upload paused — will retry in an hour",
   "upload_saved": "റിപ്പോർട്ട് സംരക്ഷിച്ചു!",
   "upload_sending": "റിപ്പോർട്ട് അയക്കുന്നു...",
   "upload_success": "റിപ്പോർട്ട് അയച്ചു!",

@@ -845,6 +845,7 @@
   "unlink_done_toast": "{n} ವರದಿಗಳನ್ನು ಅನ್‌ಲಿಂಕ್ ಮಾಡಲಾಗಿದೆ",
   "unlink_failed_toast": "ಈಗ ಅನ್‌ಲಿಂಕ್ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ",
   "upload_failed": "ಅಪ್‌ಲೋಡ್ ವಿಫಲ — ಮರುಪ್ರಯತ್ನಿಸಲಾಗುತ್ತದೆ",
+  "upload_paused_will_retry": "Upload paused — will retry in an hour",
   "upload_saved": "ವರದಿ ಉಳಿಸಲಾಗಿದೆ!",
   "upload_sending": "ವರದಿ ಕಳುಹಿಸುತ್ತಿದೆ...",
   "upload_success": "ವರದಿ ಕಳುಹಿಸಲಾಗಿದೆ!",

@@ -847,6 +847,7 @@
   "unlink_done_toast": "{n} bildirim bağlantısı kaldırıldı",
   "unlink_failed_toast": "Şimdi kaldırılamadı",
   "upload_failed": "Yükleme başarısız — yeniden denenecek",
+  "upload_paused_will_retry": "Yükleme duraklatıldı — bir saat sonra tekrar denenecek",
   "upload_saved": "Bildirim kaydedildi!",
   "upload_sending": "Bildirim gönderiliyor...",
   "upload_success": "Bildirim gönderildi!",

@@ -841,6 +841,7 @@
   "unlink_done_toast": "已解除关联 {n} 份报告",
   "unlink_failed_toast": "目前无法解除关联",
   "upload_failed": "上传失败 — 将重试",
+  "upload_paused_will_retry": "上传已暂停 — 一小时后将重试",
   "upload_saved": "报告已保存！",
   "upload_sending": "正在发送报告...",
   "upload_success": "报告已发送！",

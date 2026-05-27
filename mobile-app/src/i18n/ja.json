@@ -846,6 +846,7 @@
   "unlink_done_toast": "{n}件の報告の紐付けを解除しました",
   "unlink_failed_toast": "今は紐付けを解除できません",
   "upload_failed": "送信失敗 — 再試行します",
+  "upload_paused_will_retry": "アップロード一時停止 — 1 時間後に再試行します",
   "upload_saved": "報告を保存しました！",
   "upload_sending": "報告を送信中...",
   "upload_success": "報告を送信しました！",

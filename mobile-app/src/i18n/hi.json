@@ -844,6 +844,7 @@
   "unlink_done_toast": "{n} रिपोर्टों का लिंक हटा",
   "unlink_failed_toast": "अभी लिंक नहीं हटाया जा सका",
   "upload_failed": "अपलोड विफल — पुनः प्रयास करेंगे",
+  "upload_paused_will_retry": "अपलोड रोक दिया गया — एक घंटे में फिर कोशिश करेंगे",
   "upload_saved": "रिपोर्ट सहेजी गई!",
   "upload_sending": "रिपोर्ट भेज रहे हैं...",
   "upload_success": "रिपोर्ट भेजी गई!",

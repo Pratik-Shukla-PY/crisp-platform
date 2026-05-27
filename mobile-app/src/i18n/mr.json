@@ -845,6 +845,7 @@
   "unlink_done_toast": "{n} अहवाल अनलिंक झाले",
   "unlink_failed_toast": "आत्ता अनलिंक करता आले नाही",
   "upload_failed": "अपलोड अयशस्वी — पुन्हा प्रयत्न",
+  "upload_paused_will_retry": "Upload paused — will retry in an hour",
   "upload_saved": "अहवाल जतन झाला!",
   "upload_sending": "अहवाल पाठवत आहे...",
   "upload_success": "अहवाल पाठवला!",

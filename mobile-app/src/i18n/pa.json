@@ -845,6 +845,7 @@
   "unlink_done_toast": "{n} ਰਿਪੋਰਟਾਂ ਅਨਲਿੰਕ ਹੋਈਆਂ",
   "unlink_failed_toast": "ਹੁਣੇ ਅਨਲਿੰਕ ਨਹੀਂ ਕਰ ਸਕੇ",
   "upload_failed": "ਅੱਪਲੋਡ ਅਸਫਲ — ਮੁੜ ਕੋਸ਼ਿਸ਼ ਕਰਾਂਗੇ",
+  "upload_paused_will_retry": "Upload paused — will retry in an hour",
   "upload_saved": "ਰਿਪੋਰਟ ਸੰਭਾਲੀ!",
   "upload_sending": "ਰਿਪੋਰਟ ਭੇਜੀ ਜਾ ਰਹੀ...",
   "upload_success": "ਰਿਪੋਰਟ ਭੇਜੀ ਗਈ!",

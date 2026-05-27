@@ -847,6 +847,7 @@
   "unlink_done_toast": "{n}건의 보고서 연결 해제됨",
   "unlink_failed_toast": "지금 연결 해제할 수 없습니다",
   "upload_failed": "업로드 실패 — 다시 시도합니다",
+  "upload_paused_will_retry": "업로드 일시 중지 — 1시간 후 재시도합니다",
   "upload_saved": "보고서 저장됨!",
   "upload_sending": "보고서 전송 중...",
   "upload_success": "보고서 전송됨!",

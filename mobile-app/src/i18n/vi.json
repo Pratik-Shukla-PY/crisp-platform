@@ -847,6 +847,7 @@
   "unlink_done_toast": "Đã hủy liên kết {n} báo cáo",
   "unlink_failed_toast": "Không thể hủy liên kết lúc này",
   "upload_failed": "Gửi thất bại — sẽ thử lại",
+  "upload_paused_will_retry": "Tải lên tạm dừng — sẽ thử lại sau một giờ",
   "upload_saved": "Đã lưu báo cáo!",
   "upload_sending": "Đang gửi báo cáo...",
   "upload_success": "Đã gửi báo cáo!",

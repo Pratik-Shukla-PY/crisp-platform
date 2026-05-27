@@ -848,6 +848,7 @@
   "unlink_done_toast": "{n} rapport(s) délié(s)",
   "unlink_failed_toast": "Impossible de délier pour le moment",
   "upload_failed": "Échec de l'envoi — nouvelle tentative",
+  "upload_paused_will_retry": "Téléversement en pause — nouvel essai dans une heure",
   "upload_saved": "Rapport enregistré !",
   "upload_sending": "Envoi du rapport...",
   "upload_success": "Rapport envoyé !",

@@ -856,6 +856,7 @@
   "unlink_done_toast": "{n} informes desvinculados",
   "unlink_failed_toast": "No se pudo desvincular en este momento",
   "upload_failed": "Error al enviar — se reintentará",
+  "upload_paused_will_retry": "Subida en pausa — reintentaremos en una hora",
   "upload_saved": "¡Informe guardado!",
   "upload_sending": "Enviando informe...",
   "upload_success": "¡Informe enviado!",

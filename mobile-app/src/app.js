@@ -10132,13 +10132,59 @@ async function _uploadLegacyPhoto(item, reportId) {
 // so two distinct items can still process concurrently.
 const _inFlightReports = new Set();
 
+// HC90 (Sprint 2A, May 2026) — bound the per-row send-retry loop so
+// a persistent 5xx / wedged backend / pathological media-id doesn't
+// retry forever. Counter increments on every trySendQueuedReport
+// invocation that does real work; resets on any stage progress (so a
+// genuinely-slow-but-progressing report never trips the cap).
+// After MAX_SEND_ATTEMPTS the row pauses 1 h, then auto-resumes — no
+// data loss, no manual intervention needed. HC88 covered the verify
+// side; this covers the upload side.
+//   MAX_SEND_ATTEMPTS × 15 s = 20 × 15 = 300 s = 5 min of consecutive failures
+//   PAUSE_AFTER_EXHAUSTED_MS = 60 min auto-resume window
+const MAX_SEND_ATTEMPTS = 20;
+const PAUSE_AFTER_EXHAUSTED_MS = 60 * 60 * 1000;
+
 async function trySendQueuedReport(item) {
     const crid = item.client_report_id || item.meta?.client_report_id;
     if (crid && _inFlightReports.has(crid)) {
         console.log(`[Sync] ${crid.slice(0,8)} already in flight — skip duplicate pass`);
         return;
     }
+    // HC90 — pause window check + auto-resume on expiry.
+    const _hc90Now = Date.now();
+    const _hc90ExhaustedAt = item.sendAttemptsExhaustedAt || 0;
+    if (_hc90ExhaustedAt > 0) {
+        const remainingMs = PAUSE_AFTER_EXHAUSTED_MS - (_hc90Now - _hc90ExhaustedAt);
+        if (remainingMs > 0) {
+            const remainingMin = Math.max(1, Math.round(remainingMs / 60000));
+            console.log(`[Sync] ${crid?.slice(0, 8) || '?'} send-paused (~${remainingMin} min remaining); skip.`);
+            return;
+        }
+        // Pause window expired — auto-resume by clearing the counter.
+        item.sendAttempts = 0;
+        item.sendAttemptsExhaustedAt = 0;
+        try { await enqueueReport(item); } catch (_) {}
+        console.log(`[Sync] ${crid?.slice(0, 8) || '?'} send-pause expired; auto-resuming.`);
+    }
+    // HC90 — increment send-attempts counter.
+    item.sendAttempts = (item.sendAttempts || 0) + 1;
+    if (item.sendAttempts > MAX_SEND_ATTEMPTS) {
+        item.sendAttemptsExhaustedAt = _hc90Now;
+        try { await enqueueReport(item); } catch (_) {}
+        console.warn(
+            `[Sync] ${crid?.slice(0, 8) || '?'} send-attempts exhausted ` +
+            `(${item.sendAttempts}/${MAX_SEND_ATTEMPTS}); pausing 1 h before auto-resume. ` +
+            `Persistent failure — backend 5xx, wedged media id, or unreachable network.`,
+        );
+        try { showToast(t('upload_paused_will_retry')); } catch (_) {}
+        return;
+    }
     if (crid) _inFlightReports.add(crid);
+    // HC90 — snapshot stage state at entry; if any stage flag flips
+    // by the time we hit the finally-block, reset sendAttempts so the
+    // cap only fires on consecutive *progress-free* failures.
+    const _hc90StartStages = JSON.stringify(item.stages || {});
     try {
         const stages = item.stages;
         let reportId = item.serverId;
@@ -10683,6 +10729,20 @@ async function trySendQueuedReport(item) {
     } catch (e) {
         console.warn('trySendQueuedReport error:', e);
     } finally {
+        // HC90 (Sprint 2A) — reset send-attempts counter if ANY stage
+        // flipped from false→true during this invocation. The cap is
+        // there to catch "progress-free retry storms" (5xx loop, wedged
+        // media id) — not to penalise a genuinely slow but progressing
+        // upload. Resetting here means a report that completes one
+        // tier per pass on 2 Kbps will never trip the cap.
+        try {
+            if (JSON.stringify(item.stages || {}) !== _hc90StartStages
+                && (item.sendAttempts || 0) > 0) {
+                item.sendAttempts = 0;
+                item.sendAttemptsExhaustedAt = 0;
+                try { await enqueueReport(item); } catch (_) {}
+            }
+        } catch (_) { /* counter reset is best-effort */ }
         // Always release the in-flight guard so the next retry-loop pass
         // can legitimately retry if this one didn't complete all stages.
         if (crid) _inFlightReports.delete(crid);

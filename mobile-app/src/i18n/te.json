@@ -845,6 +845,7 @@
   "unlink_done_toast": "{n} నివేదికల లింక్ తీసివేయబడింది",
   "unlink_failed_toast": "ఇప్పుడు లింక్ తీసివేయలేకపోయాము",
   "upload_failed": "అప్‌లోడ్ విఫలం — మళ్ళీ ప్రయత్నిస్తాము",
+  "upload_paused_will_retry": "Upload paused — will retry in an hour",
   "upload_saved": "నివేదిక సేవ్ చేయబడింది!",
   "upload_sending": "నివేదిక పంపుతోంది...",
   "upload_success": "నివేదిక పంపబడింది!",
