@@ -942,6 +942,8 @@
   "v4_record": "వాయిస్ రికార్డ్",
   "v4_record_voice_fallback": "వాయిస్ రికార్డ్",
   "v4_recorder_delete": "రికార్డింగ్‌ను తొలగించండి",
+  "v4_recorder_play": "రికార్డింగ్‌ను ప్లే చేయండి",
+  "v4_recorder_rerecord": "మళ్లీ రికార్డ్ చేయండి",
   "v4_recorder_resume": "రికార్డ్ చేయబడింది — భర్తీ చేయడానికి నొక్కండి",
   "v4_recorder_state": "రికార్డ్ చేస్తోంది…",
   "v4_recorder_stop": "రికార్డింగ్‌ను ఆపండి",

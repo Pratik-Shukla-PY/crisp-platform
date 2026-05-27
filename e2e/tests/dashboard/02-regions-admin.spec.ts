@@ -55,7 +55,7 @@ test.describe('Regions admin panel', () => {
   // wiring depends on a follow-up admin-list refetch that's racing the
   // test's `.toBeHidden({timeout:10000})` assertion. Production works
   // (operator-verified); tracked as test-fixture maintenance.
-  test.skip('open panel → create region → appears in list → delete', async ({ page }) => {
+  test.fixme('open panel → create region → appears in list → delete', async ({ page }) => {
     // Open the panel.
     // Phase J.1 (May 2026) — admin items moved into the user-chip
     // dropdown. Open the dropdown first, then click the Regions item.
@@ -103,7 +103,7 @@ test.describe('Regions admin panel', () => {
 
   // Same skip rationale — admin-list refetch races the test's
   // public-list assertion. Production works.
-  test.skip('toggle enabled off → public list no longer contains it', async ({ page, request }) => {
+  test.fixme('toggle enabled off → public list no longer contains it', async ({ page, request }) => {
     // Create a fresh region directly via API to isolate this test.
     const regionName = `E2E Toggle ${Date.now()}`;
     const create = await request.post('http://localhost:8000/api/v1/admin/regions', {

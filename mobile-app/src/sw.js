@@ -29,7 +29,7 @@
 //     78 @smoke pass; Lighthouse PWA 100, A11y 98.
 // Cache bump forces every installed PWA to fetch the new shell + new
 // inline 22-locale packs on next service-worker activation.
-const CACHE_NAME = 'crisp-v316';
+const CACHE_NAME = 'crisp-v317';
 // v250 → v251 (May 21 — version-pill /health URL fix). v250 deploy
 // auto-rolled-back when prod-smoke caught a `HTTP 404 /health` on
 // PWA load. Root cause: home-screen.js _paintVersionPill stripped
@@ -1906,29 +1906,29 @@ const SW_ASSET_MANIFEST = {
     "favicon.svg": "81a594f8c5d3",
     "home-screen.js": "8222dd9d754a",
     "i18n/ar.json": "60c761c4e7c2",
-    "i18n/bn.json": "dfb46987895f",
+    "i18n/bn.json": "1947085a7074",
     "i18n/en.json": "dbaa7239089f",
     "i18n/es.json": "d010b7fa5aca",
     "i18n/fr.json": "ea5753210bdf",
-    "i18n/gu.json": "d7022376651c",
-    "i18n/hi.json": "75df580768a0",
+    "i18n/gu.json": "7d0922fd372d",
+    "i18n/hi.json": "bd282064bba7",
     "i18n/id.json": "2f80c4882df0",
     "i18n/ja.json": "b581ca9582f0",
-    "i18n/kn.json": "ca15997a22b1",
+    "i18n/kn.json": "9012efbd0b65",
     "i18n/ko.json": "04f12e2ddd5a",
-    "i18n/ml.json": "dc16c3bf0048",
-    "i18n/mr.json": "c2dbaead26a8",
-    "i18n/pa.json": "2207f4c60195",
+    "i18n/ml.json": "643e11df279d",
+    "i18n/mr.json": "cebd348d3d2e",
+    "i18n/pa.json": "b53afb63f347",
     "i18n/pt.json": "8a980cac007c",
     "i18n/ru.json": "c2b505850970",
-    "i18n/ta.json": "8613ecec2640",
-    "i18n/te.json": "3b495381d6b7",
+    "i18n/ta.json": "3c86f85e5302",
+    "i18n/te.json": "931ec5598dc9",
     "i18n/tr.json": "9269d6c80983",
     "i18n/ur.json": "b2b0c581cda0",
     "i18n/vi.json": "8cebb13006c3",
     "i18n/zh.json": "2eafdffcceda",
     "image-variants.js": "206a66ac153d",
-    "index.html": "0bea7a761733",
+    "index.html": "ae85042de0ac",
     "install-prompt.js": "f3d8588009e9",
     "manifest.json": "6ccfd61d4297",
     "nearby.js": "c3640d629ec7",

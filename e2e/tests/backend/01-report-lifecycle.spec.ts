@@ -74,7 +74,7 @@ test.describe('Backend report lifecycle', () => {
   // role-promotion endpoint behind a CRISP_TESTING env flag, or seed an
   // ADMIN user during the e2e setup step. Tracked separately as a test-infra
   // task (not a regression in the recent K + L work).
-  test.skip('end-to-end: meta → chunks → read → review → timestamps → delete', async ({ request }) => {
+  test.fixme('end-to-end: meta → chunks → read → review → timestamps → delete', async ({ request }) => {
     const token = await login(request);
     const headers = { Authorization: `Bearer ${token}` };
     const deviceHash = `E2E-DEVICE-${Date.now()}`;
@@ -188,7 +188,7 @@ test.describe('Backend report lifecycle', () => {
 
   // Same skip rationale as the end-to-end test above — /review requires
   // ANALYST/ADMIN and the test infra has no role-promotion path.
-  test.skip('/reports/{id}/review rejects invalid verdict values', async ({ request }) => {
+  test.fixme('/reports/{id}/review rejects invalid verdict values', async ({ request }) => {
     const token = await login(request);
     const headers = { Authorization: `Bearer ${token}` };
     const deviceHash = `E2E-DEVICE-${Date.now()}-x`;

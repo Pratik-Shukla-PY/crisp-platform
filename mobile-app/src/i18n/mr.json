@@ -942,6 +942,8 @@
   "v4_record": "आवाज रेकॉर्ड",
   "v4_record_voice_fallback": "आवाज रेकॉर्ड",
   "v4_recorder_delete": "रेकॉर्डिंग हटवा",
+  "v4_recorder_play": "रेकॉर्डिंग चालवा",
+  "v4_recorder_rerecord": "पुन्हा रेकॉर्ड करा",
   "v4_recorder_resume": "रेकॉर्ड केले — बदलण्यासाठी टॅप करा",
   "v4_recorder_state": "रेकॉर्डिंग…",
   "v4_recorder_stop": "रेकॉर्डिंग थांबवा",

@@ -942,6 +942,8 @@
   "v4_record": "কণ্ঠ রেকর্ড",
   "v4_record_voice_fallback": "কণ্ঠ রেকর্ড",
   "v4_recorder_delete": "রেকর্ডিং মুছুন",
+  "v4_recorder_play": "রেকর্ডিং চালান",
+  "v4_recorder_rerecord": "আবার রেকর্ড করুন",
   "v4_recorder_resume": "রেকর্ড করা হয়েছে — প্রতিস্থাপন করতে আলতো চাপুন",
   "v4_recorder_state": "রেকর্ড করা হচ্ছে…",
   "v4_recorder_stop": "রেকর্ডিং বন্ধ করুন",

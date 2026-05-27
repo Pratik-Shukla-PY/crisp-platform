@@ -942,6 +942,8 @@
   "v4_record": "ਆਵਾਜ਼ ਰਿਕਾਰਡ",
   "v4_record_voice_fallback": "ਆਵਾਜ਼ ਰਿਕਾਰਡ",
   "v4_recorder_delete": "ਰਿਕਾਰਡਿੰਗ ਮਿਟਾਓ",
+  "v4_recorder_play": "ਰਿਕਾਰਡਿੰਗ ਚਲਾਓ",
+  "v4_recorder_rerecord": "ਮੁੜ ਰਿਕਾਰਡ ਕਰੋ",
   "v4_recorder_resume": "ਰਿਕਾਰਡ ਕੀਤਾ ਗਿਆ — ਬਦਲਣ ਲਈ ਟੈਪ ਕਰੋ",
   "v4_recorder_state": "ਰਿਕਾਰਡ ਹੋ ਰਿਹਾ ਹੈ…",
   "v4_recorder_stop": "ਰਿਕਾਰਡਿੰਗ ਰੋਕੋ",

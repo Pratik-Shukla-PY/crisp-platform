@@ -942,6 +942,8 @@
   "v4_record": "અવાજ રેકોર્ડ",
   "v4_record_voice_fallback": "અવાજ રેકોર્ડ",
   "v4_recorder_delete": "રેકોર્ડિંગ કાઢી નાખો",
+  "v4_recorder_play": "રેકોર્ડિંગ ચલાવો",
+  "v4_recorder_rerecord": "ફરીથી રેકોર્ડ કરો",
   "v4_recorder_resume": "રેકોર્ડ થયું — બદલવા માટે ટૅપ કરો",
   "v4_recorder_state": "રેકોર્ડ થઈ રહ્યું છે…",
   "v4_recorder_stop": "રેકોર્ડિંગ બંધ કરો",

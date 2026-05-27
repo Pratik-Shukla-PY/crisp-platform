@@ -134,7 +134,7 @@ test.describe('PWA My Reports — individual report management', () => {
   // state-machine + my-reports status-since fetch combination doesn't
   // surface the seeded card. Production-side My Reports works (manually
   // verified). Tracked in 03a-my-reports-v6.8-rewrite.spec.ts.
-  test.skip('ACCEPTED report shows green chip and opens detail with feedback block', async ({ page, request }) => {
+  test.fixme('ACCEPTED report shows green chip and opens detail with feedback block', async ({ page, request }) => {
     await seedReport(request, deviceHash, { verdict: 'ACCEPTED' });
     await page.locator('#btn-my-reports').click();
     const card = page.locator('.mr-card').first();
@@ -153,7 +153,7 @@ test.describe('PWA My Reports — individual report management', () => {
   });
 
   // Same skip rationale as the ACCEPTED case above.
-  test.skip('REJECTED report shows red chip, rejection reason visible, no Help Sent step', async ({ page, request }) => {
+  test.fixme('REJECTED report shows red chip, rejection reason visible, no Help Sent step', async ({ page, request }) => {
     await seedReport(request, deviceHash, { verdict: 'REJECTED', actionTaken: 'Possible duplicate submission.' });
     await page.locator('#btn-my-reports').click();
     const card = page.locator('.mr-card').first();

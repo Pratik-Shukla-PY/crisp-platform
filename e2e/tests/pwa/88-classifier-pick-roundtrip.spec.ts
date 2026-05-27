@@ -104,7 +104,11 @@ async function clearQueue(page: Page) {
 async function pickClassifiers(
     page: Page,
     damage: 'MINIMAL' | 'PARTIAL' | 'COMPLETE',
-    infra: 'RESIDENTIAL' | 'COMMERCIAL' | 'GOVERNMENT' | 'EDUCATIONAL' | 'HEALTHCARE' | 'TRANSPORT_COMMUNICATION' | 'UTILITY' | 'OTHER',
+    // InfrastructureTypeEnum per CLAUDE.md — `SCHOOL` and `HOSPITAL`
+    // replaced the legacy `EDUCATIONAL` and `HEALTHCARE` during the v3
+    // sub-type expansion; this signature drifted until Sprint 1D.
+    // Main types plus the granular sub-types the v4 picker also surfaces.
+    infra: 'RESIDENTIAL' | 'COMMERCIAL' | 'GOVERNMENT' | 'UTILITY' | 'TRANSPORT_COMMUNICATION' | 'COMMUNITY' | 'PUBLIC_SPACES' | 'OTHER' | 'ROAD' | 'HOSPITAL' | 'HOUSE' | 'POWER' | 'WATER' | 'SCHOOL' | 'TELECOM',
     crisis: 'EARTHQUAKE' | 'FLOOD' | 'WILDFIRE' | 'EXPLOSION' | 'CONFLICT' | 'CIVIL_UNREST' | 'TSUNAMI' | 'HURRICANE' | 'CHEMICAL',
     opts?: { infraOtherText?: string },
 ) {

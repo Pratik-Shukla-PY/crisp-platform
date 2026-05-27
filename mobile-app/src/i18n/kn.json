@@ -942,6 +942,8 @@
   "v4_record": "ಧ್ವನಿ ರೆಕಾರ್ಡ್",
   "v4_record_voice_fallback": "ಧ್ವನಿ ರೆಕಾರ್ಡ್",
   "v4_recorder_delete": "ರೆಕಾರ್ಡಿಂಗ್ ಅಳಿಸಿ",
+  "v4_recorder_play": "ರೆಕಾರ್ಡಿಂಗ್ ಪ್ಲೇ ಮಾಡಿ",
+  "v4_recorder_rerecord": "ಮತ್ತೆ ರೆಕಾರ್ಡ್ ಮಾಡಿ",
   "v4_recorder_resume": "ರೆಕಾರ್ಡ್ ಆಗಿದೆ — ಬದಲಾಯಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
   "v4_recorder_state": "ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ…",
   "v4_recorder_stop": "ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಿ",

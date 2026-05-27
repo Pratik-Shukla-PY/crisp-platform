@@ -942,6 +942,8 @@
   "v4_record": "குரல் பதிவு",
   "v4_record_voice_fallback": "குரல் பதிவு",
   "v4_recorder_delete": "பதிவை நீக்கு",
+  "v4_recorder_play": "பதிவை இயக்கு",
+  "v4_recorder_rerecord": "மீண்டும் பதிவு செய்",
   "v4_recorder_resume": "பதிவு செய்யப்பட்டது — மாற்ற தட்டவும்",
   "v4_recorder_state": "பதிவு செய்கிறது…",
   "v4_recorder_stop": "பதிவை நிறுத்து",
