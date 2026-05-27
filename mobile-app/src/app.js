@@ -10517,39 +10517,119 @@ async function trySendQueuedReport(item) {
                               reconciled.missing.map(m => m.label).join(', ')
                             : ''),
                     );
-                } else if ((reconciled.smallAssembling || []).length > 0
-                           && (reconciled.smallMissing || []).length === 0) {
-                    // Race-safe path: SMALL is on the server but the
-                    // server is mid-assembly (assembly_status='partial').
-                    // DO NOT roll back chunk progress — the server has
-                    // every chunk, just hasn't stitched them yet. Wait
-                    // one retry-loop tick (~15 s) and reconcile again.
-                    const labels = reconciled.smallAssembling.map(m => m.label).join(', ');
-                    console.log(
-                        `[Upload:verify WAIT-ASSEMBLY] report ${reportId} — ` +
-                        `${reconciled.smallAssembling.length} SMALL tier(s) on server but ` +
-                        `still assembling (${labels}); deferring dequeue 15s.`,
-                    );
-                    // Leave the queue entry as-is; retry loop will revisit.
-                } else {
-                    // Hard-fail: SMALL of at least one photo is missing
-                    // ON THE SERVER ENTIRELY (chunks never landed). MUST
-                    // roll back and re-upload — the report has no usable
-                    // image otherwise.
+                } else if ((reconciled.smallMissing || []).length > 0) {
+                    // HC88 (HARD-FAIL — inverted gate) — was an else-
+                    // branch that fired whenever `reconciled.ok` was
+                    // false AND smallAssembling was 0.  That caught
+                    // `softAssembling > 0` (MEDIUM/ORIGINAL on server
+                    // but mid-assembly), causing an infinite re-upload
+                    // loop: stages.photo got flipped → next retry tick
+                    // re-uploaded already-landed chunks → server
+                    // deduped quickly → reconcile still mid-assembly →
+                    // HARD-FAIL again.  The HARD-FAIL log even read
+                    // "missing 0 SMALL tier(s) ()" — count zero, empty
+                    // list — but the rollback still fired.
+                    //
+                    // Now the gate is provably tight: HARD-FAIL fires
+                    // iff SMALL chunks are genuinely missing on the
+                    // server.  Every other not-ok case (smallAssembling
+                    // and/or softAssembling > 0) drops into the WAIT
+                    // branch below.
                     item.stages.photo = false;
-                    for (const m of (reconciled.smallMissing || [])) {
+                    for (const m of reconciled.smallMissing) {
                         if (m.variant) {
                             m.variant.complete = false;
                             m.variant.chunkProgress = 0;
                         }
                     }
+                    item.reconcileWaitTicks = 0;     // reset wait counter on real rollback
                     try { await enqueueReport(item); } catch (_) {}
-                    const missLabels = (reconciled.smallMissing || []).map(m => m.label).join(', ');
+                    const missLabels = reconciled.smallMissing.map(m => m.label).join(', ');
                     console.warn(
                         `[Upload:verify HARD-FAIL] report ${reportId} reconcile FAIL — ` +
                         `backend missing ${reconciled.smallMissing.length} SMALL tier(s) (${missLabels}); ` +
                         `re-queued, next retry in ~15s.`,
                     );
+                } else {
+                    // HC88 (WAIT-ASSEMBLY — bounded) — SMALL is on the
+                    // server. Whatever's not yet 'complete'
+                    // (smallAssembling, softAssembling) will be flipped
+                    // by the backend's async assembly worker, usually
+                    // within 1-3 s of the last chunk POST.  If it
+                    // stalls > 5 min, backend Action ① revives it
+                    // (`_run_assembly_recovery_sweep` in
+                    // backend/app/main.py).  No rollback, no re-upload,
+                    // just defer one retry-loop tick (~15 s).
+                    //
+                    // After MAX_WAIT_TICKS (= 3 min) the assembler is
+                    // likely stuck past Action ① / Action ② recovery
+                    // windows.  Promote to soft-drain: mark MEDIUM/
+                    // ORIGINAL as deferred via /media/mark-deferred and
+                    // dequeue the report.  Backend Action ④ then
+                    // promotes Report.sync_status from PARTIAL → SYNCED
+                    // on its 120 s idle-window check (default).
+                    item.reconcileWaitTicks = (item.reconcileWaitTicks || 0) + 1;
+                    const MAX_WAIT_TICKS = 12;          // × 15 s = 180 s = 3 min
+                    if (item.reconcileWaitTicks > MAX_WAIT_TICKS) {
+                        console.warn(
+                            `[Upload:verify WAIT-EXHAUSTED] report ${reportId} — ` +
+                            `${item.reconcileWaitTicks} tick(s) waiting on server-side ` +
+                            `assembly. Promoting to soft-drain (mark-deferred + dequeue).`,
+                        );
+                        const _now = Date.now();
+                        const _missing = reconciled.missing || [];
+                        for (const m of _missing) {
+                            if (m && m.variant) {
+                                m.variant.deferred = true;
+                                m.variant.deferredAt = m.variant.deferredAt || _now;
+                                m.variant.deferredReason = 'reconcile-wait-exhausted';
+                                m.variant.complete = false;
+                                m.variant.chunkProgress = 0;
+                            }
+                        }
+                        // Tell the backend explicitly which tiers we gave
+                        // up on so Report.expected_media reflects reality.
+                        // Same call shape as the soft-drain branch above.
+                        try {
+                            const tiersByGroup = _enumerateDeferredByGroup(item, _missing);
+                            if (Object.keys(tiersByGroup).length > 0) {
+                                await fetch(
+                                    `${API_BASE}/reports/${reportId}/media/mark-deferred`,
+                                    {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            tiers_by_group: tiersByGroup,
+                                            reason: 'bandwidth_tier_deferred',
+                                        }),
+                                    },
+                                );
+                            }
+                        } catch (_e) {
+                            console.warn(
+                                `[Upload:verify] mark-deferred call failed (post-wait):`,
+                                _e?.message || _e,
+                            );
+                        }
+                        try { await dequeueReport(item.client_report_id); } catch (_) {}
+                        try { updateSyncBadge(); } catch (_) {}
+                    } else {
+                        const allAssembling = [
+                            ...(reconciled.smallAssembling || []),
+                            ...(reconciled.softAssembling || []),
+                        ];
+                        const labels = allAssembling.map(m => m.label).join(', ');
+                        console.log(
+                            `[Upload:verify WAIT-ASSEMBLY ${item.reconcileWaitTicks}/${MAX_WAIT_TICKS}] ` +
+                            `report ${reportId} — ${allAssembling.length} tier(s) on server ` +
+                            `but still assembling (${labels}); deferring dequeue 15s.`,
+                        );
+                        // Persist the tick count so it survives SW upgrade
+                        // / app reload — without this the counter would
+                        // reset to 0 each session and the bound would
+                        // never fire on a long-running stuck assembly.
+                        try { await enqueueReport(item); } catch (_) {}
+                    }
                 }
             } catch (e) {
                 // Reconciliation network call failed — leave the report
