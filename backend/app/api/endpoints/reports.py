@@ -894,6 +894,16 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
             pii_blur_status_total.labels(status=outcome).inc()
         except Exception:
             pass
+        # OOM hotfix (May 2026): reclaim the per-blur working set (cv2
+        # arrays + easyocr/PyTorch inference tensors) so RSS doesn't ratchet
+        # up across many blurs. Module-cached models stay resident; this only
+        # prompts release of the per-call allocations. Cheap relative to a
+        # blur; harmless if it no-ops.
+        try:
+            import gc as _gc
+            _gc.collect()
+        except Exception:
+            pass
 
 
 def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
@@ -1133,6 +1143,21 @@ def _run_ai_pipeline_bg(report_id: str, media_type: str, file_url: str):
 def _try_partial_image_bg(media_id: str):
     """Background partial-image assembly — runs PII blur (slow: easyocr + MediaPipe).
     Non-blocking so the chunk handler can return in <100ms."""
+    # ── OOM hotfix (May 2026): partial-preview pipeline disabled by default ──
+    # Root cause of the PROD OOM crash-loop: _assemble_partial_image ran the
+    # FULL PII blur (MediaPipe + easyocr/PyTorch) on EVERY partial render
+    # (~every 10 chunks). Multi-image uploads turned that into a blur storm →
+    # uvicorn RSS ≈ 3.5 GB on a 3.75 GB host → kernel OOM-kill → container
+    # restart → in-flight blur tasks orphaned → media stuck
+    # pii_blur_status='pending' → GET /media/{id}/file 425 forever
+    # ("Checking PII" broken images). Disabling the partial preview removes the
+    # storm: each image now runs ONE final blur, and the dashboard shows the
+    # 425-gated FINAL image instead of an unblurred progressive partial — so we
+    # also never serve an unblurred face (UNDP must-have #7).
+    # Re-enable ONLY behind a memory-safe partial path: set CRISP_PARTIAL_PREVIEW=1.
+    import os as _os
+    if _os.getenv("CRISP_PARTIAL_PREVIEW", "0") != "1":
+        return
     from app.db.session import SessionLocal
     db = SessionLocal()
     try:

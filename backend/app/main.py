@@ -1284,7 +1284,137 @@ def _assembly_recovery_loop():
             logging.getLogger(__name__).warning(
                 f"Periodic assembly recovery error: {e}"
             )
+        try:
+            _run_pii_blur_recovery_sweep(boot=False)
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                f"Periodic PII-blur recovery error: {e}"
+            )
         _t.sleep(_ASSEMBLE_SWEEP_INTERVAL_S)
+
+
+# ── PII-blur gate recovery (OOM hotfix, May 2026) ────────────────────────────
+#   Twin of the assembly sweep, for the BLUR gate. Server PII-blur runs as an
+#   in-memory _ai_executor task (reports._run_server_pii_blur). A process
+#   restart (OOM / crash / deploy) or a pool backlog LOSES queued/in-flight
+#   tasks, stranding the Media row at pii_blur_status='pending' → GET
+#   /media/{id}/file returns 425 Too Early forever (the dashboard's "Checking
+#   PII" broken image). Before this sweep there was no recovery for that gate.
+_PII_BLUR_STALE_MIN  = int(os.getenv("CRISP_PII_BLUR_STALE_MIN",  "5"))   # re-drive a pending row after this long
+_PII_BLUR_WEDGED_MIN = int(os.getenv("CRISP_PII_BLUR_WEDGED_MIN", "60"))  # give up (→'failed') after this long
+
+
+def _run_pii_blur_recovery_sweep(*, boot: bool = False) -> None:
+    """One pass of PII-blur gate recovery. Two bounded actions, keyed on
+    `updated_at` age (no schema change):
+
+      ① GIVE UP — rows pending + assembled past `_PII_BLUR_WEDGED_MIN` flip to
+         terminal 'failed'. This LIFTS the 425 (dashboard shows the red
+         "Redaction failed" chip instead of "Checking PII" forever) and bounds
+         re-driving of a pathologically-failing row.
+      ② RE-DRIVE — rows pending + assembled + has-url, stale between
+         `_PII_BLUR_STALE_MIN` and `_PII_BLUR_WEDGED_MIN`, get re-submitted to
+         _ai_executor. _run_server_pii_blur ALWAYS blurs server-side, so the
+         re-drive is PII-safe; on success it writes a terminal status (clearing
+         'pending'); if it's orphaned again, updated_at stays old and the row
+         eventually ages into ① rather than looping forever.
+
+    Runs AFTER the Stage-1 storm-kill, so re-driving cannot re-trigger the OOM:
+    blur volume is now ~1 per image (no partial re-blur) on the 2-worker pool.
+    """
+    from datetime import datetime, timezone, timedelta
+    from app.db.session import SessionLocal
+    from app.models.report import Media
+    from app.api.endpoints.reports import _run_server_pii_blur, _ai_executor
+    log = logging.getLogger(__name__)
+    tag = "boot" if boot else "tick"
+    now = datetime.now(timezone.utc)
+    soft = now - timedelta(minutes=_PII_BLUR_STALE_MIN)
+    hard = now - timedelta(minutes=_PII_BLUR_WEDGED_MIN)
+    _db = SessionLocal()
+    try:
+        # ─────────────────────────────────────────────────────────────
+        # PII-SAFETY GUARD (UNDP must-have #7 — never expose a raw face).
+        #
+        # The /media/{id}/file gate (reports.py) returns 425 ONLY while
+        # pii_blur_status='pending'; EVERY other status — including
+        # 'failed' — falls through to a 302 that serves media.url. And
+        # _run_server_pii_blur writes 'failed' in two cases where the
+        # stored bytes are still UNBLURRED (backends-unavailable / raised).
+        #
+        # So lifting the gate is only safe when the bytes are already
+        # face-redacted, i.e. client_blur_applied=true (the PWA's
+        # BlazeFace pass blurred faces BEFORE upload — must-have #7). For
+        # client_blur_applied=false rows (Telegram/WhatsApp/SMS, where the
+        # server blur is the ONLY protection), flipping pending→'failed'
+        # or risking a re-drive→'failed' would expose a raw face. We
+        # therefore act ONLY on client_blur_applied=true rows; false rows
+        # stay safely gated at 'pending' (image lost-but-safe) until a
+        # server blur naturally completes. This matches the plan exactly:
+        # "If true → safe to flip terminal immediately. If false → MUST
+        # complete server blur before lifting the gate."
+        # ─────────────────────────────────────────────────────────────
+
+        # ① give up on CLIENT-BLURRED rows stuck past the hard deadline →
+        #    terminal 'failed' (425 lifts; dashboard shows red chip; bytes
+        #    served are the client-side-blurred ones, so PII-safe).
+        gave_up = _db.query(Media).filter(
+            Media.pii_blur_status == 'pending',
+            Media.assembly_status == 'complete',
+            Media.client_blur_applied.is_(True),
+            Media.updated_at < hard,
+        ).update({'pii_blur_status': 'failed'}, synchronize_session=False)
+        _db.commit()
+        if gave_up:
+            log.warning(
+                f"PII-blur recovery [{tag}]: {gave_up} client-blurred row(s) "
+                f"stuck >{_PII_BLUR_WEDGED_MIN}m → 'failed' (425 lifted, red chip)"
+            )
+
+        # ② re-drive soft-stale (but not yet hard) CLIENT-BLURRED pending rows.
+        to_redrive = _db.query(Media.id, Media.url).filter(
+            Media.pii_blur_status == 'pending',
+            Media.assembly_status == 'complete',
+            Media.client_blur_applied.is_(True),
+            Media.url != '',
+            Media.updated_at < soft,
+            Media.updated_at >= hard,
+        ).all()
+        for m in to_redrive:
+            # Derive the storage filename from the url tail (works for
+            # /static/<f> and s3://<f> alike — same pattern as the AI pipeline).
+            fn = m.url.rsplit("/", 1)[-1].split("://", 1)[-1].rsplit("/", 1)[-1]
+            _ai_executor.submit(_run_server_pii_blur, m.id, m.url, fn)
+        if to_redrive:
+            log.info(
+                f"PII-blur recovery [{tag}]: re-drove {len(to_redrive)} stuck "
+                f"client-blurred pending row(s) (>{_PII_BLUR_STALE_MIN}m)"
+            )
+
+        # ③ VISIBILITY — count the NON-client-blurred rows we deliberately
+        #    leave gated. We never auto-lift these (would risk exposing a
+        #    raw face); the operator can re-drive them under supervision via
+        #    scripts/drain_stuck_pii_blur.py --include-unblurred.
+        held = _db.query(Media).filter(
+            Media.pii_blur_status == 'pending',
+            Media.assembly_status == 'complete',
+            Media.client_blur_applied.is_(False),
+            Media.updated_at < hard,
+        ).count()
+        if held:
+            log.warning(
+                f"PII-blur recovery [{tag}]: {held} NON-client-blurred row(s) "
+                f"held at 425 (>{_PII_BLUR_WEDGED_MIN}m) — NOT force-failed to "
+                f"avoid exposing raw faces. Re-drive via drain_stuck_pii_blur.py "
+                f"--include-unblurred if the source is trusted."
+            )
+    except Exception as e:
+        log.warning(f"PII-blur recovery [{tag}] failed: {e}")
+    finally:
+        try:
+            _db.close()
+        except Exception:
+            pass
 
 
 async def _run_startup_tasks():
@@ -1319,6 +1449,16 @@ async def _run_startup_tasks():
         except Exception as e:
             logging.getLogger(__name__).warning(
                 f"Boot-time assembly recovery sweep failed: {e}"
+            )
+        # OOM hotfix (May 2026): on boot, immediately recover any blur rows the
+        # previous (possibly OOM-killed) instance left stranded at
+        # pii_blur_status='pending' — so a restart self-heals the 425/"Checking
+        # PII" backlog instead of leaving it stuck forever.
+        try:
+            _run_pii_blur_recovery_sweep(boot=True)
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                f"Boot-time PII-blur recovery sweep failed: {e}"
             )
         threading.Thread(target=_assembly_recovery_loop, daemon=True).start()
         logging.getLogger(__name__).info(
