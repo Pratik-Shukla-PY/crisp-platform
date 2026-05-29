@@ -74,16 +74,15 @@ async function bootHomeWithProfile(page: Page, profile: ProfileShape) {
 
 test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
 
-    test('@smoke T1_SCOUT first-timer chip is hidden (AUDIT 2026-05-23 retime)', async ({ page }) => {
-        // AUDIT 2026-05-23 — gamification re-timed. Tier badge is
-        // hidden for users with no submitted reports because the
-        // "Scout · Submit your first report to level up" framing
-        // reads poorly on a disaster victim's first visit. After a
-        // successful submission (T2+ OR lives > 0 OR a non-first-
-        // report progress key), the chip reveals as positive
-        // reinforcement. State + tier classes still apply when the
-        // chip eventually renders; this test enforces the hidden
-        // default for the first-timer cohort.
+    test('@smoke T1_SCOUT first-timer chip is visible (HC29 — always-show)', async ({ page }) => {
+        // HC29 (operator reversal of Batch 3.4, see home-screen.js:1288):
+        // Batch 3.4 hid the tier badge until the first submission, but
+        // operator review found that made the gamification ladder
+        // invisible and cut motivation for first-time + returning users
+        // alike. The chip now ALWAYS shows; the default "Scout — Submit
+        // your first report to level up" copy serves as the meaningful
+        // empty state. This test enforces the always-visible contract
+        // for the first-timer cohort + that tier/emoji/label paint.
         await bootHomeWithProfile(page, {
             badge_level: 'T1_SCOUT',
             badge_legacy: 'NEWCOMER',
@@ -94,9 +93,10 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
             },
         });
         const chip = page.locator('#home-badge-chip');
-        // Element exists in DOM (CLS reservation, see styles.css:5014)
-        // but the `hidden` attribute is set; not visible to users.
-        await expect(chip).toHaveAttribute('hidden', '');
+        // HC29: the chip is ALWAYS shown — the `hidden` attribute is
+        // removed unconditionally (home-screen.js:1300), so a first-timer
+        // sees the Scout badge + first-report empty-state copy.
+        await expect(chip).not.toHaveAttribute('hidden', '');
         await expect(chip).toHaveClass(/lvl-t1/);
         await expect(chip).toHaveAttribute('data-tier', 'T1_SCOUT');
         await expect(page.locator('#home-badge-emoji')).toHaveText('🌱');
@@ -198,11 +198,9 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
 
     test('chip layout slot preserved (no CLS) even on /profile fetch failure', async ({ page }) => {
         // Network error path — the chip should fall back to T1_SCOUT
-        // and the layout slot must stay reserved (no CLS) even though
-        // it's hidden post-AUDIT 2026-05-23 (gamification retime).
-        // The CLS reservation is on `[hidden]` itself — see
-        // styles.css:5014 — so the page doesn't reflow when the chip
-        // would have rendered.
+        // and render (HC29: always-shown). The layout slot stays
+        // reserved (no CLS) — height >= 36px — whether the chip is the
+        // first-timer empty state or a real tier.
         await page.addInitScript(() => {
             localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
             localStorage.setItem('crisp_landing_seen', '1');
@@ -217,9 +215,10 @@ test.describe('PWA — 4-tier badge chip rendering (reward v2)', () => {
         await page.waitForLoadState('networkidle');
         await page.waitForTimeout(400);
         const chip = page.locator('#home-badge-chip');
-        // First-timer fallback — chip in DOM but hidden. Layout slot
-        // is reserved by the .home-badge-chip[hidden] rule (CLS-safe).
-        await expect(chip).toHaveAttribute('hidden', '');
+        // HC29: chip falls back to T1_SCOUT and is shown (not hidden), and
+        // the layout slot stays reserved (offsetHeight >= 36, asserted below)
+        // so there's no CLS regardless of the profile-fetch outcome.
+        await expect(chip).not.toHaveAttribute('hidden', '');
         await expect(chip).toHaveClass(/lvl-t1/);
         const offsetHeight = await chip.evaluate((el) => (el as HTMLElement).offsetHeight);
         // Min-height: 36 px reservation observed (was 38 spec, browser

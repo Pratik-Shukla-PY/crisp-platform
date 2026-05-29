@@ -76,7 +76,17 @@ test.describe('VALIDATION 06 — 3 reports captured offline → drain all on rec
             }, { lat: fx.lat, lng: fx.lng, desc: `Validation 06 — ${fx.name}` });
 
             await page.evaluate(async () => { await (window as any).__crispSubmitReport(); });
-            await page.waitForTimeout(500);  // give submitReport's setTimeout(_clearCaptureState) a beat
+            await page.waitForTimeout(500);  // let submitReport settle + clear capture state
+
+            // HC80 — reopen the sticky submit latch between reports, mirroring
+            // the real UI's "Report another" → resetApp(). submitReport latches
+            // `_submitCommitted=true` on success so duplicate taps of the SAME
+            // capture are no-ops; capturing a genuinely NEW report in the UI
+            // always routes through a reset that reopens it. Without this the
+            // 2nd + 3rd programmatic submits are correctly deduped → only 1
+            // report queues (the "got 1, expected 3" failure). This is a test-
+            // harness reset, not a product change.
+            await page.evaluate(() => (window as any).__crispOpenSubmitLatch && (window as any).__crispOpenSubmitLatch());
 
             // Note: state.photoVariants is cleared by _clearCaptureState after submit; need a fresh page evaluate cycle
         }
