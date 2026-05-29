@@ -676,8 +676,14 @@ function _buildTierSwitcher(reportId, group, activeTier) {
 function thumbVariant(group) {
     if (!group || !group.members || group.members.length === 0) return null;
     // Prefer the LOWEST-rank COMPLETED variant — the thumb-first policy.
+    // May 2026 (425-fallback): a tier is only renderable once its PII blur
+    // is done. While pii_blur_status='pending', GET /media/{id}/file returns
+    // 425 Too Early, so picking it would blank the <img>. Excluding pending
+    // tiers makes the picker fall through to the ungated thumbnail/blurhash
+    // (never blank) and auto-upgrade to the full image the moment blur
+    // completes — no onerror hack, no 425 flicker, PII-safe by construction.
     const complete = group.members
-        .filter(m => m.assembly_status === 'complete' && m.url)
+        .filter(m => m.assembly_status === 'complete' && m.url && m.pii_blur_status !== 'pending')
         .sort((a, b) => (TIER_RANK[a.resolution_tier] || 0) - (TIER_RANK[b.resolution_tier] || 0));
     if (complete.length > 0) {
         const m = complete[0];
@@ -694,8 +700,9 @@ function thumbVariant(group) {
 // exists yet — caller should fall back to whatever inline tier is showing.
 function highestCompleteVariant(group) {
     if (!group || !group.members) return null;
+    // 425-fallback (May 2026): exclude blur-pending tiers — their /file 425s.
     const m = group.members
-        .filter(x => x.assembly_status === 'complete' && x.url)
+        .filter(x => x.assembly_status === 'complete' && x.url && x.pii_blur_status !== 'pending')
         .sort((a, b) => (TIER_RANK[b.resolution_tier] || 0) - (TIER_RANK[a.resolution_tier] || 0))[0];
     return m ? { src: getMediaUrl(m.url), tier: m.resolution_tier, mediaId: m.id } : null;
 }
@@ -703,8 +710,11 @@ function highestCompleteVariant(group) {
 function bestVariant(group) {
     if (!group || !group.members || group.members.length === 0) return null;
     // Prefer the highest-rank COMPLETED variant.
+    // 425-fallback (May 2026): exclude blur-pending tiers — their /file 425s,
+    // which would blank the image. Falls through to partial/thumbnail/blurhash
+    // (all ungated) until blur completes, then the full variant is picked.
     const complete = group.members
-        .filter(m => m.assembly_status === 'complete' && m.url)
+        .filter(m => m.assembly_status === 'complete' && m.url && m.pii_blur_status !== 'pending')
         .sort((a, b) => (TIER_RANK[b.resolution_tier] || 0) - (TIER_RANK[a.resolution_tier] || 0));
     if (complete.length > 0) {
         const m = complete[0];
@@ -9732,7 +9742,8 @@ function _maybeUpgradeDetailImage() {
                 const tier = tierClass ? tierClass.replace('dp-tier-', '').toUpperCase() : null;
                 if (tier) {
                     const g = groups.find(gg => gg.group_id === gid);
-                    const m = g && g.members.find(mm => mm.resolution_tier === tier && mm.assembly_status === 'complete' && mm.url);
+                    // 425-fallback: only enable a tier whose blur is done (else /file 425s).
+                    const m = g && g.members.find(mm => mm.resolution_tier === tier && mm.assembly_status === 'complete' && mm.url && mm.pii_blur_status !== 'pending');
                     if (m) b.classList.remove('disabled');
                 }
             });
