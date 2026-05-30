@@ -82,6 +82,15 @@ class MediaStorage(Protocol):
         For S3: signed presigned URL (~15 min TTL)."""
         ...
 
+    def exists(self, db_url: str) -> bool:
+        """True iff the object behind `db_url` is durably present in the
+        backend (local: file on disk; S3: HEAD 200). Used to gate
+        destructive cleanups — e.g. reclaiming media_chunks only once the
+        assembled file is CONFIRMED stored. Returns False on any
+        uncertainty (empty / cross-backend URL, 404, transient error) so
+        callers stay conservative and keep the redundant copy."""
+        ...
+
     # ── B-F (May 2026) — internal-only store for pre-blur retention ──
     # These methods write/read/delete from a sibling namespace that is
     # NEVER exposed via public routes. Used by the retroactive blur
@@ -187,6 +196,17 @@ class LocalStorage:
             return True
         except FileNotFoundError:
             return False
+
+    def exists(self, db_url: str) -> bool:
+        if db_url.startswith("/static/"):
+            return os.path.isfile(
+                os.path.join(self.upload_dir, db_url.replace("/static/", "", 1))
+            )
+        if not db_url or db_url.startswith("s3://"):
+            # Empty, or a cross-backend s3:// row we can't confirm locally.
+            return False
+        # Bare/relative filename (legacy oddity) — try under upload_dir.
+        return os.path.isfile(os.path.join(self.upload_dir, db_url.lstrip("/")))
 
     def public_url(self, db_url: str) -> str:
         # Pass through — dashboard's getMediaUrl() prepends BACKEND_HOST
@@ -363,6 +383,22 @@ class S3Storage:
                 return True
             except FileNotFoundError:
                 return False
+        return False
+
+    def exists(self, db_url: str) -> bool:
+        if db_url.startswith("s3://"):
+            key = db_url.replace("s3://", "", 1)
+            try:
+                self.s3.head_object(Bucket=self.bucket, Key=key)
+                return True
+            except Exception:
+                # 404 / ClientError / transient — treat as "not confirmed
+                # present" so callers stay conservative (keep the chunks).
+                return False
+        if db_url.startswith("/static/") and self.legacy_local_dir:
+            return os.path.isfile(
+                os.path.join(self.legacy_local_dir, db_url.replace("/static/", "", 1))
+            )
         return False
 
     def public_url(self, db_url: str) -> str:

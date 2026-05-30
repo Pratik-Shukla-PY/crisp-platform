@@ -1351,6 +1351,40 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
                 logger.info(f"[AssemblyBG] report {report_id[:8]} fully synced")
         logger.info(f"[AssemblyBG] complete {media_id[:8]} → {file_url}")
 
+        # Reclaim the reassembly buffer (May 2026). media_chunks rows hold
+        # the raw uploaded bytes ONLY for assembly; once the file is durably
+        # in storage (assembly_status='complete' + url set) nothing reads
+        # them again — the public GET /media/{id}/file route serves
+        # media.url from storage, never the chunks. We gate the delete on
+        # storage.exists(file_url) so the rows drop ONLY after the assembled
+        # object is CONFIRMED present; if the check is False/errors we keep
+        # the chunks and the periodic backfill
+        # (scripts/purge_assembled_chunks.py) reclaims them later. Wrapped +
+        # AFTER the completion commit so a cleanup hiccup can never undo a
+        # successful assembly (same convention as the metrics block below).
+        try:
+            if _get_media_storage().exists(file_url):
+                _reclaimed = db.query(MediaChunk).filter(
+                    MediaChunk.media_id == media_id
+                ).delete(synchronize_session=False)
+                db.commit()
+                if _reclaimed:
+                    logger.info(
+                        f"[AssemblyBG] reclaimed {_reclaimed} chunk(s) for "
+                        f"{media_id[:8]} (assembled file confirmed in storage)"
+                    )
+            else:
+                logger.warning(
+                    f"[AssemblyBG] chunk reclaim SKIPPED for {media_id[:8]} — "
+                    f"storage.exists({file_url}) False; keeping chunks for the "
+                    f"backfill sweep"
+                )
+        except Exception as _reclaim_e:
+            db.rollback()
+            logger.warning(
+                f"[AssemblyBG] chunk reclaim skipped for {media_id[:8]}: {_reclaim_e}"
+            )
+
         # Guaranteed-delivery: record variant success + time-to-first/full image.
         # These are the SLIs behind the 5-s first-image promise.
         if media_type == 'IMAGE':
@@ -3520,6 +3554,19 @@ def attach_media_chunk(
     from sqlalchemy.exc import IntegrityError as _MediaIntegrityError
 
     media = db.query(Media).filter(Media.id == payload.media_id).first()
+    # Chunk-cleanup guard (May 2026): once a media assembles, its chunk rows
+    # are reclaimed (see _assemble_media_file). A late/duplicate chunk for an
+    # already-'complete' media must NOT re-insert an orphan that re-seeds the
+    # emptied table — the upload is done. Ack idempotently, touch nothing.
+    if media is not None and media.assembly_status == 'complete':
+        return {
+            "media_id": payload.media_id,
+            "seq_num": payload.seq_num,
+            "received": media.received_chunks,
+            "total": payload.total_chunks,
+            "completion_pct": media.completion_pct,
+            "assembly_status": media.assembly_status,
+        }
     if not media:
         try:
             media = Media(
@@ -4060,6 +4107,18 @@ async def attach_media_chunk_bin(
     from sqlalchemy.exc import IntegrityError as _MediaBinIntegrityError
 
     media = db.query(Media).filter(Media.id == media_id).first()
+    # Chunk-cleanup guard (May 2026): see attach_media_chunk. A late/dup
+    # chunk for an already-'complete' media must not re-seed reclaimed rows.
+    if media is not None and media.assembly_status == 'complete':
+        return {
+            "media_id": media_id,
+            "seq_num": seq_num,
+            "received": media.received_chunks,
+            "total": total_chunks,
+            "completion_pct": media.completion_pct,
+            "assembly_status": media.assembly_status,
+            "transport": "binary",
+        }
     if not media:
         from app.models.report import MediaTypeEnum as _MTE, ResolutionEnum as _RE
         try:
