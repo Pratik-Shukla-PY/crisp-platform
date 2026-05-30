@@ -1,0 +1,28 @@
+{
+  "sha": "8427fc9",
+  "sha_full": "8427fc9119363ce5d55706567a3061db72ce8413",
+  "ts": "2026-05-30T04:46:46.292Z",
+  "ref": "refs/pull/35/merge",
+  "actor": "Pratik-Shukla-PY",
+  "pages": {
+    "pwa-home": {
+      "url": "http://localhost:35699/mobile-app/src/",
+      "scores": {
+        "performance": 37,
+        "accessibility": 98,
+        "best-practices": 93,
+        "pwa": 100,
+        "seo": 90
+      },
+      "metrics": {
+        "lcp": 8562.877000000002,
+        "cls": 0.060834,
+        "tbt": 1927.5255000000002,
+        "fcp": 3137.615,
+        "si": 5352.948672387715
+      },
+      "run_count": 1,
+      "median_file": "lhr-1780116405383.json"
+    }
+  }
+}
