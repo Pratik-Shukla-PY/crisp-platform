@@ -1111,7 +1111,16 @@ async function updateSyncBadge() {
         const detailsCount = _queuedDetailsCount();
         const total = visibleItems.length + detailsCount;
 
-        if (total === 0) {
+        // May 2026 — the queued-reports badge shows ONLY on the home and
+        // Thank-You (success) stages. Elsewhere (capture/review/etc.) it
+        // overlapped the header/brand row, so it's suppressed. goToStage()
+        // re-invokes updateSyncBadge() on every navigation so this stays
+        // accurate as the user moves between stages.
+        const _activeStageId = Array.from(document.querySelectorAll('.stage'))
+            .find((s) => s.classList.contains('active'))?.id;
+        const _badgeAllowedHere = _activeStageId === 'stage-home' || _activeStageId === 'stage-success';
+
+        if (total === 0 || !_badgeAllowedHere) {
             badge.style.display = 'none';
             return;
         }
@@ -3544,25 +3553,31 @@ function _paintLocationDisplays() {
 // boot probe, the HC16 status-sheet tap target) stays wired.
 // Painter writes textContent + classes + aria-label/title.
 function _applyOnlineDot(online) {
-    const dot = document.getElementById('connectivity-dot');
-    if (!dot) return;
+    // May 2026 — update EVERY connectivity dot, not just the home
+    // #connectivity-dot. The success/Thank-You header carries its own
+    // labeled dot (#connectivity-dot-success) so the online state reads
+    // consistently there too. querySelectorAll keeps both (and any future
+    // surface) in sync from one call.
+    const dots = document.querySelectorAll('.connectivity-dot');
+    if (!dots.length) return;
     // Resolve labels through i18n when available; fall back to EN
     // literals so the chip still reads correctly during the
     // synchronous frame-0 boot before i18n loads.
     const t = (typeof window.t === 'function') ? window.t : (k => null);
-    if (online) {
-        dot.classList.remove('connectivity-offline');
-        dot.classList.add('connectivity-online');
-        dot.textContent = t('status_pill_online') || 'Online';
-        dot.setAttribute('aria-label', 'Online');
-        dot.setAttribute('title', 'Online — tap to re-check');
-    } else {
-        dot.classList.remove('connectivity-online');
-        dot.classList.add('connectivity-offline');
-        dot.textContent = t('status_pill_offline') || 'Offline';
-        dot.setAttribute('aria-label', 'Offline — reports will queue');
-        dot.setAttribute('title', 'Offline — tap to re-check');
-    }
+    const label = online ? (t('status_pill_online') || 'Online')
+                         : (t('status_pill_offline') || 'Offline');
+    dots.forEach((dot) => {
+        if (online) {
+            dot.classList.remove('connectivity-offline');
+            dot.classList.add('connectivity-online');
+        } else {
+            dot.classList.remove('connectivity-online');
+            dot.classList.add('connectivity-offline');
+        }
+        dot.textContent = label;
+        dot.setAttribute('aria-label', online ? 'Online' : 'Offline — reports will queue');
+        dot.setAttribute('title', online ? 'Online — tap to re-check' : 'Offline — tap to re-check');
+    });
 }
 
 // Connectivity probe.
@@ -4072,6 +4087,13 @@ function goToStage(id) {
     document.querySelectorAll('.stage').forEach((el) => el.classList.remove('active'));
     const target = document.getElementById(id);
     if (target) target.classList.add('active');
+
+    // May 2026 — re-evaluate the queued-reports badge on every stage change
+    // so it appears ONLY on home + success and hides elsewhere; and refresh
+    // the connectivity dot(s) so the success header's "Online" indicator
+    // reflects the live state the moment the Thank-You stage paints.
+    try { if (typeof updateSyncBadge === 'function') updateSyncBadge(); } catch (_) {}
+    try { if (typeof _applyOnlineDot === 'function') _applyOnlineDot(navigator.onLine !== false); } catch (_) {}
 
     // Progress bar uses the ACTIVE list so the percentage reflects the
     // right number of steps (7 capture steps for v3, 4 for v2/v1).

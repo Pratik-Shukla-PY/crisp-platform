@@ -1411,13 +1411,12 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     line-height: 1;
 }
 .v4-header-success .success-brand .home-brand-name .connectivity-dot {
+    /* May 2026 — render the SAME labeled "Online"/"Offline" pill the home
+       header uses (inherits the .home-brand-name .connectivity-dot base
+       pill + online/offline state colours) instead of the old tiny 6px
+       dot, so the Thank-You header shows the green "Online" indicator. */
     position: static;            /* HC86 — inline, no absolute drift */
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 6px rgba(128, 238, 152, 0.7);
-    margin-inline-start: 2px;
+    margin-inline-start: 6px;
     flex: 0 0 auto;
 }
 .success-devid-pill {
@@ -2617,7 +2616,15 @@ h3.nearby-bucket-header .nearby-bucket-header-count,
 
 /* ── Sync Badge ────────────────────────────────────────────── */
 .sync-badge {
-    position: fixed; top: 16px; left: 16px; z-index: 100;
+    /* May 2026 — centred just below the brand/logo row (was pinned
+       top-left where it overlapped the header/logo). Centred via auto
+       margins + fit-content width (no transform) so the :active scale +
+       pulse animation don't fight a translate. Visibility is JS-gated to
+       the home + success stages only (updateSyncBadge). */
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 56px);
+    inset-inline: 0; margin-inline: auto; width: fit-content;
+    max-width: calc(100% - 32px); z-index: 100;
     display: flex; align-items: center; gap: 8px;
     background: rgba(21,145,155,0.9); color: #fff;
     padding: 6px 14px; border-radius: 20px;

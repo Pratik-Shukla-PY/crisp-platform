@@ -29,7 +29,7 @@
 //     78 @smoke pass; Lighthouse PWA 100, A11y 98.
 // Cache bump forces every installed PWA to fetch the new shell + new
 // inline 22-locale packs on next service-worker activation.
-const CACHE_NAME = 'crisp-v318';
+const CACHE_NAME = 'crisp-v319';  // v319 (May 2026): queued-reports badge centred below the brand row + gated to home/success only (was top-left, overlapping the header); Thank-You header shows the labeled "Online" pill; devid pill removed from success header.
 // v250 → v251 (May 21 — version-pill /health URL fix). v250 deploy
 // auto-rolled-back when prod-smoke caught a `HTTP 404 /health` on
 // PWA load. Root cause: home-screen.js _paintVersionPill stripped

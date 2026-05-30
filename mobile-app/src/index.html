@@ -204,7 +204,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v318">
+    <meta name="crisp-release" content="crisp-pwa@v319">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -6160,13 +6160,7 @@
                         <circle cx="184" cy="72" r="9" fill="#FB7185"/>
                     </svg>
                 </span>
-                <span class="home-brand-name">CRISP<span class="connectivity-dot connectivity-online" aria-hidden="true"></span></span>
-            </button>
-            <button class="success-devid-pill" id="btn-success-devid"
-                    type="button" aria-label="Device ID"
-                    data-i18n-aria-label="aria_devid">
-                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
-                <span id="success-devid-text">CRISP-…</span>
+                <span class="home-brand-name">CRISP<span class="connectivity-dot connectivity-online" id="connectivity-dot-success" role="img" data-i18n-aria-label="aria_online_status" data-i18n-title="aria_online_status">Online</span></span>
             </button>
             <button class="v4-lang-pill" data-v4-lang-pill type="button"
                     aria-label="Change language"
