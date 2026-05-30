@@ -25,20 +25,15 @@ import { test, expect } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { DISTINCT_JPEG_B64 } from './_distinct-jpegs';
 
 function writeTestJpeg(tag: string): string {
     const tmp = path.join(os.tmpdir(), `crisp-v4multi-${tag}-${Date.now()}.jpg`);
-    // Minimal valid JPEG (same byte-perfect literal the v3 multi-photo
-    // spec uses — see 06-multi-photo.spec.ts).
-    const b64 =
-        '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a' +
-        'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIy' +
-        'MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAKAAoDASIA' +
-        'AhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQA' +
-        'AAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3' +
-        'ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWm' +
-        'p6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oADAMB' +
-        'AAIRAxEAPwD3+iiigD//2Q==';
+    // Distinct per-tag JPEG. HC77 dedupes extras by EXACT previewDataUrl
+    // (app.js ~6268); byte-identical fixtures would collapse to one extra and
+    // the "3 files → 2 extras" assertion would time out. Distinct pixels per
+    // tag → distinct dataUrl → all selected photos land (real gallery photos).
+    const b64 = DISTINCT_JPEG_B64[tag] || DISTINCT_JPEG_B64.a;
     fs.writeFileSync(tmp, Buffer.from(b64, 'base64'));
     return tmp;
 }

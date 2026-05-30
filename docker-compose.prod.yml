@@ -30,6 +30,15 @@ services:
     volumes:
       - uploads:/app/backend/uploads
     restart: unless-stopped
+    # OOM hotfix (May 2026): cap backend memory so a future processing spike
+    # (e.g. PII-blur) can only OOM-kill THIS container — which auto-restarts —
+    # never the host, redis, or nginx. The May 2026 incident was a host-global
+    # OOM (constraint=CONSTRAINT_NONE) that killed uvicorn repeatedly. Host is
+    # 3.75 GB + 4 GB swap; a 3 GB cap leaves headroom for redis/nginx/OS, and
+    # memswap_limit lets a transient spike spill ~2 GB to swap before the
+    # container OOMs instead of dying instantly. Tune via redeploy if needed.
+    mem_limit: 3g
+    memswap_limit: 5g
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3).status==200 else 1)\""]
       interval: 30s
