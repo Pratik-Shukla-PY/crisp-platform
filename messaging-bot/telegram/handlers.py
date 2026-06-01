@@ -21,7 +21,7 @@ from .session_manager import (
     create_report_early, upload_image, upload_audio, upload_video_deferred,
     update_report_metadata, update_report_location, delete_report, submit_report,
     clear_session, SEVERITY_MAP, TYPE_MAP, CRISIS_MAP, DAMAGE_MAP, DEBRIS_MAP, hash_user,
-    resolve_location_name,
+    resolve_location_name, forward_geocode,
     is_duplicate_callback,
     is_stale_callback_message, track_prompt_msg,
 )
@@ -444,6 +444,22 @@ async def handle_update(update: dict):
         await resolve_location_name(session)
         if session.report_id:
             await update_report_location(session)
+
+    # Phase 2: forward-geocode a typed place name when there's no GPS pin yet
+    # and we're on the location step. Lets desktop / GPS-denied reporters set a
+    # location by typing instead of being stuck on the mobile-only button (the
+    # old #1 blocker). Sets a coarse accuracy + low geocoding_confidence so the
+    # dashboard isn't misled into trusting it as a precise fix.
+    if (not session.has_location and session.state == "STEP_LOCATION"
+            and text and not text.startswith("/")):
+        geo = await forward_geocode(text)
+        if geo:
+            session.latitude, session.longitude, session.location_name = geo
+            session.geocoding_source = "telegram_forward_geocode"
+            session.geocoding_confidence = 0.3   # low — typed place name
+            await send_text(chat_id, "📍 " + (session.location_name or t(session.lang, "step_loc_done")))
+            if session.report_id:
+                await update_report_location(session)
 
     # P2.8 — Defer server-side report creation until the session has a minimal
     # viable set of fields (photo OR audio, plus location or explicit text).

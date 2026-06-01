@@ -92,6 +92,7 @@ DAMAGE_MAP = {
 DEBRIS_MAP = {
     "debris_yes": True,
     "debris_no":  False,
+    "debris_na":  None,   # Phase 2: "Not sure / N/A" — non-blocking; stored NULL
 }
 
 
@@ -114,6 +115,11 @@ class TelegramSession:
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     location_name: str = ""           # reverse-geocoded place name
+    # Phase 2: set when the location came from a FORWARD-geocoded typed place
+    # name (no GPS pin), so the backend Location row carries honest precision
+    # metadata instead of the fabricated 50 m GPS accuracy.
+    geocoding_confidence: Optional[float] = None
+    geocoding_source: Optional[str] = None
     severity: str = "UNKNOWN"
     infra_type: str = "OTHER"
     crisis_type: str = ""          # EARTHQUAKE / FLOOD / CONFLICT / etc.
@@ -135,7 +141,7 @@ class TelegramSession:
     # Submitted to the backend as `debris_clearing_needed` (already a
     # column on Report + a field on ReportMetaCreate).
     debris_answered: bool = False
-    debris_needed: bool = False
+    debris_needed: Optional[bool] = False   # None = "Not sure / N/A" (Phase 2)
     client_report_id: str = field(default_factory=lambda: str(uuid4()))
     report_id: Optional[str] = None  # set after early creation
     created_at: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
@@ -491,6 +497,67 @@ async def resolve_location_name(session: TelegramSession):
         logger.warning(f"Reverse geocode failed: {e}")
 
 
+async def forward_geocode(query: str):
+    """Phase 2 — forward-geocode a typed place name to coordinates.
+
+    Lets desktop / GPS-denied Telegram reporters set a location by typing a
+    place name instead of being stuck on the (mobile-only) "Send Location"
+    button — the single biggest blocker in the old flow. Uses the same
+    OpenStreetMap Nominatim provider as the reverse geocoder above, /search.
+    Returns (lat, lng, short_name) on a hit, else None. Best-effort + bounded
+    timeout; never raises.
+    """
+    q = (query or "").strip()
+    if len(q) < 3:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={"q": q, "format": "json", "limit": 1, "addressdetails": 0},
+                headers={"User-Agent": "CRISP-Bot", "Accept-Language": "en"},
+            )
+            if r.status_code == 200:
+                rows = r.json()
+                if rows:
+                    top = rows[0]
+                    lat = float(top["lat"])
+                    lng = float(top["lon"])
+                    name = top.get("display_name") or q
+                    # Trim Nominatim's long comma chain to the 3 most-local parts.
+                    name = ", ".join(p.strip() for p in name.split(",")[:3])
+                    return (lat, lng, name)
+    except Exception as e:
+        logger.warning(f"Forward geocode failed: {e}")
+    return None
+
+
+def _location_payload(session: "TelegramSession") -> dict:
+    """Build the Location payload shared by create + update.
+
+    Phase 2: honest precision metadata. A real shared GPS pin is treated as
+    ~50 m; a forward-geocoded typed place name is neighbourhood/city level, so
+    it ships a coarse accuracy + a low geocoding_confidence + a source tag
+    (all accepted by the backend LocationCreate schema, same fields the PWA
+    sends) instead of masquerading as a precise 50 m GPS fix.
+    """
+    geocoded = bool(session.geocoding_source)
+    loc = {
+        "latitude": session.latitude,
+        "longitude": session.longitude,
+        "device_latitude": session.latitude,
+        "device_longitude": session.longitude,
+        "accuracy_meters": 3000.0 if geocoded else 50.0,
+        "device_location_name": session.location_name or None,
+    }
+    if geocoded:
+        loc["user_location_name"] = session.location_name or None
+        loc["geocoding_source"] = session.geocoding_source
+        if session.geocoding_confidence is not None:
+            loc["geocoding_confidence"] = session.geocoding_confidence
+    return loc
+
+
 async def create_report_early(session: TelegramSession) -> Optional[str]:
     """
     Create the report on backend as soon as location is received.
@@ -558,17 +625,12 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
         meta["infrastructure_name_from_osm"] = True
     # debris-clearing answer.
     if session.debris_answered:
-        meta["debris_clearing_needed"] = bool(session.debris_needed)
+        # Phase 2: "Not sure / N/A" → None → stored NULL (field still present,
+        # so must-have #1's cross-channel debris boolean isn't dropped).
+        meta["debris_clearing_needed"] = session.debris_needed
 
     if session.has_location:
-        meta["location"] = {
-            "latitude": session.latitude,
-            "longitude": session.longitude,
-            "device_latitude": session.latitude,
-            "device_longitude": session.longitude,
-            "accuracy_meters": 50.0,
-            "device_location_name": session.location_name or None,
-        }
+        meta["location"] = _location_payload(session)
 
     try:
         async with httpx.AsyncClient(timeout=30) as c:
@@ -704,14 +766,7 @@ async def update_report_location(session: TelegramSession) -> bool:
         return False
     try:
         async with httpx.AsyncClient(timeout=15) as c:
-            loc_data = {
-                "latitude": session.latitude,
-                "longitude": session.longitude,
-                "device_latitude": session.latitude,
-                "device_longitude": session.longitude,
-                "accuracy_meters": 50.0,
-                "device_location_name": session.location_name or None,
-            }
+            loc_data = _location_payload(session)
             r = await c.patch(
                 f"{BACKEND_URL}/api/v1/reports/{session.report_id}/location",
                 json=loc_data,

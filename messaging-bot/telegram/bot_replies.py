@@ -71,6 +71,7 @@ _STRINGS = {
         "step_debris":     "🚜 *Does this need debris clearing?*",
         "debris_yes":      "✅ Yes",
         "debris_no":       "❌ No",
+        "debris_na":       "➖ Not sure",
         # UX fix — OSM building suggestions after location drop.
         "bldg_which":      "🏛 *Which building?* Tap one, or type the name.",
         "bldg_type_instead": "Type name instead",
@@ -679,13 +680,12 @@ async def send_welcome(chat_id: int, lang: str):
 
 
 async def send_step_location(chat_id: int, lang: str):
-    # Phase 0: the "Or type the place name" hint was removed — there is no
-    # forward geocoder yet, so typed text never satisfies has_location and the
-    # hint stranded desktop/GPS-denied reporters. Phase 2 adds a real forward
-    # geocoder and restores an honest typed-place hint.
+    # Phase 2: the forward geocoder now exists (session_manager.forward_geocode),
+    # so the typed-place-name hint is honest again — typing a place name resolves
+    # to coordinates for desktop / GPS-denied reporters.
     return await _send("sendMessage", {
         "chat_id": chat_id,
-        "text": t(lang, "step_loc_num"),
+        "text": t(lang, "step_loc_num") + "\n\n" + t(lang, "step_loc_text_hint"),
         "parse_mode": "Markdown",
         "reply_markup": {
             "keyboard": [[{"text": t(lang, "step_loc_btn"), "request_location": True}]],
@@ -985,6 +985,10 @@ async def send_step_debris(chat_id: int, lang: str):
             "inline_keyboard": [
                 [{"text": t(lang, "debris_yes"), "callback_data": "debris_yes"},
                  {"text": t(lang, "debris_no"),  "callback_data": "debris_no"}],
+                # Phase 2: non-blocking "Not sure / N/A" → stored NULL. Stops
+                # forcing a meaningless debris answer on flood/power-outage
+                # reports while keeping must-have #1's field capturable.
+                [{"text": t(lang, "debris_na"),  "callback_data": "debris_na"}],
                 [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
             ],
         },
