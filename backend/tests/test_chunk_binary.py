@@ -481,6 +481,17 @@ class TestChunkRetryIdempotency:
         # After 5 posts (3 unique + 2 retries), still only 3 accounted.
         assert media.received_chunks == 3, \
             f"expected received_chunks=3, got {media.received_chunks}"
+        # The 3rd chunk completes the set → assembly runs in the background,
+        # and the chunk-cleanup feature (inline reclaim at assembly-complete)
+        # deletes the MediaChunk rows once assembly lands. So the surviving
+        # row count races background assembly: it is the 3 unique seqs
+        # (pre-reclaim) or 0 (post-reclaim) — but NEVER more than 3 and never
+        # a duplicate seq. Assert that idempotency invariant (no double-insert)
+        # without depending on assembly/cleanup timing. The authoritative
+        # "accounted exactly once" check is received_chunks==3 above.
         chunks = db.query(MediaChunk).filter(MediaChunk.media_id == media_id).all()
-        assert len(chunks) == 3, \
-            f"expected 3 MediaChunk rows, got {len(chunks)}"
+        seqs = [c.seq_num for c in chunks]
+        assert len(chunks) <= 3, \
+            f"interleaved retries re-seeded duplicate chunk rows: got {len(chunks)} (>3)"
+        assert len(seqs) == len(set(seqs)), \
+            f"duplicate seq rows present (retry double-inserted): {sorted(seqs)}"

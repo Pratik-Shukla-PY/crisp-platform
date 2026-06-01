@@ -211,3 +211,119 @@ def test_mark_deferred_with_unknown_report_returns_404(client, db):
         json={"tiers_by_group": {"some-group": ["ORIGINAL"]}},
     )
     assert res.status_code == 404
+
+
+# ── Jun 2026 — offline-queue resilience: `orphan_no_source` reason ────────────
+# Commits 2/5/6 of the resilience pass signal mark-deferred with
+# reason='orphan_no_source' (a variant lost its byte source: the dataUrl was
+# never persisted / a chunk was hard-rejected after K regens). The endpoint
+# already accepts this reason (valid_reasons set); these lock the contract the
+# PWA depends on so a future backend change can't silently break it.
+
+
+def _seed_report_no_media_landed(db, *, device_hash, expected=3):
+    """A photo-intended Report where NOTHING landed (received_media=0). This
+    is the whole-report backstop shape: a photo was declared at /meta but no
+    uploadable bytes ever reached the server."""
+    d = Device(device_hash=device_hash)
+    db.add(d)
+    db.flush()
+    r = Report(
+        device_id=d.id,
+        source=SourceEnum.APP,
+        client_report_id=f"e2e-orphan-{device_hash}",
+        sync_status=SyncStatusEnum.PARTIAL,
+        expected_media=expected,
+        received_media=0,  # nothing landed
+    )
+    db.add(r)
+    db.commit()
+    db.refresh(r)
+    return r, str(uuid.uuid4())
+
+
+def test_mark_deferred_orphan_no_source_decrements_and_syncs(client, db):
+    """Commit 6 (per-variant orphan): SMALL landed, MEDIUM + ORIGINAL lost
+    their byte source → mark-deferred(orphan_no_source) decrements
+    expected_media (3→1) and promotes the report to SYNCED on its one landed
+    tier. The failed placeholder rows carry the orphan_no_source reason so the
+    dashboard renders the honest chip."""
+    r, photo_group_id = _seed_report_with_small_landed(
+        db, device_hash="orphan-small-landed"
+    )
+    assert r.sync_status == SyncStatusEnum.PARTIAL
+
+    res = client.post(
+        f"/api/v1/reports/{r.id}/media/mark-deferred",
+        json={
+            "tiers_by_group": {photo_group_id: ["MEDIUM", "ORIGINAL"]},
+            "reason": "orphan_no_source",
+        },
+    )
+    assert res.status_code == 200, f"got {res.status_code} body={res.text}"
+    body = res.json()
+    assert body["newly_stamped"] == 2
+    assert body["sync_status"] == "SYNCED"
+
+    db.expire_all()
+    refreshed = db.query(Report).filter(Report.id == r.id).first()
+    assert refreshed.expected_media == 1  # 3 → floored at received_media (1)
+    failed_rows = [
+        m
+        for m in db.query(Media).filter_by(report_id=r.id).all()
+        if m.assembly_status == "failed"
+    ]
+    assert len(failed_rows) == 2
+    for fr in failed_rows:
+        assert fr.abandon_reason == "orphan_no_source"
+        assert fr.abandoned_at is not None
+
+
+def test_mark_deferred_orphan_no_source_is_idempotent(client, db):
+    """Second identical orphan_no_source call → noop (no double-decrement,
+    no extra rows). The PWA may re-signal on a later drain pass."""
+    r, photo_group_id = _seed_report_with_small_landed(
+        db, device_hash="orphan-idempotent"
+    )
+    p = {
+        "tiers_by_group": {photo_group_id: ["MEDIUM", "ORIGINAL"]},
+        "reason": "orphan_no_source",
+    }
+    res1 = client.post(f"/api/v1/reports/{r.id}/media/mark-deferred", json=p)
+    assert res1.status_code == 200 and res1.json()["newly_stamped"] == 2
+    res2 = client.post(f"/api/v1/reports/{r.id}/media/mark-deferred", json=p)
+    assert res2.status_code == 200 and res2.json()["newly_stamped"] == 0
+    db.expire_all()
+    assert db.query(Media).filter_by(report_id=r.id).count() == 3
+
+
+def test_mark_deferred_orphan_no_source_full_group_floors_expected(client, db):
+    """Commit 2 (whole-report backstop): a photo-intended report with NO
+    landed media at all signals every tier as orphan_no_source. expected_media
+    floors at received_media (0). Documents the honest backend outcome — the
+    report carries 3 orphan_no_source placeholders and is no longer waiting on
+    media that will never arrive. (received==expected==0 is the floor; the
+    report stays out of the 'still expecting N media' set.)"""
+    r, photo_group_id = _seed_report_no_media_landed(
+        db, device_hash="orphan-full-group"
+    )
+    res = client.post(
+        f"/api/v1/reports/{r.id}/media/mark-deferred",
+        json={
+            "tiers_by_group": {photo_group_id: ["SMALL", "MEDIUM", "ORIGINAL"]},
+            "reason": "orphan_no_source",
+        },
+    )
+    assert res.status_code == 200, f"got {res.status_code} body={res.text}"
+    assert res.json()["newly_stamped"] == 3
+
+    db.expire_all()
+    refreshed = db.query(Report).filter(Report.id == r.id).first()
+    # expected floors at received_media (0) — never negative.
+    assert refreshed.expected_media == 0
+    failed = [
+        m
+        for m in db.query(Media).filter_by(report_id=r.id).all()
+        if m.assembly_status == "failed" and m.abandon_reason == "orphan_no_source"
+    ]
+    assert len(failed) == 3

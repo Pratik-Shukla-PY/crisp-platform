@@ -265,11 +265,18 @@ class TestRevivalIdempotency:
             f"R2.a expects generation to be bumped on revival; got {first_generation}"
         )
 
-        # Second post with the OLD generation (a stale-session replay)
-        # MUST be rejected with 409 — this is the R2.a contract. Audit
-        # columns + recovered_at must stay untouched.
+        # Second post — a stale-session replay of the SAME chunk. By now the
+        # media has revived AND assembled (recovered_at set ⇒
+        # assembly_status='complete'), so the chunk-cleanup complete-guard
+        # short-circuits FIRST with an idempotent 200 ack that "touches
+        # nothing" (reports.py ~3645) — BEFORE the upload_generation epoch
+        # check is reached. That short-circuit IS the idempotency this test
+        # asserts: no double-stamp of recovered_at, no audit-trail clear, no
+        # duplicate chunk row re-seeded. (The stale-generation→409 contract
+        # on a NOT-yet-complete media is covered separately by
+        # test_recovery_r2a_upload_generation.py::TestGenerationMismatchRejects409.)
         res2 = client.post(f"/api/v1/reports/{report_id}/media/chunk", json=body_v1)
-        assert res2.status_code == 409
+        assert res2.status_code == 200, res2.text
         db.expire_all()
         m2 = db.query(Media).filter(Media.id == media_id).first()
         assert m2.recovered_at == first_recovered_at
