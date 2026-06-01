@@ -120,6 +120,23 @@ git reset --hard --quiet "$TARGET_SHA"
 
 # ── 3. Build backend image if backend/ changed ─────────────────────────
 if [ "$NEED_BACKEND_BUILD" = "yes" ]; then
+    # Reclaim disk BEFORE the rebuild. The backend image installs multi-GB
+    # ML deps (torch / cuda / mediapipe / easyocr / opencv); accumulated
+    # Docker build cache + superseded image layers from prior deploys can
+    # exhaust the EC2 volume mid-`pip install` ("No space left on device"),
+    # which aborts the deploy before the container swap. Pruning build cache
+    # + images NOT referenced by a running container is safe here: the live
+    # stack is still up (we `down` at step 4), so its images are retained —
+    # only dead layers from old builds are freed. Best-effort: a prune
+    # hiccup must never block the deploy. df is logged for diagnostics.
+    log "Disk usage before reclaim:"
+    df -h / || true
+    docker builder prune -af >/dev/null 2>&1 || true
+    docker image prune -af   >/dev/null 2>&1 || true
+    docker container prune -f >/dev/null 2>&1 || true
+    log "Disk usage after reclaim:"
+    df -h / || true
+
     log "Building backend image"
     docker compose -f "$COMPOSE_FILE" build backend
 fi
