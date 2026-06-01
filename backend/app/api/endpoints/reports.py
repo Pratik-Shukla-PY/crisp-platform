@@ -5567,7 +5567,55 @@ def get_nearby_reports(
             since = since.astimezone(timezone.utc)
         q = q.filter(Report.updated_at > since)
 
-    candidates = q.all()
+    # Execute the candidate query. The PostGIS path (ST_DWithin on the
+    # geom geography) can fail at the DB layer independently of the query
+    # LOGIC — a corrupted PostGIS catalog (e.g. spatial_ref_sys missing
+    # SRID 4326), a dropped extension, or a geom-index planner error.
+    # None of that should 500 the nearby feature for every caller: fall
+    # back to the plain lat/lng bbox filter (no PostGIS, no SRID lookup)
+    # and force the Python haversine post-filter below so the exact-radius
+    # contract still holds. Non-PostGIS SQL errors re-raise unchanged
+    # (the bbox rebuild shares every other filter, so we don't mask them).
+    from sqlalchemy.exc import SQLAlchemyError as _SQLAlchemyError
+    nearby_postgis_fell_back = False
+    try:
+        candidates = q.all()
+    except _SQLAlchemyError as _nearby_db_exc:
+        if not (use_postgis and not use_h3):
+            raise
+        logger.warning(
+            "nearby: PostGIS query failed (%s) — falling back to bbox filter",
+            _nearby_db_exc.__class__.__name__,
+        )
+        db.rollback()  # the failed statement aborted the transaction
+        q = (
+            db.query(Report)
+              .join(Location, Location.report_id == Report.id)
+              .filter(Location.latitude.between(lat_min, lat_max))
+              .filter(Location.longitude.between(lng_min, lng_max))
+              .filter(
+                  or_(
+                      Report.status.in_([
+                          ReportStatusEnum.VERIFIED,
+                          ReportStatusEnum.PENDING,
+                          ReportStatusEnum.RESPONDING,
+                      ]),
+                      and_(
+                          Report.status == ReportStatusEnum.RESOLVED,
+                          Report.server_created_at >= resolved_cutoff,
+                      ),
+                  )
+              )
+              .filter(Report.deletion_requested_at == None)
+              .filter(Report.server_created_at >= age_cutoff)
+              .options(joinedload(Report.location))
+        )
+        if caller_device_id:
+            q = q.filter(Report.device_id != caller_device_id)
+        if since is not None:
+            q = q.filter(Report.updated_at > since)
+        candidates = q.all()
+        nearby_postgis_fell_back = True
 
     # Phase 3 (May 2026, docs §6.1) — pre-fetch trust info for every
     # candidate device in ONE query so we don't N+1 inside the loop.
@@ -5587,7 +5635,7 @@ def get_nearby_reports(
     # but cheap. Keep the location-presence guard since SQLAlchemy may
     # still produce a candidate row with a NULL Location join target
     # if the DB has drift.
-    sql_filtered = use_postgis or use_h3
+    sql_filtered = (use_postgis or use_h3) and not nearby_postgis_fell_back
     inputs: List[NearbyReportInput] = []
     for r in candidates:
         if not r.location:
