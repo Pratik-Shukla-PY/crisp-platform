@@ -210,18 +210,30 @@ test.describe('VALIDATION 01 — online happy path, 5 iPhone HEIC fixtures', () 
             expect(Math.abs(truthFinal.location_lng! - fx.lng)).toBeLessThan(0.0001);
 
             // ── L5 — storage assertion (each Media.url returns bytes) ──────
-            const storageProbe: Array<{ tier: string; url: string; httpCode: number; bytes: number }> = [];
+            // A tier can be assembly-`complete` (so the report reads SYNCED)
+            // yet briefly return 425 "Too Early" while server-side PII blur is
+            // still pending — SYNCED is gated on assembly, NOT on blur. The
+            // dashboard tolerates this window via complete-only tier fallback;
+            // here we PROVE the gate is transient (never permanent) by polling
+            // each tier's stable /file until it serves bytes, within a bounded
+            // budget. A tier that never lifts within the budget is a real defect.
+            const storageProbe: Array<{ tier: string; url: string; httpCode: number; bytes: number; waitedMs: number }> = [];
             for (const m of truthFinal.media) {
-                const fullUrl = m.url!.startsWith('http') ? m.url! : `${baseURL!.replace('/mobile-app/src/', '').replace(/\/$/, '')}${m.url}`;
                 // The backend serves media via /api/v1/reports/media/{id}/file
                 const fetchUrl = `http://localhost:8000/api/v1/reports/media/${m.id}/file`;
-                const res = await page.request.get(fetchUrl, { maxRedirects: 5 });
-                const body = await res.body();
-                storageProbe.push({ tier: m.resolution_tier, url: fetchUrl, httpCode: res.status(), bytes: body.length });
+                const t0 = Date.now();
+                let res = await page.request.get(fetchUrl, { maxRedirects: 5 });
+                let body = await res.body();
+                while (res.status() === 425 && Date.now() - t0 < 60_000) {
+                    await page.waitForTimeout(1000);
+                    res = await page.request.get(fetchUrl, { maxRedirects: 5 });
+                    body = await res.body();
+                }
+                storageProbe.push({ tier: m.resolution_tier, url: fetchUrl, httpCode: res.status(), bytes: body.length, waitedMs: Date.now() - t0 });
             }
             writeArtifact(resultDir, '04_L5_storage.json', storageProbe);
             for (const p of storageProbe) {
-                expect(p.httpCode, `${p.tier} storage fetch HTTP`).toBeLessThan(400);
+                expect(p.httpCode, `${p.tier} storage fetch HTTP (after ${p.waitedMs}ms waiting for the blur gate to lift)`).toBeLessThan(400);
                 expect(p.bytes, `${p.tier} storage bytes empty`).toBeGreaterThan(100);
             }
 
@@ -269,17 +281,37 @@ test.describe('VALIDATION 01 — online happy path, 5 iPhone HEIC fixtures', () 
                 // Keep the tempfile for forensics — small footprint.
             }
             writeArtifact(resultDir, '04b_exif_phash.json', exifPhashProbe);
+            // HC98 geotag (operator-accepted, DPIA R12): when EXIF embedding is
+            // enabled, the server burns a visible watermark + machine-readable
+            // GPS EXIF into the served MEDIUM/ORIGINAL tiers for responder
+            // traceability (a clean, un-stamped archival ORIGINAL is retained
+            // internally). The SMALL thumbnail is ALWAYS skipped and stays
+            // clean. Resolve the live policy from /config so this asserts the
+            // real contract in either configuration.
+            let geotagExifEnabled = false;
+            try {
+                const cfg = await page.request.get('http://localhost:8000/api/v1/config/');
+                geotagExifEnabled = !!((await cfg.json())?.geotag?.exif_enabled);
+            } catch (_) { /* default false → expect every tier clean */ }
             for (const p of exifPhashProbe) {
-                expect(p.hasGps, `${p.tier} variant leaked EXIF GPS (privacy violation)`).toBe(false);
+                if (p.tier === 'SMALL' || !geotagExifEnabled) {
+                    // Thumbnail, or geotag disabled → no GPS may appear.
+                    expect(p.hasGps, `${p.tier} variant must NOT carry EXIF GPS (thumbnail / geotag off)`).toBe(false);
+                } else {
+                    // HC98 ON → MEDIUM/ORIGINAL intentionally carry the geotag
+                    // GPS EXIF. Asserting PRESENCE proves the feature works
+                    // ("no missing geotags") rather than merely tolerating it.
+                    expect(p.hasGps, `${p.tier} variant must carry the HC98 geotag GPS EXIF (geotag on)`).toBe(true);
+                }
                 if (typeof p.phashDistance === 'number') {
-                    // Tier-specific tolerance based on observed real-world
-                    // variance from iPhone 14 HEIC sources (validation run
-                    // May 2026): SMALL at 320px Q=0.40 = ~28-32, MEDIUM at
-                    // 800px Q=0.60 = ~28-32, ORIGINAL at q=0.95 EXIF-strip
-                    // = 0 (bit-near-identical pixels). pHash > 38 indicates
-                    // structural change, not just compression.
+                    // Tier tolerance vs. the source. SMALL 320px Q=0.40 and
+                    // MEDIUM 800px Q=0.60 carry compression variance; ORIGINAL
+                    // is q=0.95 (near-identical pixels). The HC98 watermark is a
+                    // small bottom caption band that moves pHash only ~2 bits
+                    // (measured), so ORIGINAL's tolerance is 12 (was 6 pre-HC98)
+                    // — still far below the >20 that signals a wrong/corrupt image.
                     const maxDistance = p.tier === 'SMALL' ? 38
-                        : (p.tier === 'MEDIUM' ? 38 : 6);
+                        : (p.tier === 'MEDIUM' ? 38 : 12);
                     expect(p.phashDistance, `${p.tier} pHash drifted too far from source (${p.phashDistance})`)
                         .toBeLessThanOrEqual(maxDistance);
                 }

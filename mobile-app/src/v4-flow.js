@@ -829,19 +829,27 @@
                 _toastCapHit();
                 return;
             }
-            // v6.8 — broaden iOS detection: iPadOS 13+ Safari with
-            // "Request Desktop Site" (the DEFAULT for iPad) reports UA
-            // as "Macintosh; Intel Mac OS X". navigator.platform is
-            // "MacIntel" but maxTouchPoints > 1 distinguishes iPad-touch
-            // from Mac-desktop. Without this check, iPad PWA users
-            // routed to openCameraModal where getUserMedia + tap-to-focus
-            // + the live modal layout have iPadOS-standalone quirks
-            // (verified May 2026 — operator-reported regression).
-            const _ua = navigator.userAgent || '';
-            const isIOS = /iPad|iPhone|iPod/.test(_ua)
-                       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            // HC97 (May 2026) — the custom getUserMedia camera modal is the
+            // SINGLE camera UX across every platform + capture entry point.
+            // Gate on CAPABILITY, not platform: iPhone Safari + installed PWA
+            // DO support getUserMedia (the review "+ Add" already opened the
+            // custom modal on iOS), so the old `!isIOS` fork is exactly what
+            // forced Stage-1 alone to the native iOS camera. The
+            // `<input capture>` branch below stays as the runtime fallback for
+            // contexts where getUserMedia is unavailable or denied (iOS in-app
+            // webviews, permission-denied) — openCameraModal also self-falls-
+            // back on a getUserMedia reject. `__crispForceCameraMode`
+            // ('modal' | 'native') lets e2e drive each branch deterministically
+            // (Playwright can't exercise real getUserMedia).
+            //
+            // NOTE: the prior `!isIOS` gate existed for an iPadOS desktop-mode
+            // tap-to-focus/layout quirk. If that resurfaces on iPad, narrow the
+            // fallback to iPad-only HERE rather than re-excluding all iOS.
             const hasGUM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-            if (!isIOS && hasGUM && typeof window.openCameraModal === 'function') {
+            const _forceMode = (typeof window !== 'undefined' && window.__crispForceCameraMode) || null;
+            const _useModal = _forceMode === 'modal'
+                || (_forceMode !== 'native' && hasGUM && typeof window.openCameraModal === 'function');
+            if (_useModal && typeof window.openCameraModal === 'function') {
                 const _preDataUrl = _getState().photoDataUrl;
                 const _preCount = (_getState().v4Photos || []).length;
                 window.openCameraModal();
@@ -919,6 +927,13 @@
 
                     if (added > 0) {
                         _renderThumbs();
+                        // Repaint BOTH strips: the modal may be opened from the
+                        // capture stage (this strip) OR the review "+ Add" —
+                        // fire the review refresher too so snaps surface no
+                        // matter which stage opened the camera.
+                        if (typeof window.__crispV4RefreshReviewStrip === 'function') {
+                            try { window.__crispV4RefreshReviewStrip(); } catch (_) {}
+                        }
                         nextBtn.disabled = false;
                         nextBtn.classList.add('is-ready');
                     }
@@ -1530,10 +1545,18 @@
         // Expose the refresh so the existing _handlePhoto + recording
         // helpers can fire it after they mutate state.
         window.__crispV4RefreshCapStrip = _refreshCapStrip;
+        // HC97 — expose the smart camera entry so the review "+ Add" (and any
+        // future Edit flow) routes through the SAME capability gate + custom
+        // modal + multi-snap ingest + <input capture> fallback as Stage-1.
+        window.__crispOpenCameraSmart = _openCameraSmart;
 
         function _renderThumbs() {
             const photos = _getState().v4Photos || [];
             if (!photos.length) {
+                // Clear stale <img> thumbs (not just hide the row) so the
+                // previous report's photo can't linger in the hidden DOM and
+                // reappear on the next capture after "Report another".
+                thumbsRow.innerHTML = '';
                 thumbsRow.style.display = 'none';
                 return;
             }
@@ -2199,6 +2222,26 @@
                         t.setAttribute('aria-checked', 'false');
                     });
                 }
+            } catch (_) {}
+            // May 2026 — the cause grid was the ONLY one cleared here, but
+            // _clearCaptureState also nulls state.{damage_classification,
+            // infrastructure_type}. The damage (.v4-q-opt) + infra
+            // (.v4-hit-tile) painters only toggle .is-selected on tap and
+            // never re-derive from state, so the prior report's damage + infra
+            // picks stayed visually highlighted on the next report ("selected
+            // options didn't clear"). Clear those two grids too, and drop the
+            // "OTHER, please specify" prompt + its free-text input.
+            try {
+                document.querySelectorAll(
+                    '#v4-view-damage .v4-q-opt.is-selected, #v4-view-infra .v4-hit-tile.is-selected'
+                ).forEach((el) => {
+                    el.classList.remove('is-selected', 'is-tap-confirmed');
+                    el.setAttribute('aria-checked', 'false');
+                });
+                const _otherPrompt = document.getElementById('v4-infra-other-prompt');
+                if (_otherPrompt) _otherPrompt.setAttribute('hidden', '');
+                const _otherInput = document.getElementById('v4-infra-other-input');
+                if (_otherInput) _otherInput.value = '';
             } catch (_) {}
         });
         // Re-render the dynamic sub-step label whenever the i18n pack
@@ -2869,7 +2912,14 @@
         // live (older Android browsers without getUserMedia).
         strip.querySelectorAll('[data-add-photo]').forEach((btn) => {
             btn.addEventListener('click', () => {
-                if (typeof window.openCameraModal === 'function') {
+                // HC97 — route through the SAME smart camera entry as Stage-1
+                // so the review "+ Add" gets the identical capability gate,
+                // custom modal, multi-snap ingest, and <input capture> fallback
+                // (previously it called openCameraModal() directly with only a
+                // weak "go back to capture" fallback).
+                if (typeof window.__crispOpenCameraSmart === 'function') {
+                    window.__crispOpenCameraSmart();
+                } else if (typeof window.openCameraModal === 'function') {
                     window.openCameraModal();
                 } else {
                     window.__crispGoToStage('stage-v4-capture');

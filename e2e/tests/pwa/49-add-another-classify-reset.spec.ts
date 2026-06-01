@@ -186,6 +186,58 @@ test.describe('PWA — Add Another Report classify reset (Bug 2 follow-up)', () 
             'no crisis tile may carry stale highlight after Add Another').toHaveCount(0);
     });
 
+    test('after Add Another, damage + infra highlights AND the photo strip clear', async ({ page }) => {
+        // May 2026 follow-up — the original fix only cleared the CRISIS grid.
+        // _clearCaptureState nulls state.{damage_classification,
+        // infrastructure_type} but the damage (.v4-q-opt) + infra
+        // (.v4-hit-tile) painters only toggle .is-selected on tap, so the
+        // prior report's picks stayed visually highlighted. Likewise the
+        // photo thumb strip (#v4-thumbs) was never repainted on reset, so the
+        // previous report's image bled onto the next capture screen.
+        //
+        // Simulate a completed prior report's DOM (selected damage + infra
+        // tiles, a painted photo thumb), then Add Another, then assert all
+        // three are cleared.
+        await page.evaluate(() => {
+            // The damage grid ships a default Partial selection; clear any
+            // pre-existing highlights first so the precondition is exactly 1
+            // per grid (and so this test stays robust to that default).
+            document.querySelectorAll(
+                '#v4-view-damage .v4-q-opt.is-selected, #v4-view-infra .v4-hit-tile.is-selected'
+            ).forEach((el) => el.classList.remove('is-selected'));
+            const dmg = document.querySelector('#v4-view-damage .v4-q-opt');
+            if (dmg) { dmg.classList.add('is-selected'); dmg.setAttribute('aria-checked', 'true'); }
+            const infra = document.querySelector('#v4-view-infra .v4-hit-tile');
+            if (infra) { infra.classList.add('is-selected'); infra.setAttribute('aria-checked', 'true'); }
+            const s = (window as any).state;
+            s.damage_classification = 'PARTIAL';
+            s.infrastructure_type   = 'ROAD';
+            s.v4Photos = [{ url: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' }];
+            const row = document.getElementById('v4-thumbs');
+            if (row) {
+                row.style.display = 'flex';
+                row.innerHTML = '<div class="v4-thumb"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt=""></div>';
+            }
+        });
+        // Preconditions — the dirty state is in place (also validates the
+        // selectors match the live markup).
+        await expect(page.locator('#v4-view-damage .v4-q-opt.is-selected')).toHaveCount(1);
+        await expect(page.locator('#v4-view-infra .v4-hit-tile.is-selected')).toHaveCount(1);
+        await expect(page.locator('#v4-thumbs img')).toHaveCount(1);
+
+        // ── Add Another → _clearCaptureState (clears the strip + dispatches
+        //    crisp-capture-state-cleared, which now also clears damage/infra).
+        await page.evaluate(() => (window as any)._clearCaptureState());
+        await page.waitForTimeout(50);
+
+        await expect(page.locator('#v4-view-damage .v4-q-opt.is-selected'),
+            'damage highlight must clear after Add Another').toHaveCount(0);
+        await expect(page.locator('#v4-view-infra .v4-hit-tile.is-selected'),
+            'infra highlight must clear after Add Another').toHaveCount(0);
+        await expect(page.locator('#v4-thumbs img'),
+            'photo thumbnail must clear after Add Another').toHaveCount(0);
+    });
+
     test('Bug 1: tapping the queued pill shows a toast (no silent no-op)', async ({ page }) => {
         // Capture all toasts shown during the interaction.
         const toasts: string[] = [];

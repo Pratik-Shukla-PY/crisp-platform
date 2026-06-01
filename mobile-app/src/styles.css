@@ -2643,6 +2643,10 @@ h3.nearby-bucket-header .nearby-bucket-header-count,
     animation: pulse-badge 1.5s infinite;
 }
 .sync-badge.error { background: rgba(239,68,68,0.9); }
+/* Resilience #4 — calm "needs attention" sub-state. Steady amber (NOT
+   the red .error, NO pulse) so a chronically-stuck-but-still-retrying
+   report reads as a soft nudge, never an alarm. */
+.sync-badge.attention { background: rgba(245,158,11,0.92); }
 
 /* May 2026 (operator-reported) — progress bar inside the pill.
    `.sync-badge-bar` is the track (subtle dark behind the fill).
@@ -2818,34 +2822,79 @@ h3.nearby-bucket-header .nearby-bucket-header-count,
    a max-width so it breathes on tablets. Phone input now uses box-
    sizing so it never overflows the right edge. */
 
-/* Stage shell — override generic .stage padding so the login card owns
-   the layout instead of inheriting the top-left bias. */
+/* Stage shell — flex column, top-anchored so the on-screen keyboard never
+   pushes content off-screen; content is sized to fit iPhone SE (375×667)
+   with ZERO scroll. Jun 2026 redesign — adds a back-arrow → home + a bigger
+   ripple logo + gradient "CRISP" wordmark to match the dashboard login. The
+   3-step form markup, IDs and handlers are unchanged. */
 #stage-login {
     padding: 0;
+    display: flex; flex-direction: column;
     justify-content: flex-start;   /* top-anchored — keyboard doesn't push content off-screen */
     align-items: center;
 }
-/* Spacer before the form so there's breathing room above the header on
-   tall viewports without pushing content off-screen on short ones. */
-#stage-login::before {
-    content: '';
-    flex: 0 0 20px;
+/* Back-arrow row → home. */
+#stage-login .login-topbar {
+    width: 100%; max-width: 480px; margin: 0 auto;
+    padding: 6px 16px 0;
+    display: flex; align-items: center;
+    box-sizing: border-box; flex: 0 0 auto;
+}
+.login-back {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: 12px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); font-size: 16px; cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.login-back:hover { border-color: var(--accent); color: var(--accent); }
+.login-back:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(9, 209, 199, 0.3); }
+/* Hero — ripple logo + gradient CRISP wordmark (mirrors the dashboard login). */
+#stage-login .login-hero {
+    width: 100%; text-align: center;
+    padding: 2px 24px 0;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    flex: 0 0 auto;
+}
+.login-logo-mark {
+    width: 84px; height: 84px; border-radius: 20px; overflow: hidden;
+    box-shadow: 0 12px 32px rgba(9, 209, 199, 0.22);
+}
+.login-logo-mark > svg { width: 100%; height: 100%; display: block; }
+.login-brand-name {
+    font-size: 30px; font-weight: 900; letter-spacing: 0.5px; line-height: 1;
+    background: linear-gradient(135deg, #7c3aed, #06b6d4);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
 #stage-login .stage-header {
     width: 100%;
-    padding: 40px 24px 8px;
+    padding: 8px 24px 4px;
     text-align: center;
     position: static;            /* not sticky on this stage */
     box-shadow: none;
     background: transparent;
 }
 #stage-login .stage-header h2 {
-    font-size: 1.6rem;
-    margin-bottom: 6px;
+    font-size: 1.3rem;
+    margin-bottom: 4px;
 }
 #stage-login .stage-header p {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     color: var(--muted);
+}
+/* Short viewports (iPhone SE / small Android, incl. installed-PWA notch +
+   home-indicator insets) — shrink the hero + step-3 ring so all three login
+   steps stay ZERO-scroll. Taller devices keep the full-size logo. */
+@media (max-height: 680px) {
+    .login-logo-mark { width: 60px; height: 60px; border-radius: 16px; }
+    .login-brand-name { font-size: 24px; }
+    #stage-login .login-topbar { padding-top: 4px; }
+    #stage-login .login-hero { gap: 4px; }
+    #stage-login .stage-header { padding: 4px 24px 2px; }
+    #stage-login .stage-header h2 { font-size: 1.15rem; }
+    #stage-login .stage-header p { font-size: 0.85rem; }
+    .login-success-ring { width: 56px; height: 56px; font-size: 26px; margin-top: 2px; }
+    .login-body { gap: 12px; padding: 10px 24px 16px; }
 }
 
 /* Login body — the actual form card. Max-width keeps the form readable
@@ -2854,8 +2903,8 @@ h3.nearby-bucket-header .nearby-bucket-header-count,
     width: 100%;
     max-width: 440px;
     margin: 0 auto;
-    padding: 20px 24px 32px;
-    display: flex; flex-direction: column; gap: 16px;
+    padding: 12px 24px 20px;
+    display: flex; flex-direction: column; gap: 14px;
     box-sizing: border-box;
 }
 
@@ -6605,6 +6654,18 @@ body[data-ui-v2] #stage-review .chip-btn .chip-ic ~ i.fa-solid {
 .home-sync-chip[data-state="offline"] .hsc-dot {
     background: #ef4444;
     box-shadow: 0 0 6px rgba(239, 68, 68, 0.55);
+}
+/* Resilience #4 — calm "needs attention" chip state. Amber tint (NOT
+   the red offline treatment, NO pulse) — a soft nudge for a report that
+   has cycled ≥3 HC90 pause windows; delivery still continues. */
+.home-sync-chip[data-state="attention"] {
+    border-color: rgba(245, 158, 11, 0.32);
+    background: rgba(245, 158, 11, 0.08);
+    color: #fcd34d;
+}
+.home-sync-chip[data-state="attention"] .hsc-dot {
+    background: #f59e0b;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.55);
 }
 @keyframes hsc-pulse {
     0%, 100% { opacity: 1; }

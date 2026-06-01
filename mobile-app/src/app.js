@@ -1128,6 +1128,9 @@ async function updateSyncBadge() {
         badge.style.display = 'flex';
         const syncing = visibleItems.filter(i => i.status === 'syncing').length;
         const failed = visibleItems.filter(i => i.status === 'failed').length;
+        // Resilience #4 — rows that have cycled ≥3 HC90 pause windows
+        // without progress carry a calm soft flag (NOT status='failed').
+        const needsAttention = visibleItems.filter(i => i && i._needsAttention === true).length;
 
         // BUGFIX May 2026 (operator-reported, "1 queued never leaves")
         // — compute a stage-based progress % across the queue so the
@@ -1183,6 +1186,15 @@ async function updateSyncBadge() {
         } else if (failed > 0) {
             badge.className = 'sync-badge error';
             text.textContent = `${total} ${t('sync_queued')} (${failed} ${t('sync_failed')})`;
+        } else if (needsAttention > 0) {
+            // Resilience #4 — calm escalation (NOT the red .error pill). A
+            // report has cycled through ≥3 HC90 pause windows with no
+            // progress (chronically-unreachable backend). Delivery still
+            // continues in the background via the 1-h auto-resume; this
+            // just surfaces a non-alarming "needs attention" so the user
+            // isn't left staring at a frozen "queued · N%".
+            badge.className = 'sync-badge attention';
+            text.textContent = t('sync_needs_attention') || 'Needs attention';
         } else {
             badge.className = 'sync-badge';
             // Append the % only when there's report-queue progress to
@@ -6420,29 +6432,76 @@ function setupPhotoStage() {
 }
 
 // ── Camera modal ───────────────────────────────────────────────────────────────
+// Lightweight "starting camera" spinner inside the modal — gives the first tap
+// immediate feedback while getUserMedia + the iOS permission prompt resolve
+// (the live preview is black until the stream attaches). FontAwesome is loaded
+// globally so fa-spin needs no extra CSS/i18n.
+function _showCameraLoading(modal, show) {
+    let el = document.getElementById('cam-loading');
+    if (show) {
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'cam-loading';
+            el.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:30px;color:#fff;"></i>';
+            el.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:6;background:rgba(0,0,0,0.55);pointer-events:none;';
+            modal.appendChild(el);
+        }
+        el.style.display = 'flex';
+    } else if (el) {
+        el.style.display = 'none';
+    }
+}
+
 function openCameraModal() {
     const modal = document.getElementById('camera-modal');
+    // HC97 — re-entrancy guard: `display==='flex'` is set synchronously below,
+    // so a rapid second tap (while getUserMedia is still resolving on iOS) is
+    // ignored rather than firing an overlapping getUserMedia. Fixes the "had to
+    // tap the camera button multiple times" report.
+    if (!modal || modal.style.display === 'flex') return;
     modal.style.display = 'flex';
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+    _showCameraLoading(modal, true);
+    // HC97 — request the HIGHEST resolution the camera will give over
+    // getUserMedia (ideal 4K). iOS Safari has no ImageCapture.takePhoto(), so
+    // we snapshot a video frame; WITHOUT this hint the browser returns a low
+    // default (~640×480 / 720p) — that was the "image quality reduced/capped"
+    // report. `ideal` never rejects: the device returns its best ≤ 4K.
+    navigator.mediaDevices.getUserMedia({
+        video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 3840 },
+            height: { ideal: 2160 },
+        },
+        audio: false,
+    })
         .then(stream => {
+            _showCameraLoading(modal, false);
+            // If the user closed the modal during the getUserMedia/permission
+            // wait, don't attach a now-orphaned stream — stop it.
+            if (modal.style.display !== 'flex') {
+                stream.getTracks().forEach(tk => { try { tk.stop(); } catch (_) {} });
+                return;
+            }
             state.cameraStream = stream;
             document.getElementById('camera-stream').srcObject = stream;
-            // May 2026 redesign — wire the overlay layers (status bar
-            // with live GPS, toolbar, focus reticle, …). Subsequent
-            // commits extend _attachCameraOverlay with compass /
-            // toolbar bindings / tap-to-focus; this initial pass
-            // only paints the GPS status bar.
+            // May 2026 redesign — wire the overlay layers (status bar with live
+            // GPS, toolbar, focus reticle, tap-to-focus).
             try { _attachCameraOverlay(stream); }
             catch (e) { console.warn('[camera] overlay attach failed:', e); }
         })
         .catch((err) => {
+            _showCameraLoading(modal, false);
             modal.style.display = 'none';
             // Show friendly message then fall back to file picker
             const msg = err.name === 'NotAllowedError'
                 ? t('camera_blocked_toast')
                 : t('camera_unavailable_toast');
             showToast(msg);
-            document.getElementById('file-camera').click();
+            // HC97 — fall back through the V4 file input when present: its
+            // change handler routes via _handlePhoto → both capture + review
+            // strips repaint. Legacy #file-camera is the backstop.
+            const _fb = document.getElementById('v4-file-camera') || document.getElementById('file-camera');
+            if (_fb) _fb.click();
         });
 }
 
@@ -9164,6 +9223,25 @@ async function _submitReportInner() {
             return id;
         })();
 
+        // Resilience #1 (prevention) — guarantee a photo-intended report always
+        // persists at least one uploadable byte source. A degraded capture (the
+        // no-op-blur path) can leave `state.photoBlob` set but `state.photoDataUrl`
+        // null; without this, `hasPhoto` below reads false → the captured photo is
+        // silently dropped from the report (and, if variants ALSO failed, the
+        // drain wedges with no bytes to send). Encode the blob to a data-URL NOW —
+        // before `hasPhoto` is derived — so the legacy `item.photo` fallback is
+        // always present when a photo was captured. No-op on the happy path
+        // (variants/blur already set `photoDataUrl`). Makes the "stuck at N%"
+        // wedge unreachable from capture.
+        if (!state.photoDataUrl && state.photoBlob) {
+            try {
+                state.photoDataUrl = await _blobToDataUrl(state.photoBlob);
+                console.log('[submit] resilience#1: recovered photoDataUrl from photoBlob (encode/blur path left it unset)');
+            } catch (e) {
+                console.warn('[submit] resilience#1: photoBlob→dataUrl recovery failed:', e?.message || e);
+            }
+        }
+
         const hasPhoto = !!state.photoDataUrl;
         const hasAudio = !!state.audioBlob;
         const extraPhotoCount = state.extraPhotos.length;
@@ -9673,9 +9751,131 @@ function _buildVariantWork(item) {
     return out;
 }
 
+// ── Resilience #5 (stuck-chunk auto-recovery, Jun 2026) ──────────────
+// A chunk the backend permanently rejects — 410 Gone (media hard-
+// abandoned: checksum_mismatch / original_too_large), 409 (upload-
+// generation mismatch), or a persistent 400/422 on the same seq — makes
+// _uploadVariantTier resume from chunkProgress and re-POST that same
+// chunk every drain → HC90 cycles 1 h forever (HC90 is per-report; there
+// is no per-variant escape hatch). We track consecutive HARD-4xx failures
+// per (mediaId, seq); after K we regenerate the media row (a fresh
+// media_id resets chunkProgress, so the next drain uploads a CLEAN server
+// row that bypasses the corrupt/abandoned one — the backend creates a new
+// Media on the first chunk for an unknown id). Bounded by R
+// regenerations; after that the bytes are bad at source (oversize
+// ORIGINAL / genuine corruption), so we give up THAT tier: defer it,
+// signal the backend so expected_media reconciles (the report still SYNCs
+// on its landed tiers), and raise the calm needs-attention flag
+// (resilience #4). Transient 5xx / 429 / timeout / network errors carry
+// no hard status → they stay on the existing sendWithRetry backoff + HC90
+// and never trigger a regen.
+const CHUNK_HARD_FAIL_K = 3;            // hard rejections of ONE chunk before a media-id regen
+const CHUNK_MEDIAID_REGEN_R = 2;        // media-id regenerations before giving up the tier
+const _CHUNK_HARD_STATUSES = new Set([400, 409, 410, 422]);
+const _chunkHardFailCounts = new Map(); // `${mediaId}:${seq}` → consecutive hard-4xx count
+
+// Extract an HTTP status from a thrown upload error. The binary path
+// (sendFormData) attaches err.status; the legacy base64 path (sendJSON)
+// only embeds it in the message ("HTTP 410"). Returns null for
+// status-less transient errors (Timeout / Network error).
+function _errHttpStatus(err) {
+    if (!err) return null;
+    if (typeof err.status === 'number') return err.status;
+    const m = /HTTP (\d{3})/.exec((err && err.message) || '');
+    return m ? parseInt(m[1], 10) : null;
+}
+
+// POST /media/mark-deferred for a SINGLE tier/group. Reused by the
+// stuck-chunk give-up (reason 'encode_failed') and the per-variant orphan
+// recovery (reason 'orphan_no_source'). Auth-free endpoint; idempotent +
+// non-fatal on 401/5xx/offline. NOTE: the backend only accepts the
+// reasons {bandwidth_tier_deferred, encode_failed, orphan_no_source} —
+// any other value 422s, so callers MUST pass a valid one.
+async function _signalTierDeferred(item, reportId, unit, reason) {
+    if (!reportId || !unit || !unit.groupId) return;
+    const TIER_MAP = { small: 'SMALL', medium: 'MEDIUM', original: 'ORIGINAL' };
+    const backendTier = TIER_MAP[unit.tier];
+    if (!backendTier) return;
+    const body = { tiers_by_group: { [unit.groupId]: [backendTier] }, reason };
+    if (unit.variant && unit.variant.mediaId) {
+        body.media_ids_by_group_and_tier = { [unit.groupId]: { [backendTier]: unit.variant.mediaId } };
+    }
+    try {
+        const res = await fetch(`${API_BASE}/reports/${reportId}/media/mark-deferred`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+            console.warn(`[mark-deferred:${reason}] HTTP ${res.status} for ${unit.label} — non-fatal`);
+        }
+    } catch (e) {
+        console.warn(`[mark-deferred:${reason}] POST failed (non-fatal):`, e?.message || e);
+    }
+}
+
+// Per-chunk hard-failure recovery. Called from both upload paths' catch
+// blocks BEFORE the re-throw. Mutates unit.variant (regen or give-up) on
+// a hard 4xx; no-ops on transient errors so the normal backoff owns them.
+async function _maybeRecoverStuckChunk(item, reportId, unit, seq, err) {
+    const status = _errHttpStatus(err);
+    if (!status || !_CHUNK_HARD_STATUSES.has(status)) return;  // transient → leave to backoff/HC90
+    const variant = unit.variant;
+    if (!variant || !variant.mediaId) return;
+    const key = `${variant.mediaId}:${seq}`;
+    const n = (_chunkHardFailCounts.get(key) || 0) + 1;
+    _chunkHardFailCounts.set(key, n);
+    if (n < CHUNK_HARD_FAIL_K) {
+        console.warn(`[ChunkRecover] ${unit.label} seq=${seq} hard HTTP ${status} (${n}/${CHUNK_HARD_FAIL_K}) — retry same row`);
+        return;
+    }
+    const regens = variant.mediaIdRegens || 0;
+    if (regens < CHUNK_MEDIAID_REGEN_R) {
+        const oldId = variant.mediaId;
+        variant.mediaId = genUUID();
+        variant.mediaIdRegens = regens + 1;
+        variant.chunkProgress = 0;
+        variant.frozenChunkSize = null;
+        variant.frozenTotalChunks = null;
+        variant.fullAssetChecksum = null;
+        // Drop the abandoned id's stale per-chunk counters.
+        for (const k of Array.from(_chunkHardFailCounts.keys())) {
+            if (k.indexOf(`${oldId}:`) === 0) _chunkHardFailCounts.delete(k);
+        }
+        try { await enqueueReport(item); } catch (_) {}
+        console.warn(
+            `[ChunkRecover] ${unit.label}: seq=${seq} hard-rejected ${CHUNK_HARD_FAIL_K}× (HTTP ${status}); ` +
+            `regenerated media_id ${String(oldId).slice(0, 8)}→${String(variant.mediaId).slice(0, 8)} ` +
+            `(regen ${variant.mediaIdRegens}/${CHUNK_MEDIAID_REGEN_R}); next drain uploads a clean row from seq 0.`,
+        );
+        return;
+    }
+    // Exhausted R regens — the bytes are bad at source. Give up THIS tier.
+    variant.deferred = true;
+    variant.deferredReason = 'chunk_rejected';   // local label (never sent as a backend reason)
+    variant.deferredAt = Date.now();
+    variant.chunkRejectedGiveUp = true;          // sticky → top-of-fn early-return stops re-attempts
+    item._needsAttention = true;                 // resilience #4 calm surface
+    // Backend reason MUST be one of {bandwidth_tier_deferred, encode_failed,
+    // orphan_no_source}; 'encode_failed' best fits "the bytes won't deliver".
+    await _signalTierDeferred(item, reportId, unit, 'encode_failed');
+    try { await enqueueReport(item); } catch (_) {}
+    console.warn(
+        `[ChunkRecover] ${unit.label}: seq=${seq} still hard-rejected after ${CHUNK_MEDIAID_REGEN_R} ` +
+        `media-id regens (HTTP ${status}); giving up this tier (deferred=chunk_rejected), signalled ` +
+        `mark-deferred(encode_failed), flagged needs-attention. Report reconciles SYNCED on its landed tiers.`,
+    );
+}
+
 async function _uploadVariantTier(item, reportId, unit) {
     const { tier, groupId, variant, label, clientBlurApplied } = unit;
     if (variant.complete) return;
+    // Resilience #5 — a tier whose chunks the backend permanently rejected
+    // after K hard 4xx + R media-id regens. Bytes are bad at source; never
+    // re-attempt (mark-deferred already told the backend; the report
+    // reconciles SYNCED on its landed tiers). Sticky flag — survives the
+    // deferred-clear lower down because it is checked here, before it.
+    if (variant.chunkRejectedGiveUp) return;
     if (!variant.dataUrl) {
         // K.3.c (May 2026, Phase K) — re-encode fallback before
         // silently skipping. Pre-fix, a missing dataUrl warned + returned;
@@ -9719,14 +9919,32 @@ async function _uploadVariantTier(item, reportId, unit) {
         } else {
             variant.deferred = true;
             variant.deferredReason = 'orphan_no_source';
-            variant.deferredAt = Date.now();
+            variant.deferredAt = variant.deferredAt || Date.now();
             try { await enqueueReport(item); } catch (_) {}
-            console.warn(
-                `[Upload] ${label}: missing dataUrl AND no legacy source ` +
-                `to recover from — marking deferred=orphan_no_source. ` +
-                `Backend will receive 'mark-deferred' on next soft-drain ` +
-                `(K.3.a) and the dashboard will render the chip.`,
-            );
+            // Resilience #6 — once this orphaned tier is past the 10-min
+            // age gate (so no still-in-flight encode will populate the
+            // dataUrl), signal the backend DIRECTLY for THIS tier/group so
+            // expected_media decrements and the report reconciles to
+            // SYNCED + the orphan_no_source chip NOW, instead of looping
+            // re-defer until the 14-day reconcile drop. Idempotent +
+            // non-fatal. Pre-gate we keep the old behaviour (soft-drain
+            // owns the signal) so a transient first-pass race is never
+            // punished.
+            const _orphanAgeMs = Date.now() - (item.timestamp || item.client_created_at_ms || 0);
+            if (reportId && _orphanAgeMs > 10 * 60 * 1000) {
+                await _signalTierDeferred(item, reportId, unit, 'orphan_no_source');
+                console.warn(
+                    `[VariantDrop:orphan] ${label}: no source after ${Math.round(_orphanAgeMs / 60000)} min — ` +
+                    `signalled mark-deferred(orphan_no_source); report reconciles SYNCED on its landed tiers.`,
+                );
+            } else {
+                console.warn(
+                    `[Upload] ${label}: missing dataUrl AND no legacy source ` +
+                    `to recover from — marking deferred=orphan_no_source. ` +
+                    `Backend will receive 'mark-deferred' on next soft-drain ` +
+                    `(K.3.a) and the dashboard will render the chip.`,
+                );
+            }
             return;
         }
     }
@@ -9785,14 +10003,28 @@ async function _uploadVariantTier(item, reportId, unit) {
         const submittedAt = item.timestamp || item.client_created_at_ms || Date.now();
         const ageMs = Date.now() - submittedAt;
         if (ageMs > _ONE_DAY_MS) {
-            console.log(
-                `[Upload] ${label}: 24h timeout (age=${Math.round(ageMs/3600000)}h since submit) — ` +
-                `marking deferred. Variant.complete=${variant.complete}, chunkProgress=${variant.chunkProgress||0}.`,
+            // Resilience #6 — the 24-h cap is dropping this tier. Make it
+            // VISIBLE (never a silent dequeue): signal the backend
+            // immediately so expected_media reconciles + the dashboard
+            // chip renders, and raise the calm needs-attention flag so a
+            // chronically-slow reporter's lost ORIGINAL is surfaced rather
+            // than vanishing. SMALL already gates stages.photo, so the
+            // report stays delivered + SYNCED on its landed tiers.
+            console.warn(
+                `[VariantDrop:24h] ${label}: 24h timeout (age=${Math.round(ageMs / 3600000)}h since submit) — ` +
+                `dropping this tier. complete=${variant.complete}, chunkProgress=${variant.chunkProgress || 0}.`,
             );
             variant.deferred = true;
             variant.deferredReason = '24h_timeout';
             variant.deferredAt = Date.now();
+            item._needsAttention = true;
             try { await enqueueReport(item); } catch (_) {}
+            // Backend reason must be valid; 'bandwidth_tier_deferred' is the
+            // canonical "couldn't deliver this tier in the time window" one
+            // (same reason the existing soft-drain sends for these).
+            if (reportId) {
+                await _signalTierDeferred(item, reportId, unit, 'bandwidth_tier_deferred');
+            }
             return;
         }
     }
@@ -9801,6 +10033,10 @@ async function _uploadVariantTier(item, reportId, unit) {
     // gates whether we attempt the tier at all.
     // Clear any prior deferral — we're actually uploading this time.
     if (variant.deferred) {
+        // Resilience #6 — instrument the recovery so a deferred tier that
+        // comes back to life (network recovered / source re-encoded) is
+        // visible in logs instead of a silent state flip.
+        console.log(`[VariantRecover] ${label}: previously deferred (${variant.deferredReason || '?'}) — resuming upload.`);
         variant.deferred = false;
         variant.deferredReason = null;
     }
@@ -9915,10 +10151,16 @@ async function _uploadVariantTier(item, reportId, unit) {
                 // Wedge-detection support: stamp progress so resume hooks can
                 // tell a healthy retry loop from one wedged on a dead fetch.
                 _lastChunkPostAt = Date.now();
+                // Resilience #5 — chunk landed; clear its hard-fail counter
+                // so a later transient blip doesn't accumulate toward K.
+                _chunkHardFailCounts.delete(`${mediaId}:${seq}`);
             } catch (err) {
                 pwaNetworkDowngrade();
                 variant.chunkProgress = seq;
                 try { await enqueueReport(item); } catch (_) {}
+                // Resilience #5 — regen the media row after K hard 4xx, give
+                // up the tier after R regens. No-op on transient errors.
+                try { await _maybeRecoverStuckChunk(item, reportId, unit, seq, err); } catch (_) {}
                 throw err;
             }
             variant.chunkProgress = seq + 1;
@@ -9981,12 +10223,17 @@ async function _uploadVariantTier(item, reportId, unit) {
             // Wedge-detection support: stamp progress so resume hooks can
             // tell a healthy retry loop from one wedged on a dead fetch.
             _lastChunkPostAt = Date.now();
+            // Resilience #5 — chunk landed; clear its hard-fail counter.
+            _chunkHardFailCounts.delete(`${mediaId}:${seq}`);
         } catch (err) {
             pwaNetworkDowngrade();
             // Persist the partial progress before bubbling out so a future
             // retry picks up from `seq`, not from 0.
             variant.chunkProgress = seq;
             try { await enqueueReport(item); } catch (_) {}
+            // Resilience #5 — regen the media row after K hard 4xx, give up
+            // the tier after R regens. No-op on transient errors.
+            try { await _maybeRecoverStuckChunk(item, reportId, unit, seq, err); } catch (_) {}
             throw err;
         }
         variant.chunkProgress = seq + 1;
@@ -9997,6 +10244,104 @@ async function _uploadVariantTier(item, reportId, unit) {
     }
     variant.complete = true;
     try { await enqueueReport(item); } catch (_) {}
+}
+
+// Resilience #2 (backstop, Jun 2026) — terminal recovery for the
+// "photo intended but zero uploadable bytes" wedge. Reached ONLY from
+// trySendQueuedReport's photo block when _buildVariantWork()===[] AND
+// item.photo is falsy on a serverId-set, photo-intended row. Prevention
+// (resilience #1, in _submitReportInner) makes this practically
+// unreachable from a fresh capture; this defends corrupt/legacy IDB rows
+// and any future capture-path regression so the drain can never wedge.
+//
+// Behaviour ("deliver + honest note", operator-chosen):
+//   • 10-min age gate (mirrors _isOrphanQueueRow) so transient /
+//     in-flight / encode-race windows never trip it.
+//   • Signal the backend (mark-deferred, reason 'orphan_no_source') for
+//     the main photo group + every extra group so expected_media
+//     decrements and the dashboard reconciles to SYNCED + the existing
+//     orphan_no_source chip. Idempotent; non-fatal on 401/5xx/offline.
+//   • Terminal locally: stages.photo=true (the block is never re-entered),
+//     null the (absent) byte fallbacks, re-enqueue. Reconcile dequeues
+//     on a later pass once the server shows it complete.
+//   • One honest toast (i18n upload_photo_unavailable) + a structured log.
+// Deliberately NOT status='failed' — the report IS delivered, just
+// without the photo; the dormant red terminal-failed UI stays dormant.
+async function _backstopPhotoIntendedNoBytes(item, reportId) {
+    const ageMs = Date.now() - (item.timestamp || 0);
+    if (ageMs < 10 * 60 * 1000) {
+        // Too young — a variant encode or an in-flight upload may still
+        // populate bytes on a later drain. Do nothing this pass; the row
+        // stays queued and HC90 / heartbeat / periodic sweep re-drain it.
+        console.log(
+            `[Backstop:photo-no-bytes] ${String(reportId).slice(0, 8)} ` +
+            `age=${Math.round(ageMs / 1000)}s < 600s gate — deferring backstop`,
+        );
+        return;
+    }
+    // No variant structure exists here (that is the whole point), so we
+    // signal all three canonical tiers for every group id we know about.
+    const ALL_TIERS = ['SMALL', 'MEDIUM', 'ORIGINAL'];
+    const tiersByGroup = {};
+    if (item.photoGroupId) tiersByGroup[item.photoGroupId] = ALL_TIERS.slice();
+    for (const ev of (item.extraPhotosVariants || [])) {
+        if (ev && ev.groupId) tiersByGroup[ev.groupId] = ALL_TIERS.slice();
+    }
+    if (Object.keys(tiersByGroup).length > 0) {
+        try {
+            const res = await fetch(
+                `${API_BASE}/reports/${reportId}/media/mark-deferred`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tiers_by_group: tiersByGroup,
+                        reason: 'orphan_no_source',
+                    }),
+                },
+            );
+            if (!res.ok) {
+                console.warn(
+                    `[Backstop:photo-no-bytes] mark-deferred HTTP ${res.status} ` +
+                    `for ${String(reportId).slice(0, 8)} — non-fatal; backend ` +
+                    `reconciliation catches it eventually`,
+                );
+            }
+        } catch (e) {
+            console.warn('[Backstop:photo-no-bytes] mark-deferred POST failed (non-fatal):',
+                e?.message || e);
+        }
+    } else {
+        console.warn(
+            `[Backstop:photo-no-bytes] ${String(reportId).slice(0, 8)} has no ` +
+            `photoGroupId / extra groups to signal — flipping stages.photo anyway ` +
+            `so the drain stops looping`,
+        );
+    }
+    // Terminal local state — flip stages.photo so the block is never
+    // re-entered; free the (absent) byte fallbacks; persist.
+    if (!item.stages) item.stages = {};
+    item.stages.photo = true;
+    item.photo = null;
+    item.extraPhotos = [];
+    item._backstopPhotoNoBytesAt = Date.now();
+    try { await enqueueReport(item); } catch (_) {}
+    console.warn(
+        `[Backstop:photo-no-bytes] ${String(reportId).slice(0, 8)} delivered ` +
+        `WITHOUT photo (no uploadable bytes after ${Math.round(ageMs / 1000)}s); ` +
+        `stages.photo forced true, ${Object.keys(tiersByGroup).length} group(s) ` +
+        `mark-deferred(orphan_no_source). Report reconciles to SYNCED.`,
+    );
+    // Honest one-time note — NOT a failure state.
+    try {
+        if (typeof showToast === 'function') {
+            showToast(
+                (typeof t === 'function' ? t('upload_photo_unavailable') : null) ||
+                "Report sent — the photo couldn't be uploaded.",
+                'info',
+            );
+        }
+    } catch (_) { /* toast is best-effort */ }
 }
 
 async function _uploadLegacyPhoto(item, reportId) {
@@ -10193,11 +10538,21 @@ async function trySendQueuedReport(item) {
     item.sendAttempts = (item.sendAttempts || 0) + 1;
     if (item.sendAttempts > MAX_SEND_ATTEMPTS) {
         item.sendAttemptsExhaustedAt = _hc90Now;
+        // Resilience #4 (flaky-backend escalation) — count how many full
+        // pause cycles this row has burned. After ≥3 (≈3 h against a
+        // chronically-unreachable backend) raise a CALM soft flag so the
+        // UI can surface "needs attention" WITHOUT ever stopping delivery
+        // (the 1-h auto-resume below is untouched) and WITHOUT the red
+        // terminal-failed state. Cleared the moment any stage progresses
+        // (see the HC90 finally-block reset).
+        item.pauseCycles = (item.pauseCycles || 0) + 1;
+        if (item.pauseCycles >= 3) item._needsAttention = true;
         try { await enqueueReport(item); } catch (_) {}
         console.warn(
             `[Sync] ${crid?.slice(0, 8) || '?'} send-attempts exhausted ` +
             `(${item.sendAttempts}/${MAX_SEND_ATTEMPTS}); pausing 1 h before auto-resume. ` +
-            `Persistent failure — backend 5xx, wedged media id, or unreachable network.`,
+            `Persistent failure — backend 5xx, wedged media id, or unreachable network. ` +
+            `pauseCycles=${item.pauseCycles}${item._needsAttention ? ' (needs-attention)' : ''}.`,
         );
         try { showToast(t('upload_paused_will_retry')); } catch (_) {}
         return;
@@ -10445,6 +10800,16 @@ async function trySendQueuedReport(item) {
                 } else if (item.photo) {
                     // Legacy single-photo path (no variants on this queue item).
                     await _uploadLegacyPhoto(item, reportId);
+                } else {
+                    // Resilience #2 (backstop) — a photo was intended (we entered
+                    // this block ⇒ stages.photo was false ⇒ hasPhoto was true at
+                    // submit) but there are NO uploadable bytes: _buildVariantWork()
+                    // returned [] AND there is no legacy item.photo. Without this
+                    // branch stages.photo never flips → the drain loops on this row
+                    // forever ("stuck at N%"). Deliver the report + record an honest
+                    // one-time note. Age-gated inside the helper so transient
+                    // encode / in-flight races never trip it.
+                    await _backstopPhotoIntendedNoBytes(item, reportId);
                 }
             } catch (e) {
                 console.warn(`Photo variant upload failed:`, e.message);
@@ -10762,6 +11127,12 @@ async function trySendQueuedReport(item) {
                 && (item.sendAttempts || 0) > 0) {
                 item.sendAttempts = 0;
                 item.sendAttemptsExhaustedAt = 0;
+                // Resilience #4 — a stage advanced this pass, so the
+                // backend is reachable and the report IS progressing.
+                // Clear the flaky-backend escalation so the calm
+                // "needs attention" surface resolves on its own.
+                item.pauseCycles = 0;
+                item._needsAttention = false;
                 try { await enqueueReport(item); } catch (_) {}
             }
         } catch (_) { /* counter reset is best-effort */ }
@@ -11239,6 +11610,10 @@ function setupAuthUI() {
         goToStage('stage-home');
     });
 
+    // Back-arrow (top-left) → home, from any login step.
+    const loginBackHome = document.getElementById('btn-login-back-home');
+    if (loginBackHome) loginBackHome.addEventListener('click', () => goToStage('stage-home'));
+
     // ── H. Settings ──────────────────────────────────────────────────
     const btnLogout = document.getElementById('btn-settings-logout');
     if (btnLogout) btnLogout.addEventListener('click', async () => {
@@ -11623,10 +11998,19 @@ function setupSendStage() {
         });
     }
 
-    // HC79 — My Reports inline link goes to stage-history.
+    // My Reports inline link. Must RENDER, not just switch stages:
+    // openMyReports() reconciles the IDB queue against the server + re-renders
+    // both the in-flight and submitted lists, so a just-submitted report shows
+    // immediately. Plain goToStage('stage-history') only swapped the DOM class
+    // (no render), so the report stayed hidden until a full refresh re-entered
+    // via the home path. Mirror the home button (which calls openMyReports).
     const successMyReportsBtn = document.getElementById('btn-success-my-reports');
     if (successMyReportsBtn) {
-        successMyReportsBtn.addEventListener('click', () => goToStage('stage-history'));
+        successMyReportsBtn.addEventListener('click', () => {
+            if (typeof openMyReports === 'function') openMyReports();
+            else if (typeof window.openMyReports === 'function') window.openMyReports();
+            else goToStage('stage-history');
+        });
     }
 
     // HC79 — contribution / tier strip routes to the rewards page.
@@ -14989,6 +15373,15 @@ function _clearCaptureState() {
     }
     // Drop the v4Photos array so the strip's render sees empty state.
     state.v4Photos = [];
+    // The __crispV4RefreshCapStrip hook above only re-evaluates the
+    // capture-stage Continue button — it does NOT repaint #v4-thumbs (the
+    // photo thumbnail strip). _renderThumbs is the only thing that does, and
+    // it isn't reachable from here. Clear the strip's DOM directly so the
+    // previous report's photo can't bleed onto the next capture screen after
+    // "Report another". Belt-and-braces with _renderThumbs's own
+    // clear-when-empty (v4-flow.js, May 2026).
+    const _v4ThumbsRow = document.getElementById('v4-thumbs');
+    if (_v4ThumbsRow) { _v4ThumbsRow.innerHTML = ''; _v4ThumbsRow.style.display = 'none'; }
 
     // BUGFIX May 2026 — broadcast a "capture state cleared" event so
     // module-scoped state living OUTSIDE app.js (v4-flow.js's
@@ -15216,6 +15609,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     // pounding on a row it can't make progress on. Idempotent — the
     // 10-min age gate inside _isOrphanQueueRow protects in-flight rows.
     try { await _selfHealOrphans(); } catch (e) { _silent('selfHealOrphans:boot', e); }
+
+    // 3c. Resilience #3 (boot reconcile, Jun 2026) — front-load one
+    // pass of _reconcileQueueAgainstServer at startup, AFTER self-heal
+    // and BEFORE startRetryLoop. A report that fully landed at the
+    // backend in a prior session (e.g. the tab was closed in the
+    // window between the final upload and the dequeue) otherwise lingers
+    // in IndexedDB until the first periodic/heartbeat reconcile fires —
+    // showing a stale "queued" chip and wasting an early retry tick.
+    // Reconciling here dequeues already-complete rows immediately on the
+    // next boot. Idempotent + offline-safe (early-returns when offline /
+    // no rows / no auth); keeps every unfinished row (no data loss); no
+    // drain-lock / _retryLoopRunning interaction since the loop hasn't
+    // started yet.
+    try { await _reconcileQueueAgainstServer(); } catch (e) { _silent('reconcile:boot', e); }
 
     // 4. Start persistent retry loop for any queued reports
     startRetryLoop();

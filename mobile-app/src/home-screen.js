@@ -1988,10 +1988,15 @@
         const label = document.getElementById('home-sync-chip-label');
         if (!chip || !label) return;
         let queueCount = 0;
+        let needsAttention = false;
         try {
             if (typeof window.getAllQueued === 'function') {
                 const all = await window.getAllQueued();
                 queueCount = Array.isArray(all) ? all.length : 0;
+                // Resilience #4 — surface the calm flaky-backend escalation
+                // on the home sync chip too (soft flag set after ≥3 HC90
+                // pause cycles with no progress).
+                needsAttention = Array.isArray(all) && all.some(i => i && i._needsAttention === true);
             }
         } catch (_) {}
         // HC33 — empty-queue → hide the chip entirely. No "Online"
@@ -2008,6 +2013,13 @@
         if (!online) {
             state = 'offline';
             text = (t('status_pill_offline_n') || 'Offline · {n} queued').replace('{n}', String(queueCount));
+        } else if (needsAttention) {
+            // Resilience #4 — calm escalation after ≥3 HC90 pause cycles
+            // with no progress. Delivery still continues in the
+            // background; this is a soft nudge, never a failure state.
+            // Tapping opens the status sheet for the full detail.
+            state = 'attention';
+            text = (t('sync_needs_attention') || 'Needs attention');
         } else if (window.__crispConnectivityWeak === true) {
             state = 'weak';
             // Weak signal AND queue present — communicate that we're

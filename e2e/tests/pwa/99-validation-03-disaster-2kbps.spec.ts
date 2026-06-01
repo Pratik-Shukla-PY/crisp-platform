@@ -153,20 +153,32 @@ test.describe('VALIDATION 03 — 2 KBPS sustained disaster network', () => {
         });
         expect(onList, 'report not visible to dashboard after SMALL landed').toBeTruthy();
 
-        // ── Phase B: poll for full SYNCED OR deferred-tier marker, 5-min budget ──
+        // ── Phase B: at 2 KBPS, SMALL lands fast; MEDIUM/ORIGINAL upload
+        // slowly. Per the v240 delivery design the PWA NO LONGER pre-emptively
+        // defers higher tiers — it keeps trying for up to 24 h and drops a
+        // tier only at the 24 h cap (or on a genuine orphan). So the correct
+        // end-state within a 5-min budget is: SMALL complete + report visible,
+        // and every higher tier in a HEALTHY state — complete, explicitly
+        // deferred/abandoned, OR pending WITH FORWARD PROGRESS
+        // (completion_pct > 0). A higher tier stuck `pending` at 0 % after the
+        // budget is a wedge (the real defect this scenario guards against).
+        const _higherHealthy = (m: any) =>
+            m.assembly_status === 'complete'
+            || !!m.abandon_reason                                                   // explicitly deferred / abandoned
+            || (m.assembly_status === 'pending' && (m.completion_pct || 0) > 0);     // actively progressing
         const phaseBStart = Date.now();
         const truthEnd = await pollUntil(
             () => pgReportTruth(cid!),
             (t) => {
-                // Either fully SYNCED…
+                const small = t.media.find(m => m.resolution_tier === 'SMALL');
+                if (!small || small.assembly_status !== 'complete') return false;
+                // Fully SYNCED…
                 if (t.sync_status === 'SYNCED'
                     && t.media.every(m => m.assembly_status === 'complete')) return true;
-                // …or higher tiers are marked deferred with the right reason.
-                const deferred = t.media.filter(m =>
-                    (m.resolution_tier === 'MEDIUM' || m.resolution_tier === 'ORIGINAL')
-                    && m.abandon_reason === 'bandwidth_tier_deferred',
-                );
-                return deferred.length > 0;
+                // …or SMALL delivered + every higher tier healthy (complete /
+                // deferred / progressing) — the v240 "keep trying" steady state.
+                const higher = t.media.filter(m => m.resolution_tier === 'MEDIUM' || m.resolution_tier === 'ORIGINAL');
+                return higher.length > 0 && higher.every(_higherHealthy);
             },
             { timeoutMs: 300_000, intervalMs: 5000 },
         );
@@ -182,35 +194,31 @@ test.describe('VALIDATION 03 — 2 KBPS sustained disaster network', () => {
             })),
         });
 
-        // Acceptance: either full SYNCED OR explicit deferred markers + SMALL still complete
+        // Acceptance (v240 delivery design): SMALL must deliver + the report
+        // must be dashboard-visible (both verified above), and every higher
+        // tier must be in a HEALTHY state — complete, explicitly
+        // deferred/abandoned, OR pending with forward progress
+        // (completion_pct > 0). A higher tier wedged `pending` at 0 % after the
+        // 5-min budget is the only failure (a true stuck-state).
+        //
+        // NOTE (v240): the PWA no longer pre-emptively marks
+        // bandwidth_tier_deferred on slow links — it keeps trying every drain
+        // for up to 24 h, dropping a tier only at the 24 h cap or on a genuine
+        // orphan. So a deferred MARKER is NOT required here; that signal path
+        // is exercised by backend test_mark_deferred + 121-offline-queue-
+        // resilience instead.
         const fullSynced = truthEnd.sync_status === 'SYNCED'
             && truthEnd.media.every(m => m.assembly_status === 'complete');
-        const partialWithDeferred = truthEnd.media.some(m =>
-            m.resolution_tier === 'SMALL' && m.assembly_status === 'complete'
-        ) && truthEnd.media.some(m => m.abandon_reason === 'bandwidth_tier_deferred');
+        const smallComplete = truthEnd.media.some(m =>
+            m.resolution_tier === 'SMALL' && m.assembly_status === 'complete');
+        const higherTiers = truthEnd.media.filter(m =>
+            m.resolution_tier === 'MEDIUM' || m.resolution_tier === 'ORIGINAL');
+        const allHigherHealthy = higherTiers.length > 0 && higherTiers.every(_higherHealthy);
         expect(
-            fullSynced || partialWithDeferred,
-            `on 2 KBPS, must either SYNC fully or explicitly mark deferred — got ` +
-            `sync=${truthEnd.sync_status} media=${JSON.stringify(truthEnd.media.map(m => ({ t: m.resolution_tier, s: m.assembly_status, r: m.abandon_reason })))}`,
+            smallComplete && allHigherHealthy,
+            `on 2 KBPS: SMALL must deliver + every higher tier must be complete / deferred / progressing (not wedged at 0%) — got ` +
+            `sync=${truthEnd.sync_status} media=${JSON.stringify(truthEnd.media.map(m => ({ t: m.resolution_tier, s: m.assembly_status, pct: m.completion_pct, r: m.abandon_reason })))}`,
         ).toBe(true);
-
-        // Finding 1 fix verification (May 2026): if SMALL landed and full
-        // SYNC isn't possible at 2 KBPS, the PWA MUST have signalled
-        // mark-deferred for the higher tiers so the dashboard chip is
-        // accurate. Verify at least one MEDIUM or ORIGINAL Media row exists
-        // with abandon_reason='bandwidth_tier_deferred' (the chip trigger).
-        if (!fullSynced) {
-            const deferred = truthEnd.media.filter(m =>
-                (m.resolution_tier === 'MEDIUM' || m.resolution_tier === 'ORIGINAL')
-                && m.abandon_reason === 'bandwidth_tier_deferred',
-            );
-            expect(
-                deferred.length,
-                `pre-emptive defer must signal mark-deferred so dashboard chip fires — ` +
-                `got ${deferred.length} deferred placeholders. media=` +
-                JSON.stringify(truthEnd.media.map(m => ({ t: m.resolution_tier, r: m.abandon_reason }))),
-            ).toBeGreaterThanOrEqual(1);
-        }
 
         writeArtifact(resultDir, '05_L2_wire.json', wireLog);
         writeArtifact(resultDir, '06_summary.json', {

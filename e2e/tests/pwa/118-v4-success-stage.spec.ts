@@ -263,14 +263,18 @@ test.describe('PWA — HC79 success-stage live mission-control redesign', () => 
         expect(overflow.stageH).toBeGreaterThan(500);
     });
 
-    test('@smoke all 9 brief-mandated elements render', async ({ page }) => {
+    test('@smoke all 8 brief-mandated elements render (devid pill dropped May 2026)', async ({ page }) => {
         await openSuccessStage(page);
         // 1. Brand cluster
         await expect(page.locator('#btn-success-brand .home-brand-logo svg')).toBeVisible();
         await expect(page.locator('#btn-success-brand .home-brand-name')).toBeVisible();
-        // 2. Devid pill
-        await expect(page.locator('#btn-success-devid')).toBeVisible();
-        await expect(page.locator('#success-devid-text')).toContainText('CRISP-');
+        // 2. (Removed May 2026) The success-header devid pill was dropped in
+        //    the PWA tweak that re-centred the queued-reports badge + restored
+        //    the labeled "Online" connectivity pill (#connectivity-dot-success
+        //    inside #btn-success-brand). Lock in its removal so it can't creep
+        //    back.
+        await expect(page.locator('#btn-success-devid'),
+            'devid pill was intentionally removed from the success header').toHaveCount(0);
         // 3. Lang pill
         await expect(page.locator('#stage-success [data-v4-lang-pill]')).toBeVisible();
         // 4. Thanks bar — heart + title
