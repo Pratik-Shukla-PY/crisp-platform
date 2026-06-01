@@ -41,7 +41,7 @@ Crisis analysts (dashboard, Bearer-auth) → exports (CSV / GeoJSON)
 | Photo / video | user capture | medium (faces blurred client-side before upload) | `client_blur_applied` flag + server safety-net MediaPipe pass |
 | Voice note | user record | medium (transcribed; raw audio kept until grace expires) | transcription is server-side |
 | Free-text description | user input | medium (user may include identifying detail — analyst training mitigates) | not redacted |
-| GPS coordinates (incident) | user capture | low–medium ("location data can be an identifier" — UNDP Annex 1) | not the reporter's home location; tied to the **incident** |
+| GPS coordinates (incident) | user capture | low–medium ("location data can be an identifier" — UNDP Annex 1) | not the reporter's home location; tied to the **incident**. As of HC98 the incident coordinates are also burned into served MEDIUM / ORIGINAL photos (visible caption) **and** written as GPS EXIF on those copies — see R12 |
 | Crisis / damage / infrastructure classification | user input | low | enums only, no free text |
 | Device-fingerprint hash | client-side | low — one-way SHA-256, **pseudonymous** | never reversible |
 | Email / phone (optional) | user opt-in (login) | high | only when user explicitly signs in; admin-only fields |
@@ -61,6 +61,7 @@ Crisis analysts (dashboard, Bearer-auth) → exports (CSV / GeoJSON)
 | R9 | Vulnerable subject re-identification via incident location + small population | medium in low-density regions | high | k-anonymity (≥3) on `/reports/nearby`; reports clustered to bounding boxes for public-facing maps | medium |
 | R10 | Data retention drift — reports kept indefinitely | medium without policy | medium | Soft-delete + 24-hour grace on user request; analyst-driven close-out shortens default | medium |
 | R11 | Breach (S3 misconfiguration, code exfiltration) | low — repo open source + reviewed | high | Server-side encryption at rest; IAM role narrowly scoped; gitleaks pre-commit; SENTRY error tracking | low–medium |
+| R12 | Incident location embedded in downloadable / shareable image bytes — visible caption watermark **and** GPS EXIF — on served MEDIUM / ORIGINAL photos (HC98) | medium — by design, for responder traceability | medium | Incident-not-home location (same exposure as the on-screen overlay, now travelling with the file); a pristine **un-stamped** original is retained in the internal `pre_blur/archival/` namespace (never served publicly); burn-in runs **after** PII blur so redactions are never undone; SMALL thumbnails excluded; operator can disable per deployment via `CRISP_GEOTAG_WATERMARK_ENABLED` / `CRISP_GEOTAG_EXIF_ENABLED` | medium |
 
 ## 6. Mitigation roadmap (post-submission)
 

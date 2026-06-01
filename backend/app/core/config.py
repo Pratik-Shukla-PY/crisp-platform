@@ -124,6 +124,15 @@ class Settings(BaseSettings):
     # user — protects against alarm fatigue.
     CRISP_PUSH_FREQUENCY_CAP_PER_USER_PER_HOUR: int = 1
 
+    # ── Server-side geotag embedding (HC98, May 2026) ────────────────
+    # Burn a visible lat/long + building + capture-time caption into stored
+    # MEDIUM/ORIGINAL photos AND write GPS EXIF, inside the PII-blur worker
+    # (after blur, so the caption is never blurred). A pristine un-stamped
+    # ORIGINAL is archived internally. Both default ON; disable per deployment
+    # if location-on-image is not desired.
+    CRISP_GEOTAG_WATERMARK_ENABLED: bool = True
+    CRISP_GEOTAG_EXIF_ENABLED: bool = True
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

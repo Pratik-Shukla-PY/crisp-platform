@@ -271,6 +271,12 @@ def test_0005_adds_pii_blur_status_column_and_backfills():
             conn.execute(text("DROP TYPE IF EXISTS building_id_source CASCADE"))
             conn.execute(text("DROP TYPE IF EXISTS building_event_actor_kind CASCADE"))
             conn.execute(text("DROP TYPE IF EXISTS building_note_visibility CASCADE"))
+            # 0043 — reverse-geocode cache table (HC55). Plain create_table
+            # (no IF NOT EXISTS) collides with the create_all'd table.
+            conn.execute(text("DROP TABLE IF EXISTS geocode_cache CASCADE"))
+            # 0045 — geotag watermark idempotency flag (HC98). add_column has
+            # no IF NOT EXISTS, so it collides with the create_all'd column.
+            conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS watermark_applied"))
 
             # Seed rows: one with client_blur_applied=TRUE (should
             # backfill to 'not_needed'), one with FALSE (stays NULL).
@@ -409,6 +415,12 @@ def test_legacy_db_is_upgraded_without_data_loss():
             conn.execute(text(
                 "ALTER TYPE resolutionenum ADD VALUE IF NOT EXISTS 'HIGH'"
             ))
+            # 0043 — reverse-geocode cache table (HC55). Plain create_table
+            # (no IF NOT EXISTS) collides with the create_all'd table.
+            conn.execute(text("DROP TABLE IF EXISTS geocode_cache CASCADE"))
+            # 0045 — geotag watermark idempotency flag (HC98). add_column has
+            # no IF NOT EXISTS, so it collides with the create_all'd column.
+            conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS watermark_applied"))
 
             conn.execute(text(
                 "INSERT INTO reports "

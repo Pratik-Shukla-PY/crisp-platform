@@ -11,6 +11,7 @@ httpx>=0.27.0
 anthropic>=0.40.0
 opencv-python-headless>=4.8.0
 Pillow>=10.0.0
+piexif>=1.1.3  # write GPS EXIF when server-side geotag-stamping incident photos (HC98); MIT
 # Perceptual-hash duplicate detection (Apr 2026 UI v2.1 / W3).
 # Computes a 64-bit pHash per uploaded photo; near-duplicates within the
 # same building_id + 24h window land on the dashboard as candidates.

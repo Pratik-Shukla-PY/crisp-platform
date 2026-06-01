@@ -606,6 +606,11 @@ class Media(Base):
     # rows + legacy photos uploaded pre-feature. Indexed so the
     # "find near-duplicates in same building within 24h" query is fast.
     photo_phash = Column(String(16), nullable=True, index=True)
+    # HC98 — server-side geotag burn-in idempotency. Set True once the geotag
+    # caption + GPS EXIF have been stamped into this media's stored bytes
+    # (MEDIUM/ORIGINAL image tiers only; SMALL + audio skipped). Gates the blur
+    # worker so a retry can't double-stamp. False for pre-feature + skipped rows.
+    watermark_applied = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     # P1.1 — auto-updating timestamp used by the assembly-lock stale-escape:
     # if assembly_status='assembling' AND updated_at > 5 min ago, the previous

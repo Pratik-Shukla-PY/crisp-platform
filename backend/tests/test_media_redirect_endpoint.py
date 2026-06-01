@@ -18,6 +18,8 @@ This module tests:
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from app.models.report import (
@@ -194,3 +196,74 @@ class TestMediaRedirectEndpoint:
         # And the URL points at our stable route, not S3.
         assert a["url"] == "/api/v1/reports/media/redir-test-006/file"
         assert a["thumbnail_url"] == "/api/v1/reports/media/redir-test-006/thumb"
+
+
+class TestRedirectCacheControlVsPresignTTL:
+    """Regression — the media/satellite 302 redirect must NOT be cached
+    longer than the presigned S3 URL it points at lives
+    (S3Storage.PRESIGN_TTL_SEC = 900 s). Before this fix the redirect was
+    hard-coded `max-age=3600`, so a cached redirect outlived its 15-min
+    presign → S3 403 ("expired signature") → every dashboard image broke
+    ~15 min after a report finished (PROD-only; local /static/ never
+    presigns). Both routes now share `_redirect_cache_control`."""
+
+    def test_helper_caps_s3_cache_below_presign_ttl(self):
+        from app.api.endpoints.reports import _redirect_cache_control
+
+        class _S3Like:
+            PRESIGN_TTL_SEC = 900
+
+        cc = _redirect_cache_control(
+            _S3Like(), "https://s3.example/x.jpg?X-Amz-Expires=900"
+        )
+        m = re.search(r"max-age=(\d+)", cc)
+        assert m, cc
+        max_age = int(m.group(1))
+        # The whole point: redirect cache strictly shorter than the presign.
+        assert 0 < max_age < 900, (max_age, cc)
+        assert max_age == 780  # 900 − 120 s safety margin
+
+    def test_helper_keeps_full_hour_for_local_static(self):
+        from app.api.endpoints.reports import _redirect_cache_control
+
+        class _S3Like:
+            PRESIGN_TTL_SEC = 900
+
+        # A non-expiring local /static/ path → the full 1 h cache is safe.
+        cc = _redirect_cache_control(_S3Like(), "/static/x.jpg")
+        assert "max-age=3600" in cc
+
+    def test_helper_defaults_full_hour_when_backend_has_no_ttl(self):
+        from app.api.endpoints.reports import _redirect_cache_control
+
+        class _LocalLike:  # LocalStorage exposes no PRESIGN_TTL_SEC
+            pass
+
+        cc = _redirect_cache_control(_LocalLike(), "https://whatever/x")
+        assert "max-age=3600" in cc
+
+    def test_file_route_s3_backend_caps_cache_end_to_end(self, client, db, monkeypatch):
+        """With an S3-like backend (presigned https target + PRESIGN_TTL_SEC),
+        the live /file 302's Cache-Control max-age stays below the TTL — so a
+        browser that caches the redirect can never reuse an expired presign."""
+
+        class _FakeS3:
+            PRESIGN_TTL_SEC = 900
+
+            def public_url(self, db_url):
+                key = db_url.replace("s3://", "", 1)
+                return (f"https://s3.example.com/{key}"
+                        "?X-Amz-Expires=900&X-Amz-Signature=deadbeef")
+
+        monkeypatch.setattr(
+            "app.api.endpoints.reports._get_media_storage", lambda: _FakeS3()
+        )
+        _make_media(db, "redir-s3-001", url="s3://final.jpg")
+
+        res = client.get("/api/v1/reports/media/redir-s3-001/file",
+                         follow_redirects=False)
+        assert res.status_code == 302, res.text
+        assert res.headers["location"].startswith("https://s3.example.com/")
+        m = re.search(r"max-age=(\d+)", res.headers.get("cache-control", ""))
+        assert m, res.headers.get("cache-control")
+        assert int(m.group(1)) < 900, res.headers.get("cache-control")

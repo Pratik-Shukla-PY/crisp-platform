@@ -53,4 +53,9 @@ def get_config(response: Response) -> dict:
             "frequency_cap_per_user_per_hour":
                 settings.CRISP_PUSH_FREQUENCY_CAP_PER_USER_PER_HOUR,
         },
+        # HC98 — server-side geotag burn-in + GPS EXIF on stored photos.
+        "geotag": {
+            "watermark_enabled": settings.CRISP_GEOTAG_WATERMARK_ENABLED,
+            "exif_enabled": settings.CRISP_GEOTAG_EXIF_ENABLED,
+        },
     }

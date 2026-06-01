@@ -693,6 +693,79 @@ def _run_photo_phash(media_id: str, db_url: str, filename: str) -> None:
         logger.warning(f"[pHash] {media_id}: failed: {e}")
 
 
+def _maybe_geotag_stamp(media_id: str, db_url: str, filename: str, tmp_path: str) -> None:
+    """HC98 — burn a geotag caption + GPS EXIF into the stored photo, AFTER PII
+    blur. Only MEDIUM/ORIGINAL image tiers (SMALL is a thumbnail). Keeps a
+    pristine pre-stamp ORIGINAL in the internal archival store. Best-effort —
+    the caller wraps this so a failure never changes the blur outcome.
+
+    ALWAYS re-uploads the stamped bytes — including for the `complete_clean`
+    path that otherwise skips re-upload (conditional save). cv2 re-encodes at
+    q95 so quality holds. Coordinates come from the report's Location (not image
+    EXIF), so they're correct regardless of capture orientation.
+    """
+    from app.core.config import settings
+    if not getattr(settings, "CRISP_GEOTAG_WATERMARK_ENABLED", False):
+        return
+    from app.db.session import SessionLocal
+    from app.models.report import Media as _Media, Report as _Report
+    from app.services import geotag_stamp
+
+    db = SessionLocal()
+    try:
+        m = db.query(_Media).filter(_Media.id == media_id).first()
+        if not m:
+            return
+        _t = getattr(m, "type", None)
+        if str(getattr(_t, "value", _t) or "").upper() != "IMAGE":
+            return
+        _tier = getattr(m, "resolution_tier", None)
+        tier = str(getattr(_tier, "value", _tier) or "").upper()
+        if tier not in geotag_stamp.WATERMARK_TIERS:
+            return  # SMALL / LOW thumbnails skipped
+        if getattr(m, "watermark_applied", False):
+            return  # idempotent — already stamped
+        rep = db.query(_Report).filter(_Report.id == m.report_id).first()
+        loc = getattr(rep, "location", None) if rep else None
+        if not loc or loc.latitude is None or loc.longitude is None:
+            return  # no geotag to embed
+        building = getattr(rep, "infrastructure_name", None)
+        ts = getattr(rep, "client_created_at", None) or getattr(rep, "server_created_at", None)
+        time_str = ts.strftime("%H:%M UTC") if ts else None
+
+        # Archive the pristine pre-stamp ORIGINAL (internal-only, recoverable).
+        if tier == "ORIGINAL":
+            try:
+                with open(tmp_path, "rb") as _fh:
+                    _get_media_storage().save_internal(
+                        f"archival/{media_id}", _fh.read(), _content_type_for(filename))
+            except Exception as _ar_e:
+                logger.warning(f"[geotag] archival copy failed for {media_id[:8]}: {_ar_e}")
+
+        geotag_stamp.embed_geotag(
+            tmp_path,
+            lat=loc.latitude, lng=loc.longitude,
+            accuracy_m=getattr(loc, "accuracy_meters", None),
+            building=building, time_str=time_str,
+            write_exif=getattr(settings, "CRISP_GEOTAG_EXIF_ENABLED", True),
+        )
+        # Re-upload the stamped bytes (always — the clean path skips re-upload).
+        with open(tmp_path, "rb") as _fh:
+            _get_media_storage().save(filename, _fh.read(), _content_type_for(filename))
+        db.query(_Media).filter(_Media.id == media_id).update(
+            {"watermark_applied": True}, synchronize_session=False)
+        db.commit()
+        logger.info("[geotag] stamped %s %s @ %.4f,%.4f", tier, media_id[:8],
+                    float(loc.latitude), float(loc.longitude))
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: db.close()
+        except Exception: pass
+
+
 def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
     """Server-side PII blur (MediaPipe faces + easyocr PII text). Runs in
     the AI thread pool so it doesn't block assembly. Never raises —
@@ -843,6 +916,17 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
                         f"nor clean flag set — defaulting to complete_clean. "
                         f"Result: {pii_result!r}"
                     )
+
+                # HC98 — server-side geotag embed. After blur (so the caption
+                # isn't blurred), for completed IMAGE tiers MEDIUM/ORIGINAL,
+                # burn lat/long + building + time + GPS EXIF into the stored
+                # bytes (always re-uploads; clean path included). Best-effort —
+                # never changes the blur outcome above.
+                if outcome in ('complete_with_redactions', 'complete_clean'):
+                    try:
+                        _maybe_geotag_stamp(media_id, db_url, filename, tmp_path)
+                    except Exception as _gt_e:
+                        logger.warning(f"[geotag] stamp skipped for {media_id[:8]}: {_gt_e}")
             else:
                 # Backends unavailable — the storage object still holds
                 # the unblurred bytes. Treated as 'failed' under the new
@@ -6444,6 +6528,25 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
 # the media_id (a UUID, unguessable) can fetch. Listing media_ids
 # still requires Bearer auth via /api/v1/reports/.
 
+def _redirect_cache_control(storage, target: str) -> str:
+    """Cache-Control header value for a media/satellite 302 redirect.
+
+    `target` on S3 is a presigned URL whose signature expires after
+    ``storage.PRESIGN_TTL_SEC``. If the browser caches THIS redirect longer
+    than that signature lives, the cached redirect outlives its target: the
+    image renders, then 403s ("expired signature") the moment the presign
+    dies and stays broken until the redirect cache clears (the PROD symptom —
+    media render for ~15 min after a report finishes, then every image
+    breaks). Cap the cache safely BELOW the presign TTL (120 s margin for
+    clock skew + the browser→cache write delay). Non-expiring local
+    ``/static/`` URLs (no presign) keep the full 1 h cache.
+    """
+    ttl = getattr(storage, "PRESIGN_TTL_SEC", None)
+    if (target.startswith("http://") or target.startswith("https://")) and ttl:
+        return f"public, max-age={max(60, int(ttl) - 120)}"
+    return "public, max-age=3600"
+
+
 @router.get("/media/{media_id}/file")
 @router.get("/media/{media_id}/thumb")
 def get_media_redirect(
@@ -6462,9 +6565,10 @@ def get_media_redirect(
     `/thumb` → media.thumbnail_url (small placeholder, may be partial-
               assembly bytes during chunked upload)
 
-    Cache-Control: public, max-age=3600 — the redirect itself is cached
-    for 1 hour, so even hard-refresh paths only hit the backend once per
-    image per hour. The actual S3 object cache TTL is set bucket-side.
+    Cache-Control: the redirect is cached, but never longer than the
+    presigned target's signature TTL (see `_redirect_cache_control`) — else
+    a cached redirect would outlive its presign and 403. Non-expiring local
+    /static/ URLs keep the full hour. The S3 object cache TTL is bucket-side.
 
     URL gating (May 2026, Batch B-A): when an IMAGE row is in
     `pii_blur_status='pending'`, the route returns 425 Too Early.
@@ -6502,7 +6606,8 @@ def get_media_redirect(
     if not db_url:
         raise HTTPException(status_code=404, detail="No URL available for this media")
 
-    target = _get_media_storage().public_url(db_url)
+    storage = _get_media_storage()
+    target = storage.public_url(db_url)
 
     # Defensive: if storage backend can't produce a real URL (e.g. local
     # backend asked to resolve an `s3://` row from a previously-S3 deploy),
@@ -6513,12 +6618,10 @@ def get_media_redirect(
             detail="Storage backend cannot resolve URL for this media",
         )
 
-    # Local-disk path: prefix with the same /static/ that nginx serves.
-    # The dashboard already prepends BACKEND_HOST for relative paths.
     return RedirectResponse(
         url=target,
         status_code=302,
-        headers={"Cache-Control": "public, max-age=3600"},
+        headers={"Cache-Control": _redirect_cache_control(storage, target)},
     )
 
 
@@ -6612,8 +6715,8 @@ def get_report_tier_status(
 # Fix — VerificationResponse now emits a STABLE backend-routed URL of the
 # form `/api/v1/reports/{report_id}/satellite/<primary|alt|grid/<idx>>`.
 # This endpoint resolves to a fresh presigned target on demand and tags
-# the redirect with `Cache-Control: public, max-age=3600`. Same browser-
-# cache-friendly pattern as the media redirect above.
+# the redirect via `_redirect_cache_control` (cache capped below the
+# presign TTL). Same browser-cache-friendly pattern as the media redirect.
 #
 # Auth model — intentionally NO auth (matches `get_media_redirect` and the
 # previous behaviour where presigned URLs were embedded in API responses).
@@ -6632,8 +6735,8 @@ def _satellite_redirect(
     `which` is one of "primary", "alt", "grid". For "grid", `grid_idx`
     selects the entry from the multi-provider list.
 
-    Identical 1-hour Cache-Control as `get_media_redirect` so cold
-    caches still only hit the backend ~once per image per hour.
+    Same `_redirect_cache_control` as `get_media_redirect` — the redirect is
+    cached, but never longer than the presigned URL's signature TTL.
     """
     v = db.query(SatelliteVerification).filter(
         SatelliteVerification.report_id == report_id
@@ -6665,7 +6768,8 @@ def _satellite_redirect(
     if not db_url:
         raise HTTPException(status_code=404, detail="No URL available for this satellite slot")
 
-    target = _get_media_storage().public_url(db_url)
+    storage = _get_media_storage()
+    target = storage.public_url(db_url)
 
     # Defensive: if storage backend cannot produce a real URL (e.g. a
     # cross-backend mismatch), surface 503 rather than redirect to garbage.
@@ -6678,7 +6782,7 @@ def _satellite_redirect(
     return RedirectResponse(
         url=target,
         status_code=302,
-        headers={"Cache-Control": "public, max-age=3600"},
+        headers={"Cache-Control": _redirect_cache_control(storage, target)},
     )
 
 
