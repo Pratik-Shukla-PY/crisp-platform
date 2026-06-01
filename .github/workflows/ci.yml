@@ -208,7 +208,7 @@ jobs:
           # have already been removed from HEAD but live in older blobs.
           fetch-depth: 0
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Free for public repos; for private, the action recommends a
