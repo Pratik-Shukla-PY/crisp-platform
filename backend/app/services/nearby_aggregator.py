@@ -37,11 +37,14 @@ UNDP alignment:
 """
 from __future__ import annotations
 
+import logging
 import math
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 # ── Tunable constants ──────────────────────────────────────────────────
@@ -441,6 +444,69 @@ def _truncate_to_minute(dt: datetime) -> datetime:
     return dt.replace(second=0, microsecond=0)
 
 
+def _coerce_aware(dt: Optional[datetime]) -> Optional[datetime]:
+    """Normalize a datetime to tz-aware UTC; pass ``None`` through.
+
+    Postgres returns tz-aware values for ``DateTime(timezone=True)``, but
+    offline-drained, legacy, or cross-driver rows can surface NAIVE
+    datetimes. Mixing naive + aware inside a single bucket's ``max()`` /
+    ``min()`` raises "can't compare offset-naive and offset-aware
+    datetimes" — a single such report would 500 the whole /nearby
+    response for every caller. Coercing at the read points keeps every
+    timestamp comparison safe.
+    """
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _report_is_aggregatable(r: NearbyReportInput) -> bool:
+    """True only when a report carries finite numeric coordinates.
+
+    A report that fails this is dropped from the PUBLIC aggregate (it
+    stays in the DB, untouched). Spatial aggregation (geohash bucketing,
+    centroid, haversine) cannot run on ``None`` / NaN / inf coords, and
+    one malformed row must never take the nearby feature down for every
+    other caller. Coords are ``nullable=False`` at the DB layer, so this
+    is defence-in-depth against drift / legacy / direct callers.
+    """
+    try:
+        lat, lng = r.latitude, r.longitude
+        return (
+            isinstance(lat, (int, float)) and not isinstance(lat, bool)
+            and isinstance(lng, (int, float)) and not isinstance(lng, bool)
+            and math.isfinite(lat) and math.isfinite(lng)
+        )
+    except Exception:
+        return False
+
+
+def _sanitize_reports(reports: List[NearbyReportInput]) -> List[NearbyReportInput]:
+    """Defensive entry filter shared by both aggregators.
+
+    Drops reports without usable coordinates and normalizes every
+    timestamp to tz-aware UTC, so no single bad row can raise
+    mid-aggregation. Mutates the per-request input objects in place —
+    they are built fresh per call, so this is safe.
+    """
+    clean: List[NearbyReportInput] = []
+    dropped = 0
+    for r in reports:
+        if not _report_is_aggregatable(r):
+            dropped += 1
+            continue
+        r.server_created_at = _coerce_aware(r.server_created_at) or datetime.now(timezone.utc)
+        if getattr(r, "client_created_at", None) is not None:
+            r.client_created_at = _coerce_aware(r.client_created_at)
+        clean.append(r)
+    if dropped:
+        logger.warning(
+            "nearby: dropped %d report(s) with unusable coordinates from the aggregate",
+            dropped,
+        )
+    return clean
+
+
 def _classify_tier(
     *,
     n_devices: int,
@@ -567,6 +633,12 @@ def aggregate_disaster_zones(
     by count + recency, ignoring proximity entirely. Default kept at
     25.0 for callers that don't supply it (pre-HC83 callers + tests).
     """
+    if not reports:
+        return []
+    # Defensive sanitation — same guard as aggregate_nearby; the
+    # disaster path geohashes EVERY report by lat/lng, so an unusable
+    # coordinate here is fatal without it.
+    reports = _sanitize_reports(reports)
     if not reports:
         return []
     now = datetime.now(timezone.utc)
@@ -716,7 +788,7 @@ def _summarize_bucket(
     # time); fall back to server_created_at for the legacy / online
     # ingest path where the two timestamps are within seconds.
     def _effective_time(r):
-        return getattr(r, "client_created_at", None) or r.server_created_at
+        return _coerce_aware(getattr(r, "client_created_at", None) or r.server_created_at)
 
     timestamps = [_effective_time(r) for r in bucket if r.server_created_at]
     latest = _truncate_to_minute(max(timestamps)) if timestamps else _truncate_to_minute(now)
@@ -1085,6 +1157,11 @@ def aggregate_nearby(
 
     This function ONLY groups + projects + classifies tier.
     """
+    if not reports:
+        return []
+    # Defensive sanitation — drop unusable-coord rows + normalize naive
+    # timestamps so one malformed report can't 500 the whole aggregate.
+    reports = _sanitize_reports(reports)
     if not reports:
         return []
 

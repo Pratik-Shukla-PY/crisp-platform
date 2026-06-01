@@ -5641,44 +5641,64 @@ def get_nearby_reports(
         ))
 
     # Aggregate → groups (k-anonymity + relevance sort applied inside).
-    groups = aggregate_nearby(
-        reports=inputs,
-        user_lat=lat,
-        user_lng=lng,
-        radius_km=radius_km,
-        group_by=group_by,
-        max_groups=limit,
-    )
-
-    # Phase 4 (May 2026, docs §3.8) — disaster-mode promotion. If the
-    # initial cascade returned > CRISP_DISASTER_MODE_GROUPS groups OR
-    # > CRISP_DISASTER_MODE_REPORTS raw reports inside the radius,
-    # re-aggregate into area-level mega-zones for the heat-map render.
-    # Set the X-Crisp-Density-Mode response header so the dashboard
-    # knows to switch its map render mode without parsing every
-    # group.
-    disaster_mode = is_disaster_density(
-        group_count=len(groups), report_count=len(inputs),
-        groups_threshold=settings.CRISP_DISASTER_MODE_GROUPS,
-        reports_threshold=settings.CRISP_DISASTER_MODE_REPORTS,
-    )
-    if disaster_mode:
-        groups = aggregate_disaster_zones(
+    #
+    # Defensive guard: the aggregators sanitize their own inputs (drop
+    # unusable coords, normalize naive/aware timestamps), but /nearby is a
+    # PUBLIC batch endpoint — it must NEVER return 500 to every caller
+    # because of one malformed report in range. On any unforeseen
+    # aggregation error we log the full traceback + the candidate report
+    # ids (so the offending row is identifiable from the logs) and degrade
+    # to an EMPTY nearby result; the PWA already renders empty gracefully.
+    try:
+        groups = aggregate_nearby(
             reports=inputs,
             user_lat=lat,
             user_lng=lng,
-            # HC83 — plumb the caller's actual radius through so the
-            # relevance-sort proximity normalizer matches the query
-            # window. Pre-HC83 this was implicitly hardcoded to 25 km
-            # inside the aggregator, which silently flattened proximity
-            # ranking for groups in the 25–100 km tail once HC82 raised
-            # the validator cap to 100.
             radius_km=radius_km,
-            max_zones=min(limit, 20),
+            group_by=group_by,
+            max_groups=limit,
         )
-        response.headers["X-Crisp-Density-Mode"] = "disaster"
-    else:
+
+        # Phase 4 (May 2026, docs §3.8) — disaster-mode promotion. If the
+        # initial cascade returned > CRISP_DISASTER_MODE_GROUPS groups OR
+        # > CRISP_DISASTER_MODE_REPORTS raw reports inside the radius,
+        # re-aggregate into area-level mega-zones for the heat-map render.
+        # Set the X-Crisp-Density-Mode response header so the dashboard
+        # knows to switch its map render mode without parsing every
+        # group.
+        disaster_mode = is_disaster_density(
+            group_count=len(groups), report_count=len(inputs),
+            groups_threshold=settings.CRISP_DISASTER_MODE_GROUPS,
+            reports_threshold=settings.CRISP_DISASTER_MODE_REPORTS,
+        )
+        if disaster_mode:
+            groups = aggregate_disaster_zones(
+                reports=inputs,
+                user_lat=lat,
+                user_lng=lng,
+                # HC83 — plumb the caller's actual radius through so the
+                # relevance-sort proximity normalizer matches the query
+                # window. Pre-HC83 this was implicitly hardcoded to 25 km
+                # inside the aggregator, which silently flattened proximity
+                # ranking for groups in the 25–100 km tail once HC82 raised
+                # the validator cap to 100.
+                radius_km=radius_km,
+                max_zones=min(limit, 20),
+            )
+            response.headers["X-Crisp-Density-Mode"] = "disaster"
+        else:
+            response.headers["X-Crisp-Density-Mode"] = "normal"
+    except Exception:
+        logger.exception(
+            "[nearby] aggregation failed — degrading to empty result "
+            "(lat=%.4f lng=%.4f radius=%.1f candidates=%d ids=%s)",
+            lat, lng, radius_km, len(inputs),
+            [getattr(i, "report_id", None) for i in inputs[:50]],
+        )
+        groups = []
+        disaster_mode = False
         response.headers["X-Crisp-Density-Mode"] = "normal"
+        response.headers["X-Crisp-Nearby-Degraded"] = "aggregation_error"
 
     # Phase 1 (May 2026, docs §3.2 + §3.6 + §14) — split aggregator
     # output into ACTIVE vs RECENTLY-RESOLVED, and gate T1 (weak)
