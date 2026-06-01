@@ -25,7 +25,7 @@ _STRINGS = {
         "step_loc": "📍 *Where are you?*\n\n👇 Press the button to send your location",
         "step_loc_btn": "📍 Send My Location",
         "step_loc_done": "✅ Got it!",
-        "step_photo": "📸 *Show us the damage*\n\n📸 Take a *photo* and send it\n🎤 Or send a *voice message*\n⌨️ Or *write* what happened\n\n🔒 _Faces are hidden for safety_",
+        "step_photo": "📸 *Show us the damage*\n\n📸 Take a *photo* and send it\n🎤 Or send a *voice message*\n⌨️ Or *write* what happened\n\n🔒 _Faces are blurred before responders see them_",
         "step_voice": "🎙 *Tell us what happened*\n\n🎤 Hold and talk\nor ⌨️ Write it",
         "step_text": "📝 *Anything else to add?*\n\nWrite more or press Send 👇",
         "step_text_skip": "✅ SEND",
@@ -52,7 +52,7 @@ _STRINGS = {
         "crisis_pandemic": "🦠 Pandemic", "crisis_other": "❓ Other",
         "step_damage": "🏗 *How much damage?*",
         "dmg_none": "✅ No Damage", "dmg_partial": "⚠️ Partial", "dmg_complete": "❌ Destroyed",
-        "step_photo_first": "📸 *Show us the damage*\n\n📸 Send a *photo*\n🎤 Or a *voice message*\n⌨️ Or *write* what happened\n\n🔒 _Faces hidden for safety_",
+        "step_photo_first": "📸 *Show us the damage*\n\n📸 Send a *photo*\n🎤 Or a *voice message*\n⌨️ Or *write* what happened\n\n🔒 _Faces blurred before responders see them_",
         "step_desc": "📝 *What happened?*\n\nWrite a short description 👇",
         "step_type_num": "🏗 *What is broken?*\n\nTap one 👇",
         "step_sev_num": "⚠️ *How bad is it?*\n\nTap one 👇",
@@ -79,7 +79,7 @@ _STRINGS = {
         # send_consent_prompt for the fallback resolver).
         "consent_title":   "🛡 Your privacy matters",
         "consent_body":    ("CRISP collects just:\n"
-                            "• 📍 Location\n• 📸 Photos (faces auto-blurred)\n• 🎤 Audio / text\n\n"
+                            "• 📍 Location\n• 📸 Photos (faces blurred before responders see them)\n• 🎤 Audio / text\n\n"
                             "Shared only with crisis responders. Type /delete anytime to remove your data.\n\n"
                             "Continue?"),
         "consent_yes":     "✅ I agree",
@@ -652,9 +652,13 @@ async def send_welcome(chat_id: int, lang: str):
 
 
 async def send_step_location(chat_id: int, lang: str):
+    # Phase 0: the "Or type the place name" hint was removed — there is no
+    # forward geocoder yet, so typed text never satisfies has_location and the
+    # hint stranded desktop/GPS-denied reporters. Phase 2 adds a real forward
+    # geocoder and restores an honest typed-place hint.
     return await _send("sendMessage", {
         "chat_id": chat_id,
-        "text": t(lang, "step_loc_num") + "\n\n" + t(lang, "step_loc_text_hint"),
+        "text": t(lang, "step_loc_num"),
         "parse_mode": "Markdown",
         "reply_markup": {
             "keyboard": [[{"text": t(lang, "step_loc_btn"), "request_location": True}]],
@@ -725,7 +729,7 @@ async def send_consent_prompt(chat_id: int, lang: str):
     body = _tf("consent_body",
         "CRISP collects just:\n"
         "• 📍 Location\n"
-        "• 📸 Photos (faces auto-blurred)\n"
+        "• 📸 Photos (faces blurred before responders see them)\n"
         "• 🎤 Audio / text\n\n"
         "Shared only with crisis responders. Type /delete anytime to remove your data.\n\n"
         "Continue?"
@@ -806,6 +810,7 @@ async def send_step_type(chat_id: int, lang: str):
                  {"text": "🏥 " + t(lang, "type_community"),              "callback_data": "type_community"}],
                 [{"text": "🌳 " + t(lang, "type_public_spaces"),          "callback_data": "type_public_spaces"},
                  {"text": "❓ " + t(lang, "type_other"),                   "callback_data": "type_other"}],
+                [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
             ],
         },
     })
@@ -820,7 +825,9 @@ async def send_step_crisis_type(chat_id: int, lang: str):
     # in CRISIS_MAP so any pre-v3 client still gets a valid enum on submit.
     body = (
         t(lang, "step_crisis") + "\n\n"
-        + "*" + t(lang, "crisis_group_natural") + "*"
+        + "*" + t(lang, "crisis_group_natural") + "*  ·  "
+        + "*" + t(lang, "crisis_group_technological") + "*  ·  "
+        + "*" + t(lang, "crisis_group_human_made") + "*"
     )
     return await _send("sendMessage", {
         "chat_id": chat_id,
@@ -833,6 +840,9 @@ async def send_step_crisis_type(chat_id: int, lang: str):
         # back-compat aliases in `CRISIS_MAP` still map any stale-chat
         # taps to OTHER so older history doesn't error.
         "reply_markup": {
+            # Phase 0: removed the two tappable "— GROUP —" separator rows
+            # (noop_group_* callbacks) — they looked like buttons and fired a
+            # spinner+noop on tap. Group names now live in the body text above.
             "inline_keyboard": [
                 # Natural
                 [{"text": "🏚 " + t(lang, "crisis_earthquake"), "callback_data": "crisis_earthquake"},
@@ -841,11 +851,9 @@ async def send_step_crisis_type(chat_id: int, lang: str):
                 [{"text": "🌪 " + t(lang, "crisis_cyclone"),     "callback_data": "crisis_cyclone"},
                  {"text": "🔥 " + t(lang, "crisis_wildfire"),    "callback_data": "crisis_wildfire"}],
                 # Technological
-                [{"text": "— " + t(lang, "crisis_group_technological") + " —", "callback_data": "noop_group_tech"}],
                 [{"text": "💥 " + t(lang, "crisis_explosion"),           "callback_data": "crisis_explosion"},
                  {"text": "☣️ " + t(lang, "crisis_chemical_incident"),   "callback_data": "crisis_chemical_incident"}],
                 # Human-made
-                [{"text": "— " + t(lang, "crisis_group_human_made") + " —", "callback_data": "noop_group_human"}],
                 [{"text": "⚔️ " + t(lang, "crisis_conflict"),    "callback_data": "crisis_conflict"},
                  {"text": "🪧 " + t(lang, "crisis_civil_unrest"), "callback_data": "crisis_civil_unrest"},
                  {"text": "❓ " + t(lang, "crisis_other"),        "callback_data": "crisis_other"}],
@@ -864,6 +872,7 @@ async def send_step_damage_class(chat_id: int, lang: str):
                 [{"text": t(lang, "dmg_none"), "callback_data": "dmg_none"},
                  {"text": t(lang, "dmg_partial"), "callback_data": "dmg_partial"},
                  {"text": t(lang, "dmg_complete"), "callback_data": "dmg_complete"}],
+                [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
             ],
         },
     })
@@ -942,8 +951,8 @@ async def send_step_debris(chat_id: int, lang: str):
         "parse_mode": "Markdown",
         "reply_markup": {
             "inline_keyboard": [
-                [{"text": t(lang, "debris_no"),  "callback_data": "debris_no"},
-                 {"text": t(lang, "debris_yes"), "callback_data": "debris_yes"}],
+                [{"text": t(lang, "debris_yes"), "callback_data": "debris_yes"},
+                 {"text": t(lang, "debris_no"),  "callback_data": "debris_no"}],
                 [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
             ],
         },

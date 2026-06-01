@@ -1,7 +1,9 @@
 """
 Telegram Handlers — Zero-friction crisis reporting.
 
-FLOW: Language → Photo → Description → Type → Severity → Location → Done
+FLOW: Language → Consent → Location → Damage → Infra type → Crisis → Building
+      → Debris → Evidence (photo/voice/text) → Done
+      (severity is AUTO-DERIVED from the damage answer — no separate prompt)
 
 DESIGN PRINCIPLES:
   1. NO EXTRA BUTTONS: Picking a language immediately starts reporting.
@@ -257,8 +259,11 @@ def _next_missing_step(session) -> str:
         return "STEP_BUILDING_NAME"
     if not session.debris_answered:
         return "STEP_DEBRIS"
-    if not session.severity_answered:
-        return "STEP_SEVERITY"
+    # Phase 0: removed the dead STEP_SEVERITY step. Severity is AUTO-DERIVED
+    # from the damage chip in the dmg_ callback (MINIMAL→MINOR / PARTIAL→
+    # MODERATE / COMPLETE→SEVERE), so severity_answered is already True by the
+    # time the flow reached here — the prompt was never shown and its chips
+    # duplicated the damage chips. The PWA likewise omits a severity question.
     # Evidence — accepts any of photo, voice, or text. The STEP_PHOTO
     # prompt explicitly invites all three so users aren't forced into
     # a media type they can't produce (feature phones can type; voice-
