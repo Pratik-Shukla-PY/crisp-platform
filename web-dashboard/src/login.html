@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>CRISP — Login</title>
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v35">
+    <meta name="crisp-release" content="crisp-dashboard@v36">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <!-- May 2026 (Lighthouse perf fix) — pinned to 6.4.0 to match
          index.html. Was 6.5.1 here, 6.4.0 there → users visiting both
@@ -23,13 +23,55 @@
     <style>
         :root { --bg: #080c14; --surface: #111827; --border: rgba(255,255,255,0.08); --accent: #7c3aed; --text: #f1f5f9; --dim: #64748b; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: var(--bg); color: var(--text); font-family: 'Outfit', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
-        .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 40px 32px; width: 100%; max-width: 420px; }
-        .logo { text-align: center; margin-bottom: 28px; }
-        .logo-mark { width: 72px; height: 72px; margin: 0 auto 12px; border-radius: 16px; box-shadow: 0 12px 32px rgba(9, 209, 199, 0.22); overflow: hidden; }
+        html, body { min-height: 100%; }
+        /* Jun 2026 redesign — full-height column: back-arrow → big logo hero
+           → form card → home-style footer. Replaces the single centered card
+           so the page fills the viewport with balanced vertical spacing. The
+           form fields, IDs and auth <script> are unchanged. */
+        body {
+            background:
+                radial-gradient(1100px 560px at 50% -12%, rgba(124,58,237,0.12), transparent 62%),
+                var(--bg);
+            color: var(--text);
+            font-family: 'Outfit', sans-serif;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            padding:
+                max(14px, env(safe-area-inset-top))
+                max(18px, env(safe-area-inset-right))
+                max(14px, env(safe-area-inset-bottom))
+                max(18px, env(safe-area-inset-left));
+        }
+
+        /* Main — flex-fills the space above the footer, centering
+           the logo hero + the form card with generous vertical breathing room. */
+        .login-main {
+            flex: 1 1 auto;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 32px; padding: 24px 0;
+        }
+
+        /* Hero / logo — bigger brand mark + wordmark. */
+        .login-hero { text-align: center; }
+        .logo-mark {
+            width: 112px; height: 112px; margin: 0 auto 16px; border-radius: 26px;
+            box-shadow: 0 18px 48px rgba(9, 209, 199, 0.22); overflow: hidden;
+        }
         .logo-mark > svg { width: 100%; height: 100%; display: block; }
-        .logo h1 { font-size: 32px; font-weight: 900; background: linear-gradient(135deg, #7c3aed, #06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .logo p { color: var(--dim); font-size: 13px; margin-top: 4px; }
+        .login-hero h1 {
+            font-size: 40px; font-weight: 900; letter-spacing: 0.5px; line-height: 1.05;
+            background: linear-gradient(135deg, #7c3aed, #06b6d4);
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .login-hero p { color: var(--dim); font-size: 14px; margin-top: 6px; }
+
+        /* Form card. */
+        .login-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 24px; padding: 32px 28px; width: 100%; max-width: 420px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+        }
         .tabs { display: flex; gap: 4px; margin-bottom: 24px; background: rgba(255,255,255,0.03); border-radius: 12px; padding: 4px; }
         .tab { flex: 1; padding: 10px; border: none; border-radius: 10px; background: transparent; color: var(--dim); font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
         .tab.active { background: var(--accent); color: #fff; }
@@ -61,15 +103,30 @@
         #step-otp { display: none; }
         .pw-toggle { position: relative; }
         .pw-toggle i { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--dim); cursor: pointer; }
+
+        /* Footer — mirrors the PWA home footer (Privacy · Help · CRISP version). */
+        .login-footer {
+            flex: 0 0 auto;
+            display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+            gap: 10px; padding-top: 16px; border-top: 1px solid var(--border);
+        }
+        .login-footer-link { color: rgba(203,213,225,0.75); font-size: 13px; text-decoration: none; transition: color .15s; }
+        .login-footer-link:hover { color: var(--accent); }
+        .login-footer-sep { color: var(--dim); font-size: 13px; }
+        .login-footer-version { color: var(--dim); font-size: 13px; font-weight: 500; font-family: 'JetBrains Mono', monospace; }
+
+        @media (max-width: 480px) {
+            .login-hero h1 { font-size: 34px; }
+            .logo-mark { width: 96px; height: 96px; border-radius: 22px; }
+            .login-main { gap: 24px; }
+        }
     </style>
 </head>
 <body>
-    <div class="login-card">
-        <div class="logo">
-            <!-- May 2026 — swapped FA shield for the inlined ripple-tile
-                 brand mark. Inlined so it renders during first paint
-                 without an extra HTTP fetch (login is the first
-                 dashboard page reviewers hit). -->
+    <main class="login-main">
+        <div class="login-hero">
+            <!-- May 2026 — inlined ripple-tile brand mark (renders during first
+                 paint without an extra HTTP fetch). Jun 2026 — enlarged. -->
             <div class="logo-mark" aria-hidden="true">
                 <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CRISP">
                     <defs>
@@ -91,115 +148,126 @@
             <p>Crisis Response Intelligence Platform</p>
         </div>
 
-        <div id="msg" class="msg"></div>
+        <div class="login-card">
+            <div id="msg" class="msg"></div>
 
-        <!-- Apr 2026 — single-admin lockdown. Self-service registration and
-             Enterprise SSO are intentionally disabled for the dashboard;
-             the tabs are kept in the DOM (display:none) so legacy switchTab
-             callsites don't throw, and so the original layout is one
-             feature-flag flip away. Backend also returns 410 Gone on
-             /auth/register when REGISTRATION_DISABLED=true (default in prod). -->
-        <div class="tabs" style="display:none;">
-            <button class="tab active" onclick="switchTab('login')">Login</button>
-            <button class="tab" onclick="switchTab('register')">Register</button>
-            <button class="tab" onclick="switchTab('sso')">Enterprise SSO</button>
-        </div>
+            <!-- Apr 2026 — single-admin lockdown. Self-service registration and
+                 Enterprise SSO are intentionally disabled for the dashboard;
+                 the tabs are kept in the DOM (display:none) so legacy switchTab
+                 callsites don't throw, and so the original layout is one
+                 feature-flag flip away. Backend also returns 410 Gone on
+                 /auth/register when REGISTRATION_DISABLED=true (default in prod). -->
+            <div class="tabs" style="display:none;">
+                <button class="tab active" onclick="switchTab('login')">Login</button>
+                <button class="tab" onclick="switchTab('register')">Register</button>
+                <button class="tab" onclick="switchTab('sso')">Enterprise SSO</button>
+            </div>
 
-        <!-- LOGIN TAB — Apr 2026 single-admin lockdown:
-             Password + TOTP authenticator code (Google Authenticator / Authy /
-             1Password). Email-OTP login path retained in the DOM under
-             #step-otp for the existing verifyOTP() machinery (kept for the
-             PWA reporter flow that POSTs into the same endpoints), but
-             hidden from this dashboard's UI. -->
-        <div id="panel-login" class="tab-panel active">
-            <div id="step-email">
+            <!-- LOGIN TAB — Apr 2026 single-admin lockdown:
+                 Password + TOTP authenticator code (Google Authenticator / Authy /
+                 1Password). Email-OTP login path retained in the DOM under
+                 #step-otp for the existing verifyOTP() machinery (kept for the
+                 PWA reporter flow that POSTs into the same endpoints), but
+                 hidden from this dashboard's UI. -->
+            <div id="panel-login" class="tab-panel active">
+                <div id="step-email">
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" id="login-email" class="form-input" placeholder="admin@crisplabs.tech" autocomplete="email" autofocus>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <div class="pw-toggle">
+                            <input type="password" id="login-password" class="form-input" placeholder="Enter password" autocomplete="current-password">
+                            <i class="fa-solid fa-eye" onclick="togglePw()"></i>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Authenticator code <span style="color:var(--dim);font-size:12px;font-weight:normal;">— from Google Authenticator / Authy / 1Password</span></label>
+                        <input type="text" id="login-totp" class="form-input" placeholder="123456" maxlength="6" minlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" style="letter-spacing:6px;font-family:monospace;font-size:18px;text-align:center;">
+                    </div>
+                    <button class="btn-primary" onclick="loginWithPassword()">
+                        <i class="fa-solid fa-right-to-bracket"></i> Login
+                    </button>
+                </div>
+                <!-- Email-OTP step — kept for back-compat with the PWA reporter
+                     verify flow that posts into the same /auth/otp/* endpoints.
+                     Hidden in dashboard lockdown mode. -->
+                <div id="step-otp" style="display:none;">
+                    <p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:16px;">Enter the 6-digit code sent to <strong id="otp-email-display"></strong></p>
+                    <div class="otp-row" id="otp-inputs">
+                        <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+                        <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+                        <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+                        <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+                        <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+                        <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+                    </div>
+                    <br>
+                    <button class="btn-primary" onclick="verifyOTP()">
+                        <i class="fa-solid fa-check-circle"></i> Verify &amp; Login
+                    </button>
+                    <button class="btn-secondary" onclick="sendLoginOTP()">Resend Code</button>
+                </div>
+            </div>
+
+            <!-- REGISTER TAB -->
+            <div id="panel-register" class="tab-panel">
                 <div class="form-group">
                     <label class="form-label">Email</label>
-                    <input type="email" id="login-email" class="form-input" placeholder="admin@crisplabs.tech" autocomplete="email" autofocus>
+                    <input type="email" id="reg-email" class="form-input" placeholder="you@organization.org">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Password</label>
-                    <div class="pw-toggle">
-                        <input type="password" id="login-password" class="form-input" placeholder="Enter password" autocomplete="current-password">
-                        <i class="fa-solid fa-eye" onclick="togglePw()"></i>
-                    </div>
+                    <label class="form-label">Full Name (optional)</label>
+                    <input type="text" id="reg-name" class="form-input" placeholder="Your name">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Authenticator code <span style="color:var(--dim);font-size:12px;font-weight:normal;">— from Google Authenticator / Authy / 1Password</span></label>
-                    <input type="text" id="login-totp" class="form-input" placeholder="123456" maxlength="6" minlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" style="letter-spacing:6px;font-family:monospace;font-size:18px;text-align:center;">
+                    <label class="form-label">Password (optional — can use OTP only)</label>
+                    <input type="password" id="reg-password" class="form-input" placeholder="Min 8 chars, upper+lower+digit+special">
                 </div>
-                <button class="btn-primary" onclick="loginWithPassword()">
-                    <i class="fa-solid fa-right-to-bracket"></i> Login
+                <div class="gdpr-check">
+                    <input type="checkbox" id="gdpr-consent">
+                    <span>I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>. My data will be processed in accordance with GDPR.</span>
+                </div>
+                <button class="btn-primary" onclick="registerUser()">
+                    <i class="fa-solid fa-user-plus"></i> Create Account
                 </button>
             </div>
-            <!-- Email-OTP step — kept for back-compat with the PWA reporter
-                 verify flow that posts into the same /auth/otp/* endpoints.
-                 Hidden in dashboard lockdown mode. -->
-            <div id="step-otp" style="display:none;">
-                <p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:16px;">Enter the 6-digit code sent to <strong id="otp-email-display"></strong></p>
-                <div class="otp-row" id="otp-inputs">
-                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
-                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
-                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
-                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
-                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
-                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric">
+
+            <!-- SSO TAB -->
+            <div id="panel-sso" class="tab-panel">
+                <p style="color:var(--dim);font-size:13px;margin-bottom:16px;">Login with your organization's identity provider.</p>
+                <div class="form-group">
+                    <label class="form-label">Organization Domain</label>
+                    <input type="text" id="sso-domain" class="form-input" placeholder="e.g. undp.org">
                 </div>
-                <br>
-                <button class="btn-primary" onclick="verifyOTP()">
-                    <i class="fa-solid fa-check-circle"></i> Verify &amp; Login
+                <button class="btn-primary" onclick="initiateSSO()">
+                    <i class="fa-solid fa-building"></i> Continue with SSO
                 </button>
-                <button class="btn-secondary" onclick="sendLoginOTP()">Resend Code</button>
+                <div style="margin-top:16px;">
+                    <button class="sso-btn" onclick="initiateSSO('okta')"><i class="fa-solid fa-shield-halved" style="color:#007dc1;"></i> Okta</button>
+                    <button class="sso-btn" onclick="initiateSSO('auth0')"><i class="fa-solid fa-lock" style="color:#eb5424;"></i> Auth0</button>
+                    <button class="sso-btn" onclick="initiateSSO('azure')"><i class="fa-brands fa-microsoft" style="color:#00a4ef;"></i> Azure AD</button>
+                    <button class="sso-btn" onclick="initiateSSO('keycloak')"><i class="fa-solid fa-key" style="color:#4d4d4d;"></i> Keycloak</button>
+                </div>
             </div>
-        </div>
 
-        <!-- REGISTER TAB -->
-        <div id="panel-register" class="tab-panel">
-            <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email" id="reg-email" class="form-input" placeholder="you@organization.org">
+            <!-- Apr 2026 — registration link hidden for the lockdown posture.
+                 Kept in DOM (display:none) for parity with the tabs strip above. -->
+            <div class="link-row" id="link-row" style="display:none;">
+                Don't have an account? <a onclick="switchTab('register')">Register</a>
             </div>
-            <div class="form-group">
-                <label class="form-label">Full Name (optional)</label>
-                <input type="text" id="reg-name" class="form-input" placeholder="Your name">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Password (optional — can use OTP only)</label>
-                <input type="password" id="reg-password" class="form-input" placeholder="Min 8 chars, upper+lower+digit+special">
-            </div>
-            <div class="gdpr-check">
-                <input type="checkbox" id="gdpr-consent">
-                <span>I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>. My data will be processed in accordance with GDPR.</span>
-            </div>
-            <button class="btn-primary" onclick="registerUser()">
-                <i class="fa-solid fa-user-plus"></i> Create Account
-            </button>
         </div>
+    </main>
 
-        <!-- SSO TAB -->
-        <div id="panel-sso" class="tab-panel">
-            <p style="color:var(--dim);font-size:13px;margin-bottom:16px;">Login with your organization's identity provider.</p>
-            <div class="form-group">
-                <label class="form-label">Organization Domain</label>
-                <input type="text" id="sso-domain" class="form-input" placeholder="e.g. undp.org">
-            </div>
-            <button class="btn-primary" onclick="initiateSSO()">
-                <i class="fa-solid fa-building"></i> Continue with SSO
-            </button>
-            <div style="margin-top:16px;">
-                <button class="sso-btn" onclick="initiateSSO('okta')"><i class="fa-solid fa-shield-halved" style="color:#007dc1;"></i> Okta</button>
-                <button class="sso-btn" onclick="initiateSSO('auth0')"><i class="fa-solid fa-lock" style="color:#eb5424;"></i> Auth0</button>
-                <button class="sso-btn" onclick="initiateSSO('azure')"><i class="fa-brands fa-microsoft" style="color:#00a4ef;"></i> Azure AD</button>
-                <button class="sso-btn" onclick="initiateSSO('keycloak')"><i class="fa-solid fa-key" style="color:#4d4d4d;"></i> Keycloak</button>
-            </div>
-        </div>
-
-        <!-- Apr 2026 — registration link hidden for the lockdown posture.
-             Kept in DOM (display:none) for parity with the tabs strip above. -->
-        <div class="link-row" id="link-row" style="display:none;">
-            Don't have an account? <a onclick="switchTab('register')">Register</a>
-        </div>
-    </div>
+    <!-- Footer — same shape as the citizen home page (Privacy · Help · version). -->
+    <footer class="login-footer" aria-label="Footer">
+        <a class="login-footer-link" href="/mobile-app/src/">Privacy</a>
+        <span class="login-footer-sep" aria-hidden="true">·</span>
+        <a class="login-footer-link" href="/mobile-app/src/">Help</a>
+        <span class="login-footer-sep" aria-hidden="true">·</span>
+        <span class="login-footer-version" id="login-footer-version">CRISP v35</span>
+    </footer>
 
     <!-- Sentry observability — May 2026 audit fix. -->
     <script src="vendor/sentry.min.js?v=8.30.0"></script>
@@ -363,6 +431,16 @@
             showMsg(data.message || 'SSO provider found', res.ok ? 'success' : 'error');
         } catch (e) { showMsg('Network error', 'error'); }
     }
+
+    // Footer version label — keep in sync with the crisp-release meta tag.
+    (function () {
+        try {
+            const m = document.querySelector('meta[name="crisp-release"]');
+            const v = m && m.content ? m.content.split('@').pop() : '';
+            const el = document.getElementById('login-footer-version');
+            if (el && v) el.textContent = 'CRISP ' + v;
+        } catch (_) {}
+    })();
 
     // Auto-redirect if already logged in
     if (localStorage.getItem('crisp_token')) {

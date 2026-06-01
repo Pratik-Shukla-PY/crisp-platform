@@ -2271,7 +2271,7 @@ function createIncidentCard(r) {
     // Priority order matches the audit's "operator concern" gradient:
     //   1. Media corrupt (checksum_mismatch)         — RED, data integrity
     //   2. Upload abandoned (chunks_never_arrived)   — RED, no recovery
-    //   3. PII review needed (pii_blur_status=failed) — RED, privacy risk
+    //   3. Redaction failed (pii_blur_status=failed)  — RED, privacy risk
     //   4. Original (slow network, bandwidth_tier_deferred) — AMBER
     //   5. Attribution lost (expired token)          — GREY, informational
     //   6. Uploading… (sync_status=PARTIAL + pending media) — AMBER
@@ -4359,7 +4359,7 @@ window.selectReport = (id, skipFly = false) => {
                                      data-group-id="${g.group_id || ''}"
                                      data-current-tier="${pick.tier}"
                                      onclick="dpShowGalleryImage('${r.id}',${idx},this)">
-                            <img src="${pick.src}" alt="Photo ${idx+1}">
+                            <img src="${pick.src}" alt="Photo ${idx+1}" loading="lazy" decoding="async">
                             ${!pick.isFinal ? `<span class="dp-gallery-pct">${maxPct.toFixed(0)}%</span>` : ''}
                         </div>`;
                     }).join('')}
@@ -8267,6 +8267,195 @@ const _TIER_BUTTONS = [
 // slide to swap. Cleared when the lightbox closes.
 let _currentGalleryTiers = new Map(); // photo_group_id → 'LOW' | 'MEDIUM' | 'HIGH'
 
+// Intrinsic-dimension cache (src → {w,h}). The Media schema carries no
+// width/height, so the lightbox used to hardcode 1920×1440 — which fed
+// PhotoSwipe the wrong fit geometry and STRETCHED portrait / panoramic /
+// square photos. We read each image's real naturalWidth/Height once it
+// loads and re-fit; cached per-src so re-opening is flash-free.
+const _imgDimCache = new Map();
+
+// Feed PhotoSwipe a slide's TRUE intrinsic size + re-fit it. Idempotent and
+// never throws — a sizing refinement must never break the viewer.
+function _applyRealDims(content, imgEl) {
+    try {
+        const img = imgEl
+            || (content && content.element && content.element.tagName === 'IMG' ? content.element : null)
+            || (content && content.element && content.element.querySelector ? content.element.querySelector('img') : null);
+        if (!img || !img.naturalWidth || !img.naturalHeight) return;
+        const w = img.naturalWidth, h = img.naturalHeight;
+        _imgDimCache.set(img.currentSrc || img.src, { w, h });
+        if (!content || (content.width === w && content.height === h)) return;
+        content.width = w; content.height = h;
+        if (content.data) { content.data.width = w; content.data.height = h; }
+        if (content.slide) {
+            if (content.slide.data) { content.slide.data.width = w; content.slide.data.height = h; }
+            if (typeof content.slide.updateContentSize === 'function') content.slide.updateContentSize(true);
+        }
+    } catch (_) { /* best-effort sizing refinement */ }
+}
+
+// Pre-measure intrinsic dimensions so PhotoSwipe fits the TRUE aspect from the
+// first frame (no 4:3 placeholder distortion — the schema has no width/height).
+// Cache-first: cached / data-URI / already-shown images resolve instantly.
+// Capped per-image so a slow uncached ORIGINAL never hangs the open; the
+// `loadComplete` → _applyRealDims hook is the backstop for any timeout.
+function _premeasureSlides(slides) {
+    return Promise.all((slides || []).map((s) => new Promise((resolve) => {
+        if (!s || !s.src) return resolve();
+        const cached = _imgDimCache.get(s.src);
+        if (cached) { s.width = cached.w; s.height = cached.h; return resolve(); }
+        const im = new Image();
+        let settled = false;
+        const done = () => { if (!settled) { settled = true; resolve(); } };
+        const to = setTimeout(done, 450);
+        im.onload = () => {
+            if (im.naturalWidth && im.naturalHeight) {
+                s.width = im.naturalWidth; s.height = im.naturalHeight;
+                _imgDimCache.set(s.src, { w: im.naturalWidth, h: im.naturalHeight });
+            }
+            clearTimeout(to); done();
+        };
+        im.onerror = () => { clearTimeout(to); done(); };
+        im.src = s.src;
+    })));
+}
+
+// ── Client-side rotation (non-destructive; no re-upload) ─────────────────────
+// PhotoSwipe has no native rotation. We rotate the inner <img> via a CSS
+// transform — PhotoSwipe owns the .pswp__zoom-wrap transform, so rotating the
+// child <img> doesn't fight its zoom/pan — and on 90/270 scale it to re-fit the
+// viewport (the bounding box swaps W↔H). Tracked per photo_group_id so nav
+// preserves it; reset on close. Zoom is reset to fit on each rotate so the
+// transform composes without a pan offset.
+let _currentRotations = new Map(); // photo_group_id → degrees (0/90/180/270)
+
+function _viewerImg(pswp) {
+    const c = pswp && pswp.currSlide && pswp.currSlide.content;
+    if (!c || !c.element) return null;
+    return c.element.tagName === 'IMG' ? c.element
+        : (c.element.querySelector ? c.element.querySelector('img') : null);
+}
+
+function _applyRotation(pswp) {
+    try {
+        const slide = pswp.currSlide, img = _viewerImg(pswp);
+        if (!slide || !img) return;
+        const gid = slide.data && slide.data._groupId;
+        const deg = (gid && _currentRotations.get(gid)) || 0;
+        let scale = 1;
+        if (deg % 180 === 90) {
+            // Fit the rotated bounding box (displayed H × W) into the viewport.
+            const vp = pswp.viewportSize || { x: window.innerWidth, y: window.innerHeight };
+            const fit = (slide.zoomLevels && slide.zoomLevels.fit) || 1;
+            const dispW = (slide.width || img.naturalWidth || 1) * fit;
+            const dispH = (slide.height || img.naturalHeight || 1) * fit;
+            if (dispW && dispH) scale = Math.min(vp.x / dispH, vp.y / dispW);
+        }
+        img.style.transformOrigin = 'center center';
+        img.style.transform = `rotate(${deg}deg) scale(${scale})`;
+    } catch (_) { /* rotation is a view-only nicety; never break the viewer */ }
+}
+
+function _rotateViewer(pswp, delta) {
+    const slide = pswp.currSlide, gid = slide && slide.data && slide.data._groupId;
+    if (!gid) return;
+    _currentRotations.set(gid, ((((_currentRotations.get(gid) || 0) + delta) % 360) + 360) % 360);
+    try { if (slide && typeof slide.zoomTo === 'function') slide.zoomTo(slide.zoomLevels.initial, undefined, 0); } catch (_) {}
+    _applyRotation(pswp);
+}
+
+function _resetViewerRotation(pswp) {
+    const slide = pswp.currSlide, gid = slide && slide.data && slide.data._groupId;
+    if (gid) _currentRotations.set(gid, 0);
+    try { if (slide && typeof slide.zoomTo === 'function') slide.zoomTo(slide.zoomLevels.initial, undefined, 0); } catch (_) {}
+    _applyRotation(pswp);
+}
+
+// ── Geo metadata overlay (top-right) + viewer preferences ────────────────────
+// Location is per-REPORT (every image in a report shares one Location), so the
+// overlay reflects the report's capture location — identical across that
+// report's photos by design. Content + visibility are a localStorage
+// user-preference (no per-user backend on v34).
+const _VIEWER_PREFS_KEY = 'crisp_image_viewer_prefs';
+const _OVERLAY_MODES = ['coords_building_time', 'coords_building', 'coords', 'off'];
+const _OVERLAY_LABELS = { coords_building_time: 'coords + building + time', coords_building: 'coords + building', coords: 'coordinates', off: 'off' };
+let _viewerPrefs = (() => { try { return JSON.parse(localStorage.getItem(_VIEWER_PREFS_KEY) || '{}'); } catch (_) { return {}; } })();
+function _saveViewerPrefs() { try { localStorage.setItem(_VIEWER_PREFS_KEY, JSON.stringify(_viewerPrefs)); } catch (_) {} }
+function _overlayMode() { return _OVERLAY_MODES.includes(_viewerPrefs.overlay) ? _viewerPrefs.overlay : 'coords_building_time'; }
+function _pswpRoot(pswp) { return (pswp && (pswp.element || pswp.template)) || document.querySelector('.pswp'); }
+
+function _renderGeoOverlay(el, pswp) {
+    if (!el) return;
+    const slide = pswp.currSlide && pswp.currSlide.data;
+    const mode = _overlayMode();
+    const rep = slide ? (typeof allReports !== 'undefined' ? allReports : []).find(x => x.id === slide._reportId) : null;
+    const loc = rep && rep.location;
+    if (mode === 'off' || !loc || loc.latitude == null || loc.longitude == null) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = '';
+    const lat = Number(loc.latitude), lng = Number(loc.longitude);
+    const coordTxt = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    const acc = loc.accuracy_meters;
+    const building = (mode !== 'coords') ? (rep.infrastructure_name || '') : '';
+    let timeTxt = '';
+    if (mode === 'coords_building_time') {
+        const iso = rep.client_created_at || rep.server_created_at;
+        if (iso) { try {
+            timeTxt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }).format(new Date(ensureUTC(iso)));
+        } catch (_) {} }
+    }
+    el.innerHTML =
+        `<button type="button" class="pgo-coords" title="Copy coordinates">` +
+            `<i class="fa-solid fa-location-dot"></i> ${coordTxt}` +
+            `${(acc != null && isFinite(acc)) ? ` <span class="pgo-acc">±${Math.round(acc)} m</span>` : ''}</button>` +
+        (building ? `<div class="pgo-row pgo-building"><i class="fa-solid fa-building"></i> ${escapeHtml(building)}</div>` : '') +
+        (timeTxt ? `<div class="pgo-row pgo-time"><i class="fa-regular fa-clock"></i> ${escapeHtml(timeTxt)}</div>` : '') +
+        `<button type="button" class="pgo-map">Open on map <i class="fa-solid fa-arrow-up-right-from-square"></i></button>`;
+    const cBtn = el.querySelector('.pgo-coords');
+    if (cBtn) cBtn.onclick = (e) => { e.stopPropagation();
+        try { navigator.clipboard && navigator.clipboard.writeText(`${lat.toFixed(6)}, ${lng.toFixed(6)}`); } catch (_) {}
+        if (typeof showToast === 'function') showToast(`Copied ${coordTxt}`, 'info'); };
+    const mBtn = el.querySelector('.pgo-map');
+    if (mBtn) mBtn.onclick = (e) => { e.stopPropagation();
+        try { pswp.close(); } catch (_) {}
+        if (window.map && typeof window.map.flyTo === 'function') window.map.flyTo([lat, lng], 16, { duration: 0.6 }); };
+}
+
+function _cycleOverlay(pswp) {
+    _viewerPrefs.overlay = _OVERLAY_MODES[(_OVERLAY_MODES.indexOf(_overlayMode()) + 1) % _OVERLAY_MODES.length];
+    _saveViewerPrefs();
+    const root = _pswpRoot(pswp);
+    if (root) {
+        _renderGeoOverlay(root.querySelector('.pswp-geo-overlay'), pswp);
+        const btn = root.querySelector('.pswp__button--overlay-toggle');
+        if (btn) btn.classList.toggle('pswp-toggle-on', _overlayMode() !== 'off');
+    }
+    if (typeof showToast === 'function') showToast(`Image info: ${_OVERLAY_LABELS[_overlayMode()]}`, 'info');
+}
+
+// ── Download current image (explicit user action; current tier) ──────────────
+async function _downloadViewerImage(pswp) {
+    try {
+        const data = pswp.currSlide && pswp.currSlide.data;
+        const url = (data && data.src) || '';
+        if (!url) return;
+        const name = `crisp-${String((data && data._reportId) || 'photo').slice(0, 8)}-photo${(data && (data._groupIdx + 1)) || 1}.jpg`;
+        try {
+            const resp = await fetch(url, { credentials: 'omit' });
+            if (!resp.ok) throw new Error('fetch ' + resp.status);
+            const obj = URL.createObjectURL(await resp.blob());
+            const a = document.createElement('a');
+            a.href = obj; a.download = name;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(obj), 5000);
+        } catch (_) {
+            // Cross-origin S3 without CORS → can't blob it; open so the analyst
+            // can save manually. Still an explicit, user-initiated action.
+            window.open(url, '_blank', 'noopener');
+        }
+        if (typeof showToast === 'function') showToast('Download started', 'info');
+    } catch (_) {}
+}
+
 function _buildGallerySlides(report, startGroupIdx) {
     const allImages = (report.media || []).filter(m => m.type === 'IMAGE');
     const groups = groupPhotos(allImages);
@@ -8278,14 +8467,15 @@ function _buildGallerySlides(report, startGroupIdx) {
         // includes partials/thumbnails for in-flight uploads).
         const pick = highestCompleteVariant(g) || bestVariant(g);
         _currentGalleryTiers.set(g.group_id || `loose-${idx}`, pick?.tier || 'ORIGINAL');
-        // PhotoSwipe needs intrinsic dimensions to size the slide. Real
-        // images carry these in the DB (`width`/`height` columns aren't
-        // populated in the schema), so we use generous viewport defaults
-        // and rely on PhotoSwipe's `dataSource.fit` policy to scale.
+        // Seed from the per-src dimension cache when known (flash-free
+        // re-opens); otherwise a neutral 4:3 placeholder. `_applyRealDims`
+        // (registered on PhotoSwipe `loadComplete`) corrects each slide to
+        // the image's true intrinsic size + re-fits — so no photo is stretched.
+        const _cdim = _imgDimCache.get(pick?.src);
         return {
             src: pick?.src || '',
-            width: 1920,
-            height: 1440,
+            width: _cdim?.w || 1920,
+            height: _cdim?.h || 1440,
             alt: `Photo ${idx+1} of ${totalGroups}`,
             // Custom payload that the tier-tabs UI reads.
             _groupId: g.group_id || `loose-${idx}`,
@@ -8297,7 +8487,7 @@ function _buildGallerySlides(report, startGroupIdx) {
     });
 }
 
-window.openGallery = function (reportId, startGroupIdx) {
+window.openGallery = async function (reportId, startGroupIdx) {
     if (typeof PhotoSwipe === 'undefined') {
         console.warn('[openGallery] PhotoSwipe not loaded — falling back to single-image overlay');
         const r0 = allReports.find(x => x.id === reportId);
@@ -8320,6 +8510,10 @@ window.openGallery = function (reportId, startGroupIdx) {
         .filter(m => m.assembly_status === 'complete' && m.url)
         .sort((a,b) => (TIER_RANK[b.resolution_tier]||0) - (TIER_RANK[a.resolution_tier]||0))[0]?.resolution_tier || 'ORIGINAL'));
 
+    // Give PhotoSwipe the TRUE intrinsic dims up front so it fits the real
+    // aspect from the first frame (no 4:3 distortion).
+    await _premeasureSlides(slides);
+
     const pswp = new PhotoSwipe({
         dataSource: slides,
         index: Math.max(0, Math.min(startGroupIdx || 0, slides.length - 1)),
@@ -8330,6 +8524,12 @@ window.openGallery = function (reportId, startGroupIdx) {
         // Disable pinch-to-close on iOS — collides with pinch-zoom.
         pinchToClose: false,
     });
+
+    // Re-fit every slide to its TRUE intrinsic size once the image loads —
+    // replaces the hardcoded 1920×1440 that stretched non-4:3 photos.
+    pswp.on('loadComplete', (e) => { _applyRealDims(e.content); _applyRotation(pswp); });
+    // Re-apply the per-group rotation when navigating between slides.
+    pswp.on('change', () => _applyRotation(pswp));
 
     // Register the per-slide tier-tabs UI in the top-bar area. Runs once at
     // open; the element updates itself via the `change` event when the
@@ -8395,7 +8595,14 @@ window.openGallery = function (reportId, startGroupIdx) {
                             const currSlide = pswpInst.currSlide;
                             if (currSlide && currSlide.container) {
                                 const img = currSlide.container.querySelector('img');
-                                if (img) img.src = newSrc;
+                                if (img) {
+                                    // Tier swap sets src directly, so PhotoSwipe's
+                                    // own loadComplete won't fire — re-fit to the
+                                    // new tier's real dims once it decodes.
+                                    img.addEventListener('load',
+                                        () => _applyRealDims(currSlide.content, img), { once: true });
+                                    img.src = newSrc;
+                                }
                             }
                             render(); // refresh the active-state highlight
                         };
@@ -8405,11 +8612,60 @@ window.openGallery = function (reportId, startGroupIdx) {
                 render();
             },
         });
+
+        // Download the current image (current tier).
+        pswp.ui.registerElement({ name: 'download', order: 5, isButton: true,
+            title: 'Download image (d)', ariaLabel: 'Download image',
+            html: '<i class="fa-solid fa-download"></i>',
+            onClick: () => _downloadViewerImage(pswp) });
+
+        // Rotation controls (client-side, non-destructive). FontAwesome is
+        // already loaded globally, so the icons render inside the pswp buttons.
+        pswp.ui.registerElement({ name: 'rotate-left', order: 6, isButton: true,
+            title: 'Rotate left ([)', ariaLabel: 'Rotate left',
+            html: '<i class="fa-solid fa-rotate-left"></i>',
+            onClick: () => _rotateViewer(pswp, -90) });
+        pswp.ui.registerElement({ name: 'rotate-right', order: 7, isButton: true,
+            title: 'Rotate right (])', ariaLabel: 'Rotate right',
+            html: '<i class="fa-solid fa-rotate-right"></i>',
+            onClick: () => _rotateViewer(pswp, 90) });
+        pswp.ui.registerElement({ name: 'rotate-reset', order: 8, isButton: true,
+            title: 'Reset orientation (r)', ariaLabel: 'Reset orientation',
+            html: '<i class="fa-solid fa-arrows-rotate"></i>',
+            onClick: () => _resetViewerRotation(pswp) });
+
+        // Top-right geo metadata overlay (lives in the root UI layer, so it
+        // stays put during zoom/rotation) + its toggle button.
+        pswp.ui.registerElement({ name: 'geo-overlay', className: 'pswp-geo-overlay',
+            appendTo: 'root', isButton: false,
+            onInit: (el, pswpInst) => {
+                el.setAttribute('aria-live', 'polite');
+                const render = () => _renderGeoOverlay(el, pswpInst);
+                pswpInst.on('change', render);
+                render();
+            } });
+        pswp.ui.registerElement({ name: 'overlay-toggle', order: 10, isButton: true,
+            title: 'Toggle info overlay (i)', ariaLabel: 'Toggle info overlay',
+            html: '<i class="fa-solid fa-circle-info"></i>',
+            onInit: (el) => { el.classList.toggle('pswp-toggle-on', _overlayMode() !== 'off'); },
+            onClick: () => _cycleOverlay(pswp) });
     });
+
+    // Keyboard: PhotoSwipe owns ←/→/Esc; we add the rotation shortcuts.
+    const _onKey = (e) => {
+        if (e.key === '[') { _rotateViewer(pswp, -90); e.preventDefault(); }
+        else if (e.key === ']') { _rotateViewer(pswp, 90); e.preventDefault(); }
+        else if (e.key === 'r' || e.key === '0') { _resetViewerRotation(pswp); e.preventDefault(); }
+        else if (e.key === 'i') { _cycleOverlay(pswp); e.preventDefault(); }
+        else if (e.key === 'd') { _downloadViewerImage(pswp); e.preventDefault(); }
+    };
+    document.addEventListener('keydown', _onKey);
 
     pswp.on('close', () => {
         _currentGalleryTiers = new Map();
+        _currentRotations = new Map();
     });
+    pswp.on('destroy', () => document.removeEventListener('keydown', _onKey));
 
     pswp.init();
 };
@@ -8420,14 +8676,16 @@ window.openGallery = function (reportId, startGroupIdx) {
 // loaded, fall back to the original simple overlay.
 window.openLightbox = function (url, caption) {
     if (typeof PhotoSwipe === 'undefined') { _openSingleOverlay(url, caption); return; }
+    const _cd = _imgDimCache.get(url);
     const pswp = new PhotoSwipe({
-        dataSource: [{ src: url, width: 1920, height: 1440, alt: caption || '' }],
+        dataSource: [{ src: url, width: _cd?.w || 1920, height: _cd?.h || 1440, alt: caption || '' }],
         index: 0,
         bgOpacity: 0.94,
         showHideAnimationType: 'fade',
         closeOnVerticalDrag: true,
         pinchToClose: false,
     });
+    pswp.on('loadComplete', (e) => _applyRealDims(e.content));
     pswp.init();
 };
 

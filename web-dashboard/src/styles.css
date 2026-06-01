@@ -2222,6 +2222,45 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
    read as intentional framing, not as a rendering bug. */
 .dp-img .img-thumb-bg { width:100%; height:100%; object-fit:cover; max-height:none; }
 .dp-img .img-full-layer { width:100%; height:100%; object-fit:contain; border-radius:8px; }
+
+/* ── Image viewer (PhotoSwipe) — custom toolbar icons (rotate/download) ──
+   FontAwesome <i> glyphs inside .pswp__button need an explicit light color +
+   centering since the vendor button styles target inline SVG, not font icons. */
+.pswp__button .fa-solid { color:#fff; opacity:.82; font-size:17px; line-height:1;
+    display:flex; align-items:center; justify-content:center; width:100%; height:100%; }
+.pswp__button:hover .fa-solid { opacity:1; }
+
+/* Top-right geo metadata overlay — compact glass chip. Lives in the pswp root
+   UI layer (not the transformed image), so it stays put during zoom/rotation. */
+.pswp-geo-overlay { position:absolute; top:54px; right:12px; z-index:10; max-width:40vw;
+    background:var(--panel-glass); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:8px 11px; font-size:12px; line-height:1.55; color:var(--text);
+    text-shadow:0 1px 2px rgba(0,0,0,0.7); box-shadow:0 6px 20px rgba(0,0,0,0.45); }
+.pswp-geo-overlay .pgo-row { display:flex; align-items:center; gap:6px; white-space:nowrap; }
+.pswp-geo-overlay i { width:14px; text-align:center; opacity:0.9; font-size:11px; }
+.pswp-geo-overlay .pgo-coords { display:block; background:none; border:0; padding:0; color:inherit;
+    font:inherit; cursor:pointer; font-variant-numeric:tabular-nums;
+    text-decoration:underline dotted rgba(255,255,255,0.35); }
+.pswp-geo-overlay .pgo-coords:hover { color:#bfe9ff; }
+.pswp-geo-overlay .pgo-acc { color:var(--text-sub); font-size:11px; }
+.pswp-geo-overlay .pgo-building { color:#e6edf6; margin-top:3px; }
+.pswp-geo-overlay .pgo-time { color:var(--text-sub); }
+.pswp-geo-overlay .pgo-map { margin-top:6px; display:inline-flex; align-items:center; gap:5px;
+    font-size:11px; color:var(--info); background:rgba(56,189,248,0.10);
+    border:1px solid rgba(56,189,248,0.3); border-radius:6px; padding:3px 8px; cursor:pointer; }
+.pswp-geo-overlay .pgo-map:hover { background:rgba(56,189,248,0.18); }
+.pswp__button--overlay-toggle.pswp-toggle-on .fa-solid { color:#7dd3fc; opacity:1; }
+@media (max-width:640px) { .pswp-geo-overlay { max-width:70vw; font-size:11px; top:48px; } }
+
+/* a11y: visible focus ring for keyboard users on the viewer controls + overlay. */
+.pswp__button:focus-visible,
+.pswp-geo-overlay .pgo-coords:focus-visible,
+.pswp-geo-overlay .pgo-map:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(56,189,248,0.55); border-radius:6px; }
+/* Keep the toolbar from crowding on small screens. */
+@media (max-width:640px) {
+    .pswp-tier-caption { font-size:10px; max-width:42vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pswp-tier-buttons .pswp-tier-tab { padding:2px 6px; }
+}
 .dp-img-uploading { cursor:default; }
 .dp-img-placeholder { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border:1px dashed rgba(255,255,255,0.08); }
 .dp-img .img-progress-overlay { padding:8px 8px 6px; }
