@@ -370,14 +370,24 @@ async def handle_update(update: dict):
         # time) — read it back here to restore their choice across
         # session resets.
         s.lang = consent_get_lang(user_id) or detected
-        s.state = "LANG_SELECT"
         if decoded_pwa_hash:
             s.pwa_device_hash = decoded_pwa_hash
             logger.info(
                 "telegram /start linked to PWA device-hash (chat_id=%s)",
                 chat_id,
             )
-        track_prompt_msg(s, await send_welcome(chat_id, s.lang))
+        # Phase 1: no forced 9-chip language picker on first contact — language
+        # is auto-detected (above) and switchable from the consent card's
+        # "Change language" affordance. A returning consented reporter (consent
+        # hydrated from the store) jumps straight into the flow.
+        if not s.consented and consent_has(user_id):
+            s.consented = True
+        if s.consented:
+            s.state = _next_missing_step(s)
+            await _prompt_for_step(s, chat_id, s.state)
+        else:
+            s.state = "AWAIT_CONSENT"
+            track_prompt_msg(s, await send_consent_prompt(chat_id, s.lang))
         return
 
     # /cancel always aborts
@@ -392,10 +402,19 @@ async def handle_update(update: dict):
         track_prompt_msg(s, await send_welcome(chat_id, s.lang))
         return
 
-    # If in START, DONE, or LANG_SELECT — show language picker
+    # Phase 1: a first/idle-session message no longer forces the 9-chip
+    # language picker — language is auto-detected above. Route straight to the
+    # localized consent card (new reporter) or the next missing step (returning
+    # reporter, consent hydrated from the store).
     if session.state in ("START", "DONE", "LANG_SELECT"):
-        session.state = "LANG_SELECT"
-        track_prompt_msg(session, await send_welcome(chat_id, session.lang))
+        if not session.consented and consent_has(user_id):
+            session.consented = True
+        if session.consented:
+            session.state = _next_missing_step(session)
+            await _prompt_for_step(session, chat_id, session.state)
+        else:
+            session.state = "AWAIT_CONSENT"
+            track_prompt_msg(session, await send_consent_prompt(chat_id, session.lang))
         return
 
     # P3.5 — Consent-gate: if waiting on consent (or never consented), any
@@ -541,6 +560,15 @@ async def _handle_callback(callback_query: dict):
     # `user_id`, so a returning reporter skips the consent card entirely.
     # In-memory `session.consented` is mirrored from the store on first
     # lookup so the rest of the flow keeps working unchanged.
+    # Phase 1: explicit "Change language" affordance — shows the 9-chip grid
+    # on demand (the grid is no longer a forced first step). After a pick the
+    # lang_ handler below re-shows the localized consent card if not yet
+    # consented, else re-prompts the current step in the new language.
+    if data == "change_lang":
+        await answer_callback(cq_id)
+        track_prompt_msg(session, await send_welcome(chat_id, session.lang))
+        return
+
     if data.startswith("lang_"):
         new_lang = data.replace("lang_", "")
         session.lang = new_lang
