@@ -78,6 +78,8 @@ _STRINGS = {
         "review_fix":       "✏️ Fix something",
         "review_fix_title": "✏️ *What would you like to change?*",
         "review_fix_back":  "⬅ Back to review",
+        # Phase 6: /delete (right to erasure) confirmation. English-only for now.
+        "deleted_ack":      "Your data has been deleted. You'll be asked to agree again before your next report.",
         "step_loc_text_hint": "Or type the place name",
         # native-language building-name prompt.
         # Reporter types the name (e.g. "Koramangala High School", "مدرسة الأمل")

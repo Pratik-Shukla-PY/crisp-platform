@@ -424,8 +424,27 @@ async def handle_update(update: dict):
             track_prompt_msg(s, await send_consent_prompt(chat_id, s.lang))
         return
 
-    # /cancel always aborts
-    if text.startswith("/cancel") or text.startswith("/delete"):
+    # /delete — right to erasure (must-have #10). Drop the in-progress report,
+    # REVOKE the persisted consent so the reporter must re-consent before
+    # filing anything new, then reset the session. (Previously /delete behaved
+    # exactly like /cancel and left the consent row on disk — the consent_store
+    # revoke() was documented as wired here but never actually called.)
+    # consent_get_lang now returns None (row gone) → fall back to detected.
+    if text.startswith("/delete"):
+        if session.report_id:
+            await delete_report(session)
+        consent_revoke(user_id)
+        clear_session(user_id)
+        s = get_or_create_session(user_id, chat_id)
+        s.lang = detected
+        s.state = "LANG_SELECT"
+        await send_text(chat_id, "🗑 " + t(s.lang, "deleted_ack"))
+        track_prompt_msg(s, await send_welcome(chat_id, s.lang))
+        return
+
+    # /cancel — abort the current report but KEEP consent, so cancelling
+    # doesn't force the consent card again on the next report.
+    if text.startswith("/cancel"):
         if session.report_id:
             await delete_report(session)
         clear_session(user_id)

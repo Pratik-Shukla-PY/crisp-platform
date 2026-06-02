@@ -234,29 +234,59 @@ class TelegramSession:
 
 _sessions: Dict[str, TelegramSession] = {}
 
+# Phase 6 — throttle the full-dict stale sweep. get_or_create_session runs the
+# sweep at most once per _SWEEP_INTERVAL_SEC instead of on every update, so a
+# busy bot doesn't pay an O(n) scan per message (must-have #12 — scale). In
+# webhook mode (no polling loop) this throttled sweep IS the periodic cleanup.
+_SWEEP_INTERVAL_SEC = 300.0
+_last_sweep_ts: float = 0.0
+
 
 def hash_user(user_id: int) -> str:
     """Hash Telegram user ID for privacy."""
     return "TG-" + hashlib.sha256(str(user_id).encode()).hexdigest()[:16]
 
 
-def get_or_create_session(user_id: int, chat_id: int) -> TelegramSession:
-    uh = hash_user(user_id)
-    # P2.8 — opportunistic stale-session cleanup. A full cleanup runs on the
-    # bot's purge worker (see cleanup_stale_sessions) but doing a cheap sweep
-    # on each fetch keeps the in-memory dict bounded even if the worker is
-    # disabled. Sessions older than 2 hours with no report_id are abandoned
-    # drafts; sessions older than 24 h in any state are stale.
-    now_ts = datetime.now(timezone.utc).timestamp()
-    stale_keys = [
-        k for k, s in _sessions.items()
-        if (s.state == "DONE" and (now_ts - s.created_at) > 24 * 3600) or
-           (not s.report_id and (now_ts - s.created_at) > 2 * 3600)
-    ]
+def _is_stale(s: TelegramSession, now_ts: float) -> bool:
+    """A session is stale (safe to drop from the in-memory dict) when:
+      • it's DONE and older than 24 h, or
+      • it never created a report and has sat for > 2 h (abandoned draft), or
+      • Phase 6: it created a report early but never finalized AND has been
+        idle for > 12 h (abandoned mid-flow). Without this last rule a
+        report-bearing session lingered forever — neither of the first two
+        conditions ever matched it — so the dict grew unbounded.
+    The idle check uses last_activity (not created_at) so a slow-but-active
+    long report is never reaped out from under the reporter."""
+    age = now_ts - s.created_at
+    idle = now_ts - s.last_activity
+    if s.state == "DONE" and age > 24 * 3600:
+        return True
+    if not s.report_id and age > 2 * 3600:
+        return True
+    if s.report_id and s.state != "DONE" and idle > 12 * 3600:
+        return True
+    return False
+
+
+def _sweep(now_ts: float) -> int:
+    """Drop every stale session (see _is_stale). Returns the count removed."""
+    stale_keys = [k for k, s in _sessions.items() if _is_stale(s, now_ts)]
     for k in stale_keys:
         _sessions.pop(k, None)
     if stale_keys:
         logger.info(f"[TG] Cleared {len(stale_keys)} stale session(s)")
+    return len(stale_keys)
+
+
+def get_or_create_session(user_id: int, chat_id: int) -> TelegramSession:
+    uh = hash_user(user_id)
+    # Phase 6 — throttled stale sweep: at most once per _SWEEP_INTERVAL_SEC,
+    # not on every update (the old behavior was an O(n) scan per message).
+    global _last_sweep_ts
+    now_ts = datetime.now(timezone.utc).timestamp()
+    if now_ts - _last_sweep_ts > _SWEEP_INTERVAL_SEC:
+        _last_sweep_ts = now_ts
+        _sweep(now_ts)
 
     if uh not in _sessions or _sessions[uh].state == "DONE":
         _sessions[uh] = TelegramSession(user_hash=uh, chat_id=chat_id)
@@ -265,18 +295,11 @@ def get_or_create_session(user_id: int, chat_id: int) -> TelegramSession:
 
 
 def cleanup_stale_sessions() -> int:
-    """Called by a background loop (or tests). Drops sessions that exceeded
-    the inactivity cutoffs used above. Returns the count removed."""
-    now_ts = datetime.now(timezone.utc).timestamp()
-    before = len(_sessions)
-    keys_to_drop = [
-        k for k, s in _sessions.items()
-        if (s.state == "DONE" and (now_ts - s.created_at) > 24 * 3600) or
-           (not s.report_id and (now_ts - s.created_at) > 2 * 3600)
-    ]
-    for k in keys_to_drop:
-        _sessions.pop(k, None)
-    return before - len(_sessions)
+    """Called by a background loop (or tests). Drops sessions that exceeded the
+    cutoffs in _is_stale (shared with the inline sweep). Always sweeps (not
+    throttled), so tests + an explicit worker get deterministic behavior.
+    Returns the count removed."""
+    return _sweep(datetime.now(timezone.utc).timestamp())
 
 
 def get_session(user_id: int) -> Optional[TelegramSession]:
