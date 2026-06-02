@@ -586,6 +586,18 @@ class ReportResponse(BaseModel):
     # submitted before Phase-1 won't have one.
     blurhash: Optional[str] = None
 
+    # Dynamic Crisis Forms (geo-scoped Stage 2/3 packs). Additive + nullable:
+    # default/legacy reports leave all four NULL, so must-have #1 parity is
+    # preserved by construction. The dashboard renders the curated pack answers
+    # when present, falling back to the standard field chips otherwise.
+    # `form_data` carries ONLY the non-mapped pack answers — fields bound to a
+    # first-class column (damage_classification / crisis_type / severity / …)
+    # are routed to those columns server-side, never duplicated here.
+    crisis_event_id: Optional[str] = None
+    form_pack_id: Optional[str] = None
+    form_pack_version: Optional[int] = None
+    form_data: Optional[Any] = None
+
     # reviewer workflow surface.
     # `response_time_seconds` is COMPUTED at read time from
     # help_arrived_at (or help_dispatched_at) minus reviewed_at. Not stored
