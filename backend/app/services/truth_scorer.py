@@ -46,6 +46,12 @@ You will receive:
   - A ground-level photo submitted by the citizen reporter
   - Full report context: claimed infrastructure type, severity, description,
     audio transcription, GPS coordinates, and temporal metadata
+  - (When present) COMMUNITY-CURATED GROUND TRUTH: structured answers the reporter
+    gave to crisis-specific questions inside an admin-defined crisis event (e.g.
+    "flames visible? yes", "water depth: knee-high"). These are deliberate,
+    constrained answers — weigh them as corroborating evidence across components
+    2, 3 and 4. They strengthen (or, if they contradict the photo/satellite,
+    weaken) the assessment; they are NOT a substitute for visual confirmation.
 
 Score the report across 4 components (25 pts each → total 100):
 
@@ -83,6 +89,10 @@ How reliable is the input data? Sum sub-scores:
     Has GPS + photo + audio = 5 pts
     Has GPS + photo         = 3 pts
     Text / audio only       = 1 pt
+  Community-curated ground truth (crisis-pack answers present):
+    Present = +3 pts | Absent = 0 pts
+  (Hard cap COMPONENT 4 at 25 — curated answers can lift a thin report toward
+   the cap but never above it.)
 
 Return ONLY valid JSON — no markdown fences, no prose outside the object:
 {
@@ -107,6 +117,33 @@ Return ONLY valid JSON — no markdown fences, no prose outside the object:
   ],
   "reasoning": "<2-3 sentence narrative explaining the overall score and verdict>"
 }"""
+
+
+def _format_curated_answers(form_data: Optional[dict]) -> str:
+    """Render Report.form_data (curated crisis-pack answers) as human-readable
+    'Label: value' lines for the credibility prompt. Returns '' when empty.
+
+    Mirrors the dashboard's humanize logic (B3): snake_case → Title Case keys,
+    booleans → Yes/No, lists → comma-joined. Skips null/empty answers so the
+    model isn't fed noise.
+    """
+    if not form_data or not isinstance(form_data, dict):
+        return ""
+    lines = []
+    for key, val in form_data.items():
+        if val is None or val == "" or val == []:
+            continue
+        label = str(key).replace("_", " ").strip().title()
+        if isinstance(val, bool):
+            shown = "Yes" if val else "No"
+        elif isinstance(val, (list, tuple)):
+            shown = ", ".join(str(x).replace("_", " ").title() for x in val)
+        elif isinstance(val, dict):
+            shown = json.dumps(val, ensure_ascii=False)
+        else:
+            shown = str(val)
+        lines.append(f"    {label}: {shown}")
+    return "\n".join(lines)
 
 
 class TruthScorer:
@@ -135,6 +172,15 @@ class TruthScorer:
         satellite_data: dict,
         has_audio: bool = False,
         has_gps: bool = True,
+        # B4 — Dynamic Crisis Forms context. When the report came through a
+        # geo-gated crisis pack, the reporter answered crisis-specific questions
+        # (form_data) inside an admin-defined event. These are community-curated
+        # ground truth — additional corroborating evidence for the credibility
+        # chain. All keyword + default None → existing callers are unaffected.
+        form_data: Optional[dict] = None,
+        crisis_type: Optional[str] = None,
+        form_pack_id: Optional[str] = None,
+        form_pack_version: Optional[int] = None,
     ) -> dict:
         """Run multi-modal truth scoring via Claude Haiku. Returns the scoring dict."""
         client = self._get_client()
@@ -210,15 +256,31 @@ class TruthScorer:
 
         data_completeness = "GPS + photo" + (" + audio" if has_audio else "")
 
+        # B4 — community-curated ground truth (crisis-pack answers) + event type.
+        _curated = _format_curated_answers(form_data)
+        _pack_tag = (f" [pack {form_pack_id} v{form_pack_version}]"
+                     if form_pack_id else "")
+        _curated_block = (
+            f"\nCOMMUNITY-CURATED GROUND TRUTH{_pack_tag} — structured answers the "
+            f"reporter gave to crisis-specific questions"
+            f"{f' for a confirmed {crisis_type} event' if crisis_type else ''}. "
+            f"Treat these as corroborating evidence (weigh across damage, coherence "
+            f"and data-quality), NOT as the claim itself:\n{_curated}\n"
+        ) if _curated else ""
+        _crisis_line = (f"  Confirmed crisis type:  {crisis_type} (event-bound)\n"
+                        if crisis_type else "")
+
         # ── Part 4: full context text ─────────────────────────────────────────
         content.append({"type": "text", "text": (
             f"REPORT CONTEXT:\n"
             f"  Report ID:              {report_id}\n"
             f"  Claimed infrastructure: {infrastructure_type}\n"
             f"  Claimed severity:       {severity}\n"
+            f"{_crisis_line}"
             f"  Report submitted at:    {report_dt.isoformat()}\n"
             f"  User description:       {description or '(none)'}\n"
             f"  Audio transcription:    {transcription or '(none)'}\n"
+            f"{_curated_block}"
             f"\n"
             f"SATELLITE METADATA:\n"
             f"  Source:       {satellite_data.get('source', 'Unknown')}\n"
@@ -271,8 +333,26 @@ class TruthScorer:
                 "days_gap":         days_gap,
             }
             result["scored_at"] = datetime.now(timezone.utc).isoformat()
+
+            # B4 — record that community-curated crisis-form answers were part of
+            # the evidence chain + surface it as a key finding (the dashboard
+            # detail panel renders key_findings → no schema change needed).
+            considered = bool(_curated)
+            result["form_data_considered"] = considered
+            if considered:
+                _n = len([k for k, val in (form_data or {}).items()
+                          if val not in (None, "", [])])
+                _note = (f"Community-curated crisis-form answers ({_n} field"
+                         f"{'s' if _n != 1 else ''}) were weighed as corroborating evidence.")
+                _kf = result.get("key_findings")
+                if isinstance(_kf, list):
+                    _kf.append(_note)
+                else:
+                    result["key_findings"] = [_note]
+
             logger.info(
                 f"Truth score for {report_id}: {sc['total']}/100 — {result.get('verdict')}"
+                + (" [+curated]" if considered else "")
             )
             return result
 

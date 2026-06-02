@@ -6069,6 +6069,12 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
             satellite_data    = sat_data,
             has_audio         = has_audio,
             has_gps           = True,
+            # B4 — feed the geo-gated crisis-pack context into the credibility
+            # chain. NULL for default-flow reports → byte-identical scoring.
+            form_data         = report.form_data,
+            crisis_type       = report.crisis_type,  # String(30) column, not an enum
+            form_pack_id      = report.form_pack_id,
+            form_pack_version = report.form_pack_version,
         )
     finally:
         # Clean up the temp file — both on success and on Claude API failure.
