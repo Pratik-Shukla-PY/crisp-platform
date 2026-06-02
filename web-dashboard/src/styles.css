@@ -791,6 +791,28 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     padding: 4px 10px 10px 10px;
     border-top: 1px solid rgba(148, 163, 184, 0.10);
 }
+/* B3 — curated crisis-pack answers (Report.form_data) + form provenance tag. */
+.dp-crisis-answers .dp-section-header i:first-child { color: #67e8f9; }
+.dp-cf-count {
+    font-size: 10px; font-weight: 700; line-height: 1;
+    background: rgba(34, 211, 238, 0.16); color: #67e8f9;
+    border-radius: 999px; padding: 2px 7px;
+    text-transform: none; letter-spacing: 0;
+}
+.dp-cf-formname {
+    font-size: 10.5px; font-weight: 600; color: #94a3b8;
+    text-transform: none; letter-spacing: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%;
+}
+.dp-cf-grid { display: flex; flex-direction: column; gap: 2px; }
+.dp-cf-row {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 5px 2px; border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+.dp-cf-row:last-child { border-bottom: 0; }
+.dp-cf-key { flex: 0 0 42%; font-size: 12px; color: #94a3b8; font-weight: 600; }
+.dp-cf-val { flex: 1; font-size: 12.5px; color: var(--text); word-break: break-word; }
+.dp-crisis-form-tag { cursor: default; }
 /* Hide the Activity Log section entirely when the audit ribbon
    came back empty (set by _fetchReportAuditTrail). */
 .dp-section-activity.is-empty { display: none; }

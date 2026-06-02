@@ -370,6 +370,67 @@ const CRISIS_LABELS = {
 const infraLabel  = (v) => INFRA_LABELS[v]  || (v ? String(v).replace(/_/g, ' ') : '');
 const crisisLabel = (v) => CRISIS_LABELS[v] || (v ? String(v).replace(/_/g, ' ') : '');
 
+// ── B3: Dynamic Crisis Forms — report-detail rendering ──────────────────────
+// Resolve form_pack_id → pack title/version and crisis_event_id → event name
+// from the admin crisis-forms lists (the dashboard is admin-authed). Bulk-
+// fetched ONCE and cached; failures degrade gracefully to the raw id/version.
+let _crisisFormsIndex = null, _crisisFormsIndexPromise = null;
+async function ensureCrisisFormsIndex() {
+    if (_crisisFormsIndex) return _crisisFormsIndex;
+    if (_crisisFormsIndexPromise) return _crisisFormsIndexPromise;
+    _crisisFormsIndexPromise = (async () => {
+        const idx = { packs: {}, events: {} };
+        try {
+            const base = `${BACKEND_HOST}/api/v1/admin/crisis-forms`;
+            const [pRes, eRes] = await Promise.all([
+                fetch(`${base}/packs`, { headers: _authHeaders() }),
+                fetch(`${base}/events`, { headers: _authHeaders() }),
+            ]);
+            const packs = pRes.ok ? await pRes.json() : [];
+            const events = eRes.ok ? await eRes.json() : [];
+            (Array.isArray(packs) ? packs : []).forEach((p) => { if (p && p.id) idx.packs[p.id] = { title: p.title, version: p.active_version, crisis_type: p.crisis_type }; });
+            (Array.isArray(events) ? events : []).forEach((ev) => { if (ev && ev.id) idx.events[ev.id] = { name: ev.name, crisis_type: ev.crisis_type }; });
+        } catch (_e) { /* leave empty → graceful fallback */ }
+        _crisisFormsIndex = idx;
+        return idx;
+    })();
+    return _crisisFormsIndexPromise;
+}
+window.ensureCrisisFormsIndex = ensureCrisisFormsIndex;
+
+// Humanize a form_data key (snake_case → "Title Case") + format its value.
+function _humanizeFormKey(k) {
+    return String(k == null ? '' : k).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function _formatFormValue(v) {
+    if (v === true) return 'Yes';
+    if (v === false) return 'No';
+    if (v == null || v === '') return '—';
+    if (Array.isArray(v)) return v.length ? v.map((x) => escapeHtml(_humanizeFormKey(String(x)))).join(', ') : '—';
+    if (typeof v === 'object') { try { return escapeHtml(JSON.stringify(v)); } catch (_e) { return '—'; } }
+    return escapeHtml(String(v));
+}
+// Render Report.form_data (curated crisis-pack answers) as a collapsible section.
+// The pack/event NAME is filled asynchronously post-render (see selectReport).
+function _renderFormDataSection(r) {
+    const fd = r && r.form_data;
+    if (!fd || typeof fd !== 'object' || Array.isArray(fd)) return '';
+    const keys = Object.keys(fd);
+    if (!keys.length) return '';
+    const rows = keys.map((k) => `<div class="dp-cf-row"><span class="dp-cf-key">${escapeHtml(_humanizeFormKey(k))}</span><span class="dp-cf-val">${_formatFormValue(fd[k])}</span></div>`).join('');
+    return `
+        <details class="dp-section dp-crisis-answers" open>
+            <summary class="dp-section-header">
+                <i class="fa-solid fa-clipboard-list"></i>
+                <span>Crisis-pack answers</span>
+                <span class="dp-cf-count">${keys.length}</span>
+                <span id="dp-cf-formname-${r.id}" class="dp-cf-formname"></span>
+                <i class="fa-solid fa-chevron-down dp-section-caret"></i>
+            </summary>
+            <div class="dp-section-body dp-cf-grid">${rows}</div>
+        </details>`;
+}
+
 // Phase F.3.b (May 2026, pivoted from the original source-enum plan
 // after the F.3.c audit revealed the operator-perceived "everything
 // is Transport & Communication" problem was driven by legacy ROAD
@@ -2334,6 +2395,12 @@ function createIncidentCard(r) {
             <i class="fa-solid fa-hourglass-half"></i> Uploading…
         </span>`;
     }
+    // B3 — Dynamic Crisis Form provenance chip (when the report came through a
+    // geo-gated crisis pack). Icon-only label keeps the feed card scannable; the
+    // pack title is shown on the detail panel.
+    const _formChip = r.form_pack_id
+        ? `<span class="k5a-chip" style="background:rgba(34,211,238,0.14);color:#67e8f9;" title="Submitted via a Dynamic Crisis Form pack${r.form_pack_version ? ' (v' + r.form_pack_version + ')' : ''}"><i class="fa-solid fa-clipboard-list"></i> Crisis form</span>`
+        : '';
 
     // Phase G.5 — bulk-select checkbox at top-left. Visible only when
     // multi-select mode is enabled (operator toggled the toolbar
@@ -2399,6 +2466,7 @@ function createIncidentCard(r) {
             <div class="qrt-card-footer">
                 ${_statusChip}
                 ${origPendingChip}
+                ${_formChip}
                 ${truthBadge}
                 ${actionEl}
             </div>
@@ -4147,7 +4215,7 @@ window.selectReport = (id, skipFly = false) => {
         ${urgencyHtml}
 
         <!-- ②b UNDP fields -->
-        ${r.crisis_type || r.damage_classification || r.infrastructure_name || r.building_id || r.service_status ? `
+        ${r.crisis_type || r.damage_classification || r.infrastructure_name || r.building_id || r.service_status || r.form_pack_id ? `
         <div class="dp-undp-fields" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;">
             ${r.crisis_type ? `<span class="dp-field-badge" style="background:rgba(124,58,237,0.15);color:#a78bfa;"><i class="fa-solid fa-cloud-bolt"></i> ${crisisLabel(r.crisis_type)}</span>` : ''}
             ${r.damage_classification ? `<span class="dp-field-badge" style="background:${r.damage_classification==='COMPLETE'?'rgba(239,68,68,0.15);color:#f87171':r.damage_classification==='PARTIAL'?'rgba(249,115,22,0.15);color:#fb923c':'rgba(34,197,94,0.15);color:#4ade80'};"><i class="fa-solid fa-building-circle-xmark"></i> ${r.damage_classification.replace(/_/g,' ')}</span>` : ''}
@@ -4193,6 +4261,10 @@ window.selectReport = (id, skipFly = false) => {
                  panel. Green = latest, amber = older. Only rendered for reports
                  with a building_id. -->
             ${r.building_id ? `<span id="dp-version-ribbon-${r.id}" class="dp-field-badge dp-version-ribbon" style="background:rgba(148,163,184,0.12);color:#cbd5e1;"><i class="fa-solid fa-code-branch"></i> V …</span>` : ''}
+            <!-- B3 — Dynamic Crisis Form provenance tag. Shows when the report came
+                 through a geo-gated crisis pack; the pack title + event name are
+                 resolved asynchronously post-render (see selectReport). -->
+            ${r.form_pack_id ? `<span id="dp-form-tag-${r.id}" class="dp-field-badge dp-crisis-form-tag" style="background:rgba(34,211,238,0.14);color:#67e8f9;" title="Submitted via a Dynamic Crisis Form pack"><i class="fa-solid fa-clipboard-list"></i> Crisis form${r.form_pack_version ? ` · v${r.form_pack_version}` : ''}</span>` : ''}
         </div>
         ${r.service_status ? (() => {
             const ss = r.service_status;
@@ -4254,6 +4326,9 @@ window.selectReport = (id, skipFly = false) => {
             return html;
         })() : ''}
         ` : ''}
+
+        <!-- ②c Crisis-pack curated answers (Report.form_data) -->
+        ${_renderFormDataSection(r)}
 
         <!-- ③ Evidence: Images gallery + Satellite Verify -->
         ${hasVisualEvidence ? `
@@ -4513,6 +4588,31 @@ window.selectReport = (id, skipFly = false) => {
         el.style.cursor = 'pointer';
         el.onclick = () => window.filterByBuilding(r.building_id);
         el.title = `Click to highlight all ${idx.total} reports for this building on the map`;
+    })();
+
+    // B3 — resolve the crisis-form pack title + event name for the detail tag +
+    // answers header. Async (admin lists, cached); guarded against panel close.
+    (async () => {
+        if (!r.form_pack_id && !r.crisis_event_id) return;
+        let idx;
+        try { idx = await ensureCrisisFormsIndex(); } catch (_e) { return; }
+        if (!idx) return;
+        const pack = r.form_pack_id ? idx.packs[r.form_pack_id] : null;
+        const ev = r.crisis_event_id ? idx.events[r.crisis_event_id] : null;
+        const tag = document.getElementById(`dp-form-tag-${r.id}`);
+        if (tag) {
+            const name = (pack && pack.title) ? escapeHtml(pack.title) : 'Crisis form';
+            const ver = r.form_pack_version ? ` · v${r.form_pack_version}` : '';
+            tag.innerHTML = `<i class="fa-solid fa-clipboard-list"></i> ${name}${ver}`;
+            tag.title = `Form: ${pack && pack.title ? pack.title : (r.form_pack_id || '—')}${ev && ev.name ? ` · Event: ${ev.name}` : ''}`;
+        }
+        const fn = document.getElementById(`dp-cf-formname-${r.id}`);
+        if (fn) {
+            const bits = [];
+            if (pack && pack.title) bits.push(escapeHtml(pack.title));
+            if (ev && ev.name) bits.push('· ' + escapeHtml(ev.name));
+            if (bits.length) fn.innerHTML = bits.join(' ');
+        }
     })();
 
     if (loc && !skipFly) map.flyTo([loc.latitude, loc.longitude], 15);
