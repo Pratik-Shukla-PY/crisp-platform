@@ -104,7 +104,12 @@ class TelegramSession:
     lang: str = ""           # detected from Telegram user locale
     state: str = "START"     # START → LANG_SELECT → STEP_PHOTO → STEP_DESCRIPTION → STEP_TYPE → STEP_SEVERITY → STEP_LOCATION → DONE
     text: str = ""
-    image_data_url: str = ""
+    image_data_url: str = ""        # primary photo (first received)
+    # Phase 4: additional photos (Telegram album OR one-by-one), capped to
+    # match the PWA's 3-photo total. Each item: {"data_url": str, "uploaded":
+    # bool}. Uploaded as independent ORIGINAL Media rows (Telegram has one
+    # variant per photo); expected_media counts them.
+    extra_images: list = field(default_factory=list)
     audio_data_url: str = ""
     video_data_url: str = ""     # deferred: uploaded after everything else
     image_uploaded: bool = False  # track if image was already sent to backend
@@ -208,7 +213,12 @@ class TelegramSession:
 
     @property
     def media_count(self) -> int:
-        return sum([bool(self.image_data_url), bool(self.audio_data_url)])
+        # Phase 4: primary photo + any extra album photos + audio. Each photo
+        # is an independent ORIGINAL Media row, so each counts toward
+        # expected_media.
+        return ((1 if self.image_data_url else 0)
+                + len(self.extra_images)
+                + (1 if self.audio_data_url else 0))
 
     def touch(self):
         self.last_activity = datetime.now(timezone.utc).timestamp()
@@ -667,6 +677,30 @@ async def upload_image(session: TelegramSession) -> bool:
     except Exception as e:
         logger.error(f"Image upload error: {e}")
         return False
+
+
+async def upload_extra_images(session: TelegramSession) -> bool:
+    """Phase 4 — upload any not-yet-uploaded extra album photos as independent
+    ORIGINAL Media rows on the report. Telegram has one variant per photo, so
+    each extra is its own Media row (no photo_group_id); expected_media counts
+    them. Best-effort per photo: a failure on one doesn't block the others, and
+    a row stays unflagged so a later drain can retry it."""
+    if not session.report_id or not session.extra_images:
+        return False
+    from messaging_bot.chunked_uploader import upload_media_chunked, extract_b64_from_data_url
+    any_ok = False
+    for item in session.extra_images:
+        if item.get("uploaded"):
+            continue
+        try:
+            b64, mime = extract_b64_from_data_url(item["data_url"])
+            ok = await upload_media_chunked(session.report_id, b64, "IMAGE", mime)
+            if ok:
+                item["uploaded"] = True
+                any_ok = True
+        except Exception as e:
+            logger.error(f"Extra image upload error: {e}")
+    return any_ok
 
 
 async def upload_video_deferred(session: TelegramSession) -> bool:

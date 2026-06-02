@@ -18,7 +18,7 @@ import re
 from typing import Optional
 from .session_manager import (
     get_or_create_session, is_duplicate_message,
-    create_report_early, upload_image, upload_audio, upload_video_deferred,
+    create_report_early, upload_image, upload_extra_images, upload_audio, upload_video_deferred,
     update_report_metadata, update_report_location, delete_report, submit_report,
     clear_session, SEVERITY_MAP, TYPE_MAP, CRISIS_MAP, DAMAGE_MAP, DEBRIS_MAP, hash_user,
     resolve_location_name, forward_geocode,
@@ -86,6 +86,9 @@ def _fire_upload(session, coro):
 
 _TAP_ONLY_STEPS = {"STEP_DAMAGE_CLASS", "STEP_TYPE", "STEP_CRISIS_TYPE", "STEP_DEBRIS"}
 
+# Phase 4: cap total photos per report to match the PWA's V4_MAX_PHOTOS (3).
+_MAX_PHOTOS = 3
+
 
 def _message_has_capturable(message: dict) -> bool:
     """True if the message carries something _capture_any_media would keep —
@@ -111,17 +114,28 @@ async def _capture_any_media(session, message: dict):
     """
     captured = False
 
-    # Photo
-    if message.get("photo") and not session.image_data_url:
+    # Photo — Phase 4: accept up to _MAX_PHOTOS (Telegram album OR one-by-one).
+    # The FIRST becomes the primary (session.image_data_url); the rest go to
+    # session.extra_images and upload as independent ORIGINAL Media rows.
+    if message.get("photo"):
         photos = message["photo"]
         file_id = photos[-1].get("file_id")
-        if file_id:
+        total_photos = (1 if session.image_data_url else 0) + len(session.extra_images)
+        if file_id and total_photos < _MAX_PHOTOS:
             media = await download_media(file_id)
             if media:
-                session.image_data_url = media["data_url"]
-                if session.report_id:
-                    _fire_upload(session, upload_image(session))
+                if not session.image_data_url:
+                    session.image_data_url = media["data_url"]
+                    if session.report_id:
+                        _fire_upload(session, upload_image(session))
+                else:
+                    session.extra_images.append({"data_url": media["data_url"], "uploaded": False})
+                    if session.report_id:
+                        _fire_upload(session, upload_extra_images(session))
                 captured = True
+        elif file_id and total_photos >= _MAX_PHOTOS:
+            # Cap reached — acknowledge instead of silently dropping the photo.
+            await send_text(session.chat_id, t(session.lang, "photo_cap"))
         if message.get("caption"):
             session.text = (session.text + " " + message["caption"]).strip() if session.text else message["caption"]
 
@@ -504,6 +518,8 @@ async def handle_update(update: dict):
             if session.report_id:
                 if session.image_data_url:
                     _fire_upload(session, upload_image(session))
+                if session.extra_images:
+                    _fire_upload(session, upload_extra_images(session))
                 if session.audio_data_url:
                     _fire_upload(session, upload_audio(session))
 
@@ -669,6 +685,8 @@ async def _handle_callback(callback_query: dict):
                 if session.report_id:
                     if session.image_data_url:
                         _fire_upload(session, upload_image(session))
+                    if session.extra_images:
+                        _fire_upload(session, upload_extra_images(session))
                     if session.audio_data_url:
                         _fire_upload(session, upload_audio(session))
             if session.has_evidence:
