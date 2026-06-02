@@ -173,6 +173,16 @@ class ReportMetaCreate(BaseModel):
     # chars) but our encoder uses 4x3, which yields ~30 chars.
     blurhash: Optional[str] = Field(None, max_length=96)
 
+    # Dynamic Crisis Forms — set ONLY when a report was captured inside an active
+    # crisis zone (the geo-gated Stage 2/3 pack). All optional → default
+    # submissions omit them and the report behaves exactly as before (#1 parity).
+    # form_data carries the curated pack's answers; the server re-validates them
+    # against the captured pack version in create_report_meta.
+    crisis_event_id: Optional[str] = Field(None, max_length=36)
+    form_pack_id: Optional[str] = Field(None, max_length=36)
+    form_pack_version: Optional[int] = None
+    form_data: Optional[Any] = None
+
     # UNDP taxonomy guards — applied AFTER field-level enum coercion so
     # we see the post-Pydantic values. Three checks in one pass:
     #   1) HURRICANE → CYCLONE normalisation (UNDP lists them as one

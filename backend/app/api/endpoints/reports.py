@@ -2417,7 +2417,13 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     sync = SyncStatusEnum.PARTIAL if meta_in.expected_media > 0 else SyncStatusEnum.SYNCED
 
     # Create report
-    report_dict = meta_in.model_dump(exclude={"location", "device_hash"})
+    # Crisis-form fields are excluded here and re-added ONLY after server-side
+    # validation below (so a client can't write arbitrary form_data / a mismatched
+    # version straight into the row).
+    report_dict = meta_in.model_dump(exclude={
+        "location", "device_hash",
+        "crisis_event_id", "form_pack_id", "form_pack_version", "form_data",
+    })
     # UNDP must-have #6 — pre-create the parent `buildings` row for any
     # PWA-supplied OSM footprint so the FK on the subsequent report INSERT
     # is satisfied. Without this, a fresh DB (or any client that taps a
@@ -2466,6 +2472,40 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
             f"token (device={meta_in.device_hash[:12]}, "
             f"client_report_id={meta_in.client_report_id})"
         )
+    # ── Dynamic Crisis Forms (additive, validated-before-insert) ──────────────
+    # Runs ONLY when the client submitted a form_pack_id (report captured inside an
+    # active crisis zone). Default submissions skip this block entirely → row shape
+    # + behaviour unchanged (multi-channel parity #1). The server re-validates the
+    # answers against the captured pack version FOR THIS CHANNEL; on failure → 422
+    # BEFORE any DB write (no orphan row). Unknown/unpublished pack → fail-safe:
+    # crisis fields are dropped and the report is stored as a standard report.
+    if meta_in.form_pack_id:
+        from app.models.report import CrisisFormPack, CrisisFormPackVersion
+        from app.services.crisis_form_schema import validate_submission
+        pack_ver = None
+        if meta_in.form_pack_version:
+            pack_ver = (db.query(CrisisFormPackVersion)
+                        .filter(CrisisFormPackVersion.pack_id == meta_in.form_pack_id,
+                                CrisisFormPackVersion.version == meta_in.form_pack_version)
+                        .first())
+        if pack_ver is None:
+            _pack = db.query(CrisisFormPack).filter(CrisisFormPack.id == meta_in.form_pack_id).first()
+            if _pack and _pack.active_version:
+                pack_ver = (db.query(CrisisFormPackVersion)
+                            .filter(CrisisFormPackVersion.pack_id == _pack.id,
+                                    CrisisFormPackVersion.version == _pack.active_version)
+                            .first())
+        if pack_ver is not None:
+            _fd, _fc, _errs = validate_submission(
+                pack_ver.schema_json, meta_in.form_data or {}, meta_in.source.value)
+            if _errs:
+                raise HTTPException(status_code=422, detail={"crisis_form_errors": _errs})
+            report_dict["crisis_event_id"] = meta_in.crisis_event_id
+            report_dict["form_pack_id"] = meta_in.form_pack_id
+            report_dict["form_pack_version"] = pack_ver.version
+            report_dict["form_data"] = _fd or None
+            report_dict.update(_fc)   # canonical column overrides (enum-guarded by the validator)
+
     db_report = Report(
         **report_dict,
         device_id=device.id,
