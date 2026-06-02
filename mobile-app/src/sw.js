@@ -1937,7 +1937,7 @@ const SW_ASSET_MANIFEST = {
     "sentry-init.js": "1bc08e7032f4",
     "styles.css": "641f24841260",
     "tier-config.js": "79b393bc143d",
-    "v4-flow.js": "ca8af59ec2ab",
+    "v4-flow.js": "9cedecd0b414",
     "vendor/blazeface/blazeface.min.js": "e597d1f48a73",
     "vendor/blazeface/group1-shard1of1.bin": "60b481ab6c19",
     "vendor/blazeface/model.json": "7b6bb6f35e5a",

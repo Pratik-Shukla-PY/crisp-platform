@@ -1854,12 +1854,50 @@
             } catch (_) {}
         }
 
+        // ── Dynamic Crisis Forms (geo-gate) ──────────────────────────────────
+        // Once a Stage-1 location is fixed, ask the backend whether a
+        // crisis-specific Stage 2/3 question pack is active for THIS point right
+        // now. The answer is cached on state.crisisPack for the renderer to
+        // consume. This call is intentionally inert with respect to the default
+        // flow: on {active:false}, offline, or any error we leave/clear
+        // crisisPack and the existing hardcoded Stage 2/3 runs UNCHANGED
+        // (fail-safe). Idempotent to ~110 m so it fires at most once per spot.
+        let _crisisPackKey = null;
+        function _maybeFetchCrisisPack(loc) {
+            try {
+                if (!loc || typeof loc.lat !== 'number' || typeof loc.lng !== 'number') return;
+                const key = loc.lat.toFixed(3) + ',' + loc.lng.toFixed(3);
+                if (key === _crisisPackKey) return;   // already resolved for ~here
+                _crisisPackKey = key;
+                const base = window.API_BASE;
+                if (!base) return;
+                const url = base + '/crisis-forms/active?lat=' + encodeURIComponent(loc.lat)
+                    + '&lng=' + encodeURIComponent(loc.lng);
+                fetch(url, { headers: { Accept: 'application/json' } })
+                    .then((r) => (r && r.ok ? r.json() : null))
+                    .then((data) => {
+                        if (data && data.active && data.schema_json) {
+                            _setState({ crisisPack: {
+                                pack_id: data.pack_id, pack_version: data.pack_version,
+                                event_id: data.event_id, crisis_type: data.crisis_type,
+                                schema: data.schema_json,
+                            } });
+                        } else {
+                            _setState({ crisisPack: null });
+                        }
+                        document.dispatchEvent(new CustomEvent('crisis-pack-resolved'));
+                    })
+                    .catch(() => { /* offline / error → default flow (fail-safe) */ });
+            } catch (_) {}
+        }
+
         // Apply cached GPS IMMEDIATELY as a fallback so the user sees
         // a location instantly — fresh fix will overwrite if it lands.
         const cached = _readCachedGps();
         if (cached && !current.location) {
             _setState({ location: cached });
             _paintV4LocationPills();
+            _maybeFetchCrisisPack(cached);
         }
 
         // After fresh + cache both fail, try IP geo. async.
@@ -1874,6 +1912,7 @@
                     _setState({ location: coords });
                     _writeCachedGps(coords.lat, coords.lng, coords.acc || 5000);
                     _paintV4LocationPills();
+                    _maybeFetchCrisisPack(coords);
                 } else if (!cached) {
                     // No fresh, no cache, no IP — give up.
                     text.textContent = current.locationName || UNAVAILABLE;
@@ -1894,6 +1933,7 @@
             _setState({ location: { lat: latitude, lng: longitude, acc: accuracy } });
             _writeCachedGps(latitude, longitude, accuracy);
             _paintV4LocationPills();
+            _maybeFetchCrisisPack({ lat: latitude, lng: longitude, acc: accuracy });
             (async () => {
                 try {
                     if (typeof window.resolveLocationName === 'function') {
