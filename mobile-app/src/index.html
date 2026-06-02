@@ -4885,6 +4885,12 @@
                 </div>
             </section>
 
+            <!-- Dynamic Crisis Forms — geo-gated Stage 2/3 pack sub-step.
+                 Populated at runtime by _renderCrisisPackView() in v4-flow.js
+                 ONLY when state.crisisPack is active (reporter inside a live
+                 crisis zone). Hidden + empty otherwise → default flow unchanged. -->
+            <section class="v4-classify-view" id="v4-view-crisispack" hidden></section>
+
             <!-- LEGACY no-op anchors for v4-flow.js's pre-Delta-D wiring.
                  The chip / carousel handlers initialize against these DOM
                  IDs; they're now invisible but kept so init code doesn't

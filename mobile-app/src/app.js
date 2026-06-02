@@ -9301,6 +9301,34 @@ async function _submitReportInner() {
         // header at replay; server silently degrades to anonymous when
         // expired beyond offline grace — never blocks.
         const _authToken = (window.AuthStore && window.AuthStore.getAccessToken && window.AuthStore.getAccessToken()) || null;
+        // ── Dynamic Crisis Forms ── When the geo-gated pack rendered for this
+        // report (reporter inside a live crisis zone), attach the pack id +
+        // version + assembled answers. form_data carries the crisispack-view
+        // answers PLUS each maps_to field sourced from the canonical state the
+        // default chips already captured (damage/infra/crisis/severity). The
+        // backend re-validates the whole set + routes maps_to to columns. All
+        // three stay null on the default flow (no active zone) → byte-identical
+        // to a standard report.
+        let _crisisPackId = null, _crisisPackVersion = null, _crisisFormData = null;
+        try {
+            const _cp = state.crisisPack;
+            if (_cp && _cp.schema) {
+                const _DEFAULT_CAPTURED = { damage_classification: 1, infrastructure_type: 1, crisis_type: 1, severity: 1 };
+                const _ans = state.crisisStockAnswers || {};
+                const _payload = {};
+                (_cp.schema.sections || []).forEach((sec) => (sec.fields || []).forEach((f) => {
+                    if (!f || !f.key) return;
+                    const v = (f.maps_to && _DEFAULT_CAPTURED[f.maps_to]) ? state[f.maps_to] : _ans[f.key];
+                    if (v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length)) return;
+                    _payload[f.key] = v;
+                }));
+                if (Object.keys(_payload).length) {
+                    _crisisPackId = _cp.pack_id || null;
+                    _crisisPackVersion = _cp.pack_version || null;
+                    _crisisFormData = _payload;
+                }
+            }
+        } catch (_e) { /* never block submit on crisis assembly */ }
         // Build queue item with all data
         const queueItem = {
             client_report_id: clientReportId,
@@ -9416,7 +9444,12 @@ async function _submitReportInner() {
                         user_location_name: state.userLocationName || null,
                         device_location_name: (!state.userLocationName && state.locationName) ? state.locationName : null
                     }
-                    : null
+                    : null,
+                // Dynamic Crisis Forms (geo-gated pack) — see assembly above.
+                // Null on the default flow → byte-identical standard report.
+                form_pack_id: _crisisPackId,
+                form_pack_version: _crisisPackVersion,
+                form_data: _crisisFormData
             },
             photo: hasPhoto ? state.photoDataUrl : null,
             photoSize: hasPhoto ? (state.photoBlob?.size || 0) : 0,

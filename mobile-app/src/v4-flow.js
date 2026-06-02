@@ -2022,6 +2022,139 @@
         _setState({ damage_classification: damageValue, severity: derived });
     }
 
+    // ── Dynamic Crisis Forms — Stage 2/3 pack renderer (geo-gated) ─────────
+    // When state.crisisPack is active (set by _maybeFetchCrisisPack on the
+    // location fix), a 4th classify sub-step 'crisispack' renders the pack's
+    // EXTRA questions — the stock (non-maps_to) questions PLUS any maps_to
+    // field the default chips don't already collect (e.g. debris_clearing_
+    // needed). The hardcoded damage/infra/crisis chips are untouched and keep
+    // populating the canonical fields for must-have #1 parity.
+    const _CP_DEFAULT_CAPTURED = { damage_classification: 1, infrastructure_type: 1, crisis_type: 1, severity: 1 };
+    const _CP_BASE_TYPES = { yes_no: 1, single_select: 1, multi_select: 1, short_text: 1, long_text: 1, integer: 1 };
+    function _classifyOrder() {
+        const s = window.state || {};
+        // Only add the extra sub-step when the pack actually has questions the
+        // default chips don't already capture; a pack of pure core fields is
+        // still recorded at submit (form_pack_id) but needs no extra UI.
+        if (s.crisisPack && s.crisisPack.schema && _crisisPackFields().length > 0) {
+            return CLASSIFY_ORDER.concat(['crisispack']);
+        }
+        return CLASSIFY_ORDER;
+    }
+    function _crisisPackFields() {
+        const s = window.state || {};
+        const cp = s.crisisPack;
+        if (!cp || !cp.schema) return [];
+        const out = [];
+        (cp.schema.sections || []).forEach((sec) => (sec.fields || []).forEach((f) => {
+            if (!f || !f.key || !_CP_BASE_TYPES[f.type]) return;       // skip special types
+            if (f.maps_to && _CP_DEFAULT_CAPTURED[f.maps_to]) return;  // captured by chips
+            out.push(f);
+        }));
+        return out;
+    }
+    function _cpI18n(obj, fallback) {
+        const lang = (window.state && window.state.lang) || 'en';
+        if (obj && typeof obj === 'object') {
+            if (obj[lang]) return obj[lang];
+            if (obj.en) return obj.en;
+        }
+        return fallback;
+    }
+    function _cpLabel(field) {
+        const fromI18n = _cpI18n(field.label_i18n, null);
+        if (fromI18n) return fromI18n;
+        if (typeof window.t === 'function') {
+            const tv = window.t(field.key);
+            if (tv && tv !== field.key) return tv;
+        }
+        return field.label || field.key;
+    }
+    function _cpOptLabel(opt) {
+        return _cpI18n(opt.label_i18n, null) || opt.label || opt.value;
+    }
+    function _cpYesNo(which) {
+        const k = which === 'yes' ? 'v4_yes' : 'v4_no';
+        const fb = which === 'yes' ? 'Yes' : 'No';
+        return (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
+    }
+    function _cpSetAnswer(key, type, raw, btnEl, qEl) {
+        const s = window.state || {};
+        const ans = Object.assign({}, s.crisisStockAnswers || {});
+        if (type === 'yes_no') {
+            ans[key] = (raw === 'true');
+            if (qEl) qEl.querySelectorAll('.v4-q-opt').forEach((x) => x.classList.toggle('is-selected', x === btnEl));
+        } else if (type === 'single_select') {
+            ans[key] = raw;
+            if (qEl) qEl.querySelectorAll('.v4-q-opt').forEach((x) => x.classList.toggle('is-selected', x === btnEl));
+        } else if (type === 'multi_select') {
+            const arr = Array.isArray(ans[key]) ? ans[key].slice() : [];
+            const i = arr.indexOf(raw);
+            if (i >= 0) arr.splice(i, 1); else arr.push(raw);
+            ans[key] = arr;
+            if (btnEl) btnEl.classList.toggle('is-selected');
+        } else if (type === 'integer') {
+            const n = parseInt(raw, 10);
+            ans[key] = isNaN(n) ? null : n;
+        } else {            // short_text / long_text
+            ans[key] = raw;
+        }
+        _setState({ crisisStockAnswers: ans });
+        _refreshClassifyNext();
+    }
+    function _renderCrisisPackView() {
+        const view = document.getElementById('v4-view-crisispack');
+        if (!view) return;
+        const s = window.state || {};
+        const cp = s.crisisPack || {};
+        const ans = s.crisisStockAnswers || {};
+        const fields = _crisisPackFields();
+        const esc = (x) => String(x == null ? '' : x).replace(/[&<>"]/g,
+            (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+        const heading = esc((cp.schema && _cpI18n(cp.schema.title_i18n, cp.schema.title)) || '');
+        let html = heading ? `<h1 class="v4-q-question"><span>${heading}</span></h1>` : '';
+        html += '<div class="v4-cp-list">';
+        fields.forEach((f) => {
+            const cur = ans[f.key];
+            html += `<div class="v4-cp-q" data-key="${esc(f.key)}" data-type="${esc(f.type)}">`;
+            html += `<div class="v4-cp-label">${esc(_cpLabel(f))}${f.required ? ' <span class="v4-cp-req">*</span>' : ''}</div>`;
+            if (f.type === 'yes_no') {
+                html += `<div class="v4-cp-opts">
+                    <button type="button" class="v4-q-opt v4-cp-opt${cur === true ? ' is-selected' : ''}" data-val="true"><span>${esc(_cpYesNo('yes'))}</span></button>
+                    <button type="button" class="v4-q-opt v4-cp-opt${cur === false ? ' is-selected' : ''}" data-val="false"><span>${esc(_cpYesNo('no'))}</span></button>
+                </div>`;
+            } else if (f.type === 'single_select' || f.type === 'multi_select') {
+                const isMulti = f.type === 'multi_select';
+                html += '<div class="v4-cp-opts">' + (f.options || []).map((o) => {
+                    const sel = isMulti ? (Array.isArray(cur) && cur.indexOf(o.value) >= 0) : (cur === o.value);
+                    return `<button type="button" class="v4-q-opt v4-cp-opt${sel ? ' is-selected' : ''}" data-val="${esc(o.value)}"><span>${esc(_cpOptLabel(o))}</span></button>`;
+                }).join('') + '</div>';
+            } else if (f.type === 'integer') {
+                html += `<input type="number" inputmode="numeric" class="v4-cp-input" />`;
+            } else {
+                const tag = f.type === 'long_text' ? 'textarea' : 'input';
+                html += `<${tag} class="v4-cp-input"${f.type === 'short_text' ? ' type="text"' : ''}></${tag}>`;
+            }
+            html += '</div>';
+        });
+        html += '</div>';
+        view.innerHTML = html;
+        // Wire inputs.
+        view.querySelectorAll('.v4-cp-q').forEach((q) => {
+            const key = q.getAttribute('data-key');
+            const type = q.getAttribute('data-type');
+            if (type === 'yes_no' || type === 'single_select' || type === 'multi_select') {
+                q.querySelectorAll('.v4-cp-opt').forEach((b) => b.addEventListener('click',
+                    () => _cpSetAnswer(key, type, b.getAttribute('data-val'), b, q)));
+            } else {
+                const inp = q.querySelector('.v4-cp-input');
+                if (!inp) return;
+                if (ans[key] != null) inp.value = ans[key];
+                inp.addEventListener('input', () => _cpSetAnswer(key, type, inp.value, null, q));
+            }
+        });
+    }
+
     function _initClassifyStage() {
         // ── Damage radio (sub-view 1) ──
         const damageView = document.getElementById('v4-view-damage');
@@ -2190,23 +2323,25 @@
         const nextBtn = document.getElementById('btn-v4-classify-next');
         if (backBtn) {
             backBtn.addEventListener('click', () => {
-                const idx = CLASSIFY_ORDER.indexOf(_classifyStep);
+                const order = _classifyOrder();
+                const idx = order.indexOf(_classifyStep);
                 if (idx <= 0) {
                     window.__crispGoToStage('stage-v4-capture');
                     return;
                 }
-                _showSubStep(CLASSIFY_ORDER[idx - 1]);
+                _showSubStep(order[idx - 1]);
             });
         }
         if (nextBtn) {
             nextBtn.addEventListener('click', () => {
                 if (!_canAdvanceFrom(_classifyStep)) return;
-                const idx = CLASSIFY_ORDER.indexOf(_classifyStep);
-                if (idx === CLASSIFY_ORDER.length - 1) {
+                const order = _classifyOrder();
+                const idx = order.indexOf(_classifyStep);
+                if (idx === order.length - 1) {
                     _goToReview();
                     return;
                 }
-                _showSubStep(CLASSIFY_ORDER[idx + 1]);
+                _showSubStep(order[idx + 1]);
             });
         }
 
@@ -2308,6 +2443,17 @@
             return true;
         }
         if (step === 'crisis') return !!s.crisis_type;
+        if (step === 'crisispack') {
+            // All REQUIRED extra pack questions must be answered.
+            const ans = s.crisisStockAnswers || {};
+            return _crisisPackFields().every((f) => {
+                if (!f.required) return true;
+                const v = ans[f.key];
+                if (f.type === 'multi_select') return Array.isArray(v) && v.length > 0;
+                if (f.type === 'yes_no') return v === true || v === false;
+                return v !== undefined && v !== null && String(v).trim() !== '';
+            });
+        }
         return true;
     }
     // ── Auto-progress helpers — May 2026 ──────────────────────────────
@@ -2344,13 +2490,14 @@
 
     function _doClassifyAdvance(step) {
         if (!_canAdvanceFrom(step)) return;
-        const idx = CLASSIFY_ORDER.indexOf(step);
+        const order = _classifyOrder();
+        const idx = order.indexOf(step);
         if (idx === -1) return;
-        if (idx === CLASSIFY_ORDER.length - 1) {
+        if (idx === order.length - 1) {
             _goToReview();
             return;
         }
-        _showSubStep(CLASSIFY_ORDER[idx + 1]);
+        _showSubStep(order[idx + 1]);
     }
 
     function _scheduleClassifyAdvance(step, tileEl) {
@@ -2416,13 +2563,19 @@
     }
 
     function _showSubStep(step) {
-        if (!CLASSIFY_ORDER.includes(step)) return;
+        if (!_classifyOrder().includes(step)) return;
         // If the user navigated back via the Back button (or programmatic
         // _showSubStep call), clear any pending advance from the
         // departing step.
         _advancingFromStep = null;
         _classifyStep = step;
-        ['damage','infra','crisis'].forEach((s) => {
+        // Render the dynamic crisis-pack view lazily on entry. The pack step is
+        // a multi-field form, so reveal the Continue footer (the single-pick
+        // sub-steps hide it + auto-advance) by tagging the stage.
+        if (step === 'crisispack') { try { _renderCrisisPackView(); } catch (_) {} }
+        const _stageEl = document.getElementById('stage-v4-classify');
+        if (_stageEl) _stageEl.classList.toggle('v4-cp-step', step === 'crisispack');
+        _classifyOrder().forEach((s) => {
             const view = document.getElementById('v4-view-' + s);
             if (!view) return;
             if (s === step) view.removeAttribute('hidden');
@@ -2431,12 +2584,19 @@
         // Sub-step label
         const label = document.getElementById('v4-substep-label');
         if (label) {
-            const titleKey = step === 'damage' ? 'v4_substep_how_bad'
-                          : step === 'infra'  ? 'v4_substep_what_hit'
-                          : 'v4_substep_what_caused';
-            const stepNum = CLASSIFY_ORDER.indexOf(step) + 1;
-            const ttl = (typeof window.t === 'function' ? window.t(titleKey) : titleKey);
-            label.innerHTML = `<span>${ttl}</span><span class="v4-substep-of"> · ${stepNum} of 3</span>`;
+            const order = _classifyOrder();
+            let ttl;
+            if (step === 'crisispack') {
+                const cp = (window.state && window.state.crisisPack) || {};
+                ttl = (cp.schema && _cpI18n(cp.schema.title_i18n, cp.schema.title)) || 'Crisis details';
+            } else {
+                const titleKey = step === 'damage' ? 'v4_substep_how_bad'
+                              : step === 'infra'  ? 'v4_substep_what_hit'
+                              : 'v4_substep_what_caused';
+                ttl = (typeof window.t === 'function' ? window.t(titleKey) : titleKey);
+            }
+            const stepNum = order.indexOf(step) + 1;
+            label.innerHTML = `<span>${ttl}</span><span class="v4-substep-of"> · ${stepNum} of ${order.length}</span>`;
             // HC64 (May 2026) — crisis sub-view stacks 9 cause tiles
             // in a single-column flex-fill grid; we need every pixel
             // for the tiles. The substep label "WHAT CAUSED IT · 3

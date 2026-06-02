@@ -9756,6 +9756,41 @@ body.tier-t4 .home-impact {
     background: rgba(9, 209, 199, 0.08);
     box-shadow: 0 0 24px rgba(9, 209, 199, 0.18);
 }
+/* Dynamic Crisis Forms — Stage 2/3 pack sub-step. Reuses .v4-q-opt for option
+   buttons. Unlike the single-pick damage/infra/crisis sub-steps (which hide the
+   footer and auto-advance on tap), the pack step is a multi-field form, so it
+   needs an explicit Continue — un-hide the footer ONLY when this sub-step is
+   active (the .v4-cp-step class is toggled on the stage by _showSubStep). The
+   question list scrolls inside the existing .v4-body grid row (auto 1fr auto),
+   so the footer stays pinned. This view only renders inside a live crisis zone
+   (geo-gated) — it never affects the default sub-steps or their zero-scroll
+   budget (the footer stays display:none for damage/infra/crisis). */
+#stage-v4-classify.v4-cp-step .v4-footer { display: block !important; }
+.v4-cp-list {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 2px 2px 4px;
+}
+.v4-cp-q { display: flex; flex-direction: column; gap: 8px; }
+.v4-cp-label { font-weight: 600; font-size: 15px; color: var(--text); line-height: 1.35; }
+.v4-cp-req { color: #fca5a5; }
+.v4-cp-opts { display: flex; flex-direction: column; gap: 8px; }
+.v4-cp-opt { min-height: 52px; }
+.v4-cp-opt span { flex: 1; }
+.v4-cp-input {
+    width: 100%;
+    min-height: 52px;
+    background: var(--surface, #1a3552);
+    border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
+    border-radius: 14px;
+    color: var(--text);
+    padding: 12px 14px;
+    font-size: 15px;
+    font-family: inherit;
+}
+.v4-cp-input:focus { outline: none; border-color: var(--accent, #09D1C7); }
+textarea.v4-cp-input { min-height: 88px; resize: vertical; }
 .v4-q-opt-badge {
     width: 40px;
     height: 40px;
