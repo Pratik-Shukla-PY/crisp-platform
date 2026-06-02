@@ -95,11 +95,14 @@ async function clearQueue(page: Page) {
     });
 }
 
-/** Damage → infra → crisis (the hardcoded chips), shared by both paths. */
-async function pickChips(page: Page) {
+/** Damage → infra (the first two hardcoded chips). */
+async function pickDamageInfra(page: Page) {
     await page.locator('#v4-view-damage .v4-q-opt[data-value="COMPLETE"]').click();
     await expect(page.locator('#v4-view-infra')).toBeVisible({ timeout: 1500 });
     await page.locator('#v4-view-infra .v4-hit-tile[data-value="RESIDENTIAL"]').click();
+}
+/** Click the crisis tile (default flow only — skipped inside a canonical zone). */
+async function pickCrisis(page: Page) {
     await expect(page.locator('#v4-view-crisis')).toBeVisible({ timeout: 1500 });
     await page.waitForSelector('#v4-cause-grid .v4-cause-tile[data-value="WILDFIRE"]', { timeout: 3000 });
     await page.locator('#v4-cause-grid .v4-cause-tile[data-value="WILDFIRE"]').click();
@@ -119,11 +122,13 @@ test.describe('PWA — Dynamic Crisis Forms renderer (geo-gated)', () => {
     test('@smoke active pack → crisispack sub-step renders + answers reach meta.form_data', async ({ page }) => {
         await bootClassify(page, { withPack: true });
         await clearQueue(page);
-        await pickChips(page);
+        await pickDamageInfra(page);
 
-        // With a pack active, crisis tap lands on the NEW crisispack sub-step,
-        // NOT review.
+        // Pack crisis_type is canonical (WILDFIRE) → the "what caused it" step is
+        // SKIPPED: infra auto-advances straight to the crisispack sub-step. The
+        // crisis chip view is never shown.
         await expect(page.locator('#v4-view-crisispack')).toBeVisible({ timeout: 2000 });
+        await expect(page.locator('#v4-view-crisis:visible')).toHaveCount(0);
         await expect(page.locator('#stage-v4-review.active')).toHaveCount(0);
 
         // It renders ONLY the extra fields (stock + non-chip maps_to), NOT the
@@ -168,7 +173,8 @@ test.describe('PWA — Dynamic Crisis Forms renderer (geo-gated)', () => {
     test('@smoke no pack → crisis auto-advances to review + meta.form_pack_id is null', async ({ page }) => {
         await bootClassify(page, { withPack: false });
         await clearQueue(page);
-        await pickChips(page);
+        await pickDamageInfra(page);
+        await pickCrisis(page);
 
         // Default flow: crisis tap auto-advances straight to review (no extra step).
         await expect(page.locator('#stage-v4-review.active')).toBeVisible({ timeout: 2000 });

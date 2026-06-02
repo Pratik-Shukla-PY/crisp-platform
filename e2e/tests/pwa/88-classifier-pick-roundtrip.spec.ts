@@ -60,6 +60,12 @@ async function openClassifyStage(page: Page) {
             body: JSON.stringify({ groups: [] }),
         }),
     );
+    // Isolate the DEFAULT classify flow from any live crisis zone: a real
+    // active event at the test coordinates would (correctly) skip the crisis
+    // step, so stub /crisis-forms/active inactive for deterministic default-flow.
+    await page.route('**/crisis-forms/active**', (route) =>
+        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ active: false }) }),
+    );
     await page.goto('index.html?ui=v4');
     await page.waitForLoadState('networkidle');
     await page.waitForFunction(

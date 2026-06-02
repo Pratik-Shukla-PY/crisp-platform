@@ -53,7 +53,7 @@
  *  11. Stage-exit timer cleanup — leaving stage-success stops the
  *      time-ago setInterval.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_fixtures';
 
 const IPHONE_SE = { width: 375, height: 667 };
 

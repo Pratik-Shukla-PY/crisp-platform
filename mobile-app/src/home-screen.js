@@ -2418,9 +2418,91 @@
         try { Promise.resolve(_renderRecentReports()).catch(() => {}); } catch (_) {}
     });
 
+    // ── Crisis-zone home banner (B1) ──────────────────────────────────────
+    // If the reporter's LAST-KNOWN location (cached GPS — no fresh prompt on
+    // home load) falls inside an active crisis zone, surface a calm banner so
+    // they know their report will use a crisis-specific form. Driven by the
+    // same public /crisis-forms/active endpoint the capture-stage geo-gate uses.
+    // The banner is a position:fixed child of #stage-home, so it auto-hides on
+    // other stages and never counts against the home zero-scroll budget (#87).
+    let _zoneBannerFetched = false;
+    function _readCachedLoc() {
+        try {
+            const raw = localStorage.getItem('crisp_last_location_v2')
+                     || localStorage.getItem('crisp_last_location');
+            if (!raw) return null;
+            const o = JSON.parse(raw);
+            const lat = (typeof o.lat === 'number') ? o.lat : o.latitude;
+            const lng = (typeof o.lng === 'number') ? o.lng : o.longitude;
+            if (typeof lat === 'number' && typeof lng === 'number') return { lat, lng };
+        } catch (_) {}
+        return null;
+    }
+    function _renderZoneBanner() {
+        const zone = window.__crispZone;
+        const stage = document.getElementById('stage-home');
+        if (!zone || !stage) return;
+        try {
+            if (sessionStorage.getItem('crisp_zone_banner_dismissed') === (zone.pack_id || '1')) return;
+        } catch (_) {}
+        const tt = (typeof window.t === 'function') ? window.t : (k, f) => f || k;
+        const typeLabel = tt('crisis_' + String(zone.crisis_type || '').toLowerCase(), zone.crisis_type || '');
+        const note = tt('home_crisis_zone_note', 'Active crisis form for your area');
+        let el = document.getElementById('home-crisis-banner');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'home-crisis-banner';
+            el.className = 'home-crisis-banner';
+            el.setAttribute('role', 'status');
+            el.innerHTML = '<span class="hcb-icon" aria-hidden="true">⚠</span>'
+                + '<span class="hcb-text"><strong class="hcb-type"></strong><span class="hcb-sep"> · </span><span class="hcb-note"></span></span>'
+                + '<button type="button" class="hcb-close">✕</button>';
+            el.querySelector('.hcb-close').addEventListener('click', () => {
+                try { sessionStorage.setItem('crisp_zone_banner_dismissed', zone.pack_id || '1'); } catch (_) {}
+                el.remove();
+            });
+            stage.appendChild(el);
+        }
+        el.querySelector('.hcb-type').textContent = typeLabel;
+        el.querySelector('.hcb-note').textContent = note;
+        el.querySelector('.hcb-close').setAttribute('aria-label', tt('aria_close', 'Close'));
+    }
+    function _maybeShowCrisisZoneBanner() {
+        try {
+            if (_zoneBannerFetched) { _renderZoneBanner(); return; }
+            const loc = _readCachedLoc();
+            const base = window.API_BASE;
+            if (!loc || !base) return;   // no known location → no prompt, no banner (fail-safe)
+            _zoneBannerFetched = true;
+            fetch(base + '/crisis-forms/active?lat=' + encodeURIComponent(loc.lat)
+                + '&lng=' + encodeURIComponent(loc.lng), { headers: { Accept: 'application/json' } })
+                .then((r) => (r && r.ok ? r.json() : null))
+                .then((data) => {
+                    if (data && data.active && data.crisis_type) {
+                        window.__crispZone = { crisis_type: data.crisis_type,
+                            event_name: data.event_name, pack_id: data.pack_id };
+                        _renderZoneBanner();
+                    }
+                })
+                .catch(() => { /* offline / error → no banner (fail-safe) */ });
+        } catch (_) {}
+    }
+    // Re-localize the banner when the language changes.
+    document.addEventListener('crisp:lang-changed', () => { try { _renderZoneBanner(); } catch (_) {} });
+    // Re-check whenever the home stage is (re)entered (e.g. after a report,
+    // the capture stage may have just cached a fresh location).
+    document.addEventListener('stage-entered', (e) => {
+        const stage = typeof e.detail === 'string' ? e.detail : (e.detail && e.detail.stage) || '';
+        if (stage === 'stage-home') { try { _maybeShowCrisisZoneBanner(); } catch (_) {} }
+    });
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('DOMContentLoaded', () => {
+            init();
+            try { _maybeShowCrisisZoneBanner(); } catch (_) {}
+        });
     } else {
         init();
+        try { _maybeShowCrisisZoneBanner(); } catch (_) {}
     }
 })();

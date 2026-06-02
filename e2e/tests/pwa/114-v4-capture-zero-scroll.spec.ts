@@ -37,7 +37,7 @@
  *   6. Zero-scroll regression also holds for Arabic (RTL) and
  *      Hindi (Devanagari ascenders).
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_fixtures';
 
 const IPHONE_SE = { width: 375, height: 667 };
 

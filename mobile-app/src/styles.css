@@ -9766,31 +9766,72 @@ body.tier-t4 .home-impact {
    (geo-gated) — it never affects the default sub-steps or their zero-scroll
    budget (the footer stays display:none for damage/infra/crisis). */
 #stage-v4-classify.v4-cp-step .v4-footer { display: block !important; }
+/* Compacted (B1) to minimise scroll + cognitive load: tighter gaps, 44px touch
+   targets (WCAG floor), and yes_no rendered as a 2-up row (halves the height of
+   the most common pack question). ~40-60px saved per question vs the original. */
 .v4-cp-list {
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    padding: 2px 2px 4px;
+    gap: 12px;
+    padding: 0 2px 2px;
 }
-.v4-cp-q { display: flex; flex-direction: column; gap: 8px; }
-.v4-cp-label { font-weight: 600; font-size: 15px; color: var(--text); line-height: 1.35; }
+.v4-cp-q { display: flex; flex-direction: column; gap: 6px; }
+.v4-cp-label { font-weight: 600; font-size: 14px; color: var(--text); line-height: 1.3; }
 .v4-cp-req { color: #fca5a5; }
-.v4-cp-opts { display: flex; flex-direction: column; gap: 8px; }
-.v4-cp-opt { min-height: 52px; }
+.v4-cp-opts { display: flex; flex-direction: column; gap: 6px; }
+.v4-cp-opt { min-height: 44px; padding-top: 8px; padding-bottom: 8px; }
 .v4-cp-opt span { flex: 1; }
+/* yes_no → side-by-side; short single/multi-selects (≤4 opts) → 2-col grid. */
+.v4-cp-q[data-type="yes_no"] .v4-cp-opts { flex-direction: row; }
+.v4-cp-q[data-type="yes_no"] .v4-cp-opt { flex: 1; justify-content: center; }
+.v4-cp-opts.is-grid { display: grid; grid-template-columns: 1fr 1fr; }
 .v4-cp-input {
     width: 100%;
-    min-height: 52px;
+    min-height: 44px;
     background: var(--surface, #1a3552);
     border: 1px solid var(--border-strong, rgba(255,255,255,0.12));
     border-radius: 14px;
     color: var(--text);
-    padding: 12px 14px;
+    padding: 10px 14px;
     font-size: 15px;
     font-family: inherit;
 }
 .v4-cp-input:focus { outline: none; border-color: var(--accent, #09D1C7); }
-textarea.v4-cp-input { min-height: 88px; resize: vertical; }
+textarea.v4-cp-input { min-height: 72px; resize: vertical; }
+
+/* Crisis-zone home banner (B1) — a fixed bottom toast shown when the reporter's
+   last-known location is inside an active crisis zone. position:fixed keeps it
+   OUT of the home zero-scroll budget (#87 sanctions fixed overlays). It lives
+   inside #stage-home, so it auto-hides on every other stage. Dismissible. */
+.home-crisis-banner {
+    position: fixed;
+    left: 12px; right: 12px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 12px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(245,158,11,0.97), rgba(249,115,22,0.97));
+    color: #1f2937;
+    font-size: 13.5px;
+    line-height: 1.35;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.home-crisis-banner .hcb-icon { font-size: 16px; flex: none; }
+.home-crisis-banner .hcb-text { flex: 1; min-width: 0; }
+.home-crisis-banner .hcb-type { font-weight: 700; text-transform: capitalize; }
+.home-crisis-banner .hcb-close {
+    flex: none; background: rgba(0,0,0,0.14); border: 0; color: #1f2937;
+    width: 30px; height: 30px; min-width: 30px; border-radius: 8px; font-size: 14px;
+    cursor: pointer; display: grid; place-items: center;
+}
+.home-crisis-banner .hcb-close:hover { background: rgba(0,0,0,0.24); }
+@media (prefers-reduced-motion: no-preference) {
+    .home-crisis-banner { animation: hcb-slide-in 0.25s ease-out; }
+    @keyframes hcb-slide-in { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+}
 .v4-q-opt-badge {
     width: 40px;
     height: 40px;

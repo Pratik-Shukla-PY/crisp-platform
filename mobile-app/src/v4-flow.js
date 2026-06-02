@@ -1877,11 +1877,21 @@
                     .then((r) => (r && r.ok ? r.json() : null))
                     .then((data) => {
                         if (data && data.active && data.schema_json) {
-                            _setState({ crisisPack: {
+                            const patch = { crisisPack: {
                                 pack_id: data.pack_id, pack_version: data.pack_version,
                                 event_id: data.event_id, crisis_type: data.crisis_type,
                                 schema: data.schema_json,
-                            } });
+                            } };
+                            // The active zone already knows the crisis type — auto-set the
+                            // canonical field so the "what caused it" sub-step is skipped.
+                            // GUARD: only when the event's type is a canonical CrisisTypeEnum
+                            // the PWA offers (must-have #5). A non-canonical, display-only event
+                            // type (e.g. 'LANDSLIDE') leaves crisis_type unset → the crisis chip
+                            // step stays so the reporter picks a valid type.
+                            const _CANON = { EARTHQUAKE: 1, FLOOD: 1, TSUNAMI: 1, CYCLONE: 1,
+                                WILDFIRE: 1, EXPLOSION: 1, CHEMICAL_INCIDENT: 1, CONFLICT: 1, CIVIL_UNREST: 1 };
+                            if (data.crisis_type && _CANON[data.crisis_type]) patch.crisis_type = data.crisis_type;
+                            _setState(patch);
                         } else {
                             _setState({ crisisPack: null });
                         }
@@ -2033,13 +2043,34 @@
     const _CP_BASE_TYPES = { yes_no: 1, single_select: 1, multi_select: 1, short_text: 1, long_text: 1, integer: 1 };
     function _classifyOrder() {
         const s = window.state || {};
-        // Only add the extra sub-step when the pack actually has questions the
-        // default chips don't already capture; a pack of pure core fields is
-        // still recorded at submit (form_pack_id) but needs no extra UI.
-        if (s.crisisPack && s.crisisPack.schema && _crisisPackFields().length > 0) {
-            return CLASSIFY_ORDER.concat(['crisispack']);
+        if (s.crisisPack && s.crisisPack.schema) {
+            const order = ['damage', 'infra'];
+            // Skip "what caused it" when the active zone already auto-set a
+            // canonical crisis_type (the reporter is inside a known-crisis zone).
+            // Keep it as a fallback when the event's type wasn't canonical (so
+            // crisis_type stayed unset) — must-have #5 always holds.
+            if (!s.crisis_type) order.push('crisis');
+            // Add the extra pack sub-step only when the pack has questions the
+            // default chips don't already capture; a pure-core pack still records
+            // form_pack_id at submit but needs no extra UI.
+            if (_crisisPackFields().length > 0) order.push('crisispack');
+            return order;
         }
-        return CLASSIFY_ORDER;
+        return CLASSIFY_ORDER;   // ['damage','infra','crisis'] — default flow, unchanged
+    }
+    // Re-derive the canonical crisis_type from an active zone's pack. crisisPack
+    // SURVIVES _clearCaptureState (add-another) but state.crisis_type is nulled
+    // (app.js:15241) — without this, the skipped "what caused it" step would
+    // resurrect on the 2nd report in the same zone. Idempotent + canonical-guarded
+    // (must-have #5: a non-canonical event type stays unset → crisis chip shown).
+    const _CANON_CRISIS = { EARTHQUAKE: 1, FLOOD: 1, TSUNAMI: 1, CYCLONE: 1, WILDFIRE: 1,
+        EXPLOSION: 1, CHEMICAL_INCIDENT: 1, CONFLICT: 1, CIVIL_UNREST: 1 };
+    function _ensureZoneCrisisType() {
+        const s = window.state || {};
+        const cp = s.crisisPack;
+        if (cp && cp.crisis_type && _CANON_CRISIS[cp.crisis_type] && s.crisis_type !== cp.crisis_type) {
+            _setState({ crisis_type: cp.crisis_type });
+        }
     }
     function _crisisPackFields() {
         const s = window.state || {};
@@ -2125,7 +2156,9 @@
                 </div>`;
             } else if (f.type === 'single_select' || f.type === 'multi_select') {
                 const isMulti = f.type === 'multi_select';
-                html += '<div class="v4-cp-opts">' + (f.options || []).map((o) => {
+                // Compact 2-col grid for short option sets to cut scroll.
+                const gridCls = ((f.options || []).length <= 4) ? ' is-grid' : '';
+                html += '<div class="v4-cp-opts' + gridCls + '">' + (f.options || []).map((o) => {
                     const sel = isMulti ? (Array.isArray(cur) && cur.indexOf(o.value) >= 0) : (cur === o.value);
                     return `<button type="button" class="v4-q-opt v4-cp-opt${sel ? ' is-selected' : ''}" data-val="${esc(o.value)}"><span>${esc(_cpOptLabel(o))}</span></button>`;
                 }).join('') + '</div>';
@@ -2563,6 +2596,10 @@
     }
 
     function _showSubStep(step) {
+        // Re-derive the zone's canonical crisis_type before computing the order,
+        // so the "what caused it" skip survives add-another (crisisPack persists,
+        // crisis_type was nulled by _clearCaptureState).
+        try { _ensureZoneCrisisType(); } catch (_) {}
         if (!_classifyOrder().includes(step)) return;
         // If the user navigated back via the Back button (or programmatic
         // _showSubStep call), clear any pending advance from the

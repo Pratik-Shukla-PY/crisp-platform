@@ -38,7 +38,7 @@
  *   5. Tile rendered offsetHeight ≥ 44 px (WCAG touch target).
  *   6. Zero-scroll holds for Arabic (RTL) and Hindi.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_fixtures';
 
 const IPHONE_SE = { width: 375, height: 667 };
 

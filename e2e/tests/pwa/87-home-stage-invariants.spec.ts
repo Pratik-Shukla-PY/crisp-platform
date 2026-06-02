@@ -34,7 +34,7 @@
  * and "My Reports tile" invariants for the permanent guards behind
  * each.
  */
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, type Page } from './_fixtures';
 
 async function bootHomeWithLocation(page: Page) {
     await page.addInitScript(() => {

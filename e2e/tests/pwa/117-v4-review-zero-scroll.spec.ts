@@ -37,7 +37,7 @@
  *   7. Legacy `.v4-review-subtitle` markup is gone.
  *   8. Zero-scroll holds for Arabic (RTL) and Hindi.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_fixtures';
 
 const IPHONE_SE = { width: 375, height: 667 };
 

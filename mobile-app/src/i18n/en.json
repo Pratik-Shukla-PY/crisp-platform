@@ -185,6 +185,7 @@
   "crisis_label": "What caused damage?",
   "crisis_tsunami": "Tsunami",
   "crisis_unrest": "Civil unrest",
+  "home_crisis_zone_note": "Active crisis form for your area",
   "crisis_wildfire": "Wildfire",
   "cyclone": "Cyclone",
   "damage_class_unknown": "Unknown",
