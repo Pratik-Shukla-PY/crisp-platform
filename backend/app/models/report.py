@@ -415,6 +415,17 @@ class Report(Base):
     help_dispatched_at = Column(DateTime(timezone=True), nullable=True)
     help_arrived_at = Column(DateTime(timezone=True), nullable=True)
 
+    # ── Dynamic Crisis Forms (geo-scoped Stage 2/3 packs) — ADDITIVE, all nullable.
+    # Default/legacy reports + every report captured OUTSIDE an active crisis zone
+    # leave these NULL → the standard flat-enum schema is used (zero behaviour change;
+    # preserves multi-channel parity, must-have #1). Populated only when a report was
+    # captured inside an active CrisisEvent zone, layered ON TOP of the canonical
+    # Report columns (which the default flow still fills).
+    crisis_event_id   = Column(String(36), ForeignKey("crisis_events.id", ondelete="SET NULL"), nullable=True, index=True)
+    form_pack_id      = Column(String(36), ForeignKey("crisis_form_packs.id", ondelete="SET NULL"), nullable=True)
+    form_pack_version = Column(Integer, nullable=True)
+    form_data         = Column(JSON, nullable=True)  # validated crisis-pack answers {field_key: value}
+
     device      = relationship("Device", back_populates="reports")
     location    = relationship("Location",    back_populates="report", uselist=False, cascade="all, delete-orphan")
     media       = relationship("Media",       back_populates="report", cascade="all, delete-orphan")
@@ -871,6 +882,78 @@ class AutoSubmitRegion(Base):
     created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# ── Dynamic Crisis Forms (geo-scoped Stage 2/3 question packs) ────────────────
+# Admins activate a crisis-specific Stage 2/3 question pack for a geographic zone
+# within a time window. Reporters inside an ACTIVE, in-window zone get the pack;
+# everyone else + expired zones use the default flow (Stage 1 is never touched).
+# CrisisEvent mirrors AutoSubmitRegion's center+radius circle + adds a time window
+# + a pack binding. Packs are DB-backed + versioned (immutable once published) so
+# admins publish/rollback without a redeploy, and so a report queued under an old
+# pack version still validates against THAT version on sync.
+class CrisisFormPack(Base):
+    """A curated Stage 2/3 question pack, authored in the dashboard from APPROVED
+    question blocks + crisis stock questions (NOT a free-form builder)."""
+    __tablename__ = "crisis_form_packs"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    key = Column(String(64), unique=True, nullable=False)   # stable handle, e.g. "wildfire-default"
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    crisis_type = Column(String(30), nullable=True)         # optional filter; NULL = any
+    active_version = Column(Integer, nullable=True)         # published version number; NULL = none live
+    is_archived = Column(Boolean, nullable=False, default=False)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    __table_args__ = (
+        Index("ix_crisis_form_packs_crisis_type", "crisis_type"),
+    )
+
+
+class CrisisFormPackVersion(Base):
+    """An immutable published (or editable draft) version of a CrisisFormPack.
+    `schema_json` holds the full sections→fields contract the per-channel renderers
+    (PWA / RN / Telegram) consume — field types reuse the modules.py set plus the
+    CRISP special types; field ids equal the backend column names where a field
+    maps to a first-class Report column (classifier-state invariant)."""
+    __tablename__ = "crisis_form_pack_versions"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    pack_id = Column(String(36), ForeignKey("crisis_form_packs.id", ondelete="CASCADE"), nullable=False)
+    version = Column(Integer, nullable=False)               # 1-indexed, monotonic per pack
+    schema_json = Column(JSON, nullable=False)
+    status = Column(String(16), nullable=False, default="draft")  # draft | published | archived
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (
+        UniqueConstraint("pack_id", "version", name="uq_crisis_pack_version"),
+        Index("ix_crisis_pack_versions_lookup", "pack_id", "status"),
+    )
+
+
+class CrisisEvent(Base):
+    """A geo + time scoped crisis activation. Reporters whose Stage-1 location lies
+    inside (haversine ≤ radius_km) an ACTIVE, in-window event get `form_pack_id`'s
+    pack for Stage 2/3. v1 = center+radius circle (polygon zones deferred)."""
+    __tablename__ = "crisis_events"
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    name = Column(String(200), nullable=False)
+    crisis_type = Column(String(30), nullable=True)         # CrisisTypeEnum value (display/analytics)
+    status = Column(String(20), nullable=False, default="DRAFT")  # DRAFT | LIVE | ENDED
+    is_active = Column(Boolean, nullable=False, default=False)    # admin soft toggle; gates activation
+    center_lat = Column(Float, nullable=False)
+    center_lng = Column(Float, nullable=False)
+    radius_km = Column(Float, nullable=False, default=30.0)
+    started_at = Column(DateTime(timezone=True), nullable=True)   # NULL = no lower bound
+    ended_at = Column(DateTime(timezone=True), nullable=True)     # NULL = open-ended
+    form_pack_id = Column(String(36), ForeignKey("crisis_form_packs.id", ondelete="SET NULL"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    __table_args__ = (
+        Index("ix_crisis_events_active", "is_active", "started_at", "ended_at"),
+    )
 
 
 # ── Taxonomy normalisation (UNDP Appendix-1) ──────────────────────────────────
