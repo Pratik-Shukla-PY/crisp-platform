@@ -18,6 +18,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request, Query, HTTPException, BackgroundTasks
+from fastapi.responses import PlainTextResponse
 
 from .handlers import handle_incoming_message
 
@@ -110,7 +111,11 @@ async def verify_webhook(
 
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
         logger.info(f"Webhook verified — ip={client_ip}")
-        return int(hub_challenge)
+        # Meta requires the hub.challenge echoed back VERBATIM as plain text.
+        # `int(hub_challenge)` 500s on any non-numeric challenge and returns a
+        # JSON content-type; echoing the raw string is correct for every
+        # challenge format Meta may send.
+        return PlainTextResponse(content=hub_challenge or "")
 
     logger.warning(f"Webhook verification REJECTED — ip={client_ip}, mode={hub_mode}")
     raise HTTPException(status_code=403, detail="Verification failed")
