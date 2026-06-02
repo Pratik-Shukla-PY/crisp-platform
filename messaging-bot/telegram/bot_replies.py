@@ -61,6 +61,23 @@ _STRINGS = {
         "desc_ack": "✅ Got it!",
         "photo_cap": "📸 I've got 3 photos already — that's the most I can attach. Send the clearest ones first.",
         "unsupported_media": "📸 I can take a *photo*, a *voice message*, or *text*. Please send one of those — files, stickers and GIFs aren't picked up.",
+        # Phase 5: pre-submit review card. Field labels (the values shown beside
+        # them are the reporter's own picks). English-only for now — localized
+        # in the i18n cleanup pass; t() falls back to en meanwhile.
+        "review_title":     "📋 *Please check your report*",
+        "review_intro":     "Tap *Send* if this looks right, or *Fix* to change something.",
+        "review_crisis":    "Crisis",
+        "review_damage":    "Damage",
+        "review_type":      "What was hit",
+        "review_building":  "Place",
+        "review_location":  "Location",
+        "review_debris":    "Debris clearing",
+        "review_evidence":  "Attached",
+        "review_none":      "—",
+        "review_send":      "✅ Send report",
+        "review_fix":       "✏️ Fix something",
+        "review_fix_title": "✏️ *What would you like to change?*",
+        "review_fix_back":  "⬅ Back to review",
         "step_loc_text_hint": "Or type the place name",
         # native-language building-name prompt.
         # Reporter types the name (e.g. "Koramangala High School", "مدرسة الأمل")
@@ -1078,6 +1095,49 @@ async def send_add_more_prompt(chat_id: int, lang: str):
         "reply_markup": {
             "inline_keyboard": [
                 [{"text": t(lang, "add_more_done"), "callback_data": "add_more_done"}],
+            ],
+        },
+    })
+
+
+async def send_review_card(chat_id: int, lang: str, body: str):
+    """Phase 5 — the ONE pre-submit confirm card. `body` is the field summary
+    built by handlers._review_summary (so the localized field labels + the
+    reporter's own picks stay in one place). Two buttons: ✅ Send (commits) and
+    ✏️ Fix (opens the field-edit menu). Mirrors the PWA's final review stage."""
+    text = t(lang, "review_title") + "\n\n" + body + "\n\n" + t(lang, "review_intro")
+    return await _send("sendMessage", {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown",
+        "reply_markup": {
+            "inline_keyboard": [
+                [{"text": t(lang, "review_send"), "callback_data": "review_send"}],
+                [{"text": t(lang, "review_fix"),  "callback_data": "review_fix"}],
+            ],
+        },
+    })
+
+
+async def send_review_fix_menu(chat_id: int, lang: str):
+    """Phase 5 — the ✏️ Fix menu: one button per correctable field. Tapping
+    re-opens that field's existing prompt (handlers clears the field's answered
+    flag + resets the review gate so the card re-appears after the change).
+    Evidence isn't listed — the reporter can add a photo/voice/text at any time
+    just by sending it."""
+    return await _send("sendMessage", {
+        "chat_id": chat_id,
+        "text": t(lang, "review_fix_title"),
+        "parse_mode": "Markdown",
+        "reply_markup": {
+            "inline_keyboard": [
+                [{"text": "📍 " + t(lang, "review_location"), "callback_data": "fix:location"},
+                 {"text": "🏚 " + t(lang, "review_damage"),   "callback_data": "fix:damage"}],
+                [{"text": "🏢 " + t(lang, "review_type"),     "callback_data": "fix:type"},
+                 {"text": "🆘 " + t(lang, "review_crisis"),   "callback_data": "fix:crisis"}],
+                [{"text": "🏗 " + t(lang, "review_building"), "callback_data": "fix:building"},
+                 {"text": "🚜 " + t(lang, "review_debris"),   "callback_data": "fix:debris"}],
+                [{"text": t(lang, "review_fix_back"), "callback_data": "review_back"}],
             ],
         },
     })

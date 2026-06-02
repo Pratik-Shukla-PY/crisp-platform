@@ -39,6 +39,7 @@ from .bot_replies import (
     send_step_crisis_type, send_step_damage_class, send_step_building_name,
     send_step_debris, send_building_suggestions,
     send_step_text, send_step_description, send_confirmation, send_add_more_prompt,
+    send_review_card, send_review_fix_menu,
     send_text, answer_callback, edit_reply_markup_clear,
     detect_lang, t,
 )
@@ -713,6 +714,45 @@ async def _handle_callback(callback_query: dict):
         clear_session(user_id)
         return
 
+    # Phase 5 — pre-submit review card.
+    # ✅ Send: confirm the review and commit. The idempotent latch in
+    # _finalize makes a double-tap a no-op.
+    if data == "review_send":
+        await answer_callback(cq_id)
+        session.reviewed = True
+        await _finalize(session)
+        return
+
+    # ✏️ Fix: open the field-edit menu (review gate stays closed).
+    if data == "review_fix":
+        await answer_callback(cq_id)
+        track_prompt_msg(session, await send_review_fix_menu(chat_id, lang))
+        return
+
+    # ⬅ Back to review (from the Fix menu) → re-show the card unchanged.
+    if data == "review_back":
+        await answer_callback(cq_id)
+        session.state = "REVIEW"
+        track_prompt_msg(session, await send_review_card(chat_id, lang, _review_summary(session)))
+        return
+
+    # Fix a specific field → clear its answered flag, reset the review gate,
+    # and re-open that field's existing prompt. After the user re-answers, the
+    # normal advance lands back on the review card (reviewed is now False).
+    if data.startswith("fix:"):
+        field = data.split(":", 1)[1]
+        spec = _FIX_FIELDS.get(field)
+        if spec:
+            clear_fn, step = spec
+            clear_fn(session)
+            session.reviewed = False
+            session.state = step
+            await answer_callback(cq_id)
+            await _prompt_for_step(session, chat_id, step)
+        else:
+            await answer_callback(cq_id)
+        return
+
     # Start / Report Another → carry consent across the session reset so
     # the reporter isn't re-prompted between reports.
     if data == "start_report":
@@ -941,9 +981,102 @@ async def _handle_callback(callback_query: dict):
     await answer_callback(cq_id)
 
 
+def _review_summary(session) -> str:
+    """Phase 5 — build the pre-submit review card body: one line per captured
+    field (localized label : the reporter's own pick). Skips empty fields.
+    Crisis/type/damage values are the canonical enums the reporter chose
+    (readable: EARTHQUAKE / RESIDENTIAL / COMPLETE); localizing the VALUE
+    labels is deferred to the i18n cleanup pass."""
+    lang = session.lang
+    lines = []
+    if session.crisis_type:
+        lines.append(f"🆘 *{t(lang, 'review_crisis')}:* {session.crisis_type}")
+    if session.damage_class:
+        lines.append(f"🏚 *{t(lang, 'review_damage')}:* {session.damage_class}")
+    if session.type_answered and session.infra_type:
+        lines.append(f"🏢 *{t(lang, 'review_type')}:* {session.infra_type}")
+    if session.infra_name:
+        lines.append(f"🏗 *{t(lang, 'review_building')}:* {session.infra_name}")
+    loc = session.location_name or (
+        f"{session.latitude:.4f}, {session.longitude:.4f}" if session.has_location else "")
+    if loc:
+        lines.append(f"📍 *{t(lang, 'review_location')}:* {loc}")
+    if session.debris_answered:
+        if session.debris_needed is True:
+            dtxt = t(lang, "debris_yes")
+        elif session.debris_needed is False:
+            dtxt = t(lang, "debris_no")
+        else:
+            dtxt = t(lang, "debris_na")
+        lines.append(f"🚜 *{t(lang, 'review_debris')}:* {dtxt}")
+    # Evidence — count photos (primary + extras) + audio + text flags.
+    ev = []
+    n_photos = (1 if session.image_data_url else 0) + len(session.extra_images)
+    if n_photos:
+        ev.append(f"{n_photos}×📸")
+    if session.audio_data_url:
+        ev.append("🎤")
+    if session.text:
+        ev.append("📝")
+    lines.append(f"📎 *{t(lang, 'review_evidence')}:* {' '.join(ev) if ev else t(lang, 'review_none')}")
+    return "\n".join(lines)
+
+
+# Phase 5: maps a ✏️ Fix field key → (clear-fn, step) so tapping it re-opens
+# the relevant existing prompt. clear-fn resets that field's answered-flag(s)
+# so `_next_missing_step` routes back to that step; everything else stays
+# answered, so after the correction the flow returns straight to the review
+# card (because consent_accept/fix reset `session.reviewed = False`).
+def _fix_clear_location(s):
+    s.latitude = None
+    s.longitude = None
+    s.location_name = ""
+
+def _fix_clear_damage(s):
+    s.damage_class = ""
+    # severity is re-derived from the next damage pick; reset the gate so the
+    # damage callback recomputes it rather than keeping the stale value.
+    s.severity_answered = False
+
+def _fix_clear_type(s):
+    s.type_answered = False
+    s.infra_type = "OTHER"
+
+def _fix_clear_crisis(s):
+    s.crisis_type = ""
+
+def _fix_clear_building(s):
+    s.infra_name = ""
+    s.infra_name_answered = False
+
+def _fix_clear_debris(s):
+    s.debris_answered = False
+    s.debris_needed = False
+
+_FIX_FIELDS = {
+    "location": (_fix_clear_location, "STEP_LOCATION"),
+    "damage":   (_fix_clear_damage,   "STEP_DAMAGE_CLASS"),
+    "type":     (_fix_clear_type,     "STEP_TYPE"),
+    "crisis":   (_fix_clear_crisis,   "STEP_CRISIS_TYPE"),
+    "building": (_fix_clear_building, "STEP_BUILDING_NAME"),
+    "debris":   (_fix_clear_debris,   "STEP_DEBRIS"),
+}
+
+
 async def _finalize(session):
     lang = session.lang
     chat_id = session.chat_id
+    # Idempotent submit latch (HC80 analogue): once a submit is in flight or
+    # done, never file again — a double-tap of ✅ Send is a no-op.
+    if session.submitted:
+        return
+    # Phase 5 — pre-submit review gate. Show the confirm card once and wait for
+    # ✅ Send; a ✏️ Fix resets `reviewed` so the card re-appears after the edit.
+    if not session.reviewed:
+        session.state = "REVIEW"
+        track_prompt_msg(session, await send_review_card(chat_id, lang, _review_summary(session)))
+        return
+    session.submitted = True   # latch BEFORE the await — double-tap safe
     report_id = await submit_report(session)
     if report_id:
         await send_confirmation(
@@ -960,4 +1093,5 @@ async def _finalize(session):
         if session.video_data_url:
             _fire_upload(session, upload_video_deferred(session))
     else:
+        session.submitted = False   # submission failed — allow a retry
         await send_text(chat_id, t(lang, "error"))

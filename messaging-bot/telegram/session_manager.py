@@ -194,6 +194,14 @@ class TelegramSession:
     # is buffered here and replayed through _capture_any_media right after the
     # user taps consent, so their first action is never silently dropped.
     pending_message: Optional[dict] = None
+    # Phase 5: pre-submit review gate. `reviewed` flips True once the user
+    # confirms the review card (✅ Send); a ✏️ Fix resets it to False so the
+    # card re-appears after the correction. `submitted` is the idempotent
+    # submit latch (the Telegram analogue of the PWA's HC80 _submitCommitted):
+    # set True before submit_report so a double-tap of ✅ Send can't file twice;
+    # reset to False only if submission fails, to allow a retry.
+    reviewed: bool = False
+    submitted: bool = False
 
     @property
     def has_evidence(self) -> bool:
