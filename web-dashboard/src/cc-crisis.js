@@ -174,17 +174,46 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   const el = (id) => document.getElementById(id);
-  function localInputToISO(v) { // datetime-local "2026-06-03T08:00" → aware ISO (UTC Z)
-    if (!v) return null;
-    const d = new Date(v);
-    return isNaN(d.getTime()) ? null : d.toISOString();
-  }
-  function isoToLocalInput(iso) { // aware ISO → datetime-local value in the operator's TZ
+  const _pad2 = (n) => String(n).padStart(2, '0');
+  function isoToLocalDate(iso) { // aware ISO → "YYYY-MM-DD" in the operator's TZ
     if (!iso) return '';
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${_pad2(d.getMonth() + 1)}-${_pad2(d.getDate())}`;
+  }
+  function isoToLocalTime(iso) { // aware ISO → "HH:MM" in the operator's TZ
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return `${_pad2(d.getHours())}:${_pad2(d.getMinutes())}`;
+  }
+  function dateTimeToISO(dateVal, timeVal) { // calendar date + clock dropdown → aware ISO (UTC Z)
+    if (!dateVal) return null;             // blank date = open-ended bound
+    const t = /^\d{2}:\d{2}$/.test(timeVal || '') ? timeVal : '00:00';
+    const d = new Date(`${dateVal}T${t}`);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  // 30-min clock options "00:00".."23:30"; if `cur` (HH:MM) is off-grid (a value
+  // saved before this picker existed), inject it so the saved time is preserved.
+  function timeOptions(cur) {
+    const set = [];
+    for (let h = 0; h < 24; h++) for (const m of [0, 30]) set.push(`${_pad2(h)}:${_pad2(m)}`);
+    if (/^\d{2}:\d{2}$/.test(cur || '') && set.indexOf(cur) === -1) set.push(cur);
+    set.sort();
+    return set.map((t) => `<option value="${t}" ${t === cur ? 'selected' : ''}>${t}</option>`).join('');
+  }
+  // Public geocode proxy (no auth): "describe" (text→coords+name) + "reverse" (coords→name).
+  async function geocode(path, body) {
+    const res = await fetch(`${BACKEND_HOST}/api/v1/reports/geocode/${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const det = data && data.detail;
+      const msg = (det && (det.message || (typeof det === 'string' ? det : null))) || res.statusText;
+      const err = new Error(msg); err.status = res.status; throw err;
+    }
+    return data;
   }
   function fmtDate(iso) {
     if (!iso) return '—';
@@ -200,6 +229,10 @@
     if (en && en < now) return { k: 'exp', label: 'Expired' };
     if (st && st > now) return { k: 'sched', label: 'Scheduled' };
     return { k: 'live', label: 'Live' };
+  }
+  function creatorName(e) { // event.created_by (user id) → full_name via S.userMap
+    if (!e || !e.created_by) return '';
+    return S.userMap[e.created_by] || 'Unknown user';
   }
 
   // ── API ────────────────────────────────────────────────────────────────────
@@ -241,6 +274,7 @@
   const S = {
     tab: 'events',
     events: [], packs: [],
+    users: [], userMap: {},    // admin user list → id→full_name for "Created by"
     editingEvent: undefined,   // undefined = not editing, {} = new, {…} = edit
     builderPackId: null, builderPack: null, builderVersions: [],
     builderBlocks: null,       // working copy of {core:[…], stock:[…]} with .on flags
@@ -302,6 +336,18 @@
       color:var(--text,#f1f5f9);border-radius:9px;padding:9px 10px;font-size:13.5px;font-family:inherit}
     .cc-cf-input:focus,.cc-cf-select:focus,.cc-cf-textarea:focus{outline:none;border-color:var(--accent,#7c5cff)}
     .cc-cf-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .cc-cf-dt{display:grid;grid-template-columns:1fr 116px;gap:8px}
+    .cc-cf-geo{display:flex;gap:8px;align-items:stretch}
+    .cc-cf-geo .cc-cf-input{flex:1;min-width:0}
+    .cc-cf-geo .cc-cf-btn{flex:none;white-space:nowrap}
+    .cc-cf-geo-res{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:-4px 0 12px;font-size:12px;color:var(--text-sub,#aab4c5)}
+    .cc-cf-geo-pin{flex:none}
+    .cc-cf-geo-name{color:var(--text,#f1f5f9)}
+    .cc-cf-geo-chip{font-size:10px;padding:2px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+    .cc-cf-geo-chip.high{background:rgba(16,185,129,.16);color:#5ee9b5}
+    .cc-cf-geo-chip.medium{background:rgba(245,158,11,.16);color:#fbd38d}
+    .cc-cf-geo-chip.low,.cc-cf-geo-chip.none{background:rgba(239,68,68,.14);color:#ffb4b4}
+    .cc-cf-geo-chip.src{background:var(--surface-3,#1b2538);color:var(--text-dim,#6b7689)}
     .cc-cf-build{display:grid;grid-template-columns:1fr 372px;gap:16px;align-items:start}
     @media(max-width:900px){.cc-cf-build{grid-template-columns:1fr}}
     .cc-cf-chips{display:flex;gap:6px;flex-wrap:wrap}
@@ -417,12 +463,17 @@
 
   async function refreshAll() {
     try {
-      const [events, packs] = await Promise.all([
+      const [events, packs, users] = await Promise.all([
         api('GET', '/events').catch(() => []),
         api('GET', '/packs').catch(() => []),
+        // admin-only; resolves event.created_by → full_name. Non-fatal on 403.
+        api('GET', '/users', undefined, `${BACKEND_HOST}/api/v1/auth`).catch(() => []),
       ]);
       S.events = Array.isArray(events) ? events : [];
       S.packs = Array.isArray(packs) ? packs : [];
+      S.users = Array.isArray(users) ? users : [];
+      S.userMap = {};
+      S.users.forEach((u) => { if (u && u.id) S.userMap[u.id] = u.full_name || u.email || u.id; });
       render();
     } catch (e) { toast('Could not load crisis data: ' + e.message, 'err'); }
   }
@@ -456,8 +507,9 @@
         const st = eventStatus(e);
         const zone = `${(e.radius_km || 0)} km · ${Number(e.center_lat).toFixed(2)}, ${Number(e.center_lng).toFixed(2)}`;
         const win = `${fmtDate(e.started_at)} – ${fmtDate(e.ended_at)}`;
+        const creator = creatorName(e);
         return `<tr>
-          <td><div style="font-weight:600">${esc(e.name)}</div><div style="color:var(--text-dim,#6b7689);font-size:11.5px">${esc(packTitle(e.form_pack_id))}</div></td>
+          <td><div style="font-weight:600">${esc(e.name)}</div><div style="color:var(--text-dim,#6b7689);font-size:11.5px">${esc(packTitle(e.form_pack_id))}</div>${creator ? `<div style="color:var(--text-dim,#6b7689);font-size:11px;margin-top:1px">Created by ${esc(creator)}</div>` : ''}</td>
           <td>${esc(e.crisis_type || '—')}</td>
           <td>${esc(zone)}</td>
           <td>${esc(win)}</td>
@@ -530,20 +582,33 @@
           <div>
             <div class="cc-cf-fld"><label class="cc-cf-lbl">Crisis name</label><input class="cc-cf-input" id="cc-ev-name" value="${esc(e.name || '')}" placeholder="Forest Fire — Bandipur"></div>
             <div class="cc-cf-fld"><label class="cc-cf-lbl">Crisis type</label><select class="cc-cf-select" id="cc-ev-type">${typeOpts}</select></div>
-            <div class="cc-cf-grid2">
-              <div class="cc-cf-fld"><label class="cc-cf-lbl">Starts</label><input class="cc-cf-input" type="datetime-local" id="cc-ev-start" value="${isoToLocalInput(e.started_at)}"></div>
-              <div class="cc-cf-fld"><label class="cc-cf-lbl">Ends</label><input class="cc-cf-input" type="datetime-local" id="cc-ev-end" value="${isoToLocalInput(e.ended_at)}"></div>
-            </div>
-            <p class="cc-cf-hint">Leave a bound blank for an open-ended window. When the window closes (or you deactivate), the zone auto-reverts to the default flow.</p>
+            <div class="cc-cf-fld"><label class="cc-cf-lbl">Starts</label>
+              <div class="cc-cf-dt">
+                <input class="cc-cf-input" type="date" id="cc-ev-start-date" value="${isoToLocalDate(e.started_at)}" aria-label="Start date">
+                <select class="cc-cf-select" id="cc-ev-start-time" aria-label="Start time">${timeOptions(isoToLocalTime(e.started_at))}</select>
+              </div></div>
+            <div class="cc-cf-fld"><label class="cc-cf-lbl">Ends</label>
+              <div class="cc-cf-dt">
+                <input class="cc-cf-input" type="date" id="cc-ev-end-date" value="${isoToLocalDate(e.ended_at)}" aria-label="End date">
+                <select class="cc-cf-select" id="cc-ev-end-time" aria-label="End time">${timeOptions(isoToLocalTime(e.ended_at))}</select>
+              </div></div>
+            <p class="cc-cf-hint">Leave the start/end <em>date</em> blank for an open-ended window. When the window closes (or you deactivate), the zone auto-reverts to the default flow.</p>
           </div>
           <div>
+            <div class="cc-cf-fld"><label class="cc-cf-lbl">Find a place</label>
+              <div class="cc-cf-geo">
+                <input class="cc-cf-input" id="cc-ev-geo-q" placeholder="Type a place name → fills coordinates" autocomplete="off">
+                <button type="button" class="cc-cf-btn sm" id="cc-ev-geo-go">Search</button>
+              </div></div>
             <div class="cc-cf-grid2">
               <div class="cc-cf-fld"><label class="cc-cf-lbl">Center latitude</label><input class="cc-cf-input" id="cc-ev-lat" value="${e.center_lat != null ? esc(e.center_lat) : ''}" placeholder="11.6680"></div>
               <div class="cc-cf-fld"><label class="cc-cf-lbl">Center longitude</label><input class="cc-cf-input" id="cc-ev-lng" value="${e.center_lng != null ? esc(e.center_lng) : ''}" placeholder="76.6340"></div>
             </div>
+            <div class="cc-cf-geo-res" id="cc-ev-geo-res" hidden></div>
             <div class="cc-cf-fld"><label class="cc-cf-lbl">Radius (km)</label><div class="cc-cf-chips" id="cc-ev-radius">${radii}</div></div>
             <div class="cc-cf-fld"><label class="cc-cf-lbl">Question pack</label><select class="cc-cf-select" id="cc-ev-pack">${packOpts}</select></div>
             <div class="cc-cf-fld"><label class="cc-cf-lbl"><input type="checkbox" id="cc-ev-active" ${e.is_active ? 'checked' : ''} style="width:auto;margin-right:7px;vertical-align:middle">Active (matches reporters once published &amp; in-window)</label></div>
+            ${(!isNew && creatorName(e)) ? `<p class="cc-cf-hint" style="margin-top:0">Created by ${esc(creatorName(e))}${e.created_at ? ` · ${fmtDate(e.created_at)}` : ''}</p>` : ''}
           </div>
         </div>
         <div class="cc-cf-row" style="margin-top:6px">
@@ -558,6 +623,41 @@
       selRadius = Number(c.getAttribute('data-r'));
       body.querySelectorAll('#cc-ev-radius .cc-cf-chip').forEach((x) => x.classList.toggle('on', x === c));
     }));
+    // ── bi-directional geocoding ──────────────────────────────────────────────
+    const geoRes = el('cc-ev-geo-res');
+    function showGeoRes(r) {
+      if (!geoRes) return;
+      if (!r || !r.location_name) { geoRes.hidden = true; geoRes.innerHTML = ''; return; }
+      const conf = r.confidence ? `<span class="cc-cf-geo-chip ${esc(r.confidence)}">${esc(r.confidence)}</span>` : '';
+      const src = r.source ? `<span class="cc-cf-geo-chip src">${esc(r.source)}</span>` : '';
+      geoRes.hidden = false;
+      geoRes.innerHTML = `<span class="cc-cf-geo-pin">📍</span><span class="cc-cf-geo-name">${esc(r.location_name)}</span>${conf}${src}`;
+    }
+    async function doForward() {
+      const q = (el('cc-ev-geo-q').value || '').trim();
+      if (q.length < 3) { toast('Type at least 3 characters of a place name.', 'err'); return; }
+      const btn = el('cc-ev-geo-go'); const old = btn.textContent; btn.textContent = '…'; btn.disabled = true;
+      try {
+        const r = await geocode('describe', { text: q });
+        if (r && typeof r.latitude === 'number' && typeof r.longitude === 'number') {
+          el('cc-ev-lat').value = Number(r.latitude).toFixed(6);
+          el('cc-ev-lng').value = Number(r.longitude).toFixed(6);
+          showGeoRes(r);
+        } else { toast('Could not resolve that place — enter coordinates manually.', 'err'); }
+      } catch (err) { toast('Lookup failed: ' + err.message, 'err'); }
+      finally { btn.textContent = old; btn.disabled = false; }
+    }
+    async function doReverse() {
+      const lat = parseFloat(el('cc-ev-lat').value), lng = parseFloat(el('cc-ev-lng').value);
+      if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+      try { showGeoRes(await geocode('reverse', { lat, lng })); } catch (_e) { /* non-fatal */ }
+    }
+    el('cc-ev-geo-go').addEventListener('click', doForward);
+    el('cc-ev-geo-q').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); doForward(); } });
+    el('cc-ev-lat').addEventListener('change', doReverse);
+    el('cc-ev-lng').addEventListener('change', doReverse);
+    if (!isNew && e.center_lat != null && e.center_lng != null) doReverse(); // show the saved zone's name
+
     el('cc-cf-ev-back').addEventListener('click', () => { S.editingEvent = undefined; render(); });
     el('cc-cf-ev-cancel').addEventListener('click', () => { S.editingEvent = undefined; render(); });
     el('cc-cf-ev-save').addEventListener('click', () => saveEvent(e, () => selRadius));
@@ -570,8 +670,8 @@
     if (!name) { toast('Crisis name is required.', 'err'); return; }
     if (isNaN(lat) || lat < -90 || lat > 90) { toast('Center latitude must be between -90 and 90.', 'err'); return; }
     if (isNaN(lng) || lng < -180 || lng > 180) { toast('Center longitude must be between -180 and 180.', 'err'); return; }
-    const startISO = localInputToISO(el('cc-ev-start').value);
-    const endISO = localInputToISO(el('cc-ev-end').value);
+    const startISO = dateTimeToISO(el('cc-ev-start-date').value, el('cc-ev-start-time').value);
+    const endISO = dateTimeToISO(el('cc-ev-end-date').value, el('cc-ev-end-time').value);
     if (startISO && endISO && Date.parse(endISO) <= Date.parse(startISO)) { toast('End must be after start.', 'err'); return; }
     const packId = el('cc-ev-pack').value || null;
     const payload = {

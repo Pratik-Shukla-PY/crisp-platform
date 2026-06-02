@@ -47,6 +47,7 @@ class CrisisEventResponse(BaseModel):
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
     form_pack_id: Optional[str] = None
+    created_by: Optional[str] = None  # user id; the dashboard resolves → full_name
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
