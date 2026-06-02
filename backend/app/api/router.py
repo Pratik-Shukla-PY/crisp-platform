@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share, config, observability, appeals, devices, hot_regions, buildings
+from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share, config, observability, appeals, devices, hot_regions, buildings, crisis_forms
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -71,3 +71,10 @@ api_router.include_router(hot_regions.router,
 api_router.include_router(buildings.router,
                           prefix="/buildings",
                           tags=["buildings"])
+# Dynamic Crisis Forms — geo-scoped Stage 2/3 question packs.
+# Public read at /api/v1/crisis-forms/active?lat=&lng= (cacheable, unauthenticated):
+# clients ask "is a crisis pack active at my location?" after the Stage-1 location
+# fix and fall back to the default flow when not. Admin CRUD + pack publish/rollback
+# at /api/v1/admin/crisis-forms/* (JWT + require_admin).
+api_router.include_router(crisis_forms.public_router, prefix="/crisis-forms", tags=["crisis-forms"])
+api_router.include_router(crisis_forms.admin_router, prefix="/admin/crisis-forms", tags=["crisis-forms"])
