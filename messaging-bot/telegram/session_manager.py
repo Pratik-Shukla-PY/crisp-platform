@@ -185,6 +185,10 @@ class TelegramSession:
     # `create_report_early` writes this as `meta["device_hash"]` so the
     # Telegram report clusters with the user's PWA reports.
     pwa_device_hash: Optional[str] = None
+    # Phase 3: a message sent BEFORE consent (cold "photo-first" / "pin-first")
+    # is buffered here and replayed through _capture_any_media right after the
+    # user taps consent, so their first action is never silently dropped.
+    pending_message: Optional[dict] = None
 
     @property
     def has_evidence(self) -> bool:

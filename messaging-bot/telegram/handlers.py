@@ -84,6 +84,25 @@ def _fire_upload(session, coro):
     session.pending_uploads.append(task)
 
 
+_TAP_ONLY_STEPS = {"STEP_DAMAGE_CLASS", "STEP_TYPE", "STEP_CRISIS_TYPE", "STEP_DEBRIS"}
+
+
+def _message_has_capturable(message: dict) -> bool:
+    """True if the message carries something _capture_any_media would keep —
+    used to decide whether to buffer a pre-consent message for replay (Phase 3)."""
+    if any(message.get(k) for k in ("photo", "video", "video_note", "voice", "audio", "location")):
+        return True
+    txt = (message.get("text") or "").strip()
+    return bool(txt) and not txt.startswith("/")
+
+
+def _message_is_unsupported_media(message: dict) -> bool:
+    """True for media types the bot can't ingest as evidence (sticker /
+    GIF-animation / contact / poll / dice / a file-Document) — so Phase 3 can
+    nudge the reporter instead of silently swallowing what they sent."""
+    return any(message.get(k) for k in ("sticker", "animation", "contact", "poll", "dice", "document"))
+
+
 async def _capture_any_media(session, message: dict):
     """
     Silently capture ANY media/text from the message, regardless of current step.
@@ -425,6 +444,11 @@ async def handle_update(update: dict):
     if not session.consented and consent_has(user_id):
         session.consented = True
     if session.state == "AWAIT_CONSENT" or not session.consented:
+        # Phase 3: buffer a cold "X-first" message (photo / location pin / a few
+        # words sent before the consent tap) so it's replayed after consent
+        # instead of silently dropped — an impatient reporter never loses input.
+        if _message_has_capturable(message):
+            session.pending_message = message
         track_prompt_msg(session, await send_consent_prompt(chat_id, session.lang))
         return
 
@@ -437,7 +461,7 @@ async def handle_update(update: dict):
     # ── CAPTURE everything first, regardless of step ──
     had_location_before = session.has_location
     had_evidence_before = session.has_evidence
-    await _capture_any_media(session, message)
+    captured = await _capture_any_media(session, message)
 
     # Resolve location name if just received
     if session.has_location and not had_location_before:
@@ -499,7 +523,18 @@ async def handle_update(update: dict):
         # Step changed — send the new prompt
         session.state = next_step
         await _prompt_for_step(session, chat_id, next_step)
-    # else: same step, user sent bonus data (e.g. extra photo) — no re-prompt
+    else:
+        # Same step — no advance. Phase 3: don't leave the user in silence.
+        if not captured and _message_is_unsupported_media(message):
+            # Sticker / GIF / file-Document / contact — acknowledge instead of
+            # silently swallowing what looked (to the user) like evidence.
+            await send_text(chat_id, t(session.lang, "unsupported_media"))
+        elif (text and not text.startswith("/") and session.state in _TAP_ONLY_STEPS):
+            # Stray text typed on a tap-only step — re-send the current prompt
+            # so the user knows to tap a button (their text is still kept on
+            # the description by _capture_any_media above).
+            await _prompt_for_step(session, chat_id, session.state)
+        # else: bonus data on a non-tap step (e.g. extra photo) — no re-prompt
 
 
 async def _handle_callback(callback_query: dict):
@@ -617,6 +652,31 @@ async def _handle_callback(callback_query: dict):
         session.consented = True
         consent_grant(user_id, session.lang)     # persist → never re-ask
         await answer_callback(cq_id, "Thanks!")
+        # Phase 3: replay any pre-consent message we buffered so the reporter's
+        # first action (photo / pin / words sent before this tap) is captured
+        # rather than lost. Mirrors handle_update's capture + create path.
+        if session.pending_message:
+            pending = session.pending_message
+            session.pending_message = None
+            had_loc = session.has_location
+            await _capture_any_media(session, pending)
+            if session.has_location and not had_loc:
+                await resolve_location_name(session)
+            if (not session.report_id
+                    and (session.image_data_url or session.audio_data_url or session.text)
+                    and session.has_location):
+                await create_report_early(session)
+                if session.report_id:
+                    if session.image_data_url:
+                        _fire_upload(session, upload_image(session))
+                    if session.audio_data_url:
+                        _fire_upload(session, upload_audio(session))
+            if session.has_evidence:
+                await send_text(
+                    chat_id,
+                    t(session.lang, "photo_ack") if session.image_data_url
+                    else t(session.lang, "desc_ack"),
+                )
         # Jump straight to the NEXT missing step (usually STEP_LOCATION in
         # the Apr-2026 reorder). Previously always landed on STEP_PHOTO.
         session.state = _next_missing_step(session)

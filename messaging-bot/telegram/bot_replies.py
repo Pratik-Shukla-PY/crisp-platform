@@ -59,6 +59,7 @@ _STRINGS = {
         "step_loc_num": "📍 *Where is this?*\n\n👇 Press the button to send location",
         "photo_ack": "✅ Got your photo!",
         "desc_ack": "✅ Got it!",
+        "unsupported_media": "📸 I can take a *photo*, a *voice message*, or *text*. Please send one of those — files, stickers and GIFs aren't picked up.",
         "step_loc_text_hint": "Or type the place name",
         # native-language building-name prompt.
         # Reporter types the name (e.g. "Koramangala High School", "مدرسة الأمل")
