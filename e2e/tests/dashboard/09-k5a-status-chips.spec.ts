@@ -9,7 +9,7 @@
  *   1. Media corrupt            (abandon_reason = 'checksum_mismatch')   RED
  *   2. Upload abandoned         (abandon_reason = 'chunks_never_arrived' OR
  *                                                 'assembly_worker_lost')  RED
- *   3. PII review needed        (pii_blur_status = 'failed')              RED
+ *   3. Redaction failed        (pii_blur_status = 'failed')              RED
  *   4. Original (slow network)  (abandon_reason = 'bandwidth_tier_deferred') AMBER
  *   5. Attribution lost         (submitted_as_anonymous_due_to_expired_token) GREY
  *   6. Uploading…               (sync_status=PARTIAL + media pending)     AMBER
@@ -136,7 +136,7 @@ test.describe('Dashboard K.5.a — status chip-row', () => {
         expect(chipText).toContain('Upload abandoned');
     });
 
-    test('pii_blur_status=failed → "PII review needed" red chip', async ({ page, request }) => {
+    test('pii_blur_status=failed → "Redaction failed" red chip', async ({ page, request }) => {
         await stubReportsList(page, [_stubReport({
             id: 'k5a-pii',
             media: [{ id: 'm1', type: 'IMAGE', resolution_tier: 'LOW',
@@ -147,7 +147,7 @@ test.describe('Dashboard K.5.a — status chip-row', () => {
         const chipText = await page.locator(
             '.qrt-card[data-report-id="k5a-pii"] .k5a-chip-red'
         ).first().textContent();
-        expect(chipText).toContain('PII review needed');
+        expect(chipText).toContain('Redaction failed');
     });
 
     test('bandwidth_tier_deferred → "Original (slow network)" amber chip', async ({ page, request }) => {
