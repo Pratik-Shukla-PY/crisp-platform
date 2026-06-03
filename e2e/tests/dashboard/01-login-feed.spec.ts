@@ -89,7 +89,7 @@ test.describe('Dashboard login + feed', () => {
     await expect(banner).toBeHidden();
   });
 
-  test('admin sees the Regions button in the header', async ({ page }) => {
+  test('admin user-menu no longer carries Regions (relocated to Reporting — CC-IA)', async ({ page }) => {
     await page.goto('index.html');
     const token = await (async () => {
       const req = await page.request.post('http://localhost:8000/api/v1/auth/login', {
@@ -106,12 +106,13 @@ test.describe('Dashboard login + feed', () => {
     }, token);
     await page.reload();
 
-    // Apr 2026 — region auto-submit admin panel button is role-gated.
-    // Phase J.1 (May 2026) — admin items (Moderation, Pending Deletions,
-    // Auto-Regions) moved into the user-chip dropdown to declutter
-    // the header. Open the dropdown first; the inner button is still
-    // gated by _maybeShowRegionsButton on role.
+    // CC-IA P2 (2026-06) — "Auto-Submit Regions" was moved OUT of the user-chip
+    // dropdown into the Reporting module (#/reporting → cc-crisis "Auto-submit
+    // regions" tab; see 02-regions-admin.spec.ts). Under automation the router
+    // lands on #/incidents (the feed), so the header user-menu is visible here.
+    // Opening it must NOT show the old regions launcher anymore.
     await page.locator('.user-menu-trigger').click();
-    await expect(page.locator('#btn-auto-regions')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.user-menu-logout')).toBeVisible({ timeout: 10_000 });  // menu actually opened
+    await expect(page.locator('#btn-auto-regions')).toHaveCount(0);                    // regions launcher gone
   });
 });

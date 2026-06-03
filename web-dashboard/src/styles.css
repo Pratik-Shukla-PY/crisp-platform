@@ -3795,7 +3795,13 @@ body.burst-mode .notif-glow {
 .region-chip.region-chip-off { color:#94a3b8; border:1px solid rgba(148,163,184,0.35); background:rgba(148,163,184,0.08); }
 
 /* Region form modal — floating overlay similar to the lightbox pattern. */
-#region-form-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:10000; align-items:center; justify-content:center; }
+/* CC-IA P2: Auto-Submit Regions are now launched from the Reporting module
+   (cc-crisis #cc-cf-overlay, z-index 99999). The relocated #regions-panel +
+   this create/edit modal must render ABOVE that overlay, so their z-index is
+   raised past 99999. (#moderation-panel reuses .deletions-panel but stays
+   inside the incident view at its base z-index 20 — unaffected.) */
+#regions-panel { z-index:100000; }
+#region-form-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:100002; align-items:center; justify-content:center; }
 .region-form { width:min(460px, 90vw); background:#0f172a; border:1px solid rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.5); }
 .region-form-body { padding:16px; display:flex; flex-direction:column; gap:10px; }
 .region-form-body label { font-size:11px; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px; }

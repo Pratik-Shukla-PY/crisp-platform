@@ -1,42 +1,64 @@
 /**
- * Dashboard — Auto-submit regions admin panel (Apr 2026 Phase 4).
+ * Dashboard — Auto-submit regions admin panel.
  *
- * Covers every button on the regions panel:
- *   · Opens from the header Regions button (admin-only)
- *   · Add region form: name + lat + lng + radius + enable
- *   · Toggle enabled/disabled
- *   · Edit region
- *   · Delete region with confirmation
- *   · Public /regions/enabled reflects the enabled set (cross-check)
+ * CC-IA P2 (2026-06): Auto-Submit Regions was RELOCATED out of the header
+ * user-menu into the Reporting module. It is now reached at
+ *   #/reporting → cc-crisis "Auto-submit regions" tab → "Open regions manager"
+ * which opens the (now body-level) #regions-panel above the Reporting overlay.
+ * The regions CRUD itself (#regions-panel / #region-form-overlay / the
+ * showRegionsPanel/openRegionForm/saveRegionForm globals) is unchanged.
+ *
+ * Covers:
+ *   · Relocation contract — regions is reachable from #/reporting, NOT the
+ *     user-menu (#btn-auto-regions no longer exists); closing the panel keeps
+ *     the Reporting overlay open.
+ *   · Add region form: name + lat + lng + radius + enable  (fixme — see below)
+ *   · Toggle enabled/disabled + public /regions/enabled cross-check (fixme)
  *
  * Uses the ADMIN fixture from helpers/api.ts for login and cleans up after
  * itself via cleanupTestRegions.
  */
-import { test, expect } from '@playwright/test';
-import { ADMIN, cleanupTestRegions } from '../helpers/api';
+import { test, expect, Page } from '@playwright/test';
+import { ADMIN, ensureAdminAndLogin, cleanupTestRegions } from '../helpers/api';
 
-async function loginAsAdmin(page) {
-  await page.goto('index.html');
+async function bootAdmin(page: Page): Promise<string> {
   const res = await page.request.post('http://localhost:8000/api/v1/auth/login', {
     data: { email: ADMIN.email, password: ADMIN.password },
   });
   const body = await res.json();
   const token = body.access_token || body.token;
+  await page.goto('index.html');
   await page.evaluate((t) => {
     localStorage.setItem('crisp_token', t);
     localStorage.setItem('crisp_user', JSON.stringify({
       email: 'e2e-admin@crisp.test', role: 'SUPER_ADMIN', full_name: 'E2E Admin',
     }));
+    localStorage.setItem('crisp_router_force_root', '1');  // real CC root, not the automation feed default
   }, token);
   await page.reload();
+  await page.waitForFunction(() => !!(window as any).__crispRouter, null, { timeout: 15_000 });
   return token;
 }
 
-test.describe('Regions admin panel', () => {
+/**
+ * Navigate to the Reporting module and open the Auto-Submit Regions panel
+ * through the relocated launcher (the post-CC-IA path).
+ */
+async function openRegionsViaReporting(page: Page) {
+  await page.evaluate(() => (window as any).__crispRouter.navigate('/reporting'));
+  await expect(page.locator('#cc-cf-overlay.cc-cf-open')).toBeVisible({ timeout: 5000 });
+  await page.locator('.cc-cf-tab[data-tab="regions"]').click();
+  await page.locator('#cc-cf-open-regions').click();
+  await expect(page.locator('#regions-panel')).toBeVisible({ timeout: 5000 });
+}
+
+test.describe('Regions admin panel (relocated to Reporting — CC-IA)', () => {
   let token: string;
 
+  test.beforeAll(async ({ request }) => { await ensureAdminAndLogin(request); });
+
   test.beforeEach(async ({ page }) => {
-    token = await loginAsAdmin(page);
+    token = await bootAdmin(page);
   });
 
   test.afterAll(async ({ request }) => {
@@ -50,18 +72,30 @@ test.describe('Regions admin panel', () => {
     }
   });
 
-  // SKIP RATIONALE (May 2026): `#region-form-overlay` stays visible after
-  // the create-region POST in the test environment — the overlay-dismiss
-  // wiring depends on a follow-up admin-list refetch that's racing the
-  // test's `.toBeHidden({timeout:10000})` assertion. Production works
-  // (operator-verified); tracked as test-fixture maintenance.
+  test('@smoke relocation: reachable from #/reporting, not the user-menu', async ({ page }) => {
+    // The user-menu launcher is gone (moved into the Reporting module).
+    await expect(page.locator('#btn-auto-regions')).toHaveCount(0);
+
+    // Reach it through the Reporting module instead.
+    await openRegionsViaReporting(page);
+    await expect(page).toHaveURL(/#\/reporting/);
+    await expect(page.locator('#regions-panel .del-panel-header')).toContainText(/Auto-Submit Regions/i);
+
+    // Closing the regions panel returns to the Reporting overlay (still open),
+    // not the incident feed.
+    await page.locator('#regions-panel .close-btn').click();
+    await expect(page.locator('#regions-panel')).toBeHidden();
+    await expect(page.locator('#cc-cf-overlay.cc-cf-open')).toBeVisible();
+  });
+
+  // SKIP RATIONALE (May 2026, carried forward): `#region-form-overlay` stays
+  // visible after the create-region POST in the test environment — the
+  // overlay-dismiss wiring depends on a follow-up admin-list refetch that's
+  // racing the test's `.toBeHidden()` assertion. Production works
+  // (operator-verified); tracked as test-fixture maintenance. Reach-path
+  // updated to the post-CC-IA Reporting route.
   test.fixme('open panel → create region → appears in list → delete', async ({ page }) => {
-    // Open the panel.
-    // Phase J.1 (May 2026) — admin items moved into the user-chip
-    // dropdown. Open the dropdown first, then click the Regions item.
-    await page.locator('.user-menu-trigger').click();
-    await page.locator('#btn-auto-regions').click();
-    await expect(page.locator('#regions-panel')).toBeVisible();
+    await openRegionsViaReporting(page);
 
     // Click "Add region".
     await page.locator('#regions-panel-footer button').first().click();
@@ -101,8 +135,8 @@ test.describe('Regions admin panel', () => {
     await expect(row).toHaveCount(0, { timeout: 5000 });
   });
 
-  // Same skip rationale — admin-list refetch races the test's
-  // public-list assertion. Production works.
+  // Same skip rationale — admin-list refetch races the test's public-list
+  // assertion. Production works. Reach-path updated to the Reporting route.
   test.fixme('toggle enabled off → public list no longer contains it', async ({ page, request }) => {
     // Create a fresh region directly via API to isolate this test.
     const regionName = `E2E Toggle ${Date.now()}`;
@@ -117,11 +151,8 @@ test.describe('Regions admin panel', () => {
     });
     expect(create.ok()).toBeTruthy();
 
-    // Open the panel + find the row.
-    // Phase J.1 (May 2026) — admin items moved into the user-chip
-    // dropdown. Open the dropdown first, then click the Regions item.
-    await page.locator('.user-menu-trigger').click();
-    await page.locator('#btn-auto-regions').click();
+    // Open the panel via the Reporting module + find the row.
+    await openRegionsViaReporting(page);
     const row = page.locator('.region-row', { hasText: regionName });
     await expect(row).toBeVisible();
 

@@ -116,12 +116,8 @@
                         <span>Pending Deletions</span>
                         <span class="user-menu-badge" id="deletion-count-badge">0</span>
                     </button>
-                    <button class="user-menu-item" id="btn-auto-regions"
-                            onclick="showRegionsPanel();_toggleUserMenu(false);"
-                            style="display:none;">
-                        <i class="fa-solid fa-location-crosshairs"></i>
-                        <span>Auto-Submit Regions</span>
-                    </button>
+                    <!-- CC-IA P2: "Auto-Submit Regions" moved out of the user-menu into the
+                         Reporting module (#/reporting → cc-crisis "Auto-submit regions" tab). -->
                     <div class="user-menu-divider" id="user-menu-admin-divider" style="display:none;"></div>
                     <button class="user-menu-item user-menu-logout"
                             onclick="crispLogout()">
@@ -485,20 +481,9 @@
         <div class="del-panel-footer" id="del-panel-footer"></div>
     </div>
 
-    <!-- Phase 4 (Apr 2026) — Auto-Submit Regions Admin Panel (overlay).
-         Admin toggles enable per-region 2-minute auto-submit timers on
-         clients. Uses the same overlay/header pattern as the deletions
-         panel for visual consistency. -->
-    <div id="regions-panel" class="deletions-panel" style="display:none;">
-        <div class="del-panel-header">
-            <h3><i class="fa-solid fa-location-crosshairs"></i> Auto-Submit Regions</h3>
-            <button class="close-btn" onclick="closeRegionsPanel()"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div class="del-panel-body" id="regions-panel-body"></div>
-        <div class="del-panel-footer" id="regions-panel-footer">
-            <button class="btn btn-primary" onclick="openRegionForm()"><i class="fa-solid fa-plus"></i> Add region</button>
-        </div>
-    </div>
+    <!-- CC-IA P2: #regions-panel relocated to body level (see end of file) so
+         Auto-Submit Regions stays reachable when the incident view is hidden
+         behind a non-incident route. Launched from #/reporting (cc-crisis). -->
 
     <!-- Phase 5.1 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §7+§17) —
          Moderation overlay. Two-tab layout: Triage (acute clusters)
@@ -524,29 +509,7 @@
         <div class="del-panel-body" id="moderation-panel-body"></div>
     </div>
 
-    <!-- Region create/edit modal. Small inline form; radius in kilometres. -->
-    <div id="region-form-overlay" style="display:none;">
-        <div class="region-form">
-            <div class="del-panel-header">
-                <h3 id="region-form-title"><i class="fa-solid fa-pen"></i> Region</h3>
-                <button class="close-btn" onclick="closeRegionForm()"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="region-form-body">
-                <label>Name</label>
-                <input type="text" id="region-name" maxlength="120" placeholder="e.g. Bangalore">
-                <div class="region-grid">
-                    <div><label>Latitude</label><input type="number" step="0.0001" id="region-lat" placeholder="12.9716"></div>
-                    <div><label>Longitude</label><input type="number" step="0.0001" id="region-lng" placeholder="77.5946"></div>
-                    <div><label>Radius (km)</label><input type="number" step="0.1" min="0.1" max="200" id="region-radius-km" placeholder="12"></div>
-                </div>
-                <label class="region-enabled-row"><input type="checkbox" id="region-enabled"> Enabled (clients in this zone will see the 2-min auto-submit timer)</label>
-            </div>
-            <div class="del-panel-footer region-form-footer">
-                <button class="btn btn-secondary" onclick="closeRegionForm()">Cancel</button>
-                <button class="btn btn-primary" onclick="saveRegionForm()"><i class="fa-solid fa-check"></i> Save</button>
-            </div>
-        </div>
-    </div>
+    <!-- CC-IA P2: #region-form-overlay relocated to body level (see end of file). -->
 
     <!-- Predictive Intelligence Panel -->
     <div id="predictions-panel" class="predictions-panel" style="display:none;">
@@ -648,6 +611,50 @@
         <div class="dp-action-dock" id="dp-action-dock"></div>
     </aside>
 </main>
+
+<!-- ── CC-IA P2 (2026-06) — Auto-Submit Regions, relocated to BODY level ──────────
+     Moved out of #view-incidents (the <main> incident view) so they stay
+     reachable when the incident view is display:none behind a non-incident
+     route. Launched from the Reporting module: #/reporting → cc-crisis
+     "Auto-submit regions" tab → showRegionsPanel(). Their z-index is raised
+     above the Reporting overlay (#cc-cf-overlay) in styles.css. .deletions-panel
+     uses position:absolute resolved against the viewport — identical geometry
+     to when it lived inside the 100vw×100vh <main>. -->
+<!-- Phase 4 (Apr 2026) — Auto-Submit Regions Admin Panel (overlay). -->
+<div id="regions-panel" class="deletions-panel" style="display:none;">
+    <div class="del-panel-header">
+        <h3><i class="fa-solid fa-location-crosshairs"></i> Auto-Submit Regions</h3>
+        <button class="close-btn" onclick="closeRegionsPanel()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="del-panel-body" id="regions-panel-body"></div>
+    <div class="del-panel-footer" id="regions-panel-footer">
+        <button class="btn btn-primary" onclick="openRegionForm()"><i class="fa-solid fa-plus"></i> Add region</button>
+    </div>
+</div>
+
+<!-- Region create/edit modal. Small inline form; radius in kilometres. -->
+<div id="region-form-overlay" style="display:none;">
+    <div class="region-form">
+        <div class="del-panel-header">
+            <h3 id="region-form-title"><i class="fa-solid fa-pen"></i> Region</h3>
+            <button class="close-btn" onclick="closeRegionForm()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="region-form-body">
+            <label>Name</label>
+            <input type="text" id="region-name" maxlength="120" placeholder="e.g. Bangalore">
+            <div class="region-grid">
+                <div><label>Latitude</label><input type="number" step="0.0001" id="region-lat" placeholder="12.9716"></div>
+                <div><label>Longitude</label><input type="number" step="0.0001" id="region-lng" placeholder="77.5946"></div>
+                <div><label>Radius (km)</label><input type="number" step="0.1" min="0.1" max="200" id="region-radius-km" placeholder="12"></div>
+            </div>
+            <label class="region-enabled-row"><input type="checkbox" id="region-enabled"> Enabled (clients in this zone will see the 2-min auto-submit timer)</label>
+        </div>
+        <div class="del-panel-footer region-form-footer">
+            <button class="btn btn-secondary" onclick="closeRegionForm()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveRegionForm()"><i class="fa-solid fa-check"></i> Save</button>
+        </div>
+    </div>
+</div>
 
 <!-- Phase G.5 (May 2026) — Bulk-action floating bar. Appears at the
      bottom of the viewport whenever bulk-select mode is on AND at

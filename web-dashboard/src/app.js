@@ -10926,7 +10926,10 @@ function _initUserMenu() {
 // 30 s; cheap DOM-only.
 
 function _refreshUserMenuAdminState() {
-    const ids = ['btn-moderation', 'btn-pending-deletions', 'btn-auto-regions'];
+    // CC-IA P2: 'btn-auto-regions' removed — Auto-Submit Regions moved to the
+    // Reporting module (#/reporting). _maybeShowRegionsButton() stays a safe
+    // no-op (the button id no longer exists in the DOM).
+    const ids = ['btn-moderation', 'btn-pending-deletions'];
     const visible = ids.map(id => {
         const el = document.getElementById(id);
         return el && el.style.display !== 'none';
