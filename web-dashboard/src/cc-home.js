@@ -139,7 +139,7 @@
     ov.setAttribute('aria-label', 'CRISP Control Center');
     document.body.appendChild(ov);
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && ov.classList.contains('cc-home-open')) closeLanding();
+      if (e.key === 'Escape' && ov.classList.contains('cc-home-open')) { if (window.__crispRouter) window.__crispRouter.navigate('/incidents'); else closeLanding(); }
     });
     return ov;
   }
@@ -202,28 +202,22 @@
         <div class="cc-home-cards" id="cc-home-cards">${cardsHtml()}</div>
         <div class="cc-home-strip" id="cc-home-strip"></div>
         <div id="cc-home-activity"></div>
-        <div class="cc-home-foot">
-          <label class="cc-home-skip"><input type="checkbox" id="cc-home-skip-cb" ${localStorage.getItem(SKIP_KEY) ? 'checked' : ''}>
-            Skip this and go straight to incidents next time</label>
-        </div>
+        <!-- Mandatory Control Center root — no skip control. -->
       </div>`;
     ov.classList.add('cc-home-open');
 
-    // card actions
+    // card actions → route navigation (the router shows the module + hides the rest)
+    const go = (r) => { try { (window.__crispRouter ? window.__crispRouter.navigate : noop)(r); } catch (_e) {} };
     ov.querySelectorAll('.cc-home-card').forEach((b) => b.addEventListener('click', () => {
       if (b.hasAttribute('disabled')) return;
       const act = b.getAttribute('data-act');
-      if (act === 'cc-home-c1') { closeLanding(); }
-      else if (act === 'cc-home-c2') { closeLanding(); (window.openAccountSettings || noop)(); }
-      else if (act === 'cc-home-c3') { closeLanding(); (window.openOrgSettings || noop)(); }
-      else if (act === 'cc-home-c4') { closeLanding(); (window.openCrisisForms || noop)(); }
+      if (act === 'cc-home-c1') go('/incidents');
+      else if (act === 'cc-home-c2') go('/users');
+      else if (act === 'cc-home-c3') go('/org');
+      else if (act === 'cc-home-c4') go('/reporting');
     }));
-    el('cc-home-gear').addEventListener('click', () => { closeLanding(); (window.openAccountSettings || noop)(); });
-    el('cc-home-bell').addEventListener('click', () => { closeLanding(); });
-    el('cc-home-skip-cb').addEventListener('change', (e) => {
-      if (e.target.checked) localStorage.setItem(SKIP_KEY, '1');
-      else localStorage.removeItem(SKIP_KEY);
-    });
+    el('cc-home-gear').addEventListener('click', () => go('/users'));
+    el('cc-home-bell').addEventListener('click', () => go('/incidents'));
     // focus the first card for keyboard users
     const first = ov.querySelector('.cc-home-card');
     if (first) try { first.focus(); } catch (_) {}
@@ -283,7 +277,7 @@
       btn.innerHTML = `<i class="fa-solid fa-grip"></i> Control Center`;
       btn.addEventListener('click', () => {
         try { dropdown.classList.remove('open'); dropdown.style.display = ''; } catch (_) {}
-        openLanding();
+        try { (window.__crispRouter ? window.__crispRouter.navigate('/') : openLanding()); } catch (_e) { openLanding(); }
       });
       dropdown.insertBefore(btn, dropdown.firstChild);
     } catch (_e) { /* never break the dashboard */ }
@@ -298,12 +292,8 @@
     // Suppressed under automation (navigator.webdriver) so the dashboard's
     // existing feed-driven e2e specs aren't blocked by the overlay; a force flag
     // (crisp_cc_force_landing) re-enables it for the Control-Center spec itself.
-    let _forced = false;
-    try { _forced = localStorage.getItem('crisp_cc_force_landing') === '1'; } catch (_) {}
-    const _automation = (typeof navigator !== 'undefined' && navigator.webdriver) && !_forced;
-    if (token() && !localStorage.getItem(SKIP_KEY) && !_automation) {
-      setTimeout(openLanding, 250);   // let app.js boot the feed underneath first
-    }
+    // The router (router.js) owns when the Control Center shows (route '/').
+    // No auto-show / skip here anymore — the Control Center is the mandatory root.
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

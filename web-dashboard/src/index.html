@@ -47,7 +47,7 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<main class="dashboard-container">
+<main class="dashboard-container" id="view-incidents">
     <div id="crisis-map"></div>
 
     <!-- Top Command Bar -->
@@ -717,6 +717,8 @@
 <script src="cc-settings.js?v=1"></script>
 <!-- Control Center landing (self-contained additive overlay; B7). -->
 <script src="cc-home.js?v=1"></script>
+<!-- Navigation hub: mandatory Control Center root + 4-module hash router (loaded last). -->
+<script src="router.js?v=1"></script>
 
 <!-- Offline status banner. Phase F image-reliability (May 2026): the
      banner now requires ≥ 3 consecutive fetch failures before lighting,

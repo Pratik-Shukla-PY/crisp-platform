@@ -434,10 +434,12 @@
       </div>`;
     document.body.appendChild(ov);
     // close affordances
-    el('cc-cf-close').addEventListener('click', closeOverlay);
-    ov.addEventListener('mousedown', (e) => { if (e.target === ov) closeOverlay(); });
+    // Close → return to the Control Center root when routed; else just hide.
+    const _exit = () => { if (window.__crispRouter) window.__crispRouter.navigate('/'); else closeOverlay(); };
+    el('cc-cf-close').addEventListener('click', _exit);
+    ov.addEventListener('mousedown', (e) => { if (e.target === ov) _exit(); });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && ov.classList.contains('cc-cf-open') && !S.editingEvent && !S.builderPackId) closeOverlay();
+      if (e.key === 'Escape' && ov.classList.contains('cc-cf-open') && !S.editingEvent && !S.builderPackId) _exit();
     });
     ov.querySelectorAll('.cc-cf-tab').forEach((b) => b.addEventListener('click', () => {
       S.tab = b.getAttribute('data-tab');
