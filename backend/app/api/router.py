@@ -1,16 +1,11 @@
 from fastapi import APIRouter
-from app.api.endpoints import reports, exports, auth, predictions, admin, integrations, analytics, modules, push, share, config, observability, appeals, devices, hot_regions, buildings, crisis_forms
+from app.api.endpoints import reports, exports, auth, predictions, integrations, analytics, modules, push, share, config, observability, appeals, devices, hot_regions, buildings, crisis_forms
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 api_router.include_router(exports.router, prefix="/exports", tags=["exports"])
 api_router.include_router(predictions.router, prefix="/predictions", tags=["predictions"])
-# region auto-submit config.
-# Public read at /api/v1/regions/enabled (cacheable, unauthenticated).
-# Admin CRUD at /api/v1/admin/regions/* (JWT + require_admin).
-api_router.include_router(admin.public_router, prefix="/regions", tags=["regions"])
-api_router.include_router(admin.admin_router, prefix="/admin", tags=["admin"])
 # UI v2.1 (W7) — UNDP RAPIDA integration stub. Server-to-server
 # ingestion endpoint + JSON-Schema + field-mapping reference so UNOSAT
 # / RAPIDA tooling can build adapters against a stable contract.

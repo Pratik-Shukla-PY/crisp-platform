@@ -111,7 +111,6 @@ class ReportCreate(BaseModel):
     severity: SeverityEnum = SeverityEnum.UNKNOWN
     infrastructure_type: InfraTypeEnum = InfraTypeEnum.OTHER
     description: Optional[str] = Field(None, max_length=5000)
-    is_auto_submitted: bool = False
     client_created_at: Optional[datetime] = None
     location: LocationBase
     media: Optional[List[MediaBase]] = []
@@ -134,7 +133,6 @@ class ReportMetaCreate(BaseModel):
     infrastructure_type: InfraTypeEnum = InfraTypeEnum.OTHER
     description: Optional[str] = Field(None, max_length=5000)
     caller_info: Optional[Any] = None
-    is_auto_submitted: bool = False
     client_created_at: Optional[datetime] = None
     location: Optional[LocationBase] = None
     expected_media: int = Field(0, ge=0, le=50)
@@ -502,7 +500,6 @@ class ReportResponse(BaseModel):
     detected_language: Optional[str] = None
     caller_info: Optional[Any] = None
     ai_assessment: Optional[Any] = None
-    is_auto_submitted: bool = False
     expected_media: int = 0
     received_media: int = 0
     server_created_at: datetime

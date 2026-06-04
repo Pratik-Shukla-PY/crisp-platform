@@ -219,18 +219,6 @@ media_asset_integrity_fail_total = Counter(
     ["tier"],  # LOW | MEDIUM | HIGH | ORIGINAL — tier of the failed variant
 )
 
-# region auto-submit SLIs.
-geofence_check_total = Counter(
-    "crisp_geofence_check_total",
-    "Result of a client-side geofence check at 'Start Report'.",
-    ["result"],  # inside | outside | no_gps
-)
-auto_submit_count = Counter(
-    "crisp_auto_submit_count",
-    "Reports auto-submitted by the region timer, labelled by reason.",
-    ["reason"],  # timeout | cancel | leave_zone
-)
-
 # reviewer verdict counter.
 reports_reviewed_total = Counter(
     "crisp_reports_reviewed_total",

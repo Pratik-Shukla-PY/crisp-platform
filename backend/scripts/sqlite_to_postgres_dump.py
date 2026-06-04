@@ -72,7 +72,6 @@ PREFERRED_ORDER = [
     "media_chunks",
     "incident_clusters",
     "cluster_reports",
-    "auto_submit_regions",
     "prediction_zones",
     "prediction_results",
     "satellite_verifications",

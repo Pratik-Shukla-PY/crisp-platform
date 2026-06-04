@@ -160,7 +160,6 @@ class TestPartialAssemblySafeguards:
                 sync_status="SYNCED",
                 severity="UNKNOWN",
                 infrastructure_type="OTHER",
-                is_auto_submitted=False,
                 expected_media=1,
                 received_media=0,
                 reviewer_verdict="NOT_REVIEWED",

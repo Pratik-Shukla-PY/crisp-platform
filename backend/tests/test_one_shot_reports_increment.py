@@ -46,7 +46,6 @@ def _base_payload(device_hash: str, *, media=None, expected_media=None):
         "severity": "MODERATE",
         "infrastructure_type": "ROAD",
         "description": "K.2.g test report",
-        "is_auto_submitted": False,
         "location": {"latitude": 12.97, "longitude": 77.59},
         "media": media or [],
     }

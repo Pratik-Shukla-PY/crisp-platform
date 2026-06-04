@@ -51,7 +51,6 @@ def _make_report(db, report_id: str | None = None) -> Report:
             sync_status=SyncStatusEnum.SYNCED,
             severity=SeverityEnum.UNKNOWN,
             infrastructure_type=InfraTypeEnum.OTHER,
-            is_auto_submitted=False,
             expected_media=0,
             received_media=0,
             device_id=did,

@@ -57,7 +57,6 @@ def _make_parent_report(db, report_id: str = "redir-parent-1"):
             sync_status=SyncStatusEnum.SYNCED,
             severity=SeverityEnum.UNKNOWN,
             infrastructure_type=InfraTypeEnum.OTHER,
-            is_auto_submitted=False,
             expected_media=1,
             received_media=1,
             device_id=device_id,

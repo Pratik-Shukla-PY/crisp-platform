@@ -286,10 +286,10 @@ def test_0005_adds_pii_blur_status_column_and_backfills():
             conn.execute(text(
                 "INSERT INTO reports "
                 "(id, device_id, source, status, sync_status, severity, "
-                " infrastructure_type, is_auto_submitted, expected_media, "
+                " infrastructure_type, expected_media, "
                 " received_media, reviewer_verdict) "
                 "VALUES ('r1', 'd1', 'APP', 'PENDING', 'SYNCED', 'UNKNOWN', "
-                " 'OTHER', FALSE, 0, 0, 'NOT_REVIEWED')"
+                " 'OTHER', 0, 0, 'NOT_REVIEWED')"
             ))
             conn.execute(text(
                 "INSERT INTO media (id, report_id, type, resolution_tier, "
@@ -425,10 +425,10 @@ def test_legacy_db_is_upgraded_without_data_loss():
             conn.execute(text(
                 "INSERT INTO reports "
                 "(id, source, status, sync_status, severity, infrastructure_type, "
-                " is_auto_submitted, expected_media, received_media, "
+                " expected_media, received_media, "
                 " reviewer_verdict, damage_classification, crisis_type) "
                 "VALUES ('legacy-1', 'APP', 'PENDING', 'SYNCED', 'UNKNOWN', "
-                " 'HOUSE', FALSE, 0, 0, 'NOT_REVIEWED', 'NO_DAMAGE', 'EARTHQUAKE')"
+                " 'HOUSE', 0, 0, 'NOT_REVIEWED', 'NO_DAMAGE', 'EARTHQUAKE')"
             ))
         eng.dispose()
 

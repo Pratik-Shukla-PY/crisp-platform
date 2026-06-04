@@ -343,7 +343,6 @@ class Report(Base):
     detected_language = Column(String(10), nullable=True)  # ISO language code (en, hi, zh, etc.)
     caller_info = Column(JSON, nullable=True)  # Phone number, network city/state for IVR/SMS/Telegram
     ai_assessment = Column(JSON, nullable=True)  # Cached AI assessment {score, action, summary, details}
-    is_auto_submitted = Column(Boolean, default=False, nullable=False)
     expected_media = Column(Integer, default=0, nullable=False)   # How many media files expected
     received_media = Column(Integer, default=0, nullable=False)   # How many received so far
     client_created_at = Column(DateTime(timezone=True))
@@ -860,36 +859,12 @@ class ReporterProfile(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
-class AutoSubmitRegion(Base):
-    """Phase 4 (Apr 2026) — region-level auto-submit configuration.
-
-    When `enabled=True`, any client whose current GPS lies within this
-    circle (haversine ≤ radius_meters) shows a 2-minute countdown on
-    "Start Report" tap; the report is auto-submitted when the timer hits 0.
-    Config is admin-controlled via the dashboard.
-
-    v1 uses center+radius circles (cheap, mirrors `IncidentCluster` at
-    line 279–289). GeoJSON polygons are a deferred v2 follow-up for
-    non-circular cities (Dhaka, Kathmandu, Kabul basins).
-    """
-    __tablename__ = "auto_submit_regions"
-    id = Column(String(36), primary_key=True, default=gen_uuid)
-    name = Column(String(120), nullable=False)
-    enabled = Column(Boolean, default=False, nullable=False)
-    center_lat = Column(Float, nullable=False)
-    center_lng = Column(Float, nullable=False)
-    radius_meters = Column(Integer, nullable=False, default=10000)  # 10 km default
-    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-
 # ── Dynamic Crisis Forms (geo-scoped Stage 2/3 question packs) ────────────────
 # Admins activate a crisis-specific Stage 2/3 question pack for a geographic zone
 # within a time window. Reporters inside an ACTIVE, in-window zone get the pack;
 # everyone else + expired zones use the default flow (Stage 1 is never touched).
-# CrisisEvent mirrors AutoSubmitRegion's center+radius circle + adds a time window
-# + a pack binding. Packs are DB-backed + versioned (immutable once published) so
+# CrisisEvent uses a center+radius circle + a time window + a pack binding.
+# Packs are DB-backed + versioned (immutable once published) so
 # admins publish/rollback without a redeploy, and so a report queued under an old
 # pack version still validates against THAT version on sync.
 class CrisisFormPack(Base):
