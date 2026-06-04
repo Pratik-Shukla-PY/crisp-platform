@@ -347,8 +347,6 @@
   "stage8_title": "Vérifier et envoyer",
   "bldg_offline_prompt": "Tapez le nom du bâtiment dans votre langue",
   "bldg_offline_hint": "L'équipe fera la correspondance GPS",
-  "autosub_cancel_btn": "✕ Annuler l'envoi auto",
-  "autosub_click_anywhere": "Touchez pour annuler",
   "community_infra": "Communauté",
   "crisis_group_natural": "Naturel",
   "crisis_group_technological": "Technologique",

@@ -325,8 +325,6 @@
   "stage8_title": "검토 및 전송",
   "bldg_offline_prompt": "건물 이름을 모국어로 입력하세요",
   "bldg_offline_hint": "팀이 나중에 GPS에 매핑합니다",
-  "autosub_cancel_btn": "✕ 자동 전송 취소",
-  "autosub_click_anywhere": "탭하여 취소",
   "community_infra": "커뮤니티",
   "crisis_group_natural": "자연",
   "crisis_group_technological": "기술적",

@@ -333,8 +333,6 @@
   "stage8_title": "Revisar y enviar",
   "bldg_offline_prompt": "Escriba el nombre del edificio en su idioma",
   "bldg_offline_hint": "El equipo lo asignará a GPS",
-  "autosub_cancel_btn": "✕ Cancelar envío automático",
-  "autosub_click_anywhere": "Toque para cancelar",
   "community_infra": "Comunidad",
   "crisis_group_natural": "Naturales",
   "crisis_group_technological": "Tecnológico",

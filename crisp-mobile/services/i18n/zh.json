@@ -322,8 +322,6 @@
   "stage8_title": "检查并发送",
   "bldg_offline_prompt": "用您的语言输入建筑名称",
   "bldg_offline_hint": "团队将后续映射到 GPS",
-  "autosub_cancel_btn": "✕ 取消自动提交",
-  "autosub_click_anywhere": "点按取消",
   "community_infra": "社区设施",
   "crisis_group_natural": "自然",
   "crisis_group_technological": "技术",

@@ -279,8 +279,6 @@
   "stage8_title": "Review and send",
   "bldg_offline_prompt": "Type the building name in your language",
   "bldg_offline_hint": "The team will map this to GPS later",
-  "autosub_cancel_btn": "✕ Cancel auto-submit",
-  "autosub_click_anywhere": "Tap to cancel",
   "__meta__": {
     "locale": "en",
     "name": "English",

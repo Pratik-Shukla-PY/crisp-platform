@@ -324,8 +324,6 @@
   "stage8_title": "समीक्षा करें और भेजें",
   "bldg_offline_prompt": "इमारत का नाम अपनी भाषा में लिखें",
   "bldg_offline_hint": "टीम बाद में इसे GPS से मिलाएगी",
-  "autosub_cancel_btn": "✕ स्वतः भेजना रद्द करें",
-  "autosub_click_anywhere": "रद्द करने के लिए टैप करें",
   "community_infra": "समुदाय",
   "crisis_group_natural": "प्राकृतिक",
   "crisis_group_technological": "तकनीकी",

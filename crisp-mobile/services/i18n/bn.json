@@ -324,8 +324,6 @@
   "stage8_title": "পর্যালোচনা ও পাঠানো",
   "bldg_offline_prompt": "আপনার ভাষায় ভবনের নাম লিখুন",
   "bldg_offline_hint": "দল পরে এটিকে GPS-এ ম্যাপ করবে",
-  "autosub_cancel_btn": "✕ স্বয়ংক্রিয় প্রেরণ বাতিল",
-  "autosub_click_anywhere": "বাতিল করতে ট্যাপ করুন",
   "community_infra": "সম্প্রদায়",
   "crisis_group_natural": "প্রাকৃতিক",
   "crisis_group_technological": "প্রযুক্তিগত",

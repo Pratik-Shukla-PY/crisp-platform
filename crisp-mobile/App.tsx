@@ -166,7 +166,6 @@ import { blurFacesBase64, prewarm as prewarmPIIBlur } from './services/piiBlur';
 import { generateVariants, PhotoVariants, TIER_TO_RESOLUTION } from './services/imageVariants';
 import { swallow as telemetrySwallow } from './services/telemetry';
 // Phase 4 (Apr 2026) — region-gated auto-submit timer.
-import { getEnabledRegions, findActiveRegion, Region } from './services/regionCache';
 // May 2026 — Phase 2 of RN ↔ PWA parity. New HomeScreen mirrors the
 // PWA's redesigned home stage (3-section flex, CTA-anchored,
 // quiet identity pill, channels grid). Replaces the old in-line
@@ -456,61 +455,6 @@ function FlowProgress({ step, have }: {
   );
 }
 
-/**
- * AutoSubmitTimer — Phase 4 (Apr 2026).
- * Sticky banner shown during capture flow when the user is inside an
- * admin-enabled auto-submit region. Counts down from 2:00. At T=0 calls
- * `onFire`; Cancel button calls `onCancel`.
- */
-function AutoSubmitTimer({ region, onFire, onCancel }: {
-  region: Region;
-  onFire: () => void;
-  onCancel: () => void;
-}) {
-  const [remaining, setRemaining] = React.useState(120); // 2 min in seconds
-  const fired = React.useRef(false);
-  React.useEffect(() => {
-    const tick = setInterval(() => {
-      setRemaining((r) => {
-        const next = r - 1;
-        if (next <= 0 && !fired.current) {
-          fired.current = true;
-          clearInterval(tick);
-          onFire();
-          return 0;
-        }
-        return next;
-      });
-    }, 1000);
-    return () => clearInterval(tick);
-  }, [onFire]);
-  const mm = Math.floor(remaining / 60);
-  const ss = remaining % 60;
-  return (
-    <View
-      accessibilityRole="alert"
-      accessibilityLiveRegion="polite"
-      style={{
-        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 9999,
-        backgroundColor: '#dc2626',
-        paddingVertical: 10, paddingHorizontal: 14,
-        flexDirection: 'row', alignItems: 'center', gap: 10,
-      }}
-    >
-      <Text style={{ color: '#fff', fontSize: 18 }}>⏱</Text>
-      <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', flex: 1 }}>
-        Auto-submitting in {mm}:{String(ss).padStart(2, '0')}  ·  <Text style={{ opacity: 0.8 }}>{region.name}</Text>
-      </Text>
-      <TouchableOpacity
-        onPress={onCancel}
-        accessibilityLabel="Cancel auto-submit"
-        style={{ backgroundColor: '#fff', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6 }}
-      >
-        <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 13 }}>Cancel</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -705,13 +649,6 @@ export default function App() {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [deviceHash, setDeviceHash] = useState('');
-  // Phase 4 (Apr 2026) — region-gated auto-submit timer state.
-  // `activeRegion` ≠ null ⇒ AutoSubmitTimer banner is visible. Set when the
-  // user taps Start Report AND their GPS lies within an admin-enabled zone.
-  // `isAutoSubmit` flags the in-flight report so the backend knows the
-  // submission came from a timer expiry (for telemetry + provenance).
-  const [activeRegion, setActiveRegion] = useState<Region | null>(null);
-  const [isAutoSubmit, setIsAutoSubmit] = useState(false);
   const [history, setHistory] = useState<HistoryReport[]>([]);
   // In-flight (queued / syncing / failed) reports — merged with history in
   // the "My Reports" screen so users can see what hasn't shipped yet and
@@ -1508,9 +1445,6 @@ export default function App() {
     setIsLocationUserCorrected(false); setUserLocationName('');
     // Guaranteed-delivery — clear variant state so the next capture starts clean.
     setPhotoVariants(null); setPhotoGroupId(null);
-    // Phase 4 — clear auto-submit state so the next Start Report evaluates
-    // geofence fresh and the old region name doesn't bleed into a new flow.
-    setActiveRegion(null); setIsAutoSubmit(false);
   };
 
   const submitReport = async () => {
@@ -1573,9 +1507,6 @@ export default function App() {
         client_report_id: clientId, source: 'ANDROID', severity, infrastructure_type: infraType,
         description: description || '', detected_language: lang,
         expected_media: expectedMedia,
-        // Phase 4 (Apr 2026): flag region-timer-driven submissions so server
-        // telemetry can distinguish manual vs auto-submit reports.
-        is_auto_submitted: isAutoSubmit,
         crisis_type: crisisType, damage_classification: damageClass,
         infrastructure_name: infraName || null, debris_clearing_needed: debrisClearing,
         // Phase B2 (Apr 2026 UI v3) — distinguisher between OSM-auto-filled and
@@ -1746,55 +1677,6 @@ export default function App() {
         translucent={false}
       />
 
-      {/* Phase 4 (Apr 2026) — Auto-submit timer banner, visible only during
-           the capture flow (photo / audio / review / confirm) when the user's
-           GPS is inside an enabled region. Tapping Cancel clears the
-           activeRegion so the banner disappears and manual submit resumes.
-
-           RNV4-P4 (June 2026) — INTENTIONALLY v3/v2-screen-only; dormant in v4.
-           Auto-submit-regions is a v3-era feature that was never ported to the
-           V4 stage sequence on EITHER client, so this matches the PWA flagship
-           rather than exceeding it: the PWA arms its timer on v4 stages but its
-           handleAutoSubmit (mobile-app/src/app.js) only branches on the legacy
-           stage-photo/audio/review/send — it has no stage-v4-* branch, so the
-           PWA countdown never actually submits in v4 either. Auto-submit is a
-           CRISP value-add, NOT a UNDP must-have, so RN consciously leaves it
-           v3-only. Two further reasons not to wire it into v4 here: (a) the
-           timer fires on a clock regardless of progress, but RNV4-P4 made the
-           classifier null-first, and an auto-fire before the user classifies
-           would POST infrastructure_type:null → Pydantic 422 → wedged offline
-           queue; (b) keeping it bound to the v3 screens means the
-           UI_V4_ENABLED=false rollback restores working auto-submit unchanged.
-           A proper v4 wiring (gate the fire on a completed classify) is tracked
-           as a follow-up; see docs/PARITY.md "Auto-submit regions". */}
-      {activeRegion && (screen === 'photo' || screen === 'audio' ||
-        screen === 'review_details' || screen === 'review_confirm' ||
-        // Phase B4 (Apr 2026 UI v3) — auto-submit stays armed through
-        // the new v3 capture stages too. (See the v4 note above — these v3
-        // screens are unreachable while UI_V4_ENABLED is true.)
-        screen === 'where' || screen === 'infra' ||
-        screen === 'crisis' || screen === 'extras') && (
-        <AutoSubmitTimer
-          region={activeRegion}
-          onCancel={() => {
-            setActiveRegion(null);
-            setIsAutoSubmit(false);
-          }}
-          onFire={() => {
-            // Guard: must have at least one piece of content to submit.
-            if (!photoUri && !audioUri && !description?.trim()) {
-              // Apr 2026 i18n sweep — localised auto-submit guard copy.
-              Alert.alert('Error', t('error_cannot_autosubmit'));
-              setActiveRegion(null);
-              return;
-            }
-            setIsAutoSubmit(true);
-            setActiveRegion(null);
-            submitReport();
-          }}
-        />
-      )}
-
       {/* Apr 2026 UX rewrite — landing screen simplified:
             · Hero title + short sub (no "4 easy steps" promise).
             · IMPACT METRICS card (reports submitted + lives impacted) gives
@@ -1835,28 +1717,9 @@ export default function App() {
              hidden until the user completes their first capture. */
           nearbyLat={location?.lat ?? null}
           nearbyLng={location?.lng ?? null}
-          onStartReport={async () => {
-            try {
-              const { status } = await Location.getForegroundPermissionsAsync();
-              if (status === 'granted') {
-                const pos = await Location.getCurrentPositionAsync({
-                  accuracy: Location.Accuracy.Balanced,
-                });
-                const regions = await getEnabledRegions();
-                const match = findActiveRegion(
-                  pos.coords.latitude, pos.coords.longitude, regions,
-                );
-                if (match) {
-                  setActiveRegion(match);
-                  console.log(`[AutoSubmit] armed — region="${match.name}"`);
-                }
-              }
-            } catch (e) {
-              console.log('[AutoSubmit] geofence check skipped:', (e as Error)?.message || e);
-            }
-            // May 2026 — Phase 3 route. When UI_V4_ENABLED flips to true
-            // (after Phases 4 + 5 land), CTA routes to the single-page
-            // v4_capture screen. Until then, fall through to the v3 'where'
+          onStartReport={() => {
+            // When UI_V4_ENABLED is true the CTA routes to the single-page
+            // v4_capture screen; otherwise it falls through to the v3 'where'
             // flow (or legacy 'photo' if v3 is also off).
             setScreen(UI_V4_ENABLED ? 'v4_capture' : (uiV3 ? 'where' : 'photo'));
           }}
@@ -2215,28 +2078,7 @@ export default function App() {
             </View>
           )}
 
-          <TouchableOpacity style={s.bigBtn} onPress={async () => {
-            // Phase 4: arm the 2-minute auto-submit timer iff the user's
-            // GPS is inside an admin-enabled region. Silent no-op when
-            // outside / GPS unavailable / config empty.
-            try {
-              const { status } = await Location.getForegroundPermissionsAsync();
-              if (status === 'granted') {
-                const pos = await Location.getCurrentPositionAsync({
-                  accuracy: Location.Accuracy.Balanced,
-                });
-                const regions = await getEnabledRegions();
-                const match = findActiveRegion(
-                  pos.coords.latitude, pos.coords.longitude, regions,
-                );
-                if (match) {
-                  setActiveRegion(match);
-                  console.log(`[AutoSubmit] armed — region="${match.name}"`);
-                }
-              }
-            } catch (e) {
-              console.log('[AutoSubmit] geofence check skipped:', (e as Error)?.message || e);
-            }
+          <TouchableOpacity style={s.bigBtn} onPress={() => {
             // Phase B4 (Apr 2026 UI v3) — v3 flow opens on the "where"
             // stage (location + damage) before the reporter is asked
             // for evidence. When the flag is off (`crisp_ui_v3='off'`)

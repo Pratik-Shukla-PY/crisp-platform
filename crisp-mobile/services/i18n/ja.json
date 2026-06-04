@@ -324,8 +324,6 @@
   "stage8_title": "確認して送信",
   "bldg_offline_prompt": "建物の名前を母国語で入力してください",
   "bldg_offline_hint": "チームが後でGPSにマッピングします",
-  "autosub_cancel_btn": "✕ 自動送信をキャンセル",
-  "autosub_click_anywhere": "タップしてキャンセル",
   "community_infra": "コミュニティ",
   "crisis_group_natural": "自然",
   "crisis_group_technological": "技術的",

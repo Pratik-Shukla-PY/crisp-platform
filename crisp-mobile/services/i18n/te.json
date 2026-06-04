@@ -324,8 +324,6 @@
   "stage8_title": "సమీక్షించి పంపు",
   "bldg_offline_prompt": "మీ భాషలో భవన పేరును టైప్ చేయండి",
   "bldg_offline_hint": "బృందం తర్వాత దీన్ని GPSకి మ్యాప్ చేస్తుంది",
-  "autosub_cancel_btn": "✕ ఆటో-సెండ్‌ని రద్దు చేయి",
-  "autosub_click_anywhere": "రద్దు చేయడానికి నొక్కండి",
   "community_infra": "సంఘం",
   "crisis_group_natural": "ప్రకృతి",
   "crisis_group_technological": "సాంకేతిక",

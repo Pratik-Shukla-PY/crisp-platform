@@ -324,8 +324,6 @@
   "stage8_title": "Проверить и отправить",
   "bldg_offline_prompt": "Введите название здания на вашем языке",
   "bldg_offline_hint": "Команда свяжет с GPS",
-  "autosub_cancel_btn": "✕ Отменить авто-отправку",
-  "autosub_click_anywhere": "Нажмите для отмены",
   "community_infra": "Сообщество",
   "crisis_group_natural": "Природный",
   "crisis_group_technological": "Технологический",

@@ -322,8 +322,6 @@
   "stage8_title": "مراجعة وإرسال",
   "bldg_offline_prompt": "اكتب اسم المبنى بلغتك",
   "bldg_offline_hint": "سيربطه الفريق بـ GPS",
-  "autosub_cancel_btn": "✕ إلغاء الإرسال التلقائي",
-  "autosub_click_anywhere": "المس للإلغاء",
   "community_infra": "مجتمعي",
   "crisis_group_natural": "طبيعي",
   "crisis_group_technological": "تكنولوجي",
