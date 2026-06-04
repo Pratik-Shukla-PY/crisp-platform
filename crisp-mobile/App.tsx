@@ -1749,11 +1749,29 @@ export default function App() {
       {/* Phase 4 (Apr 2026) — Auto-submit timer banner, visible only during
            the capture flow (photo / audio / review / confirm) when the user's
            GPS is inside an enabled region. Tapping Cancel clears the
-           activeRegion so the banner disappears and manual submit resumes. */}
+           activeRegion so the banner disappears and manual submit resumes.
+
+           RNV4-P4 (June 2026) — INTENTIONALLY v3/v2-screen-only; dormant in v4.
+           Auto-submit-regions is a v3-era feature that was never ported to the
+           V4 stage sequence on EITHER client, so this matches the PWA flagship
+           rather than exceeding it: the PWA arms its timer on v4 stages but its
+           handleAutoSubmit (mobile-app/src/app.js) only branches on the legacy
+           stage-photo/audio/review/send — it has no stage-v4-* branch, so the
+           PWA countdown never actually submits in v4 either. Auto-submit is a
+           CRISP value-add, NOT a UNDP must-have, so RN consciously leaves it
+           v3-only. Two further reasons not to wire it into v4 here: (a) the
+           timer fires on a clock regardless of progress, but RNV4-P4 made the
+           classifier null-first, and an auto-fire before the user classifies
+           would POST infrastructure_type:null → Pydantic 422 → wedged offline
+           queue; (b) keeping it bound to the v3 screens means the
+           UI_V4_ENABLED=false rollback restores working auto-submit unchanged.
+           A proper v4 wiring (gate the fire on a completed classify) is tracked
+           as a follow-up; see docs/PARITY.md "Auto-submit regions". */}
       {activeRegion && (screen === 'photo' || screen === 'audio' ||
         screen === 'review_details' || screen === 'review_confirm' ||
         // Phase B4 (Apr 2026 UI v3) — auto-submit stays armed through
-        // the new v3 capture stages too.
+        // the new v3 capture stages too. (See the v4 note above — these v3
+        // screens are unreachable while UI_V4_ENABLED is true.)
         screen === 'where' || screen === 'infra' ||
         screen === 'crisis' || screen === 'extras') && (
         <AutoSubmitTimer

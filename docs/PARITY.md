@@ -528,6 +528,35 @@ after Phase 3 it counts 4.
 
 ---
 
+## Auto-submit regions — v3-only on BOTH clients; dormant in v4
+
+Auto-submit-regions (a geofenced countdown that auto-submits a report at T=0
+for reporters inside an admin-enabled region) is a **v3-era CRISP value-add,
+NOT a UNDP must-have**, and it was **never ported to the V4 stage sequence on
+either client**. Parity here = "neither client auto-submits in v4," which both
+satisfy:
+
+- **PWA** — `index.html` still arms the timer banner on every non-home/success
+  stage (incl. the v4 stages), but `handleAutoSubmit()` (`mobile-app/src/app.js`)
+  only branches on the legacy `stage-photo / stage-audio / stage-review /
+  stage-send`. It has no `stage-v4-*` branch, so on the v4 flow the countdown
+  reaches 0 and **does nothing** (sets `state.isAutoSubmit=true`, never submits).
+  ⚠ Pre-existing PWA UX bug: the banner is visible + counts down in v4 but never
+  fires — a separate cleanup, tracked outside this RN parity work.
+- **RN** — `crisp-mobile/App.tsx` renders its `AutoSubmitTimer` only for the
+  v3/v2 screens (`photo/audio/review_*/where/infra/crisis/extras`), never the
+  `v4_*` screens, so with `UI_V4_ENABLED=true` the banner simply doesn't appear.
+  Cleaner than the PWA (no misleading countdown). The v3 wiring is kept so the
+  `UI_V4_ENABLED=false` rollback restores working auto-submit unchanged.
+
+A proper v4 wiring is deferred. The blocker to a naïve port: the timer fires on
+a clock regardless of progress, but the v4 classifier state is null-first
+(RNV4-P4) — an auto-fire before the user classifies would POST
+`infrastructure_type: null` → Pydantic 422 → wedged offline queue. Any v4
+wiring MUST gate the fire on a completed classify (damage+infra+crisis set).
+
+---
+
 ## How to enforce parity going forward
 
 1. If a new field is added, add it to the table above.
