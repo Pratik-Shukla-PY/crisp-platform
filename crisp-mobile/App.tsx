@@ -535,10 +535,17 @@ export default function App() {
   // chip (RESIDENTIAL). `ROAD` was the v2 default before the chip set
   // switched to UNDP Appendix-1 taxonomy. Backend accepts both enum
   // values so in-flight offline queues keep replaying cleanly.
-  const [infraType, setInfraType] = useState('RESIDENTIAL');
+  // RNV4-P4 — null-first for the three USER-PICKED taxonomy fields. The v4
+  // classify flow forces the reporter to pick each one, so they're always set
+  // before submit; resetting them to hardcoded values (the old
+  // RESIDENTIAL/FLOOD/PARTIAL defaults) is the misclassification anti-pattern
+  // CLAUDE.md forbids ("reset is null-only"). severity is NOT user-picked — it's
+  // derived from the damage pick (deriveSeverityFromDamage) — so it keeps a
+  // valid non-null default (sending severity:null would 422 + wedge the queue).
+  const [infraType, setInfraType] = useState<string | null>(null);
   const [severity, setSeverity] = useState('MODERATE');
-  const [crisisType, setCrisisType] = useState('FLOOD');
-  const [damageClass, setDamageClass] = useState('PARTIAL');  // UNDP: MINIMAL / PARTIAL / COMPLETE
+  const [crisisType, setCrisisType] = useState<string | null>(null);
+  const [damageClass, setDamageClass] = useState<string | null>(null);  // UNDP: MINIMAL / PARTIAL / COMPLETE
   // PR 6 (Apr 2026): damage level merged into the infra chip — same-chip
   // second tap collapses the severity row. Starts expanded so users see the
   // silent PARTIAL default before interacting.
@@ -610,8 +617,9 @@ export default function App() {
   // stage-extras can drop the explicit severity chips.
   useEffect(() => {
     if (!uiV3) return;
-    const map: Record<string, string> = { MINIMAL: 'MINOR', NO_DAMAGE: 'MINOR', PARTIAL: 'MODERATE', COMPLETE: 'SEVERE', DESTROYED: 'SEVERE' };
-    const next = map[damageClass] || 'MODERATE';
+    // Same derivation the v4 flow uses (deriveSeverityFromDamage) — single
+    // source of truth, null-safe (null damageClass → MODERATE).
+    const next = deriveSeverityFromDamage(damageClass);
     if (severity !== next) setSeverity(next);
   }, [damageClass, uiV3]);
   // PR 6 note: RN's home screen already renders the full flag row from
@@ -1486,8 +1494,11 @@ export default function App() {
   };
   const resetReport = () => {
     setPhotoUri(null); setPhotoBase64(null); setAudioUri(null); setDescription('');
-    setInfraType('RESIDENTIAL'); setSeverity('MODERATE');
-    setCrisisType('FLOOD'); setDamageClass('PARTIAL'); setInfraName(''); setInfraNameFromOsm(false); setDebrisClearing(false);
+    // null-first reset for the user-picked taxonomy (RNV4-P4 / CLAUDE.md); the
+    // v4 classify flow re-collects them per report. severity is re-derived from
+    // the next damage pick, so its reset value is overwritten before submit.
+    setInfraType(null); setSeverity('MODERATE');
+    setCrisisType(null); setDamageClass(null); setInfraName(''); setInfraNameFromOsm(false); setDebrisClearing(false);
     setLocation(null); setLocationName(''); setIsSending(false); setReportId('');
     // RNV4-P2 — clear crisis-pack state + geo-gate key so a new report re-resolves.
     setCrisisPack(null); setCrisisStockAnswers({}); crisisPackKeyRef.current = null;
@@ -3442,8 +3453,8 @@ export default function App() {
                   sanity-check the most load-bearing fields before Submit. */}
               <View style={s.summaryCard}>
                 <Text style={s.summaryRow}>🌪 {(crisisTypes.find(ct => ct.key === crisisType)?.label) || crisisType}</Text>
-                <Text style={s.summaryRow}>🏗 {damageClass.replace(/_/g, ' ')}  ·  ⚠️ {severity}</Text>
-                <Text style={s.summaryRow}>📋 {infraType.replace(/_/g, ' ')}</Text>
+                <Text style={s.summaryRow}>🏗 {(damageClass || '—').replace(/_/g, ' ')}  ·  ⚠️ {severity}</Text>
+                <Text style={s.summaryRow}>📋 {(infraType || '—').replace(/_/g, ' ')}</Text>
                 {locationName ? <Text style={s.summaryRow}>📍 {locationName}</Text> : null}
                 {pressingNeeds.length > 0 ? <Text style={s.summaryRow}>{t('needs_prefix')} {pressingNeeds.join(', ')}</Text> : null}
               </View>
@@ -3505,7 +3516,7 @@ export default function App() {
                   it returns to the legacy review_details screen. */}
               <TouchableOpacity onPress={() => setScreen(uiV3 ? 'crisis' : 'review_details')}><Text style={{ color: Colors.accent }}>{t('edit')}</Text></TouchableOpacity>
             </View>
-            <Text style={s.summaryRow}>🌪 {crisisType.replace(/_/g, ' ')}  📸 {photoUri ? '✅' : '❌'} + {extraPhotos.length} extra  🎤 {audioUri ? '✅' : '❌'}</Text>
+            <Text style={s.summaryRow}>🌪 {(crisisType || '—').replace(/_/g, ' ')}  📸 {photoUri ? '✅' : '❌'} + {extraPhotos.length} extra  🎤 {audioUri ? '✅' : '❌'}</Text>
             {description ? <Text style={s.summaryDesc} numberOfLines={3}>📝 {description}</Text> : null}
             {locationName ? <Text style={s.summaryRow}>📍 {locationName}</Text> : null}
           </View>
@@ -3517,7 +3528,7 @@ export default function App() {
                   to the v3 infra stage (what was hit + damage severity). */}
               <TouchableOpacity onPress={() => setScreen(uiV3 ? 'infra' : 'review_details')}><Text style={{ color: Colors.accent }}>{t('edit')}</Text></TouchableOpacity>
             </View>
-            <Text style={s.summaryRow}>📋 {infraType} | ⚠️ {severity} | 🏗 {damageClass.replace(/_/g, ' ')}</Text>
+            <Text style={s.summaryRow}>📋 {infraType || '—'} | ⚠️ {severity} | 🏗 {(damageClass || '—').replace(/_/g, ' ')}</Text>
             {infraName ? <Text style={s.summaryRow}>🏛 {infraName}</Text> : null}
             {debrisClearing ? <Text style={s.summaryRow}>{t('debris_needed')}</Text> : null}
             <Text style={s.summaryRow}>⚡ {electricityStatus} · 💧 {waterStatus} · 🏥 {healthStatus}</Text>

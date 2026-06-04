@@ -94,11 +94,12 @@ export interface V4ReviewScreenProps {
   hasVoice: boolean;
   hasText: boolean;
 
-  // Summary rows
+  // Summary rows. The classifier values are null until picked (RNV4-P4
+  // null-first); the SummaryRow render already shows an em-dash for null.
   locationText: string;
-  infraType: string;
-  crisisType: string;
-  damageClass: string;
+  infraType: string | null;
+  crisisType: string | null;
+  damageClass: string | null;
 
   // Building footprint (UNDP must-have #6)
   buildingId: string | null;

@@ -127,9 +127,11 @@ const ADVANCE_MS_REDUCED = 80;
 
 // ── Props ─────────────────────────────────────────────────────────
 export interface V4ClassifyScreenProps {
-  damageClass: string;
-  infraType: string;
-  crisisType: string;
+  // null until the reporter picks (RNV4-P4 null-first). The chip sub-views
+  // compare against the value, so null simply renders nothing selected.
+  damageClass: string | null;
+  infraType: string | null;
+  crisisType: string | null;
   infraName: string;
 
   onSetDamage: (v: string) => void;
@@ -410,7 +412,7 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
 
 // ── DamageView ────────────────────────────────────────────────────
 function DamageView(props: {
-  value: string;
+  value: string | null;
   getScale: (id: string) => Animated.Value;
   onSelect: (v: string) => void;
 }) {
@@ -460,7 +462,7 @@ function DamageView(props: {
 
 // ── InfraView ─────────────────────────────────────────────────────
 function InfraView(props: {
-  value: string;
+  value: string | null;
   infraName: string;
   getScale: (id: string) => Animated.Value;
   onSelect: (v: string) => void;
@@ -529,7 +531,7 @@ function InfraView(props: {
 
 // ── CrisisView ────────────────────────────────────────────────────
 function CrisisView(props: {
-  value: string;
+  value: string | null;
   getScale: (id: string) => Animated.Value;
   onSelect: (v: string) => void;
 }) {
