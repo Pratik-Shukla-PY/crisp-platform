@@ -160,7 +160,8 @@ import { useAudioRecorder, AudioModule, IOSOutputFormat, AudioQuality } from 'ex
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { detectNetworkTier, getAdaptiveConfig, getCurrentTier } from './services/networkAdaptive';
 import { getHistory, getImpactStats, markHistoryDeletionRequested, updateHistoryStatus, HistoryReport, getInFlightReports, QueuedReport, deleteReport as deleteQueuedReport, updateReportStatus } from './services/database';
-import { getDeviceStatusSince, deleteReportFromServer, getApiBase } from './services/api';
+import { getDeviceStatusSince, deleteReportFromServer, getApiBase, getCrisisFormsActive } from './services/api';
+import { assembleCrisisForm } from './services/crisisForm';
 import { blurFacesBase64, prewarm as prewarmPIIBlur } from './services/piiBlur';
 import { generateVariants, PhotoVariants, TIER_TO_RESOLUTION } from './services/imageVariants';
 import { swallow as telemetrySwallow } from './services/telemetry';
@@ -556,6 +557,12 @@ export default function App() {
   // the truth for any actual selection.
   const [nearbyBuildings, setNearbyBuildings] = useState<NearbyBuilding[]>([]);
 
+  // RN→PWA V4 parity (RNV4-P2) — geo-scoped crisis pack active at the current
+  // location (null = default flow; fail-safe). crisisStockAnswers holds the
+  // dynamic pack-question answers (filled by DynamicModuleRenderer in RNV4-P3).
+  const [crisisPack, setCrisisPack] = useState<any>(null);
+  const [crisisStockAnswers, setCrisisStockAnswers] = useState<Record<string, any>>({});
+
   // Phase 1 (Apr 2026 — Optional reporter login). State is sourced from
   // AuthStore (services/auth.ts); these local copies exist so React
   // re-renders the Login/account pill when they change. Never blocks
@@ -615,6 +622,39 @@ export default function App() {
   // Phase 4: parity with PWA. User-correction flag + manual location name.
   const [isLocationUserCorrected, setIsLocationUserCorrected] = useState(false);
   const [userLocationName, setUserLocationName] = useState<string>('');
+
+  // RN→PWA V4 parity (RNV4-P2) — geo-gate. Resolve the active crisis pack for
+  // the current location fix (idempotent to ~110 m; fail-safe → default flow).
+  // Mirrors the PWA's _maybeFetchCrisisPack (mobile-app/src/v4-flow.js): on a
+  // hit, cache the pack + auto-set the canonical crisis_type when the zone's
+  // type is a CrisisTypeEnum value; otherwise clear the pack.
+  const crisisPackKeyRef = useRef<string | null>(null);
+  const maybeFetchCrisisPack = (loc: { lat: number; lng: number } | null) => {
+    if (!UI_V4_ENABLED) return;   // V4-only feature — fully inert (no fetch, no crisis_type override) until activation (RNV4-P4)
+    if (!loc || typeof loc.lat !== 'number' || typeof loc.lng !== 'number') return;
+    const key = loc.lat.toFixed(3) + ',' + loc.lng.toFixed(3);
+    if (key === crisisPackKeyRef.current) return;
+    crisisPackKeyRef.current = key;
+    getCrisisFormsActive(loc.lat, loc.lng).then((data) => {
+      if (data && data.active && data.schema_json) {
+        setCrisisPack({
+          pack_id: data.pack_id, pack_version: data.pack_version,
+          event_id: data.event_id, crisis_type: data.crisis_type, schema: data.schema_json,
+        });
+        const CANON: Record<string, number> = {
+          EARTHQUAKE: 1, FLOOD: 1, TSUNAMI: 1, CYCLONE: 1, WILDFIRE: 1,
+          EXPLOSION: 1, CHEMICAL_INCIDENT: 1, CONFLICT: 1, CIVIL_UNREST: 1,
+        };
+        if (data.crisis_type && CANON[data.crisis_type]) setCrisisType(data.crisis_type);
+      } else {
+        setCrisisPack(null);
+      }
+    });
+  };
+  // Re-resolve the pack on every location change (GPS fix / refresh / user edit).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { maybeFetchCrisisPack(location); }, [location]);
+
   // UNDP Appendix 1 — optional OSM-way id for a specific building footprint
   // selected by the reporter via the map picker. `null` means "location as
   // GPS only". Submitted as `building_id` on the meta payload.
@@ -1441,6 +1481,8 @@ export default function App() {
     setInfraType('RESIDENTIAL'); setSeverity('MODERATE');
     setCrisisType('FLOOD'); setDamageClass('PARTIAL'); setInfraName(''); setInfraNameFromOsm(false); setDebrisClearing(false);
     setLocation(null); setLocationName(''); setIsSending(false); setReportId('');
+    // RNV4-P2 — clear crisis-pack state + geo-gate key so a new report re-resolves.
+    setCrisisPack(null); setCrisisStockAnswers({}); crisisPackKeyRef.current = null;
     // Phase 4 — reset the new service/needs/extra-photos state too.
     setElectricityStatus('UNKNOWN'); setWaterStatus('UNKNOWN'); setHealthStatus('UNKNOWN');
     setPressingNeeds([]); setExtraPhotos([]);
@@ -1498,6 +1540,15 @@ export default function App() {
         (photoData ? (mainHasVariants ? 3 : 1) : 0) +
         (extrasWithVariants * 3) + extrasWithoutVariants +
         (audioData ? 1 : 0);
+      // RN→PWA V4 parity (RNV4-P2) — Dynamic Crisis Forms. assembleCrisisForm
+      // mirrors the PWA: form_data = maps_to fields from canonical state ∪ the
+      // pack answers; all three null on the default flow (byte-identical report).
+      const { form_pack_id: formPackId, form_pack_version: formPackVersion, form_data: formData } =
+        assembleCrisisForm(
+          crisisPack,
+          { damage_classification: damageClass, infrastructure_type: infraType, crisis_type: crisisType, severity },
+          crisisStockAnswers,
+        );
       const meta = {
         device_hash: deviceHash || `ANDROID-${crypto.randomUUID().substring(0, 8)}`,
         client_report_id: clientId, source: 'ANDROID', severity, infrastructure_type: infraType,
@@ -1539,6 +1590,10 @@ export default function App() {
           user_location_name: userLocationName || null,
           is_user_corrected: isLocationUserCorrected,
         } } : {}),
+        // Dynamic Crisis Forms (RNV4-P2) — null on the default flow.
+        form_pack_id: formPackId,
+        form_pack_version: formPackVersion,
+        form_data: formData,
       };
 
       // Guaranteed-delivery — serialize variant payloads alongside the

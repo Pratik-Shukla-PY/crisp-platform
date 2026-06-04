@@ -83,6 +83,22 @@ export async function createReportMeta(meta: any): Promise<{ id: string }> {
   return sendJSON(`${API_BASE}/reports/meta`, 'POST', meta);
 }
 
+/** Geo-gated crisis-form pack active at a point (public, cacheable). Mirrors the
+ *  PWA's _maybeFetchCrisisPack fetch. FAIL-SAFE: any non-200 / offline / parse
+ *  error → null, so the caller leaves crisisPack null and the default Stage-2/3
+ *  flow runs unchanged. Returns the raw {active, pack_id, pack_version,
+ *  event_id, crisis_type, schema_json} body on a hit. */
+export async function getCrisisFormsActive(lat: number, lng: number): Promise<any | null> {
+  try {
+    const url = `${API_BASE}/crisis-forms/active?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 /** Stage 2: Send text description */
 export async function sendDescription(reportId: string, description: string): Promise<any> {
   return sendJSON(`${API_BASE}/reports/${reportId}/description`, 'PATCH', { description }, 20000);
