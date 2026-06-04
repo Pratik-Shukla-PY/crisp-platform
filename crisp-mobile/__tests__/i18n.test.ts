@@ -159,3 +159,26 @@ describe('i18n — crisis-type picker labelKeys (CPi18n)', () => {
             }
         });
 });
+
+describe('i18n — crisis-pack cp_/cpopt_ keys (RNV4-P0)', () => {
+    // The DynamicModuleRenderer localizes geo-scoped crisis-pack questions via
+    // cp_<fieldkey> (labels) + cpopt_<fieldkey>_<VALUE> (options), mirroring the
+    // PWA. These ~48 keys were ported from mobile-app/src/i18n. Each must resolve
+    // (not the raw key) in every locale so a crisis pack never renders English-only.
+    const CP_KEYS = Object.keys(require('../services/i18n/en.json'))
+        .filter((k) => k.startsWith('cp_') || k.startsWith('cpopt_'));
+    afterAll(() => setLanguage('en'));
+    test('en carries the full crisis-pack key set (cp_ + cpopt_)', () => {
+        expect(CP_KEYS.length).toBeGreaterThanOrEqual(48);
+    });
+    test.each(['en', 'hi', 'ar', 'zh'])(
+        'all cp_/cpopt_ keys resolve (not the raw key) in %s', (loc) => {
+            setLanguage(loc);
+            for (const k of CP_KEYS) {
+                const v = t(k);
+                expect(typeof v).toBe('string');
+                expect(v.length).toBeGreaterThan(0);
+                expect(v).not.toBe(k);
+            }
+        });
+});
