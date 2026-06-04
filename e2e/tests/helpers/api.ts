@@ -1,6 +1,6 @@
 /**
  * Test helpers that talk directly to the CRISP backend API.
- * Used for seeding state (admin user, regions) and asserting post-conditions
+ * Used for seeding state (admin user) and asserting post-conditions
  * (the report we just submitted via the UI actually landed on the server).
  */
 import { APIRequestContext, expect } from '@playwright/test';
@@ -38,21 +38,6 @@ export async function ensureAdminAndLogin(request: APIRequestContext): Promise<s
   expect(res.ok(), `Login failed: ${res.status()} ${await res.text()}`).toBeTruthy();
   const body = await res.json();
   return body.access_token || body.token;
-}
-
-/** Delete every auto-submit region created by previous test runs so each
- *  suite starts from a clean slate. Safe: only deletes rows whose name
- *  starts with "E2E ". */
-export async function cleanupTestRegions(request: APIRequestContext, token: string) {
-  const headers = { Authorization: `Bearer ${token}` };
-  const list = await request.get(`${BACKEND}/api/v1/admin/regions`, { headers });
-  if (!list.ok()) return;
-  const regions = await list.json();
-  for (const r of regions) {
-    if (typeof r.name === 'string' && r.name.startsWith('E2E ')) {
-      await request.delete(`${BACKEND}/api/v1/admin/regions/${r.id}`, { headers });
-    }
-  }
 }
 
 /** Drop any synthetic report rows we know belong to the test device_hash

@@ -3204,9 +3204,10 @@ async function _probeConnectivity() {
             const ctrl = new AbortController();
             const timer = setTimeout(() => ctrl.abort(), 5000);
             // Cachebust param so a stale SW/proxy cache can't masquerade as
-            // live connectivity. `/regions/enabled` is tiny, public, and
-            // already SW-cached — cheap to hit but we want fresh here.
-            const res = await fetch(`${API_BASE}/regions/enabled?_cb=${Date.now()}`, {
+            // live connectivity. `/api/v1/health` is the PWA's tiny public
+            // health route (mirrored under the /api/v1/ prefix nginx proxies
+            // in PROD) — cheap to hit; we force a fresh response here.
+            const res = await fetch(`${API_BASE}/health?_cb=${Date.now()}`, {
                 method: 'GET',
                 signal: ctrl.signal,
                 cache: 'no-store',

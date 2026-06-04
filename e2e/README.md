@@ -11,7 +11,6 @@ Run every feature check with **one command**: `bash test.sh` from the repo root.
 | PWA landing screen | Playwright | hero, CTA, My Reports, language toggle, anti-regression (no 4-card roadmap) | `e2e/tests/pwa/01-landing.spec.ts` |
 | PWA capture flow | Playwright | photo → audio → review → send, flow-progress state transitions, Apr 2026 audio UX copy | `e2e/tests/pwa/02-capture-flow.spec.ts` |
 | Dashboard login + feed | Playwright | login form, feed render, LIVE chip, offline banner (stays hidden on healthy stack) | `e2e/tests/dashboard/01-login-feed.spec.ts` |
-| Dashboard regions admin | Playwright | create, toggle, edit, delete region; public `/regions/enabled` reflects admin state | `e2e/tests/dashboard/02-regions-admin.spec.ts` |
 | Dashboard reviewer workflow | Playwright | Mark Accepted/Rejected, action_taken enforcement, Dispatched/Arrived timestamps, computed response_time | `e2e/tests/dashboard/03-reviewer-workflow.spec.ts` |
 | RN | `tsc --noEmit` | Compile-time safety. No E2E (device-level Detox is deferred) | — |
 
@@ -63,7 +62,7 @@ Tag smoke-critical checks with `@smoke` in the test name; they'll run under
 
 Use helpers from `tests/helpers/api.ts`:
 - `ensureAdminAndLogin(request)` → returns a JWT to thread into `Authorization`
-- `cleanupTestRegions(request, token)` / `cleanupTestReports(...)` → teardown
+- `cleanupTestReports(request, token)` → teardown of synthetic report rows
 - `TEST_JPEG_BASE64` → deterministic small photo for upload flows
 
 ## CI
@@ -94,6 +93,6 @@ Example GitHub Actions step:
   both halves of the stack.
 
 Device-level RN testing (Detox) is deferred — the service layer
-(database.ts, syncEngine.ts, regionCache.ts, i18n.ts) is already covered by
+(database.ts, syncEngine.ts, i18n.ts) is already covered by
 `tsc --noEmit` and the backend contract tests cover everything those
 services call. If we ship a native-only feature later, Detox can layer in.

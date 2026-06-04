@@ -685,30 +685,6 @@ body { background: var(--bg); color: var(--text); display: flex; justify-content
     border-radius: 4px; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ── Auto-Submit Timer ──────────────────────────────────────── */
-.auto-submit-timer {
-    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-    background: rgba(239, 68, 68, 0.95); color: #fff;
-    padding: 12px 20px; border-radius: 32px;
-    display: flex; align-items: center; gap: 10px;
-    font-weight: 700; font-size: 1rem;
-    box-shadow: 0 8px 32px rgba(239, 68, 68, 0.3);
-    z-index: 200; animation: pulse-timer 1s ease-in-out infinite;
-}
-.auto-submit-timer i {
-    font-size: 1.1rem;
-}
-#timer-display {
-    font-family: 'Courier New', monospace; min-width: 36px;
-}
-.auto-send-text {
-    font-size: 0.85rem; opacity: 0.9; font-weight: 600;
-}
-@keyframes pulse-timer {
-    0%, 100% { transform: translateX(-50%) scale(1); }
-    50% { transform: translateX(-50%) scale(1.05); }
-}
-
 /* ── Stage System ───────────────────────────────────────────── */
 /* v4 viewport-fit refactor:
    - Use `100dvh` for the height (was implicit 100% from `inset: 0`) so
@@ -5602,14 +5578,13 @@ html[dir="rtl"] .v4-back .fa-chevron-left {
    first block underneath. Safe for v1 and v2 alike.
 
    Phase A3 (Apr 2026 UI v3) — z-index 30 → 300. The old value sat below
-   the flow-progress (z:101), the auto-submit pill (z:200), the lang-
-   switcher (z:100), and the offline banner (z:200), which meant those
-   elements scrolled OVER the sticky header — causing the "title text
-   bleeds through on scroll" report. 300 puts it above every in-stage
-   element (still below the upload overlay at 9999 + auto-submit banner
-   at 9999 which should cover the whole viewport). Background made
-   explicitly opaque so backdrop-filter is a visual-sugar layer, not
-   the only thing between header text and the scrolling content. */
+   the flow-progress (z:101), the lang-switcher (z:100), and the offline
+   banner (z:200), which meant those elements scrolled OVER the sticky
+   header — causing the "title text bleeds through on scroll" report. 300
+   puts it above every in-stage element (still below the upload overlay at
+   9999 which should cover the whole viewport). Background made explicitly
+   opaque so backdrop-filter is a visual-sugar layer, not the only thing
+   between header text and the scrolling content. */
 .stage-header {
     position: sticky;
     top: 0;

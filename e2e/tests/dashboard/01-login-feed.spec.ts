@@ -88,31 +88,4 @@ test.describe('Dashboard login + feed', () => {
     // Banner DOM exists but should be hidden.
     await expect(banner).toBeHidden();
   });
-
-  test('admin user-menu no longer carries Regions (relocated to Reporting — CC-IA)', async ({ page }) => {
-    await page.goto('index.html');
-    const token = await (async () => {
-      const req = await page.request.post('http://localhost:8000/api/v1/auth/login', {
-        data: { email: ADMIN.email, password: ADMIN.password },
-      });
-      const body = await req.json();
-      return body.access_token || body.token;
-    })();
-    await page.evaluate((t) => {
-      localStorage.setItem('crisp_token', t);
-      localStorage.setItem('crisp_user', JSON.stringify({
-        email: 'e2e-admin@crisp.test', role: 'SUPER_ADMIN', full_name: 'E2E Admin',
-      }));
-    }, token);
-    await page.reload();
-
-    // CC-IA P2 (2026-06) — "Auto-Submit Regions" was moved OUT of the user-chip
-    // dropdown into the Reporting module (#/reporting → cc-crisis "Auto-submit
-    // regions" tab; see 02-regions-admin.spec.ts). Under automation the router
-    // lands on #/incidents (the feed), so the header user-menu is visible here.
-    // Opening it must NOT show the old regions launcher anymore.
-    await page.locator('.user-menu-trigger').click();
-    await expect(page.locator('.user-menu-logout')).toBeVisible({ timeout: 10_000 });  // menu actually opened
-    await expect(page.locator('#btn-auto-regions')).toHaveCount(0);                    // regions launcher gone
-  });
 });

@@ -3,9 +3,8 @@
  *
  * Operator-reported, May 2026 (screenshot of the fullscreen picker
  * showing the map painted ONLY in the top-left ~30% of the visible
- * area, the rest grey + zero building polygons; auto-submit timer
- * still ticking "Bangalore" even though the map was centred on
- * Jamnagar after a manual location change):
+ * area, the rest grey + zero building polygons, even though the map
+ * was centred on Jamnagar after a manual location change):
  *
  *   Two issues:
  *     1. "Map Not rendering Full on expanding" — fullscreen picker

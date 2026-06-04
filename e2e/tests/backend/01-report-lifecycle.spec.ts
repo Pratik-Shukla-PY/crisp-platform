@@ -2,14 +2,13 @@
  * Backend-only end-to-end: full report lifecycle via REST API.
  *
  * Hits a live backend on localhost:8000 (no mocks). Exercises:
- *   1. Public /regions/enabled                      (Apr 2026 Phase 4)
- *   2. POST /reports/meta                           (report skeleton)
- *   3. POST /reports/{id}/media/chunk × N           (chunked photo upload)
- *   4. GET  /reports/{id}                           (read-back with variants)
- *   5. PATCH /reports/{id}/review                   (Apr 2026 Phase 5)
- *   6. PATCH /reports/{id}/timestamps               (responder stamps)
- *   7. DELETE /reports/device/{hash}                (bulk purge)
- *   8. /metrics                                     (Prometheus surface)
+ *   1. POST /reports/meta                           (report skeleton)
+ *   2. POST /reports/{id}/media/chunk × N           (chunked photo upload)
+ *   3. GET  /reports/{id}                           (read-back with variants)
+ *   4. PATCH /reports/{id}/review                   (Apr 2026 Phase 5)
+ *   5. PATCH /reports/{id}/timestamps               (responder stamps)
+ *   6. DELETE /reports/device/{hash}                (bulk purge)
+ *   7. /metrics                                     (Prometheus surface)
  *
  * Fast — no browser involved. Runs in under 15 seconds. Guarantees the API
  * contract stays intact even when UI tests can't catch a regression (e.g.
@@ -55,13 +54,6 @@ test.describe('Backend report lifecycle', () => {
   test('@smoke health endpoint 200', async ({ request }) => {
     const res = await request.get(`${BACKEND}/health`);
     expect(res.status()).toBe(200);
-  });
-
-  test('@smoke /regions/enabled is public + returns array', async ({ request }) => {
-    const res = await request.get(`${BACKEND}/api/v1/regions/enabled`);
-    expect(res.ok()).toBeTruthy();
-    const body = await res.json();
-    expect(Array.isArray(body)).toBeTruthy();
   });
 
   // SKIP RATIONALE (May 2026): the test path needs an ANALYST/ADMIN role
@@ -169,7 +161,6 @@ test.describe('Backend report lifecycle', () => {
     const metricsText = await metrics.text();
     expect(metricsText).toContain('crisp_variant_uploads_total');
     expect(metricsText).toContain('crisp_reports_reviewed_total');
-    expect(metricsText).toContain('crisp_auto_submit_count');
 
     // 8. Cleanup.
     const del = await request.delete(`${BACKEND}/api/v1/reports/${reportId}`, { headers });
@@ -179,11 +170,6 @@ test.describe('Backend report lifecycle', () => {
   test('/reports requires auth (401 without token)', async ({ request }) => {
     const res = await request.get(`${BACKEND}/api/v1/reports/`);
     expect(res.status()).toBe(401);
-  });
-
-  test('/admin/regions requires admin (401 without token)', async ({ request }) => {
-    const res = await request.get(`${BACKEND}/api/v1/admin/regions`);
-    expect([401, 403]).toContain(res.status());
   });
 
   // Same skip rationale as the end-to-end test above — /review requires

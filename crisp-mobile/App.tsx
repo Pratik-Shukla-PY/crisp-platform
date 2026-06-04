@@ -165,7 +165,6 @@ import { assembleCrisisForm, deriveSeverityFromDamage } from './services/crisisF
 import { blurFacesBase64, prewarm as prewarmPIIBlur } from './services/piiBlur';
 import { generateVariants, PhotoVariants, TIER_TO_RESOLUTION } from './services/imageVariants';
 import { swallow as telemetrySwallow } from './services/telemetry';
-// Phase 4 (Apr 2026) — region-gated auto-submit timer.
 // May 2026 — Phase 2 of RN ↔ PWA parity. New HomeScreen mirrors the
 // PWA's redesigned home stage (3-section flex, CTA-anchored,
 // quiet identity pill, channels grid). Replaces the old in-line
