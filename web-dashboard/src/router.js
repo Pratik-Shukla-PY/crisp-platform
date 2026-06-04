@@ -8,7 +8,7 @@
  *   #/incidents   → Incident Monitoring (the existing <main> dashboard view)
  *   #/users       → Account & User management (cc-settings, account mode)
  *   #/org         → Organisation settings   (cc-settings, org mode)        [admin]
- *   #/reporting   → Reporting / PWA config  (cc-crisis + Auto-Submit Regions) [admin]
+ *   #/reporting   → Reporting / PWA config  (cc-crisis crisis-forms builder) [admin]
  *
  * Design notes:
  *  - The route is the FIRST `;`-segment that starts with `/`. All existing hash

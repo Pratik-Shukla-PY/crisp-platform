@@ -429,7 +429,6 @@
         <div class="cc-cf-tabs">
           <button class="cc-cf-tab" data-tab="events">Crisis events</button>
           <button class="cc-cf-tab" data-tab="packs">Question packs</button>
-          <button class="cc-cf-tab" data-tab="regions">Auto-submit regions</button>
         </div>
         <div class="cc-cf-body" id="cc-cf-body"></div>
       </div>`;
@@ -462,11 +461,6 @@
   function closeOverlay() {
     const ov = el('cc-cf-overlay');
     if (ov) ov.classList.remove('cc-cf-open');
-    // The relocated Auto-Submit Regions panel/form are body-level (CC-IA P2);
-    // close them too so they don't orphan-survive when the Reporting module
-    // closes (e.g. the router navigating away from #/reporting).
-    if (window.closeRegionsPanel) window.closeRegionsPanel();
-    if (window.closeRegionForm) window.closeRegionForm();
   }
 
   async function refreshAll() {
@@ -496,25 +490,7 @@
     if (S.builderPackId) { renderBuilder(body); return; }
     if (S.editingEvent !== undefined) { renderEventEditor(body); return; }
     if (S.tab === 'events') renderEvents(body);
-    else if (S.tab === 'regions') renderRegions(body);
     else renderPacks(body);
-  }
-
-  // ── AUTO-SUBMIT REGIONS tab (CC-IA P2) ──────────────────────────────────────────
-  // Relocated here from the header user-menu. The regions CRUD still lives in
-  // app.js (showRegionsPanel / #regions-panel — a body-level floating panel now
-  // raised above this overlay in z-index); this tab is just its launcher inside
-  // the Reporting module so Auto-Submit Regions is owned by Reporting, not the
-  // Incident dashboard.
-  function renderRegions(body) {
-    body.innerHTML = `
-      <div class="cc-cf-card">
-        <div class="cc-cf-row"><h3 style="margin:0">Auto-submit regions</h3><div class="cc-cf-spacer"></div>
-          <button class="cc-cf-btn primary" id="cc-cf-open-regions">Open regions manager</button></div>
-        <p class="cc-cf-hint" style="margin:8px 0 0">Define geographic zones (centre + radius) where every client whose GPS falls inside sees a 2-minute auto-submit timer. Enabled zones are served to clients via the public <code>/regions/enabled</code> endpoint; deactivating a zone reverts those clients instantly.</p>
-      </div>`;
-    const b = el('cc-cf-open-regions');
-    if (b) b.addEventListener('click', () => { if (window.showRegionsPanel) window.showRegionsPanel(); });
   }
 
   // ── EVENTS tab ────────────────────────────────────────────────────────────────

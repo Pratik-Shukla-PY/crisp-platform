@@ -4541,7 +4541,6 @@ window.selectReport = (id, skipFly = false) => {
                 <div class="dp-meta-row"><span class="dp-meta-key">Report ID</span><span style="font-family:monospace;font-size:11px;">${r.id.substring(0,12)}…</span></div>
                 <div class="dp-meta-row"><span class="dp-meta-key">Media</span><span>${r.received_media}/${r.expected_media} received</span></div>
                 <div class="dp-meta-row"><span class="dp-meta-key">Submitted</span><span>${new Date(ensureUTC(r.server_created_at)).toLocaleString()}</span></div>
-                ${r.is_auto_submitted ? `<div class="dp-meta-row"><span class="dp-meta-key">Auto</span><span style="color:#f59e0b;">Auto-submitted</span></div>` : ''}
             </div>
         </div>
     `;
@@ -9415,206 +9414,6 @@ window.closeDeletionsPanel = function () {
     if (panel) panel.style.display = 'none';
 };
 
-// ── Phase 4 (Apr 2026) — Auto-Submit Regions Admin Panel ─────────────────────
-// Admin toggles enable per-region 2-minute auto-submit countdowns on clients.
-// Uses JWT (not X-Admin-Key) — the global fetch wrapper at line 27 handles
-// the Authorization header automatically for any /api/ request.
-
-let _regionsCache = [];
-let _regionEditingId = null;   // null when creating, uuid when editing
-
-/** Show the Regions button to ADMIN / SUPER_ADMIN only. */
-function _maybeShowRegionsButton() {
-    const u = _crispUser;
-    const role = (u && u.role) || '';
-    const btn = document.getElementById('btn-auto-regions');
-    if (btn && (role === 'ADMIN' || role === 'SUPER_ADMIN')) {
-        btn.style.display = 'inline-flex';
-    }
-}
-// Expose so _initUserMenu (called on DOMContentLoaded) can invoke it.
-window._maybeShowRegionsButton = _maybeShowRegionsButton;
-
-window.showRegionsPanel = async function () {
-    const panel = document.getElementById('regions-panel');
-    const body = document.getElementById('regions-panel-body');
-    if (!panel || !body) return;
-    panel.style.display = 'block';
-    body.innerHTML = '<div style="padding:20px;color:#9ca3af;">Loading…</div>';
-    try {
-        const res = await fetch(`${BACKEND_HOST}/api/v1/admin/regions`);
-        if (!res.ok) {
-            body.innerHTML = `<div style="padding:20px;color:#ef4444;">Failed to load regions (${res.status})</div>`;
-            return;
-        }
-        _regionsCache = await res.json();
-        _renderRegionsList();
-    } catch (e) {
-        body.innerHTML = `<div style="padding:20px;color:#ef4444;">Error: ${e.message}</div>`;
-    }
-};
-
-window.closeRegionsPanel = function () {
-    const panel = document.getElementById('regions-panel');
-    if (panel) panel.style.display = 'none';
-};
-
-function _renderRegionsList() {
-    const body = document.getElementById('regions-panel-body');
-    if (!body) return;
-    if (!_regionsCache.length) {
-        body.innerHTML = `<div style="padding:20px;color:#94a3b8;">
-            No auto-submit regions configured yet.<br><br>
-            Click <b>Add region</b> to create one. Enabled regions show a
-            2-minute auto-submit timer on every client whose GPS falls inside
-            their radius.
-        </div>`;
-        return;
-    }
-    body.innerHTML = _regionsCache.map(r => {
-        const radiusKm = (r.radius_meters / 1000).toFixed(1);
-        const lat = r.center_lat.toFixed(4);
-        const lng = r.center_lng.toFixed(4);
-        const chipClass = r.enabled ? 'region-chip-on' : 'region-chip-off';
-        const chipLabel = r.enabled ? 'ENABLED' : 'disabled';
-        return `<div class="region-row" data-id="${r.id}">
-            <div class="region-row-main">
-                <div class="region-row-name"><b>${_esc(r.name)}</b>
-                    <span class="region-chip ${chipClass}">${chipLabel}</span></div>
-                <div class="region-row-meta">
-                    ${lat}°, ${lng}° · ${radiusKm} km radius
-                </div>
-            </div>
-            <div class="region-row-actions">
-                <button class="btn btn-secondary" onclick="toggleRegion('${r.id}')" title="${r.enabled ? 'Disable' : 'Enable'}">
-                    <i class="fa-solid ${r.enabled ? 'fa-pause' : 'fa-play'}"></i>
-                </button>
-                <button class="btn btn-secondary" onclick="openRegionForm('${r.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
-                <button class="btn btn-danger" onclick="deleteRegion('${r.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
-            </div>
-        </div>`;
-    }).join('');
-}
-
-function _esc(s) {
-    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-window.openRegionForm = function (regionId) {
-    const overlay = document.getElementById('region-form-overlay');
-    if (!overlay) return;
-    _regionEditingId = regionId || null;
-    const title = document.getElementById('region-form-title');
-    const name = document.getElementById('region-name');
-    const lat = document.getElementById('region-lat');
-    const lng = document.getElementById('region-lng');
-    const rad = document.getElementById('region-radius-km');
-    const en = document.getElementById('region-enabled');
-    if (regionId) {
-        const r = _regionsCache.find(x => x.id === regionId);
-        if (r) {
-            title.innerHTML = '<i class="fa-solid fa-pen"></i> Edit region';
-            name.value = r.name;
-            lat.value = r.center_lat;
-            lng.value = r.center_lng;
-            rad.value = (r.radius_meters / 1000);
-            en.checked = !!r.enabled;
-        }
-    } else {
-        title.innerHTML = '<i class="fa-solid fa-plus"></i> Add region';
-        name.value = '';
-        lat.value = '';
-        lng.value = '';
-        rad.value = '10';
-        en.checked = false;
-    }
-    overlay.style.display = 'flex';
-};
-
-window.closeRegionForm = function () {
-    const overlay = document.getElementById('region-form-overlay');
-    if (overlay) overlay.style.display = 'none';
-    _regionEditingId = null;
-};
-
-window.saveRegionForm = async function () {
-    const name = (document.getElementById('region-name').value || '').trim();
-    const lat = parseFloat(document.getElementById('region-lat').value);
-    const lng = parseFloat(document.getElementById('region-lng').value);
-    const radKm = parseFloat(document.getElementById('region-radius-km').value);
-    const enabled = document.getElementById('region-enabled').checked;
-    if (!name) return showToast('Name required', 'error');
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90) return showToast('Latitude must be -90..90', 'error');
-    if (!Number.isFinite(lng) || lng < -180 || lng > 180) return showToast('Longitude must be -180..180', 'error');
-    if (!Number.isFinite(radKm) || radKm < 0.1 || radKm > 200) return showToast('Radius must be 0.1..200 km', 'error');
-
-    const body = {
-        name,
-        center_lat: lat,
-        center_lng: lng,
-        radius_meters: Math.round(radKm * 1000),
-        enabled,
-    };
-    const isEdit = !!_regionEditingId;
-    const url = isEdit
-        ? `${BACKEND_HOST}/api/v1/admin/regions/${_regionEditingId}`
-        : `${BACKEND_HOST}/api/v1/admin/regions`;
-    const method = isEdit ? 'PATCH' : 'POST';
-    try {
-        const res = await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-            let detail = `HTTP ${res.status}`;
-            try { detail = (await res.json()).detail || detail; } catch (_) {}
-            return showToast(`Save failed: ${detail}`, 'error');
-        }
-        showToast(isEdit ? 'Region updated' : 'Region created', 'success');
-        closeRegionForm();
-        showRegionsPanel();   // reload list
-    } catch (e) {
-        showToast(`Save error: ${e.message}`, 'error');
-    }
-};
-
-window.toggleRegion = async function (regionId) {
-    const r = _regionsCache.find(x => x.id === regionId);
-    if (!r) return;
-    try {
-        const res = await fetch(`${BACKEND_HOST}/api/v1/admin/regions/${regionId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ enabled: !r.enabled }),
-        });
-        if (!res.ok) return showToast(`Toggle failed (${res.status})`, 'error');
-        showToast(r.enabled ? `Disabled "${r.name}"` : `Enabled "${r.name}"`, 'success');
-        showRegionsPanel();
-    } catch (e) {
-        showToast(`Toggle error: ${e.message}`, 'error');
-    }
-};
-
-window.deleteRegion = async function (regionId) {
-    const r = _regionsCache.find(x => x.id === regionId);
-    if (!r) return;
-    if (!confirm(`Delete region "${r.name}"? Clients in this zone will no longer auto-submit.`)) return;
-    try {
-        const res = await fetch(`${BACKEND_HOST}/api/v1/admin/regions/${regionId}`, {
-            method: 'DELETE',
-        });
-        if (res.ok || res.status === 204) {
-            showToast(`Deleted "${r.name}"`, 'success');
-            showRegionsPanel();
-        } else {
-            showToast(`Delete failed (${res.status})`, 'error');
-        }
-    } catch (e) {
-        showToast(`Delete error: ${e.message}`, 'error');
-    }
-};
-
 // P1.8 — admin endpoints now require X-Admin-Key. Cache the key in localStorage
 // so the operator only pastes it once. If absent, prompt. If the server later
 // returns 403 (key rotated), wipe the cached copy and prompt again.
@@ -10897,8 +10696,6 @@ function _initUserMenu() {
     const roleEl = document.getElementById('user-role-badge');
     if (nameEl) nameEl.textContent = u.full_name || u.email?.split('@')[0] || '';
     if (roleEl) roleEl.textContent = u.role || 'VIEWER';
-    // Phase 4: reveal Regions button only to admins.
-    if (typeof _maybeShowRegionsButton === 'function') _maybeShowRegionsButton();
     // Phase 5.1 (May 2026): reveal Moderation button + kick the first
     // badge fetch so the headline count is correct within a few seconds
     // of page load, not on the next 90 s tick.
@@ -10922,13 +10719,10 @@ function _initUserMenu() {
 // The user-chip dropdown holds admin actions. _refreshUserMenuAdminState
 // keeps the divider + the red-dot indicator in sync with the existing
 // per-button visibility/badge helpers (_maybeShowModerationButton,
-// _checkPendingDeletions, _maybeShowRegionsButton). Runs on init + every
+// _checkPendingDeletions). Runs on init + every
 // 30 s; cheap DOM-only.
 
 function _refreshUserMenuAdminState() {
-    // CC-IA P2: 'btn-auto-regions' removed — Auto-Submit Regions moved to the
-    // Reporting module (#/reporting). _maybeShowRegionsButton() stays a safe
-    // no-op (the button id no longer exists in the DOM).
     const ids = ['btn-moderation', 'btn-pending-deletions'];
     const visible = ids.map(id => {
         const el = document.getElementById(id);

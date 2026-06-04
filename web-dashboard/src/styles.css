@@ -2489,13 +2489,6 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .status-RESOLVED   { background: rgba(16,185,129,0.2);  color: var(--resolved);  border: 1px solid rgba(16,185,129,0.4); }
 .status-FALSE_ALARM{ background: rgba(234,179,8,0.15);  color: #fbbf24;          border: 1px solid rgba(234,179,8,0.3); }
 
-.auto-submit-badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    font-size: 13px; font-weight: 700; padding: 4px 10px;
-    border-radius: 16px; background: rgba(255,152,0,0.2);
-    color: #ff9800; border: 1px solid rgba(255,152,0,0.4);
-}
-
 .detail-description-block {
     background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
     border-radius: 10px; padding: 12px 14px;
@@ -3782,35 +3775,6 @@ body.burst-mode .notif-glow {
     display: flex; align-items: center; justify-content: center; gap: 6px;
 }
 
-/* ── Phase 4 (Apr 2026) — Auto-Submit Regions admin panel ─────────────── */
-.region-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; border-bottom:1px solid rgba(255,255,255,0.06); }
-.region-row:last-child { border-bottom:none; }
-.region-row-main { flex:1; min-width:0; }
-.region-row-name { font-size:14px; color:#e5e7eb; display:flex; align-items:center; gap:8px; }
-.region-row-meta { font-size:12px; color:#94a3b8; margin-top:3px; }
-.region-row-actions { display:flex; gap:6px; flex-shrink:0; }
-.region-row-actions .btn { padding:6px 10px; font-size:12px; }
-.region-chip { font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; text-transform:uppercase; letter-spacing:0.4px; }
-.region-chip.region-chip-on { color:#22c55e; border:1px solid rgba(34,197,94,0.45); background:rgba(34,197,94,0.1); }
-.region-chip.region-chip-off { color:#94a3b8; border:1px solid rgba(148,163,184,0.35); background:rgba(148,163,184,0.08); }
-
-/* Region form modal — floating overlay similar to the lightbox pattern. */
-/* CC-IA P2: Auto-Submit Regions are now launched from the Reporting module
-   (cc-crisis #cc-cf-overlay, z-index 99999). The relocated #regions-panel +
-   this create/edit modal must render ABOVE that overlay, so their z-index is
-   raised past 99999. (#moderation-panel reuses .deletions-panel but stays
-   inside the incident view at its base z-index 20 — unaffected.) */
-#regions-panel { z-index:100000; }
-#region-form-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:100002; align-items:center; justify-content:center; }
-.region-form { width:min(460px, 90vw); background:#0f172a; border:1px solid rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.5); }
-.region-form-body { padding:16px; display:flex; flex-direction:column; gap:10px; }
-.region-form-body label { font-size:11px; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px; }
-.region-form-body input[type=text], .region-form-body input[type=number] { padding:8px 10px; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#e5e7eb; font-size:14px; width:100%; box-sizing:border-box; }
-.region-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
-.region-grid > div { display:flex; flex-direction:column; gap:4px; }
-.region-enabled-row { display:flex; align-items:flex-start; gap:8px; font-size:12px; color:#cbd5e1; text-transform:none; letter-spacing:0; font-weight:400; line-height:1.4; }
-.region-enabled-row input[type=checkbox] { margin-top:2px; flex-shrink:0; }
-.region-form-footer { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid rgba(255,255,255,0.06); }
 
 /* ── Phase 5 (Apr 2026) — Reviewer actions block (detail panel) ────────── */
 .dp-reviewer { margin:8px 0 6px; padding:10px 12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; }
