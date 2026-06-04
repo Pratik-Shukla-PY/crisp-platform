@@ -69,16 +69,14 @@ describe('V4ReviewScreen — module shape + i18n contract', () => {
 
     // Pressing needs
     'v4_needs',
-    'need_food_water',
-    'need_cash',
-    'need_health',
-    'need_shelter',
-    'need_livelihoods',
-    'need_wash',
-    'need_basic_services',
-    'need_protection',
-    'need_local_support',
-    'need_other',
+    // PWA-mirror: the 6 pressing-needs chips use undp_need_* keys (see
+    // V4ReviewScreen NEEDS_CHIPS — reconciled from the old 10-value HRP set).
+    'undp_need_food',
+    'undp_need_shelter',
+    'undp_need_medical',
+    'undp_need_cash',
+    'undp_need_protection',
+    'undp_need_services',
 
     // Send + sending state
     'v4_send',

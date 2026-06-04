@@ -54,18 +54,19 @@ const SERVICE_OPTIONS: { v: ServiceLevel; labelKey: string; fb: string }[] = [
   { v: 'UNKNOWN',     labelKey: 'v4_unknown',         fb: 'Unknown' },
 ];
 
-// ── Pressing-needs registry (matches PWA's #v4-needs chips) ─────────
+// ── Pressing-needs registry — EXACT mirror of the PWA's #v4-undp-sheet
+//    pressing_needs chips (mobile-app/src/index.html data-value + undp_need_*
+//    keys + order). Submitted values (food_water / shelter / medical / cash /
+//    protection / services) match the dashboard humanizer + the canonical
+//    Report row (UNDP must-have #1). Was a divergent 10-value HRP set;
+//    reconciled to the PWA's 6 for V4 parity. ──────────────────────────────
 const NEEDS_CHIPS = [
-  { v: 'food',           labelKey: 'need_food_water',     fb: 'Food / water' },
-  { v: 'cash',           labelKey: 'need_cash',           fb: 'Cash' },
-  { v: 'health',         labelKey: 'need_health',         fb: 'Healthcare' },
-  { v: 'shelter',        labelKey: 'need_shelter',        fb: 'Shelter' },
-  { v: 'livelihoods',    labelKey: 'need_livelihoods',    fb: 'Livelihoods' },
-  { v: 'wash',           labelKey: 'need_wash',           fb: 'WASH' },
-  { v: 'basic_services', labelKey: 'need_basic_services', fb: 'Basic services' },
-  { v: 'protection',     labelKey: 'need_protection',     fb: 'Protection' },
-  { v: 'local_support',  labelKey: 'need_local_support',  fb: 'Local support' },
-  { v: 'other',          labelKey: 'need_other',          fb: 'Other' },
+  { v: 'food_water', labelKey: 'undp_need_food',       fb: 'Food / water' },
+  { v: 'shelter',    labelKey: 'undp_need_shelter',    fb: 'Shelter' },
+  { v: 'medical',    labelKey: 'undp_need_medical',    fb: 'Medical' },
+  { v: 'cash',       labelKey: 'undp_need_cash',       fb: 'Cash help' },
+  { v: 'protection', labelKey: 'undp_need_protection', fb: 'Safety' },
+  { v: 'services',   labelKey: 'undp_need_services',   fb: 'Services' },
 ];
 
 // ── Helper ──────────────────────────────────────────────────────────
