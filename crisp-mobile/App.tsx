@@ -161,7 +161,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { detectNetworkTier, getAdaptiveConfig, getCurrentTier } from './services/networkAdaptive';
 import { getHistory, getImpactStats, markHistoryDeletionRequested, updateHistoryStatus, HistoryReport, getInFlightReports, QueuedReport, deleteReport as deleteQueuedReport, updateReportStatus } from './services/database';
 import { getDeviceStatusSince, deleteReportFromServer, getApiBase, getCrisisFormsActive } from './services/api';
-import { assembleCrisisForm } from './services/crisisForm';
+import { assembleCrisisForm, deriveSeverityFromDamage } from './services/crisisForm';
 import { blurFacesBase64, prewarm as prewarmPIIBlur } from './services/piiBlur';
 import { generateVariants, PhotoVariants, TIER_TO_RESOLUTION } from './services/imageVariants';
 import { swallow as telemetrySwallow } from './services/telemetry';
@@ -232,12 +232,13 @@ type Screen =
   // Phase 6 — Rewards page + Badge Studio share surface.
   | 'v4_rewards';
 
-// May 2026 v4 — flag check (default OFF on RN until V4_PARITY_DEFERRED
-// roadmap completes). PWA defaults flag ON; RN companion defaults OFF
-// so users get the existing v3 flow on the legacy 4-stage path. When
-// the v4 RN screens ship (see V4_PARITY_DEFERRED.md), flip this to
-// the same default-on pattern the PWA uses.
-const UI_V4_ENABLED = false;
+// June 2026 — v4 ACTIVATED (RNV4-P4). RN now mirrors the PWA's flagship
+// V4 report flow: home → v4_capture → v4_classify → v4_review → success,
+// with geo-scoped crisis packs (RNV4-P0..P3). The legacy v3/v2 screens
+// stay in the tree but are unreachable while this is true (the start-report
+// route below always lands on v4_capture); flip back to `false` for a
+// one-flag rollback to v3 if a field issue surfaces before the deadline.
+const UI_V4_ENABLED = true;
 
 /**
  * Schedule heavy async work to run AFTER any user interaction (touch, scroll,
@@ -1476,6 +1477,13 @@ export default function App() {
     } catch (e) { telemetrySwallow('pollStatus', e); }
   };
   const changeLang = (code: string) => { setLanguage(code); setLang(code); };
+  // V4 damage pick → set damage_classification AND derive severity (the v4
+  // classify flow doesn't collect severity directly). Mirror PWA _v4ApplyDamage;
+  // derivation lives in services/crisisForm.ts (pure + unit-tested).
+  const applyV4Damage = (v: string) => {
+    setDamageClass(v);
+    setSeverity(deriveSeverityFromDamage(v));
+  };
   const resetReport = () => {
     setPhotoUri(null); setPhotoBase64(null); setAudioUri(null); setDescription('');
     setInfraType('RESIDENTIAL'); setSeverity('MODERATE');
@@ -1930,7 +1938,7 @@ export default function App() {
           infraType={infraType}
           crisisType={crisisType}
           infraName={infraName}
-          onSetDamage={setDamageClass}
+          onSetDamage={applyV4Damage}
           onSetInfra={(v) => {
             // Match the PWA behaviour: clear stale infra_name when the
             // user moves OFF the OTHER tile.

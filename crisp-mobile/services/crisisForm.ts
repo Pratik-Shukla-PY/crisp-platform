@@ -92,6 +92,23 @@ export function crisisPackRequiredAnswered(fields: any[], answers: Record<string
   });
 }
 
+// The V4 classify flow collects damage/infra/crisis but NOT severity (the PWA
+// dropped the explicit severity chips in v4). So severity is derived from the
+// damage pick. Mirror of the PWA's _V4_DAMAGE_TO_SEVERITY (v4-flow.js): without
+// this a v4 report can land with severity null → Pydantic 422 → the offline
+// queue retries forever ("stuck at 25%"). Always returns a valid SeverityEnum.
+const _V4_DAMAGE_TO_SEVERITY: Record<string, string> = {
+  MINIMAL: 'MINOR', PARTIAL: 'MODERATE', COMPLETE: 'SEVERE',
+  // Legacy values the schema still accepts (the v4 UI doesn't show them).
+  NO_DAMAGE: 'MINOR', DESTROYED: 'SEVERE',
+};
+
+/** Derive a non-null SeverityEnum from the user's damage pick. Pure; mirrors
+ *  the PWA's _v4ApplyDamage so RN v4 reports carry an accurate severity. */
+export function deriveSeverityFromDamage(damage: string | null | undefined): string {
+  return (damage && _V4_DAMAGE_TO_SEVERITY[damage]) || 'MODERATE';
+}
+
 export function assembleCrisisForm(
   crisisPack: CrisisPack | null | undefined,
   canonical: Record<string, any>,

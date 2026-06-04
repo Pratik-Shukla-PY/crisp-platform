@@ -9,6 +9,7 @@ import {
   crisisPackRenderableFields,
   crisisPackRequiredAnswered,
   crisisPackClassifyOrder,
+  deriveSeverityFromDamage,
 } from '../services/crisisForm';
 
 describe('assembleCrisisForm (RNV4-P2 crisis-pack submit parity)', () => {
@@ -175,5 +176,27 @@ describe('crisisPackClassifyOrder (RNV4-P3 — dynamic sub-step order)', () => {
       crisis_type: 'FLOOD',
       schema: { sections: [{ fields: [{ key: 'crisis_type', type: 'single_select', maps_to: 'crisis_type' }] }] },
     } as any)).toEqual(['damage', 'infra']);
+  });
+});
+
+describe('deriveSeverityFromDamage (RNV4-P4 — v4 severity from damage pick)', () => {
+  // The v4 classify flow doesn't collect severity; it's derived from damage.
+  // A null/unknown result would submit severity:null → Pydantic 422 → the
+  // offline queue retries forever, so this MUST always return a valid enum.
+  test('maps the UNDP damage taxonomy to SeverityEnum', () => {
+    expect(deriveSeverityFromDamage('MINIMAL')).toBe('MINOR');
+    expect(deriveSeverityFromDamage('PARTIAL')).toBe('MODERATE');
+    expect(deriveSeverityFromDamage('COMPLETE')).toBe('SEVERE');
+  });
+
+  test('maps legacy damage values the schema still accepts', () => {
+    expect(deriveSeverityFromDamage('NO_DAMAGE')).toBe('MINOR');
+    expect(deriveSeverityFromDamage('DESTROYED')).toBe('SEVERE');
+  });
+
+  test('null / undefined / unknown → MODERATE fallback (never null)', () => {
+    expect(deriveSeverityFromDamage(null)).toBe('MODERATE');
+    expect(deriveSeverityFromDamage(undefined)).toBe('MODERATE');
+    expect(deriveSeverityFromDamage('WHATEVER')).toBe('MODERATE');
   });
 });
