@@ -1942,6 +1942,15 @@ export default function App() {
           }}
           onSetCrisis={setCrisisType}
           onSetInfraName={setInfraName}
+          // RNV4-P3 — geo-scoped crisis pack. When active with renderable
+          // fields, V4ClassifyScreen appends a 'crisispack' sub-step that
+          // collects the extra Stage-2/3 questions into crisisStockAnswers
+          // (fed into form_data at submit by assembleCrisisForm — RNV4-P2).
+          crisisPack={crisisPack}
+          crisisStockAnswers={crisisStockAnswers}
+          onSetStockAnswer={(k, v) =>
+            setCrisisStockAnswers((prev) => ({ ...prev, [k]: v }))
+          }
           onBack={() => setScreen(UI_V4_ENABLED ? 'v4_capture' : 'home')}
           onContinue={() => {
             // Phase 5 landed — route to v4_review.

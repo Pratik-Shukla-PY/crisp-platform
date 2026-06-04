@@ -35,6 +35,63 @@ const DEFAULT_CAPTURED: Record<string, boolean> = {
 
 const EMPTY: CrisisFormResult = { form_pack_id: null, form_pack_version: null, form_data: null };
 
+// Base field types the renderer can draw (special types — photo/audio/location/
+// building/severity — are captured elsewhere). Matches the PWA's _CP_BASE_TYPES.
+const BASE_TYPES: Record<string, boolean> = {
+  yes_no: true, single_select: true, multi_select: true, short_text: true, long_text: true, integer: true,
+};
+
+/** The crisis-pack fields the DynamicModuleRenderer should draw: base-type
+ *  fields whose maps_to isn't already captured by the hardcoded classify chips.
+ *  Mirror of the PWA's _crisisPackFields (mobile-app/src/v4-flow.js). Pure. */
+export function crisisPackRenderableFields(crisisPack: CrisisPack | null | undefined): any[] {
+  if (!crisisPack || !crisisPack.schema) return [];
+  const out: any[] = [];
+  (crisisPack.schema.sections || []).forEach((sec) =>
+    (sec.fields || []).forEach((f: any) => {
+      if (!f || !f.key || !BASE_TYPES[f.type]) return;
+      if (f.maps_to && DEFAULT_CAPTURED[f.maps_to]) return;
+      out.push(f);
+    }),
+  );
+  return out;
+}
+
+// Canonical CrisisTypeEnum values (must-have #5). When the active zone's pack
+// carries one of these as crisis_type, the chip 'crisis' sub-step is skipped —
+// the event already knows the type. Mirror of the PWA's _classifyOrder gate.
+const CANON_CRISIS_TYPES: Record<string, boolean> = {
+  EARTHQUAKE: true, FLOOD: true, TSUNAMI: true, CYCLONE: true, WILDFIRE: true,
+  EXPLOSION: true, CHEMICAL_INCIDENT: true, CONFLICT: true, CIVIL_UNREST: true,
+};
+
+/** The V4 classify sub-step order. Mirror of the PWA's _classifyOrder
+ *  (mobile-app/src/v4-flow.js). Default ['damage','infra','crisis']; with an
+ *  active pack → drop 'crisis' when the zone auto-set a canonical crisis_type,
+ *  and append 'crisispack' when the pack has questions the chips don't already
+ *  capture. Pure — drives V4ClassifyScreen's `order`. */
+export function crisisPackClassifyOrder(crisisPack: CrisisPack | null | undefined): string[] {
+  if (!crisisPack || !crisisPack.schema) return ['damage', 'infra', 'crisis'];
+  const order: string[] = ['damage', 'infra'];
+  const packType = crisisPack.crisis_type;
+  if (!(packType && CANON_CRISIS_TYPES[packType])) order.push('crisis');
+  if (crisisPackRenderableFields(crisisPack).length > 0) order.push('crisispack');
+  return order;
+}
+
+/** True when every REQUIRED renderable field has a usable answer — gates the
+ *  crisispack sub-step's Continue. Mirror of the PWA's _canAdvanceFrom('crisispack'). */
+export function crisisPackRequiredAnswered(fields: any[], answers: Record<string, any> | null | undefined): boolean {
+  const ans = answers || {};
+  return (fields || []).every((f: any) => {
+    if (!f || !f.required) return true;
+    const v = ans[f.key];
+    if (f.type === 'multi_select') return Array.isArray(v) && v.length > 0;
+    if (f.type === 'yes_no') return v === true || v === false;
+    return v !== undefined && v !== null && String(v).trim() !== '';
+  });
+}
+
 export function assembleCrisisForm(
   crisisPack: CrisisPack | null | undefined,
   canonical: Record<string, any>,

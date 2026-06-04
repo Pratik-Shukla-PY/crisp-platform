@@ -59,10 +59,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '../constants/colors';
 import { t } from '../services/i18n';
+import DynamicModuleRenderer from '../components/DynamicModuleRenderer';
+import {
+  crisisPackRenderableFields,
+  crisisPackRequiredAnswered,
+  crisisPackClassifyOrder,
+} from '../services/crisisForm';
 
 // ── Sub-view ordering ─────────────────────────────────────────────
-type ClassifyStep = 'damage' | 'infra' | 'crisis';
-const CLASSIFY_ORDER: ClassifyStep[] = ['damage', 'infra', 'crisis'];
+// The concrete order is computed per-instance from the active crisis pack via
+// crisisPackClassifyOrder() (see `order` below): default ['damage','infra',
+// 'crisis']; RNV4-P3 appends 'crisispack' (and may drop 'crisis') when a
+// geo-gated pack is active.
+type ClassifyStep = 'damage' | 'infra' | 'crisis' | 'crisispack';
 
 // ── Damage options (radio rows) ───────────────────────────────────
 const DAMAGE_OPTIONS = [
@@ -131,8 +140,15 @@ export interface V4ClassifyScreenProps {
   /** Called when the user taps Back AT the damage sub-view (first one). */
   onBack: () => void;
 
-  /** Called when the user picks a crisis tile (terminal sub-view). */
+  /** Called at the terminal sub-view (crisis tile, or the crisispack Continue). */
   onContinue: () => void;
+
+  // RNV4-P3 — geo-scoped crisis pack. When present with renderable fields, a 4th
+  // 'crisispack' sub-step renders the extra questions (mirrors the PWA). Optional
+  // so the default flow + existing tests are unaffected when omitted.
+  crisisPack?: any;
+  crisisStockAnswers?: Record<string, any>;
+  onSetStockAnswer?: (key: string, value: any) => void;
 }
 
 // ── Helper: small text-resolve wrapper with EN fallback ───────────
@@ -148,6 +164,16 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
   const [step, setStep] = useState<ClassifyStep>('damage');
   const [reducedMotion, setReducedMotion] = useState(false);
   const advancingRef = useRef<ClassifyStep | null>(null);
+
+  // RNV4-P3 — dynamic sub-step order + the renderable pack fields. Both come
+  // from the pure helpers in services/crisisForm.ts (mirror of the PWA's
+  // _classifyOrder / _crisisPackFields), so the order logic is unit-tested
+  // independently of this screen.
+  const renderableFields = useMemo(() => crisisPackRenderableFields(props.crisisPack), [props.crisisPack]);
+  const order = useMemo<ClassifyStep[]>(
+    () => crisisPackClassifyOrder(props.crisisPack) as ClassifyStep[],
+    [props.crisisPack],
+  );
 
   // Detect reduced-motion once on mount; refresh on focus changes
   // (RN supports change events via AccessibilityInfo.addEventListener).
@@ -199,25 +225,33 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
     });
   };
 
-  // Compute the next sub-step OR fire onContinue at terminal.
+  // Compute the next sub-step OR fire onContinue at terminal. Uses the dynamic
+  // `order` so the crisis step can be skipped + the crisispack step appended.
   const advanceFromStep = (fromStep: ClassifyStep) => {
-    const idx = CLASSIFY_ORDER.indexOf(fromStep);
-    if (idx === CLASSIFY_ORDER.length - 1) {
+    const idx = order.indexOf(fromStep);
+    if (idx === order.length - 1) {
       props.onContinue();
       return;
     }
-    setStep(CLASSIFY_ORDER[idx + 1]);
+    setStep(order[idx + 1]);
   };
 
   // Back — within classify or out to onBack.
   const goBack = () => {
-    const idx = CLASSIFY_ORDER.indexOf(step);
+    const idx = order.indexOf(step);
     if (idx <= 0) {
       props.onBack();
       return;
     }
-    setStep(CLASSIFY_ORDER[idx - 1]);
+    setStep(order[idx - 1]);
   };
+
+  // If the order changes (pack arrives/clears) and the current step is no longer
+  // valid (e.g. 'crisis' got skipped), fall back to the first step.
+  useEffect(() => {
+    if (!order.includes(step)) setStep(order[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order]);
 
   // OTHER infra tile — text-input blur trigger advances.
   const tryOtherAdvance = () => {
@@ -227,11 +261,13 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
     advanceFromStep('infra');
   };
 
-  // Sub-step counter (1-of-3 / 2-of-3 / 3-of-3 within classify).
-  const subStepNum = CLASSIFY_ORDER.indexOf(step) + 1;
+  // Sub-step counter (1-of-N / … within classify; N = order.length, which is
+  // 4 when an active crisis pack appends the 'crisispack' sub-step).
+  const subStepNum = order.indexOf(step) + 1;
   const subStepKey = step === 'damage' ? 'v4_substep_how_bad'
                   : step === 'infra'  ? 'v4_substep_what_hit'
-                  : 'v4_substep_what_caused';
+                  : step === 'crisis' ? 'v4_substep_what_caused'
+                  : 'summary_details';
 
   return (
     // (May 2026 — Fix-R3) — KAV so the soft keyboard doesn't cover
@@ -281,7 +317,7 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
           <Text style={styles.substepLabel}>
             {ti(subStepKey, '')}
           </Text>
-          <Text style={styles.substepOf}>{` · ${subStepNum} of 3`}</Text>
+          <Text style={styles.substepOf}>{` · ${subStepNum} of ${order.length}`}</Text>
         </View>
 
         {/* §C + §D — switch by step */}
@@ -334,10 +370,39 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
             }}
           />
         )}
+
+        {/* §C.4 — geo-scoped crisis pack (RNV4-P3). The extra Stage-2/3
+            questions the chips don't capture. Unlike the auto-advancing chip
+            steps, this one has an explicit Continue gated on required fields
+            (mirrors the PWA's revealed footer on its 'crisispack' step). */}
+        {step === 'crisispack' && (
+          <View testID="v4cl-crisispack">
+            <DynamicModuleRenderer
+              fields={renderableFields}
+              answers={props.crisisStockAnswers || {}}
+              onSetAnswer={(k, v) => { if (props.onSetStockAnswer) props.onSetStockAnswer(k, v); }}
+              title={(props.crisisPack && props.crisisPack.schema && props.crisisPack.schema.title) || null}
+            />
+            <TouchableOpacity
+              style={[
+                styles.cpContinue,
+                !crisisPackRequiredAnswered(renderableFields, props.crisisStockAnswers || {}) && styles.cpContinueDisabled,
+              ]}
+              disabled={!crisisPackRequiredAnswered(renderableFields, props.crisisStockAnswers || {})}
+              onPress={() => advanceFromStep('crisispack')}
+              accessibilityRole="button"
+              accessibilityLabel={ti('v4_continue', 'Continue')}
+              testID="v4cl-crisispack-continue"
+            >
+              <Text style={styles.cpContinueText}>{ti('v4_continue', 'Continue')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
-      {/* §E — No Continue button. The PWA hides it on classify too —
-          auto-progress carries the user through. Back-button only. */}
+      {/* §E — No pinned Continue button. The PWA hides it on classify too —
+          auto-progress carries the user through the chip steps; the crisispack
+          step renders its own in-scroll Continue (above). Back-button only. */}
     </View>
     </KeyboardAvoidingView>
   );
@@ -633,6 +698,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1.6, textTransform: 'uppercase',
   },
   substepOf: { color: 'rgba(255,255,255,0.42)', fontSize: 10.5, fontWeight: '600' },
+
+  // §C.4 crisis-pack Continue (RNV4-P3) — the one classify sub-step with an
+  // explicit gated Continue (the chip steps auto-advance).
+  cpContinue: {
+    marginTop: 8, backgroundColor: Colors.accent, borderRadius: 12,
+    paddingVertical: 15, alignItems: 'center',
+  },
+  cpContinueDisabled: { opacity: 0.4 },
+  cpContinueText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
 
   // §C Question
   question: {
