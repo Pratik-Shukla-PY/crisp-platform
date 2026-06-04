@@ -1351,5 +1351,9 @@
   "nearby_sheet_close": "അടയ്ക്കുക",
   "nearby_reports_nearby_label": "സമീപത്തെ റിപ്പോർട്ടുകൾ",
   "nearby_one_area": "1 പ്രദേശം",
-  "nearby_n_areas": "{n} പ്രദേശങ്ങൾ"
+  "nearby_n_areas": "{n} പ്രദേശങ്ങൾ",
+  "crisis_cyclone": "ചുഴലിക്കാറ്റ്",
+  "crisis_landslide": "ഉരുൾപൊട്ടൽ",
+  "crisis_pandemic": "മഹാമാരി",
+  "crisis_other": "മറ്റുള്ളവ"
 }

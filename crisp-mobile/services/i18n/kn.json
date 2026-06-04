@@ -791,5 +791,9 @@
   "nearby_sheet_close": "ಮುಚ್ಚಿ",
   "nearby_reports_nearby_label": "ಸಮೀಪದ ವರದಿಗಳು",
   "nearby_one_area": "1 ಪ್ರದೇಶ",
-  "nearby_n_areas": "{n} ಪ್ರದೇಶಗಳು"
+  "nearby_n_areas": "{n} ಪ್ರದೇಶಗಳು",
+  "crisis_cyclone": "ಚಂಡಮಾರುತ",
+  "crisis_landslide": "ಭೂಕುಸಿತ",
+  "crisis_pandemic": "ಸಾಂಕ್ರಾಮಿಕ",
+  "crisis_other": "ಇತರೆ"
 }

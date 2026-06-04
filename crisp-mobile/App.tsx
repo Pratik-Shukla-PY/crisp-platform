@@ -1628,17 +1628,19 @@ export default function App() {
     // UNDP Appendix-1 crisis taxonomy — Natural / Technological / Human-made.
     // HURRICANE + WILDFIRE removed from the user-visible chip list; the
     // backend still accepts them for historical rows.
-    { key: 'EARTHQUAKE',         icon: '🏚', label: 'Earthquake' },
-    { key: 'FLOOD',              icon: '🌊', label: 'Flood' },
-    { key: 'TSUNAMI',            icon: '🌊', label: 'Tsunami' },
-    { key: 'CYCLONE',            icon: '🌪', label: 'Cyclone' },
-    { key: 'LANDSLIDE',          icon: '🏔', label: 'Landslide' },
-    { key: 'EXPLOSION',          icon: '💥', label: 'Explosion' },
-    { key: 'CHEMICAL_INCIDENT',  icon: '☣️', label: 'Chemical' },
-    { key: 'PANDEMIC',           icon: '🦠', label: 'Pandemic' },
-    { key: 'CONFLICT',           icon: '⚔️', label: 'Conflict' },
-    { key: 'CIVIL_UNREST',       icon: '🪧', label: 'Civil Unrest' },
-    { key: 'OTHER',              icon: '❓', label: 'Other' },
+    // `labelKey` routes the chip label through i18n (all 22 locales); the
+    // hardcoded `label` stays as the EN fallback. Render: t(labelKey) || label.
+    { key: 'EARTHQUAKE',         icon: '🏚', labelKey: 'crisis_earthquake', label: 'Earthquake' },
+    { key: 'FLOOD',              icon: '🌊', labelKey: 'crisis_flood',      label: 'Flood' },
+    { key: 'TSUNAMI',            icon: '🌊', labelKey: 'crisis_tsunami',    label: 'Tsunami' },
+    { key: 'CYCLONE',            icon: '🌪', labelKey: 'crisis_cyclone',    label: 'Cyclone' },
+    { key: 'LANDSLIDE',          icon: '🏔', labelKey: 'crisis_landslide',  label: 'Landslide' },
+    { key: 'EXPLOSION',          icon: '💥', labelKey: 'crisis_explosion',  label: 'Explosion' },
+    { key: 'CHEMICAL_INCIDENT',  icon: '☣️', labelKey: 'crisis_chemical',   label: 'Chemical' },
+    { key: 'PANDEMIC',           icon: '🦠', labelKey: 'crisis_pandemic',   label: 'Pandemic' },
+    { key: 'CONFLICT',           icon: '⚔️', labelKey: 'crisis_conflict',   label: 'Conflict' },
+    { key: 'CIVIL_UNREST',       icon: '🪧', labelKey: 'crisis_unrest',     label: 'Civil Unrest' },
+    { key: 'OTHER',              icon: '❓', labelKey: 'crisis_other',      label: 'Other' },
   ];
   // UNDP Appendix-1 damage labels (Apr 2026 UI v2.1) — verbatim phrasing
   // from the spec: "Minimal / No damage", "Partially damaged", "Completely
@@ -2575,7 +2577,7 @@ export default function App() {
                         style={[s.chip, crisisType === ct.key && s.chipActive]}
                         onPress={() => setCrisisType(ct.key)}
                         accessibilityRole="button">
-                        <Text style={s.chipText}>{ct.icon} {ct.label}</Text>
+                        <Text style={s.chipText}>{ct.icon} {t(ct.labelKey) || ct.label}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -2911,7 +2913,7 @@ export default function App() {
           )}
 
           <Text style={s.label}>{t('crisis_label')}</Text>
-          <View style={s.chipRow}>{crisisTypes.map(ct => <TouchableOpacity key={ct.key} style={[s.chip, crisisType === ct.key && s.chipActive]} onPress={() => setCrisisType(ct.key)}><Text style={s.chipText}>{ct.icon} {ct.label}</Text></TouchableOpacity>)}</View>
+          <View style={s.chipRow}>{crisisTypes.map(ct => <TouchableOpacity key={ct.key} style={[s.chip, crisisType === ct.key && s.chipActive]} onPress={() => setCrisisType(ct.key)}><Text style={s.chipText}>{ct.icon} {t(ct.labelKey) || ct.label}</Text></TouchableOpacity>)}</View>
 
           <Text style={s.label}>{t('service_label')}</Text>
           {(['electricity', 'water', 'health'] as const).map((svc) => {

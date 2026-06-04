@@ -791,5 +791,9 @@
   "nearby_sheet_close": "ਬੰਦ ਕਰੋ",
   "nearby_reports_nearby_label": "ਨੇੜਲੀਆਂ ਰਿਪੋਰਟਾਂ",
   "nearby_one_area": "1 ਖੇਤਰ",
-  "nearby_n_areas": "{n} ਖੇਤਰ"
+  "nearby_n_areas": "{n} ਖੇਤਰ",
+  "crisis_cyclone": "ਚੱਕਰਵਾਤ",
+  "crisis_landslide": "ਜ਼ਮੀਨ ਖਿਸਕਣਾ",
+  "crisis_pandemic": "ਮਹਾਂਮਾਰੀ",
+  "crisis_other": "ਹੋਰ"
 }

@@ -791,5 +791,9 @@
   "nearby_sheet_close": "மூடு",
   "nearby_reports_nearby_label": "அருகிலுள்ள அறிக்கைகள்",
   "nearby_one_area": "1 பகுதி",
-  "nearby_n_areas": "{n} பகுதிகள்"
+  "nearby_n_areas": "{n} பகுதிகள்",
+  "crisis_cyclone": "சூறாவளி",
+  "crisis_landslide": "நிலச்சரிவு",
+  "crisis_pandemic": "பெருந்தொற்று",
+  "crisis_other": "மற்றவை"
 }

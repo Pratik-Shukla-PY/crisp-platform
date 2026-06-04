@@ -754,5 +754,9 @@
   "nearby_sheet_close": "Close",
   "nearby_reports_nearby_label": "reports nearby",
   "nearby_one_area": "1 area",
-  "nearby_n_areas": "{n} areas"
+  "nearby_n_areas": "{n} areas",
+  "crisis_cyclone": "Cyclone",
+  "crisis_landslide": "Landslide",
+  "crisis_pandemic": "Pandemic",
+  "crisis_other": "Other"
 }

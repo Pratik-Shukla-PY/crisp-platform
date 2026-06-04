@@ -791,5 +791,9 @@
   "nearby_sheet_close": "閉じる",
   "nearby_reports_nearby_label": "近隣の報告",
   "nearby_one_area": "1 エリア",
-  "nearby_n_areas": "{n} エリア"
+  "nearby_n_areas": "{n} エリア",
+  "crisis_cyclone": "サイクロン",
+  "crisis_landslide": "地滑り",
+  "crisis_pandemic": "パンデミック",
+  "crisis_other": "その他"
 }

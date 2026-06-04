@@ -792,5 +792,9 @@
   "nearby_sheet_close": "Kapat",
   "nearby_reports_nearby_label": "yakındaki raporlar",
   "nearby_one_area": "1 bölge",
-  "nearby_n_areas": "{n} bölge"
+  "nearby_n_areas": "{n} bölge",
+  "crisis_cyclone": "Siklon",
+  "crisis_landslide": "Heyelan",
+  "crisis_pandemic": "Pandemi",
+  "crisis_other": "Diğer"
 }

@@ -791,5 +791,9 @@
   "nearby_sheet_close": "बंद करें",
   "nearby_reports_nearby_label": "पास के रिपोर्ट",
   "nearby_one_area": "1 क्षेत्र",
-  "nearby_n_areas": "{n} क्षेत्र"
+  "nearby_n_areas": "{n} क्षेत्र",
+  "crisis_cyclone": "चक्रवात",
+  "crisis_landslide": "भूस्खलन",
+  "crisis_pandemic": "महामारी",
+  "crisis_other": "अन्य"
 }

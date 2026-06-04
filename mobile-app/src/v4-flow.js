@@ -2093,16 +2093,32 @@
         return fallback;
     }
     function _cpLabel(field) {
+        // 1) translations embedded in the pack (label_i18n) win; 2) else a static
+        // i18n key — `cp_<fieldkey>` (the crisis-pack convention) then the bare
+        // <fieldkey>; 3) else the plain English label. Stock packs ship English
+        // `label` only, so the static `cp_*` keys are what localizes them.
         const fromI18n = _cpI18n(field.label_i18n, null);
         if (fromI18n) return fromI18n;
         if (typeof window.t === 'function') {
-            const tv = window.t(field.key);
-            if (tv && tv !== field.key) return tv;
+            const keys = ['cp_' + field.key, field.key];
+            for (let i = 0; i < keys.length; i++) {
+                const tv = window.t(keys[i]);
+                if (tv && tv !== keys[i]) return tv;
+            }
         }
         return field.label || field.key;
     }
-    function _cpOptLabel(opt) {
-        return _cpI18n(opt.label_i18n, null) || opt.label || opt.value;
+    function _cpOptLabel(opt, fieldKey) {
+        // Mirror _cpLabel for select options: embedded `label_i18n` → static key
+        // `cpopt_<fieldkey>_<VALUE>` → plain English label.
+        const fromI18n = _cpI18n(opt.label_i18n, null);
+        if (fromI18n) return fromI18n;
+        if (fieldKey && typeof window.t === 'function') {
+            const k = 'cpopt_' + fieldKey + '_' + opt.value;
+            const tv = window.t(k);
+            if (tv && tv !== k) return tv;
+        }
+        return opt.label || opt.value;
     }
     function _cpYesNo(which) {
         const k = which === 'yes' ? 'v4_yes' : 'v4_no';
@@ -2160,7 +2176,7 @@
                 const gridCls = ((f.options || []).length <= 4) ? ' is-grid' : '';
                 html += '<div class="v4-cp-opts' + gridCls + '">' + (f.options || []).map((o) => {
                     const sel = isMulti ? (Array.isArray(cur) && cur.indexOf(o.value) >= 0) : (cur === o.value);
-                    return `<button type="button" class="v4-q-opt v4-cp-opt${sel ? ' is-selected' : ''}" data-val="${esc(o.value)}"><span>${esc(_cpOptLabel(o))}</span></button>`;
+                    return `<button type="button" class="v4-q-opt v4-cp-opt${sel ? ' is-selected' : ''}" data-val="${esc(o.value)}"><span>${esc(_cpOptLabel(o, f.key))}</span></button>`;
                 }).join('') + '</div>';
             } else if (f.type === 'integer') {
                 html += `<input type="number" inputmode="numeric" class="v4-cp-input" />`;

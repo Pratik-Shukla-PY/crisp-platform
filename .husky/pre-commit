@@ -92,6 +92,26 @@ if [ -n "$i18n_staged" ]; then
     fi
 fi
 
+# ── 5b. crisis-pack curated-option i18n coverage ────────────────────
+# Every stock crisis-pack question + select option must have a
+# cp_/cpopt_ key in en.json — the PWA pack renderer localizes the
+# (English-only) stock packs via those keys. Fires when a locale file
+# OR the stock-pack source (cc-crisis.js) changes, so adding a question
+# without a translation key fails the commit. validate-i18n.mjs then
+# enforces 22-locale parity of the keys.
+cp_i18n_staged=$(git diff --cached --name-only --diff-filter=ACM | \
+                 grep -E '^(mobile-app/src/i18n/[a-z]{2,3}\.json|web-dashboard/src/cc-crisis\.js)$' || true)
+if [ -n "$cp_i18n_staged" ]; then
+    if command -v node >/dev/null 2>&1; then
+        if ! node scripts/validate-crisis-pack-i18n.mjs; then
+            echo ""
+            echo "✗ Crisis-pack i18n coverage failed — a stock question/option lacks a cp_/cpopt_ key."
+            echo "  Add the key(s) to all 22 mobile-app/src/i18n/*.json files."
+            exit 1
+        fi
+    fi
+fi
+
 # ── 6. SW asset manifest drift ──────────────────────────────────────
 # Sprint 1A (May 2026, post-HC88) — catches the silent-drift bug class
 # that hit us in HC84/85: a developer edits any precached file (locale

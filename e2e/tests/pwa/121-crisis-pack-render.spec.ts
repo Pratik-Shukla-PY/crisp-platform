@@ -189,4 +189,61 @@ test.describe('PWA — Dynamic Crisis Forms renderer (geo-gated)', () => {
         expect(meta.damage_classification).toBe('COMPLETE');
         expect(meta.infrastructure_type).toBe('RESIDENTIAL');
     });
+
+    // CPi18n: the stock packs ship English-only labels; the PWA renderer
+    // localizes each field label via the static key cp_<fieldkey> and each
+    // select option via cpopt_<fieldkey>_<VALUE>. Booting in a non-EN locale
+    // must render those in the user's language, NOT English. Hindi (Devanagari
+    // ऀ-ॿ) is a script-based check — robust to wording tweaks and
+    // proves the curated crisis-pack options are actually translated.
+    test('@smoke active pack renders curated labels + options TRANSLATED in a non-EN locale (hi)', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('crisp_privacy_consent', JSON.stringify({ accepted: true, ts: Date.now() }));
+            localStorage.setItem('crisp_landing_seen', '1');
+            localStorage.setItem('crisp_ui_v4', 'on');
+            localStorage.setItem('crisp_lang', 'hi');
+            localStorage.setItem('crisp_lang_manual', 'hi');
+        });
+        await page.route('**/api/v1/reports/nearby**', (route) =>
+            route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ groups: [] }) }));
+        await page.route('**/api/v1/reports/meta', (route) =>
+            route.fulfill({ status: 503, body: '{"detail":"blocked-by-spec"}' }));
+        await page.goto('index.html?ui=v4');
+        await page.waitForLoadState('networkidle');
+        await page.waitForFunction(
+            () => typeof (window as any).goToStage === 'function'
+               && typeof (window as any).state === 'object'
+               && typeof (window as any).t === 'function',
+            null, { timeout: 8000 });
+        // Confirm the Hindi pack is actually live before asserting (else the
+        // renderer's English fallback would mask a load failure).
+        await page.waitForFunction(() => {
+            const t = (window as any).t;
+            return typeof t === 'function' && t('cp_flames_visible') && /[ऀ-ॿ]/.test(t('cp_flames_visible'));
+        }, null, { timeout: 8000 });
+        await page.evaluate((pack) => {
+            const s = (window as any).state = (window as any).state || {};
+            s.photoDataUrl = 'data:image/png;base64,iVBORw0KGgo=';
+            s.v4Photos = [s.photoDataUrl];
+            s.location = { lat: 11.668, lng: 76.634, acc: 35 };
+            s.crisisPack = pack;
+            s.crisisStockAnswers = {};
+            (window as any).goToStage('stage-v4-classify');
+        }, TEST_PACK);
+        await expect(page.locator('#stage-v4-classify.active')).toBeVisible({ timeout: 3000 });
+        await page.locator('#v4-view-damage .v4-q-opt[data-value="COMPLETE"]').click();
+        await expect(page.locator('#v4-view-infra')).toBeVisible({ timeout: 1500 });
+        await page.locator('#v4-view-infra .v4-hit-tile[data-value="RESIDENTIAL"]').click();
+        await expect(page.locator('#v4-view-crisispack')).toBeVisible({ timeout: 2000 });
+
+        const DEVANAGARI = /[ऀ-ॿ]/;
+        // Field label localized via cp_flames_visible (not the English source label).
+        const flamesLabel = (await page.locator('#v4-view-crisispack .v4-cp-q[data-key="flames_visible"] .v4-cp-label').innerText()).trim();
+        expect(flamesLabel, 'field label should be Hindi, not English').toMatch(DEVANAGARI);
+        expect(flamesLabel).not.toMatch(/Flames visible/i);
+        // Select option localized via cpopt_smoke_density_HEAVY.
+        const heavyOpt = (await page.locator('#v4-view-crisispack .v4-cp-q[data-key="smoke_density"] .v4-cp-opt[data-val="HEAVY"]').innerText()).trim();
+        expect(heavyOpt, 'option label should be Hindi, not English').toMatch(DEVANAGARI);
+        expect(heavyOpt).not.toMatch(/Heavy/i);
+    });
 });

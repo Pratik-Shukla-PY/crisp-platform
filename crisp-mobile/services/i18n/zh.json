@@ -789,5 +789,9 @@
   "nearby_sheet_close": "关闭",
   "nearby_reports_nearby_label": "附近报告",
   "nearby_one_area": "1 个区域",
-  "nearby_n_areas": "{n} 个区域"
+  "nearby_n_areas": "{n} 个区域",
+  "crisis_cyclone": "气旋",
+  "crisis_landslide": "山体滑坡",
+  "crisis_pandemic": "大流行病",
+  "crisis_other": "其他"
 }

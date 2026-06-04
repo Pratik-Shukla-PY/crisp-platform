@@ -792,5 +792,9 @@
   "nearby_sheet_close": "닫기",
   "nearby_reports_nearby_label": "주변 보고",
   "nearby_one_area": "1개 지역",
-  "nearby_n_areas": "{n}개 지역"
+  "nearby_n_areas": "{n}개 지역",
+  "crisis_cyclone": "사이클론",
+  "crisis_landslide": "산사태",
+  "crisis_pandemic": "팬데믹",
+  "crisis_other": "기타"
 }

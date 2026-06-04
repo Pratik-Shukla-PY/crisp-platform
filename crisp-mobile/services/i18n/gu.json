@@ -791,5 +791,9 @@
   "nearby_sheet_close": "બંધ કરો",
   "nearby_reports_nearby_label": "નજીકના રિપોર્ટ",
   "nearby_one_area": "1 વિસ્તાર",
-  "nearby_n_areas": "{n} વિસ્તારો"
+  "nearby_n_areas": "{n} વિસ્તારો",
+  "crisis_cyclone": "ચક્રવાત",
+  "crisis_landslide": "ભૂસ્ખલન",
+  "crisis_pandemic": "મહામારી",
+  "crisis_other": "અન્ય"
 }

@@ -791,5 +791,9 @@
   "nearby_sheet_close": "Закрыть",
   "nearby_reports_nearby_label": "сообщений рядом",
   "nearby_one_area": "1 район",
-  "nearby_n_areas": "{n} районов"
+  "nearby_n_areas": "{n} районов",
+  "crisis_cyclone": "Циклон",
+  "crisis_landslide": "Оползень",
+  "crisis_pandemic": "Пандемия",
+  "crisis_other": "Другое"
 }

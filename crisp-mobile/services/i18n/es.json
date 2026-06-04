@@ -800,5 +800,9 @@
   "nearby_sheet_close": "Cerrar",
   "nearby_reports_nearby_label": "informes cercanos",
   "nearby_one_area": "1 área",
-  "nearby_n_areas": "{n} áreas"
+  "nearby_n_areas": "{n} áreas",
+  "crisis_cyclone": "Ciclón",
+  "crisis_landslide": "Deslizamiento",
+  "crisis_pandemic": "Pandemia",
+  "crisis_other": "Otro"
 }

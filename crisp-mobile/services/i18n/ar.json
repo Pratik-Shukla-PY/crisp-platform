@@ -789,5 +789,9 @@
   "nearby_sheet_close": "إغلاق",
   "nearby_reports_nearby_label": "تقارير قريبة",
   "nearby_one_area": "منطقة واحدة",
-  "nearby_n_areas": "{n} مناطق"
+  "nearby_n_areas": "{n} مناطق",
+  "crisis_cyclone": "إعصار",
+  "crisis_landslide": "انزلاق أرضي",
+  "crisis_pandemic": "جائحة",
+  "crisis_other": "أخرى"
 }

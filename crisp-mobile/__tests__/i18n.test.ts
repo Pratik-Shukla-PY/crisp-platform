@@ -17,6 +17,11 @@
  *      Chinese / Russian in a refactor.
  */
 
+// React Native defines __DEV__ globally at runtime; the jest env doesn't.
+// setLanguage() → applyTextDirection() references it on an LTR↔RTL switch
+// (e.g. when this file exercises the 'ar' locale), so define it for tests.
+(global as any).__DEV__ = false;
+
 jest.spyOn(console, 'log').mockImplementation(() => {});
 
 // Mock expo-localization's getLocales() so tests are deterministic. The
@@ -129,4 +134,28 @@ describe('i18n.getAvailableLanguages', () => {
             expect(typeof l.un).toBe('boolean');
         }
     });
+});
+
+describe('i18n — crisis-type picker labelKeys (CPi18n)', () => {
+    // Mirrors the App.tsx `crisisTypes` labelKey map. The picker previously
+    // hardcoded English labels; it now renders `t(labelKey) || label`. Every
+    // chip label must resolve to a real translation (not the raw key) in every
+    // locale, so a non-EN reporter never sees an English-only crisis picker.
+    // crisis_cyclone / landslide / pandemic / other were added this change.
+    const CRISIS_LABEL_KEYS = [
+        'crisis_earthquake', 'crisis_flood', 'crisis_tsunami', 'crisis_cyclone',
+        'crisis_landslide', 'crisis_explosion', 'crisis_chemical', 'crisis_pandemic',
+        'crisis_conflict', 'crisis_unrest', 'crisis_other',
+    ];
+    afterAll(() => setLanguage('en'));
+    test.each(['en', 'hi', 'ar', 'zh', 'fr', 'es'])(
+        'all 11 crisis labelKeys resolve (not the raw key) in %s', (loc) => {
+            setLanguage(loc);
+            for (const k of CRISIS_LABEL_KEYS) {
+                const v = t(k);
+                expect(typeof v).toBe('string');
+                expect(v.length).toBeGreaterThan(0);
+                expect(v).not.toBe(k);   // resolved to a value, not the last-resort raw key
+            }
+        });
 });

@@ -791,5 +791,9 @@
   "nearby_sheet_close": "বন্ধ করুন",
   "nearby_reports_nearby_label": "কাছাকাছি রিপোর্ট",
   "nearby_one_area": "1টি এলাকা",
-  "nearby_n_areas": "{n}টি এলাকা"
+  "nearby_n_areas": "{n}টি এলাকা",
+  "crisis_cyclone": "ঘূর্ণিঝড়",
+  "crisis_landslide": "ভূমিধস",
+  "crisis_pandemic": "মহামারী",
+  "crisis_other": "অন্যান্য"
 }

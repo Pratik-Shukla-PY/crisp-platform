@@ -188,6 +188,15 @@ jobs:
           else
             echo "scripts/validate-i18n.mjs not found — skipping"
           fi
+          # Crisis-pack curated-option coverage: every stock pack question +
+          # select option must have a cp_/cpopt_ key in en.json (the PWA pack
+          # renderer localizes the English-only stock packs via those keys).
+          # validate-i18n above already enforced 22-locale parity of the keys.
+          if [ -f scripts/validate-crisis-pack-i18n.mjs ]; then
+            node scripts/validate-crisis-pack-i18n.mjs
+          else
+            echo "scripts/validate-crisis-pack-i18n.mjs not found — skipping"
+          fi
       - name: Check Sentry release tags match SW cache names
         # Phase 3.2 (May 2026) — bisectable errors. The PWA + dashboard
         # service workers carry the canonical build version

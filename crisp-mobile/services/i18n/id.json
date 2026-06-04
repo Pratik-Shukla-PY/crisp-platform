@@ -800,5 +800,9 @@
   "nearby_sheet_close": "Tutup",
   "nearby_reports_nearby_label": "laporan di sekitar",
   "nearby_one_area": "1 area",
-  "nearby_n_areas": "{n} area"
+  "nearby_n_areas": "{n} area",
+  "crisis_cyclone": "Siklon",
+  "crisis_landslide": "Tanah longsor",
+  "crisis_pandemic": "Pandemi",
+  "crisis_other": "Lainnya"
 }

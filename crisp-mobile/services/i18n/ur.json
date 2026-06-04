@@ -791,5 +791,9 @@
   "nearby_sheet_close": "بند کریں",
   "nearby_reports_nearby_label": "قریب کی رپورٹس",
   "nearby_one_area": "1 علاقہ",
-  "nearby_n_areas": "{n} علاقے"
+  "nearby_n_areas": "{n} علاقے",
+  "crisis_cyclone": "طوفان",
+  "crisis_landslide": "لینڈ سلائیڈ",
+  "crisis_pandemic": "وبائی مرض",
+  "crisis_other": "دیگر"
 }

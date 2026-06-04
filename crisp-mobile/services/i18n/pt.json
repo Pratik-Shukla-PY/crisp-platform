@@ -797,5 +797,9 @@
   "nearby_sheet_close": "Fechar",
   "nearby_reports_nearby_label": "relatos por perto",
   "nearby_one_area": "1 área",
-  "nearby_n_areas": "{n} áreas"
+  "nearby_n_areas": "{n} áreas",
+  "crisis_cyclone": "Ciclone",
+  "crisis_landslide": "Deslizamento",
+  "crisis_pandemic": "Pandemia",
+  "crisis_other": "Outro"
 }

@@ -791,5 +791,9 @@
   "nearby_sheet_close": "మూసివేయండి",
   "nearby_reports_nearby_label": "సమీపంలో నివేదికలు",
   "nearby_one_area": "1 ప్రాంతం",
-  "nearby_n_areas": "{n} ప్రాంతాలు"
+  "nearby_n_areas": "{n} ప్రాంతాలు",
+  "crisis_cyclone": "తుఫాను",
+  "crisis_landslide": "కొండచరియలు విరిగిపడటం",
+  "crisis_pandemic": "మహమ్మారి",
+  "crisis_other": "ఇతర"
 }
