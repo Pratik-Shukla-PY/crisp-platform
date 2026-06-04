@@ -86,8 +86,6 @@
   "audio_recorded": "✅ 音频已录制",
   "auto_loc_label": "位置（自动）",
   "auto_time_label": "时间（自动）",
-  "autosub_cancel_btn": "✕ 取消自动提交",
-  "autosub_click_anywhere": "点按取消",
   "back": "返回",
   "badge_chip_lives_stat": "已挽救 {n} 条生命",
   "badge_studio_download": "下载",

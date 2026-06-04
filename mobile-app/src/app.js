@@ -1475,8 +1475,6 @@ const I18N = {
         stage8_title: "Review and send",
         bldg_offline_prompt: "Type the building name in your language",
         bldg_offline_hint: "The team will map this to GPS later",
-        autosub_cancel_btn: "✕ Cancel auto-submit",
-        autosub_click_anywhere: "Tap to cancel",
         photo_attached: "✅ Added", your_message: "Message:", type_your_msg: "Type...",
         what_damaged: "Damage?", road: "Road", hospital: "Clinic", house: "Home", power: "Power", water: "Water", other: "Other",
         severity_label: "Severity?", minor: "Low", moderate: "Moderate", severe: "High", ready_send: "READY",
@@ -2748,435 +2746,8 @@ const state = {
     speechCode: 'en-US',
     mediaRecorder: null,
     audioChunks: [],
-    isAutoSubmit: false,  // Flag to track if this submission is auto-submitted
-    inactivityTimeoutMs: 120 * 1000 // 2 minutes in milliseconds
 };
 
-// ── Phase 4 — Region-gated Auto-Submit Timer ─────────────────────
-// When a user taps "Start Report" AND their GPS falls inside an admin-enabled
-// region, a 2-minute countdown runs throughout the capture flow. On T=0 the
-// report auto-submits whatever has been captured; Cancel at any time returns
-// to manual flow.
-//
-// The geofence config is fetched from GET /api/v1/regions/enabled and cached
-// in localStorage for 24 h (offline fallback). If GPS is unavailable or no
-// enabled region matches, the timer is never armed.
-
-const _REGION_CACHE_KEY = 'crisp_regions_enabled_v1';
-const _REGION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;   // 24 h persisted (offline)
-const _REGION_MEM_TTL_MS = 10 * 1000;               // 10 s in-memory throttle
-const _AUTO_SUBMIT_MS = 2 * 60 * 1000;              // 2 min
-const _PROBE_MIN_INTERVAL_MS = 1500;                // throttle tryArm probes
-
-// In-memory cache so rapid stage transitions don't hammer the endpoint.
-// Bypassed by `{ bustCache: true }` (e.g. after a dashboard change).
-let _regionMemCache = { ts: 0, data: null };
-
-/** Haversine distance in kilometres between two GPS points. */
-function _haversineKm(lat1, lng1, lat2, lng2) {
-    const toRad = (x) => x * Math.PI / 180;
-    const R = 6371; // km
-    const dLat = toRad(lat2 - lat1);
-    const dLng = toRad(lng2 - lng1);
-    const a = Math.sin(dLat / 2) ** 2 +
-              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-              Math.sin(dLng / 2) ** 2;
-    return 2 * R * Math.asin(Math.sqrt(a));
-}
-
-/** Fetch enabled regions from the public endpoint.
- *
- *  Cache strategy:
- *  1. Short-lived in-memory cache (10 s) prevents stage-transition hammering.
- *  2. Persisted localStorage cache (24 h TTL) for offline fallback ONLY —
- *     live fetch is always preferred when network is reachable.
- *  3. `{ bustCache: true }` bypasses the mem cache and forces a live fetch,
- *     used when we want dashboard-flip changes to take effect immediately.
- *
- *  Previous bug: the 24 h TTL meant a region enabled in the dashboard took
- *  up to 24 h to propagate to clients. Mem cache + always-live-try fixes.
- */
-async function _fetchEnabledRegions(opts = {}) {
-    const { bustCache = false } = opts;
-    if (!bustCache && _regionMemCache.data && (Date.now() - _regionMemCache.ts) < _REGION_MEM_TTL_MS) {
-        return _regionMemCache.data;
-    }
-    let persisted = null;
-    try {
-        persisted = JSON.parse(localStorage.getItem(_REGION_CACHE_KEY) || 'null');
-    } catch (_) {}
-    try {
-        // early-init fallback (API_BASE not yet bound). Pick a
-        // sensible default per host: localhost dev → :8000, prod → same origin
-        // (behind nginx /api/ proxy). Don't blindly suffix :8000 — that
-        // pointed at a closed port behind the ALB.
-        // Phase F dev-on-LAN (May 2026) — match the module-level
-        // `_isLocalDev` definition: loopback names + RFC-1918 ranges
-        // resolve to "same host, port 8000".
-        const _earlyLanRe = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/;
-        const _earlyIsLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname)
-                              || _earlyLanRe.test(window.location.hostname);
-        const _earlyBase = _earlyIsLocalDev
-            ? `${window.location.protocol}//${window.location.hostname}:8000/api/v1`
-            : `${window.location.origin}/api/v1`;
-        const url = (typeof API_BASE !== 'undefined' ? API_BASE : _earlyBase) + '/regions/enabled';
-        const res = await fetch(url, { method: 'GET', cache: 'no-store' });
-        if (res.ok) {
-            const data = await res.json();
-            localStorage.setItem(_REGION_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
-            _regionMemCache = { ts: Date.now(), data };
-            return data;
-        }
-    } catch (e) {
-        console.warn('[Region] fetch failed, using cache:', e?.message || e);
-    }
-    // Live fetch failed — fall back to persisted cache (any age; network down ≈ offline).
-    if (persisted && Array.isArray(persisted.data)) {
-        _regionMemCache = { ts: Date.now(), data: persisted.data };
-        return persisted.data;
-    }
-    return [];
-}
-
-/** Pick the active region from an already-loaded list, using current GPS.
- *  Returns null on GPS failure, no regions, or no haversine match.  */
-async function _findActiveRegionFromList(regions) {
-    if (!Array.isArray(regions) || regions.length === 0) return null;
-    if (!navigator.geolocation) {
-        console.warn('[Region] no navigator.geolocation — timer disabled');
-        return null;
-    }
-    const pos = await new Promise((resolve) => {
-        navigator.geolocation.getCurrentPosition(
-            (p) => resolve(p),
-            (e) => { console.warn('[Region] GPS error:', e?.message || e); resolve(null); },
-            { timeout: 5000, maximumAge: 60000, enableHighAccuracy: false }
-        );
-    });
-    if (!pos) return null;
-    for (const r of regions) {
-        const dKm = _haversineKm(pos.coords.latitude, pos.coords.longitude, r.center_lat, r.center_lng);
-        const dMeters = dKm * 1000;
-        if (dMeters <= r.radius_meters) {
-            console.log(`[Region] inside '${r.name}' — ${Math.round(dMeters)} m / ${r.radius_meters} m radius`);
-            return r;
-        }
-    }
-    console.log(`[Region] outside all ${regions.length} enabled regions`);
-    return null;
-}
-
-/** Returns the region the user is currently inside, or null. Never throws.
- *  Kept as the sugar helper for callers that don't want to deal with the
- *  two-step fetch-then-match. */
-async function _findActiveRegion(opts = {}) {
-    const regions = await _fetchEnabledRegions(opts);
-    return _findActiveRegionFromList(regions);
-}
-
-/** Global auto-submit timer — a banner at the top of every stage from
- *  Start Report onwards. User may cancel at any time; otherwise the
- *  report auto-submits at T=0.
- *
- *  v3 changes:
- *    - `tryArm({bustCache:true})` is called on every `goToStage` so
- *      dashboard-flipped regions propagate without a 24 h cache wait.
- *    - `hasMinimumInput()` gate — the timer refuses to arm until the
- *      user has at least one of photo / audio / text, eliminating the
- *      silent "fire but toast-and-skip" failure mode.
- *    - Diagnostic chip at bottom-right shows `Regions: N · inside: X ·
- *      armed in Y s` to make the state visible in field testing.
- *    - `userCancelled` latch — once the user taps Cancel, the timer
- *      stays off for the rest of this report (until stage-home resets).
- */
-class InactivityManager {
-    constructor() {
-        this.intervalId = null;
-        this.deadline = null;
-        this.bannerEl = null;
-        this.chipEl = null;
-        this.activeRegion = null;
-        this.regionsList = [];
-        this.userCancelled = false;
-        this.lastProbeAt = 0;
-        this.lastStatus = 'idle';
-    }
-
-    _ensureBanner() {
-        if (this.bannerEl) return this.bannerEl;
-        const el = document.createElement('div');
-        el.id = 'auto-submit-banner';
-        el.setAttribute('role', 'status');
-        el.setAttribute('aria-live', 'polite');
-        // v3 — banner rebuilt for usability:
-        //   • Whole-banner tap cancels (field testers consistently tapped the
-        //     banner thinking it would dismiss the timer, but only the 6 × 12
-        //     px "Cancel" text caught the tap).
-        //   • Big explicit ✕ CANCEL button on the right still present for
-        //     users who prefer an unambiguous target + aria-label.
-        //   • Escape key cancels (desktop / accessibility path).
-        //   • Subtext "Tap anywhere to cancel" localised via the new
-        //     `autosub_click_anywhere` key (EN + 5 UN locales).
-        el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#ea580c,#dc2626);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.25);cursor:pointer;';
-        el.setAttribute('tabindex', '0');
-        el.setAttribute('aria-label', (typeof t === 'function' && t('autosub_cancel_btn')) || '✕ Cancel auto-submit');
-        const clickHintRaw = (typeof t === 'function' && t('autosub_click_anywhere')) || 'Tap anywhere to cancel';
-        const cancelLabelRaw = (typeof t === 'function' && t('autosub_cancel_btn')) || '✕ Cancel';
-        el.innerHTML =
-            `<i class="fa-solid fa-stopwatch" aria-hidden="true" style="font-size:18px;"></i>` +
-            `<span style="flex:1;line-height:1.25;">` +
-                `<span style="display:block;">` +
-                    `Auto-submitting in <span id="auto-submit-remaining" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">2:00</span> · ` +
-                    `<span id="auto-submit-region" style="opacity:0.85;"></span>` +
-                `</span>` +
-                `<span id="auto-submit-hint" style="display:block;font-size:11px;font-weight:500;opacity:0.85;margin-top:2px;">${clickHintRaw}</span>` +
-            `</span>` +
-            `<button id="auto-submit-cancel" type="button" style="background:#fff;color:#dc2626;border:0;padding:10px 16px;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;min-height:40px;min-width:88px;letter-spacing:0.02em;" aria-label="Cancel auto-submit">${cancelLabelRaw}</button>`;
-        document.body.appendChild(el);
-
-        // Whole-banner cancel. stopPropagation on the explicit button so we
-        // don't double-fire (button bubbles into the banner click handler).
-        const cancelBtn = el.querySelector('#auto-submit-cancel');
-        cancelBtn.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            this.cancel('user');
-        });
-        el.addEventListener('click', () => this.cancel('user'));
-        el.addEventListener('keydown', (ev) => {
-            if (ev.key === 'Enter' || ev.key === ' ') {
-                ev.preventDefault();
-                this.cancel('user');
-            }
-        });
-        // Escape-anywhere cancel — added once, guarded so multiple banner
-        // (re)creations don't stack duplicate listeners.
-        if (!window.__crispAutoSubmitEscHooked) {
-            window.__crispAutoSubmitEscHooked = true;
-            document.addEventListener('keydown', (ev) => {
-                if (ev.key === 'Escape' && this.intervalId) {
-                    this.cancel('user');
-                }
-            });
-        }
-
-        this.bannerEl = el;
-        return el;
-    }
-
-    /** Diagnostic chip — bottom-right pill that shows the timer's state.
-     *  Only paints when we have regions loaded, to avoid noise on non-gated
-     *  deployments. */
-    _ensureChip() {
-        if (this.chipEl) return this.chipEl;
-        const el = document.createElement('div');
-        el.id = 'auto-submit-diag-chip';
-        el.style.cssText = 'position:fixed;bottom:12px;right:12px;z-index:9998;background:rgba(17,24,39,0.88);color:#f9fafb;padding:5px 10px;border-radius:12px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 2px 6px rgba(0,0,0,0.2);pointer-events:none;max-width:80vw;letter-spacing:0.01em;display:none;';
-        el.setAttribute('aria-hidden', 'true');
-        document.body.appendChild(el);
-        this.chipEl = el;
-        return el;
-    }
-
-    _updateChip() {
-        if (!this.chipEl) return;
-        const loaded = Array.isArray(this.regionsList) ? this.regionsList.length : 0;
-        const inside = this.activeRegion ? this.activeRegion.name : null;
-        const armed = !!this.intervalId;
-        const inputOk = (typeof hasMinimumInput === 'function') ? hasMinimumInput() : true;
-        let status;
-        if (armed) {
-            const s = Math.max(0, Math.round((this.deadline - Date.now()) / 1000));
-            status = `armed in ${s}s`;
-        } else if (this.userCancelled) {
-            status = 'user-cancelled';
-        } else if (inside && !inputOk) {
-            status = 'waiting for input';
-        } else if (inside) {
-            status = 'arming…';
-        } else if (loaded > 0) {
-            status = 'outside region';
-        } else {
-            status = 'no regions';
-        }
-        this.chipEl.textContent = `Regions: ${loaded} · ${inside ? 'inside: ' + inside : 'outside'} · ${status}`;
-        // Only render the chip when we have region info worth surfacing.
-        this.chipEl.style.display = (loaded > 0 || armed) ? 'block' : 'none';
-        this.lastStatus = status;
-    }
-
-    /** Try to arm the timer. Idempotent — safe to call on every stage entry.
-     *
-     *  Returns one of: 'already-armed', 'user-cancelled', 'throttled',
-     *  'no-region', 'waiting-for-input', 'armed', 'error'.
-     *
-     *  Options:
-     *    bustCache — bypass the 10 s mem cache on `/regions/enabled` so
-     *                dashboard changes take effect on the next stage entry.
-     */
-    async tryArm(opts = {}) {
-        const { bustCache = false } = opts;
-        if (this.intervalId) {
-            this._updateChip();
-            return 'already-armed';
-        }
-        if (this.userCancelled) {
-            this._updateChip();
-            return 'user-cancelled';
-        }
-        const now = Date.now();
-        if (!bustCache && (now - this.lastProbeAt) < _PROBE_MIN_INTERVAL_MS) {
-            return 'throttled';
-        }
-        this.lastProbeAt = now;
-
-        try {
-            this.regionsList = await _fetchEnabledRegions({ bustCache });
-        } catch (_) {
-            this.regionsList = [];
-        }
-
-        let region = null;
-        try {
-            region = await _findActiveRegionFromList(this.regionsList);
-        } catch (e) {
-            console.warn('[InactivityManager] region-match failed:', e?.message || e);
-        }
-        this.activeRegion = region;
-        this._ensureChip();
-        this._updateChip();
-
-        if (!region) {
-            return 'no-region';
-        }
-
-        // New v3 gate: don't arm until the user has something worth submitting.
-        // Previously we armed immediately and silently skipped at T=0, which
-        // manifested as "timer visible but nothing happens" in field tests.
-        if (typeof hasMinimumInput === 'function' && !hasMinimumInput()) {
-            console.log('[InactivityManager] deferring arm — no photo/audio/text yet');
-            return 'waiting-for-input';
-        }
-
-        this.deadline = Date.now() + _AUTO_SUBMIT_MS;
-        this._ensureBanner().style.display = 'flex';
-        const regionEl = document.getElementById('auto-submit-region');
-        if (regionEl) regionEl.textContent = region.name;
-        this.updateDisplay();
-        this.intervalId = setInterval(() => {
-            this.updateDisplay();
-            this._updateChip();
-        }, 1000);
-        this._updateChip();
-        console.log(`[InactivityManager] armed: region='${region.name}' deadline=+${_AUTO_SUBMIT_MS / 1000}s`);
-        return 'armed';
-    }
-
-    updateDisplay() {
-        const remain = Math.max(0, this.deadline - Date.now());
-        const mm = Math.floor(remain / 60000);
-        const ss = Math.floor((remain % 60000) / 1000);
-        const el = document.getElementById('auto-submit-remaining');
-        if (el) el.textContent = `${mm}:${String(ss).padStart(2, '0')}`;
-        if (remain <= 0) {
-            this._fire();
-        }
-    }
-
-    _fire() {
-        if (!this.intervalId) return;
-        clearInterval(this.intervalId);
-        this.intervalId = null;
-        this.hide();
-        this._updateChip();
-        if (typeof handleAutoSubmit === 'function') handleAutoSubmit();
-    }
-
-    cancel(reason) {
-        if (!this.intervalId && !this.deadline) {
-            if (reason === 'user') this.userCancelled = true;
-            this._updateChip();
-            return;
-        }
-        if (this.intervalId) clearInterval(this.intervalId);
-        this.intervalId = null;
-        this.deadline = null;
-        if (reason === 'user') {
-            this.userCancelled = true;
-        }
-        this.activeRegion = null;
-        this.hide();
-        this._updateChip();
-        console.log(`[InactivityManager] cancelled (${reason || 'unknown'})`);
-    }
-
-    /** stop() is called when returning to home / success — reset the latch
-     *  so the next report can arm normally. */
-    stop() {
-        this.cancel('stop');
-        this.userCancelled = false;
-        this.regionsList = [];
-        if (this.chipEl) this.chipEl.style.display = 'none';
-    }
-    show() { if (this.bannerEl) this.bannerEl.style.display = 'flex'; }
-    hide() {
-        if (this.bannerEl) this.bannerEl.style.display = 'none';
-        const legacy = document.getElementById('auto-submit-timer');
-        if (legacy) legacy.style.display = 'none';
-    }
-
-    /** Legacy compat shim. The v1 idle-watchdog model is gone — but old
-     *  call sites still invoke .reset(). Treated as "re-evaluate arm
-     *  conditions", not as a timer restart. */
-    reset() { /* no-op; tryArm handles re-evaluation */ }
-
-    start() { this.tryArm({ bustCache: true }); }
-
-    /** Public introspection for Playwright tests + DevTools debugging. */
-    status() {
-        return {
-            armed: !!this.intervalId,
-            region: this.activeRegion ? this.activeRegion.name : null,
-            regionsLoaded: (this.regionsList || []).length,
-            userCancelled: !!this.userCancelled,
-            remainingMs: this.intervalId ? Math.max(0, (this.deadline || 0) - Date.now()) : null,
-            lastStatus: this.lastStatus,
-        };
-    }
-}
-
-// Auto-submit handler (called when inactivity timeout expires)
-function handleAutoSubmit() {
-    const currentStage = Array.from(document.querySelectorAll('.stage')).find(s => s.classList.contains('active'))?.id;
-
-    // Don't auto-submit on home or success stages
-    if (currentStage === 'stage-home' || currentStage === 'stage-success') return;
-
-    // Validate: at least one input must be provided
-    if (!hasMinimumInput()) {
-        showToast(t('submit_needs_content'));
-        inactivityManager.reset();
-        return;
-    }
-
-    // Mark this submission as auto-submit
-    state.isAutoSubmit = true;
-
-    // Auto-submit: capture current state and submit
-    if (currentStage === 'stage-photo') {
-        goToStage('stage-audio');
-    } else if (currentStage === 'stage-audio') {
-        if (state.isRecording) state.isRecording = false;
-        state.transcript = document.getElementById('live-transcript')?.value || '';
-        goToStage('stage-review');
-    } else if (currentStage === 'stage-review') {
-        state.description = document.getElementById('edit-text')?.value.trim() || '';
-        goToStage('stage-send');
-    } else if (currentStage === 'stage-send') {
-        submitReport();
-    }
-}
-
-const inactivityManager = new InactivityManager(state.inactivityTimeoutMs, handleAutoSubmit);
 
 // Dynamically resolve backend host so the app works from:
 //   - localhost (desktop dev)              → http://localhost:8000
@@ -4058,11 +3629,6 @@ window.__crispSelfHealOrphans = () => _selfHealOrphans();
 // on auth + privacy banner state that's noisy to set up in tests).
 window.__crispRenderPartialReports = () => (typeof _renderPartialReports === 'function'
     ? _renderPartialReports() : Promise.resolve());
-// Auto-submit diagnostic hooks — used by e2e specs to assert state
-// transitions + by DevTools (`__crispInactivityStatus()` in console) to
-// inspect the region-match / arm / waiting-for-input state machine.
-window.__crispInactivityStatus = () => inactivityManager.status();
-window.__crispInactivityTryArm = (opts) => inactivityManager.tryArm(opts || { bustCache: true });
 
 function goToStage(id) {
     // May 2026 (perf Sprint B.2) — lazy-load FontAwesome on first
@@ -4148,18 +3714,6 @@ function goToStage(id) {
         } catch (_) { /* private mode / file:// — silent skip */ }
     }
 
-    // Manage auto-submit timer: hide on home/success; on every other stage,
-    // re-evaluate arm conditions with a fresh `/regions/enabled` fetch so
-    // dashboard-flipped regions propagate immediately (was 24 h before).
-    // `tryArm` is idempotent — returns 'already-armed' if the timer is
-    // already running, so stage transitions don't reset the countdown.
-    if (id === 'stage-home' || id === 'stage-success') {
-        inactivityManager.stop();
-        inactivityManager.hide();
-    } else {
-        inactivityManager.show();
-        inactivityManager.tryArm({ bustCache: true });
-    }
 
     // M3 — re-evaluate the post-submission UNDP-details soft
     // prompt every time we land on stage-success. Hidden when the user
@@ -9374,7 +8928,6 @@ async function _submitReportInner() {
                 ) || 'UNKNOWN'),
                 infrastructure_type:          state.infrastructure_type   || state.infraType    || null,
                 description: '', // Split to Stage 2 for 1KBPS safety
-                is_auto_submitted: state.isAutoSubmit,
                 client_created_at: new Date().toISOString(),
                 expected_media: expectedMedia,
                 // UNDP required fields
@@ -15197,8 +14750,6 @@ window.crispConfirm = crispConfirm;
 //     capture's recorder / camera wiring.
 //   - state.buildingId cleared so OSM footprint selection doesn't carry.
 function _clearCaptureState() {
-    inactivityManager.stop();
-
     // ── State fields ────────────────────────────────────────────────────────
     state.photoDataUrl = null; state.photoBlob = null; state.extraPhotos = [];
     // PR 5: blur-pending is an array now; zero it so stale promises from the
@@ -15228,7 +14779,7 @@ function _clearCaptureState() {
     // re-introduce hardcoded values here — see CLAUDE.md "Classifier-
     // state field naming" invariant.
     state.infraType = null; state.crisisType = null; state.damageClass = null;
-    state.infraName = ''; state.severity = null; state.isAutoSubmit = false;
+    state.infraName = ''; state.severity = null;
     state.infraNameFromOsm = false;
     state.debrisClearing = false; state.serviceStatus = { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] };
     // v4 capture flow — authoritative source-of-truth for the four
@@ -15837,13 +15388,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     try { _startHeartbeat(); } catch (e) { _silent('heartbeat', e); }
 
-    // 8. Setup start button. Phase 4: the auto-submit
-    // timer is armed inside goToStage() via inactivityManager.tryArm({bustCache:true})
-    // on every stage transition away from home/success. bustCache=true forces a
-    // fresh `/regions/enabled` fetch so dashboard-flipped regions propagate
-    // immediately (was 24 h before). tryArm() also gates on hasMinimumInput()
-    // and is a silent no-op outside any enabled region, so start is safe.
-    // start button lands on stage-where when v3
+    // 8. Setup start button. The start button lands on stage-where when v3
     // is on so the flow opens with location + damage. Legacy v2 goes straight
     // to stage-photo. The choice of entry point is the ONLY difference
     // visible to the user at this instant; subsequent navigation uses
