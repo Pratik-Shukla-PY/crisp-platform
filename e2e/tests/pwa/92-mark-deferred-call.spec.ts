@@ -26,6 +26,9 @@ async function bootPwa(page) {
             JSON.stringify({ accepted: true, ts: Date.now() }));
         localStorage.setItem('crisp_landing_seen', '1');
         localStorage.setItem('crisp_device_id_v2', h);
+        // Isolation: drive the queue manually; suppress the background auto-drain
+        // so it can't dequeue rows under assertion (read-after-enqueue flake fix).
+        (window as any).__crispSuppressAutoDrain = true;
     }, DEVICE_HASH);
     await page.goto('index.html');
     await page.waitForFunction(

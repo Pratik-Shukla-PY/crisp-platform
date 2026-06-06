@@ -39,6 +39,9 @@ async function bootPwa(page: Page) {
         localStorage.setItem('crisp_landing_seen', '1');
         localStorage.setItem('crisp_ui_v4', 'on');
         localStorage.setItem('crisp_lang', 'en');
+        // Isolation: drive the queue manually; suppress the background auto-drain
+        // so it can't dequeue rows under assertion (read-after-enqueue flake fix).
+        (window as any).__crispSuppressAutoDrain = true;
     });
     await page.goto('index.html?ui=v4');
     await page.waitForFunction(

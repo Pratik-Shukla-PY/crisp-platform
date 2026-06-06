@@ -33,10 +33,16 @@ test.describe('VALIDATION 10 — 30% packet loss on chunk-bin', () => {
         const wireLog: Array<{ ts: number; url: string; outcome: 'ok' | 'dropped' | 'real-fail' }> = [];
         const dropDecisions: number[] = [];
 
-        // Intercept chunk-bin: 30% probability of failing with 502.
+        // Intercept chunk-bin: ~30% probability of failing with 502. The FIRST
+        // POST is always dropped so the test deterministically exercises the
+        // retry-through-loss path and the drops>0 self-check below is never
+        // flaky on a low chunk count (a few-MB photo can be <10 chunks, where a
+        // pure-random 30% can occasionally drop zero). The dropped chunk's retry
+        // interleaves with later POSTs and converges.
+        let chunkPostCount = 0;
         await page.route('**/api/v1/reports/*/media/chunk-bin', async (route) => {
             const url = route.request().url();
-            if (Math.random() < DROP_RATE) {
+            if (chunkPostCount++ === 0 || Math.random() < DROP_RATE) {
                 wireLog.push({ ts: Date.now(), url, outcome: 'dropped' });
                 dropDecisions.push(Date.now());
                 await route.fulfill({
@@ -122,9 +128,13 @@ test.describe('VALIDATION 10 — 30% packet loss on chunk-bin', () => {
         expect(truthFinal.media_count).toBeGreaterThanOrEqual(3);
         expect(truthFinal.media.every(m => m.assembly_status === 'complete')).toBe(true);
 
-        // Drop rate should be roughly DROP_RATE ± 15% (sample variance)
-        expect(actualDropRate, `actual drop rate ${actualDropRate.toFixed(2)} far from target ${DROP_RATE}`)
-            .toBeGreaterThan(DROP_RATE - 0.15);
+        // Sanity: the loss simulation actually dropped chunks (proves the test
+        // exercised retry-through-loss). We assert drops OCCURRED rather than a
+        // precise rate — the empirical rate has high variance on a low chunk
+        // count (a few-MB photo → few chunks), so the old `> DROP_RATE - 0.15`
+        // bound was spuriously flaky on its own RNG without testing the app.
+        expect(drops, `expected the packet-loss sim to drop some chunks (got ${drops}/${totalChunks}, rate ${actualDropRate.toFixed(2)})`)
+            .toBeGreaterThan(0);
 
         // No duplicate Media rows from chunk retries
         const dupRaw = execSync(
