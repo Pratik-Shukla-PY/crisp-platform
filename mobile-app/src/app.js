@@ -532,7 +532,11 @@ function _estimateQueueItemBytes(item) {
         if (!variants) return;
         for (const tier of ['small', 'medium', 'original']) {
             const v = variants[tier];
-            if (v && typeof v.dataUrl === 'string') {
+            if (v && v.blob && typeof v.blob.size === 'number') {
+                // Retained Blob (ORIGINAL tier post-fix): IDB stores raw
+                // bytes via structured clone — no base64 inflation.
+                total += v.blob.size;
+            } else if (v && typeof v.dataUrl === 'string') {
                 total += v.dataUrl.length;
             } else if (v && typeof v.size === 'number') {
                 // Fallback to declared size (rough, but better than 0)
@@ -966,7 +970,7 @@ function _isOrphanQueueRow(item) {
     const txt = item.text || item.description || '';
     const noTextPayload = !txt || txt.length === 0;
     const noAudioPayload = !item.audioBlob;
-    const _variantHasBytes = (v) => !!(v && (v.complete || (v.chunkProgress || 0) > 0 || v.dataUrl));
+    const _variantHasBytes = (v) => !!(v && (v.complete || (v.chunkProgress || 0) > 0 || v.dataUrl || (v.blob instanceof Blob && v.blob.size > 0)));
     const mainPhotoEmpty = !item.photoVariants
         || !Object.values(item.photoVariants).some(_variantHasBytes);
     const extrasEmpty = !Array.isArray(item.extraPhotosVariants)
@@ -3601,11 +3605,16 @@ window.__crispEnumerateDeferredByGroup = (item, missing) =>
 // + deferred-marker branch is exercisable.
 window.__crispUploadVariantTier = (item, reportId, unit) =>
     _uploadVariantTier(item, reportId, unit);
+// Mode B — let tests drive the drain-time tier regeneration in isolation.
+window.__crispRegenerateMissingVariants = (item) => _regenerateMissingVariants(item);
 // K.4.a — drain-mutex helpers exposed for the cross-tab e2e spec.
 window.__crispAcquireDrainLock = () => _acquireDrainLock();
 window.__crispReleaseDrainLock = () => _releaseDrainLock();
 window.__crispDrainLockKey = () => _DRAIN_LOCK_KEY;
-window.__crispStartRetryLoop = () => startRetryLoop();
+window.__crispStartRetryLoop = () => startRetryLoop(true);
+// Wedge-recovery — expose the pure decision so the offline-false-wedge
+// regression suite can assert it across airplane/offline/reconnect/restart.
+window.__crispIsLoopWedged = (args) => _isLoopWedged(args);
 // K.4.b — let tests inspect whether a submit is in flight + invoke
 // submitReport directly for the double-tap dedup assertion.
 window.__crispSubmitReport = () => submitReport();
@@ -9010,7 +9019,19 @@ async function _submitReportInner() {
             // Truthful client_blur_applied for the legacy (no-variants)
             // upload path. Same pattern as the variant fields above.
             clientBlurApplied: Boolean(state.photoClientBlurApplied),
+            // Mode B recovery — retain the full-res source blob for any photo
+            // whose async ImageVariants.generate() hadn't finished within the
+            // submit budget (variants still null at construction). The drain
+            // regenerates tiers from these (see _regenerateMissingVariants) so a
+            // slow-device / large-capture race never downgrades a photo to the
+            // legacy untiered path — or, in a MIXED multi-photo report, drops it
+            // silently (the drain dispatch is `if(workUnits) … else if(item.photo)`,
+            // so the legacy branch is skipped whenever ANY other photo has
+            // variants). IDB persists Blobs natively (structured clone). Retained
+            // ONLY when variants are absent → zero footprint in the common case.
+            photoSourceBlob: (hasPhoto && !mainHasVariants) ? (state.photoBlob || null) : null,
             extraPhotos: state.extraPhotos.map(ep => ep.dataUrl),
+            extraSourceBlobs: state.extraPhotos.map(ep => (ep.variants && ep.variants.small) ? null : (ep.blob || null)),
             audioBlob: null,
             audioSize: 0,
             text: state.description || state.transcript || '',
@@ -9086,12 +9107,31 @@ async function _submitReportInner() {
         async function _encodeVariants(variantsObj, sourceTriple) {
             if (!variantsObj || !sourceTriple) return;
             for (const tier of ['small', 'medium', 'original']) {
-                if (sourceTriple[tier]?.blob) {
-                    try {
-                        variantsObj[tier].dataUrl = await _blobToDataUrl(sourceTriple[tier].blob);
-                    } catch (e) {
-                        console.warn(`[submitReport] failed to encode ${tier} variant:`, e);
-                    }
+                const src = sourceTriple[tier];
+                if (!src?.blob || !variantsObj[tier]) continue;
+                // ORIGINAL is the large tier (up to the 5 MB cap). Running it
+                // through FileReader.readAsDataURL allocates a base64 string
+                // ~33% larger than the blob AND intermittently OOMs on
+                // memory-constrained devices — the throw was swallowed below,
+                // leaving original.dataUrl=null so the tier uploaded no bytes
+                // and the ORIGINAL media row was never created (confirmed root
+                // cause of the intermittent multi-photo "no original" loss;
+                // SMALL/MEDIUM are tens–hundreds of KB and never hit this).
+                // IndexedDB persists Blobs natively (store.put = structured
+                // clone), so retain the Blob and let _uploadVariantTier slice
+                // it directly — no giant base64 string is ever created, IDB
+                // footprint shrinks, and full original fidelity is kept.
+                if (tier === 'original') {
+                    variantsObj.original.blob = src.blob;
+                    continue;
+                }
+                try {
+                    variantsObj[tier].dataUrl = await _blobToDataUrl(src.blob);
+                } catch (e) {
+                    console.warn(`[submitReport] failed to encode ${tier} variant:`, e);
+                    // Insurance: if even a small/medium base64 throws, fall back
+                    // to the same blob-retention path so the tier still uploads.
+                    variantsObj[tier].blob = src.blob;
                 }
             }
         }
@@ -9338,6 +9378,73 @@ function _buildVariantWork(item) {
     return out;
 }
 
+// Mode B recovery helper — build the queue-item variant structure from a fresh
+// ImageVariants.generate() result, mirroring the submit-time construction +
+// _encodeVariants: SMALL/MEDIUM as base64 dataUrls, ORIGINAL retained as a Blob
+// (to dodge the readAsDataURL OOM). Async because of the small/medium encode.
+async function _queueVariantStructFromGenerated(gen) {
+    const v = {
+        clientBlurApplied: Boolean(gen.clientBlurApplied),
+        small:    { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: gen.small.bytes },
+        medium:   { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: gen.medium.bytes },
+        original: { dataUrl: null, blob: gen.original.blob, mediaId: genUUID(), chunkProgress: 0, complete: false, size: gen.original.bytes, originalStrategy: gen.original.strategy || 'exif_strip_q95' },
+    };
+    try { v.small.dataUrl  = await _blobToDataUrl(gen.small.blob); }  catch (_) { v.small.blob  = gen.small.blob; }
+    try { v.medium.dataUrl = await _blobToDataUrl(gen.medium.blob); } catch (_) { v.medium.blob = gen.medium.blob; }
+    return v;
+}
+
+// Mode B fix — regenerate tiers for any photo that was enqueued with NULL
+// variants (its async ImageVariants.generate() didn't finish within the
+// 500 ms blur-wait + 1500 ms reattempt submit budget) from the retained
+// full-res source blob. Runs in the drain BEFORE _buildVariantWork, so a raced
+// photo recovers full SMALL/MEDIUM/ORIGINAL tiering + archival fidelity instead
+// of falling to the legacy untiered path — and, in a MIXED multi-photo report,
+// is never silently dropped (the legacy `else if (item.photo)` branch is
+// skipped whenever any sibling photo has variants). With ImageVariants present,
+// generate() returns all tiers for any decodable blob (internal blurredSrc
+// fallbacks), so after this pass no null-variant photo with a source blob
+// remains → the mixed-drop is structurally closed. Fast no-op once every photo
+// has variants. Persists the regenerated structure so the upload + a restart
+// resume from it.
+async function _regenerateMissingVariants(item) {
+    if (!item || typeof window.ImageVariants?.generate !== 'function') return false;
+    let changed = false;
+    // Main photo
+    if (!item.photoVariants && item.photoSourceBlob instanceof Blob && item.photoSourceBlob.size > 0) {
+        const gen = await window.ImageVariants.generate(item.photoSourceBlob)
+            .catch(e => { _silent('regen.main', e); return null; });
+        if (gen && gen.small) {
+            item.photoGroupId = item.photoGroupId || genUUID();
+            item.photoVariants = await _queueVariantStructFromGenerated(gen);
+            item.photoSourceBlob = null;   // reclaim IDB — bytes now live on the variant
+            changed = true;
+            console.log('[regen] main photo: tiers regenerated in drain (Mode B recovery)');
+        }
+    }
+    // Extra photos
+    if (Array.isArray(item.extraSourceBlobs)) {
+        if (!Array.isArray(item.extraPhotosVariants)) item.extraPhotosVariants = [];
+        for (let i = 0; i < item.extraSourceBlobs.length; i++) {
+            const src = item.extraSourceBlobs[i];
+            const have = item.extraPhotosVariants[i] && item.extraPhotosVariants[i].small;
+            if (have || !(src instanceof Blob) || src.size === 0) continue;
+            const gen = await window.ImageVariants.generate(src)
+                .catch(e => { _silent('regen.extra', e); return null; });
+            if (gen && gen.small) {
+                const v = await _queueVariantStructFromGenerated(gen);
+                v.groupId = genUUID();
+                item.extraPhotosVariants[i] = v;
+                item.extraSourceBlobs[i] = null;
+                changed = true;
+                console.log(`[regen] extra[${i}]: tiers regenerated in drain (Mode B recovery)`);
+            }
+        }
+    }
+    if (changed) { try { await enqueueReport(item); } catch (_) {} }
+    return changed;
+}
+
 // ── Resilience #5 (stuck-chunk auto-recovery, Jun 2026) ──────────────
 // A chunk the backend permanently rejects — 410 Gone (media hard-
 // abandoned: checksum_mismatch / original_too_large), 409 (upload-
@@ -9463,7 +9570,10 @@ async function _uploadVariantTier(item, reportId, unit) {
     // reconciles SYNCED on its landed tiers). Sticky flag — survives the
     // deferred-clear lower down because it is checked here, before it.
     if (variant.chunkRejectedGiveUp) return;
-    if (!variant.dataUrl) {
+    // A retained Blob (ORIGINAL tier, or a small/medium base64 fallback) is a
+    // valid byte source even with no dataUrl — don't treat it as an orphan.
+    const _hasBlobBytes = variant.blob instanceof Blob && variant.blob.size > 0;
+    if (!variant.dataUrl && !_hasBlobBytes) {
         // K.3.c (May 2026, Phase K) — re-encode fallback before
         // silently skipping. Pre-fix, a missing dataUrl warned + returned;
         // the variant was permanently orphaned and never surfaced to the
@@ -9650,7 +9760,10 @@ async function _uploadVariantTier(item, reportId, unit) {
         // Convert the stored dataUrl back into a Blob for zero-copy
         // slicing. Ephemeral — doesn't replace the persisted dataUrl
         // (which stays JSON-serialisable for IndexedDB crash recovery).
-        const blob = _dataUrlToBlob(variant.dataUrl);
+        // Prefer a retained Blob (ORIGINAL tier post-fix — never base64-encoded,
+        // to avoid the readAsDataURL OOM) and slice it directly. Fall back to
+        // decoding the persisted dataUrl (small/medium, and pre-fix queue rows).
+        const blob = _hasBlobBytes ? variant.blob : _dataUrlToBlob(variant.dataUrl);
         // v241 (May 21, 2026) — FREEZE chunkSize + total on the variant
         // after the first attempt. Pre-fix bug observed on cellular smoke
         // 5 (report 5b9823d4 group 62e25fd5): a variant uploaded chunks
@@ -9737,7 +9850,7 @@ async function _uploadVariantTier(item, reportId, unit) {
                 pwaNetworkUpgrade();
                 // Wedge-detection support: stamp progress so resume hooks can
                 // tell a healthy retry loop from one wedged on a dead fetch.
-                _lastChunkPostAt = Date.now();
+                _lastDrainTickAt = Date.now();
                 // Resilience #5 — chunk landed; clear its hard-fail counter
                 // so a later transient blip doesn't accumulate toward K.
                 _chunkHardFailCounts.delete(`${mediaId}:${seq}`);
@@ -9762,7 +9875,16 @@ async function _uploadVariantTier(item, reportId, unit) {
     }
 
     // ── Legacy base64 path (feature flag off) ───────────────────────────
-    const b64 = variant.dataUrl.includes(',') ? variant.dataUrl.split(',')[1] : variant.dataUrl;
+    // ORIGINAL post-fix carries a Blob (no dataUrl) to dodge the submit-time
+    // readAsDataURL OOM; the binary path above slices that Blob directly. This
+    // legacy fallback (binary disabled / endpoint 404) still needs base64, so
+    // derive it lazily from the Blob here. Rare path — any OOM is bounded by
+    // the existing chunk retry loop, far better than crashing on a null dataUrl.
+    let _legacyDataUrl = variant.dataUrl;
+    if (!_legacyDataUrl && _hasBlobBytes) {
+        _legacyDataUrl = await _blobToDataUrl(variant.blob);
+    }
+    const b64 = _legacyDataUrl.includes(',') ? _legacyDataUrl.split(',')[1] : _legacyDataUrl;
     // v241 — same freeze logic as the bin path above. See the long comment
     // there for why this matters (silent variant-skip on probe-tier shift).
     if (!variant.frozenChunkSize) {
@@ -9809,7 +9931,7 @@ async function _uploadVariantTier(item, reportId, unit) {
             pwaNetworkUpgrade();
             // Wedge-detection support: stamp progress so resume hooks can
             // tell a healthy retry loop from one wedged on a dead fetch.
-            _lastChunkPostAt = Date.now();
+            _lastDrainTickAt = Date.now();
             // Resilience #5 — chunk landed; clear its hard-fail counter.
             _chunkHardFailCounts.delete(`${mediaId}:${seq}`);
         } catch (err) {
@@ -10214,6 +10336,13 @@ async function trySendQueuedReport(item) {
         // for reports queued before this feature shipped.
         if (!stages.photo && reportId) {
             try {
+                // Mode B recovery — regenerate tiers for any photo enqueued
+                // with null variants (submit-budget race) from its retained
+                // source blob, BEFORE building the work list. Runs on the first
+                // pass (before stages.photo can flip), so a raced photo joins
+                // the tier-first work list and is never dropped or downgraded.
+                // No-op once every photo has variants.
+                await _regenerateMissingVariants(item);
                 // Build the variant work list, tier-first.
                 const workUnits = _buildVariantWork(item);
 
@@ -10438,7 +10567,7 @@ async function trySendQueuedReport(item) {
                         // Wedge-detection support: stamp progress so resume
                         // hooks can distinguish healthy in-flight uploads
                         // from a wedged retry loop awaiting a dead fetch.
-                        _lastChunkPostAt = Date.now();
+                        _lastDrainTickAt = Date.now();
                     } catch (retryErr) {
                         pwaNetworkDowngrade();
                         throw retryErr;
@@ -10780,10 +10909,11 @@ function _releaseDrainLock() {
 }
 
 // May 21 2026 (cellular smoke 3 v3) — wedge-detection support.
-// Stamped by every successful chunk POST (bin + base64 paths) so that
-// resume hooks (visibilitychange, online, periodic sweep) can tell the
-// difference between "retry loop is healthily mid-upload" and "retry
-// loop claims to be running but is wedged on a dead awaited fetch".
+// LIVENESS clock. Stamped whenever the retry loop EXECUTES — every while-loop
+// iteration, before each per-item send, AND on every successful chunk POST
+// (bin + base64 paths). The wedge-recovery uses this to tell the difference
+// between "retry loop is alive (uploading OR cycling)" and "retry loop claims
+// to be running but is wedged on a dead awaited fetch".
 // iOS Safari suspends background tabs and may kill the underlying TCP
 // connection while the JS task is awaiting `fetch`. On resume, the
 // awaited Promise never resolves and `_retryLoopRunning` stays `true`
@@ -10791,27 +10921,77 @@ function _releaseDrainLock() {
 // without doing anything. Without this stamp + the wedge-detection
 // below, the only recovery was Safari-kill-and-reopen (operator
 // observed during smoke 3 v3).
-let _lastChunkPostAt = 0;
+//
+// Jun 2026 — this MUST be a liveness signal, not a "last successful POST"
+// signal. A device that is simply OFFLINE (airplane mode, tunnel/cell loss)
+// keeps the loop alive and CYCLING but lands zero successful POSTs. If the
+// wedge clock only advanced on success, a >60 s offline stretch made the loop
+// look "wedged"; on reconnect a trigger (online/heartbeat) fired the
+// wedge-recovery, cleared the concurrency guards, and a SECOND drain pass ran
+// concurrently with the first — re-uploading in-progress tiers from chunk 0
+// (idempotent on the backend, so no data loss/dupe rows, but ~2x bandwidth on
+// exactly the bad networks where it's scarcest). Stamping on every loop tick
+// (plus the offline-skip below) keeps an alive-but-offline loop "fresh", so
+// only a genuinely frozen loop trips the wedge.
+let _lastDrainTickAt = 0;
 const _RETRY_LOOP_WEDGE_THRESHOLD_MS = 60_000;
 
-async function startRetryLoop() {
+// Pure wedge-recovery decision (extracted + exported for regression tests).
+// A claimed-running loop is "wedged" (frozen on a dead awaited fetch) ONLY when:
+//   • it is running, AND
+//   • we are ONLINE (offline ≠ wedged — the false-wedge fix; an offline loop is
+//     alive and offline-skipping, it just lands no successful POSTs), AND
+//   • there is pending work, AND
+//   • it hasn't ticked (executed) within the threshold.
+// Not-running ⇒ false (a fresh process after a browser/device restart has
+// _retryLoopRunning=false and proceeds via the normal start path, not recovery).
+function _isLoopWedged({ running, lastTickAt, now, online, hasPending, thresholdMs }) {
+    if (!running) return false;
+    if (!online) return false;
+    if (!hasPending) return false;
+    return (now - (lastTickAt || 0)) > thresholdMs;
+}
+
+async function startRetryLoop(force) {
+    // Test-isolation hook — unit specs that drive the queue manually
+    // (enqueue → assert → uploadVariantTier) set window.__crispSuppressAutoDrain
+    // BEFORE boot so the background drain can't concurrently dequeue/mutate the
+    // rows they're asserting on (the source of a ~30-40% read-after-enqueue
+    // flake). Production never sets it; full-flow validation specs that need the
+    // loop (99-validation-*) deliberately leave it unset → loop runs normally.
+    // `force` (passed only by the __crispStartRetryLoop test surface) bypasses
+    // the suppression so a spec can still drive a single controlled pass.
+    if (!force && typeof window !== 'undefined' && window.__crispSuppressAutoDrain) return;
     // Wedge-recovery (runs on EVERY entry to startRetryLoop, before the
-    // running-guard). If the loop claims to be running but no chunk has
-    // POSTed in 60 s AND we know there's still work in the queue, the
-    // loop is wedged on a dead Promise — force-reset and proceed.
+    // running-guard). If the loop claims to be running but hasn't TICKED
+    // (executed a loop iteration / per-item send / successful POST) in 60 s
+    // AND there's pending work AND we're ONLINE, the loop is frozen on a dead
+    // Promise — force-reset and proceed.
     // Safe to clobber: the K.1.b backend-side IntegrityError catch makes
     // duplicate chunk POSTs idempotent, so the worst case is a few
     // wasted retries, not data corruption.
+    //
+    // The `_online` guard is the offline-false-wedge fix: a device offline for
+    // >60 s keeps the loop alive but lands no successful POSTs. We must NOT treat
+    // that as wedged — otherwise reconnect spawns a 2nd concurrent drain pass
+    // that re-uploads in-progress tiers (idempotent, but 2x bandwidth). `_online`
+    // is belt-and-suspenders alongside the liveness clock + the offline-skip in
+    // the loop body: offline ticks keep `_lastDrainTickAt` fresh, so the loop
+    // never looks wedged while offline; a GENUINELY frozen loop (iOS killed the
+    // awaited fetch while ONLINE) still goes stale + trips here, unchanged.
     if (_retryLoopRunning) {
-        const silentMs = Date.now() - (_lastChunkPostAt || 0);
+        const silentMs = Date.now() - (_lastDrainTickAt || 0);
+        const _online = (typeof navigator === 'undefined') || navigator.onLine !== false;
         const hasPendingWork = await (async () => {
             try { return (await getAllQueued()).length > 0; }
             catch (_) { return false; }
         })();
-        if (silentMs > _RETRY_LOOP_WEDGE_THRESHOLD_MS && hasPendingWork) {
+        if (_isLoopWedged({ running: true, lastTickAt: _lastDrainTickAt, now: Date.now(),
+                            online: _online, hasPending: hasPendingWork,
+                            thresholdMs: _RETRY_LOOP_WEDGE_THRESHOLD_MS })) {
             console.warn(
-                `[Retry] wedge detected — _retryLoopRunning=true but no chunk POST in ` +
-                `${Math.round(silentMs/1000)}s with queue non-empty; ` +
+                `[Retry] wedge detected — _retryLoopRunning=true but loop has not ticked in ` +
+                `${Math.round(silentMs/1000)}s with queue non-empty + online; ` +
                 `force-resetting + re-arming. ` +
                 `Most likely iOS Safari killed an awaited TCP connection during suspension.`
             );
@@ -10838,7 +11018,29 @@ async function startRetryLoop() {
 
     try {
         while (true) {
+            // Liveness tick — proves the loop is executing this iteration (the
+            // wedge-recovery reads _lastDrainTickAt). Updated again per-item below
+            // so a long ONLINE drain of many items also stays "fresh".
+            _lastDrainTickAt = Date.now();
             try {
+                // Cheap queue-empty check first (so an empty queue still exits,
+                // online or offline). Then the OFFLINE-SKIP: don't attempt doomed
+                // uploads while offline — they fail, waste battery, and a long
+                // failing-retry could stretch one iteration past the wedge
+                // threshold (making an alive loop look frozen). Stay alive + keep
+                // ticking; resume seamlessly on reconnect from each tier's
+                // persisted chunkProgress (resume-from-offset is unaffected).
+                let pending = [];
+                try { pending = await getAllQueued(); } catch (_) { pending = []; }
+                if (pending.length === 0) {
+                    console.log('Retry loop: queue empty, stopping');
+                    return;
+                }
+                if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                    await new Promise(r => setTimeout(r, 15000));
+                    continue;
+                }
+
                 // Hotfix: BEFORE retrying uploads, reconcile against
                 // server truth. If a report has already landed server-side but a
                 // stage flag is still false locally (chunk ack lost, variant
@@ -10856,6 +11058,7 @@ async function startRetryLoop() {
                     // Backward-compat: unwrap old nested format (payload key) if present
                     const item = rawItem.payload && !rawItem.stages ? rawItem.payload : rawItem;
                     if (item.stages && item.meta) {
+                        _lastDrainTickAt = Date.now();   // per-item liveness (long online drains)
                         await trySendQueuedReport(item);
                     }
                 }
@@ -15193,7 +15396,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // BEFORE startRetryLoop so the retry loop doesn't waste a tick
     // pounding on a row it can't make progress on. Idempotent — the
     // 10-min age gate inside _isOrphanQueueRow protects in-flight rows.
-    try { await _selfHealOrphans(); } catch (e) { _silent('selfHealOrphans:boot', e); }
+    // Suppressed in queue-isolation unit specs (see startRetryLoop) so the
+    // boot-time self-heal can't dequeue rows the test is asserting on.
+    if (!(typeof window !== 'undefined' && window.__crispSuppressAutoDrain)) {
+        try { await _selfHealOrphans(); } catch (e) { _silent('selfHealOrphans:boot', e); }
+    }
 
     // 3c. Resilience #3 (boot reconcile, Jun 2026) — front-load one
     // pass of _reconcileQueueAgainstServer at startup, AFTER self-heal
@@ -15207,7 +15414,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // no rows / no auth); keeps every unfinished row (no data loss); no
     // drain-lock / _retryLoopRunning interaction since the loop hasn't
     // started yet.
-    try { await _reconcileQueueAgainstServer(); } catch (e) { _silent('reconcile:boot', e); }
+    if (!(typeof window !== 'undefined' && window.__crispSuppressAutoDrain)) {
+        try { await _reconcileQueueAgainstServer(); } catch (e) { _silent('reconcile:boot', e); }
+    }
 
     // 4. Start persistent retry loop for any queued reports
     startRetryLoop();
@@ -15371,7 +15580,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const tick = async () => {
             if (document.visibilityState !== 'visible') return;
             if (!navigator.onLine) return;
-            const silentMs = Date.now() - (_lastChunkPostAt || 0);
+            const silentMs = Date.now() - (_lastDrainTickAt || 0);
             if (silentMs < _HEARTBEAT_SILENCE_THRESHOLD_MS) return;
             // Only kick if there's actually pending work — otherwise
             // healthy quiet-queue would burn IDB reads forever.
