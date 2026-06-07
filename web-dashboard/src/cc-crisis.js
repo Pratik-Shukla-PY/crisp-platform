@@ -457,6 +457,7 @@
     S.tab = 'events'; S.editingEvent = undefined; S.builderPackId = null;
     render();
     refreshAll();
+    try { const x = el('cc-cf-close'); if (x) x.focus(); } catch (_e) {}   // move focus into the modal (a11y)
   }
   function closeOverlay() {
     const ov = el('cc-cf-overlay');
@@ -1060,6 +1061,12 @@
   // schema contract be verified headlessly without a browser session. Pure: it
   // assembles a schema from the block library exactly as the builder would.
   window.__ccCrisis = {
+    // REQUIRED by router.js hideAll(): every close path (✕ button, ESC, backdrop)
+    // routes to '/', and the router dismisses this overlay via
+    // window.__ccCrisis.closeOverlay(). Omitting it (the original bug) left the
+    // crisis-forms modal pinned on top of the Control Center on every close.
+    // openOverlay is exported for parity with __ccSettings / __ccHome.
+    openOverlay, closeOverlay,
     buildSchemaFor: function (stockKey, packMeta) {
       S.builderPack = packMeta || { key: 'test-pack', title: 'Test pack' };
       S.builderBlocks = {

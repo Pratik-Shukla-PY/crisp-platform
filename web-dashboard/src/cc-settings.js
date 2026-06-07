@@ -211,6 +211,7 @@
       : (currentUser().email || '');
     renderTabs();
     render();
+    try { const x = el('cc-st-close'); if (x) x.focus(); } catch (_e) {}   // move focus into the modal (a11y)
   }
 
   function visibleTabs() {
