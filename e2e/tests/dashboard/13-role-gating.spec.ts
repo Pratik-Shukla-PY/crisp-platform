@@ -11,10 +11,10 @@
  *   /org          ✓            ✓      ✗        ✗
  *   /reporting    ✓            ✓      ✗        ✗
  *
- * On the Control Center root the Org (card 3) + Reporting (card 4) cards are
- * disabled for non-admins ("Admin only" badge); a direct navigate() to a
- * disallowed route bounces back to the root. Admins see all four enabled and
- * the admin routes open their module overlays.
+ * On the Crisis Intelligence root the Org + Crisis Forms Quick Actions are
+ * disabled for non-admins (an "admin" badge); a direct navigate() to a
+ * disallowed route bounces back to the root. Admins see them enabled and the
+ * admin routes open their module overlays.
  *
  * NOTE: the e2e login is a single SUPER_ADMIN backend user; the client role is
  * what gates the UI, so we vary localStorage.crisp_user.role to exercise the
@@ -43,6 +43,8 @@ async function bootAuthed(page: Page, role: string) {
   await page.waitForFunction(() => !!(window as any).__crispRouter, null, { timeout: 15_000 });
 }
 
+const qa = (page: Page) => page.locator('#cc-qa button');
+
 test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
   test.beforeAll(async ({ request }) => { await ensureAdminAndLogin(request); });
 
@@ -70,21 +72,21 @@ test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
     });
   }
 
-  // ── Non-admins: admin cards disabled + admin routes bounce to root. ───────────
+  // ── Non-admins: admin Quick Actions disabled + admin routes bounce to root. ───
   for (const role of ['ANALYST', 'VIEWER']) {
-    test(`@smoke ${role}: Org+Reporting cards disabled; direct admin routes bounce to root`, async ({ page }) => {
+    test(`@smoke ${role}: Org+Reporting actions disabled; direct admin routes bounce to root`, async ({ page }) => {
       await bootAuthed(page, role);
       await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
 
-      // Cards 3 (Org) + 4 (Reporting) disabled with an "Admin only" badge.
-      await expect(page.locator('.cc-home-card.cc-home-c3')).toBeDisabled();
-      await expect(page.locator('.cc-home-card.cc-home-c4')).toBeDisabled();
-      await expect(page.locator('.cc-home-card.cc-home-c3')).toContainText(/Admin only/i);
-      await expect(page.locator('.cc-home-card.cc-home-c4')).toContainText(/Admin only/i);
+      // Org + Crisis Forms Quick Actions disabled with an "admin" badge.
+      await expect(page.locator('#cc-qa button[data-route="/org"]')).toBeDisabled();
+      await expect(page.locator('#cc-qa button[data-route="/reporting"]')).toBeDisabled();
+      await expect(page.locator('#cc-qa button[data-route="/org"]')).toContainText(/admin/i);
+      await expect(page.locator('#cc-qa button[data-route="/reporting"]')).toContainText(/admin/i);
 
-      // Cards 1 (Monitor) + 2 (Account) remain enabled.
-      await expect(page.locator('.cc-home-card.cc-home-c1')).toBeEnabled();
-      await expect(page.locator('.cc-home-card.cc-home-c2')).toBeEnabled();
+      // Operations + Account remain enabled.
+      await expect(qa(page).filter({ hasText: 'Operations Center' })).toBeEnabled();
+      await expect(qa(page).filter({ hasText: 'Account' }).first()).toBeEnabled();
 
       // Direct navigation to an admin module bounces back to the root.
       await page.evaluate(() => (window as any).__crispRouter.navigate('/org'));
@@ -102,13 +104,13 @@ test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
     });
   }
 
-  // ── Admin: all four cards enabled + admin routes open their overlays. ─────────
-  test('@smoke ADMIN: all four cards enabled; /org + /reporting open their modules', async ({ page }) => {
+  // ── Admin: admin Quick Actions enabled + admin routes open their overlays. ────
+  test('@smoke ADMIN: Org+Reporting actions enabled; /org + /reporting open their modules', async ({ page }) => {
     await bootAuthed(page, 'ADMIN');
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
-    for (const c of ['c1', 'c2', 'c3', 'c4']) {
-      await expect(page.locator(`.cc-home-card.cc-home-${c}`)).toBeEnabled();
-    }
+    await expect(page.locator('#cc-qa button[data-route="/org"]')).toBeEnabled();
+    await expect(page.locator('#cc-qa button[data-route="/reporting"]')).toBeEnabled();
+    await expect(qa(page).filter({ hasText: 'Operations Center' })).toBeEnabled();
 
     // /org opens the Organisation settings overlay (cc-settings).
     await page.evaluate(() => (window as any).__crispRouter.navigate('/org'));

@@ -1,26 +1,28 @@
-/* cc-home.js — Control Center landing (self-contained, additive).
+/* cc-home.js — Crisis Intelligence Center (post-login landing).
  *
- * A Vercel/Linear-style post-login landing shown over the dashboard: a clean
- * header (CRISP + org logo/name), a "Good {time}, {name}" hero, exactly four
- * primary action cards, an optional quick-status strip + recent-activity list,
- * and a "skip next time" preference.
+ * A humanitarian situation room shown over the dashboard at route '/'. It
+ * delivers SITUATIONAL AWARENESS first, navigation second — replacing the old
+ * 4-tile launcher. It does NOT redesign the "Monitor & Respond" module; it
+ * surfaces a read-only summary and routes INTO that module for action.
  *
- * Design principle (operator brief): "Do NOT remove any existing capability.
- * Only simplify access to it." So this is a pure overlay:
- *   • The existing incident feed / map / analytics render underneath, untouched.
- *   • Card 1 "Monitor & Respond" simply dismisses the landing → the feed is
- *     revealed (already booted by app.js). Cards 2-4 call the existing launchers
- *     (window.openAccountSettings / openOrgSettings / openCrisisForms).
- *   • Reachable again any time via the user-menu "Control Center" item or
- *     window.openControlCenter().
- *   • app.js / styles.css are NOT touched (this file + one <script> tag).
+ * Hard rule (operator brief): every widget is backed by REAL data — no dummy
+ * cards, no fake AI, no hardcoded KPIs. Sources:
+ *   • GET /api/v1/analytics/summary   — KPIs, distributions, timings, impact, deltas
+ *   • GET /api/v1/analytics/damage-rate-24h — 24h intake sparkline
+ *   • GET /api/v1/reports/?limit=…    — map markers + recent activity
+ *   • GET /api/v1/reports/nearby      — emerging-hotspot briefing
+ *   • router.js                       — deep-links into the operations module
+ * Metrics with no backing data (population/displacement/households) are shown
+ * as an explicit "data integration required" note, never invented.
+ * See web-dashboard/docs/crisis-intelligence-dashboard-spec.md.
+ *
+ * app.js / styles.css are NOT touched (this file + its injected styles only).
  */
 (function () {
   'use strict';
   if (window.__ccHomeLoaded) return;
   window.__ccHomeLoaded = true;
 
-  const SKIP_KEY = 'crisp_cc_skip_landing';
   const token = () => localStorage.getItem('crisp_token');
   function currentUser() {
     try { return JSON.parse(localStorage.getItem('crisp_user') || '{}') || {}; }
@@ -42,12 +44,6 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   const el = (id) => document.getElementById(id);
-  function greeting() {
-    const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 18) return 'Good afternoon';
-    return 'Good evening';
-  }
   function timeAgo(s) {
     if (!s) return '';
     const t = new Date(s).getTime();
@@ -58,68 +54,127 @@
     if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
     return Math.floor(sec / 86400) + 'd ago';
   }
+  const fmtNum = (n) => (n == null ? '—' : Number(n).toLocaleString());
+  function fmtDur(sec) {
+    if (sec == null) return '—';
+    sec = Math.round(sec);
+    if (sec < 60) return sec + 's';
+    if (sec < 3600) return Math.round(sec / 60) + 'm';
+    if (sec < 86400) return (sec / 3600).toFixed(1) + 'h';
+    return (sec / 86400).toFixed(1) + 'd';
+  }
+  const titleCase = (s) => String(s || '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
   async function jget(path) {
     const res = await fetch(API + path, { headers: { Authorization: `Bearer ${token() || ''}` } });
     if (!res.ok) throw new Error(String(res.status));
     return { body: await res.json(), headers: res.headers };
   }
 
-  // ── styles ─────────────────────────────────────────────────────────────────
+  const SEV_COLOR = {
+    CRITICAL: '#f87171', SEVERE: '#fb923c', MODERATE: '#fbbf24', MINOR: '#4ade80', UNKNOWN: '#64748b',
+  };
+  const SEV_ORDER = ['CRITICAL', 'SEVERE', 'MODERATE', 'MINOR', 'UNKNOWN'];
+
+  // Module-level handles (single landing instance).
+  let _map = null, _cluster = null, _poll = null;
+
+  // ── styles ───────────────────────────────────────────────────────────────
   function injectStyles() {
     if (el('cc-home-styles')) return;
     const css = `
     #cc-home-overlay{position:fixed;inset:0;z-index:99990;display:none;overflow:auto;
-      background:radial-gradient(1200px 600px at 70% -10%,rgba(124,92,255,.16),transparent 60%),
-        radial-gradient(900px 500px at 0% 110%,rgba(34,211,238,.10),transparent 55%),var(--bg,#080c14)}
+      background:radial-gradient(1100px 560px at 78% -12%,rgba(65,143,222,.12),transparent 60%),
+        radial-gradient(820px 460px at -5% 108%,rgba(34,211,238,.07),transparent 55%),#0B1220;
+      color:#E6EDF7;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     #cc-home-overlay.cc-home-open{display:block}
-    .cc-home-wrap{max-width:1080px;margin:0 auto;padding:22px 20px 40px;min-height:100%;display:flex;flex-direction:column}
-    .cc-home-head{display:flex;align-items:center;gap:12px;margin-bottom:30px}
-    .cc-home-brand{display:flex;align-items:center;gap:11px;min-width:0}
-    .cc-home-logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#7c5cff,#22d3ee);
+    .cc-wrap{max-width:1480px;margin:0 auto;padding:18px 22px 40px;min-height:100%}
+    .cc-num{font-variant-numeric:tabular-nums}
+    /* header */
+    .cc-hd{display:flex;align-items:center;gap:13px;margin-bottom:16px}
+    .cc-logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#418FDE,#22d3ee);
       display:grid;place-items:center;font-weight:800;color:#fff;flex:none;overflow:hidden}
-    .cc-home-logo img{width:100%;height:100%;object-fit:contain}
-    .cc-home-brand .nm{font-weight:700;font-size:15px;color:var(--text,#f1f5f9);line-height:1.2;
-      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .cc-home-brand .sub{font-size:11.5px;color:var(--text-dim,#6b7689)}
-    .cc-home-head .cc-home-actions{margin-left:auto;display:flex;align-items:center;gap:8px}
-    .cc-home-ico{width:36px;height:36px;border-radius:9px;border:1px solid var(--border-2,rgba(255,255,255,.14));
-      background:var(--surface-2,#141c2b);color:var(--text-sub,#aab4c5);cursor:pointer;font-size:14px;display:grid;place-items:center}
-    .cc-home-ico:hover{color:#fff;border-color:var(--accent,#7c5cff)}
-    .cc-home-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#7c5cff,#22d3ee);
-      color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;flex:none}
-    .cc-home-hero{margin:0 0 4px;font-size:30px;font-weight:800;letter-spacing:-.02em;color:var(--text,#f1f5f9)}
-    @media(max-width:560px){.cc-home-hero{font-size:24px}}
-    .cc-home-tagline{color:var(--text-sub,#aab4c5);font-size:14px;margin:0 0 22px}
-    .cc-home-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-    @media(max-width:720px){.cc-home-cards{grid-template-columns:1fr}}
-    .cc-home-card{position:relative;text-align:left;background:var(--surface,#0e1420);border:1px solid var(--border,rgba(255,255,255,.10));
-      border-radius:16px;padding:20px;cursor:pointer;color:var(--text,#f1f5f9);transition:.16s;display:flex;gap:15px;align-items:flex-start;width:100%;font-family:inherit}
-    .cc-home-card:hover{border-color:var(--accent,#7c5cff);transform:translateY(-2px);background:var(--surface-2,#141c2b)}
-    .cc-home-card:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(124,58,237,.45)}
-    .cc-home-card[disabled]{cursor:not-allowed;opacity:.55}
-    .cc-home-card[disabled]:hover{transform:none;border-color:var(--border,rgba(255,255,255,.10));background:var(--surface,#0e1420)}
-    .cc-home-card .ci{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:20px;flex:none}
-    .cc-home-card .ct{font-weight:700;font-size:16px;margin:0 0 4px}
-    .cc-home-card .cd{font-size:12.5px;color:var(--text-dim,#6b7689);line-height:1.5}
-    .cc-home-card .cb{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim,#6b7689);margin-top:8px;display:inline-block}
-    .cc-home-c1 .ci{background:rgba(239,68,68,.14);color:#fca5a5}
-    .cc-home-c2 .ci{background:rgba(34,211,238,.14);color:#67e8f9}
-    .cc-home-c3 .ci{background:rgba(124,92,255,.16);color:#c4b5fd}
-    .cc-home-c4 .ci{background:rgba(16,185,129,.15);color:#5ee9b5}
-    .cc-home-strip{display:flex;gap:10px;flex-wrap:wrap;margin:22px 0 0}
-    .cc-home-stat{background:var(--surface,#0e1420);border:1px solid var(--border,rgba(255,255,255,.09));border-radius:11px;padding:11px 15px;min-width:120px}
-    .cc-home-stat .n{font-size:20px;font-weight:800}
-    .cc-home-stat .l{font-size:11px;color:var(--text-dim,#6b7689);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
-    .cc-home-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
-    .cc-home-act{margin-top:24px;background:var(--surface,#0e1420);border:1px solid var(--border,rgba(255,255,255,.09));border-radius:14px;padding:6px 4px}
-    .cc-home-act h3{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-sub,#aab4c5);margin:10px 14px 6px;font-weight:700}
-    .cc-home-act-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border,rgba(255,255,255,.06));font-size:13px}
-    .cc-home-act-row .sv{width:8px;height:8px;border-radius:50%;flex:none}
-    .cc-home-act-row .tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .cc-home-act-row .ag{color:var(--text-dim,#6b7689);font-size:11.5px;flex:none}
-    .cc-home-foot{margin-top:auto;padding-top:22px;display:flex;align-items:center;gap:10px;color:var(--text-dim,#6b7689);font-size:12px}
-    .cc-home-skip{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
-    .cc-home-skip input{width:auto;cursor:pointer}
+    .cc-logo img{width:100%;height:100%;object-fit:contain}
+    .cc-hd .ti{font-weight:800;font-size:17px;letter-spacing:-.01em;margin:0;line-height:1.2}
+    .cc-hd .su{font-size:11.5px;color:#8A99B5}
+    .cc-hd .sp{margin-left:auto;display:flex;align-items:center;gap:14px}
+    .cc-live{display:flex;align-items:center;gap:7px;font-size:12px;color:#8A99B5}
+    .cc-dot{width:8px;height:8px;border-radius:50%}
+    .cc-clock{font-size:12px;color:#8A99B5;font-variant-numeric:tabular-nums}
+    .cc-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#418FDE,#22d3ee);
+      color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}
+    .cc-btn{border:1px solid #2C3A52;background:#1A2740;color:#cdd8ec;border-radius:8px;padding:7px 13px;
+      font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+    .cc-btn:hover{border-color:#418FDE;color:#fff}
+    .cc-btn-pri{background:#418FDE;border-color:#418FDE;color:#fff}
+    /* section + cards */
+    .cc-sec-t{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#8A99B5;margin:22px 2px 10px;display:flex;align-items:center;gap:8px}
+    .cc-card{background:#121A2A;border:1px solid #243149;border-radius:12px;padding:15px}
+    /* KPI strip */
+    .cc-kpis{display:grid;grid-template-columns:repeat(8,1fr);gap:12px}
+    @media(max-width:1180px){.cc-kpis{grid-template-columns:repeat(4,1fr)}}
+    @media(max-width:560px){.cc-kpis{grid-template-columns:repeat(2,1fr)}}
+    .cc-kpi{background:#121A2A;border:1px solid #243149;border-radius:12px;padding:13px 14px;position:relative}
+    .cc-kpi.crit{border-color:rgba(248,113,113,.45);background:linear-gradient(180deg,rgba(248,113,113,.08),#121A2A)}
+    .cc-kpi .n{font-size:30px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
+    .cc-kpi .l{font-size:11px;color:#8A99B5;margin-top:5px;text-transform:uppercase;letter-spacing:.04em}
+    .cc-chip{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;margin-top:6px;padding:1px 6px;border-radius:20px}
+    /* body grid */
+    .cc-body{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+    @media(max-width:1100px){.cc-body{grid-template-columns:1fr}}
+    #cc-map{height:430px;border-radius:10px;overflow:hidden;background:#0d1422}
+    .cc-map-fallback{height:430px;display:grid;place-items:center;color:#8A99B5;font-size:13px}
+    /* attention queue */
+    .cc-att-row{display:flex;align-items:center;gap:11px;padding:11px 6px;border-top:1px solid #1d2942;cursor:pointer}
+    .cc-att-row:first-of-type{border-top:none}
+    .cc-att-row:hover{background:#16213a}
+    .cc-att-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:13px;flex:none}
+    .cc-att-row .lab{flex:1;font-size:13px;color:#cdd8ec}
+    .cc-att-row .cnt{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+    .cc-att-row .ar{color:#5C6B85;font-size:13px}
+    .cc-att-row.zero .cnt{color:#34D399}
+    /* ops intel grid */
+    .cc-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+    @media(max-width:980px){.cc-grid3{grid-template-columns:1fr}}
+    .cc-bar-row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px}
+    .cc-bar-row .bl{width:78px;color:#aab4c5;flex:none;text-transform:capitalize;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .cc-bar-track{flex:1;height:8px;background:#1d2942;border-radius:6px;overflow:hidden}
+    .cc-bar-fill{height:100%;border-radius:6px}
+    .cc-bar-row .bv{width:34px;text-align:right;color:#cdd8ec;font-variant-numeric:tabular-nums;flex:none}
+    .cc-spark{display:flex;align-items:flex-end;gap:2px;height:48px;margin-top:6px}
+    .cc-spark i{flex:1;background:#418FDE;border-radius:2px 2px 0 0;min-height:2px;opacity:.85}
+    .cc-statline{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-top:1px solid #1d2942}
+    .cc-statline:first-child{border-top:none}
+    .cc-statline .v{font-weight:700;font-variant-numeric:tabular-nums}
+    /* impact + briefing */
+    .cc-grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media(max-width:980px){.cc-grid2{grid-template-columns:1fr}}
+    .cc-imp{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+    .cc-imp .b{background:#0f1726;border:1px solid #1d2942;border-radius:10px;padding:11px 13px}
+    .cc-imp .b .n{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+    .cc-imp .b .l{font-size:11px;color:#8A99B5;margin-top:3px}
+    .cc-note{font-size:11.5px;color:#7d89a3;background:#0f1726;border:1px dashed #2C3A52;border-radius:9px;padding:9px 11px;line-height:1.5}
+    .cc-brief{padding:10px 11px;border-radius:10px;background:#0f1726;border-left:3px solid #418FDE;margin-bottom:9px}
+    .cc-brief .h{font-size:13px;font-weight:700;color:#E6EDF7;margin-bottom:2px}
+    .cc-brief .d{font-size:12px;color:#aab4c5;line-height:1.45}
+    .cc-brief .s{font-size:10px;color:#5C6B85;margin-top:4px}
+    .cc-brief.warn{border-left-color:#fb923c}.cc-brief.crit{border-left-color:#f87171}
+    /* activity table */
+    .cc-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+    .cc-tbl th{text-align:left;color:#8A99B5;font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;padding:7px 9px;border-bottom:1px solid #243149}
+    .cc-tbl td{padding:9px 9px;border-bottom:1px solid #1a2436;color:#cdd8ec;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+    .cc-tbl tr{cursor:pointer}.cc-tbl tbody tr:hover{background:#16213a}
+    .cc-badge{display:inline-block;padding:1px 8px;border-radius:20px;font-size:10.5px;font-weight:700}
+    /* quick actions */
+    .cc-qa{display:flex;flex-wrap:wrap;gap:10px}
+    .cc-qa button{display:flex;align-items:center;gap:8px;background:#121A2A;border:1px solid #243149;border-radius:10px;
+      padding:11px 15px;color:#cdd8ec;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+    .cc-qa button:hover{border-color:#418FDE;color:#fff}
+    .cc-qa button[disabled]{opacity:.45;cursor:not-allowed}
+    .cc-qa .ad{font-size:9px;font-weight:700;color:#5C6B85;text-transform:uppercase;margin-left:2px}
+    .cc-empty{color:#5C6B85;font-size:12.5px;padding:14px 4px;text-align:center}
+    .cc-stale{font-size:10.5px;color:#7d89a3;margin-left:6px}
+    @media(prefers-reduced-motion:no-preference){.cc-kpi .n{transition:none}}
     `;
     const tag = document.createElement('style');
     tag.id = 'cc-home-styles';
@@ -127,113 +182,138 @@
     document.head.appendChild(tag);
   }
 
-  // ── overlay ──────────────────────────────────────────────────────────────────
+  // ── overlay ────────────────────────────────────────────────────────────────
   function ensureOverlay() {
     let ov = el('cc-home-overlay');
     if (ov) return ov;
     injectStyles();
     ov = document.createElement('div');
     ov.id = 'cc-home-overlay';
-    ov.setAttribute('role', 'dialog');
-    ov.setAttribute('aria-modal', 'true');
-    ov.setAttribute('aria-label', 'CRISP Control Center');
+    // Labelled landmark region (app.js already owns <main id="view-incidents">,
+    // so a second `main` would be invalid; `region` + aria-label is correct).
+    ov.setAttribute('role', 'region');
+    ov.setAttribute('aria-label', 'CRISP Crisis Intelligence Center');
     document.body.appendChild(ov);
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && ov.classList.contains('cc-home-open')) { if (window.__crispRouter) window.__crispRouter.navigate('/incidents'); else closeLanding(); }
+      if (e.key === 'Escape' && ov.classList.contains('cc-home-open')) {
+        if (window.__crispRouter) window.__crispRouter.navigate('/incidents'); else closeLanding();
+      }
     });
     return ov;
   }
-
   function closeLanding() {
     const ov = el('cc-home-overlay');
     if (ov) ov.classList.remove('cc-home-open');
+    if (_poll) { clearInterval(_poll); _poll = null; }
   }
 
-  const SEV_COLOR = {
-    CRITICAL: '#f87171', SEVERE: '#fb923c', MODERATE: '#fbbf24', MINOR: '#4ade80', UNKNOWN: '#64748b',
-  };
+  const go = (r) => { try { if (window.__crispRouter) window.__crispRouter.navigate(r); } catch (_e) {} };
 
-  function cardsHtml() {
-    const admin = isAdmin();
-    const card = (cls, icon, iconGlyph, title, desc, badge, disabled) => `
-      <button class="cc-home-card ${cls}" data-act="${cls}" ${disabled ? 'disabled aria-disabled="true"' : ''}
-        aria-label="${esc(title)}">
-        <div class="ci">${iconGlyph}</div>
-        <div style="min-width:0"><div class="ct">${esc(title)}</div><div class="cd">${esc(desc)}</div>
-          ${badge ? `<span class="cb">${esc(badge)}</span>` : ''}</div>
-      </button>`;
-    return [
-      card('cc-home-c1', '', '🛰', 'Monitor & Respond to Incidents',
-        'Live incident feed, map, triage, dispatch & satellite verification.', 'Open the operations feed', false),
-      card('cc-home-c2', '', '👤', 'Account Settings',
-        'Your profile, password, two-factor, active sessions & audit log.', '', false),
-      card('cc-home-c3', '', '🏛', 'Organisation Settings',
-        'Identity, branding, logo, contact & channel overview.', admin ? '' : 'Admin only',
-        !admin),
-      card('cc-home-c4', '', '🧩', 'Crisis Forms & PWA Templates',
-        'Geo-scoped crisis question packs, per-channel previews & versions.', admin ? '' : 'Admin only',
-        !admin),
-    ].join('');
-  }
-
+  // ── layout ───────────────────────────────────────────────────────────────
   async function openLanding() {
     if (!token()) return;
     ensureOverlay();
     const ov = el('cc-home-overlay');
     const user = currentUser();
-    const name = (user.full_name || user.email || '').split('@')[0] || 'there';
+    const name = (user.full_name || user.email || '').split('@')[0] || 'operator';
     const initial = (name[0] || 'U').toUpperCase();
+    const role = String(user.role || 'VIEWER').toUpperCase();
     ov.innerHTML = `
-      <div class="cc-home-wrap">
-        <div class="cc-home-head">
-          <div class="cc-home-brand">
-            <div class="cc-home-logo" id="cc-home-logo">C</div>
-            <div><div class="nm" id="cc-home-orgname">CRISP Control Center</div>
-              <div class="sub">Crisis Response Intelligence</div></div>
-          </div>
-          <div class="cc-home-actions">
-            <button class="cc-home-ico" id="cc-home-bell" aria-label="Notifications" title="Notifications">🔔</button>
-            <button class="cc-home-ico" id="cc-home-gear" aria-label="Account settings" title="Account settings">⚙</button>
-            <div class="cc-home-avatar" title="${esc(user.email || '')}">${esc(initial)}</div>
+      <div class="cc-wrap">
+        <div class="cc-hd">
+          <div class="cc-logo" id="cc-home-logo">C</div>
+          <div><h1 class="ti" id="cc-home-orgname">Crisis Intelligence Center</h1>
+            <div class="su">Crisis Response Intelligence · Situation Room</div></div>
+          <div class="sp">
+            <span class="cc-live"><span class="cc-dot" id="cc-conn"></span><span id="cc-conn-t">—</span></span>
+            <span class="cc-clock" id="cc-clock">—</span>
+            <button class="cc-btn cc-btn-pri" id="cc-go-ops">Operations →</button>
+            <div class="cc-avatar" title="${esc(user.email || '')} · ${esc(role)}">${esc(initial)}</div>
           </div>
         </div>
-        <h1 class="cc-home-hero">${esc(greeting())}, ${esc(name)}</h1>
-        <p class="cc-home-tagline">Where would you like to start?</p>
-        <div class="cc-home-cards" id="cc-home-cards">${cardsHtml()}</div>
-        <div class="cc-home-strip" id="cc-home-strip"></div>
-        <div id="cc-home-activity"></div>
-        <!-- Mandatory Control Center root — no skip control. -->
+
+        <div class="cc-sec-t">Executive Situation Overview <span class="cc-stale" id="cc-sum-stale"></span></div>
+        <div class="cc-kpis" id="cc-kpis">${kpiSkeleton()}</div>
+
+        <div class="cc-body">
+          <div>
+            <div class="cc-sec-t">Global Crisis Snapshot</div>
+            <div class="cc-card" style="padding:8px"><div id="cc-map"></div></div>
+          </div>
+          <div>
+            <div class="cc-sec-t">Immediate Attention Required</div>
+            <div class="cc-card" id="cc-att"><div class="cc-empty">Loading…</div></div>
+          </div>
+        </div>
+
+        <div class="cc-sec-t">Operational Intelligence</div>
+        <div class="cc-grid3">
+          <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">By severity</div><div id="cc-dist-sev"></div></div>
+          <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">By crisis type</div><div id="cc-dist-type"></div></div>
+          <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">Efficiency &amp; intake</div><div id="cc-eff"></div></div>
+        </div>
+
+        <div class="cc-grid2" style="margin-top:14px">
+          <div><div class="cc-sec-t">Operational Impact</div><div class="cc-card" id="cc-impact"></div></div>
+          <div><div class="cc-sec-t">Situation Briefing</div><div class="cc-card" id="cc-brief"><div class="cc-empty">Analyzing…</div></div></div>
+        </div>
+
+        <div class="cc-sec-t">Recent Operational Activity</div>
+        <div class="cc-card" id="cc-activity" style="padding:6px 10px"><div class="cc-empty">Loading…</div></div>
+
+        <div class="cc-sec-t">Quick Actions</div>
+        <div class="cc-qa" id="cc-qa">${quickActionsHtml()}</div>
       </div>`;
     ov.classList.add('cc-home-open');
 
-    // card actions → route navigation (the router shows the module + hides the rest)
-    const go = (r) => { try { (window.__crispRouter ? window.__crispRouter.navigate : noop)(r); } catch (_e) {} };
-    ov.querySelectorAll('.cc-home-card').forEach((b) => b.addEventListener('click', () => {
+    el('cc-go-ops').addEventListener('click', () => go('/incidents'));
+    ov.querySelectorAll('#cc-qa button').forEach((b) => b.addEventListener('click', () => {
       if (b.hasAttribute('disabled')) return;
-      const act = b.getAttribute('data-act');
-      if (act === 'cc-home-c1') go('/incidents');
-      else if (act === 'cc-home-c2') go('/users');
-      else if (act === 'cc-home-c3') go('/org');
-      else if (act === 'cc-home-c4') go('/reporting');
+      go(b.getAttribute('data-route'));
     }));
-    el('cc-home-gear').addEventListener('click', () => go('/users'));
-    el('cc-home-bell').addEventListener('click', () => go('/incidents'));
-    // focus the first card for keyboard users
-    const first = ov.querySelector('.cc-home-card');
-    if (first) try { first.focus(); } catch (_) {}
 
+    startClock();
     loadOrg();
-    loadStatusAndActivity();
+    refreshAll();
+    if (_poll) clearInterval(_poll);
+    _poll = setInterval(() => { if (el('cc-home-overlay') && el('cc-home-overlay').classList.contains('cc-home-open')) refreshAll(); }, 30000);
   }
-  function noop() {}
 
+  function refreshAll() {
+    setConn();
+    loadSummary();
+    loadFeed();
+    loadSparkline();
+    loadBriefing();
+  }
+
+  function kpiSkeleton() {
+    return Array.from({ length: 8 }).map(() => `<div class="cc-kpi"><div class="n">—</div><div class="l">…</div></div>`).join('');
+  }
+
+  function quickActionsHtml() {
+    const admin = isAdmin();
+    const b = (route, glyph, label, adminOnly) =>
+      `<button data-route="${route}" ${adminOnly && !admin ? 'disabled aria-disabled="true"' : ''}>
+         <span>${glyph}</span> ${esc(label)}${adminOnly ? `<span class="ad">${admin ? '' : 'admin'}</span>` : ''}</button>`;
+    return [
+      b('/incidents', '🛰', 'Operations Center', false),
+      b('/reporting', '🧩', 'Crisis Forms', true),
+      b('/org', '🏛', 'Organisation', true),
+      b('/users', '👤', 'Account', false),
+      b('/users', '👥', 'User Management', true),
+      b('/incidents', '⬇', 'Exports', false),
+    ].join('');
+  }
+
+  // ── data: org branding ──
   async function loadOrg() {
     try {
       const { body } = await jget('/config/');
       const org = body && body.org;
       if (!org) return;
       const nm = el('cc-home-orgname');
-      if (nm && org.org_public_name) nm.textContent = org.org_public_name;
+      if (nm && org.org_public_name) nm.textContent = org.org_public_name + ' · Crisis Intelligence';
       if (org.org_logo_url) {
         const lg = el('cc-home-logo');
         if (lg) lg.innerHTML = `<img src="${esc(BACKEND_HOST + org.org_logo_url)}" alt="logo">`;
@@ -241,40 +321,321 @@
     } catch (_) { /* defaults stand */ }
   }
 
-  async function loadStatusAndActivity() {
-    // Quick-status strip + recent activity from one reports fetch (best-effort).
+  // ── data: summary (KPIs, distributions, impact) ──
+  let _lastSummary = null;
+  async function loadSummary() {
     try {
-      const { body, headers } = await jget('/reports/?limit=5');
-      const reports = Array.isArray(body) ? body : (body && (body.items || body.reports)) || [];
-      const total = headers.get('X-Total-Count') || (Array.isArray(body) ? body.length : reports.length);
-      const open = reports.filter((r) => ['PENDING', 'TRIAGE', 'VERIFYING'].includes(String(r.status || '').toUpperCase())).length;
-      const strip = el('cc-home-strip');
-      if (strip) strip.innerHTML = `
-        <div class="cc-home-stat"><div class="n">${esc(total)}</div><div class="l">Reports tracked</div></div>
-        <div class="cc-home-stat"><div class="n">${esc(open)}<span style="font-size:12px;color:var(--text-dim,#6b7689)"> of last 5</span></div><div class="l">Need triage</div></div>
-        <div class="cc-home-stat"><div class="n"><span class="cc-home-dot" style="background:${navigator.onLine ? '#10b981' : '#ef4444'}"></span>${navigator.onLine ? 'Online' : 'Offline'}</div><div class="l">Connectivity</div></div>`;
-      const act = el('cc-home-activity');
-      if (act && reports.length) {
-        act.className = 'cc-home-act';
-        act.innerHTML = `<h3>Recent activity</h3>` + reports.slice(0, 5).map((r) => {
-          const sv = SEV_COLOR[String(r.severity || 'UNKNOWN').toUpperCase()] || '#64748b';
-          const what = [r.crisis_type, r.infrastructure_type].filter(Boolean).map((x) => String(x).replace(/_/g, ' ')).join(' · ') || 'Report';
-          return `<div class="cc-home-act-row"><span class="sv" style="background:${sv}"></span>
-            <span class="tx">${esc(what)}${r.infrastructure_name ? ' — ' + esc(r.infrastructure_name) : ''}</span>
-            <span class="ag">${esc(timeAgo(r.server_created_at))}</span></div>`;
-        }).join('');
-      }
-    } catch (_) { /* strip/activity omitted on failure — never blocks the landing */ }
+      const { body } = await jget('/analytics/summary');
+      _lastSummary = body;
+      renderKpis(body);
+      renderAttention(body);
+      renderDistributions(body);
+      renderEfficiency(body);
+      renderImpact(body);
+      const st = el('cc-sum-stale');
+      if (st) st.textContent = 'updated ' + timeAgo(body.generated_at);
+    } catch (e) {
+      const st = el('cc-sum-stale');
+      if (st) st.textContent = (String(e.message) === '401' || String(e.message) === '403')
+        ? 'sign-in required' : 'data unavailable';
+    }
   }
 
-  // ── launcher (user-menu item) + boot ────────────────────────────────────────
+  function deltaChip(curr, prev) {
+    const d = (curr || 0) - (prev || 0);
+    if (!d) return `<div class="cc-chip" style="color:#5C6B85;background:#1d2942">— vs prev 24h</div>`;
+    const up = d > 0;
+    const col = up ? '#fb923c' : '#34D399';
+    const bg = up ? 'rgba(251,146,60,.14)' : 'rgba(52,211,153,.14)';
+    return `<div class="cc-chip" style="color:${col};background:${bg}">${up ? '▲' : '▼'} ${Math.abs(d)} vs prev 24h</div>`;
+  }
+
+  function renderKpis(b) {
+    const c = b.counts || {};
+    const d = b.deltas || {};
+    const t = b.timings || {};
+    const kpi = (n, l, opts) => `<div class="cc-kpi ${opts && opts.crit ? 'crit' : ''}">
+      <div class="n cc-num" ${opts && opts.color ? `style="color:${opts.color}"` : ''}>${n}</div>
+      <div class="l">${esc(l)}</div>${opts && opts.chip ? opts.chip : ''}</div>`;
+    const tiles = [
+      kpi(fmtNum(c.active), 'Active incidents'),
+      kpi(fmtNum(c.critical), 'Critical', { crit: c.critical > 0, color: c.critical > 0 ? SEV_COLOR.CRITICAL : '' }),
+      kpi(fmtNum(c.pending_verification), 'Pending verification'),
+      kpi(fmtNum(c.awaiting_triage), 'Awaiting triage'),
+      kpi(fmtNum(c.open_dispatch), 'Open dispatch'),
+      kpi(fmtNum(c.active_ops), 'Active operations'),
+      kpi(fmtNum(d.reports_24h), 'New (24h)', { chip: deltaChip(d.reports_24h, d.reports_prev_24h) }),
+      kpi(fmtNum(c.resolved_in_window), 'Resolved (24h)', { color: '#34D399' }),
+    ];
+    const box = el('cc-kpis');
+    if (box) box.innerHTML = tiles.join('');
+  }
+
+  function renderAttention(b) {
+    const c = b.counts || {};
+    const row = (glyph, color, label, n, route) => {
+      const zero = !n;
+      return `<div class="cc-att-row ${zero ? 'zero' : ''}" data-route="${route}">
+        <div class="cc-att-ic" style="background:${color}22;color:${color}">${glyph}</div>
+        <div class="lab">${esc(label)}</div>
+        <div class="cnt cc-num" ${!zero ? `style="color:${color}"` : ''}>${fmtNum(n)}</div>
+        <div class="ar">›</div></div>`;
+    };
+    const rows = [
+      row('🔴', SEV_COLOR.CRITICAL, 'Critical incidents', c.critical, '/incidents'),
+      row('⬆', '#fb923c', 'Escalating (risk ≥ 70)', c.escalating, '/incidents'),
+      row('🔍', '#418FDE', 'Pending verification', c.pending_verification, '/incidents'),
+      row('📋', '#22d3ee', 'Awaiting triage', c.awaiting_triage, '/incidents'),
+      row('🚑', '#2DD4BF', 'Dispatched, no arrival', c.open_dispatch, '/incidents'),
+      row('⏱', '#a78bfa', 'Stale (open & unreviewed)', c.stale, '/incidents'),
+    ];
+    const box = el('cc-att');
+    if (box) {
+      box.innerHTML = rows.join('');
+      box.querySelectorAll('.cc-att-row').forEach((r) => r.addEventListener('click', () => go(r.getAttribute('data-route'))));
+    }
+  }
+
+  function barRows(obj, colorFn, max) {
+    const entries = Object.entries(obj || {});
+    if (!entries.length) return `<div class="cc-empty">No data</div>`;
+    entries.sort((a, b) => b[1] - a[1]);
+    const top = entries.slice(0, max || 6);
+    const peak = Math.max(1, ...top.map((e) => e[1]));
+    return top.map(([k, v]) => {
+      const col = colorFn ? colorFn(k) : '#418FDE';
+      const w = Math.round((v / peak) * 100);
+      return `<div class="cc-bar-row"><span class="bl" title="${esc(titleCase(k))}">${esc(titleCase(k))}</span>
+        <span class="cc-bar-track"><span class="cc-bar-fill" style="width:${w}%;background:${col}"></span></span>
+        <span class="bv cc-num">${fmtNum(v)}</span></div>`;
+    }).join('');
+  }
+
+  function renderDistributions(b) {
+    const dist = b.distributions || {};
+    const sevBox = el('cc-dist-sev');
+    if (sevBox) {
+      // Render severities in canonical order for scannability.
+      const ordered = {};
+      SEV_ORDER.forEach((s) => { if (dist.by_severity && dist.by_severity[s] != null) ordered[s] = dist.by_severity[s]; });
+      Object.keys(dist.by_severity || {}).forEach((k) => { if (ordered[k] == null) ordered[k] = dist.by_severity[k]; });
+      sevBox.innerHTML = barRows(ordered, (k) => SEV_COLOR[k] || '#64748b', 5);
+    }
+    const typeBox = el('cc-dist-type');
+    if (typeBox) typeBox.innerHTML = barRows(dist.by_crisis_type, () => '#418FDE', 6);
+  }
+
+  function renderEfficiency(b) {
+    const t = b.timings || {}, dist = b.distributions || {};
+    const ver = dist.verified || 0, unver = dist.unverified || 0;
+    const tot = ver + unver;
+    const pct = tot ? Math.round((ver / tot) * 100) : 0;
+    const box = el('cc-eff');
+    if (box) box.innerHTML = `
+      <div class="cc-statline"><span>Avg verification time</span><span class="v">${fmtDur(t.avg_verification_seconds)}</span></div>
+      <div class="cc-statline"><span>Avg response time</span><span class="v">${fmtDur(t.avg_response_seconds)}</span></div>
+      <div class="cc-statline"><span>Verified reports</span><span class="v">${fmtNum(ver)} (${pct}%)</span></div>
+      <div class="cc-statline"><span>Unverified / rejected</span><span class="v">${fmtNum(unver)}</span></div>
+      <div style="margin-top:10px"><div class="cc-sec-t" style="margin:0 0 4px">Intake · last 24h</div>
+        <div class="cc-spark" id="cc-spark"><div class="cc-empty" style="padding:0">—</div></div></div>`;
+  }
+
+  function renderImpact(b) {
+    const im = b.impact || {};
+    const cell = (n, l) => `<div class="b"><div class="n cc-num">${n}</div><div class="l">${esc(l)}</div></div>`;
+    const box = el('cc-impact');
+    if (box) box.innerHTML = `
+      <div class="cc-imp">
+        ${cell(fmtNum(im.critical_infrastructure), 'Critical infrastructure hit')}
+        ${cell(im.service_disruptions == null ? '—' : fmtNum(im.service_disruptions), 'Service disruptions')}
+        ${cell(fmtNum(im.lives_impacted_sum), 'Lives impacted (reported)')}
+        ${cell(fmtNum(im.responders_active), 'Responders active')}
+      </div>
+      <div class="cc-note"><strong>Population exposure &amp; displacement</strong> — not shown.
+        CRISP records citizen damage reports, not census/displacement data. These require an external
+        data integration (WorldPop/GHSL for population, IOM DTM/UNHCR for displacement) joined by
+        geography. Surfacing fabricated figures would mislead operations.</div>`;
+  }
+
+  // ── data: 24h intake sparkline ──
+  async function loadSparkline() {
+    try {
+      const { body } = await jget('/analytics/damage-rate-24h');
+      const buckets = (body && body.buckets) || [];
+      const spark = el('cc-spark');
+      if (!spark) return;
+      if (!buckets.length) { spark.innerHTML = `<div class="cc-empty" style="padding:0">No intake</div>`; return; }
+      const peak = Math.max(1, ...buckets.map((x) => x.report_count || 0));
+      spark.innerHTML = buckets.map((x) => {
+        const h = Math.round(((x.report_count || 0) / peak) * 100);
+        return `<i style="height:${Math.max(3, h)}%" title="${esc(x.bucket_start)}: ${x.report_count}"></i>`;
+      }).join('');
+    } catch (_) { /* sparkline optional */ }
+  }
+
+  // ── data: map + recent activity (one reports fetch) ──
+  async function loadFeed() {
+    try {
+      const { body } = await jget('/reports/?limit=200');
+      const reports = Array.isArray(body) ? body : (body && (body.items || body.reports)) || [];
+      renderMap(reports);
+      renderActivity(reports);
+    } catch (_) {
+      const a = el('cc-activity'); if (a) a.innerHTML = `<div class="cc-empty">Activity unavailable</div>`;
+      mapFallback('Map data unavailable');
+    }
+  }
+
+  function rLatLng(r) {
+    const loc = r.location || r;
+    const lat = loc.latitude != null ? loc.latitude : loc.lat;
+    const lng = loc.longitude != null ? loc.longitude : loc.lng;
+    if (lat == null || lng == null) return null;
+    if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) return null;  // null-island
+    return [Number(lat), Number(lng)];
+  }
+
+  function mapFallback(msg) {
+    const m = el('cc-map');
+    if (m) m.outerHTML = `<div class="cc-map-fallback" id="cc-map">${esc(msg)}</div>`;
+  }
+
+  function renderMap(reports) {
+    const cont = el('cc-map');
+    if (!cont) return;
+    if (typeof window.L === 'undefined' || !window.L.map) { mapFallback('Map library not loaded'); return; }
+    try {
+      if (!_map) {
+        _map = window.L.map('cc-map', { zoomControl: true, attributionControl: false, worldCopyJump: true })
+          .setView([15, 30], 2);
+        window.L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(_map);
+        setTimeout(() => { try { _map.invalidateSize(); } catch (_) {} }, 120);
+      }
+      if (_cluster) { try { _map.removeLayer(_cluster); } catch (_) {} _cluster = null; }
+      const useCluster = window.L.markerClusterGroup;
+      _cluster = useCluster ? window.L.markerClusterGroup({ maxClusterRadius: 40, showCoverageOnHover: false }) : window.L.layerGroup();
+      const pts = [];
+      reports.forEach((r) => {
+        const ll = rLatLng(r);
+        if (!ll) return;
+        pts.push(ll);
+        const sev = String(r.severity || 'UNKNOWN').toUpperCase();
+        const col = SEV_COLOR[sev] || '#64748b';
+        const mk = window.L.circleMarker(ll, { radius: 6, color: col, weight: 1.5, fillColor: col, fillOpacity: .65 });
+        const what = [r.crisis_type, r.infrastructure_type].filter(Boolean).map(titleCase).join(' · ') || 'Report';
+        mk.bindPopup(`<b>${esc(what)}</b><br>${esc(titleCase(sev))} · ${esc(String(r.status || ''))}<br><small>${esc(timeAgo(r.server_created_at))}</small>`);
+        _cluster.addLayer(mk);
+      });
+      _map.addLayer(_cluster);
+      if (pts.length) { try { _map.fitBounds(pts, { padding: [30, 30], maxZoom: 8 }); } catch (_) {} }
+    } catch (e) { mapFallback('Map render failed'); }
+  }
+
+  const STATUS_COLOR = {
+    PENDING: '#fbbf24', RESPONDING: '#2DD4BF', RESOLVED: '#34D399',
+    REJECTED: '#6B7280', FALSE_ALARM: '#6B7280', VERIFIED: '#418FDE',
+  };
+  function verdictLabel(v) {
+    const s = String(v || 'NOT_REVIEWED').toUpperCase();
+    if (s === 'ACCEPTED') return '<span style="color:#34D399">✓ verified</span>';
+    if (s === 'REJECTED') return '<span style="color:#f87171">✗ rejected</span>';
+    return '<span style="color:#8A99B5">unreviewed</span>';
+  }
+
+  function renderActivity(reports) {
+    const box = el('cc-activity');
+    if (!box) return;
+    if (!reports.length) { box.innerHTML = `<div class="cc-empty">No recent activity</div>`; return; }
+    const rows = reports.slice(0, 10).map((r) => {
+      const sev = String(r.severity || 'UNKNOWN').toUpperCase();
+      const col = SEV_COLOR[sev] || '#64748b';
+      const status = String(r.status || '').toUpperCase();
+      const sc = STATUS_COLOR[status] || '#6B7280';
+      const place = (r.location && (r.location.user_location_name || r.location.device_location_name)) || '—';
+      const what = [r.crisis_type, r.infrastructure_type].filter(Boolean).map(titleCase).join(' · ') || 'Report';
+      return `<tr data-id="${esc(r.id || '')}">
+        <td title="${esc(what)}">${esc(what)}</td>
+        <td title="${esc(place)}">${esc(place)}</td>
+        <td><span class="cc-badge" style="background:${col}22;color:${col}">${esc(titleCase(sev))}</span></td>
+        <td>${verdictLabel(r.reviewer_verdict)}</td>
+        <td><span class="cc-badge" style="background:${sc}22;color:${sc}">${esc(titleCase(status))}</span></td>
+        <td style="color:#8A99B5">${esc(timeAgo(r.server_created_at))}</td></tr>`;
+    }).join('');
+    box.innerHTML = `<table class="cc-tbl"><thead><tr>
+      <th>Type</th><th>Location</th><th>Severity</th><th>Verification</th><th>Status</th><th>Updated</th>
+      </tr></thead><tbody>${rows}</tbody></table>`;
+    box.querySelectorAll('tbody tr').forEach((tr) => tr.addEventListener('click', () => go('/incidents')));
+  }
+
+  // ── data: rule-based situation briefing (real aggregates, no LLM) ──
+  async function loadBriefing() {
+    const box = el('cc-brief');
+    if (!box) return;
+    const cards = [];
+    const s = _lastSummary;
+    // Emerging hotspot — from the live nearby aggregator (burst/acute tiers).
+    try {
+      const { body } = await jget('/reports/nearby');
+      const groups = (body && (body.groups || body.items)) || (Array.isArray(body) ? body : []);
+      const acute = groups.filter((g) => g.is_acute || g.is_burst)
+        .sort((a, b) => (b.report_count || 0) - (a.report_count || 0));
+      if (acute.length) {
+        const g = acute[0];
+        cards.push({ cls: 'crit', h: 'Emerging hotspot',
+          d: `${fmtNum(g.report_count)} reports clustering${g.label ? ' near ' + esc(g.label) : ''}${g.is_acute ? ' (acute)' : ' (burst)'}. ${acute.length} active cluster${acute.length > 1 ? 's' : ''}.`,
+          s: 'source: /reports/nearby' });
+      }
+    } catch (_) { /* nearby optional */ }
+    if (s && s.counts) {
+      const c = s.counts, t = s.timings || {};
+      if (c.pending_verification > 0) cards.push({ cls: 'warn', h: 'Verification backlog',
+        d: `${fmtNum(c.pending_verification)} report(s) awaiting human review; ${fmtNum(c.awaiting_triage)} still in triage.`,
+        s: 'source: /analytics/summary' });
+      if (c.escalating > 0) cards.push({ cls: 'crit', h: 'Escalating incidents',
+        d: `${fmtNum(c.escalating)} incident(s) at high escalation risk (score ≥ 70). Prioritize review.`,
+        s: 'source: building escalation_risk' });
+      if (t.avg_response_seconds != null) cards.push({ cls: '', h: 'Response performance',
+        d: `Average response time is ${fmtDur(t.avg_response_seconds)} (dispatch→arrival from reviewed reports).`,
+        s: 'source: /analytics/summary' });
+      const d = s.deltas || {};
+      if ((d.reports_24h || 0) > (d.reports_prev_24h || 0)) cards.push({ cls: 'warn', h: 'Intake rising',
+        d: `${fmtNum(d.reports_24h)} new reports in 24h vs ${fmtNum(d.reports_prev_24h)} the prior day — incident inflow is increasing.`,
+        s: 'source: /analytics/summary deltas' });
+    }
+    if (!cards.length) { box.innerHTML = `<div class="cc-empty">No notable operational patterns in the current window.</div>`; return; }
+    const stamp = s && s.generated_at ? ' · ' + timeAgo(s.generated_at) : '';
+    box.innerHTML = cards.slice(0, 5).map((c) => `<div class="cc-brief ${c.cls}">
+      <div class="h">${c.h}</div><div class="d">${c.d}</div><div class="s">${c.s}${stamp}</div></div>`).join('');
+  }
+
+  // ── header live bits ──
+  function setConn() {
+    const dot = el('cc-conn'), t = el('cc-conn-t');
+    const on = navigator.onLine;
+    if (dot) dot.style.background = on ? '#34D399' : '#f87171';
+    if (t) t.textContent = on ? 'Live' : 'Offline';
+  }
+  function startClock() {
+    const tick = () => {
+      const c = el('cc-clock');
+      if (!c) return;
+      const d = new Date();
+      const utc = d.toISOString().slice(11, 16);
+      c.textContent = `${utc} UTC · ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    };
+    tick();
+    if (window.__ccClock) clearInterval(window.__ccClock);
+    window.__ccClock = setInterval(tick, 30000);
+  }
+
+  // ── launcher (user-menu item) + boot ──
   function injectLauncher() {
     try {
       const dropdown = el('user-menu-dropdown');
       if (!dropdown || el('cc-home-launch')) return;
       const btn = document.createElement('button');
       btn.id = 'cc-home-launch'; btn.className = 'user-menu-item';
-      btn.innerHTML = `<i class="fa-solid fa-grip"></i> Control Center`;
+      btn.innerHTML = `<i class="fa-solid fa-grip"></i> Crisis Intelligence`;
       btn.addEventListener('click', () => {
         try { dropdown.classList.remove('open'); dropdown.style.display = ''; } catch (_) {}
         try { (window.__crispRouter ? window.__crispRouter.navigate('/') : openLanding()); } catch (_e) { openLanding(); }
@@ -288,17 +649,11 @@
     injectLauncher();
     let tries = 0;
     const iv = setInterval(() => { injectLauncher(); if (el('cc-home-launch') || ++tries > 20) clearInterval(iv); }, 400);
-    // Auto-show the landing on first load after login, unless the user opted out.
-    // Suppressed under automation (navigator.webdriver) so the dashboard's
-    // existing feed-driven e2e specs aren't blocked by the overlay; a force flag
-    // (crisp_cc_force_landing) re-enables it for the Control-Center spec itself.
-    // The router (router.js) owns when the Control Center shows (route '/').
-    // No auto-show / skip here anymore — the Control Center is the mandatory root.
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 
-  // public API (reachable from the menu + tests)
+  // public API (reachable from the menu + tests + router)
   window.openControlCenter = openLanding;
   window.__ccHome = { openLanding, closeLanding };
 })();

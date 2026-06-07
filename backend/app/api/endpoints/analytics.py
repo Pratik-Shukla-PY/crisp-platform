@@ -37,11 +37,15 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.core.deps import require_viewer
 from app.db.session import get_db
-from app.models.report import Report, Location
+from app.models.report import (
+    Report, Location, Building, BuildingResponder,
+    ReportStatusEnum, SeverityEnum, InfraTypeEnum, ReviewerVerdictEnum,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -266,3 +270,243 @@ def damage_rate_24h(db: Session = Depends(get_db)):
         total_reports=total,
         buckets=buckets,
     )
+
+
+# ── Operational summary (Crisis Intelligence dashboard landing) ───────
+#
+# One round-trip of indexed aggregates powering the landing's KPIs,
+# distributions, timings, impact proxies, and trend deltas. Every value is
+# a LIVE aggregate over non-soft-deleted reports (+ Building rollups) —
+# nothing is stored or hardcoded. Built for the 500k-row scale target:
+# pure COUNT/AVG/GROUP BY over indexed columns (status, severity,
+# crisis_type, server_created_at, reviewer_verdict).
+#
+# Honest scope: this surfaces ONLY metrics with real backing. Population,
+# households, displaced persons, and country breakdowns are intentionally
+# absent — CRISP has no census/displacement data and no country column
+# (see web-dashboard/docs/crisis-intelligence-dashboard-spec.md §4).
+
+_CLOSED_STATUSES = [
+    ReportStatusEnum.RESOLVED,
+    ReportStatusEnum.REJECTED,
+    ReportStatusEnum.FALSE_ALARM,
+]
+_CLOSED_BUILDING_STATES = ["RESOLVED", "ARCHIVED", "FALSE_ALARM"]
+_CRITICAL_INFRA = [
+    InfraTypeEnum.UTILITY,
+    InfraTypeEnum.GOVERNMENT,
+    InfraTypeEnum.TRANSPORT_COMMUNICATION,
+    InfraTypeEnum.COMMUNITY,
+]
+_DISRUPTED_SERVICE_VALUES = [
+    "DISRUPTED", "DESTROYED", "BLACKOUT", "NOT_OPERATIONAL",
+    "PARTIALLY_OPERATIONAL", "INTERMITTENT", "LOAD_SHEDDING",
+]
+_ESCALATING_RISK_THRESHOLD = 70.0
+
+# Tiny in-process TTL cache, matching the dashboard poll cadence. Cleared on
+# every dev --reload and on process restart; fine for situational-awareness data.
+_SUMMARY_TTL_SECONDS = 30
+_summary_cache: dict = {}
+
+
+def _enum_name(v) -> str:
+    return v.value if hasattr(v, "value") else str(v)
+
+
+class SummaryCounts(BaseModel):
+    active: int
+    critical: int
+    pending_verification: int
+    awaiting_triage: int
+    open_dispatch: int
+    resolved_in_window: int
+    active_ops: int
+    escalating: int
+    stale: int
+
+
+class SummaryDistributions(BaseModel):
+    by_severity: dict
+    by_crisis_type: dict
+    by_status: dict
+    verified: int
+    unverified: int
+
+
+class SummaryTimings(BaseModel):
+    avg_verification_seconds: Optional[float] = None
+    avg_response_seconds: Optional[float] = None
+
+
+class SummaryImpact(BaseModel):
+    critical_infrastructure: int
+    lives_impacted_sum: int
+    responders_active: int
+    # None when the JSON service_status query is unavailable on this dialect.
+    service_disruptions: Optional[int] = None
+
+
+class SummaryDeltas(BaseModel):
+    reports_24h: int
+    reports_prev_24h: int
+    reports_7d: int
+    reports_prev_7d: int
+
+
+class SummaryResponse(BaseModel):
+    generated_at: str
+    window_hours: int
+    stale_hours: int
+    total_reports: int
+    counts: SummaryCounts
+    distributions: SummaryDistributions
+    timings: SummaryTimings
+    impact: SummaryImpact
+    deltas: SummaryDeltas
+
+
+@router.get(
+    "/summary",
+    response_model=SummaryResponse,
+    summary="Operational situational-awareness summary for the dashboard landing",
+)
+def operational_summary(
+    window_hours: int = Query(24, ge=1, le=720,
+                              description="Window for 'resolved in window' (hours)"),
+    stale_hours: int = Query(24, ge=1, le=720,
+                             description="Age above which an open, unreviewed report is 'stale'"),
+    db: Session = Depends(get_db),
+    _user=Depends(require_viewer),
+):
+    now = datetime.now(timezone.utc)
+    cache_key = (window_hours, stale_hours)
+    hit = _summary_cache.get(cache_key)
+    if hit and hit[0] > now:
+        return hit[1]
+
+    not_deleted = Report.deletion_requested_at.is_(None)
+    active = [not_deleted, Report.status.notin_(_CLOSED_STATUSES)]
+    NOT_REVIEWED = ReviewerVerdictEnum.NOT_REVIEWED.value
+
+    def _count(*filters) -> int:
+        return int(db.query(func.count(Report.id)).filter(*filters).scalar() or 0)
+
+    window_cut = now - timedelta(hours=window_hours)
+    stale_cut = now - timedelta(hours=stale_hours)
+
+    # ── counts ──
+    counts = SummaryCounts(
+        active=_count(*active),
+        critical=_count(*active, Report.severity == SeverityEnum.CRITICAL),
+        pending_verification=_count(not_deleted, Report.reviewer_verdict == NOT_REVIEWED),
+        awaiting_triage=_count(not_deleted, Report.status == ReportStatusEnum.PENDING,
+                               Report.reviewer_verdict == NOT_REVIEWED),
+        open_dispatch=_count(not_deleted, Report.help_dispatched_at.isnot(None),
+                             Report.help_arrived_at.is_(None)),
+        resolved_in_window=_count(not_deleted, Report.status == ReportStatusEnum.RESOLVED,
+                                  Report.updated_at >= window_cut),
+        active_ops=_count(not_deleted, Report.status == ReportStatusEnum.RESPONDING),
+        escalating=0,  # building-based; filled below (defensive)
+        stale=_count(not_deleted, Report.status == ReportStatusEnum.PENDING,
+                     Report.reviewer_verdict == NOT_REVIEWED,
+                     Report.server_created_at < stale_cut),
+    )
+
+    # ── distributions ──
+    def _group(col) -> dict:
+        out: dict = {}
+        for val, n in (db.query(col, func.count(Report.id))
+                         .filter(*active).group_by(col).all()):
+            if val is not None:
+                out[_enum_name(val)] = int(n)
+        return out
+
+    by_status: dict = {}
+    for val, n in (db.query(Report.status, func.count(Report.id))
+                     .filter(not_deleted).group_by(Report.status).all()):
+        if val is not None:
+            by_status[_enum_name(val)] = int(n)
+
+    distributions = SummaryDistributions(
+        by_severity=_group(Report.severity),
+        by_crisis_type=_group(Report.crisis_type),
+        by_status=by_status,
+        verified=_count(not_deleted, Report.reviewer_verdict == ReviewerVerdictEnum.ACCEPTED.value),
+        unverified=_count(not_deleted, Report.reviewer_verdict.in_(
+            [NOT_REVIEWED, ReviewerVerdictEnum.REJECTED.value])),
+    )
+
+    # ── timings (computed at read time; mirrors response_time_seconds) ──
+    avg_verif = (db.query(func.avg(func.extract(
+        "epoch", Report.first_verified_at - Report.server_created_at)))
+        .filter(not_deleted, Report.first_verified_at.isnot(None)).scalar())
+    resp_end = func.coalesce(Report.help_arrived_at, Report.help_dispatched_at)
+    avg_resp = (db.query(func.avg(func.extract("epoch", resp_end - Report.reviewed_at)))
+        .filter(not_deleted, Report.reviewed_at.isnot(None),
+                or_(Report.help_arrived_at.isnot(None),
+                    Report.help_dispatched_at.isnot(None))).scalar())
+    timings = SummaryTimings(
+        avg_verification_seconds=float(avg_verif) if avg_verif is not None else None,
+        avg_response_seconds=float(avg_resp) if avg_resp is not None else None,
+    )
+
+    # ── impact (real proxies only — see spec §4 for what is intentionally absent) ──
+    lives = (db.query(func.coalesce(func.sum(Report.lives_impacted), 0))
+               .filter(*active).scalar()) or 0
+    service_disruptions: Optional[int] = None
+    try:
+        service_disruptions = _count(
+            not_deleted, Report.service_status.isnot(None),
+            or_(*[func.json_extract_path_text(Report.service_status, k).in_(_DISRUPTED_SERVICE_VALUES)
+                  for k in ("electricity", "water", "health", "telecom")]),
+        )
+    except Exception:  # noqa: BLE001 — JSON dialect quirk must never 500 the dashboard
+        service_disruptions = None
+
+    responders_active = 0
+    escalating = 0
+    try:
+        responders_active = int(db.query(func.count(BuildingResponder.id))
+            .filter(BuildingResponder.cleared_at.is_(None)).scalar() or 0)
+        escalating = int(db.query(func.count(Building.id))
+            .filter(Building.escalation_risk >= _ESCALATING_RISK_THRESHOLD,
+                    Building.state.notin_(_CLOSED_BUILDING_STATES)).scalar() or 0)
+    except Exception:  # noqa: BLE001
+        pass
+    counts.escalating = escalating
+
+    impact = SummaryImpact(
+        critical_infrastructure=_count(*active, Report.infrastructure_type.in_(_CRITICAL_INFRA)),
+        lives_impacted_sum=int(lives),
+        responders_active=responders_active,
+        service_disruptions=service_disruptions,
+    )
+
+    # ── deltas (fixed windows for the trend chips) ──
+    def _between(lo, hi=None) -> int:
+        f = [not_deleted, Report.server_created_at >= lo]
+        if hi is not None:
+            f.append(Report.server_created_at < hi)
+        return _count(*f)
+
+    deltas = SummaryDeltas(
+        reports_24h=_between(now - timedelta(hours=24)),
+        reports_prev_24h=_between(now - timedelta(hours=48), now - timedelta(hours=24)),
+        reports_7d=_between(now - timedelta(days=7)),
+        reports_prev_7d=_between(now - timedelta(days=14), now - timedelta(days=7)),
+    )
+
+    resp = SummaryResponse(
+        generated_at=now.isoformat(),
+        window_hours=window_hours,
+        stale_hours=stale_hours,
+        total_reports=_count(not_deleted),
+        counts=counts,
+        distributions=distributions,
+        timings=timings,
+        impact=impact,
+        deltas=deltas,
+    )
+    _summary_cache[cache_key] = (now + timedelta(seconds=_SUMMARY_TTL_SECONDS), resp)
+    return resp
