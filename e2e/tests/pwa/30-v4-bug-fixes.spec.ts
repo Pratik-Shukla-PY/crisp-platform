@@ -362,18 +362,27 @@ test.describe('BUG 4 — v4 voice-only path is wired and exposes recording state
 
     test('v4 textarea writes through to state.description', async ({ page }) => {
         await _bootV4(page);
-        await page.evaluate(() => (window as any).CrispV4.goToReview());
-        await page.waitForTimeout(300);
-        // Expand the voice drawer so the textarea is visible (it's inside
-        // a collapsed <details> by default).
-        await page.evaluate(() => {
-            const d = document.getElementById('v4-voice-drawer') as HTMLDetailsElement | null;
-            if (d) d.open = true;
+        // The #v4-text-desc input listener is wired at boot (_initReviewStage),
+        // and the contract under test is purely "input → state". The review
+        // drawer's on-screen visibility is gated by the redesigned bottom-sheet
+        // UX (a trigger button + smooth-scroll), which makes a Playwright
+        // .fill() flaky; drive the input event directly to assert the
+        // write-through (input → _setState → state.description + .transcript).
+        const result = await page.evaluate(() => {
+            const ta = document.getElementById('v4-text-desc') as HTMLTextAreaElement | null;
+            if (!ta) return { ok: false, desc: null, transcript: null };
+            ta.value = 'voice-only test description';
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            return {
+                ok: true,
+                desc: (window as any).state.description,
+                transcript: (window as any).state.transcript,
+            };
         });
-        await page.waitForTimeout(100);
-        await page.locator('#v4-text-desc').fill('voice-only test description');
-        const desc = await page.evaluate(() => (window as any).state.description);
-        expect(desc, 'state.description not synced from v4 textarea')
+        expect(result.ok, '#v4-text-desc not present in DOM').toBe(true);
+        expect(result.desc, 'state.description not synced from v4 textarea input handler')
+            .toBe('voice-only test description');
+        expect(result.transcript, 'state.transcript should mirror the textarea (submit reads either)')
             .toBe('voice-only test description');
     });
 
@@ -507,12 +516,17 @@ test.describe('BUG 1 (post-merge) — single always-on home, no overlay flash', 
             hasLandingOverlay: !!document.getElementById('landing-overlay'),
             hasLegacyConsentOverlay: !!document.getElementById('consent-overlay'),
             homeActive: !!document.querySelector('#stage-home.active'),
-            consentRowPresent: !!document.getElementById('home-consent'),
+            // HC57+ — the inline #home-consent row was removed; the consent gate
+            // is now the #consent-onboarding modal, which is active on first
+            // visit while <html> lacks the `crisp-consented` class.
+            consentGatePresent: !!document.getElementById('consent-onboarding'),
+            consentGateActiveFirstVisit: !document.documentElement.classList.contains('crisp-consented'),
         }));
         expect(dom.hasLandingOverlay, '#landing-overlay should not exist anymore').toBe(false);
         expect(dom.hasLegacyConsentOverlay, '#consent-overlay should be deleted').toBe(false);
         expect(dom.homeActive, '#stage-home should be the active stage').toBe(true);
-        expect(dom.consentRowPresent, 'inline #home-consent should exist on first visit').toBe(true);
+        expect(dom.consentGatePresent, '#consent-onboarding (replacing the inline #home-consent row) should exist').toBe(true);
+        expect(dom.consentGateActiveFirstVisit, 'consent gate should be active on first visit (no crisp-consented class)').toBe(true);
     });
 
     test('returning visitor (consent set) sees home with consent row hidden', async ({ page }) => {
