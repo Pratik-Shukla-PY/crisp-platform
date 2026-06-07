@@ -17,7 +17,7 @@ const SUMMARY = {
     generated_at: NOW, window_hours: 24, stale_hours: 24, total_reports: 137,
     counts: {
         active: 42, critical: 7, pending_verification: 18, awaiting_triage: 23,
-        open_dispatch: 9, resolved_in_window: 31, active_ops: 5, escalating: 4, stale: 6,
+        open_dispatch: 9, resolved_in_window: 31, active_ops: 5, escalating: 4, stale: 6, sla_at_risk: 3,
     },
     distributions: {
         by_severity: { CRITICAL: 7, SEVERE: 12, MODERATE: 20, MINOR: 8 },
@@ -76,9 +76,12 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     await expect(page.locator('#cc-kpis')).toContainText('Active incidents', { timeout: 6000 });
     await expect(page.locator('#cc-kpis')).toContainText('42');
     await expect(page.locator('#cc-kpis')).toContainText('Critical');
-    // §3 attention queue.
+    // §3 attention queue (incl. Phase-2 SLA-at-risk row).
     await expect(page.locator('#cc-att')).toContainText('Critical incidents');
+    await expect(page.locator('#cc-att')).toContainText('SLA at-risk');
     await expect(page.locator('#cc-att')).toContainText('Escalating');
+    // §2 Phase-2 client-side countries-impacted caption (Turf over world.json).
+    await expect(page.locator('#cc-map-geo')).toContainText(/countries impacted/i, { timeout: 8000 });
     // §4 distributions rendered.
     await expect(page.locator('#cc-dist-sev')).toContainText('Critical');
     // §5 impact + the honest no-fabrication placard (the guardrail, in the UI).

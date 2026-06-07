@@ -23,7 +23,8 @@ def test_summary_shape(client, viewer_token):
               "counts", "distributions", "timings", "impact", "deltas"):
         assert k in b, f"missing top-level key: {k}"
     for k in ("active", "critical", "pending_verification", "awaiting_triage",
-              "open_dispatch", "resolved_in_window", "active_ops", "escalating", "stale"):
+              "open_dispatch", "resolved_in_window", "active_ops", "escalating", "stale",
+              "sla_at_risk"):
         assert isinstance(b["counts"][k], int), f"counts.{k} not int"
     assert isinstance(b["distributions"]["by_severity"], dict)
     assert isinstance(b["distributions"]["by_crisis_type"], dict)

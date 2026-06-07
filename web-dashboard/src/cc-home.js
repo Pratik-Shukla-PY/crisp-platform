@@ -124,6 +124,8 @@
     @media(max-width:1100px){.cc-body{grid-template-columns:1fr}}
     #cc-map{height:430px;border-radius:10px;overflow:hidden;background:#0d1422}
     .cc-map-fallback{height:430px;display:grid;place-items:center;color:#8A99B5;font-size:13px}
+    .cc-geo{font-size:11.5px;color:#8A99B5;padding:8px 6px 2px}
+    .cc-geo strong{color:#cdd8ec;font-variant-numeric:tabular-nums}
     /* attention queue */
     .cc-att-row{display:flex;align-items:center;gap:11px;padding:11px 6px;border-top:1px solid #1d2942;cursor:pointer}
     .cc-att-row:first-of-type{border-top:none}
@@ -238,7 +240,7 @@
         <div class="cc-body">
           <div>
             <div class="cc-sec-t">Global Crisis Snapshot</div>
-            <div class="cc-card" style="padding:8px"><div id="cc-map"></div></div>
+            <div class="cc-card" style="padding:8px"><div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div></div>
           </div>
           <div>
             <div class="cc-sec-t">Immediate Attention Required</div>
@@ -383,6 +385,7 @@
     };
     const rows = [
       row('🔴', SEV_COLOR.CRITICAL, 'Critical incidents', c.critical, '/incidents'),
+      row('⏳', '#fb923c', 'SLA at-risk (severity targets)', c.sla_at_risk, '/incidents'),
       row('⬆', '#fb923c', 'Escalating (risk ≥ 70)', c.escalating, '/incidents'),
       row('🔍', '#418FDE', 'Pending verification', c.pending_verification, '/incidents'),
       row('📋', '#22d3ee', 'Awaiting triage', c.awaiting_triage, '/incidents'),
@@ -480,6 +483,7 @@
       const reports = Array.isArray(body) ? body : (body && (body.items || body.reports)) || [];
       renderMap(reports);
       renderActivity(reports);
+      loadWorldGeo().then(() => renderGeoCaption(reports)).catch(() => {});
     } catch (_) {
       const a = el('cc-activity'); if (a) a.innerHTML = `<div class="cc-empty">Activity unavailable</div>`;
       mapFallback('Map data unavailable');
@@ -493,6 +497,51 @@
     if (lat == null || lng == null) return null;
     if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) return null;  // null-island
     return [Number(lat), Number(lng)];
+  }
+
+  // ── client-side country derivation (interim) — Turf point-in-polygon over the
+  // bundled world.json, scoped to the LOADED report window. A proper at-scale
+  // country breakdown needs a Location.country column + backfill (spec §4-A);
+  // until then this honestly labels itself "current view".
+  let _world = null, _worldPromise = null;
+  const _countryCache = {};
+  function loadWorldGeo() {
+    if (_world) return Promise.resolve(_world);
+    if (!_worldPromise) {
+      _worldPromise = fetch('world.json').then((r) => r.json())
+        .then((j) => { _world = j; return j; })
+        .catch(() => { _world = { features: [] }; return _world; });
+    }
+    return _worldPromise;
+  }
+  function countryFor(lat, lng) {
+    if (!_world || !window.turf) return null;
+    const key = lat.toFixed(1) + ',' + lng.toFixed(1);
+    if (key in _countryCache) return _countryCache[key];
+    let name = null;
+    try {
+      const pt = window.turf.point([lng, lat]);
+      for (const f of (_world.features || [])) {
+        if (window.turf.booleanPointInPolygon(pt, f)) { name = (f.properties && f.properties.name) || null; break; }
+      }
+    } catch (_) { /* turf hiccup → unknown */ }
+    _countryCache[key] = name;
+    return name;
+  }
+  function renderGeoCaption(reports) {
+    const box = el('cc-map-geo');
+    if (!box) return;
+    const tally = {};
+    (reports || []).forEach((r) => {
+      const ll = rLatLng(r);
+      if (!ll) return;
+      const c = countryFor(ll[0], ll[1]);
+      if (c) tally[c] = (tally[c] || 0) + 1;
+    });
+    const entries = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) { box.textContent = ''; return; }
+    const top = entries.slice(0, 4).map(([c, n]) => `${esc(c)} (${n})`).join(' · ');
+    box.innerHTML = `🌍 <strong>${entries.length}</strong> countries impacted (current view) · ${top}`;
   }
 
   function mapFallback(msg) {

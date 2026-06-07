@@ -37,7 +37,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_
 from sqlalchemy.orm import Session
 
 from app.core.deps import require_viewer
@@ -303,6 +303,13 @@ _DISRUPTED_SERVICE_VALUES = [
     "PARTIALLY_OPERATIONAL", "INTERMITTENT", "LOAD_SHEDDING",
 ]
 _ESCALATING_RISK_THRESHOLD = 70.0
+# Interim SLA policy (hardcoded per-severity response targets, hours): a PENDING
+# report older than its severity target is "at risk". No stored policy table yet
+# (see spec §4-C) — these defaults are computed server-side over ALL reports.
+_SLA_THRESHOLD_HOURS = {
+    SeverityEnum.CRITICAL: 1, SeverityEnum.SEVERE: 4,
+    SeverityEnum.MODERATE: 12, SeverityEnum.MINOR: 24, SeverityEnum.UNKNOWN: 12,
+}
 
 # Tiny in-process TTL cache, matching the dashboard poll cadence. Cleared on
 # every dev --reload and on process restart; fine for situational-awareness data.
@@ -324,6 +331,7 @@ class SummaryCounts(BaseModel):
     active_ops: int
     escalating: int
     stale: int
+    sla_at_risk: int
 
 
 class SummaryDistributions(BaseModel):
@@ -396,6 +404,11 @@ def operational_summary(
     stale_cut = now - timedelta(hours=stale_hours)
 
     # ── counts ──
+    sla_at_risk = _count(
+        not_deleted, Report.status == ReportStatusEnum.PENDING,
+        or_(*[and_(Report.severity == sev, Report.server_created_at < now - timedelta(hours=h))
+              for sev, h in _SLA_THRESHOLD_HOURS.items()]),
+    )
     counts = SummaryCounts(
         active=_count(*active),
         critical=_count(*active, Report.severity == SeverityEnum.CRITICAL),
@@ -411,6 +424,7 @@ def operational_summary(
         stale=_count(not_deleted, Report.status == ReportStatusEnum.PENDING,
                      Report.reviewer_verdict == NOT_REVIEWED,
                      Report.server_created_at < stale_cut),
+        sla_at_risk=sla_at_risk,
     )
 
     # ── distributions ──
