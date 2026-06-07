@@ -2691,66 +2691,75 @@ Object.assign(I18N.zh || (I18N.zh = {}), {
     crisis_conflict: "冲突", crisis_unrest: "动乱",
 });
 
-const state = {
+// ── Report capture state — SINGLE SOURCE OF TRUTH ────────────────────────────
+// `_freshReportState()` returns EVERY field scoped to ONE report. The reset
+// between reports is `Object.assign(state, _freshReportState())`
+// (see reportLifecycleReset) — so no per-report field can ever be missed again.
+// Any field NOT returned here is PRESERVED across reports and MUST be declared in
+// `_PRESERVED_STATE_KEYS`. `scripts/validate-report-reset.mjs` FAILS CI if any
+// `state.*` field is in neither set, so a future capture field can never silently
+// leak into the next report (this is the permanent fix for the recurring
+// state-persistence bug).
+//
+// NEVER hardcode classifier defaults here — null only (CLAUDE.md "Classifier-
+// state field naming"; gated by e2e/88). The pre-v6.7 RESIDENTIAL/FLOOD/PARTIAL/
+// MODERATE defaults were a reporter-blocking bug.
+function _freshReportState() {
+    // Re-seed location from the device-GPS cache so a fresh report starts at the
+    // device's last known position — but NEVER carry over a user-corrected
+    // location (is_user_corrected is reset to false).
+    let location = null, deviceLocation = null;
+    try {
+        const g = JSON.parse(localStorage.getItem('crisp_device_gps'));
+        if (g && g.lat) {
+            location = { lat: g.lat, lng: g.lng, acc: g.acc || 0, is_user_corrected: false };
+            deviceLocation = { lat: g.lat, lng: g.lng };
+        }
+    } catch (_) { /* malformed cache → start with no location */ }
+    return {
+        // Photos: primary + extras + 3-tier variants + blur pipeline.
+        photoDataUrl: null, photoBlob: null, photoVariants: null, photoGroupId: null,
+        extraPhotos: [], v4Photos: [], photoBlurPending: [], blurhash: null,
+        photoClientBlurApplied: undefined, buildingId: null, buildingOsmElement: null,
+        // Audio + voice/text + recorder/recognition scaffolding.
+        audioBlob: null, audioChunks: [], transcript: '', description: '',
+        mediaRecorder: null, isRecording: false, recognition: null,
+        timerInterval: null, timerSeconds: 0, cameraStream: null, v4VoiceOnly: false,
+        detectedLang: null, detectedLangLabel: null,
+        // Classifiers — snake_case is authoritative (v4 writes these). null only.
+        damage_classification: null, infrastructure_type: null, crisis_type: null,
+        infrastructure_name: '', infrastructure_name_from_osm: false,
+        // Classifiers — legacy v3 camelCase fallbacks (pre-v6.7 IDB rows). null only.
+        infraType: null, crisisType: null, damageClass: null, severity: null,
+        infraName: '', infraNameFromOsm: false,
+        // V4 extras + UNDP service details.
+        debrisClearing: false,
+        serviceStatus: { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] },
+        // Crisis-pack ANSWERS reset per report; the zone form schema `crisisPack`
+        // is PRESERVED so it re-applies in-zone (see _PRESERVED_STATE_KEYS).
+        crisisStockAnswers: {},
+        applicableModules: [],   // W6 modules cache (per crisis type)
+        // Location-derived. gpsErrorCode: null|'denied'|'unavailable'|'timeout'|
+        // 'no-support'|'insecure-context'. nearbyBuildings: BuildingSelect cache.
+        location: location, deviceLocation: deviceLocation, userLocationName: null, locationName: null,
+        gpsErrorCode: null, nearbyBuildings: [],
+        // Review-stage pagination cursor.
+        reviewPage: 1,
+    };
+}
+
+// Fields PRESERVED across reports (NOT report-scoped). Every `state.*` key must
+// be in `_freshReportState()` OR here — enforced by scripts/validate-report-reset.mjs.
+const _PRESERVED_STATE_KEYS = [
+    'lang',        // selected UI language — persists across reports
+    'speechCode',  // speech-recognition locale — persists
+    'crisisPack',  // active crisis-zone form schema — re-applies in-zone by design (v4-flow.js)
+];
+
+const state = Object.assign({
     lang: 'en',
-    photoDataUrl: null,
-    photoBlob: null,
-    // Guaranteed-delivery pipeline: three JPEG variants of the main photo
-    // (SMALL/MEDIUM/LARGE) share a photoGroupId. Populated by
-    // ImageVariants.generate() during capture.
-    photoVariants: null,   // { small: {blob,bytes}, medium: {...}, original: {...} }
-    photoGroupId: null,    // UUID linking the three variants on the backend
-    // Extra photos: each entry now carries its own variants + groupId.
-    // { dataUrl, blob, variants: {small, medium, original}, groupId }.
-    extraPhotos: [],
-    audioBlob: null,
-    transcript: '',
-    description: '',
-    // default infraType = the first UNDP
-    // super-type chip (RESIDENTIAL). Was 'ROAD' under v2 legacy chips.
-    // Backend InfraTypeEnum accepts both the legacy + super-type values
-    // so offline queues built by pre-v3 clients keep replaying cleanly.
-    infraType: 'RESIDENTIAL',
-    severity: 'MODERATE',
-    crisisType: 'FLOOD',
-    damageClass: 'PARTIAL',
-    infraName: '',
-    // distinguisher between user-typed names and
-    // names auto-filled from the OSM building-select tap. `false` (or
-    // absent) = user typed it; `true` = building-select.js auto-filled
-    // from the OSM tags. Dashboard uses this to flag `building_id = NULL
-    // AND infraNameFromOsm=false` rows as "needs mapping".
-    infraNameFromOsm: false,
-    // List of nearest buildings populated by BuildingSelect.preCacheNearest()
-    // when GPS resolves. Non-authoritative (purely a UX affordance for the
-    // free-text autocomplete); `buildingId` remains the truth for any actual
-    // selection.
-    nearbyBuildings: [],
-    // W6 applicable-modules cache per crisis type.
-    // Populated by fetchApplicableModules on crisis-chip tap. Consumed by the
-    // future inline renderer on stage-review.
-    applicableModules: [],
-    debrisClearing: false,
-    serviceStatus: { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] },
-    location: null,
-    deviceLocation: null, // Keep original GPS separately
-    userLocationName: null, // Place name typed by user (for offline geocoding)
-    locationName: null, // Resolved human-readable place name from reverse geocoding
-    // M9 — track WHY GPS failed so the landmark-fallback banner
-    // can render with a contextual message. null when GPS is healthy or
-    // hasn't resolved yet; one of: 'denied' (user said no), 'unavailable'
-    // (PositionUnavailable), 'timeout' (>8s), 'no-support' (browser),
-    // 'insecure-context' (non-HTTPS origin).
-    gpsErrorCode: null,
-    isRecording: false,
-    recognition: null,
-    timerInterval: null,
-    timerSeconds: 0,
-    cameraStream: null,
     speechCode: 'en-US',
-    mediaRecorder: null,
-    audioChunks: [],
-};
+}, _freshReportState());
 
 
 // Dynamically resolve backend host so the app works from:
@@ -3641,6 +3650,10 @@ window.__crispRenderPartialReports = () => (typeof _renderPartialReports === 'fu
     ? _renderPartialReports() : Promise.resolve());
 
 function goToStage(id) {
+    // Capture the OUTGOING stage before we deactivate it below, so the
+    // reset-on-entry guard further down can tell where the user came from.
+    const _prevStageEl = document.querySelector('.stage.active');
+    const _prevStageId = _prevStageEl ? _prevStageEl.id : null;
     // May 2026 (perf Sprint B.2) — lazy-load FontAwesome on first
     // non-home stage navigation. The home stage uses inline SVG for
     // all icons (audio glyph, channels strip, login/MyReports, trophy)
@@ -3703,6 +3716,22 @@ function goToStage(id) {
     // feedback that their reports are counted.
     if (id === 'stage-home') {
         try { updateHomeImpactMetrics(); } catch (e) { console.warn('[Home] metrics:', e); }
+    }
+
+    // Guarded reset-on-entry — start a FRESH report whenever the user ARRIVES at
+    // capture from a terminal / non-flow stage (home, success/thank-you, My
+    // Reports, report detail). This closes Journey 4 (abandon → Home → new) and
+    // any nav path that reaches capture without a prior reset, so a previous
+    // report can never bleed into the new one. We DON'T reset when arriving from
+    // within the flow (classify / review / back-nav, or the review "+ Add photo"
+    // which routes through capture) — that would wipe an in-progress capture;
+    // render-from-state on entry keeps that DOM correct instead. Runs BEFORE the
+    // stage-entered dispatch so v4-flow's capture render-from-state reflects the
+    // cleared state. Idempotent (safe even when a caller already reset).
+    const _RESET_ON_ENTRY_FROM = ['stage-home', 'stage-success', 'stage-history', 'stage-report-detail'];
+    if (id === 'stage-v4-capture' && _prevStageId && _prevStageId !== id
+        && _RESET_ON_ENTRY_FROM.includes(_prevStageId)) {
+        try { reportLifecycleReset(); } catch (_) {}
     }
 
     // Phase 6: notify listeners that a stage was entered. The review-stage
@@ -14953,74 +14982,22 @@ window.crispConfirm = crispConfirm;
 //     state.cameraStream nulled out so no stale refs leak into the next
 //     capture's recorder / camera wiring.
 //   - state.buildingId cleared so OSM footprint selection doesn't carry.
-function _clearCaptureState() {
-    // ── State fields ────────────────────────────────────────────────────────
-    state.photoDataUrl = null; state.photoBlob = null; state.extraPhotos = [];
-    // PR 5: blur-pending is an array now; zero it so stale promises from the
-    // previous report can't make the next awaitPendingBlur() wait on them.
-    state.photoBlurPending = [];
-    state.photoGroupId = null; state.photoVariants = null;
-    // Phase-1 progressive-upload: clear blurhash so it doesn't leak from the
-    // previous capture into the next report's meta payload.
-    state.blurhash = null;
-    // PII-blur hardening leaves a per-capture truthful flag on
-    // state. Clearing it means the next capture starts from "unknown until
-    // the pipeline runs", not from the previous report's answer.
-    state.photoClientBlurApplied = undefined;
-    state.audioBlob = null; state.transcript = ''; state.description = '';
-    // v6.7 (May 2026) — the legacy v3 fields (infraType / crisisType /
-    // damageClass / infraName / severity) are now NULL-reset, NOT
-    // hardcoded to ROAD / FLOOD / PARTIAL / MODERATE / '' as they were
-    // pre-v6.7. The pre-v6.7 hardcoded defaults were the root cause of
-    // the reporter-blocking bug where every report submitted with
-    // those four wrong classifiers regardless of what the user tapped
-    // — v4-flow.js writes to the snake_case fields below, never to
-    // these legacy camelCase fields, so the legacy values stayed at
-    // their reset defaults forever. submitReport now reads
-    // snake_case-first with these as defensive fallbacks; surfacing
-    // null when a pick is missing is correct behaviour (dashboard
-    // flags for review) rather than silently mis-classifying. DO NOT
-    // re-introduce hardcoded values here — see CLAUDE.md "Classifier-
-    // state field naming" invariant.
-    state.infraType = null; state.crisisType = null; state.damageClass = null;
-    state.infraName = ''; state.severity = null;
-    state.infraNameFromOsm = false;
-    state.debrisClearing = false; state.serviceStatus = { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] };
-    // v4 capture flow — authoritative source-of-truth for the four
-    // classifier fields. v4-flow.js writes here on every user tap;
-    // submitReport reads here first. Reset to null so the next
-    // capture starts from "no pick" and v4-flow's _canAdvanceFrom
-    // correctly disables Next until the user re-picks.
-    state.damage_classification = null;
-    state.infrastructure_type   = null;
-    state.crisis_type           = null;
-    state.infrastructure_name   = '';
-    state.infrastructure_name_from_osm = false;
-    // Building-footprint selection (OSM way id) — don't carry between reports.
-    state.buildingId = null;
-    // Media-recorder scaffolding — these accumulate across recordings and
-    // must zero between reports so the next audio capture starts from a
-    // clean chunk array. The recorder instance itself is closed by its
-    // own stop handler; we just drop our reference.
-    state.mediaRecorder = null;
-    state.audioChunks = [];
-    // Camera stream — if the previous capture left the live-camera modal
-    // open and the user navigated back without closing it, the stream
-    // could linger. Clearing the reference lets GC reclaim the track once
-    // the viewfinder DOM is torn down. A proactive .getTracks().stop()
-    // runs inside the camera-modal close handler; this is belt-and-braces.
-    state.cameraStream = null;
-
-    // Always reset to device GPS — never carry over user-corrected location to next report
-    state.userLocationName = null; state.locationName = null;
-    const cachedGps = (() => { try { return JSON.parse(localStorage.getItem('crisp_device_gps')); } catch (_) { return null; } })();
-    if (cachedGps && cachedGps.lat) {
-        state.location = { lat: cachedGps.lat, lng: cachedGps.lng, acc: cachedGps.acc || 0, is_user_corrected: false };
-        state.deviceLocation = { lat: cachedGps.lat, lng: cachedGps.lng };
-    } else {
-        state.location = null;
-        state.deviceLocation = null;
-    }
+function reportLifecycleReset() {
+    // ── State fields — SINGLE SOURCE OF TRUTH (see _freshReportState) ─────────
+    // Free live handles BEFORE the reset so a running recording timer or a
+    // speech-recognition session from the previous report can't fire into the
+    // next one (the factory only drops the references).
+    try { if (state.timerInterval) clearInterval(state.timerInterval); } catch (_) {}
+    try { if (state.recognition && state.recognition.abort) state.recognition.abort(); } catch (_) {}
+    // Reset EVERY report-scoped field in one shot. This is the whole point of the
+    // factory: no field can be missed. Adding a capture field? Put it in
+    // _freshReportState() (resets per report) or _PRESERVED_STATE_KEYS (survives)
+    // — scripts/validate-report-reset.mjs FAILS CI if a state.* field is in
+    // neither set, so this class of bug cannot silently return.
+    // NOTE: only in-memory `state` resets here. The IndexedDB queue
+    // (pending-reports) is NEVER touched — queued reports must survive
+    // (offline-first). DOM is reset below; the v4 stages also render-from-state.
+    Object.assign(state, _freshReportState());
 
     // ── DOM reset ───────────────────────────────────────────────────────────
     // Every lookup is guarded because elements in this list have been added/
@@ -15192,11 +15169,47 @@ function _clearCaptureState() {
     try {
         document.dispatchEvent(new CustomEvent('crisp-capture-state-cleared'));
     } catch (_) {}
+
+    // Dev/test self-check — assert the reset returned every report field to its
+    // _freshReportState() default. Any mismatch logs a structured
+    // `[reset-leak] <field>` line; the e2e matrix asserts ZERO such errors, so a
+    // future un-reset field fails the suite loudly, by name. No-op in production.
+    try { _assertReportStateClean(); } catch (_) {}
+}
+
+// Back-compat alias — existing call sites (submitReport, resetApp), the window
+// export, and e2e specs all use `_clearCaptureState`. `reportLifecycleReset` is
+// the canonical name.
+function _clearCaptureState() { return reportLifecycleReset(); }
+
+// Dev/test only (gated on navigator.webdriver / window.__crispDebugReset):
+// deep-compare every report-scoped key against a fresh factory object and report
+// any that did not reset. This is layer 3 of the anti-regression design.
+function _assertReportStateClean() {
+    const _isTestEnv = (typeof navigator !== 'undefined' && navigator.webdriver)
+        || (typeof window !== 'undefined' && window.__crispDebugReset);
+    if (!_isTestEnv) return;
+    const fresh = _freshReportState();
+    const same = (a, b) => {
+        if (a === b) return true;
+        try { return JSON.stringify(a) === JSON.stringify(b); } catch (_) { return false; }
+    };
+    for (const k of Object.keys(fresh)) {
+        // crisis_type is legitimately re-applied AFTER the reset from an active
+        // crisis-zone pack (_ensureZoneCrisisType; UNDP must-have #5 — the zone
+        // drives the cause). That re-apply is intended, not a leak: accept it
+        // when it matches the preserved crisisPack's crisis_type.
+        if (k === 'crisis_type' && state.crisisPack && state.crisis_type === state.crisisPack.crisis_type) continue;
+        if (!same(state[k], fresh[k])) {
+            try { console.error(`[reset-leak] ${k}`, { got: state[k], want: fresh[k] }); } catch (_) {}
+        }
+    }
 }
 
 // Expose for the post-submit hook and tests. The pure form (no navigation)
 // is the safer default; tests and submitReport can assert on the result
 // without racing the stage transition.
+window.reportLifecycleReset = reportLifecycleReset;
 window._clearCaptureState = _clearCaptureState;
 
 function resetApp() {

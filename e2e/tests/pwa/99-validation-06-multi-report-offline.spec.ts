@@ -1,13 +1,22 @@
 /**
  * Validation Scenario 06 — Multi-report offline queue drain.
  *
- * Capture 3 reports back-to-back while OFFLINE, then reconnect. All 3 must
+ * Capture 4 reports back-to-back while OFFLINE, then reconnect. All 4 must
  * drain to SYNCED on the dashboard with no swapped IDs, no duplicates, and
  * each report's geotag preserved.
  *
+ * Also exercises the report-lifecycle reset under the offline queue path (the
+ * recurring "stale state leaks into the next report" guard): after each offline
+ * submit the capture state is fully cleared AND the IDB queue grows by exactly
+ * one — reset clears in-memory state + DOM but NEVER drains the queue (UNDP
+ * must-have #3, offline-first).
+ *
  * Pass criteria:
- *   · 3 distinct queue items in IDB while offline
- *   · On reconnect, all 3 reach SYNCED within 90 s
+ *   · queue depth grows by exactly 1 per offline submit (reset never shrinks it)
+ *   · capture state clean between offline submits (description / audio /
+ *     crisis-pack answers do NOT carry to the next report)
+ *   · 4 distinct queue items in IDB while offline
+ *   · On reconnect, all 4 reach SYNCED within 120 s
  *   · Each report's lat/lng matches its respective fixture (no cross-talk)
  *   · No duplicate Report rows
  */
@@ -24,12 +33,13 @@ const FIXTURES = [
     { name: 'IMG_5718',   file: 'IMG_5718.jpg',   lat: 12.93488, lng: 77.61173 },
     { name: 'IMG_5785',   file: 'IMG_5785.jpg',   lat: 25.46743, lng: 81.78442 },
     { name: 'IMG_5832',   file: 'IMG_5832.jpg',   lat: 25.16453, lng: 82.50972 },
+    { name: 'IMG_5931',   file: 'IMG_5931.jpg',   lat: 19.07283, lng: 72.88261 },
 ];
 const SCENARIO = '06-multi-report-offline';
 const DEVICE_HASH = 'PWA-validation-multi-report-offline-06';
 
-test.describe('VALIDATION 06 — 3 reports captured offline → drain all on reconnect', () => {
-    test('3 offline captures → reconnect → all 3 SYNCED with correct geotags', async ({ page }) => {
+test.describe('VALIDATION 06 — 4 reports captured offline → drain all on reconnect', () => {
+    test('4 offline captures → reconnect → all 4 SYNCED with correct geotags', async ({ page }) => {
         test.setTimeout(300_000);
         const resultDir = ensureScenarioDir(SCENARIO, 'multi');
 
@@ -47,8 +57,9 @@ test.describe('VALIDATION 06 — 3 reports captured offline → drain all on rec
 
         await page.context().setOffline(true);
 
-        // Capture + submit 3 reports while offline
+        // Capture + submit all fixtures while offline
         const cids: string[] = [];
+        let submittedSoFar = 0;
         for (const fx of FIXTURES) {
             const fixtureBytes = fs.readFileSync(path.join(FIXTURES_DIR, fx.file));
             // Ingest + variants
@@ -64,7 +75,7 @@ test.describe('VALIDATION 06 — 3 reports captured offline → drain all on rec
                 }
             }, { bytes: Array.from(fixtureBytes), name: fx.file });
 
-            await page.evaluate(({ lat, lng, desc }) => {
+            await page.evaluate(({ lat, lng, desc, ans }) => {
                 const s = (window as any).state;
                 s.crisis_type = 'FLOOD';
                 s.infrastructure_type = 'HOUSE';
@@ -73,10 +84,34 @@ test.describe('VALIDATION 06 — 3 reports captured offline → drain all on rec
                 s.description = desc;
                 s.location = { lat, lng, acc: 5 };
                 s.locationName = 'Multi-offline test';
-            }, { lat: fx.lat, lng: fx.lng, desc: `Validation 06 — ${fx.name}` });
+                s.crisisStockAnswers = ans;   // data-integrity: must NOT carry to the next offline report
+            }, { lat: fx.lat, lng: fx.lng, desc: `Validation 06 — ${fx.name}`, ans: { test_q: `ans-${fx.name}` } });
 
             await page.evaluate(async () => { await (window as any).__crispSubmitReport(); });
             await page.waitForTimeout(500);  // let submitReport settle + clear capture state
+            submittedSoFar++;
+
+            // ── Reset-between-offline-submits invariant (the recurring-bug guard,
+            // exercised under the offline queue path). After each submit the
+            // capture state must be fully cleared AND the IDB queue must have
+            // grown by exactly one — reset clears in-memory state + DOM but
+            // NEVER drains the queue (UNDP must-have #3, offline-first).
+            const probe = await page.evaluate((deviceHash) =>
+                (window as any).__crispGetAllQueued().then((all: any[]) => {
+                    const s = (window as any).state;
+                    return {
+                        depth: all.filter((q) => q.meta?.device_hash === deviceHash).length,
+                        description: s.description,
+                        audioBlobNull: s.audioBlob === null,
+                        crisis_type: s.crisis_type,
+                        stockAnswers: s.crisisStockAnswers,
+                    };
+                }), DEVICE_HASH);
+            expect(probe.depth, `queue depth after offline submit #${submittedSoFar} must grow by exactly 1`).toBe(submittedSoFar);
+            expect(probe.description, `description cleared after offline submit #${submittedSoFar}`).toBe('');
+            expect(probe.audioBlobNull, `audioBlob cleared after offline submit #${submittedSoFar}`).toBe(true);
+            expect(probe.crisis_type, `crisis_type cleared after offline submit #${submittedSoFar}`).toBeNull();
+            expect(probe.stockAnswers, 'crisis-pack answers must NOT carry to the next offline report').toEqual({});
 
             // HC80 — reopen the sticky submit latch between reports, mirroring
             // the real UI's "Report another" → resetApp(). submitReport latches
@@ -91,7 +126,7 @@ test.describe('VALIDATION 06 — 3 reports captured offline → drain all on rec
             // Note: state.photoVariants is cleared by _clearCaptureState after submit; need a fresh page evaluate cycle
         }
 
-        // Read the queue — should have 3 items
+        // Read the queue — should have one item per fixture
         const queue = await page.evaluate(async (deviceHash) => {
             const all = await (window as any).__crispGetAllQueued();
             return all
@@ -105,7 +140,7 @@ test.describe('VALIDATION 06 — 3 reports captured offline → drain all on rec
                 }));
         }, DEVICE_HASH);
         writeArtifact(resultDir, '01_idb_offline.json', queue);
-        expect(queue.length, `expected 3 IDB queue rows, got ${queue.length}`).toBe(3);
+        expect(queue.length, `expected ${FIXTURES.length} IDB queue rows, got ${queue.length}`).toBe(FIXTURES.length);
         cids.push(...queue.map((q: any) => q.cid));
 
         // ── RECONNECT ─────────────────────────────────────────────────────
@@ -116,7 +151,7 @@ test.describe('VALIDATION 06 — 3 reports captured offline → drain all on rec
             if ((window as any).startRetryLoop) (window as any).startRetryLoop();
         });
 
-        // Poll for all 3 reaching SYNCED
+        // Poll for all reaching SYNCED
         const finalStates = await pollUntil(
             () => cids.map(cid => pgReportTruth(cid)),
             (states) => states.every(t => t.report_id !== null

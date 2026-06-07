@@ -1361,6 +1361,46 @@
         // app.js can pull the recorder back to idle after a clean reset).
         window.__crispV4RenderCapRecorderState = _renderCapRecorderState;
 
+        // RENDER-FROM-STATE — the v4 capture + classify DOM is a pure function of
+        // `state`. Called on stage-v4-capture entry, on every classify sub-step
+        // show, AND on crisp-capture-state-cleared. Because a cleared `state`
+        // deterministically yields a clean DOM, NO future capture field can leak
+        // into the next report by being "painted on tap but never cleared on
+        // reset" — that imperative-paint gap was the root cause of the recurring
+        // state-persistence bug (description textarea + recorder panel + grid
+        // highlights all leaked because reset hand-enumerated DOM clears and kept
+        // falling behind). Idempotent + fully guarded.
+        function _renderV4FromState() {
+            const s = window.state || {};
+            // Capture stage: description textarea + voice recorder panel.
+            try { const ta = document.getElementById('v4-cap-text-area'); if (ta) ta.value = s.description || ''; } catch (_) {}
+            try { _renderCapRecorderState((s.audioBlob && s.audioBlob.size > 0) ? 'stopped' : 'idle'); } catch (_) {}
+            // Classify stage: damage / infra / crisis selections derive from state
+            // (each option's data-value compared to the canonical state field).
+            const sel = (selector, val) => {
+                try {
+                    document.querySelectorAll(selector).forEach((el) => {
+                        const on = val != null && el.getAttribute('data-value') === val;
+                        el.classList.toggle('is-selected', on);
+                        if (!on) el.classList.remove('is-tap-confirmed');
+                        try { el.setAttribute('aria-checked', on ? 'true' : 'false'); } catch (_) {}
+                    });
+                } catch (_) {}
+            };
+            sel('#v4-view-damage .v4-q-opt', s.damage_classification);
+            sel('#v4-view-infra .v4-hit-tile', s.infrastructure_type);
+            sel('#v4-cause-grid .v4-cause-tile', s.crisis_type);
+            // Infra "OTHER, please specify" prompt + free-text mirror state.
+            try {
+                const isOther = s.infrastructure_type === 'OTHER';
+                const prompt = document.getElementById('v4-infra-other-prompt');
+                if (prompt) { if (isOther) prompt.removeAttribute('hidden'); else prompt.setAttribute('hidden', ''); }
+                const input = document.getElementById('v4-infra-other-input');
+                if (input) input.value = isOther ? (s.infrastructure_name || '') : '';
+            } catch (_) {}
+        }
+        window.__crispV4RenderFromState = _renderV4FromState;
+
         // Voice mic CTA — start recording + flip into the RECORDING state.
         if (capMicBtn) {
             capMicBtn.addEventListener('click', () => {
@@ -1539,7 +1579,14 @@
         _refreshCapStrip();
         document.addEventListener('stage-entered', (e) => {
             const stage = typeof e.detail === 'string' ? e.detail : (e.detail?.stage || '');
-            if (stage === 'stage-v4-capture') _refreshCapStrip();
+            if (stage === 'stage-v4-capture') {
+                _refreshCapStrip();
+                // Defensive depth: derive the capture DOM (textarea + recorder)
+                // from state on EVERY entry, so even a nav path that reaches
+                // capture without firing a reset shows a state-consistent DOM
+                // (and back-nav from classify preserves an in-progress capture).
+                try { _renderV4FromState(); } catch (_) {}
+            }
         });
 
         // Expose the refresh so the existing _handlePhoto + recording
@@ -2433,40 +2480,15 @@
             // where a parallel reset path races) we want the gate to
             // immediately reflect emptiness.
             try { _refreshClassifyNext(); } catch (_) {}
-            // Clear any selected crisis tile so the user doesn't see a
-            // stale highlight on the next entry. May 2026 — replaces
-            // the older "_crisisGroup = null + show group cards / hide
-            // subtypes" reset; the drill-down was retired when the
-            // crisis sub-step was flattened to a single grid.
-            try {
-                const grid = document.getElementById('v4-cause-grid');
-                if (grid) {
-                    grid.querySelectorAll('.v4-cause-tile.is-selected').forEach((t) => {
-                        t.classList.remove('is-selected');
-                        t.setAttribute('aria-checked', 'false');
-                    });
-                }
-            } catch (_) {}
-            // May 2026 — the cause grid was the ONLY one cleared here, but
-            // _clearCaptureState also nulls state.{damage_classification,
-            // infrastructure_type}. The damage (.v4-q-opt) + infra
-            // (.v4-hit-tile) painters only toggle .is-selected on tap and
-            // never re-derive from state, so the prior report's damage + infra
-            // picks stayed visually highlighted on the next report ("selected
-            // options didn't clear"). Clear those two grids too, and drop the
-            // "OTHER, please specify" prompt + its free-text input.
-            try {
-                document.querySelectorAll(
-                    '#v4-view-damage .v4-q-opt.is-selected, #v4-view-infra .v4-hit-tile.is-selected'
-                ).forEach((el) => {
-                    el.classList.remove('is-selected', 'is-tap-confirmed');
-                    el.setAttribute('aria-checked', 'false');
-                });
-                const _otherPrompt = document.getElementById('v4-infra-other-prompt');
-                if (_otherPrompt) _otherPrompt.setAttribute('hidden', '');
-                const _otherInput = document.getElementById('v4-infra-other-input');
-                if (_otherInput) _otherInput.value = '';
-            } catch (_) {}
+            // Render-from-state: derive ALL capture + classify DOM from the
+            // (now-cleared) state — the description textarea, the voice recorder
+            // panel, and the damage/infra/crisis selections + the infra-OTHER
+            // prompt. This REPLACES the old hand-maintained "clear these specific
+            // selectors" block, which kept falling behind every time a new
+            // capture field was added (the recurrence). With render-from-state,
+            // a cleared `state` always yields a clean DOM, so the leak cannot
+            // reappear for any future field that paints from state.
+            try { if (window.__crispV4RenderFromState) window.__crispV4RenderFromState(); } catch (_) {}
         });
         // Re-render the dynamic sub-step label whenever the i18n pack
         // updates (e.g. async en.json load resolves after first paint).
@@ -2634,6 +2656,10 @@
             if (s === step) view.removeAttribute('hidden');
             else view.setAttribute('hidden', '');
         });
+        // Render-from-state: derive the shown sub-step's selection from `state`
+        // on every entry, so back-nav re-highlights a saved pick and a fresh
+        // report shows none (no imperative-paint drift).
+        try { if (window.__crispV4RenderFromState) window.__crispV4RenderFromState(); } catch (_) {}
         // Sub-step label
         const label = document.getElementById('v4-substep-label');
         if (label) {

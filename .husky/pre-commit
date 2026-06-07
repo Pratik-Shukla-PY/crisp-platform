@@ -138,4 +138,25 @@ if [ -n "$sw_asset_staged" ]; then
     fi
 fi
 
+# ── 7. Report-lifecycle reset completeness ──────────────────────────
+# Permanent guard against the recurring "stale report state leaks into the
+# next report" bug: every field written to the global `state` must be
+# classified as reset-per-report (_freshReportState) or preserved
+# (_PRESERVED_STATE_KEYS). A new capture field added without classifying it
+# fails here. See scripts/validate-report-reset.mjs. Trigger: the three
+# files that write the global state.
+reset_src_staged=$(git diff --cached --name-only --diff-filter=ACM | \
+                   grep -E '^mobile-app/src/(app|v4-flow|building-select)\.js$' || true)
+if [ -n "$reset_src_staged" ]; then
+    if command -v node >/dev/null 2>&1; then
+        if ! node scripts/validate-report-reset.mjs; then
+            echo ""
+            echo "✗ Report-reset completeness check failed (see above)."
+            echo "  Classify each field in mobile-app/src/app.js: add it to"
+            echo "  _freshReportState() (resets every report) or _PRESERVED_STATE_KEYS."
+            exit 1
+        fi
+    fi
+fi
+
 echo "✓ pre-commit checks passed"

@@ -249,6 +249,20 @@ jobs:
           else
             echo "scripts/generate-home-i18n-inline.mjs not found — skipping"
           fi
+      - name: Check report-lifecycle reset completeness
+        # Permanent guard against the recurring "stale report state leaks into
+        # the next report" bug. Every field written to the PWA global `state`
+        # must be classified as reset-per-report (_freshReportState) or
+        # preserved (_PRESERVED_STATE_KEYS); a new capture field added without
+        # classifying it fails here, so the leak class cannot silently return.
+        # The pre-commit hook gates this locally; CI is the backstop against
+        # --no-verify / non-husky commits.
+        run: |
+          if [ -f scripts/validate-report-reset.mjs ]; then
+            node scripts/validate-report-reset.mjs
+          else
+            echo "scripts/validate-report-reset.mjs not found — skipping"
+          fi
 
   python-security:
     name: Python dep vulnerability scan (pip-audit)
