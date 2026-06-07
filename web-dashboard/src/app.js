@@ -10827,9 +10827,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // the first 3 sessions per device.
     _onboardingBumpSession();
     _kickOnboardingTips();
-    // Close dropdowns on outside click
+    // Close dropdowns on outside click. The toggle buttons stopPropagation, so
+    // opening one never self-closes; item clicks remove `open` themselves. The
+    // dp-overflow / dp-verdict / bc-state menus were previously absent here, so
+    // they stayed open on an outside click (DASH-004).
     document.addEventListener('click', (e) => {
-        document.querySelectorAll('.export-dropdown.open, .sort-dropdown.open').forEach(d => {
+        document.querySelectorAll(
+            '.export-dropdown.open, .sort-dropdown.open, .dp-overflow-wrap.open, .dp-verdict-dropdown.open, .bc-state-dropdown.open',
+        ).forEach(d => {
             if (!d.contains(e.target)) d.classList.remove('open');
         });
     });

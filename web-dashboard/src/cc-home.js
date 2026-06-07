@@ -197,9 +197,12 @@
     ov.setAttribute('aria-label', 'CRISP Crisis Intelligence Center');
     document.body.appendChild(ov);
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && ov.classList.contains('cc-home-open')) {
+      if (!ov.classList.contains('cc-home-open')) return;
+      if (e.key === 'Escape') {
         if (window.__crispRouter) window.__crispRouter.navigate('/incidents'); else closeLanding();
+        return;
       }
+      if (e.key === 'Tab') trapTab(e, ov);
     });
     return ov;
   }
@@ -207,6 +210,15 @@
     const ov = el('cc-home-overlay');
     if (ov) ov.classList.remove('cc-home-open');
     if (_poll) { clearInterval(_poll); _poll = null; }
+  }
+  // Focus-trap: keep Tab/Shift+Tab within the open overlay (a11y, WCAG 2.4.3).
+  function trapTab(e, ov) {
+    const sel = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    const nodes = Array.from(ov.querySelectorAll(sel)).filter((n) => n.offsetParent !== null);
+    if (!nodes.length) return;
+    const first = nodes[0], last = nodes[nodes.length - 1], a = document.activeElement;
+    if (e.shiftKey) { if (a === first || !ov.contains(a)) { e.preventDefault(); last.focus(); } }
+    else if (a === last || !ov.contains(a)) { e.preventDefault(); first.focus(); }
   }
 
   const go = (r) => { try { if (window.__crispRouter) window.__crispRouter.navigate(r); } catch (_e) {} };

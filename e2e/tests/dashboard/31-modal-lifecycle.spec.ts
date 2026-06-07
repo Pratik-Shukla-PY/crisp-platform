@@ -125,4 +125,28 @@ test.describe('Dashboard — modal lifecycle', () => {
     await expect(page.locator('#cc-st-overlay.cc-st-open')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('#cc-st-close')).toBeFocused();
   });
+
+  // ── Full focus-trap: Tab/Shift+Tab cycle inside the dialog, never escape ───
+  test('@smoke focus is trapped within an open modal (Tab never escapes)', async ({ page }) => {
+    await bootAuthed(page);
+    await nav(page, '/reporting');
+    await expect(page.locator('#cc-cf-overlay.cc-cf-open')).toBeVisible({ timeout: 5000 });
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press('Tab');
+      const inside = await page.evaluate(() => {
+        const ov = document.getElementById('cc-cf-overlay');
+        return !!(ov && document.activeElement && ov.contains(document.activeElement));
+      });
+      expect(inside, `focus escaped the modal on Tab #${i + 1}`).toBe(true);
+    }
+    // Shift+Tab also stays inside.
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('Shift+Tab');
+      const inside = await page.evaluate(() => {
+        const ov = document.getElementById('cc-cf-overlay');
+        return !!(ov && document.activeElement && ov.contains(document.activeElement));
+      });
+      expect(inside, `focus escaped on Shift+Tab #${i + 1}`).toBe(true);
+    }
+  });
 });

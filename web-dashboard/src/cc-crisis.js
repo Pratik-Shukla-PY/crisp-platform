@@ -410,6 +410,17 @@
     document.head.appendChild(tag);
   }
 
+  // Focus-trap: keep Tab/Shift+Tab within the open overlay (a11y, WCAG 2.4.3).
+  // Also pulls focus back in if it ever escaped behind the modal.
+  function trapTab(e, ov) {
+    const sel = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    const nodes = Array.from(ov.querySelectorAll(sel)).filter((n) => n.offsetParent !== null);
+    if (!nodes.length) return;
+    const first = nodes[0], last = nodes[nodes.length - 1], a = document.activeElement;
+    if (e.shiftKey) { if (a === first || !ov.contains(a)) { e.preventDefault(); last.focus(); } }
+    else if (a === last || !ov.contains(a)) { e.preventDefault(); first.focus(); }
+  }
+
   // ── overlay shell ──────────────────────────────────────────────────────────
   function ensureOverlay() {
     let ov = el('cc-cf-overlay');
@@ -439,7 +450,9 @@
     el('cc-cf-close').addEventListener('click', _exit);
     ov.addEventListener('mousedown', (e) => { if (e.target === ov) _exit(); });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && ov.classList.contains('cc-cf-open') && !S.editingEvent && !S.builderPackId) _exit();
+      if (!ov.classList.contains('cc-cf-open')) return;
+      if (e.key === 'Escape' && !S.editingEvent && !S.builderPackId) { _exit(); return; }
+      if (e.key === 'Tab') trapTab(e, ov);
     });
     ov.querySelectorAll('.cc-cf-tab').forEach((b) => b.addEventListener('click', () => {
       S.tab = b.getAttribute('data-tab');
