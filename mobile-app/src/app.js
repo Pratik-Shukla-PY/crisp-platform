@@ -6054,29 +6054,62 @@ function openCameraModal() {
     if (!modal || modal.style.display === 'flex') return;
     modal.style.display = 'flex';
     _showCameraLoading(modal, true);
-    // HC97 — request the HIGHEST resolution the camera will give over
-    // getUserMedia (ideal 4K). iOS Safari has no ImageCapture.takePhoto(), so
-    // we snapshot a video frame; WITHOUT this hint the browser returns a low
-    // default (~640×480 / 720p) — that was the "image quality reduced/capped"
-    // report. `ideal` never rejects: the device returns its best ≤ 4K.
+    // Perceived first-open speed (Jun 2026) — two-phase resolution. A cold
+    // camera warms up and paints its FIRST FRAME noticeably faster at 1080p
+    // than at 4K, so we request 1080p first → the live preview appears sooner
+    // and the modal stops "sitting on a spinner". Once the preview is visible
+    // we transparently upgrade the SAME track to 4K in the background
+    // (applyConstraints), so captured photos keep the camera's native fidelity.
+    //
+    // Capture quality stays safe: the shutter snapshots the live <video> (iOS
+    // has no ImageCapture.takePhoto), so once the upgrade lands every snap is
+    // 4K. A snap taken in the brief pre-upgrade window is still 1080p —
+    // comfortably above the ~640×480/720p default that HC97's 4K hint was added
+    // to fix, never the old "quality capped" regression. If the 4K upgrade is
+    // unsupported/refused (some iOS capture modes) the stream simply stays 1080p.
     navigator.mediaDevices.getUserMedia({
         video: {
             facingMode: { ideal: 'environment' },
-            width: { ideal: 3840 },
-            height: { ideal: 2160 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
         },
         audio: false,
     })
         .then(stream => {
-            _showCameraLoading(modal, false);
             // If the user closed the modal during the getUserMedia/permission
             // wait, don't attach a now-orphaned stream — stop it.
             if (modal.style.display !== 'flex') {
+                _showCameraLoading(modal, false);
                 stream.getTracks().forEach(tk => { try { tk.stop(); } catch (_) {} });
                 return;
             }
             state.cameraStream = stream;
-            document.getElementById('camera-stream').srcObject = stream;
+            const videoEl = document.getElementById('camera-stream');
+            // Hide the spinner the instant the preview paints its FIRST FRAME —
+            // not merely when getUserMedia resolves — which removes the black
+            // flash between spinner-off and first pixels so the preview snaps in
+            // cleanly. Then kick off the background 4K upgrade. The fallback
+            // timer covers any browser that doesn't fire the frame events.
+            let _settled = false;
+            const _onFirstFrame = () => {
+                if (_settled) return;
+                _settled = true;
+                _showCameraLoading(modal, false);
+                // Background, best-effort upgrade to 4K on the SAME track so
+                // captures keep native fidelity (HC97). Done AFTER the first
+                // frame so the fast 1080p preview shows first.
+                try {
+                    const vt = stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+                    if (vt && vt.applyConstraints) {
+                        vt.applyConstraints({ width: { ideal: 3840 }, height: { ideal: 2160 } })
+                            .catch(() => { /* refused → stay at 1080p; capture still HD */ });
+                    }
+                } catch (_) { /* applyConstraints unsupported → stay at 1080p */ }
+            };
+            videoEl.addEventListener('loadeddata', _onFirstFrame, { once: true });
+            videoEl.addEventListener('playing', _onFirstFrame, { once: true });
+            setTimeout(_onFirstFrame, 1500);
+            videoEl.srcObject = stream;
             // May 2026 redesign — wire the overlay layers (status bar with live
             // GPS, toolbar, focus reticle, tap-to-focus).
             try { _attachCameraOverlay(stream); }
