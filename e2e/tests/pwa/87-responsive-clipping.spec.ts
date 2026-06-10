@@ -162,11 +162,22 @@ for (const { name, profile } of DEVICES) {
         test(`stage-success — primary + secondary CTAs reachable`, async ({ page }) => {
             await goToStage(page, 'stage-success');
 
+            // v323-v324 success redesign: the stage is now a zero-scroll
+            // flex column with a .success-footer at the bottom of the
+            // flex track (HC79 removed the old sticky overlay rules).
+            // Primary CTA = #btn-new-report ("Report another incident",
+            // resetApp() -> capture). The old .success-secondary-row /
+            // #btn-track-report was removed; the secondary affordance is
+            // now the "My Reports" footer link (#btn-success-my-reports,
+            // calls openMyReports()). The header brand button
+            // (#btn-success-brand) routes home and must stay reachable too.
             await expectReachableCTA(page, '#stage-success #btn-new-report',
-                'Primary "Add another report" CTA');
+                'Primary "Report another incident" CTA');
             await expectReachableCTA(page,
-                '#stage-success .success-secondary-row #btn-track-report',
-                'Secondary "Track" button');
+                '#stage-success .success-footer #btn-success-my-reports',
+                'Secondary "My Reports" link');
+            await expectReachableCTA(page, '#stage-success #btn-success-brand',
+                'Header brand "Home" button');
             await expectNoHorizontalScroll(page);
         });
 

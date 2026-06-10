@@ -11,9 +11,19 @@
  *
  *   2. Timestamp footer read like "2026-05-12 22:39:35 GMT+5:30" —
  *      buried timezone label + local clock behind a numeric offset
- *      that operators don't recognise at a glance. Fix is three
- *      stacked lines: IANA timezone name / human-readable label /
- *      local 12-hour clock.
+ *      that operators don't recognise at a glance. Fixed first as
+ *      three stacked lines; then two product revisions landed:
+ *        • AUDIT 2026-05-23 — the IANA line ("Asia/Kolkata") is
+ *          technical noise for citizen reporters, so it paints ONLY
+ *          when localStorage.crisp_tech_user === 'on' (blank
+ *          otherwise).
+ *        • HC60 (May 2026) — the visible time is now a single inline
+ *          sub-row under the location name ("±35 m · 2:17 PM");
+ *          #v4-meta-time-tz-iana / -label survive as hidden shims
+ *          that _paintCaptureTimestamp keeps writing to.
+ *      The spec asserts the current contract: human tz label +
+ *      12-hour clock always painted (never the legacy GMT±NN
+ *      single-liner), IANA gated behind tech mode.
  *
  * Specs drive the v4 flow with placeSearch + Nominatim mocked, so the
  * test runs fast and offline. No live Nominatim dependency.
@@ -26,6 +36,9 @@ async function bootV4Pwa(page: Page) {
             JSON.stringify({ accepted: true, ts: Date.now() }));
         localStorage.setItem('crisp_landing_seen', '1');
         localStorage.setItem('crisp_ui_v4', 'on');
+        // Pin English so copy assertions don't vary with geo-locale.
+        localStorage.setItem('crisp_lang_manual', 'en');
+        localStorage.setItem('crisp_lang', 'en');
     });
     await page.goto('index.html?ui=v4');
     await page.waitForFunction(
@@ -164,10 +177,10 @@ test.describe('PWA v4 — location suggestions (Nominatim fallback)', () => {
     });
 });
 
-test.describe('PWA v4 — three-line timestamp footer', () => {
+test.describe('PWA v4 — capture timestamp (inline clock + tz shims)', () => {
     test.beforeEach(async ({ page }) => { await bootV4Pwa(page); });
 
-    test('renders IANA + human label + 12-hour clock (not GMT±NN)', async ({ page }) => {
+    test('paints human tz label + 12-hour clock; IANA only in tech mode (not GMT±NN)', async ({ page }) => {
         await page.evaluate(() => {
             const fn = (window as any).__crispGoToStage;
             if (typeof fn === 'function') fn('stage-v4-capture');
@@ -175,16 +188,17 @@ test.describe('PWA v4 — three-line timestamp footer', () => {
         await expect(page.locator('#stage-v4-capture.active')).toBeVisible({ timeout: 5000 });
 
         // Wait for _paintCaptureTimestamp's first paint (it runs on
-        // 'stage-entered' for the v4-capture stage).
+        // 'stage-entered' for the v4-capture stage, then every 1s).
+        // Citizen mode (no crisp_tech_user) intentionally leaves the
+        // IANA shim BLANK (AUDIT 2026-05-23), so only the label +
+        // clock slots are guaranteed to fill.
         await page.waitForFunction(() => {
-            const elIana  = document.getElementById('v4-meta-time-tz-iana');
             const elLabel = document.getElementById('v4-meta-time-tz-label');
             const elClock = document.getElementById('v4-meta-time-text');
-            return elIana && elLabel && elClock &&
-                   elIana.textContent && elIana.textContent !== '—' &&
+            return !!(elLabel && elClock &&
                    elLabel.textContent && elLabel.textContent !== '—' &&
-                   elClock.textContent && elClock.textContent !== '—';
-        }, null, { timeout: 4000 });
+                   elClock.textContent && elClock.textContent !== '—');
+        }, null, { timeout: 10000 });
 
         const snapshot = await page.evaluate(() => ({
             iana:  document.getElementById('v4-meta-time-tz-iana')!.textContent,
@@ -192,16 +206,20 @@ test.describe('PWA v4 — three-line timestamp footer', () => {
             clock: document.getElementById('v4-meta-time-text')!.textContent,
         }));
 
-        // IANA names look like "Continent/City" or "UTC+HH:MM" fallback.
-        expect(snapshot.iana, 'IANA name format').toMatch(/^([A-Z][a-z]+\/[A-Z][A-Za-z_]+|UTC[+-]\d{2}:\d{2})$/);
+        // Citizen default: the IANA slot is deliberately blanked by
+        // the painter — "Asia/Kolkata" is operator forensics, noise
+        // for a first-time reporter.
+        expect(snapshot.iana, 'IANA blank for citizen reporters').toBe('');
 
         // Human label must be non-empty + must not just be the offset
         // string (that was the pre-fix output). At minimum 5 chars
         // ("Time" / "UTC" / etc.).
         expect(snapshot.label!.length, 'human label non-trivial').toBeGreaterThan(4);
+        expect(snapshot.label, 'label not a bare GMT offset').not.toMatch(/^GMT[+-]/);
 
         // 12-hour clock pattern: "H:MM AM" or "HH:MM PM" (locale-
-        // dependent; en-* uses these forms).
+        // dependent; en-* uses these forms — \s also matches the
+        // U+202F narrow space newer ICU inserts before AM/PM).
         expect(snapshot.clock, '12-hour clock format').toMatch(/^\d{1,2}:\d{2}\s?(AM|PM|am|pm)$/);
 
         // Critically: the clock slot must NOT be the old date-time-tz
@@ -210,5 +228,27 @@ test.describe('PWA v4 — three-line timestamp footer', () => {
         // still running.
         expect(snapshot.clock, 'no GMT prefix (legacy single-line)').not.toMatch(/GMT/);
         expect(snapshot.clock, 'no YYYY-MM-DD prefix').not.toMatch(/^\d{4}-\d{2}-\d{2}/);
+
+        // HC60 layout contract: the visible clock renders inline in
+        // the location sub-row; the verbose tz spans stay hidden shims.
+        await expect(page.locator('#v4-meta-loc-sub #v4-meta-time-text'),
+            'clock visible inline in the loc sub-row').toBeVisible();
+        await expect(page.locator('#v4-meta-time-tz-iana'),
+            'IANA shim stays hidden').toBeHidden();
+        await expect(page.locator('#v4-meta-time-tz-label'),
+            'label shim stays hidden').toBeHidden();
+
+        // Tech mode: flipping crisp_tech_user on is picked up by the
+        // 1-second repaint interval — the IANA slot must then fill
+        // with a canonical zone name (or the UTC±HH:MM fallback).
+        await page.evaluate(() => localStorage.setItem('crisp_tech_user', 'on'));
+        await page.waitForFunction(() => {
+            const el = document.getElementById('v4-meta-time-tz-iana');
+            return !!(el && el.textContent && el.textContent !== '—');
+        }, null, { timeout: 5000 });
+        const ianaTech = await page.evaluate(
+            () => document.getElementById('v4-meta-time-tz-iana')!.textContent);
+        expect(ianaTech, 'IANA name format in tech mode')
+            .toMatch(/^([A-Z][a-z]+\/[A-Z][A-Za-z_]+|UTC[+-]\d{2}:\d{2})$/);
     });
 });

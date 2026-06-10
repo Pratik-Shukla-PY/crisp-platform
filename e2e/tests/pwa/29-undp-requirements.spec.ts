@@ -24,19 +24,29 @@ import { test, expect, Page } from '@playwright/test';
 // Hard requirement: every test runs with NO bypass flags.
 test.use({ storageState: { cookies: [], origins: [] } });
 
-// Helper: satisfy the inline consent gate on the merged home page (the
-// previous full-screen #landing-overlay was deleted in May 2026 — consent
-// now lives on #stage-home as a small checkbox). Returns once Start is
-// enabled.
+// Helper: satisfy the first-visit consent gate as a real user. HC57
+// (May 2026) replaced the inline #home-consent-check checkbox row on
+// #stage-home with a full-screen, NON-dismissible onboarding modal
+// (#consent-onboarding). Tapping "Accept & Continue" persists the same
+// localStorage['crisp_privacy_consent'] key and reveals the home
+// surface (btn-start is no longer disabled-gated at all). No-op for
+// already-consented sessions.
 async function _passLandingAsRealUser(page: Page) {
-    const consent = page.locator('#home-consent-check');
-    if (await consent.count() && await consent.isVisible()) {
-        await consent.check();
-        // Wait for home-screen.js to clear btn-start.disabled.
-        await page.waitForFunction(
-            () => !(document.getElementById('btn-start') as HTMLButtonElement)?.disabled,
-            null, { timeout: 3000 },
-        );
+    // home-screen.js init() wires BOTH the consent modal and the HC16
+    // status sheet; __crispStatusSheetWired doubles as the "home
+    // wiring is live" readiness flag (clicking Accept before init()
+    // would be a dead click).
+    await page.waitForFunction(
+        () => (window as any).__crispStatusSheetWired === true,
+        null, { timeout: 10000 },
+    );
+    const accept = page.locator('#consent-onboarding-accept-btn');
+    if (await accept.count() && await accept.isVisible()) {
+        await accept.click();
+        // _wireConsentModal's accept handler adds `crisp-consented` to
+        // <html>, which display:none's the overlay via CSS.
+        await page.locator('#consent-onboarding')
+            .waitFor({ state: 'hidden', timeout: 3000 });
     }
 }
 
@@ -78,19 +88,54 @@ test.describe('UNDP §1 — User-facing frontend exists + reachable', () => {
     });
 
     test('home stage shows Start CTA + My Reports + offline reassurance', async ({ page }) => {
+        // This test asserts English copy — pin the language so a
+        // geo-derived locale can't flip the strings (repo convention).
+        await page.addInitScript(() => {
+            localStorage.setItem('crisp_lang_manual', 'en');
+            localStorage.setItem('crisp_lang', 'en');
+        });
         await page.goto('');
+
+        // First visit: the HC57 consent-onboarding modal blocks the
+        // home surface. Its "Works Offline" card is the first-visit
+        // offline reassurance (the old `.home-hero-helper` "Always
+        // Working. Everywhere." line under the CTA was REMOVED in
+        // HC35 — its CSS rule survives as an orphan with no DOM
+        // consumer, so never assert on it).
+        const consentOverlay = page.locator('#consent-onboarding');
+        await expect(consentOverlay, 'first visit must show consent onboarding').toBeVisible();
+        await expect(
+            consentOverlay.locator('.consent-card-title', { hasText: 'Works Offline' }),
+            'consent modal missing the Works Offline reassurance card',
+        ).toBeVisible();
+
+        // Accept as a real user → home surface unblocked.
         await _passLandingAsRealUser(page);
-        // v3 home is .active by default once the landing dismisses.
-        // No need for an additional goToStage call — but allow a short
-        // settle window for the dismissal animation.
-        await page.waitForTimeout(800);
-        await expect(page.locator('#btn-start')).toBeVisible();
-        await expect(page.locator('#btn-my-reports')).toBeVisible();
-        // v6.8 (May 2026): offline reassurance copy renders inside
-        // `.home-hero-helper` (was `.home-offline-hint` in pre-v6.6
-        // landing). i18n key `home_cta_helper` — text reads "Always
-        // Working. Everywhere." in English.
-        await expect(page.locator('.home-hero-helper')).toBeVisible();
+
+        // Primary CTA — single dominant label since v169.1 (the
+        // "CAPTURE · VERIFY · HELP" cta-sub was removed).
+        const startBtn = page.locator('#btn-start');
+        await expect(startBtn).toBeVisible();
+        await expect(startBtn).toContainText('Report an Incident');
+
+        // My Reports — v6 promoted it into the .home-primary-row glass
+        // buttons under the CTA; the #mr-count chip always renders
+        // (default "0") per the v6 ask #6 invariant.
+        const myReports = page.locator('#btn-my-reports');
+        await expect(myReports).toBeVisible();
+        await expect(myReports.locator('#mr-count')).toBeVisible();
+
+        // Post-consent offline reassurance on the home stage itself:
+        // HC16 made the brand cluster (.home-brand) the tappable
+        // connection-status surface — tapping opens #home-status-sheet
+        // whose .hss-reassure line carries the offline-first message
+        // ("Your reports send automatically..." online / "Reports save
+        // on your phone..." offline).
+        await page.locator('#stage-home .home-brand').click();
+        await expect(page.locator('#home-status-sheet')).toBeVisible();
+        const reassure = page.locator('#home-status-sheet-reassure');
+        await expect(reassure).toBeVisible();
+        await expect(reassure).not.toHaveText('');
     });
 });
 

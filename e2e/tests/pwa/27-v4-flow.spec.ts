@@ -172,6 +172,14 @@ test.describe('UI v4 — Page 2 classify', () => {
 
 test.describe('UI v4 — Page 3 review', () => {
     test('summary rows show selected classifications', async ({ page }) => {
+        // This test asserts English display copy — pin the locale so a
+        // geo-derived default can't swap the label language.
+        await page.addInitScript(() => {
+            try {
+                localStorage.setItem('crisp_lang_manual', 'en');
+                localStorage.setItem('crisp_lang', 'en');
+            } catch {}
+        });
         await page.goto('');
         await page.waitForFunction(() => !!(window as any).CrispV4, null, { timeout: 6000 });
         // Set state via the classify page; the review page repaints via _updateReviewSummary().
@@ -179,9 +187,11 @@ test.describe('UI v4 — Page 3 review', () => {
         await page.locator('#v4-view-damage .v4-q-opt[data-value="COMPLETE"]').click();
         // Now go to review.
         await page.evaluate(() => (window as any).CrispV4.goToReview());
-        // The damage row should reflect "Complete".
+        // HC67 (May 2026): the review row renders the canonical
+        // translated label via t('damage_complete') — EN copy is
+        // "Fully Destroyed" (no longer the raw enum word "Complete").
         const damageText = await page.locator('#v4-row-damage-text').textContent();
-        expect(damageText?.toLowerCase()).toContain('complete');
+        expect(damageText?.toLowerCase()).toContain('fully destroyed');
     });
 });
 

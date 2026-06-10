@@ -5,12 +5,14 @@
  * Operator: "Increase the size of the icons, keep responsive for
  * multiple screens we decided earlier."
  *
- * New sizes (matches the home-stage CTA responsive cascade):
- *   default          → 48×48 / 28 px
- *   ≥ 380 px width   → 56×56 / 32 px
- *   ≥ 700 px height  → 60×60 / 34 px
- *   ≥ 800 px height  → 64×64 / 36 px
- *   ≥ 900 px height  → 68×68 / 38 px
+ * HC62 (May 2026) refactored the cascade again: tile height is now
+ * driven by the flex-fill grid (`repeat(8, 1fr)`), and only the icon +
+ * font sizes scale per breakpoint (see styles.css ~9970):
+ *   default (iPhone SE)  → 36×36 / 22 px
+ *   ≥ 380 px width       → 40×40 / 24 px
+ *   ≥ 700 px height      → 44×44 / 26 px
+ *   ≥ 850 px height      → 52×52 / 30 px
+ *   ≥ 1000 px height     → 60×60 / 34 px
  */
 import { test, expect, Page } from '@playwright/test';
 
@@ -43,7 +45,7 @@ async function bootV4OnInfraStep(page: Page) {
 
 test.describe('PWA — classify infra-tile icon sizes (May 2026)', () => {
 
-    test('@smoke default (≤380w) icons are 48×48 with 28px glyph', async ({ page, browserName }) => {
+    test('@smoke default (≤380w) icons are 36×36 with 22px glyph', async ({ page, browserName }) => {
         // The Pixel-7 device profile already has width 412 — that
         // exceeds the 380 breakpoint, so we'd actually hit the
         // ≥380 rule. Force a narrower viewport for the "default" assertion.
@@ -56,12 +58,14 @@ test.describe('PWA — classify infra-tile icon sizes (May 2026)', () => {
             const cs = window.getComputedStyle(el);
             return { w: cs.width, h: cs.height, fs: cs.fontSize };
         });
-        expect(sizes.w).toBe('48px');
-        expect(sizes.h).toBe('48px');
-        expect(sizes.fs).toBe('28px');
+        expect(sizes.w).toBe('36px');
+        expect(sizes.h).toBe('36px');
+        expect(sizes.fs).toBe('22px');
     });
 
-    test('≥380w breakpoint — icons grow to 56×56 with 32px glyph', async ({ page }) => {
+    test('≥380w breakpoint — icons grow to 40×40 with 24px glyph', async ({ page }) => {
+        // Height 690 stays below the 700px tier so only the width
+        // breakpoint fires.
         await page.setViewportSize({ width: 412, height: 690 });
         await bootV4OnInfraStep(page);
         const icon = page.locator('.v4-hit-tile').first().locator('.v4-hit-tile-icon');
@@ -69,22 +73,39 @@ test.describe('PWA — classify infra-tile icon sizes (May 2026)', () => {
             const cs = window.getComputedStyle(el);
             return { w: cs.width, h: cs.height, fs: cs.fontSize };
         });
-        expect(sizes.w).toBe('56px');
-        expect(sizes.h).toBe('56px');
-        expect(sizes.fs).toBe('32px');
+        expect(sizes.w).toBe('40px');
+        expect(sizes.h).toBe('40px');
+        expect(sizes.fs).toBe('24px');
     });
 
-    test('≥800h breakpoint — icons grow to 64×64 with 36px glyph', async ({ page }) => {
-        await page.setViewportSize({ width: 420, height: 820 });
+    test('taller viewports — icons step up through the height tiers', async ({ page }) => {
+        await page.setViewportSize({ width: 420, height: 740 });
         await bootV4OnInfraStep(page);
         const icon = page.locator('.v4-hit-tile').first().locator('.v4-hit-tile-icon');
-        const sizes = await icon.evaluate((el) => {
+        const readSizes = () => icon.evaluate((el) => {
             const cs = window.getComputedStyle(el);
             return { w: cs.width, h: cs.height, fs: cs.fontSize };
         });
-        expect(sizes.w).toBe('64px');
-        expect(sizes.h).toBe('64px');
-        expect(sizes.fs).toBe('36px');
+
+        // ≥700h tier (Pixel 7 / Galaxy S22 class).
+        let sizes = await readSizes();
+        expect(sizes.w).toBe('44px');
+        expect(sizes.h).toBe('44px');
+        expect(sizes.fs).toBe('26px');
+
+        // ≥850h tier (Pixel 7 Pro / iPhone 14 Pro Max class).
+        await page.setViewportSize({ width: 420, height: 900 });
+        sizes = await readSizes();
+        expect(sizes.w).toBe('52px');
+        expect(sizes.h).toBe('52px');
+        expect(sizes.fs).toBe('30px');
+
+        // ≥1000h tier (tablets / landscape laptops).
+        await page.setViewportSize({ width: 420, height: 1020 });
+        sizes = await readSizes();
+        expect(sizes.w).toBe('60px');
+        expect(sizes.h).toBe('60px');
+        expect(sizes.fs).toBe('34px');
     });
 
     test('@theme-visual screenshot at default Pixel-7 viewport', async ({ page }) => {

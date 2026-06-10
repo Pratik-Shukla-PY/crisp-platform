@@ -21,13 +21,26 @@
  *
  * Companion service-worker bump: v166 → v167. Hard-reload is
  * needed for returning users to pick up the new build.
+ *
+ * June 2026 realignment — two tests updated for the post-v5 home:
+ *   · HC57 replaced the inline #home-consent row with the
+ *     first-visit #consent-onboarding modal (legacy row removed).
+ *   · HC35 removed the .home-hero-helper line; home_cta_helper is
+ *     an orphan i18n key. The CTA copy contract now pins the
+ *     home_cta_primary label instead.
+ *   · v6 ask #6 promoted Sign-in + My Reports into the hero card
+ *     (#home-primary-row), which is asserted as part of the card
+ *     grouping invariant.
  */
 import { test, expect, Page } from '@playwright/test';
 
 async function bootHome(page: Page) {
     await page.addInitScript(() => {
-        // Consent NOT pre-accepted so the consent row inside the
-        // hero card is visible for assertion.
+        // Consent NOT pre-accepted: since HC57 the consent surface is
+        // the first-visit #consent-onboarding modal (the inline
+        // #home-consent row was REMOVED from the hero card), so a
+        // fresh boot lets us assert the modal is the live consent
+        // affordance.
         localStorage.setItem('crisp_landing_seen', '1');
         localStorage.setItem('crisp_ui_v4', 'on');
         localStorage.setItem('crisp_lang', 'en');
@@ -43,31 +56,52 @@ test.describe('PWA — home v5 layout invariants', () => {
 
     // ── Phase 1 — hero card grouping ──────────────────────────────
 
-    test('@smoke .home-hero-card is visible and groups consent + CTA + helper', async ({ page }) => {
+    test('@smoke .home-hero-card is visible and groups pill + CTA + primary row', async ({ page }) => {
         const card = page.locator('#home-hero-card');
         await expect(card).toBeVisible();
 
-        // CTA + consent must be DESCENDANTS of the card, not floating
-        // outside it as in the pre-v5 layout.
-        await expect(card.locator('#home-consent')).toHaveCount(1);
+        // Current card composition (post-HC35/HC57/v6): Lifekeeper
+        // pill + primary CTA + Sign-in/My-Reports primary row are
+        // DESCENDANTS of the card, not floating outside it as in the
+        // pre-v5 layout.
         await expect(card.locator('#btn-start')).toHaveCount(1);
-        await expect(card.locator('.home-hero-helper')).toHaveCount(1);
         // Lifekeeper pill (#home-reward-hero) is relocated INTO the
-        // card too; it's hidden when no badge is loaded yet, but the
-        // element exists in the card subtree.
+        // card; the element exists in the card subtree.
         await expect(card.locator('#home-reward-hero')).toHaveCount(1);
+        // v6 ask #6 — Sign-in + My Reports promoted into the card as
+        // big glass buttons directly under the CTA.
+        await expect(card.locator('#home-primary-row')).toHaveCount(1);
+        await expect(card.locator('#btn-home-login-icon')).toHaveCount(1);
+        await expect(card.locator('#btn-my-reports')).toHaveCount(1);
+
+        // HC57 — the legacy inline consent row + HC35 helper line are
+        // GONE from the page entirely; consent now lives in the
+        // first-visit #consent-onboarding modal OUTSIDE the card.
+        await expect(page.locator('#home-consent')).toHaveCount(0);
+        await expect(page.locator('.home-hero-helper')).toHaveCount(0);
+        await expect(page.locator('#consent-onboarding')).toBeVisible();
+        await expect(card.locator('#consent-onboarding')).toHaveCount(0);
+        await expect(
+            page.locator('#consent-onboarding #consent-onboarding-accept-btn'),
+        ).toHaveCount(1);
     });
 
-    test('CTA helper text resolves the home_cta_helper i18n key', async ({ page }) => {
-        const helper = page.locator('.home-hero-helper');
-        await expect(helper).toBeVisible();
-        const txt = (await helper.textContent() || '').trim();
+    test('CTA label resolves the home_cta_primary i18n key', async ({ page }) => {
+        // HC35 removed the "Always Working. Everywhere." helper line
+        // (the home_cta_helper key is now an orphan with no DOM
+        // consumer). The CTA's visible copy is the single dominant
+        // label bound to home_cta_primary — assert IT resolves to a
+        // real localized string instead.
+        const label = page.locator('#btn-start .cta-label');
+        await expect(label).toBeVisible();
+        const txt = (await label.textContent() || '').trim();
         expect(txt.length).toBeGreaterThan(0);
-        // v168.1 — copy changed from "Works offline and syncs..." to
-        // "Always Working. Everywhere." Match on any of the three
-        // expected tokens so the test survives further wording
-        // tweaks per operator iteration.
-        expect(txt.toLowerCase()).toMatch(/always|everywhere|offline/);
+        // Raw i18n keys must never leak into the UI.
+        expect(txt).not.toMatch(/home_cta/i);
+        // Language is pinned to English in bootHome; current copy is
+        // "Report an Incident". Match on the stable token so the test
+        // survives minor wording tweaks per operator iteration.
+        expect(txt.toLowerCase()).toContain('report');
     });
 
     test('CTA bigger than v4: clamp-up of cta-label fontSize', async ({ page }) => {

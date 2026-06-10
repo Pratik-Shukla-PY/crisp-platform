@@ -1,26 +1,27 @@
 /**
- * Merged always-on home page (May 2026).
+ * Merged always-on home page (May 2026, realigned June 2026).
  *
  * The first-visit-only landing overlay was deleted; the merged home
  * page replaces both `#landing-overlay` AND the previous minimal
  * `#stage-home`. This spec covers:
  *
  *   1. The home page is visible on every load (no first-visit gating).
- *   2. All 4 channels (IVR / SMS / Telegram / WhatsApp) and 3 native-app
- *      buttons (iOS / Android / Expo Go) are reachable.
+ *   2. All 4 channels (IVR / SMS / Telegram / WhatsApp) and 2 native-app
+ *      buttons (iOS / Android) are reachable via the channels sheet.
  *   3. IVR is LIVE — anchor with tel:+16626768896.
- *   4. Telegram is LIVE — anchor with t.me/crisp_undp_bot.
- *   5. SMS / WhatsApp / iOS / Android render as disabled "Coming soon"
- *      buttons until handles are wired.
- *   6. Expo Go is LIVE — anchor with exp://.
- *   7. The inline consent checkbox gates `#btn-start` until checked,
- *      then auto-hides + persists in localStorage.
- *   8. Returning visitors (consent already set) see no consent row;
- *      Start is enabled immediately.
- *   9. window.InstallPrompt API surface is exposed (legacy contract).
- *  10. iOS install sheet renders when triggered.
- *  11. Viewport fits 360x640 without horizontal scroll.
- *  12. #stage-home has the v4 viewport rule (min-height: 100dvh).
+ *   4. Telegram is LIVE — button with data-action="telegram-deeplink".
+ *   5. SMS / WhatsApp / iOS / Android render as disabled rows
+ *      ("Coming soon" / "Low bandwidth") until handles are wired.
+ *   6. Consent is the HC57 `#consent-onboarding` first-visit modal
+ *      (the legacy `#home-consent` inline checkbox row was REMOVED):
+ *      the modal blocks the home surface until "Accept & Continue",
+ *      persists the same `crisp_privacy_consent` localStorage key,
+ *      and never re-paints for returning visitors.
+ *   7. window.InstallPrompt API surface is exposed (legacy contract).
+ *   8. The universal install sheet (#ios-install-sheet) renders when
+ *      triggered — title copy is now "Add CRISP to your home screen".
+ *   9. Viewport fits 360x640 without horizontal scroll.
+ *  10. #stage-home has the v4 viewport rule (min-height via dvh).
  */
 import { test, expect } from '@playwright/test';
 
@@ -30,6 +31,34 @@ import { test, expect } from '@playwright/test';
 // fire on `page.reload()` inside a test, which breaks any persistence
 // assertions (e.g. "consent persists after reload").
 test.use({ storageState: { cookies: [], origins: [] } });
+
+// Force English locale — the Bengaluru GPS fixture in
+// playwright.config.ts would otherwise auto-detect a regional locale
+// and copy assertions ("Coming soon" / "Low bandwidth" / the install
+// sheet title) would render translated. Repo convention: set BOTH
+// crisp_lang_manual and crisp_lang.
+async function pinEnglish(page) {
+    await page.addInitScript(() => {
+        try {
+            localStorage.setItem('crisp_lang', 'en');
+            localStorage.setItem('crisp_lang_manual', 'en');
+        } catch (_) {}
+    });
+}
+
+// HC57 (May 2026): first-time visitors get the full-surface
+// `#consent-onboarding` modal, which intercepts pointer events on the
+// home stage. Tests that interact with home-stage controls (channels
+// strip etc.) seed consent up-front so the modal never paints — same
+// key the product persists on Accept.
+async function seedConsent(page) {
+    await page.addInitScript(() => {
+        try {
+            localStorage.setItem('crisp_privacy_consent',
+                JSON.stringify({ accepted: true, ts: Date.now() }));
+        } catch (_) {}
+    });
+}
 
 test.describe('Merged always-on home page', () => {
 
@@ -45,20 +74,18 @@ test.describe('Merged always-on home page', () => {
     // single `#home-channels-strip` icon row. Full per-channel buttons
     // (with [data-channel] attrs) now live inside the `#channels-sheet`
     // bottom-sheet, opened on tap. Tests below tap the strip first then
-    // query `#channels-sheet [data-channel="..."]`.
+    // query `#channels-sheet [data-channel="..."]`. Consent is seeded
+    // first — otherwise the HC57 onboarding modal covers the strip.
     async function openChannelsSheet(page) {
-        // Force English locale — the Bengaluru GPS fixture in
-        // playwright.config.ts would otherwise auto-detect Kannada
-        // and the status copy ("Coming soon" / "Low bandwidth") would
-        // render translated, breaking the regex match below.
-        await page.addInitScript(() => {
-            localStorage.setItem('crisp_lang', 'en');
-            localStorage.setItem('crisp_lang_manual', 'en');
-        });
+        await pinEnglish(page);
+        await seedConsent(page);
         await page.goto('');
-        await page.waitForSelector('#home-channels-strip', { timeout: 5000 });
+        // Wait for home-screen.js to paint the strip icons (paint also
+        // binds the click handler that opens the sheet).
+        await page.waitForSelector('#home-channels-strip .hcs-icon', { timeout: 5000 });
         await page.locator('#home-channels-strip').click();
-        await page.waitForSelector('#channels-sheet[aria-hidden="false"], #channels-sheet:not([hidden])', { timeout: 3000 });
+        await page.waitForSelector('#channels-sheet:not([hidden])', { timeout: 3000 });
+        await page.waitForSelector('#channels-sheet [data-channel]', { timeout: 3000 });
     }
 
     test('all 4 channel buttons + 2 app buttons render', async ({ page }) => {
@@ -107,7 +134,8 @@ test.describe('Merged always-on home page', () => {
             const btn = page.locator(`#channels-sheet [data-channel="${ch}"]`);
             await expect(btn).toHaveClass(/is-disabled/);
             // v6.8 — status copy moved to `.csr-status` (was `.lc-soon`
-            // in the legacy big-button layout). Assert the status text.
+            // in the legacy big-button layout). SMS renders "Low
+            // bandwidth", WhatsApp "Coming soon".
             await expect(btn.locator('.csr-status')).toBeVisible();
             await expect(btn.locator('.csr-status')).toContainText(/coming soon|low bandwidth/i);
             const tag = await btn.evaluate((el) => el.tagName.toLowerCase());
@@ -129,39 +157,57 @@ test.describe('Merged always-on home page', () => {
     // internal tester builds, but the public channels-sheet doesn't
     // render it. Test removed.
 
-    test('consent checkbox gates btn-start until checked', async ({ page }) => {
+    // HC57 (May 2026) — the legacy `#home-consent` checkbox row that
+    // gated #btn-start was REMOVED. Consent is now a full first-visit
+    // onboarding modal (#consent-onboarding) that blocks the entire
+    // home surface until "Accept & Continue" is tapped. Same
+    // protective intent: a first-time visitor cannot start reporting
+    // before consenting.
+    test('consent onboarding modal gates the home surface until accepted', async ({ page }) => {
+        await pinEnglish(page);
         await page.goto('');
-        await page.waitForSelector('#home-consent-check', { timeout: 5000 });
-        const startBtn = page.locator('#btn-start');
-        await expect(startBtn).toBeDisabled();
-        await page.locator('#home-consent-check').check();
-        await expect(startBtn).not.toBeDisabled();
+        const modal = page.locator('#consent-onboarding');
+        await expect(modal).toBeVisible({ timeout: 5000 });
+        // Frame-0 gate: html lacks `crisp-consented`, body scroll locked.
+        const gated = await page.evaluate(() => ({
+            consented: document.documentElement.classList.contains('crisp-consented'),
+            bodyOverflow: getComputedStyle(document.body).overflow,
+        }));
+        expect(gated.consented).toBe(false);
+        expect(gated.bodyOverflow).toBe('hidden');
+        // Accept & Continue → modal hides, home surface usable.
+        await page.locator('#consent-onboarding-accept-btn').click();
+        await expect(modal).toBeHidden();
+        await expect(page.locator('#btn-start')).toBeEnabled();
     });
 
-    test('checking consent persists + hides the row', async ({ page }) => {
+    test('accepting consent persists + modal never re-paints', async ({ page }) => {
+        await pinEnglish(page);
         await page.goto('');
-        await page.waitForSelector('#home-consent-check');
-        await page.locator('#home-consent-check').check();
-        // Wait for hide animation (~250ms in CSS) to settle.
-        await page.waitForTimeout(400);
-        await expect(page.locator('#home-consent')).toBeHidden();
-        // Persistence — reload + ensure consent stays set + row stays hidden.
-        await page.reload();
-        await expect(page.locator('#home-consent')).toBeHidden();
+        await page.waitForSelector('#consent-onboarding-accept-btn', { timeout: 5000 });
+        await page.locator('#consent-onboarding-accept-btn').click();
+        await expect(page.locator('#consent-onboarding')).toBeHidden();
+        // Persistence — same `crisp_privacy_consent` key as the legacy
+        // checkbox (backward compatible with already-installed PWAs).
         const persisted = await page.evaluate(() =>
             !!localStorage.getItem('crisp_privacy_consent'));
         expect(persisted).toBe(true);
+        // Reload — head IIFE adds `crisp-consented` at frame 0, modal
+        // stays display:none.
+        await page.reload();
+        await page.waitForSelector('#stage-home.active', { timeout: 5000 });
+        await expect(page.locator('#consent-onboarding')).toBeHidden();
+        const consentedClass = await page.evaluate(() =>
+            document.documentElement.classList.contains('crisp-consented'));
+        expect(consentedClass).toBe(true);
     });
 
-    test('returning visitors with consent see no checkbox + Start enabled', async ({ page }) => {
-        await page.addInitScript(() => {
-            localStorage.setItem('crisp_privacy_consent',
-                JSON.stringify({ accepted: true, ts: Date.now() }));
-        });
+    test('returning visitors with consent see no modal + Start enabled', async ({ page }) => {
+        await seedConsent(page);
         await page.goto('');
         await page.waitForSelector('#stage-home.active', { timeout: 5000 });
-        await expect(page.locator('#home-consent')).toBeHidden();
-        await expect(page.locator('#btn-start')).not.toBeDisabled();
+        await expect(page.locator('#consent-onboarding')).toBeHidden();
+        await expect(page.locator('#btn-start')).toBeEnabled();
     });
 
     test('window.InstallPrompt API surface is exposed', async ({ page }) => {
@@ -186,6 +232,8 @@ test.describe('Merged always-on home page', () => {
     });
 
     test('iOS install sheet renders when triggered', async ({ page }) => {
+        await pinEnglish(page);
+        await seedConsent(page);
         await page.addInitScript(() => {
             Object.defineProperty(navigator, 'userAgent', {
                 value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
@@ -198,7 +246,10 @@ test.describe('Merged always-on home page', () => {
             await (window as any).InstallPrompt.show();
         });
         await expect(page.locator('#ios-install-sheet')).toBeVisible({ timeout: 1000 });
-        await expect(page.locator('.iis-title')).toContainText(/Install CRISP/i);
+        // Universal-install-sheet copy (install_sheet_title): the sheet
+        // now serves every browser, headline is "Add CRISP to your home
+        // screen" (was "Install CRISP" pre-redesign).
+        await expect(page.locator('.iis-title')).toContainText(/Add CRISP to your home screen/i);
     });
 
     test('viewport fits 360x640 without horizontal scroll', async ({ page }) => {
