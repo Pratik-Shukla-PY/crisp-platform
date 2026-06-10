@@ -64,9 +64,19 @@ test('startup safe — head IIFE simulated throw, app boots on en', async ({ pag
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(100);
 
-    // Should default to en even though the resolver chain partly failed.
-    const lang = await page.evaluate(() => document.documentElement.lang);
-    expect(['en']).toContain(lang);
+    // The SAFETY contract is the head IIFE's deterministic output: with the
+    // browser signal sabotaged and no manual pick / cached region context,
+    // the resolver must land on 'en' (source fallback_en). Sampling
+    // document.documentElement.lang here raced the geo-IP region
+    // auto-localization that legitimately runs AFTER boot when no explicit
+    // locale signal exists (void-filler policy, Jun 2026) — on a machine in
+    // Karnataka that flipped the DOM to 'kn' within the 100ms wait.
+    const boot = await page.evaluate(() => ({
+        lang: (window as any).__crispBootLang,
+        source: (window as any).__crispI18nMetrics?.source,
+    }));
+    expect(boot.lang).toBe('en');
+    expect(boot.source).toBe('fallback_en');
 
     const cta = page.locator('#btn-start');
     await expect(cta).toBeVisible();

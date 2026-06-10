@@ -4734,18 +4734,23 @@ function detectAndSetupLanguage() {
             localBtn.textContent = '🌐 ' + String(code || 'EN').toUpperCase();
             if (label) localBtn.title = label;
         }
-        // If the user has no manual pick, promote the detected local to
-        // the active locale (default behaviour — local wins).
-        // gate on SUPPORTED_LANGS instead of
-        // I18N[code]. The inline I18N only holds en/kn/hi/ta (legacy
-        // 4 langs); the other 18 supported locales live in their JSON
-        // files and aren't in I18N until `activateLang` triggers a
-        // `_loadLocaleJson` merge. The old gate meant a cached
-        // `crisp_loc_ctx` of e.g. "fr" never auto-activated on
-        // refresh — the picker showed "📍 Your region: Français" but
-        // the UI stayed English.
+        // Auto-activate policy (Jun 2026 — explicit-signal precedence):
+        // a geo/IP-detected region language fills a VOID, it never overrides
+        // an explicit locale signal. Precedence: manual pick > browser
+        // locale (when it resolves to a supported language) > geo detection
+        // > en. Previously "local wins" auto-switched even when the device
+        // declared a supported locale (e.g. an en-US browser in Karnataka
+        // silently flipped to Kannada) — jarring, non-deterministic across
+        // host machines, and it surprised evaluators. The suggestion pill
+        // below still always advertises the detected region language.
+        // Gate on SUPPORTED_LANGS instead of I18N[code]: the inline I18N
+        // only holds en/kn/hi/ta; the other 18 locales live in JSON files
+        // and merge on activateLang.
         const manual = localStorage.getItem('crisp_lang_manual') || '';
-        if (!manual && code && code !== state.lang && SUPPORTED_LANGS.has(code)) {
+        let _bootSrc = '';
+        try { _bootSrc = (window.__crispI18nMetrics && window.__crispI18nMetrics.source) || ''; } catch (_) {}
+        const _explicitBoot = _bootSrc === 'manual' || _bootSrc === 'browser';
+        if (!manual && !_explicitBoot && code && code !== state.lang && SUPPORTED_LANGS.has(code)) {
             activateLang(code);
         }
         // Paint the suggestion chip inside the picker overlay only when

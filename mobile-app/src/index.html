@@ -92,10 +92,12 @@
          body parses (so screen readers + bidi + font-fallback all use the
          right locale from frame 0).
 
-         Resolution order mirrors app.js (CLAUDE.md "Language policy"):
+         Resolution order mirrors app.js noteDetectedLocal (Jun 2026 —
+         explicit-signal precedence: a declared device locale outranks
+         geo/IP detection; the cached region language only fills the void):
            1. localStorage.crisp_lang_manual          — explicit user pick
-           2. localStorage.crisp_loc_ctx.lang         — last GPS/IP cache
-           3. navigator.language(s)[0]                — browser locale
+           2. navigator.language(s)[0]                — browser locale
+           3. localStorage.crisp_loc_ctx.lang         — last GPS/IP cache
            4. 'en'                                    — last-resort default
 
          Fail-safe guarantees:
@@ -154,7 +156,21 @@
                 if (m) { var p = pick(m); if (p) { lang = p; source = 'manual'; } }
             } catch (_) {}
 
-            // 2. cached GPS/IP context
+            // 2. browser language (explicit device signal — outranks geo/IP).
+            //    No 'en' default here: a browser that declares NOTHING is not
+            //    an explicit signal, so it falls through to the region cache.
+            if (!lang) {
+                try {
+                    var nav = (navigator.languages && navigator.languages[0])
+                        || navigator.language || '';
+                    var p3 = nav ? pick(nav) : null;
+                    if (p3) { lang = p3; source = 'browser'; }
+                } catch (_) {}
+            }
+
+            // 3. cached GPS/IP context (region language — void-filler only,
+            //    reached when the browser locale doesn't resolve to a
+            //    supported language)
             if (!lang) {
                 try {
                     var raw = localStorage.getItem('crisp_loc_ctx');
@@ -165,16 +181,6 @@
                             if (p2) { lang = p2; source = 'cached_ctx'; }
                         }
                     }
-                } catch (_) {}
-            }
-
-            // 3. browser language
-            if (!lang) {
-                try {
-                    var nav = (navigator.languages && navigator.languages[0])
-                        || navigator.language || 'en';
-                    var p3 = pick(nav);
-                    if (p3) { lang = p3; source = 'browser'; }
                 } catch (_) {}
             }
 
@@ -204,7 +210,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v330">
+    <meta name="crisp-release" content="crisp-pwa@v331">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">

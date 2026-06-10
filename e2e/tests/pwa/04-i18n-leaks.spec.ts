@@ -154,7 +154,16 @@ test.describe('PWA i18n leak guard', () => {
     for (const mm of html.matchAll(/data-i18n(?:-placeholder)?="([a-z0-9_]+)"/g)) {
       domKeys.add(mm[1]);
     }
-    const en = I18N.en || {};
+    // English lives in TWO real sources: the legacy inline I18N.en subset in
+    // app.js AND i18n/en.json (the long tail, merged at runtime by
+    // _loadLocaleJson; 22-locale parity is CI-gated by validate-i18n.mjs).
+    // Checking only the inline block flagged 65 keys that actually ship in
+    // en.json — the guard must check the union.
+    const enJson = JSON.parse(fs.readFileSync(
+      require('path').resolve(__dirname, '../../../mobile-app/src/i18n/en.json'),
+      'utf8',
+    ));
+    const en = { ...(enJson || {}), ...(I18N.en || {}) };
     const missing = [...domKeys].filter((k) => !(k in en)).sort();
     expect(missing, `${missing.length} data-i18n keys have no English value: ${missing.join(', ')}`).toEqual([]);
   });
