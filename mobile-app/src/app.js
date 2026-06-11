@@ -2735,6 +2735,17 @@ function _freshReportState() {
         // V4 extras + UNDP service details.
         debrisClearing: false,
         serviceStatus: { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] },
+        // V4 FLAT UNDP fields — written by the review UNDP sheet through
+        // computed-key _setState calls keyed off data-undp-field attributes,
+        // which the static validator covers by scanning index.html. Missing
+        // from this factory pre-Jun-2026 meant report N debris and service
+        // answers leaked into the next report payload. null means unanswered;
+        // the submit gate requires debris_present to be an explicit boolean.
+        // NOTE for this factory body: keep comments free of apostrophes and
+        // braces — the static validator parses this object literal textually.
+        debris_present: null,
+        electricity_status: null, water_status: null, health_status: null,
+        pressing_needs: [],
         // Crisis-pack ANSWERS reset per report; the zone form schema `crisisPack`
         // is PRESERVED so it re-applies in-zone (see _PRESERVED_STATE_KEYS).
         crisisStockAnswers: {},

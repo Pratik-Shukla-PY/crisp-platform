@@ -101,6 +101,27 @@ for (const rel of SCAN) {
     }
 }
 
+// COMPUTED-KEY blind spot (Jun 2026): the review UNDP sheet writes state via
+// `_setState({ [row.getAttribute('data-undp-field')]: … })` — a computed key the
+// scans above cannot see. The field names live in index.html as
+// data-undp-field="…" attributes, so harvest them there too. This is exactly
+// how debris_present / electricity_status / water_status / health_status /
+// pressing_needs leaked across reports unclassified until Jun 2026.
+{
+    const rel = 'mobile-app/src/index.html';
+    const html = read(rel);
+    // Scope to the V4 sheet (#v4-undp-sheet … up to the legacy
+    // #stage-undp-details): only the v4 sheet's wiring writes the GLOBAL
+    // state via _setState; the legacy standalone stage writes a module-local
+    // `_state` object with its own clear, so its attrs (debris/electricity/
+    // water/health) are not report-state keys. Missing anchors → harvest the
+    // whole file (over-fire loudly rather than under-protect silently).
+    const start = html.indexOf('id="v4-undp-sheet"');
+    const end = html.indexOf('id="stage-undp-details"');
+    const slice = (start >= 0 && end > start) ? html.slice(start, end) : html;
+    for (const m of slice.matchAll(/data-undp-field="([A-Za-z_]\w*)"/g)) note(m[1], rel);
+}
+
 for (const [k, files] of [...offenders].sort()) {
     fail(`state.${k} is WRITTEN (${[...files].map((f) => f.split('/').pop()).join(', ')}) but is in neither _freshReportState() nor _PRESERVED_STATE_KEYS.`);
 }

@@ -64,6 +64,13 @@ test.describe('PWA — report-lifecycle reset (no cross-report leakage)', () => 
                 s.infrastructure_type = 'ROAD';
                 s.crisis_type = 'EXPLOSION';
                 s.crisisStockAnswers = { q1: 'yes', q2: i };
+                // V4 flat UNDP-details fields (review sheet, computed-key
+                // writes) — leaked across reports until Jun 2026.
+                s.debris_present = true;
+                s.electricity_status = 'SEVERE';
+                s.water_status = 'MODERATE';
+                s.health_status = 'NOT_FUNCTIONING';
+                s.pressing_needs = ['water', 'shelter'];
                 s.v4Photos = [{ url: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' }];
                 s.userLocationName = 'Typed place ' + i;
                 s.location = { lat: 1, lng: 2, acc: 5, is_user_corrected: true };
@@ -86,6 +93,8 @@ test.describe('PWA — report-lifecycle reset (no cross-report leakage)', () => 
                 eq('description', ''); eq('transcript', ''); eq('audioBlob', null);
                 eq('damage_classification', null); eq('infrastructure_type', null); eq('crisis_type', null);
                 eq('crisisStockAnswers', {}); eq('v4Photos', []); eq('userLocationName', null);
+                eq('debris_present', null); eq('electricity_status', null);
+                eq('water_status', null); eq('health_status', null); eq('pressing_needs', []);
                 eq('gpsErrorCode', null); eq('applicableModules', []); eq('nearbyBuildings', []);
                 eq('buildingId', null); eq('buildingOsmElement', null);
                 if (s.location && s.location.is_user_corrected) bad.push('state.location.is_user_corrected');
