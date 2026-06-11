@@ -27,6 +27,7 @@ from app.schemas.report import (
     ReportDescriptionUpdate, ThumbnailPayload, MediaChunkPayload,
     VerificationResponse,
     ReportNearbyResponse, ReportNearbyGroup,
+    _utc_iso,
 )
 from app.services.nearby_aggregator import (
     aggregate_nearby, aggregate_disaster_zones, is_disaster_density,
@@ -1952,7 +1953,11 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
     reports = q.all()
 
     def _iso(dt):
-        return dt.isoformat() if dt else None
+        # Z-suffixed UTC — same guarantee as ReportResponse's field
+        # serializers. Bare isoformat() depends on the datetime being
+        # tz-aware (true on Postgres timestamptz today, but fragile) and
+        # emits '+00:00' instead of 'Z'.
+        return _utc_iso(dt)
 
     def _rt(r):
         """Computed response_time_seconds — same formula as ReportResponse."""
@@ -7227,7 +7232,7 @@ def get_media_duplicates(
                 "phash": m.photo_phash,
                 "hamming_distance": d,
                 "url": m.url or None,
-                "created_at": m.created_at.isoformat() if m.created_at else None,
+                "created_at": _utc_iso(m.created_at),
             })
     hits.sort(key=lambda x: x["hamming_distance"])
     return {
@@ -7395,7 +7400,7 @@ def get_report_audit_trail(
                 "user_id": r.user_id,
                 "user_email": r.user_email,
                 "details": r.details or {},
-                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "created_at": _utc_iso(r.created_at),
             }
             for r in rows
         ],

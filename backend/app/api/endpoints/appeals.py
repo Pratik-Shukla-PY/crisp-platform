@@ -42,6 +42,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import require_admin
 from app.db.session import get_db
 from app.models.report import Appeal, AppealEvent, Device
+from app.schemas.report import _utc_iso  # Z-suffixed UTC wire format
 
 
 router = APIRouter()
@@ -175,7 +176,7 @@ def get_appeal(
                 "event_kind": e.event_kind,
                 "actor_admin_id": e.actor_admin_id,
                 "payload": e.payload,
-                "occurred_at": e.occurred_at.isoformat(),
+                "occurred_at": _utc_iso(e.occurred_at),
             }
             for e in events
         ],

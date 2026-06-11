@@ -916,6 +916,38 @@ function ensureUTC(iso) {
     return s + 'Z';
 }
 
+// ── Operator-local time presentation (Jun 2026) ──────────────────────────
+// ONE date-time format for the whole dashboard: "11 Jun 2026, 2:45 PM"
+// in the operator's local timezone + locale. Every absolute timestamp
+// shown in UI goes through here — never raw ISO, never UTC wall-clock.
+// Parsing routes through ensureUTC so a naive backend string can never
+// render shifted by the local offset.
+function fmtDateTime(iso) {
+    if (!iso) return '';
+    const d = new Date(ensureUTC(iso));
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString([], {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit',
+    });
+}
+// DATE-ONLY values (e.g. satellite acquisition_date "2026-06-08") must not
+// be fed to the Date parser as bare strings — JS reads them as UTC
+// midnight, which displays as the PREVIOUS day for viewers west of UTC.
+// Anchor the literal Y-M-D to LOCAL midnight, then show the calendar date.
+function fmtDateOnly(s) {
+    if (!s) return '';
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s).trim());
+    if (!m) return fmtDateTime(s) || String(s);
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+}
+// Exposed for the sibling modules (cc-home / cc-settings / cc-crisis /
+// predictions load after app.js) so every surface shares one format.
+window.__ccFmtDateTime = fmtDateTime;
+window.__ccFmtDateOnly = fmtDateOnly;
+window.__ccEnsureUTC = ensureUTC;
+
 function timeAgo(iso) {
     const d = new Date(ensureUTC(iso));
     if (isNaN(d.getTime())) return 'Just now';
@@ -3080,7 +3112,10 @@ function _renderAnalytics() {
 
     // 0b. Score Trend (daily — store in localStorage)
     const TREND_KEY = 'crisp_score_trend';
-    const today = new Date().toISOString().slice(0, 10);
+    // Key by the operator's LOCAL calendar day (was toISOString = UTC day,
+    // which rolled the bucket over at 05:30 IST / mid-shift elsewhere).
+    const _now = new Date();
+    const today = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
     let trend = {};
     try { trend = JSON.parse(localStorage.getItem(TREND_KEY) || '{}'); } catch (_) {}
     trend[today] = sc;
@@ -3096,15 +3131,14 @@ function _renderAnalytics() {
     if (_stc) _stc.innerHTML = `
         <div class="ac-timeline-bars" style="height:50px;">
             ${trendEntries.map(([day, val]) => {
-                const dayLabel = day.slice(5); // MM-DD
                 const col = val >= 80 ? '#22c55e' : val >= 60 ? '#86efac' : val >= 40 ? '#eab308' : val >= 20 ? '#f97316' : '#ef4444';
-                return `<div class="ac-tbar" style="height:${Math.max(4, (val/trendMax)*100)}%;background:linear-gradient(to top,${col}66,${col});" title="${day}: ${val}/100">
+                return `<div class="ac-tbar" style="height:${Math.max(4, (val/trendMax)*100)}%;background:linear-gradient(to top,${col}66,${col});" title="${fmtDateOnly(day)}: ${val}/100">
                     <span class="ac-tbar-val">${val}</span>
                 </div>`;
             }).join('')}
         </div>
         <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);margin-top:4px;">
-            ${trendEntries.length > 1 ? `<span>${trendEntries[0][0].slice(5)}</span><span>${trendEntries[trendEntries.length-1][0].slice(5)}</span>` : '<span>Today</span>'}
+            ${trendEntries.length > 1 ? `<span>${fmtDateOnly(trendEntries[0][0])}</span><span>${fmtDateOnly(trendEntries[trendEntries.length-1][0])}</span>` : '<span>Today</span>'}
         </div>`;
 
     // 1. Severity Distribution
@@ -5836,7 +5870,7 @@ window._refreshBuildingTimeline = async (buildingId) => {
                 <span class="bc-tl-icon"><i class="fa-solid ${icon}"></i></span>
                 <div class="bc-tl-body">
                     <div class="bc-tl-line">${body}</div>
-                    <div class="bc-tl-ts">${escapeHtml(new Date(e.occurred_at).toLocaleString())} · ${timeAgo(e.occurred_at)}</div>
+                    <div class="bc-tl-ts">${escapeHtml(fmtDateTime(e.occurred_at))} · ${timeAgo(e.occurred_at)}</div>
                 </div>
             </div>`;
         }).join('');
@@ -6014,7 +6048,7 @@ function _renderBuildingLifecycleStepper(events, detail) {
         <div class="bc-life-strip">
             ${nodes.map((n, i) => `
                 <div class="bc-life-node ${n.terminal ? 'bc-life-node-terminal' : ''} ${n.inProgress ? 'bc-life-node-progress' : ''}"
-                     title="${n.at ? new Date(n.at).toLocaleString() : ''}">
+                     title="${n.at ? fmtDateTime(n.at) : ''}">
                     <div class="bc-life-icon" style="border-color:${n.color}55;background:${n.color}1a;color:${n.color};">
                         <i class="fa-solid ${n.icon}"></i>
                     </div>
@@ -6964,7 +6998,7 @@ function _renderIncidentTimeline(r) {
             </span>
             <div class="dp-timeline-body">
                 <div class="dp-timeline-label">${escapeHtml(e.label)}</div>
-                <div class="dp-timeline-ts">${escapeHtml(new Date(e.ts).toLocaleString())} · ${timeAgo(e.ts)}</div>
+                <div class="dp-timeline-ts">${escapeHtml(fmtDateTime(e.ts))} · ${timeAgo(e.ts)}</div>
             </div>
         </li>
     `).join('');
@@ -7993,7 +8027,7 @@ window.exportPDF = (id) => {
     const ci = r.caller_info;
     const locName = loc?.user_location_name || loc?.device_location_name || (loc ? `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : 'Unknown');
     const srcLabel = {APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || r.source;
-    const ts = new Date(ensureUTC(r.server_created_at)).toLocaleString();
+    const ts = fmtDateTime(r.server_created_at);
 
     // Gather all image URLs: user photo + primary satellite + alt satellite
     // May 2026 — getMediaUrl() handles all four cases now: relative
@@ -8007,8 +8041,11 @@ window.exportPDF = (id) => {
     const satAltImgUrl = v?.satellite_image_url_alt ? getMediaUrl(v.satellite_image_url_alt) : '';
     const satSource1 = (v?.satellite_source || 'Satellite').split('(')[0].trim();
     const satSource2 = (v?.satellite_source_alt || 'Alt Satellite').split('(')[0].trim();
-    const satDate1 = v?.satellite_acquisition_date ? new Date(v.satellite_acquisition_date).toLocaleDateString() : '';
-    const satDate2 = v?.satellite_acquisition_date_alt ? new Date(v.satellite_acquisition_date_alt).toLocaleDateString() : '';
+    // Date-only acquisition dates go through fmtDateOnly — bare
+    // YYYY-MM-DD strings parse as UTC midnight and shift a day for
+    // viewers west of UTC if fed to the Date parser directly.
+    const satDate1 = v?.satellite_acquisition_date ? fmtDateOnly(v.satellite_acquisition_date) : '';
+    const satDate2 = v?.satellite_acquisition_date_alt ? fmtDateOnly(v.satellite_acquisition_date_alt) : '';
     const satRes1 = v?.satellite_resolution_m ? `${v.satellite_resolution_m}m` : '';
     const satRes2 = v?.satellite_resolution_m_alt ? `${v.satellite_resolution_m_alt}m` : '';
     const hasAnyImage = userImgUrl || satImgUrl || satAltImgUrl;

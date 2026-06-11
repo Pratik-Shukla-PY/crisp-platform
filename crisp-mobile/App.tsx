@@ -539,12 +539,20 @@ export default function App() {
   // Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — auto date/time label
   // painted on stage-where. Ticks every 60 s via a useEffect hook below;
   // purely local (`new Date()`), zero network, zero wait.
+  // Manual LOCAL fallback for Hermes builds without full Intl — the old
+  // toISOString fallback rendered UTC wall-clock unlabeled (off by the
+  // device offset). Local getters never need Intl.
+  const _localStamp = () => {
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
   const [whereAutoTime, setWhereAutoTime] = useState<string>(() => {
     try {
       const now = new Date();
       return `${now.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' })} · ${now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
     } catch {
-      return new Date().toISOString().slice(0, 16).replace('T', ' ');
+      return _localStamp();
     }
   });
   useEffect(() => {
@@ -553,7 +561,7 @@ export default function App() {
         const now = new Date();
         setWhereAutoTime(`${now.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' })} · ${now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`);
       } catch {
-        setWhereAutoTime(new Date().toISOString().slice(0, 16).replace('T', ' '));
+        setWhereAutoTime(_localStamp());
       }
     };
     tick();

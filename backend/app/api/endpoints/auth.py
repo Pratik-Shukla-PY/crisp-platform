@@ -26,6 +26,7 @@ from app.core.security import (
 )
 from app.core.deps import get_current_user, require_admin, require_super_admin
 from app.services.sms import send_otp_sms, validate_e164, SMSSendError
+from app.schemas.report import _utc_iso  # Z-suffixed UTC wire format
 from jwt import PyJWTError as JWTError  # May 2026: jose → PyJWT (CVE closure)
 
 logger = logging.getLogger(__name__)
@@ -766,7 +767,7 @@ def my_reports(
             "infrastructure_type": r.infrastructure_type.value if hasattr(r.infrastructure_type, "value") else r.infrastructure_type,
             "crisis_type": r.crisis_type,
             "description": r.description,
-            "server_created_at": r.server_created_at.isoformat() if r.server_created_at else None,
+            "server_created_at": _utc_iso(r.server_created_at),
             "user_id": r.user_id,
             "is_anonymous": r.user_id is None,
         })
@@ -784,9 +785,9 @@ def get_profile(user: User = Depends(get_current_user)):
         "mfa_enabled": user.mfa_enabled,
         "organization_id": user.organization_id,
         "login_count": user.login_count,
-        "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
-        "created_at": user.created_at.isoformat() if user.created_at else None,
-        "gdpr_consent_at": user.gdpr_consent_at.isoformat() if user.gdpr_consent_at else None,
+        "last_login_at": _utc_iso(user.last_login_at),
+        "created_at": _utc_iso(user.created_at),
+        "gdpr_consent_at": _utc_iso(user.gdpr_consent_at),
     }
 
 

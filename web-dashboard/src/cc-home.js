@@ -46,7 +46,10 @@
   const el = (id) => document.getElementById(id);
   function timeAgo(s) {
     if (!s) return '';
-    const t = new Date(s).getTime();
+    // Route through app.js's ensureUTC so a naive backend ISO string can't
+    // be parsed as local time and shift the "ago" math by the UTC offset.
+    const norm = (window.__ccEnsureUTC || ((x) => x))(s);
+    const t = new Date(norm).getTime();
     if (isNaN(t)) return '';
     const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
     if (sec < 60) return 'just now';
@@ -681,8 +684,17 @@
       const c = el('cc-clock');
       if (!c) return;
       const d = new Date();
-      const utc = d.toISOString().slice(11, 16);
-      c.textContent = `${utc} UTC · ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      // Operator-local time only (was a "12:34 UTC · 18:04" dual clock —
+      // local time everywhere, no UTC wall-clocks). The short timezone
+      // label ("IST", "GMT+5:30", …) keeps the clock unambiguous on
+      // cross-timezone screen-shares without surfacing UTC.
+      let tz = '';
+      try {
+        tz = (new Intl.DateTimeFormat([], { timeZoneName: 'short' })
+          .formatToParts(d).find((p) => p.type === 'timeZoneName') || {}).value || '';
+      } catch (_) { /* label is optional */ }
+      const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      c.textContent = tz ? `${time} ${tz}` : time;
     };
     tick();
     if (window.__ccClock) clearInterval(window.__ccClock);

@@ -11667,7 +11667,11 @@ function _refreshV3AutoMeta() {
             const timePart = now.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' });
             timeEl.textContent = `${datePart} · ${timePart}`;
         } catch (_) {
-            timeEl.textContent = new Date().toISOString().replace('T', ' ').slice(0, 16);
+            // Manual LOCAL fallback (the old toISOString fallback rendered
+            // UTC wall-clock unlabeled — off by the device offset).
+            const d = new Date();
+            const p = (n) => String(n).padStart(2, '0');
+            timeEl.textContent = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
         }
     }
     // delegate to the central paint helper so this top panel
@@ -12016,7 +12020,9 @@ function setupSendStage() {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            const stamp = new Date().toISOString().slice(0, 10);
+            const _d = new Date();
+            const _p = (n) => String(n).padStart(2, '0');
+            const stamp = `${_d.getFullYear()}-${_p(_d.getMonth() + 1)}-${_p(_d.getDate())}`;  // local date
             a.download = `crisp-my-data-${stamp}.json`;
             document.body.appendChild(a);
             a.click();
@@ -12821,9 +12827,40 @@ function _deriveActionTaken(r) {
 // The `t(key).replace('{n}', n)` pattern is our light-weight interpolation;
 // a real ICU message formatter would handle plural forms natively, but for
 // "N min ago" strings this is sufficient across the locales we support.
+// Treat a timezone-less ISO string as UTC (the backend stores UTC; a naive
+// string parsed by the Date constructor would be read as LOCAL time and
+// shift every display + "ago" computation by the device offset). Strings
+// that already carry Z or an explicit offset pass through unchanged.
+function _ensureUtcIso(iso) {
+    if (!iso) return iso;
+    const s = String(iso).trim();
+    if (/Z$/i.test(s) || /[+-]\d{2}:?\d{2}$/.test(s)) return s;
+    return s + 'Z';
+}
+
+// ONE absolute date-time format for the whole PWA: "11 Jun 2026, 2:45 PM"
+// in the device-local timezone, localized to the active app language.
+// Falls back to a manual LOCAL (never UTC) rendering if the locale tag is
+// rejected by Intl.
+function _fmtLocalDateTime(iso) {
+    if (!iso) return '';
+    const d = new Date(_ensureUtcIso(iso));
+    if (!Number.isFinite(d.getTime())) return '';
+    const lang = (typeof state !== 'undefined' && state.lang) ? state.lang : undefined;
+    try {
+        return d.toLocaleString(lang, {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: 'numeric', minute: '2-digit',
+        });
+    } catch (_) {
+        const p = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    }
+}
+
 function _timeAgo(iso) {
     if (!iso) return '';
-    const ts = new Date(iso).getTime();
+    const ts = new Date(_ensureUtcIso(iso)).getTime();
     if (!Number.isFinite(ts)) return '';
     const diff = Math.max(0, (Date.now() - ts) / 1000);
     const fmt = (key, n) => t(key).replace('{n}', String(n));
@@ -13828,7 +13865,7 @@ function renderReportDetail(r) {
     const dateMeta = document.getElementById('rd-meta-date');
     if (dateMeta) {
         const iso = r.server_created_at || r.updated_at;
-        dateMeta.textContent = iso ? new Date(iso).toLocaleString() : '';
+        dateMeta.textContent = iso ? _fmtLocalDateTime(iso) : '';
     }
 
     // Timeline — 4 stops: Submitted → Under Review → Accepted → Help Sent.

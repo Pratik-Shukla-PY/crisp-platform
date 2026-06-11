@@ -34,6 +34,7 @@ from app.core.deps import require_admin
 from app.db.session import get_db
 from app.models.report import NearbyGroupEvent
 from app.api.endpoints.reports import _NEARBY_CACHE  # in-process aggregator cache
+from app.schemas.report import _utc_iso  # Z-suffixed UTC wire format
 
 
 router = APIRouter()
@@ -70,7 +71,7 @@ def get_acute_clusters(
                 "acute_grade": g.acute_grade,
                 "centroid_lat": g.centroid_lat,
                 "centroid_lng": g.centroid_lng,
-                "latest_at": g.latest_at.isoformat(),
+                "latest_at": _utc_iso(g.latest_at),
                 "crisis_types": g.crisis_types,
                 "severity_max": g.severity_max,
             }
@@ -112,7 +113,7 @@ def get_group_events(
                 "from_count": r.from_count,
                 "to_count": r.to_count,
                 "payload": r.payload,
-                "occurred_at": r.occurred_at.isoformat(),
+                "occurred_at": _utc_iso(r.occurred_at),
             }
             for r in rows
         ],

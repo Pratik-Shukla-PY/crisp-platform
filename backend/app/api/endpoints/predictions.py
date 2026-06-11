@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.prediction import PredictionZone, PredictionResult
 from app.core.deps import require_viewer, require_analyst, require_admin
+from app.schemas.report import _utc_iso  # Z-suffixed UTC wire format
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -150,7 +151,7 @@ async def run_forecast(req: ForecastRequest, user=Depends(require_analyst), db: 
         "id": pred.id, "zone_id": zone.id, "zone_name": zone.name,
         "latitude": zone.latitude, "longitude": zone.longitude,
         **{k: v for k, v in result.items() if k not in ("weather_data", "historical_summary", "seismic_data", "geospatial_data", "conflict_data")},
-        "created_at": str(pred.created_at),
+        "created_at": _utc_iso(pred.created_at),
     }
 
 
@@ -178,7 +179,7 @@ def get_latest_predictions(user=Depends(require_viewer), db: Session = Depends(g
                 "signal_breakdown": latest.signal_breakdown,
                 "recommended_action": latest.recommended_action,
                 "reasoning": latest.reasoning,
-                "created_at": str(latest.created_at),
+                "created_at": _utc_iso(latest.created_at),
             })
     return results
 
@@ -218,6 +219,6 @@ def get_zone_history(zone_id: str, user=Depends(require_viewer), db: Session = D
             "headline": p.headline, "contributing_factors": p.contributing_factors,
             "signal_breakdown": p.signal_breakdown,
             "recommended_action": p.recommended_action,
-            "created_at": str(p.created_at),
+            "created_at": _utc_iso(p.created_at),
         } for p in history],
     }

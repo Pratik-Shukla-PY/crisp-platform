@@ -922,7 +922,9 @@
     async function _handleDownload() {
         try {
             const blob = await _composeForShare();
-            const ts = new Date().toISOString().slice(0, 10);
+            const _bd = new Date();
+    const _bp = (n) => String(n).padStart(2, '0');
+    const ts = `${_bd.getFullYear()}-${_bp(_bd.getMonth() + 1)}-${_bp(_bd.getDate())}`;  // local date
             const filename = `crisp-${state.tier.toLowerCase()}-${state.template}-${ts}.png`;
             _downloadBlob(blob, filename);
             _toast(_t('badge_studio_downloaded', 'Saved to your downloads'), 'success');

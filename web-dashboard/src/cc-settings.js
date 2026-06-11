@@ -45,6 +45,11 @@
   const el = (id) => document.getElementById(id);
   function fmtDate(s) {
     if (!s) return '—';
+    // Shared dashboard format (app.js __ccFmtDateTime: "11 Jun 2026,
+    // 2:45 PM", operator-local, ensureUTC-hardened parse). Fallback keeps
+    // the old rendering if app.js hasn't exposed the helper yet.
+    const shared = window.__ccFmtDateTime;
+    if (shared) { const out = shared(s); return out || '—'; }
     const d = new Date(s);
     return isNaN(d.getTime()) ? '—' : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   }
