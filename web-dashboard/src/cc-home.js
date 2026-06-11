@@ -306,9 +306,6 @@
       const intent = b.getAttribute('data-intent');
       if (intent === 'users') window.__ccSettingsInitialTab = 'users';
       go(b.getAttribute('data-route'));
-      if (intent === 'export') {
-        setTimeout(() => { try { window.__crispOpenExportMenu && window.__crispOpenExportMenu(); } catch (_e) {} }, 120);
-      }
     }));
     const homeBtn = el('cc-nav-home');
     if (homeBtn) homeBtn.addEventListener('click', () => { try { ov.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_e) { ov.scrollTop = 0; } });
@@ -347,7 +344,7 @@
     return [
       `<button class="on" id="cc-nav-home" aria-current="page"><span aria-hidden="true">🏠</span> Home</button>`,
       b('/incidents', '🛰', 'Operations', false),
-      b('/incidents', '⬇', 'Exports', false, 'export'),
+      b('/exports', '⬇', 'Exports', false),
       b('/reporting', '🧩', 'Crisis Forms', true),
       b('/org', '🏛', 'Organisation', true),
       b('/users', '👥', 'Users', true, 'users'),

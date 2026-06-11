@@ -36,6 +36,7 @@
     '/users':      ['SUPER_ADMIN', 'ADMIN', 'ANALYST', 'VIEWER'],  // account self-service; Users-mgmt tab gated inside cc-settings
     '/org':        ['SUPER_ADMIN', 'ADMIN'],
     '/reporting':  ['SUPER_ADMIN', 'ADMIN'],
+    '/exports':    ['SUPER_ADMIN', 'ADMIN', 'ANALYST', 'VIEWER'],
   };
 
   function role() {
@@ -82,6 +83,7 @@
     try { window.__ccHome && window.__ccHome.closeLanding && window.__ccHome.closeLanding(); } catch (_e) {}
     try { window.__ccSettings && window.__ccSettings.closeOverlay && window.__ccSettings.closeOverlay(); } catch (_e) {}
     try { window.__ccCrisis && window.__ccCrisis.closeOverlay && window.__ccCrisis.closeOverlay(); } catch (_e) {}
+    try { window.__ccExports && window.__ccExports.closeOverlay && window.__ccExports.closeOverlay(); } catch (_e) {}
   }
   function showIncidents() {
     const inc = incidentsEl();
@@ -121,6 +123,12 @@
       try { (window.openOrgSettings || function () {})(); } catch (_e) {}
     } else if (route === '/reporting') {
       try { (window.openCrisisForms || function () {})(); } catch (_e) {}
+    } else if (route === '/exports') {
+      // Pass the PREVIOUS route so closing the center returns the user to
+      // exactly where they came from (landing or ops). The ops view stays
+      // visible underneath when arriving from /incidents.
+      if (_currentRoute === '/incidents') showIncidents();
+      try { (window.openExportCenter || function () {})(_currentRoute || '/'); } catch (_e) {}
     } else {
       try { (window.openControlCenter || function () {})(); } catch (_e) {}
       route = '/';

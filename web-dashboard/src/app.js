@@ -4171,6 +4171,7 @@ window.selectReport = (id, skipFly = false) => {
                     })() : `<button class="dp-run-ai-btn" onclick="runAIAssessment('${r.id}')"><i class="fa-solid fa-shield-halved"></i> Credibility Check</button>`}
                 </div>
                 <button class="dp-pdf-btn" onclick="exportPDF('${r.id}')" title="Export PDF"><i class="fa-solid fa-file-pdf"></i></button>
+                <button class="dp-pdf-btn" onclick="downloadEvidenceBundle('${r.id}')" title="Evidence bundle (ZIP) — photos, audio, satellite snapshots + verification JSON for offline review"><i class="fa-solid fa-file-zipper"></i></button>
             </div>
             <!-- Phase 5 (Apr 2026) — Reviewer actions + response-time strip.
                  Lives above the existing dispatch/resolve/false-alarm row so
@@ -9569,6 +9570,29 @@ function _exportFilterParams() {
 }
 window._exportFilterParams = _exportFilterParams;
 
+// Jun 2026 (export audit) — per-report evidence bundle: ZIP of evidence.json,
+// completed media files, stored satellite snapshots and a README, so a
+// verifier (or UNDP judge) can review one report fully OFFLINE.
+window.downloadEvidenceBundle = async function (reportId) {
+    showToast('Preparing evidence bundle…', 'info');
+    try {
+        const base = API.replace('/api/v1/reports', '/api/v1/exports');
+        const res = await fetch(`${base}/evidence-bundle/${encodeURIComponent(reportId)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `crisp_evidence_${String(reportId).slice(0, 8)}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+        showToast('Evidence bundle downloaded', 'success');
+    } catch (e) {
+        showToast(`Evidence bundle failed: ${e.message}`, 'error');
+    }
+};
+
 window.exportData = async function (format) {
     const fmt = ['csv', 'geojson', 'shapefile', 'kml', 'pdf'].includes(format) ? format : 'csv';
     const base = API.replace('/api/v1/reports', '/api/v1/exports');
@@ -9604,22 +9628,6 @@ window.exportData = async function (format) {
     }
 };
 
-// Deep-link hook for the Crisis Intelligence command bar's "Exports" action:
-// opens the ops Tools menu with the Export… submenu expanded, so the admin
-// lands on the actual export affordance instead of a bare report list. The
-// existing outside-click closer (.export-dropdown.open sweep) handles dismiss.
-window.__crispOpenExportMenu = function () {
-    const dd = document.getElementById('cmd-tools-dropdown');
-    if (!dd) return false;
-    dd.classList.add('open');
-    const sub = dd.querySelector('.tools-menu-submenu');
-    if (sub) sub.classList.add('open');
-    try {
-        const first = dd.querySelector('.tools-menu-subitem');
-        if (first) first.focus();
-    } catch (_e) { /* focus is best-effort */ }
-    return true;
-};
 
 window.exportNodeData = function (path) {
     const parts = path.split('|');

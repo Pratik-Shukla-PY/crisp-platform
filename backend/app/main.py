@@ -373,6 +373,11 @@ app.add_middleware(
         "X-Offset",
         "X-Server-Time",
         "ETag",
+        # Jun 2026 (export audit) — fetch->blob downloads read the server's
+        # filename from Content-Disposition; it is NOT CORS-safelisted, so
+        # cross-origin dev (8080 -> 8000) silently fell back to generic
+        # client-side filenames without this.
+        "Content-Disposition",
     ],
 )
 

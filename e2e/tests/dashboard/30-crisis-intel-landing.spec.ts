@@ -93,7 +93,10 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     await expect(page.locator('#cc-activity')).toContainText('Patna');
 
     await page.waitForTimeout(400);
-    const runtimeErrors = errors.filter((e) => !/net::ERR|Failed to load resource|favicon|ERR_/i.test(e));
+    // nominatim/CORS: the ops view's reverse-geocoder calls an EXTERNAL
+    // service this stubbed harness doesn't intercept — its CORS rejection is
+    // environment noise, not a landing runtime error.
+    const runtimeErrors = errors.filter((e) => !/net::ERR|Failed to load resource|favicon|ERR_|nominatim|CORS policy/i.test(e));
     expect(runtimeErrors, 'landing runtime errors: ' + JSON.stringify(runtimeErrors)).toEqual([]);
 });
 
@@ -118,7 +121,16 @@ async function openLanding(page, role = 'ADMIN') {
     });
     await page.goto('index.html');
     await page.waitForTimeout(600);
-    await page.evaluate(() => (window as any).openControlCenter && (window as any).openControlCenter());
+    // Enter the landing THROUGH the router (real-user path) so
+    // _currentRoute is '/' — the Export Center's close-returns-to-origin
+    // contract depends on the route the user actually came from. Direct
+    // openControlCenter() calls leave the route at the automation default
+    // (/incidents) and made the close-step assert the wrong origin.
+    await page.evaluate(() => {
+        const r = (window as any).__crispRouter;
+        if (r) r.navigate('/');
+        else (window as any).openControlCenter && (window as any).openControlCenter();
+    });
     await expect(page.locator('#cc-nav')).toBeVisible({ timeout: 6000 });
 }
 
@@ -158,14 +170,68 @@ test('Users deep-link opens Account Settings ON the Users tab (admin)', async ({
     await expect(page.locator('.cc-st-tab.on')).toHaveText(/Users/i);
 });
 
-test('Exports deep-link opens the ops Tools → Export… menu', async ({ page }) => {
+test('Exports pill opens the Export Center; closing returns to the landing', async ({ page }) => {
     await openLanding(page, 'ADMIN');
-    await page.locator('#cc-nav button[data-intent="export"]').click();
-    await page.waitForTimeout(400);
-    // Landing closed (routed to /incidents) and the export affordance is open.
-    await expect(page.locator('#cmd-tools-dropdown')).toHaveClass(/open/);
-    await expect(page.locator('#cmd-tools-dropdown .tools-menu-submenu')).toHaveClass(/open/);
-    await expect(page.locator('#cmd-tools-dropdown .tools-menu-subitem').first()).toBeVisible();
+    await page.locator('#cc-nav button[data-route="/exports"]').click();
+    // Route-level overlay (#/exports) — scope panel + format cards + count.
+    await expect(page).toHaveURL(/#\/exports/);
+    await expect(page.locator('#cc-ex-overlay.cc-ex-open')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#cc-ex-dataset .cc-ex-card')).toHaveCount(5);
+    await expect(page.locator('#cc-ex-briefing .cc-ex-card')).toHaveCount(3);
+    // Live scope count from the stubbed /exports/count.
+    await expect(page.locator('#cc-ex-count .n')).not.toHaveText('…', { timeout: 5000 });
+    // Recent-exports audit panel renders.
+    await expect(page.locator('#cc-ex-recent-body')).not.toContainText('Loading', { timeout: 5000 });
+    // ✕ returns EXACTLY where the user came from: the landing.
+    await page.locator('#cc-ex-close').click();
+    await expect(page).toHaveURL(/#\/$/);
+    await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible();
+    await expect(page.locator('#cc-ex-overlay.cc-ex-open')).toHaveCount(0);
+});
+
+test('Export Center downloads a CSV through the authenticated backend route', async ({ page }) => {
+    await openLanding(page, 'ADMIN');
+    let sawAuthHeader = false;
+    await page.route('**/api/v1/exports/csv**', async (route) => {
+        sawAuthHeader = !!route.request().headers()['authorization'];
+        return route.fulfill({
+            status: 200,
+            headers: {
+                'content-disposition': 'attachment; filename=crisp_reports_20260612.csv',
+                // Mirrors the backend CORS config — Content-Disposition is not
+                // CORS-safelisted, so without exposing it the client cannot
+                // read the server filename on cross-origin dev (a real bug
+                // this test caught and main.py now fixes).
+                'access-control-expose-headers': 'Content-Disposition',
+            },
+            contentType: 'text/csv',
+            body: 'id,source\n#meta+id,#meta+channel\nr1,APP\n',
+        });
+    });
+    await page.locator('#cc-nav button[data-route="/exports"]').click();
+    await expect(page.locator('#cc-ex-overlay.cc-ex-open')).toBeVisible({ timeout: 5000 });
+    const [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 8000 }),
+        page.locator('#cc-ex-dataset .cc-ex-card[data-path="csv"]').click(),
+    ]);
+    expect(download.suggestedFilename()).toBe('crisp_reports_20260612.csv');
+    expect(sawAuthHeader, 'export fetch must carry the Authorization header').toBe(true);
+});
+
+test('Export Center scope change refreshes the count with the right params', async ({ page }) => {
+    const countCalls: string[] = [];
+    await openLanding(page, 'ADMIN');
+    await page.route('**/api/v1/exports/count**', async (route) => {
+        countCalls.push(route.request().url());
+        return route.fulfill({ json: { count: 7, filters: {} } });
+    });
+    await page.locator('#cc-nav button[data-route="/exports"]').click();
+    await expect(page.locator('#cc-ex-overlay.cc-ex-open')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#cc-ex-count .n')).toHaveText('7', { timeout: 5000 });
+    await page.locator('.cc-ex-radio[data-scope="24h"]').click();
+    await expect.poll(() => countCalls.some((u) => u.includes('since=')), {
+        timeout: 5000,
+    }).toBe(true);
 });
 
 test('admin-gated nav items render disabled with the admin chip for viewers', async ({ page }) => {
