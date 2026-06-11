@@ -1051,5 +1051,19 @@
   "export_note": "ਇਸ ਡੀਵਾਈਸ ਤੋਂ ਭੇਜੀ ਹਰ ਰਿਪੋਰਟ ਨੂੰ ਇੱਕ JSON ਫਾਈਲ ਵਜੋਂ ਡਾਊਨਲੋਡ ਕਰੋ ਜੋ ਤੁਸੀਂ ਰੱਖ ਸਕਦੇ ਹੋ।",
   "export_preparing": "ਤਿਆਰ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ…",
   "export_success": "{n} ਰਿਪੋਰਟਾਂ ਨਿਰਯਾਤ ਕੀਤੀਆਂ।",
-  "export_empty": "ਨਿਰਯਾਤ ਕਰਨ ਲਈ ਅਜੇ ਕੋਈ ਰਿਪੋਰਟ ਨਹੀਂ ਹੈ।"
+  "export_empty": "ਨਿਰਯਾਤ ਕਰਨ ਲਈ ਅਜੇ ਕੋਈ ਰਿਪੋਰਟ ਨਹੀਂ ਹੈ।",
+  "add_another_report": "ਇੱਕ ਹੋਰ ਰਿਪੋਰਟ ਜੋੜੋ",
+  "lang_picker_close": "ਬੰਦ ਕਰੋ",
+  "lang_picker_other_section": "ਹੋਰ ਸਮਰਥਿਤ",
+  "lang_picker_un_section": "UN ਅਧਿਕਾਰਤ ਭਾਸ਼ਾਵਾਂ",
+  "report_id": "ID:",
+  "sent_sub": "ਤੁਹਾਡੀ ਰਿਪੋਰਟ ਜਾਨਾਂ ਬਚਾਉਣ ਵਿੱਚ ਮਦਦ ਕਰ ਸਕਦੀ ਹੈ। ਅਸੀਂ ਤੁਹਾਨੂੰ ਸੂਚਿਤ ਰੱਖਾਂਗੇ।",
+  "sent_title": "ਧੰਨਵਾਦ।",
+  "success_btn_home": "ਹੋਮ",
+  "success_btn_rewards": "ਇਨਾਮ",
+  "success_impact_first": "ਤੁਹਾਡੀ ਪਹਿਲੀ ਰਿਪੋਰਟ — ਅੱਗੇ ਆਉਣ ਲਈ ਧੰਨਵਾਦ।",
+  "success_impact_nth": "ਤੁਹਾਡੀ {n}ਵੀਂ ਰਿਪੋਰਟ — ਧੰਨਵਾਦ!",
+  "track_report": "ਆਪਣੀ ਰਿਪੋਰਟ ਟਰੈਕ ਕਰੋ",
+  "v4_cap_tip_impact": "ਪੁਸ਼ਟੀ ਕੀਤੇ ਜਵਾਬਦੇਹ ਹਰ ਰਿਪੋਰਟ ਪੜ੍ਹਦੇ ਹਨ। ਹਰ ਵੇਰਵਾ ਮਹੱਤਵਪੂਰਨ ਹੈ।",
+  "v4_cap_tips_eyebrow": "ਮਦਦਗਾਰ ਸੁਝਾਅ"
 }

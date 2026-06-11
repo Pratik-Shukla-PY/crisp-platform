@@ -1062,5 +1062,19 @@
   "export_note": "Descarga cada reporte que enviaste desde este dispositivo como un archivo JSON que puedes conservar.",
   "export_preparing": "Preparando…",
   "export_success": "Se exportaron {n} reporte(s).",
-  "export_empty": "Aún no hay reportes para exportar."
+  "export_empty": "Aún no hay reportes para exportar.",
+  "add_another_report": "Añadir otro informe",
+  "lang_picker_close": "Cerrar",
+  "lang_picker_other_section": "Todos los idiomas",
+  "lang_picker_un_section": "Más comunes",
+  "report_id": "Identificador:",
+  "sent_sub": "Su informe puede ayudar a salvar vidas. Le mantendremos informado.",
+  "sent_title": "Gracias.",
+  "success_btn_home": "Inicio",
+  "success_btn_rewards": "Recompensas",
+  "success_impact_first": "Tu primer reporte — gracias por dar el paso.",
+  "success_impact_nth": "Tu reporte {n} — ¡gracias!",
+  "track_report": "Seguir su informe",
+  "v4_cap_tip_impact": "Respondedores verificados leen cada informe. Cada detalle importa.",
+  "v4_cap_tips_eyebrow": "Consejos útiles"
 }

@@ -1043,5 +1043,19 @@
   "export_note": "نزّل كل بلاغ أرسلته من هذا الجهاز كملف JSON تحتفظ به.",
   "export_preparing": "جارٍ التحضير…",
   "export_success": "تم تصدير {n} بلاغ.",
-  "export_empty": "لا توجد بلاغات للتصدير بعد."
+  "export_empty": "لا توجد بلاغات للتصدير بعد.",
+  "add_another_report": "إضافة تقرير آخر",
+  "lang_picker_close": "إغلاق",
+  "lang_picker_other_section": "كل اللغات",
+  "lang_picker_un_section": "الأكثر شيوعًا",
+  "report_id": "المعرف:",
+  "sent_sub": "قد يساعد تقريرك في إنقاذ الأرواح. سنُبقيك على اطلاع.",
+  "sent_title": "شكراً لك.",
+  "success_btn_home": "الرئيسية",
+  "success_btn_rewards": "المكافآت",
+  "success_impact_first": "أول تقرير لك — شكرًا لتقدمك.",
+  "success_impact_nth": "تقريرك رقم {n} — شكرًا!",
+  "track_report": "تتبّع تقريرك",
+  "v4_cap_tip_impact": "يقرأ المستجيبون الموثوقون كل تقرير. كل تفصيل مهم.",
+  "v4_cap_tips_eyebrow": "نصائح مفيدة"
 }

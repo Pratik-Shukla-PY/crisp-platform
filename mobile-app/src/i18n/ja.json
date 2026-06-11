@@ -1052,5 +1052,19 @@
   "export_note": "このデバイスから送信したすべての報告を、保存できるJSONファイルとしてダウンロードします。",
   "export_preparing": "準備中…",
   "export_success": "{n}件の報告をエクスポートしました。",
-  "export_empty": "まだエクスポートする報告がありません。"
+  "export_empty": "まだエクスポートする報告がありません。",
+  "add_another_report": "別の報告を追加",
+  "lang_picker_close": "閉じる",
+  "lang_picker_other_section": "対応言語",
+  "lang_picker_un_section": "国連公用語",
+  "report_id": "ID：",
+  "sent_sub": "あなたの報告は命を救う助けになります。続報をお知らせします。",
+  "sent_title": "ありがとうございます。",
+  "success_btn_home": "ホーム",
+  "success_btn_rewards": "報酬",
+  "success_impact_first": "初めての報告 — 行動してくださりありがとうございます。",
+  "success_impact_nth": "{n}回目の報告 — ありがとうございます！",
+  "track_report": "報告を追跡",
+  "v4_cap_tip_impact": "認証された対応者がすべての報告を読みます。すべての詳細が重要です。",
+  "v4_cap_tips_eyebrow": "役立つヒント"
 }

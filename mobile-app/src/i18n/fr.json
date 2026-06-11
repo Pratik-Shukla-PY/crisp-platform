@@ -1054,5 +1054,19 @@
   "export_note": "Téléchargez chaque signalement envoyé depuis cet appareil sous forme de fichier JSON que vous pouvez conserver.",
   "export_preparing": "Préparation…",
   "export_success": "{n} signalement(s) exporté(s).",
-  "export_empty": "Aucun signalement à exporter pour le moment."
+  "export_empty": "Aucun signalement à exporter pour le moment.",
+  "add_another_report": "Ajouter un autre rapport",
+  "lang_picker_close": "Fermer",
+  "lang_picker_other_section": "Toutes les langues",
+  "lang_picker_un_section": "Les plus courantes",
+  "report_id": "ID :",
+  "sent_sub": "Votre rapport peut sauver des vies. Nous vous tiendrons informé.",
+  "sent_title": "Merci.",
+  "success_btn_home": "Accueil",
+  "success_btn_rewards": "Récompenses",
+  "success_impact_first": "Votre premier signalement — merci de vous être manifesté.",
+  "success_impact_nth": "Votre {n} signalement — merci !",
+  "track_report": "Suivre votre rapport",
+  "v4_cap_tip_impact": "Des intervenants vérifiés lisent chaque rapport. Chaque détail compte.",
+  "v4_cap_tips_eyebrow": "Conseils utiles"
 }

@@ -1028,5 +1028,19 @@
   "export_note": "Download every report you've sent from this device as a JSON file you can keep.",
   "export_preparing": "Preparing…",
   "export_success": "Exported {n} report(s).",
-  "export_empty": "No reports to export yet."
+  "export_empty": "No reports to export yet.",
+  "add_another_report": "Add another report",
+  "lang_picker_close": "Close",
+  "lang_picker_other_section": "Also supported",
+  "lang_picker_un_section": "UN official languages",
+  "report_id": "ID:",
+  "sent_sub": "Your report can help save lives. We will keep you posted.",
+  "sent_title": "Thank you.",
+  "success_btn_home": "Home",
+  "success_btn_rewards": "Rewards",
+  "success_impact_first": "Your first report — thank you for stepping up.",
+  "success_impact_nth": "Your {n} report — thank you!",
+  "track_report": "Track your report",
+  "v4_cap_tip_impact": "Verified responders read every report. Every detail matters.",
+  "v4_cap_tips_eyebrow": "Helpful tips"
 }

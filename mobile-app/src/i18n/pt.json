@@ -1058,5 +1058,19 @@
   "export_note": "Baixe cada relato que você enviou deste dispositivo como um arquivo JSON que você pode guardar.",
   "export_preparing": "Preparando…",
   "export_success": "{n} relato(s) exportado(s).",
-  "export_empty": "Ainda não há relatos para exportar."
+  "export_empty": "Ainda não há relatos para exportar.",
+  "add_another_report": "Adicionar outro relatório",
+  "lang_picker_close": "Fechar",
+  "lang_picker_other_section": "Também suportados",
+  "lang_picker_un_section": "Idiomas oficiais da ONU",
+  "report_id": "Identificador:",
+  "sent_sub": "O seu relatório pode ajudar a salvar vidas. Manteremos você informado.",
+  "sent_title": "Obrigado.",
+  "success_btn_home": "Início",
+  "success_btn_rewards": "Recompensas",
+  "success_impact_first": "O seu primeiro relatório — obrigado por agir.",
+  "success_impact_nth": "O seu {n}.º relatório — obrigado!",
+  "track_report": "Acompanhar o seu relatório",
+  "v4_cap_tip_impact": "Respondentes verificados leem cada relatório. Cada detalhe importa.",
+  "v4_cap_tips_eyebrow": "Dicas úteis"
 }

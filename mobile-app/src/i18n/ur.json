@@ -1051,5 +1051,19 @@
   "export_note": "اس ڈیوائس سے بھیجی گئی ہر رپورٹ کو ایک JSON فائل کے طور پر ڈاؤن لوڈ کریں جسے آپ رکھ سکتے ہیں۔",
   "export_preparing": "تیار کیا جا رہا ہے…",
   "export_success": "{n} رپورٹس برآمد ہوئیں۔",
-  "export_empty": "ابھی برآمد کرنے کے لیے کوئی رپورٹ نہیں ہے۔"
+  "export_empty": "ابھی برآمد کرنے کے لیے کوئی رپورٹ نہیں ہے۔",
+  "add_another_report": "ایک اور رپورٹ شامل کریں",
+  "lang_picker_close": "بند کریں",
+  "lang_picker_other_section": "دیگر معاون",
+  "lang_picker_un_section": "UN کی سرکاری زبانیں",
+  "report_id": "آئی ڈی:",
+  "sent_sub": "آپ کی رپورٹ زندگیاں بچانے میں مدد کر سکتی ہے۔ ہم آپ کو مطلع کریں گے۔",
+  "sent_title": "شکریہ۔",
+  "success_btn_home": "گھر",
+  "success_btn_rewards": "انعامات",
+  "success_impact_first": "آپ کی پہلی رپورٹ — آگے آنے کا شکریہ۔",
+  "success_impact_nth": "آپ کی {n}ویں رپورٹ — شکریہ!",
+  "track_report": "اپنی رپورٹ ٹریک کریں",
+  "v4_cap_tip_impact": "تصدیق شدہ جواب دہندگان ہر رپورٹ پڑھتے ہیں۔ ہر تفصیل اہم ہے۔",
+  "v4_cap_tips_eyebrow": "مددگار تجاویز"
 }

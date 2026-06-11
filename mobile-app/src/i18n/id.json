@@ -1065,5 +1065,19 @@
   "export_note": "Unduh setiap laporan yang Anda kirim dari perangkat ini sebagai berkas JSON yang dapat Anda simpan.",
   "export_preparing": "Menyiapkan…",
   "export_success": "{n} laporan diekspor.",
-  "export_empty": "Belum ada laporan untuk diekspor."
+  "export_empty": "Belum ada laporan untuk diekspor.",
+  "add_another_report": "Tambah laporan lain",
+  "lang_picker_close": "Tutup",
+  "lang_picker_other_section": "Juga didukung",
+  "lang_picker_un_section": "Bahasa resmi PBB",
+  "report_id": "Pengenal:",
+  "sent_sub": "Laporan Anda dapat membantu menyelamatkan nyawa. Kami akan terus memberi tahu Anda.",
+  "sent_title": "Terima kasih.",
+  "success_btn_home": "Beranda",
+  "success_btn_rewards": "Hadiah",
+  "success_impact_first": "Laporan pertama Anda — terima kasih telah bertindak.",
+  "success_impact_nth": "Laporan ke-{n} Anda — terima kasih!",
+  "track_report": "Lacak laporan Anda",
+  "v4_cap_tip_impact": "Petugas terverifikasi membaca setiap laporan. Setiap detail penting.",
+  "v4_cap_tips_eyebrow": "Tips Berguna"
 }

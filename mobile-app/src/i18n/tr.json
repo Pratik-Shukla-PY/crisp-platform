@@ -1053,5 +1053,19 @@
   "export_note": "Bu cihazdan gönderdiğiniz her raporu saklayabileceğiniz bir JSON dosyası olarak indirin.",
   "export_preparing": "Hazırlanıyor…",
   "export_success": "{n} rapor dışa aktarıldı.",
-  "export_empty": "Henüz dışa aktarılacak rapor yok."
+  "export_empty": "Henüz dışa aktarılacak rapor yok.",
+  "add_another_report": "Başka bir bildirim ekle",
+  "lang_picker_close": "Kapat",
+  "lang_picker_other_section": "Ayrıca desteklenen",
+  "lang_picker_un_section": "BM resmi dilleri",
+  "report_id": "Kimlik:",
+  "sent_sub": "Bildiriminiz hayat kurtarmaya yardımcı olabilir. Sizi bilgilendireceğiz.",
+  "sent_title": "Teşekkürler.",
+  "success_btn_home": "Ana sayfa",
+  "success_btn_rewards": "Ödüller",
+  "success_impact_first": "İlk bildiriminiz — adım attığınız için teşekkürler.",
+  "success_impact_nth": "{n}. bildiriminiz — teşekkürler!",
+  "track_report": "Bildiriminizi takip edin",
+  "v4_cap_tip_impact": "Doğrulanmış müdahaleciler her raporu okur. Her ayrıntı önemlidir.",
+  "v4_cap_tips_eyebrow": "Faydalı İpuçları"
 }

@@ -1053,5 +1053,19 @@
   "export_note": "Tải xuống mọi báo cáo bạn đã gửi từ thiết bị này dưới dạng tệp JSON mà bạn có thể giữ lại.",
   "export_preparing": "Đang chuẩn bị…",
   "export_success": "Đã xuất {n} báo cáo.",
-  "export_empty": "Chưa có báo cáo nào để xuất."
+  "export_empty": "Chưa có báo cáo nào để xuất.",
+  "add_another_report": "Thêm báo cáo khác",
+  "lang_picker_close": "Đóng",
+  "lang_picker_other_section": "Cũng được hỗ trợ",
+  "lang_picker_un_section": "Ngôn ngữ chính thức LHQ",
+  "report_id": "Mã:",
+  "sent_sub": "Báo cáo của bạn có thể giúp cứu mạng. Chúng tôi sẽ cập nhật cho bạn.",
+  "sent_title": "Cảm ơn bạn.",
+  "success_btn_home": "Trang chủ",
+  "success_btn_rewards": "Phần thưởng",
+  "success_impact_first": "Báo cáo đầu tiên — cảm ơn bạn đã hành động.",
+  "success_impact_nth": "Báo cáo thứ {n} — cảm ơn!",
+  "track_report": "Theo dõi báo cáo",
+  "v4_cap_tip_impact": "Người ứng cứu đã xác minh đọc mọi báo cáo. Mọi chi tiết đều quan trọng.",
+  "v4_cap_tips_eyebrow": "Mẹo hữu ích"
 }

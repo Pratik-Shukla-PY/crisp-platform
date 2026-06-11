@@ -31,13 +31,41 @@ fi
 
 DRY_RUN=0
 FORCE=0
+ALLOW_KEY_LOSS=0
 for arg in "$@"; do
     case "$arg" in
-        --dry-run) DRY_RUN=1 ;;
-        --force)   FORCE=1 ;;
+        --dry-run)        DRY_RUN=1 ;;
+        --force)          FORCE=1 ;;
+        --allow-key-loss) ALLOW_KEY_LOSS=1 ;;
         *) echo "Unknown flag: $arg" >&2; exit 2 ;;
     esac
 done
+
+# ── Key-loss guard (Jun 2026) ────────────────────────────────────────────────
+# This script REPLACES the RN packs with the PWA packs. If the RN packs have
+# accumulated keys the PWA source lacks, a sync silently DELETES them — which
+# broke the V4CaptureScreen jest contract (22 failures) when
+# v4_cap_tips_eyebrow / v4_cap_tip_impact existed only on the RN side.
+# Compare en.json key sets BEFORE any copy: RN-only keys abort the sync (even
+# with --force — that flag only skips the interactive prompt). Fix by adding
+# the keys to mobile-app/src/i18n/ (the canonical registry for BOTH clients)
+# or deleting them from the RN packs; --allow-key-loss overrides deliberately.
+RN_ONLY_KEYS=$(jq -r --slurpfile pwa "$PWA_I18N/en.json" \
+    '(keys - ($pwa[0] | keys)) | map(select(. != "__meta__")) | .[]' \
+    "$RN_I18N/en.json")
+if [ -n "$RN_ONLY_KEYS" ] && [ "$ALLOW_KEY_LOSS" -eq 0 ]; then
+    echo "✗ ABORT: the RN packs contain keys missing from the PWA source." >&2
+    echo "  Syncing would permanently DELETE these keys from the RN packs:" >&2
+    # SC2001-clean line prefixing: prefix the first line, then replace every
+    # newline with newline + prefix (no sed subshell needed).
+    echo "    - ${RN_ONLY_KEYS//$'\n'/$'\n'    - }" >&2
+    echo "" >&2
+    echo "  Fix: add them to mobile-app/src/i18n/*.json (all 22 locales — the" >&2
+    echo "  canonical string registry for both clients), or delete them from" >&2
+    echo "  crisp-mobile/services/i18n/ if truly dead. Re-run after." >&2
+    echo "  To proceed anyway (data loss!): --allow-key-loss" >&2
+    exit 1
+fi
 
 # May 2026 — SC2012 fix: `ls` output isn't safe to parse when filenames
 # contain spaces / newlines / special chars. `find` is the deterministic
