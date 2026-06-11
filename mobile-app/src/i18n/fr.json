@@ -598,7 +598,7 @@
   "privacy_rights_1": "Supprimer tout signalement individuel (bouton Supprimer dans la vue détail)",
   "privacy_rights_2": "Supprimer tous vos signalements en une fois (Paramètres → Supprimer tous mes signalements)",
   "privacy_rights_3": "Délai de 24 heures — vous pouvez annuler la suppression dans ce délai",
-  "privacy_rights_4": "Exporter vos signalements en JSON / CSV (Paramètres → Exporter mes données — bientôt)",
+  "privacy_rights_4": "Exportez vos signalements dans un fichier JSON (Paramètres → Exporter mes données).",
   "privacy_rights_5": "Les signalements anonymes restent anonymes pour toujours ; nous ne pouvons pas les désanonymiser",
   "privacy_rights_6": "Demande de correction: la classification ou le texte d'un signalement peut être modifié en le supprimant et en le ré-envoyant (édition sur place à venir).",
   "privacy_rights_7": "Vous opposer au traitement / le restreindre pour un signalement spécifique en écrivant au contact en bas de cette page.",
@@ -1049,5 +1049,10 @@
   "crisis_cyclone": "Cyclone",
   "crisis_landslide": "Glissement de terrain",
   "crisis_pandemic": "Pandémie",
-  "crisis_other": "Autre"
+  "crisis_other": "Autre",
+  "export_my_data": "Exporter mes données",
+  "export_note": "Téléchargez chaque signalement envoyé depuis cet appareil sous forme de fichier JSON que vous pouvez conserver.",
+  "export_preparing": "Préparation…",
+  "export_success": "{n} signalement(s) exporté(s).",
+  "export_empty": "Aucun signalement à exporter pour le moment."
 }

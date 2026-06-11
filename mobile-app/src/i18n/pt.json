@@ -602,7 +602,7 @@
   "privacy_rights_1": "Eliminar qualquer relatório individual (botão Eliminar na vista de detalhes)",
   "privacy_rights_2": "Eliminar todos os seus relatórios de uma vez (Definições → Eliminar todos os meus relatórios)",
   "privacy_rights_3": "Período de 24 horas — pode anular a eliminação dentro desse prazo antes da remoção definitiva",
-  "privacy_rights_4": "Exportar os seus relatórios como JSON / CSV (Definições → Exportar os meus dados — em breve)",
+  "privacy_rights_4": "Exporte seus relatos como um arquivo JSON (Configurações → Exportar meus dados).",
   "privacy_rights_5": "Os relatórios anónimos permanecem anónimos para sempre; não podemos identificá-los",
   "privacy_rights_6": "Solicitar correção: a classificação ou o texto de um relatório pode ser alterado excluindo e reenviando (edição no local em breve).",
   "privacy_rights_7": "Opor-se / restringir o processamento de um relatório específico enviando um e-mail ao contato no final desta página.",
@@ -1053,5 +1053,10 @@
   "crisis_cyclone": "Ciclone",
   "crisis_landslide": "Deslizamento",
   "crisis_pandemic": "Pandemia",
-  "crisis_other": "Outro"
+  "crisis_other": "Outro",
+  "export_my_data": "Exportar meus dados",
+  "export_note": "Baixe cada relato que você enviou deste dispositivo como um arquivo JSON que você pode guardar.",
+  "export_preparing": "Preparando…",
+  "export_success": "{n} relato(s) exportado(s).",
+  "export_empty": "Ainda não há relatos para exportar."
 }

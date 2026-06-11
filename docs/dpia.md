@@ -68,7 +68,7 @@ Crisis analysts (dashboard, Bearer-auth) → exports (CSV / GeoJSON)
 
 | # | Action | Owner | Target |
 |---|---|---|---|
-| M1 | Implement "Export my data" (user-side access — currently labelled "coming soon") | engineering | Q3 2026 |
+| M1 | ~~Implement "Export my data"~~ — **done** (Settings → Export my data downloads every report this device sent as a JSON file via `GET /reports/device/{hash}`) | engineering | shipped |
 | M2 | Implement in-place edit on submitted reports (correction without delete-and-resubmit) | engineering | Q3 2026 |
 | M3 | Per-locale translation of HC48 privacy disclosures (currently EN-fallback) | i18n team | Q3 2026 |
 | M4 | Annual DPIA review + retention-policy review (UNDP Annex 3 obligation) | project lead | every 12 months |

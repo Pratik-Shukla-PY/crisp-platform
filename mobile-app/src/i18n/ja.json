@@ -596,7 +596,7 @@
   "privacy_rights_1": "個別の報告を削除（詳細画面の削除ボタン）",
   "privacy_rights_2": "すべての報告を一括削除（設定 → すべての報告を削除）",
   "privacy_rights_3": "24時間のソフト削除猶予 — 完全削除前の24時間以内に削除を取り消せます",
-  "privacy_rights_4": "報告をJSON / CSVでエクスポート（設定 → データをエクスポート — 近日）",
+  "privacy_rights_4": "報告をJSONファイルとしてエクスポート（設定 → データをエクスポート）。",
   "privacy_rights_5": "匿名報告は永遠に匿名のまま。匿名化を解除することはできません",
   "privacy_rights_6": "訂正の依頼: 報告の分類や本文は削除して再送信することで修正できます (近日中に直接編集も可能になります)。",
   "privacy_rights_7": "特定の報告の処理への異議申し立て / 制限は、このページ末尾の連絡先へメールしてください。",
@@ -1047,5 +1047,10 @@
   "crisis_cyclone": "サイクロン",
   "crisis_landslide": "地滑り",
   "crisis_pandemic": "パンデミック",
-  "crisis_other": "その他"
+  "crisis_other": "その他",
+  "export_my_data": "データをエクスポート",
+  "export_note": "このデバイスから送信したすべての報告を、保存できるJSONファイルとしてダウンロードします。",
+  "export_preparing": "準備中…",
+  "export_success": "{n}件の報告をエクスポートしました。",
+  "export_empty": "まだエクスポートする報告がありません。"
 }

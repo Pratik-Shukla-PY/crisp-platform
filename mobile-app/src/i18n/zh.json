@@ -591,7 +591,7 @@
   "privacy_rights_1": "删除任意单条报告（详情页删除按钮）",
   "privacy_rights_2": "一次删除你所有的报告（设置 → 删除我的所有报告）",
   "privacy_rights_3": "24 小时宽限期 — 永久删除前可撤销",
-  "privacy_rights_4": "以 JSON / CSV 导出报告（设置 → 导出我的数据 — 即将上线）",
+  "privacy_rights_4": "将您的报告导出为 JSON 文件（设置 → 导出我的数据）。",
   "privacy_rights_5": "匿名报告永远保持匿名；我们无法去匿名化",
   "privacy_rights_6": "请求更正:可以通过删除并重新提交来修改报告的分类或文本(很快支持就地编辑)。",
   "privacy_rights_7": "通过页面底部的联系方式来反对或限制对特定报告的处理。",
@@ -1042,5 +1042,10 @@
   "crisis_cyclone": "气旋",
   "crisis_landslide": "山体滑坡",
   "crisis_pandemic": "大流行病",
-  "crisis_other": "其他"
+  "crisis_other": "其他",
+  "export_my_data": "导出我的数据",
+  "export_note": "将您从此设备发送的每份报告下载为可保存的 JSON 文件。",
+  "export_preparing": "正在准备…",
+  "export_success": "已导出 {n} 份报告。",
+  "export_empty": "暂无可导出的报告。"
 }

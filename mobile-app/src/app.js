@@ -1928,7 +1928,7 @@ const I18N = {
         privacy_rights_1: "Delete any single report (per-report Delete button on the detail view)",
         privacy_rights_2: "Delete all your reports at once (Settings → Delete all my reports)",
         privacy_rights_3: "24-hour soft-delete grace — you can undo deletion within 24 hours before permanent removal",
-        privacy_rights_4: "Export your reports as JSON / CSV (Settings → Export my data — coming soon)",
+        privacy_rights_4: "Export your reports as a JSON file (Settings → Export my data)",
         privacy_rights_5: "Anonymous reports stay anonymous forever; we cannot unblind them",
         privacy_rights_title: "Your rights",
         privacy_title: "Privacy & how it works",
@@ -11968,6 +11968,67 @@ function setupSendStage() {
         } finally {
             _daBtn.disabled = false;
             _daBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> <span data-i18n="delete_all_my_reports">Delete all my reports</span>';
+        }
+    });
+
+    // Data-subject access right (UNDP Privacy Policy Annex 2 (f)) — download
+    // every report this device submitted as a JSON file. Reuses the same
+    // public device-hash endpoint as "My Reports"; anonymous reporters can
+    // exercise this without an account.
+    const _exBtn = document.getElementById('btn-settings-export');
+    if (_exBtn) _exBtn.addEventListener('click', async () => {
+        const deviceHash = localStorage.getItem('crisp_device_id_v2') ||
+                           localStorage.getItem('crisp_device_hash') ||
+                           localStorage.getItem('crisp_device_id') || '';
+        if (!deviceHash) {
+            // showToast(message, duration) — the 2nd arg is the display
+            // duration in ms, not a type. Use the default (3 s) so the
+            // feedback is actually visible.
+            showToast(t('export_empty'));
+            return;
+        }
+        const _exLabel = '<i class="fa-solid fa-download"></i> <span data-i18n="export_my_data">Export my data</span>';
+        _exBtn.disabled = true;
+        _exBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('export_preparing')}`;
+        try {
+            const res = await fetch(`${API_BASE}/reports/device/${deviceHash}`);
+            if (!res.ok) {
+                let detail = `HTTP ${res.status}`;
+                try { detail = (await res.json()).detail || detail; } catch (_) {}
+                showToast(t('delete_failed_toast').replace('{detail}', String(detail)));
+                return;
+            }
+            const reports = await res.json();
+            if (!Array.isArray(reports) || reports.length === 0) {
+                showToast(t('export_empty'));
+                return;
+            }
+            // Wrap the rows with a small export envelope so the file is
+            // self-describing (who/when/how-many) for the data subject.
+            const payload = {
+                export_kind: 'crisp-my-data',
+                device_hash: deviceHash,
+                exported_at: new Date().toISOString(),
+                report_count: reports.length,
+                reports,
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const stamp = new Date().toISOString().slice(0, 10);
+            a.download = `crisp-my-data-${stamp}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            // Revoke on the next tick so the download has committed.
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            showToast(t('export_success').replace('{n}', String(reports.length)));
+        } catch (e) {
+            showToast(t('delete_error_toast').replace('{error}', String(e && e.message ? e.message : e)));
+        } finally {
+            _exBtn.disabled = false;
+            _exBtn.innerHTML = _exLabel;
         }
     });
 }

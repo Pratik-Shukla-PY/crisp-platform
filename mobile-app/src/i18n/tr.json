@@ -597,7 +597,7 @@
   "privacy_rights_1": "Herhangi bir tekil bildirimi silin (detay görünümündeki Sil düğmesi)",
   "privacy_rights_2": "Tüm bildirimlerinizi tek seferde silin (Ayarlar → Tüm bildirimlerimi sil)",
   "privacy_rights_3": "24 saatlik yumuşak silme süresi — kalıcı kaldırmadan önce 24 saat içinde silmeyi geri alabilirsiniz",
-  "privacy_rights_4": "Bildirimleri JSON / CSV olarak dışa aktarın (Ayarlar → Verilerimi dışa aktar — yakında)",
+  "privacy_rights_4": "Raporlarınızı bir JSON dosyası olarak dışa aktarın (Ayarlar → Verilerimi dışa aktar).",
   "privacy_rights_5": "Anonim bildirimler sonsuza dek anonim kalır; kimlik açamayız",
   "privacy_rights_6": "Düzeltme talebi: bir raporun sınıflandırması veya metni, silinip yeniden gönderilerek değiştirilebilir (yerinde düzenleme yakında).",
   "privacy_rights_7": "Belirli bir raporun işlenmesine itiraz etmek / kısıtlamak için bu sayfanın altındaki adrese e-posta gönderin.",
@@ -1048,5 +1048,10 @@
   "crisis_cyclone": "Siklon",
   "crisis_landslide": "Heyelan",
   "crisis_pandemic": "Pandemi",
-  "crisis_other": "Diğer"
+  "crisis_other": "Diğer",
+  "export_my_data": "Verilerimi dışa aktar",
+  "export_note": "Bu cihazdan gönderdiğiniz her raporu saklayabileceğiniz bir JSON dosyası olarak indirin.",
+  "export_preparing": "Hazırlanıyor…",
+  "export_success": "{n} rapor dışa aktarıldı.",
+  "export_empty": "Henüz dışa aktarılacak rapor yok."
 }

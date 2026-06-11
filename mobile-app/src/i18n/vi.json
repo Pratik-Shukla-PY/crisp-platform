@@ -597,7 +597,7 @@
   "privacy_rights_1": "Xóa bất kỳ báo cáo nào (nút Xóa trên trang chi tiết)",
   "privacy_rights_2": "Xóa tất cả báo cáo cùng lúc (Cài đặt → Xóa tất cả báo cáo của tôi)",
   "privacy_rights_3": "24 giờ ân hạn xóa mềm — có thể hoàn tác xóa trong khoảng thời gian đó",
-  "privacy_rights_4": "Xuất báo cáo dưới dạng JSON / CSV (Cài đặt → Xuất dữ liệu của tôi — sắp có)",
+  "privacy_rights_4": "Xuất báo cáo của bạn dưới dạng tệp JSON (Cài đặt → Xuất dữ liệu của tôi).",
   "privacy_rights_5": "Báo cáo ẩn danh vẫn ẩn danh mãi mãi; chúng tôi không thể truy danh tính",
   "privacy_rights_6": "Yêu cầu sửa đổi: phân loại hoặc nội dung báo cáo có thể được sửa đổi bằng cách xóa và gửi lại (chỉnh sửa tại chỗ sẽ sớm có mặt).",
   "privacy_rights_7": "Phản đối / hạn chế xử lý báo cáo cụ thể bằng cách gửi email tới địa chỉ liên hệ ở cuối trang này.",
@@ -1048,5 +1048,10 @@
   "crisis_cyclone": "Lốc xoáy",
   "crisis_landslide": "Sạt lở đất",
   "crisis_pandemic": "Đại dịch",
-  "crisis_other": "Khác"
+  "crisis_other": "Khác",
+  "export_my_data": "Xuất dữ liệu của tôi",
+  "export_note": "Tải xuống mọi báo cáo bạn đã gửi từ thiết bị này dưới dạng tệp JSON mà bạn có thể giữ lại.",
+  "export_preparing": "Đang chuẩn bị…",
+  "export_success": "Đã xuất {n} báo cáo.",
+  "export_empty": "Chưa có báo cáo nào để xuất."
 }

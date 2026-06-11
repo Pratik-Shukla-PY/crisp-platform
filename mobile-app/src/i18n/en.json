@@ -572,7 +572,7 @@
   "privacy_rights_1": "Delete any single report (per-report Delete button on the detail view)",
   "privacy_rights_2": "Delete all your reports at once (Settings → Delete all my reports)",
   "privacy_rights_3": "24-hour soft-delete grace — you can undo deletion within 24 hours before permanent removal",
-  "privacy_rights_4": "Export your reports as JSON / CSV (Settings → Export my data — coming soon)",
+  "privacy_rights_4": "Export your reports as a JSON file (Settings → Export my data).",
   "privacy_rights_5": "Anonymous reports stay anonymous forever; we cannot unblind them",
   "privacy_rights_6": "Request correction: a report's classification or text can be amended by deleting and resubmitting (we'll surface in-place edit shortly).",
   "privacy_rights_7": "Object to / restrict processing of a specific report by emailing the contact at the bottom of this page.",
@@ -1023,5 +1023,10 @@
   "crisis_cyclone": "Cyclone",
   "crisis_landslide": "Landslide",
   "crisis_pandemic": "Pandemic",
-  "crisis_other": "Other"
+  "crisis_other": "Other",
+  "export_my_data": "Export my data",
+  "export_note": "Download every report you've sent from this device as a JSON file you can keep.",
+  "export_preparing": "Preparing…",
+  "export_success": "Exported {n} report(s).",
+  "export_empty": "No reports to export yet."
 }

@@ -609,7 +609,7 @@
   "privacy_rights_1": "Hapus laporan tunggal (tombol Hapus pada tampilan detail)",
   "privacy_rights_2": "Hapus semua laporan sekaligus (Pengaturan → Hapus semua laporan)",
   "privacy_rights_3": "Penundaan penghapusan lunak 24 jam — Anda dapat membatalkan penghapusan dalam waktu tersebut sebelum penghapusan permanen",
-  "privacy_rights_4": "Ekspor laporan sebagai JSON / CSV (Pengaturan → Ekspor data — segera)",
+  "privacy_rights_4": "Ekspor laporan Anda sebagai berkas JSON (Pengaturan → Ekspor data saya).",
   "privacy_rights_5": "Laporan anonim tetap anonim selamanya; kami tidak dapat membuka identitas",
   "privacy_rights_6": "Permintaan koreksi: klasifikasi atau teks laporan dapat diubah dengan menghapus dan mengirim ulang (edit di tempat akan segera tersedia).",
   "privacy_rights_7": "Keberatan / membatasi pemrosesan laporan tertentu dengan mengirim email ke kontak di bagian bawah halaman ini.",
@@ -1060,5 +1060,10 @@
   "crisis_cyclone": "Siklon",
   "crisis_landslide": "Tanah longsor",
   "crisis_pandemic": "Pandemi",
-  "crisis_other": "Lainnya"
+  "crisis_other": "Lainnya",
+  "export_my_data": "Ekspor data saya",
+  "export_note": "Unduh setiap laporan yang Anda kirim dari perangkat ini sebagai berkas JSON yang dapat Anda simpan.",
+  "export_preparing": "Menyiapkan…",
+  "export_success": "{n} laporan diekspor.",
+  "export_empty": "Belum ada laporan untuk diekspor."
 }
