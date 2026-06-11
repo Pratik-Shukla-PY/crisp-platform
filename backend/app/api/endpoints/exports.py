@@ -1,19 +1,24 @@
 """
-Data Export Endpoints — CSV, GeoJSON, Shapefile, KML
-For UNDP judges and GIS tool integration.
+Data Export Endpoints — CSV (HXL-tagged), GeoJSON, Shapefile, KML, PDF,
+analytics summary/sitrep, per-report evidence bundles, plus count /
+data-dictionary / recent-exports support endpoints.
+For UNDP judges, GIS tool integration, and humanitarian data sharing.
 """
+import csv
 import io
 import json
 import logging
+import re
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+from xml.sax.saxutils import escape as _xml_escape
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from app.core.deps import require_viewer
+from sqlalchemy.orm import Session, joinedload, selectinload
 
+from app.core.deps import require_viewer
 from app.db.session import get_db
 from app.models.report import Report, Location
 
@@ -21,28 +26,122 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _utc_date_stamp() -> str:
+    """Filename date stamp — UTC, not server-local (a 2am IST export was
+    getting the previous day's date)."""
+    return datetime.now(timezone.utc).strftime("%Y%m%d")
+
+
+def _parse_iso(value: str, param: str) -> datetime:
+    """ISO-8601 parse that FAILS LOUDLY. The old behaviour swallowed
+    ValueError and silently dropped the filter — an analyst typing a typo'd
+    date got the FULL dataset labelled as a filtered one."""
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid ISO-8601 datetime for '{param}': {value!r}",
+        )
+
+
 def _query_reports(db: Session, status: Optional[str], crisis_type: Optional[str],
-                   since: Optional[str], until: Optional[str]):
-    """Shared query builder for all export endpoints."""
-    q = db.query(Report).filter(Report.deletion_requested_at.is_(None))
+                   since: Optional[str], until: Optional[str],
+                   severity: Optional[str] = None, bbox: Optional[str] = None):
+    """Shared query builder for all export endpoints. Returns the QUERY so
+    callers can count() or iterate. Eager-loads the per-report relations
+    every format consumes (location, verification, media) — the old lazy
+    loading was an N+1 per row."""
+    q = (
+        db.query(Report)
+        .options(
+            joinedload(Report.location),
+            joinedload(Report.verification),
+            selectinload(Report.media),
+        )
+        .filter(Report.deletion_requested_at.is_(None))
+    )
     if status:
         q = q.filter(Report.status == status)
     if crisis_type:
         q = q.filter(Report.crisis_type == crisis_type)
+    if severity:
+        q = q.filter(Report.severity == severity)
     if since:
-        try:
-            q = q.filter(Report.server_created_at >= datetime.fromisoformat(since))
-        except ValueError:
-            pass
+        q = q.filter(Report.server_created_at >= _parse_iso(since, "since"))
     if until:
+        q = q.filter(Report.server_created_at <= _parse_iso(until, "until"))
+    if bbox:
+        # bbox=minLng,minLat,maxLng,maxLat (GeoJSON axis order).
         try:
-            q = q.filter(Report.server_created_at <= datetime.fromisoformat(until))
-        except ValueError:
-            pass
-    return q.order_by(Report.server_created_at.desc()).all()
+            min_lng, min_lat, max_lng, max_lat = [float(x) for x in bbox.split(",")]
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid bbox (want 'minLng,minLat,maxLng,maxLat'): {bbox!r}",
+            )
+        q = q.join(Location, Location.report_id == Report.id).filter(
+            Location.longitude >= min_lng, Location.longitude <= max_lng,
+            Location.latitude >= min_lat, Location.latitude <= max_lat,
+        )
+    return q.order_by(Report.server_created_at.desc())
 
 
-def _report_to_row(r):
+def _build_tier_map(db: Session, reports) -> dict:
+    """Bulk device_id → reporter-tier map. Replaces the old per-row double
+    query (2 × N) with two set-based queries total."""
+    from app.models.report import Device, ReporterProfile
+    device_ids = {r.device_id for r in reports if r.device_id}
+    if not device_ids:
+        return {}
+    devices = db.query(Device.id, Device.device_hash).filter(Device.id.in_(device_ids)).all()
+    hash_by_dev = {d.id: d.device_hash for d in devices if d.device_hash}
+    if not hash_by_dev:
+        return {}
+    profiles = (
+        db.query(ReporterProfile.device_hash, ReporterProfile.badge_level)
+        .filter(ReporterProfile.device_hash.in_(set(hash_by_dev.values())))
+        .all()
+    )
+    valid = {"T1_SCOUT", "T2_SIGNAL", "T3_CHANGEMAKER", "T4_LIFEKEEPER"}
+    tier_by_hash = {p.device_hash: p.badge_level for p in profiles if p.badge_level in valid}
+    return {dev_id: tier_by_hash.get(h, "") for dev_id, h in hash_by_dev.items()}
+
+
+def _fetch_export_rows(db: Session, status, crisis_type, since, until,
+                       severity=None, bbox=None, limit: Optional[int] = None):
+    """Run the export query and flatten to plain row dicts (no ORM refs held).
+    Returns (rows, total) where total is the pre-limit match count so
+    truncation is never silent."""
+    q = _query_reports(db, status, crisis_type, since, until, severity, bbox)
+    reports = q.limit(limit).all() if limit else q.all()
+    total = q.order_by(None).count() if limit else len(reports)
+    tier_map = _build_tier_map(db, reports)
+    rows = [_report_to_row(r, tier_map) for r in reports]
+    return rows, total, reports
+
+
+def _audit_export(db: Session, user, request: Optional[Request], fmt: str,
+                  filters: dict, row_count: int) -> None:
+    """Provenance record: who exported what dataset, when (humanitarian-data
+    accountability; the building dossier already logs DOSSIER_EXPORTED —
+    this extends the same discipline to bulk exports). Never lets audit
+    failure break an export."""
+    try:
+        from app.api.endpoints.auth import _audit
+        _audit(
+            db, getattr(user, "id", None), getattr(user, "email", ""),
+            "EXPORT", request,
+            resource_type="export",
+            details={"format": fmt, "row_count": row_count,
+                     "filters": {k: v for k, v in (filters or {}).items() if v}},
+        )
+        db.commit()
+    except Exception:
+        logger.exception("export audit log failed (format=%s)", fmt)
+
+
+def _report_to_row(r, tier_map: Optional[dict] = None):
     """Extract flat dict from a Report for export.
 
     UNDP-aligned values:
@@ -94,32 +193,32 @@ def _report_to_row(r):
     )
 
     # ── V4 reporter_tier ──────────────────────────────────────────────
-    # Joined from ReporterProfile via the device's device_hash. We do
-    # this on a per-row basis to keep the export endpoints simple
-    # (the dashboard listing endpoint uses a bulk JOIN; exports
-    # stream so the per-row cost is fine for the typical ≤10k-row
-    # download). Errors are silenced — a tier-join failure must
-    # never corrupt a bulk export.
-    reporter_tier = ""
+    # Bulk-prefetched device_id → tier map (see _build_tier_map). The old
+    # per-row implementation issued TWO queries per report (N+1 audit
+    # finding, Jun 2026); a 10k-row export ran 20k extra queries.
+    reporter_tier = (tier_map or {}).get(r.device_id, "") if r.device_id else ""
+
+    # ── Jun 2026 metadata additions (export audit) ────────────────────
+    # Appended columns — the schema is append-only so existing consumers
+    # keep working by name. These were all DERIVABLE-BUT-OMITTED: the
+    # values existed on the models but never reached any export.
+    def _iso(dt):
+        return dt.isoformat() if dt else ""
+    media_list = []
     try:
-        # Importing lazily so the model module isn't loaded unless an
-        # export is actually requested.
-        from app.models.report import Device, ReporterProfile
-        from app.db.session import SessionLocal  # noqa: F401  (used implicitly via r._sa_instance_state.session)
-        sess = getattr(r, "_sa_instance_state", None)
-        sess = sess.session if sess is not None else None
-        if sess is not None and r.device_id:
-            dev = sess.query(Device).filter(Device.id == r.device_id).first()
-            if dev and dev.device_hash:
-                prof = sess.query(ReporterProfile).filter(
-                    ReporterProfile.device_hash == dev.device_hash
-                ).first()
-                if prof and prof.badge_level in (
-                    "T1_SCOUT", "T2_SIGNAL", "T3_CHANGEMAKER", "T4_LIFEKEEPER",
-                ):
-                    reporter_tier = prof.badge_level
+        media_list = list(r.media or [])
     except Exception:
-        logger.exception("reporter_tier join failed for report %s", getattr(r, "id", "<unknown>"))
+        media_list = []
+    media_count = len(media_list)
+    first_photo_url = ""
+    for m in media_list:
+        mtype = (m.type.value if getattr(m, "type", None) else "")
+        if mtype == "IMAGE" and getattr(m, "assembly_status", "") == "complete":
+            first_photo_url = f"/api/v1/reports/media/{m.id}/thumb"
+            break
+    location_source = ""
+    if loc:
+        location_source = "user_corrected" if getattr(loc, "is_user_corrected", False) else "device_gps"
 
     return {
         "id": r.id,
@@ -133,7 +232,10 @@ def _report_to_row(r):
         "damage_classification": damage,
         "crisis_type": r.crisis_type or "",
         "crisis_category": crisis_cat,
-        "description": (r.description or "").replace("\n", " ").replace(",", ";"),
+        # Newlines flattened for spreadsheet sanity; commas PRESERVED — the
+        # csv module quotes properly now (the old hand-rolled writer forced
+        # `,`→`;` mangling, silently rewriting user testimony).
+        "description": (r.description or "").replace("\n", " "),
         "debris_clearing_needed": str(r.debris_clearing_needed) if r.debris_clearing_needed is not None else "",
         # Keep `service_status` as the legacy JSON blob for any
         # downstream pipeline that already parses it; the flat
@@ -160,53 +262,127 @@ def _report_to_row(r):
             f"{v.satellite_cloud_cover_pct:.1f}" if v and v.satellite_cloud_cover_pct is not None else ""
         ),
         "satellite_source": (v.satellite_source if v else "") or "",
+        # ── Jun 2026 appended metadata (export audit) ──────────────────
+        # Offline chronology: client capture time alongside server receipt.
+        "client_created_at": _iso(r.client_created_at),
+        # GPS quality + provenance — humanitarian IM officers weight point
+        # reliability by horizontal accuracy and whether a human corrected
+        # the pin.
+        "accuracy_m": (str(loc.accuracy_meters) if loc and loc.accuracy_meters is not None else ""),
+        "location_source": location_source,
+        "infra_name_from_osm": (
+            str(r.infrastructure_name_from_osm)
+            if getattr(r, "infrastructure_name_from_osm", None) is not None else ""
+        ),
+        # Review / response audit trail.
+        "reviewer_verdict": getattr(r, "reviewer_verdict", "") or "",
+        "reviewed_at": _iso(getattr(r, "reviewed_at", None)),
+        "help_dispatched_at": _iso(getattr(r, "help_dispatched_at", None)),
+        "help_arrived_at": _iso(getattr(r, "help_arrived_at", None)),
+        # Crisis-event linkage + comms planning.
+        "crisis_event_id": getattr(r, "crisis_event_id", "") or "",
+        "detected_language": getattr(r, "detected_language", "") or "",
+        # Media presence (no bytes — stable thumb URL for the first photo).
+        "media_count": str(media_count),
+        "first_photo_url": first_photo_url,
     }
 
 
 # ── CSV Export ────────────────────────────────────────────────────────────────
 
+# Canonical export column order, shared by CSV (and mirrored in GeoJSON
+# properties). APPEND-ONLY: downstream consumers key on names.
+EXPORT_HEADERS = [
+    "id", "client_report_id", "source", "status", "severity",
+    "infrastructure_type", "infrastructure_sub_type", "infrastructure_name",
+    "damage_classification", "crisis_type", "crisis_category",
+    "description", "debris_clearing_needed", "service_status",
+    # Phase 2.1 (May 2026) — UNDP analyst-friendly flat V4 columns.
+    "electricity_status", "water_status", "health_status",
+    "pressing_needs", "reporter_tier",
+    "building_id", "latitude", "longitude", "location_name",
+    "lives_impacted", "timestamp",
+    # Satellite verification columns (UNDP must-have #11).
+    "satellite_verdict", "satellite_total_score",
+    "satellite_acquisition_date", "satellite_days_gap",
+    "satellite_cloud_cover_pct", "satellite_source",
+    # Jun 2026 appended metadata (export audit).
+    "client_created_at", "accuracy_m", "location_source",
+    "infra_name_from_osm", "reviewer_verdict", "reviewed_at",
+    "help_dispatched_at", "help_arrived_at", "crisis_event_id",
+    "detected_language", "media_count", "first_photo_url",
+]
+
+# HXL hashtag row (https://hxlstandard.org) — the HDX convention puts the
+# tags on row 2, under the human-readable headers. HXL-aware tools (HDX,
+# Quick Charts, hxl-proxy) auto-detect them; everything else treats the row
+# as one extra data row. Blank where no standard tag fits.
+HXL_TAGS = {
+    "id": "#meta+id", "source": "#meta+channel", "status": "#status",
+    "severity": "#severity", "infrastructure_type": "#infrastructure+type",
+    "infrastructure_name": "#infrastructure+name",
+    "damage_classification": "#impact+type", "crisis_type": "#event+type",
+    "crisis_category": "#event+category", "description": "#description",
+    "building_id": "#infrastructure+building+id",
+    "latitude": "#geo+lat", "longitude": "#geo+lon",
+    "location_name": "#loc+name", "lives_impacted": "#affected",
+    "timestamp": "#date+reported", "client_created_at": "#date+occurred",
+    "detected_language": "#meta+lang", "crisis_event_id": "#event+id",
+}
+
+_NUMERIC_RE = re.compile(r"-?\d+(\.\d+)?")
+
+
+def _csv_cell(value) -> str:
+    """Spreadsheet formula-injection guard: a leading = + - @ makes Excel /
+    Sheets execute the cell. Prefix a quote — except for plain numbers
+    (negative latitudes/longitudes must stay numeric)."""
+    s = "" if value is None else str(value)
+    if s[:1] in ("=", "+", "-", "@") and not _NUMERIC_RE.fullmatch(s):
+        return "'" + s
+    return s
+
+
 @router.get("/csv")
 def export_csv(
+    request: Request,
     user=Depends(require_viewer),
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    bbox: Optional[str] = Query(None, description="minLng,minLat,maxLng,maxLat"),
+    hxl: bool = Query(True, description="Include the HXL hashtag row (row 2)"),
 ):
-    """Export all reports as CSV file."""
-    reports = _query_reports(db, status, crisis_type, since, until)
-    headers = [
-        "id", "client_report_id", "source", "status", "severity",
-        "infrastructure_type", "infrastructure_sub_type", "infrastructure_name",
-        "damage_classification", "crisis_type", "crisis_category",
-        "description", "debris_clearing_needed", "service_status",
-        # Phase 2.1 (May 2026) — UNDP analyst-friendly flat V4
-        # columns. ``service_status`` JSON above is kept for legacy
-        # consumers; these split it into one column per signal so
-        # spreadsheets / QGIS / R can filter / pivot directly.
-        "electricity_status", "water_status", "health_status",
-        "pressing_needs", "reporter_tier",
-        "building_id", "latitude", "longitude", "location_name",
-        "lives_impacted", "timestamp",
-        # .1 — satellite verification columns. UNDP
-        # judges + downstream analysts can now see truth scores in
-        # bulk exports, not just in the dashboard.
-        "satellite_verdict", "satellite_total_score",
-        "satellite_acquisition_date", "satellite_days_gap",
-        "satellite_cloud_cover_pct", "satellite_source",
-    ]
+    """Export reports as CSV (proper RFC-4180 quoting via the csv module —
+    the old hand-rolled f'\"{v}\"' writer corrupted any field containing a
+    double quote), with an HXL hashtag row for HDX interoperability and a
+    formula-injection guard."""
+    rows, total, _ = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox)
+    _audit_export(db, user, request, "csv",
+                  {"status": status, "crisis_type": crisis_type, "since": since,
+                   "until": until, "severity": severity, "bbox": bbox},
+                  len(rows))
 
     def generate():
-        yield ",".join(headers) + "\n"
-        for r in reports:
-            row = _report_to_row(r)
-            yield ",".join(f'"{row.get(h, "")}"' for h in headers) + "\n"
+        buf = io.StringIO()
+        w = csv.writer(buf, quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
+        w.writerow(EXPORT_HEADERS)
+        if hxl:
+            w.writerow([HXL_TAGS.get(h, "") for h in EXPORT_HEADERS])
+        yield buf.getvalue()
+        buf.seek(0); buf.truncate(0)
+        for row in rows:
+            w.writerow([_csv_cell(row.get(h, "")) for h in EXPORT_HEADERS])
+            yield buf.getvalue()
+            buf.seek(0); buf.truncate(0)
 
     return StreamingResponse(
         generate(),
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=crisp_reports_{datetime.now().strftime('%Y%m%d')}.csv"}
+        headers={"Content-Disposition": f"attachment; filename=crisp_reports_{_utc_date_stamp()}.csv"}
     )
 
 
@@ -214,20 +390,26 @@ def export_csv(
 
 @router.get("/geojson")
 def export_geojson(
+    request: Request,
     user=Depends(require_viewer),
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    bbox: Optional[str] = Query(None, description="minLng,minLat,maxLng,maxLat"),
 ):
-    """Export all reports as GeoJSON FeatureCollection."""
-    reports = _query_reports(db, status, crisis_type, since, until)
+    """Export reports as a GeoJSON FeatureCollection. Reports without a
+    Location row can't be point features — they are counted in the foreign
+    `metadata` member instead of silently vanishing."""
+    rows, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox)
     features = []
-    for r in reports:
-        row = _report_to_row(r)
+    dropped_no_location = 0
+    for r, row in zip(reports, rows):
         loc = r.location
         if not loc:
+            dropped_no_location += 1
             continue
         features.append({
             "type": "Feature",
@@ -235,12 +417,31 @@ def export_geojson(
             "properties": {k: v for k, v in row.items() if k not in ("latitude", "longitude")},
         })
 
-    geojson = {"type": "FeatureCollection", "features": features}
+    geojson = {
+        "type": "FeatureCollection",
+        # Foreign member (RFC 7946 §6.1 allows them): self-describing
+        # provenance so a file found on disk a month later still says what
+        # it contains and what was omitted.
+        "metadata": {
+            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "feature_count": len(features),
+            "dropped_no_location": dropped_no_location,
+            "filters": {k: v for k, v in {
+                "status": status, "crisis_type": crisis_type, "since": since,
+                "until": until, "severity": severity, "bbox": bbox,
+            }.items() if v},
+        },
+        "features": features,
+    }
+    _audit_export(db, user, request, "geojson",
+                  {"status": status, "crisis_type": crisis_type, "since": since,
+                   "until": until, "severity": severity, "bbox": bbox},
+                  len(features))
     content = json.dumps(geojson, indent=2)
     return StreamingResponse(
         io.BytesIO(content.encode()),
         media_type="application/geo+json",
-        headers={"Content-Disposition": f"attachment; filename=crisp_reports_{datetime.now().strftime('%Y%m%d')}.geojson"}
+        headers={"Content-Disposition": f"attachment; filename=crisp_reports_{_utc_date_stamp()}.geojson"}
     )
 
 
@@ -248,17 +449,21 @@ def export_geojson(
 
 @router.get("/shapefile")
 def export_shapefile(
+    request: Request,
     user=Depends(require_viewer),
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    bbox: Optional[str] = Query(None, description="minLng,minLat,maxLng,maxLat"),
 ):
     """Export all reports as Shapefile (.shp/.shx/.dbf/.prj) in a ZIP."""
     import shapefile
 
-    reports = _query_reports(db, status, crisis_type, since, until)
+    rows_all, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox)
+    row_by_id = {row["id"]: row for row in rows_all}
 
     shp_buf = io.BytesIO()
     shx_buf = io.BytesIO()
@@ -289,12 +494,22 @@ def export_shapefile(
     w.field("HEALTH_ST", "C", 25)
     w.field("NEEDS", "C", 200)
     w.field("REPRT_TIER", "C", 20)
+    # Jun 2026 (export audit) — satellite verification columns. Their
+    # absence violated UNDP must-have #11 ("CSV/GeoJSON/Shapefile/KML
+    # always include the 6 satellite verification columns"); the Shapefile
+    # was the only bulk format missing them. DBF caps names at 10 chars.
+    w.field("SAT_VERD", "C", 30)
+    w.field("SAT_SCORE", "C", 10)
+    w.field("SAT_ACQ", "C", 30)
+    w.field("SAT_GAP", "C", 10)
+    w.field("SAT_CLOUD", "C", 10)
+    w.field("SAT_SRC", "C", 40)
 
     for r in reports:
         loc = r.location
         if not loc:
             continue
-        row = _report_to_row(r)
+        row = row_by_id[r.id]
         w.point(loc.longitude, loc.latitude)
         w.record(
             row["id"][:40], row["source"][:20], row["status"][:20],
@@ -307,9 +522,17 @@ def export_shapefile(
             row["electricity_status"][:25], row["water_status"][:25],
             row["health_status"][:25], row["pressing_needs"][:200],
             row["reporter_tier"][:20],
+            # Satellite verification (must-have #11).
+            row["satellite_verdict"][:30], row["satellite_total_score"][:10],
+            row["satellite_acquisition_date"][:30], row["satellite_days_gap"][:10],
+            row["satellite_cloud_cover_pct"][:10], row["satellite_source"][:40],
         )
 
     w.close()
+    _audit_export(db, user, request, "shapefile",
+                  {"status": status, "crisis_type": crisis_type, "since": since,
+                   "until": until, "severity": severity, "bbox": bbox},
+                  len(reports))
 
     # WGS84 projection file
     prj_content = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]'
@@ -326,7 +549,7 @@ def export_shapefile(
     return StreamingResponse(
         zip_buf,
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=crisp_reports_{datetime.now().strftime('%Y%m%d')}.zip"}
+        headers={"Content-Disposition": f"attachment; filename=crisp_reports_{_utc_date_stamp()}.zip"}
     )
 
 
@@ -340,12 +563,15 @@ def export_shapefile(
 
 @router.get("/pdf")
 def export_pdf(
+    request: Request,
     user=Depends(require_viewer),
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    bbox: Optional[str] = Query(None, description="minLng,minLat,maxLng,maxLat"),
     limit: int = Query(200, ge=1, le=1000),
 ):
     """Export up to `limit` reports as a single PDF dossier.
@@ -361,16 +587,18 @@ def export_pdf(
     )
     from reportlab.lib import colors
 
-    reports = _query_reports(db, status, crisis_type, since, until)[:limit]
-
-    # May 2026 audit Item 3 — log a warning when the limit is hit so the
-    # operator knows the export was silently truncated. Pre-fix this was
-    # a silent slice with no visible signal in the response.
-    if len(reports) >= limit:
+    rows_all, total, reports = _fetch_export_rows(
+        db, status, crisis_type, since, until, severity, bbox, limit=limit)
+    row_by_id = {row["id"]: row for row in rows_all}
+    truncated = total > len(reports)
+    if truncated:
         logger.warning(
-            f"[exports/pdf] hit limit={limit} — operator export may be truncated. "
-            f"Consider increasing ?limit or paginating."
+            f"[exports/pdf] hit limit={limit} (total={total}) — export truncated."
         )
+    _audit_export(db, user, request, "pdf",
+                  {"status": status, "crisis_type": crisis_type, "since": since,
+                   "until": until, "severity": severity, "bbox": bbox, "limit": limit},
+                  len(reports))
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -414,9 +642,22 @@ def export_pdf(
         small,
     ))
     story.append(Paragraph(
-        f"Generated at {datetime.utcnow().isoformat()}Z — {len(reports)} report(s) included.",
+        f"Generated at {datetime.now(timezone.utc).isoformat().replace('+00:00', '')}Z "
+        f"— {len(reports)} of {total} matching report(s) included.",
         small,
     ))
+    if truncated:
+        # Jun 2026 (export audit) — truncation must be VISIBLE in the
+        # artifact, not just a server log line the operator never sees.
+        warn_style = ParagraphStyle(
+            "warn", parent=small, textColor=colors.HexColor("#b45309"),
+            fontName="Helvetica-Bold",
+        )
+        story.append(Paragraph(
+            f"NOTE: result truncated at limit={limit} — {total - len(reports)} matching "
+            f"report(s) are NOT in this document. Narrow the filters or raise ?limit (max 1000).",
+            warn_style,
+        ))
     filt_bits = []
     if status: filt_bits.append(f"status={status}")
     if crisis_type: filt_bits.append(f"crisis_type={crisis_type}")
@@ -429,7 +670,7 @@ def export_pdf(
     for i, r in enumerate(reports):
         if i > 0:
             story.append(PageBreak())
-        row = _report_to_row(r)
+        row = row_by_id[r.id]
         story.append(Paragraph(
             f"Report {row['id'][:8]} — {row['infrastructure_type'] or 'UNKNOWN'} / {row['damage_classification'] or 'UNKNOWN'}",
             h2,
@@ -479,7 +720,13 @@ def export_pdf(
             ["Location (lat, lng)",    f"{row['latitude']}, {row['longitude']}"],
             ["Location Name",          row["location_name"]],
             ["Lives Impacted",         row["lives_impacted"]],
+            ["Captured at (client)",   row.get("client_created_at", "")],
             ["Submitted at",           row["timestamp"]],
+            # Jun 2026 — review/response audit trail on the dossier.
+            ["Reviewer Verdict",       row.get("reviewer_verdict", "")],
+            ["Reviewed at",            row.get("reviewed_at", "")],
+            ["Help Dispatched at",     row.get("help_dispatched_at", "")],
+            ["Help Arrived at",        row.get("help_arrived_at", "")],
         ])
 
         # May 2026 audit Item 3 — append satellite verification rows
@@ -513,13 +760,15 @@ def export_pdf(
         if r.description:
             story.append(Spacer(1, 0.3 * cm))
             story.append(Paragraph("Description", label))
-            story.append(Paragraph(r.description, body))
+            # _xml_escape: ReportLab Paragraph parses XML-ish markup; raw
+            # '&' / '<' in citizen text broke rendering (Jun 2026 audit).
+            story.append(Paragraph(_xml_escape(r.description), body))
 
         if r.service_status:
             story.append(Spacer(1, 0.3 * cm))
             story.append(Paragraph("Service status", label))
             for k, v in (r.service_status or {}).items():
-                story.append(Paragraph(f"{k}: {v}", body))
+                story.append(Paragraph(_xml_escape(f"{k}: {v}"), body))
 
         # May 2026 audit Item 3 — Media section. Pre-fix the PDF
         # contained ZERO photos and ZERO audio references regardless of
@@ -614,7 +863,7 @@ def export_pdf(
         media_type="application/pdf",
         headers={
             "Content-Disposition":
-                f"attachment; filename=crisp_reports_{datetime.now().strftime('%Y%m%d')}.pdf"
+                f"attachment; filename=crisp_reports_{_utc_date_stamp()}.pdf"
         },
     )
 
@@ -623,17 +872,25 @@ def export_pdf(
 
 @router.get("/kml")
 def export_kml(
+    request: Request,
     user=Depends(require_viewer),
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    bbox: Optional[str] = Query(None, description="minLng,minLat,maxLng,maxLat"),
 ):
     """Export all reports as KML for Google Earth."""
     import simplekml
 
-    reports = _query_reports(db, status, crisis_type, since, until)
+    rows_all, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox)
+    row_by_id = {row["id"]: row for row in rows_all}
+    _audit_export(db, user, request, "kml",
+                  {"status": status, "crisis_type": crisis_type, "since": since,
+                   "until": until, "severity": severity, "bbox": bbox},
+                  len(reports))
     kml = simplekml.Kml(name="CRISP Crisis Reports")
 
     # Colour by UNDP damage label. "NO_DAMAGE" kept as an alias for legacy
@@ -649,7 +906,7 @@ def export_kml(
         loc = r.location
         if not loc:
             continue
-        row = _report_to_row(r)
+        row = row_by_id[r.id]
         name = f"{row['infrastructure_type']} — {row['severity']}"
         # Phase 2.1 (May 2026) — surface V4 service-status + reporter
         # tier in the KML description so a humanitarian analyst
@@ -682,6 +939,11 @@ def export_kml(
             "electricity_status", "water_status", "health_status",
             "pressing_needs", "reporter_tier", "damage_classification",
             "crisis_type", "crisis_category", "infrastructure_type",
+            # Jun 2026 (export audit) — satellite verification columns
+            # (must-have #11): KML ExtendedData previously omitted them.
+            "satellite_verdict", "satellite_total_score",
+            "satellite_acquisition_date", "satellite_days_gap",
+            "satellite_cloud_cover_pct", "satellite_source",
         ):
             try:
                 pnt.extendeddata.newdata(name=k, value=row.get(k, "") or "")
@@ -694,5 +956,361 @@ def export_kml(
     return StreamingResponse(
         io.BytesIO(content.encode()),
         media_type="application/vnd.google-earth.kml+xml",
-        headers={"Content-Disposition": f"attachment; filename=crisp_reports_{datetime.now().strftime('%Y%m%d')}.kml"}
+        headers={"Content-Disposition": f"attachment; filename=crisp_reports_{_utc_date_stamp()}.kml"}
+    )
+
+
+# ── Support endpoints (Jun 2026, export audit) ────────────────────────────────
+
+@router.get("/count")
+def export_count(
+    user=Depends(require_viewer),
+    db: Session = Depends(get_db),
+    status: Optional[str] = Query(None),
+    crisis_type: Optional[str] = Query(None),
+    since: Optional[str] = Query(None),
+    until: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    bbox: Optional[str] = Query(None, description="minLng,minLat,maxLng,maxLat"),
+):
+    """Row count for a prospective export — lets the Export Center show
+    'N reports match this scope' BEFORE the user downloads anything."""
+    q = _query_reports(db, status, crisis_type, since, until, severity, bbox)
+    return {
+        "count": q.order_by(None).count(),
+        "filters": {k: v for k, v in {
+            "status": status, "crisis_type": crisis_type, "since": since,
+            "until": until, "severity": severity, "bbox": bbox,
+        }.items() if v},
+    }
+
+
+@router.get("/recent")
+def recent_exports(
+    user=Depends(require_viewer),
+    db: Session = Depends(get_db),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """Last N export provenance records (who pulled what dataset, when) —
+    the Export Center's audit-trail panel. Org-wide visibility by design:
+    operational transparency in a shared crisis room."""
+    from app.models.auth import AuthAuditLog
+    rows = (
+        db.query(AuthAuditLog)
+        .filter(AuthAuditLog.action == "EXPORT")
+        .order_by(AuthAuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    def _z(dt):
+        return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z") if dt else None
+    return [{
+        "user_email": r.user_email,
+        "format": (r.details or {}).get("format"),
+        "row_count": (r.details or {}).get("row_count"),
+        "filters": (r.details or {}).get("filters") or {},
+        "created_at": _z(r.created_at),
+    } for r in rows]
+
+
+# Column descriptions for the data dictionary — kept beside EXPORT_HEADERS so
+# a new column without a description is caught in review.
+_COLUMN_DESCRIPTIONS = {
+    "id": "Report UUID (server-assigned)",
+    "client_report_id": "Client-generated idempotency id",
+    "source": "Intake channel: APP / ANDROID / WHATSAPP / TELEGRAM / SMS / IVR",
+    "status": "Operational status (PENDING / VERIFIED / RESPONDING / RESOLVED / ...)",
+    "severity": "Operator severity (CRITICAL / SEVERE / MODERATE / MINOR)",
+    "infrastructure_type": "UNDP infrastructure super-type (+ OTHER)",
+    "infrastructure_sub_type": "Granular sub-type where the reporter chose one",
+    "infrastructure_name": "Building / structure name (reporter-supplied or OSM)",
+    "damage_classification": "UNDP 3-tier: MINIMAL / PARTIAL / COMPLETE",
+    "crisis_type": "UNDP crisis taxonomy value",
+    "crisis_category": "Natural / technological / human-made (derived)",
+    "description": "Reporter free text (newlines flattened)",
+    "debris_clearing_needed": "UNDP core question — True/False/blank(unanswered)",
+    "service_status": "Legacy JSON blob of the V4 service answers",
+    "electricity_status": "V4 flat: power status at the site",
+    "water_status": "V4 flat: water status at the site",
+    "health_status": "V4 flat: health-service status at the site",
+    "pressing_needs": "V4 flat: semicolon-joined needs list",
+    "reporter_tier": "Reporter credibility tier (gamification)",
+    "building_id": "Stable building identifier (OSM-derived where available)",
+    "latitude": "WGS84 decimal degrees",
+    "longitude": "WGS84 decimal degrees",
+    "location_name": "Human place name (user-selected, else reverse-geocoded)",
+    "lives_impacted": "Reporter-estimated people affected",
+    "timestamp": "Server receipt time, ISO-8601 UTC",
+    "satellite_verdict": "Satellite truth-score verdict",
+    "satellite_total_score": "Satellite truth score (0-100)",
+    "satellite_acquisition_date": "Satellite image acquisition date",
+    "satellite_days_gap": "Days between report and satellite image",
+    "satellite_cloud_cover_pct": "Cloud cover of the satellite scene (%)",
+    "satellite_source": "Satellite imagery provider",
+    "client_created_at": "Device capture time, ISO-8601 (offline chronology)",
+    "accuracy_m": "GPS horizontal accuracy in meters",
+    "location_source": "device_gps or user_corrected pin",
+    "infra_name_from_osm": "True when the name came from an OSM footprint",
+    "reviewer_verdict": "Human review verdict (NOT_REVIEWED / ACCEPTED / REJECTED)",
+    "reviewed_at": "Human review time, ISO-8601",
+    "help_dispatched_at": "Response dispatch time, ISO-8601",
+    "help_arrived_at": "Response arrival time, ISO-8601",
+    "crisis_event_id": "Linked crisis activation id (if any)",
+    "detected_language": "Reporter language (ISO code)",
+    "media_count": "Number of media items attached",
+    "first_photo_url": "Stable thumbnail URL of the first completed photo",
+}
+
+
+@router.get("/data-dictionary")
+def export_data_dictionary(user=Depends(require_viewer)):
+    """Machine+human readable data dictionary for the export schema
+    (column, HXL hashtag, description) — downloadable CSV so every shared
+    dataset can travel with its own documentation."""
+    def generate():
+        buf = io.StringIO()
+        w = csv.writer(buf, quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
+        w.writerow(["column", "hxl_tag", "description"])
+        for h in EXPORT_HEADERS:
+            w.writerow([h, HXL_TAGS.get(h, ""), _COLUMN_DESCRIPTIONS.get(h, "")])
+        yield buf.getvalue()
+    return StreamingResponse(
+        generate(), media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=crisp_export_data_dictionary.csv"},
+    )
+
+
+# ── Analytics exports (Jun 2026 — the analytics surface had NO export) ───────
+
+def _summary_payload(db: Session, user, window_hours: int = 24):
+    """Reuse the dashboard's cached operational summary computation."""
+    from app.api.endpoints.analytics import operational_summary
+    return operational_summary(window_hours=window_hours, stale_hours=24, db=db, _user=user)
+
+
+@router.get("/analytics-summary")
+def export_analytics_summary(
+    request: Request,
+    user=Depends(require_viewer),
+    db: Session = Depends(get_db),
+    window_hours: int = Query(24, ge=1, le=720),
+):
+    """Flatten /analytics/summary into a section,metric,value CSV."""
+    s = _summary_payload(db, user, window_hours)
+    d = s.model_dump() if hasattr(s, "model_dump") else dict(s)
+
+    def generate():
+        buf = io.StringIO()
+        w = csv.writer(buf, quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
+        w.writerow(["section", "metric", "value"])
+        w.writerow(["meta", "generated_at", d.get("generated_at", "")])
+        w.writerow(["meta", "window_hours", d.get("window_hours", "")])
+        w.writerow(["meta", "total_reports", d.get("total_reports", "")])
+        for section in ("counts", "timings", "impact", "deltas"):
+            for k, v in (d.get(section) or {}).items():
+                w.writerow([section, k, "" if v is None else v])
+        for dist_name, dist in (d.get("distributions") or {}).items():
+            if isinstance(dist, dict):
+                for k, v in dist.items():
+                    w.writerow([f"distribution:{dist_name}", k, v])
+            else:
+                w.writerow(["distributions", dist_name, dist])
+        yield buf.getvalue()
+
+    _audit_export(db, user, request, "analytics-summary",
+                  {"window_hours": window_hours}, 1)
+    return StreamingResponse(
+        generate(), media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=crisp_analytics_summary_{_utc_date_stamp()}.csv"},
+    )
+
+
+@router.get("/sitrep")
+def export_sitrep(
+    request: Request,
+    user=Depends(require_viewer),
+    db: Session = Depends(get_db),
+    window_hours: int = Query(24, ge=1, le=720),
+):
+    """One-page situation-report PDF: the operational summary (counts,
+    attention queue, distributions, timings, intake deltas) in a shareable
+    briefing artifact — the 'sitrep' humanitarian coordination expects."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib import colors
+
+    s = _summary_payload(db, user, window_hours)
+    d = s.model_dump() if hasattr(s, "model_dump") else dict(s)
+    c = d.get("counts") or {}
+    t = d.get("timings") or {}
+    im = d.get("impact") or {}
+    dl = d.get("deltas") or {}
+    dist = d.get("distributions") or {}
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm,
+                            topMargin=2 * cm, bottomMargin=2 * cm,
+                            title="CRISP Situation Report", author="CRISP Platform")
+    styles = getSampleStyleSheet()
+    small = ParagraphStyle("small", parent=styles["BodyText"], fontSize=8,
+                           textColor=colors.grey)
+    story = [
+        Paragraph("CRISP Situation Report", styles["Heading1"]),
+        Paragraph(
+            f"Generated at {datetime.now(timezone.utc).isoformat().replace('+00:00', '')}Z "
+            f"· window: last {window_hours}h · total reports on platform: {d.get('total_reports', '—')}",
+            small,
+        ),
+        Spacer(1, 0.4 * cm),
+    ]
+
+    def _table(title, pairs):
+        story.append(Paragraph(title, styles["Heading2"]))
+        tbl = Table([[k, str(v if v is not None else "—")] for k, v in pairs],
+                    colWidths=[8 * cm, None], hAlign="LEFT")
+        tbl.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#475569")),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.25, colors.HexColor("#e2e8f0")),
+        ]))
+        story.append(tbl)
+        story.append(Spacer(1, 0.3 * cm))
+
+    _table("Situation overview", [
+        ("Active incidents", c.get("active")),
+        ("Critical", c.get("critical")),
+        ("Pending verification", c.get("pending_verification")),
+        ("Awaiting triage", c.get("awaiting_triage")),
+        ("Open dispatch (no arrival)", c.get("open_dispatch")),
+        ("Active operations", c.get("active_ops")),
+        ("SLA at-risk", c.get("sla_at_risk")),
+        ("Escalating (risk ≥ 70)", c.get("escalating")),
+        ("Stale (open & unreviewed)", c.get("stale")),
+        (f"Resolved (last {window_hours}h)", c.get("resolved_in_window")),
+    ])
+    _table("Intake", [
+        ("New reports (24h)", dl.get("reports_24h")),
+        ("Previous 24h", dl.get("reports_prev_24h")),
+        ("New reports (7d)", dl.get("reports_7d")),
+        ("Previous 7d", dl.get("reports_prev_7d")),
+    ])
+    _table("Response performance", [
+        ("Avg verification time (s)", t.get("avg_verification_seconds")),
+        ("Avg response time (s)", t.get("avg_response_seconds")),
+        ("Verified reports", (dist or {}).get("verified")),
+        ("Unverified / rejected", (dist or {}).get("unverified")),
+    ])
+    _table("Operational impact", [
+        ("Critical infrastructure hit", im.get("critical_infrastructure")),
+        ("Service disruptions", im.get("service_disruptions")),
+        ("Lives impacted (reported)", im.get("lives_impacted_sum")),
+        ("Responders active", im.get("responders_active")),
+    ])
+    sev = (dist or {}).get("by_severity") or {}
+    if sev:
+        _table("By severity", sorted(sev.items(), key=lambda kv: -int(kv[1] or 0)))
+    ct = (dist or {}).get("by_crisis_type") or {}
+    if ct:
+        _table("By crisis type", sorted(ct.items(), key=lambda kv: -int(kv[1] or 0))[:8])
+    story.append(Paragraph(
+        "Population exposure & displacement are intentionally not shown: CRISP records "
+        "citizen damage reports, not census/displacement data.", small))
+
+    doc.build(story)
+    buf.seek(0)
+    _audit_export(db, user, request, "sitrep", {"window_hours": window_hours}, 1)
+    return StreamingResponse(
+        buf, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=crisp_sitrep_{_utc_date_stamp()}.pdf"},
+    )
+
+
+# ── Evidence bundle (Jun 2026 — judge-friendly single-report package) ─────────
+
+@router.get("/evidence-bundle/{report_id}")
+def export_evidence_bundle(
+    report_id: str,
+    request: Request,
+    user=Depends(require_viewer),
+    db: Session = Depends(get_db),
+):
+    """ZIP package for one report: evidence JSON (same payload as the public
+    share page), every completed media file, satellite snapshots when stored,
+    and a README — so a verifier can review a report fully OFFLINE instead of
+    fetching media one stable URL at a time."""
+    report = (
+        db.query(Report)
+        .options(joinedload(Report.location), joinedload(Report.verification),
+                 selectinload(Report.media))
+        .filter(Report.id == report_id, Report.deletion_requested_at.is_(None))
+        .first()
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    from app.api.endpoints.reports import get_public_evidence
+    evidence = get_public_evidence(report_id, db)
+
+    from app.services.storage import get_storage
+    storage = None
+    try:
+        storage = get_storage()
+    except Exception as se:
+        logger.warning(f"[evidence-bundle] storage unavailable; media omitted: {se}")
+
+    zip_buf = io.BytesIO()
+    skipped = []
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("evidence.json", json.dumps(evidence, indent=2, default=str))
+        media_added = 0
+        for m in list(report.media or []):
+            if getattr(m, "assembly_status", "") != "complete" or not m.url:
+                continue
+            mtype = (m.type.value if getattr(m, "type", None) else "MEDIA")
+            tier = (m.resolution_tier.value if getattr(m, "resolution_tier", None) else "")
+            ext = "webm" if mtype == "AUDIO" else "jpg"
+            fname = f"media/{mtype.lower()}_{media_added + 1}_{tier or 'file'}_{m.id[:8]}.{ext}"
+            if storage:
+                try:
+                    zf.writestr(fname, storage.read(m.url))
+                    media_added += 1
+                    continue
+                except Exception as me:
+                    logger.warning(f"[evidence-bundle] media read failed {m.id[:8]}: {me}")
+            skipped.append(f"{fname} -> /api/v1/reports/media/{m.id}/file")
+        v = getattr(report, "verification", None)
+        for label, attr in (("satellite_primary", "satellite_image_url"),
+                            ("satellite_alt", "satellite_image_url_alt")):
+            url = getattr(v, attr, None) if v else None
+            if url and storage:
+                try:
+                    zf.writestr(f"satellite/{label}.png", storage.read(url))
+                except Exception as se2:
+                    logger.warning(f"[evidence-bundle] satellite read failed ({label}): {se2}")
+                    skipped.append(f"satellite/{label}.png -> stored at {url}")
+        readme = [
+            f"CRISP evidence bundle — report {report_id}",
+            f"Generated at {datetime.now(timezone.utc).isoformat().replace('+00:00', '')}Z",
+            "",
+            "Contents:",
+            "  evidence.json — verification evidence (same payload as the public share page)",
+            "  media/        — completed photo/audio files attached to the report",
+            "  satellite/    — stored satellite snapshots used for verification",
+            "",
+            "Timestamps are ISO-8601 UTC. Coordinates are WGS84 decimal degrees.",
+        ]
+        if skipped:
+            readme += ["", "Items unavailable at bundle time (fetch via stable URL):"]
+            readme += [f"  {s}" for s in skipped]
+        zf.writestr("README.txt", "\n".join(readme))
+    zip_buf.seek(0)
+    _audit_export(db, user, request, "evidence-bundle", {"report_id": report_id}, 1)
+    return StreamingResponse(
+        zip_buf, media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=crisp_evidence_{report_id[:8]}.zip"},
     )
