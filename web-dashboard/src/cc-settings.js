@@ -220,6 +220,15 @@
     S.mode = mode === 'org' ? 'org' : 'account';
     S.loaded = {};
     S.tab = S.mode === 'org' ? 'branding' : 'profile';
+    // One-shot deep-link from the Crisis Intelligence command bar ("Users"
+    // should land ON the Users tab, not the profile). Honoured only when the
+    // requested tab is visible for this role; always consumed so a stale
+    // intent can't leak into a later open.
+    try {
+      const want = window.__ccSettingsInitialTab;
+      window.__ccSettingsInitialTab = null;
+      if (want && S.mode === 'account' && visibleTabs().some((t) => t[0] === want)) S.tab = want;
+    } catch (_e) { /* deep-link is best-effort */ }
     el('cc-st-overlay').classList.add('cc-st-open');
     el('cc-st-title').textContent = S.mode === 'org' ? 'Organisation Settings' : 'Account Settings';
     el('cc-st-sub').textContent = S.mode === 'org'

@@ -11,7 +11,7 @@
  *   /org          ✓            ✓      ✗        ✗
  *   /reporting    ✓            ✓      ✗        ✗
  *
- * On the Crisis Intelligence root the Org + Crisis Forms Quick Actions are
+ * On the Crisis Intelligence root the Org + Crisis Forms command-bar items are
  * disabled for non-admins (an "admin" badge); a direct navigate() to a
  * disallowed route bounces back to the root. Admins see them enabled and the
  * admin routes open their module overlays.
@@ -43,7 +43,7 @@ async function bootAuthed(page: Page, role: string) {
   await page.waitForFunction(() => !!(window as any).__crispRouter, null, { timeout: 15_000 });
 }
 
-const qa = (page: Page) => page.locator('#cc-qa button');
+const qa = (page: Page) => page.locator('#cc-nav button');
 
 test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
   test.beforeAll(async ({ request }) => { await ensureAdminAndLogin(request); });
@@ -72,20 +72,20 @@ test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
     });
   }
 
-  // ── Non-admins: admin Quick Actions disabled + admin routes bounce to root. ───
+  // ── Non-admins: admin command-bar items disabled + admin routes bounce to root. ──
   for (const role of ['ANALYST', 'VIEWER']) {
     test(`@smoke ${role}: Org+Reporting actions disabled; direct admin routes bounce to root`, async ({ page }) => {
       await bootAuthed(page, role);
       await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
 
-      // Org + Crisis Forms Quick Actions disabled with an "admin" badge.
-      await expect(page.locator('#cc-qa button[data-route="/org"]')).toBeDisabled();
-      await expect(page.locator('#cc-qa button[data-route="/reporting"]')).toBeDisabled();
-      await expect(page.locator('#cc-qa button[data-route="/org"]')).toContainText(/admin/i);
-      await expect(page.locator('#cc-qa button[data-route="/reporting"]')).toContainText(/admin/i);
+      // Org + Crisis Forms command-bar items disabled with an "admin" badge.
+      await expect(page.locator('#cc-nav button[data-route="/org"]')).toBeDisabled();
+      await expect(page.locator('#cc-nav button[data-route="/reporting"]')).toBeDisabled();
+      await expect(page.locator('#cc-nav button[data-route="/org"]')).toContainText(/admin/i);
+      await expect(page.locator('#cc-nav button[data-route="/reporting"]')).toContainText(/admin/i);
 
       // Operations + Account remain enabled.
-      await expect(qa(page).filter({ hasText: 'Operations Center' })).toBeEnabled();
+      await expect(qa(page).filter({ hasText: 'Operations' }).first()).toBeEnabled();
       await expect(qa(page).filter({ hasText: 'Account' }).first()).toBeEnabled();
 
       // Direct navigation to an admin module bounces back to the root.
@@ -104,13 +104,13 @@ test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
     });
   }
 
-  // ── Admin: admin Quick Actions enabled + admin routes open their overlays. ────
+  // ── Admin: admin command-bar items enabled + admin routes open their overlays. ───
   test('@smoke ADMIN: Org+Reporting actions enabled; /org + /reporting open their modules', async ({ page }) => {
     await bootAuthed(page, 'ADMIN');
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('#cc-qa button[data-route="/org"]')).toBeEnabled();
-    await expect(page.locator('#cc-qa button[data-route="/reporting"]')).toBeEnabled();
-    await expect(qa(page).filter({ hasText: 'Operations Center' })).toBeEnabled();
+    await expect(page.locator('#cc-nav button[data-route="/org"]')).toBeEnabled();
+    await expect(page.locator('#cc-nav button[data-route="/reporting"]')).toBeEnabled();
+    await expect(qa(page).filter({ hasText: 'Operations' }).first()).toBeEnabled();
 
     // /org opens the Organisation settings overlay (cc-settings).
     await page.evaluate(() => (window as any).__crispRouter.navigate('/org'));

@@ -4,7 +4,7 @@
  * After login the Crisis Intelligence landing (`#/`) is the root — not the
  * incident feed. It shows a situational-awareness dashboard (KPIs, map,
  * attention queue, intelligence, impact, briefing, activity) and a compact
- * Quick Actions row that routes into the modules. Under automation the router
+ * pinned command bar (#cc-nav, Jun 2026 — was the bottom #cc-qa Quick Actions row) that routes into the modules. Under automation the router
  * lands on `#/incidents` by default (so feed-driven specs aren't blocked);
  * these tests opt into the real root via `crisp_router_force_root`.
  *
@@ -33,7 +33,7 @@ async function bootAuthed(page: Page, opts?: { role?: string }) {
   await page.waitForFunction(() => !!(window as any).__crispRouter, null, { timeout: 15_000 });
 }
 
-const qa = (page: Page) => page.locator('#cc-qa button');
+const qa = (page: Page) => page.locator('#cc-nav button');
 
 test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
   test.beforeAll(async ({ request }) => { await ensureAdminAndLogin(request); });
@@ -42,7 +42,7 @@ test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
     await bootAuthed(page);
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
     await expect(page).toHaveURL(/#\/$/);
-    // The situational-awareness dashboard renders (KPI strip + Quick Actions).
+    // The situational-awareness dashboard renders (KPI strip + command bar).
     await expect(page.locator('#cc-kpis')).toBeVisible();
     await expect(page.locator('#cc-kpis')).toContainText('Active incidents', { timeout: 8000 });
     await expect(qa(page).first()).toBeVisible();
@@ -64,10 +64,10 @@ test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
     }
   });
 
-  test('@smoke Operations Center → routes to #/incidents, reveals the feed, hides the root', async ({ page }) => {
+  test('@smoke Operations → routes to #/incidents, reveals the feed, hides the root', async ({ page }) => {
     await bootAuthed(page);
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
-    await qa(page).filter({ hasText: 'Operations Center' }).click();
+    await qa(page).filter({ hasText: 'Operations' }).first().click();
     await expect(page).toHaveURL(/#\/incidents/);
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toHaveCount(0);
     await expect(page.locator('#view-incidents')).toBeVisible();
@@ -89,7 +89,7 @@ test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
   test('@smoke Crisis Forms → #/reporting opens the crisis-forms module', async ({ page }) => {
     await bootAuthed(page);
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
-    await page.locator('#cc-qa button[data-route="/reporting"]').click();
+    await page.locator('#cc-nav button[data-route="/reporting"]').click();
     await expect(page).toHaveURL(/#\/reporting/);
     await expect(page.locator('#cc-cf-overlay')).toBeVisible({ timeout: 3000 });
   });
@@ -104,9 +104,9 @@ test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
   test('@smoke role gate: ANALYST sees Org/Reporting actions disabled + #/org redirects to root', async ({ page }) => {
     await bootAuthed(page, { role: 'ANALYST' });
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('#cc-qa button[data-route="/org"]')).toBeDisabled();
-    await expect(page.locator('#cc-qa button[data-route="/reporting"]')).toBeDisabled();
-    await expect(qa(page).filter({ hasText: 'Operations Center' })).toBeEnabled();
+    await expect(page.locator('#cc-nav button[data-route="/org"]')).toBeDisabled();
+    await expect(page.locator('#cc-nav button[data-route="/reporting"]')).toBeDisabled();
+    await expect(qa(page).filter({ hasText: 'Operations' }).first()).toBeEnabled();
     await expect(qa(page).filter({ hasText: 'Account' }).first()).toBeEnabled();
     // A direct route to an admin module bounces back to the root.
     await page.evaluate(() => (window as any).__crispRouter.navigate('/org'));

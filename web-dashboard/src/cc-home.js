@@ -91,10 +91,28 @@
         radial-gradient(820px 460px at -5% 108%,rgba(34,211,238,.07),transparent 55%),#0B1220;
       color:#E6EDF7;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     #cc-home-overlay.cc-home-open{display:block}
-    .cc-wrap{max-width:1480px;margin:0 auto;padding:18px 22px 40px;min-height:100%}
+    .cc-wrap{max-width:1480px;margin:0 auto;padding:0 22px 40px;min-height:100%}
     .cc-num{font-variant-numeric:tabular-nums}
+    /* sticky header block — identity row + primary nav stay pinned while the
+       page scrolls. z-index must clear Leaflet's internal panes/controls
+       (up to ~1000); the map card is additionally isolated below. Negative
+       margins bleed the bar to the wrap edges so content scrolls under a
+       full-width surface, not a floating strip. */
+    .cc-stick{position:sticky;top:0;z-index:1200;margin:0 -22px 16px;padding:14px 22px 0;
+      background:rgba(11,18,32,.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+      border-bottom:1px solid rgba(255,255,255,.07)}
+    /* primary nav (command bar) */
+    .cc-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0 12px}
+    .cc-nav button{display:inline-flex;align-items:center;gap:7px;background:#141F35;border:1px solid #2C3A52;
+      border-radius:999px;padding:6px 13px;color:#cdd8ec;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+    .cc-nav button:hover{border-color:#418FDE;color:#fff}
+    .cc-nav button:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
+    .cc-nav button[disabled]{opacity:.45;cursor:not-allowed}
+    .cc-nav button.on{border-color:#418FDE;color:#7db8ef;background:rgba(65,143,222,.10)}
+    .cc-nav .ad{font-size:9px;font-weight:700;color:#fbbf24;background:rgba(251,191,36,.12);
+      padding:1px 6px;border-radius:999px;margin-left:2px;text-transform:uppercase}
     /* header */
-    .cc-hd{display:flex;align-items:center;gap:13px;margin-bottom:16px}
+    .cc-hd{display:flex;align-items:center;gap:13px}
     .cc-logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#418FDE,#22d3ee);
       display:grid;place-items:center;font-weight:800;color:#fff;flex:none;overflow:hidden}
     .cc-logo img{width:100%;height:100%;object-fit:contain}
@@ -125,7 +143,10 @@
     /* body grid */
     .cc-body{display:grid;grid-template-columns:2fr 1fr;gap:14px}
     @media(max-width:1100px){.cc-body{grid-template-columns:1fr}}
-    #cc-map{height:430px;border-radius:10px;overflow:hidden;background:#0d1422}
+    /* isolation contains Leaflet's internal z-indexes (panes 200-700,
+       controls 1000) inside the card so they can never paint over the
+       sticky nav while scrolling. */
+    #cc-map{height:430px;border-radius:10px;overflow:hidden;background:#0d1422;isolation:isolate}
     .cc-map-fallback{height:430px;display:grid;place-items:center;color:#8A99B5;font-size:13px}
     .cc-geo{font-size:11.5px;color:#8A99B5;padding:8px 6px 2px}
     .cc-geo strong{color:#cdd8ec;font-variant-numeric:tabular-nums}
@@ -171,12 +192,6 @@
     .cc-tbl tr{cursor:pointer}.cc-tbl tbody tr:hover{background:#16213a}
     .cc-badge{display:inline-block;padding:1px 8px;border-radius:20px;font-size:10.5px;font-weight:700}
     /* quick actions */
-    .cc-qa{display:flex;flex-wrap:wrap;gap:10px}
-    .cc-qa button{display:flex;align-items:center;gap:8px;background:#121A2A;border:1px solid #243149;border-radius:10px;
-      padding:11px 15px;color:#cdd8ec;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
-    .cc-qa button:hover{border-color:#418FDE;color:#fff}
-    .cc-qa button[disabled]{opacity:.45;cursor:not-allowed}
-    .cc-qa .ad{font-size:9px;font-weight:700;color:#5C6B85;text-transform:uppercase;margin-left:2px}
     .cc-empty{color:#5C6B85;font-size:12.5px;padding:14px 4px;text-align:center}
     .cc-stale{font-size:10.5px;color:#7d89a3;margin-left:6px}
     @media(prefers-reduced-motion:no-preference){.cc-kpi .n{transition:none}}
@@ -237,16 +252,18 @@
     const role = String(user.role || 'VIEWER').toUpperCase();
     ov.innerHTML = `
       <div class="cc-wrap">
-        <div class="cc-hd">
-          <div class="cc-logo" id="cc-home-logo">C</div>
-          <div><h1 class="ti" id="cc-home-orgname">Crisis Intelligence Center</h1>
-            <div class="su">Crisis Response Intelligence · Situation Room</div></div>
-          <div class="sp">
-            <span class="cc-live"><span class="cc-dot" id="cc-conn"></span><span id="cc-conn-t">—</span></span>
-            <span class="cc-clock" id="cc-clock">—</span>
-            <button class="cc-btn cc-btn-pri" id="cc-go-ops">Operations →</button>
-            <div class="cc-avatar" title="${esc(user.email || '')} · ${esc(role)}">${esc(initial)}</div>
+        <div class="cc-stick" id="cc-stick">
+          <div class="cc-hd">
+            <div class="cc-logo" id="cc-home-logo">C</div>
+            <div><h1 class="ti" id="cc-home-orgname">Crisis Intelligence Center</h1>
+              <div class="su">Crisis Response Intelligence · Situation Room</div></div>
+            <div class="sp">
+              <span class="cc-live"><span class="cc-dot" id="cc-conn"></span><span id="cc-conn-t">—</span></span>
+              <span class="cc-clock" id="cc-clock">—</span>
+              <div class="cc-avatar" title="${esc(user.email || '')} · ${esc(role)}">${esc(initial)}</div>
+            </div>
           </div>
+          <nav class="cc-nav" id="cc-nav" aria-label="Primary">${navHtml()}</nav>
         </div>
 
         <div class="cc-sec-t">Executive Situation Overview <span class="cc-stale" id="cc-sum-stale"></span></div>
@@ -277,17 +294,24 @@
 
         <div class="cc-sec-t">Recent Operational Activity</div>
         <div class="cc-card" id="cc-activity" style="padding:6px 10px"><div class="cc-empty">Loading…</div></div>
-
-        <div class="cc-sec-t">Quick Actions</div>
-        <div class="cc-qa" id="cc-qa">${quickActionsHtml()}</div>
       </div>`;
     ov.classList.add('cc-home-open');
 
-    el('cc-go-ops').addEventListener('click', () => go('/incidents'));
-    ov.querySelectorAll('#cc-qa button').forEach((b) => b.addEventListener('click', () => {
+    // Command-bar navigation. Two deep-link intents fix the old quick-action
+    // flaws: "Users" lands on the Users tab inside Account Settings (not the
+    // profile), and "Exports" opens the ops Tools → Export… menu on arrival
+    // instead of dropping the admin on a bare report list.
+    ov.querySelectorAll('#cc-nav button[data-route]').forEach((b) => b.addEventListener('click', () => {
       if (b.hasAttribute('disabled')) return;
+      const intent = b.getAttribute('data-intent');
+      if (intent === 'users') window.__ccSettingsInitialTab = 'users';
       go(b.getAttribute('data-route'));
+      if (intent === 'export') {
+        setTimeout(() => { try { window.__crispOpenExportMenu && window.__crispOpenExportMenu(); } catch (_e) {} }, 120);
+      }
     }));
+    const homeBtn = el('cc-nav-home');
+    if (homeBtn) homeBtn.addEventListener('click', () => { try { ov.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_e) { ov.scrollTop = 0; } });
 
     startClock();
     loadOrg();
@@ -308,18 +332,26 @@
     return Array.from({ length: 8 }).map(() => `<div class="cc-kpi"><div class="n">—</div><div class="l">…</div></div>`).join('');
   }
 
-  function quickActionsHtml() {
+  // Pinned command bar (replaces the old bottom "Quick Actions" section —
+  // navigation belongs in persistent chrome, not below the fold). Admin-gated
+  // items render disabled with an "admin" chip for other roles: visible-but-
+  // disabled keeps the permission model legible instead of features silently
+  // missing. "Operations" is the ONE ops entry point (the old header
+  // "Operations →" duplicate is gone).
+  function navHtml() {
     const admin = isAdmin();
-    const b = (route, glyph, label, adminOnly) =>
-      `<button data-route="${route}" ${adminOnly && !admin ? 'disabled aria-disabled="true"' : ''}>
-         <span>${glyph}</span> ${esc(label)}${adminOnly ? `<span class="ad">${admin ? '' : 'admin'}</span>` : ''}</button>`;
+    const b = (route, glyph, label, adminOnly, intent) =>
+      `<button data-route="${route}" ${intent ? `data-intent="${intent}"` : ''}
+         ${adminOnly && !admin ? 'disabled aria-disabled="true"' : ''}>
+         <span aria-hidden="true">${glyph}</span> ${esc(label)}${adminOnly && !admin ? `<span class="ad">admin</span>` : ''}</button>`;
     return [
-      b('/incidents', '🛰', 'Operations Center', false),
+      `<button class="on" id="cc-nav-home" aria-current="page"><span aria-hidden="true">🏠</span> Home</button>`,
+      b('/incidents', '🛰', 'Operations', false),
+      b('/incidents', '⬇', 'Exports', false, 'export'),
       b('/reporting', '🧩', 'Crisis Forms', true),
       b('/org', '🏛', 'Organisation', true),
+      b('/users', '👥', 'Users', true, 'users'),
       b('/users', '👤', 'Account', false),
-      b('/users', '👥', 'User Management', true),
-      b('/incidents', '⬇', 'Exports', false),
     ].join('');
   }
 

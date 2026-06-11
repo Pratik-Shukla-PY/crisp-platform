@@ -96,3 +96,87 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     const runtimeErrors = errors.filter((e) => !/net::ERR|Failed to load resource|favicon|ERR_/i.test(e));
     expect(runtimeErrors, 'landing runtime errors: ' + JSON.stringify(runtimeErrors)).toEqual([]);
 });
+
+// ── Pinned command bar (Jun 2026 UX rework) ─────────────────────────────────
+// Quick Actions moved from the bottom of the page into a sticky two-row
+// header block. These tests pin: the bar stays visible after scroll (incl.
+// above the Leaflet map), the bottom section is gone, the old duplicate
+// "Operations →" header button is gone, and the two deep-links land on the
+// real target (Users tab; ops Export… menu) instead of generic screens.
+
+async function openLanding(page, role = 'ADMIN') {
+    await page.addInitScript((r) => {
+        localStorage.setItem('crisp_token', 'e2e-fake-token');
+        localStorage.setItem('crisp_user', JSON.stringify({ role: r, email: 'ops@undp.org', full_name: 'Ops Lead' }));
+    }, role);
+    await page.route('**/api/v1/**', async (route) => {
+        const u = route.request().url();
+        if (u.includes('/analytics/summary')) return route.fulfill({ json: SUMMARY });
+        if (u.includes('/reports/nearby')) return route.fulfill({ json: { groups: [] } });
+        if (u.includes('/reports/')) return route.fulfill({ status: 200, headers: { 'X-Total-Count': '1' }, json: REPORTS });
+        return route.fulfill({ status: 200, json: {} });
+    });
+    await page.goto('index.html');
+    await page.waitForTimeout(600);
+    await page.evaluate(() => (window as any).openControlCenter && (window as any).openControlCenter());
+    await expect(page.locator('#cc-nav')).toBeVisible({ timeout: 6000 });
+}
+
+test('command bar is pinned: stays visible after scrolling to the bottom', async ({ page }) => {
+    await openLanding(page);
+    // The old bottom Quick Actions section must be gone, and so must the
+    // duplicate header Operations button.
+    expect(await page.locator('#cc-qa').count(), 'bottom Quick Actions must be removed').toBe(0);
+    expect(await page.locator('#cc-go-ops').count(), 'duplicate Operations → button must be removed').toBe(0);
+
+    // Scroll the overlay to the very bottom — the nav must remain on-screen
+    // at the top (position: sticky), not scroll away with the content.
+    await page.evaluate(() => {
+        const ov = document.getElementById('cc-home-overlay')!;
+        ov.scrollTop = ov.scrollHeight;
+    });
+    await page.waitForTimeout(250);
+    const box = await page.locator('#cc-stick').boundingBox();
+    expect(box, 'sticky block must have a box').toBeTruthy();
+    expect(box!.y, 'sticky block must be pinned at the viewport top').toBeLessThanOrEqual(2);
+    await expect(page.locator('#cc-nav')).toBeVisible();
+    // And it must be ABOVE the Leaflet map in the stacking order: the element
+    // at the bar's center must live inside the sticky block, not the map.
+    const onTop = await page.evaluate(() => {
+        const bar = document.getElementById('cc-stick')!;
+        const r = bar.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return !!(hit && bar.contains(hit));
+    });
+    expect(onTop, 'sticky bar must stack above the map while scrolled').toBe(true);
+});
+
+test('Users deep-link opens Account Settings ON the Users tab (admin)', async ({ page }) => {
+    await openLanding(page, 'ADMIN');
+    await page.locator('#cc-nav button[data-intent="users"]').click();
+    await expect(page.locator('#cc-st-overlay')).toBeVisible({ timeout: 6000 });
+    await expect(page.locator('.cc-st-tab.on')).toHaveText(/Users/i);
+});
+
+test('Exports deep-link opens the ops Tools → Export… menu', async ({ page }) => {
+    await openLanding(page, 'ADMIN');
+    await page.locator('#cc-nav button[data-intent="export"]').click();
+    await page.waitForTimeout(400);
+    // Landing closed (routed to /incidents) and the export affordance is open.
+    await expect(page.locator('#cmd-tools-dropdown')).toHaveClass(/open/);
+    await expect(page.locator('#cmd-tools-dropdown .tools-menu-submenu')).toHaveClass(/open/);
+    await expect(page.locator('#cmd-tools-dropdown .tools-menu-subitem').first()).toBeVisible();
+});
+
+test('admin-gated nav items render disabled with the admin chip for viewers', async ({ page }) => {
+    await openLanding(page, 'VIEWER');
+    for (const intentOrRoute of ['/reporting', '/org']) {
+        const btn = page.locator(`#cc-nav button[data-route="${intentOrRoute}"]`);
+        await expect(btn).toBeDisabled();
+        await expect(btn.locator('.ad')).toHaveText(/admin/i);
+    }
+    const usersBtn = page.locator('#cc-nav button[data-intent="users"]');
+    await expect(usersBtn).toBeDisabled();
+    // Account (self-service) stays enabled for every role.
+    await expect(page.locator('#cc-nav button[data-route="/users"]:not([data-intent])')).toBeEnabled();
+});

@@ -9551,6 +9551,23 @@ window.exportData = function (format) {
     else exportCSV(filtered);
 };
 
+// Deep-link hook for the Crisis Intelligence command bar's "Exports" action:
+// opens the ops Tools menu with the Export… submenu expanded, so the admin
+// lands on the actual export affordance instead of a bare report list. The
+// existing outside-click closer (.export-dropdown.open sweep) handles dismiss.
+window.__crispOpenExportMenu = function () {
+    const dd = document.getElementById('cmd-tools-dropdown');
+    if (!dd) return false;
+    dd.classList.add('open');
+    const sub = dd.querySelector('.tools-menu-submenu');
+    if (sub) sub.classList.add('open');
+    try {
+        const first = dd.querySelector('.tools-menu-subitem');
+        if (first) first.focus();
+    } catch (_e) { /* focus is best-effort */ }
+    return true;
+};
+
 window.exportNodeData = function (path) {
     const parts = path.split('|');
     let cur = buildControlPanelTree(allReports);
