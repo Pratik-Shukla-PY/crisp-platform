@@ -241,6 +241,11 @@ let _lastReportsEtag = null;
 let allReports = [];
 let sortMode = 'impact';
 let timeFilterHours = 0; // 0 = show all time (no filter)
+// Jun 2026 (export audit) — the tree renderer's fully-filtered set, cached so
+// tree-node exports ship EXACTLY what the visible tree was built from
+// (status + time + search + chips + crisis drill). exportNodeData previously
+// rebuilt from raw allReports: a node badge showing 3 could export 10 rows.
+let _lastTreeFiltered = null;
 let statusFilter = 'active';
 let selectedId = null;
 const knownIds = new Set();
@@ -2553,6 +2558,7 @@ function renderTreeFeed(el) {
         filtered = filtered.filter(_passesChipFilters);
     }
     el.innerHTML = '';
+    _lastTreeFiltered = filtered;   // export parity — see exportNodeData
     const frag = document.createDocumentFragment();
     const tree = buildControlPanelTree(filtered);
     renderTreeLevel(frag, tree, 0, '');
@@ -9538,17 +9544,64 @@ window.purgeExpiredOnly = async function () {
 const _origFetchReports = fetchReports;
 
 // ── Export Functions ──────────────────────────────────────────────────────────
-window.exportData = function (format) {
-    // Shapefile and KML use backend API endpoints (binary generation)
-    if (format === 'shapefile' || format === 'kml') {
-        const base = API.replace('/api/v1/reports', '/api/v1/exports');
-        window.open(`${base}/${format === 'shapefile' ? 'shapefile' : 'kml'}`, '_blank');
-        showToast(`Downloading ${format.toUpperCase()} export...`, 'success');
-        return;
+// Jun 2026 (export audit) — every format now downloads through the BACKEND
+// export endpoints via an authenticated fetch -> blob:
+//   * Shapefile/KML previously used window.open, which bypasses the fetch
+//     auth interceptor -> guaranteed 401 in a new tab while the UI toasted
+//     success (broken for every role).
+//   * CSV/GeoJSON previously used client-side assembly that omitted the 6
+//     satellite verification columns (UNDP must-have #11) and ignored the
+//     backend's richer schema (HXL row, appended metadata columns).
+// The on-screen status + time filters pass through as query params (the
+// composite "Active" view maps to status=PENDING,VERIFIED — the backend
+// accepts a comma list). Client-side assembly survives only as the offline
+// fallback for CSV/GeoJSON, clearly labelled as degraded.
+function _exportFilterParams() {
+    const params = new URLSearchParams();
+    if (statusFilter && statusFilter !== 'all') {
+        params.set('status', statusFilter === 'active'
+            ? 'PENDING,VERIFIED' : statusFilter.toUpperCase());
     }
-    const filtered = getFilteredReports();
-    if (format === 'geojson') exportGeoJSON(filtered);
-    else exportCSV(filtered);
+    if (timeFilterHours > 0) {
+        params.set('since', new Date(Date.now() - timeFilterHours * 3600000).toISOString());
+    }
+    return params;
+}
+window._exportFilterParams = _exportFilterParams;
+
+window.exportData = async function (format) {
+    const fmt = ['csv', 'geojson', 'shapefile', 'kml', 'pdf'].includes(format) ? format : 'csv';
+    const base = API.replace('/api/v1/reports', '/api/v1/exports');
+    const qs = _exportFilterParams().toString();
+    const url = `${base}/${fmt}${qs ? '?' + qs : ''}`;
+    showToast(`Preparing ${fmt.toUpperCase()} export…`, 'info');
+    try {
+        const res = await fetch(url);   // auth header injected by the interceptor
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const cd = res.headers.get('content-disposition') || '';
+        const m = /filename=([^;]+)/.exec(cd);
+        const fallbackExt = fmt === 'shapefile' ? 'zip' : fmt;
+        const name = m ? m[1].trim().replace(/^"|"$/g, '') : `crisp_reports.${fallbackExt}`;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+        showToast(`${fmt.toUpperCase()} export downloaded`, 'success');
+    } catch (e) {
+        if (fmt === 'csv' || fmt === 'geojson') {
+            // Degraded offline fallback over the already-loaded session
+            // reports — explicitly labelled (no satellite columns).
+            const filtered = getFilteredReports();
+            if (fmt === 'geojson') exportGeoJSON(filtered); else exportCSV(filtered);
+            showToast('Backend unreachable — exported the reports loaded in this session instead (no satellite columns).', 'warning');
+        } else {
+            showToast(`${fmt.toUpperCase()} export failed: ${e.message}`, 'error');
+        }
+    }
 };
 
 // Deep-link hook for the Crisis Intelligence command bar's "Exports" action:
@@ -9570,7 +9623,8 @@ window.__crispOpenExportMenu = function () {
 
 window.exportNodeData = function (path) {
     const parts = path.split('|');
-    let cur = buildControlPanelTree(allReports);
+    // Same source as the visible tree (filtered), not raw allReports.
+    let cur = buildControlPanelTree(_lastTreeFiltered || allReports);
     for (const p of parts) { if (cur && cur[p]) cur = cur[p]; else return; }
     const incs = collectIncidents(cur);
     exportCSV(incs, `crisp_${path.replace(/\|/g, '_')}`);
@@ -9578,7 +9632,11 @@ window.exportNodeData = function (path) {
 
 window.exportNodeDataFromIncidents = function (ids) {
     const incs = allReports.filter(r => ids.includes(r.id));
-    exportCSV(incs, 'crisp_hotspot');
+    // Timestamped name — the old fixed 'crisp_hotspot' overwrote / (1)-suffixed
+    // successive exports with no way to tell them apart.
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    exportCSV(incs, `crisp_hotspot_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`);
 };
 
 function getFilteredReports() {

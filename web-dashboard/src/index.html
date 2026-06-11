@@ -259,6 +259,7 @@
                             <button class="tools-menu-item tools-menu-subitem" onclick="exportData('geojson');this.closest('.export-dropdown').classList.remove('open');this.closest('.tools-menu-submenu').classList.remove('open')"><i class="fa-solid fa-globe"></i> GeoJSON</button>
                             <button class="tools-menu-item tools-menu-subitem" onclick="exportData('shapefile');this.closest('.export-dropdown').classList.remove('open');this.closest('.tools-menu-submenu').classList.remove('open')"><i class="fa-solid fa-map"></i> Shapefile</button>
                             <button class="tools-menu-item tools-menu-subitem" onclick="exportData('kml');this.closest('.export-dropdown').classList.remove('open');this.closest('.tools-menu-submenu').classList.remove('open')"><i class="fa-solid fa-earth-americas"></i> KML</button>
+                            <button class="tools-menu-item tools-menu-subitem" onclick="exportData('pdf');this.closest('.export-dropdown').classList.remove('open');this.closest('.tools-menu-submenu').classList.remove('open')"><i class="fa-solid fa-file-pdf"></i> PDF dossier</button>
                         </div>
                     </div>
 
@@ -663,7 +664,7 @@
      Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
      app.js so the reporter_tier-badge renderer can read it synchronously. -->
 <script src="tier-config.js?v=1"></script>
-<script src="app.js?v=779"></script>
+<script src="app.js?v=780"></script>
 <script src="predictions.js?v=111"></script>
 <!-- Dynamic Crisis Forms admin panel (geo-scoped Stage 2/3 question packs).
      Self-contained + additive: injects an admin-only "Crisis Forms" item into
