@@ -2252,9 +2252,99 @@ def _purge_expired_deletions(db: Session):
     return count
 
 
+def _enforce_retention_policy(db: Session, batch_limit: int = 1000) -> int:
+    """Mark reports whose retention window has expired for deletion.
+
+    UNDP Privacy Policy §22-24 + Annex 2 (c): personal data is kept only as
+    long as necessary. CRISP retains reports while the crisis response is
+    active, then for `CRISP_RETENTION_AFTER_CLOSE_DAYS` (default 365) for
+    audit/verification, then permanently deletes them. The window is anchored
+    on:
+      * the crisis's `ended_at` for reports tied to an ENDED CrisisEvent, OR
+      * the report's own `server_created_at` for standalone reports.
+    Reports tied to a LIVE/DRAFT crisis are NEVER touched (the response is
+    still active).
+
+    This does NOT hard-delete directly: it writes a DeletionAuditLog row and
+    sets `deletion_requested_at = now`, `deletion_grace_minutes = 0`, so the
+    proven `_purge_expired_deletions` sweep performs the actual hard-delete
+    (media cleanup + counter decrement) on the same/next tick. One deletion
+    code path, one audit trail.
+
+    Set `CRISP_RETENTION_AFTER_CLOSE_DAYS = 0` to disable entirely.
+    """
+    from app.core.config import settings
+    from app.models.report import CrisisEvent
+
+    window_days = getattr(settings, "CRISP_RETENTION_AFTER_CLOSE_DAYS", 365)
+    if not window_days or window_days <= 0:
+        return 0  # retention sweep disabled
+
+    now = datetime.now(timezone.utc)
+    cutoff_ts = now - timedelta(days=window_days)
+
+    # Query 1 — standalone reports (no crisis activation), anchored on
+    # creation. server_created_at is indexed, so this is scale-safe.
+    standalone = (
+        db.query(Report)
+        .filter(
+            Report.crisis_event_id.is_(None),
+            Report.deletion_requested_at.is_(None),
+            Report.server_created_at <= cutoff_ts,
+        )
+        .limit(batch_limit)
+        .all()
+    )
+
+    # Query 2 — reports tied to an ENDED crisis, anchored on the crisis's
+    # close time (ended_at; fall back to updated_at if the operator ended it
+    # without stamping a date).
+    ended_crisis = (
+        db.query(Report)
+        .join(CrisisEvent, Report.crisis_event_id == CrisisEvent.id)
+        .filter(
+            Report.deletion_requested_at.is_(None),
+            CrisisEvent.status == "ENDED",
+            sa_func.coalesce(CrisisEvent.ended_at, CrisisEvent.updated_at) <= cutoff_ts,
+        )
+        .limit(batch_limit)
+        .all()
+    )
+
+    expired = {r.id: r for r in (standalone + ended_crisis)}.values()
+    count = 0
+    for report in expired:
+        loc_snapshot = None
+        if report.location:
+            loc_snapshot = {
+                "lat": report.location.latitude,
+                "lng": report.location.longitude,
+                "name": report.location.device_location_name or report.location.user_location_name,
+            }
+        db.add(DeletionAuditLog(
+            report_id=report.id,
+            device_hash=report.device.device_hash if report.device else None,
+            location_snapshot=loc_snapshot,
+            damage_type=report.infrastructure_type.value if report.infrastructure_type else None,
+            severity=report.severity.value if report.severity else None,
+            deletion_source="RETENTION",
+        ))
+        report.deletion_requested_at = now
+        report.deletion_grace_minutes = 0  # purge on the next sweep tick
+        count += 1
+
+    if count:
+        db.commit()
+        logger.info(f"Retention: marked {count} report(s) past the {window_days}-day window for purge")
+    return count
+
+
 @router.post("/purge-expired", status_code=status.HTTP_200_OK)
 def purge_expired_deletions(request: Request, db: Session = Depends(get_db)):
-    """Admin endpoint: permanently delete all reports past the 24-hour grace period."""
+    """Admin endpoint: permanently delete all reports past the 24-hour grace
+    period. Retention-policy enforcement runs on the scheduled background
+    sweep (see app.main._purge_loop), not here, so this endpoint's contract
+    stays a pure grace-purge trigger."""
     from app.main import verify_admin_key
     verify_admin_key(request)
     count = _purge_expired_deletions(db)

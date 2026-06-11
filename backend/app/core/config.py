@@ -133,6 +133,16 @@ class Settings(BaseSettings):
     CRISP_GEOTAG_WATERMARK_ENABLED: bool = True
     CRISP_GEOTAG_EXIF_ENABLED: bool = True
 
+    # ── Retention policy (UNDP Privacy Policy §22-24 + Annex 2 (c)) ──────
+    # Reports are retained while the crisis response is active, then for a
+    # bounded window for audit/verification, then permanently deleted. The
+    # window is anchored on the crisis's `ended_at` for reports tied to an
+    # ENDED CrisisEvent, or on the report's own latest activity (updated_at /
+    # server_created_at) for standalone reports. Set to 0 to DISABLE the
+    # retention sweep entirely (soft-delete-on-request still applies).
+    # Default = 365 days (crisis close + 1 year), per the privacy notice.
+    CRISP_RETENTION_AFTER_CLOSE_DAYS: int = 365
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

@@ -198,3 +198,120 @@ class TestPurgeWorker:
             ReporterProfile.device_hash == purge_device_hash).first()
         assert profile.report_count == 0, \
             "purge must decrement report_count to match the live row count"
+
+
+# ── Retention policy (UNDP §22-24 + Annex 2 (c)) — crisis close + 1 year ─────
+
+from app.api.endpoints.reports import _enforce_retention_policy
+from app.models.report import CrisisEvent
+from app.core.config import settings
+
+
+class TestRetentionPolicy:
+    """The retention sweep marks reports past their retention window for
+    deletion (DeletionAuditLog + grace=0), which the existing purge then
+    hard-deletes. Window anchors: standalone reports on creation; ENDED-crisis
+    reports on the crisis close time. LIVE-crisis reports are never touched."""
+
+    def _age_report(self, db, report_id, days):
+        """Rewind a report's server_created_at by `days` (tz-aware UTC)."""
+        row = db.query(Report).filter(Report.id == report_id).first()
+        row.server_created_at = datetime.now(timezone.utc) - timedelta(days=days)
+        db.commit()
+
+    def test_standalone_report_past_window_is_marked_and_purged(
+            self, client, db, purge_device_hash):
+        report_id = _seed_report(client, purge_device_hash, "ret-old-standalone")
+        # Age it just past the default 365-day window.
+        self._age_report(db, report_id, settings.CRISP_RETENTION_AFTER_CLOSE_DAYS + 5)
+
+        marked = _enforce_retention_policy(db)
+        assert marked >= 1
+        db.expire_all()
+        row = db.query(Report).filter(Report.id == report_id).first()
+        assert row.deletion_requested_at is not None, "should be marked for deletion"
+        assert row.deletion_grace_minutes == 0, "retention mark uses grace=0"
+
+        # The standard purge then hard-deletes it.
+        purged = _purge_expired_deletions(db)
+        assert purged >= 1
+        db.expire_all()
+        assert db.query(Report).filter(Report.id == report_id).first() is None
+
+        # An audit row preserves the anonymized metadata, tagged RETENTION.
+        from app.models.report import DeletionAuditLog
+        audit = db.query(DeletionAuditLog).filter(
+            DeletionAuditLog.report_id == report_id).first()
+        assert audit is not None and audit.deletion_source == "RETENTION"
+
+    def test_recent_standalone_report_is_untouched(
+            self, client, db, purge_device_hash):
+        report_id = _seed_report(client, f"{purge_device_hash}-recent", "ret-recent")
+        # Fresh report (well within the window) must not be marked.
+        marked_ids_before = {r.id for r in db.query(Report).filter(
+            Report.deletion_requested_at != None).all()}
+        _enforce_retention_policy(db)
+        db.expire_all()
+        row = db.query(Report).filter(Report.id == report_id).first()
+        assert row is not None
+        assert row.deletion_requested_at is None, "recent report must be retained"
+
+    def test_live_crisis_report_is_retained_even_when_old(
+            self, client, db, purge_device_hash):
+        # A report attached to a LIVE crisis must survive regardless of age —
+        # the response is still active.
+        report_id = _seed_report(client, f"{purge_device_hash}-live", "ret-live-crisis")
+        crisis = CrisisEvent(
+            name="Live Quake", crisis_type="EARTHQUAKE", status="LIVE",
+            is_active=True, center_lat=12.97, center_lng=77.59, radius_km=30.0,
+            started_at=datetime.now(timezone.utc) - timedelta(days=400),
+        )
+        db.add(crisis)
+        db.flush()
+        row = db.query(Report).filter(Report.id == report_id).first()
+        row.crisis_event_id = crisis.id
+        row.server_created_at = datetime.now(timezone.utc) - timedelta(days=400)
+        db.commit()
+
+        _enforce_retention_policy(db)
+        db.expire_all()
+        row = db.query(Report).filter(Report.id == report_id).first()
+        assert row is not None and row.deletion_requested_at is None, \
+            "a report under a LIVE crisis must never be retention-purged"
+
+    def test_ended_crisis_report_past_window_is_marked(
+            self, client, db, purge_device_hash):
+        report_id = _seed_report(client, f"{purge_device_hash}-ended", "ret-ended-crisis")
+        crisis = CrisisEvent(
+            name="Ended Flood", crisis_type="FLOOD", status="ENDED",
+            is_active=False, center_lat=12.97, center_lng=77.59, radius_km=30.0,
+            started_at=datetime.now(timezone.utc) - timedelta(days=500),
+            ended_at=datetime.now(timezone.utc) - timedelta(
+                days=settings.CRISP_RETENTION_AFTER_CLOSE_DAYS + 10),
+        )
+        db.add(crisis)
+        db.flush()
+        row = db.query(Report).filter(Report.id == report_id).first()
+        row.crisis_event_id = crisis.id
+        # Keep the report itself "recent" so ONLY the crisis-close anchor can
+        # trigger the mark (proves the ended_at path, not the creation path).
+        row.server_created_at = datetime.now(timezone.utc) - timedelta(days=2)
+        db.commit()
+
+        marked = _enforce_retention_policy(db)
+        assert marked >= 1
+        db.expire_all()
+        row = db.query(Report).filter(Report.id == report_id).first()
+        assert row.deletion_requested_at is not None, \
+            "report under a crisis ended > window ago must be marked"
+
+    def test_retention_disabled_is_noop(self, client, db, purge_device_hash, monkeypatch):
+        report_id = _seed_report(client, f"{purge_device_hash}-off", "ret-disabled")
+        self._age_report(db, report_id, 1000)
+        monkeypatch.setattr(settings, "CRISP_RETENTION_AFTER_CLOSE_DAYS", 0)
+        marked = _enforce_retention_policy(db)
+        assert marked == 0
+        db.expire_all()
+        row = db.query(Report).filter(Report.id == report_id).first()
+        assert row is not None and row.deletion_requested_at is None, \
+            "window=0 disables the retention sweep entirely"

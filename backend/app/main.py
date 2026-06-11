@@ -662,12 +662,16 @@ import asyncio
 import threading
 
 def _purge_loop():
-    """Run every 15 minutes, delete expired soft-deleted reports."""
+    """Run every 15 minutes: enforce the retention policy (mark reports past
+    their retention window for deletion), then hard-delete everything past its
+    grace period — both retention-marked rows (grace=0, purged same tick) and
+    user-requested soft-deletes past their 24-hour grace."""
     from app.db.session import SessionLocal
-    from app.api.endpoints.reports import _purge_expired_deletions
+    from app.api.endpoints.reports import _purge_expired_deletions, _enforce_retention_policy
     while True:
         try:
             db = SessionLocal()
+            _enforce_retention_policy(db)
             count = _purge_expired_deletions(db)
             db.close()
         except Exception as e:
