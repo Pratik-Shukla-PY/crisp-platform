@@ -1375,6 +1375,9 @@
             // Capture stage: description textarea + voice recorder panel.
             try { const ta = document.getElementById('v4-cap-text-area'); if (ta) ta.value = s.description || ''; } catch (_) {}
             try { _renderCapRecorderState((s.audioBlob && s.audioBlob.size > 0) ? 'stopped' : 'idle'); } catch (_) {}
+            // Review stage: required debris card (defined in _initReviewStage —
+            // window hook, cross-scope safe; no-op before review init).
+            try { if (window.__crispV4RenderDebrisCard) window.__crispV4RenderDebrisCard(); } catch (_) {}
             // Classify stage: damage / infra / crisis selections derive from state
             // (each option's data-value compared to the canonical state field).
             const sel = (selector, val) => {
@@ -2767,6 +2770,9 @@
                 // voice / text states could have changed during navigation
                 // (back→capture→retake, drawer→record, etc.).
                 try { _refreshCapturedStrip(); } catch (err) { console.warn('[Q10] strip:', err); }
+                // Required debris card renders from state on every entry
+                // (covers reset, back-nav, and pre-filled state).
+                try { if (window.__crispV4RenderDebrisCard) window.__crispV4RenderDebrisCard(); } catch (_) {}
             }
         });
 
@@ -2880,11 +2886,13 @@
         function _refreshTriggerBadge() {
             if (!_undpTrigger) return;
             const s = _getState();
+            // Jun 2026 — debris moved OUT of this sheet (it is a UNDP CORE
+            // question, now a required card on the review surface), so the
+            // sheet counts 4 optional questions, not 5.
             const filled = [
                 !!s.electricity_status,
                 !!s.water_status,
                 !!s.health_status,
-                s.debris_present !== null && s.debris_present !== undefined,
                 Array.isArray(s.pressing_needs) && s.pressing_needs.length > 0,
             ].filter(Boolean).length;
             const badge = _undpTrigger.querySelector('.undp-details-cta-time');
@@ -2899,11 +2907,37 @@
                     badge.textContent = (v && v !== 'v4_undp_trigger_time') ? v : 'Optional';
                 } catch { badge.textContent = 'Optional'; }
             } else {
-                badge.textContent = `${filled}/5`;
+                badge.textContent = `${filled}/4`;
             }
         }
         // Expose so app.js setLanguage() can call after i18n re-application.
         window.__crispV4RefreshUndpBadge = _refreshTriggerBadge;
+
+        // ── REQUIRED debris card (UNDP core question, Jun 2026) ─────────
+        // Moved out of the optional sheet onto the review surface
+        // (#v4-debris-card). Taps write state.debris_present (explicit
+        // true/false — null means unanswered); _onSend refuses to submit
+        // while unanswered. Renders from state so reset/back-nav stay
+        // correct (called from _renderV4FromState via the window hook +
+        // review stage-entry below).
+        function _renderDebrisCard() {
+            const card = document.getElementById('v4-debris-card');
+            if (!card) return;
+            const v = _getState().debris_present;
+            const yes = document.getElementById('v4-debris-yes');
+            const no = document.getElementById('v4-debris-no');
+            if (yes) yes.classList.toggle('is-selected', v === true);
+            if (no) no.classList.toggle('is-selected', v === false);
+            card.classList.toggle('is-answered', v === true || v === false);
+        }
+        window.__crispV4RenderDebrisCard = _renderDebrisCard;
+        (function _wireDebrisCard() {
+            const yes = document.getElementById('v4-debris-yes');
+            const no = document.getElementById('v4-debris-no');
+            if (!yes || !no) return;
+            yes.addEventListener('click', () => { _setState({ debris_present: true }); _renderDebrisCard(); });
+            no.addEventListener('click', () => { _setState({ debris_present: false }); _renderDebrisCard(); });
+        })();
 
         // Sheet open / close — pure DOM, no state change.
         function _openUndpSheet() {
@@ -3573,6 +3607,53 @@
     //      we stay on stage-success and the status pill flips to the
     //      offline "Queued" copy (already implemented in HC79).
     async function _onSend() {
+        // ── UNDP core-question gate (Jun 2026) ──────────────────────────
+        // The Problem Statement requires the infrastructure / crisis /
+        // damage classifications AND the debris question to be answered
+        // before a report may be submitted. The classify stage gates the
+        // first three on the way through (_canAdvanceFrom), but this is the
+        // last line of defence (back-nav edits, programmatic paths); debris
+        // is answered here on review. The SERVER stays permissive — legacy
+        // channels (SMS/IVR/WhatsApp) submit partial reports by design and
+        // analysts classify them; this gate is the app-side UX enforcement.
+        const _gateState = window.state || {};
+        const _tt = (key, fallback) => {
+            try {
+                const fn = window.t;
+                if (typeof fn === 'function') {
+                    const v = fn(key);
+                    if (v && v !== key) return v;
+                }
+            } catch (_) {}
+            return fallback;
+        };
+        const _missingClassify =
+            !_gateState.damage_classification || !_gateState.crisis_type
+            || !_gateState.infrastructure_type
+            || (_gateState.infrastructure_type === 'OTHER'
+                && !String(_gateState.infrastructure_name || '').trim());
+        if (_missingClassify) {
+            if (typeof window.showToast === 'function') {
+                window.showToast(_tt('v4_submit_missing_classify',
+                    'Please answer the required questions first — damage, infrastructure and crisis type.'), 'warn');
+            }
+            try { window.__crispGoToStage('stage-v4-classify'); } catch (_) {}
+            return;
+        }
+        if (_gateState.debris_present !== true && _gateState.debris_present !== false) {
+            if (typeof window.showToast === 'function') {
+                window.showToast(_tt('v4_submit_missing_debris',
+                    'One required question left: is there debris to clear?'), 'warn');
+            }
+            const _debrisCard = document.getElementById('v4-debris-card');
+            if (_debrisCard) {
+                try { _debrisCard.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+                _debrisCard.classList.add('v4-debris-attn');
+                setTimeout(() => _debrisCard.classList.remove('v4-debris-attn'), 1700);
+            }
+            return;
+        }
+
         const sendBtn = document.getElementById('btn-v4-send');
         // Immediate visual feedback even though we navigate away
         // in the next tick.

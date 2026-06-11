@@ -631,6 +631,117 @@ test.describe('Backend submit endpoint accepts UNDP payload', () => {
 // Channels — UNDP brief mentions WhatsApp/SMS/IVR/etc as inputs
 // ════════════════════════════════════════════════════════════════════════
 
+// ════════════════════════════════════════════════════════════════════════
+// UNDP §2 — Required-question SUBMIT GATE (Jun 2026)
+// The Problem Statement requires the infrastructure / crisis / damage
+// classifications AND the debris question to be answered before a report
+// may be submitted. _onSend (v4-flow.js) is the last line of defence: it
+// must refuse to call __crispSubmitReport while any of those are unanswered.
+// We stub __crispSubmitReport with a recorder so the gate's allow/block
+// decision is asserted with zero backend side-effects.
+// ════════════════════════════════════════════════════════════════════════
+
+test.describe('UNDP §2 — submit gate enforces required questions', () => {
+    // Land on stage-v4-review with a recorder installed over the real
+    // submit, and the global state seeded to a given shape.
+    async function _armReviewGate(page: Page, seed: Record<string, unknown>) {
+        await page.goto('');
+        await page.waitForFunction(
+            () => typeof (window as any).__crispGoToStage === 'function'
+                && !!(window as any).state,
+            null, { timeout: 8000 },
+        );
+        await page.evaluate((s) => {
+            const st = (window as any).state;
+            // Clean slate then apply the test's seed.
+            st.damage_classification = null;
+            st.crisis_type = null;
+            st.infrastructure_type = null;
+            st.infrastructure_name = '';
+            st.debris_present = null;
+            Object.assign(st, s);
+            // Recorder over the real submit — the gate calls this ONLY
+            // when every required question is answered.
+            (window as any).__submitCalls = 0;
+            (window as any).__crispSubmitReport = () => {
+                (window as any).__submitCalls += 1;
+                return Promise.resolve();
+            };
+            (window as any).__crispGoToStage('stage-v4-review');
+        }, seed);
+        await page.waitForTimeout(150);
+        // Render the debris card from the seeded state.
+        await page.evaluate(() => (window as any).__crispV4RenderDebrisCard?.());
+    }
+
+    const FULL = {
+        damage_classification: 'PARTIAL',
+        crisis_type: 'EARTHQUAKE',
+        infrastructure_type: 'COMMERCIAL',
+    };
+
+    test('blocks submit when damage/infra/crisis are missing', async ({ page }) => {
+        // Only debris answered; the three classifiers absent.
+        await _armReviewGate(page, { debris_present: true });
+        await page.locator('#btn-v4-send').click();
+        await page.waitForTimeout(300);
+        const calls = await page.evaluate(() => (window as any).__submitCalls);
+        expect(calls, 'submit fired despite missing classifiers').toBe(0);
+        // Gate routes the user back to the classify stage to fix it.
+        const onClassify = await page.evaluate(() =>
+            document.getElementById('stage-v4-classify')?.classList.contains('active'));
+        expect(onClassify, 'gate did not route to classify stage').toBe(true);
+    });
+
+    test('blocks submit when only the debris question is unanswered', async ({ page }) => {
+        await _armReviewGate(page, { ...FULL, debris_present: null });
+        await page.locator('#btn-v4-send').click();
+        await page.waitForTimeout(300);
+        const calls = await page.evaluate(() => (window as any).__submitCalls);
+        expect(calls, 'submit fired with debris unanswered').toBe(0);
+        // Still on review (not advanced to success), and the debris card
+        // flags itself for attention.
+        const state = await page.evaluate(() => ({
+            successActive: document.getElementById('stage-success')?.classList.contains('active'),
+            cardAnswered: document.getElementById('v4-debris-card')?.classList.contains('is-answered'),
+        }));
+        expect(state.successActive, 'advanced to success with debris unanswered').toBeFalsy();
+        expect(state.cardAnswered, 'debris card should not be marked answered').toBeFalsy();
+    });
+
+    test('allows submit once all required questions are answered (debris = No)', async ({ page }) => {
+        await _armReviewGate(page, { ...FULL, debris_present: false });
+        // The debris card must render as answered from state.
+        const answered = await page.evaluate(() =>
+            document.getElementById('v4-debris-card')?.classList.contains('is-answered'));
+        expect(answered, 'debris=false should mark the card answered').toBe(true);
+        await page.locator('#btn-v4-send').click();
+        await page.waitForTimeout(300);
+        const calls = await page.evaluate(() => (window as any).__submitCalls);
+        expect(calls, 'submit did not fire despite all questions answered').toBe(1);
+    });
+
+    test('debris card Yes/No taps write explicit boolean state', async ({ page }) => {
+        await _armReviewGate(page, { ...FULL });
+        // Fresh: unanswered → card not "answered".
+        let answered = await page.evaluate(() =>
+            document.getElementById('v4-debris-card')?.classList.contains('is-answered'));
+        expect(answered).toBeFalsy();
+        // Tap "Yes" → state.debris_present === true.
+        await page.locator('#v4-debris-yes').click();
+        const afterYes = await page.evaluate(() => ({
+            val: (window as any).state.debris_present,
+            answered: document.getElementById('v4-debris-card')?.classList.contains('is-answered'),
+        }));
+        expect(afterYes.val, 'Yes tap should set debris_present=true').toBe(true);
+        expect(afterYes.answered, 'card should mark answered after a tap').toBe(true);
+        // Tap "No" → flips to false (explicit, not null).
+        await page.locator('#v4-debris-no').click();
+        const afterNo = await page.evaluate(() => (window as any).state.debris_present);
+        expect(afterNo, 'No tap should set debris_present=false').toBe(false);
+    });
+});
+
 test.describe('Channels endpoints reachable (UNDP brief: multi-channel intake)', () => {
     test('GET /push/vapid-public reachable (Web Push channel)', async ({ request }) => {
         // Same default as e2e/playwright.config.ts: localhost for dev/CI;

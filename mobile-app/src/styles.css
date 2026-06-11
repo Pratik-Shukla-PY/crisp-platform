@@ -15792,6 +15792,43 @@ button.v4-review-row { appearance: none; }
 }
 .v4-review-row:active { transform: scale(0.99); }
 
+/* Row 5 — required debris question (UNDP core question, Jun 2026). A
+   non-clickable row hosting its own Y/N pills (global .undp-yn styling
+   reused from the sheet). The amber "Required" chip hides once answered;
+   .v4-debris-attn flashes when Send is tapped while unanswered. */
+.v4-review-row--debris { cursor: default; }
+.v4-review-row--debris:hover,
+.v4-review-row--debris:focus-visible {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+.v4-review-row--debris:active { transform: none; }
+.v4-debris-yn { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 6px; min-width: 132px; }
+.v4-debris-yn .undp-yn { padding: 7px 10px; }
+.v4-required-chip {
+    display: inline-block;
+    margin-inline-start: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.14);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    vertical-align: middle;
+}
+.v4-review-row--debris.is-answered .v4-required-chip { display: none; }
+@keyframes v4DebrisAttn {
+    0%, 100% { box-shadow: none; }
+    40% { box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.45); }
+}
+.v4-review-row--debris.v4-debris-attn {
+    animation: v4DebrisAttn 0.8s ease 2;
+    border-color: rgba(251, 191, 36, 0.6);
+}
+
 .v4-review-row-thumb,
 .v4-review-row-icon {
     width: 36px;
