@@ -66,7 +66,11 @@
     return '#' + [route].concat(stateSegs || []).join(';');
   }
   function navigate(route) {
-    const { stateSegs } = parseHash();
+    let { stateSegs } = parseHash();
+    // Queue state segments are operations-view state (Jun 2026 attention
+    // queues). Leaving /incidents drops them so the landing/settings URLs
+    // stay clean and a stale queue can't silently re-apply later.
+    if (route !== '/incidents') stateSegs = stateSegs.filter((s) => !s.startsWith('queue='));
     const next = buildHash(route, stateSegs);
     if (location.hash !== next) location.hash = next;   // fires hashchange → dispatch
     else dispatch();                                     // same hash → force a re-render

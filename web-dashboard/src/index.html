@@ -588,7 +588,8 @@
             </div>
         </div>
 
-        <div id="report-feed-list" class="incident-list"></div>
+        <div id="queue-banner" style="display:none" role="status" aria-live="polite"></div>
+            <div id="report-feed-list" class="incident-list"></div>
     </aside>
 
     <!-- Detail View (Rapid Decision Interface) -->
@@ -670,7 +671,7 @@
      Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
      app.js so the reporter_tier-badge renderer can read it synchronously. -->
 <script src="tier-config.js?v=1"></script>
-<script src="app.js?v=781"></script>
+<script src="app.js?v=782"></script>
 <script src="predictions.js?v=111"></script>
 <!-- Dynamic Crisis Forms admin panel (geo-scoped Stage 2/3 question packs).
      Self-contained + additive: injects an admin-only "Crisis Forms" item into
@@ -680,9 +681,9 @@
 <script src="cc-settings.js?v=4"></script>
 <script src="cc-exports.js?v=1"></script>
 <!-- Control Center landing (self-contained additive overlay; B7). -->
-<script src="cc-home.js?v=4"></script>
+<script src="cc-home.js?v=5"></script>
 <!-- Navigation hub: mandatory Control Center root + 4-module hash router (loaded last). -->
-<script src="router.js?v=1"></script>
+<script src="router.js?v=2"></script>
 
 <!-- Offline status banner. Phase F image-reliability (May 2026): the
      banner now requires ≥ 3 consecutive fetch failures before lighting,

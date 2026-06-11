@@ -419,27 +419,37 @@
 
   function renderAttention(b) {
     const c = b.counts || {};
-    const row = (glyph, color, label, n, route) => {
+    // Jun 2026 (routing audit) — each row deep-links into its OWN
+    // operational queue: '#/incidents;queue=<key>'. The ops view reads the
+    // segment, applies the matching predicate (same definition the badge
+    // count uses — see QUEUES in app.js) and shows a queue banner. The hash
+    // is written wholesale so no stale segments ride along.
+    const row = (glyph, color, label, n, queue) => {
       const zero = !n;
-      return `<div class="cc-att-row ${zero ? 'zero' : ''}" data-route="${route}">
+      return `<div class="cc-att-row ${zero ? 'zero' : ''}" data-queue="${queue}" role="link" tabindex="0"
+        aria-label="${esc(label)} — open queue (${fmtNum(n)})">
         <div class="cc-att-ic" style="background:${color}22;color:${color}">${glyph}</div>
         <div class="lab">${esc(label)}</div>
         <div class="cnt cc-num" ${!zero ? `style="color:${color}"` : ''}>${fmtNum(n)}</div>
         <div class="ar">›</div></div>`;
     };
     const rows = [
-      row('🔴', SEV_COLOR.CRITICAL, 'Critical incidents', c.critical, '/incidents'),
-      row('⏳', '#fb923c', 'SLA at-risk (severity targets)', c.sla_at_risk, '/incidents'),
-      row('⬆', '#fb923c', 'Escalating (risk ≥ 70)', c.escalating, '/incidents'),
-      row('🔍', '#418FDE', 'Pending verification', c.pending_verification, '/incidents'),
-      row('📋', '#22d3ee', 'Awaiting triage', c.awaiting_triage, '/incidents'),
-      row('🚑', '#2DD4BF', 'Dispatched, no arrival', c.open_dispatch, '/incidents'),
-      row('⏱', '#a78bfa', 'Stale (open & unreviewed)', c.stale, '/incidents'),
+      row('🔴', SEV_COLOR.CRITICAL, 'Critical incidents', c.critical, 'critical'),
+      row('⏳', '#fb923c', 'SLA at-risk (severity targets)', c.sla_at_risk, 'sla-risk'),
+      row('⬆', '#fb923c', 'Escalating (risk ≥ 70)', c.escalating, 'escalating'),
+      row('🔍', '#418FDE', 'Pending verification', c.pending_verification, 'verification'),
+      row('📋', '#22d3ee', 'Awaiting triage', c.awaiting_triage, 'triage'),
+      row('🚑', '#2DD4BF', 'Dispatched, no arrival', c.open_dispatch, 'dispatch'),
+      row('⏱', '#a78bfa', 'Stale (open & unreviewed)', c.stale, 'stale'),
     ];
     const box = el('cc-att');
     if (box) {
       box.innerHTML = rows.join('');
-      box.querySelectorAll('.cc-att-row').forEach((r) => r.addEventListener('click', () => go(r.getAttribute('data-route'))));
+      const openQueue = (r) => { window.location.hash = '#/incidents;queue=' + r.getAttribute('data-queue'); };
+      box.querySelectorAll('.cc-att-row').forEach((r) => {
+        r.addEventListener('click', () => openQueue(r));
+        r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openQueue(r); } });
+      });
     }
   }
 

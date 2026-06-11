@@ -5746,3 +5746,34 @@ body.burst-mode .notif-glow {
     filter: brightness(1.4) saturate(0);
     mix-blend-mode: screen;
 }
+
+/* ── Operational queue banner (Jun 2026 — attention-panel deep links) ── */
+#queue-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 10px 8px;
+    padding: 9px 12px;
+    border: 1px solid rgba(65, 143, 222, 0.45);
+    background: rgba(65, 143, 222, 0.10);
+    border-radius: 10px;
+    font-size: 12px;
+}
+#queue-banner .qb-icon { font-size: 15px; }
+#queue-banner .qb-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#queue-banner .qb-text strong { color: #cfe3f8; font-size: 12.5px; }
+#queue-banner .qb-count { color: #7db8ef; font-weight: 700; }
+#queue-banner .qb-desc { color: #8A99B5; font-size: 10.5px; line-height: 1.35; }
+#queue-banner .qb-clear {
+    margin-left: auto;
+    flex: none;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #cdd8ec;
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+}
+#queue-banner .qb-clear:hover { border-color: #418FDE; color: #fff; }

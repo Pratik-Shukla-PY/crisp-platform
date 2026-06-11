@@ -475,6 +475,181 @@ const SEV_COLORS = { CRITICAL: '#ef4444', SEVERE: '#f97316', MODERATE: '#eab308'
 let viewMode = 'queue'; // 'queue' = triage cards | 'tree' = strategic hierarchy
 let cardSortMode = 'priority'; // priority | newest | oldest | severity | type | has_media | confidence | crisis | damage | source
 
+// ── Operational queues (Jun 2026 — attention-panel routing audit) ────────────
+// Each Crisis Intelligence "Immediate Attention" row deep-links into ONE of
+// these queues via the hash state segment `#/incidents;queue=<key>`. Every
+// predicate mirrors the EXACT backend count definition in
+// backend/app/api/endpoints/analytics.py::operational_summary, so the queue
+// view shows the same population the landing badge counted:
+//   critical      = active (not closed) + severity CRITICAL          (:414)
+//   sla-risk      = PENDING + older than its severity's SLA target   (:407-411)
+//   escalating    = reports on buildings with escalation_risk >= 70  (:486-488;
+//                   NOTE: the badge counts BUILDINGS — the queue shows their
+//                   linked reports, labelled accordingly)
+//   verification  = reviewer_verdict NOT_REVIEWED (NO status filter) (:415)
+//   triage        = PENDING + NOT_REVIEWED                           (:416-417)
+//   dispatch      = help_dispatched_at set, help_arrived_at null     (:418-419)
+//   stale         = PENDING + NOT_REVIEWED + older than 24h          (:424-426)
+// While a queue is active it REPLACES the status pill + time-range filters
+// (the queue defines the population; search/chips still narrow it).
+const _QUEUE_CLOSED = ['RESOLVED', 'REJECTED', 'FALSE_ALARM'];         // analytics.py:289-293
+const _QUEUE_SLA_HOURS = { CRITICAL: 1, SEVERE: 4, MODERATE: 12, MINOR: 24, UNKNOWN: 12 };  // analytics.py:309-312
+const _QUEUE_STALE_HOURS = 24;                                          // analytics.py:385-386
+function _slaDeadline(r) {
+    const h = _QUEUE_SLA_HOURS[r.severity] != null ? _QUEUE_SLA_HOURS[r.severity] : 12;
+    return new Date(ensureUTC(r.server_created_at)).getTime() + h * 3600e3;
+}
+const QUEUES = {
+    'critical': {
+        label: 'Critical incidents', icon: '🔴',
+        desc: 'Open incidents at CRITICAL severity',
+        pass: (r) => !_QUEUE_CLOSED.includes(r.status) && r.severity === 'CRITICAL',
+        sort: 'priority',
+    },
+    'sla-risk': {
+        label: 'SLA at-risk', icon: '⏳',
+        desc: 'PENDING reports past their severity response target (1h critical / 4h severe / 12h moderate / 24h minor) — most overdue first',
+        pass: (r) => r.status === 'PENDING' && Date.now() > _slaDeadline(r),
+        sort: 'sla_breach',
+    },
+    'escalating': {
+        label: 'Escalating buildings', icon: '⬆',
+        desc: 'Reports on buildings with escalation risk >= 70 (the landing badge counts the BUILDINGS; this queue shows their reports)',
+        pass: (r) => !_QUEUE_CLOSED.includes(r.status)
+            && r.building_id && _escalatingBuildingIds && _escalatingBuildingIds.has(r.building_id),
+        sort: 'priority',
+        needsBuildings: true,
+    },
+    'verification': {
+        label: 'Pending verification', icon: '🔍',
+        desc: 'Reports awaiting a human review verdict (any status — an unreviewed resolved report still needs its verdict)',
+        pass: (r) => (r.reviewer_verdict || 'NOT_REVIEWED') === 'NOT_REVIEWED',
+        sort: 'oldest',
+    },
+    'triage': {
+        label: 'Awaiting triage', icon: '📋',
+        desc: 'PENDING and unreviewed — oldest first',
+        pass: (r) => r.status === 'PENDING' && (r.reviewer_verdict || 'NOT_REVIEWED') === 'NOT_REVIEWED',
+        sort: 'oldest',
+    },
+    'dispatch': {
+        label: 'Dispatched, no arrival', icon: '🚑',
+        desc: 'Help dispatched but arrival not yet confirmed',
+        pass: (r) => !!r.help_dispatched_at && !r.help_arrived_at,
+        sort: 'oldest',
+    },
+    'stale': {
+        label: 'Stale (open & unreviewed)', icon: '⏱',
+        desc: 'PENDING, unreviewed, older than 24 hours — oldest inactivity first',
+        pass: (r) => r.status === 'PENDING'
+            && (r.reviewer_verdict || 'NOT_REVIEWED') === 'NOT_REVIEWED'
+            && (Date.now() - new Date(ensureUTC(r.server_created_at)).getTime()) > _QUEUE_STALE_HOURS * 3600e3,
+        sort: 'oldest',
+    },
+};
+let _activeQueue = null;                 // queue key | null
+let _escalatingBuildingIds = null;       // Set<building_id> (escalating queue prefetch)
+let _queuePrevSort = null;               // restore the user's sort on queue exit
+
+function _applyQueueFilter(reports) {
+    if (!_activeQueue || !QUEUES[_activeQueue]) return reports;
+    return reports.filter(QUEUES[_activeQueue].pass);
+}
+
+// Escalating prefetch — the badge's population lives on the buildings table
+// (Building.escalation_risk / Building.state), not on report rows.
+async function _loadEscalatingBuildings() {
+    try {
+        const base = API.replace('/api/v1/reports', '/api/v1/buildings');
+        const res = await fetch(`${base}?sort_by=escalation_risk&order_dir=desc&limit=200`);
+        if (!res.ok) throw new Error(String(res.status));
+        const body = await res.json();
+        const items = Array.isArray(body) ? body : (body.items || body.buildings || []);
+        const closed = ['RESOLVED', 'ARCHIVED', 'FALSE_ALARM'];        // analytics.py:294
+        _escalatingBuildingIds = new Set(items
+            .filter((b) => Number(b.escalation_risk) >= 70 && !closed.includes(b.state))
+            .map((b) => b.id));
+    } catch (_e) {
+        _escalatingBuildingIds = new Set();   // fail visible: queue shows 0 + banner stays
+    }
+    renderFeed();
+    _renderQueueBanner();
+}
+
+function _hashStateSegs() {
+    return (location.hash || '').replace(/^#/, '').split(';').filter(Boolean)
+        .filter((s) => !s.startsWith('/'));
+}
+function _queueFromHash() {
+    const seg = _hashStateSegs().find((s) => s.startsWith('queue='));
+    const key = seg ? seg.slice(6) : null;
+    return key && QUEUES[key] ? key : null;
+}
+
+// Enter/exit a queue. updateHash=false when the change came FROM the hash
+// (deep link, back/forward, refresh) to avoid feedback loops.
+function setActiveQueue(key, updateHash = true) {
+    key = key && QUEUES[key] ? key : null;
+    if (key === _activeQueue && !updateHash) { _renderQueueBanner(); return; }
+    if (key && !_activeQueue) _queuePrevSort = cardSortMode;
+    _activeQueue = key;
+    if (key) {
+        cardSortMode = QUEUES[key].sort;
+        // A queue's members can live in ANY triage bucket (e.g. the
+        // dispatch queue's cards sit under HELP SENT, collapsed by
+        // default) — the user must immediately see the reports, so all
+        // buckets open while a queue is active.
+        sectionState = { needs: true, dispatched: true, resolved: true };
+        if (QUEUES[key].needsBuildings && !_escalatingBuildingIds) _loadEscalatingBuildings();
+    } else {
+        if (_queuePrevSort) { cardSortMode = _queuePrevSort; _queuePrevSort = null; }
+        sectionState = { needs: true, dispatched: false, resolved: false };
+    }
+    if (updateHash) {
+        const segs = _hashStateSegs().filter((s) => !s.startsWith('queue='));
+        if (key) segs.push('queue=' + key);
+        const next = '#' + ['/incidents'].concat(segs).join(';');
+        if (location.hash !== next) location.hash = next;
+    }
+    _renderQueueBanner();
+    renderFeed();
+}
+window.clearActiveQueue = () => setActiveQueue(null);
+
+function _renderQueueBanner() {
+    const banner = document.getElementById('queue-banner');
+    if (!banner) return;
+    if (!_activeQueue) { banner.style.display = 'none'; return; }
+    const q = QUEUES[_activeQueue];
+    const matched = _applyQueueFilter(allReports).length;
+    const bCount = _activeQueue === 'escalating' && _escalatingBuildingIds
+        ? ` · ${_escalatingBuildingIds.size} building(s)` : '';
+    banner.style.display = 'flex';
+    banner.innerHTML = `
+        <span class="qb-icon" aria-hidden="true">${q.icon}</span>
+        <span class="qb-text"><strong>${escapeHtml(q.label)}</strong>
+          <span class="qb-count">${matched} report(s)${bCount}</span>
+          <span class="qb-desc">${escapeHtml(q.desc)}</span></span>
+        <button class="qb-clear" onclick="clearActiveQueue()" title="Leave this queue (show all reports)">✕ Clear queue</button>`;
+}
+
+// Deep-link sync: applies `;queue=` from the hash on boot, on back/forward,
+// and on refresh. Runs alongside the router's own hashchange handling.
+function _syncQueueFromHash() {
+    const route = ((location.hash || '').replace(/^#/, '').split(';').find((s) => s.startsWith('/')) || '');
+    if (route && route !== '/incidents') return;   // queue state belongs to ops only
+    const key = _queueFromHash();
+    if (key !== _activeQueue) setActiveQueue(key, false);
+}
+window.addEventListener('hashchange', _syncQueueFromHash);
+// Boot sync — covers deep links + refresh. DOMContentLoaded may already have
+// fired by the time this script block runs, so sync immediately in that case.
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(_syncQueueFromHash, 0));
+} else {
+    setTimeout(_syncQueueFromHash, 0);
+}
+
 // Phase G.5 (May 2026) — Bulk multi-select state.
 // `_bulkSelectMode` toggles the checkbox UI; `_bulkSelectedIds` is
 // the Set of currently-selected report ids. Both reset on view-mode
@@ -1884,6 +2059,7 @@ function renderHotspots(parentEl, reports) {
 }
 
 function renderFeed() {
+    _renderQueueBanner();
     const el = document.getElementById('report-feed-list');
     if (!el) return;
     if (viewMode === 'queue') {
@@ -1972,9 +2148,11 @@ function _applyProgressiveReveal(container) {
 
 // ── Queue Mode: three-bucket triage cards ─────────────────────────────────────
 function renderTriageQueue(el) {
-    // Apply time filter
-    let reports = allReports;
-    if (timeFilterHours > 0) {
+    // Operational queue (attention-panel deep link) — the queue predicate
+    // DEFINES the population (replaces status/time filters; search/chips
+    // still narrow below).
+    let reports = _applyQueueFilter(allReports);
+    if (!_activeQueue && timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
         // K.5.b (May 2026, Phase K) — use _priorityTime so offline-
         // drained reports stay visible by CAPTURE time, not by the
@@ -2128,6 +2306,9 @@ function getSortFunction() {
     const SOURCE_ORDER = { IVR: 6, SMS: 5, TELEGRAM: 4, WHATSAPP: 3, ANDROID: 2, APP: 1 };
 
     switch (cardSortMode) {
+        case 'sla_breach':
+            // Most overdue first: smallest (deadline - now) ascending.
+            return (a, b) => _slaDeadline(a) - _slaDeadline(b);
         case 'newest':
             return (a, b) => new Date(b.server_created_at) - new Date(a.server_created_at);
         case 'oldest':
@@ -2527,15 +2708,16 @@ window.setViewMode = function(mode) {
 
 // ── Tree Mode: original hierarchical feed ─────────────────────────────────────
 function renderTreeFeed(el) {
-    // Filter by status
-    let filtered = allReports.filter(r => {
-        if (statusFilter === 'all') return true;
-        const s = r.status;
-        if (statusFilter === 'active') return s === 'PENDING' || s === 'VERIFIED';
-        return s.toLowerCase() === statusFilter.toLowerCase();
-    });
+    // Operational queue (attention-panel deep link) — replaces status/time.
+    let filtered = _activeQueue ? _applyQueueFilter(allReports)
+        : allReports.filter(r => {
+            if (statusFilter === 'all') return true;
+            const s = r.status;
+            if (statusFilter === 'active') return s === 'PENDING' || s === 'VERIFIED';
+            return s.toLowerCase() === statusFilter.toLowerCase();
+        });
     // Filter by time
-    if (timeFilterHours > 0) {
+    if (!_activeQueue && timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
         // K.5.b — use _priorityTime so offline-drained reports stay visible
         // by capture time, not the late server-receive timestamp.
@@ -2579,8 +2761,8 @@ function renderTreeFeed(el) {
 let _crisisDrillFilter = null;
 
 function _getFilteredReports() {
-    let reports = allReports;
-    if (timeFilterHours > 0) {
+    let reports = _applyQueueFilter(allReports);
+    if (!_activeQueue && timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
         // K.5.b — use _priorityTime for offline-aware time filter.
         reports = reports.filter(r => _priorityTime(r) > cutoff);
@@ -9648,13 +9830,14 @@ window.exportNodeDataFromIncidents = function (ids) {
 };
 
 function getFilteredReports() {
-    let filtered = allReports.filter(r => {
-        if (statusFilter === 'all') return true;
-        const s = r.status;
-        if (statusFilter === 'active') return s === 'PENDING' || s === 'VERIFIED';
-        return s.toLowerCase() === statusFilter.toLowerCase();
-    });
-    if (timeFilterHours > 0) {
+    let filtered = _activeQueue ? _applyQueueFilter(allReports)
+        : allReports.filter(r => {
+            if (statusFilter === 'all') return true;
+            const s = r.status;
+            if (statusFilter === 'active') return s === 'PENDING' || s === 'VERIFIED';
+            return s.toLowerCase() === statusFilter.toLowerCase();
+        });
+    if (!_activeQueue && timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
         // K.5.b — use _priorityTime for offline-aware time filter.
         filtered = filtered.filter(r => _priorityTime(r) > cutoff);
