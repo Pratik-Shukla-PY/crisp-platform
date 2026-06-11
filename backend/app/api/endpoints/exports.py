@@ -62,7 +62,11 @@ def _query_reports(db: Session, status: Optional[str], crisis_type: Optional[str
         .filter(Report.deletion_requested_at.is_(None))
     )
     if status:
-        q = q.filter(Report.status == status)
+        # Comma-separated list supported so the dashboard's composite
+        # "Active" view (PENDING+VERIFIED) exports exactly what it shows.
+        statuses = [s.strip() for s in status.split(",") if s.strip()]
+        q = q.filter(Report.status.in_(statuses)) if len(statuses) > 1 \
+            else q.filter(Report.status == statuses[0])
     if crisis_type:
         q = q.filter(Report.crisis_type == crisis_type)
     if severity:
