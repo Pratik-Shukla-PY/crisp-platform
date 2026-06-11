@@ -116,7 +116,8 @@ export interface V4ReviewScreenProps {
   onChangeDescription: (v: string) => void;
 
   // UNDP details
-  debrisClearing: boolean;
+  // debris is a UNDP CORE question — null = unanswered (gates Send).
+  debrisClearing: boolean | null;
   onSetDebris: (v: boolean) => void;
   electricityStatus: ServiceLevel;
   onSetElectricity: (v: ServiceLevel) => void;
@@ -141,6 +142,22 @@ export interface V4ReviewScreenProps {
   onEditLocation: () => void;
 }
 
+/**
+ * UNDP core-question submit gate (Jun 2026) — parity with the PWA _onSend
+ * gate. A report may only be sent once the three classifiers AND the debris
+ * question are answered. debris is nullable: null = unanswered. Exported as a
+ * pure function so the contract is unit-testable without a render harness.
+ */
+export function v4ReviewMissingRequired(g: {
+  infraType: string | null;
+  crisisType: string | null;
+  damageClass: string | null;
+  debrisClearing: boolean | null;
+}): boolean {
+  const debrisAnswered = g.debrisClearing === true || g.debrisClearing === false;
+  return !g.infraType || !g.crisisType || !g.damageClass || !debrisAnswered;
+}
+
 export default function V4ReviewScreen(props: V4ReviewScreenProps) {
   const insets = useSafeAreaInsets();
 
@@ -156,6 +173,20 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
   // button (previously hard-coded +88, broken under accessibility
   // font scaling on iOS / Android).
   const [footerHeight, setFooterHeight] = useState(88);
+
+  // UNDP core-question gate (Jun 2026) — parity with the PWA submit gate.
+  // Send is disabled until the three classifiers AND the debris question are
+  // answered. The classify screen gates the classifiers on the way through;
+  // this is the last line of defence (back-nav edits, debris answered here).
+  const debrisAnswered =
+    props.debrisClearing === true || props.debrisClearing === false;
+  const missingRequired = v4ReviewMissingRequired({
+    infraType: props.infraType,
+    crisisType: props.crisisType,
+    damageClass: props.damageClass,
+    debrisClearing: props.debrisClearing,
+  });
+  const sendDisabled = props.isSending || missingRequired;
 
   return (
     // (May 2026 — Fix-R3) — KAV so the soft keyboard doesn't cover
@@ -321,27 +352,37 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
           icon="📋"
           testID="v4rev-undp-drawer"
         >
-          {/* Debris Y/N */}
+          {/* Debris Y/N — UNDP CORE question (required to answer before
+              submit). The "Required" chip clears once an explicit Yes/No is
+              chosen; null leaves neither pill active so it never looks
+              pre-answered. */}
           <View style={styles.undpRow}>
-            <Text style={styles.undpLabel}>
-              {ti('v4_debris', 'Debris to clear?')}
-            </Text>
+            <View style={styles.undpLabelRow}>
+              <Text style={styles.undpLabel}>
+                {ti('v4_debris', 'Debris to clear?')}
+              </Text>
+              {props.debrisClearing !== true && props.debrisClearing !== false && (
+                <Text style={styles.requiredChip} testID="v4rev-debris-required">
+                  {ti('v4_required_chip', 'Required')}
+                </Text>
+              )}
+            </View>
             <View style={styles.ynRow}>
               <Pressable
-                style={[styles.ynBtn, props.debrisClearing && styles.ynBtnActive]}
+                style={[styles.ynBtn, props.debrisClearing === true && styles.ynBtnActive]}
                 onPress={() => props.onSetDebris(true)}
                 testID="v4rev-debris-yes"
               >
-                <Text style={[styles.ynLabel, props.debrisClearing && styles.ynLabelActive]}>
+                <Text style={[styles.ynLabel, props.debrisClearing === true && styles.ynLabelActive]}>
                   {ti('v4_yes', 'Yes')}
                 </Text>
               </Pressable>
               <Pressable
-                style={[styles.ynBtn, !props.debrisClearing && styles.ynBtnActive]}
+                style={[styles.ynBtn, props.debrisClearing === false && styles.ynBtnActive]}
                 onPress={() => props.onSetDebris(false)}
                 testID="v4rev-debris-no"
               >
-                <Text style={[styles.ynLabel, !props.debrisClearing && styles.ynLabelActive]}>
+                <Text style={[styles.ynLabel, props.debrisClearing === false && styles.ynLabelActive]}>
                   {ti('v4_no', 'No')}
                 </Text>
               </Pressable>
@@ -405,13 +446,20 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
         ]}
         testID="v4rev-footer"
       >
+        {missingRequired && !props.isSending && (
+          <Text style={styles.sendHint} testID="v4rev-send-hint">
+            {!debrisAnswered
+              ? ti('v4_submit_missing_debris', 'One required question left: is there debris to clear?')
+              : ti('v4_submit_missing_classify', 'Please answer the required questions first — damage, infrastructure and crisis type.')}
+          </Text>
+        )}
         <TouchableOpacity
-          style={[styles.sendBtn, props.isSending && styles.sendBtnDisabled]}
+          style={[styles.sendBtn, sendDisabled && styles.sendBtnDisabled]}
           onPress={props.onSend}
-          disabled={props.isSending}
+          disabled={sendDisabled}
           accessibilityRole="button"
           accessibilityLabel={ti('v4_send', 'Send to UNDP')}
-          accessibilityState={{ disabled: props.isSending }}
+          accessibilityState={{ disabled: sendDisabled }}
           testID="v4rev-btn-send"
         >
           {props.isSending ? (
@@ -685,6 +733,25 @@ const styles = StyleSheet.create({
   undpRowNeeds: { paddingVertical: 4 },
   undpLabel: {
     flex: 1, color: Colors.text, fontSize: 12.5, fontWeight: '600',
+  },
+  // Debris is a required core question — label + "Required" chip sit on one
+  // row so the chip reads as part of the question, not the answer pills.
+  undpLabelRow: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+  },
+  requiredChip: {
+    color: '#fbbf24', fontSize: 10, fontWeight: '700',
+    letterSpacing: 0.4, textTransform: 'uppercase',
+    paddingHorizontal: 8, paddingVertical: 1,
+    borderRadius: 999,
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    borderWidth: 1, borderColor: 'rgba(251,191,36,0.35)',
+    overflow: 'hidden',
+  },
+  // Inline hint above Send when a required answer is still missing.
+  sendHint: {
+    color: '#fbbf24', fontSize: 12, lineHeight: 16,
+    textAlign: 'center', marginBottom: 8, paddingHorizontal: 8,
   },
 
   // Yes/No

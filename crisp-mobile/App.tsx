@@ -498,7 +498,11 @@ export default function App() {
   // unchanged. setInfraName / setDebrisClearing remain callable in case a
   // future feature wants to reintroduce the inputs.
   const [infraName, setInfraName] = useState('');
-  const [debrisClearing, setDebrisClearing] = useState(false);
+  // Jun 2026 — debris is a UNDP CORE question (required to answer before
+  // submit), so it is nullable: null = unanswered (gates Send), true/false =
+  // an explicit citizen answer. Was a plain boolean that defaulted to false
+  // and rendered "No" pre-selected, letting reports ship without an answer.
+  const [debrisClearing, setDebrisClearing] = useState<boolean | null>(null);
   // Apr 2026 UI v2.1 — tracks whether `infraName` was auto-filled from
   // an OSM tag vs typed manually. Only auto-cleared values when the
   // user clears the building selection; a manually-typed name survives.
@@ -1434,7 +1438,7 @@ export default function App() {
     // v4 classify flow re-collects them per report. severity is re-derived from
     // the next damage pick, so its reset value is overwritten before submit.
     setInfraType(null); setSeverity('MODERATE');
-    setCrisisType(null); setDamageClass(null); setInfraName(''); setInfraNameFromOsm(false); setDebrisClearing(false);
+    setCrisisType(null); setDamageClass(null); setInfraName(''); setInfraNameFromOsm(false); setDebrisClearing(null);
     setLocation(null); setLocationName(''); setIsSending(false); setReportId('');
     // RNV4-P2 — clear crisis-pack state + geo-gate key so a new report re-resolves.
     setCrisisPack(null); setCrisisStockAnswers({}); crisisPackKeyRef.current = null;
@@ -2569,13 +2573,13 @@ export default function App() {
             </Text>
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
               <TouchableOpacity
-                style={[s.chip, !debrisClearing && s.chipActive, { flex: 1, paddingVertical: 14, justifyContent: 'center' }]}
+                style={[s.chip, debrisClearing === false && s.chipActive, { flex: 1, paddingVertical: 14, justifyContent: 'center' }]}
                 onPress={() => setDebrisClearing(false)}
                 accessibilityRole="button">
                 <Text style={s.chipText}>✕ {(t as any)('debris_no') || 'No'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[s.chip, debrisClearing && s.chipActive, { flex: 1, paddingVertical: 14, justifyContent: 'center' }]}
+                style={[s.chip, debrisClearing === true && s.chipActive, { flex: 1, paddingVertical: 14, justifyContent: 'center' }]}
                 onPress={() => setDebrisClearing(true)}
                 accessibilityRole="button">
                 <Text style={s.chipText}>✓ {(t as any)('debris_yes') || 'Yes'}</Text>

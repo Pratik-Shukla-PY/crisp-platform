@@ -81,6 +81,12 @@ describe('V4ReviewScreen — module shape + i18n contract', () => {
     // Send + sending state
     'v4_send',
     'upload_sending',
+
+    // Jun 2026 — UNDP core-question submit gate (required debris + blocked-
+    // submit hints). Parity with the PWA gate.
+    'v4_required_chip',
+    'v4_submit_missing_classify',
+    'v4_submit_missing_debris',
   ];
 
   it('every required key resolves to a non-empty string in en', () => {
@@ -103,5 +109,36 @@ describe('V4ReviewScreen — module shape + i18n contract', () => {
       expect(typeof pack[key]).toBe('string');
       expect(pack[key].length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('V4ReviewScreen — UNDP core-question submit gate', () => {
+  const { v4ReviewMissingRequired } = require('../screens/V4ReviewScreen');
+  const FULL = {
+    infraType: 'COMMERCIAL',
+    crisisType: 'EARTHQUAKE',
+    damageClass: 'PARTIAL',
+    debrisClearing: false as boolean | null,
+  };
+
+  it('exports the gate predicate', () => {
+    expect(typeof v4ReviewMissingRequired).toBe('function');
+  });
+
+  it('all four answered (debris=No) → not missing → Send enabled', () => {
+    expect(v4ReviewMissingRequired({ ...FULL, debrisClearing: false })).toBe(false);
+    expect(v4ReviewMissingRequired({ ...FULL, debrisClearing: true })).toBe(false);
+  });
+
+  it('debris unanswered (null) → missing → Send blocked', () => {
+    expect(v4ReviewMissingRequired({ ...FULL, debrisClearing: null })).toBe(true);
+  });
+
+  it.each([
+    ['infraType'],
+    ['crisisType'],
+    ['damageClass'],
+  ])('missing %s → missing → Send blocked', (field) => {
+    expect(v4ReviewMissingRequired({ ...FULL, [field]: null })).toBe(true);
   });
 });
