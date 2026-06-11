@@ -292,9 +292,33 @@
           ${m.is_verified ? '<span class="cc-st-pill ok">Verified</span>' : '<span class="cc-st-pill warn">Unverified</span>'}
         </div>
         <p class="cc-st-hint">Member since ${fmtDate(m.created_at)} · ${m.login_count || 0} logins · last ${fmtDate(m.last_login_at)}.</p>
-        <div class="cc-st-row" style="margin-top:12px"><div class="cc-st-spacer"></div>
+        <div class="cc-st-row" style="margin-top:12px">
+          <button class="cc-st-btn" id="cc-st-gdpr-export"
+                  title="Download everything CRISP stores about your account (profile, sessions, audit trail, linked reports) as JSON — your data-access right.">
+            ⬇ Download my account data</button>
+          <div class="cc-st-spacer"></div>
           <button class="cc-st-btn primary" id="cc-st-save-profile">Save changes</button></div>
       </div>`;
+    // Data-subject access right (UNDP Privacy Policy Annex 2 (f)) — the
+    // backend /auth/me/data-export endpoint previously had NO UI consumer
+    // anywhere (export audit finding). JSON blob download, same pattern as
+    // the PWA's "Export my data".
+    el('cc-st-gdpr-export').addEventListener('click', async () => {
+      try {
+        const data = await api('GET', '/me/data-export');
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        const d = new Date();
+        const p = (n) => String(n).padStart(2, '0');
+        a.href = URL.createObjectURL(blob);
+        a.download = `crisp-account-data-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+        toast('Account data downloaded.', 'ok');
+      } catch (e) { toast('Export failed: ' + e.message, 'err'); }
+    });
     el('cc-st-save-profile').addEventListener('click', async () => {
       const full_name = el('cc-st-name').value.trim();
       if (!full_name) { toast('Name cannot be empty.', 'err'); return; }

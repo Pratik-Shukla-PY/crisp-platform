@@ -151,6 +151,19 @@ panel + format cards + record count + recent exports).
 
 ## 7. Implementation Roadmap
 
+> **Status (2026-06-12): P0, P1 and P2 are IMPLEMENTED** (commits 0ec6480,
+> 4dcfe78, 473da85, f911735 + the settings GDPR consumer). All five P0 fixes,
+> the Export Center (`#/exports`, cc-exports.js) with scope preview + live
+> count + recent-exports audit panel, filter parity, export audit logging,
+> HXL row + data dictionary, appended metadata columns, analytics CSV +
+> sitrep PDF, and per-report evidence bundles are live. A sixth P0-class fix
+> emerged during verification: `Content-Disposition` was not CORS-exposed,
+> so cross-origin dev silently lost server filenames on fetch→blob downloads.
+> Remaining (P3, deliberately deferred): GPKG (operator decision, Jun 2026 —
+> Shapefile+GeoJSON cover GIS interop), scheduled/email exports (needs infra),
+> citizen receipt PDF, IVR report-ID readback (architecturally blocked: the
+> report row is created asynchronously AFTER the call ends).
+
 | # | Item | Effort | Risk | Depends on |
 |---|---|---|---|---|
 | **P0-1** | Fix Shapefile/KML auth (fetch→blob), kill false toast | S | low | — |
