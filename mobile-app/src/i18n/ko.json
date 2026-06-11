@@ -588,6 +588,8 @@
   "privacy_recipients_4": "지도 및 건물 외곽선 (OpenStreetMap / Mapbox) — 위치 선택기 표시용. 지역의 경계 상자만 공유됩니다.",
   "privacy_recipients_5": "메시징 게이트웨이 (SMS / IVR 용 Twilio; 채팅용 Telegram 및 WhatsApp) — 해당 채널로 신고하는 경우에만.",
   "privacy_recipients_6": "위성 이미지 제공자 (ESA Sentinel-2, Microsoft Planetary Computer, ESA Copernicus) — 신고 위치 주변의 경계 상자만 수신하며 사진이나 기기 코드는 절대 수신하지 않습니다.",
+  "privacy_adm_title": "자동화된 결정 및 AI",
+  "privacy_adm_body": "CRISP는 AI(Anthropic Claude)를 사용해 귀하의 신고를 위성 이미지와 대조하여 진위 점수를 부여하고, 음성 및 SMS 신고의 분류를 제안합니다. 이러한 자동 평가는 대응자의 우선순위 결정을 돕기 위한 것일 뿐이며, 귀하의 신고를 차단·거부·삭제하지 않고, 조치 전에 사람 분석가가 신고를 검토합니다. privacy@crisplabs.tech 로 이메일을 보내 자동 평가에 대한 사람의 검토를 요청할 수 있습니다.",
   "privacy_recipients_lede": "CRISP는 아래 수신자 범주와만 보고서를 공유하며, 모두 계약 또는 상업적 데이터 보호 조항 하에 있습니다. 데이터는 귀하의 국가 외에서 처리될 수 있습니다.",
   "privacy_recipients_title": "데이터의 행선지",
   "privacy_retention_body": "보고서는 활성 위기 대응에 필요한 기간 동안만 보관됩니다 (기본 보관은 위기가 열려 있는 한 무기한이며, 분석가 검토로 더 일찍 종료될 수 있습니다). 삭제를 요청하시면, 보고서는 영구 삭제 대기열에 들어가 24시간 이내에 완전히 제거됩니다. 삭제된 보고서에 첨부된 사진과 음성은 동일한 일정으로 삭제됩니다. 익명 집계 통계 (개수, 지역 총계) 는 삭제 후에도 비개인 데이터로 보관될 수 있으며, 귀하를 식별하지 않습니다.",

@@ -587,6 +587,8 @@
   "privacy_recipients_4": "地図と建物のフットプリント (OpenStreetMap / Mapbox) — 位置選択を表示するため。地域の境界ボックスのみが共有されます。",
   "privacy_recipients_5": "メッセージングゲートウェイ (Twilio for SMS / IVR; Telegram と WhatsApp for chat) — それらのチャネルから報告した場合のみ。",
   "privacy_recipients_6": "衛星画像プロバイダ (ESA Sentinel-2、Microsoft Planetary Computer、ESA Copernicus) — 報告位置周辺の境界ボックスのみを受信。写真やデバイスコードは受信しません。",
+  "privacy_adm_title": "自動判定とAI",
+  "privacy_adm_body": "CRISPはAI（Anthropic Claude）を用いて、あなたの報告を衛星画像と照合して真偽スコアを付与し、音声・SMS報告の分類を提案します。これらの自動評価は対応者の優先順位付けを助けるだけで、あなたの報告をブロック・却下・削除することは決してなく、対応の前に人間の分析者が報告を確認します。自動評価について人間による確認を希望する場合は privacy@crisplabs.tech までメールしてください。",
   "privacy_recipients_lede": "CRISP は以下のカテゴリの受信者にのみ報告を共有します。すべて契約またはデータ保護に関する商用条件下にあります。データはあなたの国以外で処理される場合があります。",
   "privacy_recipients_title": "データの送信先",
   "privacy_retention_body": "報告は活発な危機対応に必要な期間のみ保持されます (既定では危機が開いている間は無期限。アナリストレビューにより早期にクローズされる場合があります)。削除を要求すると、報告はハード削除キューに入り、24 時間以内に完全に削除されます。削除された報告に添付された写真と音声は同じスケジュールで消去されます。匿名の集計統計 (カウント、地域合計) は削除後も非個人データとして保持される場合があります — 個人を特定することはありません。",

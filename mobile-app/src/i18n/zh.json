@@ -582,6 +582,8 @@
   "privacy_recipients_4": "地图和建筑物轮廓 (OpenStreetMap / Mapbox) — 用于呈现位置选择器;仅共享您所在区域的边界框。",
   "privacy_recipients_5": "消息网关 (Twilio 用于 SMS / IVR;Telegram 和 WhatsApp 用于聊天接入) — 仅当您通过这些渠道报告时。",
   "privacy_recipients_6": "卫星图像提供商 (ESA Sentinel-2、Microsoft Planetary Computer、ESA Copernicus) — 仅接收报告位置周围的边界框,从不接收您的照片或设备代码。",
+  "privacy_adm_title": "自动决策与人工智能",
+  "privacy_adm_body": "CRISP 使用人工智能（Anthropic Claude）将您的报告与卫星图像核对并给出真实性评分，并为语音和短信报告建议分类。这些自动评估仅帮助响应人员确定优先级——绝不会拦截、拒绝或删除您的报告，且在采取行动前会有人工分析师审查报告。您可发送邮件至 privacy@crisplabs.tech 申请对任何自动评估进行人工复核。",
   "privacy_recipients_lede": "CRISP 仅与下列接收方类别共享您的报告,所有共享均受合同或商业数据保护条款约束。数据可能在您所在国家之外处理。",
   "privacy_recipients_title": "您的数据流向哪里",
   "privacy_retention_body": "报告仅在活跃危机响应需要时保留(默认情况下危机开放期间无限保留;分析师审查可能提前关闭报告)。当您请求删除时,您的报告将被排入硬删除队列,并在 24 小时内永久移除。附加到已删除报告的照片和音频按相同时间表删除。删除后,匿名的汇总统计数据(计数、区域总计)可能作为非个人数据保留 — 这些永远不会识别您。",

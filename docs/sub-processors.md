@@ -29,6 +29,8 @@ Citizens are informed of these categories — but not necessarily the brand name
 
 **Note:** the device-fingerprint hash, free-text description, email/phone are **never sent** to Anthropic. Anthropic does not retain inputs for training under our agreement.
 
+**Automated decision-making (Annex 2 (f)):** Claude produces a truth score and suggested classifications. These are **advisory only** — they never block, reject, or delete a report, and a human analyst reviews every report before action. The data subject is told this in the privacy notice and may request human review via `privacy@crisplabs.tech`. See DPIA risk R13.
+
 ## Category 4 — Maps & building footprints
 
 | Vendor | Service | Receives | Region | DPA |
