@@ -55,6 +55,34 @@ CRISP is an open-source, offline-first platform that enables communities to repo
                                        Building Versioning          Data Export (CSV/GeoJSON/SHP/KML)
 ```
 
+### Channel capability matrix
+
+Every channel produces the same `Report` row shape, but channels differ in how
+the UNDP core questions are answered. Rich clients ask the reporter directly;
+lean channels capture what they can and the rest is classified downstream (by
+AI from the transcript, or by a UNDP analyst from the evidence — both
+explicitly anticipated in the challenge Q&A, which notes that "technical
+validation and deeper analysis remain essential functions of UNDP teams").
+
+Legend: ✅ asked & enforced · 🟢 asked (optional) · 🤖 AI-extracted · 👤 analyst-classified · — n/a
+
+| Core question | PWA | Android (RN) | Telegram | WhatsApp | SMS | IVR |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| Damage classification | ✅ | ✅ | ✅ | 👤 | 🤖 | 🤖 |
+| Infrastructure type | ✅ | ✅ | ✅ | ✅ | 🤖 | 🤖 |
+| Crisis type | ✅ | ✅ | ✅ | 👤 | 🤖 | 🤖 |
+| Debris clearing | ✅ | ✅ | ✅ | 👤 | 🤖 | 🤖 |
+| Location (GPS / textual) | ✅ | ✅ | ✅ | ✅ | 🤖 | 🤖 |
+| Photo / evidence | 🟢 | 🟢 | 🟢 | ✅ | — | — |
+
+**WhatsApp** is intentionally a rapid-intake channel: it collects severity,
+infrastructure type, location, and media/text evidence with minimal back-and-
+forth, and the crisis type, damage class, and debris question are classified by
+an analyst (or the AI extractor) from that evidence. Reporters who want to
+self-classify every field use the PWA, the Android app, or Telegram. The
+backend schema accepts a partial row from any channel; the dashboard renders
+only the fields a given report actually carries.
+
 ### Tech Stack
 
 | Layer | Technology |
