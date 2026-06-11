@@ -240,3 +240,70 @@ def test_sms_webhook_returns_twiml_or_200(client, sms_patches):
     # Today's contract: JSON, not TwiML.
     assert "application/json" in ctype
     assert res.json() == {"status": "accepted"}
+
+
+# ── UNDP core question: debris_clearing_needed (Jun 2026) ───────────────────
+# The SMS parser detects a debris-clearing signal from free text and the
+# webhook forwards it to /reports/meta. A POSITIVE signal → True; no signal →
+# None (never a fabricated False — absence of the word is not a "no").
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("road blocked by rubble near Sector 7", True),   # blocked + rubble
+        ("debris everywhere, cannot pass", True),          # debris + cannot pass
+        ("a fallen tree is blocking the lane", True),      # fallen tree + blocking
+        ("house damaged but the path is clear", None),     # no debris keyword
+        ("minor crack in the wall, everything fine", None),
+        ("flood water rising in the village", None),
+    ],
+)
+def test_parse_sms_debris_signal(text, expected):
+    from messaging_bot.sms.parser import parse_sms
+    result = parse_sms(text).get("debris_clearing_needed")
+    assert result is expected, f"{text!r} → {result!r}, expected {expected!r}"
+
+
+def test_parse_sms_never_returns_false():
+    """No SMS phrasing should yield a hard False — the only values are True
+    (explicit signal) or None (unknown). This protects the never-invent
+    invariant: a missing answer must read as 'not stated', not 'no debris'."""
+    from messaging_bot.sms.parser import parse_sms
+    samples = [
+        "everything is fine here", "small leak in the pipe",
+        "earthquake felt strongly", "need food and water urgently",
+        "", "   ",
+    ]
+    for s in samples:
+        assert parse_sms(s).get("debris_clearing_needed") in (True, None)
+
+
+def test_sms_webhook_sets_debris_on_blockage_text(client, db, sms_patches):
+    """End-to-end: an SMS mentioning a blocked/rubble site lands a Report
+    whose debris_clearing_needed column is True (UNDP core question reaches
+    the DB, not just the parser)."""
+    phone = f"+91700111{int(time.time()) % 10000:04d}"
+    res = client.post(
+        _sms_url(),
+        data={
+            "From": phone,
+            "Body": "collapse on the highway, rubble blocking the road, cannot pass",
+            "MessageSid": f"SM-debris-{time.time()}",
+        },
+    )
+    assert res.status_code == 200, res.text
+    db.expire_all()
+    device_hash = sms_webhook._hash_phone(phone)
+    report = (
+        db.query(Report)
+        .filter(
+            Report.device_id == db.query(Device.id)
+            .filter(Device.device_hash == device_hash)
+            .scalar_subquery()
+        )
+        .first()
+    )
+    assert report is not None, "expected a Report row for the debris SMS"
+    assert report.debris_clearing_needed is True, (
+        "debris signal in SMS text must set debris_clearing_needed=True"
+    )

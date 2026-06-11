@@ -40,6 +40,19 @@ _DAMAGE_KEYWORDS = {
     "NO_DAMAGE": ["safe", "intact", "undamaged", "fine", "ok", "standing"],
 }
 
+# Debris-clearing keywords — UNDP core question "Is there debris that requires
+# clearing on or near the infrastructure site?". A POSITIVE signal sets
+# debris_clearing_needed=True. There is no reliable NEGATIVE signal in free
+# SMS text (absence of the word != "no debris"), so a no-match yields None
+# (unknown) rather than False — the never-invent-a-value invariant the rest of
+# the parser follows for damage_classification.
+_DEBRIS_KEYWORDS = [
+    "debris", "rubble", "wreckage", "blocked", "blocking", "blockage",
+    "obstruct", "obstructed", "obstructing", "clear the road", "road clear",
+    "clearing", "fallen tree", "fallen pole", "collapsed onto", "buried",
+    "impassable", "cannot pass", "can't pass", "path blocked", "access blocked",
+]
+
 
 def parse_sms(text: str) -> dict:
     """
@@ -112,13 +125,21 @@ def parse_sms(text: str) -> dict:
             damage_class = dclass
             break
 
-    logger.info(f"SMS parsed: type={infra_type} sev={severity} crisis={crisis_type} damage={damage_class} loc='{location_text[:30]}'")
+    # 6. Detect debris-clearing need (UNDP core question). Positive signal
+    # only → True; otherwise None (unknown). Never default to False.
+    debris_clearing_needed = True if any(k in lower for k in _DEBRIS_KEYWORDS) else None
+
+    logger.info(
+        f"SMS parsed: type={infra_type} sev={severity} crisis={crisis_type} "
+        f"damage={damage_class} debris={debris_clearing_needed} loc='{location_text[:30]}'"
+    )
 
     return {
         "infrastructure_type": infra_type,
         "severity": severity,
         "crisis_type": crisis_type,
         "damage_classification": damage_class,
+        "debris_clearing_needed": debris_clearing_needed,
         "description": text.strip(),
         "location_text": location_text,
         "keywords_found": list(set(keywords_found)),

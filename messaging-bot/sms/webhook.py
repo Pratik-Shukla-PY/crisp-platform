@@ -179,6 +179,10 @@ async def _process_sms(phone: str, text: str):
         "caller_info": {"phone": phone, "source": "SMS"},
         "crisis_type": parsed.get("crisis_type") or None,
         "damage_classification": parsed.get("damage_classification") or None,
+        # UNDP core question — True when the SMS text signals debris, else
+        # None (unknown). Never False from SMS: absence of the word is not a
+        # "no". `is None` check (not `or None`) so a real False would survive.
+        "debris_clearing_needed": parsed.get("debris_clearing_needed"),
     }
 
     if geo["latitude"] is not None:

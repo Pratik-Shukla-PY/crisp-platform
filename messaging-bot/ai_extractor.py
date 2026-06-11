@@ -56,6 +56,7 @@ Return JSON with these fields:
   "severity": "one of: SEVERE, MODERATE, MINOR",
   "crisis_type": "one of: EARTHQUAKE, FLOOD, CONFLICT, HURRICANE, CYCLONE, WILDFIRE, LANDSLIDE, PANDEMIC, OTHER",
   "damage_classification": "one of: NO_DAMAGE, PARTIAL, COMPLETE",
+  "debris_clearing_needed": "true if the caller mentions debris, rubble, a fallen tree/pole, or a blocked / impassable / buried site that needs clearing; false ONLY if they explicitly say the path or site is clear; null if not mentioned",
   "summary": "A clear, professional 1-2 sentence English summary of the crisis situation for a control center operator to take action on. Fix any transcription errors, grammar issues, and translate any non-English fragments to English. Max 80 words.",
   "user_said": "A clean English version of what the caller actually said, fixing transcription artifacts but preserving their meaning faithfully. Max 60 words."
 }}"""}],
@@ -142,6 +143,12 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
     if damage_class not in valid_damage:
         damage_class = ""
 
+    # UNDP core question — accept only a real boolean from Claude; treat a
+    # missing field, null, or a string like "null"/"unknown" as "not stated"
+    # (None) so we never PATCH a fabricated False onto the report.
+    debris_raw = extracted.get("debris_clearing_needed")
+    debris_clearing_needed = debris_raw if isinstance(debris_raw, bool) else None
+
     # Update classification — keep raw transcription in description for
     # audit trail. infrastructure_type + crisis_type are now conditionally
     # included ONLY when Claude returned a confident value (the previous
@@ -155,6 +162,8 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
         update_payload["infrastructure_type"] = infra_type
     if crisis_type is not None:
         update_payload["crisis_type"] = crisis_type
+    if debris_clearing_needed is not None:
+        update_payload["debris_clearing_needed"] = debris_clearing_needed
     # Use the clean user_said as description (what user actually meant)
     if user_said:
         update_payload["description"] = user_said
@@ -225,6 +234,10 @@ async def _keyword_extract_and_update(report_id: str, text: str):
         update_payload["infrastructure_type"] = parsed["infrastructure_type"]
     if parsed["severity"] != "MODERATE":
         update_payload["severity"] = parsed["severity"]
+    # UNDP core question — parse_sms returns True on a debris signal, else
+    # None. Patch only a positive signal; never a fabricated False.
+    if parsed.get("debris_clearing_needed") is not None:
+        update_payload["debris_clearing_needed"] = parsed["debris_clearing_needed"]
 
     if update_payload:
         try:
