@@ -213,6 +213,35 @@ class TestRetentionPolicy:
     hard-deletes. Window anchors: standalone reports on creation; ENDED-crisis
     reports on the crisis close time. LIVE-crisis reports are never touched."""
 
+    @pytest.fixture(autouse=True)
+    def _cleanup(self, db, purge_device_hash):
+        """Hard-remove everything this test created so the shared test DB
+        can't leak into later suites. This file runs (alphabetically) before
+        test_reporter_profile_counter; leftover marked/standalone reports +
+        CrisisEvents previously polluted its purge-counter assertions."""
+        yield
+        from app.models.report import (
+            Device, ReporterProfile, DeletionAuditLog, CrisisEvent as _CE,
+        )
+        hashes = [purge_device_hash] + [
+            f"{purge_device_hash}-{s}" for s in ("recent", "live", "ended", "off")
+        ]
+        dev_ids = [d.id for d in db.query(Device).filter(Device.device_hash.in_(hashes)).all()]
+        if dev_ids:
+            reps = db.query(Report).filter(Report.device_id.in_(dev_ids)).all()
+            rep_ids = [r.id for r in reps]
+            for r in reps:
+                db.delete(r)  # cascades location/media/ai/verification
+            if rep_ids:
+                db.query(DeletionAuditLog).filter(
+                    DeletionAuditLog.report_id.in_(rep_ids)).delete(synchronize_session=False)
+            db.query(ReporterProfile).filter(
+                ReporterProfile.device_hash.in_(hashes)).delete(synchronize_session=False)
+            db.query(Device).filter(Device.id.in_(dev_ids)).delete(synchronize_session=False)
+        db.query(_CE).filter(_CE.name.in_(["Live Quake", "Ended Flood"])).delete(
+            synchronize_session=False)
+        db.commit()
+
     def _age_report(self, db, report_id, days):
         """Rewind a report's server_created_at by `days` (tz-aware UTC)."""
         row = db.query(Report).filter(Report.id == report_id).first()
