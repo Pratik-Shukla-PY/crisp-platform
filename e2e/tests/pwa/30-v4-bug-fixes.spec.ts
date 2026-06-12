@@ -701,6 +701,10 @@ test.describe('BUG 9 — v4 send always enqueues report into IDB', () => {
             s.infraType = 'COMMERCIAL';
             s.damageClass = 'PARTIAL';
             s.severity = 'MODERATE';
+            // Jun 2026 UNDP gate: _onSend refuses to submit until the debris
+            // question has an explicit answer — this test exercises offline
+            // IDB persistence, not the gate, so answer it.
+            s.debris_present = false;
             s.description = 'v4 offline-queue regression test';
             s.photoDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAKAAoDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==';
             const stubBlob = new Blob([new Uint8Array([0xFF, 0xD8])], { type: 'image/jpeg' });
