@@ -165,7 +165,7 @@
     .cc-bar-row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px}
     .cc-bar-row .bl{width:78px;color:#aab4c5;flex:none;text-transform:capitalize;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .cc-bar-track{flex:1;height:8px;background:#1d2942;border-radius:6px;overflow:hidden}
-    .cc-bar-fill{height:100%;border-radius:6px}
+    .cc-bar-fill{display:block;height:100%;border-radius:6px}
     .cc-bar-row .bv{width:34px;text-align:right;color:#cdd8ec;font-variant-numeric:tabular-nums;flex:none}
     .cc-spark{display:flex;align-items:flex-end;gap:2px;height:48px;margin-top:6px}
     .cc-spark i{flex:1;background:#418FDE;border-radius:2px 2px 0 0;min-height:2px;opacity:.85}
@@ -495,6 +495,7 @@
       <div class="cc-statline"><span>Unverified / rejected</span><span class="v">${fmtNum(unver)}</span></div>
       <div style="margin-top:10px"><div class="cc-sec-t" style="margin:0 0 4px">Intake · last 24h</div>
         <div class="cc-spark" id="cc-spark"><div class="cc-empty" style="padding:0">—</div></div></div>`;
+    _renderSpark();   // repaint from cache — the card rebuild just wiped #cc-spark
   }
 
   function renderImpact(b) {
@@ -514,19 +515,32 @@
         geography. Surfacing fabricated figures would mislead operations.</div>`;
   }
 
-  // ── data: 24h intake sparkline ──
+  // ── data: 24h intake sparkline ──────────────────────────────────────────
+  // RACE FIX (Jun 2026): #cc-spark is CREATED by renderEfficiency (summary
+  // completion), but this fetch usually resolves first — it used to find no
+  // container, bail, and the summary then painted a permanent "—" over it.
+  // Buckets are cached and rendered by whichever side finishes LAST:
+  // loadSparkline() on fetch completion, renderEfficiency() right after it
+  // rebuilds the card.
+  let _sparkBuckets = null;
+  function _renderSpark() {
+    const spark = el('cc-spark');
+    if (!spark || _sparkBuckets == null) return;
+    if (!_sparkBuckets.length) {
+      spark.innerHTML = `<div class="cc-empty" style="padding:0">No intake</div>`;
+      return;
+    }
+    const peak = Math.max(1, ..._sparkBuckets.map((x) => x.report_count || 0));
+    spark.innerHTML = _sparkBuckets.map((x) => {
+      const h = Math.round(((x.report_count || 0) / peak) * 100);
+      return `<i style="height:${Math.max(3, h)}%" title="${esc(x.bucket_start)}: ${x.report_count}"></i>`;
+    }).join('');
+  }
   async function loadSparkline() {
     try {
       const { body } = await jget('/analytics/damage-rate-24h');
-      const buckets = (body && body.buckets) || [];
-      const spark = el('cc-spark');
-      if (!spark) return;
-      if (!buckets.length) { spark.innerHTML = `<div class="cc-empty" style="padding:0">No intake</div>`; return; }
-      const peak = Math.max(1, ...buckets.map((x) => x.report_count || 0));
-      spark.innerHTML = buckets.map((x) => {
-        const h = Math.round(((x.report_count || 0) / peak) * 100);
-        return `<i style="height:${Math.max(3, h)}%" title="${esc(x.bucket_start)}: ${x.report_count}"></i>`;
-      }).join('');
+      _sparkBuckets = (body && body.buckets) || [];
+      _renderSpark();
     } catch (_) { /* sparkline optional */ }
   }
 

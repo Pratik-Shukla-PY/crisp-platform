@@ -82,8 +82,18 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     await expect(page.locator('#cc-att')).toContainText('Escalating');
     // §2 Phase-2 client-side countries-impacted caption (Turf over world.json).
     await expect(page.locator('#cc-map-geo')).toContainText(/countries impacted/i, { timeout: 8000 });
-    // §4 distributions rendered.
+    // §4 distributions rendered — and the bar FILLS actually paint (Jun 2026
+    // regression: .cc-bar-fill was an inline <span>, so width/height were
+    // ignored and every bar rendered as an empty track with no color).
     await expect(page.locator('#cc-dist-sev')).toContainText('Critical');
+    const fillBox = await page.locator('#cc-dist-sev .cc-bar-fill').first().boundingBox();
+    expect(fillBox, 'bar fill must have a box').toBeTruthy();
+    expect(fillBox!.width, 'bar fill must have non-zero painted width').toBeGreaterThan(4);
+    expect(fillBox!.height, 'bar fill must have non-zero painted height').toBeGreaterThan(2);
+    // §4b intake sparkline renders bars regardless of fetch-completion order
+    // (Jun 2026 race: #cc-spark is created by the summary renderer AFTER the
+    // sparkline fetch usually resolves — cached-bucket repaint fixes it).
+    await expect(page.locator('#cc-spark i').first()).toBeVisible({ timeout: 6000 });
     // §5 impact + the honest no-fabrication placard (the guardrail, in the UI).
     await expect(page.locator('#cc-impact')).toContainText('Critical infrastructure');
     await expect(page.locator('#cc-impact')).toContainText('data integration');
