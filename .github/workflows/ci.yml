@@ -289,6 +289,16 @@ jobs:
         # comment explaining why we're safe; revisit when upstream
         # ships a fix.
         #
+        #   GHSA-rrmf-rvhw-rf47 (torch <= 2.12.0 — torch.jit.script
+        #     memory corruption, published Jun 2026)
+        #     Local-host attack vector only (CVSS AV:L/PR:L, low C/I/A).
+        #     torch is transitive via easyocr (server-side PII-blur OCR
+        #     net); the backend never calls torch.jit.script and never
+        #     feeds TorchScript from untrusted input, so the vector is
+        #     unreachable through the API surface. NO fixed release
+        #     exists (2.12.0 is last_affected) — revisit when upstream
+        #     ships a patched version.
+        #
         #   CVE-2024-23342 (ecdsa 0.19.x — Minerva timing attack)
         #     Transitive via python-jose. We sign JWTs with HS256
         #     (HMAC-SHA256), which doesn't go through the ecdsa code
@@ -299,7 +309,8 @@ jobs:
         #     for any signing.
         run: |
           pip-audit -r backend/requirements.txt --strict --vulnerability-service osv \
-            --ignore-vuln CVE-2024-23342
+            --ignore-vuln CVE-2024-23342 \
+            --ignore-vuln GHSA-rrmf-rvhw-rf47
 
   secrets-scan:
     name: Secrets scan (gitleaks)
