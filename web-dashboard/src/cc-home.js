@@ -443,32 +443,27 @@
   function renderOpsRail(ops) {
     const box = el('cc-ops-rail');
     if (!box) return;
+    // Shared card (cc-operations.js CrispOpCard) — the rail + the /operations list
+    // render the SAME card. Fallback to a minimal inline row if that module hasn't
+    // loaded (defensive; both ship in index.html).
+    if (window.CrispOpCard && typeof window.CrispOpCard.renderInto === 'function') {
+      window.CrispOpCard.renderInto(box, ops, { empty: 'No active operations. Active crisis events appear here.' });
+      return;
+    }
     const sorted = (ops || []).slice().sort(_opWorst);
     if (!sorted.length) {
       box.innerHTML = `<div class="cc-empty">No active operations. Active crisis events appear here.</div>`;
       return;
     }
     box.innerHTML = sorted.map((o) => {
-      if (o.is_cluster) {
-        return `<div class="cc-op-row cluster" data-cluster="1" role="link" tabindex="0"
-            aria-label="Launch an operation for ${fmtNum(o.critical)} unassigned critical reports">
-          <span class="cc-op-dot" style="background:#f87171"></span>
-          <div class="cc-op-body"><div class="cc-op-name">${fmtNum(o.critical)} critical, no operation</div>
-            <div class="cc-op-meta">Launch operation here →</div></div>
-          <div class="cc-op-counts"><div class="c crit"><b>${fmtNum(o.critical)}</b><span>Critical</span></div></div>
-          <div class="cc-op-ar">›</div></div>`;
-      }
-      const hc = _OP_HEALTH[o.health] || _OP_HEALTH.GREEN;
-      const typ = o.crisis_type ? titleCase(o.crisis_type) + ' · ' : '';
-      return `<div class="cc-op-row" data-op="${esc(o.id)}" role="link" tabindex="0" aria-label="${esc(o.name)} — open operation">
-        <span class="cc-op-dot" style="background:${hc}" title="${esc(o.health_reason || o.health || '')}"></span>
-        <div class="cc-op-body"><div class="cc-op-name">${esc(o.name)}</div>
-          <div class="cc-op-meta">${esc(typ)}${esc(o.status || '')}${o.is_active ? '' : ' · inactive'} · upd ${timeAgo(o.last_activity)}</div></div>
-        <div class="cc-op-counts">
-          <div class="c crit"><b>${fmtNum(o.critical)}</b><span>Crit</span></div>
-          <div class="c"><b>${fmtNum(o.new_24h)}</b><span>New</span></div>
-          <div class="c"><b>${fmtNum(o.total)}</b><span>Total</span></div>
-        </div><div class="cc-op-ar">›</div></div>`;
+      const hc = o.is_cluster ? '#f87171' : (_OP_HEALTH[o.health] || _OP_HEALTH.GREEN);
+      const nm = o.is_cluster ? `${fmtNum(o.critical)} critical, no operation` : esc(o.name);
+      const attr = o.is_cluster ? 'data-cluster="1"' : `data-op="${esc(o.id)}"`;
+      return `<div class="cc-op-row" ${attr} role="link" tabindex="0">
+        <span class="cc-op-dot" style="background:${hc}"></span>
+        <div class="cc-op-body"><div class="cc-op-name">${nm}</div></div>
+        <div class="cc-op-counts"><div class="c crit"><b>${fmtNum(o.critical)}</b><span>Crit</span></div></div>
+        <div class="cc-op-ar">›</div></div>`;
     }).join('');
     box.querySelectorAll('[data-op]').forEach((r) => {
       const open = () => { try { window.location.hash = '#/operations/' + encodeURIComponent(r.getAttribute('data-op')); } catch (_e) {} };
@@ -476,7 +471,6 @@
       r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
     });
     box.querySelectorAll('[data-cluster]').forEach((r) => {
-      // Phase 3 — real launch (create operation + bulk-claim the cluster), with undo.
       const launch = () => { try { (window.launchOperationFromCluster || function () {})(); } catch (_e) {} };
       r.addEventListener('click', launch);
       r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launch(); } });

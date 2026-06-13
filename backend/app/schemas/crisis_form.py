@@ -19,6 +19,7 @@ class CrisisEventCreate(BaseModel):
     form_pack_id: Optional[str] = None
     is_active: bool = False
     status: str = "DRAFT"
+    place_name: Optional[str] = None
 
 
 class CrisisEventUpdate(BaseModel):
@@ -32,6 +33,7 @@ class CrisisEventUpdate(BaseModel):
     form_pack_id: Optional[str] = None
     is_active: Optional[bool] = None
     status: Optional[str] = None
+    place_name: Optional[str] = None
 
 
 # ── Operations list (operator-facing rollup; Phase 2) ──────────────────────
@@ -47,9 +49,20 @@ class OperationSummaryResponse(BaseModel):
     is_active: bool = False
     center_lat: Optional[float] = None
     center_lng: Optional[float] = None
+    # P2 card fields — geography + identity + dates (all on CrisisEvent; were
+    # omitted from the rollup payload). radius_km drives the SVG mini-map ring;
+    # place_name is the denormalised "City, Country"; form_name is the active
+    # pack's title (outerjoin); started_at/ended_at are the operation window.
+    radius_km: Optional[float] = None
+    place_name: Optional[str] = None
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    form_pack_id: Optional[str] = None
+    form_name: Optional[str] = None
     critical: int = 0
     new_24h: int = 0
     total: int = 0
+    verified: int = 0                           # all-time verified reports in this op
     last_activity: Optional[datetime] = None
     is_cluster: bool = False
     # Phase 3 — backend-authoritative health (replaces the client-side stand-in).
@@ -91,6 +104,7 @@ class CrisisEventResponse(BaseModel):
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
     form_pack_id: Optional[str] = None
+    place_name: Optional[str] = None
     created_by: Optional[str] = None  # user id; the dashboard resolves → full_name
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

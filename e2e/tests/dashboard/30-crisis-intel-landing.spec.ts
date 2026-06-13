@@ -90,7 +90,7 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     await expect(page.locator('.cc-zone-response')).toContainText('Active Response');
     await expect(page.locator('.cc-zone-monitor')).toContainText('Global Monitoring');
     await expect(page.locator('#cc-ops-rail')).toContainText('Bihar Floods', { timeout: 6000 });
-    await expect(page.locator('#cc-ops-rail')).toContainText('Launch operation here');
+    await expect(page.locator('#cc-ops-rail')).toContainText('Launch an operation here');  // shared card cluster CTA
     await expect(page.locator('#cc-map-badge')).toHaveCount(0);   // de-duped: no map badge echoing the rail
     await expect(page.locator('#cc-kpis')).toHaveCount(0);
     // §3 attention queue (the "Global Attention" block). The terminal pipeline

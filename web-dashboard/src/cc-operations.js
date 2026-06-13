@@ -83,6 +83,149 @@
     go('#' + route);
   }
 
+  // ── shared operation card ──────────────────────────────────────────────────
+  // ONE card used by BOTH the home Active-Operations rail (cc-home.js) and the
+  // #/operations list. Previously two drifted implementations (different health
+  // colours + stat labels). Self-injects its CSS so it styles correctly in either
+  // overlay regardless of which loaded first. Cards are pure inline HTML/SVG (no
+  // Leaflet per card) so 10/50/100 operations stay cheap.
+  const TYPE_ICON = {
+    EARTHQUAKE: '⊕', FLOOD: '🌊', TSUNAMI: '🌊', CYCLONE: '🌀', HURRICANE: '🌀',
+    WILDFIRE: '🔥', EXPLOSION: '💥', CHEMICAL_INCIDENT: '☣', CHEMICAL: '☣',
+    CONFLICT: '⚔', CIVIL_UNREST: '✊', CIVILUNREST: '✊', LANDSLIDE: '⛰',
+  };
+  const STATUS_STYLE = {
+    LIVE: ['LIVE', '#34D399'], DRAFT: ['DRAFT', '#9fb3d1'],
+    PAUSED: ['PAUSED', '#fbbf24'], ENDED: ['ENDED', '#7d89a3'],
+  };
+  function _fmtDate(s) {
+    if (!s) return '';
+    try {
+      const d = new Date((window.__ccEnsureUTC || ((x) => x))(s));
+      return isNaN(d.getTime()) ? '' : d.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch (_e) { return ''; }
+  }
+  const CrispOpCard = {
+    _injectCss() {
+      if (el('crisp-opcard-styles')) return;
+      const css = `
+      .opc{display:flex;align-items:center;gap:13px;padding:12px 14px;background:#101a2e;
+        border:1px solid #233149;border-radius:12px;cursor:pointer;transition:border-color .12s,background .12s}
+      .opc:hover{border-color:#418FDE;background:#13203a}
+      .opc:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
+      .opc-mm{width:58px;height:58px;flex:0 0 auto;display:block}
+      .opc-mm-alert{width:58px;height:58px;flex:0 0 auto;display:grid;place-items:center;font-size:24px;
+        border-radius:9px;background:#1b1113;border:1px solid #7f1d1d}
+      .opc-main{flex:1;min-width:0}
+      .opc-hd{display:flex;align-items:center;gap:8px;min-width:0}
+      .opc-ic{font-size:15px;flex:0 0 auto}
+      .opc-name{font-size:14.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+      .opc-badge{font-size:9.5px;font-weight:800;letter-spacing:.05em;padding:1px 7px;border-radius:999px;
+        border:1px solid #33476a;background:rgba(255,255,255,.03);flex:0 0 auto}
+      .opc-health{width:10px;height:10px;border-radius:50%;flex:0 0 auto;margin-left:auto;
+        box-shadow:0 0 0 3px rgba(255,255,255,.05)}
+      .opc-meta{font-size:11.5px;color:#8aa0bf;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .opc-stats{display:flex;flex-wrap:wrap;gap:13px;margin-top:7px}
+      .opc-st{font-size:11px;color:#8aa0bf;font-variant-numeric:tabular-nums}
+      .opc-st b{font-size:13.5px;font-weight:800;color:#dce6f5;margin-right:3px}
+      .opc-st.crit b{color:#f87171}
+      .opc-ar{color:#5b6b86;font-size:18px;flex:0 0 auto}
+      .opc-cluster{border-style:dashed;border-color:#7f1d1d;background:#1b1113}
+      .opc-cluster:hover{border-color:#f87171;background:#241416}
+      .opc-cluster .opc-name{color:#fca5a5}
+      `;
+      const st = document.createElement('style');
+      st.id = 'crisp-opcard-styles';
+      st.textContent = css;
+      document.head.appendChild(st);
+    },
+    typeIcon(o) { return TYPE_ICON[String(o && o.crisis_type || '').toUpperCase()] || '⚠'; },
+    statusBadge(o) {
+      const s = String(o && o.status || '').toUpperCase();
+      const sty = STATUS_STYLE[s] || [s || '—', '#9fb3d1'];
+      const inactive = (s === 'LIVE' && o && o.is_active === false) ? ' title="inactive"' : '';
+      return `<span class="opc-badge" style="color:${sty[1]};border-color:${sty[1]}66"${inactive}>${esc(sty[0])}</span>`;
+    },
+    // Inline-SVG schematic: centre dot + radius ring (sized by radius_km), in the
+    // crisis-type colour, over a faint graticule. Honest + cheap; the human "where"
+    // is the place_name line. No tiles, no Leaflet — safe at 100 cards.
+    miniMap(o) {
+      const col = opColor(o);
+      const r = Math.max(8, Math.min(22, (Number(o && o.radius_km) || 30) * 0.55));
+      return `<svg viewBox="0 0 58 58" class="opc-mm" aria-hidden="true">
+        <rect x="1" y="1" width="56" height="56" rx="9" fill="#0d1626" stroke="#223049"></rect>
+        <line x1="29" y1="6" x2="29" y2="52" stroke="#1c2840"></line>
+        <line x1="6" y1="29" x2="52" y2="29" stroke="#1c2840"></line>
+        <circle cx="29" cy="29" r="${r.toFixed(1)}" fill="${col}22" stroke="${col}" stroke-width="1.4"></circle>
+        <circle cx="29" cy="29" r="3" fill="${col}"></circle>
+      </svg>`;
+    },
+    _placeLine(o) {
+      const place = o.place_name ? esc(o.place_name)
+        : (o.center_lat != null && o.center_lng != null
+            ? Number(o.center_lat).toFixed(2) + ', ' + Number(o.center_lng).toFixed(2) : '');
+      const form = o.form_name ? '📋 ' + esc(o.form_name) : '';
+      const st = _fmtDate(o.started_at), en = _fmtDate(o.ended_at);
+      const dates = (st || en) ? ('Started ' + (st || '—') + (en ? ' · Ended ' + en : ' · Open')) : '';
+      return [form, place ? '📍 ' + place : '', dates].filter(Boolean).join('  ·  ');
+    },
+    card(o) {
+      if (o.is_cluster) {
+        return `<div class="opc opc-cluster" data-cluster="1" role="link" tabindex="0"
+            aria-label="Launch an operation for ${fmtNum(o.critical)} unassigned critical reports">
+          <div class="opc-mm-alert">🚨</div>
+          <div class="opc-main">
+            <div class="opc-hd"><span class="opc-name">${fmtNum(o.critical)} critical reports, no operation</span></div>
+            <div class="opc-meta">Launch an operation here to coordinate response →</div>
+            <div class="opc-stats"><span class="opc-st crit"><b>${fmtNum(o.critical)}</b> Critical</span></div>
+          </div>
+          <div class="opc-ar">›</div></div>`;
+      }
+      const hc = healthColor(o);
+      return `<div class="opc" data-op="${esc(o.id)}" role="link" tabindex="0" aria-label="${esc(o.name)} — open operation">
+        ${this.miniMap(o)}
+        <div class="opc-main">
+          <div class="opc-hd">
+            <span class="opc-ic">${this.typeIcon(o)}</span>
+            <span class="opc-name">${esc(o.name)}</span>
+            ${this.statusBadge(o)}
+            <span class="opc-health" style="background:${hc}" title="${esc(o.health_reason || o.health || '')}"></span>
+          </div>
+          <div class="opc-meta">${this._placeLine(o) || '—'}</div>
+          <div class="opc-stats">
+            <span class="opc-st crit"><b>${fmtNum(o.critical)}</b> Critical</span>
+            <span class="opc-st"><b>${fmtNum(o.new_24h)}</b> New 24h</span>
+            <span class="opc-st"><b>${fmtNum(o.total)}</b> Total</span>
+            <span class="opc-st"><b>${fmtNum(o.verified)}</b> Verified</span>
+            <span class="opc-st"><b>${fmtNum(o.responders_active)}</b> Responders</span>
+          </div>
+        </div>
+        <div class="opc-ar">›</div></div>`;
+    },
+    // Render + wire a whole list/rail into `host`. Shared by both surfaces.
+    renderInto(host, ops, opts) {
+      if (!host) return;
+      this._injectCss();
+      const sorted = (ops || []).slice().sort(worstFirst);
+      if (!sorted.length) {
+        host.innerHTML = `<div class="cco-empty">${esc((opts && opts.empty) || 'No operations yet. Active crisis events appear here.')}</div>`;
+        return;
+      }
+      host.innerHTML = sorted.map((o) => this.card(o)).join('');
+      host.querySelectorAll('[data-op]').forEach((row) => {
+        const open = () => go('#/operations/' + encodeURIComponent(row.getAttribute('data-op')));
+        row.addEventListener('click', open);
+        row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+      });
+      host.querySelectorAll('[data-cluster]').forEach((row) => {
+        const launch = () => { try { (window.launchOperationFromCluster || function () {})(); } catch (_e) {} };
+        row.addEventListener('click', launch);
+        row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launch(); } });
+      });
+    },
+  };
+  window.CrispOpCard = CrispOpCard;
+
   // ── styles ───────────────────────────────────────────────────────────────
   function injectStyles() {
     if (el('cc-ops-styles')) return;
@@ -196,50 +339,10 @@
     renderRows(el('cco-list'), ops);
   }
 
+  // Thin wrapper over the shared card (CrispOpCard) — the list + the home rail
+  // render the SAME card now (was a separate, drifted implementation).
   function renderRows(host, ops) {
-    if (!host) return;
-    const sorted = (ops || []).slice().sort(worstFirst);
-    if (!sorted.length) {
-      host.innerHTML = '<div class="cco-empty">No operations yet. Active crisis events appear here.</div>';
-      return;
-    }
-    host.innerHTML = sorted.map((o) => {
-      if (o.is_cluster) {
-        return `<div class="cco-op cco-cluster" data-cluster="1" role="link" tabindex="0">
-          <span class="cco-dot" style="background:#f87171"></span>
-          <div class="cco-op-main">
-            <div class="cco-op-name">${fmtNum(o.critical)} critical, no operation</div>
-            <div class="cco-op-meta">Launch operation here →</div>
-          </div>
-          <div class="cco-op-counts"><div class="c crit"><b>${fmtNum(o.critical)}</b><span>Critical</span></div></div>
-          <div class="cco-ar">›</div></div>`;
-      }
-      const hc = healthColor(o);
-      const typ = o.crisis_type ? titleCase(o.crisis_type) + ' · ' : '';
-      return `<div class="cco-op" data-op="${esc(o.id)}" role="link" tabindex="0">
-        <span class="cco-dot" style="background:${hc}" title="${esc(o.health_reason || o.health || '')}"></span>
-        <div class="cco-op-main">
-          <div class="cco-op-name">${esc(o.name)}</div>
-          <div class="cco-op-meta">${esc(typ)}${esc(o.status || '')}${o.is_active ? '' : ' · inactive'} · upd ${timeAgo(o.last_activity)}</div>
-        </div>
-        <div class="cco-op-counts">
-          <div class="c crit"><b>${fmtNum(o.critical)}</b><span>Critical</span></div>
-          <div class="c"><b>${fmtNum(o.new_24h)}</b><span>New 24h</span></div>
-          <div class="c"><b>${fmtNum(o.total)}</b><span>Total</span></div>
-        </div>
-        <div class="cco-ar">›</div></div>`;
-    }).join('');
-    host.querySelectorAll('[data-op]').forEach((row) => {
-      const open = () => go('#/operations/' + encodeURIComponent(row.getAttribute('data-op')));
-      row.addEventListener('click', open);
-      row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
-    });
-    host.querySelectorAll('[data-cluster]').forEach((row) => {
-      // Phase 3 — real launch (create operation + bulk-claim the cluster), with undo.
-      const launch = () => { (window.launchOperationFromCluster || function () {})(); };
-      row.addEventListener('click', launch);
-      row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launch(); } });
-    });
+    CrispOpCard.renderInto(host, ops, { empty: 'No operations yet. Active crisis events appear here.' });
   }
 
   // ── DETAIL view ──────────────────────────────────────────────────────────────

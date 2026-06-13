@@ -20,7 +20,9 @@ const NOW = new Date().toISOString();
 const OPERATIONS = [
     {
         id: 'op-a', name: 'Bihar Floods', crisis_type: 'FLOOD', status: 'LIVE', is_active: true,
-        center_lat: 25.6, center_lng: 85.1, critical: 5, new_24h: 9, total: 42, last_activity: NOW, is_cluster: false,
+        center_lat: 25.6, center_lng: 85.1, radius_km: 22, place_name: 'Patna, India',
+        form_name: 'Flood Assessment v2', started_at: NOW, critical: 5, new_24h: 9, total: 42,
+        verified: 7, last_activity: NOW, is_cluster: false,
         health: 'RED', health_reason: '5 unattended critical', responders_active: 2,
     },
     {
@@ -84,14 +86,22 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         await page.evaluate(() => { location.hash = '#/operations'; });
         const list = page.locator('#cc-ops-overlay #cco-list');
         await expect(list).toContainText('Bihar Floods', { timeout: 6000 });
-        await expect(list).toContainText('critical, no operation');  // un-operationalised cluster CTA
+        await expect(list).toContainText('no operation');           // un-operationalised cluster CTA
+        // The unified card renders the new fields: status badge, form name, place,
+        // verified count, and an inline-SVG mini-map (no Leaflet per card).
+        const card = page.locator('#cco-list [data-op="op-a"]');
+        await expect(card.locator('.opc-badge')).toContainText('LIVE');
+        await expect(card).toContainText('Flood Assessment v2');
+        await expect(card).toContainText('Patna, India');
+        await expect(card).toContainText('Verified');
+        await expect(card.locator('svg.opc-mm')).toHaveCount(1);
         // worst-first: Bihar (5 critical) ranks above Assam (0 critical).
-        const names = await page.locator('#cco-list .cco-op-name').allTextContents();
+        const names = await page.locator('#cco-list .opc-name').allTextContents();
         const bihar = names.findIndex((n) => /Bihar/.test(n));
         const assam = names.findIndex((n) => /Assam/.test(n));
         expect(bihar).toBeGreaterThanOrEqual(0);
         expect(assam).toBeGreaterThan(bihar);
-        await page.locator('#cco-list [data-op="op-a"]').click();
+        await card.click();
         await expect.poll(() => page.evaluate(() => location.hash)).toContain('/operations/op-a');
     });
 
@@ -140,7 +150,7 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         await page.evaluate(() => { location.hash = '#/operations'; });
         const row = page.locator('#cco-list [data-op="op-a"]');
         await expect(row).toBeVisible({ timeout: 6000 });
-        const dot = row.locator('.cco-dot');
+        const dot = row.locator('.opc-health');     // unified card health dot
         await expect(dot).toHaveCSS('background-color', 'rgb(248, 113, 113)');   // RED
         await expect(dot).toHaveAttribute('title', /unattended critical/);
     });

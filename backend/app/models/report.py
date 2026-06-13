@@ -921,11 +921,15 @@ class CrisisEvent(Base):
     id = Column(String(36), primary_key=True, default=gen_uuid)
     name = Column(String(200), nullable=False)
     crisis_type = Column(String(30), nullable=True)         # CrisisTypeEnum value (display/analytics)
-    status = Column(String(20), nullable=False, default="DRAFT")  # DRAFT | LIVE | ENDED
+    status = Column(String(20), nullable=False, default="DRAFT")  # DRAFT | LIVE | PAUSED | ENDED (PAUSED ⇒ is_active False)
     is_active = Column(Boolean, nullable=False, default=False)    # admin soft toggle; gates activation
     center_lat = Column(Float, nullable=False)
     center_lng = Column(Float, nullable=False)
     radius_km = Column(Float, nullable=False, default=30.0)
+    # Denormalised "City, Country" for the operation card — resolved best-effort
+    # via reverse-geocode + GeocodeCache at create/launch/center-edit (0051). NULL
+    # = unresolved → the card falls back to coordinates.
+    place_name = Column(String(200), nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)   # NULL = no lower bound
     ended_at = Column(DateTime(timezone=True), nullable=True)     # NULL = open-ended
     form_pack_id = Column(String(36), ForeignKey("crisis_form_packs.id", ondelete="SET NULL"), nullable=True)

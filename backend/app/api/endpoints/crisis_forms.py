@@ -180,9 +180,18 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
             CrisisEvent.id, CrisisEvent.name, CrisisEvent.crisis_type,
             CrisisEvent.status, CrisisEvent.is_active,
             CrisisEvent.center_lat, CrisisEvent.center_lng,
+            # P2 card geography/identity/dates (functionally dependent on the PK,
+            # so they need no GROUP BY entry under Postgres). form_name comes from
+            # the 1:1 pack outerjoin below — MAX() keeps GROUP BY on the event id.
+            CrisisEvent.radius_km, CrisisEvent.place_name,
+            CrisisEvent.started_at, CrisisEvent.ended_at, CrisisEvent.form_pack_id,
+            sa_func.max(CrisisFormPack.title).label("form_name"),
             sa_func.count(Report.id).label("total"),
             sa_func.coalesce(sa_func.sum(
                 case((Report.severity == SeverityEnum.CRITICAL, 1), else_=0)), 0).label("critical"),
+            # verified = reviewer accepted (mirrors analytics counts.verified).
+            sa_func.coalesce(sa_func.sum(
+                case((Report.reviewer_verdict == ReviewerVerdictEnum.ACCEPTED.value, 1), else_=0)), 0).label("verified"),
             sa_func.coalesce(sa_func.sum(
                 case((Report.server_created_at >= new_cut, 1), else_=0)), 0).label("new_24h"),
             sa_func.max(Report.server_created_at).label("last_activity"),
@@ -206,6 +215,9 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
             Report.crisis_event_id == CrisisEvent.id,
             Report.deletion_requested_at.is_(None),
         ))
+        # 1:1 pack join for the card's form name — does NOT fan out the Report
+        # SUMs (≤1 pack per event), so the conditional aggregates stay correct.
+        .outerjoin(CrisisFormPack, CrisisFormPack.id == CrisisEvent.form_pack_id)
         .group_by(CrisisEvent.id)
         .order_by(CrisisEvent.is_active.desc(), CrisisEvent.created_at.desc())
         .all()
@@ -243,7 +255,11 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
         ops.append(OperationSummaryResponse(
             id=r.id, name=r.name, crisis_type=r.crisis_type, status=r.status,
             is_active=bool(r.is_active), center_lat=r.center_lat, center_lng=r.center_lng,
+            radius_km=r.radius_km, place_name=r.place_name,
+            started_at=r.started_at, ended_at=r.ended_at,
+            form_pack_id=r.form_pack_id, form_name=r.form_name,
             critical=int(r.critical or 0), new_24h=int(r.new_24h or 0), total=int(r.total or 0),
+            verified=int(r.verified or 0),
             last_activity=r.last_activity, is_cluster=False,
             health=health, health_reason=reason,
             responders_active=resp_by_op.get(r.id, 0),
@@ -403,6 +419,13 @@ def launch_operation(payload: OperationLaunchRequest, db: Session = Depends(get_
         report_ids=ids, report_count=len(ids),
         actor_user_id=getattr(user, "id", None)))
     db.commit()
+    # Denormalise the centroid's place name for a freshly-launched op (best-effort;
+    # a merged-into existing op already has one).
+    if not merged and (target.center_lat or target.center_lng):
+        pn = _resolve_place_name(target.center_lat, target.center_lng, db)
+        if pn:
+            target.place_name = pn
+            db.commit()
     logger.info(f"[Operation] launch op={target.id[:8]} claimed={claimed} merged={merged}")
     return OperationLaunchResponse(
         operation_id=target.id, operation_name=target.name,
@@ -446,6 +469,26 @@ def list_events(db: Session = Depends(get_db), _user=Depends(require_admin)):
     return db.query(CrisisEvent).order_by(CrisisEvent.created_at.desc()).all()
 
 
+def _resolve_place_name(lat, lng, db) -> Optional[str]:
+    """Best-effort "City, Country" for an operation centre via the reverse-geocode
+    cascade (GeocodeCache → Mapbox → Nominatim). NEVER raises and never fails an
+    admin write — returns None so the card falls back to coordinates. Skipped under
+    pytest (the suite makes no external network calls). Called AFTER the event row
+    is committed so the geocoder's own cache writes can't disturb the create txn."""
+    import os
+    if os.environ.get("PYTEST_CURRENT_TEST") or lat is None or lng is None:
+        return None
+    try:
+        import asyncio
+        from messaging_bot.sms.geocoder import reverse_geocode_coords
+        res = asyncio.run(reverse_geocode_coords(float(lat), float(lng), language="en", db=db))
+        name = (res or {}).get("location_name")
+        return name or None
+    except Exception as _e:  # geocoder down / event-loop issue → coordinates fallback
+        logger.info(f"[CrisisEvent] place_name geocode skipped: {_e}")
+        return None
+
+
 @admin_router.post("/events", response_model=CrisisEventResponse,
                    status_code=status.HTTP_201_CREATED, summary="Create a crisis event")
 def create_event(payload: CrisisEventCreate, db: Session = Depends(get_db), user=Depends(require_admin)):
@@ -453,7 +496,14 @@ def create_event(payload: CrisisEventCreate, db: Session = Depends(get_db), user
         if not db.query(CrisisFormPack).filter(CrisisFormPack.id == payload.form_pack_id).first():
             raise HTTPException(status_code=400, detail="form_pack_id does not exist")
     ev = CrisisEvent(**payload.model_dump(), created_by=user.id)
+    if ev.status == "PAUSED":          # paused operations never match new reports
+        ev.is_active = False
     db.add(ev); db.commit(); db.refresh(ev)
+    if not ev.place_name:              # denormalise the centre's place name (best-effort)
+        pn = _resolve_place_name(ev.center_lat, ev.center_lng, db)
+        if pn:
+            ev.place_name = pn
+            db.commit(); db.refresh(ev)
     logger.info(f"[CrisisEvent] created id={ev.id[:8]} name={ev.name!r} active={ev.is_active} r={ev.radius_km}km")
     return ev
 
@@ -469,6 +519,13 @@ def update_event(event_id: str, payload: CrisisEventUpdate, db: Session = Depend
             raise HTTPException(status_code=400, detail="form_pack_id does not exist")
     for k, v in data.items():
         setattr(ev, k, v)
+    # Activation gate: PAUSED ⇒ not active, so a paused operation stops matching
+    # new reports (resolve_active_event filters is_active==True).
+    if data.get("status") == "PAUSED":
+        ev.is_active = False
+    # Re-derive place_name when the centre MOVED and the caller didn't set one.
+    if ("center_lat" in data or "center_lng" in data) and "place_name" not in data:
+        ev.place_name = _resolve_place_name(ev.center_lat, ev.center_lng, db) or ev.place_name
     db.commit(); db.refresh(ev)
     logger.info(f"[CrisisEvent] updated id={ev.id[:8]} changes={list(data.keys())}")
     return ev
