@@ -8951,7 +8951,7 @@ async function _submitReportInner() {
         // backend re-validates the whole set + routes maps_to to columns. All
         // three stay null on the default flow (no active zone) → byte-identical
         // to a standard report.
-        let _crisisPackId = null, _crisisPackVersion = null, _crisisFormData = null;
+        let _crisisPackId = null, _crisisPackVersion = null, _crisisFormData = null, _crisisEventId = null;
         try {
             const _cp = state.crisisPack;
             if (_cp && _cp.schema) {
@@ -8968,6 +8968,11 @@ async function _submitReportInner() {
                     _crisisPackId = _cp.pack_id || null;
                     _crisisPackVersion = _cp.pack_version || null;
                     _crisisFormData = _payload;
+                    // Echo the active event id the /active fetch already stored
+                    // (v4-flow). The server VERIFIES it owns the answered pack
+                    // (and re-derives from location otherwise), so this is a hint,
+                    // not trusted blindly — but it links the report to its operation.
+                    _crisisEventId = _cp.event_id || null;
                 }
             }
         } catch (_e) { /* never block submit on crisis assembly */ }
@@ -9090,7 +9095,8 @@ async function _submitReportInner() {
                 // Null on the default flow → byte-identical standard report.
                 form_pack_id: _crisisPackId,
                 form_pack_version: _crisisPackVersion,
-                form_data: _crisisFormData
+                form_data: _crisisFormData,
+                crisis_event_id: _crisisEventId
             },
             photo: hasPhoto ? state.photoDataUrl : null,
             photoSize: hasPhoto ? (state.photoBlob?.size || 0) : 0,
