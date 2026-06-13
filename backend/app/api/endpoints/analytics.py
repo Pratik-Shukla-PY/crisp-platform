@@ -332,6 +332,15 @@ class SummaryCounts(BaseModel):
     escalating: int
     stale: int
     sla_at_risk: int
+    # ── action-based Command Center model (Jun 2026) ──
+    # Three mutually-exclusive pipeline stages (every open report is in exactly
+    # one) + entity-correct situational counts. The legacy fields above are kept
+    # for backward-compat / other consumers.
+    needs_review: int = 0          # open · unreviewed · not dispatched/responding (reports)
+    needs_response: int = 0        # open · ACCEPTED · not dispatched/responding (reports)
+    active_operations: int = 0     # open · dispatched OR responding (reports)
+    critical_incidents: int = 0    # distinct critical situations (buildings + ungrouped critical reports)
+    escalating_reports: int = 0    # open reports sitting on escalating-hotspot buildings (secondary count)
 
 
 class SummaryDistributions(BaseModel):
@@ -425,6 +434,25 @@ def operational_summary(
                      Report.reviewer_verdict == NOT_REVIEWED,
                      Report.server_created_at < stale_cut),
         sla_at_risk=sla_at_risk,
+        # ── action-based pipeline (mutually exclusive: every open report in one) ──
+        # active-ops wins if dispatched/responding; else split by verdict.
+        needs_review=_count(*active, Report.reviewer_verdict == NOT_REVIEWED,
+                            Report.help_dispatched_at.is_(None),
+                            Report.status != ReportStatusEnum.RESPONDING),
+        needs_response=_count(*active, Report.reviewer_verdict == ReviewerVerdictEnum.ACCEPTED.value,
+                              Report.help_dispatched_at.is_(None),
+                              Report.status != ReportStatusEnum.RESPONDING),
+        active_operations=_count(*active, or_(Report.help_dispatched_at.isnot(None),
+                                              Report.status == ReportStatusEnum.RESPONDING)),
+        # critical_incidents + escalating_reports filled below (need dedup / hotspot ids).
+    )
+    # Critical = distinct SITUATIONS, not raw reports: dedupe open-critical by
+    # building; each building-less critical report is its own incident.
+    _crit = [*active, Report.severity == SeverityEnum.CRITICAL]
+    counts.critical_incidents = (
+        int(db.query(func.count(func.distinct(Report.building_id)))
+            .filter(*_crit, Report.building_id.isnot(None)).scalar() or 0)
+        + _count(*_crit, Report.building_id.is_(None))
     )
 
     # ── distributions ──
@@ -483,9 +511,15 @@ def operational_summary(
     try:
         responders_active = int(db.query(func.count(BuildingResponder.id))
             .filter(BuildingResponder.cleared_at.is_(None)).scalar() or 0)
-        escalating = int(db.query(func.count(Building.id))
+        hotspot_ids = [row[0] for row in db.query(Building.id)
             .filter(Building.escalation_risk >= _ESCALATING_RISK_THRESHOLD,
-                    Building.state.notin_(_CLOSED_BUILDING_STATES)).scalar() or 0)
+                    Building.state.notin_(_CLOSED_BUILDING_STATES)).all()]
+        escalating = len(hotspot_ids)
+        # underlying open reports on those hotspots — the secondary "N reports"
+        # number so the landing card's count matches its click destination.
+        counts.escalating_reports = (
+            _count(*active, Report.building_id.in_(hotspot_ids)) if hotspot_ids else 0
+        )
     except Exception:  # noqa: BLE001
         pass
     counts.escalating = escalating

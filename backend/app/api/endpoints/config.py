@@ -48,8 +48,16 @@ class OrgConfigUpdate(BaseModel):
 
 @router.get("/")
 def get_config(response: Response) -> dict:
-    """Return deployment-tunable client flags + org branding. 5-min cache."""
-    response.headers["Cache-Control"] = "public, max-age=300"
+    """Return deployment-tunable client flags + org branding.
+
+    `no-cache` (revalidate every load) rather than the old 5-min cache: this
+    blob carries org BRANDING (name/colour/logo), which must be authoritative.
+    The old `max-age=300` made the Home/shell show a STALE org name for up to
+    5 minutes after an admin saved it (while the admin panel, which uses
+    `no-store`, showed the new value) — the "saved successfully but reverts on
+    navigation" report. The payload is tiny and fetched once per page load, so
+    revalidation cost is negligible."""
+    response.headers["Cache-Control"] = "no-cache"
     return {
         "nearby": {
             "citizen_t1_visibility": settings.CRISP_CITIZEN_T1_VISIBILITY,
