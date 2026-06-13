@@ -577,11 +577,30 @@ const QUEUES = {
 let _activeQueue = null;                 // queue key | null
 let _escalatingBuildingIds = null;       // Set<building_id> (escalating queue prefetch)
 let _queuePrevSort = null;               // restore the user's sort on queue exit
+let _activeCrisisEventId = null;         // Operations Phase 2 — operation scope | null
 
 function _applyQueueFilter(reports) {
     if (!_activeQueue || !QUEUES[_activeQueue]) return reports;
     return reports.filter(QUEUES[_activeQueue].pass);
 }
+
+// Operations Phase 2 — scope the incident feed to a single operation. Resets
+// the delta cursor + ETag and clears the cache so the next fetch is a FULL,
+// scoped refresh (no stale cross-operation reports leaking through a delta
+// poll). Pass null to return to the global feed. cc-operations.js calls this
+// when opening/closing an operation; the router clears it on every
+// non-/operations route via the cc-operations teardown.
+function setOperationScope(crisisEventId) {
+    const next = crisisEventId || null;
+    if (next === _activeCrisisEventId) return;
+    _activeCrisisEventId = next;
+    _lastServerTime = null;
+    _lastReportsEtag = null;
+    allReports = [];
+    try { fetchReports(); } catch (_e) {}
+}
+window.setOperationScope = setOperationScope;
+window.getOperationScope = () => _activeCrisisEventId;
 
 // Escalating prefetch — the badge's population lives on the buildings table
 // (Building.escalation_risk / Building.state), not on report rows.
@@ -10353,9 +10372,14 @@ async function fetchReports() {
         // doesn't quietly truncate. `&` vs `?` depends on whether
         // `?since=` is already present.
         const limitParam = `limit=${DASHBOARD_PAGE_LIMIT}`;
-        const listUrl = wantFullRefresh
+        // Operations Phase 2 — when an operation is active, scope the feed to it
+        // (the backend filters before X-Total-Count, so the count stays scoped).
+        const scopeParam = _activeCrisisEventId
+            ? '&crisis_event_id=' + encodeURIComponent(_activeCrisisEventId) : '';
+        const listUrl = (wantFullRefresh
             ? baseUrl + '?' + limitParam
-            : baseUrl + '?since=' + encodeURIComponent(_lastServerTime) + '&' + limitParam;
+            : baseUrl + '?since=' + encodeURIComponent(_lastServerTime) + '&' + limitParam)
+            + scopeParam;
         // Phase 4: echo back the previous ETag so the server can return
         // 304 if nothing changed. Skip on full-refresh polls so we always
         // get a fresh body to validate the local state against the server

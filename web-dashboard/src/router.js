@@ -33,6 +33,7 @@
   const ROUTE_ROLES = {
     '/':           ['SUPER_ADMIN', 'ADMIN', 'ANALYST', 'VIEWER'],
     '/incidents':  ['SUPER_ADMIN', 'ADMIN', 'ANALYST', 'VIEWER'],
+    '/operations': ['SUPER_ADMIN', 'ADMIN', 'ANALYST', 'VIEWER'],  // list + #/operations/{id}
     '/users':      ['SUPER_ADMIN', 'ADMIN', 'ANALYST', 'VIEWER'],  // account self-service; Users-mgmt tab gated inside cc-settings
     '/org':        ['SUPER_ADMIN', 'ADMIN'],
     '/reporting':  ['SUPER_ADMIN', 'ADMIN'],
@@ -58,9 +59,17 @@
     const segs = raw.split(';').filter(Boolean);
     let routeSeg = segs.find((s) => s.startsWith('/')) || '';
     if (routeSeg === '/home') routeSeg = '/';
-    const route = ROUTE_ROLES[routeSeg] ? routeSeg : (routeSeg ? '__unknown__' : '');
+    // Positional param: `/operations/<id>` resolves to the base route
+    // `/operations` (for role-gating + dispatch) with the id captured in
+    // params. Only /operations gets positional parsing — every other route is
+    // unchanged, so the chip/building/queue state-segment writers keep working.
+    const params = {};
+    let baseSeg = routeSeg;
+    const m = routeSeg.match(/^\/operations\/(.+)$/);
+    if (m) { baseSeg = '/operations'; params.id = decodeURIComponent(m[1]); }
+    const route = ROUTE_ROLES[baseSeg] ? baseSeg : (routeSeg ? '__unknown__' : '');
     const stateSegs = segs.filter((s) => !s.startsWith('/'));
-    return { route, stateSegs, hasRoute: !!routeSeg };
+    return { route, params, stateSegs, hasRoute: !!routeSeg };
   }
   function buildHash(route, stateSegs) {
     return '#' + [route].concat(stateSegs || []).join(';');
@@ -88,6 +97,10 @@
     try { window.__ccSettings && window.__ccSettings.closeOverlay && window.__ccSettings.closeOverlay(); } catch (_e) {}
     try { window.__ccCrisis && window.__ccCrisis.closeOverlay && window.__ccCrisis.closeOverlay(); } catch (_e) {}
     try { window.__ccExports && window.__ccExports.closeOverlay && window.__ccExports.closeOverlay(); } catch (_e) {}
+    // Tearing down the operations overlay also resets the app's operation
+    // scope (_activeCrisisEventId) to global — so any non-/operations route
+    // dispatched after this never inherits a stale crisis_event_id filter.
+    try { window.__ccOperations && window.__ccOperations.closeOverlay && window.__ccOperations.closeOverlay(); } catch (_e) {}
   }
   function showIncidents() {
     const inc = incidentsEl();
@@ -133,6 +146,9 @@
       // visible underneath when arriving from /incidents.
       if (_currentRoute === '/incidents') showIncidents();
       try { (window.openExportCenter || function () {})(_currentRoute || '/'); } catch (_e) {}
+    } else if (route === '/operations') {
+      // id present → one operation's worklist dashboard; null → operations list.
+      try { (window.openOperations || function () {})(parsed.params.id || null); } catch (_e) {}
     } else {
       try { (window.openControlCenter || function () {})(); } catch (_e) {}
       route = '/';

@@ -106,7 +106,8 @@
   // buttons map to /users; the Account button (no data-intent) is the primary
   // active target — "Users" is a sub-destination (the admin user-management tab).
   const ROUTE_LABEL = {
-    '/': 'Home', '/incidents': 'Operations', '/exports': 'Exports',
+    '/': 'Home', '/operations': 'Operations', '/incidents': 'Incidents',
+    '/exports': 'Exports',
     '/reporting': 'Crisis Forms', '/org': 'Organisation', '/users': 'Account',
   };
 
@@ -168,6 +169,7 @@
     body.crisp-has-globalnav #cc-home-overlay,
     body.crisp-has-globalnav #cc-ex-overlay,
     body.crisp-has-globalnav #cc-st-overlay,
+    body.crisp-has-globalnav #cc-ops-overlay,
     body.crisp-has-globalnav #cc-cf-overlay{padding-top:var(--gnav-h);box-sizing:border-box}
     /* Transient FULLSCREEN viewers/modals are focused tasks — they must cover
        the shell bar (the nav is contextually unavailable while they're open),
@@ -256,7 +258,10 @@
     return [
       // No "Home" item — the CRISP brand mark (left) is the Home affordance
       // (aria-label "go to Home"); a separate Home button was redundant.
-      b('/incidents', '🛰', 'Operations', false),
+      // Operations (the operation-centric workspace) is primary; Incidents is
+      // the raw global report feed.
+      b('/operations', '🎯', 'Operations', false),
+      b('/incidents', '🛰', 'Incidents', false),
       b('/exports', '⬇', 'Exports', false),
       b('/reporting', '🧩', 'Crisis Forms', true),
       b('/org', '🏛', 'Organisation', true),
