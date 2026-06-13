@@ -21,10 +21,12 @@ const OPERATIONS = [
     {
         id: 'op-a', name: 'Bihar Floods', crisis_type: 'FLOOD', status: 'LIVE', is_active: true,
         center_lat: 25.6, center_lng: 85.1, critical: 5, new_24h: 9, total: 42, last_activity: NOW, is_cluster: false,
+        health: 'RED', health_reason: '5 unattended critical', responders_active: 2,
     },
     {
         id: 'op-b', name: 'Assam Quake', crisis_type: 'EARTHQUAKE', status: 'LIVE', is_active: true,
         center_lat: 26, center_lng: 92, critical: 0, new_24h: 1, total: 8, last_activity: NOW, is_cluster: false,
+        health: 'GREEN', health_reason: 'all clear', responders_active: 0,
     },
     { id: null, name: 'Unassigned critical reports', is_cluster: true, critical: 3, total: 3 },
 ];
@@ -57,6 +59,8 @@ async function boot(page) {
         const u = route.request().url();
         if (u.includes('/analytics/summary')) return route.fulfill({ json: SUMMARY_SCOPED });
         if (u.includes('/config/')) return route.fulfill({ json: { org: { org_public_name: 'UNDP CRISP' } } });
+        if (u.includes('/operations/launch')) return route.fulfill({ status: 201, json: { operation_id: 'op-new', operation_name: 'Launched', claimed_count: 3, merged_into_existing: false } });
+        if (u.includes('/unclaim')) return route.fulfill({ status: 200, json: { operation_id: 'op-a', operation_name: 'Bihar Floods', unclaimed_count: 3 } });
         if (u.includes('/operations')) return route.fulfill({ json: OPERATIONS });
         if (u.includes('/reports/')) return route.fulfill({ status: 200, headers: { 'X-Total-Count': '42' }, json: REPORTS });
         return route.fulfill({ status: 200, json: {} });
@@ -122,5 +126,30 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         await page.waitForTimeout(500);
         await expect(page.locator('body')).not.toHaveClass(/crisp-op-scoped/);
         await expect(page.locator('#cgn-context-banner')).toBeHidden();
+    });
+
+    test('Phase 3 — health dot + "why" come from the backend (no client heuristic)', async ({ page }) => {
+        await boot(page);
+        await page.goto('index.html');
+        await page.waitForTimeout(400);
+        await page.evaluate(() => { location.hash = '#/operations'; });
+        const row = page.locator('#cco-list [data-op="op-a"]');
+        await expect(row).toBeVisible({ timeout: 6000 });
+        const dot = row.locator('.cco-dot');
+        await expect(dot).toHaveCSS('background-color', 'rgb(248, 113, 113)');   // RED
+        await expect(dot).toHaveAttribute('title', /unattended critical/);
+    });
+
+    test('Phase 3 — cluster CTA launches a real operation (auto-claim) and opens it', async ({ page }) => {
+        await boot(page);
+        page.on('dialog', (d) => d.accept('Bihar Critical Cluster'));   // window.prompt(name)
+        await page.goto('index.html');
+        await page.waitForTimeout(400);
+        await page.evaluate(() => { location.hash = '#/operations'; });
+        const cta = page.locator('#cco-list [data-cluster]');
+        await expect(cta).toBeVisible({ timeout: 6000 });
+        await cta.click();
+        // POST /operations/launch (stubbed) → navigate to the newly created operation.
+        await expect.poll(() => page.evaluate(() => location.hash)).toContain('/operations/op-new');
     });
 });
