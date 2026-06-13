@@ -1642,6 +1642,27 @@ class BuildingResponder(Base):
     notes = Column(Text, nullable=True)
 
 
+# Phase 3 — append-only audit of "Claim (with undo)" cluster actions on an
+# operation. Each CLAIMED row snapshots exactly which report ids were bulk-claimed
+# (crisis_event_id set) so the action is reversible (UNCLAIMED un-sets them).
+class OperationClaimLog(Base):
+    """Reversible cluster-claim trail for an operation (CrisisEvent)."""
+    __tablename__ = "operation_claim_log"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    operation_id = Column(
+        String(36), ForeignKey("crisis_events.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    event_kind = Column(String(16), nullable=False)        # CLAIMED | UNCLAIMED
+    report_ids = Column(JSON, nullable=False)              # snapshot for undo
+    report_count = Column(Integer, nullable=False, default=0)
+    actor_user_id = Column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    happened_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 # Phase H.3 — per-operator building watch list.
 #
 # Each operator can "watch" a building to get prioritised in their

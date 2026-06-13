@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ── Crisis Event ──────────────────────────────────────────────────────────
@@ -58,6 +58,24 @@ class OperationSummaryResponse(BaseModel):
     responders_active: int = 0                  # live responders attached to this op
     unattended_critical: int = 0
     sla_breaches: int = 0
+
+
+# ── Auto-claim write-path (Phase 3) ────────────────────────────────────────
+class OperationLaunchRequest(BaseModel):
+    """Operationalize the un-operationalised critical cluster: create (or merge
+    into) an operation and bulk-claim the open-critical, un-operationalised reports."""
+    name: str = Field(..., max_length=200)
+    crisis_type: Optional[str] = None
+    form_pack_id: Optional[str] = None
+
+
+class OperationLaunchResponse(BaseModel):
+    operation_id: str
+    operation_name: str = ""
+    claimed_count: int = 0
+    skipped_count: int = 0
+    unclaimed_count: int = 0
+    merged_into_existing: bool = False
 
 
 class CrisisEventResponse(BaseModel):

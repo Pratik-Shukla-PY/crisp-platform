@@ -34,7 +34,7 @@ from app.core.deps import require_admin, require_analyst, require_viewer
 from app.models.report import (
     CrisisEvent, CrisisFormPack, CrisisFormPackVersion,
     Report, ReportStatusEnum, SeverityEnum, ReviewerVerdictEnum,
-    BuildingResponder, Building,
+    BuildingResponder, Building, OperationClaimLog,
 )
 from app.api.endpoints.analytics import (
     _SLA_THRESHOLD_HOURS, _ESCALATING_RISK_THRESHOLD, _CLOSED_BUILDING_STATES,
@@ -48,6 +48,7 @@ from app.schemas.crisis_form import (
     CrisisFormPackVersionCreate, CrisisFormPackVersionResponse,
     PublishRequest, SchemaLintRequest, SchemaLintResponse,
     ActiveCrisisFormResponse, OperationSummaryResponse,
+    OperationLaunchRequest, OperationLaunchResponse,
 )
 from app.schemas.building import ResponderCreate, ResponderResponse, ResponderUpdate
 
@@ -324,6 +325,114 @@ def update_operation_responder(event_id: str, responder_id: str, body: Responder
         r.notes = body.notes
     db.commit(); db.refresh(r)
     return r
+
+
+# ── Operator: auto-claim write-path (Phase 3) — launch / unclaim ────────────
+@operations_router.post("/launch", response_model=OperationLaunchResponse,
+                        status_code=status.HTTP_201_CREATED,
+                        summary="Launch an operation from the un-operationalised critical cluster")
+def launch_operation(payload: OperationLaunchRequest, db: Session = Depends(get_db),
+                     user=Depends(require_analyst)):
+    """Operationalize the un-operationalised critical cluster: create a CrisisEvent
+    from the open-critical reports that belong to NO operation (centroid + bounding
+    radius) and bulk-claim them (set crisis_event_id). Reversible via /unclaim. If
+    the cluster centroid sits inside a SMALLER existing active operation, claim INTO
+    that op instead of creating a duplicate (locked dedup rule)."""
+    if payload.form_pack_id and not db.query(CrisisFormPack).filter(
+            CrisisFormPack.id == payload.form_pack_id).first():
+        raise HTTPException(status_code=400, detail="form_pack_id does not exist")
+    # Lock the orphan-critical rows so two concurrent launches can't both grab them.
+    # No eager load: FOR UPDATE can't apply to the nullable side of an outer join,
+    # and the cluster is small (a handful of criticals) → lazy location reads are fine.
+    orphans = (db.query(Report)
+               .filter(Report.deletion_requested_at.is_(None),
+                       Report.crisis_event_id.is_(None),
+                       Report.severity == SeverityEnum.CRITICAL,
+                       Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED))
+               .with_for_update(skip_locked=True)
+               .all())
+    if not orphans:
+        raise HTTPException(status_code=409,
+                            detail="No un-operationalised critical reports to claim")
+    pts = [(r.location.latitude, r.location.longitude) for r in orphans
+           if r.location and r.location.latitude is not None and r.location.longitude is not None]
+    if pts:
+        center_lat = sum(p[0] for p in pts) / len(pts)
+        center_lng = sum(p[1] for p in pts) / len(pts)
+        radius_km = min(30.0, max(
+            (haversine_km(center_lat, center_lng, p[0], p[1]) for p in pts), default=0.0) + 5.0)
+        if radius_km <= 0:
+            radius_km = 30.0
+    else:
+        center_lat = center_lng = 0.0
+        radius_km = 30.0
+    # Dedup: claim INTO a SMALLER existing active op whose circle contains the centroid.
+    target = None
+    if pts:
+        for existing in (db.query(CrisisEvent)
+                         .filter(CrisisEvent.is_active.is_(True),
+                                 CrisisEvent.center_lat.isnot(None)).all()):
+            try:
+                d = haversine_km(center_lat, center_lng, existing.center_lat, existing.center_lng)
+            except (TypeError, ValueError):
+                continue
+            if d <= (existing.radius_km or 0) and (existing.radius_km or 0) < radius_km:
+                target = existing
+                break
+    merged = target is not None
+    if target is None:
+        target = CrisisEvent(
+            name=payload.name, crisis_type=payload.crisis_type,
+            status="LIVE", is_active=True,
+            center_lat=center_lat, center_lng=center_lng, radius_km=radius_km,
+            form_pack_id=payload.form_pack_id, created_by=getattr(user, "id", None))
+        db.add(target); db.flush()
+    ids = [r.id for r in orphans]
+    # Re-check crisis_event_id IS NULL inside the UPDATE WHERE — a concurrent launch
+    # that already claimed a report updates 0 rows for it (no double-claim).
+    claimed = (db.query(Report)
+               .filter(Report.id.in_(ids), Report.crisis_event_id.is_(None))
+               .update({Report.crisis_event_id: target.id}, synchronize_session=False))
+    db.add(OperationClaimLog(
+        operation_id=target.id, event_kind="CLAIMED",
+        report_ids=ids, report_count=len(ids),
+        actor_user_id=getattr(user, "id", None)))
+    db.commit()
+    logger.info(f"[Operation] launch op={target.id[:8]} claimed={claimed} merged={merged}")
+    return OperationLaunchResponse(
+        operation_id=target.id, operation_name=target.name,
+        claimed_count=int(claimed or 0), skipped_count=len(ids) - int(claimed or 0),
+        merged_into_existing=merged)
+
+
+@operations_router.post("/{event_id}/unclaim", response_model=OperationLaunchResponse,
+                        summary="Undo the most recent cluster claim on an operation")
+def unclaim_operation(event_id: str, db: Session = Depends(get_db),
+                      user=Depends(require_analyst)):
+    """Reverse the most recent CLAIMED action on this operation — un-set
+    crisis_event_id on exactly the reports that were claimed."""
+    last = (db.query(OperationClaimLog)
+            .filter(OperationClaimLog.operation_id == event_id,
+                    OperationClaimLog.event_kind == "CLAIMED")
+            .order_by(OperationClaimLog.happened_at.desc())
+            .first())
+    if not last:
+        raise HTTPException(status_code=404, detail="No claim to undo for this operation")
+    ids = last.report_ids or []
+    unclaimed = 0
+    if ids:
+        unclaimed = (db.query(Report)
+                     .filter(Report.id.in_(ids), Report.crisis_event_id == event_id)
+                     .update({Report.crisis_event_id: None}, synchronize_session=False))
+    db.add(OperationClaimLog(
+        operation_id=event_id, event_kind="UNCLAIMED",
+        report_ids=ids, report_count=int(unclaimed or 0),
+        actor_user_id=getattr(user, "id", None)))
+    db.commit()
+    ev = db.query(CrisisEvent).filter(CrisisEvent.id == event_id).first()
+    return OperationLaunchResponse(
+        operation_id=event_id, operation_name=(ev.name if ev else ""),
+        unclaimed_count=int(unclaimed or 0))
 
 
 # ── Admin: Crisis Events CRUD ───────────────────────────────────────────────
