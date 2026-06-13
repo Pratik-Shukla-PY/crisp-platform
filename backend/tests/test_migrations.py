@@ -277,6 +277,28 @@ def test_0005_adds_pii_blur_status_column_and_backfills():
             # 0045 — geotag watermark idempotency flag (HC98). add_column has
             # no IF NOT EXISTS, so it collides with the create_all'd column.
             conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS watermark_applied"))
+            # 0046 / 0050 — Dynamic Crisis Forms + Operations: 3 form tables + the
+            # claim log + 4 report linkage columns. Drop dependents first
+            # (operation_claim_log → crisis_events → pack_versions → packs), then the
+            # report columns (their FKs + 0048 composite indexes go with the CASCADE).
+            # crisis_events.place_name (0051) rides on the table recreate;
+            # building_responders Option-B cols (0049) ride on the dropped buildings
+            # tables (line ~222); ix_buildings_escalation_risk (0052) uses IF NOT EXISTS.
+            conn.execute(text("DROP TABLE IF EXISTS operation_claim_log CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS crisis_events CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS crisis_form_pack_versions CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS crisis_form_packs CASCADE"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS crisis_event_id"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS form_pack_id"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS form_pack_version"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS form_data"))
+            # 0047 — DROPS reports.is_auto_submitted + the auto_submit_regions table,
+            # both of which predate the 0004 baseline (so absent from the stamped
+            # schema) and were removed from the current model (so absent from
+            # create_all). Re-create minimal stand-ins so 0047's plain drop (no
+            # IF EXISTS) has something to drop — same pattern as the LOW/HIGH re-add.
+            conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS is_auto_submitted BOOLEAN"))
+            conn.execute(text("CREATE TABLE IF NOT EXISTS auto_submit_regions (id VARCHAR(36) PRIMARY KEY)"))
 
             # Seed rows: one with client_blur_applied=TRUE (should
             # backfill to 'not_needed'), one with FALSE (stays NULL).
@@ -421,6 +443,24 @@ def test_legacy_db_is_upgraded_without_data_loss():
             # 0045 — geotag watermark idempotency flag (HC98). add_column has
             # no IF NOT EXISTS, so it collides with the create_all'd column.
             conn.execute(text("ALTER TABLE media DROP COLUMN IF EXISTS watermark_applied"))
+            # 0046 / 0050 — Dynamic Crisis Forms + Operations: 3 form tables + the
+            # claim log + 4 report linkage columns. Drop dependents first; the report
+            # columns' FKs + 0048 composite indexes go with the CASCADE'd tables.
+            # place_name (0051) rides on the recreate; escalation_risk index (0052)
+            # uses IF NOT EXISTS; building_responders cols (0049) ride on the dropped
+            # buildings tables (above).
+            conn.execute(text("DROP TABLE IF EXISTS operation_claim_log CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS crisis_events CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS crisis_form_pack_versions CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS crisis_form_packs CASCADE"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS crisis_event_id"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS form_pack_id"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS form_pack_version"))
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS form_data"))
+            # 0047 — re-create the columns/table it DROPS (predate the 0004 baseline +
+            # removed from the current model), so its plain drop has something to drop.
+            conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS is_auto_submitted BOOLEAN"))
+            conn.execute(text("CREATE TABLE IF NOT EXISTS auto_submit_regions (id VARCHAR(36) PRIMARY KEY)"))
 
             conn.execute(text(
                 "INSERT INTO reports "
