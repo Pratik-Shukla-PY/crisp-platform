@@ -5274,6 +5274,74 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
     db.refresh(db_report)
     return db_report
 
+
+@router.get("/markers")
+def list_report_markers(
+    db: Session = Depends(get_db),
+    _user=Depends(require_viewer),
+    limit: int = Query(5000, ge=1, le=20000),
+    bbox: Optional[str] = Query(None, description="minLng,minLat,maxLng,maxLat"),
+    since: Optional[str] = Query(None),
+    status: Optional[str] = Query(None, description="comma-separated"),
+    crisis_event_id: Optional[str] = Query(None, description="scope to one operation"),
+):
+    """Lightweight map markers — id + coords + severity/status/type ONLY (a
+    column tuple query joined to Location; NO media/AI/verification eager loads).
+
+    The dashboard map used GET /reports/?limit=200 (heavy rows, capped at 500),
+    so at 100k/500k it plotted a non-representative newest-200 slice. This ships
+    up to 20k lean points (a few KB each → no N+1, no serializer walk) so the
+    global Common Operating Picture is honest at scale. Optional bbox lets a
+    zoomed map fetch only its view. Ordered newest-first within the cap."""
+    safe_limit = max(1, min(limit, 20000))
+
+    def _ev(v):
+        return getattr(v, "value", v)
+
+    q = (
+        db.query(
+            Report.id, Location.latitude, Location.longitude,
+            Report.severity, Report.status, Report.crisis_type,
+            Report.infrastructure_type, Report.server_created_at,
+        )
+        .join(Location, Location.report_id == Report.id)
+        .filter(
+            Report.deletion_requested_at.is_(None),
+            Location.latitude.isnot(None), Location.longitude.isnot(None),
+        )
+    )
+    if crisis_event_id:
+        q = q.filter(Report.crisis_event_id == crisis_event_id)
+    if status:
+        statuses = [s.strip() for s in status.split(",") if s.strip()]
+        q = q.filter(Report.status.in_(statuses)) if len(statuses) > 1 \
+            else q.filter(Report.status == statuses[0])
+    if since:
+        try:
+            q = q.filter(Report.server_created_at >= datetime.fromisoformat(since.replace("Z", "+00:00")))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=422, detail=f"Invalid 'since' timestamp: {since!r}")
+    if bbox:
+        try:
+            min_lng, min_lat, max_lng, max_lat = [float(x) for x in bbox.split(",")]
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=422, detail=f"Invalid bbox (want 'minLng,minLat,maxLng,maxLat'): {bbox!r}")
+        q = q.filter(
+            Location.longitude >= min_lng, Location.longitude <= max_lng,
+            Location.latitude >= min_lat, Location.latitude <= max_lat,
+        )
+    rows = q.order_by(Report.server_created_at.desc()).limit(safe_limit).all()
+    return [
+        {
+            "id": r.id, "lat": r.latitude, "lng": r.longitude,
+            "severity": _ev(r.severity), "status": _ev(r.status),
+            "crisis_type": r.crisis_type, "infrastructure_type": _ev(r.infrastructure_type),
+            "server_created_at": r.server_created_at.isoformat() if r.server_created_at else None,
+        }
+        for r in rows
+    ]
+
+
 @router.get("/", response_model=List[ReportResponse])
 def get_reports(
     request: Request,

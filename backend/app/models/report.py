@@ -1152,7 +1152,10 @@ class Building(Base):
     severity_score = Column(Float, nullable=True, index=True)
     confidence_score = Column(Float, nullable=True)
     activity_score = Column(Float, nullable=True)
-    escalation_risk = Column(Float, nullable=True)
+    # Indexed (0052): the "escalating hotspots" filter (escalation_risk >= 70) runs
+    # on EVERY /analytics/summary AND every /operations rollup; without an index it
+    # was a full Building scan that degrades as building count grows.
+    escalation_risk = Column(Float, nullable=True, index=True)
     humanitarian_priority = Column(Float, nullable=True, index=True)
 
     # Roll-ups (canonical "what's the situation" counters).

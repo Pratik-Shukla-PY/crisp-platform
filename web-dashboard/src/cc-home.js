@@ -568,18 +568,29 @@
     } catch (_) { /* sparkline optional */ }
   }
 
-  // ── data: map + recent activity (one reports fetch) ──
-  async function loadFeed() {
-    try {
-      const { body } = await jget('/reports/?limit=200');
+  // ── data: map markers + recent activity ──
+  // TWO fetches now (decoupled): the global MAP pulls up to 5k LIGHTWEIGHT markers
+  // (id/coords/severity/status/type — GET /reports/markers) so it stays
+  // representative at 100k/500k instead of the old heavy newest-200 slice; the
+  // Recent-Activity table pulls only the newest ~20 RICH rows (it shows 10).
+  function loadFeed() {
+    // MAP — many lean points.
+    jget('/reports/markers?limit=5000').then(({ body }) => {
+      const markers = Array.isArray(body) ? body : (body && (body.items || body.reports)) || [];
+      renderMap(markers);
+      // Geo caption (client Turf point-in-polygon) is O(points × countries) — sample
+      // down so 5k markers don't stall the caption while the map still plots them all.
+      const stride = markers.length > 800 ? Math.ceil(markers.length / 800) : 1;
+      const geoSample = stride > 1 ? markers.filter((_, i) => i % stride === 0) : markers;
+      loadWorldGeo().then(() => renderGeoCaption(geoSample)).catch(() => {});
+    }).catch(() => { mapFallback('Map data unavailable'); });
+    // RECENT ACTIVITY — newest rich rows.
+    jget('/reports/?limit=20').then(({ body }) => {
       const reports = Array.isArray(body) ? body : (body && (body.items || body.reports)) || [];
-      renderMap(reports);
       renderActivity(reports);
-      loadWorldGeo().then(() => renderGeoCaption(reports)).catch(() => {});
-    } catch (_) {
+    }).catch(() => {
       const a = el('cc-activity'); if (a) a.innerHTML = `<div class="cc-empty">Activity unavailable</div>`;
-      mapFallback('Map data unavailable');
-    }
+    });
   }
 
   function rLatLng(r) {
