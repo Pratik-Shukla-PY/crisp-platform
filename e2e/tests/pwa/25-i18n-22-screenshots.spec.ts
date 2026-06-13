@@ -102,8 +102,12 @@ for (const lang of LOCALES) {
         const pickerText = await page.locator('#lang-picker-overlay').innerText().catch(() => '');
         const pickerLeaks = scanForRawKeys(pickerText);
         expect(pickerLeaks, `${lang} picker raw-key leak`).toEqual([]);
-        // Close the picker.
-        await page.locator('#lang-picker-close').click().catch(() => {});
+        // Close the picker. The bottom "Close" button (#lang-picker-close)
+        // was removed in HC54 (May 2026) — the only surviving close
+        // affordance is the top-right ✕ (#lang-picker-close-x). Using the
+        // stale id made each locale's click wait out the full 60s test
+        // budget (no actionTimeout is set), timing the whole spec out.
+        await page.locator('#lang-picker-close-x').click().catch(() => {});
         await page.waitForTimeout(200);
 
         // Stage 3 — capture-v4 entry (best effort; not all locales may
