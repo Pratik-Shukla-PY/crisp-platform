@@ -457,7 +457,12 @@
                     patch.location = {
                         lat: _locSelected.lat,
                         lng: _locSelected.lng,
-                        accuracy: null,
+                        // The submit payload reads state.location.acc (app.js) — write
+                        // THAT key, not `accuracy` (a key nothing reads → every edited
+                        // location silently shipped accuracy_meters 0). 0 + the
+                        // is_user_corrected flag below = "user-placed pin", matching the
+                        // other user-corrected path (app.js selectPlace).
+                        acc: 0,
                         source: 'user_corrected',
                         // The edited place is now AUTHORITATIVE for matching
                         // (priority: user-edited > GPS > device-fallback). The
@@ -502,7 +507,13 @@
                     // operation matching for the NEW coordinates (overriding the jitter
                     // guard), drops the previous zone's stock answers, and toasts. The
                     // backend re-derives crisis_event_id from these coords at intake too.
-                    _onLocationReeval(patch.location.lat, patch.location.lng);
+                    // NOTE: _onLocationReeval is declared inside _refreshGps (a sibling
+                    // scope), so it is NOT a bare in-scope identifier here — call it via
+                    // the global it exports (assigned when _refreshGps runs on capture
+                    // entry, which always precedes this editor being openable).
+                    if (typeof window.__crispV4OnLocationReeval === 'function') {
+                        window.__crispV4OnLocationReeval(patch.location.lat, patch.location.lng);
+                    }
                 }
             }
             _closeLocEdit();
@@ -1859,6 +1870,31 @@
         }
     });
 
+    // ── Crisis-pack swap → repaint the classify flow ─────────────────────
+    // _maybeFetchCrisisPack swaps state.crisisPack ASYNCHRONOUSLY (notably after
+    // the reporter edits the location and _onLocationReeval re-resolves the zone)
+    // and fires 'crisis-pack-resolved'. _setState is non-reactive, so without this
+    // listener the new zone's pack would never reach the DOM while the user is on
+    // the classify stage — the stale device-zone questions would persist (the
+    // reported "device-location form is still visible" bug). Re-assert the current
+    // sub-step against the RECOMPUTED order so the visible crispack view (and
+    // whether the step exists at all) reflects the EDITED location. No-op off the
+    // classify stage — capture/review re-derive on their own entry.
+    document.addEventListener('crisis-pack-resolved', () => {
+        try {
+            const stageEl = document.getElementById('stage-v4-classify');
+            if (!stageEl || !stageEl.classList.contains('active')) return;
+            const order = _classifyOrder();
+            // If the current sub-step vanished (the edited zone dropped the
+            // crispack or crisis-chip step), fall back to the last valid step
+            // rather than stranding the reporter on a now-hidden view; otherwise
+            // re-render the current view from the swapped state.
+            const step = order.indexOf(_classifyStep) >= 0 ? _classifyStep : order[order.length - 1];
+            _showSubStep(step);
+            _refreshClassifyNext();
+        } catch (_) {}
+    });
+
     function _refreshGps() {
         const text = document.getElementById('v4-meta-location-text');
         if (!text) return;
@@ -1933,7 +1969,11 @@
                 if (!base) return;
                 const url = base + '/crisis-forms/active?lat=' + encodeURIComponent(loc.lat)
                     + '&lng=' + encodeURIComponent(loc.lng);
-                fetch(url, { headers: { Accept: 'application/json' } })
+                // Expose the in-flight resolution so _onSend can await it before
+                // assembling the payload — a fast edit→send must not ship the stale
+                // device-zone form_pack_id/version/form_data (the server only
+                // backstops crisis_event_id, not the form pack). Cleared on settle.
+                const _p = fetch(url, { headers: { Accept: 'application/json' } })
                     .then((r) => (r && r.ok ? r.json() : null))
                     .then((data) => {
                         if (data && data.active && data.schema_json) {
@@ -1973,7 +2013,9 @@
                         }
                         document.dispatchEvent(new CustomEvent('crisis-pack-resolved'));
                     })
-                    .catch(() => { /* offline / error → default flow (fail-safe) */ });
+                    .catch(() => { /* offline / error → default flow (fail-safe) */ })
+                    .finally(() => { if (window.__crispV4PackInFlight === _p) window.__crispV4PackInFlight = null; });
+                window.__crispV4PackInFlight = _p;
             } catch (_) {}
         }
 
@@ -2720,10 +2762,14 @@
         if (step === 'crisispack') { try { _renderCrisisPackView(); } catch (_) {} }
         const _stageEl = document.getElementById('stage-v4-classify');
         if (_stageEl) _stageEl.classList.toggle('v4-cp-step', step === 'crisispack');
-        _classifyOrder().forEach((s) => {
-            const view = document.getElementById('v4-view-' + s);
-            if (!view) return;
-            if (s === step) view.removeAttribute('hidden');
+        // Hide EVERY classify sub-view — not just those in the current order. A
+        // location edit can DROP the crispack (or crisis) step from the order; the
+        // removed view must still be hidden, otherwise its stale questions stay on
+        // screen even though that step is no longer part of the flow (the reported
+        // "device-location form still visible" tail case when editing into a
+        // no-zone location).
+        document.querySelectorAll('.v4-classify-view').forEach((view) => {
+            if (view.id === 'v4-view-' + step) view.removeAttribute('hidden');
             else view.setAttribute('hidden', '');
         });
         // Render-from-state: derive the shown sub-step's selection from `state`
@@ -3749,6 +3795,21 @@
             console.warn('[HC80] pre-submit nav failed:', e);
         }
 
+        // Barrier — if a location edit kicked off a crisis-pack re-resolution that
+        // hasn't settled yet, wait for it (capped at 2.5 s) so __crispSubmitReport
+        // reads the EDITED zone's state.crisisPack, not the stale device-zone pack.
+        // The server only backstops crisis_event_id from coords — form_pack_id /
+        // form_pack_version / form_data have NO server correction, so a fast
+        // edit→send would otherwise tag the report with the wrong zone's pack. The
+        // timeout keeps the offline-first guarantee (must-have #3): on a slow/dead
+        // network we submit with whatever is in state rather than blocking.
+        try {
+            const _inflight = window.__crispV4PackInFlight;
+            if (_inflight && typeof _inflight.then === 'function') {
+                await Promise.race([_inflight, new Promise((res) => setTimeout(res, 2500))]);
+            }
+        } catch (_) {}
+
         // Kick off submitReport in the background. Don't await it
         // here — the user is already on stage-success watching the
         // status pill. HC80's _submitCommitted latch in app.js
@@ -3869,6 +3930,18 @@
     }
     function _goToClassify() {
         window.__crispGoToStage('stage-v4-classify');
+        // Re-assert the current sub-step against the live order so the crispack
+        // view re-renders from the (possibly edited-location-swapped) state.crisisPack
+        // instead of a stale device-zone form. _goToClassify previously never
+        // called _showSubStep, so a back-nav after a location edit kept the old
+        // questions on screen. Validate _classifyStep is still in the order (an edit
+        // can add/remove the crispack or crisis step); fall back to the first step
+        // only if it disappeared — never reset the reporter's place otherwise.
+        try {
+            const order = _classifyOrder();
+            const step = order.indexOf(_classifyStep) >= 0 ? _classifyStep : order[0];
+            _showSubStep(step);
+        } catch (_) {}
         _updateReviewSummary();
     }
     function _goToReview() {

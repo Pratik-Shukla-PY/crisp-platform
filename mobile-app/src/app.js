@@ -8959,6 +8959,17 @@ async function _submitReportInner() {
         try {
             const _cp = state.crisisPack;
             if (_cp && _cp.schema) {
+                // Operation linkage (crisis_event_id) is a property of the MATCHED
+                // ZONE, not of the answers — echo it whenever a pack is active so
+                // the report keeps its operation link even before any stock question
+                // is answered (e.g. right after a location edit cleared the answers
+                // and the reporter submits from review). The server VERIFIES/re-
+                // derives it from the (edited) location, so it is a hint, not trusted
+                // blindly; with no form_pack_id it takes the backend's GLOBAL-with-
+                // linkage path (re-derive from coords). Previously this sat inside the
+                // payload-non-empty gate, so an empty form_data dropped the operation
+                // link entirely.
+                _crisisEventId = _cp.event_id || null;
                 const _DEFAULT_CAPTURED = { damage_classification: 1, infrastructure_type: 1, crisis_type: 1, severity: 1 };
                 const _ans = state.crisisStockAnswers || {};
                 const _payload = {};
@@ -8968,15 +8979,13 @@ async function _submitReportInner() {
                     if (v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length)) return;
                     _payload[f.key] = v;
                 }));
+                // form_pack_id/version/form_data ride along ONLY with a non-empty
+                // payload: shipping a pack id with empty form_data would 422 against
+                // the pack's required fields (the backend validates the full set).
                 if (Object.keys(_payload).length) {
                     _crisisPackId = _cp.pack_id || null;
                     _crisisPackVersion = _cp.pack_version || null;
                     _crisisFormData = _payload;
-                    // Echo the active event id the /active fetch already stored
-                    // (v4-flow). The server VERIFIES it owns the answered pack
-                    // (and re-derives from location otherwise), so this is a hint,
-                    // not trusted blindly — but it links the report to its operation.
-                    _crisisEventId = _cp.event_id || null;
                 }
             }
         } catch (_e) { /* never block submit on crisis assembly */ }
