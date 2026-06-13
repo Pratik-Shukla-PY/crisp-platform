@@ -1105,7 +1105,12 @@ def export_data_dictionary(user=Depends(require_viewer)):
 def _summary_payload(db: Session, user, window_hours: int = 24):
     """Reuse the dashboard's cached operational summary computation."""
     from app.api.endpoints.analytics import operational_summary
-    return operational_summary(window_hours=window_hours, stale_hours=24, db=db, _user=user)
+    # crisis_event_id MUST be passed explicitly — these CSV/PDF exports are GLOBAL.
+    # Omitting it lets operational_summary's FastAPI `Query(None)` DEFAULT object
+    # leak through as the value (it's truthy → reaches the SQL filter →
+    # "can't adapt type Query"). This is the only programmatic caller path.
+    return operational_summary(window_hours=window_hours, stale_hours=24,
+                               crisis_event_id=None, db=db, _user=user)
 
 
 @router.get("/analytics-summary")

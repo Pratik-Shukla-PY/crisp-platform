@@ -436,6 +436,13 @@ def operational_summary(
     _user=Depends(require_viewer),
 ):
     now = datetime.now(timezone.utc)
+    # Defensive: when called PROGRAMMATICALLY (e.g. the export-analytics-summary /
+    # sitrep endpoints via _summary_payload) an omitted crisis_event_id arrives as
+    # the FastAPI `Query(None)` DEFAULT object, not None — which is truthy and would
+    # reach the SQL filter ("can't adapt type Query"). Coerce anything that isn't a
+    # real string id back to None (global) so that path and a stray query arg are safe.
+    if not isinstance(crisis_event_id, str):
+        crisis_event_id = None
     # crisis_event_id MUST be part of the cache key — otherwise one operation's
     # counts would be served for another (or for the global view).
     cache_key = (window_hours, stale_hours, crisis_event_id or "_global_")
