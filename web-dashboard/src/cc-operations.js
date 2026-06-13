@@ -300,6 +300,28 @@
     .cco-btn:hover{border-color:#418FDE;color:#fff}
     .cco-btn.primary{background:#1d4ed8;border-color:#2563eb;color:#fff}
     .cco-empty{padding:26px;text-align:center;color:#8aa0bf;font-size:13px}
+    /* local conditions — weather + hazard alerts */
+    .cco-src{font-size:10px;font-weight:600;color:#5b6b86;text-transform:none;letter-spacing:0;margin-left:6px}
+    #cco-weather{padding:14px 16px}
+    .cco-wx{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+    .cco-wx-now{display:flex;flex-direction:column}
+    .cco-wx-t{font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+    .cco-wx-s{font-size:12px;color:#9fb3d1;margin-top:3px}
+    .cco-wx-m{display:flex;gap:16px;font-size:12.5px;color:#cdd8ec}
+    .cco-wx-days{display:flex;gap:14px;margin-left:auto;flex-wrap:wrap}
+    .cco-wx-day{display:flex;flex-direction:column;align-items:center;gap:1px;font-size:11px;color:#9fb3d1;min-width:54px}
+    .cco-wx-day b{font-size:10.5px;color:#7d89a3;text-transform:uppercase;letter-spacing:.04em}
+    .cco-wx-day span{font-weight:700;color:#dce6f5;font-variant-numeric:tabular-nums}
+    .cco-wx-day small{font-size:9.5px;color:#7d89a3;text-align:center;line-height:1.15}
+    .cco-alerts{margin-top:14px;padding-top:12px;border-top:1px solid #1f2c44}
+    .cco-alerts-h{font-size:11.5px;font-weight:700;color:#fca5a5;margin-bottom:8px}
+    .cco-alert{display:flex;align-items:center;gap:9px;padding:5px 0;font-size:12.5px}
+    .cco-alert-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+    .cco-alert-t{font-weight:600;color:#e6edf7}
+    .cco-alert-m{color:#8aa0bf;font-size:11px}
+    .cco-alert-m a{color:#7db8ef;text-decoration:none}
+    .cco-alerts-none{margin-top:12px;font-size:12px;color:#6ee7b7}
+    .cco-wx-attr{margin-top:12px;font-size:10px;color:#5b6b86}
     `;
     const st = document.createElement('style');
     st.id = 'cc-ops-styles';
@@ -396,6 +418,8 @@
           <div class="cco-wl" id="cco-wl"></div>
         </div>
       </div>
+      <div class="cco-sec-t">Local conditions <span class="cco-src">weather · hazard alerts</span></div>
+      <div class="cco-card" id="cco-weather"><div class="cco-empty">Loading local conditions…</div></div>
       <div class="cco-actions">
         <button class="cco-btn primary" id="cco-act-feed">Open full incident feed</button>
         <button class="cco-btn" id="cco-act-export">Export</button>
@@ -422,6 +446,54 @@
 
     renderWorklist(reports);
     renderOpMap(reports);
+    loadWeather(id);
+  }
+
+  // ── local conditions (weather + hazard alerts) — backend-proxied + cached ──
+  async function loadWeather(id) {
+    const box = el('cco-weather');
+    if (!box) return;
+    let ctx;
+    try { ctx = await jget('/operations/' + encodeURIComponent(id) + '/weather'); }
+    catch (_e) { box.innerHTML = '<div class="cco-empty">Local conditions unavailable.</div>'; return; }
+    if (!box.isConnected) return;                 // user navigated away mid-fetch
+    if (!ctx || !ctx.available) {
+      box.innerHTML = '<div class="cco-empty">Local conditions unavailable right now.</div>';
+      return;
+    }
+    const w = ctx.weather, alerts = ctx.alerts || [];
+    const r = (n, suf) => (n == null ? '—' : Math.round(n) + suf);
+    let html = '';
+    if (w) {
+      html += `<div class="cco-wx">
+        <div class="cco-wx-now"><div class="cco-wx-t">${r(w.temperature_c, '°C')}</div>
+          <div class="cco-wx-s">${esc(w.summary || '—')}</div></div>
+        <div class="cco-wx-m">
+          <span>💧 ${w.humidity_pct != null ? w.humidity_pct + '%' : '—'}</span>
+          <span>🌧 ${w.precipitation_mm != null ? w.precipitation_mm + ' mm' : '—'}</span>
+          <span>💨 ${r(w.wind_kmh, ' km/h')}</span></div>
+        <div class="cco-wx-days">${(w.daily || []).map((d) => `<div class="cco-wx-day">
+          <b>${esc(String(d.date || '').slice(5))}</b>
+          <span>${d.t_max_c != null ? Math.round(d.t_max_c) : '—'}° / ${d.t_min_c != null ? Math.round(d.t_min_c) : '—'}°</span>
+          <small>${esc(d.summary || '')}</small></div>`).join('')}</div>
+      </div>`;
+    }
+    if (alerts.length) {
+      html += `<div class="cco-alerts"><div class="cco-alerts-h">⚠ Hazard alerts near this operation</div>`
+        + alerts.map((a) => {
+          const lvl = String(a.alert_level || '').toLowerCase();
+          const col = lvl === 'red' ? '#f87171' : lvl === 'orange' ? '#fb923c' : '#9fb3d1';
+          const link = a.url ? ` · <a href="${esc(a.url)}" target="_blank" rel="noopener">details ↗</a>` : '';
+          const meta = [a.type, a.distance_km != null ? a.distance_km + ' km' : '', a.country].filter(Boolean).join(' · ');
+          return `<div class="cco-alert"><span class="cco-alert-dot" style="background:${col}"></span>
+            <span class="cco-alert-t">${esc(a.name || a.type || 'Alert')}</span>
+            <span class="cco-alert-m">${esc(meta)}${link}</span></div>`;
+        }).join('') + `</div>`;
+    } else if (w) {
+      html += `<div class="cco-alerts-none">✓ No active hazard alerts near this operation.</div>`;
+    }
+    html += `<div class="cco-wx-attr">${esc((w && w.attribution) || '')}${w ? ' · ' : ''}Hazard alerts: GDACS (UN OCHA · EC JRC)</div>`;
+    box.innerHTML = html;
   }
 
   function _isOpen(r) {

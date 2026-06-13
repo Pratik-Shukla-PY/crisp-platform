@@ -63,6 +63,13 @@ async function boot(page) {
         if (u.includes('/config/')) return route.fulfill({ json: { org: { org_public_name: 'UNDP CRISP' } } });
         if (u.includes('/operations/launch')) return route.fulfill({ status: 201, json: { operation_id: 'op-new', operation_name: 'Launched', claimed_count: 3, merged_into_existing: false } });
         if (u.includes('/unclaim')) return route.fulfill({ status: 200, json: { operation_id: 'op-a', operation_name: 'Bihar Floods', unclaimed_count: 3 } });
+        if (u.includes('/weather')) return route.fulfill({ json: {
+            available: true,
+            weather: { temperature_c: 31, summary: 'Thunderstorm', humidity_pct: 70, precipitation_mm: 2,
+                       wind_kmh: 12, daily: [{ date: '2026-06-14', t_max_c: 33, t_min_c: 26, summary: 'Storm' }],
+                       attribution: 'Weather by Open-Meteo.com (CC BY 4.0)' },
+            alerts: [{ type: 'FL', name: 'Bihar flood', alert_level: 'Orange', distance_km: 12, country: 'India' }],
+        } });
         if (u.includes('/operations')) return route.fulfill({ json: OPERATIONS });
         if (u.includes('/reports/')) return route.fulfill({ status: 200, headers: { 'X-Total-Count': '42' }, json: REPORTS });
         return route.fulfill({ status: 200, json: {} });
@@ -185,6 +192,16 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         const dataReqs = exportReqs.filter((u) => !/\/exports\/recent/.test(u));
         expect(dataReqs.length).toBeGreaterThan(0);
         expect(dataReqs.every((u) => /crisis_event_id=op-a/.test(u))).toBe(true);
+    });
+
+    test('@smoke operation dashboard shows Local conditions (weather + GDACS alerts)', async ({ page }) => {
+        await boot(page);
+        await page.goto('index.html#/operations/op-a');
+        await page.waitForTimeout(900);
+        const wx = page.locator('#cco-weather');
+        await expect(wx).toContainText('Thunderstorm', { timeout: 4000 });   // Open-Meteo weather
+        await expect(wx).toContainText('Open-Meteo');                        // CC BY 4.0 attribution
+        await expect(wx).toContainText('Bihar flood');                      // GDACS hazard alert
     });
 
     test('@smoke operation scope does NOT leak into the global feed after leaving', async ({ page }) => {

@@ -284,6 +284,30 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
     return ops
 
 
+# ── Operator: local weather + hazard alerts for an operation (P4) ───────────
+@operations_router.get("/{event_id}/weather",
+                       summary="Local weather (Open-Meteo) + hazard alerts (GDACS) for an operation")
+async def operation_weather(event_id: str, db: Session = Depends(get_db),
+                            _user=Depends(require_viewer)):
+    """Backend-proxied local conditions for the operation's region — current
+    weather + 3-day forecast (Open-Meteo) and nearby disaster alerts (GDACS),
+    cached 45 min. Returns 200 {available:false} (never 5xx) when both providers
+    are unreachable so the dashboard never hard-fails. The ONLY data sent upstream
+    is the operation's centre coords + radius — never any report/reporter data."""
+    ev = db.query(CrisisEvent).filter(CrisisEvent.id == event_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    from app.services.operation_context import (
+        fetch_operation_context, cache_get, cache_put,
+    )
+    cached = cache_get(event_id)
+    if cached is not None:
+        return cached
+    ctx = await fetch_operation_context(ev.center_lat, ev.center_lng, ev.radius_km or 30.0)
+    cache_put(event_id, ctx)
+    return ctx
+
+
 # ── Operator: operation-level responders (Phase 3, Option B) ────────────────
 # Reuses the BuildingResponder table with target_type=OPERATION + crisis_event_id
 # (building_id NULL) — no separate Team/Org entity. Same assigned → dispatched →
