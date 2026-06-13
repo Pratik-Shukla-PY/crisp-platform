@@ -78,7 +78,7 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     await expect(page.locator('#cc-kpis')).toContainText('Critical');
     // §3 attention queue (incl. Phase-2 SLA-at-risk row).
     await expect(page.locator('#cc-att')).toContainText('Critical incidents');
-    await expect(page.locator('#cc-att')).toContainText('SLA at-risk');
+    await expect(page.locator('#cc-att')).toContainText('Needs review');
     await expect(page.locator('#cc-att')).toContainText('Escalating');
     // §2 Phase-2 client-side countries-impacted caption (Turf over world.json).
     await expect(page.locator('#cc-map-geo')).toContainText(/countries impacted/i, { timeout: 8000 });
@@ -144,33 +144,49 @@ async function openLanding(page, role = 'ADMIN') {
     await expect(page.locator('#cc-nav')).toBeVisible({ timeout: 6000 });
 }
 
-test('command bar is pinned: stays visible after scrolling to the bottom', async ({ page }) => {
+test('map re-initialises when returning to Home from Operations', async ({ page }) => {
+    await openLanding(page);                                   // first Home visit — map inits
+    await expect.poll(() => page.locator('#cc-map .leaflet-pane').count(), { timeout: 6000 }).toBeGreaterThan(0);
+    // Operations → Home again. openLanding() rebuilds the overlay HTML (a fresh
+    // #cc-map), so the singleton Leaflet map must re-attach to the new node —
+    // regression guard for "Operations → Home → blank map".
+    await page.evaluate(() => (window as any).__crispRouter.navigate('/incidents'));
+    await expect(page.locator('#view-incidents')).toBeVisible();
+    await page.evaluate(() => (window as any).__crispRouter.navigate('/'));
+    await expect(page.locator('#cc-nav')).toBeVisible({ timeout: 6000 });
+    await expect.poll(() => page.locator('#cc-map .leaflet-pane').count(), { timeout: 6000 }).toBeGreaterThan(0);
+    expect(await page.evaluate(() => document.getElementById('cc-map')?.classList.contains('leaflet-container'))).toBe(true);
+});
+
+test('global shell bar is pinned: stays visible after scrolling to the bottom', async ({ page }) => {
     await openLanding(page);
     // The old bottom Quick Actions section must be gone, and so must the
     // duplicate header Operations button.
     expect(await page.locator('#cc-qa').count(), 'bottom Quick Actions must be removed').toBe(0);
     expect(await page.locator('#cc-go-ops').count(), 'duplicate Operations → button must be removed').toBe(0);
 
-    // Scroll the overlay to the very bottom — the nav must remain on-screen
-    // at the top (position: sticky), not scroll away with the content.
+    // The primary nav now lives in the unified Command Center shell
+    // (#crisp-globalnav, crisp-shell.js) — one persistent bar on every surface.
+    // Scroll the landing to the very bottom: the fixed shell bar must remain
+    // on-screen at the very top, not scroll away with the content.
     await page.evaluate(() => {
         const ov = document.getElementById('cc-home-overlay')!;
         ov.scrollTop = ov.scrollHeight;
     });
     await page.waitForTimeout(250);
-    const box = await page.locator('#cc-stick').boundingBox();
-    expect(box, 'sticky block must have a box').toBeTruthy();
-    expect(box!.y, 'sticky block must be pinned at the viewport top').toBeLessThanOrEqual(2);
-    await expect(page.locator('#cc-nav')).toBeVisible();
-    // And it must be ABOVE the Leaflet map in the stacking order: the element
-    // at the bar's center must live inside the sticky block, not the map.
+    const box = await page.locator('#crisp-globalnav').boundingBox();
+    expect(box, 'shell bar must have a box').toBeTruthy();
+    expect(box!.y, 'shell bar must be pinned at the viewport top').toBeLessThanOrEqual(2);
+    await expect(page.locator('#crisp-globalnav #cc-nav')).toBeVisible();
+    // And it must stack ABOVE the page (incl. the Leaflet map): the element at
+    // the bar's centre must live inside the shell bar, not whatever is beneath.
     const onTop = await page.evaluate(() => {
-        const bar = document.getElementById('cc-stick')!;
+        const bar = document.getElementById('crisp-globalnav')!;
         const r = bar.getBoundingClientRect();
         const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
         return !!(hit && bar.contains(hit));
     });
-    expect(onTop, 'sticky bar must stack above the map while scrolled').toBe(true);
+    expect(onTop, 'shell bar must stack above the page while scrolled').toBe(true);
 });
 
 test('Users deep-link opens Account Settings ON the Users tab (admin)', async ({ page }) => {

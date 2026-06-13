@@ -32,8 +32,35 @@ async function bootAuthed(page: Page) {
     null, { timeout: 15_000 });
 }
 
+// The org config is a single GLOBAL blob (backend/app/services/org_config.py)
+// with no per-test isolation. The branding round-trip test below writes a
+// generated "E2E Org <ts>" through the real API; without restoring it, every
+// suite run permanently overwrites the operator's real org name. Snapshot here,
+// restore in afterAll.
+let _adminToken: string | null = null;
+let _origOrg: Record<string, any> | null = null;
+
 test.describe('Dashboard — settings modules (B6)', () => {
-  test.beforeAll(async ({ request }) => { await ensureAdminAndLogin(request); });
+  test.beforeAll(async ({ request }) => {
+    _adminToken = await ensureAdminAndLogin(request);
+    try {
+      const r = await request.get('http://localhost:8000/api/v1/config/org',
+        { headers: { Authorization: `Bearer ${_adminToken}` } });
+      if (r.ok()) _origOrg = await r.json();
+    } catch { /* best-effort snapshot */ }
+  });
+
+  test.afterAll(async ({ request }) => {
+    if (!_origOrg || !_adminToken) return;
+    const keys = ['org_name', 'org_public_name', 'org_contact_email', 'org_support_url',
+                  'org_region', 'org_default_language', 'org_primary_color'];
+    const data: Record<string, any> = {};
+    for (const k of keys) if (_origOrg[k] != null) data[k] = _origOrg[k];
+    try {
+      await request.patch('http://localhost:8000/api/v1/config/org',
+        { headers: { Authorization: `Bearer ${_adminToken}` }, data });
+    } catch { /* best-effort restore */ }
+  });
 
   test('@smoke Account settings: opens, profile loads, tabs present', async ({ page }) => {
     await bootAuthed(page);

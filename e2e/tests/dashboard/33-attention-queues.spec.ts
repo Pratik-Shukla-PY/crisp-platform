@@ -17,14 +17,13 @@ const now = Date.now();
 const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
 const H = 3600e3;
 
-// Crafted membership (see QUEUES definitions):
-//   critical:     r_crit                                  → 1
-//   sla-risk:     r_sla (SEVERE, 5h old) + r_stale (MINOR, 30h old) → 2
-//   escalating:   r_esc (building b1, risk 80)            → 1
-//   verification: r_crit + r_stale (NOT_REVIEWED)         → 2
-//   triage:       r_crit + r_stale (PENDING+NOT_REVIEWED) → 2
-//   dispatch:     r_disp                                  → 1
-//   stale:        r_stale (PENDING+NOT_REVIEWED, >24h)    → 1
+// Crafted membership (5-card action model — the three work queues are
+// MUTUALLY EXCLUSIVE; critical/escalating are situational overlays):
+//   critical:       r_crit (CRITICAL)                                  → 1
+//   needs-review:   r_crit + r_stale (unreviewed, not dispatched/responding) → 2
+//   escalating:     r_esc (building b1, risk 80)                       → 1
+//   needs-response: r_sla + r_esc (ACCEPTED, not dispatched/responding)→ 2
+//   active-ops:     r_disp (RESPONDING / dispatched)                   → 1
 const REPORTS = [
     { id: 'r_crit', severity: 'CRITICAL', status: 'PENDING', reviewer_verdict: 'NOT_REVIEWED',
       crisis_type: 'EARTHQUAKE', infrastructure_type: 'HOSPITAL', description: 'QCRIT collapsed ward',
@@ -47,7 +46,8 @@ const REPORTS = [
 const SUMMARY = {
     generated_at: new Date(now).toISOString(), window_hours: 24, stale_hours: 24, total_reports: 5,
     counts: { active: 5, critical: 1, pending_verification: 2, awaiting_triage: 2,
-              open_dispatch: 1, resolved_in_window: 0, active_ops: 1, escalating: 1, stale: 1, sla_at_risk: 2 },
+              open_dispatch: 1, resolved_in_window: 0, active_ops: 1, escalating: 1, stale: 1, sla_at_risk: 2,
+              needs_review: 2, needs_response: 2, active_operations: 1, critical_incidents: 1, escalating_reports: 1 },
     distributions: { by_severity: { CRITICAL: 1 }, by_crisis_type: { FLOOD: 2 }, by_status: {}, verified: 1, unverified: 4 },
     timings: { avg_verification_seconds: null, avg_response_seconds: null },
     impact: { critical_infrastructure: 1, lives_impacted_sum: 0, responders_active: 1, service_disruptions: 0 },
@@ -56,12 +56,10 @@ const SUMMARY = {
 
 const EXPECTED: Record<string, { count: number, member: string }> = {
     'critical': { count: 1, member: 'r_crit' },
-    'sla-risk': { count: 2, member: 'r_sla' },
+    'needs-review': { count: 2, member: 'r_crit' },
     'escalating': { count: 1, member: 'r_esc' },
-    'verification': { count: 2, member: 'r_crit' },
-    'triage': { count: 2, member: 'r_stale' },
-    'dispatch': { count: 1, member: 'r_disp' },
-    'stale': { count: 1, member: 'r_stale' },
+    'needs-response': { count: 2, member: 'r_sla' },
+    'active-ops': { count: 1, member: 'r_disp' },
 };
 
 async function boot(page: Page) {
@@ -125,18 +123,18 @@ test.describe('Attention rows → dedicated operational queues', () => {
 
     test('browser refresh preserves queue state (deep link is the state)', async ({ page }) => {
         await boot(page);
-        await page.locator('#cc-att .cc-att-row[data-queue="triage"]').click();
+        await page.locator('#cc-att .cc-att-row[data-queue="needs-review"]').click();
         await expect(page.locator('#queue-banner')).toBeVisible({ timeout: 6000 });
         await page.reload();
         await page.waitForTimeout(800);
-        await expect(page).toHaveURL(/#\/incidents;queue=triage/);
+        await expect(page).toHaveURL(/#\/incidents;queue=needs-review/);
         await expect(page.locator('#queue-banner')).toBeVisible({ timeout: 8000 });
-        await expect(page.locator('#queue-banner')).toContainText('Awaiting triage');
+        await expect(page.locator('#queue-banner')).toContainText('Needs review');
     });
 
     test('browser back returns to the landing; navigating home drops the queue segment', async ({ page }) => {
         await boot(page);
-        await page.locator('#cc-att .cc-att-row[data-queue="stale"]').click();
+        await page.locator('#cc-att .cc-att-row[data-queue="needs-review"]').click();
         await expect(page.locator('#queue-banner')).toBeVisible({ timeout: 6000 });
         // Back → landing restored.
         await page.goBack();

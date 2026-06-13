@@ -58,7 +58,10 @@ test.describe('Dashboard — modal lifecycle', () => {
     await bootAuthed(page);
     await nav(page, '/reporting');
     await expect(page.locator('#cc-cf-overlay.cc-cf-open')).toBeVisible({ timeout: 5000 });
-    await page.locator('#cc-cf-overlay').click({ position: { x: 6, y: 6 } });   // backdrop, outside the shell
+    // Click the backdrop in the left gutter, BELOW the persistent global shell
+    // bar (#crisp-globalnav owns the top ~52px on every surface by design, so a
+    // top-corner click now lands on the bar, not the backdrop).
+    await page.locator('#cc-cf-overlay').click({ position: { x: 6, y: 400 } });   // backdrop, outside the shell
     await expect(page.locator('#cc-cf-overlay.cc-cf-open')).toHaveCount(0);
   });
 
