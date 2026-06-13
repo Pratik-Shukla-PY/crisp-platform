@@ -108,6 +108,25 @@ if _sentry_enabled:
 # Dev mode must be opted into with APP_ENV=dev so an accidental prod deploy
 # refuses to boot instead of shipping open.
 APP_ENV = os.getenv("APP_ENV", "production").lower()
+
+
+def _should_autostart_telegram_polling(app_env: str, poll_flag: str) -> bool:
+    """Whether THIS backend should hold the Telegram long-poll on boot.
+
+    A Telegram bot allows exactly ONE active getUpdates poll per token; a second
+    poller gets 409 Conflict. Local/dev .env files carry the SAME prod bot token,
+    so a dev backend that polls steals the prod poll slot and silently takes the
+    live Telegram channel down. Therefore only the production deployment polls.
+
+    CRISP_TELEGRAM_POLLING is an explicit override: "1" forces on (a single
+    operator with a dedicated token), "0" forces off; unset → poll iff prod.
+    """
+    f = (poll_flag or "").strip()
+    if f == "1":
+        return True
+    if f == "0":
+        return False
+    return app_env == "production"
 ADMIN_KEY = os.getenv("CRISP_ADMIN_KEY", "")
 if not ADMIN_KEY:
     if APP_ENV == "production":
@@ -1510,9 +1529,23 @@ async def _run_startup_tasks():
                 f"AI retry daemon failed to start: {e}"
             )
 
-    # Auto-start Telegram polling if token is configured
+    # Auto-start Telegram long-polling — PRODUCTION ONLY.
+    #
+    # A Telegram bot allows exactly ONE active getUpdates long-poll per token.
+    # This boot hook used to start polling whenever TELEGRAM_BOT_TOKEN was set,
+    # regardless of environment. Because local/dev .env files carry the SAME
+    # prod bot token, every dev backend boot stole the prod poll slot — Telegram
+    # answered prod's getUpdates with 409 Conflict, silently taking the live
+    # Telegram channel down (no messages → no reports) until the dev process
+    # stopped. It also deleteWebhook'd the shared bot on every dev boot.
+    #
+    # Gate strictly on the deployment env: only the production backend polls
+    # (see _should_autostart_telegram_polling). A dev backend uses a SEPARATE
+    # test bot token or the webhook test harness.
+    _poll_flag = os.getenv("CRISP_TELEGRAM_POLLING", "")
+    _should_poll = _should_autostart_telegram_polling(APP_ENV, _poll_flag)
     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    if telegram_token:
+    if telegram_token and _should_poll:
         try:
             from messaging_bot.telegram.webhook import telegram_router
             import httpx
@@ -1526,3 +1559,10 @@ async def _run_startup_tasks():
             logging.getLogger(__name__).info("Telegram polling auto-started on boot")
         except Exception as e:
             logging.getLogger(__name__).warning(f"Telegram auto-start failed: {e}")
+    elif telegram_token:
+        logging.getLogger(__name__).warning(
+            "Telegram polling NOT started (APP_ENV=%s, CRISP_TELEGRAM_POLLING=%r): a "
+            "non-production backend must never poll the shared bot token — it would "
+            "steal the prod poll slot (409 Conflict). Use a separate test bot locally.",
+            APP_ENV, _poll_flag or "unset",
+        )
