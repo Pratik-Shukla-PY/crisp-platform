@@ -459,6 +459,11 @@
                         lng: _locSelected.lng,
                         accuracy: null,
                         source: 'user_corrected',
+                        // The edited place is now AUTHORITATIVE for matching
+                        // (priority: user-edited > GPS > device-fallback). The
+                        // submit payload reads this flag (app.js) so the report
+                        // ships latitude/longitude = edited, is_user_corrected=true.
+                        is_user_corrected: true,
                     };
                     _locationMoved = true;
                 }
@@ -493,6 +498,11 @@
                             window.BuildingSelect.ensureMap(patch.location.lat, patch.location.lng).catch(() => {});
                         }
                     } catch (_) {}
+                    // AUTHORITATIVE RE-EVAL — the edited place re-runs crisis-form +
+                    // operation matching for the NEW coordinates (overriding the jitter
+                    // guard), drops the previous zone's stock answers, and toasts. The
+                    // backend re-derives crisis_event_id from these coords at intake too.
+                    _onLocationReeval(patch.location.lat, patch.location.lng);
                 }
             }
             _closeLocEdit();
@@ -1940,16 +1950,60 @@
                             // step stays so the reporter picks a valid type.
                             const _CANON = { EARTHQUAKE: 1, FLOOD: 1, TSUNAMI: 1, CYCLONE: 1,
                                 WILDFIRE: 1, EXPLOSION: 1, CHEMICAL_INCIDENT: 1, CONFLICT: 1, CIVIL_UNREST: 1 };
-                            if (data.crisis_type && _CANON[data.crisis_type]) patch.crisis_type = data.crisis_type;
+                            if (data.crisis_type && _CANON[data.crisis_type]) {
+                                patch.crisis_type = data.crisis_type;
+                                patch._crisisTypeAuto = true;   // zone-derived → clearable on a later swap
+                            } else if (_getState()._crisisTypeAuto) {
+                                // New zone has a non-canonical type → drop the stale
+                                // auto-applied type from the PREVIOUS zone (Bangalore→Chennai).
+                                patch.crisis_type = null;
+                                patch._crisisTypeAuto = false;
+                            }
                             _setState(patch);
                         } else {
-                            _setState({ crisisPack: null });
+                            // No active zone here → drop the pack AND any crisis_type we
+                            // auto-applied from a previous zone, so the "what caused it"
+                            // chip step returns. A hand-picked crisis_type is preserved.
+                            const patch = { crisisPack: null };
+                            if (_getState()._crisisTypeAuto) {
+                                patch.crisis_type = null;
+                                patch._crisisTypeAuto = false;
+                            }
+                            _setState(patch);
                         }
                         document.dispatchEvent(new CustomEvent('crisis-pack-resolved'));
                     })
                     .catch(() => { /* offline / error → default flow (fail-safe) */ });
             } catch (_) {}
         }
+
+        // Authoritative re-evaluation when the reporter EDITS the location (place
+        // search / edit-after-capture). The edited location is the source of truth:
+        // force a fresh crisis-forms/active match (overriding the ~110 m jitter
+        // guard), drop the previous zone's stock answers so the renderer can't paint
+        // stale questions, then confirm. The pack + crisis_type re-apply (or clear)
+        // inside _maybeFetchCrisisPack; the crispack sub-step re-renders on the
+        // 'crisis-pack-resolved' event.
+        function _onLocationReeval(lat, lng) {
+            try {
+                _crisisPackKey = null;                    // an explicit edit overrides the jitter guard
+                _setState({ crisisStockAnswers: {} });    // clear the previous zone's answers
+                _maybeFetchCrisisPack({ lat: lat, lng: lng });
+                // Localize against window.t (the module-scope _tt helper lives in a
+                // different function); fall back to EN if the key is unresolved.
+                const _K = 'v4_location_pack_refreshed';
+                const _EN = 'Location updated. Applicable crisis form has been refreshed based on the new location.';
+                let msg = _EN;
+                try {
+                    const _fn = window.t;
+                    if (typeof _fn === 'function') { const v = _fn(_K); if (v && v !== _K) msg = v; }
+                } catch (_) {}
+                // showToast(message, duration_ms) — pass a numeric dwell, NOT a type
+                // string (a string coerces to NaN → the toast vanishes instantly).
+                if (typeof window.showToast === 'function') window.showToast(msg, 3500);
+            } catch (_) {}
+        }
+        window.__crispV4OnLocationReeval = _onLocationReeval;
 
         // Apply cached GPS IMMEDIATELY as a fallback so the user sees
         // a location instantly — fresh fix will overwrite if it lands.

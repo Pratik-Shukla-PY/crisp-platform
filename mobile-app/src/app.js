@@ -2749,6 +2749,10 @@ function _freshReportState() {
         // Crisis-pack ANSWERS reset per report; the zone form schema `crisisPack`
         // is PRESERVED so it re-applies in-zone (see _PRESERVED_STATE_KEYS).
         crisisStockAnswers: {},
+        // True when crisis_type was auto-applied from the active zone (so a later
+        // location edit can clear it); false when hand-picked. See v4-flow.js
+        // _maybeFetchCrisisPack / _onLocationReeval.
+        _crisisTypeAuto: false,
         applicableModules: [],   // W6 modules cache (per crisis type)
         // Location-derived. gpsErrorCode: null|'denied'|'unavailable'|'timeout'|
         // 'no-support'|'insecure-context'. nearbyBuildings: BuildingSelect cache.

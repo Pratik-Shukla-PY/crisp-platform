@@ -812,6 +812,7 @@
   "v4_required_chip": "Obligatoire",
   "v4_submit_missing_classify": "Veuillez d'abord répondre aux questions obligatoires : dommages, infrastructure et type de crise.",
   "v4_submit_missing_debris": "Il reste une question obligatoire : y a-t-il des débris à dégager ?",
+  "v4_location_pack_refreshed": "Emplacement mis à jour. Le formulaire de crise applicable a été actualisé en fonction du nouvel emplacement.",
   "undp_debris_label": "Débris bloquant la zone ?",
   "undp_details_cta": "Ajouter 4 détails rapides",
   "undp_details_cta_sub": "Aide les secours à prioriser",

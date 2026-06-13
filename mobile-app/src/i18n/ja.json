@@ -810,6 +810,7 @@
   "v4_required_chip": "必須",
   "v4_submit_missing_classify": "まず必須の質問にお答えください — 被害、インフラ、危機の種類。",
   "v4_submit_missing_debris": "必須の質問が1つ残っています：撤去が必要な瓦礫はありますか？",
+  "v4_location_pack_refreshed": "位置情報が更新されました。新しい位置に基づいて該当する危機フォームが更新されました。",
   "undp_debris_label": "瓦礫がエリアを塞いでいますか？",
   "undp_details_cta": "4つの詳細を追加",
   "undp_details_cta_sub": "救助の優先判断に役立ちます",

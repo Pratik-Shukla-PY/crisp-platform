@@ -811,6 +811,7 @@
   "v4_required_chip": "Zorunlu",
   "v4_submit_missing_classify": "Lütfen önce zorunlu soruları yanıtlayın — hasar, altyapı ve kriz türü.",
   "v4_submit_missing_debris": "Bir zorunlu soru kaldı: temizlenmesi gereken moloz var mı?",
+  "v4_location_pack_refreshed": "Konum güncellendi. Geçerli kriz formu yeni konuma göre yenilendi.",
   "undp_debris_label": "Alanı tıkayan enkaz?",
   "undp_details_cta": "4 hızlı ayrıntı ekle",
   "undp_details_cta_sub": "Kurtarma önceliklendirmesine yardım eder",

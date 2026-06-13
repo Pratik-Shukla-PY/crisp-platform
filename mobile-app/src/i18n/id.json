@@ -823,6 +823,7 @@
   "v4_required_chip": "Wajib",
   "v4_submit_missing_classify": "Harap jawab pertanyaan wajib terlebih dahulu — kerusakan, infrastruktur, dan jenis krisis.",
   "v4_submit_missing_debris": "Tersisa satu pertanyaan wajib: apakah ada puing yang harus dibersihkan?",
+  "v4_location_pack_refreshed": "Lokasi diperbarui. Formulir krisis yang berlaku telah disegarkan berdasarkan lokasi baru.",
   "undp_debris_label": "Puing menghalangi area?",
   "undp_details_cta": "Tambah 4 detail cepat",
   "undp_details_cta_sub": "Membantu responden memprioritaskan penyelamatan",
