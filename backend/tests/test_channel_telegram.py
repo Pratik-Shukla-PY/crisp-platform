@@ -328,6 +328,93 @@ def test_telegram_start_token_links_pwa_device_hash(client, monkeypatch):
     assert meta["source"] == "TELEGRAM"
 
 
+def test_telegram_attaches_crisis_event_id_when_in_active_zone(client, monkeypatch):
+    """When the reporter shared a GPS location inside an active crisis zone, the
+    Telegram bot resolves /crisis-forms/active and echoes ONLY crisis_event_id
+    onto the meta POST. It must NOT attach form_pack_id — Telegram doesn't render
+    the dynamic pack, so a pack would 422 on its unanswered required fields."""
+    import asyncio
+    from messaging_bot.telegram import session_manager as tg_sessions
+
+    tg_sessions._sessions.clear()
+    session = tg_sessions.TelegramSession(user_hash="tg-zone-test", chat_id=900001)
+    session.severity = "MODERATE"
+    session.infra_type = "ROAD"
+    session.text = "road flooded"
+    session.latitude = 12.97
+    session.longitude = 77.59
+
+    captured = []
+
+    class _GetResp:
+        status_code = 200
+        def json(self):
+            return {"active": True, "event_id": "evt-zone-A",
+                    "pack_id": "pk-A", "pack_version": 1}
+
+    class _PostResp:
+        status_code = 201
+        text = "ok"
+        def json(self):
+            return {"id": "rep-tg-zone"}
+
+    class _FakeClient:
+        def __init__(self, *a, **kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url, params=None, headers=None): return _GetResp()
+        async def post(self, url, json=None, **kw):
+            captured.append(json)
+            return _PostResp()
+
+    import httpx as _httpx
+    monkeypatch.setattr(_httpx, "AsyncClient", _FakeClient)
+
+    asyncio.run(tg_sessions.create_report_early(session))
+    assert captured, "create_report_early didn't POST"
+    meta = captured[0]
+    assert meta.get("crisis_event_id") == "evt-zone-A"
+    assert "form_pack_id" not in meta, "chat channels must NOT attach a form pack"
+
+
+def test_telegram_without_location_stays_global(client, monkeypatch):
+    """No shared location → no /active lookup, no crisis_event_id (GLOBAL)."""
+    import asyncio
+    from messaging_bot.telegram import session_manager as tg_sessions
+
+    tg_sessions._sessions.clear()
+    session = tg_sessions.TelegramSession(user_hash="tg-noloc-test", chat_id=900002)
+    session.severity = "MODERATE"
+    session.infra_type = "ROAD"
+    session.text = "report without location"
+    # no latitude/longitude → has_location is False
+
+    captured = []
+
+    class _PostResp:
+        status_code = 201
+        text = "ok"
+        def json(self):
+            return {"id": "rep-tg-noloc"}
+
+    class _FakeClient:
+        def __init__(self, *a, **kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url, params=None, headers=None):
+            raise AssertionError("must not call /active without a shared location")
+        async def post(self, url, json=None, **kw):
+            captured.append(json)
+            return _PostResp()
+
+    import httpx as _httpx
+    monkeypatch.setattr(_httpx, "AsyncClient", _FakeClient)
+
+    asyncio.run(tg_sessions.create_report_early(session))
+    assert captured, "create_report_early didn't POST"
+    assert "crisis_event_id" not in captured[0]
+
+
 def test_telegram_start_without_token_keeps_user_hash(client, monkeypatch):
     """A bare `/start` (no payload) should NOT set pwa_device_hash;
     the Report falls back to the Telegram-derived `user_hash` as

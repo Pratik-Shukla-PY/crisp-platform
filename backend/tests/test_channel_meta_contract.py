@@ -128,6 +128,58 @@ class TestChannelMetaContract:
         assert body["service_status"] is None
         assert body["source"] == "IVR"
 
+    def test_non_gps_channels_stay_global_inside_active_zone(self, client, db, admin_token):
+        """Operations Phase 1 — non-GPS channels (SMS / IVR) must NEVER be
+        auto-linked to an operation, even when their text/audio-geocoded
+        location happens to fall inside an active crisis zone. Linkage is
+        gated on an explicit crisis_event_id hint, which only the GPS channels
+        (PWA / RN / Telegram / WhatsApp) send. This pins the 'no fake-matching'
+        rule at the API contract boundary, per source."""
+        import uuid
+        from datetime import timedelta
+        from app.models.report import (
+            Report, CrisisEvent, CrisisFormPack, CrisisFormPackVersion,
+        )
+
+        # Publish a pack + stand up an active zone covering (12.97, 77.59).
+        key = "wf-global-" + uuid.uuid4().hex[:8]
+        p = client.post("/api/v1/admin/crisis-forms/packs",
+                        json={"key": key, "title": "Zone"},
+                        headers={"Authorization": f"Bearer {admin_token}"})
+        assert p.status_code == 201, p.text
+        pid = p.json()["id"]
+        client.post(f"/api/v1/admin/crisis-forms/packs/{pid}/versions",
+                    json={"schema_json": {"key": key, "title": "Zone", "sections": []}},
+                    headers={"Authorization": f"Bearer {admin_token}"})
+        client.post(f"/api/v1/admin/crisis-forms/packs/{pid}/publish",
+                    json={"version": 1},
+                    headers={"Authorization": f"Bearer {admin_token}"})
+        now = datetime.now(timezone.utc)
+        ev = CrisisEvent(
+            name="zone-" + uuid.uuid4().hex[:8], crisis_type="FLOOD",
+            status="LIVE", is_active=True, form_pack_id=pid,
+            center_lat=12.97, center_lng=77.59, radius_km=30.0,
+            started_at=now - timedelta(days=1),
+        )
+        db.add(ev); db.commit(); db.refresh(ev)
+        try:
+            for source in ("SMS", "IVR"):
+                cid = self._ts_cid(source.lower())
+                payload = _minimum_channel_meta(source, f"{source}-GLOBAL-TEST", cid)
+                payload.pop("debris_clearing_needed", None)
+                # Location IS inside the active zone — but NO crisis_event_id hint.
+                payload["location"] = {"latitude": 12.97, "longitude": 77.59}
+                res = client.post("/api/v1/reports/meta", json=payload)
+                assert res.status_code == 201, res.text
+                row = db.query(Report).filter(Report.client_report_id == cid).first()
+                assert row is not None and row.crisis_event_id is None, (
+                    f"{source} report inside an active zone must stay GLOBAL "
+                    f"(no hint → no link)"
+                )
+        finally:
+            db.query(CrisisEvent).filter(CrisisEvent.id == ev.id).delete()
+            db.commit()
+
     def test_channel_payload_without_severity_or_damage_accepted(self, client):
         """Truly-minimum: just a device + crisis_type + concrete
         infrastructure_type. The PWA always sends severity +

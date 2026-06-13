@@ -167,3 +167,87 @@ def test_rate_limit_on_verify_webhook(client):
             saw_429 = True
             break
     assert saw_429, "rate limiter should trip within 35 requests (cap is 30/min)"
+
+
+def test_whatsapp_attaches_crisis_event_id_when_in_active_zone(client, monkeypatch):
+    """WhatsApp shares a GPS location → submit_report resolves the active zone
+    and echoes ONLY crisis_event_id (never form_pack_id — WhatsApp doesn't render
+    the dynamic pack). The server re-derives authoritatively from the location."""
+    import asyncio
+    from messaging_bot.whatsapp import session_manager as wa_sessions
+
+    session = wa_sessions.SessionBuffer(phone_hash="WA-zone-test", phone_raw="+10000000000")
+    session.severity = "MODERATE"
+    session.infra_type = "ROAD"
+    session.text = "wall collapsed"
+    session.latitude = 12.97
+    session.longitude = 77.59
+
+    captured = []
+
+    class _GetResp:
+        status_code = 200
+        def json(self):
+            return {"active": True, "event_id": "evt-wa-zone",
+                    "pack_id": "pk-A", "pack_version": 1}
+
+    class _PostResp:
+        status_code = 201
+        text = "ok"
+        def json(self):
+            return {"id": "rep-wa-zone"}
+
+    class _FakeClient:
+        def __init__(self, *a, **kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url, params=None, headers=None): return _GetResp()
+        async def post(self, url, json=None, **kw):
+            captured.append(json)
+            return _PostResp()
+
+    import httpx as _httpx
+    monkeypatch.setattr(_httpx, "AsyncClient", _FakeClient)
+
+    asyncio.run(wa_sessions.submit_report(session))
+    assert captured, "submit_report didn't POST"
+    meta = captured[0]
+    assert meta.get("crisis_event_id") == "evt-wa-zone"
+    assert "form_pack_id" not in meta, "chat channels must NOT attach a form pack"
+
+
+def test_whatsapp_without_location_stays_global(client, monkeypatch):
+    """No shared location → no /active lookup, no crisis_event_id (GLOBAL)."""
+    import asyncio
+    from messaging_bot.whatsapp import session_manager as wa_sessions
+
+    session = wa_sessions.SessionBuffer(phone_hash="WA-noloc-test", phone_raw="+10000000001")
+    session.severity = "MODERATE"
+    session.infra_type = "ROAD"
+    session.text = "no location report"
+    # no latitude/longitude → has_location is False
+
+    captured = []
+
+    class _PostResp:
+        status_code = 201
+        text = "ok"
+        def json(self):
+            return {"id": "rep-wa-noloc"}
+
+    class _FakeClient:
+        def __init__(self, *a, **kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url, params=None, headers=None):
+            raise AssertionError("must not call /active without a shared location")
+        async def post(self, url, json=None, **kw):
+            captured.append(json)
+            return _PostResp()
+
+    import httpx as _httpx
+    monkeypatch.setattr(_httpx, "AsyncClient", _FakeClient)
+
+    asyncio.run(wa_sessions.submit_report(session))
+    assert captured, "submit_report didn't POST"
+    assert "crisis_event_id" not in captured[0]
