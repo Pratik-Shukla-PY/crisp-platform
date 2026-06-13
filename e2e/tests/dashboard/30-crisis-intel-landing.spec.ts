@@ -34,6 +34,15 @@ const REPORTS = [{
     infrastructure_type: 'HOSPITAL', reviewer_verdict: 'NOT_REVIEWED', server_created_at: NOW,
     location: { latitude: 25.6, longitude: 85.1, user_location_name: 'Patna, IN' },
 }];
+// Phase 2 — the /operations rollup feeding the ops-first home rail.
+const OPERATIONS = [
+    {
+        id: 'op-flood-1', name: 'Bihar Floods', crisis_type: 'FLOOD', status: 'LIVE',
+        is_active: true, center_lat: 25.6, center_lng: 85.1,
+        critical: 5, new_24h: 9, total: 42, last_activity: NOW, is_cluster: false,
+    },
+    { id: null, name: 'Unassigned critical reports', is_cluster: true, critical: 3, total: 3 },
+];
 
 test('Crisis Intelligence landing renders from the real summary contract, no runtime errors', async ({ page }) => {
     const errors: string[] = [];
@@ -61,6 +70,7 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
             return route.fulfill({ json: { groups: [{ report_count: 12, label: 'Patna', is_acute: true }] } });
         }
         if (u.includes('/config/')) return route.fulfill({ json: { org: { org_public_name: 'UNDP CRISP' } } });
+        if (u.includes('/operations')) return route.fulfill({ json: OPERATIONS });
         if (u.includes('/reports/')) {
             return route.fulfill({ status: 200, headers: { 'X-Total-Count': '137' }, json: REPORTS });
         }
@@ -72,11 +82,16 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     errors.length = 0;                      // isolate: only capture LANDING-induced errors
     await page.evaluate(() => (window as any).openControlCenter && (window as any).openControlCenter());
 
-    // §1 KPI strip from the summary contract.
-    await expect(page.locator('#cc-kpis')).toContainText('Active incidents', { timeout: 6000 });
-    await expect(page.locator('#cc-kpis')).toContainText('42');
-    await expect(page.locator('#cc-kpis')).toContainText('Critical');
-    // §3 attention queue (incl. Phase-2 SLA-at-risk row).
+    // §1 operations-first home: the Active Operations rail (primary, left)
+    // renders from /operations, incl. the un-operationalised critical cluster
+    // CTA; the map header badge folds in the critical + in-response counts.
+    // The old 8-tile Executive KPI strip is gone.
+    await expect(page.locator('#cc-ops-rail')).toContainText('Bihar Floods', { timeout: 6000 });
+    await expect(page.locator('#cc-ops-rail')).toContainText('Launch operation here');
+    await expect(page.locator('#cc-map-badge')).toContainText(/critical/i);
+    await expect(page.locator('#cc-map-badge')).toContainText(/in response/i);
+    await expect(page.locator('#cc-kpis')).toHaveCount(0);
+    // §3 attention queue (now the demoted "Global Attention" block).
     await expect(page.locator('#cc-att')).toContainText('Critical incidents');
     await expect(page.locator('#cc-att')).toContainText('Needs review');
     await expect(page.locator('#cc-att')).toContainText('Escalating');
@@ -126,6 +141,7 @@ async function openLanding(page, role = 'ADMIN') {
         const u = route.request().url();
         if (u.includes('/analytics/summary')) return route.fulfill({ json: SUMMARY });
         if (u.includes('/reports/nearby')) return route.fulfill({ json: { groups: [] } });
+        if (u.includes('/operations')) return route.fulfill({ json: OPERATIONS });
         if (u.includes('/reports/')) return route.fulfill({ status: 200, headers: { 'X-Total-Count': '1' }, json: REPORTS });
         return route.fulfill({ status: 200, json: {} });
     });

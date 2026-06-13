@@ -42,9 +42,11 @@ test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
     await bootAuthed(page);
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
     await expect(page).toHaveURL(/#\/$/);
-    // The situational-awareness dashboard renders (KPI strip + command bar).
-    await expect(page.locator('#cc-kpis')).toBeVisible();
-    await expect(page.locator('#cc-kpis')).toContainText('Active incidents', { timeout: 8000 });
+    // Operations-first situational dashboard renders: the Active Operations rail
+    // (primary) + the global map. (The old 8-tile Executive KPI strip is gone.)
+    await expect(page.locator('#cc-ops-rail')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('#cc-map-card')).toBeVisible();
+    await expect(page.locator('#cc-kpis')).toHaveCount(0);
     await expect(qa(page).first()).toBeVisible();
     // The incident view is hidden behind the root (not the landing surface).
     await expect(page.locator('#view-incidents')).toBeHidden();
@@ -64,10 +66,12 @@ test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
     }
   });
 
-  test('@smoke Operations → routes to #/incidents, reveals the feed, hides the root', async ({ page }) => {
+  test('@smoke Incidents → routes to #/incidents, reveals the feed, hides the root', async ({ page }) => {
     await bootAuthed(page);
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
-    await qa(page).filter({ hasText: 'Operations' }).first().click();
+    // "Incidents" is the raw global feed; "Operations" (primary) is the new
+    // operations workspace (covered by 35-operations.spec.ts).
+    await page.locator('#cc-nav button[data-route="/incidents"]').click();
     await expect(page).toHaveURL(/#\/incidents/);
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toHaveCount(0);
     await expect(page.locator('#view-incidents')).toBeVisible();
